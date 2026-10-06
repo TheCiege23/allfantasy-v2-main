@@ -4,9 +4,11 @@ import { prisma } from '@/lib/prisma'
 import { NATIVE_PLATFORM_VALUES } from '@/lib/dashboard/platform-label'
 import { runNativeAutoSubsForLeague } from './nativeAutoSubs'
 import { reconcileTeamAlertNotifications } from './teamAlertService'
-/** Bounded phases ride the existing alert sweep; no new cron schedules or provider calls. */
+import { reconcileTeamDeliveryReceipts } from './teamDeliveryReconciliation'
+/** Bounded phases ride the existing alert sweep; delivery reconciliation only reads provider receipts. */
 export async function runTeamWorkspaceSweep(userIds:string[],deadline:number){
-  const outcome={nativeLeagues:0,swaps:0,alertsEvaluated:0,errors:0,budgetStopped:false}
+  const outcome={nativeLeagues:0,swaps:0,alertsEvaluated:0,errors:0,budgetStopped:false,deliveryReceiptsChecked:0}
+  if(Date.now()<deadline)try{outcome.deliveryReceiptsChecked=(await reconcileTeamDeliveryReceipts(Math.min(deadline,Date.now()+3000))).checked}catch{outcome.errors++}
   const nativeDeadline=nativeSweepDeadline(deadline,Date.now())
   const nativeWhere={platform:{in:[...NATIVE_PLATFORM_VALUES]},settings:{path:['nativeAutoSubsEnabled'],equals:true},status:{in:['active','in_season']}}
   const count=await prisma.league.count({where:nativeWhere})

@@ -71,7 +71,7 @@ export async function removePushSubscription(
 }
 
 /** Get all subscriptions for a user. */
-export async function getPushSubscriptions(userId: string): Promise<
+export async function getPushSubscriptions(userId: string, strict = false): Promise<
   { id: string; endpoint: string; p256dh: string; auth: string }[]
 > {
   const rows = await (prisma as any).webPushSubscription
@@ -79,7 +79,7 @@ export async function getPushSubscriptions(userId: string): Promise<
       where: { userId },
       select: { id: true, endpoint: true, p256dh: true, auth: true },
     })
-    .catch(() => [])
+    .catch((error: unknown) => { if(strict)throw error;return [] })
   return rows
 }
 
@@ -157,9 +157,10 @@ async function sendToSubscription(
  */
 export async function sendPushToUser(
   userId: string,
-  input: PushPayload
+  input: PushPayload,
+  options?: { strictSubscriptionRead?: boolean }
 ): Promise<SendPushResult[]> {
-  const all = await getPushSubscriptions(userId)
+  const all = await getPushSubscriptions(userId, options?.strictSubscriptionRead)
   if (all.length === 0) return []
   // Resolved once here so the APNs and web-push halves see the same, already-vetted picture.
   const payload: PushPayload = {

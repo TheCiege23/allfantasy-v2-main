@@ -225,7 +225,7 @@ export function getTwilioFromPhoneNumber() {
 /**
  * Send an SMS. Returns false if Twilio is not configured or send fails (no throw).
  */
-export async function sendSms(toPhone: string, body: string): Promise<boolean> {
+export async function sendSms(toPhone: string, body: string, onAccepted?: (providerId: string) => void): Promise<boolean> {
   const status = getTwilioRuntimeStatus()
   const fromNumber = process.env.TWILIO_PHONE_NUMBER?.trim()
   if (!status.canUseRawSms || !fromNumber) {
@@ -238,13 +238,14 @@ export async function sendSms(toPhone: string, body: string): Promise<boolean> {
 
   try {
     const client = getTwilioClient()
-    await client.messages.create({
+    const message = await client.messages.create({
       from: fromNumber,
       to: toPhone,
       // Brand name + opt-out line (formatProgramSms). Sliced first so the added
       // "Reply STOP" line can never be the part that gets cut off.
       body: formatProgramSms(body.slice(0, 1500)),
     })
+    if (message.sid) onAccepted?.(message.sid)
     return true
   } catch (error) {
     console.error("[twilio] SMS send failed", sanitizeTwilioError(error))

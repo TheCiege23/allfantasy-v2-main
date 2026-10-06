@@ -2,19 +2,19 @@ import 'server-only'
 import { isRosterChopped } from '@/lib/guillotine/guillotineGuard'
 import {rotateSweepTargets} from './teamSweepPolicy'
 import { prisma } from '@/lib/prisma'
-import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
+import { dispatchTeamNotification } from './teamDeliveryReceipts'
+import { nativeAutoSubsSlotHold } from './nativeAutoSubsAssessmentPolicy'
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidation'
 import { applyStarterSwap } from '@/lib/roster/starterSwap'
 import { getStarterSlotLabels } from '@/lib/league/rosterSlots'
-import { isEligibleForSlot } from '@/lib/core-app/rosterSlots'
 import { automaticLineup } from '@/lib/core-app/teamWorkspace'
 import { leagueWeekFromSettings } from '@/lib/core-app/seasonTimeline'
 import { findSportsPlayersForLeague } from '@/lib/player-identity/findSportsPlayerByLeagueId'
 import { getPlayerGameLockStateForAutoCoach } from '@/lib/autocoach/playerGameLock'
 import { persistRosterLineupWithEngine } from '@/lib/roster-lineup-engine/lineupService'
 import { readTeamPreference } from './teamPreferenceStore'
-import { definiteInactive,freshAutoSubsEvidence,nativeAutoSubsKey,type NativeAutoSubsAssignment } from './nativeAutoSubsPolicy'
+import { freshAutoSubsEvidence,nativeAutoSubsKey,type NativeAutoSubsAssignment } from './nativeAutoSubsPolicy'
 const settingsObject=(s:unknown)=>s&&typeof s==='object'&&!Array.isArray(s)?s as Record<string,unknown>:{}
 
 /** Reads saved provider evidence only. Uncertain status or missing game times holds execution. */
@@ -27,7 +27,7 @@ export async function runNativeAutoSubsForLeague(leagueId:string,deadline=Date.n
   const results:Array<{rosterId:string;applied:boolean;reason:string}>=[]
   for(const roster of rotateSweepTargets(rosters,Date.now())) {
     if(Date.now()>=deadline) break
-    if(await isRosterChopped(leagueId,roster.id)) continue
+    if(await isRosterChopped(leagueId,roster.id) || league.lockAllMoves) continue
     const owner=roster.platformUserId,key=nativeAutoSubsKey(leagueId,roster.id,season,week)
     const assignment=await readTeamPreference<NativeAutoSubsAssignment>(owner,key)
     if(!assignment?.enabled) continue
@@ -38,11 +38,14 @@ export async function runNativeAutoSubsForLeague(leagueId:string,deadline=Date.n
     for(const [slot,backup] of Object.entries(assignment.backups)) {
       if(Date.now()>=deadline) break
       const index=Number(slot),outId=starters[index],out=players.get(outId),into=players.get(backup),now=Date.now()
-      if(!out || !into || !sections.bench.some(p=>String(p.id)===backup) || !labels[index] || !isEligibleForSlot(labels[index],into.position)) continue
-      if(!definiteInactive(out.status) || definiteInactive(into.status) || !['ACTIVE','HEALTHY','AVAILABLE'].includes((into.status??'').toUpperCase()) || !freshAutoSubsEvidence(out,now) || !freshAutoSubsEvidence(into,now)) {results.push({rosterId:roster.id,applied:false,reason:'status_evidence_unavailable_or_stale'});continue}
+      const assessmentInput={out,into,onBench:sections.bench.some(p=>String(p.id)===backup),slotLabel:labels[index],now}
+      const hold=nativeAutoSubsSlotHold(assessmentInput)
+      if(hold){results.push({rosterId:roster.id,applied:false,reason:hold});continue}
+      if(!out||!into)continue
       const args={sport:String(league.sport),leagueSeason:season,leagueSettings:league.settings}
       const [outLock,inLock]=await Promise.all([getPlayerGameLockStateForAutoCoach({...args,teamAbbr:out.team}),getPlayerGameLockStateForAutoCoach({...args,teamAbbr:into.team})])
-      if((outLock.nextKickoffUtc?.getTime()??Infinity)>now+7*86400_000 || (inLock.nextKickoffUtc?.getTime()??Infinity)>now+7*86400_000 || !outLock.scheduleKnown || !inLock.scheduleKnown || !outLock.nextKickoffUtc || !inLock.nextKickoffUtc || outLock.lockedBecauseGameStarted || inLock.lockedBecauseGameStarted) {results.push({rosterId:roster.id,applied:false,reason:'game_lock_or_schedule_unavailable'});continue}
+      const gameHold=nativeAutoSubsSlotHold({...assessmentInput,now:Date.now(),locks:[outLock,inLock]})
+      if(gameHold){results.push({rosterId:roster.id,applied:false,reason:gameHold});continue}
       const auditId=`native-autosub:${JSON.stringify([leagueId,roster.id,season,week,assignment.version,outId,backup])}`
       if(await prisma.automationAuditLog.findUnique({where:{id:auditId}})) continue
       const next=applyStarterSwap(roster.playerData,index,backup)
@@ -75,7 +78,7 @@ export async function runNativeAutoSubsForLeague(leagueId:string,deadline=Date.n
         const verifiedSections=getNormalizedLineupSections(verified?.playerData)
         const applied=String(verifiedSections.starters[index]?.id)===backup && verifiedSections.bench.some(p=>String(p.id)===outId)
         results.push({rosterId:roster.id,applied,reason:applied?'saved_and_verified':'saved_refresh_required'})
-        if(applied) await dispatchNotification({userIds:[owner],leagueId,category:'autocoach',type:'native_autosub_applied',title:'Native AutoSubs · '+(league.name??'AllFantasy'),body:`${out.name} (${out.status}) → ${into.name}. Your assigned backup was saved and verified.`,actionHref:`/core/my-team?league=${encodeURIComponent(leagueId)}`,dedupePrefix:auditId,severity:'medium',meta:{auditId,season,week,playerOutId:outId,playerInId:backup}}).catch(()=>{})
+        if(applied) await dispatchTeamNotification({userIds:[owner],leagueId,category:'autocoach',type:'native_autosub_applied',title:'Native AutoSubs · '+(league.name??'AllFantasy'),body:`${out.name} (${out.status}) → ${into.name}. Your assigned backup was saved and verified.`,actionHref:`/core/my-team?league=${encodeURIComponent(leagueId)}`,dedupePrefix:auditId,severity:'medium',meta:{auditId,season,week,playerOutId:outId,playerInId:backup}},auditId).catch(()=>{})
         // One backup per roster per sweep; the next sweep reads the new roster snapshot.
         break
       }catch{results.push({rosterId:roster.id,applied:false,reason:'authorization_changed_or_conflicting_save'})}
