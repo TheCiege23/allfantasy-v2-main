@@ -1,14 +1,16 @@
+import {DRAFT_POINTS_SPORTS} from './sportEvidence';
 import type { Prisma } from '@prisma/client';
 /** Phase 4 foundation: preserve values, not IDs pointing at mutable projection rows. */
 export async function captureDraftAnalysisBasis(tx: Prisma.TransactionClient, league: {
     sport: unknown;
     season: number | null;
 } | null, at: Date, playerPool='all') {
-    const base = { version: 'draft-analysis-basis-v2', capturedAt: at.toISOString(), identitySpace: 'canonical_with_verified_aliases', scoringBasis: 'league_rescored_stat_rates_per_game' };
-    if (String(league?.sport).toUpperCase() !== 'NFL' || !league?.season)
+    const sport=String(league?.sport).toUpperCase();
+    const base = { version: 'draft-analysis-basis-v2', capturedAt: at.toISOString(), sport, identitySpace: 'canonical_with_verified_aliases', scoringBasis: 'league_rescored_stat_rates_per_game' };
+    if (!DRAFT_POINTS_SPORTS.some(s=>s===sport) || !league?.season)
         return { ...base, state: 'unsupported', reason: 'A compatible season projection source is unavailable.', entries: [] };
     const rows = await tx.aFProjectionSnapshot.findMany({
-        where: { sport: 'NFL', season: league.season, week: null, eventId: null, computedAt: { lte: at } },
+        where: { sport, season: league.season, week: null, eventId: null, computedAt: { lte: at } },
         orderBy: [{ computedAt: 'desc' }, { id: 'desc' }], take: 5001,
         select: { id: true, playerId: true, playerName: true, position: true, rosProjection: true, rosWeeksRemaining: true, afProjection: true, adjustmentFactors: true, computedAt: true, confidenceLevel: true },
     });
@@ -18,11 +20,11 @@ export async function captureDraftAnalysisBasis(tx: Prisma.TransactionClient, le
     for (const row of rows)
         if (!players.has(row.playerId))
             players.set(row.playerId, row);
-    const mappings = players.size ? await tx.playerIdentityMap.findMany({ where: { sport: 'NFL', id: { in: [...players.keys()] } }, select: { id: true, sleeperId: true } }) : [];
+    const mappings = players.size && sport==='NFL' ? await tx.playerIdentityMap.findMany({ where: { sport: 'NFL', id: { in: [...players.keys()] } }, select: { id: true, sleeperId: true } }) : [];
     const aliases = new Map(mappings.map(m => [m.id, m.sleeperId]));
     const object = (v: unknown): Record<string, unknown> => v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : {};
     let eligibility: unknown = null;
-    if (players.size && ['rookies_only','veterans_only'].includes(playerPool)) {
+    if (sport==='NFL' && players.size && ['rookies_only','veterans_only'].includes(playerPool)) {
         const cached = await tx.sportsDataCache.findUnique({where:{cacheKey:'sleeper:nfl:yearsexp:compact:v1'},select:{data:true,expiresAt:true}});
         const data=object(cached?.data),years=object(data.bySleeperId),observed=typeof data.observedAt==='string'?Date.parse(data.observedAt):NaN;
         const classified=[...players.keys()].map(playerId=>({playerId,years:years[aliases.get(playerId)??'']}));
