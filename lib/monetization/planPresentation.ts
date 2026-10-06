@@ -55,6 +55,12 @@ const PLAN_NAMES: Record<string, string> = {
   af_supreme: 'AF Supreme',
 }
 
+/** "AF Pro" for af_pro_monthly / af_pro_yearly; null for a SKU that is not a plan. */
+export function planDisplayNameForSku(sku: string | null | undefined): string | null {
+  if (!sku) return null
+  return PLAN_NAMES[sku.replace(/_(monthly|yearly)$/, '')] ?? null
+}
+
 function round2(n: number): number {
   return Math.round(n * 100) / 100
 }

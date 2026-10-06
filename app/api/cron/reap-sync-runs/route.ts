@@ -9,6 +9,7 @@ import { reapAllAbandonedRuns, recordSyncJobRun } from '@/lib/production-health/
 import { runTradeAgentPass, type TradeAgentPassResult } from '@/lib/decision-os/trade/tradeAgentPass'
 import { runComprehensiveBackgroundAnalysis, type TradeLearningPassResult } from '@/lib/comprehensive-trade-learning'
 import { runTradeCalibrationPass, type TradeCalibrationPassResult } from '@/lib/trade-engine/calibrationPass'
+import { runAnnualRenewalReminderPass, type RenewalReminderPassResult } from '@/lib/billing/annualRenewalReminders'
 import {
   runRelationshipRefreshPass,
   type RelationshipRefreshPassResult,
@@ -132,6 +133,19 @@ export async function GET(request: NextRequest) {
   )
 
   /*
+   * Annual-renewal reminders ride here too (2026-10), for the same ceiling reason: the notice
+   * several states require 15–45 days before an annual plan auto-renews, promised in Terms 8.3.
+   * Hourly is fine — one reminder per billing period, deduplicated in Stripe's own metadata
+   * (lib/billing/annualRenewalReminders). AFTER the heartbeat, so it can never fail the reap,
+   * and ahead of the budgeted passes below, because it is small and must not be starved.
+   */
+  const renewalReminders: RenewalReminderPassResult | { ran: false; reason: string } =
+    await runAnnualRenewalReminderPass().catch((error) => ({
+      ran: false as const,
+      reason: error instanceof Error ? error.message.slice(0, 160) : 'the pass failed',
+    }))
+
+  /*
    * The nightly trade agent rides here (design step 9, 2026-09-27) because `cron-schedule.json` is at
    * its 60-job ceiling and docs/crons.md says to extend an existing handler first. It runs AFTER the
    * heartbeat above, so it can never delay or fail the reap, and a failure is reported beside the
@@ -229,6 +243,7 @@ export async function GET(request: NextRequest) {
     cutoff,
     cachePurge,
     privateRelay,
+    renewalReminders,
     tradeAgent,
     tradeLearning,
     tradeCalibration,
