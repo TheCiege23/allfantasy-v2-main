@@ -4,6 +4,7 @@ vi.mock('@/lib/prisma', () => ({ prisma: db }))
 import { calculateScoreFromSportConfig } from '@/lib/redraft/scoringEngine'
 import { importedNcaafScoring } from '@/lib/redraft/importedNcaafScoring'
 import { getLeagueNcaafScoringConfig, saveLeagueNcaafScoringConfig } from '@/lib/ncaaf-scoring/NcaafScoringConfigService'
+import { ncaafAdapter } from '@/lib/redraft/sportAdapters/ncaaf'
 import { NCAAF_CONFIG } from '@/lib/sportConfig/configs/ncaaf'
 import { aggregateNcaafWeek, normalizeCfbdGameStats } from '@/lib/scoring-runtime/ncaafStatNormalization'
 import fixture from '../fixtures/cream-bowl-period4-scoring.json'
@@ -21,6 +22,11 @@ describe('imported NCAAF scoring through the application scorer', () => {
     expect(await score({ rec: 4, rec_yds: 50 }, 'TE')).toBe(11)
     expect(await score({ rec: 4, rec_yds: 50 }, 'WR')).toBe(9)
     expect(await score({ rec: 4 }, undefined)).toBe(4)
+  })
+  it('cannot award a supplied TE-bonus count to a receiver or unknown position', async () => {
+    expect(await score({ rec: 4, te_premium: 40 }, 'WR')).toBe(4)
+    expect(await score({ rec: 4, te_premium: 40 })).toBe(4)
+    expect(await score({ rec: 4, te_premium: 40 }, 'TE')).toBe(6)
   })
   it('uses source reception rules despite a misleading half-PPR template label', async () => {
     league({ ...imported, sportConfig: { scoringPreset: 'HALF_PPR' } })
@@ -66,6 +72,12 @@ describe('athlete return touchdown normalization and scoring', () => {
     expect(game.stats).toMatchObject({ pr_td: 1, kr_td: 2, rec_td: 1, idp_td: 1 })
     expect(game.unmappedKeys).toEqual([])
     expect(await score(game.stats, 'WR')).toBe(24) // three returns + one receiving; no default IDP weight
+  })
+  it('preserves return counts through the sport adapter before league-aware scoring', async () => {
+    const normalized = normalizeCfbdGameStats({ 'puntReturns.TD': 1, 'kickReturns.TD': 2 }).stats
+    const parsed = ncaafAdapter.parseRawStats(normalized)
+    expect(parsed).toMatchObject({ pr_td: 1, kr_td: 2, fumble_td: 0, te_premium: 0 })
+    expect(await score(parsed, 'WR')).toBe(18)
   })
   it('aggregates multiple games without reusing yards or attempts as TD counts', async () => {
     const week = aggregateNcaafWeek([{ 'puntReturns.TD': 1 }, { 'kickReturns.TD': 1, 'puntReturns.TD': 0 }])

@@ -268,7 +268,7 @@ export function applyTePremiumStat(
   position?: string | null,
 ): Record<string, number> {
   const isTe = String(position ?? '').trim().toUpperCase() === 'TE'
-  if (!isTe) return rawStats
+  if (!isTe) return 'te_premium' in rawStats ? { ...rawStats, te_premium: 0 } : rawStats
   if (!categories.some((c) => c.key === 'te_premium')) return rawStats
   const receptions = rawStats.rec ?? rawStats.receptions ?? 0
   return { ...rawStats, te_premium: receptions }
