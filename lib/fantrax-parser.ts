@@ -240,56 +240,33 @@ export function parseFantraxMatchups(csvContent: string): FantraxMatchup[] {
 }
 
 export function parseFantraxRoster(csvContent: string): FantraxPlayer[] {
-  const lines = csvContent.split('\n').filter(l => l.trim())
   const players: FantraxPlayer[] = []
-  
-  let headerFound = false
-  
-  for (const line of lines) {
+  let headers: string[] = []
+  for (const line of csvContent.split('\n').filter(l => l.trim())) {
     const cells = parseCSVLine(line)
-    
-    if (cells[0] === '"ID"' || cells[0] === 'ID') {
-      headerFound = true
-      continue
+    if (cells[0] === 'ID') { headers = cells.map(h => h.toLowerCase().replace(/[^a-z0-9]/g, '')); continue }
+    if (!headers.length || !cells[0]?.trim()) continue
+    const get = (...names: string[]) => {
+      const index = headers.findIndex(h => names.includes(h))
+      return index < 0 ? '' : cells[index] ?? ''
     }
-    
-    if (cells[0] === '""' || cells[0] === '' || cells[0] === '"Offense"' || cells[0] === 'Offense') {
-      continue
-    }
-    
-    if (headerFound && cells.length >= 24) {
-      const fantraxId = cells[0].replace(/"/g, '').replace(/\*/g, '')
-      if (fantraxId) {
-        players.push({
-          fantraxId,
-          position: cells[1].replace(/"/g, ''),
-          name: cells[2].replace(/"/g, ''),
-          nflTeam: cells[3].replace(/"/g, ''),
-          eligiblePositions: cells[4].replace(/"/g, ''),
-          primaryPosition: cells[5].replace(/"/g, ''),
-          status: cells[6].replace(/"/g, ''),
-          year: cells[7].replace(/"/g, ''),
-          age: cells[8] ? parseInt(cells[8].replace(/"/g, '')) : null,
-          opponent: cells[9].replace(/"/g, ''),
-          fantasyPoints: parseNumber(cells[10]),
-          avgFantasyPoints: parseNumber(cells[11]),
-          byeWeeks: cells[12].replace(/"/g, ''),
-          passingYards: parseNumber(cells[13]),
-          passingTDs: parseInt(cells[14].replace(/"/g, '')) || 0,
-          rushingYards: parseNumber(cells[15]),
-          rushingTDs: parseInt(cells[16].replace(/"/g, '')) || 0,
-          receptions: parseInt(cells[17].replace(/"/g, '')) || 0,
-          receivingYards: parseNumber(cells[18]),
-          receivingTDs: parseInt(cells[19].replace(/"/g, '')) || 0,
-          fumblesRecoveredTD: parseInt(cells[20].replace(/"/g, '')) || 0,
-          returnTDs: parseInt(cells[21].replace(/"/g, '')) || 0,
-          twoPtConversions: parseInt(cells[22].replace(/"/g, '')) || 0,
-          gamesPlayed: parseInt(cells[23].replace(/"/g, '')) || 0
-        })
-      }
-    }
+    const fantraxId = get('id').replace(/\*/g, '').trim()
+    const name = get('player', 'name')
+    // Section labels and malformed rows are not athletes.
+    if (!/^[a-z0-9]+$/i.test(fantraxId) || !name || !get('pos', 'position')) continue
+    players.push({
+      fantraxId, name, position: get('pos', 'position'), nflTeam: get('team'),
+      eligiblePositions: get('eligible'), primaryPosition: get('primpos', 'primarypos', 'primaryposition'),
+      status: ({ ACT: 'ACTIVE', RES: 'RESERVE', IR: 'INJURED_RESERVE' } as Record<string, string>)[get('status').toUpperCase()] ?? get('status'), year: get('year'), age: get('age') ? parseInt(get('age')) : null,
+      opponent: get('opponent', 'opp'), fantasyPoints: parseNumber(get('fantasypoints', 'fpts')),
+      avgFantasyPoints: parseNumber(get('avgfantasypoints', 'fantasypointspergame', 'fpg')),
+      byeWeeks: get('bye', 'byeweeks'), passingYards: parseNumber(get('ydspa')), passingTDs: parseNumber(get('tdpa')),
+      rushingYards: parseNumber(get('ydsru')), rushingTDs: parseNumber(get('tdru')),
+      receptions: parseNumber(get('rec')), receivingYards: parseNumber(get('ydsrc')), receivingTDs: parseNumber(get('tdrc')),
+      fumblesRecoveredTD: parseNumber(get('frtd')), returnTDs: parseNumber(get('td', 'rtt')),
+      twoPtConversions: parseNumber(get('2pt', '2rr')), gamesPlayed: parseNumber(get('gamesplayed', 'gp')),
+    })
   }
-  
   return players
 }
 

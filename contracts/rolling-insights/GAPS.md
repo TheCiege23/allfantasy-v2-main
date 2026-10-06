@@ -58,7 +58,7 @@
 |---|---|---|---|---|
 | `G-01` | Field names in `/live` for **NHL** | **RESOLVED** | — | `fixtures/live.NHL.json` — probed 2026-03-15 on `RSC_TOKEN2`, 6 games, full player box. Fields in `ENDPOINTS.yaml → fields.NHL`. ⚠ NHL nests `player_box.<side>.{goalies\|skaters}.<player_id>`, one level deeper than NBA/MLB. |
 | `G-01b` | Are **NBA / NHL** actually entitled on `RSC_TOKEN2`? | **RESOLVED — yes** | NBA + NHL scoring | Probed 2026-03-15 with `RSC_TOKEN2`: NBA HTTP 200 / 7 games, NHL HTTP 200 / 6 games, both with full player box. Recorded because this question has been answered WRONGLY twice by probing with the first token only — see `N-02` and the CLAUDE.md credential table. A single-credential probe cannot answer "do we have this sport". |
-| `G-02` | Field names in `/live` for **NCAAFB** | UNVERIFIED | CFB scoring | Probe on a Saturday → commit fixture |
+| `G-02` | Field names in `/live` for **NCAAFB** | SHAPE VERIFIED 2026-10-05 | Advanced scoring still incomplete | `fixtures/live.NCAAFB.json`: 54 games / 3,588 player lines, 2026-10-03. See follow-up below. |
 | `G-03` | Field names in `/live` for **NCAABB** | **RESOLVED 2026-09-24** | — | `fixtures/live.NCAABB.json` — `probe.sh live NCAAB "" 2026-04-06` on `RSC_TOKEN2`, 1 game (the national final). NBA's shape: `player_box.<side>.<player_id>`, no group level. Fields in `ENDPOINTS.yaml → fields.NCAABB`. ⚠ One game only — see N-15 before trusting a box to be complete. |
 | `G-04` | Field names in `/live` for **SOCCER** (all 3 leagues) | PARTIAL 2026-09-28 — no fixture | Soccer scoring | Still no `/live` fixture. What the ingest STORES was read off production `player_game_stats` instead (4,159 rows, EPL + La Liga + Serie A): groups `fielders` / `goalkeepers`, and the fields listed in `lib/scoring-runtime/soccerStatNormalization.ts`. That is the ingest's output, not the vendor payload — capture `probe.sh live SOCCER EPL <matchday>` to close this. |
 | `G-05` | `game_id` format for NHL / NCAAFB / NCAABB / SOCCER | SOCCER resolved 2026-09-28 | Per-game polling | SOCCER: `YYYYMMDD-<home>-<away>`, the date being the kickoff's US Eastern day (all 1,140 live rows of `fixtures/schedule-season.SOCCER.*.json`). |
@@ -434,3 +434,25 @@ whether the format is stable across sports (NFL and SOCCER both show it; the oth
 ages at all), and whether the vendor also exposes a real `birth_date` on an endpoint we do not
 call. Per the repo rule this was NOT probed — resolving it needs `scripts/probe.sh` on a new
 endpoint/sport pair with the fixture committed in the same change, or an answer from the vendor.
+
+
+### NCAAFB live capture — October 5, 2026
+
+Captured through the contract probe on the entitled second account for October 3.
+The existing box parser extracts all 3,588 player lines from 54 games. All 107 kicker
+lines have a field_goal_distances array whose length equals field_goals_made,
+including zero-make lines. This supports further distance reconciliation; it does
+not authorize summing distances as makes or enabling a second scoring source.
+
+Team boxes include safeties, defensive interceptions/recoveries, sacks, defense
+TDs, defense points allowed and team two-point counts. Player boxes do not contain
+verified two-point, forced-fumble or assisted-tackle fields. Total team two-point
+counts cannot be assigned to individual athletes. RI player IDs and its week
+number are separate source namespaces; scoring must reconcile athlete and game
+identity before combining these lines with CFBD. No runtime scoring is changed.
+
+The probe no longer requires jq, refuses to overwrite a committed capture, and
+withholds curl errors and non-200 bodies so a failed request cannot print the
+credential-bearing query URL. Credentials must still be supplied only via env.
+
+Production has no ri.contract_probe_log table (to_regclass returned null). The committed fixture and this contract record the capture; no schema was created merely to log a probe.
