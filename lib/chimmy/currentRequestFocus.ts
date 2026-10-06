@@ -1,7 +1,18 @@
+/**
+ * 🛑 A NUMBER IN AN EARLIER TURN IS A SNAPSHOT, WHOEVER WROTE IT. The policy already put current tool
+ * evidence ahead of earlier ASSISTANT claims and counts, but a figure the USER pasted — a weekly
+ * brief, a card, odds — was covered by nothing. Production 2026-10-06, HailShiva: yesterday's pasted
+ * brief said 51.9%; today the model told the user "Your card's 51.9% does not match this — I can't
+ * reconcile the two" while their card read 65.1%. It was the same estimate, one week apart.
+ */
+export const EARLIER_FIGURES_RULE =
+  'Figures in earlier turns — odds, scores, projections, values, or a brief or card the user pasted — are snapshots from when that message was sent and may be out of date. Never present an earlier turn\'s figure as the user\'s current card, current odds or current value, and never call a difference between an earlier figure and a current tool result a conflict to reconcile. Current tool results are the current figures; mention an earlier figure only as earlier, and only if the current request asks how things changed.'
+
 /** Shared history is memory, not a queue of unanswered tasks. */
 export const CHIMMY_CURRENT_REQUEST_POLICY =
   'Answer only the CURRENT user request. Earlier conversation turns are memory: use them to resolve references or follow-ups in the current request, but do not reopen unrelated old or unanswered questions. League names appearing only in history are not requests to select those leagues. Keep the selected league as the default for facts and tools; select another league only when the current request asks about it. Cross-league checks are appropriate only when the current request asks for them, or no league is selected. Never combine an old trade question with a new roster review unless the current request asks for both.' +
   ' Current tool and Decision OS evidence takes precedence over earlier assistant claims. Use the supplied current roster and injury counts; do not reuse counts from conversation history or infer that players without reports are healthy. Distinguish hypothetical optimized projections from the provider\'s stored lineup projection and actual scores. Stored starter placement or an injury list is not proof that a lineup change is still allowed. If kickoff locks and provider eligibility were not checked, disclose that before suggesting an actionable swap. ACT and INACT are roster activity states, not injury designations.' +
+  ' ' + EARLIER_FIGURES_RULE +
   ' Only the CURRENT request can carry an image, and only when SCREENSHOT EVIDENCE appears for it. An earlier turn that mentions a screenshot refers to an image that is no longer available; never tell the user they attached an image to the current request, and never ask them to retype one, unless that evidence is present.'
 
 export function currentRequestFocus(leagueId: string | null): string {
