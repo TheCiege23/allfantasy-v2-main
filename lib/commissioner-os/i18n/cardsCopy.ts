@@ -25,6 +25,7 @@
  */
 import { commissionerOsText } from '@/lib/core-app/commissionerOsText'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
+import { NETWORKS_LINK_ES } from '@/lib/commissioner-os/i18n/shellCopy'
 import type { SeverityTier } from '@/lib/commissioner-ui/tokens/colors'
 
 const plural = (n: string, one: string, many: string) => (n === '1' ? `1 ${one}` : `${n} ${many}`)
@@ -142,7 +143,8 @@ const UI_ES: Record<string, string> = {
   'Reliability:': 'Fiabilidad:',
 
   // CommissionerNetworks
-  'Commissioner networks': 'Redes de comisionado',
+  // The page heading reads the sidebar link's word: one source, in shellCopy.
+  'Commissioner networks': NETWORKS_LINK_ES,
   'Unify leagues you own under one named commissioner workspace. Each item keeps its league-level drilldown.':
     'Une las ligas que son tuyas en un espacio de comisionado con nombre. Cada elemento conserva su detalle por liga.',
   'Edit network': 'Editar red',
@@ -177,15 +179,8 @@ const UI_ES: Record<string, string> = {
   'Invalid network update': 'Actualización de la red no válida',
   'Network not found': 'No se encontró la red',
   'Missing networkId': 'Falta el identificador de la red',
-  // A workspace task's priority, shown lower-case in parentheses. Feminine like `TASK_PRIORITY_ES`
-  // above, but ⚠ it DISAGREES with it on two tiers (advisory "aviso" vs "Informativa", positive
-  // "positiva" vs "Saludable"). Left as shipped on 2026-10-06 — the closing pass changed no output —
-  // pending a decision on which reading both screens should share.
-  critical: 'crítica',
-  elevated: 'elevada',
-  standard: 'estándar',
-  advisory: 'aviso',
-  positive: 'positiva',
+  // A queued task's priority is NOT here: the networks page reads `taskPriorityLabelText`, the
+  // workspace badge's own labels, so the two screens cannot disagree on a tier again.
 }
 
 type Rule = [RegExp, (...groups: string[]) => string]

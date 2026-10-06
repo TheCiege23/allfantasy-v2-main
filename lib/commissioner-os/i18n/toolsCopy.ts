@@ -186,12 +186,15 @@ const UI_ES: Record<string, string> = {
     'Cada valor de aquí se capturó de esta liga, no se supuso. Lo marcado como «no capturado» no venía en lo que devolvió la importación: no es un valor predeterminado y ninguna página de Commissioner OS lo trata como tal.',
 
   // Errors the loaders hand these screens (every live client's not-integrated message, and the
-  // settings client's two). ⚠ analyticsCopy's `cosErrorText` translates the not-integrated message
-  // too, as "todavía no" where this says "aún no"; both left as shipped, pending a decision on one.
-  'The live Decision OS backend is not yet integrated in this environment.':
-    'El backend en vivo de Decision OS aún no está integrado en este entorno.',
+  // settings client's two) — read from analyticsCopy's `cosErrorText`, the one translator for them.
+  'The live Decision OS backend is not yet integrated in this environment.': cosErrorText(
+    'The live Decision OS backend is not yet integrated in this environment.',
+    'es',
+  ),
   'No active league could be resolved for this session.': cosErrorText('No active league could be resolved for this session.', 'es'),
-  'This league could not be read.': 'No se pudo leer esta liga.',
+  // "This league could not be read." has no entry here on purpose: it means what /core's Competitive
+  // Edge loaders mean by it (the league row could not be read), so `toolsText` falls through to
+  // coreUiCopy's translation.
 }
 
 /** The source writes these with straight apostrophes; the table keys them typographically. */
@@ -235,9 +238,11 @@ const AUTOMATION_ES: Record<string, string> = {
   'Checks each league for conditions a commissioner should know about — a feed that has stopped arriving, managers who have gone quiet — and keeps the Workspace task list current. Closes tasks on its own when the condition clears.':
     'Revisa cada liga en busca de situaciones que un comisionado debería conocer (datos que han dejado de llegar, mánagers que se han quedado callados) y mantiene al día la lista de tareas del Espacio de trabajo. Cierra las tareas por sí sola cuando la situación se resuelve.',
   'Daily at 08:40 UTC, one scan per league': 'Cada día a las 08:40 UTC, una revisión por liga',
-  'Waiver batch processing': 'Procesamiento de agentes libres por lotes',
+  // A waiver RUN is «procesamiento de reclamos» (the owner's ruling, 2026-10-06); «agentes libres»
+  // is only ever the players.
+  'Waiver batch processing': 'Procesamiento de reclamos por lotes',
   'Settles pending waiver claims for leagues that run batched waivers, in FAAB or rolling-priority order. Only applies to leagues whose waivers are run by AllFantasy — an imported league settles its waivers on its own platform, so this never has work to do for one.':
-    'Resuelve los reclamos de agentes libres pendientes en las ligas que los procesan por lotes, por orden de FAAB o de prioridad rotativa. Solo se aplica a las ligas cuyos agentes libres gestiona AllFantasy: una liga importada los resuelve en su propia plataforma, así que aquí nunca tiene trabajo para ella.',
+    'Resuelve los reclamos de agentes libres pendientes en las ligas que los procesan por lotes, por orden de FAAB o de prioridad rotativa. Solo se aplica a las ligas cuyos reclamos procesa AllFantasy: una liga importada los resuelve en su propia plataforma, así que aquí nunca tiene trabajo para ella.',
   'Every 5 minutes, for leagues with pending claims': 'Cada 5 minutos, para las ligas con reclamos pendientes',
   'Scheduled report generation': 'Generación de informes programados',
   'Generates the reports each league has on a schedule — the weekly commissioner digest and the rest of the catalog — and files them in Reports ready to read or share. One report per league per ISO week, so a daily run never produces the same digest twice.':
@@ -334,9 +339,10 @@ export function viewInText(sectionLabel: string, language: string | null | undef
  * is translated by the catalog that owns it: an automation's here, a report template's by
  * analyticsCopy's `reportTemplateText`. A name neither catalog knows stays as written.
  *
- * ⚠ analyticsCopy's `reportText` also translates "<template> generated successfully." (the Reports
- * page's preview simulation) and writes it without the colon this one uses. Two shapes of one
- * English sentence, left as shipped pending a decision on one.
+ * analyticsCopy's `reportText` also translates "<template> generated successfully." (the Reports
+ * page's preview simulation), without the colon this one uses. Kept on purpose, and not a duplicate:
+ * here it is a LIST LINE in the activity feed ("X: se generó…", name first like every other line),
+ * there it is a sentence of prose ("X se generó…").
  */
 const REPORT_DEFAULT_REASON = 'no partial file was produced.'
 const report = (tpl: string) => reportTemplateText(tpl, 'es')
@@ -353,6 +359,7 @@ const COMPOSED_RULES: [RegExp, (...g: string[]) => string][] = [
   [/^(.+) failed on its last run\.$/s, (name) => `${automationText(name, 'es')}: falló en su última ejecución.`],
   [/^(.+) ran successfully\.$/s, (name) => `${automationText(name, 'es')}: se ejecutó correctamente.`],
   [/^(.+) failed to generate\.$/s, (tpl) => `${report(tpl)}: no se pudo generar.`],
+  // A list line, so name-colon — see the note above for why the Reports preview's prose differs.
   [/^(.+) generated successfully\.$/s, (tpl) => `${report(tpl)}: se generó correctamente.`],
 ]
 

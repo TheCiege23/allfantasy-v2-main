@@ -6,7 +6,8 @@ import { shortDate } from '@/components/commissioner-os/primitives/pinnedTime'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { kickoffText } from '@/lib/core-app/kickoffText'
-import { cardsCopy } from '@/lib/commissioner-os/i18n/cardsCopy'
+import { cardsCopy, taskPriorityLabelText } from '@/lib/commissioner-os/i18n/cardsCopy'
+import type { SeverityTier } from '@/lib/commissioner-ui/tokens/colors'
 
 type League = { id: string; name: string; sport: string }
 type Network = {
@@ -29,6 +30,12 @@ export function CommissionerNetworks() {
   const { language } = useOptionalLanguage()
   const ui = (english: string) => cardsCopy(english, language)
   const core = (english: string) => coreUiCopy(english, language)
+  // A queued task's priority reads the workspace badge's labels (Informativa, Saludable…), lower-cased
+  // like the raw value English shows in the same parentheses. An unknown value stays as stored.
+  const priority = (raw: string) => {
+    const label = taskPriorityLabelText(raw as SeverityTier, raw, language)
+    return language === 'es' ? label.toLocaleLowerCase('es') : label
+  }
   const [data, setData] = useState<Payload | null>(null)
   const [name, setName] = useState('')
   const [selected, setSelected] = useState<string[]>([])
@@ -95,7 +102,7 @@ export function CommissionerNetworks() {
       {data?.networks.map((network) => <section key={network.id} className="rounded-xl border border-white/15 p-4">
         <div className="flex items-center justify-between gap-3"><h2 className="text-lg font-semibold">{network.name}</h2><div className="flex gap-3 text-sm"><button type="button" onClick={() => { setEditing(network.id); setName(network.name); setSelected(network.members.map((member) => member.leagueId)) }} className="underline">{core('Edit')}</button><button type="button" disabled={busy} onClick={() => void remove(network.id)} className="text-red-300 underline">{ui('Delete')}</button></div></div>
         <h3 className="mt-4 text-sm font-semibold">{core('Leagues')}</h3><ul className="mt-2 space-y-1 text-sm">{network.members.map((member) => <li key={member.leagueId}><Link className="underline" href={`/core/commissioner?league=${encodeURIComponent(member.leagueId)}`}>{member.league.name}</Link> <span className="text-white/60">· {ui(member.role)}</span></li>)}</ul>
-        <div className="mt-5 grid gap-5 md:grid-cols-2"><div><h3 className="text-sm font-semibold">{ui('Attention queue')}</h3>{network.queue.length ? <ul className="mt-2 space-y-2 text-sm">{network.queue.map((task) => <li key={task.id}><Link className="underline" href={`/core/commissioner?league=${encodeURIComponent(task.leagueId)}`}>{leagueName(network, task.leagueId)}: {task.title}</Link> <span className="text-white/55">({ui(task.priority)})</span></li>)}</ul> : <p className="mt-2 text-sm text-white/60">{ui('No open workspace tasks on file.')}</p>}</div>
+        <div className="mt-5 grid gap-5 md:grid-cols-2"><div><h3 className="text-sm font-semibold">{ui('Attention queue')}</h3>{network.queue.length ? <ul className="mt-2 space-y-2 text-sm">{network.queue.map((task) => <li key={task.id}><Link className="underline" href={`/core/commissioner?league=${encodeURIComponent(task.leagueId)}`}>{leagueName(network, task.leagueId)}: {task.title}</Link> <span className="text-white/55">({priority(task.priority)})</span></li>)}</ul> : <p className="mt-2 text-sm text-white/60">{ui('No open workspace tasks on file.')}</p>}</div>
           <div><h3 className="text-sm font-semibold">{ui('Recent history')}</h3>{network.history.length ? <ul className="mt-2 space-y-2 text-sm">{network.history.map((event) => <li key={event.id}><Link className="underline" href={`/core/commissioner?league=${encodeURIComponent(event.leagueId)}`}>{leagueName(network, event.leagueId)}: {event.summary || event.type}</Link> <span className="text-white/55">· {kickoffText(shortDate(event.occurredAt), language)}</span></li>)}</ul> : <p className="mt-2 text-sm text-white/60">{ui('No projected audit history on file.')}</p>}</div></div>
       </section>)}
     </main>

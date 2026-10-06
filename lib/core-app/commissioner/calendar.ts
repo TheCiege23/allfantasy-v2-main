@@ -183,18 +183,18 @@ export function buildLeagueCalendar(input: CalendarInput): LeagueCalendar {
     gaps.push(
       L(
         `Waivers process on ${input.platformLabel}, and its processing schedule isn’t imported.`,
-        `Los agentes libres se procesan en ${input.platformLabel}, y su horario de proceso no se importa.`,
+        `Los reclamos se procesan en ${input.platformLabel}, y su horario de procesamiento no se importa.`,
       ),
     )
   } else if (NO_WAIVER_RUN.has(waiverType)) {
-    gaps.push(L('This league has no waiver run — free agents are first come, first served.', 'Esta liga no tiene proceso de agentes libres: los fichajes son por orden de llegada.'))
+    gaps.push(L('This league has no waiver run — free agents are first come, first served.', 'Esta liga no tiene procesamiento de reclamos: los fichajes son por orden de llegada.'))
   } else if (input.waivers?.dayOfWeek != null && input.waivers.timeUtc) {
     const next = nextWeeklyRun(now, input.waivers.dayOfWeek, input.waivers.timeUtc)
     if (next) {
       events.push({
         id: 'waivers',
         kind: 'waivers',
-        title: L('Waivers process', 'Proceso de agentes libres'),
+        title: L('Waivers process', 'Procesamiento de reclamos'),
         at: next.toISOString(),
         allDay: false,
         week: null,
@@ -205,7 +205,7 @@ export function buildLeagueCalendar(input: CalendarInput): LeagueCalendar {
       })
     }
   } else {
-    gaps.push(L('This league’s waiver processing time isn’t set.', 'No está fijada la hora de proceso de agentes libres de esta liga.'))
+    gaps.push(L('This league’s waiver processing time isn’t set.', 'No está fijada la hora del procesamiento de reclamos de esta liga.'))
   }
 
   // ── Trade deadline ───────────────────────────────────────────────────

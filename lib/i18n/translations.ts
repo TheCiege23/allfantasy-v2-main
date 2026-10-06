@@ -6700,7 +6700,7 @@ export const translations: Record<string, Record<string, string>> = {
 
     "dashboard.warroom.today.title": "Agenda Fantasy de Hoy",
     "dashboard.warroom.today.lineupLocks": "La alineación de {{league}} se bloquea",
-    "dashboard.warroom.today.waiversProcess": "Se procesan los waivers",
+    "dashboard.warroom.today.waiversProcess": "Se procesan los reclamos",
     "dashboard.warroom.today.autoSwapOne": "1 protección automática de alineación aplicada",
     "dashboard.warroom.today.autoSwapMany": "{{n}} protecciones automáticas de alineación aplicadas",
     "dashboard.warroom.today.last24Hours": "Últimas 24 horas",

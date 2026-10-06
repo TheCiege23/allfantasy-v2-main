@@ -111,7 +111,7 @@ export function reviewSignalCards(leagueId: string, s: LeagueReviewSignals, lang
         ? `${plural(s.overdueWaiverClaims, 'solicitud de agentes libres lleva', 'solicitudes de agentes libres llevan')} más de una semana esperando`
         : `${plural(s.overdueWaiverClaims, 'waiver claim')} waiting over a week`,
       detail: es
-        ? 'Una ronda de agentes libres ya debería haber resuelto estas solicitudes. Procesa los agentes libres para resolverlas.'
+        ? 'Un procesamiento de reclamos ya debería haber resuelto estas solicitudes. Procesa los reclamos para resolverlas.'
         : 'These claims should have been decided by a waiver run by now. Run waivers to process them.',
       due: null,
       action: { label: es ? 'Abrir agentes libres' : 'Open waivers', href: `/core/commissioner?league=${id}#ch-waivers`, external: false },
