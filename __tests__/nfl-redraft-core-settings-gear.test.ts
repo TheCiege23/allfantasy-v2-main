@@ -81,8 +81,12 @@ describe('NFL redraft core — audit log placeholder panel', () => {
   it('audit log placeholder copy matches the Phase 1 canonical text', () => {
     // The exact text matters — UX wants the same wording surfaced in the QA
     // tooling and any future content-translation pass. Locking it here.
-    expect(src).toMatch(/Audit logging is ready to be wired/)
-    expect(src).toMatch(/Commissioner actions will appear\s+here once backend logging is enabled/)
+    // Since the translation pass (2026-10-05) the panel renders it through the dictionary, so the
+    // canonical English is pinned there and the panel is pinned to that key.
+    expect(src).toMatch(/\{t\('lsPanel\.audit\.body'\)\}/)
+    expect(translations.en['lsPanel.audit.body']).toBe(
+      'Audit logging is ready to be wired. Commissioner actions will appear here once backend logging is enabled.',
+    )
   })
 
   it('audit log panel does NOT fabricate fake events', () => {
