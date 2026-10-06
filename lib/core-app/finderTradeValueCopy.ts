@@ -599,7 +599,7 @@ const valuesAreEs = (fairness: string) => `los valores están ${FAIRNESS_ES[fair
 
 const LAST_MOVE_ES: Record<MoveKind, string> = {
   trade: 'Último intercambio',
-  waiver: 'Última reclamación ganada',
+  waiver: 'Último reclamo ganado',
   roster_move: 'Último movimiento',
 }
 const NEED_ES = { thin: 'Escaso en', set: 'Cubierto en', deep: 'Sobrado en' } as const

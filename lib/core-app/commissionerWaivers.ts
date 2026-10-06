@@ -230,11 +230,11 @@ export async function getCommissionerWaiverOversight(input: {
       reason: imported
         ? L(
             `This league's waivers run on ${platform.charAt(0).toUpperCase()}${platform.slice(1)}. Bids and claim results aren't shared with AllFantasy, so there is nothing to oversee here — manage them on the platform.`,
-            `Los agentes libres de esta liga se procesan en ${platform.charAt(0).toUpperCase()}${platform.slice(1)}. Las ofertas y los resultados de las solicitudes no se comparten con AllFantasy, así que aquí no hay nada que supervisar: gestiónalos en la plataforma.`,
+            `Los reclamos de esta liga se procesan en ${platform.charAt(0).toUpperCase()}${platform.slice(1)}. Las ofertas y los resultados de los reclamos no se comparten con AllFantasy, así que aquí no hay nada que supervisar: gestiónalos en la plataforma.`,
           )
         : L(
             'No waiver settings or runs yet. Once the first run processes, budgets and results appear here.',
-            'Aún no hay configuración ni procesos de agentes libres. Cuando se procese el primero, aquí aparecerán los presupuestos y los resultados.',
+            'Aún no hay configuración ni procesamientos de reclamos. Cuando se procese el primero, aquí aparecerán los presupuestos y los resultados.',
           ),
     }
   }

@@ -130,7 +130,7 @@ const RECIPE_COPY_ES: Record<RecipeKey, { label: string; description: string; ca
   },
   inactivityWarning: {
     label: 'Avisos de inactividad',
-    description: 'Un aviso semanal amistoso que nombra a los mánagers sin intercambios, solicitudes ni cambios de plantilla en 14 días.',
+    description: 'Un aviso semanal amistoso que nombra a los mánagers sin intercambios, reclamos ni cambios de plantilla en 14 días.',
     cadence: 'Como mucho una vez por semana',
   },
   votingDeadline: {

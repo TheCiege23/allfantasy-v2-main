@@ -465,7 +465,7 @@ const spanish: Record<string, string> = {
   'Ranked pickups for a league, priced against your FAAB and waiver order.': 'Opciones de agentes libres ordenadas según tu FAAB y prioridad de reclamo.',
   'Trade Analyzer': 'Analizador de intercambios',
   'Fairness and value on a proposal, graded in that league’s own scoring.': 'Equidad y valor de una propuesta según la puntuación de esa liga.',
-  'No waiver deadline is pending across your leagues.': 'No hay plazos de agentes libres pendientes en tus ligas.',
+  'No waiver deadline is pending across your leagues.': 'No hay plazos de reclamos pendientes en tus ligas.',
   'No trade offer is waiting on you.': 'No tienes ofertas de intercambio pendientes.',
   'Trade Evaluator': 'Evaluador de intercambios',
   'Trade Finder (Sleeper only)': 'Buscador de intercambios (solo Sleeper)',

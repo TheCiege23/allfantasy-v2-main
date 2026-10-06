@@ -113,7 +113,7 @@ export function activityChart(rows: ActivityRow[], now: Date, language = 'en'): 
     title: L('League activity', 'Actividad de la liga'),
     subtitle: L(
       `Trades, waiver claims and roster moves per week · last ${ACTIVITY_WEEKS} weeks`,
-      `Intercambios, solicitudes de agentes libres y cambios de plantilla por semana · últimas ${ACTIVITY_WEEKS} semanas`,
+      `Intercambios, reclamos y cambios de plantilla por semana · últimas ${ACTIVITY_WEEKS} semanas`,
     ),
     bars: buckets.map((b, i) => ({
       label: shortDate(b.start, language),
@@ -185,14 +185,14 @@ export function waiverParticipationChart(rows: ActivityRow[], managers: ManagerR
   return {
     key: 'waivers',
     title: L('Waiver participation', 'Participación en agentes libres'),
-    subtitle: L('Waiver claims by manager · this season', 'Solicitudes de agentes libres por mánager · esta temporada'),
+    subtitle: L('Waiver claims by manager · this season', 'Reclamos por mánager · esta temporada'),
     bars,
     takeaway:
       managers.length === 0
         ? null
         : L(
             `${participating} of ${managers.length} managers have made a claim${claims > 0 ? ` · ${claims} claims in all` : ''}.`,
-            `${participating} de ${managers.length} mánagers han hecho una solicitud${claims > 0 ? ` · ${claims} solicitudes en total` : ''}.`,
+            `${participating} de ${managers.length} mánagers han hecho un reclamo${claims > 0 ? ` · ${claims} reclamos en total` : ''}.`,
           ),
   }
 }

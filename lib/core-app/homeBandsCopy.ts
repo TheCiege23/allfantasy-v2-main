@@ -164,7 +164,7 @@ const COVERAGE_ES: Record<string, { label: string; reason: string }> = {
   'Records and standings': { label: 'Récords y clasificaciones', reason: 'todavía no se ha leído ningún resultado de liga' },
   'Which slot is which': { label: 'Qué puesto es cuál', reason: 'no se leen las plantillas de alineación, así que un puesto no tiene nombre' },
   'Pending trade offers and waiver claims': {
-    label: 'Ofertas de intercambio y reclamaciones de agentes libres pendientes',
+    label: 'Ofertas de intercambio y reclamos pendientes',
     reason: 'solo se leen las transacciones completadas',
   },
   'League chatter': { label: 'Conversación de la liga', reason: 'no se importan los chats de Discord ni de la plataforma' },
@@ -218,7 +218,7 @@ const ALERT_LABEL_ES: Record<string, string> = {
   trade_rejected: 'intercambios rechazados',
   trade_countered: 'contraofertas',
   waiver_processed: 'resultados de reclamos',
-  waiver_claim: 'reclamaciones de agentes libres',
+  waiver_claim: 'reclamos',
   draft_pick: 'selecciones del draft',
   draft_starting: 'drafts que empiezan',
   lineup_lock: 'bloqueos de alineación',

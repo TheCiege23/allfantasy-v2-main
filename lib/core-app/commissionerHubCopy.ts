@@ -247,14 +247,14 @@ const ES: Record<string, string> = {
   Team: 'Equipo',
   Player: 'Jugador',
   Matchup: 'Enfrentamiento',
-  'Waiver claim': 'Solicitud de agentes libres',
+  'Waiver claim': 'Reclamo',
   'Changed league settings': 'Cambió la configuración de la liga',
   'Undid a draft pick': 'Deshizo una selección del draft',
   'Ran waivers by hand': 'Procesó los reclamos a mano',
   'Ran a league automation': 'Ejecutó una automatización de la liga',
   'Edited the standings': 'Editó la clasificación',
   'Adjusted a team’s FAAB': 'Ajustó el FAAB de un equipo',
-  'Changed the waiver order': 'Cambió el orden de agentes libres',
+  'Changed the waiver order': 'Cambió la prioridad de reclamo',
   'Recalculated the standings': 'Recalculó la clasificación',
   'Locked or unlocked the league': 'Bloqueó o desbloqueó la liga',
   'Paused or resumed the league': 'Pausó o reanudó la liga',
@@ -296,18 +296,18 @@ const ES: Record<string, string> = {
   'Run by a commissioner': 'Lo procesó un comisionado',
   Scheduled: 'Programado',
   'This run started and never finished, so some claims were not processed.':
-    'Este proceso empezó y nunca terminó, así que algunas solicitudes no se procesaron.',
-  'The last run processed no claims.': 'El último proceso no procesó ninguna solicitud.',
+    'Este proceso empezó y nunca terminó, así que algunos reclamos no se procesaron.',
+  'The last run processed no claims.': 'El último proceso no procesó ningún reclamo.',
   'No waiver run has processed in this league yet.': 'Aún no ha habido ningún procesamiento de reclamos en esta liga.',
   'Running…': 'Procesando…',
   'Processes the claims waiting now, by this league’s rules. Settled claims are not re-run.':
-    'Procesa las solicitudes que esperan ahora, según las reglas de esta liga. Las solicitudes ya resueltas no se vuelven a procesar.',
+    'Procesa los reclamos que esperan ahora, según las reglas de esta liga. Los reclamos ya resueltos no se vuelven a procesar.',
   '1 claim is waiting. Only the primary commissioner can run waivers manually.':
-    '1 solicitud está esperando. Solo el comisionado principal puede procesar los reclamos manualmente.',
+    '1 reclamo está esperando. Solo el comisionado principal puede procesar los reclamos manualmente.',
   'Not run. Try again in a moment.': 'No se procesó. Inténtalo de nuevo en un momento.',
   'Nothing processed — waivers are locked or no claims were waiting.':
-    'No se procesó nada: los reclamos están bloqueados o no había solicitudes esperando.',
-  'Processed 1 claim.': 'Se procesó 1 solicitud.',
+    'No se procesó nada: los reclamos están bloqueados o no había ninguno esperando.',
+  'Processed 1 claim.': 'Se procesó 1 reclamo.',
   'Not run — the connection dropped.': 'No se procesó: se cortó la conexión.',
 }
 
@@ -371,10 +371,10 @@ const PATTERNS: Pattern[] = [
   [/^Run waivers now · (\d+) waiting$/, (n) => `Procesar reclamos ahora · ${n} en espera`],
   [
     /^(\d+) claims are waiting\. Only the primary commissioner can run waivers manually\.$/,
-    (n) => `${n} solicitudes están esperando. Solo el comisionado principal puede procesar los reclamos manualmente.`,
+    (n) => `${n} reclamos están esperando. Solo el comisionado principal puede procesar los reclamos manualmente.`,
   ],
   [/^Not run: (.+)\.$/s, (why) => `No se procesó: ${why}.`],
-  [/^Processed (\d+) claims\.$/, (n) => `Se procesaron ${n} solicitudes.`],
+  [/^Processed (\d+) claims\.$/, (n) => `Se procesaron ${n} reclamos.`],
   // The audit log's templates (see the note on its vocabulary above).
   [/^Import of the (\d{4}) season failed$/, (s) => `Falló la importación de la temporada ${s}`],
   [/^Imported the (\d{4}) season from (.+)$/s, (s, p) => `Se importó la temporada ${s} desde ${p}`],

@@ -172,7 +172,7 @@ export function abandonedTeamsFlag(input: AbandonedInput): HealthFlag {
       count,
       headline: es ? 'Ningún mánager ha hecho un movimiento en 14 días' : 'No manager has made a move in 14 days',
       detail: es
-        ? `Ninguno de los ${managers.length} mánagers ha hecho un intercambio, una solicitud de agentes libres ni un cambio de plantilla en dos semanas. Es la liga la que está tranquila, no un equipo abandonado.`
+        ? `Ninguno de los ${managers.length} mánagers ha hecho un intercambio, un reclamo ni un cambio de plantilla en dos semanas. Es la liga la que está tranquila, no un equipo abandonado.`
         : `None of the ${managers.length} managers has made a trade, waiver claim or roster move in two weeks. That is the league being quiet, not one team being abandoned.`,
       names: [],
       action: null,
@@ -216,7 +216,7 @@ export function abandonedTeamsFlag(input: AbandonedInput): HealthFlag {
             : null,
           quiet.length > 0
             ? es
-              ? `Sin intercambios, solicitudes ni cambios de plantilla en 14 días: ${namesPreview(quiet, 4, 'es')}. Estar tranquilo no es lo mismo que haberse ido: habla con ellos antes de reemplazar a nadie.`
+              ? `Sin intercambios, reclamos ni cambios de plantilla en 14 días: ${namesPreview(quiet, 4, 'es')}. Estar tranquilo no es lo mismo que haberse ido: habla con ellos antes de reemplazar a nadie.`
               : `No trade, waiver claim or roster move in 14 days: ${namesPreview(quiet)}. Quiet isn’t the same as gone — check in before replacing anyone.`
             : null,
         ]

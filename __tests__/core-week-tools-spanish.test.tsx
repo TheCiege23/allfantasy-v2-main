@@ -51,7 +51,7 @@ describe('Spanish Core week and tools surfaces', () => {
     render(<Tools data={data} />)
     expect(screen.getByRole('heading', { name: 'Decide algo hoy' })).toBeTruthy()
     expect(screen.getByRole('link', { name: /Asistente de agentes libres/ })).toHaveAttribute('href', '/core/waivers')
-    expect(screen.getByText('No hay plazos de agentes libres pendientes en tus ligas.')).toBeTruthy()
+    expect(screen.getByText('No hay plazos de reclamos pendientes en tus ligas.')).toBeTruthy()
   })
 
   it('explains missing rivalry history in Spanish', () => {

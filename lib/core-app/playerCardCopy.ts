@@ -486,7 +486,7 @@ export type WaiverEdgeCopy = {
  */
 export const WAIVER_EDGE_ES: WaiverEdgeCopy = {
   heading: 'Ventaja competitiva · los reclamos de los demás mánagers',
-  aria: 'Ventaja competitiva · agentes libres',
+  aria: 'Ventaja competitiva · reclamos',
   basis: (season, asOf, stale) =>
     `Datos de los reclamos ganados en el historial de Sleeper de esta liga en la temporada ${season}${asOf ? `, a ${asOf} ET` : ''}${stale ? ' (puede estar desactualizado)' : ''}. Sleeper no publica las ofertas perdidas, así que solo cuenta las ganadas. Muestra lo que hicieron, no lo que ofertarán.`,
 }
