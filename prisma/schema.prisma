@@ -4044,6 +4044,7 @@ model AppUser {
   householdExceptionsAsB                   HouseholdException[]                   @relation("HouseholdExceptionUserB")
   deletedLeagueTombstones                  DeletedLeagueTombstone[]
   legalAcceptances                         LegalAcceptance[]
+  coreBracketPicks                         CoreBracketPick[]
 
   @@map("app_users")
 }
@@ -19132,4 +19133,26 @@ model LegalAcceptance {
 
   @@index([userId, document])
   @@map("legal_acceptances")
+}
+
+/// /core Bracket Challenge picks (components/core-app/screens/BracketChallenge.tsx): one row per
+/// account per sport per season — the champion and the final's series length. Written and read only
+/// by /api/core/bracket-picks (lib/core-app/bracketPicksStore). NOT a pool entry: pool picks live in
+/// PlayoffBracketEntry / PlayoffBracketPick, keyed by entry + series, with no series-length column.
+model CoreBracketPick {
+  id             String   @id @default(uuid())
+  userId         String
+  /// A SportKey from lib/brackets/sportShell, e.g. "mlb".
+  sport          String   @db.VarChar(16)
+  seasonYear     Int
+  /// SportsTeam.id of the picked champion; null while only a series length is picked.
+  championTeamId String?
+  /// Games in the final series (one of the shell's finalLength options); null when not picked.
+  finalLength    Int?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  user           AppUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, sport, seasonYear])
+  @@map("core_bracket_picks")
 }

@@ -1,9 +1,12 @@
 'use client'
 
 import Link from 'next/link'
-import { useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import '@/components/core-app/af-bracket.css'
 import type { BracketChallengeData, BracketSide, BracketTeam } from '@/lib/core-app/bracketChallenge'
+import { BRACKET_SEASON_YEAR, type BracketPicksResponse } from '@/lib/core-app/bracketPicks'
+import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { TopicTip } from '@/components/core-app/TopicTip'
 
 /**
@@ -122,10 +125,175 @@ function SideColumn({
   )
 }
 
+/**
+ * Where the picks live, decided once per mount by GET /api/core/bracket-picks.
+ *
+ * - `loading`  — asking the route. The controls work; a pick made now wins over the saved one.
+ * - `account`  — the route answered `ok`: picks load from, and save to, the account.
+ * - `preview`  — signed out (401), the migration is not applied (`unavailable`), the read failed, or
+ *                the sport's bracket is not built. Picks stay in component state and the screen says
+ *                they are not saved, which is then true.
+ */
+type SaveMode = 'loading' | 'account' | 'preview'
+type SaveState = 'idle' | 'pending' | 'saved' | 'failed'
+
+const PICKS_URL = '/api/core/bracket-picks'
+/** Long enough to fold a run of taps into one write; short enough that leaving the page rarely beats it. */
+export const SAVE_DEBOUNCE_MS = 600
+
+type Snapshot = { championTeamId: string | null; finalLength: number | null }
+
 export function BracketChallenge({ data }: BracketChallengeProps) {
   const { shell } = data
-  const [champion, setChampion] = useState<BracketTeam | null>(null)
-  const [length, setLength] = useState<number | null>(null)
+  const { language } = useOptionalLanguage()
+  const copy = (english: string) => coreUiCopy(english, language)
+  const [champion, setChampionState] = useState<BracketTeam | null>(null)
+  const [length, setLengthState] = useState<number | null>(null)
+  const [mode, setMode] = useState<SaveMode>(shell.available ? 'loading' : 'preview')
+  const [saveState, setSaveState] = useState<SaveState>('idle')
+
+  /*
+   * ⚠ REFS, NOT STATE, FOR EVERYTHING A TIMER OR A RESPONSE READS. The debounced save and the GET's
+   * resolution both run after the render that scheduled them; reading state there reads a stale
+   * closure and saves the PREVIOUS pick.
+   */
+  const modeRef = useRef<SaveMode>(mode)
+  const touched = useRef(false)
+  /*
+   * What a save sends. `championTeamId` can hold a saved champion the picker does not offer right now
+   * (the team list failed to read, so the pool is empty): it is re-sent until the player picks or
+   * clears a champion themselves — otherwise tapping a series length would save `null` over a
+   * champion they never touched.
+   */
+  const latest = useRef<Snapshot>({ championTeamId: null, finalLength: null })
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const seq = useRef(0)
+  const pool = useRef(data.pool)
+  pool.current = data.pool
+
+  const setModeBoth = (next: SaveMode) => {
+    modeRef.current = next
+    setMode(next)
+  }
+
+  const save = useCallback(
+    async (snapshot: Snapshot, keepalive = false) => {
+      const mine = ++seq.current
+      setSaveState('pending')
+      try {
+        const res = await fetch(PICKS_URL, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sport: shell.key, ...snapshot }),
+          keepalive,
+        })
+        const body = (await res.json().catch(() => null)) as BracketPicksResponse | null
+        if (mine !== seq.current) return // a newer save is in flight; it owns the status line
+        if (res.ok && body?.status === 'ok') {
+          setSaveState('saved')
+        } else if (body?.status === 'unavailable') {
+          // The table is not there after all. Say so honestly rather than "not saved, retry" forever.
+          modeRef.current = 'preview'
+          setMode('preview')
+          setSaveState('idle')
+        } else {
+          setSaveState('failed')
+        }
+      } catch {
+        if (mine === seq.current) setSaveState('failed')
+      }
+    },
+    [shell.key],
+  )
+
+  const schedule = useCallback(() => {
+    if (modeRef.current !== 'account') return
+    if (timer.current) clearTimeout(timer.current)
+    setSaveState('pending')
+    timer.current = setTimeout(() => {
+      timer.current = null
+      void save(latest.current)
+    }, SAVE_DEBOUNCE_MS)
+  }, [save])
+
+  // Load the saved pick once per sport. Signed out, unmigrated or failing → preview.
+  useEffect(() => {
+    /*
+     * ⚠ A SPORT SWITCH IS A PROP CHANGE, NOT A REMOUNT. The switcher's links keep this component
+     * mounted, so without this reset one sport's picks would carry into the next — and, once
+     * touched, be saved under it. (The flush effect below has already sent the old sport's pending
+     * save: React runs every cleanup before any setup.)
+     */
+    touched.current = false
+    latest.current = { championTeamId: null, finalLength: null }
+    setChampionState(null)
+    setLengthState(null)
+    setSaveState('idle')
+    if (!shell.available) {
+      setModeBoth('preview')
+      return
+    }
+    let cancelled = false
+    setModeBoth('loading')
+    fetch(`${PICKS_URL}?sport=${encodeURIComponent(shell.key)}`, { cache: 'no-store' })
+      .then(async (res) => {
+        const body = (await res.json().catch(() => null)) as BracketPicksResponse | null
+        if (cancelled) return
+        if (!res.ok || body?.status !== 'ok') {
+          setModeBoth('preview')
+          return
+        }
+        setModeBoth('account')
+        if (touched.current) {
+          // Picked while loading: that pick is newer than anything saved. Save it.
+          schedule()
+          return
+        }
+        const pick = body.pick
+        if (!pick) return
+        const len =
+          pick.finalLength !== null && shell.finalLength?.options.includes(pick.finalLength)
+            ? pick.finalLength
+            : null
+        latest.current = { championTeamId: pick.championTeamId, finalLength: len }
+        setChampionState(pool.current.find((t) => t.id === pick.championTeamId) ?? null)
+        setLengthState(len)
+        setSaveState('saved')
+      })
+      .catch(() => {
+        if (!cancelled) setModeBoth('preview')
+      })
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per sport; `schedule` reads refs only
+  }, [shell.key, shell.available])
+
+  // Leaving within the debounce window must not drop the last pick: flush it on the way out.
+  useEffect(
+    () => () => {
+      if (timer.current) {
+        clearTimeout(timer.current)
+        timer.current = null
+        void save(latest.current, true)
+      }
+    },
+    [save],
+  )
+
+  const setChampion = (team: BracketTeam | null) => {
+    touched.current = true
+    latest.current = { ...latest.current, championTeamId: team?.id ?? null }
+    setChampionState(team)
+    schedule()
+  }
+
+  const setLength = (n: number | null) => {
+    touched.current = true
+    latest.current = { ...latest.current, finalLength: n }
+    setLengthState(n)
+    schedule()
+  }
 
   const maxPoints =
     shell.rounds.reduce((sum, r) => sum + r.points, 0) + (shell.finalLength?.bonus ?? 0)
@@ -134,7 +302,9 @@ export function BracketChallenge({ data }: BracketChallengeProps) {
     <div className="af-bk">
       <header className="af-bk-head">
         <p className="af-bk-eyebrow af-label">Bracket Challenge</p>
-        <h1 className="af-display af-bk-title">{shell.label} 2026</h1>
+        <h1 className="af-display af-bk-title">
+          {shell.label} {BRACKET_SEASON_YEAR}
+        </h1>
 
         {/* Sport switcher. One shell — every entry here renders through this file. */}
         <nav className="af-bk-sports" aria-label="Sport">
@@ -201,22 +371,22 @@ export function BracketChallenge({ data }: BracketChallengeProps) {
                 ) : null}
                 <span className="af-bk-champ-name">{champion.name}</span>
                 <button type="button" className="af-bk-champ-clear" onClick={() => setChampion(null)}>
-                  Change
+                  {copy('Change')}
                 </button>
               </>
             ) : (
-              <span className="af-bk-champ-empty">Pick your champion</span>
+              <span className="af-bk-champ-empty">{copy('Pick your champion')}</span>
             )}
           </div>
 
           <label className="af-bk-picker">
-            <span className="af-bk-picker-label">Champion</span>
+            <span className="af-bk-picker-label">{copy('Champion')}</span>
             <select
               className="af-bk-select"
               value={champion?.id ?? ''}
               onChange={(e) => setChampion(data.pool.find((t) => t.id === e.target.value) ?? null)}
             >
-              <option value="">Choose a team…</option>
+              <option value="">{copy('Choose a team…')}</option>
               {data.pool.map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.name}
@@ -226,25 +396,58 @@ export function BracketChallenge({ data }: BracketChallengeProps) {
           </label>
 
           {/*
-           * ⚠ THESE PICKS ARE NOT SAVED, AND THE SCREEN MUST SAY SO. Champion and length live in
-           * `useState` only — no route, no table, no entry — so a reload clears them. This screen
-           * is a preview of the shell; picks that count live in a pool (PlayoffBracketEntry /
-           * PlayoffBracketPick), entered from /brackets. It once said "Nothing you pick is lost
-           * when the field locks"; pinned by __tests__/core-app/bracket-challenge-picks-not-saved.
-           * Wire persistence and change this copy in the same commit, or neither.
+           * ⚠ THE NOTE MUST MATCH WHERE THE PICKS ACTUALLY ARE. They are saved to the account only in
+           * `account` mode — the route answered `ok`. Signed out, before the core_bracket_picks
+           * migration is applied, on a failed read, or for a sport whose bracket is not built, they
+           * live in component state and a reload clears them, and the note says exactly that. It
+           * once said "Nothing you pick is lost when the field locks" while nothing was saved at all;
+           * pinned by __tests__/core-app/bracket-challenge-picks-not-saved.test.tsx. Either way, this
+           * is the player's own pick, not a pool entry — picks that count against friends live in a
+           * pool (PlayoffBracketEntry / PlayoffBracketPick), entered from /brackets.
            */}
-          <p className="af-bk-unsaved" role="note" data-testid="af-bk-unsaved">
-            Picks here are a preview and are not saved — a reload clears them. To make picks that
-            count, <Link href="/brackets">join or start a pool</Link>.
-          </p>
+          {mode === 'loading' ? (
+            <p className="af-bk-unsaved" role="note" data-testid="af-bk-loading">
+              {copy('Loading your saved picks…')}
+            </p>
+          ) : mode === 'account' ? (
+            <div className="af-bk-unsaved" role="note" data-testid="af-bk-saved">
+              <p>
+                {copy(
+                  'Your picks are saved to your account, so a reload keeps them. This is your own pick, not a pool entry — to play it against friends,',
+                )}{' '}
+                <Link href="/brackets">{copy('join or start a pool')}</Link>.
+              </p>
+              <p className="af-bk-save-status" role="status" aria-live="polite" data-state={saveState}>
+                {saveState === 'pending'
+                  ? copy('Saving…')
+                  : saveState === 'saved'
+                    ? copy('Saved')
+                    : saveState === 'failed'
+                      ? (
+                          <>
+                            {copy('Not saved — check your connection and try again.')}{' '}
+                            <button type="button" className="af-bk-save-retry" onClick={() => void save(latest.current)}>
+                              {copy('Try again')}
+                            </button>
+                          </>
+                        )
+                      : copy('Nothing picked yet — picks save as you make them.')}
+              </p>
+            </div>
+          ) : (
+            <p className="af-bk-unsaved" role="note" data-testid="af-bk-unsaved">
+              {copy('Picks here are a preview and are not saved — a reload clears them. To make picks that count,')}{' '}
+              <Link href="/brackets">{copy('join or start a pool')}</Link>.
+            </p>
+          )}
 
           {/* Length pick — only where the final is a series. */}
           {shell.finalLength ? (
             <div className="af-bk-length">
               <span className="af-bk-picker-label">
-                In how many games? <span className="af-bk-bonus">+{shell.finalLength.bonus}</span>
+                {copy('In how many games?')} <span className="af-bk-bonus">+{shell.finalLength.bonus}</span>
               </span>
-              <div className="af-bk-length-set" role="group" aria-label="Series length">
+              <div className="af-bk-length-set" role="group" aria-label={copy('Series length')}>
                 {shell.finalLength.options.map((n) => (
                   <button
                     key={n}
