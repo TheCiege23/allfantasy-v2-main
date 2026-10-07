@@ -132,7 +132,7 @@ export async function captureImportedResults(leagueId: string, key: string, appl
         const count=await tx.$executeRaw(Prisma.sql`INSERT INTO league_player_weekly_scores (id,"leagueId","seasonYear",week,"playerId","rosterId",points,"isStarter","isFinalized",source,"createdAt","updatedAt") SELECT r.id,${sourceLeagueId},${choice.season},r.week,r."playerId",r."rosterId",r.points,r."isStarter",true,'sleeper',now(),now() FROM jsonb_to_recordset(${JSON.stringify(sealed)}::jsonb) AS r(id text,week integer,"playerId" text,"rosterId" integer,points double precision,"isStarter" boolean) ON CONFLICT ("leagueId","seasonYear",week,"playerId") DO UPDATE SET "isFinalized"=true,"updatedAt"=now() WHERE league_player_weekly_scores.source='sleeper' AND league_player_weekly_scores.points=EXCLUDED.points AND league_player_weekly_scores."rosterId"=EXCLUDED."rosterId" AND league_player_weekly_scores."isStarter"=EXCLUDED."isStarter"`);
         if(count!==sealed.length)throw new Error('Score changed during finalization; no observation published');
         await Promise.all(persist(tx));
-      },{timeout:15000});
+      },{timeout:60000});
     }else await prisma.$transaction(persist(prisma));
   }
   return {weeks:coveredWeeks.length,state:report.state};

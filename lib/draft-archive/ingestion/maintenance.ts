@@ -24,7 +24,7 @@ export async function maintainDraftResults(budgetMs=180000){
  const queue=maintenanceQueue(sources,now.getTime(),now.getUTCFullYear());
  const report={inventory:inventory.length,selected:queue.length,examined:0,ready:0,partial:0,unavailable:0,failed:0,elapsedMs:0};
  for(const s of queue){
-  if(budget.remainingMs()<100000)break;
+  if(budget.remainingMs()<125000)break;
   const attemptedAt=new Date();let retryAt=new Date(attemptedAt.getTime()+12*3600000),kind='observed';
   try{const result=await captureImportedResults(s.leagueId,'imported:'+s.sourceId,true);report[result.state]++;if(result.state==='unavailable'){kind='source_evidence';retryAt=new Date(attemptedAt.getTime()+7*86400000);}}
   catch(error){report.failed++;const failure=maintenanceFailure(error);kind=failure.kind;retryAt=new Date(attemptedAt.getTime()+failure.delayMs);}
