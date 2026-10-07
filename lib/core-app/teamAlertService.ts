@@ -1,4 +1,6 @@
 import 'server-only'
+import {issueAlertMeasurement} from './teamAlertEngagement'
+import {measuredAlertHref} from './teamAlertClientMetrics'
 import { prisma } from '@/lib/prisma'
 import { getMyTeamData } from './myTeam'
 import { buildTeamAlerts,freshTeamAlertRoster } from './teamAlerts'
@@ -27,7 +29,8 @@ export async function reconcileTeamAlertNotifications(leagueId:string,userId:str
   let evaluated=0
   for(const a of result.alerts){
     const digest=createHash('sha256').update(a.key).digest('hex').slice(0,24),sourceKey=`${prefix}${digest}:${userId}`
-    activeKeys.add(sourceKey);activeTargets.set(sourceKey,a.href)
+    const href=measuredAlertHref(a.href,issueAlertMeasurement(userId,leagueId,a.key,a.kind))
+    activeKeys.add(sourceKey);activeTargets.set(sourceKey,href)
     if(!a.fresh)continue
     // A persisted claim prevents repeat email/push as well as duplicate bell entries.
     const claim=`team-alert:${sourceKey}`
@@ -35,7 +38,7 @@ export async function reconcileTeamAlertNotifications(leagueId:string,userId:str
     const deadline=new Intl.DateTimeFormat(es?'es':'en',{dateStyle:'medium',timeStyle:'short',timeZone:'UTC'}).format(new Date(a.deadline))+' UTC'
     const title=a.kind==='injury'?`${a.playerName} · ${a.leagueName}`:`${a.label} · ${a.leagueName}`
     const body=a.kind==='injury'?(es?`Baja registrada (${a.status}). Plazo: ${deadline}. Reserva elegible: ${a.alternative??'ninguna verificada'}.`:`Recorded inactive (${a.status}). Deadline: ${deadline}. Eligible backup: ${a.alternative??'none verified'}.`):(es?`Plazo registrado: ${deadline}. Revisa las reglas de esta liga.`:`Recorded deadline: ${deadline}. Review this league's rules.`)
-    await dispatchTeamNotification({userIds:[userId],leagueId,category:a.kind==='injury'?'injury_alerts':'lineup_reminders',type:'team_workspace_alert',title,body,actionHref:a.href,actionLabel:a.kind==='injury'?(es?'Revisar titular y reservas':'Review starter and backups'):(es?'Revisar plazo':'Review deadline'),dedupePrefix:`${prefix}${digest}`,severity:'medium',meta:{kind:a.kind,deadline:a.deadline,evidenceSource:a.source,evidenceAt:a.observedAt,alternative:a.alternative}},claim)
+    await dispatchTeamNotification({userIds:[userId],leagueId,category:a.kind==='injury'?'injury_alerts':'lineup_reminders',type:'team_workspace_alert',title,body,actionHref:href,actionLabel:a.kind==='injury'?(es?'Revisar titular y reservas':'Review starter and backups'):(es?'Revisar plazo':'Review deadline'),dedupePrefix:`${prefix}${digest}`,severity:'medium',meta:{kind:a.kind,deadline:a.deadline,evidenceSource:a.source,evidenceAt:a.observedAt,alternative:a.alternative}},claim)
     evaluated++
   }
   const previous=await prisma.platformNotification.findMany({where:{userId,leagueId,type:'team_workspace_alert',readAt:null},select:{id:true,sourceKey:true,meta:true}})

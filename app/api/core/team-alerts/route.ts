@@ -30,8 +30,9 @@ export async function GET(req:Request){
 export async function POST(req:Request){
  const session=await getServerSession(authOptions as never) as {user?:{id?:string}}|null,userId=session?.user?.id
  if(!userId)return NextResponse.json({error:'Unauthorized'},{status:401})
- const origin=req.headers.get('origin')
- if(!origin||origin!==new URL(req.url).origin||req.headers.get('sec-fetch-site')==='cross-site')return NextResponse.json({error:'Forbidden'},{status:403})
+ const origin=req.headers.get('origin'),allowedOrigins=new Set([new URL(req.url).origin])
+ for(const configured of [process.env.NEXTAUTH_URL,process.env.NEXT_PUBLIC_APP_URL]){if(configured){try{allowedOrigins.add(new URL(configured).origin)}catch{/* Ignore invalid server configuration. */}}}
+ if(!origin||!allowedOrigins.has(origin)||req.headers.get('sec-fetch-site')==='cross-site')return NextResponse.json({error:'Forbidden'},{status:403})
  if(!req.headers.get('content-type')?.startsWith('application/json'))return NextResponse.json({error:'Invalid request'},{status:400})
  const text=await req.text();if(text.length>2048)return NextResponse.json({error:'Invalid request'},{status:400})
  let body;try{body=JSON.parse(text)}catch{return NextResponse.json({error:'Invalid request'},{status:400})}

@@ -10,7 +10,7 @@ function sign(userId:string,leagueId:string,payload:string){return createHmac('s
 export function issueAlertMeasurement(userId:string,leagueId:string,key:string,kind:'injury'|'deadline',now=Date.now()):string|null{
  if(!secret())return null
  const digest=createHash('sha256').update(key).digest('hex').slice(0,24)
- const payload=`${now+TTL}.${kind}.${digest}`
+ const payload=`${Math.floor(now/86400_000)*86400_000+TTL}.${kind}.${digest}`
  return `${payload}.${sign(userId,leagueId,payload)}`
 }
 export function verifyAlertMeasurement(userId:string,leagueId:string,token:unknown,now=Date.now()){

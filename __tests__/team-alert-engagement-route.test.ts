@@ -1,4 +1,4 @@
-import {beforeEach,describe,it,expect,vi} from 'vitest'
+import {beforeEach,afterEach,describe,it,expect,vi} from 'vitest'
 const m=vi.hoisted(()=>({session:vi.fn(),access:vi.fn(),verify:vi.fn(),record:vi.fn(),read:vi.fn()}))
 vi.mock('next-auth',()=>({getServerSession:m.session}));vi.mock('@/lib/auth',()=>({authOptions:{}}))
 vi.mock('@/lib/league-access',()=>({resolveLeagueMembership:m.access}))
@@ -6,11 +6,18 @@ vi.mock('@/lib/core-app/teamAlertService',()=>({readTeamAlerts:vi.fn()}));vi.moc
 vi.mock('@/lib/core-app/teamAlertEngagement',()=>({ALERT_EVENTS:['opened','reviewed','stale','not_useful','repeat'],verifyAlertMeasurement:m.verify,recordAlertEvent:m.record,readAlertUsefulness:m.read,issueAlertMeasurement:vi.fn()}))
 import {POST,GET} from '@/app/api/core/team-alerts/route'
 function request(body:unknown={league:'L',measurement:'signed',event:'opened'},origin='http://localhost'){return new Request('http://localhost/api/core/team-alerts',{method:'POST',headers:{'content-type':'application/json',origin},body:JSON.stringify(body)})}
-beforeEach(()=>{vi.clearAllMocks();m.session.mockResolvedValue({user:{id:'owner'}});m.access.mockResolvedValue({ok:true});m.verify.mockReturnValue({kind:'injury',digest:'verified'});m.record.mockResolvedValue(undefined);m.read.mockResolvedValue({days:30,counts:{opened:1}})})
+afterEach(()=>vi.unstubAllEnvs())
+beforeEach(()=>{vi.stubEnv('NEXTAUTH_URL','http://localhost');vi.stubEnv('NEXT_PUBLIC_APP_URL','http://localhost');vi.clearAllMocks();m.session.mockResolvedValue({user:{id:'owner'}});m.access.mockResolvedValue({ok:true});m.verify.mockReturnValue({kind:'injury',digest:'verified'});m.record.mockResolvedValue(undefined);m.read.mockResolvedValue({days:30,counts:{opened:1}})})
 describe('alert measurement write boundary',()=>{
  it('uses session ownership and verified context instead of client identities',async()=>{
   expect((await POST(request({league:'L',measurement:'signed',event:'opened',userId:'foreign'}))).status).toBe(200)
   expect(m.verify).toHaveBeenCalledWith('owner','L','signed');expect(m.record).toHaveBeenCalledWith('owner','L','opened',{kind:'injury',digest:'verified'})
+ })
+ it('accepts the configured public origin behind a proxy without trusting client forwarding headers',async()=>{
+  vi.stubEnv('NEXTAUTH_URL','https://www.allfantasy.ai')
+  expect((await POST(request(undefined,'https://www.allfantasy.ai'))).status).toBe(200)
+  const forged=request(undefined,'https://other.test');forged.headers.set('x-forwarded-host','other.test')
+  expect((await POST(forged)).status).toBe(403)
  })
  it.each(['anonymous','foreign','forged','cross-site','oversized','invalid-event'])('rejects %s measurement writes',async scenario=>{
   let r=request()
