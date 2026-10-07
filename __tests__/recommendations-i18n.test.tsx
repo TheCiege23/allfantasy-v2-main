@@ -164,10 +164,13 @@ describe('🛑 the screens read Spanish', () => {
   })
 
   it('priority and confidenceLabel stay English in the model — the chip classes and the badge branch on them', () => {
-    const es = localizeRecommendations(READY(), 'es')
+    // ONE model, compared with itself: READY() stamps `lastUpdatedIso` with the clock, so two calls
+    // can differ by a millisecond and fail an equality that has nothing to do with language.
+    const ready = READY()
+    const es = localizeRecommendations(ready, 'es')
     expect(es.recommendations.map((x) => x.priority)).toEqual(['Critical', 'High'])
-    expect(es.confidenceLabel).toBe(READY().confidenceLabel)
-    expect(localizeRecommendations(READY(), 'en')).toEqual(READY())
+    expect(es.confidenceLabel).toBe(ready.confidenceLabel)
+    expect(localizeRecommendations(ready, 'en')).toEqual(ready)
   })
 
   it('🛑 DecideHome’s attention queue — the real view model, localized', async () => {
