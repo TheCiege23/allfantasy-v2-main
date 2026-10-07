@@ -1,5 +1,6 @@
 'use client'
 
+import posthog from 'posthog-js'
 import { ChimmyTrades } from './ChimmyTrades'
 import { LeagueScopePicker } from './LeagueScopePicker'
 import { readScreenshotPreview } from '@/lib/chimmy-chat/screenshotPreview'
@@ -318,12 +319,16 @@ export function describeChimmyFailure(status: number | null, code: unknown): { m
   return { message: describeChimmyError(code), retryable: false }
 }
 
-/** A failed ask, carrying whether a retry is worth offering. */
+/** A failed ask, carrying whether a retry is worth offering and what the route answered. */
 class ChimmyAskError extends Error {
   readonly retryable: boolean
-  constructor(failure: { message: string; retryable: boolean }) {
+  readonly status: number | null
+  readonly code: string | null
+  constructor(failure: { message: string; retryable: boolean }, status: number | null = null, code: unknown = null) {
     super(failure.message)
     this.retryable = failure.retryable
+    this.status = status
+    this.code = typeof code === 'string' ? code : null
   }
 }
 
@@ -610,6 +615,8 @@ export function ChimmyPanel({
    * resend under a sentence about something else.
    */
   const [retryAsk, setRetryAsk] = useState<{ message: string; question: string } | null>(null)
+  /* The last question in this scope came back without an answer: an empty thread is not "Nothing asked yet." */
+  const [unanswered, setUnanswered] = useState(false)
   /* Out of tokens: a card with ways to keep going, not an error line. See lib/chimmy/outOfAnswers.ts. */
   const [outOfAnswers, setOutOfAnswers] = useState<OutOfAnswers | null>(null)
   /* Fast or Deep, per user. Sent with every question; see ChimmyAnswerMode.tsx. */
@@ -635,6 +642,7 @@ export function ChimmyPanel({
     setScreenshot(null)
     setError(null)
     setOutOfAnswers(null)
+    setUnanswered(false)
     if (screenshotRef.current) screenshotRef.current.value = ''
   }, [scopeId])
 
@@ -681,6 +689,7 @@ export function ChimmyPanel({
       setDraft('')
       setError(null)
       setOutOfAnswers(null)
+      setUnanswered(false)
       setBusy(true)
       setScreenshot(null)
       const imagePreview = attached ? await readScreenshotPreview(attached) : null
@@ -763,6 +772,7 @@ export function ChimmyPanel({
           setDraft(question)
           if (activeScope.current === scopeId) {
             setScreenshot(attached)
+            setUnanswered(true)
             setOutOfAnswers(
               describeOutOfAnswers(readPlanAllowanceView(from.planAllowance) ?? planStatus, {
                 // Only a build that sells nothing drops the buy offer; an IAP build sells tokens.
@@ -795,6 +805,7 @@ export function ChimmyPanel({
             setTurns((t) => (t.length && t[t.length - 1].role === 'you' ? t.slice(0, -1) : t))
             setDraft(question)
             setError('No tokens were spent — your question was not sent.')
+            setUnanswered(true)
             return
           }
           res = await post(true)
@@ -843,7 +854,7 @@ export function ChimmyPanel({
             ])
             return
           }
-          throw new ChimmyAskError(describeChimmyFailure(res.status, payload.code ?? payload.error))
+          throw new ChimmyAskError(describeChimmyFailure(res.status, payload.code ?? payload.error), res.status, payload.code)
         }
 
         /*
@@ -941,19 +952,38 @@ export function ChimmyPanel({
          * A failed send hands the question back rather than losing what was typed — and takes it out
          * of the transcript, as the decline and out-of-tokens paths already do. Left in, it printed
          * twice (bubble and box), Try again added a third copy, and the next question sent it to the
-         * model as an unanswered turn. Only when the thread still ends on THIS question: a scope
-         * switch mid-request means the last turn is someone else's.
+         * model as an unanswered turn. Only when the thread still ends on THIS question.
+         *
+         * 🛑 A SCOPE SWITCH MID-REQUEST USED TO DROP THE ERROR, so the question left the thread and
+         * nothing said why. `setTurns` and `setDraft` here belong to the scope the question was asked
+         * in, so that thread is still cleaned up; the scope on screen now gets a line naming where the
+         * question was asked, but no Try again — that would send it to the wrong league.
          */
+        const sameScope = activeScope.current === scopeId
+        const shown = question || `Screenshot: ${attached?.name ?? 'image'}`
         setDraft(question)
-        if (activeScope.current === scopeId) {
-          const shown = question || `Screenshot: ${attached?.name ?? 'image'}`
-          setTurns((t) => (t.length && t[t.length - 1].role === 'you' && t[t.length - 1].text === shown ? t.slice(0, -1) : t))
+        setTurns((t) => (t.length && t[t.length - 1].role === 'you' && t[t.length - 1].text === shown ? t.slice(0, -1) : t))
+        const failure =
+          e instanceof ChimmyAskError ? e : { message: 'Chimmy hit a snag on that one.', retryable: true }
+        if (sameScope) {
           setScreenshot(attached)
-          const failure =
-            e instanceof ChimmyAskError ? e : { message: 'Chimmy hit a snag on that one.', retryable: true }
+          setUnanswered(true)
           setError(failure.message)
           setRetryAsk(failure.retryable ? { message: failure.message, question } : null)
+        } else {
+          setError(`Chimmy did not answer your question in ${scope?.name ?? 'All leagues'}. ${failure.message}`)
+          setRetryAsk(null)
         }
+        posthog.capture('chimmy_request_failed', {
+          status: e instanceof ChimmyAskError ? e.status : null,
+          code: e instanceof ChimmyAskError ? e.code : null,
+          retryable: failure.retryable,
+          unexpected: !(e instanceof ChimmyAskError),
+          scope: scopeId ? 'league' : 'global',
+          scope_changed: !sameScope,
+          public_mode: publicMode,
+          source: source ?? 'drawer',
+        })
       } finally {
         setBusy(false)
       }
@@ -1080,6 +1110,12 @@ export function ChimmyPanel({
                 Try again
               </button>
             </div>
+          </div>
+        ) : turns.length === 0 && unanswered && !busy ? (
+          /* A failed or unsent first question is not "Nothing asked yet." — say it went unanswered. */
+          <div className="af-cm-empty" role="alert">
+            <p className="af-cm-empty-t">Chimmy did not answer that question.</p>
+            <p className="af-cm-empty-b">Your question is back in the box below.</p>
           </div>
         ) : turns.length === 0 ? (
           <div className="af-cm-empty">
