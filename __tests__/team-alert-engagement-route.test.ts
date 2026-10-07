@@ -15,7 +15,7 @@ describe('alert measurement write boundary',()=>{
  })
  it('accepts the configured public origin behind a proxy without trusting client forwarding headers',async()=>{
   vi.stubEnv('NEXTAUTH_URL','https://www.allfantasy.ai')
-  expect((await POST(request(undefined,'https://www.allfantasy.ai'))).status).toBe(200)
+  expect((await POST(new Request('http://0.0.0.0:8080/api/core/team-alerts',{method:'POST',headers:{'content-type':'application/json',origin:'https://www.allfantasy.ai'},body:JSON.stringify({league:'L',measurement:'signed',event:'opened'})}))).status).toBe(200)
   const forged=request(undefined,'https://other.test');forged.headers.set('x-forwarded-host','other.test')
   expect((await POST(forged)).status).toBe(403)
  })

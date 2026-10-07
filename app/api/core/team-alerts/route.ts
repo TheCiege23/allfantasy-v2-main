@@ -1,3 +1,4 @@
+import {getServedOrigin} from '@/lib/http/served-origin'
 import {ALERT_EVENTS,issueAlertMeasurement,verifyAlertMeasurement,recordAlertEvent,readAlertUsefulness,type AlertEvent} from '@/lib/core-app/teamAlertEngagement'
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
@@ -30,7 +31,7 @@ export async function GET(req:Request){
 export async function POST(req:Request){
  const session=await getServerSession(authOptions as never) as {user?:{id?:string}}|null,userId=session?.user?.id
  if(!userId)return NextResponse.json({error:'Unauthorized'},{status:401})
- const origin=req.headers.get('origin'),allowedOrigins=new Set([new URL(req.url).origin])
+ const origin=req.headers.get('origin'),allowedOrigins=new Set([getServedOrigin(req)])
  for(const configured of [process.env.NEXTAUTH_URL,process.env.NEXT_PUBLIC_APP_URL]){if(configured){try{allowedOrigins.add(new URL(configured).origin)}catch{/* Ignore invalid server configuration. */}}}
  if(!origin||!allowedOrigins.has(origin)||req.headers.get('sec-fetch-site')==='cross-site')return NextResponse.json({error:'Forbidden'},{status:403})
  if(!req.headers.get('content-type')?.startsWith('application/json'))return NextResponse.json({error:'Invalid request'},{status:400})
