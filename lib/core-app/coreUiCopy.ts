@@ -1265,6 +1265,24 @@ const spanish: Record<string, string> = {
   Suspension: 'Suspendido',
   Suspended: 'Suspendido',
   'Injured Reserve': 'Lista de lesionados',
+  // Bracket Challenge's picks panel and where its picks are kept (components/core-app/screens/BracketChallenge.tsx).
+  'Pick your champion': 'Elige a tu campeón',
+  Champion: 'Campeón',
+  'Choose a team…': 'Elige un equipo…',
+  Change: 'Cambiar',
+  'In how many games?': '¿En cuántos partidos?',
+  'Series length': 'Duración de la serie',
+  'Loading your saved picks…': 'Cargando tus selecciones guardadas…',
+  'Your picks are saved to your account, so a reload keeps them. This is your own pick, not a pool entry — to play it against friends,':
+    'Tus selecciones se guardan en tu cuenta, así que siguen aquí al recargar. Es tu predicción personal, no una entrada de pool. Para competir con amigos,',
+  'Picks here are a preview and are not saved — a reload clears them. To make picks that count,':
+    'Estas selecciones son una vista previa y no se guardan: al recargar se borran. Para hacer selecciones que cuenten,',
+  'join or start a pool': 'únete a un pool o crea uno',
+  'Saving…': 'Guardando…',
+  Saved: 'Guardado',
+  'Not saved — check your connection and try again.': 'No se guardó. Revisa tu conexión e inténtalo de nuevo.',
+  'Try again': 'Reintentar',
+  'Nothing picked yet — picks save as you make them.': 'Aún no has elegido nada. Tus selecciones se guardan al hacerlas.',
 }
 
 /** "3 min ago" / "2h 5m ago" / "4d ago" / "just now" (RefreshLineups `asOfLabel`) → Spanish. */

@@ -6,6 +6,7 @@ import {
   seedsPerSide,
   toClientShell,
   type ClientSportShell,
+  type SportShell,
   type SportKey,
 } from '@/lib/brackets/sportShell'
 
@@ -130,26 +131,52 @@ function dedupe(rows: TeamRow[], match: [RegExp, RegExp] | null): TeamRow[] {
   return [...byName.values()]
 }
 
-export async function getBracketChallenge(sport: SportKey): Promise<BracketChallengeData> {
-  const shell = SPORT_SHELLS[sport]
+function readTeamRows(shell: SportShell): Promise<TeamRow[]> {
+  return prisma.sportsTeam.findMany({
+    // Explicit select: this table has grown columns that break a bare read.
+    where: { sport: shell.label.toUpperCase().replace('-', '') },
+    select: { id: true, name: true, shortName: true, logo: true, conference: true },
+    orderBy: { name: 'asc' },
+  })
+}
 
-  const rows = await prisma.sportsTeam
-    .findMany({
-      // Explicit select: this table has grown columns that break a bare read.
-      where: { sport: shell.label.toUpperCase().replace('-', '') },
-      select: { id: true, name: true, shortName: true, logo: true, conference: true },
-      orderBy: { name: 'asc' },
-    })
-    .catch(() => [])
-
+/*
+ * The champion picker offers every club in the sport. Where the conference
+ * string identifies a side we keep only clubs that land on one — but if NO
+ * club does (a sport whose provider gives us no side information), we keep
+ * them all rather than returning an empty picker, which would read as "we
+ * have no teams" when what we actually lack is a side label.
+ */
+function poolFromRows(rows: TeamRow[], shell: SportShell): BracketTeam[] {
   const teams = dedupe(rows, shell.conferenceMatch)
-
-  const toTeam = (r: (typeof teams)[number]): BracketTeam => ({
+  const sided = teams.filter((t) => sideOf(t.conference, shell.conferenceMatch) !== null)
+  return (shell.conferenceMatch && sided.length ? sided : teams).map((r) => ({
     id: r.id,
     name: r.name,
     shortName: r.shortName ?? r.name.slice(0, 3).toUpperCase(),
     logo: r.logo,
-  })
+  }))
+}
+
+/**
+ * The clubs the champion picker offers for a sport — the same list the screen
+ * renders, so a saved pick can only ever name a club the player could choose.
+ *
+ * ⚠ THIS ONE THROWS ON A FAILED READ, unlike `getBracketChallenge`, which
+ * renders an empty picker instead. /api/core/bracket-picks validates against
+ * it, and it must tell "that team is not in this bracket" (400) apart from
+ * "the team list could not be read" (503) — an empty list would turn every
+ * outage into a validation error.
+ */
+export async function getBracketPool(sport: SportKey): Promise<BracketTeam[]> {
+  const shell = SPORT_SHELLS[sport]
+  return poolFromRows(await readTeamRows(shell), shell)
+}
+
+export async function getBracketChallenge(sport: SportKey): Promise<BracketChallengeData> {
+  const shell = SPORT_SHELLS[sport]
+
+  const rows = await readTeamRows(shell).catch(() => [] as TeamRow[])
 
   const per = seedsPerSide(shell)
   const pairs = firstRoundPairs(shell)
@@ -171,16 +198,6 @@ export async function getBracketChallenge(sport: SportKey): Promise<BracketChall
 
   const sides: [BracketSide, BracketSide] = [buildSide(shell.sides[0]), buildSide(shell.sides[1])]
 
-  /*
-   * The champion picker offers every club in the sport. Where the conference
-   * string identifies a side we keep only clubs that land on one — but if NO
-   * club does (a sport whose provider gives us no side information), we keep
-   * them all rather than returning an empty picker, which would read as "we
-   * have no teams" when what we actually lack is a side label.
-   */
-  const sided = teams.filter((t) => sideOf(t.conference, shell.conferenceMatch) !== null)
-  const pool = (shell.conferenceMatch && sided.length ? sided : teams).map(toTeam)
-
   return {
     shell: toClientShell(shell),
     sports: SPORT_ORDER.map((key) => ({
@@ -189,7 +206,7 @@ export async function getBracketChallenge(sport: SportKey): Promise<BracketChall
       available: SPORT_SHELLS[key].available,
     })),
     sides,
-    pool,
+    pool: poolFromRows(rows, shell),
     seedsPending: true,
   }
 }
