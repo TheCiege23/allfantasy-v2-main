@@ -1479,6 +1479,7 @@ export default async function AfCorePage({
   }
 
   recordRootDuration('af.shell_ms', shellStartedAt)
+  try{const durationMs=Math.max(0,Date.now()-shellStartedAt);if(durationMs>=2500)console.info('[core-shell-timing]',JSON.stringify({durationMs}))}catch{/* Diagnostics cannot fail the shell. */}
 
   /*
    * The same duration, against the budget it was measured against (`lib/sports-os/budgets.ts`).

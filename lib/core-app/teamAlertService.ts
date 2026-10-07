@@ -23,11 +23,11 @@ export async function reconcileTeamAlertNotifications(leagueId:string,userId:str
   const result=await readTeamAlerts(leagueId,userId)
   if(!result.available)return {evaluated:0,available:false}
   const profile=await prisma.userProfile.findUnique({where:{userId},select:{preferredLanguage:true}}),es=profile?.preferredLanguage==='es'
-  const activeKeys=new Set<string>(),prefix=`team-workspace:${leagueId}:`
+  const activeKeys=new Set<string>(),activeTargets=new Map<string,string>(),prefix=`team-workspace:${leagueId}:`
   let evaluated=0
   for(const a of result.alerts){
     const digest=createHash('sha256').update(a.key).digest('hex').slice(0,24),sourceKey=`${prefix}${digest}:${userId}`
-    activeKeys.add(sourceKey)
+    activeKeys.add(sourceKey);activeTargets.set(sourceKey,a.href)
     if(!a.fresh)continue
     // A persisted claim prevents repeat email/push as well as duplicate bell entries.
     const claim=`team-alert:${sourceKey}`
@@ -39,6 +39,25 @@ export async function reconcileTeamAlertNotifications(leagueId:string,userId:str
     evaluated++
   }
   const previous=await prisma.platformNotification.findMany({where:{userId,leagueId,type:'team_workspace_alert',readAt:null},select:{id:true,sourceKey:true,meta:true}})
-  for(const row of previous)if(row.sourceKey?.startsWith(prefix)&&!activeKeys.has(row.sourceKey))await prisma.platformNotification.update({where:{id:row.id},data:{readAt:new Date(),meta:{...(row.meta&&typeof row.meta==='object'&&!Array.isArray(row.meta)?row.meta:{}),resolvedAt:new Date().toISOString()}}})
+  for(const row of previous){
+    if(!row.sourceKey?.startsWith(prefix))continue
+    const href=activeTargets.get(row.sourceKey)
+    const meta=row.meta&&typeof row.meta==='object'&&!Array.isArray(row.meta)?row.meta:{}
+    if(href){
+      if(meta.actionHref===href)continue
+      // Merge only the target field atomically: delivery receipt updates may occur concurrently.
+      // Already-claimed alerts are upgraded without sending another push or email.
+      await prisma.$executeRaw`UPDATE "platform_notifications"
+        SET "meta" = (CASE WHEN jsonb_typeof("meta")='object' THEN "meta" ELSE '{}'::jsonb END) || ${JSON.stringify({actionHref:href})}::jsonb
+        WHERE "id"=${row.id} AND "userId"=${userId} AND "leagueId"=${leagueId}
+          AND "type"='team_workspace_alert' AND "sourceKey"=${row.sourceKey} AND "readAt" IS NULL`
+    }else{
+      await prisma.$executeRaw`UPDATE "platform_notifications"
+        SET "readAt"=NOW(), "meta"=(CASE WHEN jsonb_typeof("meta")='object' THEN "meta" ELSE '{}'::jsonb END) || ${JSON.stringify({resolvedAt:new Date().toISOString()})}::jsonb
+        WHERE "id"=${row.id} AND "userId"=${userId} AND "leagueId"=${leagueId}
+          AND "type"='team_workspace_alert' AND "sourceKey"=${row.sourceKey} AND "readAt" IS NULL`
+    }
+  }
+
   return {evaluated,available:true}
 }

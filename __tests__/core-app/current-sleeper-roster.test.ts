@@ -123,3 +123,32 @@ describe('every roster’s weekly lineup (the opponent’s side of the matchup c
     expect(result?.weekStarters).toBeNull()
   })
 })
+
+
+describe('connected-provider changed lineup edge cases',()=>{
+ beforeEach(()=>{get.mockReset()})
+ it('rejects a changed owner instead of falling back to the previously claimed roster number',async()=>{
+  mockRosters([{roster_id:3,owner_id:'new-owner',players:['p'],starters:['p']}])
+  expect(await currentSleeperRoster('league',{platformUserId:'old-owner',externalId:'3'})).toBeNull()
+ })
+ it('requires a unique current weekly row when stored starters disagree',async()=>{
+  get.mockImplementation(async(path:string)=>path.endsWith('/rosters')?[{roster_id:3,owner_id:'owner',players:['old','new'],starters:['old']}]:path.includes('/matchups/')?[{roster_id:3,starters:['new']},{roster_id:3,starters:['old']}]:{status:'in_season',settings:{leg:2}})
+  expect(await currentSleeperRoster('league',{platformUserId:'owner'})).toBeNull()
+ })
+ it('refuses an invalid host week instead of guessing a game lock from a saved roster',async()=>{
+  get.mockImplementation(async(path:string)=>path.endsWith('/rosters')?[{roster_id:3,owner_id:'owner',players:['p'],starters:['p']}]:{status:'in_season',settings:{leg:0}})
+  expect(await currentSleeperRoster('league',{platformUserId:'owner'})).toBeNull()
+ })
+})
+
+
+describe('malformed connected-provider payloads',()=>{
+ beforeEach(()=>{get.mockReset()})
+ it('ignores null roster and weekly rows without throwing or losing verified slots',async()=>{
+  get.mockImplementation(async(path:string)=>path.endsWith('/rosters')?[null,{roster_id:3,owner_id:'owner',players:['p'],starters:['p']}]:path.includes('/matchups/')?[null,{roster_id:3,starters:['p']}]:{status:'in_season',settings:{leg:2}})
+  expect((await currentSleeperRoster('league',{platformUserId:'owner'}))?.starters).toEqual(['p'])
+ })
+ it.each([{players:['p',{}],starters:['p']},{players:['p'],starters:[{}]},{players:['p'],starters:['p'],reserve:[{}]},{players:['p'],starters:['p'],co_owners:'owner'}])('holds malformed player assignments %j',async fields=>{
+  mockRosters([{roster_id:3,owner_id:'owner',...fields}]);expect(await currentSleeperRoster('league',{platformUserId:'owner'})).toBeNull()
+ })
+})

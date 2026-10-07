@@ -58,6 +58,7 @@ export function traceCard<T>(card: CoreCardRead, load: () => Promise<T>): Promis
   try {
     return Sentry.startSpan({ name: card, op: 'core.card', onlyIfParent: true, attributes: { 'af.card': card } }, () => {
       const startedAt = Date.now()
+      const clockStart = performance.now()
       pending = run()
       /*
        * The card's duration against its declared budget (`lib/sports-os/budgets.ts`), written on
@@ -82,6 +83,8 @@ export function traceCard<T>(card: CoreCardRead, load: () => Promise<T>): Promis
       const settle = <R,>(fn: () => R): R => {
         try {
           recordBudgetOnActiveSpan({ phase: 'card', name: card }, Date.now() - startedAt)
+          const durationMs=Math.max(0,Math.round(performance.now()-clockStart))
+          if(durationMs>=2500)console.info('[core-card-timing]',JSON.stringify({card,durationMs}))
         } catch {
           // Telemetry must never break a card.
         }
