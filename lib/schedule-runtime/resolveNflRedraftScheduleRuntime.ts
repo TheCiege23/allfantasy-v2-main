@@ -49,6 +49,7 @@ export type NflRedraftScheduleRuntimeResolved =
       rules: NonNullable<Awaited<ReturnType<typeof resolveCanonicalLeagueRules>>>
       state: CanonicalScheduleRuntimeState
       coverage: NflRedraftScheduleRuntimeCoverage
+      sourceReadOnly?: boolean
     }
   | {
       ok: false
@@ -233,6 +234,7 @@ export async function resolveNflRedraftScheduleRuntime(input: {
     rules,
     state,
     coverage: coverage(state),
+    sourceReadOnly: Boolean(imported),
   }
 }
 
@@ -346,9 +348,7 @@ export async function advanceNflRedraftScheduleWeek(input: {
   const resolved = await resolveNflRedraftScheduleRuntime({ seasonId: input.seasonId })
   if (!resolved.ok) return { ok: false, code: resolved.reason, message: 'Schedule runtime could not be resolved.' }
 
-  if (resolved.rules.general.season == null) return { ok: false, code: 'SEASON_NOT_FOUND', message: 'Season year is unavailable.' }
-  const imported = await loadFantraxNativePresentation({ id: input.seasonId, leagueId: resolved.state.leagueId, season: resolved.rules.general.season })
-  if (imported) return { ok: false, code: 'IMPORTED_SOURCE_READ_ONLY', message: 'Fantrax controls the scoring calendar for this imported league.' }
+  if (resolved.sourceReadOnly) return { ok: false, code: 'IMPORTED_SOURCE_READ_ONLY', message: 'Fantrax controls the scoring calendar for this imported league.' }
 
   const rosterRuntime = await resolveNflRedraftRosterRuntime({
     leagueId: resolved.state.leagueId,

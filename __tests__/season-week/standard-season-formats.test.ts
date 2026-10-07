@@ -204,3 +204,6 @@ describe('score-sync reaches every season', () => {
     expect(rotatingBatch(ids.slice(0, 30), 50, 12345)).toHaveLength(30)
   })
 })
+
+// These native-season fixtures have no imported source history.
+vi.mock('@/lib/redraft/fantraxNativePresentation', () => ({ loadFantraxNativePresentation: vi.fn().mockResolvedValue(null) }))
