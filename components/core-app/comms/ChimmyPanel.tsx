@@ -963,8 +963,8 @@ export function ChimmyPanel({
         const shown = question || `Screenshot: ${attached?.name ?? 'image'}`
         setDraft(question)
         setTurns((t) => (t.length && t[t.length - 1].role === 'you' && t[t.length - 1].text === shown ? t.slice(0, -1) : t))
-        const failure =
-          e instanceof ChimmyAskError ? e : { message: 'Chimmy hit a snag on that one.', retryable: true }
+        const asked = e instanceof ChimmyAskError ? e : null
+        const failure = asked ?? { message: 'Chimmy hit a snag on that one.', retryable: true }
         if (sameScope) {
           setScreenshot(attached)
           setUnanswered(true)
@@ -972,13 +972,12 @@ export function ChimmyPanel({
           setRetryAsk(failure.retryable ? { message: failure.message, question } : null)
         } else {
           setError(`Chimmy did not answer your question in ${scope?.name ?? 'All leagues'}. ${failure.message}`)
-          setRetryAsk(null)
         }
         posthog.capture('chimmy_request_failed', {
-          status: e instanceof ChimmyAskError ? e.status : null,
-          code: e instanceof ChimmyAskError ? e.code : null,
+          status: asked?.status ?? null,
+          code: asked?.code ?? null,
           retryable: failure.retryable,
-          unexpected: !(e instanceof ChimmyAskError),
+          unexpected: !asked,
           scope: scopeId ? 'league' : 'global',
           scope_changed: !sameScope,
           public_mode: publicMode,
@@ -1111,7 +1110,7 @@ export function ChimmyPanel({
               </button>
             </div>
           </div>
-        ) : turns.length === 0 && unanswered && !busy ? (
+        ) : turns.length === 0 && unanswered ? (
           /* A failed or unsent first question is not "Nothing asked yet." — say it went unanswered. */
           <div className="af-cm-empty" role="alert">
             <p className="af-cm-empty-t">Chimmy did not answer that question.</p>
