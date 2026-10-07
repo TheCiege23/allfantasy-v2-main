@@ -15,6 +15,7 @@ import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { matchupConfidenceText, matchupReasonText } from '@/lib/core-app/matchupReasonText'
 import { useEffect, useRef, useState, type CSSProperties, type RefObject } from 'react'
 import { InfoTip } from '@/components/core-app/InfoTip'
+import { MatchupMarketPanel } from '@/components/core-app/MatchupMarketPanel'
 import type {
   MatchupData,
   MatchupPlayerCell,
@@ -1207,6 +1208,8 @@ export function Matchup({ data }: MatchupProps) {
       </section>
       </>
       )}
+      {/* Your starters' scoring environment, from the stored odds. Self-contained: nothing off-NFL or once final. */}
+      <MatchupMarketPanel data={data} />
     </div>
     </PlayerCardLeagueScope>
   )
