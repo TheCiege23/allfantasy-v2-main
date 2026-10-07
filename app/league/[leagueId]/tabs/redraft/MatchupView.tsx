@@ -163,7 +163,7 @@ export function MatchupView({
             <div className="grid gap-2 sm:grid-cols-3">
               <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-3">
                 <p className="text-[11px] uppercase tracking-[0.15em] text-white/35">Starter total</p>
-                <p className="mt-1 text-lg font-bold text-white">{selectedLiveTeam?.starterTotal.toFixed(2) ?? selectedScore.toFixed(2)}</p>
+                <p className="mt-1 text-lg font-bold text-white">{selectedLiveTeam?.starterTotal.toFixed(2) ?? selectedScore?.toFixed(2) ?? '—'}</p>
               </div>
               <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-3">
                 <p className="text-[11px] uppercase tracking-[0.15em] text-white/35">Bench points</p>
