@@ -384,7 +384,7 @@ const PREMIUM_FEATURE_MONETIZATION_MATRIX: readonly PremiumFeatureMonetizationEn
     requiredPlanId: "pro",
     tokenRuleCode: null,
     lockedReason: "League AI Coaching is part of AF Pro (monthly or yearly).",
-    backendEnforcement: "requireFeatureEntitlement(league_ai_coaching) on POST /api/ai-tools/long-term-coaching; subscription-only (Stripe checkout: af_pro_monthly / af_pro_yearly).",
+    backendEnforcement: "requireFeatureEntitlement(league_ai_coaching) on POST /api/ai/coaching/plan; subscription-only (Stripe checkout: af_pro_monthly / af_pro_yearly).",
     frontendGateBehavior: "FeatureGate on league AI Coaching tab.",
     unavailableBehavior: "disable_with_fallback",
     surfaceHints: {

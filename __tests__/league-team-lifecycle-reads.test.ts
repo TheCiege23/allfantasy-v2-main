@@ -95,7 +95,6 @@ describe('the display reads that were migrated actually use it', () => {
     ['lib/core-app/leagueHome.ts', 1, 1],
     ['app/api/rankings/route.ts', 1, 1],
     ['app/api/dynasty-outlook/route.ts', 1, 1],
-    ['app/api/trade-value/league-teams/route.ts', 1, 1],
     // A departed franchise must not hold a seat or be dealt a draft slot.
     ['app/api/leagues/[leagueId]/fill-empty-slots/handler.ts', 2, 2],
     ['app/api/leagues/[leagueId]/draft/settings/route.ts', 2, 1],
@@ -116,12 +115,14 @@ describe('the display reads that were migrated actually use it', () => {
 /**
  * 🛑 THESE READ THE WHOLE LEAGUE ON PURPOSE. FILTERING ONE IS A BUG, NOT A MISSING MIGRATION.
  *
- * Of the 23 league-wide `leagueTeam.findMany` sites, only seven should exclude an archived team.
+ * Of the 22 league-wide `leagueTeam.findMany` sites, only six should exclude an archived team.
+ * (It was 23 and seven until 2026-10-06, when `app/api/trade-value/league-teams` was deleted —
+ * its only caller was the AI tools grid, deleted the same day.)
  * The rest are NAME LOOKUPS or POSITIONAL JOINS, and the failure mode is the opposite of the one
  * the filter exists for: instead of hiding a departed franchise, filtering blanks a label on a row
  * that is still shown, or silently shifts an array index.
  *
- * The danger this guards is somebody reading "7 of 23 migrated" as unfinished work and completing
+ * The danger this guards is somebody reading "6 of 22 migrated" as unfinished work and completing
  * the sweep mechanically. Each entry names what would break.
  */
 describe('the league-wide reads that must NOT be filtered', () => {
