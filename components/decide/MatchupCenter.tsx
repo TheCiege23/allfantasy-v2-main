@@ -6,15 +6,11 @@
  * viewer's matchup; pre-season/no-matchup states are honest.
  */
 
-import { useEffect, useState } from 'react'
-import type { MatchupCenterPayload, MatchupSide } from '@/lib/matchup-intel/matchupCenterService'
+import type { MatchupSide } from '@/lib/matchup-intel/matchupCenterService'
 import { sleeperAvatarThumb } from '@/lib/sports-data/headshots'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useMatchupCenter } from './useMatchupCenter'
 import './broadcast-deck.css'
-
-type ApiResponse =
-  | { supported: false; platform: string }
-  | { supported: true; viewerSleeperUserId: string | null; center: MatchupCenterPayload | null; error?: string }
 
 function Side({ s, right = false }: { s: MatchupSide; right?: boolean }) {
   const { t } = useOptionalLanguage()
@@ -46,30 +42,8 @@ function Side({ s, right = false }: { s: MatchupSide; right?: boolean }) {
 
 export function MatchupCenter({ leagueId }: { leagueId: string }) {
   const { t } = useOptionalLanguage()
-  const [data, setData] = useState<ApiResponse | null>(null)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    let cancelled = false
-    setLoading(true)
-    void fetch(`/api/league/matchup-center?leagueId=${encodeURIComponent(leagueId)}`, {
-      credentials: 'same-origin',
-      cache: 'no-store',
-    })
-      .then((res) => res.json() as Promise<ApiResponse>)
-      .then((payload) => {
-        if (!cancelled) setData(payload)
-      })
-      .catch(() => {
-        if (!cancelled) setData({ supported: true, viewerSleeperUserId: null, center: null, error: 'Request failed' })
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [leagueId])
+  /* Shared with the "This week" strip on the same screen — one request between them. */
+  const { data, loading } = useMatchupCenter(leagueId)
 
   if (data && !data.supported) return null
   const center = data && data.supported ? data.center : null

@@ -37,6 +37,7 @@ import { TradeFinder } from '@/components/decide/TradeFinder'
 import { MatchupCenter } from '@/components/decide/MatchupCenter'
 import { WaiverIntel } from '@/components/decide/WaiverIntel'
 import { CommissionerPulse } from '@/components/decide/CommissionerPulse'
+import { ThisWeekStrip } from '@/components/decide/ThisWeekStrip'
 import {
   buildLeagueHomePulse,
   type LeaguePulseViewModel,
@@ -275,6 +276,9 @@ export function DecideHome({
 
   return (
     <div className="bdx" data-testid="decide-home">
+      {/* ── This week: the clocks the week runs on, first because they are the ones that move ── */}
+      <ThisWeekStrip leagueId={league.id} currentWeek={league.currentWeek ?? null} onOpenTab={onOpenTab} />
+
       {/* ── KPI row ── */}
       <div className="bdx-kpis">
         <div className="bdx-kpi">
