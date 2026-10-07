@@ -118,7 +118,7 @@ const DAY_LABEL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frid
  * defaults. In particular, Sleeper's mapper does not import the processing day
  * or UTC time, so a populated mirror field is not proof of a provider schedule.
  */
-async function resolveWaiverRules(leagueId: string, platform: string): Promise<{
+export async function resolveWaiverRules(leagueId: string, platform: string): Promise<{
   waiverType: SectionState<WaiverTypeInfo>
   processTime: SectionState<WaiverRunInfo>
   tiebreak: SectionState<string>
