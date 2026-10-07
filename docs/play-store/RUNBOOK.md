@@ -68,7 +68,8 @@ bubblewrap build
 1. https://play.google.com/console → create app → name **AllFantasy**,
    package `ai.allfantasy.app`, free, App.
 2. **App content** section (all required before review):
-   - Privacy policy: `https://allfantasy.ai/privacy`
+   - Privacy policy: `https://allfantasy.ai/privacy` — submit after the 2026-10
+     rewrite (PR #2130) is live, so review reads the policy this form matches.
    - Data safety form. Measured against the live site and code on 2026-09-25;
      re-check before each submission, because a new SDK or a PostHog project
      setting changes the answer without touching this file:
@@ -81,7 +82,9 @@ bubblewrap build
        capture); diagnostics (PostHog network timing).
      - **Shared with third parties for advertising:** the Meta Pixel, Google Tag
        Manager and **the TikTok and Reddit pixels GTM loads** run on every page,
-       Google Ads conversion tracking fires `ad.doubleclick.net`, and the server
+       Google Ads conversion tracking AND remarketing fire, Google Analytics 4
+       collects usage (declare App activity as shared with Google for analytics
+       too), and the server
        sends Meta Conversions API events (`CompleteRegistration`, `Lead`,
        `Subscribe`, `Purchase`). Declare it as shared, not only collected.
      - 🛑 **THE AD PARTNER LIST CANNOT BE DERIVED FROM THIS REPO.** TikTok and
@@ -91,21 +94,37 @@ bubblewrap build
        `performance.getEntriesByType('resource')` — a devtools network panel in
        the in-app browser reported only same-origin requests and showed none of
        these hosts, which reads exactly like "no trackers fire".
-     - Measured 2026-09-28 on `https://www.allfantasy.ai/`, third-party hosts on
-       first load: `connect.facebook.net`, `www.googletagmanager.com`,
+     - Measured 2026-10-06 on `https://www.allfantasy.ai/` (no GPC, no opt-out
+       cookie), third-party hosts on first load: `connect.facebook.net`,
+       `www.facebook.com` (the Facebook SDK's `/x/oauth/status`),
+       `www.googletagmanager.com`, `analytics.google.com` + `stats.g.doubleclick.net`
+       (**Google Analytics 4**, new since 09-28), `googleads.g.doubleclick.net` +
+       `www.google.com/rmkt/collect` + `/pagead/1p-user-list` (**Google Ads
+       remarketing**, account 18431392427, new since 09-28), `ad.doubleclick.net`,
        `analytics.tiktok.com` (+ `analytics-ipv6.tiktokw.us`),
        `www.redditstatic.com`, `pixel-config.reddit.com`, `alb.reddit.com`,
-       `ad.doubleclick.net`, `static.cloudflareinsights.com`, `sentry.io`.
-       One host is UNIDENTIFIED and worth naming before you certify the form:
-       `mpc2-prod-27-is5qnl632q-uk.a.run.app` (arrived as a `fetch`, almost
-       certainly a tag inside the container).
-     - ✅ `/privacy` now names Meta, Google, TikTok and Reddit (the advertising
-       section and the "we do not sell" callout). The earlier blocker here —
-       "/privacy does not mention Meta, Google advertising tags" — was fixed
-       2026-09-25 and this note went stale the same day; it is resolved.
+       `static.cloudflareinsights.com`, `sentry.io`, `fonts.googleapis.com`.
+       ⚠ The Meta config that loads is for dataset **1607977376870461**, not the
+       1595613188959043 named in `app/layout.tsx` — confirm which one GTM carries.
+     - Still UNIDENTIFIED: `mpc2-prod-27-is5qnl632q-uk.a.run.app` — a `fetch` to
+       `/events?cee=…`, 7 ms after the Facebook SDK's status check. It is NOT in
+       `gtm.js`, `gtag/js`, TikTok's `events.js` or the Facebook SDK (searched); the
+       scripts that could not be read cross-origin are Reddit's `pixel.js`, Meta's
+       `fbevents.js` + signals config, and TikTok's `main.*.js`. Most likely Meta.
+       Name it before certifying the form; it is a third party either way.
+     - ✅ `/privacy` (2026-10 rewrite) names Meta, Google — including Google
+       Analytics and Google Ads remarketing — TikTok and Reddit in its Section 5
+       table, says the Android app runs these tools as the website does, and says
+       PostHog receives email and name with the account id.
+     - **Users can now opt out of the advertising sharing**, at
+       `https://allfantasy.ai/privacy/choices` or with Global Privacy Control
+       (`lib/privacy/adMeasurementOptOut`). It is opt-OUT: the tags still load by
+       default, so keep "shared for advertising" = **yes** and do not mark that data
+       optional. In the TWA a GPC signal only exists if the user's Chrome sends one.
      - Data encrypted in transit; users delete in-app at **Settings → Account →
        Start account deletion**, or by email via
-       `https://allfantasy.ai/data-deletion` if locked out.
+       `https://allfantasy.ai/data-deletion` if locked out. Deletion also deletes
+       saved connected-platform credentials (2026-10).
      - **App Store Connect → App Privacy takes the SAME categories and the OPPOSITE
        tracking answer, and that is not an inconsistency.** Contact Info (email,
        phone, name), Location (coarse), Usage Data (product interaction), Diagnostics
