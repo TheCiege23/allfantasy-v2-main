@@ -28,7 +28,7 @@ export async function GET(req:Request){
 }
 
 export async function POST(req:Request){
- const userId=(await getServerSession(authOptions))?.user?.id
+ const session=await getServerSession(authOptions as never) as {user?:{id?:string}}|null,userId=session?.user?.id
  if(!userId)return NextResponse.json({error:'Unauthorized'},{status:401})
  const origin=req.headers.get('origin')
  if(!origin||origin!==new URL(req.url).origin||req.headers.get('sec-fetch-site')==='cross-site')return NextResponse.json({error:'Forbidden'},{status:403})
