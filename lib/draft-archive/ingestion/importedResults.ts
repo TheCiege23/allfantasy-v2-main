@@ -63,10 +63,12 @@ export async function captureImportedResults(leagueId: string, key: string, appl
     const batch=await Promise.all(weeks.slice(offset,offset+3).map(async week=>({week,data:await read(`league/${sourceLeagueId}/matchups/${week}`)})));
     for (const {week,data} of batch) {
       if (!Array.isArray(data) || !data.length || data.length>teams.length) continue;
-      const matchups=data.map(object), ids=matchups.map(m=>id(m.roster_id));
+      const sourceMatchups=data.map(object), ids=sourceMatchups.map(m=>id(m.roster_id));
       if (new Set(ids).size!==ids.length || ids.some(rosterId=>!rosterId||!rosterIds.includes(rosterId))) continue;
-      const presentTeams=teams.filter(t=>ids.includes(t.rosterId));
-      if (matchups.some(m=>!Array.isArray(m.players)||!Array.isArray(m.starters)||m.players.length>100||m.starters.length>100||new Set(m.players).size!==m.players.length||new Set((m.starters as unknown[]).filter(p=>p!=='0')).size!==(m.starters as unknown[]).filter(p=>p!=='0').length||m.starters.some(p=>typeof p!=='string'||(p!=='0'&&!(m.players as unknown[]).includes(p)))||m.players.some(p=>typeof p!=='string'))) continue;
+      // A missing/malformed team's contribution is unknown; verified remaining teams can still be shown.
+      const matchups=sourceMatchups.filter(m=>Array.isArray(m.players)&&Array.isArray(m.starters)&&m.players.length<=100&&m.starters.length<=100&&new Set(m.players).size===m.players.length&&new Set((m.starters as unknown[]).filter(p=>p!=='0')).size===(m.starters as unknown[]).filter(p=>p!=='0').length&&m.starters.every(p=>typeof p==='string'&&(p==='0'||(m.players as unknown[]).includes(p)))&&m.players.every(p=>typeof p==='string'));
+      if(!matchups.length)continue;
+      const presentTeams=teams.filter(t=>matchups.some(m=>id(m.roster_id)===t.rosterId));
       const ownedIds=matchups.flatMap(m=>m.players as string[]);
       if (new Set(ownedIds).size!==ownedIds.length) continue;
       let complete=presentTeams.length===teams.length; const weekRows: typeof rows=[];

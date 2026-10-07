@@ -49,7 +49,7 @@ describe('source-bound historical weekly results',()=>{
   it('rejects contradictory provider ownership and duplicate starters',async()=>{
     for(const data of [[matchups[0],{...matchups[1],players:['p','replacement']}],[{...matchups[0],starters:['p','p']},matchups[1]]]) {
       vi.stubGlobal('fetch',vi.fn(async(url:string)=>({ok:true,json:async()=>source(url,data)})));
-      expect((await captureImportedResults('l','imported:222')).state).toBe('unavailable');
+      expect((await captureImportedResults('l','imported:222')).state).toBe(data[0].starters.length>1?'partial':'unavailable');
     }
   });
   it('rejects malformed persisted totals and observation dates without crashing the page',async()=>{
@@ -119,4 +119,10 @@ it('preserves known weekly teams when a draft roster later disappears, leaving r
  const stored=db.create.mock.calls[0][0].data.snapshotData;expect(stored.report.teams[0].starterPoints).toBe(10);expect(stored.report.teams[1].coveredPicks).toBe(0);expect(stored.report.teams.every((t:any)=>t.rank===null)).toBe(true);
  vi.stubGlobal('fetch',vi.fn(async(url:string)=>({ok:true,json:async()=>url.includes('/matchups/')?[{...matchups[0],roster_id:99}]:source(url)})));
  expect((await captureImportedResults('l','imported:222')).state).toBe('unavailable');
+});
+
+it('preserves verified teams when one weekly roster is malformed without ranking the draft',async()=>{
+ vi.stubGlobal('fetch',vi.fn(async(url:string)=>({ok:true,json:async()=>url.includes('/matchups/')?[matchups[0],{...matchups[1],players:null}]:source(url)})));
+ expect(await captureImportedResults('l','imported:222')).toEqual({weeks:0,state:'partial'});
+ const stored=db.create.mock.calls[0][0].data.snapshotData;expect(stored.report.teams[0].starterPoints).toBe(10);expect(stored.report.teams[1].coveredPicks).toBe(0);expect(stored.report.teams.every((t:any)=>t.rank===null)).toBe(true);
 });
