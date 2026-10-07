@@ -27,6 +27,8 @@ export const COMMS_OPEN_EVENT = 'af-comms-open'
 
 /** The shape `COMMS_OPEN_EVENT` carries, so both sides agree on it. */
 export type CommsOpenDetail = {
+  /** Explicitly reviewed public draft, scoped to one league. It never sends automatically. */
+  leagueDraft?: import('@/lib/core-app/commissionerWeeklyPlan').ReviewedLeagueDraft
   tab?: 'league' | 'chimmy' | 'huddle' | 'dms'
   prefill?: string
   /**

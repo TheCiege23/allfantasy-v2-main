@@ -7,6 +7,7 @@ import type { WeeklyPlayoffPath } from '@/lib/core-app/weeklyPlayoffPath'
 import { commissionerWeekDraft, drawWeeklyShareCard, rivalryNarrative, weeklySocialPost, weeklyCardScenarios, WEEK_PUBLIC_URL, WEEK_SOCIALS, type WeekSocial } from '@/lib/core-app/weeklyShare'
 import { COMMS_OPEN_EVENT } from './comms/commsEvents'
 import { formatPct1 } from '@/lib/core-app/weeklyPercent'
+import CommissionerWeeklyPlan from './CommissionerWeeklyPlan'
 
 function download(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob); const link = document.createElement('a')
@@ -90,9 +91,9 @@ export function WeeklySharing({ data, path }: { data: WeeklyBlueprint; path?: We
       {!hasCharts ? <p><small>{es ? 'Abre una liga con un modelo de playoffs disponible para exportar sus gráficos.' : 'Open a league with an available playoff model to export its charts.'}</small></p> : null}
     </details>
     {commId ? <details><summary>{es ? 'Plan del comisionado' : 'Commissioner weekly plan'}</summary>
+      <CommissionerWeeklyPlan key={commId} leagueId={commId} data={data} announcement={announcement} />
       <p>{es ? 'Comprueba plazos, puntuación pendiente y reglas de playoffs antes de publicar un resumen.' : 'Check deadlines, pending scoring and playoff rules before publishing a briefing.'}</p>
-      <textarea aria-label={es ? 'Borrador del anuncio' : 'Announcement draft'} readOnly value={announcement} onFocus={e=>e.target.select()} rows={6}/>
-      <div className="af-wbp-buttons"><button type="button" onClick={()=>copy(announcement)}>{es ? 'Copiar anuncio' : 'Copy announcement'}</button><button type="button" onClick={askCommissioner}>{es ? 'Preparar con Chimmy' : 'Prepare with Chimmy'}</button><Link href={`/core/commissioner?league=${encodeURIComponent(commId)}`}>{es ? 'Abrir Centro del comisionado' : 'Open Commissioner Hub'}</Link><Link href={`/core/standings?league=${encodeURIComponent(commId)}`}>{es ? 'Revisar clasificación' : 'Review standings'}</Link></div>
+      <div className="af-wbp-buttons"><button type="button" onClick={askCommissioner}>{es ? 'Preparar con Chimmy' : 'Prepare with Chimmy'}</button><Link href={`/core/commissioner?league=${encodeURIComponent(commId)}`}>{es ? 'Abrir Centro del comisionado' : 'Open Commissioner Hub'}</Link><Link href={`/core/standings?league=${encodeURIComponent(commId)}`}>{es ? 'Revisar clasificación' : 'Review standings'}</Link></div>
     </details> : data.commissionerLeagueIds?.length ? <Link href="/core/commissioner">{es ? 'Preparar las ligas que administras' : 'Prepare the leagues you manage'} →</Link> : null}
     <p role="status">{status}</p>
   </section>

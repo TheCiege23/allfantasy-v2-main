@@ -199,6 +199,8 @@ export async function reconcileLeagueTasks(leagueId: string, now = new Date()): 
 
   const detectedKeys = new Set(candidates.map((c) => c.sourceKey))
   for (const row of existing) {
+    // Reviewed weekly work is owned by the commissioner, never by a detector.
+    if (row.sourceKey.startsWith('weekly:')) continue
     if (detectedKeys.has(row.sourceKey)) continue
     if (detectedKeys.has('operational:coverage:v1') && row.sourceKey.startsWith('operational:lineup:')) continue
     if (SETTLED.has(row.status)) continue

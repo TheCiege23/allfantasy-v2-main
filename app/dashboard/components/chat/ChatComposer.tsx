@@ -30,6 +30,7 @@ export type LeagueComposerPayload = {
 }
 
 type ChatComposerProps = {
+  reviewedDraft?: import('@/lib/core-app/commissionerWeeklyPlan').ReviewedLeagueDraft
   leagueId: string
   onSend: (message: LeagueComposerPayload) => void | Promise<void>
   placeholder?: string
@@ -159,6 +160,7 @@ export function imageRejection(file: { type: string; size: number }): string | n
 type Picker = 'gif' | 'emoji' | 'poll' | null
 
 export function ChatComposer({
+  reviewedDraft,
   leagueId,
   onSend,
   placeholder = 'Message league...',
@@ -184,6 +186,7 @@ export function ChatComposer({
   /** Photos on their way up. Shown as chips so a slow upload never looks like nothing happened. */
   const [uploading, setUploading] = useState(0)
   const appliedPrefillKey = useRef<string | null>(null)
+  const appliedReviewedDraft = useRef<string | null>(null)
   const [activePicker, setActivePicker] = useState<Picker>(null)
   const pickerAnchorRef = useRef<HTMLDivElement | null>(null)
   const floatingRef = useRef<HTMLDivElement | null>(null)
@@ -353,6 +356,16 @@ export function ChatComposer({
       autoResize()
     })
   }, [leagueId, initialDraftText, autoResize])
+
+  useEffect(() => {
+    if (!reviewedDraft || reviewedDraft.leagueId !== leagueId || chatType !== 'league' || appliedReviewedDraft.current === reviewedDraft.id) return
+    appliedReviewedDraft.current = reviewedDraft.id
+    if ((text.trim() || pollDraft || pendingGif || attachments.length) && !window.confirm('Replace your current unsent message with this reviewed weekly draft?')) return
+    setText(reviewedDraft.text)
+    setPollDraft(reviewedDraft.poll ? { ...reviewedDraft.poll, closeAt: new Date(reviewedDraft.poll.closeAt) } : null)
+    setPendingGif(null); setAttachments([])
+    queueMicrotask(() => { textareaRef.current?.focus(); autoResize() })
+  }, [reviewedDraft, leagueId, chatType, text, pollDraft, pendingGif, attachments.length, autoResize])
 
   const insertChar = useCallback((char: string) => {
     const ta = textareaRef.current

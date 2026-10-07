@@ -1,5 +1,7 @@
+// @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('@/lib/commissioner-workspace/operationalTasks',()=>({readOperationalTasks:vi.fn(async()=>[])}))
+vi.mock('@/lib/commissioner-workspace/rosterReads',()=>({readOrphanTeamCounts:vi.fn(async()=>({orphanCount:0,totalTeams:12,ownedTeamNames:[]}))}))
 
 /**
  * Commissioner Workspace's task store: what gets detected, and what the reconciler does with it.
@@ -86,6 +88,12 @@ beforeEach(() => {
 })
 
 describe('detectStaleImport', () => {
+  it('never auto-resolves a reviewed weekly task during a detector scan', async () => {
+    mocks.findMany.mockResolvedValue([storedRow({ sourceKey: 'weekly:task:reviewed', status: 'waiting_on_league_vote' })])
+    mocks.readActivityWindow.mockResolvedValue({ lastActivityAt: NOW, eventCount: 500, tradeCount: 0, waiverCount: 0 })
+    await reconcileLeagueTasks('lg-1', NOW)
+    expect(mocks.update.mock.calls.some(([arg]) => arg.where.id === 'row-1')).toBe(false)
+  })
   it('says nothing while the feed is inside the inactivity threshold', () => {
     expect(detectStaleImport(daysAgo(13), 500, NOW)).toBeNull()
   })
