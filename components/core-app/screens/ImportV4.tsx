@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import posthog from 'posthog-js'
 import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
 import { useCallback, useEffect, useRef, useState } from 'react'
 /*
@@ -1445,6 +1446,7 @@ export function ImportV4({
     setBulkStatus({})
     setBulkMessage({})
     setError(null)
+    const startedAt = Date.now()
     const results: BulkLeagueResult[] = []
     for (let i = 0; i < selectedLeagues.length; i++) {
       const result = await importOneLeague(selectedLeagues[i].sourceId)
@@ -1458,6 +1460,19 @@ export function ImportV4({
     }
     setBulkRunning(false)
     setBulkDone(true)
+
+    const countOf = (status: BulkStatus) => results.filter((r) => r.status === status).length
+    posthog.capture('league_bulk_import_completed', {
+      platform: provider,
+      league_count: results.length,
+      done_count: countOf('done'),
+      exists_count: countOf('exists'),
+      needs_attestation_count: countOf('needs-attestation'),
+      not_found_count: countOf('not-found'),
+      provider_unavailable_count: countOf('provider-unavailable'),
+      failed_count: countOf('failed'),
+      duration_ms: Date.now() - startedAt,
+    })
 
     /*
      * One event for the whole run, counting only rows that actually wrote.
@@ -2477,6 +2492,11 @@ export function ImportV4({
                 rule 3). A button reading "Import 4 leagues" beside three ticked
                 boxes is the kind of small lie that costs trust at the last step
                 of a funnel — and this IS the last step.
+
+                While running, the count names the league IN PROGRESS, not the
+                ones finished. The loop is sequential and one commit can take a
+                minute, so a finished count sits on "1 of 5" while league 2 works
+                and reads as frozen.
               */}
               <button
                 type="button"
@@ -2485,7 +2505,7 @@ export function ImportV4({
                 onClick={() => void runBulkImport()}
               >
                 {bulkRunning
-                  ? `Importing… ${bulkCounts.processed} of ${selectedLeagues.length}`
+                  ? `Importing league ${Math.min(bulkCounts.processed + 1, selectedLeagues.length)} of ${selectedLeagues.length}…`
                   : selectedLeagues.length === 0
                     ? 'Pick at least one league'
                     : `Import ${selectedLeagues.length} ${selectedLeagues.length === 1 ? 'league' : 'leagues'}`}
