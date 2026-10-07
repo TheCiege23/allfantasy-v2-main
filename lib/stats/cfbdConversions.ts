@@ -67,17 +67,20 @@ export function conversionCandidateGames(rows: readonly CfbdGameLogRow[]): strin
   return [...new Set([...teams.values()].filter(t => t.touchdowns > t.attempts).map(t => t.gameId).concat(rows.filter(r => r.statPayload._conversionSource === 'espn-summary').map(r => r.gameId)))].sort()
 }
 
-export async function enrichCfbdConversions(rows: CfbdGameLogRow[], fetchSummary: (id: string) => Promise<unknown> = async id => {
-  const res = await fetch(`https://site.api.espn.com/apis/site/v2/sports/football/college-football/summary?event=${encodeURIComponent(id)}`, { signal: AbortSignal.timeout(8000) })
-  if (!res.ok) throw new Error(`summary HTTP ${res.status}`)
-  return res.json()
-}, maxGames = 16): Promise<{ rows: CfbdGameLogRow[]; evidence: ConversionEvidence[]; gaps: string[]; verifiedGames: string[] }> {
+export async function enrichCfbdConversions(rows: CfbdGameLogRow[], fetchSummary: (id: string) => Promise<unknown>, maxGames = 16): Promise<{ rows: CfbdGameLogRow[]; evidence: ConversionEvidence[]; gaps: string[]; verifiedGames: string[] }> {
   const candidates = conversionCandidateGames(rows), evidence: ConversionEvidence[] = [], gaps: string[] = [], verifiedGames: string[] = []
   if (candidates.length > maxGames) gaps.push(`${candidates.length - maxGames} conversion candidate games deferred`)
   // Bounded batches: at most 16 calls, four at a time, within the collector's cron budget.
   for (let i = 0; i < Math.min(candidates.length, maxGames); i += 4) {
     await Promise.all(candidates.slice(i, Math.min(i + 4, maxGames)).map(async gameId => {
-      try { const parsed = extractEspnConversions(await fetchSummary(gameId.replace(/^cfbd:/, '')), gameId, rows); evidence.push(...parsed.evidence); if (!parsed.gaps.length) verifiedGames.push(gameId); gaps.push(...parsed.gaps.map(g => `${gameId}: ${g}`)) }
+      try {
+        const summary = await fetchSummary(gameId.replace(/^cfbd:/, ''))
+        const parsed = extractEspnConversions(summary, gameId, rows)
+        evidence.push(...parsed.evidence)
+        // A live or incomplete summary may add explicit evidence, but cannot retract a prior try.
+        if (!parsed.gaps.length && (summary as any)?.header?.competitions?.[0]?.status?.type?.completed === true) verifiedGames.push(gameId)
+        gaps.push(...parsed.gaps.map(g => `${gameId}: ${g}`))
+      }
       catch { gaps.push(`${gameId}: conversion summary unavailable`) }
     }))
   }

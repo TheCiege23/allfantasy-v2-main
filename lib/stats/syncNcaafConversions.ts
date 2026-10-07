@@ -5,6 +5,12 @@ import type { CfbdGameLogRow } from './cfbdGameLogs'
 
 const stableJson = (v: unknown): string => JSON.stringify(v, (_, value) => value && typeof value === 'object' && !Array.isArray(value) ? Object.fromEntries(Object.entries(value).sort(([a],[b]) => a.localeCompare(b))) : value)
 
+async function fetchEspnConversionSummary(id: string): Promise<unknown> {
+  const res = await fetch(`https://site.api.espn.com/apis/site/v2/sports/football/college-football/summary?event=${encodeURIComponent(id)}`, { signal: AbortSignal.timeout(8000) })
+  if (!res.ok) throw new Error(`summary HTTP ${res.status}`)
+  return res.json()
+}
+
 /** Independent retry ledger: replay cached evidence after a box-score refresh and refresh corrections. */
 export async function syncRecentNcaafConversions(season: number, now = new Date()) {
   const stored = await prisma.playerGameStat.findMany({ where: { sportType: 'NCAAF', season, gameDate: { gte: new Date(now.getTime() - 21 * 86400000) }, gameId: { startsWith: 'cfbd:' }, OR: [{ source: 'cfbd-weekly' }, { source: null }] }, select: { id: true, playerId: true, gameId: true, statPayload: true, updatedAt: true } })
@@ -20,7 +26,7 @@ export async function syncRecentNcaafConversions(season: number, now = new Date(
       if (data.verified === true) cachedVerified.push(gameId)
     }
   }
-  const enriched = await enrichCfbdConversions(rows.filter(r => due.includes(r.gameId)))
+  const enriched = await enrichCfbdConversions(rows.filter(r => due.includes(r.gameId)), fetchEspnConversionSummary)
   const evidence = [...cachedEvidence, ...enriched.evidence], verifiedGames = [...cachedVerified, ...enriched.verifiedGames]
   const patched = applyConversionEvidence(rows, evidence, verifiedGames)
   let written = 0; const conflicts = new Set<string>()
