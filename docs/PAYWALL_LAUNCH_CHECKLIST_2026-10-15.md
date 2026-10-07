@@ -63,8 +63,8 @@ catalog. See §8.
 
 | Key | Plan feature | Routes |
 |---|---|---|
-| `start_sit_ai` | `pro_start_sit` | `ai-tools/start-sit/analyze`, `leagues/[id]/ai/start-sit`, `start-sit/chimmy` |
-| `trade_ai` | `trade_analyzer` | `ai/trade-analysis`, `dynasty-trade-analyzer`, `trade-value/chimmy`, `trades/analyze` |
+| `start_sit_ai` | `pro_start_sit` | `leagues/[id]/ai/start-sit`, `start-sit/chimmy` |
+| `trade_ai` | `trade_analyzer` | `ai/trade-analysis`, `dynasty-trade-analyzer`, `trades/analyze` |
 | `trade_finder` | `trade_analyzer` | `trade-finder` (3/day anonymous until launch) |
 | `draft_ai` | `pro_draft_ai` | `ai/draft-help`, `draft-ai` |
 | `chimmy_voice` | `ai_chat` | `chimmy/voice` |
