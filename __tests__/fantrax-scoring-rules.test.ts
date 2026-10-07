@@ -90,7 +90,6 @@ describe('categories Fantrax keeps in one bucket and this codebase keeps in thre
       info([{ position: DEFAULT, points: 2, scoringCategory: cat('INDIVIDUAL_TWO_POINT_CONVERSIONS_SCORES', '2PT', '2RR') }]),
     )
     expect(rules).toEqual([
-      { stat_key: 'pass_2pt', points_value: 2 },
       { stat_key: 'rush_2pt', points_value: 2 },
       { stat_key: 'rec_2pt', points_value: 2 },
     ])

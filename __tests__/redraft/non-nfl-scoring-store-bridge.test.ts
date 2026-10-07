@@ -156,7 +156,7 @@ describe('NCAAF', () => {
     expect(await score({ pass_td: 2 })).toBe(12)
   })
 
-  it('a saved two-point value applies to the engine’s single two-point category', async () => {
+  it('a saved equal rushing/receiving value preserves legacy aggregate scoring', async () => {
     league('NCAAF', {
       ncaaf_scoring_config: {
         rules: { ...UI_DEFAULTS.NCAAF, passing_2pt: 3, rushing_2pt: 3, receiving_2pt: 3 },

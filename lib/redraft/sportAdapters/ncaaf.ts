@@ -30,7 +30,10 @@ export const ncaafAdapter: SportAdapter = {
       idp_td: raw.idp_td ?? 0,
       idp_int: raw.idp_int ?? 0,
       idp_int_return_yards: raw.idp_int_return_yards ?? 0,
-      two_pt: raw.two_pt ?? 0,
+      two_pt: ['pass_2pt', 'rush_2pt', 'rec_2pt'].some(k => k in raw) ? 0 : raw.two_pt ?? 0,
+      ...(['pass_2pt', 'rush_2pt', 'rec_2pt'].some(k => k in raw) ? {
+        pass_2pt: raw.pass_2pt ?? 0, rush_2pt: raw.rush_2pt ?? 0, rec_2pt: raw.rec_2pt ?? 0,
+      } : {}),
       fum_lost: raw.fum_lost ?? 0,
       def_td: raw.def_td ?? 0,
       def_int: raw.def_int ?? 0,
