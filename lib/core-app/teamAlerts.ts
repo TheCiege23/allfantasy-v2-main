@@ -3,7 +3,7 @@ import type { MyTeamData } from './myTeam'
 import { eligibleComparisons } from './teamWorkspace'
 import { leagueCalendar } from './leagueCalendar'
 import { teamInjuryAlertHref,teamDeadlineAlertHref } from './teamAlertTarget'
-export type TeamAlert={key:string;kind:'injury'|'deadline';leagueId:string;leagueName:string;playerId:string|null;playerName:string|null;status:string|null;deadline:string;source:string;observedAt:string|null;alternative:string|null;href:string;fresh:boolean;label:string}
+export type TeamAlert={measurement?:string|null;key:string;kind:'injury'|'deadline';leagueId:string;leagueName:string;playerId:string|null;playerName:string|null;status:string|null;deadline:string;source:string;observedAt:string|null;alternative:string|null;href:string;fresh:boolean;label:string}
 /** Deadlines are recorded timestamps. A week number is never guessed into a date. */
 export function buildTeamAlerts(data:MyTeamData,settings:unknown,now:number):TeamAlert[]{
   const league=data.league,alerts:TeamAlert[]=[]

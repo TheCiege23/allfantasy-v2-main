@@ -45,10 +45,10 @@ export async function currentSleeperRoster(
   // An owner id is authoritative. Never fall through to a different owner's
   // roster just because an old roster number still matches after reassignment.
   const matches = team.platformUserId
-    ? rows.filter((r) => r.owner_id === team.platformUserId || r.co_owners?.includes(team.platformUserId!))
-    : rows.filter((r) => String(r.roster_id) === team.externalId)
+    ? rows.filter((r) => r && typeof r==='object' && (r.owner_id === team.platformUserId || Array.isArray(r.co_owners)&&r.co_owners.includes(team.platformUserId!)))
+    : rows.filter((r) => r && typeof r==='object' && String(r.roster_id) === team.externalId)
   const row = matches.length === 1 ? matches[0] : null
-  if (!row || !Array.isArray(row.starters) || (row.players != null && !Array.isArray(row.players))) return null
+  if (!row || !validPlayerIds(row.starters,true) || (row.players != null && !validPlayerIds(row.players)) || (row.co_owners != null && !validPlayerIds(row.co_owners))) return null
   // Sleeper's roster starters can disagree with the live weekly lineup. The
   // matchup endpoint is authoritative for this week's starter slots (including
   // bye teams with a null matchup_id). Never fall back to the stale roster list.
@@ -73,6 +73,7 @@ export async function currentSleeperRoster(
   if (matchups) {
     weekStarters = {}
     for (const other of rows) {
+      if(!other||typeof other!=='object'||!Number.isInteger(other.roster_id))continue
       const weekly = weeklyStarters(matchups, other)
       if (weekly && startersAreActive(other, weekly)) weekStarters[String(other.roster_id)] = normalizeStarters(weekly)
     }
@@ -93,13 +94,13 @@ function weeklyStarters(
   matchups: Array<{ roster_id: number; starters: string[] }>,
   row: LiveRoster,
 ): string[] | null {
-  const matching = matchups.filter((m) => m.roster_id === row.roster_id)
-  return matching.length === 1 && Array.isArray(matching[0].starters) ? matching[0].starters : null
+  const matching = matchups.filter((m) => m && typeof m==='object' && m.roster_id === row.roster_id)
+  return matching.length === 1 && validPlayerIds(matching[0].starters,true) ? matching[0].starters : null
 }
 
 /** Conflicting assignments are unknown, never a reason to flag a starter. */
 function startersAreActive(row: LiveRoster, starters: string[]): boolean {
-  if ((row.reserve != null && !Array.isArray(row.reserve)) || (row.taxi != null && !Array.isArray(row.taxi))) return false
+  if ((row.reserve != null && !validPlayerIds(row.reserve)) || (row.taxi != null && !validPlayerIds(row.taxi))) return false
   const inactive = new Set([...(row.reserve ?? []), ...(row.taxi ?? [])])
   return !starters.some((id) => id && id !== '0' && inactive.has(id))
 }
@@ -110,4 +111,9 @@ function startersAreActive(row: LiveRoster, starters: string[]): boolean {
  */
 function normalizeStarters(starters: string[]): string[] {
   return starters.map((id) => (id == null || id === '' ? '0' : id))
+}
+
+/** Runtime provider arrays can be malformed despite the declared endpoint type. */
+function validPlayerIds(value:unknown,holes=false):value is string[]{
+  return Array.isArray(value)&&value.every(id=>typeof id==='string'&&(holes||id.length>0)||holes&&id==null)
 }

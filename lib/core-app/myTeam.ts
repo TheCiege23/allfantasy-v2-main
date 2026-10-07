@@ -1,4 +1,5 @@
 import 'server-only'
+import {teamLoadTiming} from '@/lib/observability/teamLoadTiming'
 import { automaticLineup, autoSubsSetting } from './teamWorkspace'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { weekFromLeagueSettingsForLineup } from '@/lib/roster/buildPersistedRosterDataFromRosterState'
@@ -962,6 +963,15 @@ export async function getMyTeamData(
   ctx?: LeagueContext | null,
   options?: { savedRosterOnly?: boolean; alertPreviewOnly?: boolean },
 ): Promise<MyTeamData | null> {
+  const timing=teamLoadTiming(options?.alertPreviewOnly?'alerts':options?.savedRosterOnly?'saved':'full')
+  try{return await loadMyTeamData(leagueId,userId,ctx,options,timing)}finally{timing.finish()}
+}
+
+async function loadMyTeamData(
+  leagueId:string,userId:string,ctx:LeagueContext|null|undefined,
+  options:{savedRosterOnly?:boolean;alertPreviewOnly?:boolean}|undefined,
+  timing:ReturnType<typeof teamLoadTiming>,
+):Promise<MyTeamData|null>{
   const savedRosterOnly = options?.savedRosterOnly || options?.alertPreviewOnly
   const lc = leagueContextFor(leagueId, userId, ctx)
   /*
@@ -972,7 +982,7 @@ export async function getMyTeamData(
    * ⚠ A SECOND, DIFFERENT LEAGUE ID. `WeeklyMatchup.leagueId` holds `platformLeagueId`, not
    * `League.id`. Both are strings, so using the wrong one returns an empty result, not an error.
    */
-  const league = await lc.league()
+  const league = await timing.read('league',()=>lc.league())
   if (!league) return null
 
   const sport = String(league.sport ?? 'NFL')
@@ -1075,7 +1085,7 @@ export async function getMyTeamData(
   const candidates = myRosterCandidates(myTeamRow, userId)
   const isSleeper = String(league.platform).toLowerCase() === 'sleeper'
   const liveRoster = isSleeper && !savedRosterOnly && league.platformLeagueId
-    ? await currentSleeperRoster(league.platformLeagueId, myTeamRow)
+    ? await timing.read('roster',()=>currentSleeperRoster(league.platformLeagueId!, myTeamRow))
     : null
   if (liveRoster && typeof liveRoster.bestBall === 'boolean') base.league.bestBall = liveRoster.bestBall
   /*
@@ -1103,10 +1113,10 @@ export async function getMyTeamData(
   const roster = isSleeper && !savedRosterOnly
     ? (liveRoster ? { playerData: liveRoster } : null)
     : candidates.length > 0
-      ? await prisma.roster.findFirst({
+      ? await timing.read('roster',()=>prisma.roster.findFirst({
           where: { leagueId, platformUserId: { in: candidates } },
           select: { id: true, platformUserId: true, playerData: true },
-        })
+        }))
       : null
 
   if (!roster) {
@@ -1182,14 +1192,14 @@ export async function getMyTeamData(
    */
   const scoringSettings = extractScoringSettings(league.settings)
 
-  const resolved = await resolvePlayers(
+  const resolved = await timing.read('players',()=>resolvePlayers(
     [...new Set([...starterIds, ...allIds, ...reserveIds, ...taxiIds])],
     sport,
     projectionWeek,
     sportsWeek,
     scoringSettings,
     String(league.platform ?? '')
-  )
+  ))
 
   /*
    * ⚠ THE BYE PASS RUNS HERE, BEFORE ANYTHING READS A PROJECTION. It ran after the bench check,
@@ -1403,7 +1413,7 @@ export async function getMyTeamData(
    * players without a countdown, because a confident "1 year left" that is
    * wrong is how someone loses a player to a deadline they thought they had.
    */
-  const tenure = taxiIds.length > 0 ? await getTaxiTenure(leagueId, taxiIds) : null
+  const tenureRead = taxiIds.length > 0 ? getTaxiTenure(leagueId, taxiIds) : Promise.resolve(null)
 
   /*
    * The league's own week, which is a third clock again — distinct from both
@@ -1411,9 +1421,26 @@ export async function getMyTeamData(
    * by it, and it is resolved from the matchup rows themselves rather than a
    * calendar because sync bootstraps every week as an unscored 0-0 row.
    */
-  const leagueWeek = league.platformLeagueId
-    ? await resolveCurrentWeekForLeague(league.platformLeagueId)
-    : null
+  const leagueWeekRead = league.platformLeagueId
+    ? resolveCurrentWeekForLeague(league.platformLeagueId)
+    : Promise.resolve(null)
+
+  const gradeRead = getRosterGrade({
+    leagueId,
+    myPlatformUserIds: candidates,
+    isDynasty: Boolean(league.isDynasty),
+    starters: league.starters,
+    /*
+     * The same scoring map that produces the AF column on every roster row, so
+     * the grade is a ranking IN THIS LEAGUE rather than against a 12-team
+     * full-PPR market this league may look nothing like. Without these two the
+     * ledger layer cannot run and the grade silently falls back to raw market
+     * prices — honest, but a weaker claim, and `basis.leagueScored` says which.
+     */
+    scoringSettings,
+    projectionWeek,
+  }).catch(() => null)
+
 
   /*
    * Byes for THIS week (to flag a starter who is not playing) and the next few
@@ -1424,7 +1451,9 @@ export async function getMyTeamData(
    * One cache read for the whole roster. Keyed by the HOST team, because the
    * forecast belongs to the stadium the game is played in, not to the player.
    */
-  const weather = await getGameWeather({
+
+
+  const weatherRead = getGameWeather({
     sport,
     games: new Map(
       [...resolved.values()].map((p) => [
@@ -1447,6 +1476,17 @@ export async function getMyTeamData(
     ),
   }).catch(() => new Map())
 
+  const marketRead = getRosteredMarket({
+    sport,
+    dynastyOnly: league.isDynasty ?? null,
+  }).catch(() => null)
+
+  // These enrichments share the verified roster, but none depends on another's result.
+  // Await the whole wave so a rejected required read cannot leave sibling promises unhandled.
+  const [tenure, leagueWeek, weather, market, grade] = await timing.read('enrichment',()=>Promise.all([
+    tenureRead, leagueWeekRead, weatherRead, marketRead, gradeRead,
+  ]))
+
   for (const [id, w] of weather) {
     const p = resolved.get(id)
     if (p) p.weather = w
@@ -1459,10 +1499,7 @@ export async function getMyTeamData(
    * Scoped to this league's format: a player started in every dynasty league
    * can be a waiver add in redraft, and blending those describes neither.
    */
-  const market = await getRosteredMarket({
-    sport,
-    dynastyOnly: league.isDynasty ?? null,
-  }).catch(() => null)
+
 
   if (market && market.leaguesCounted >= MIN_LEAGUES_FOR_MARKET) {
     for (const p of resolved.values()) {
@@ -1544,21 +1581,6 @@ export async function getMyTeamData(
     (id) => resolved.get(id)?.afEngineProjectedPoints,
   )
 
-  const grade = await getRosterGrade({
-    leagueId,
-    myPlatformUserIds: candidates,
-    isDynasty: Boolean(league.isDynasty),
-    starters: league.starters,
-    /*
-     * The same scoring map that produces the AF column on every roster row, so
-     * the grade is a ranking IN THIS LEAGUE rather than against a 12-team
-     * full-PPR market this league may look nothing like. Without these two the
-     * ledger layer cannot run and the grade silently falls back to raw market
-     * prices — honest, but a weaker claim, and `basis.leagueScored` says which.
-     */
-    scoringSettings,
-    projectionWeek,
-  }).catch(() => null)
 
   /*
    * 🛑 THE MATCHUP CARD PRICES LINEUPS THE WAY THIS SCREEN DOES, OR IT DISAGREES WITH THE HEADER.
@@ -1655,7 +1677,7 @@ export async function getMyTeamData(
     : Promise.resolve(null)
 
   const matchup = leagueWeek
-    ? await getNextMatchup({
+    ? await timing.read('matchup',()=>getNextMatchup({
         leagueId,
         platformLeagueId: league.platformLeagueId,
         myExternalId: myTeamRow.externalId,
@@ -1674,7 +1696,7 @@ export async function getMyTeamData(
             : null,
         priceLineups,
         bestBall: base.league.bestBall === true,
-      }).catch(() => null)
+      }).catch(() => null))
     : null
 
   const starterDays = starterSlots

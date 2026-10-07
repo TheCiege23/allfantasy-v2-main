@@ -168,6 +168,18 @@ describe('Team alert loading budget',()=>{
   const {currentSleeperRoster}=await import('@/lib/core-app/currentSleeperRoster');expect(currentSleeperRoster).not.toHaveBeenCalled()
   expect(previewReads).toBeLessThan(fullReads);process.stdout.write(JSON.stringify({benchmark:'controlled mocked database reads',fullReads,previewReads})+'\n')
  },30000)
+ it('starts independent enrichments while weather is pending, preserving roster output',async()=>{
+  const {getMyTeamData}=await import('@/lib/core-app/myTeam')
+  const baseline=await getMyTeamData(LEAGUE_ID,USER_ID,context() as any,{savedRosterOnly:true})
+  let release!:(value:any)=>void
+  db.answers['weatherCache.findMany']=()=>new Promise(resolve=>{release=resolve})
+  const {getRosteredMarket}=await import('@/lib/core-app/rosteredMarket')
+  vi.clearAllMocks();db.calls=[]
+  const pending=getMyTeamData(LEAGUE_ID,USER_ID,context() as any,{savedRosterOnly:true})
+  await vi.waitFor(()=>{expect(release).toBeTypeOf('function');expect(getRosteredMarket).toHaveBeenCalled()})
+  release([])
+  expect(await pending).toEqual(baseline)
+ })
  it('starts the team count while the claimed-team read is still pending',async()=>{
   const {getMyTeamData}=await import('@/lib/core-app/myTeam');const ctx=context();let finish!:(value:any)=>void
   ctx.claimedTeam=vi.fn(()=>new Promise(resolve=>{finish=resolve})) as any
