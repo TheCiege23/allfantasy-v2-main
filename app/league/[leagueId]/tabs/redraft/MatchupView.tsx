@@ -69,6 +69,8 @@ export function MatchupView({
   selectedRosterId: string | null
   sport: string
 }) {
+  // Source totals take precedence over native recalculation for an imported result.
+  if (matchup?.source === 'fantrax') liveMatchup = null
   const showAfHint = isWeatherSensitiveSport(sport)
   const snapshot = scoringSnapshot(matchup)
   const missing = Array.isArray(snapshot?.missingPlayerIds) ? snapshot.missingPlayerIds.length : 0
@@ -133,18 +135,19 @@ export function MatchupView({
           </span>
         </div>
 
+        {matchup?.scoringEvidence && <p className="mb-3 text-xs text-white/50">{matchup.scoringEvidence.message}</p>}
         <div className="grid grid-cols-3 gap-3">
           <div className="text-center">
             <p className="truncate text-[11px] text-white/50">{selectedName}</p>
-            <p className="text-2xl font-bold text-white">{selectedScore.toFixed(2)}</p>
+            <p className="text-2xl font-bold text-white">{selectedScore == null ? '—' : selectedScore.toFixed(2)}</p>
           </div>
           <div className="flex flex-col items-center justify-center text-white/35">
             <span className="text-xs uppercase">vs</span>
-            <span className="text-[11px]">{liveMatchup ? 'live scoring' : 'cached scoring'}</span>
+            <span className="text-[11px]">{matchup?.source === 'fantrax' ? 'Fantrax totals' : liveMatchup ? 'live scoring' : 'cached scoring'}</span>
           </div>
           <div className="text-center">
             <p className="truncate text-[11px] text-white/50">{opponentName}</p>
-            <p className="text-2xl font-bold text-white">{opponentScore.toFixed(2)}</p>
+            <p className="text-2xl font-bold text-white">{opponentScore == null ? '—' : opponentScore.toFixed(2)}</p>
           </div>
         </div>
 

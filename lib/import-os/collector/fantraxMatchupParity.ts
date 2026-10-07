@@ -1,3 +1,4 @@
+import { syncFantraxNativePresentation } from '@/lib/redraft/fantraxNativePresentation'
 /**
  * Fantasy OS — Fantrax weekly-matchup parity collector.
  *
@@ -256,6 +257,10 @@ export async function runFantraxMatchupParity(input?: {
           points2: row.homeScore,
         })
       }
+
+      if (fetched.periodsFailed > 0) throw new Error('Fantrax period reads incomplete; preserving previous native presentation')
+      const linked = await prisma.league.findMany({ where: { platform: { equals: 'fantrax', mode: 'insensitive' }, platformLeagueId: connection.platformLeagueId, season: connection.season }, select: { id: true } })
+      for (const league of linked) await syncFantraxNativePresentation(league.id, info.data, fetched.rows, now)
 
       const schedule = Array.from(byWeek.values()).sort((a, b) => a.week - b.week)
       if (schedule.length === 0) {

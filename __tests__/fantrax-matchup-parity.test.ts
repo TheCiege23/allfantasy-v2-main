@@ -1,3 +1,4 @@
+vi.mock('@/lib/redraft/fantraxNativePresentation', () => ({ syncFantraxNativePresentation: vi.fn().mockResolvedValue({ changed: false }) }))
 // @vitest-environment node
 /**
  * Guards `lib/import-os/collector/fantraxMatchupParity.ts` — the writer

@@ -1,3 +1,4 @@
+import { loadFantraxNativePresentation } from '@/lib/redraft/fantraxNativePresentation'
 import { prisma } from '@/lib/prisma'
 import { resolveCanonicalLeagueRules } from '@/lib/league-runtime'
 import { resolveNflRedraftRosterRuntime } from '@/lib/roster-runtime/resolveNflRedraftRosterRuntime'
@@ -73,6 +74,7 @@ export type PersistedScheduleGenerationResult =
         | 'SCHEDULE_ALREADY_EXISTS'
         | 'SEASON_NOT_FOUND'
         | 'VALIDATION_BLOCKED'
+      | 'IMPORTED_SOURCE_READ_ONLY'
       message: string
     }
 
@@ -213,14 +215,16 @@ export async function resolveNflRedraftScheduleRuntime(input: {
   if (!season.rosters.length) return { ok: false, reason: 'rosters_unavailable' }
 
   const teams = await buildTeamsForRedraftRosters(season.leagueId, season.rosters as RedraftRosterRow[])
+  const imported = await loadFantraxNativePresentation(season, input.now)
   const state = buildCanonicalScheduleRuntimeState({
     rules,
     teams,
-    persistedMatchups: season.schedule.map(toScheduleMatchupInput),
-    currentWeek: season.currentWeek,
+    persistedMatchups: imported ? imported.matchups : season.schedule.map(toScheduleMatchupInput),
+    currentWeek: imported?.currentWeek ?? season.currentWeek,
     status: season.status,
     totalWeeks: season.totalWeeks,
-    playoffStartWeek: season.playoffStartWeek,
+    playoffStartWeek: imported?.playoffStartWeek ?? season.playoffStartWeek,
+    regularSeasonWeeks: imported?.regularSeasonWeeks,
     now: input.now,
   })
 
@@ -341,6 +345,10 @@ export async function advanceNflRedraftScheduleWeek(input: {
 > {
   const resolved = await resolveNflRedraftScheduleRuntime({ seasonId: input.seasonId })
   if (!resolved.ok) return { ok: false, code: resolved.reason, message: 'Schedule runtime could not be resolved.' }
+
+  if (resolved.rules.general.season == null) return { ok: false, code: 'SEASON_NOT_FOUND', message: 'Season year is unavailable.' }
+  const imported = await loadFantraxNativePresentation({ id: input.seasonId, leagueId: resolved.state.leagueId, season: resolved.rules.general.season })
+  if (imported) return { ok: false, code: 'IMPORTED_SOURCE_READ_ONLY', message: 'Fantrax controls the scoring calendar for this imported league.' }
 
   const rosterRuntime = await resolveNflRedraftRosterRuntime({
     leagueId: resolved.state.leagueId,
