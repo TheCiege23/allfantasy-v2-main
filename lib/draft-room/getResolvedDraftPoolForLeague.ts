@@ -502,8 +502,56 @@ async function loadLatestAveragedAdpRowsForScorings(
   return out
 }
 
-function enrichRawRowFromDbPool(existing: DraftPoolRawRow, p: SportPoolRow): void {
-  const extId = p.external_source_id ?? null
+/** The provider id a DB pool row contributes to a raw pool row. See `nflPoolRowIdResolver`. */
+type PoolRowIdFor = (p: SportPoolRow) => string | null
+
+const externalSourceIdAsIs: PoolRowIdFor = (p) => p.external_source_id ?? null
+
+/**
+ * NFL: the provider id a DB pool row may put on a draft pool row.
+ *
+ * 🛑 NOT `external_source_id` AS-IS. That field is `sleeperId ?? externalId`, so a Rolling
+ * Insights row with no Sleeper id carries its RI number. Measured on production 2026-10-06, in
+ * every NFL pool synced that fortnight: Marquise Goodwin (RI 19) and Joe Flacco (Sleeper 19)
+ * were both drafted as "19", and Cardale Jones (RI 23) and Jason Witten (Sleeper 23) as "23".
+ * Drafting one marked the other taken, and a roster slot holding "19" is scored as Flacco.
+ * The 3+-digit guards elsewhere in this file (`looksLikeSleeperNumericId`) never see a one- or
+ * two-digit RI id, which is how these got through.
+ *
+ * So, in order:
+ *   1. the row's own Sleeper id;
+ *   2. else the Sleeper id of another pool row for the same name and position, only when
+ *      exactly ONE Sleeper id exists for that pair (Goodwin's RI row borrows 1346 from his
+ *      Sleeper row). Two Sleeper ids for one name and position means two men, so refuse;
+ *   3. else a NUMERIC external id is refused, because numbers are what the NFL scoring path
+ *      reads as Sleeper ids, and the row's internal `player_id` is used instead;
+ *   4. else a non-numeric external id is kept, as before.
+ */
+function nflPoolRowIdResolver(poolRows: SportPoolRow[]): PoolRowIdFor {
+  const keyOf = (p: SportPoolRow) =>
+    `${normalizeDraftPoolNameForDedupe(p.full_name ?? '')}|${normalizeKeyPart(p.position ?? '')}`
+  const sleeperIdsByKey = new Map<string, Set<string>>()
+  for (const row of poolRows) {
+    const sid = poolRowSleeperId(row)
+    if (!sid) continue
+    const key = keyOf(row)
+    const ids = sleeperIdsByKey.get(key) ?? new Set<string>()
+    ids.add(sid)
+    sleeperIdsByKey.set(key, ids)
+  }
+  return (p) => {
+    const own = poolRowSleeperId(p)
+    if (own) return own
+    const siblings = sleeperIdsByKey.get(keyOf(p))
+    if (siblings && siblings.size === 1) return [...siblings][0]!
+    const ext = String(p.external_source_id ?? '').trim()
+    if (/^\d+$/.test(ext)) return p.player_id ?? null
+    return ext === '' ? null : ext
+  }
+}
+
+function enrichRawRowFromDbPool(existing: DraftPoolRawRow, p: SportPoolRow, idFor: PoolRowIdFor): void {
+  const extId = idFor(p)
   const legacyPlayerId = p.player_id ?? null
   existing.playerId ??= extId ?? legacyPlayerId ?? undefined
   existing.sleeperId ??= extId ?? undefined
@@ -528,6 +576,7 @@ function mergeDbPoolIntoRawList(
   mergeCap: number,
   useMixedPoolTypeMarkers: boolean,
   seenNames: Set<string>,
+  idFor: PoolRowIdFor = externalSourceIdAsIs,
 ): void {
   for (const p of poolRows) {
     const norm = normalizeDraftPoolNameForDedupe(p.full_name ?? '')
@@ -552,7 +601,7 @@ function mergeDbPoolIntoRawList(
       },
     )
     if (existingIdx >= 0) {
-      enrichRawRowFromDbPool(rawList[existingIdx], p)
+      enrichRawRowFromDbPool(rawList[existingIdx], p, idFor)
       seenNames.add(norm)
       continue
     }
@@ -564,7 +613,7 @@ function mergeDbPoolIntoRawList(
       name: p.full_name,
       position: p.position ?? 'â',
       team: p.team_abbreviation ?? null,
-      playerId: p.external_source_id ?? p.player_id ?? null,
+      playerId: idFor(p) ?? p.player_id ?? null,
       adp: null,
       bye: null,
       injuryStatus: p.injury_status ?? null,
@@ -1240,8 +1289,10 @@ export async function getResolvedDraftPoolForLeague(
       poolMergeCap(limit),
       useMixedPoolTypeMarkers,
       seenAuction,
+      sport === 'NFL' ? nflPoolRowIdResolver(poolRows as SportPoolRow[]) : externalSourceIdAsIs,
     )
   } else if (sport === 'NFL') {
+    const nflIdFor = nflPoolRowIdResolver(poolRows as SportPoolRow[])
     rawList = averagedAdpRows.map((e) => ({
       name: e.name,
       position: e.position,
@@ -1263,7 +1314,7 @@ export async function getResolvedDraftPoolForLeague(
             name: p.full_name,
             position: p.position ?? 'â',
             team: p.team_abbreviation ?? null,
-            playerId: p.external_source_id ?? (p as { player_id?: string | null }).player_id ?? null,
+            playerId: nflIdFor(p as SportPoolRow) ?? (p as { player_id?: string | null }).player_id ?? null,
             adp: null,
             bye: null,
             ...(useMixedPoolTypeMarkers ? { poolType: 'pro' as const } : {}),
@@ -1280,6 +1331,7 @@ export async function getResolvedDraftPoolForLeague(
       poolMergeCap(limit),
       useMixedPoolTypeMarkers,
       seenAfterRanked,
+      nflIdFor,
     )
     if (strictPoolSeparation && poolType === 'rookie') {
       const excludedProIds = isC2C
@@ -1862,10 +1914,13 @@ export async function getResolvedDraftPoolForLeague(
      * match at all. ⚠ Scoped to NUMERIC ids: `nfl:def:KC` and the UUID ids other sports use
      * are not in Sleeper's space and are left exactly as they were.
      */
+    // ⚠ ANY all-digit id, not only `looksLikeSleeperNumericId` (3+ digits): Sleeper's space
+    // starts at 1, and Marquise Goodwin's RI id 19 is Joe Flacco's Sleeper id. See
+    // `nflPoolRowIdResolver`.
     const poolExternalId =
       sport === 'NFL' &&
       poolMatchExternalId &&
-      looksLikeSleeperNumericId(poolMatchExternalId) &&
+      /^\d+$/.test(poolMatchExternalId) &&
       !poolRowSleeperId(poolMatch!)
         ? null
         : poolMatchExternalId

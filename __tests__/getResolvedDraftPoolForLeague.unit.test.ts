@@ -281,6 +281,63 @@ describe('getResolvedDraftPoolForLeague', () => {
     expect(merge.playerId).toBe('ext-merge-1')
   })
 
+  it('NFL: a Rolling Insights number never becomes a playerId — no two players share "19"', async () => {
+    // Production 2026-10-06: Goodwin's RI row (sleeper_id null, external 19) and Flacco's
+    // Sleeper row (19) were both drafted as "19". Drafting one marked the other taken.
+    const getResolvedDraftPoolForLeague = await loadPool()
+    hm.getLiveADP.mockResolvedValue([{ name: 'Joe Flacco', position: 'QB', team: 'CIN', adp: 1, bye: 10 }])
+    const row = (o: Record<string, unknown>) => ({
+      injury_status: null,
+      secondary_positions: [],
+      image_url: null,
+      status: null,
+      age: null,
+      ...o,
+    })
+    hm.getPlayerPoolForLeague.mockResolvedValue([
+      row({ full_name: 'Joe Flacco', position: 'QB', team_abbreviation: 'CIN', external_source_id: '19', sleeper_id: '19', player_id: 'sp-flacco' }),
+      // RI row first, so without the fix it is the one that names Goodwin.
+      row({ full_name: 'Marquise Goodwin', position: 'WR', team_abbreviation: 'Miami Dolphins', external_source_id: '19', sleeper_id: null, player_id: 'sp-goodwin-ri' }),
+      row({ full_name: 'Marquise Goodwin', position: 'WR', team_abbreviation: 'CLE', external_source_id: '1346', sleeper_id: '1346', player_id: 'sp-goodwin' }),
+      // RI-only, no Sleeper sibling: falls back to the internal id, never the bare number.
+      row({ full_name: 'Arian Foster', position: 'RB', team_abbreviation: 'Miami Dolphins', external_source_id: '71', sleeper_id: null, player_id: 'sp-foster' }),
+      // Two Sleeper ids for one name+position are two men: an RI row for that name borrows neither.
+      // The RI row comes first so it is the one kept (later same-name rows are dropped by name).
+      row({ full_name: 'Mike Williams', position: 'WR', team_abbreviation: 'Pittsburgh Steelers', external_source_id: '61', sleeper_id: null, player_id: 'sp-mw-ri' }),
+      row({ full_name: 'Mike Williams', position: 'WR', team_abbreviation: 'NYJ', external_source_id: '4068', sleeper_id: '4068', player_id: 'sp-mw1' }),
+      row({ full_name: 'Mike Williams', position: 'WR', team_abbreviation: 'TB', external_source_id: '1408', sleeper_id: '1408', player_id: 'sp-mw2' }),
+    ])
+
+    const res = await getResolvedDraftPoolForLeague('league-unit', {
+      effectiveLeagueTemplate: effectiveNflNoK(),
+      limit: 120,
+    })
+
+    const idsOf = (name: string) => res.entries.filter((e) => e.name === name).map((e) => e.playerId)
+    expect(idsOf('Joe Flacco')).toEqual(['19'])
+    expect(idsOf('Marquise Goodwin')).toEqual(['1346'])
+    expect(idsOf('Arian Foster')).toEqual(['sp-foster'])
+    expect(idsOf('Mike Williams')).toEqual(['sp-mw-ri'])
+    const ids = res.entries.map((e) => e.playerId)
+    expect(new Set(ids).size).toBe(ids.length)
+    expect(ids).not.toContain('71')
+  })
+
+  it('NFL: the RI fallback is refused even when the RI row is the one enriching an ADP row', async () => {
+    const getResolvedDraftPoolForLeague = await loadPool()
+    // ADP data so Cardale arrives as an ADP row and the pool rows ENRICH it (not push a new one).
+    hm.adpDataFindFirst.mockResolvedValue({ season: 2025, week: 1 })
+    hm.adpDataFindMany.mockResolvedValue([{ playerName: 'Cardale Jones', position: 'QB', team: 'LAC', source: 'espn', adp: 1 }])
+    hm.getLiveADP.mockResolvedValue([{ name: 'Cardale Jones', position: 'QB', team: 'LAC', adp: 1, bye: 5 }])
+    hm.getPlayerPoolForLeague.mockResolvedValue([
+      { full_name: 'Cardale Jones', position: 'QB', team_abbreviation: 'LAC', external_source_id: '23', sleeper_id: null, player_id: 'sp-cardale-ri', injury_status: null, secondary_positions: [], image_url: null, status: null, age: null },
+      { full_name: 'Cardale Jones', position: 'QB', team_abbreviation: 'Los Angeles Chargers', external_source_id: '3210', sleeper_id: '3210', player_id: 'sp-cardale', injury_status: null, secondary_positions: [], image_url: null, status: null, age: null },
+    ])
+    const res = await getResolvedDraftPoolForLeague('league-unit', { effectiveLeagueTemplate: effectiveNflNoK(), limit: 120 })
+    const cardale = res.entries.filter((e) => e.name === 'Cardale Jones')
+    expect(cardale.map((e) => e.playerId)).toEqual(['3210'])
+  })
+
   it('excludes drafted players by normalized name and by player id', async () => {
     const getResolvedDraftPoolForLeague = await loadPool()
     hm.getLiveADP.mockResolvedValue([
