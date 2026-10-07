@@ -1,3 +1,5 @@
+import {salaryScenarioData,type SalaryScenarioData} from './salaryScenarioModel';
+import {collegeValues,type CollegeValueReport} from './collegeValueModel';
 import {salaryHistory,type SalaryHistory} from './salaryHistoryModel';
 import 'server-only';
 import type {weeklyOutcomes} from './weeklyOutcomeModel';
@@ -54,12 +56,13 @@ export type ArchivePick = {
 export type ArchiveDetail = {
     phase4?: { components:DecisionComponents[]; replay:ReplayData; calibration:CalibrationModel|null; scores:ReturnType<typeof calibratedScores>; lineage:LineageReport; dynasty:DynastyMark[]; contributions?:PlayerContribution[] };
     weeklyOutcomes?:ReturnType<typeof weeklyOutcomes>;
-    specialtyEvidence?:{capturedAt:string;collegeMode:string|null;collegeRounds:number[];collegePlayers:number;salaryTeams:number;salaryContracts:number;salaryHistory?:SalaryHistory;dispersal:boolean};
+    specialtyEvidence?:{capturedAt:string;collegeMode:string|null;collegeRounds:number[];collegePlayers:number;salaryTeams:number;salaryContracts:number;salaryHistory?:SalaryHistory;salaryScenario?:SalaryScenarioData;collegeValues?:CollegeValueReport;dispersal:boolean};
     canReconcile?: boolean;
     canRefreshResults?: boolean;
     resultsObservedAt?: string | null;
     references?: DraftReference[];
     analysisReport?: DraftAnalysisReport;
+    preDraftReport?: DraftAnalysisReport;
     resultsReport?: ResultsReport;
     choice: Omit<ArchiveChoice, 'total' | 'createdAt'>;
     picks: ArchivePick[];
@@ -246,6 +249,7 @@ export async function draftArchiveDetail(leagueId: string, userId: string, key: 
     const analysis = analysisReadiness(nativeSnap.analysisBasis, picks.length);
     const analysisTeams = native ? order.flatMap(t => string(t.rosterId) ? [{ rosterId: string(t.rosterId)!, name: string(t.displayName) ?? string(t.rosterId)! }] : []) : providerRosters.flatMap(t => string(t.roster_id) ? [{ rosterId: string(t.roster_id)!, name: string(object(t.metadata).team_name) ?? string(t.roster_id)! }] : []);
     const existingRoster = native ? frozenExistingRoster(nativeSnap,context,analysisTeams) : null;
+    const preDraftReport = existingRoster?.length ? draftDayReport(nativeSnap.analysisBasis, context, [], analysisTeams, startedAt,existingRoster) : undefined;
     const analysisReport = draftDayReport(nativeSnap.analysisBasis, context, picks, analysisTeams, startedAt,existingRoster);
     let results: ResultsReport | undefined;
     let contributions:PlayerContribution[]=[];
@@ -317,7 +321,7 @@ export async function draftArchiveDetail(leagueId: string, userId: string, key: 
     } catch { coverage.push('Recorded trade lineage is temporarily unavailable.'); }
     try { dynasty=await dynastyMarks(referenceContext,picks,nativeSnap.analysisBasis,startedAt,references); } catch { coverage.push('Current dynasty market references are temporarily unavailable.'); }
     const specialty=object(object(nativeSnap.analysisBasis).specialty),college=object(specialty.college),salary=object(specialty.salary);
-    const specialtyEvidence=(college.state==='captured'||salary.state==='captured'||Object.keys(object(specialty.dispersal)).length>0)&&specialty.version==='draft-specialty-v1'&&typeof specialty.capturedAt==='string'&&startedAt&&Date.parse(specialty.capturedAt)<=Date.parse(startedAt)?{capturedAt:specialty.capturedAt,collegeMode:college.state==='captured'?string(college.mode):null,collegeRounds:Array.isArray(college.rounds)?college.rounds.filter((r):r is number=>typeof r==='number'&&Number.isInteger(r)):[],collegePlayers:Array.isArray(college.players)?college.players.length:0,salaryTeams:Array.isArray(salary.ledgers)?salary.ledgers.length:0,salaryContracts:Array.isArray(salary.contracts)?salary.contracts.length:0,salaryHistory:salary.state==='captured'?salaryHistory(specialty,startedAt,choice.season):undefined,dispersal:Object.keys(object(specialty.dispersal)).length>0}:undefined;
+    const specialtyEvidence=(college.state==='captured'||salary.state==='captured'||Object.keys(object(specialty.dispersal)).length>0)&&specialty.version==='draft-specialty-v1'&&typeof specialty.capturedAt==='string'&&startedAt&&Date.parse(specialty.capturedAt)<=Date.parse(startedAt)?{capturedAt:specialty.capturedAt,collegeMode:college.state==='captured'?string(college.mode):null,collegeRounds:Array.isArray(college.rounds)?college.rounds.filter((r):r is number=>typeof r==='number'&&Number.isInteger(r)):[],collegePlayers:Array.isArray(college.players)?college.players.length:0,salaryTeams:Array.isArray(salary.ledgers)?salary.ledgers.length:0,salaryContracts:Array.isArray(salary.contracts)?salary.contracts.length:0,salaryScenario:salary.state==='captured'?salaryScenarioData(specialty,startedAt,choice.season):undefined,collegeValues:college.state==='captured'?collegeValues(specialty,startedAt):undefined,salaryHistory:salary.state==='captured'?salaryHistory(specialty,startedAt,choice.season):undefined,dispersal:Object.keys(object(specialty.dispersal)).length>0}:undefined;
     const phase4={contributions,components,replay,calibration,scores:calibratedScores(components,calibration,choice.season,startedAt),lineage,dynasty};
-    return JSON.parse(JSON.stringify({ phase4, weeklyOutcomes,specialtyEvidence, canReconcile, canRefreshResults, resultsObservedAt, references, analysisReport, resultsReport: results, analysis, choice: publicChoice, picks, snapshot: publicSnapshot, startedAt, endedAt, endMeaning: native ? 'Completed at' : 'Provider last selection time', elapsedMs: duration(startedAt, endedAt), activeMs: native && clock.complete === true ? number(clock.totalActiveMs) : null, events: publicEvents, eventsMore: events.length > 100, corrections: corrections.slice(0, 100), correctionsMore: corrections.length > 100, trades: publicTrades, tradesMore: trades.length > 100, playerTrades, playerTradesMore: (playerTradeRows?.length ?? 0) > 100, coverage, sessionId })) as ArchiveDetail;
+    return JSON.parse(JSON.stringify({ phase4, weeklyOutcomes,specialtyEvidence, canReconcile, canRefreshResults, resultsObservedAt, references, preDraftReport, analysisReport, resultsReport: results, analysis, choice: publicChoice, picks, snapshot: publicSnapshot, startedAt, endedAt, endMeaning: native ? 'Completed at' : 'Provider last selection time', elapsedMs: duration(startedAt, endedAt), activeMs: native && clock.complete === true ? number(clock.totalActiveMs) : null, events: publicEvents, eventsMore: events.length > 100, corrections: corrections.slice(0, 100), correctionsMore: corrections.length > 100, trades: publicTrades, tradesMore: trades.length > 100, playerTrades, playerTradesMore: (playerTradeRows?.length ?? 0) > 100, coverage, sessionId })) as ArchiveDetail;
 }

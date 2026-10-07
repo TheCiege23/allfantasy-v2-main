@@ -7,17 +7,17 @@
 .af-draft-reference :is(input,button){min-height:44px;background:var(--surface2);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:.5rem}
 .af-draft-reference nav{display:flex;flex-wrap:wrap;gap:1rem;align-items:center;margin:1rem 0}
 .af-draft-reference summary{min-height:44px;cursor:pointer;padding:.5rem 0}
-:is(.af-draft-reference,.af-draft-analysis) :is(input,button,summary,a):focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+:is(.af-draft-reference,.af-draft-analysis) :is(input,select,button,summary,a):focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 .af-archive textarea{width:100%;max-width:32rem;min-height:88px;background:var(--surface2);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:.6rem}
 @media(max-width:767px){.af-draft-reference,.af-draft-analysis{padding:.75rem}.af-draft-reference label{max-width:100%}}
 
 .af-phase4-tabs{display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;margin:1rem 0}
-.af-draft-phase4 :is(button,input,a){min-height:44px;border-radius:8px;padding:.5rem;background:var(--surface2);color:var(--text);border:1px solid var(--line)}
+.af-draft-phase4 :is(button,input,select,a){min-height:44px;border-radius:8px;padding:.5rem;background:var(--surface2);color:var(--text);border:1px solid var(--line)}
 .af-draft-phase4 button[aria-pressed=true]{border-color:var(--accent);background:var(--surface)}
 .af-draft-phase4 button:disabled{opacity:.5}
 .af-draft-phase4 .af-info-tip{width:44px;height:44px;min-width:44px;border-radius:50%;padding:0;box-sizing:border-box}
 .af-draft-phase4 label{display:grid;gap:.4rem;margin:.6rem 0;max-width:28rem}
-.af-draft-phase4 input{max-width:100%;min-width:0;box-sizing:border-box;font-size:16px}
+.af-draft-phase4 :is(input,select){max-width:100%;min-width:0;box-sizing:border-box;font-size:16px}
 .af-draft-phase4 small{display:block;margin-top:.3rem}
 .af-draft-phase4 summary{cursor:pointer;min-height:44px;padding:.6rem 0}
 .af-phase4-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:.75rem}
@@ -28,3 +28,6 @@
 
 .af-draft-phase4 .af-cap-history table{min-width:900px}
 .af-draft-phase4 .af-cap-history :is(th,td){white-space:nowrap;overflow-wrap:normal}
+
+.af-draft-phase4 .af-college-values table{min-width:900px}
+.af-draft-phase4 .af-college-values th{white-space:nowrap;overflow-wrap:normal}
