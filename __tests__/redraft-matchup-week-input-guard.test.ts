@@ -129,3 +129,6 @@ describe('redraft matchup route — week input guard (beta)', () => {
     await expect(res.json()).resolves.toEqual({ error: 'matchupId or seasonId+week required' })
   })
 })
+
+// These native-season fixtures have no imported source history.
+vi.mock('@/lib/redraft/fantraxNativePresentation', () => ({ loadFantraxNativePresentation: vi.fn().mockResolvedValue(null) }))

@@ -1,5 +1,5 @@
 import React from 'react'
-import {render,screen,cleanup,waitFor} from '@testing-library/react'
+import {render,screen,cleanup,waitFor,act} from '@testing-library/react'
 import {describe,it,expect,vi,afterEach} from 'vitest'
 const m=vi.hoisted(()=>({language:'en'}))
 vi.mock('@/components/i18n/LanguageProviderClient',()=>({useOptionalLanguage:()=>({language:m.language})}))
@@ -16,6 +16,15 @@ describe('injury alert review UI',()=>{
  it('selects a non-first affected slot without choosing a backup',async()=>{
   const second={...data,starters:{available:true,data:[{slotLabel:'RB',player:{sleeperId:'healthy',name:'Healthy',kickoff:deadline,ruledOut:false}},data.starters.available?data.starters.data[0]:null]}} as unknown as MyTeamData
   history.replaceState(null,'',teamInjuryAlertHref('a','p',deadline,1));const review=vi.fn();render(<TeamAlertTarget data={second} onReview={review}/>);await waitFor(()=>expect(review).toHaveBeenCalledWith(1));expect(review).not.toHaveBeenCalledWith(0)
+ })
+ it('updates an expired injury on resume without refocusing or selecting again',async()=>{
+  history.replaceState(null,'',teamInjuryAlertHref('a','p',deadline,0));const review=vi.fn()
+  render(<TeamAlertTarget data={data} onReview={review}/>);await waitFor(()=>expect(review).toHaveBeenCalledWith(0))
+  review.mockClear();const scroll=vi.mocked(HTMLElement.prototype.scrollIntoView);scroll.mockClear()
+  vi.spyOn(Date,'now').mockReturnValue(Date.parse(deadline)+1)
+  act(()=>window.dispatchEvent(new Event('pageshow')))
+  await screen.findByText(/original alert deadline has passed/)
+  expect(review).not.toHaveBeenCalled();expect(scroll).not.toHaveBeenCalled()
  })
  it('does not select a starter for an outdated alert',async()=>{history.replaceState(null,'',teamInjuryAlertHref('a','old',deadline,0));const review=vi.fn();render(<TeamAlertTarget data={data} onReview={review}/>);await screen.findByText(/no longer in the original starting slot/);expect(review).not.toHaveBeenCalled()})
  it('updates same-league alert context after navigation without jumping on routine refresh',async()=>{history.replaceState(null,'',teamInjuryAlertHref('a','p',deadline,0));const review=vi.fn(),view=render(<TeamAlertTarget data={data} onReview={review}/>);await waitFor(()=>expect(review).toHaveBeenCalledWith(0));const scroll=vi.mocked(HTMLElement.prototype.scrollIntoView);scroll.mockClear();view.rerender(<TeamAlertTarget data={{...data}} onReview={review}/>);expect(scroll).not.toHaveBeenCalled();history.pushState(null,'',teamInjuryAlertHref('a','old',deadline,0));view.rerender(<TeamAlertTarget data={{...data}} onReview={review}/>);await screen.findByText(/no longer in the original starting slot/)})

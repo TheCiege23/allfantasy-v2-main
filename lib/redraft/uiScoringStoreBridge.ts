@@ -131,20 +131,18 @@ export const UI_SCORING_STORES: Readonly<Record<string, Store>> = {
   NCAAF: {
     settingsKey: 'ncaaf_scoring_config',
     receptionFromPresetUntilSaved: true,
-    // The engine has one two-point category; when the panel's three differ, the last present
-    // (receiving) wins — the same collapse the NFL bridge makes.
     keyMap: {
       passing_yards: 'pass_yds',
       passing_td: 'pass_td',
       interception_thrown: 'pass_int',
-      passing_2pt: 'two_pt',
+      passing_2pt: 'pass_2pt',
       rushing_yards: 'rush_yds',
       rushing_td: 'rush_td',
-      rushing_2pt: 'two_pt',
+      rushing_2pt: 'rush_2pt',
       reception: 'rec',
       receiving_yards: 'rec_yds',
       receiving_td: 'rec_td',
-      receiving_2pt: 'two_pt',
+      receiving_2pt: 'rec_2pt',
       te_premium: 'te_premium',
       return_td: 'kr_td', // One panel bucket supplies both distinct athlete return categories.
       off_fumble_recovery_td: 'fumble_td',
@@ -231,7 +229,11 @@ export function bridgeUiRulesForSport(sport: string, rules: Record<string, unkno
     const value = Number(rules[uiKey])
     if (rules[uiKey] != null && Number.isFinite(value)) out[engineKey] = value
   }
-  if (sport === 'NCAAF' && out.kr_td !== undefined) out.pr_td = out.kr_td
+  if (sport === 'NCAAF') {
+    if (out.kr_td !== undefined) out.pr_td = out.kr_td
+    // Legacy aggregate counts have no role; retain a weight only when both scoring roles agree.
+    if (out.rush_2pt !== undefined && out.rush_2pt === out.rec_2pt) out.two_pt = out.rush_2pt
+  }
   return out
 }
 

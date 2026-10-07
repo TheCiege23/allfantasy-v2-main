@@ -1,3 +1,4 @@
+export type { LegalPageSearchParams } from "@/lib/legal/legal-route-resolver"
 export {
   getSignupReturnUrl,
   getDisclaimerUrl,
@@ -5,4 +6,7 @@ export {
   getPrivacyUrl,
   getDataDeletionUrl,
   getNoGamblingPolicyUrl,
+  getSmsTermsUrl,
+  getCopyrightPolicyUrl,
+  resolveLegalBackLink,
 } from "@/lib/legal/legal-route-resolver"

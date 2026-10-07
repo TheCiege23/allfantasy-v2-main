@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("@/lib/analytics/recordAnalyticsEvent", () => ({ recordAnalyticsEvent: vi.fn().mockResolvedValue(undefined) }))
+// The "Do Not Sell or Share" account lookup (lib/privacy/adOptOutStore) is a DB read; this test is about the payload.
+vi.mock("@/lib/privacy/adOptOutStore", () => ({ isUserAdOptedOut: vi.fn(async () => false), setUserAdOptOut: vi.fn(async () => true) }))
 
 import { sendMetaCAPIEvent } from "@/lib/meta-capi"
 

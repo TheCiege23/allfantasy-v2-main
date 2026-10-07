@@ -1,7 +1,21 @@
+import { fantraxScoringRules } from '@/lib/league-import/fantrax/fantraxScoring'
+import type { FantraxLeagueInfo } from '@/lib/league-import/fantrax/fantraxApi'
 import type { ScoringCategory } from '@/lib/sportConfig/types'
 
 const record = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null
+
+/** Re-read the preserved category codes to repair legacy imported conversion mappings. */
+function sourceRules(settings: unknown): Record<string, unknown> | null {
+  const root = record(settings), scoring = record(root?.scoringSettings)
+  if (scoring?.source !== 'fantrax') return null
+  const system = record(record(root?.fantrax_settings)?.scoringSystem)
+  if (Array.isArray(system?.scoringCategorySettings)) {
+    const mapped = fantraxScoringRules({ scoringSystem: system } as FantraxLeagueInfo)
+    if (mapped.rules.length && !mapped.gaps.length) return Object.fromEntries(mapped.rules.map(r => [r.stat_key, r.points_value]))
+  }
+  return record(scoring?.rules)
+}
 
 /** Fantrax uses the importer stat namespace, not the commissioner-panel namespace. */
 const KEYS: Readonly<Record<string, string>> = {
@@ -11,7 +25,7 @@ const KEYS: Readonly<Record<string, string>> = {
   bonus_rec_te: 'te_premium',
   // The current canonical provider stat is an aggregate conversion count. Athlete evidence
   // remains a separate coverage requirement; do not derive a count from a team point total.
-  rush_2pt: 'two_pt', rec_2pt: 'two_pt',
+  pass_2pt: 'pass_2pt', rush_2pt: 'rush_2pt', rec_2pt: 'rec_2pt',
 }
 
 /**
@@ -24,7 +38,7 @@ export function importedNcaafScoring(
 ): { categories: ScoringCategory[]; overrides: Record<string, number> } | null {
   if (sport !== 'NCAAF') return null
   const scoring = record(record(settings)?.scoringSettings)
-  const rules = record(scoring?.rules)
+  const rules = sourceRules(settings)
   if (scoring?.source !== 'fantrax' || !rules || !Object.keys(rules).length) return null
   const mapped: Record<string, number> = {}
   for (const [key, value] of Object.entries(rules)) {
@@ -47,14 +61,14 @@ export function importedNcaafScoring(
  */
 export function importedNcaafPanelRules(settings: unknown, panelKeys: readonly string[]): Record<string, number> | null {
   const scoring = record(record(settings)?.scoringSettings)
-  const rules = record(scoring?.rules)
+  const rules = sourceRules(settings)
   if (scoring?.source !== 'fantrax' || !rules || !Object.keys(rules).length) return null
   const out = Object.fromEntries(panelKeys.map(key => [key, 0]))
   const map: Record<string, string> = {
     pass_yd: 'passing_yards', pass_td: 'passing_td', pass_int: 'interception_thrown',
     rush_yd: 'rushing_yards', rush_td: 'rushing_td', rec: 'reception', rec_yd: 'receiving_yards',
     rec_td: 'receiving_td', fum_lost: 'fumble_lost', fum_rec_td: 'off_fumble_recovery_td',
-    bonus_rec_te: 'te_premium', rush_2pt: 'rushing_2pt', rec_2pt: 'receiving_2pt',
+    bonus_rec_te: 'te_premium', pass_2pt: 'passing_2pt', rush_2pt: 'rushing_2pt', rec_2pt: 'receiving_2pt',
   }
   for (const [key, value] of Object.entries(rules)) {
     if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error('Invalid imported Fantrax scoring weight')

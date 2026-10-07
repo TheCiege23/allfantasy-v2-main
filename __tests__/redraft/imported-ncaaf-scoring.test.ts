@@ -1,3 +1,4 @@
+import period5 from '../fixtures/cream-bowl-period5-scoring.json'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 const db = vi.hoisted(() => ({ league: { findFirst: vi.fn(), findUnique: vi.fn(), update: vi.fn() } }))
 vi.mock('@/lib/prisma', () => ({ prisma: db }))
@@ -104,8 +105,7 @@ describe('captured completed period 4: historical lineups and independent provid
       let total = 0
       for (const player of team.players) total += await score(aggregateNcaafWeek(player.rows).stats, player.position)
       expect(total).toBeCloseTo(team.expectedIndependentPoints, 8)
-      if (team.team === 'Georgia Bulldogs') expect(team.sourcePoints - total).toBeCloseTo(2, 8)
-      else expect(total).toBeCloseTo(team.sourcePoints, 8)
+      expect(total).toBeCloseTo(team.sourcePoints, 8)
     })
   }
 })
@@ -125,3 +125,18 @@ describe('commissioner panel and scoring agree', () => {
     expect(await score({ rec: 4, pr_td: 1, kr_td: 1, pass_int: 1, fum_lost: 1 }, 'TE')).toBe(18)
   })
 })
+
+ describe('conversion roles through application scoring',()=>{
+  it('credits receiving/rushing tries while an unscored passing try contributes nothing',async()=>{expect(await score({pass_2pt:1,rec_2pt:1,rush_2pt:1,two_pt:3})).toBe(4)})
+  it('honors distinct commissioner role weights without adding legacy aggregate points',async()=>{league({ncaaf_scoring_config:{lastUpdatedBy:'commissioner',rules:{passing_2pt:1,rushing_2pt:3,receiving_2pt:4}}});expect(await score({pass_2pt:1,rush_2pt:1,rec_2pt:1,two_pt:3})).toBe(8)})
+ })
+
+ it('retains legacy aggregate conversions through the adapter',async()=>{league({ncaaf_scoring_config:{lastUpdatedBy:'commissioner',rules:{passing_2pt:0,rushing_2pt:3,receiving_2pt:3}}});expect(await score(ncaafAdapter.parseRawStats({two_pt:1}))).toBe(3)})
+
+ describe('second completed period with conversion events and a named provider discrepancy',()=>{
+  for(const team of period5.teams)it(team.team+': replays captured independent provider evidence',async()=>{let total=0;for(const p of team.players)total+=await score(aggregateNcaafWeek(p.rows).stats,p.position);expect(total).toBeCloseTo(team.expectedIndependentPoints,8);if(team.team===period5.providerDiscrepancy.team)expect(total-team.sourcePoints).toBeCloseTo(period5.providerDiscrepancy.sourcePointDelta,8);else expect(total).toBeCloseTo(team.sourcePoints,8)})
+  it("ESPN's explicit final passing line explains the source discrepancy without changing scoring weights",async()=>{const team=period5.teams.find(t=>t.team===period5.providerDiscrepancy.team)!;let total=0;for(const p of team.players){const rows=p.rows.map(r=>p.name===period5.providerDiscrepancy.athlete?{...r,'passing.YDS':period5.providerDiscrepancy.espn}:r);total+=await score(aggregateNcaafWeek(rows).stats,p.position)}expect(total).toBeCloseTo(team.sourcePoints,8)})
+ })
+
+ it('keeps native NCAAF conversion weights separate from Fantrax defaults',async()=>{league({});expect(await score({pass_2pt:1,rush_2pt:1,rec_2pt:1})).toBe(6)})
+ it('does not suppress NFL aggregate conversion scoring',async()=>{league({},'NFL');expect(await score({two_pt:1,pass_2pt:1})).toBe(2)})

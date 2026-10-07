@@ -1,3 +1,4 @@
+import { loadFantraxNativePresentation } from '@/lib/redraft/fantraxNativePresentation'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -47,7 +48,8 @@ export async function GET(req: NextRequest) {
   const gate = await assertLeagueMember(season.leagueId, userId)
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
 
-  return NextResponse.json({ season })
+  const imported = await loadFantraxNativePresentation(season)
+  return NextResponse.json({ season: imported ? { ...season, currentWeek: imported.currentWeek ?? season.currentWeek, source: imported.source, playoffStartWeek: imported.playoffStartWeek ?? season.playoffStartWeek } : season })
 }
 
 export async function POST(req: NextRequest) {

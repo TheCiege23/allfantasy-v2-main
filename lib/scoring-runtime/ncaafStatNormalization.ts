@@ -16,8 +16,9 @@
  * reported as unmapped, which is how a vendor rename shows up as a warning instead of as a week in
  * which every quarterback quietly threw for zero yards.
  *
- * ⚠ WHAT CFBD CANNOT GIVE, AND IS THEREFORE NOT INVENTED: two-point conversions, field-goal distance
- * buckets, and team-defense lines. Those categories stay at zero for the players they belong to.
+ * ⚠ WHAT CFBD CANNOT GIVE, AND IS THEREFORE NOT INVENTED: unenriched two-point conversions, field-goal distance
+ * buckets, and team-defense lines. Explicit ESPN conversion evidence is enriched separately;
+ * missing conversion evidence is not inferred from a score residual.
  */
 
 export interface NcaafGameStats {
@@ -39,6 +40,9 @@ export const NCAAF_STAT_ALIASES: Readonly<Record<string, string>> = {
   'receiving.YDS': 'rec_yds',
   'receiving.TD': 'rec_td',
   'fumbles.LOST': 'fum_lost',
+  'conversions.PASS': 'pass_2pt',
+  'conversions.RUSH': 'rush_2pt',
+  'conversions.REC': 'rec_2pt',
   'kickReturns.TD': 'kr_td',
   'puntReturns.TD': 'pr_td',
   'kicking.XPM': 'xp_made',

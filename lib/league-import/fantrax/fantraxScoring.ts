@@ -31,8 +31,8 @@ export type FantraxScoringResult = {
  * Fantrax category code -> the stat key(s) it means here.
  *
  * ⚠ SOME ARE ONE-TO-MANY, AND THAT IS NOT A ROUNDING ERROR. Fantrax keeps a
- * single bucket where this codebase keeps three: one "two point conversions"
- * category against pass/rush/rec, and one "return touchdowns" against kick and
+ * single bucket where this codebase keeps distinct roles: one "two point conversions scored"
+ * category against rush/rec; passing conversions are a separate category, and one "return touchdowns" against kick and
  * punt returns. Fanning the value out to each is the only reading that scores a
  * player correctly; picking one would silently zero the other two.
  */
@@ -61,7 +61,8 @@ const CATEGORY_KEYS: Record<string, string[]> = {
   INDIVIDUAL_RECEIVING_TOUCHDOWNS: ['rec_td'],
   INDIVIDUAL_RECEPTIONS: ['rec'],
   INDIVIDUAL_FUMBLES_RECOVERED_TOUCHDOWNS_OFFENSE: ['fum_rec_td'],
-  INDIVIDUAL_TWO_POINT_CONVERSIONS_SCORES: ['pass_2pt', 'rush_2pt', 'rec_2pt'],
+  INDIVIDUAL_TWO_POINT_CONVERSIONS_SCORES: ['rush_2pt', 'rec_2pt'],
+  INDIVIDUAL_TWO_POINT_CONVERSIONS_PASSES: ['pass_2pt'],
   INDIVIDUAL_RETURN_TOUCHDOWNS: ['kr_td', 'pr_td'],
 }
 

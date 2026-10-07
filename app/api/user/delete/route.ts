@@ -83,6 +83,10 @@ export async function POST(req: Request) {
     )
   }
 
+  // The legacy MFL session row is keyed by this browser's cookie, not by the user (see
+  // releaseDeletedAccountLinks). Read from the header so the route needs no request scope.
+  const mflSessionId = readCookie(req.headers.get("cookie"), "mfl_session")
+
   try {
     await prisma.$transaction(async (tx) => {
       await tx.genericTradeComparison.deleteMany({ where: { userId } })
@@ -108,7 +112,7 @@ export async function POST(req: Request) {
        * account and every re-import refused. Found 2026-09-28 by deleting the App Review demo
        * account. See lib/account/releaseDeletedAccountLinks.
        */
-      await releaseDeletedAccountLinks(tx, userId)
+      await releaseDeletedAccountLinks(tx, userId, { mflSessionId })
     })
   } catch (error) {
     console.error("[user/delete] erasure failed:", error)
@@ -123,11 +127,29 @@ export async function POST(req: Request) {
   await revokeAllSessionsForUser(userId).catch(() => undefined)
 
   console.warn("[user/delete] account erased", { userId, cancelledSubscriptions: billing.cancelled.length })
-  return NextResponse.json({
+  const response = NextResponse.json({
     ok: true,
     deleted: true,
     cancelledSubscriptions: billing.cancelled.length,
     // An App Store subscription is the user's to cancel; the client tells them where.
     appleSubscriptionActive: billing.hasAppleSubscription,
   })
+  if (mflSessionId) response.cookies.set("mfl_session", "", { maxAge: 0, path: "/" })
+  return response
+}
+
+function readCookie(header: string | null, name: string): string | null {
+  for (const part of (header ?? "").split(";")) {
+    const eq = part.indexOf("=")
+    if (eq > 0 && part.slice(0, eq).trim() === name) {
+      const value = part.slice(eq + 1).trim()
+      if (!value) return null
+      try {
+        return decodeURIComponent(value)
+      } catch {
+        return value
+      }
+    }
+  }
+  return null
 }

@@ -1487,20 +1487,34 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
     const clock = window.setInterval(() => setRailClock(Date.now()), 15_000)
     // Per SCREEN: a screen with no live value keeps the idle cadence on game days too.
     const refreshMs = shellRouteRefreshMs(active, Boolean(props.gameDayActive), props.liveGameCount ?? 0)
-    const refresh = window.setInterval(() => {
+    let lastRefreshAt=Date.now()
+    const refreshRoute=()=>{
       if (document.visibilityState !== 'visible') return
-      if (shellRefreshPendingRef.current) return
+      if (Date.now()-lastRefreshAt<1000 || shellRefreshPendingRef.current) return
       // A tab click is already fetching a fresh render; a refresh landing first would clear its
       // skeleton and flash the screen being left.
       if (navPendingRef.current) return
       // The matchup board polls the same route on a better-informed cadence; two
       // timers on one route paid for two full renders every period.
       if (routeRefreshClaimed()) return
+      lastRefreshAt=Date.now()
       startShellRefresh(() => router.refresh())
-    }, refreshMs)
+    }
+    const refresh = window.setInterval(refreshRoute, refreshMs)
+    // Resume/reconnect must read a fresh roster and schedule, even between timer ticks.
+    const resume=(event:Event)=>{
+      if(event.type==='pageshow'&&!(event as PageTransitionEvent).persisted)return
+      setRailClock(Date.now());refreshRoute()
+    }
+    window.addEventListener('pageshow',resume)
+    window.addEventListener('online',resume)
+    document.addEventListener('visibilitychange',resume)
     return () => {
       window.clearInterval(clock)
       window.clearInterval(refresh)
+      window.removeEventListener('pageshow',resume)
+      window.removeEventListener('online',resume)
+      document.removeEventListener('visibilitychange',resume)
     }
   }, [active, props.gameDayActive, props.liveGameCount, router])
 

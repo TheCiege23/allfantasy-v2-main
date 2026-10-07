@@ -166,3 +166,17 @@ describe('the shell poll and the matchup board', () => {
     unmount()
   })
 })
+
+
+describe('resume and reconnect route recovery',()=>{
+ it('refreshes once on resume, preserves the route owner and ignores hidden tabs',()=>{
+  render(<Shell />);act(()=>void vi.advanceTimersByTime(1000))
+  Object.defineProperty(document,'visibilityState',{configurable:true,get:()=> 'hidden'})
+  act(()=>window.dispatchEvent(new Event('online')));expect(nav.router.refresh).not.toHaveBeenCalled()
+  Object.defineProperty(document,'visibilityState',{configurable:true,get:()=> 'visible'})
+  act(()=>{document.dispatchEvent(new Event('visibilitychange'));window.dispatchEvent(new Event('online'))})
+  expect(nav.router.refresh).toHaveBeenCalledTimes(1)
+  const release=claimRouteRefresh();act(()=>void vi.advanceTimersByTime(1000))
+  act(()=>window.dispatchEvent(new Event('online')));expect(nav.router.refresh).toHaveBeenCalledTimes(1);release()
+ })
+})

@@ -67,6 +67,8 @@ export function pointsForCategory(cat: ScoringCategory, rawStats: Record<string,
     const max = cat.tierMax ?? Number.POSITIVE_INFINITY
     return value >= min && value <= max ? pts : 0
   }
+  // Explicit role counts supersede the legacy aggregate conversion count.
+  if (cat.sport === 'NCAAF' && cat.key === 'two_pt' && ['pass_2pt', 'rush_2pt', 'rec_2pt'].some(k => k in rawStats)) return 0
   const raw = rawStats[cat.key] ?? 0
   if (cat.unit === 'per_yard' || cat.unit === 'per_inning') {
     return raw * pts
