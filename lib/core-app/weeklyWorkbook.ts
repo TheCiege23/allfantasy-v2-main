@@ -12,6 +12,7 @@ export function buildWeeklyWorkbook(data: WeeklyBlueprint, path?: WeeklyPlayoffP
   const append = (name: string, rows: unknown[][]) => {
     const sheet = XLSX.utils.aoa_to_sheet(rows)
     sheet['!cols'] = [{wch:32},{wch:65},{wch:30},{wch:30}]
+    sheet['!rows'] = rows.map((row,index)=>({hpt:index===0?30:Math.min(180,Math.max(30,...row.map((value,col)=>String(value??'').split('\n').reduce((lines,line)=>lines+Math.max(1,Math.ceil(line.length/(col===0?30:col===1?63:28))),0)*15)))}))
     XLSX.utils.book_append_sheet(wb,sheet,name)
     return sheet
   }
@@ -46,7 +47,6 @@ export function buildWeeklyWorkbook(data: WeeklyBlueprint, path?: WeeklyPlayoffP
   const modelPeriod = path?.period ?? (!path ? data.playoff?.period : undefined) ?? ''
   append('Model',[['Available',valid],['Season',modelSeason],['Period',modelPeriod],['Iterations',valid ? path?.league?.assumptions.iterations : ''],['Calculated at',valid ? path?.league?.assumptions.computedAt : ''],...(valid ? (path?.league?.assumptions.missing ?? []).map(m=>['Assumption',m]) : [['Note',modelNote]])])
   const bytes = XLSX.write(wb,{bookType:'xlsx',type:'array'}) as ArrayBuffer
-  if (!points.length && !scenarios.length) return new Uint8Array(bytes)
   const zip = XLSX.CFB.read(new Uint8Array(bytes),{type:'array'})
   const get = (name: string) => {
     const entry = XLSX.CFB.find(zip,`/${name}`)
@@ -54,6 +54,12 @@ export function buildWeeklyWorkbook(data: WeeklyBlueprint, path?: WeeklyPlayoffP
     return new TextDecoder().decode(new Uint8Array(entry.content as Uint8Array))
   }
   const put = (name: string,value: string) => XLSX.CFB.utils.cfb_add(zip,`/${name}`,new TextEncoder().encode(value))
+  const styles=get('xl/styles.xml').replace(/(<cellXfs[^>]*>)([\s\S]*?)(<\/cellXfs>)/,(_,open,body,close)=>open+body.replace(/<xf([^>]*)\/>/g,'<xf$1 applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf>')+close)
+  put('xl/styles.xml',styles)
+  wb.SheetNames.forEach((_,index)=>{
+    const part=`xl/worksheets/sheet${index+1}.xml`
+    put(part,get(part).replace(/<sheetView([^>]*)\/>/,'<sheetView$1><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A2" sqref="A2"/></sheetView>'))
+  })
   let types = get('[Content_Types].xml')
   const addChart = (sheetIndex: number, sheetName: string, rows: unknown[][], kind: 'line'|'bar', title: string) => {
     const id = sheetIndex, end = rows.length + 1

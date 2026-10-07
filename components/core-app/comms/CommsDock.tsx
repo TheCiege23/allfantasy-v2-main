@@ -87,6 +87,7 @@ export function CommsDock({
   const [open, setOpen] = useState(false)
   const [tab, setTab] = useState<CommsTab>('chimmy')
   const [prefill, setPrefill] = useState<string | null>(null)
+  const [leagueDraft, setLeagueDraft] = useState<CommsOpenDetail['leagueDraft']>(undefined)
   const [openRequest, setOpenRequest] = useState<{
     seq: number
     tab: CommsTab | null
@@ -118,6 +119,7 @@ export function CommsDock({
        * leaving a stale sentence in the box.
        */
       setPrefill(detail?.prefill ?? null)
+      setLeagueDraft(detail?.tab === 'league' && detail.leagueId === detail.leagueDraft?.leagueId ? detail.leagueDraft : undefined)
       setOpenRequest((prev) => ({
         seq: (prev?.seq ?? 0) + 1,
         tab: detail?.tab ?? null,
@@ -223,6 +225,7 @@ export function CommsDock({
         pageSurface={pageSurface}
         initialTab={tab}
         initialDraft={prefill}
+        leagueDraft={leagueDraft}
         openRequest={openRequest}
       />
 

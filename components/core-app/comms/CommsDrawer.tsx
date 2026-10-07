@@ -75,6 +75,7 @@ export type { CommsLeague } from './ChimmyPanel'
 export type CommsTab = 'league' | 'chimmy' | 'huddle' | 'dms' | 'discord'
 
 export type CommsDrawerProps = {
+  leagueDraft?: import('@/lib/core-app/commissionerWeeklyPlan').ReviewedLeagueDraft
   /** Keys the saved Chimmy conversations, so one account's chat never loads for another. */
   userId?: string
   mode?: 'overlay' | 'docked'
@@ -154,6 +155,7 @@ const TAB_ICONS: Record<CommsTab, typeof Sparkles> = {
  * activity feed when no league is picked, and the public @chimmy mode.
  */
 function LeaguePanel({
+  leagueDraft,
   leagues,
   scopeId,
   onScope,
@@ -161,6 +163,7 @@ function LeaguePanel({
   chimmyPlanAllowance = null,
   userId,
 }: {
+  leagueDraft?: CommsDrawerProps['leagueDraft']
   leagues: CommsLeague[]
   scopeId: string | null
   onScope: (id: string | null) => void
@@ -169,6 +172,7 @@ function LeaguePanel({
   userId?: string
 }) {
   const [askChimmy, setAskChimmy] = useState(false)
+  useEffect(() => { if (leagueDraft) setAskChimmy(false) }, [leagueDraft?.id])
 
   const scope = useMemo(() => leagues.find((l) => l.id === scopeId) ?? null, [leagues, scopeId])
 
@@ -235,6 +239,7 @@ function LeaguePanel({
 
   return (
     <LeagueConversation
+      reviewedDraft={leagueDraft?.leagueId === scopeId ? leagueDraft : undefined}
       leagueId={scopeId}
       leagueName={scope?.name ?? null}
       isCommissioner={Boolean(scope?.isCommissioner)}
@@ -474,6 +479,7 @@ function DiscordPanel({
 // ── The drawer ─────────────────────────────────────────────────────────
 
 export function CommsDrawer({
+  leagueDraft,
   mode = 'overlay',
   open,
   onClose,
@@ -491,6 +497,7 @@ export function CommsDrawer({
   const { language } = useOptionalLanguage()
   const [tab, setTab] = useState<CommsTab>(initialTab)
   const [scopeId, setScopeId] = useState<string | null>(pageLeagueId)
+  const [dismissedLeagueDraft, setDismissedLeagueDraft] = useState<string | null>(null)
   const panelRef = useRef<HTMLElement | null>(null)
   /** The backdrop. A SIBLING of the panel, so it needs an inert exemption — see below. */
   const scrimRef = useRef<HTMLButtonElement | null>(null)
@@ -686,9 +693,10 @@ export function CommsDrawer({
 
         {tab === 'league' ? (
           <LeaguePanel
+            leagueDraft={leagueDraft?.leagueId === scopeId && leagueDraft.id !== dismissedLeagueDraft ? leagueDraft : undefined}
             leagues={leagues}
             scopeId={scopeId}
-            onScope={setScopeId}
+            onScope={id => { setScopeId(id); if (leagueDraft) setDismissedLeagueDraft(leagueDraft.id) }}
             chimmyTokenCost={chimmyTokenCost}
             chimmyPlanAllowance={chimmyPlanAllowance}
             userId={userId}

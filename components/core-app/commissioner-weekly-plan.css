@@ -1,0 +1,11 @@
+.af-weekly-comm { min-width: 0; padding: 1rem; border: 1px solid var(--af-line, #334155); border-radius: 1rem; margin-block: 1rem; }
+.af-weekly-comm details { padding-block: .75rem; border-bottom: 1px solid var(--af-line, #334155); }
+.af-weekly-comm summary { min-height: 44px; cursor: pointer; display: flex; align-items: center; }
+.af-weekly-comm label { display: grid; gap: .4rem; margin-block: .75rem; }
+.af-weekly-comm input, .af-weekly-comm textarea, .af-weekly-comm select { width: 100%; min-width: 0; box-sizing: border-box; min-height: 44px; border: 1px solid #64748b; border-radius: .5rem; padding: .6rem; font: inherit; font-size: 16px; color: inherit; background: var(--af-bg, #0b1523); }
+.af-weekly-comm textarea { resize: vertical; }
+.af-weekly-comm button, .af-weekly-comm a { min-height: 44px; }
+.af-weekly-comm p, .af-weekly-comm a { overflow-wrap: anywhere; }
+
+.af-weekly-comm > a { display: inline-flex; align-items: center; max-width: 100%; }
+.af-weekly-comm button { max-width: 100%; white-space: normal; }

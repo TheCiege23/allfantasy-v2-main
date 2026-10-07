@@ -55,6 +55,7 @@ export type ConversationLeague = {
 export type LeagueConversationSurface = 'drawer' | 'page' | 'draft_room'
 
 export type LeagueConversationProps = {
+  reviewedDraft?: import('@/lib/core-app/commissionerWeeklyPlan').ReviewedLeagueDraft
   leagueId: string
   leagueName?: string | null
   /** Offers "close the poll" on anyone's poll and @global. The server re-checks both. */
@@ -168,6 +169,7 @@ function readDraftLink(value: unknown): LeagueDraftLink | null {
 }
 
 export function LeagueConversation({
+  reviewedDraft,
   leagueId,
   leagueName = null,
   isCommissioner = false,
@@ -909,6 +911,7 @@ export function LeagueConversation({
         re-checks commissioner status, so this decides what is shown, never what is permitted.
       */}
       <ChatComposer
+        reviewedDraft={reviewedDraft}
         /* A half-written message belongs to the league it was typed in. */
         key={`${leagueId}:${tribe ?? ''}`}
         leagueId={leagueId}
