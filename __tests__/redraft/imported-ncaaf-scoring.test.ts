@@ -137,3 +137,6 @@ describe('commissioner panel and scoring agree', () => {
   for(const team of period5.teams)it(team.team+': replays captured independent provider evidence',async()=>{let total=0;for(const p of team.players)total+=await score(aggregateNcaafWeek(p.rows).stats,p.position);expect(total).toBeCloseTo(team.expectedIndependentPoints,8);if(team.team===period5.providerDiscrepancy.team)expect(total-team.sourcePoints).toBeCloseTo(period5.providerDiscrepancy.sourcePointDelta,8);else expect(total).toBeCloseTo(team.sourcePoints,8)})
   it("ESPN's explicit final passing line explains the source discrepancy without changing scoring weights",async()=>{const team=period5.teams.find(t=>t.team===period5.providerDiscrepancy.team)!;let total=0;for(const p of team.players){const rows=p.rows.map(r=>p.name===period5.providerDiscrepancy.athlete?{...r,'passing.YDS':period5.providerDiscrepancy.espn}:r);total+=await score(aggregateNcaafWeek(rows).stats,p.position)}expect(total).toBeCloseTo(team.sourcePoints,8)})
  })
+
+ it('keeps native NCAAF conversion weights separate from Fantrax defaults',async()=>{league({});expect(await score({pass_2pt:1,rush_2pt:1,rec_2pt:1})).toBe(6)})
+ it('does not suppress NFL aggregate conversion scoring',async()=>{league({},'NFL');expect(await score({two_pt:1,pass_2pt:1})).toBe(2)})
