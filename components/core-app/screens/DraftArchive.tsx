@@ -11,6 +11,7 @@ import { DraftReferences } from './DraftReferences';
 import { DraftAnalysis } from './DraftAnalysis';
 import { DraftPhase4 } from './DraftPhase4';
 import { DraftResultsRefresh } from './DraftResultsRefresh';
+import { DraftRecordView } from './DraftRecordView';
 import '@/components/core-app/af-draft-archive.css';
 type Choice = Omit<ArchiveChoice, 'createdAt' | 'total'>;
 const coverageSpanish: Record<string, string> = {
@@ -94,7 +95,7 @@ export function DraftArchive({ choices, detail, leagueId, page, more, total, err
      <p>{t('Results-to-date grade: Insufficient data', 'Calificación de resultados: Datos insuficientes')}<small>{detail.analysis.resultsToDate.coveredPicks}/{detail.analysis.totalPicks} {t('selections with verified contribution coverage', 'selecciones con contribución verificada')}</small></p>
     </div>
    </section>}
-   {[[t('Draft-time snapshot', 'Instantánea del draft'), detail.snapshot], [t('Clock timeline', 'Cronología del reloj'), detail.events], [t('Commissioner corrections', 'Correcciones del comisionado'), detail.corrections], [t('Trade packages', 'Paquetes de intercambios'), detail.trades], [t('Executed trades during draft', 'Intercambios ejecutados durante el draft'), detail.playerTrades ?? []]].map(([title, data], index) => <details key={String(title)}><summary>{String(title)} {help(String(title), sectionHelp[index][0], sectionHelp[index][1])}</summary><pre>{JSON.stringify(data, null, 2)}</pre></details>)}
+   {[[t('Draft-time snapshot', 'Instantánea del draft'), detail.snapshot], [t('Clock timeline', 'Cronología del reloj'), detail.events], [t('Commissioner corrections', 'Correcciones del comisionado'), detail.corrections], [t('Trade packages', 'Paquetes de intercambios'), detail.trades], [t('Executed trades during draft', 'Intercambios ejecutados durante el draft'), detail.playerTrades ?? []]].map(([title, data], index) => <details key={String(title)}><summary>{String(title)} {help(String(title), sectionHelp[index][0], sectionHelp[index][1])}</summary><DraftRecordView value={data} language={es ? 'es' : 'en'}/></details>)}
    <nav aria-label={t('Timeline pages', 'Páginas de cronología')}>
     {timelinePage > 1 && <Link href={timelineHref(timelinePage - 1)}>{t('Newer records', 'Registros más recientes')}</Link>}
     <span>{t('Timeline page', 'Página de cronología')} {timelinePage}</span>
