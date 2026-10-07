@@ -1,4 +1,5 @@
 import 'server-only';
+import {importedResultCutoff} from '../resultCutoff';
 import {stableFinalWeeks} from '../reconciliationModel';
 import {MAX_WEEKLY_ROSTER_PLAYERS,weeklyOutcomes,type WeeklyRosterEvidence} from '../weeklyOutcomeModel';
 import { createHash } from 'node:crypto';
@@ -43,12 +44,13 @@ export async function captureImportedResults(leagueId: string, key: string, appl
   const rosterIds = Object.values(object(draft.slot_to_roster_id)).map(id).filter((v):v is string=>!!v);
   if (rosterIds.length < 2 || rosterIds.length > 32 || new Set(rosterIds).size !== rosterIds.length) throw new Error('Complete draft roster inventory required');
   const teams = rosterIds.map(rosterId=>({rosterId,name:'Team '+rosterId}));
-  if (new Set(selections.map(p=>p.playerId)).size!==selections.length||selections.some(p=>!p.playerId||!p.rosterId||!rosterIds.includes(p.rosterId))) throw new Error('Unambiguous recorded player and team identities required');
+  if (new Set(selections.map(p=>p.playerId)).size!==selections.length||selections.some(p=>!p.playerId||(p.rosterId!==null&&!rosterIds.includes(p.rosterId)))) throw new Error('Unambiguous recorded player and team identities required');
   const scored = Number(object(provider.settings).last_scored_leg);
   if (!Number.isInteger(scored) || scored < 1 || scored > 18) throw new Error('Provider has not confirmed scored weeks');
   const games = await prisma.sportsGame.findMany({where:{sport:'NFL',season:choice.season,seasonType:'regular',week:{gte:1,lte:scored}},take:1001,select:{week:true,startTime:true,status:true,source:true}});
-  if (games.length > 1000 || typeof draft.start_time !== 'number' || !Number.isFinite(draft.start_time)) throw new Error('Verified draft and schedule dates required');
-  const startTime = draft.start_time;
+  const cutoff=importedResultCutoff(draft);
+  if (games.length > 1000 || !cutoff) throw new Error('Verified draft and schedule dates required');
+  const startTime = cutoff.at;
   const weeks = Array.from({length:scored},(_,i)=>i+1).filter(week=>games.some(g=>g.week===week) && games.filter(g=>g.week===week).every(g=>g.startTime && g.startTime.getTime() > startTime));
   const reconciled=await prisma.leaguePlayerWeeklyScore.findMany({where:{leagueId:sourceLeagueId,seasonYear:choice.season,source:'sleeper',week:{in:weeks}},take:MAX_WEEKLY_ROSTER_PLAYERS+1,select:{week:true,playerId:true,rosterId:true,points:true,isStarter:true,isFinalized:true}});
   if(reconciled.length>MAX_WEEKLY_ROSTER_PLAYERS)throw new Error('Final score evidence bound exceeded');
@@ -60,14 +62,15 @@ export async function captureImportedResults(leagueId: string, key: string, appl
     if (Date.now()>deadline) throw new Error('Result refresh time bound exceeded');
     const batch=await Promise.all(weeks.slice(offset,offset+3).map(async week=>({week,data:await read(`league/${sourceLeagueId}/matchups/${week}`)})));
     for (const {week,data} of batch) {
-      if (!Array.isArray(data) || data.length!==teams.length) continue;
+      if (!Array.isArray(data) || !data.length || data.length>teams.length) continue;
       const matchups=data.map(object), ids=matchups.map(m=>id(m.roster_id));
-      if (new Set(ids).size!==teams.length || !teams.every(t=>ids.includes(t.rosterId))) continue;
+      if (new Set(ids).size!==ids.length || ids.some(rosterId=>!rosterId||!rosterIds.includes(rosterId))) continue;
+      const presentTeams=teams.filter(t=>ids.includes(t.rosterId));
       if (matchups.some(m=>!Array.isArray(m.players)||!Array.isArray(m.starters)||m.players.length>100||m.starters.length>100||new Set(m.players).size!==m.players.length||new Set((m.starters as unknown[]).filter(p=>p!=='0')).size!==(m.starters as unknown[]).filter(p=>p!=='0').length||m.starters.some(p=>typeof p!=='string'||(p!=='0'&&!(m.players as unknown[]).includes(p)))||m.players.some(p=>typeof p!=='string'))) continue;
       const ownedIds=matchups.flatMap(m=>m.players as string[]);
       if (new Set(ownedIds).size!==ownedIds.length) continue;
-      let complete=true; const weekRows: typeof rows=[];
-      for (const team of teams) {
+      let complete=presentTeams.length===teams.length; const weekRows: typeof rows=[];
+      for (const team of presentTeams) {
         const m=matchups.find(m=>id(m.roster_id)===team.rosterId)!;
         for (const pick of selections.filter(p=>p.rosterId===team.rosterId)) {
           if (!pick.playerId) {complete=false;continue;}
@@ -76,7 +79,7 @@ export async function captureImportedResults(leagueId: string, key: string, appl
           weekRows.push({rosterId:team.rosterId,playerId:pick.playerId,week,points:owned ? value as number : 0,isStarter:owned&&(m.starters as string[]).includes(pick.playerId),held:owned});
         }
       }
-      for(const team of teams){
+      for(const team of presentTeams){
         const m=matchups.find(m=>id(m.roster_id)===team.rosterId)!;
         const starters=m.starters as string[];
         weekEvidence.push({week,rosterId:team.rosterId,players:(m.players as string[]).map(playerId=>{
@@ -103,12 +106,12 @@ export async function captureImportedResults(leagueId: string, key: string, appl
   }
   const report=resultsReport(selections,teams,rows,weeks);
   report.provisional=true;
-  report.coverage='Provider-reported scored weeks, retrieved at the displayed observation time. Production is counted only while a drafted player is held by the original team; exhaustive weekly rosters establish zero original-team contribution after departure. These are provisional usage ranks, not NFL production totals or draft-decision grades.';
+  report.coverage=(cutoff.basis==='provider_last_pick'?'Start time unavailable; only weeks entirely after the recorded last pick are included. ':'')+(selections.some(p=>p.rosterId===null)?`${selections.filter(p=>p.rosterId===null).length} unassigned provider picks have unknown selecting teams; their contribution and whole-draft ranks are unavailable. `:'')+'Provider-reported scored weeks, retrieved at the displayed observation time. Production is counted only while a drafted player is held by the original team; exhaustive weekly rosters establish zero original-team contribution after departure. These are provisional usage ranks, not NFL production totals or draft-decision grades.';
   if (!completeDraft || coveredWeeks.length !== weeks.length) {report.state=report.teams.some(t=>t.coveredPicks)?'partial':'unavailable';for(const team of report.teams)team.rank=null;}
   const outcomes=weeklyOutcomes(selections,weeks,rosterIds,weekEvidence);
   const provisionalReport={...report,teams:report.teams.map(t=>({...t})),provisional:true};
-  if(outcomes.finalizedWeeks.length===weeks.length&&weeks.length>0&&report.state==='ready'){report.provisional=false;report.coverage='Reconciled finalized original-team weekly contribution. Bench substitution comparisons are retrospective and use the slot rules observed at refresh, not waiver availability or causal draft grades.';}
-  const observation: ImportedResultsObservation={version:'draft-results-v3',leagueId,key,observedAt:new Date().toISOString(),sourceLeagueId,sourceDraftId:choice.sourceId,report,weekly:{selections:selections.map(p=>({playerId:p.playerId!,rosterId:p.rosterId!})),expectedWeeks:weeks,rows,completeDraft,weekEvidence}};
+  if(outcomes.finalizedWeeks.length===weeks.length&&weeks.length>0&&report.state==='ready'){report.provisional=false;report.coverage=(cutoff.basis==='provider_last_pick'?'Start time unavailable; only weeks entirely after the recorded last pick are included. ':'')+'Reconciled finalized original-team weekly contribution. Bench substitution comparisons are retrospective and use the slot rules observed at refresh, not waiver availability or causal draft grades.';}
+  const observation: ImportedResultsObservation={version:'draft-results-v3',leagueId,key,observedAt:new Date().toISOString(),sourceLeagueId,sourceDraftId:choice.sourceId,report,weekly:{resultCutoff:cutoff,selections:selections.map(p=>({playerId:p.playerId!,rosterId:p.rosterId})),expectedWeeks:weeks,rows,completeDraft,weekEvidence}};
   const fingerprint=createHash('sha256').update(JSON.stringify(observation)).digest('hex');
   if (apply && rows.length) {
     const aggregate:ImportedResultsObservation={version:'draft-results-v1',leagueId,key,observedAt:observation.observedAt,sourceLeagueId,sourceDraftId:choice.sourceId,report:provisionalReport};
