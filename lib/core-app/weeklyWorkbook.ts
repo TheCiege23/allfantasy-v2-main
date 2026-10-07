@@ -2,7 +2,7 @@ import * as XLSX from 'xlsx'
 import { weeklyActionText, weeklyBrief, type WeeklyBlueprint } from './weeklyBlueprint'
 import { rivalryNarrative } from './weeklyShare'
 import type { WeeklyPlayoffPath } from './weeklyPlayoffPath'
-import { pct1 } from './weeklyPercent'
+import { formatPct1, pct1 } from './weeklyPercent'
 import { weeklyCalendarTitle } from './weeklyCalendar'
 
 const xml = (s: string) => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;')
@@ -31,7 +31,20 @@ export function buildWeeklyWorkbook(data: WeeklyBlueprint, path?: WeeklyPlayoffP
   append('Calendar', [['League','Event','Time (UTC)','Source'],...(data.calendar?.events??[]).map(e=>[e.leagueName,weeklyCalendarTitle(e,es),e.at,e.source])])
   append('Calendar gaps', [['League','Missing timing'],...(data.calendar?.gaps??[]).map(g=>[g.leagueName,g.kind])])
   append('Coverage',[['League','AF current forecast','Provider current forecast','Partial'],...data.coverage.map(c=>[c.leagueName,c.af,c.provider,c.partial])])
-  append('Model',[['Available',valid],['Season',path?.season ?? ''],['Period',path?.period ?? ''],['Iterations',valid ? path?.league?.assumptions.iterations : ''],['Calculated at',valid ? path?.league?.assumptions.computedAt : ''],...((valid ? path?.league?.assumptions.missing : ['Playoff model unavailable for this format or data.']) ?? []).map(m=>['Assumption',m])])
+  /*
+   * 🛑 "UNAVAILABLE" WAS ALSO PRINTED WHEN THE MODEL EXISTED. The portfolio export carries no path,
+   * so this sheet said "Playoff model unavailable for this format or data" while the Brief two tabs
+   * over quoted NFL Dreaming!'s 33.6% from that very model (production 2026-10-06). `Available`
+   * still means "this workbook carries the model's details"; the note now says WHY it does not.
+   */
+  const stalePeriod = !valid && !!path?.league?.you?.modelled && (path.league.season !== path.season || path.league.period !== path.period)
+  const modelNote = valid ? null
+    : !path && data.playoff ? `Charts and model details export from one league's own Your Week page. The Brief's ${formatPct1(data.playoff.probability)}% is ${data.playoff.leagueName}'s current playoff estimate.`
+    : stalePeriod ? 'The saved playoff model is for a different season or period than this export, so its charts and details are omitted.'
+    : 'Playoff model unavailable for this format or data.'
+  const modelSeason = path?.season ?? (!path ? data.playoff?.season : undefined) ?? ''
+  const modelPeriod = path?.period ?? (!path ? data.playoff?.period : undefined) ?? ''
+  append('Model',[['Available',valid],['Season',modelSeason],['Period',modelPeriod],['Iterations',valid ? path?.league?.assumptions.iterations : ''],['Calculated at',valid ? path?.league?.assumptions.computedAt : ''],...(valid ? (path?.league?.assumptions.missing ?? []).map(m=>['Assumption',m]) : [['Note',modelNote]])])
   const bytes = XLSX.write(wb,{bookType:'xlsx',type:'array'}) as ArrayBuffer
   if (!points.length && !scenarios.length) return new Uint8Array(bytes)
   const zip = XLSX.CFB.read(new Uint8Array(bytes),{type:'array'})
