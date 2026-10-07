@@ -32,6 +32,22 @@ describe('reviewed commissioner weekly workflow', () => {
     expect(fetcher).not.toHaveBeenCalled()
     window.removeEventListener(COMMS_OPEN_EVENT, listener)
   })
+  it('keeps edited announcements across source refreshes and copies the reviewed text', async () => {
+    const copy=vi.fn().mockResolvedValue(undefined);Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:copy}})
+    const view=render(<CommissionerWeeklyPlan leagueId="A" announcement="Original" />)
+    fireEvent.change(screen.getByLabelText('Announcement draft'),{target:{value:'My reviewed message'}})
+    view.rerender(<CommissionerWeeklyPlan leagueId="A" announcement="Fresh source" />)
+    expect((screen.getByLabelText('Announcement draft') as HTMLTextAreaElement).value).toBe('My reviewed message')
+    fireEvent.click(screen.getByText('Copy announcement'))
+    await waitFor(()=>expect(copy).toHaveBeenCalledWith('My reviewed message'))
+    view.rerender(<CommissionerWeeklyPlan leagueId="B" announcement="League B" />)
+    expect((screen.getByLabelText('Announcement draft') as HTMLTextAreaElement).value).toBe('League B')
+  })
+  it('updates an untouched generated announcement when the weekly source refreshes', () => {
+    const view=render(<CommissionerWeeklyPlan leagueId="A" announcement="Original" />)
+    view.rerender(<CommissionerWeeklyPlan leagueId="A" announcement="Fresh source" />)
+    expect((screen.getByLabelText('Announcement draft') as HTMLTextAreaElement).value).toBe('Fresh source')
+  })
   it('keeps the same request identity after an unknown save result', async () => {
     const fetcher = vi.fn().mockRejectedValueOnce(new Error('Network')).mockResolvedValue({ ok: true }); vi.stubGlobal('fetch', fetcher)
     render(<CommissionerWeeklyPlan leagueId="A" />)

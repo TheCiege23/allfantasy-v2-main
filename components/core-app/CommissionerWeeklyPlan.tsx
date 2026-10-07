@@ -8,7 +8,9 @@ import { reviewedPoll, weeklyTaskSuggestions, type ReviewedLeagueDraft } from '@
 import { COMMS_OPEN_EVENT } from './comms/commsEvents'
 import './commissioner-weekly-plan.css'
 
-export default function CommissionerWeeklyPlan({ leagueId, data, announcement = '' }: { leagueId: string; data?: WeeklyBlueprint; announcement?: string }) {
+type PlanProps = { leagueId: string; data?: WeeklyBlueprint; announcement?: string }
+export default function CommissionerWeeklyPlan(props: PlanProps) { return <CommissionerWeeklyEditor key={props.leagueId} {...props} /> }
+function CommissionerWeeklyEditor({ leagueId, data, announcement = '' }: PlanProps) {
   const { language } = useOptionalLanguage()
   const es = language === 'es', t = (en: string, sp: string) => es ? sp : en
   const [title, setTitle] = useState(''), [description, setDescription] = useState(''), [dueAt, setDueAt] = useState('')
@@ -16,7 +18,8 @@ export default function CommissionerWeeklyPlan({ leagueId, data, announcement = 
   const [status, setStatus] = useState(''), [busy, setBusy] = useState(false)
   const request = useRef<{ id: string; body: string } | null>(null)
   const scope = useRef(leagueId); scope.current = leagueId
-  useEffect(() => { setTitle(''); setDescription(''); setDueAt(''); setText(announcement); setQuestion(''); setOptions(''); setCloseAt(''); setStatus(''); request.current = null }, [leagueId, announcement])
+  const generatedAnnouncement = useRef(announcement)
+  useEffect(() => { const previous = generatedAnnouncement.current; generatedAnnouncement.current = announcement; setText(current => current === previous ? announcement : current) }, [announcement])
   const suggestions = data ? weeklyTaskSuggestions(data, leagueId, es) : []
   async function saveTask() {
     if (!title.trim() || busy) return
@@ -47,10 +50,10 @@ export default function CommissionerWeeklyPlan({ leagueId, data, announcement = 
     <h2>{t('Turn this week into league action', 'Convierte esta semana en acciones de liga')}</h2>
     <p>{t('Review the evidence, save a task, or prepare an editable league message. Tasks are audited. Drafts open unsent.', 'Revisa los datos, guarda una tarea o prepara un mensaje editable para la liga. Las tareas se registran. Los borradores se abren sin enviar.')}</p>
     <details><summary>{t('Save a reviewed weekly task', 'Guardar una tarea semanal revisada')}</summary>
-      {suggestions.length > 0 && <label>{t('Start from a weekly issue', 'Empezar con un asunto semanal')}<select defaultValue="" onChange={e => { const s = suggestions.find(s => s.id === e.target.value); if (s) { setTitle(s.title); setDescription(s.description) } }}><option value="">{t('Choose an issue or write your own', 'Elige un asunto o escribe el tuyo')}</option>{suggestions.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}</select></label>}
-      <label>{t('Task title', 'Título de tarea')}<input value={title} maxLength={180} onChange={e => setTitle(e.target.value)} /></label>
-      <label>{t('Reviewed details', 'Detalles revisados')}<textarea value={description} maxLength={4000} rows={4} onChange={e => setDescription(e.target.value)} /></label>
-      <label>{t('Due time (your device time zone, optional)', 'Plazo (zona horaria del dispositivo, opcional)')}<input type="datetime-local" value={dueAt} onChange={e => setDueAt(e.target.value)} /></label>
+      {suggestions.length > 0 && <label>{t('Start from a weekly issue', 'Empezar con un asunto semanal')}<select disabled={busy} defaultValue="" onChange={e => { const s = suggestions.find(s => s.id === e.target.value); if (s) { setTitle(s.title); setDescription(s.description) } }}><option value="">{t('Choose an issue or write your own', 'Elige un asunto o escribe el tuyo')}</option>{suggestions.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}</select></label>}
+      <label>{t('Task title', 'Título de tarea')}<input disabled={busy} value={title} maxLength={180} onChange={e => setTitle(e.target.value)} /></label>
+      <label>{t('Reviewed details', 'Detalles revisados')}<textarea disabled={busy} value={description} maxLength={4000} rows={4} onChange={e => setDescription(e.target.value)} /></label>
+      <label>{t('Due time (your device time zone, optional)', 'Plazo (zona horaria del dispositivo, opcional)')}<input disabled={busy} type="datetime-local" value={dueAt} onChange={e => setDueAt(e.target.value)} /></label>
       <button className="af-btn" type="button" disabled={busy || !title.trim()} onClick={saveTask}>{busy ? t('Saving…', 'Guardando…') : t('Save task', 'Guardar tarea')}</button>
     </details>
     <details><summary>{t('Prepare an announcement', 'Preparar un anuncio')}</summary><label>{t('Announcement draft', 'Borrador del anuncio')}<textarea value={text} rows={6} maxLength={4000} onChange={e => setText(e.target.value)} /></label><button className="af-btn" type="button" disabled={!text.trim()} onClick={copyAnnouncement}>{t('Copy announcement', 'Copiar anuncio')}</button><button className="af-btn" type="button" disabled={!text.trim()} onClick={() => openDraft()}>{t('Review in league chat', 'Revisar en chat de liga')}</button></details>
