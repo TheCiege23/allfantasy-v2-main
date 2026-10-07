@@ -27,6 +27,7 @@ vi.mock('@/lib/tokens/client-confirm', () => ({
   previewTokenSpend: vi.fn(),
 }))
 
+import posthog from 'posthog-js'
 import { ChimmyChatPageClient } from '@/app/chimmy/chat/ChimmyChatPageClient'
 import CommsDrawer from '@/components/core-app/comms/CommsDrawer'
 
@@ -259,6 +260,40 @@ describe('/chimmy/chat is the drawer\'s Chimmy tab, full screen', () => {
     openPage()
     expect(await screen.findByText('Is Bijan a sell?')).toBeInTheDocument()
     expect(screen.getByText('Hold. His usage is climbing.')).toBeInTheDocument()
+  })
+
+  it('a failed first question says it went unanswered, not "Nothing asked yet.", and is counted', async () => {
+    const capture = vi.spyOn(posthog, 'capture').mockImplementation(() => undefined)
+    routeFetch({ chimmy: () => json({ error: 'boom', code: 'internal_error' }, 500) })
+    openPage()
+    await ask('Who should I start?')
+
+    expect(await screen.findByText('Chimmy did not answer that question.')).toBeInTheDocument()
+    expect(screen.queryByText('Nothing asked yet.')).toBeNull()
+    expect(screen.getByText('Chimmy hit a snag on our side.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
+    expect((screen.getByLabelText('Message') as HTMLTextAreaElement).value).toBe('Who should I start?')
+    expect(capture).toHaveBeenCalledWith(
+      'chimmy_request_failed',
+      expect.objectContaining({ status: 500, code: 'internal_error', retryable: true, scope_changed: false }),
+    )
+  })
+
+  it('still shows the failure when the league scope changed while Chimmy was answering', async () => {
+    const capture = vi.spyOn(posthog, 'capture').mockImplementation(() => undefined)
+    let fail: (r: Response) => void = () => {}
+    routeFetch({ chimmy: () => new Promise<Response>((resolve) => { fail = resolve }) as unknown as Response })
+    openPage({ leagueId: 'L1' })
+    await ask('How does my matchup look?')
+    await waitFor(() => expect(chimmyPosts()).toHaveLength(1))
+
+    fireEvent.change(screen.getByLabelText('League scope'), { target: { value: 'L2' } })
+    await act(async () => fail(json({ error: 'boom' }, 500)))
+
+    expect(await screen.findByText('Chimmy did not answer your question in KBFL. Chimmy hit a snag on our side.')).toBeInTheDocument()
+    // Try again here would send the question to the wrong league.
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull()
+    expect(capture).toHaveBeenCalledWith('chimmy_request_failed', expect.objectContaining({ status: 500, scope_changed: true }))
   })
 })
 
