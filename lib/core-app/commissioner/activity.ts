@@ -301,13 +301,22 @@ export function unnamedTeamLabel(language = 'en'): string {
  * platform id (Yahoo's "414.l.123.t.4") would read as noise, so that falls through to the label.
  */
 export function teamDisplayName(t: TeamIdentityRow, language = 'en'): string {
+  const slot = t.externalId?.trim()
+  const bySlot = slot && /^\d{1,3}$/.test(slot) ? (language === 'es' ? `Equipo ${slot}` : `Team ${slot}`) : null
+  return realTeamName(t) ?? bySlot ?? unnamedTeamLabel(language)
+}
+
+/**
+ * The team's own name, or its owner's — null when it has neither, which is what an importer's
+ * "Unknown" means. For a caller that must tell a real name from a stand-in (the drama engine
+ * renames an old headline only once both sides have one).
+ */
+export function realTeamName(t: Pick<TeamIdentityRow, 'teamName' | 'ownerName'>): string | null {
   const clean = (v: string | null | undefined) => {
     const s = v?.trim()
     return s && s.toLowerCase() !== 'unknown' ? s : null
   }
-  const slot = t.externalId?.trim()
-  const bySlot = slot && /^\d{1,3}$/.test(slot) ? (language === 'es' ? `Equipo ${slot}` : `Team ${slot}`) : null
-  return clean(t.teamName) ?? clean(t.ownerName) ?? bySlot ?? unnamedTeamLabel(language)
+  return clean(t.teamName) ?? clean(t.ownerName)
 }
 
 /**

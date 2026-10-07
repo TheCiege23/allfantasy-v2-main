@@ -169,22 +169,37 @@ const RULES: Rule[] = [
   // attentionSignals
   [/^Draft in (\d+) days$/, (n) => `El draft es en ${n} días`],
 
-  // DramaEventDetector headlines and summaries — the names are the users' own and stay as they are
-  [/^(.+?) vs (.+): (Emerging|Heated|Blood Feud|League Classic) rivalry$/s, (a, b, tier) => `${a} vs ${b}: rivalidad ${RIVALRY_TIER_ES[tier]}`],
+  // DramaEventDetector headlines and summaries — the names are the users' own and stay as they are,
+  // except the stand-in for a team with none ("Team 9"), which is ours and reads «Equipo 9» (`teamEs`).
+  [/^(.+?) vs (.+): (Emerging|Heated|Blood Feud|League Classic) rivalry$/s, (a, b, tier) => `${teamEs(a)} vs ${teamEs(b)}: rivalidad ${RIVALRY_TIER_ES[tier]}`],
   [/^Head-to-head tension \(score (\d+)\/100\)\.$/, (score) => `Tensión en el cara a cara (puntuación ${score}/100).`],
-  [/^Major upset in week (\d+): (.+)$/s, (w, teams) => `Gran sorpresa en la semana ${w}: ${teams}`],
-  [/^Revenge game completed: (.+)$/s, (teams) => `Revancha consumada: ${teams}`],
-  [/^(.+) is on a (\d+)-game heater$/s, (team, n) => `${team} lleva una racha de ${n} victorias`],
-  [/^Collapse warning: (.+) has dropped (\d+) straight$/s, (team, n) => `Alerta de derrumbe: ${team} ha perdido ${n} seguidos`],
-  [/^Title defense alive for (.+)$/s, (team) => `${team} sigue vivo en la defensa del título`],
+  [/^Major upset in week (\d+): (.+)$/s, (w, teams) => `Gran sorpresa en la semana ${w}: ${teamsEs(teams)}`],
+  [/^Revenge game completed: (.+)$/s, (teams) => `Revancha consumada: ${teamsEs(teams)}`],
+  [/^(.+) is on a (\d+)-game heater$/s, (team, n) => `${teamEs(team)} lleva una racha de ${n} victorias`],
+  [/^Collapse warning: (.+) has dropped (\d+) straight$/s, (team, n) => `Alerta de derrumbe: ${teamEs(team)} ha perdido ${n} seguidos`],
+  [/^Title defense alive for (.+)$/s, (team) => `${teamEs(team)} sigue vivo en la defensa del título`],
   [/^Trade fallout after week (\d+) blockbuster$/, (w) => `Repercusiones del gran intercambio de la semana ${w}`],
   [
     /^High-volatility trade \((\d+) moved assets, value swing (-?[\d.]+)\)\.$/,
     (n, swing) => `Intercambio de alta volatilidad (${plural(n, 'activo movido', 'activos movidos')}, variación de valor ${swing}).`,
   ],
-  [/^Dynasty shift alert: (.+) is surging$/s, (team) => `Alerta de cambio dinástico: ${team} va en ascenso`],
-  [/^(.+) no longer looks untouchable as power shifts\.$/s, (team) => `${team} ya no parece intocable mientras cambia el poder.`],
+  [/^Dynasty shift alert: (.+) is surging$/s, (team) => `Alerta de cambio dinástico: ${teamEs(team)} va en ascenso`],
+  [/^(.+) no longer looks untouchable as power shifts\.$/s, (team) => `${teamEs(team)} ya no parece intocable mientras cambia el poder.`],
 ]
+
+/**
+ * A team with no name is printed by its roster slot, "Team 9" (`teamDisplayName`, and the drama
+ * engine's `rivalSideNamer`). Those two words are ours, not the user's, so they are translated; any
+ * other name — including a real team called "Team Awesome" — is the user's and passes through.
+ */
+function teamEs(name: string): string {
+  return name.replace(/^Team (\d{1,3})$/, 'Equipo $1')
+}
+
+/** Both sides of an "A vs B" pair. */
+function teamsEs(teams: string): string {
+  return teams.split(' vs ').map(teamEs).join(' vs ')
+}
 
 /** A Commissioner OS sentence in the reader's language; unknown text passes through unchanged. */
 export function commissionerOsText(text: string | null | undefined, language: string): string {
