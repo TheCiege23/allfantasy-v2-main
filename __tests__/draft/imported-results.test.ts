@@ -49,7 +49,7 @@ describe('source-bound historical weekly results',()=>{
   it('rejects contradictory provider ownership and duplicate starters',async()=>{
     for(const data of [[matchups[0],{...matchups[1],players:['p','replacement']}],[{...matchups[0],starters:['p','p']},matchups[1]]]) {
       vi.stubGlobal('fetch',vi.fn(async(url:string)=>({ok:true,json:async()=>source(url,data)})));
-      expect((await captureImportedResults('l','imported:222')).state).toBe('unavailable');
+      expect((await captureImportedResults('l','imported:222')).state).toBe(data[0].starters.length>1?'partial':'unavailable');
     }
   });
   it('rejects malformed persisted totals and observation dates without crashing the page',async()=>{
@@ -91,3 +91,38 @@ it('keeps the previous aggregate reader compatible when selected-player weeks ex
  expect(db.create.mock.calls.map(c=>c[0].data.snapshotData.version)).toEqual(['draft-results-v3','draft-results-v1'])
  expect(db.create.mock.calls[0][0].data.snapshotData.weekly.rows).toHaveLength(18000)
 })
+
+ it('retains unassigned picks as partial evidence and never invents their owner',async()=>{
+  db.facts.mockResolvedValue([...facts,{round:1,pickNumber:3,playerId:'unassigned',metadata:{sourceLeagueId:'111',selectionRosterId:null}}]);
+  vi.stubGlobal('fetch',vi.fn(async(url:string)=>({ok:true,json:async()=>url.endsWith('/picks')?[...source(url),{round:1,pick_no:3,player_id:'unassigned',roster_id:null}]:source(url)})));
+  expect(await captureImportedResults('l','imported:222')).toEqual({weeks:1,state:'partial'});
+  const stored=db.create.mock.calls[0][0].data.snapshotData;
+  expect(stored.weekly.selections[2]).toEqual({playerId:'unassigned',rosterId:null});
+  expect(stored.report.coverage).toContain('1 unassigned');expect(stored.report.teams.every((t:any)=>t.rank===null)).toBe(true);
+  db.history.mockResolvedValue({snapshotData:stored});
+  const picks=[...facts.map(f=>({playerId:f.playerId,rosterId:f.metadata.selectionRosterId,playerName:'Player',position:'WR',keeper:false})),{playerId:'unassigned',rosterId:null,playerName:'Player',position:'WR',keeper:false}];
+  expect((await readImportedResults('l','imported:222',picks))?.report.state).toBe('partial');
+  expect(await readImportedResults('l','imported:222',picks.map(p=>p.playerId==='unassigned'?{...p,rosterId:'1'}:p))).toBeNull();
+ });
+ it('uses a completed last-pick cutoff without relabelling it a start',async()=>{
+  vi.stubGlobal('fetch',vi.fn(async(url:string)=>({ok:true,json:async()=>url.includes('/draft/')&&!url.endsWith('/picks')?{...source(url),status:'complete',start_time:null,last_picked:Date.parse('2026-09-01')}:source(url)})));
+  expect((await captureImportedResults('l','imported:222')).state).toBe('ready');
+  const stored=db.create.mock.calls[0][0].data.snapshotData;expect(stored.weekly.resultCutoff.basis).toBe('provider_last_pick');expect(stored.report.coverage).toContain('Start time unavailable');
+  db.history.mockResolvedValue({snapshotData:stored});const picks=facts.map(f=>({playerId:f.playerId,rosterId:f.metadata.selectionRosterId,playerName:'Player',position:'WR',keeper:false}));
+  expect((await readImportedResults('l','imported:222',picks))?.report.coverage).toContain('recorded last pick');
+  db.games.mockResolvedValue([{week:1,startTime:new Date('2026-08-31')}]);expect((await captureImportedResults('l','imported:222')).state).toBe('unavailable');
+ });
+
+it('preserves known weekly teams when a draft roster later disappears, leaving ranks unavailable',async()=>{
+ vi.stubGlobal('fetch',vi.fn(async(url:string)=>({ok:true,json:async()=>url.includes('/matchups/')?[matchups[0]]:source(url)})));
+ expect(await captureImportedResults('l','imported:222')).toEqual({weeks:0,state:'partial'});
+ const stored=db.create.mock.calls[0][0].data.snapshotData;expect(stored.report.teams[0].starterPoints).toBe(10);expect(stored.report.teams[1].coveredPicks).toBe(0);expect(stored.report.teams.every((t:any)=>t.rank===null)).toBe(true);
+ vi.stubGlobal('fetch',vi.fn(async(url:string)=>({ok:true,json:async()=>url.includes('/matchups/')?[{...matchups[0],roster_id:99}]:source(url)})));
+ expect((await captureImportedResults('l','imported:222')).state).toBe('unavailable');
+});
+
+it('preserves verified teams when one weekly roster is malformed without ranking the draft',async()=>{
+ vi.stubGlobal('fetch',vi.fn(async(url:string)=>({ok:true,json:async()=>url.includes('/matchups/')?[matchups[0],{...matchups[1],players:null}]:source(url)})));
+ expect(await captureImportedResults('l','imported:222')).toEqual({weeks:0,state:'partial'});
+ const stored=db.create.mock.calls[0][0].data.snapshotData;expect(stored.report.teams[0].starterPoints).toBe(10);expect(stored.report.teams[1].coveredPicks).toBe(0);expect(stored.report.teams.every((t:any)=>t.rank===null)).toBe(true);
+});
