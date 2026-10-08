@@ -24,7 +24,8 @@ export function buildWeeklySwings(data: WeeklyBlueprint, es = false): WeeklySwin
     const evidence = e ? es ? `Datos guardados: ${e.empty} huecos, ${e.out} ausentes, ${football ? `${e.bye ?? 'sin verificar'} en descanso` : 'revisa la cobertura del calendario'} y ${e.questionable} con dudas.` : `Stored lineup: ${e.empty} empty slots, ${e.out} unavailable, ${football ? `${e.bye ?? 'unchecked'} on bye` : 'review schedule coverage'} and ${e.questionable} questionable.` : ''
     const reason = a.kind === 'lineup' && sport && !football ? es ? 'Los huecos y las ausencias pueden afectar tu resultado; compara opciones elegibles según el formato.' : 'Empty slots and unavailable starters can affect your result; compare eligible options under your scoring format.' : weeklyActionReason(a,es)
     const players = e?.players?.length ? `${es ? 'Titulares para revisar' : 'Starters to review'}: ${e.players.join(', ')}.` : ''
-    const detail = [reason, evidence, players, sportWeekAdvice(sport,es)].filter(Boolean).join(' ')
+    const branches = a.playoffScenarios ? `${es ? 'Probabilidad estimada si ganas' : 'Estimated playoff probability if you win'}: ${a.playoffScenarios.ifWin.toFixed(1)}%; ${es ? 'si pierdes' : 'if you lose'}: ${a.playoffScenarios.ifLose.toFixed(1)}%.` : ''
+    const detail = [reason, evidence, players, branches, sportWeekAdvice(sport,es)].filter(Boolean).join(' ')
     return { id:a.id, leagueId:a.leagueId, leagueName:a.leagueName, sport, tone:a.kind === 'lineup' || a.kind === 'monitor' ? 'risk' as const : a.kind === 'playoff' ? 'opportunity' as const : 'check' as const,
       title:weeklyActionText(a,es), detail, href:a.href,
       prompt:`${weeklyActionPrompt(a,es)} ${detail}` }

@@ -38,7 +38,7 @@ export function WeeklyBlueprint({ data, path }: { data: Blueprint; path?: Weekly
         <span className="af-wbp-action-tag">{a.kind === 'monitor' ? es ? 'Vigilar' : 'Watchlist' : a.kind === 'sync' ? es ? 'Datos pendientes' : 'Data check' : a.kind === 'lineup' ? es ? 'Revisar alineación' : 'Lineup review' : es ? 'Planificar' : 'Plan ahead'}</span>
         <Link href={a.href}><strong>{weeklyActionText(a, es)}</strong><span>{a.leagueName}</span></Link>
         <p>{swings.find(s=>s.id===a.id)?.detail ?? weeklyActionReason(a,es)}</p>
-        {a.gameAt ? <small>{es ? 'Próximo partido: ' : 'Next game: '}<LocalGameTime iso={a.gameAt} language={language} />. {es ? 'Confirma el bloqueo en tu liga.' : 'Confirm your league’s lineup lock.'}</small> : <small>{es ? 'Comprueba las reglas y el horario de tu liga.' : 'Check your league’s rules and timing.'}</small>}
+        {a.gameAt ? <small>{a.kind === 'deadline' ? es ? 'Plazo: ' : 'Deadline: ' : es ? 'Próximo partido: ' : 'Next game: '}<LocalGameTime iso={a.gameAt} language={language} />. {es ? 'Confirma el bloqueo en tu liga.' : 'Confirm your league’s lineup lock.'}</small> : <small>{es ? 'Comprueba las reglas y el horario de tu liga.' : 'Check your league’s rules and timing.'}</small>}
         <button type="button" onClick={()=>askAction(a)} aria-label={es ? `Comparar opciones con Chimmy: ${a.leagueName}` : `Compare options with Chimmy: ${a.leagueName}`}>{es ? 'Comparar con Chimmy' : 'Compare with Chimmy'}</button>
       </li>)}</ol> : <p>{es ? 'Conecta una liga para preparar tu semana.' : 'Connect a league to build your week.'}</p>}
       {data.actionCount > 3 ? <p>{es ? 'Estas son tus tres primeras prioridades.' : 'These are your first three priorities.'}</p> : null}
