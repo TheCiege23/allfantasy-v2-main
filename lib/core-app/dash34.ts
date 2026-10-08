@@ -1,3 +1,4 @@
+import { teamLoadTiming } from '@/lib/observability/teamLoadTiming'
 import { readInjurySyncFreshness } from '@/lib/injuries/injurySyncState'
 import 'server-only'
 import type { LineupVerification } from './lineupVerification'
@@ -604,6 +605,21 @@ export async function getDash34Data(
   now: Date = new Date(),
   options: Dash34Options = {},
 ): Promise<Dash34Result> {
+  const timing = teamLoadTiming('core-summary')
+  try {
+    return await loadDash34Data(userId, leagueRows, now, options, timing)
+  } finally {
+    timing.finish()
+  }
+}
+
+async function loadDash34Data(
+  userId: string,
+  leagueRows: Dash34LeagueRow[],
+  now: Date,
+  options: Dash34Options,
+  timing: ReturnType<typeof teamLoadTiming>,
+): Promise<Dash34Result> {
   /*
    * Historical board rows out of the list first, before anything expensive keys
    * off them. These are the 543-row tail; fanning roster and injury reads across
@@ -631,44 +647,34 @@ export async function getDash34Data(
   const activeIds = active.map((l) => l.id)
   const sports = [...new Set(active.map((l) => String(l.sport ?? 'NFL').toUpperCase()))]
 
-  const [teams, nextGames, injuryChecks] = await Promise.all([
-    prisma.leagueTeam
-      .findMany({
-        where: { claimedByUserId: userId, leagueId: { in: activeIds } },
-        select: {
-          leagueId: true,
-          id: true,
-          teamName: true,
-          ownerName: true,
-          platformUserId: true,
-          externalId: true,
-          isCommissioner: true,
-          isCoCommissioner: true,
-        },
-      })
-      .catch(fellBack(options, 'teams', [])),
-    /*
-     * Enough future games to cover the next-24-hours feed as well as the single
-     * next kickoff, in one read. Ordered by start time so the first row IS the
-     * countdown target. Global — shared through the 60s cache above.
-     */
+  // These reads do not depend on a claimed team or a provider response.
+  // Start the shared feeds now, keeping their existing fallback and cache rules.
+  const injuryRowsPromise = timing.read('injuries', () => readInjuryFeed(sports, options))
+  const nflFixturesPromise = timing.read('schedule', () =>
+    sports.includes('NFL') ? readNflFixtures(now, options) : Promise.resolve([]))
+  const [teams, nextGames, injuryChecks, formatRows, chopped] = await Promise.all([
+    timing.read('league', () => prisma.leagueTeam.findMany({
+      where: { claimedByUserId: userId, leagueId: { in: activeIds } },
+      select: {
+        leagueId: true, id: true, teamName: true, ownerName: true,
+        platformUserId: true, externalId: true, isCommissioner: true, isCoCommissioner: true,
+      },
+    }).catch(fellBack(options, 'teams', []))),
     readNextGames(sports, now, options),
     Promise.all(sports.filter(s => s !== 'SOCCER').map(s => readInjurySyncFreshness(s))),
+    timing.read('format', () => prisma.league.findMany({
+      where: { id: { in: activeIds } },
+      select: { id: true, platform: true, bestBallMode: true, guillotineMode: true, leagueVariant: true, settings: true },
+    }).catch(() => [])),
+    prisma.guillotineRosterState.findMany({
+      where: { leagueId: { in: activeIds }, choppedAt: { not: null } },
+      select: { leagueId: true, rosterId: true },
+    }).catch(() => []),
   ])
-
   const teamByLeague = new Map(teams.map((t) => [t.leagueId, t]))
-  const formatRows = await prisma.league.findMany({ where: { id: { in: activeIds } },
-    select: { id: true, platform: true, bestBallMode: true, guillotineMode: true, leagueVariant: true, settings: true } }).catch(() => [])
   const formatByLeague = new Map(formatRows.map(l => [l.id, l]))
   const platformByLeague = new Map(active.map((l) => [l.id, formatByLeague.get(l.id)?.platform ?? l.platform]))
-  const chopped = await prisma.guillotineRosterState.findMany({ where: { leagueId: { in: activeIds }, choppedAt: { not: null } },
-    select: { leagueId: true, rosterId: true } }).catch(() => [])
   const choppedTeams = new Set(chopped.map(r => `${r.leagueId}:${r.rosterId}`))
-  const eliminatedRows = await prisma.guillotineElimination.findMany({
-    where: { leagueId: { in: activeIds }, eliminatedOwnerId: { in: [userId, ...teams.map(t => t.platformUserId).filter((id): id is string => Boolean(id))] } },
-    select: { leagueId: true, season: { select: { season: true } } },
-  }).catch(() => [])
-
   /*
    * ⚠ ROSTERS ARE MATCHED PER LEAGUE, NOT AGAINST ONE GLOBAL CANDIDATE LIST.
    * `LeagueTeam.externalId` holds values like "4" — a global `platformUserId IN
@@ -687,36 +693,41 @@ export async function getDash34Data(
     },
   }))
 
-  const storedRosters = rosterOr.length
-    ? await prisma.roster
-        .findMany({
+  const sleeperLeagues = active.filter((l) => String(l.platform).toLowerCase() === 'sleeper')
+  const [storedRosters, eliminatedRows, liveRosters] = await Promise.all([
+    timing.read('roster', () => rosterOr.length
+      ? prisma.roster.findMany({
           where: { OR: rosterOr },
           select: { id: true, leagueId: true, playerData: true },
-        })
-        .catch(fellBack(options, 'rosters', []))
-    : []
-
-  const liveRosters: Array<{ leagueId: string; playerData: unknown }> = []
-  const sleeperLeagues = active.filter((l) => String(l.platform).toLowerCase() === 'sleeper')
-  // Bound concurrent requests. A failed provider read cannot promote a stale
-  // imported starter assignment into an urgent current alert.
-  for (let i = 0; i < sleeperLeagues.length; i += 8) {
-    const batch = await Promise.all(sleeperLeagues.slice(i, i + 8).map(async (l) => {
-      const team = teamByLeague.get(l.id)
-      const sourceId = l.platformLeagueId ?? l.sleeperLeagueId
-      if (!team || !sourceId) return null
-      const playerData = await currentSleeperRoster(sourceId, team)
-      return playerData ? { leagueId: l.id, playerData } : null
-    }))
-    for (const row of batch) if (row) liveRosters.push(row)
-  }
+        }).catch(fellBack(options, 'rosters', []))
+      : Promise.resolve([])),
+    timing.read('elimination', () => prisma.guillotineElimination.findMany({
+      where: { leagueId: { in: activeIds }, eliminatedOwnerId: { in: [userId, ...teams.map(t => t.platformUserId).filter((id): id is string => Boolean(id))] } },
+      select: { leagueId: true, season: { select: { season: true } } },
+    }).catch(() => [])),
+    timing.read('provider', async () => {
+      const rows: Array<{ leagueId: string; playerData: unknown }> = []
+      // Keep the eight-league bound and authoritative current lineup checks.
+      for (let i = 0; i < sleeperLeagues.length; i += 8) {
+        const batch = await Promise.all(sleeperLeagues.slice(i, i + 8).map(async (l) => {
+          const team = teamByLeague.get(l.id)
+          const sourceId = l.platformLeagueId ?? l.sleeperLeagueId
+          if (!team || !sourceId) return null
+          const playerData = await currentSleeperRoster(sourceId, team)
+          return playerData ? { leagueId: l.id, playerData } : null
+        }))
+        for (const row of batch) if (row) rows.push(row)
+      }
+      return rows
+    }),
+  ])
   const sleeperIds = new Set(sleeperLeagues.map((l) => l.id))
   // In Sleeper ids: an ESPN roster translated (ESPN 12483 is Stafford, Sleeper 12483 Jack Bech), any
   // other foreign one emptied. One read covers every ESPN league.
-  const rosters = await sleeperReadableRosters(
+  const rosters = await timing.read('identities', () => sleeperReadableRosters(
     [...storedRosters.filter((r) => !sleeperIds.has(r.leagueId)), ...liveRosters],
     (r) => platformByLeague.get(r.leagueId),
-  )
+  ))
 
   /**
    * leagueId → the roster, split by slot.
@@ -775,7 +786,7 @@ export async function getDash34Data(
   const playerIds = [...everyPlayerId]
 
   const [playerRows, injuryRows, nflFixtures] = await Promise.all([
-    playerIds.length
+    timing.read('players', () => playerIds.length
       ? prisma.sportsPlayer
           .findMany({
             where: { sleeperId: { in: playerIds } },
@@ -796,14 +807,14 @@ export async function getDash34Data(
             },
           })
           .catch(fellBack(options, 'players', []))
-      : Promise.resolve([]),
+      : Promise.resolve([])),
     /*
      * The injury feed — filtered to unexpired rows in SQL and shared through
      * the 60s cache above. The 45-day report-age gate is applied below in the
      * loader, where the brief, the chips, the urgent counts and the book all
      * inherit it at once.
      */
-    readInjuryFeed(sports, options),
+    injuryRowsPromise,
     /*
      * Next kickoff per NFL club, for "when does this player actually play".
      *
@@ -815,7 +826,7 @@ export async function getDash34Data(
      * of distinct games by about half and the map takes first-seen per club.
      * Global — shared through the 60s cache above.
      */
-    sports.includes('NFL') ? readNflFixtures(now, options) : Promise.resolve([]),
+    nflFixturesPromise,
   ])
 
   /**
@@ -1172,8 +1183,8 @@ export async function getDash34Data(
   }
 
   const currentWeek = [...rosterByLeague.values()].find(r => r.verification?.week != null)?.verification?.week
-  const byeInfo = currentWeek ? await getByeWeeks({ sport: 'NFL', season: Number(active.find(l => String(l.sport ?? 'NFL').toUpperCase() === 'NFL')?.season ?? now.getUTCFullYear()),
-    fromWeek: currentWeek, horizon: 0, playerTeams: new Map([...playerById].map(([id, p]) => [id, p.team])) }).catch(() => null) : null
+  const byeInfo = currentWeek ? await timing.read('bye', () => getByeWeeks({ sport: 'NFL', season: Number(active.find(l => String(l.sport ?? 'NFL').toUpperCase() === 'NFL')?.season ?? now.getUTCFullYear()),
+    fromWeek: currentWeek, horizon: 0, playerTeams: new Map([...playerById].map(([id, p]) => [id, p.team])) }).catch(() => null)) : null
   const byePlayers = new Set(currentWeek ? byeInfo?.byWeek.get(currentWeek) ?? [] : [])
 
   /* ── The league list ───────────────────────────────────────────────────── */
@@ -1544,12 +1555,12 @@ export async function getDash34Data(
   const valueFormat: 'DYNASTY' | 'REDRAFT' =
     dynastyCount * 2 >= totalActive ? 'DYNASTY' : 'REDRAFT'
   const bookEntries = [...book.values()]
-  const valueBySleeperId = await readPlayerValues(
+  const valueBySleeperId = await timing.read('values', () => readPlayerValues(
     bookEntries.map((b) => b.sleeperId).filter(Boolean),
     valueFormat,
     'ONE_QB',
     options,
-  )
+  ))
   const rankOf = (b: BookEntry): number | null =>
     valueBySleeperId.get(b.sleeperId)?.overallRank ?? null
 

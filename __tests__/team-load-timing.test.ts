@@ -27,3 +27,13 @@ it('records fixed portfolio phases without exposing translated roster data',asyn
  expect(log).toHaveBeenCalledWith('[team-load-timing]',JSON.stringify({mode:'portfolio',totalMs:3100,phases:{identities:3100}}))
  expect(JSON.stringify(log.mock.calls)).not.toContain('fixture-id')
 })
+
+it('records Core provider durations without logging account or provider data', async () => {
+ let time=0;vi.spyOn(performance,'now').mockImplementation(()=>time)
+ const log=vi.spyOn(console,'info').mockImplementation(()=>{})
+ const timing=teamLoadTiming('core-summary')
+ await timing.read('provider',async()=>{time=8100;return {account:'private-fixture'}})
+ timing.finish()
+ expect(log).toHaveBeenCalledWith('[team-load-timing]',JSON.stringify({mode:'core-summary',totalMs:8100,phases:{provider:8100}}))
+ expect(JSON.stringify(log.mock.calls)).not.toContain('private-fixture')
+})

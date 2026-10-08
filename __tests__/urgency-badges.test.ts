@@ -16,6 +16,8 @@ vi.mock('@/lib/prisma', () => ({
 
 import {
   URGENCY_TTL_MS,
+  URGENCY_KEY_PREFIX,
+  LINEUP_URGENCY_KEY_PREFIX,
   draftLeagueIds,
   getUrgencyBadges,
   lineupLeagueIds,
@@ -157,5 +159,50 @@ describe('recordPendingOffers', () => {
   it('writes nothing when no scan answered', async () => {
     await recordPendingOffers('u1', [], NOW)
     expect(h.cacheUpsert).not.toHaveBeenCalled()
+  })
+})
+
+
+describe('independent lineup and offer writes', () => {
+  it.each(['offers', 'lineup'] as const)('preserves both fields when the %s write finishes last', async (late) => {
+    const rows = new Map<string, unknown>()
+    h.cacheFind.mockImplementation(async ({ where }: { where: { cacheKey: string } }) => {
+      const data = rows.get(where.cacheKey)
+      return data ? { data: JSON.parse(JSON.stringify(data)) } : null
+    })
+    let release!: () => void
+    const gate = new Promise<void>(resolve => { release = resolve })
+    let pending = false
+    h.cacheUpsert.mockImplementation(async (args: { where: { cacheKey: string }; update: { data: unknown } }) => {
+      const isLineup = args.where.cacheKey.startsWith(LINEUP_URGENCY_KEY_PREFIX)
+      if ((late === 'lineup') === isLineup && !pending) { pending = true; await gate }
+      rows.set(args.where.cacheKey, JSON.parse(JSON.stringify(args.update.data)))
+      return {}
+    })
+    const badges = (lineupLeagues?: Array<{ id: string; emptyStarters: number }>) => getUrgencyBadges({
+      userId: 'u1', leagues: LEAGUES, liveDraftLeagueIds: [], now: NOW,
+      lineupLeagues, loadLineupLeagues: async () => null,
+    })
+    const lateWrite = late === 'offers'
+      ? recordPendingOffers('u1', [{ leagueId: 'L1', waiting: 1 }], NOW)
+      : badges([{ id: 'L2', emptyStarters: 1 }])
+    try {
+      await vi.waitFor(() => expect(pending).toBe(true))
+      if (late === 'offers') await badges([{ id: 'L2', emptyStarters: 1 }])
+      else await recordPendingOffers('u1', [{ leagueId: 'L1', waiting: 1 }], NOW)
+    } finally { release(); await lateWrite }
+    expect(rows.has(`${URGENCY_KEY_PREFIX}u1`)).toBe(true)
+    expect(rows.has(`${LINEUP_URGENCY_KEY_PREFIX}u1`)).toBe(true)
+    const result = await badges()
+    expect(result.myTeam).toBe(1)
+    expect(result.trades).toBe(1)
+  })
+  it('reads fresh legacy lineup state during rollout but prefers the dedicated row', async () => {
+    h.cacheFind.mockImplementation(async ({ where }: { where: { cacheKey: string } }) => ({ data: {
+      version: 1, offers: {}, lineup: { at: NOW.toISOString(), leagueIds: where.cacheKey.startsWith(LINEUP_URGENCY_KEY_PREFIX) ? ['L1', 'L2'] : ['L1'] },
+    } }))
+    const result = await getUrgencyBadges({ userId: 'u1', leagues: LEAGUES,
+      liveDraftLeagueIds: [], now: NOW, loadLineupLeagues: async () => null })
+    expect(result.myTeam).toBe(2)
   })
 })

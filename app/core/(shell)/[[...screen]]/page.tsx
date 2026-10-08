@@ -3722,10 +3722,6 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
          */
         let tradesFailed = false
         let tradesIncomplete = false
-        // The pending-offers cache write the trade scan fires — see `offersSettled` below.
-        let offersRecorded: Promise<unknown> = Promise.resolve()
-        // Only a Sleeper identity makes the scan report offers at all, and only a report writes the row.
-        const scanWillRecordOffers = Boolean(leagueListPayload?.sleeperUserId)
         const trades = traceCard('trades', () =>
           tradeWeek.then((currentWeek) =>
             getRecentTrades(
@@ -3753,7 +3749,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
                  * 10-minute freshness rule, and recording it must never slow the home.
                  */
                 onPendingOffers: (scanned) => {
-                  offersRecorded = recordPendingOffers(userId, scanned, now).catch(() => undefined)
+                  void recordPendingOffers(userId, scanned, now).catch(() => undefined)
                 },
                 // Every way this read can come back partial — see the flag above, and the loader's
                 // own note on the three permanent bounds it deliberately does NOT report.
@@ -3767,28 +3763,8 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           tradesFailed = true
           return []
         })
-        /*
-         * ⚠ THE TAB BADGES WAIT FOR THIS, NOT FOR THE SUMMARY ALONE. `getUrgencyBadges` and
-         * `recordPendingOffers` each read the one `core-urgency` cache row and write it back WHOLE.
-         * When the badges ran after every home read, the offers write had a head start; running
-         * independently, either could overwrite the other — dropping the new offers, or restoring an
-         * old lineup count. The badges stream, so no card waits for this.
-         *
-         * ⚠ BUT ONLY WHEN A WRITE IS ACTUALLY COMING. Without a Sleeper identity the scan reports
-         * nothing and writes nothing, so waiting on it would put the slowest read on the page in
-         * front of the badges for no reason at all.
-         *
-         * ⚠ AND THERE IS A THIRD WRITER, safe today only by sequencing: lib/core-app/leagueHome.ts
-         * also calls `recordPendingOffers` on the `/core?league=<id>` path. Nothing orders it against
-         * these two except that `leagueHome` is awaited long before this runs. Move either read into
-         * the streaming set and it is the same clobber.
-         *
-         * The real fix is for all three to stop sharing a row they each rewrite whole — a
-         * field-scoped write, so none can clobber another and the badges need not wait.
-         */
-        const offersSettled = scanWillRecordOffers
-          ? trades.then(() => offersRecorded).then(() => undefined)
-          : Promise.resolve()
+        // Lineup counts use their own cache key, so tab badges can stream without
+        // waiting for trade enrichment or the pending-offers write.
 
         // A fresh array per reader, as each had before: neither can see what the other does to its input.
         const routineLeagues = () =>
@@ -4071,7 +4047,6 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           trades,
           brief,
           drafts,
-          offersSettled,
         }
       })()
 
@@ -4248,9 +4223,9 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * shell on their own (`ScreenShellSignals`, below) and the screen renders without them.
    */
   const urgencyBadges = traceCard('urgency-badges', () =>
-    // On the home: after the summary AND the trade scan's pending-offers write — see `offersSettled`.
+    // On the home, reuse the summary without waiting for the trade card.
     (homeLoads
-      ? Promise.all([homeLoads.dash34, homeLoads.offersSettled]).then(([summary]) => summary)
+      ? homeLoads.dash34
       : Promise.resolve(dash34)
     ).then((summary) =>
       getUrgencyBadges({
