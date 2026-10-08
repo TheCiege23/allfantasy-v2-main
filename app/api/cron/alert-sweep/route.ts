@@ -42,6 +42,11 @@
  * It reports under `sportWaiverCheck` and records `cron-chimmy-sport-waiver-check` only on a run
  * that actually ran for users.
  *
+ * AND THE BEST BALL DEPTH CHECK (2026-10-08, lib/chimmy-alerts/runBestBallDepthCheck.ts): in the
+ * lineup check's window, a best ball manager whose auto lineup has nobody healthy left at a position
+ * gets one message for the week. The rule is the home card's (dash34 depthAlerts), red only. It
+ * reports under `bestBallDepth` and records `cron-chimmy-best-ball-depth` only on a run that ran.
+ *
  * A THIRD, SHIPPED OFF: THE GUILLOTINE CHOP-RELEASE ALERT (lib/chimmy-alerts/chopRelease.ts). When a
  * guillotine league's chopped roster hits waivers, each surviving member gets their own FAAB bid plan
  * for it. It does nothing — not one read — unless the service carries CHOP_RELEASE_ALERTS_ENABLED=1.
@@ -53,6 +58,8 @@
  *   userId=...   evaluate a single user, for verification (both jobs)
  *   lineupCheck=force   run the lineup check outside its window (the weekly claim still holds)
  *   lineupCheck=off     skip the lineup check this run
+ *   bestBallDepth=force run the best ball depth check outside its window (the weekly claim still holds)
+ *   bestBallDepth=off   skip the best ball depth check this run
  *   waiverCheck=force   run the waiver check outside its window (the weekly claim still holds)
  *   waiverCheck=off     skip the waiver check this run
  *   sportWaiverCheck=force  run the other-sport waiver check outside its windows (in-season sports
@@ -82,6 +89,7 @@ import { decidePushForUser } from '@/lib/notifications/pushGate'
 import { teamSweepTelemetry } from '@/lib/core-app/teamSweepPolicy'
 import { recordSyncJobRun, withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 import { runLineupCheck, type LineupCheckRun } from '@/lib/chimmy-alerts/runLineupCheck'
+import { runBestBallDepthCheck, type BestBallDepthRun } from '@/lib/chimmy-alerts/runBestBallDepthCheck'
 import { runWaiverCheck, type WaiverCheckRun } from '@/lib/chimmy-alerts/runWaiverCheck'
 import { runSportWaiverCheck, type SportWaiverCheckRun } from '@/lib/chimmy-alerts/runSportWaiverCheck'
 import type { ChopReleaseRun } from '@/lib/chimmy-alerts/runChopReleaseCheck'
@@ -114,6 +122,7 @@ const JOB = 'cron-alert-sweep'
 
 /** Recorded only when a weekly check actually ran for users — see the header. */
 const LINEUP_CHECK_JOB = 'cron-chimmy-lineup-check'
+const BEST_BALL_DEPTH_JOB = 'cron-chimmy-best-ball-depth'
 const WAIVER_CHECK_JOB = 'cron-chimmy-waiver-check'
 const SPORT_WAIVER_CHECK_JOB = 'cron-chimmy-sport-waiver-check'
 const CHOP_RELEASE_JOB = 'cron-chimmy-chop-release'
@@ -135,6 +144,7 @@ const SWEEP_CEILING_MS = 240_000
 
 type PhaseRefusal = { ran: false; reason: 'disabled' | 'error'; error?: string }
 type LineupCheckReport = LineupCheckRun | PhaseRefusal
+type BestBallDepthReport = BestBallDepthRun | PhaseRefusal
 type WaiverCheckReport = WaiverCheckRun | PhaseRefusal
 type SportWaiverCheckReport = SportWaiverCheckRun | PhaseRefusal
 type ChopReleaseReport = ChopReleaseRun | PhaseRefusal
@@ -185,6 +195,25 @@ async function weeklyCheckPhase<R extends { ran: boolean }>(
 function lineupCheckPhase(args: PhaseArgs): Promise<LineupCheckReport> {
   return weeklyCheckPhase('lineup check', args, runLineupCheck, (r) => ({
     jobName: LINEUP_CHECK_JOB,
+    outcome: {
+      rowsRead: r.leaguesChecked,
+      rowsWritten: r.outcomes.sent ?? 0,
+      rowsSkipped: r.notReached,
+      errors: r.errors.map((e) => `${e.userId}: ${e.error}`),
+      status: r.errors.length > 0 ? 'partial' : 'success',
+      metadata: { week: r.week, mainSlate: r.mainSlate, users: r.users, outcomes: r.outcomes },
+    },
+  }))
+}
+
+/**
+ * ⚠ SHARES THE LINEUP CHECK'S WINDOW, so the two run in the same fires; each has its own budget and
+ * both still stop starting users at `SWEEP_CEILING_MS`. Only managers holding a best ball league are
+ * walked, so for most of the audience this costs nothing.
+ */
+function bestBallDepthPhase(args: PhaseArgs): Promise<BestBallDepthReport> {
+  return weeklyCheckPhase('best ball depth check', args, runBestBallDepthCheck, (r) => ({
+    jobName: BEST_BALL_DEPTH_JOB,
     outcome: {
       rowsRead: r.leaguesChecked,
       rowsWritten: r.outcomes.sent ?? 0,
@@ -660,6 +689,12 @@ async function handle(req: NextRequest) {
       singleUser,
       sweepStartedAt: startedAt,
     })
+    const bestBallDepth = await bestBallDepthPhase({
+      mode: (url.searchParams.get('bestBallDepth') ?? '').trim().toLowerCase(),
+      dryRun,
+      singleUser,
+      sweepStartedAt: startedAt,
+    })
     const waiverCheck = await waiverCheckPhase({
       mode: (url.searchParams.get('waiverCheck') ?? '').trim().toLowerCase(),
       dryRun,
@@ -700,6 +735,8 @@ async function handle(req: NextRequest) {
       errors: withErrors.slice(0, 10).map((r) => ({ userId: r.userId, errors: r.errors })),
       /** Chimmy's lineup check — see the header. Mostly `{ ran: false, reason: 'early' }`. */
       lineupCheck,
+      /** The best ball depth check — the lineup check's window; red positions only. */
+      bestBallDepth,
       /** Chimmy's Tuesday waiver check — the same shape, the same rules. */
       waiverCheck,
       /** The other sports' waiver check — per-sport windows; mostly `{ ran: false, reason: 'closed' }`. */

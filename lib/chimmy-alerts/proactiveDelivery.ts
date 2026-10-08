@@ -11,6 +11,7 @@ import { getSettingsProfile } from '@/lib/user-settings'
 import { loadChimmyAlertPreferences } from './ChimmyAlertPreferencesService'
 import type { ScheduledGame } from './lineupCheck'
 import type { ChimmyAlertUserPreferences } from './types'
+import { isBestBallLeagueRow } from '@/lib/core-app/leagueBestBall'
 
 /**
  * What every weekly Chimmy message shares — the lineup check before the main slate, the waiver
@@ -46,6 +47,9 @@ export type ProactiveAudienceLeague = {
   name: string | null
   leagueVariant: string | null
   bestBallMode: boolean | null
+  /** With `settings`, what `isBestBallAudienceLeague` reads — see that function. */
+  leagueType?: string | null
+  settings?: unknown
   /** For "one message line per REAL league" — see lib/core-app/realLeague.ts. */
   platform?: string | null
   platformLeagueId?: string | null
@@ -105,6 +109,8 @@ export const proactiveDeliveryDeps: ProactiveDeliveryDeps = {
             name: true,
             leagueVariant: true,
             bestBallMode: true,
+            leagueType: true,
+            settings: true,
             platform: true,
             platformLeagueId: true,
             season: true,
@@ -145,6 +151,21 @@ export const proactiveDeliveryDeps: ProactiveDeliveryDeps = {
   },
   dispatch: dispatchNotification,
   baseUrl: getBaseUrl,
+}
+
+/**
+ * Is this audience league best ball? 🛑 THE COLUMN ALONE IS NOT THE ANSWER: 0 of 344 imported Sleeper
+ * leagues had `bestBallMode` set on 2026-09-27 — imports carry the flag in `settings.best_ball`. The
+ * lineup check tested the columns only, so imported best ball leagues were sent "fix your lineup"
+ * for a lineup the platform sets itself. One test, shared by both checks (lib/core-app/leagueBestBall.ts).
+ */
+export function isBestBallAudienceLeague(l: ProactiveAudienceLeague): boolean {
+  return isBestBallLeagueRow({
+    bestBallMode: l.bestBallMode,
+    leagueVariant: l.leagueVariant,
+    leagueType: l.leagueType ?? null,
+    settings: l.settings,
+  })
 }
 
 /** The category switch, global and master — per-league overrides are the caller's, per league. */
