@@ -7,7 +7,7 @@ import { formatPct1 } from './weeklyPercent'
 import type { WeeklyCalendar } from './weeklyCalendar'
 import { isAtRisk,isRuledOut } from './injuryStatus'
 
-export type WeeklyAction = { id: string; leagueId: string; leagueName: string; kind: 'lineup' | 'monitor' | 'sync' | 'playoff' | 'review' | 'deadline'; count: number; href: string; gameAt: string | null; source: 'stored-lineup' | 'season-outlook' | 'league-context' | 'weekly-calendar'; season?: number | null; period?: number | null; sport?: string; deadlineKind?: 'lineup' | 'waivers' | 'trade'; playoffScenarios?: {ifWin:number;ifLose:number}; evidence?: { empty: number; out: number; bye: number | null; questionable: number; players?: string[] } }
+export type WeeklyAction = { id: string; leagueId: string; leagueName: string; kind: 'lineup' | 'monitor' | 'sync' | 'playoff' | 'review' | 'deadline'; count: number; href: string; gameAt: string | null; source: 'stored-lineup' | 'season-outlook' | 'league-context' | 'weekly-calendar'; season?: number | null; period?: number | null; sport?: string; unavailable?: boolean; deadlineKind?: 'lineup' | 'waivers' | 'trade'; playoffScenarios?: {ifWin:number;ifLose:number}; evidence?: { empty: number; out: number; bye: number | null; questionable: number; players?: string[] } }
 export type WeeklyBlueprint = {
   name: string | null; teamName: string | null; leagueCount: number; sports: string[]; focusLeagueId: string | null
   actions: WeeklyAction[]; actionCount: number; attentionLeagueIds: string[]; lineupReadFailed: boolean
@@ -49,6 +49,10 @@ export function buildWeeklyBlueprint(input: {
   const now = input.now.getTime()
   for (const row of rows) {
     if (row.bestBall || row.automatic || row.archived) continue
+    if (row.coverageReason && row.week == null) {
+      actions.push({id:`${row.leagueId}:review`,leagueId:row.leagueId,leagueName:row.leagueName,kind:'review',unavailable:true,count:0,href:`/core/my-team?league=${encodeURIComponent(row.leagueId)}`,gameAt:null,source:'league-context'})
+      continue
+    }
     const game = row.lockAt ? Date.parse(row.lockAt) : NaN
     const card = cards.find(m => m.leagueId === row.leagueId)
     // My Team already reading the week after a FINISHED board week is the Tuesday gap above, not stale data.
@@ -105,7 +109,7 @@ export function buildWeeklyBlueprint(input: {
   const probability = outlook?.you?.playoffPct
   return { name: input.name?.trim() || null, teamName: input.board.leagueBoard?.yourTeamName ?? null, leagueCount: leagues.length,
     sports: [...new Set(leagues.map(l => l.sport?.trim()).filter((s): s is string => Boolean(s)))], focusLeagueId: focus,
-    actions: actions.slice(0, 3).map(a=>({...a,sport:leagues.find(l=>l.id===a.leagueId)?.sport?.trim().toUpperCase()})), actionCount: actions.length, attentionLeagueIds, lineupReadFailed: input.pulse == null || (leagues.length > 0 && rows.length === 0), coverage,
+    actions: actions.slice(0, 3).map(a=>({...a,sport:leagues.find(l=>l.id===a.leagueId)?.sport?.trim().toUpperCase()})), actionCount: actions.length, attentionLeagueIds, lineupReadFailed: input.pulse == null || (leagues.length > 0 && !rows.some(r=>!r.archived && r.week != null && !r.coverageReason)), coverage,
     sportPlans: leagues.map(l=>({leagueId:l.id,leagueName:l.name?.trim() || 'League',sport:l.sport?.trim().toUpperCase() || 'UNKNOWN'})),
     calendar: input.calendar,
     commissionerLeagueIds: input.commissionerLeagueIds?.filter(id => allowed.has(id)) ?? [],
@@ -125,6 +129,7 @@ export function weeklyActionText(action: WeeklyAction, es = false): string {
   return ({ lineup: `Review ${action.count} lineup issue${action.count === 1 ? '' : 's'}`, monitor: `Monitor ${action.count} questionable starter${action.count === 1 ? '' : 's'}`, sync: 'Refresh your team data', playoff: `Explore period ${action.count} playoff scenarios`, review: 'Review your team and its rules' })[action.kind]
 }
 export function weeklyActionReason(action: WeeklyAction, es = false): string {
+  if(action.unavailable)return es ? 'No hay una alineación verificable para esta liga. Revisa la cobertura de la importación antes de decidir; no se ha comprobado que los titulares estén disponibles.' : 'A verifiable lineup is unavailable for this league. Review import coverage before deciding; starter availability has not been checked.'
   if(action.kind==='lineup' && action.sport && !['NFL','NCAAF'].includes(action.sport)) return es ? 'Los huecos y las ausencias pueden afectar tu resultado; compara opciones elegibles según el formato.' : 'Empty slots and unavailable starters can affect your result; compare eligible options under your scoring format.'
   if(action.kind==='deadline')return es ? 'Hay una fecha confirmada guardada para esta liga. Comprueba las reglas y completa tu decisión antes del plazo.' : 'A confirmed date is stored for this league. Check the rules and complete your decision before the deadline.'
   return es ? ({lineup:'Los huecos, las ausencias o los descansos pueden costarte puntos. Revisa las opciones elegibles.',monitor:'Una designación de duda puede cambiar. Comprueba las noticias antes de decidir.',sync:'Los datos están incompletos o no coinciden con el período. Actualízalos antes de elegir jugadores.',playoff:'Compara los escenarios de victoria y derrota y revisa las reglas del modelo.',review:'Revisa los titulares y las reglas de esta liga para preparar tu próxima decisión.'})[action.kind]
