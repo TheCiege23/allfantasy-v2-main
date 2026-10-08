@@ -848,8 +848,8 @@ async function loadRecentTrades(
   // Receipt reuse reads before creating. Preserve serialized writes within this
   // read while independent grades and league context run in bounded groups.
   let receiptWrites = Promise.resolve()
-  const saveReceipt = (input: Parameters<typeof receiptIdForGrade>[0]) => {
-    const save = receiptWrites.then(() => receiptIdForGrade(input))
+  const queueReceipt = (write: () => Promise<string | null>) => {
+    const save = receiptWrites.then(write)
     receiptWrites = save.then(() => undefined, () => undefined)
     return save
   }
@@ -878,7 +878,7 @@ async function loadRecentTrades(
           try {
             const inputs = completedTradeInputs(src, currentSeason)
             if (inputs) {
-              t.receiptId = await saveReceipt({
+              t.receiptId = await queueReceipt(() => receiptIdForGrade({
                 surface: 'dashboard-trades',
                 leagueId: t.leagueId,
                 userId: live?.viewerUserId ?? null,
@@ -886,7 +886,7 @@ async function loadRecentTrades(
                 get: inputs.get,
                 viewerSide: false,
                 grade: oneGrade,
-              })
+              }))
             }
           } catch {
             t.receiptId = null
