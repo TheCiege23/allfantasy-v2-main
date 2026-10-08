@@ -22,8 +22,9 @@ import type { ChimmyPlanAllowanceView } from '@/lib/chimmy/planAllowanceView'
  * "never a page you navigate to and lose your place" — a per-screen mount would
  * unmount it on navigation, which is the failure it exists to avoid. Same reason
  * the read-only chip and the geo notice live in the shell.
- * 🛑 THE SHELL ITSELF IS STILL REPLACED on a /core screen change — the page's loading
- * boundary sits above it — so where the user was is restored from commsUiMemory.ts.
+ * 🛑 THE SHELL ITSELF IS STILL REPLACED on a /core screen change — Next keys the
+ * `[[...screen]]` page that renders it on the screen param — so where the user was is
+ * restored from commsUiMemory.ts.
  *
  * ⚠ DOCKED IS CHOSEN BY THE PAGE, NOT BY THE VIEWPORT ALONE. 23b docks beside a
  * roster or matchup — screens where you are reading one league and asking about
@@ -174,8 +175,8 @@ export function CommsDock({
   const close = useCallback(() => setOpen(false), [])
 
   /*
-   * An open chat stays open across a /core navigation: the page's loading boundary replaces this
-   * whole component on every screen change (see commsUiMemory.ts), so the open state is restored
+   * An open chat stays open across a /core navigation: a screen change mounts a new shell and with
+   * it a new copy of this component (see commsUiMemory.ts), so the open state is restored
    * after mount — in an effect, never in the first render, so the server's closed render hydrates.
    */
   const restoredOpenFor = useRef<string | undefined>(undefined)

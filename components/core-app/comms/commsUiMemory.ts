@@ -5,12 +5,15 @@ import type { CommsTab } from './CommsDrawer'
 /**
  * Where the chat was — open or closed, which tab, which league — kept for the browser session.
  *
- * 🛑 THE CHAT DOES NOT SURVIVE A /core NAVIGATION ON ITS OWN. `app/core/[[...screen]]/loading.tsx`
- * is the boundary for the whole shell, and the screen param is part of that segment's key, so every
- * screen change re-suspends and REPLACES the shell — CommsDock included. The chat closed, its bubble
- * disappeared while the next screen loaded, and it came back closed on whatever tab it started with
- * (owner report 2026-09-25: "the chat bubble closes … and doesn't come back"). The drawer's own
- * comment claimed it "stays mounted across navigations"; it does not.
+ * 🛑 THE CHAT DOES NOT SURVIVE A /core SCREEN CHANGE ON ITS OWN. AfCoreShell — and CommsDock in it —
+ * is rendered by `app/core/(shell)/[[...screen]]/page.tsx`, and Next keys that segment's React tree
+ * on its param (layout-router's `stateKey`, built by createRouterCacheKey: `screen|trades|oc` vs
+ * `screen|waivers|oc`). So every screen change builds a NEW shell and the chat starts over: closed,
+ * on its default tab (owner report 2026-09-25: "the chat bubble closes … and doesn't come back").
+ * Moving `loading.tsx` above the `(shell)` group (bc722a4bd) stopped the whole-app skeleton between
+ * tabs; it did NOT stop this remount, because the key is the page segment's, not the boundary's.
+ * A league switch is a query change only and keeps the same key, so it never lost the chat.
+ * The drawer's own comment once claimed it "stays mounted across navigations"; it does not.
  *
  * Remembered per signed-in user, so one account's chat state never opens for another. sessionStorage,
  * not localStorage: a new tab or tomorrow starts closed, which is what a chat bubble should do.

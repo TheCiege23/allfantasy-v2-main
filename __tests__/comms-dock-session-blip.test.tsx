@@ -123,8 +123,9 @@ describe('the chat drawer through a session re-check blip', () => {
 })
 
 /*
- * "The chat bubble closes … and doesn't come back": /core's loading boundary replaces the whole shell
- * on every screen change, so CommsDock unmounts and mounts fresh. Unmount + render is that navigation.
+ * "The chat bubble closes … and doesn't come back": Next keys the /core page segment on its screen
+ * param, so every screen change mounts a new shell and CommsDock with it (see commsUiMemory.ts).
+ * Unmount + render is that navigation.
  */
 function renderDock(pageLeagueId: string | null = null) {
   return render(
@@ -149,7 +150,7 @@ describe('the chat across a /core navigation', () => {
     fireEvent.click(screen.getByRole('button', { name: /Open communications/ }))
     fireEvent.click(screen.getByRole('tab', { name: /League/ }))
     fireEvent.change(screen.getByRole('combobox', { name: 'League scope' }), { target: { value: 'L2' } })
-    first.unmount() // the loading boundary swaps the shell out
+    first.unmount() // the screen change swaps the shell out
 
     renderDock()
     expect(document.querySelector('.af-cm')).not.toBeNull()
