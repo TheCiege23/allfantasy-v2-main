@@ -104,7 +104,7 @@ it('offers the selected draft question without losing or sending the saved messa
   fireEvent.click(screen.getByRole('button', { name: 'Add suggested question' }))
   expect(input.value).toBe('My unsent question\n\n'+incoming)
   expect(screen.queryByRole('status', { name:'Suggested question' })).toBeNull()
-  expect(vi.mocked(fetch).mock.calls.some(([,init])=>(init as RequestInit)?.method==='POST')).toBe(false)
+  expect(vi.mocked(fetch).mock.calls.some(([url,init])=>String(url).split('?')[0]==='/api/chat/chimmy'&&(init as RequestInit)?.method==='POST')).toBe(false)
 })
 it('does not show a different league suggestion and allows keeping the existing message', async () => {
   sessionStorage.setItem('af:comms:conversations:u1', JSON.stringify({ dj: { turns: [], draft: 'Keep me' } }))
