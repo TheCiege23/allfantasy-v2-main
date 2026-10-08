@@ -4052,6 +4052,14 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
            */
           regularSeason: traceCard('regular-season', () => hasRegularSeasonStarted('NFL')).catch(() => false),
           trades,
+          /*
+           * The trade band's "why this grade" line is the Trade Center's paid depth (trade_depth,
+           * AF Pro) — the letter stays free, the reason is the breakdown. Read only on the home and
+           * never blocking a card: a failed lookup locks the line rather than the band.
+           */
+          tradeDepth: traceCard('trade-depth', () =>
+            resolveCorePaywall(userId, { email: viewerEmail, now }).then((p) => p.trade_depth),
+          ).catch(() => null),
           brief,
           drafts,
         }

@@ -57,7 +57,8 @@ describe('⚠ no core screen opens the legacy league page', () => {
   })
 
   it('opens Core trade activity in the league Trades tab', () => {
-    expect(read('DashTradeBand.tsx')).toContain('/league/${t.leagueId}?view=trades')
+    // The home band opens the /core Trades tab itself (2026-10-08), not the legacy league page.
+    expect(read('DashTradeBand.tsx')).toContain('/core/trades?league=${encodeURIComponent(leagueId)}')
     expect(read('DashSinceLastVisit.tsx')).toContain('/league/${t.leagueId}?view=trades')
     expect(read('DashTradeBand.tsx')).not.toContain('?view=legacy')
     expect(read('DashSinceLastVisit.tsx')).not.toContain('?view=legacy')

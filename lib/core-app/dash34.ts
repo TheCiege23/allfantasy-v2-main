@@ -17,6 +17,8 @@ import { composePlayerIdentities } from './playerIdentityCompose'
 import { getTeamInfo, normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { leagueDisplayName } from './leagueHome'
 import { selectKickoffLeague } from './kickoffContext'
+import { isBestBallLeagueRow } from './leagueBestBall'
+import { bestBallDepthAlerts, type DepthAlert } from './bestBallDepth'
 import { clubKey, indexFixturesByWeek, weekVerdict } from './lineupWeekFixtures'
 import type {
   Dash34Brief,
@@ -122,7 +124,19 @@ export type Dash34LeagueRow = {
   hasUnifiedRecord?: boolean | null
 }
 
+/** One best ball position worth a glance, in one league. */
+export type Dash34DepthAlert = DepthAlert & {
+  leagueId: string
+  leagueName: string
+  platform: string
+  href: string
+  /** Null where the league has waivers switched off. */
+  waiversHref: string | null
+}
+
 export type Dash34Result = Dash34Data & {
+  /** Best ball depth checks — positions where the healthy room has thinned. Empty most weeks. */
+  depthAlerts?: Dash34DepthAlert[]
   injuryCheckedAt?: string | null
   /** Rows excluded from the list because they are historical, not played. */
   legacyCount: number
@@ -1060,6 +1074,8 @@ async function loadDash34Data(
     benchIn: number
     irIn: number
     taxiIn: number
+    /** Rostered (not IR/taxi) in a best ball league, where the platform sets the lineup. */
+    bestBallIn: number
     /** leagueId → the slot this player occupies there. */
     slotByLeague: Map<string, 'starter' | 'bench' | 'ir' | 'taxi'>
   }
@@ -1098,7 +1114,32 @@ async function loadDash34Data(
     }
   >()
 
+  /*
+   * ⚠ BEST BALL IS DECIDED BEFORE THE BOOK, NOT AFTER IT. Sleeper fills `starters` in a best ball
+   * league with the platform's auto lineup, and the book used to count those as "starting" — so a
+   * best ball league put players in "Starters in doubt" that nobody can bench (founder-reported
+   * 2026-10-08). The provider's live flag is one signal; `isBestBallLeagueRow` reads the column,
+   * `leagueType` and the `settings.best_ball` flag imports actually carry.
+   */
+  const leagueRowById = new Map(active.map((l) => [l.id, l]))
+  const bestBallLeagues = new Set(
+    [...rosterByLeague.keys()].filter((id) => {
+      const f = formatByLeague.get(id)
+      return rosterByLeague.get(id)?.bestBall === true || isBestBallLeagueRow({
+        bestBallMode: f?.bestBallMode ?? null,
+        leagueVariant: f?.leagueVariant ?? null,
+        leagueType: leagueRowById.get(id)?.leagueType ?? null,
+        settings: f?.settings,
+      })
+    }),
+  )
+  for (const id of bestBallLeagues) {
+    const r = rosterByLeague.get(id)
+    if (r) r.bestBall = true
+  }
+
   for (const [leagueId, roster] of rosterByLeague) {
+    const bestBallHere = bestBallLeagues.has(leagueId)
     let total = 0
     let starting = 0
     let unavailable = 0
@@ -1108,7 +1149,8 @@ async function loadDash34Data(
       const d = designationOf(pid)
       if (!d) continue
       total++
-      const isStarter = roster.starters.has(pid)
+      // In best ball the platform sets the lineup after the games; nobody there is "starting".
+      const isStarter = !bestBallHere && roster.starters.has(pid)
       if (isStarter) starting++
       if (isUnavailable(d.status)) {
         unavailable++
@@ -1137,11 +1179,17 @@ async function loadDash34Data(
             : 'bench'
 
       const key = d.name.trim().toLowerCase()
+      /*
+       * A best ball league's active players sit in no chosen slot, so the chip says nothing rather
+       * than "bench": the count goes to `bestBallIn` instead. IR and taxi stay what they are.
+       */
+      const autoLineup = bestBallHere && slot === 'bench'
       const entry = book.get(key)
       if (entry) {
         entry.leagues.add(leagueId)
-        entry.slotByLeague.set(leagueId, slot)
-        if (slot === 'starter') entry.startingIn++
+        if (!autoLineup) entry.slotByLeague.set(leagueId, slot)
+        if (autoLineup) entry.bestBallIn++
+        else if (slot === 'starter') entry.startingIn++
         else if (slot === 'ir') entry.irIn++
         else if (slot === 'taxi') entry.taxiIn++
         else entry.benchIn++
@@ -1158,10 +1206,11 @@ async function loadDash34Data(
           leagues: new Set([leagueId]),
           sleeperId: pid,
           startingIn: slot === 'starter' ? 1 : 0,
-          benchIn: slot === 'bench' ? 1 : 0,
+          benchIn: slot === 'bench' && !autoLineup ? 1 : 0,
           irIn: slot === 'ir' ? 1 : 0,
           taxiIn: slot === 'taxi' ? 1 : 0,
-          slotByLeague: new Map([[leagueId, slot]]),
+          bestBallIn: autoLineup ? 1 : 0,
+          slotByLeague: autoLineup ? new Map() : new Map([[leagueId, slot]]),
         })
       }
     }
@@ -1189,14 +1238,22 @@ async function loadDash34Data(
 
   /* ── The league list ───────────────────────────────────────────────────── */
 
+  /** Best ball positions worth a glance, across every league — see bestBallDepth.ts. */
+  const depthAlerts: Dash34DepthAlert[] = []
+
   const leagues: Dash34League[] = active.map((row) => {
     const team = teamByLeague.get(row.id) ?? null
     const hurt = hurtByLeague.get(row.id) ?? NO_HURT
     const roster = rosterByLeague.get(row.id)
     const stage = roster?.leagueStatus ?? stageOf(row)
     const format = formatByLeague.get(row.id)
-    const bestBall = roster?.bestBall || format?.bestBallMode === true || format?.leagueVariant === 'best_ball'
-    if (roster) roster.bestBall = Boolean(bestBall)
+    const bestBall = Boolean(roster?.bestBall) || isBestBallLeagueRow({
+      bestBallMode: format?.bestBallMode ?? null,
+      leagueVariant: format?.leagueVariant ?? null,
+      leagueType: row.leagueType ?? null,
+      settings: format?.settings,
+    })
+    if (roster) roster.bestBall = bestBall
     const storedRosterId = storedRosters.find(r => r.leagueId === row.id)?.id
     const eliminated = roster?.eliminated || [team?.externalId, team?.id, storedRosterId].some(id => id && choppedTeams.has(`${row.id}:${id}`))
       || eliminatedRows.some(r => r.leagueId === row.id && r.season.season === Number(row.season))
@@ -1211,6 +1268,31 @@ async function loadDash34Data(
       emptyStarters: roster?.emptyStarters ?? 0, hurtStarters: hurt.startingUnavailable,
     })
     hurt.startingUnavailable = eligibility.hurtStarters
+    if (bestBall && roster && !eliminated && !eliminationRosterEmpty
+      && !['pre_draft', 'setup', 'drafting', 'complete', 'completed', 'offseason'].includes(String(stage ?? ''))) {
+      const settingsSlots = (format?.settings as { roster_positions?: unknown } | null | undefined)?.roster_positions
+      const slots = roster.verification?.slots
+        ?? (Array.isArray(settingsSlots) ? settingsSlots.map(String) : null)
+      for (const alert of bestBallDepthAlerts(slots, roster.all.map((id) => {
+        const d = designationOf(id)
+        return {
+          name: d?.name ?? playerById.get(id)?.name ?? id,
+          position: playerById.get(id)?.position ?? null,
+          status: d?.status ?? null,
+          unavailable: Boolean(d && isUnavailable(d.status)),
+          inactive: roster.reserve.has(id) || roster.taxi.has(id),
+        }
+      }))) {
+        depthAlerts.push({
+          ...alert,
+          leagueId: row.id,
+          leagueName: leagueDisplayName(row.name),
+          platform: String(row.platform ?? 'manual').toLowerCase(),
+          href: `/core/my-team?league=${encodeURIComponent(row.id)}`,
+          waiversHref: roster.waiversEnabled === false ? null : `/core/waivers?league=${encodeURIComponent(row.id)}`,
+        })
+      }
+    }
     if (bestBall || eliminated || eliminationRosterEmpty || eligibility.emptyStarters === 0 && eligibility.hurtStarters === 0 && stage !== 'in_season') hurt.starting = 0
     const platform = String(row.platform ?? 'manual').toLowerCase()
     const commish = Boolean(row.isCommissioner || team?.isCommissioner || team?.isCoCommissioner)
@@ -1671,6 +1753,7 @@ async function loadDash34Data(
         benchIn: b.benchIn,
         irIn: b.irIn,
         taxiIn: b.taxiIn,
+        bestBallIn: b.bestBallIn,
         /*
          * What the feed actually said, e.g. "Ruled out — ankle. Did not
          * practice Friday." It was selected, stored and carried this far, then
@@ -1957,6 +2040,9 @@ async function loadDash34Data(
     brief: null,
     chimmyBrief,
     book: bookRows.length > 0 ? bookRows : null,
+    depthAlerts: depthAlerts
+      .sort((a, b) => (a.tone === b.tone ? 0 : a.tone === 'bad' ? -1 : 1))
+      .slice(0, 8),
     /*
      * What the prices on those rows actually are, so the card can say it
      * instead of implying a number tuned to a league it never saw.

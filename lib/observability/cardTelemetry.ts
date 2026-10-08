@@ -38,6 +38,7 @@ export type CoreCardRead =
   | 'plays'
   | 'regular-season'
   | 'trades'
+  | 'trade-depth'
   | 'following'
   | 'receipts'
   | 'routine-facts'

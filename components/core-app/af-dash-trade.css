@@ -1,34 +1,79 @@
 /* Trades that just landed (DashTradeBand.tsx). Token-authored on the af-core
    palette. Neutral, not urgent: a completed trade is news, not a deadline, so
    it reads quieter than the drafts and game-day bands and louder than the
-   schedule strip. There is deliberately no empty state — no recent trade
-   renders nothing at all. */
+   schedule strip.
+
+   2026-10-08: rebuilt on Sleeper's trade-card shape — two teams side by side
+   with a swap mark between, each team's letter as a badge — and the sides stay
+   side by side on a phone, because stacking them made one trade a screen tall.
+   Only the last 24 hours render; a quiet row stands in when none landed. */
 
 .af-trade {
   margin: 0 0 14px;
   border: 1px solid var(--line);
-  border-left: 4px solid var(--accent);
-  border-radius: 14px;
+  border-radius: 16px;
   background: var(--surface);
-  padding: 12px 16px;
+  padding: 12px 14px;
 }
 
 .af-trade-head {
   display: flex;
-  align-items: baseline;
-  gap: 10px;
+  align-items: center;
+  gap: 8px;
   flex-wrap: wrap;
   margin-bottom: 10px;
 }
 .af-trade-kicker {
-  color: var(--accent);
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text);
 }
 .af-trade-count {
+  margin-left: auto;
   font-size: 11px;
   font-weight: 700;
   color: var(--muted);
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text) 6%, transparent);
 }
 
+/* ── No trade in the window ───────────────────────────────────────────── */
+.af-trade-quiet {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 52px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+  color: var(--text);
+  text-decoration: none;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.af-trade-quiet-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.af-trade-quiet-sub {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.af-trade-quiet-cta {
+  flex-shrink: 0;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+/* ── Cards ────────────────────────────────────────────────────────────── */
 .af-trade-list {
   display: flex;
   flex-direction: column;
@@ -36,60 +81,105 @@
 }
 .af-trade-card {
   border: 1px solid var(--line);
-  border-radius: 11px;
+  border-radius: 14px;
   background: var(--bg);
-  padding: 10px 12px;
+  padding: 4px 12px 8px;
 }
 
 .af-trade-meta {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 8px;
-  margin-bottom: 8px;
+  min-width: 0;
 }
 .af-trade-league {
+  min-width: 0;
   font-size: 12.5px;
   font-weight: 700;
   color: var(--text);
   text-decoration: none;
-}
-.af-trade-league:hover {
-  color: var(--accent);
-}
-.af-trade-ago {
-  font-size: 11px;
-  color: var(--muted);
-}
-
-/* Two sides, side by side — the swap should read as a swap. */
-.af-trade-sides {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 10px;
-}
-.af-trade-side {
-  border: 1px solid var(--line);
-  border-radius: 9px;
-  padding: 8px 10px;
-  background: var(--surface);
-}
-.af-trade-mgr {
-  display: block;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.af-trade-league:hover {
+  color: var(--accent);
+}
 .af-trade-league-avatar {
-  width: 26px;
-  height: 26px;
-  flex: 0 0 26px;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
   border-radius: 7px;
   object-fit: cover;
   border: 1px solid var(--line);
 }
+.af-trade-ago {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+.af-trade-status {
+  flex-shrink: 0;
+  margin-left: auto;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+.af-trade-status[data-status='processed'],
+.af-trade-status[data-status='accepted'] {
+  color: var(--good);
+  background: color-mix(in srgb, var(--good) 14%, transparent);
+}
+.af-trade-status[data-status='pending'],
+.af-trade-status[data-status='awaiting_votes'],
+.af-trade-status[data-status='awaiting_commissioner'] {
+  color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 14%, transparent);
+}
+
+/* Two sides, side by side — the swap should read as a swap, on a phone too. */
+.af-trade-sides {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+.af-trade-sides[data-count='2'] {
+  grid-template-columns: 1fr 1fr;
+}
+.af-trade-side {
+  position: relative;
+  min-width: 0;
+  padding: 10px 10px 10px;
+}
+.af-trade-side + .af-trade-side {
+  border-left: 1px solid var(--line);
+}
+.af-trade-swap {
+  position: absolute;
+  top: 16px;
+  left: -12px;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--accent);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  z-index: 1;
+}
+
 .af-trade-manager {
   display: flex;
   align-items: center;
@@ -104,12 +194,58 @@
   object-fit: cover;
   border: 1px solid var(--line);
 }
+.af-trade-avatar--initials {
+  display: grid;
+  place-items: center;
+  font-size: 10.5px;
+  font-weight: 800;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+}
+.af-trade-mgr {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The letter is the badge — coloured by tone so a lopsided deal reads at a glance. */
+.af-trade-grade {
+  flex: 0 0 auto;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 6px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  font-size: 15px;
+  font-weight: 900;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+}
+.af-trade-grade[data-tone='good'] {
+  color: var(--good);
+  background: color-mix(in srgb, var(--good) 16%, transparent);
+}
+.af-trade-grade[data-tone='mid'] {
+  color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 14%, transparent);
+}
+.af-trade-grade[data-tone='bad'] {
+  color: var(--bad);
+  background: color-mix(in srgb, var(--bad) 14%, transparent);
+}
+
 .af-trade-got {
   display: block;
-  margin: 2px 0 5px;
-  font-size: 12px;
+  margin: 8px 0 4px;
+  font-size: 10.5px;
   font-weight: 800;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--muted);
 }
 
@@ -119,47 +255,47 @@
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  font-size: 12px;
+  gap: 6px;
+  font-size: 12.5px;
   color: var(--text);
-}
-/* A pick is marked as a pick — it is a different kind of asset from a player
-   and the card should not let them blur together. */
-.af-trade-assets li[data-kind='pick'] {
-  color: var(--muted);
-  font-style: italic;
 }
 .af-trade-assets li {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
+  min-width: 0;
 }
-.af-trade-side-grade {
-  grid-column: 1 / -1;
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin-top: 7px;
-  padding-top: 7px;
-  border-top: 1px solid var(--line);
-  font-size: 11px;
-  line-height: 1.45;
-  color: var(--muted);
-}
-.af-trade-side-letter {
+.af-trade-asset-icon {
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
-  flex: 0 0 28px;
-  border-radius: 8px;
-  background: var(--chip);
-  border: 1px solid var(--chip-line);
-  color: var(--text);
-  font-weight: 900;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+}
+.af-trade-asset-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+.af-trade-asset-name {
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* A pick is marked as a pick — a different kind of asset from a player. */
+.af-trade-assets li[data-kind='pick'] .af-trade-asset-name {
+  font-style: italic;
+  font-weight: 600;
 }
 .af-trade-pos {
-  font-size: 12px;
+  font-size: 10.5px;
   font-weight: 700;
   color: var(--muted);
 }
@@ -168,30 +304,7 @@
   color: var(--muted);
 }
 
-.af-trade-open {
-  display: inline-block;
-  margin-top: 9px;
-  font-size: 11.5px;
-  font-weight: 700;
-  color: var(--accent);
-  text-decoration: none;
-}
-.af-trade-open:hover {
-  text-decoration: underline;
-}
-
-@media (max-width: 640px) {
-  .af-trade {
-    padding: 10px 12px;
-  }
-  .af-trade-sides {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* The prospective verdict — market value of what each side received, on the
-   day. Neutral when the deal reads fair; accented when it leans, because
-   "leans" is the part a reader acts on. */
+/* The verdict — names the manager it favours. Neutral when even; warm when it leans. */
 .af-trade-verdict {
   margin: 8px 0 0;
   font-size: 11.5px;
@@ -204,37 +317,94 @@
 .af-trade-verdict-word[data-fair='true'] {
   color: var(--good);
 }
-.af-trade-fair {
-  font-weight: 700;
-}
 .af-trade-conf {
   color: var(--muted);
 }
 
+/* AF Pro's "why": one short clamped line per side, never a paragraph. */
+.af-trade-why {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+.af-trade-why li {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.af-trade-why strong {
+  color: var(--text);
+}
+.af-trade-why-lock {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--muted);
+  text-decoration: none;
+}
+.af-trade-why-lock:hover {
+  color: var(--accent);
+}
+
+.af-trade-open {
+  display: inline-flex;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  text-decoration: none;
+}
+.af-trade-open:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 640px) {
+  .af-trade {
+    padding: 10px 10px;
+    border-radius: 14px;
+  }
+  .af-trade-card {
+    padding: 2px 10px 6px;
+  }
+  .af-trade-side {
+    padding: 9px 8px;
+  }
+  .af-trade-conf {
+    display: block;
+    margin-top: 1px;
+  }
+}
+
 /* ── 44px touch floor ─────────────────────────────────────────────────
  *
- * ⚠ MEASURED, NOT ASSUMED. `.af-wl-allweeks` rendered at 16px — a real
- * link a thumb cannot reliably hit. These are the controls on this sheet
- * that carried no floor of their own.
- *
- * ⚠ min-height DOES NOTHING ON AN INLINE BOX, which is why the ones that
- * declared no `display` get `inline-flex` here. A control that only looks
- * padded is not a control that can be tapped.
+ * ⚠ MEASURED, NOT ASSUMED. These are the controls on this sheet that
+ * carried no floor of their own. min-height does nothing on an inline box,
+ * which is why each declares inline-flex above.
  *
  * ⚠ BOTH SELECTORS ON PURPOSE. af-core.css scopes its primitives as
  * `.af-core a` (0,2,0); a bare class is (0,1,0) and loses wherever that
- * applies. Links inside running text are deliberately NOT here — forcing
- * 44px on those breaks the paragraph and WCAG exempts them.
+ * applies.
  */
-
 .af-trade-open,
-.af-core .af-trade-open {
-  min-height: 44px;
-}
-
+.af-core .af-trade-open,
+.af-trade-why-lock,
+.af-core .af-trade-why-lock,
 .af-trade-league,
 .af-core .af-trade-league {
-  display: inline-flex;
-  align-items: center;
   min-height: 44px;
+}
+.af-trade-league,
+.af-core .af-trade-league {
+  display: inline-block;
+  line-height: 44px;
 }

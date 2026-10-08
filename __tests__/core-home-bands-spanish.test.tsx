@@ -775,7 +775,9 @@ function bandTrade(over: Partial<RecentTrade> = {}): RecentTrade {
 
 describe('Latest league trades (DashTradeBand)', () => {
   const ENGLISH =
-    /Latest league trades|latest|past 2 weeks|\bago\b|just now|RECEIVED|IN THIS TRADE|\bmore\b|No players or picks|League grade|Got [\d,]+|on this league|today’s values|still being prepared|favou?rs|even deal|One side|confidence|Open this league|Accepted|Proposed|Awaiting|Completed/
+    /\bTrades\b|last 24|\bago\b|just now|Received|\bGets\b|\bmore\b|FAAB only|League grade|Got [\d,]+|on this league|today’s values|still being prepared|favou?rs|even deal|One side|confidence|Why these grades|All .* trades|Accepted|Proposed|Awaiting|Completed/
+  /* The "why" line is AF Pro's trade depth (2026-10-08); these tests read it as a plan holder. */
+  const PRO = { unlocked: true, hasPlan: true, preLaunchFree: false, depth: 'trade_depth', startsAt: '2026-10-15T04:00:00.000Z', planName: 'AF Pro', label: 'The full trade breakdown', upgradePath: '/upgrade?plan=pro' } as const
 
   it('every card, status, grade line and verdict reads Spanish', () => {
     const trades = [
@@ -792,19 +794,19 @@ describe('Latest league trades (DashTradeBand)', () => {
         ],
       } as never),
     ]
-    const out = es(<DashTradeBand trades={trades} now={TR_NOW} />)
+    const out = es(<DashTradeBand trades={trades} now={TR_NOW} depth={PRO} />)
     expectSpanish(out, ENGLISH, 'trades')
-    expect(out).toContain('Últimos intercambios de tus ligas')
-    expect(out).toContain('4 recientes · últimas 2 semanas')
+    expect(out).toContain('Intercambios')
+    expect(out).toContain('4 en las últimas 24 h')
     expect(out).toContain('hace 3 h')
     expect(out).toContain('justo ahora')
     expect(out).toContain('Completado')
     expect(out).toContain('Esperando votos')
     expect(out).toContain('Propuesto')
-    expect(out).toContain('RECIBIÓ')
-    expect(out).toContain('EN ESTE INTERCAMBIO')
+    expect(out).toContain('Recibió')
+    expect(out).toContain('Recibe')
     expect(out).toContain('+1 más')
-    expect(out).toContain('No hay jugadores ni selecciones registrados: solo FAAB, o no se capturaron')
+    expect(out).toContain('Solo FAAB, o no se capturó')
     expect(out).toContain('Calificación de liga')
     expect(out).toContain('Recibió 6,400 por 5,100 con los valores de esta liga en la fecha del traspaso (14 sep). Con los valores de hoy: C.')
     expect(out).toContain('La calificación específica de la liga aún se está preparando.')
@@ -816,7 +818,7 @@ describe('Latest league trades (DashTradeBand)', () => {
     expect(out).toContain('Un intercambio equilibrado sobre el papel')
     expect(out).toContain('Un lado sale ganando')
     expect(out).toContain('con los valores de esta liga en la fecha del traspaso (14 sep) · 72% de confianza')
-    expect(out).toContain('Abrir los intercambios de esta liga')
+    expect(out).toContain('Todos los intercambios de Dynasty Gridiron')
   })
 
   it('a grade line without parts, and a withheld basis, stay whole English', () => {
@@ -825,6 +827,7 @@ describe('Latest league trades (DashTradeBand)', () => {
       <DashTradeBand
         trades={[{ ...t, sides: [{ ...t.sides[0]!, gradeParts: undefined, gradeBasis: null, gradeReason: 'League grade withheld: Josh Allen has no price.' }, t.sides[1]!] } as never]}
         now={TR_NOW}
+        depth={PRO}
       />,
     )
     expect(out).toContain('League grade withheld: Josh Allen has no price.')
@@ -832,21 +835,40 @@ describe('Latest league trades (DashTradeBand)', () => {
   })
 
   it('English is unchanged', () => {
-    const out = en(<DashTradeBand trades={[bandTrade()]} now={TR_NOW} />)
+    const out = en(<DashTradeBand trades={[bandTrade()]} now={TR_NOW} depth={PRO} />)
     for (const s of [
-      'Latest league trades',
-      '1 latest · past 2 weeks',
+      'Trades',
+      '1 in the last 24h',
       '3h ago',
-      'IN THIS TRADE',
+      'Gets',
       '+1 more',
-      'No players or picks on record — FAAB only, or not captured',
+      'FAAB only, or not captured',
       'League grade',
       'Got 6,400 for 5,100 on this league’s values at the time of the trade (Sep 14). On today’s values: C.',
       'Slightly favours Ice Kings',
       ' · on this league’s values at the time of the trade (Sep 14) · 72% confidence',
-      'Open this league’s trades',
+      'All Dynasty Gridiron trades',
     ])
       expect(out).toContain(s)
+  })
+
+  it('without AF Pro the letters stay and the reasons never reach the page', () => {
+    const out = en(<DashTradeBand trades={[bandTrade()]} now={TR_NOW} />)
+    expect(out).toContain('Why these grades · AF Pro')
+    expect(out).not.toContain('Got 6,400 for 5,100')
+    expect(out).not.toContain('still being prepared')
+  })
+
+  it('shows only the last 24 hours, and a quiet row pointing at the last trade when none landed', () => {
+    const old = bandTrade({ id: 'old', acceptedAt: new Date(TR_NOW.getTime() - 30 * 3_600_000).toISOString() } as never)
+    const both = en(<DashTradeBand trades={[bandTrade(), old]} now={TR_NOW} depth={PRO} />)
+    expect(both).toContain('1 in the last 24h')
+    expect(both).not.toContain('1d ago')
+    const quiet = en(<DashTradeBand trades={[old]} now={TR_NOW} depth={PRO} />)
+    expect(quiet).toContain('No trades in the last 24 hours.')
+    expect(quiet).toContain('Last one was in Dynasty Gridiron')
+    expect(quiet).toContain('See trades')
+    expect(quiet).not.toContain('Ice Kings')
   })
 })
 
