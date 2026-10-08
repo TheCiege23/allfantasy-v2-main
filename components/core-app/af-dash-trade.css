@@ -121,7 +121,7 @@
 .af-trade-status {
   flex-shrink: 0;
   margin-left: auto;
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -197,7 +197,7 @@
 .af-trade-avatar--initials {
   display: grid;
   place-items: center;
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 800;
   color: var(--muted);
   background: color-mix(in srgb, var(--text) 8%, transparent);
@@ -242,7 +242,7 @@
 .af-trade-got {
   display: block;
   margin: 8px 0 4px;
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -295,7 +295,7 @@
   font-weight: 600;
 }
 .af-trade-pos {
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--muted);
 }
