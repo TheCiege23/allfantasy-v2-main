@@ -326,7 +326,8 @@ html[data-mode='light'] .bdx.bdx-embed-core .bdx-sev.info { background: color-mi
 /* ── This week: the four clocks at the top of the Decide home (ThisWeekStrip) ──
    Own top-level blocks at end of file, so nothing can be carried into another query. */
 .bdx .bdx-week { margin: 0 0 22px; }
-.bdx .bdx-week-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+/* auto-fit: three tiles fill the row instead of leaving a fourth column empty. */
+.bdx .bdx-week-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
 .bdx .bdx-week-tile {
   display: flex; flex-direction: column; align-items: flex-start; gap: 3px; min-width: 0;
   padding: 13px 16px; border-radius: 12px; text-align: left; cursor: pointer;
@@ -343,9 +344,42 @@ html[data-mode='light'] .bdx.bdx-embed-core .bdx-sev.info { background: color-mi
   font-variant-numeric: tabular-nums; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .bdx .bdx-week-tile .d { font-size: 12px; color: var(--bdx-ink-dim); max-width: 100%; overflow-wrap: anywhere; }
-@media (max-width: 960px) {
-  .bdx .bdx-week-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+/* ── The Decide home sizes itself by its OWN width, not the screen's ──
+   On a desktop the league page is three columns (league rail, this deck, My Leagues), so the deck is
+   ~370px wide at 1280 and ~590px at 1920 — narrower than a phone in landscape. The viewport rules
+   above (960px) never fire there: measured on the live page at 1280, the KPI row needed 420px in 320
+   and ran off the column, and Matchup Center's pairs held 154px columns. Container queries follow
+   the column wherever the shell puts it, phones included. Scoped to the Decide home root
+   (.bdx-home): .bdx is also embedded on /core, where inline-size containment could collapse a
+   content-sized embed. */
+.bdx.bdx-home { container: bdx-home / inline-size; }
+
+/* This week: two columns in a narrow deck, so four clocks cost two rows, not four; an odd last tile
+   takes the whole row rather than leaving a hole. */
+@container bdx-home (max-width: 560px) {
+  .bdx .bdx-week-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .bdx .bdx-week-tile:last-child:nth-child(odd) { grid-column: 1 / -1; }
 }
-@media (max-width: 420px) {
-  .bdx .bdx-week-grid { grid-template-columns: minmax(0, 1fr); }
+@container bdx-home (max-width: 360px) {
+  .bdx .bdx-week-tile { padding: 11px 12px; }
+  .bdx .bdx-week-tile .v { font-size: 16px; }
+  .bdx .bdx-week-tile .d { font-size: 11.5px; }
+}
+
+/* KPI row and support band: the same collapse the 960px viewport rule makes, at the deck's width. */
+@container bdx-home (max-width: 480px) {
+  .bdx .bdx-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .bdx .bdx-support { grid-template-columns: minmax(0, 1fr); }
+}
+@container bdx-home (max-width: 560px) {
+  .bdx .bdx-support.bdx-support--wide { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ── Matchup Center pairs ──
+   Was an inline 1fr 1fr, which out-ranked every collapse and held each card at its content width:
+   at 375px the page scrolled sideways. minmax(0, 1fr) lets a card shrink; a pair needs ~360px, so
+   below 720px of deck they stack. */
+.bdx .bdx-support.bdx-support--pair { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@container bdx-home (max-width: 720px) {
+  .bdx .bdx-support.bdx-support--pair { grid-template-columns: minmax(0, 1fr); }
 }
