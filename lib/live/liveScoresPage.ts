@@ -404,6 +404,7 @@ async function loadRosteredPlayers(
       leagueId: true,
       externalId: true,
       platformUserId: true,
+      lifecycleState: true,
       league: { select: { id: true, name: true, platform: true, platformLeagueId: true, sport: true, season: true, settings: true } },
     },
   })
@@ -433,9 +434,24 @@ async function loadRosteredPlayers(
     }
     const owned = new Set<string>()
     const started = new Set<string>()
+    /*
+     * ⚠ A SEAT IS ONE MANAGER, NOT ONE ROW. An import that changed its team-id format can leave the
+     * old row behind, still claimed: measured 2026-10-08 on a Fantrax league holding
+     * `fantrax-team:ciege82` (last written 09-03) beside `789336590` for the same
+     * `fantrax-user:Ciege82` — two claimed rows, one roster. Counted per row, the stale one always
+     * "failed", and the college tab told its owner "we could not read your rosters" every day.
+     * So rows are grouped by the provider's user id, and the read is incomplete only when a SEAT
+     * has no roster. An ARCHIVED team is not a seat at all.
+     */
+    const seatOf = (team: (typeof claimed)[number]) => team.platformUserId || team.externalId || `${team.leagueId}:?`
+    const seatsWithRoster = new Set<string>()
+    const seats = new Set<string>()
     for (const team of claimed) {
+      if (team.lifecycleState === 'ARCHIVED') continue
+      seats.add(seatOf(team))
       const roster = team.externalId ? resolved.get(team.externalId) : pool.find((r) => myRosterCandidates(team, userId).includes(r.platformUserId))
-      if (!roster) { incomplete = true; continue }
+      if (!roster) continue
+      seatsWithRoster.add(seatOf(team))
       // A Fleaflicker/MFL/Fantrax/Yahoo id collides with a real Sleeper id: that roster ties in nobody.
       // An ESPN one is translated (raw, ESPN 12483 Stafford is Sleeper's 12483 Jack Bech).
       const readable = await sleeperReadablePlayerDataOf(league.platform, roster.playerData)
@@ -443,6 +459,7 @@ async function loadRosteredPlayers(
       const data = readable as { starters?: unknown } | null
       for (const id of rosterPlayerIds({ starters: data?.starters })) started.add(id)
     }
+    if ([...seats].some((seat) => !seatsWithRoster.has(seat))) incomplete = true
     ownedByLeague.set(league.platformLeagueId, owned)
     startedByLeague.set(league.platformLeagueId, started)
   }
