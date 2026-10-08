@@ -2,7 +2,8 @@ import { parse } from 'csv-parse/sync'
 import type { FantraxTeamRoster } from './fantraxApi'
 
 export type FantraxActual = { playerId: string; name: string; points: number; isStarter: boolean }
-export type VerifiedFantraxActuals = { sourceTeamId: string; players: FantraxActual[]; starterTotal: number }
+export type FantraxZeroEvidence = { playerId: string; opponent: string; kind: 'bye' | 'zero_exported_stats' }
+export type VerifiedFantraxActuals = { sourceTeamId: string; players: FantraxActual[]; starterTotal: number; zeroEvidence: FantraxZeroEvidence[] }
 
 /** CSV exports carry neither season nor period. Bind them to an independently fetched
  * period roster and source team total before treating their points as source actuals. */
@@ -22,6 +23,7 @@ export function verifyFantraxWeeklyActuals(input: {
   const expected = new Map(input.roster.rosterItems.map(p => [p.id, p]))
   if (!expected.size || expected.size !== input.roster.rosterItems.length) throw new Error('Period roster missing or duplicated')
   const players: FantraxActual[] = []
+  const zeroEvidence: FantraxZeroEvidence[] = []
   const seen = new Set<string>()
   for (const row of lines.slice(headerAt + 1)) {
     const cell = (key: string) => String(row[header.indexOf(key)] ?? '').trim()
@@ -43,11 +45,16 @@ export function verifyFantraxWeeklyActuals(input: {
     const opponent = cell('Opponent')
     if (opponent !== 'Bye' && !/\sF(?:\s|$)/.test(opponent)) throw new Error('CSV contains unfinished games or projections')
     players.push({ playerId, name: cell('Player'), points, isStarter: normalizedStatus === 'ACTIVE' })
+    // Evidence about the SOURCE export, not an independent provider calculation.
+    const scoringColumns = ['YDS-Pa','TD-Pa','YDS-Ru','TDRu','REC','YDS-RC','TD-Rc','FRTD','TD','2PT']
+    if (points === 0 && scoringColumns.every(column => header.filter(h => h === column).length === 1 && /^-?0(?:\.0+)?$/.test(cell(column)))) {
+      zeroEvidence.push({playerId, opponent, kind: opponent === 'Bye' ? 'bye' : 'zero_exported_stats'})
+    }
   }
   if (seen.size !== expected.size) throw new Error('CSV omits period roster players')
   const starterTotal = players.filter(p => p.isStarter).reduce((sum, p) => sum + p.points, 0)
   if (Math.abs(starterTotal - input.sourceTotal) > 0.001) throw new Error('CSV starter total differs from the source period total')
-  return { sourceTeamId: input.sourceTeamId, players, starterTotal }
+  return { sourceTeamId: input.sourceTeamId, players, starterTotal, zeroEvidence }
 }
 
 /** Missing calculations stay missing, never silently become scoreless games. */

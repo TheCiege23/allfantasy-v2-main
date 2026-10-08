@@ -1,0 +1,8 @@
+{
+ "manifest_version":3,"name":"AllFantasy Fantrax Score Connector","version":"0.1.0",
+ "description":"Download verified actual-week scores through your existing Fantrax login and import them into your AllFantasy league.",
+ "host_permissions":["https://www.fantrax.com/*","https://www.allfantasy.ai/*"],
+ "action":{"default_popup":"popup.html"},
+ "background":{"service_worker":"worker.js","type":"module"},
+ "content_scripts":[{"matches":["https://www.allfantasy.ai/*"],"js":["bridge.js"]}]
+}

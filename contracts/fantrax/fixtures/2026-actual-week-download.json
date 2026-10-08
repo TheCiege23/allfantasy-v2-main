@@ -1,0 +1,36 @@
+{
+  "capturedAt": "2026-10-07",
+  "source": "User-supplied Chrome Network request for an actual-week roster export",
+  "method": "GET",
+  "origin": "https://www.fantrax.com",
+  "path": "/fxpa/downloadTeamRosterStats",
+  "query": {
+    "leagueId": "<sourceLeagueId>",
+    "period": "4",
+    "seasonOrProjection": "SEASON_50t_BY_PERIOD",
+    "timeframeTypeCode": "BY_PERIOD",
+    "scoringCategoryType": "5",
+    "statsType": "1",
+    "view": "STATS",
+    "teamId": "<sourceTeamId>",
+    "adminMode": "false",
+    "startDate": "2026-09-01",
+    "endDate": "2026-10-07",
+    "lineupChangeSystem": "EASY_CLICK",
+    "daily": "false",
+    "origDaily": "false"
+  },
+  "unauthenticatedResponse": {
+    "httpStatus": 200,
+    "contentType": "application/json",
+    "body": {
+      "pageError": {
+        "onScreen": false,
+        "code": "WARNING_NOT_LOGGED_IN",
+        "text": "Sorry, you must be logged in to perform this action.",
+        "forceReload": false
+      }
+    }
+  },
+  "responseNote": "Login error text is shortened. Authenticated browser transport must still be verified after extension installation. CSV validation is covered by fantrax-weekly-actuals.test.ts and verified source export receipts."
+}
