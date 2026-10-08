@@ -223,6 +223,7 @@ import CommissionerHub from '@/components/core-app/screens/CommissionerHub'
 import { getCommissionerHub } from '@/lib/core-app/commissionerHub'
 import { resolveServerRenderPreferences } from '@/lib/preferences/ServerRenderPreferenceResolver'
 import { resolveCorePaywall } from '@/lib/core-app/corePaywall'
+import { loadDailyStreak } from '@/lib/core-app/dailyStreakStore'
 import type { LaunchOfferView } from '@/lib/monetization/foundingMember'
 import { homeLaunchOfferFor } from '@/components/launch/homeLaunchOffer'
 import { LaunchOfferStrip } from '@/components/launch/LaunchOfferStrip'
@@ -4057,6 +4058,13 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
            * AF Pro) — the letter stays free, the reason is the breakdown. Read only on the home and
            * never blocking a card: a failed lookup locks the line rather than the band.
            */
+          /*
+           * The daily check-in streak. Recorded on the same condition as the "since your last visit"
+           * marker — a real, unfiltered home visit — so a prefetch never keeps a streak alive.
+           */
+          streak: traceCard('streak', () =>
+            loadDailyStreak(userId, now, { record: homeRecordVisit && !homeScoped }),
+          ).catch(() => null),
           tradeDepth: traceCard('trade-depth', () =>
             resolveCorePaywall(userId, { email: viewerEmail, now }).then((p) => p.trade_depth),
           ).catch(() => null),

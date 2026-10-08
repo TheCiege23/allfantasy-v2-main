@@ -39,6 +39,7 @@ export type CoreCardRead =
   | 'regular-season'
   | 'trades'
   | 'trade-depth'
+  | 'streak'
   | 'following'
   | 'receipts'
   | 'routine-facts'

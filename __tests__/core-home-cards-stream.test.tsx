@@ -310,6 +310,8 @@ describe('/core home cards stream independently', () => {
       // "Connect your league" (2026-09-25) — above everything, and renders nothing once a team is
       // claimed; see components/core-app/home/ConnectLeagueCard.tsx.
       'connect',
+      // The daily streak strip (2026-10-08) — one compact row above the decisions.
+      'streak',
       // The decision queue leads the home (2026-09-16) — ahead of every band.
       'issues',
       'since-last-visit',
