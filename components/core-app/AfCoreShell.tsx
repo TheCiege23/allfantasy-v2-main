@@ -18,6 +18,8 @@ import { AfCrest } from '@/components/core-app/AfCrest'
 import { CoreNavIcon } from '@/components/core-app/CoreNavIcon'
 import { LeagueMark } from '@/components/core-app/LeagueMark'
 import SyncNowButton from '@/components/core-app/SyncNowButton'
+import LeagueSwipe from '@/components/core-app/LeagueSwipe'
+import { LEAGUE_SWIPE_SCREENS } from '@/lib/core-app/leagueSwipe'
 import PlayerCardProvider from '@/components/core-app/player-card/PlayerCardProvider'
 import { COMMS_OPEN_EVENT, SUPPORT_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
 import { isCoreSurfaceKey } from '@/lib/core-app/coreSurface'
@@ -2389,6 +2391,17 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             its own league through `PlayerCardLeagueScope`, which is why this
             mount takes no `leagueId` — the shell does not know one.
           */}
+          {/*
+            Swipe between leagues on a phone (2026-10-08): the pager row plus the gesture on this
+            content area. Phone layout only, only with a league selected and somewhere to go, and
+            only on league-scoped screens (LEAGUE_SWIPE_SCREENS) — never a draft room or the desk.
+          */}
+          {phoneLayout && props.selectedLeagueId && leagues.length > 1 && LEAGUE_SWIPE_SCREENS.has(active) ? (
+            <LeagueSwipe
+              leagues={leagues.map((l) => ({ id: l.id, name: l.name, imageUrl: l.imageUrl ?? null, mark: l.mark }))}
+              selectedLeagueId={props.selectedLeagueId}
+            />
+          ) : null}
           <ShellSignalsContext.Provider value={setPublishedSignals}>
             <CoreNavPendingContext.Provider value={navPending != null}>
               <PlayerCardProvider>{children}</PlayerCardProvider>
