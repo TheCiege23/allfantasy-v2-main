@@ -10,16 +10,19 @@ import { formatPct1, pct1 } from '@/lib/core-app/weeklyPercent'
 import '@/components/core-app/af-week-blueprint.css'
 import { WeeklySharing } from './WeeklySharing'
 import { WeeklyCalendar } from './WeeklyCalendar'
+import { buildWeeklySwings, sportWeekAdvice } from '@/lib/core-app/weeklySportPlan'
+import { playoffInputChanges } from '@/lib/core-app/weeklyPlayoffMovement'
 
 export function WeeklyBlueprint({ data, path }: { data: Blueprint; path?: WeeklyPlayoffPath | null }) {
   const { language } = useOptionalLanguage(); const es = language === 'es'
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'manual'>('idle')
   const brief = weeklyBrief(data, es)
+  const swings = buildWeeklySwings(data,es)
   const ask = () => {
     const detail: CommsOpenDetail = { tab: 'chimmy', prefill: `${brief}\n${es ? 'Explica los riesgos y las opciones de esta semana. Verifica las reglas y los plazos; no supongas datos que falten.' : 'Explain this week’s risks and options. Verify the rules and deadlines; do not assume missing data.'}`, ...(data.focusLeagueId ? { leagueId: data.focusLeagueId } : {}) }
     window.dispatchEvent(new CustomEvent(COMMS_OPEN_EVENT, { detail }))
   }
-  const askAction = (action: WeeklyAction) => window.dispatchEvent(new CustomEvent(COMMS_OPEN_EVENT, {detail:{tab:'chimmy',leagueId:action.leagueId,prefill:weeklyActionPrompt(action,es)} satisfies CommsOpenDetail}))
+  const askAction = (action: WeeklyAction) => window.dispatchEvent(new CustomEvent(COMMS_OPEN_EVENT, {detail:{tab:'chimmy',leagueId:action.leagueId,prefill:swings.find(s=>s.id===action.id)?.prompt ?? weeklyActionPrompt(action,es)} satisfies CommsOpenDetail}))
   async function copyBrief() { try { await navigator.clipboard.writeText(brief); setCopyState('copied') } catch { setCopyState('manual') } }
   return <section className="af-wbp" aria-label={es ? 'Tu plan semanal' : 'Your weekly blueprint'}>
     <header><p className="af-label">{es ? 'AllFantasy · Tu plan' : 'AllFantasy · Your blueprint'}</p>
@@ -30,12 +33,12 @@ export function WeeklyBlueprint({ data, path }: { data: Blueprint; path?: Weekly
       {copyState === 'manual' ? <textarea aria-label={es ? 'Resumen para copiar' : 'Brief to copy'} readOnly value={brief} onFocus={e => e.target.select()} /> : null}
     </header>
     <div className="af-wbp-grid"><section><h3>{es ? 'Tus próximas prioridades' : 'Your next priorities'}</h3>
-      <p>{es ? 'Empieza por una decisión. Abre su liga o compara las opciones con Chimmy.' : 'Start with one decision. Open its league or compare options with Chimmy.'}</p>
-      {data.actions.length ? <ol className="af-wbp-actions">{data.actions.map(a => <li key={a.id}>
+      <p>{es ? '¿Qué puede cambiar tu semana? Empieza por estos riesgos y oportunidades.' : 'What could swing your week? Start with these risks and opportunities.'}</p>
+      {data.actions.length ? <ol className="af-wbp-actions">{data.actions.map(a => <li key={a.id} id={`weekly-issue-${a.id}`}>
         <span className="af-wbp-action-tag">{a.kind === 'monitor' ? es ? 'Vigilar' : 'Watchlist' : a.kind === 'sync' ? es ? 'Datos pendientes' : 'Data check' : a.kind === 'lineup' ? es ? 'Revisar alineación' : 'Lineup review' : es ? 'Planificar' : 'Plan ahead'}</span>
         <Link href={a.href}><strong>{weeklyActionText(a, es)}</strong><span>{a.leagueName}</span></Link>
-        <p>{weeklyActionReason(a,es)}</p>
-        {a.gameAt ? <small>{es ? 'Próximo partido: ' : 'Next game: '}<LocalGameTime iso={a.gameAt} language={language} />. {es ? 'Confirma el bloqueo en tu liga.' : 'Confirm your league’s lineup lock.'}</small> : <small>{es ? 'Comprueba las reglas y el horario de tu liga.' : 'Check your league’s rules and timing.'}</small>}
+        <p>{swings.find(s=>s.id===a.id)?.detail ?? weeklyActionReason(a,es)}</p>
+        {a.gameAt ? <small>{a.kind === 'deadline' ? es ? 'Plazo: ' : 'Deadline: ' : es ? 'Próximo partido: ' : 'Next game: '}<LocalGameTime iso={a.gameAt} language={language} />. {es ? 'Confirma el bloqueo en tu liga.' : 'Confirm your league’s lineup lock.'}</small> : <small>{es ? 'Comprueba las reglas y el horario de tu liga.' : 'Check your league’s rules and timing.'}</small>}
         <button type="button" onClick={()=>askAction(a)} aria-label={es ? `Comparar opciones con Chimmy: ${a.leagueName}` : `Compare options with Chimmy: ${a.leagueName}`}>{es ? 'Comparar con Chimmy' : 'Compare with Chimmy'}</button>
       </li>)}</ol> : <p>{es ? 'Conecta una liga para preparar tu semana.' : 'Connect a league to build your week.'}</p>}
       {data.actionCount > 3 ? <p>{es ? 'Estas son tus tres primeras prioridades.' : 'These are your first three priorities.'}</p> : null}
@@ -45,6 +48,7 @@ export function WeeklyBlueprint({ data, path }: { data: Blueprint; path?: Weekly
       <p>{es ? 'Las estimaciones históricas se muestran aparte de los pronósticos de tu alineación actual.' : 'Historical scoring estimates are shown separately from current lineup forecasts.'}</p>
       <ul>{data.coverage.slice(0, 5).map(c => <li key={c.leagueId}><Link href={`/core/my-team?league=${encodeURIComponent(c.leagueId)}`}>{c.leagueName}</Link>: {c.af ? 'AF' : ''}{c.af && c.provider ? ' + ' : ''}{c.provider ? es ? 'proveedor' : 'provider' : ''}{!c.af && !c.provider ? es ? 'pronóstico actual no disponible' : 'current forecast unavailable' : ''}{c.partial ? es ? ' · parcial' : ' · partial' : ''}</li>)}</ul>
     </section>}</div>
+    {data.sportPlans?.length ? <details className="af-wbp-sports"><summary>{es ? 'Preparación por deporte y formato' : 'Plan by sport and format'}</summary><p>{es ? 'El deporte no confirma el formato. Comprueba puntos, categorías, roto y reglas de bloqueo en cada liga. Los pronósticos de volumen, categorías y límites solo se muestran cuando hay datos verificados.' : 'Sport alone does not establish the format. Confirm points, categories, roto and lock rules in each league. Game-volume, category and limit forecasts require verified data.'}</p><ul>{[...new Set(data.sportPlans.map(s=>s.sport))].map(sport=><li key={sport}><strong>{sport}</strong><p>{sportWeekAdvice(sport,es)}</p><div>{data.sportPlans!.filter(s=>s.sport===sport).map(l=><Link key={l.leagueId} href={`/core/my-team?league=${encodeURIComponent(l.leagueId)}`}>{l.leagueName} → </Link>)}</div></li>)}</ul></details> : null}
     <WeeklyCalendar data={data.calendar} />
     <WeeklySharing data={data} path={path} />
   </section>
@@ -70,13 +74,18 @@ export function PlayoffPath({ path }: { path: WeeklyPlayoffPath }) {
   const previous = path.points.filter(p => p.period < path.period).at(-1)
   const delta = valid && previous ? you!.playoffPct - previous.probability : null
   const swing = path.swing
+  const inputChanges = playoffInputChanges(previous,path.points.find(p=>p.period===path.period),es)
   return <section className="af-wbp-path"><h3>{es ? 'Tu camino a los playoffs' : 'Your playoff path'}</h3>
     {valid ? <>
       <p><strong className="af-wbp-prob">{you!.playoffPct > 0 && you!.playoffPct < 1 ? '<1' : you!.playoffPct > 99 && you!.playoffPct < 100 ? '>99' : you!.playoffPct.toFixed(0)}%</strong> {es ? 'probabilidad estimada' : 'estimated probability'}</p>
       <p>{you!.status === 'clinched' ? es ? 'Clasificación asegurada según las reglas modeladas.' : 'Clinched under the modeled rules.' : you!.status === 'eliminated' ? es ? 'Eliminado según las reglas modeladas; aún puedes competir por objetivos semanales.' : 'Eliminated under the modeled rules; weekly goals still matter.' : you!.playoffPct < 5 ? es ? 'Pocas probabilidades; no es una eliminación matemática.' : 'Long shot; this is not mathematical elimination.' : you!.playoffPct >= 99 ? es ? 'Clasificación muy probable; aún no está asegurada matemáticamente.' : 'Likely in; not mathematically clinched.' : es ? 'El resultado sigue abierto.' : 'The outcome is still open.'}</p>
       {delta != null ? <p>{pct1(delta) >= 0 ? '+' : ''}{formatPct1(delta)} {es ? `puntos porcentuales frente al período ${previous!.period}` : `percentage points versus period ${previous!.period}`}.</p> : <p>{es ? 'La tendencia comienza con tu primer resumen guardado.' : 'Your trend starts with the first saved snapshot.'}</p>}
+      {inputChanges.length ? <details><summary>{es ? 'Entradas que cambiaron desde el resumen anterior' : 'Inputs changed since the previous snapshot'}</summary><ul>{inputChanges.map(change=><li key={change}>{change}</li>)}</ul></details> : previous ? <p>{es ? 'No hay cambios de entradas comparables guardados para estos períodos.' : 'Comparable input changes were not recorded for these periods.'}</p> : null}
       {path.points.length > 1 ? <><svg viewBox="0 0 300 100" role="img" aria-label={es ? 'Tendencia de probabilidades; valores en la tabla' : 'Playoff probability trend; values in the table'}><polyline fill="none" stroke="currentColor" strokeWidth="3" points={path.points.map((p,i) => `${10 + i * 280 / (path.points.length - 1)},${90 - p.probability * .8}`).join(' ')} /></svg><details><summary>{es ? 'Datos de la tendencia' : 'Trend data'}</summary><table><thead><tr><th>{es ? 'Período' : 'Period'}</th><th>%</th></tr></thead><tbody>{path.points.map(p => <tr key={p.period}><td>{p.period}</td><td>{formatPct1(p.probability)}%</td></tr>)}</tbody></table></details></> : null}
       {swing && swing.week >= path.period ? <div className="af-wbp-branches"><h4>{es ? `Escenarios del período ${swing.week}` : `Period ${swing.week} scenarios`}</h4>{[{ title: es ? 'Si ganas' : 'If you win', value: swing.ifWin }, { title: es ? 'Si pierdes' : 'If you lose', value: swing.ifLose }].map(b => <div key={b.title}><span>{b.title}: {formatPct1(b.value)}%</span><span className="af-wbp-bar" aria-hidden><i style={{ width: `${Math.max(0, Math.min(100,b.value))}%` }} /></span></div>)}</div> : <p>{es ? 'No hay un escenario pendiente de victoria/derrota para este período.' : 'No pending win/loss scenario is available for this period.'}</p>}
+      {league!.whatDecidesIt ? <p>{coreUiCopy(league!.whatDecidesIt,language)}</p> : null}
+      {delta != null ? <p>{es ? 'El cambio refleja nuevas puntuaciones, calendario restante o entradas del modelo; no se ha atribuido a una causa específica.' : 'Movement can reflect new scores, remaining schedule or model inputs; a specific cause has not been established.'}</p> : null}
+      {swing?.week === path.period && swing.helpIfLose?.length ? <p>{es ? 'Si pierdes, el modelo señala ayuda de: ' : 'If you lose, the model identifies possible help from: '}{swing.helpIfLose.join(', ')}. {es ? 'Es una condición del modelo, no una garantía.' : 'This is conditional model evidence, not a guarantee.'}</p> : null}
       <details><summary>{es ? 'Cómo se calcula' : 'How this is calculated'}</summary><p>{es ? 'Simulación del calendario restante con el historial de puntuación. No es una garantía.' : 'Remaining-schedule simulation using scoring history. This is not a guarantee.'}</p><p>{league!.assumptions.iterations.toLocaleString()} {es ? 'simulaciones' : 'simulations'} · {es ? 'Último cálculo' : 'Last calculated'}: <LocalCalculatedTime iso={league!.assumptions.computedAt} language={language}/></p><ul>{league!.assumptions.missing.map(m => <li key={m}>{coreUiCopy(m, language)}</li>)}</ul></details>
     </> : <p>{es ? 'El modelo de playoffs no está disponible para este formato o estos datos. Revisa la clasificación y las reglas de tu liga.' : 'Playoff modeling is unavailable for this format or data. Review your league standings and rules.'}</p>}
     {path.historyUnavailable ? <p role="status">{es ? 'El historial de probabilidades no está disponible; el cálculo actual sigue visible.' : 'Probability history is unavailable; the current calculation remains visible.'}</p> : null}

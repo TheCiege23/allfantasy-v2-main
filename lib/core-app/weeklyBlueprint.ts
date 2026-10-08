@@ -5,8 +5,9 @@ import { lineupProjectionFor } from './weekLineups'
 import type { WeekLineups } from './weekLineups'
 import { formatPct1 } from './weeklyPercent'
 import type { WeeklyCalendar } from './weeklyCalendar'
+import { isAtRisk,isRuledOut } from './injuryStatus'
 
-export type WeeklyAction = { id: string; leagueId: string; leagueName: string; kind: 'lineup' | 'monitor' | 'sync' | 'playoff' | 'review'; count: number; href: string; gameAt: string | null; source: 'stored-lineup' | 'season-outlook' | 'league-context'; season?: number | null; period?: number | null }
+export type WeeklyAction = { id: string; leagueId: string; leagueName: string; kind: 'lineup' | 'monitor' | 'sync' | 'playoff' | 'review' | 'deadline'; count: number; href: string; gameAt: string | null; source: 'stored-lineup' | 'season-outlook' | 'league-context' | 'weekly-calendar'; season?: number | null; period?: number | null; sport?: string; unavailable?: boolean; deadlineKind?: 'lineup' | 'waivers' | 'trade'; playoffScenarios?: {ifWin:number;ifLose:number}; evidence?: { empty: number; out: number; bye: number | null; questionable: number; players?: string[] } }
 export type WeeklyBlueprint = {
   name: string | null; teamName: string | null; leagueCount: number; sports: string[]; focusLeagueId: string | null
   actions: WeeklyAction[]; actionCount: number; attentionLeagueIds: string[]; lineupReadFailed: boolean
@@ -14,6 +15,7 @@ export type WeeklyBlueprint = {
   matchup?: { opponent: string; period: number; leagueName: string; leagueId?: string; season?: number }
   playoff?: { probability: number; leagueName: string; leagueId?: string; season?: number; period?: number }
   rivalry?: { opponent: string; wins: number; losses: number; ties: number; winningStreak: number; losingStreak: number; final: boolean }
+  sportPlans?: Array<{ leagueId: string; leagueName: string; sport: string }>
   calendar?: WeeklyCalendar
   commissionerLeagueIds?: string[]
 }
@@ -41,12 +43,16 @@ export function buildWeeklyBlueprint(input: {
   const focus = input.focusLeagueId ?? null
   const leagues = input.leagues.filter(l => !focus || l.id === focus)
   const allowed = new Set(leagues.map(l => l.id))
-  const rows = [...input.pulse?.needs ?? [], ...input.pulse?.set ?? []].filter(r => allowed.has(r.leagueId))
+  const rows = (input.pulse?.inventory ?? [...input.pulse?.needs ?? [], ...input.pulse?.set ?? []]).filter(r => allowed.has(r.leagueId))
   const cards = [...input.board.coinFlips, ...input.board.leaning, ...input.board.unprojected].filter(m => allowed.has(m.leagueId))
   const actions: WeeklyAction[] = []
   const now = input.now.getTime()
   for (const row of rows) {
-    if (row.bestBall || row.automatic) continue
+    if (row.bestBall || row.automatic || row.archived) continue
+    if (row.coverageReason && row.week == null) {
+      actions.push({id:`${row.leagueId}:review`,leagueId:row.leagueId,leagueName:row.leagueName,kind:'review',unavailable:true,count:0,href:`/core/my-team?league=${encodeURIComponent(row.leagueId)}`,gameAt:null,source:'league-context'})
+      continue
+    }
     const game = row.lockAt ? Date.parse(row.lockAt) : NaN
     const card = cards.find(m => m.leagueId === row.leagueId)
     // My Team already reading the week after a FINISHED board week is the Tuesday gap above, not stale data.
@@ -59,11 +65,19 @@ export function buildWeeklyBlueprint(input: {
     actions.push({ id: `${row.leagueId}:${kind}`, leagueId: row.leagueId, leagueName: row.leagueName, kind,
       count: kind === 'lineup' ? count : kind === 'monitor' ? row.questionable : row.unresolved,
       href: `/core/${kind === 'sync' ? 'league-sync' : 'my-team'}?league=${encodeURIComponent(row.leagueId)}`,
-      gameAt: !unreadable && game > now ? new Date(game).toISOString() : null, source: 'stored-lineup', season: row.season, period: row.week })
+      gameAt: !unreadable && game > now ? new Date(game).toISOString() : null, source: 'stored-lineup', season: row.season, period: row.week, evidence: unreadable || ![row.empty,row.out,row.questionable].every(Number.isFinite) ? undefined : {empty:row.empty,out:row.out,bye:row.bye,questionable:row.questionable,players:row.players?.filter(p=>p.starter && (p.onBye || isRuledOut(p.status) || isAtRisk(p.status)) && (!p.kickoff || Date.parse(p.kickoff)>now)).slice(0,3).map(p=>p.name)} })
     // A lineup repair and an injury watch are distinct decisions in a focused league.
     if (kind === 'lineup' && row.questionable > 0) actions.push({...actions[actions.length-1],id:`${row.leagueId}:monitor`,kind:'monitor',count:row.questionable})
   }
-  const priority = { lineup: 0, monitor: 1, sync: 2, playoff: 3, review: 4 }
+  for (const event of input.calendar?.events ?? []) {
+    const at=Date.parse(event.at)
+    if (!allowed.has(event.leagueId) || !['lineup','waivers','trade'].includes(event.kind) || !Number.isFinite(at) || at<=now || at>now+7*86400000) continue
+    const kind=event.kind as 'lineup' | 'waivers' | 'trade'
+    const id=`${event.leagueId}:deadline:${kind}`
+    if(actions.some(a=>a.id===id))continue
+    actions.push({id,leagueId:event.leagueId,leagueName:event.leagueName,kind:'deadline',deadlineKind:kind,count:0,href:event.href,gameAt:event.at,source:'weekly-calendar'})
+  }
+  const priority = { lineup: 0, monitor: 1, sync: 2, deadline: 3, playoff: 4, review: 5 }
   actions.sort((a, b) => priority[a.kind] - priority[b.kind] || (a.gameAt ? Date.parse(a.gameAt) : Infinity) - (b.gameAt ? Date.parse(b.gameAt) : Infinity) || b.count - a.count || a.leagueName.localeCompare(b.leagueName))
   const swings = Object.values(input.outlook?.swingByLeague ?? {}).filter(s => {
     const model = input.outlook?.leagues.find(l=>l.leagueId === s.leagueId)
@@ -74,7 +88,7 @@ export function buildWeeklyBlueprint(input: {
       (!card || (model.season === card.season && model.period === (next?.week ?? card.week)))
   }).sort((a,b) => b.swing - a.swing)
   for (const swing of swings) if (!actions.some(a => a.leagueId === swing.leagueId && (a.kind === 'sync' || a.kind === 'playoff'))) actions.push({ id: `${swing.leagueId}:playoff`, leagueId: swing.leagueId, leagueName: swing.leagueName, kind: 'playoff', count: swing.week,
-    href: `/core/season-outlook?league=${encodeURIComponent(swing.leagueId)}`, gameAt: null, source: 'season-outlook', period: swing.week, season: input.outlook?.leagues.find(l=>l.leagueId === swing.leagueId)?.season })
+    href: `/core/season-outlook?league=${encodeURIComponent(swing.leagueId)}`, gameAt: null, source: 'season-outlook', playoffScenarios:{ifWin:swing.ifWin,ifLose:swing.ifLose}, period: swing.week, season: input.outlook?.leagues.find(l=>l.leagueId === swing.leagueId)?.season })
   if (!actions.length && leagues.length) {
     const l = leagues.find(l => input.favoriteIds?.has(l.id)) ?? leagues[0]
     actions.push({ id: `${l.id}:review`, leagueId: l.id, leagueName: l.name?.trim() || 'League', kind: 'review', count: 0,
@@ -95,7 +109,8 @@ export function buildWeeklyBlueprint(input: {
   const probability = outlook?.you?.playoffPct
   return { name: input.name?.trim() || null, teamName: input.board.leagueBoard?.yourTeamName ?? null, leagueCount: leagues.length,
     sports: [...new Set(leagues.map(l => l.sport?.trim()).filter((s): s is string => Boolean(s)))], focusLeagueId: focus,
-    actions: actions.slice(0, 3), actionCount: actions.length, attentionLeagueIds, lineupReadFailed: input.pulse == null || (leagues.length > 0 && rows.length === 0), coverage,
+    actions: actions.slice(0, 3).map(a=>({...a,sport:leagues.find(l=>l.id===a.leagueId)?.sport?.trim().toUpperCase()})), actionCount: actions.length, attentionLeagueIds, lineupReadFailed: input.pulse == null || (leagues.length > 0 && !rows.some(r=>!r.archived && r.week != null && !r.coverageReason)), coverage,
+    sportPlans: leagues.map(l=>({leagueId:l.id,leagueName:l.name?.trim() || 'League',sport:l.sport?.trim().toUpperCase() || 'UNKNOWN'})),
     calendar: input.calendar,
     commissionerLeagueIds: input.commissionerLeagueIds?.filter(id => allowed.has(id)) ?? [],
     // Prior meetings must belong to the exact displayed opponent and period.
@@ -109,17 +124,21 @@ export function buildWeeklyBlueprint(input: {
     ...(outlook && probability != null && Number.isFinite(probability) && probability >= 0 && probability <= 100 ? { playoff: { probability, leagueName: outlook.leagueName, leagueId: outlook.leagueId, season: outlook.season, period: outlook.period } } : {}) }
 }
 export function weeklyActionText(action: WeeklyAction, es = false): string {
+  if(action.kind==='deadline')return es ? ({lineup:'Revisa el cierre de alineación',waivers:'Prepara tus reclamos antes del plazo',trade:'Revisa la fecha límite de intercambios'})[action.deadlineKind ?? 'lineup'] : ({lineup:'Review the confirmed lineup deadline',waivers:'Prepare claims before waiver processing',trade:'Review the confirmed trade deadline'})[action.deadlineKind ?? 'lineup']
   if (es) return ({ lineup: `Revisa ${action.count} problema${action.count === 1 ? '' : 's'} en tu alineación`, monitor: `Vigila ${action.count} titular${action.count === 1 ? '' : 'es'} con dudas`, sync: 'Actualiza los datos de tu equipo', playoff: `Explora los escenarios del período ${action.count}`, review: 'Revisa tu equipo y sus reglas' })[action.kind]
   return ({ lineup: `Review ${action.count} lineup issue${action.count === 1 ? '' : 's'}`, monitor: `Monitor ${action.count} questionable starter${action.count === 1 ? '' : 's'}`, sync: 'Refresh your team data', playoff: `Explore period ${action.count} playoff scenarios`, review: 'Review your team and its rules' })[action.kind]
 }
 export function weeklyActionReason(action: WeeklyAction, es = false): string {
+  if(action.unavailable)return es ? 'No hay una alineación verificable para esta liga. Revisa la cobertura de la importación antes de decidir; no se ha comprobado que los titulares estén disponibles.' : 'A verifiable lineup is unavailable for this league. Review import coverage before deciding; starter availability has not been checked.'
+  if(action.kind==='lineup' && action.sport && !['NFL','NCAAF'].includes(action.sport)) return es ? 'Los huecos y las ausencias pueden afectar tu resultado; compara opciones elegibles según el formato.' : 'Empty slots and unavailable starters can affect your result; compare eligible options under your scoring format.'
+  if(action.kind==='deadline')return es ? 'Hay una fecha confirmada guardada para esta liga. Comprueba las reglas y completa tu decisión antes del plazo.' : 'A confirmed date is stored for this league. Check the rules and complete your decision before the deadline.'
   return es ? ({lineup:'Los huecos, las ausencias o los descansos pueden costarte puntos. Revisa las opciones elegibles.',monitor:'Una designación de duda puede cambiar. Comprueba las noticias antes de decidir.',sync:'Los datos están incompletos o no coinciden con el período. Actualízalos antes de elegir jugadores.',playoff:'Compara los escenarios de victoria y derrota y revisa las reglas del modelo.',review:'Revisa los titulares y las reglas de esta liga para preparar tu próxima decisión.'})[action.kind]
     : ({lineup:'Empty slots, absences or byes can cost points. Review eligible options.',monitor:'A questionable designation can change. Check the latest status before deciding.',sync:'Team data is incomplete or differs from the matchup period. Refresh it before choosing players.',playoff:'Compare the win and loss scenarios and review the model’s rules.',review:'Review this league’s starters and rules to prepare your next decision.'})[action.kind]
 }
 /** An unsent, scoped question; no lineup changes or claims are executed. */
 export function weeklyActionPrompt(action: WeeklyAction, es = false): string {
   const period = action.period ? `${es ? 'Período' : 'Period'} ${action.period}${action.season ? ` · ${action.season}` : ''}. ` : ''
-  const timing = action.gameAt ? `${es ? 'Próximo partido registrado' : 'Next stored game time'}: ${action.gameAt}. ` : ''
+  const timing = action.gameAt ? `${action.kind === 'deadline' ? es ? 'Plazo confirmado' : 'Confirmed deadline' : es ? 'Próximo partido registrado' : 'Next stored game time'}: ${action.gameAt}. ` : ''
   return `${action.leagueName}. ${period}${weeklyActionText(action,es)}. ${weeklyActionReason(action,es)} ${timing}${es ? 'Ayúdame a comparar mis opciones. Verifica los datos, las reglas y el plazo oficial de esta liga; no inventes jugadores, horarios ni movimientos.' : 'Help me compare my options. Verify this league’s data, rules and official deadline; do not invent players, timing or transactions.'}`
 }
 export function weeklyBrief(data: WeeklyBlueprint, es = false): string {
