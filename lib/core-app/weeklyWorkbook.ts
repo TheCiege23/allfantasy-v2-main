@@ -11,7 +11,7 @@ export function buildWeeklyWorkbook(data: WeeklyBlueprint, path?: WeeklyPlayoffP
   const wb = XLSX.utils.book_new()
   const append = (name: string, rows: unknown[][]) => {
     const sheet = XLSX.utils.aoa_to_sheet(rows)
-    sheet['!cols'] = [{wch:32},{wch:65},{wch:30},{wch:30}]
+    sheet['!cols'] = Array.from({length:Math.max(4,...rows.map(r=>r.length))},(_,i)=>({wch:i===0?32:i===1?65:30}))
     sheet['!rows'] = rows.map((row,index)=>({hpt:index===0?30:Math.min(180,Math.max(30,...row.map((value,col)=>String(value??'').split('\n').reduce((lines,line)=>lines+Math.max(1,Math.ceil(line.length/(col===0?30:col===1?63:28))),0)*15)))}))
     XLSX.utils.book_append_sheet(wb,sheet,name)
     return sheet
@@ -46,6 +46,7 @@ export function buildWeeklyWorkbook(data: WeeklyBlueprint, path?: WeeklyPlayoffP
   const modelSeason = path?.season ?? (!path ? data.playoff?.season : undefined) ?? ''
   const modelPeriod = path?.period ?? (!path ? data.playoff?.period : undefined) ?? ''
   append('Model',[['Available',valid],['Season',modelSeason],['Period',modelPeriod],['Iterations',valid ? path?.league?.assumptions.iterations : ''],['Calculated at',valid ? path?.league?.assumptions.computedAt : ''],...(valid ? (path?.league?.assumptions.missing ?? []).map(m=>['Assumption',m]) : [['Note',modelNote]])])
+  if(data.scheduleForecasts?.length)append('Schedule evidence',[['League','Player','Role','Stored team games (lower bound)','From (UTC)','Through (UTC)','Stored game times (UTC)','Coverage gaps'],...data.scheduleForecasts.flatMap(f=>f.players.length?f.players.map(p=>[f.leagueName,p.name,p.role,p.games??'Unavailable',f.from,f.through,p.dates.join('\n'),f.gaps.join(', ')]):[[f.leagueName,'Unavailable','','Unavailable',f.from,f.through,'',f.gaps.join(', ')]])])
   const bytes = XLSX.write(wb,{bookType:'xlsx',type:'array'}) as ArrayBuffer
   const zip = XLSX.CFB.read(new Uint8Array(bytes),{type:'array'})
   const get = (name: string) => {

@@ -40,11 +40,14 @@ async function handle(req:Request){
   const statuses=['open','in_progress','waiting_on_manager','waiting_on_league_vote','completed','archived']
   if(typeof body.id!=='string'||typeof body.expectedStatus!=='string'||typeof body.expectedUpdatedAt!=='string'||!Number.isFinite(Date.parse(body.expectedUpdatedAt))||typeof body.status!=='string'||!statuses.includes(body.status))return NextResponse.json({error:'Invalid task update'},{status:400})
   const updated=await prisma.$transaction(async tx=>{
+    if(!await isCommissioner(leagueId,userId,tx))return 'forbidden' as const
+    const task=await tx.commissionerWorkspaceTask.findFirst({where:{id:body.id as string,leagueId},select:{title:true}})
     const count=await tx.commissionerWorkspaceTask.updateMany({where:{id:body.id as string,leagueId,status:body.expectedStatus as string,updatedAt:new Date(body.expectedUpdatedAt as string),OR:[{sourceKey:{startsWith:'operational:'}},{sourceKey:{startsWith:'weekly:'}}]},data:{status:body.status as string,resolvedAt:body.status==='completed'?new Date():null,autoResolvedAt:null}})
     if(count.count!==1)return false
-    await tx.leagueAuditLog.create({data:{leagueId,userId,actionType:'workspace.task_status_changed',entityType:'workspace_task',entityId:body.id as string,beforeState:{status:body.expectedStatus as string},afterState:{status:body.status as string}}})
+    await tx.leagueAuditLog.create({data:{leagueId,userId,actionType:'workspace.task_status_changed',entityType:'workspace_task',entityId:body.id as string,beforeState:{status:body.expectedStatus as string},afterState:{status:body.status as string,...(task?.title?{title:task.title}:{})}}})
     return true
   })
+  if(updated==='forbidden')return NextResponse.json({error:'Commissioner only'},{status:403})
   return updated?NextResponse.json({updated:true}):NextResponse.json({error:'Task changed. Reload the queue.'},{status:409})
 }
 export const GET=handle,PATCH=handle,POST=handle

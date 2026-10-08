@@ -197,6 +197,7 @@ import YourWeekLeague from '@/components/core-app/screens/YourWeekLeague'
 import SeasonOutlook from '@/components/core-app/screens/SeasonOutlook'
 import { getSeasonOutlook } from '@/lib/core-app/seasonOutlook'
 import { buildWeeklyBlueprint } from '@/lib/core-app/weeklyBlueprint'
+import { getWeeklyScheduleForecasts } from '@/lib/core-app/weeklyScheduleForecastLoader'
 import { getWeeklyCalendar } from '@/lib/core-app/weeklyCalendarLoader'
 import { readWeeklyPlayoffPath } from '@/lib/core-app/weeklyPlayoffPath'
 import { WeeklyBlueprint } from '@/components/core-app/WeeklyBlueprint'
@@ -3352,6 +3353,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
     lineups: ctx.weekLineups, favoriteIds: ctx.favoriteIds, focusLeagueId: selectedLeagueId, now: ctx.now,
     commissionerLeagueIds: playedLeagues.filter(l => l.isCommissioner).map(l => l.id),
   }) : null
+  if(weeklyBlueprint)weeklyBlueprint.scheduleForecasts=await getWeeklyScheduleForecasts(myTeamPulse,weekLeagues.filter(l=>!selectedLeagueId||l.id===selectedLeagueId).map(l=>l.id),ctx.now).catch(()=>[])
   // Snapshots are keyed by period, so they follow the plan's period: keyed on the board's FINISHED
   // week, the Tuesday estimate overwrote the one saved before that week was played.
   const weeklyPathPeriod = weeklyBlueprint?.matchup?.leagueId === selectedLeagueId && weeklyBlueprint?.matchup?.season === weekBoard?.leagueBoard?.season
