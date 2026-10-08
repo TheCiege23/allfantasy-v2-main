@@ -1,3 +1,4 @@
+import { teamSweepTelemetry } from '@/lib/core-app/teamSweepPolicy'
 /**
  * GET/POST /api/cron/alert-sweep
  *
@@ -720,7 +721,9 @@ async function handle(req: NextRequest) {
     const payload =
       dryRun || singleUser
         ? await runSweep()
-        : await withSyncJobRun({ jobName: JOB, sport: 'NFL', trigger: 'cron' }, runSweep, (r) => ({
+        : await withSyncJobRun({ jobName: JOB, sport: 'NFL', trigger: 'cron' }, runSweep, (r) => {
+            const teamWorkspace=teamSweepTelemetry(r.teamWorkspace)
+            return {
             rowsRead: r.usersScanned,
             rowsWritten: r.pushesSent,
             rowsSkipped: r.usersWithErrors,
@@ -730,8 +733,10 @@ async function handle(req: NextRequest) {
              * right is one nobody reads. What IS reported is push being unconfigured, because
              * that silently converts every alert into nothing at all.
              */
-            status: !r.pushConfigured || r.usersWithErrors > 0 ? ('partial' as const) : ('success' as const),
-          }))
+            status: !r.pushConfigured || r.usersWithErrors > 0 || teamWorkspace.errors > 0 ? ('partial' as const) : ('success' as const),
+            metadata:{teamWorkspace},
+          }
+          })
 
     return NextResponse.json(payload)
   } catch (err) {

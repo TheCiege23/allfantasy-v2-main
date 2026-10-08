@@ -1,6 +1,6 @@
 import {readFileSync} from 'node:fs'
 import {describe,it,expect} from 'vitest'
-import {rotateSweepTargets,nativeSweepDeadline,teamSweepBatchOffset,TEAM_SWEEP_INTERVAL_MS} from '@/lib/core-app/teamSweepPolicy'
+import {rotateSweepTargets,nativeSweepDeadline,teamSweepBatchOffset,TEAM_SWEEP_INTERVAL_MS,teamSweepTelemetry} from '@/lib/core-app/teamSweepPolicy'
 describe('bounded team workspace sweep fairness',()=>{
  it('gives every account the first admission slot even when only one target fits each sweep',()=>{const ids=['first','middle','last'];expect([0,1,2].map(tick=>rotateSweepTargets(ids,tick*TEAM_SWEEP_INTERVAL_MS)[0])).toEqual(ids)})
  it('preserves every roster exactly once without modifying the caller list',()=>{const rosters=[{id:'a'},{id:'b'},{id:'c'}];const result=rotateSweepTargets(rosters,TEAM_SWEEP_INTERVAL_MS);expect(result.map(r=>r.id)).toEqual(['b','c','a']);expect(rosters.map(r=>r.id)).toEqual(['a','b','c']);expect(rotateSweepTargets([],0)).toEqual([])})
@@ -25,4 +25,9 @@ it.each([[6,2],[66,2],[24,8],[65,2],[25,8]])('covers all %i leagues through sche
  }
  expect(seen.size).toBe(count)
  expect(teamSweepBatchOffset(0,batchSize,0)).toBe(0)
+})
+
+it('records only fixed counters and keeps internal errors visible without provider details',()=>{
+ expect(teamSweepTelemetry({nativeLeagues:2,swaps:1,alertsEvaluated:3,errors:1,budgetStopped:true,deliveryReceiptsChecked:4,userId:'private',actionHref:'private',errorMessage:'private'})).toEqual({nativeLeagues:2,swaps:1,alertsEvaluated:3,errors:1,budgetStopped:true,deliveryReceiptsChecked:4})
+ expect(teamSweepTelemetry({errors:NaN,swaps:-1})).toEqual({nativeLeagues:0,swaps:0,alertsEvaluated:0,errors:0,budgetStopped:false,deliveryReceiptsChecked:0})
 })

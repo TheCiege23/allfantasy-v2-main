@@ -15,3 +15,10 @@ export function teamSweepBatchOffset(count:number,batchSize:number,now:number):n
   const offset=(Math.floor(now/TEAM_SWEEP_INTERVAL_MS)*batchSize)%count
   return (offset+count)%count
 }
+
+/** Persist only fixed numerical counters, never recipient IDs, targets or provider errors. */
+export function teamSweepTelemetry(value:unknown){
+  const data=value && typeof value==='object' ? value as Record<string,unknown> : {}
+  const count=(key:string)=>typeof data[key]==='number' && Number.isFinite(data[key]) ? Math.max(0,Math.trunc(data[key] as number)) : 0
+  return {nativeLeagues:count('nativeLeagues'),swaps:count('swaps'),alertsEvaluated:count('alertsEvaluated'),errors:count('errors'),budgetStopped:data.budgetStopped===true,deliveryReceiptsChecked:count('deliveryReceiptsChecked')}
+}
