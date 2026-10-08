@@ -41,6 +41,49 @@ export type ResolvedNflDraftPoolAnalytics = {
   }
 }
 
+type RiSeasonRowLike = {
+  playerId: string
+  season: string | null
+  fantasyPointsPerGame: number | null
+  gamesPlayed: number | null
+  updatedAt: Date
+}
+
+/**
+ * One Rolling Insights season row per player: the NEWEST SEASON that can actually supply a
+ * PPG (non-null `fantasyPointsPerGame`, at least `RI_MIN_GAMES_PLAYED` games), else the newest
+ * season at all. Ties within a season go to the most recently written row.
+ *
+ * 🛑 NOT "the most recently written row". That was the rule, and a backfill that re-touched
+ * old seasons made it pick them: on production 2026-10-06 the 2024 rows were rewritten on
+ * Sep 19, after the 2025 rows (Sep 11), so 996 players resolved to 2024. The pool then
+ * correctly refused a two-season-old PPG and showed a flat position placeholder instead:
+ * every fallback RB at 8.65, Josh Jacobs (17.95 in 2024) included. Choosing by season, players
+ * with a usable 2025/2026 PPG went from 509 to 721.
+ *
+ * Why "can supply a PPG" before "newest": 960 of the 1,400 2026 rows carry no PPG yet (no
+ * games played). Taking those blindly would discard a usable 2025 row for nothing.
+ */
+export function pickRiSeasonRowPerPlayer<T extends RiSeasonRowLike>(rows: T[]): Map<string, T> {
+  const seasonNum = (r: T) => {
+    const n = Number(r.season)
+    return Number.isFinite(n) ? n : -Infinity
+  }
+  const usable = (r: T) =>
+    r.fantasyPointsPerGame != null &&
+    Number.isFinite(Number(r.fantasyPointsPerGame)) &&
+    (r.gamesPlayed ?? 0) >= RI_MIN_GAMES_PLAYED
+  const sorted = [...rows].sort(
+    (a, b) =>
+      Number(usable(b)) - Number(usable(a)) ||
+      seasonNum(b) - seasonNum(a) ||
+      b.updatedAt.getTime() - a.updatedAt.getTime(),
+  )
+  const out = new Map<string, T>()
+  for (const row of sorted) if (!out.has(row.playerId)) out.set(row.playerId, row)
+  return out
+}
+
 /** Default NFL season key for stats rows (e.g. training camp through draft). */
 export function defaultNflPlayerStatsSeason(): string {
   const y = new Date()
@@ -261,9 +304,7 @@ export async function loadRollingInsightsSeasonByDraftPoolKey(options: {
     },
   })
 
-  const sorted = [...statsRows].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
-  for (const row of sorted) {
-    if (riSeasonByPlayerId.has(row.playerId)) continue
+  for (const row of pickRiSeasonRowPerPlayer(statsRows).values()) {
     riSeasonByPlayerId.set(row.playerId, {
       fantasyPointsPerGame: row.fantasyPointsPerGame ?? null,
       fantasyPointsSeason: row.fantasyPoints ?? null,
@@ -284,7 +325,8 @@ export type RollingInsightsStatsDetailRow = {
 
 /**
  * Full RI season row (including `stats` JSON splits) keyed by Rolling Insights player id.
- * Latest row per playerId wins (same ordering rules as season slice loader).
+ * The SAME row the season slice loader picks (`pickRiSeasonRowPerPlayer`), so the splits and
+ * the PPG beside them describe one season.
  */
 export async function loadRollingInsightsStatsDetailByPlayerIds(
   playerIds: string[],
@@ -301,16 +343,16 @@ export async function loadRollingInsightsStatsDetailByPlayerIds(
     },
     select: {
       playerId: true,
+      season: true,
       stats: true,
       fantasyPoints: true,
       fantasyPointsPerGame: true,
+      gamesPlayed: true,
       updatedAt: true,
     },
   })
 
-  const sorted = [...statsRows].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
-  for (const row of sorted) {
-    if (out.has(row.playerId)) continue
+  for (const row of pickRiSeasonRowPerPlayer(statsRows).values()) {
     out.set(row.playerId, {
       stats: row.stats,
       fantasyPoints: row.fantasyPoints ?? null,

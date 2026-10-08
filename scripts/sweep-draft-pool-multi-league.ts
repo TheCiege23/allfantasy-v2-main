@@ -19,6 +19,7 @@
 
 import { PrismaClient } from '@prisma/client'
 import { canonicalName, canonicalPosition, canonicalTeam } from '../lib/draft-room/player-canonical-identity'
+import { defaultNflPlayerStatsSeason } from '../lib/draft/analytics/nfl-rolling-insights-draft-analytics'
 
 const prisma = new PrismaClient()
 
@@ -83,6 +84,7 @@ type PoolRow = {
   fantasyPointsPerGame: number | null
   projectionSource: string | null
   rollingInsightsSupplementalFppg: number | null
+  rollingInsightsSupplementalSeason: string | null
   yearsExp: number | null
   isRookie: boolean | null
   headshotUrl: string | null
@@ -115,6 +117,7 @@ function toPoolRows(payload: unknown): PoolRow[] {
         fantasyPointsPerGame: num(stats?.fantasyPointsPerGame),
         projectionSource: str(entry.projectionSource) ?? str(stats?.projectionSource),
         rollingInsightsSupplementalFppg: num(supplemental?.fantasyPointsPerGame),
+        rollingInsightsSupplementalSeason: str(supplemental?.season),
         yearsExp: num(entry.yearsExp),
         isRookie: boolOrNull(entry.isRookie),
         headshotUrl: str(assets?.headshotUrl) ?? null,
@@ -159,6 +162,7 @@ type LeagueMetrics = {
   fallbackProjectionCount: number
   fallbackBySource: Record<string, number>
   taggedRealRows: number
+  staleRiSupplementalRows: number
   rookieSignalCoveragePct: number
   identityMissingSleeperCarryForward: number
   duplicateSleeperIdGroups: number
@@ -321,9 +325,26 @@ async function evaluateLeague(
     })
   }
 
-  // real projection rows not fallback-tagged
+  // real projection rows not fallback-tagged.
+  // Only RI stats from a season the pool would USE count (this season or last, the rule in
+  // resolveNflDraftPoolAnalytics). A player whose newest RI season is older correctly gets the
+  // position fallback, and flagging those reported ~210 "real" rows per pool that were not.
+  const statsSeason = Number(defaultNflPlayerStatsSeason())
+  const usableSeason = (s: string | null) => s != null && (Number(s) === statsSeason || Number(s) === statsSeason - 1)
   const taggedRealRows = rows.filter(
-    (r) => r.projectionSource != null && r.rollingInsightsSupplementalFppg != null,
+    (r) =>
+      r.projectionSource != null &&
+      r.rollingInsightsSupplementalFppg != null &&
+      usableSeason(r.rollingInsightsSupplementalSeason),
+  ).length
+  // Reported, never failed: a fallback row whose RI stats are older than last season. Some players
+  // genuinely have nothing newer, so this cannot be a check; it is the trend to watch. Before the
+  // 2026-10-07 loader fix (newest usable season, not newest write) it was ~290 per pool.
+  const staleRiSupplementalRows = rows.filter(
+    (r) =>
+      r.projectionSource != null &&
+      r.rollingInsightsSupplementalSeason != null &&
+      Number(r.rollingInsightsSupplementalSeason) < statsSeason - 1,
   ).length
   if (taggedRealRows > 0) {
     failures.push({
@@ -392,6 +413,7 @@ async function evaluateLeague(
     fallbackProjectionCount: fallbackRows.length,
     fallbackBySource,
     taggedRealRows,
+    staleRiSupplementalRows,
     rookieSignalCoveragePct: Number(rookieSignalPct.toFixed(2)),
     identityMissingSleeperCarryForward,
     duplicateSleeperIdGroups: dupSleeperIdGroups.length,
@@ -555,7 +577,7 @@ function printReport(report: ReturnType<typeof buildFixOrder> extends string[] ?
     console.log(`         entries   : ${league.entryCount}`)
     console.log(`         syncedAt  : ${league.cacheSyncedAt}`)
     const m = league.metrics
-    console.log(`         metrics   : dupPlayerIds=${m.duplicatePlayerIdGroups}  dupSleeperIds=${m.duplicateSleeperIdGroups}  pairCollisions=${m.knownPairCollisionViolations}  missingHeadshots=${m.missingHeadshots}  missingTeamLogos=${m.trueMissingTeamLogos}  missingProjections=${m.missingProjectionCount}  identityMissingSleeperForward=${m.identityMissingSleeperCarryForward}  rookieSignalPct=${m.rookieSignalCoveragePct}`)
+    console.log(`         metrics   : dupPlayerIds=${m.duplicatePlayerIdGroups}  dupSleeperIds=${m.duplicateSleeperIdGroups}  pairCollisions=${m.knownPairCollisionViolations}  missingHeadshots=${m.missingHeadshots}  missingTeamLogos=${m.trueMissingTeamLogos}  missingProjections=${m.missingProjectionCount}  identityMissingSleeperForward=${m.identityMissingSleeperCarryForward}  rookieSignalPct=${m.rookieSignalCoveragePct}  staleRiFallbackRows=${m.staleRiSupplementalRows}`)
 
     if (!league.pass || verbose) {
       for (const f of league.failures) {
