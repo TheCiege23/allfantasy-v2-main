@@ -18,6 +18,8 @@ import { getTeamInfo, normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { leagueDisplayName } from './leagueHome'
 import { selectKickoffLeague } from './kickoffContext'
 import { isBestBallLeagueRow } from './leagueBestBall'
+import { isTop25Sport, pollIsKnown, showCollegeGame } from '@/lib/live/collegeTop25'
+import { readFollowedTeams, readRankBook } from '@/lib/live/collegeTop25Store'
 import { bestBallDepthAlerts, type DepthAlert } from './bestBallDepth'
 import { clubKey, indexFixturesByWeek, weekVerdict } from './lineupWeekFixtures'
 import type {
@@ -387,7 +389,12 @@ const readNextGamesCached = unstable_cache(
       .findMany({
         where: { sport: { in: sports }, startTime: { gte: new Date() } },
         orderBy: { startTime: 'asc' },
-        take: 40,
+        /*
+         * 200, not 40: college games outside the Top 25 are filtered out below (readNextGames), and a
+         * Saturday NCAAF slate alone is 50+ fixtures — 40 could all be unranked and leave the first
+         * kickoff with nothing to name. Shared by every user for 60s, so the wider read is cheap.
+         */
+        take: 200,
         select: {
           sport: true,
           startTime: true,
@@ -418,11 +425,33 @@ const readNextGamesCached = unstable_cache(
   { revalidate: 60 },
 )
 
-async function readNextGames(sports: string[], now: Date, options: Dash34Options = {}) {
+async function readNextGames(sports: string[], now: Date, options: Dash34Options = {}, userId: string | null = null) {
   const rows = await readNextGamesCached([...sports].sort()).catch(fellBack(options, 'next-games', []))
+  /*
+   * ⚠ COLLEGE: THE TOP 25 PLUS YOUR TEAMS (founder, 2026-10-08). "First kickoff" and the next-24h
+   * list named Sam Houston at Liberty over Bucs–Cowboys because an unranked Thursday game kicked off
+   * first. Same rule and rank book as /core/live (lib/live/collegeTop25.ts); fails open with no poll.
+   */
+  const top25 = new Map(
+    await Promise.all(
+      sports.filter((s) => isTop25Sport(s)).map(async (s) => {
+        const [book, follows] = await Promise.all([
+          readRankBook(s).catch(() => null),
+          readFollowedTeams(userId, s).catch(() => []),
+        ])
+        return [s.toUpperCase(), { book, follows, known: pollIsKnown(book, []) }] as const
+      }),
+    ),
+  )
   return rows
     .map((g) => ({ ...g, startTime: g.startTime ? new Date(g.startTime) : null }))
     .filter((g) => g.startTime != null && g.startTime.getTime() >= now.getTime())
+    .filter((g) => {
+      const t = top25.get(String(g.sport ?? '').toUpperCase())
+      if (!t) return true
+      const side = (team: string | null) => ({ abbrev: team, name: team, rank: null })
+      return showCollegeGame({ home: side(g.homeTeam), away: side(g.awayTeam) }, t.book, t.follows, t.known)
+    })
 }
 
 /**
@@ -674,7 +703,7 @@ async function loadDash34Data(
         platformUserId: true, externalId: true, isCommissioner: true, isCoCommissioner: true,
       },
     }).catch(fellBack(options, 'teams', []))),
-    readNextGames(sports, now, options),
+    readNextGames(sports, now, options, userId),
     Promise.all(sports.filter(s => s !== 'SOCCER').map(s => readInjurySyncFreshness(s))),
     timing.read('format', () => prisma.league.findMany({
       where: { id: { in: activeIds } },
