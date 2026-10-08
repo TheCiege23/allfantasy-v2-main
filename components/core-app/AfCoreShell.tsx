@@ -1813,14 +1813,22 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           aria-expanded={railOpen}
           aria-controls="af-rail-scroll"
           onClick={toggleRail}
+          /*
+           * On a phone this row IS the tray's header and its way out, so it says "close" and draws a ✕
+           * (moved to the right edge by af-core-shell.css) rather than the desktop's « collapse arrow.
+           * The floating handle still closes it too; this is the control a reader looks for at the top.
+           */
+          aria-label={mobileRailOpen ? (language === 'es' ? 'Cerrar ligas' : 'Close leagues') : undefined}
           title={
-            railOpen
-              ? language === 'es' ? 'Contraer la barra de ligas' : 'Collapse the league rail'
-              : language === 'es' ? 'Expandir la barra de ligas' : 'Expand the league rail'
+            mobileRailOpen
+              ? language === 'es' ? 'Cerrar ligas' : 'Close leagues'
+              : railOpen
+                ? language === 'es' ? 'Contraer la barra de ligas' : 'Collapse the league rail'
+                : language === 'es' ? 'Expandir la barra de ligas' : 'Expand the league rail'
           }
         >
           <span className="af-rail-toggle-icon" aria-hidden>
-            {railOpen ? '«' : '»'}
+            {mobileRailOpen ? '✕' : railOpen ? '«' : '»'}
           </span>
           <span className="af-rail-toggle-text">
             {leagues.length}{' '}
