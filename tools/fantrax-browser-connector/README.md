@@ -1,8 +1,9 @@
 # AllFantasy Fantrax Score Connector
 
 Operator preview for Chrome. The connector downloads every team for selected
-completed weeks through the commissioner's existing Fantrax login. It never
-reads, copies, saves, or uploads cookies. Fantrax explicitly rejects this endpoint
+completed weeks through the commissioner's existing Fantrax login. Chrome attaches
+the session directly to Fantrax requests; the connector never extracts or stores
+cookies or sends them to AllFantasy. Fantrax explicitly rejects this endpoint
 without login (`WARNING_NOT_LOGGED_IN`), even when HTTP status is 200.
 
 ## Install after the API release is live
