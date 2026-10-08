@@ -1,4 +1,3 @@
-import { teamSweepTelemetry } from '@/lib/core-app/teamSweepPolicy'
 /**
  * GET/POST /api/cron/alert-sweep
  *
@@ -80,6 +79,7 @@ import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher
 import { sendPushToUser } from '@/lib/push-notifications'
 import { apnsConfig } from '@/lib/push-notifications/apns'
 import { decidePushForUser } from '@/lib/notifications/pushGate'
+import { teamSweepTelemetry } from '@/lib/core-app/teamSweepPolicy'
 import { recordSyncJobRun, withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 import { runLineupCheck, type LineupCheckRun } from '@/lib/chimmy-alerts/runLineupCheck'
 import { runWaiverCheck, type WaiverCheckRun } from '@/lib/chimmy-alerts/runWaiverCheck'
@@ -724,18 +724,18 @@ async function handle(req: NextRequest) {
         : await withSyncJobRun({ jobName: JOB, sport: 'NFL', trigger: 'cron' }, runSweep, (r) => {
             const teamWorkspace=teamSweepTelemetry(r.teamWorkspace)
             return {
-            rowsRead: r.usersScanned,
-            rowsWritten: r.pushesSent,
-            rowsSkipped: r.usersWithErrors,
-            /*
-             * ⚠ ZERO PUSHES IS NOT A FAILURE and must never be recorded as one — on a Tuesday in
-             * the off-season it is the correct outcome, and a job that reports failure for being
-             * right is one nobody reads. What IS reported is push being unconfigured, because
-             * that silently converts every alert into nothing at all.
-             */
-            status: !r.pushConfigured || r.usersWithErrors > 0 || teamWorkspace.errors > 0 ? ('partial' as const) : ('success' as const),
-            metadata:{teamWorkspace},
-          }
+              rowsRead: r.usersScanned,
+              rowsWritten: r.pushesSent,
+              rowsSkipped: r.usersWithErrors,
+              /*
+               * ⚠ ZERO PUSHES IS NOT A FAILURE and must never be recorded as one — on a Tuesday in
+               * the off-season it is the correct outcome, and a job that reports failure for being
+               * right is one nobody reads. What IS reported is push being unconfigured, because
+               * that silently converts every alert into nothing at all.
+               */
+              status: !r.pushConfigured || r.usersWithErrors > 0 || teamWorkspace.errors > 0 ? ('partial' as const) : ('success' as const),
+              metadata:{teamWorkspace},
+            }
           })
 
     return NextResponse.json(payload)

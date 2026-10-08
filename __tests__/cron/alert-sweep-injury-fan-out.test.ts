@@ -12,6 +12,8 @@ const h = vi.hoisted(() => ({
   recordSyncJobRun: vi.fn(),
   findFirst: vi.fn(),
   fanOut: vi.fn(),
+  teamSweep: vi.fn(),
+  outcome: vi.fn(),
 }))
 
 vi.mock('server-only', () => ({}))
@@ -39,8 +41,9 @@ vi.mock('@/lib/chimmy-alerts/runLineupCheck', () => ({ runLineupCheck: h.runLine
 // `{ reason: 'error' }` on every test — green, and exercising nothing.
 vi.mock('@/lib/chimmy-alerts/runWaiverCheck', () => ({ runWaiverCheck: h.runWaiverCheck }))
 vi.mock('@/lib/chimmy-alerts/runSportWaiverCheck', () => ({ runSportWaiverCheck: h.runSportWaiverCheck }))
+vi.mock('@/lib/core-app/teamWorkspaceSweep',()=>({runTeamWorkspaceSweep:h.teamSweep}))
 vi.mock('@/lib/production-health/syncJobRunTelemetry', () => ({
-  withSyncJobRun: async (_ctx: unknown, fn: () => Promise<unknown>) => fn(),
+  withSyncJobRun: async (_ctx: unknown, fn: () => Promise<unknown>, summarize: (result: unknown) => unknown) => {const result=await fn();h.outcome(summarize(result));return result},
   recordSyncJobRun: h.recordSyncJobRun,
 }))
 
@@ -66,6 +69,7 @@ const call = (qs: string) => GET(new NextRequest(`https://allfantasy.ai/api/cron
 
 beforeEach(() => {
   vi.clearAllMocks()
+  h.teamSweep.mockResolvedValue({nativeLeagues:0,swaps:0,alertsEvaluated:0,errors:0,budgetStopped:false,deliveryReceiptsChecked:0})
   h.hydrate.mockResolvedValue({ injuredStarters: [{}], leaguesScanned: 3, feedStale: false })
   h.loadPrefs.mockResolvedValue(null)
   h.findFirst.mockResolvedValue(null)
@@ -118,4 +122,17 @@ describe('alert sweep — injury fan-out', () => {
     expect(h.dispatch).toHaveBeenCalledTimes(1)
     expect(h.dispatch.mock.calls[0]![0]).toMatchObject({ title: 'Tank Dell is Out and still starting', body: 'Tank Dell starts for you in L1.' })
   })
+})
+
+it.each([[0,'success'],[1,'partial']])('persists Team sweep counters and marks %i internal errors as %s',async(errors,status)=>{
+ vi.stubEnv('VAPID_PUBLIC_KEY','test-public')
+ vi.stubEnv('VAPID_PRIVATE_KEY','test-private')
+ h.detect.mockReturnValue([])
+ h.teamSweep.mockResolvedValue({nativeLeagues:2,swaps:1,alertsEvaluated:3,errors,budgetStopped:true,deliveryReceiptsChecked:4,userId:'private-user'})
+ try{
+  const response=await call('')
+  expect(response.status).toBe(200)
+  expect(h.outcome).toHaveBeenCalledWith(expect.objectContaining({status,metadata:{teamWorkspace:{nativeLeagues:2,swaps:1,alertsEvaluated:3,errors,budgetStopped:true,deliveryReceiptsChecked:4}}}))
+  expect(JSON.stringify(h.outcome.mock.calls)).not.toContain('private-user')
+ }finally{vi.unstubAllEnvs()}
 })
