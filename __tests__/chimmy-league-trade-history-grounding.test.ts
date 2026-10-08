@@ -5,11 +5,16 @@ const mocks = vi.hoisted(() => ({
   historyFindMany: vi.fn(),
   tradeFindMany: vi.fn(),
   sportsPlayerFindMany: vi.fn(),
+  leagueFindMany: vi.fn(),
+  leagueTeamFindMany: vi.fn(),
+  snapshotFindMany: vi.fn(),
 }))
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
-    league: { findUnique: mocks.leagueFindUnique },
+    league: { findUnique: mocks.leagueFindUnique, findMany: mocks.leagueFindMany },
+    leagueTeam: { findMany: mocks.leagueTeamFindMany },
+    tradeAnalysisSnapshot: { findMany: mocks.snapshotFindMany },
     leagueTradeHistory: { findMany: mocks.historyFindMany },
     leagueTrade: { findMany: mocks.tradeFindMany },
     sportsPlayer: { findMany: mocks.sportsPlayerFindMany },
@@ -21,6 +26,8 @@ import {
   buildLeagueTradeHistoryOutcome,
   TRADE_HISTORY_BLOCK_MARKER,
 } from '@/lib/chimmy-trade/leagueTradeHistoryGrounding'
+import { observeToolLoopAnswer } from '@/lib/chimmy/toolLoopGuardObservation'
+import { checkTradeLetters, type ChimmyTradeGrade } from '@/lib/chimmy/tradeGradeCheck'
 
 function trade(overrides: Record<string, unknown> = {}) {
   return {
@@ -277,5 +284,347 @@ describe('buildLeagueTradeHistoryOutcome — why there is no block', () => {
 
     mocks.historyFindMany.mockResolvedValue([])
     expect(await buildLeagueTradeHistoryContext('lg1', 'user-1')).toBeNull()
+  })
+})
+
+/*
+ * 🛑 CHIMMY TOLD A KBFL MANAGER THE TRADE HISTORY "ISN'T ITEMIZED" (2026-09-20/21).
+ *
+ * The block it could read printed "one side got [..] for [..]": no manager on either
+ * side and eight trades at most, so "what did Layes23 give up?" had no answer even
+ * when the block arrived. Every line now names both managers, and the tool path can
+ * narrow to a season, a manager or a player.
+ */
+describe('buildLeagueTradeHistoryOutcome — itemized, with both managers', () => {
+  /* One deal, stored once from each manager's side, as ingestion writes it. */
+  const bothSides = [
+    trade({
+      transactionId: 'tx-9',
+      playersGiven: ['2216'],
+      playersReceived: ['5859'],
+      picksReceived: [{ round: 1, season: '2027' }],
+      picksGiven: [],
+      partnerName: 'Layes23',
+      history: { sleeperUsername: 'TheCiege24' },
+    }),
+    trade({
+      transactionId: 'tx-9',
+      playersGiven: ['5859'],
+      playersReceived: ['2216'],
+      picksReceived: [],
+      picksGiven: [{ round: 1, season: '2027' }],
+      partnerName: 'TheCiege24',
+      history: { sleeperUsername: 'Layes23' },
+    }),
+  ]
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.leagueFindUnique.mockResolvedValue({
+      platform: 'sleeper',
+      platformLeagueId: '1234567890',
+      sport: 'nfl',
+      season: 2026,
+    })
+    mocks.historyFindMany.mockResolvedValue([{ id: 'h1' }, { id: 'h2' }])
+    mocks.tradeFindMany.mockResolvedValue(bothSides)
+    mocks.sportsPlayerFindMany.mockResolvedValue([
+      { externalId: 'sleeper:5859', sleeperId: '5859', name: 'Brian Thomas Jr.' },
+      { externalId: 'sleeper:2216', sleeperId: '2216', name: 'Mike Evans' },
+    ])
+  })
+
+  it('names both managers and every asset on one line per deal', async () => {
+    const out = await buildLeagueTradeHistoryOutcome('lg1', 'user-1')
+    if (out.kind !== 'ok') throw new Error('expected ok')
+    expect(out.uniqueTrades).toBe(1)
+    expect(out.text).toContain(
+      'TheCiege24 got [Brian Thomas Jr., 2027 R1] from Layes23 for [Mike Evans].',
+    )
+    expect(out.text).not.toContain('one side got')
+  })
+
+  it("reads a manager's own side of the deal when the question is about them", async () => {
+    const out = await buildLeagueTradeHistoryOutcome('lg1', 'user-1', { manager: 'layes23' })
+    if (out.kind !== 'ok') throw new Error('expected ok')
+    expect(out.text).toContain('Layes23 got [Mike Evans] from TheCiege24 for [Brian Thomas Jr., 2027 R1].')
+    expect(out.text).toContain('Filtered to manager "layes23": 1 trade.')
+  })
+
+  it('drops deals a named manager was not part of', async () => {
+    const out = await buildLeagueTradeHistoryOutcome('lg1', 'user-1', { manager: 'SomeoneElse' })
+    if (out.kind !== 'ok') throw new Error('expected ok')
+    expect(out.text).toContain('Filtered to manager "SomeoneElse": 0 trades.')
+    expect(out.text).toContain('No trade in the window read matches that filter.')
+    expect(out.text).not.toContain('Mike Evans')
+  })
+
+  it('finds a trade by player name', async () => {
+    const hit = await buildLeagueTradeHistoryOutcome('lg1', 'user-1', { player: 'evans' })
+    if (hit.kind !== 'ok') throw new Error('expected ok')
+    expect(hit.text).toContain('Filtered to player "evans": 1 trade.')
+    expect(hit.text).toContain('Mike Evans')
+
+    const miss = await buildLeagueTradeHistoryOutcome('lg1', 'user-1', { player: 'Jefferson' })
+    if (miss.kind !== 'ok') throw new Error('expected ok')
+    expect(miss.text).toContain('Filtered to player "Jefferson": 0 trades.')
+  })
+
+  /* A player match only sees named players; an unnamed one must not read as "never traded". */
+  it('warns that a player match can miss a trade whose players have no name on file', async () => {
+    mocks.sportsPlayerFindMany.mockResolvedValue([])
+    const out = await buildLeagueTradeHistoryOutcome('lg1', 'user-1', { player: 'Evans' })
+    if (out.kind !== 'ok') throw new Error('expected ok')
+    expect(out.text).toMatch(/have no name on file, so a player match can miss a trade/)
+  })
+
+  it('narrows the database read to one season rather than filtering afterwards', async () => {
+    await buildLeagueTradeHistoryOutcome('lg1', 'user-1', { season: 2025 })
+    expect(mocks.tradeFindMany.mock.calls[0][0].where.season).toBe(2025)
+
+    await buildLeagueTradeHistoryOutcome('lg1', 'user-1')
+    expect(mocks.tradeFindMany.mock.calls[1][0].where.season).toBeUndefined()
+  })
+
+  it('lists more than the push block\'s eight when the tool asks for them, and says when older ones were not read', async () => {
+    const many = Array.from({ length: 24 }, (_, i) =>
+      trade({ transactionId: `tx-${i}`, partnerName: 'Layes23', history: { sleeperUsername: 'TheCiege24' } }),
+    )
+    mocks.tradeFindMany.mockResolvedValue(many)
+
+    const push = await buildLeagueTradeHistoryOutcome('lg1', 'user-1')
+    if (push.kind !== 'ok') throw new Error('expected ok')
+    expect(push.shown).toBe(8)
+
+    const tool = await buildLeagueTradeHistoryOutcome('lg1', 'user-1', { maxShown: 30, scanLimit: 24 })
+    if (tool.kind !== 'ok') throw new Error('expected ok')
+    expect(tool.shown).toBe(24)
+    expect(tool.text).toContain('All 24, most recent first:')
+    expect(tool.text).toContain('Older trades exist beyond this window')
+  })
+})
+
+/*
+ * 🛑 NEITHER STORED NAME IS A NAME. On every ingested row `partnerName` is null and
+ * `sleeperUsername` is the Sleeper USER ID, so a block built from them printed
+ * "1208593130748645376 got [..] from another manager". Seen in Chrome against the test copy,
+ * 2026-09-25. The league's own team rows name both sides.
+ */
+describe('buildLeagueTradeHistoryOutcome — managers named by team', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.leagueFindUnique.mockResolvedValue({ platform: 'sleeper', platformLeagueId: '1382', sport: 'nfl', season: 2026 })
+    mocks.historyFindMany.mockResolvedValue([{ id: 'h1' }])
+    mocks.tradeFindMany.mockResolvedValue([
+      trade({
+        transactionId: 'tx-7',
+        playersGiven: ['2216'],
+        playersReceived: ['5859'],
+        picksReceived: [],
+        partnerName: null,
+        partnerRosterId: 3,
+        history: { sleeperUsername: '1208593130748645376' },
+      }),
+    ])
+    mocks.sportsPlayerFindMany.mockResolvedValue([
+      { externalId: 'sleeper:5859', sleeperId: '5859', name: 'Brian Thomas Jr.' },
+      { externalId: 'sleeper:2216', sleeperId: '2216', name: 'Mike Evans' },
+    ])
+    /* The question arrived on a row with no teams; a sibling row for the same Sleeper league has them. */
+    mocks.leagueFindMany.mockResolvedValue([{ id: 'lg1' }, { id: 'lg-sibling' }])
+    mocks.leagueTeamFindMany.mockResolvedValue([
+      { leagueId: 'lg-sibling', externalId: '7', platformUserId: '1208593130748645376', teamName: 'ElTigre164', ownerName: 'ElTigre164' },
+      { leagueId: 'lg-sibling', externalId: '3', platformUserId: '1227375788647530496', teamName: 'Whohatesyou', ownerName: 'Whohatesyou' },
+    ])
+  })
+
+  it('turns a Sleeper user id and a roster id into the teams they are', async () => {
+    const out = await buildLeagueTradeHistoryOutcome('lg1', 'user-1')
+    if (out.kind !== 'ok') throw new Error('expected ok')
+    expect(out.text).toContain('ElTigre164 got [Brian Thomas Jr.] from Whohatesyou for [Mike Evans].')
+    expect(out.text).not.toContain('1208593130748645376 got')
+    expect(out.text).toMatch(/CURRENT team names/)
+    /* Every row for this Sleeper league is read, not just the one the question came in on. */
+    expect(mocks.leagueTeamFindMany.mock.calls[0][0].where.leagueId.in).toEqual(['lg1', 'lg-sibling'])
+  })
+
+  it('finds a manager by part of their team name, on either side of the deal', async () => {
+    const out = await buildLeagueTradeHistoryOutcome('lg1', 'user-1', { manager: 'tigre' })
+    if (out.kind !== 'ok') throw new Error('expected ok')
+    expect(out.text).toContain('Filtered to manager "tigre": 1 trade.')
+
+    const partner = await buildLeagueTradeHistoryOutcome('lg1', 'user-1', { manager: 'Whohatesyou' })
+    if (partner.kind !== 'ok') throw new Error('expected ok')
+    expect(partner.text).toContain('Filtered to manager "Whohatesyou": 1 trade.')
+  })
+
+  it('never prints a bare id when no team row names it', async () => {
+    mocks.leagueTeamFindMany.mockResolvedValue([])
+    const out = await buildLeagueTradeHistoryOutcome('lg1', 'user-1')
+    if (out.kind !== 'ok') throw new Error('expected ok')
+    expect(out.text).toContain('an unnamed manager got [Brian Thomas Jr.] from another manager for [Mike Evans].')
+    expect(out.text).not.toMatch(/\d{12,}/)
+    expect(out.text).not.toMatch(/CURRENT team names/)
+  })
+
+  it('still builds the block when the team read fails', async () => {
+    mocks.leagueFindMany.mockRejectedValue(new Error('db down'))
+    const out = await buildLeagueTradeHistoryOutcome('lg1', 'user-1')
+    expect(out.kind).toBe('ok')
+  })
+})
+
+/*
+ * 🛑 A COMPLETED TRADE'S LETTER IS ITS FROZEN ORIGINAL, NEVER TODAY'S (Guap's ruling, 2026-09-28;
+ * priced at the time of the trade since 2026-10-03). Every other surface shows the original from
+ * `trade_analysis_snapshots`; a tool that re-graded on today's values would hand Chimmy a letter no
+ * screen shows. The tool READS the originals and never takes one: a lookup writes nothing.
+ */
+describe('get_league_trade_history — the frozen original grade, and only that one', () => {
+  /* tx-9 again, stored once from each manager's side. */
+  const bothSides = [
+    trade({
+      transactionId: 'tx-9',
+      tradeDate: new Date('2026-09-20T18:00:00.000Z'),
+      playersGiven: ['2216'],
+      playersReceived: ['5859'],
+      picksReceived: [{ round: 1, season: '2027' }],
+      picksGiven: [],
+      partnerName: 'Layes23',
+      history: { sleeperUsername: 'TheCiege24' },
+    }),
+    trade({
+      transactionId: 'tx-9',
+      tradeDate: new Date('2026-09-20T18:00:00.000Z'),
+      playersGiven: ['5859'],
+      playersReceived: ['2216'],
+      picksReceived: [],
+      picksGiven: [{ round: 1, season: '2027' }],
+      partnerName: 'TheCiege24',
+      history: { sleeperUsername: 'Layes23' },
+    }),
+  ]
+
+  /** A v2 original as `frozenCompletedGrade.ts` stores it, written from the side that sends `give`. */
+  function frozenRow(over: { give?: string[]; get?: string[]; letter?: string; partnerLetter?: string } = {}) {
+    return {
+      contextKey: 'tx-9',
+      payloadJson: {
+        v: 2,
+        tradeId: 'tx-9',
+        give: over.give ?? ['sleeper:2216'],
+        get: over.get ?? ['pick:2027:1', 'sleeper:5859'],
+        grade: { graded: true, letter: over.letter ?? 'B', partnerLetter: over.partnerLetter ?? 'D', percentDiff: 18, label: 'Leans your way' },
+        frozenAt: '2026-10-04T12:00:00.000Z',
+        basis: 'trade_date',
+        pricedAsOf: '2026-09-20',
+        tradeAt: '2026-09-20T18:00:00.000Z',
+      },
+    }
+  }
+
+  function storeFrozen(rows: unknown[]) {
+    mocks.snapshotFindMany.mockImplementation(async (q: { where: { snapshotType: string } }) =>
+      q.where.snapshotType === 'completed_trade_grade_v2' ? rows : [],
+    )
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.leagueFindUnique.mockResolvedValue({ platform: 'sleeper', platformLeagueId: '1234567890', sport: 'nfl', season: 2026 })
+    mocks.historyFindMany.mockResolvedValue([{ id: 'h1' }, { id: 'h2' }])
+    mocks.tradeFindMany.mockResolvedValue(bothSides)
+    mocks.sportsPlayerFindMany.mockResolvedValue([
+      { externalId: 'sleeper:5859', sleeperId: '5859', name: 'Brian Thomas Jr.' },
+      { externalId: 'sleeper:2216', sleeperId: '2216', name: 'Mike Evans' },
+    ])
+    mocks.leagueFindMany.mockResolvedValue([])
+    mocks.leagueTeamFindMany.mockResolvedValue([])
+    storeFrozen([frozenRow()])
+  })
+
+  it('prints the frozen original under the trade, says when it was priced, and allows exactly its letters', async () => {
+    const grades: ChimmyTradeGrade[] = []
+    const out = await buildLeagueTradeHistoryOutcome('lg1', 'user-1', { frozenGrades: true, onGrade: (g) => grades.push(g) })
+    if (out.kind !== 'ok') throw new Error('expected ok')
+    expect(out.text).toContain(
+      "AllFantasy grade (the frozen original, on this league's values at the time of the trade (Sep 20)): B for TheCiege24, D for Layes23.",
+    )
+    // Read on the AF row the question came in on, by the Sleeper transaction id.
+    expect(mocks.snapshotFindMany.mock.calls[0][0].where).toMatchObject({ leagueId: 'lg1', contextKey: { in: ['tx-9'] } })
+    expect(grades).toHaveLength(1)
+    expect(grades[0]!.letters).toEqual(['B', 'D'])
+    // The route's letter check passes an answer quoting it, and refuses one that re-grades the deal.
+    expect(checkTradeLetters('AllFantasy graded it a B for TheCiege24.', grades)).toEqual({ ok: true })
+    expect(checkTradeLetters('I would grade it an A for TheCiege24.', grades).ok).toBe(false)
+  })
+
+  it("orients the letter to whichever manager's side the line is read from", async () => {
+    const out = await buildLeagueTradeHistoryOutcome('lg1', 'user-1', { frozenGrades: true, manager: 'layes23' })
+    if (out.kind !== 'ok') throw new Error('expected ok')
+    expect(out.text).toContain('Layes23 got [Mike Evans] from TheCiege24')
+    expect(out.text).toContain('D for Layes23, B for TheCiege24.')
+  })
+
+  /* A used pick is graded as the player drafted with it, so the stored set names a player the trade row calls a pick. */
+  it('still orients a deal whose traded pick was graded as the player drafted with it', async () => {
+    mocks.tradeFindMany.mockResolvedValue([{ ...bothSides[0], picksReceived: [{ round: 1, season: '2025' }] }])
+    storeFrozen([frozenRow({ give: ['sleeper:2216'], get: ['sleeper:5859', 'sleeper:9509'] })])
+    const out = await buildLeagueTradeHistoryOutcome('lg1', 'user-1', { frozenGrades: true })
+    if (out.kind !== 'ok') throw new Error('expected ok')
+    expect(out.text).toContain('B for TheCiege24, D for Layes23.')
+  })
+
+  it('lends no letter to a deal whose assets match the stored original neither way', async () => {
+    storeFrozen([frozenRow({ give: ['sleeper:4046'], get: ['sleeper:5859'] })])
+    const grades: ChimmyTradeGrade[] = []
+    const out = await buildLeagueTradeHistoryOutcome('lg1', 'user-1', { frozenGrades: true, onGrade: (g) => grades.push(g) })
+    if (out.kind !== 'ok') throw new Error('expected ok')
+    expect(out.text).not.toMatch(/\b[BD] for /)
+    expect(grades).toEqual([])
+  })
+
+  /* Nothing frozen means no grade — the tool never grades on today's values to fill the gap. */
+  it('says a trade with no original has no grade, and tells the model not to make one up', async () => {
+    storeFrozen([])
+    const grades: ChimmyTradeGrade[] = []
+    const out = await buildLeagueTradeHistoryOutcome('lg1', 'user-1', { frozenGrades: true, onGrade: (g) => grades.push(g) })
+    if (out.kind !== 'ok') throw new Error('expected ok')
+    expect(out.text).not.toContain('AllFantasy grade (')
+    expect(out.text).toMatch(/no "AllFantasy grade" line has no grade on file/)
+    expect(out.text).not.toMatch(/today/i)
+    expect(grades).toEqual([])
+  })
+
+  it('leaves the push block as it was: no grade read, no letters', async () => {
+    const out = await buildLeagueTradeHistoryOutcome('lg1', 'user-1')
+    if (out.kind !== 'ok') throw new Error('expected ok')
+    expect(mocks.snapshotFindMany).not.toHaveBeenCalled()
+    expect(out.text).not.toContain('AllFantasy grade')
+    expect(out.text).toMatch(/do NOT state what any of them was worth, who won, or assign a grade/)
+  })
+
+  it('still lists the trades when the grade read fails', async () => {
+    mocks.snapshotFindMany.mockRejectedValue(new Error('db down'))
+    const out = await buildLeagueTradeHistoryOutcome('lg1', 'user-1', { frozenGrades: true })
+    if (out.kind !== 'ok') throw new Error('expected ok')
+    expect(out.text).toContain('TheCiege24 got [Brian Thomas Jr., 2027 R1] from Layes23 for [Mike Evans].')
+    expect(out.text).not.toContain('AllFantasy grade (')
+  })
+
+  /*
+   * The hallucination guard (observe-only on the tool loop) is grounded on what the tools returned.
+   * An itemized answer read off this tool must pass it; a figure the tool never gave must not.
+   */
+  it("grounds the tool loop's hallucination guard: its dates pass, an invented figure does not", async () => {
+    const out = await buildLeagueTradeHistoryOutcome('lg1', 'user-1', { frozenGrades: true })
+    if (out.kind !== 'ok') throw new Error('expected ok')
+    const question = 'What trades has TheCiege24 made this year?'
+    const honest = observeToolLoopAnswer({ evidence: out.text, promptLines: [], question, hasLeagueContext: true,
+      answer: 'On 2026-09-20 (2026 week 3) TheCiege24 got Brian Thomas Jr. and a 2027 R1 from Layes23 for Mike Evans.' })
+    expect(honest.unmatched).toEqual([])
+    const invented = observeToolLoopAnswer({ evidence: out.text, promptLines: [], question, hasLeagueContext: true,
+      answer: 'On 2026-09-20 TheCiege24 got Brian Thomas Jr. from Layes23, worth 37.5 points a week to him.' })
+    expect(invented.unmatched).toContain('37.5')
   })
 })

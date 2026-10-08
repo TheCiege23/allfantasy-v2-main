@@ -463,6 +463,12 @@ const CHIMMY_TOOL_LOOP_SYSTEM_PROMPT = [
   `Stored starters are not a live read of the platform. ${LINEUP_ACTION_RULES}`,
   'To grade a trade the user describes, call evaluate_trade with what they give and what they get. Before you suggest a counter-offer, evaluate that one too and quote its grade.',
   'For "find me a trade", "who should I trade with", "who has a running back I can get" or "what can I get for X", call find_trade_ideas — with position or trade_away when they named one. It searches every roster in the league; present its ideas with its names and numbers, lead with the first, and offer to grade one with evaluate_trade.',
+  /*
+   * 🛑 CHIMMY TOLD A KBFL MANAGER THE LEAGUE'S TRADE HISTORY "ISN'T ITEMIZED" (2026-09-20/21) WHILE
+   * 27 TRADES WITH RESOLVABLE PLAYERS WERE ON FILE. The only trade read it had printed eight trades
+   * with no manager names; get_league_trade_history lists every one with both sides.
+   */
+  'For trades that already happened — "what trades happened this year", "what did X give up", "who has traded with me", "when was X traded" — call get_league_trade_history (with manager, player or season when the user named one) and list the deals it returns: date, both managers, and every player and pick each way. Never say the history is not itemized when that tool returned trades. A completed trade\'s grade is only the frozen "AllFantasy grade" that tool prints, with when it was priced; never run evaluate_trade on a completed trade to grade it.',
   'For waiver pickups, call get_available_players, then evaluate_waiver_move on the best fit (with the drop, if they named one) before recommending an add.',
   /*
    * ── LEAGUE CHAT, WAIVERS AND CONFIRM-CARD ACTIONS (2026-09-25) ─────────────────────────────────
