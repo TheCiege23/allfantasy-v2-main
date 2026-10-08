@@ -46,3 +46,14 @@ export function buildWeeklyScheduleForecast(row:MyTeamRow,games:WeeklyScheduledG
  if(result.players.some(p=>p.role==='pitcher'))gaps.push('confirmed-pitcher-starts')
  return result
 }
+
+/** Send the same observed evidence to Chimmy, scoped to one league and rolling date window. */
+export function weeklySchedulePrompt(f:WeeklyScheduleForecast,es=false):string {
+ const rows=f.players.filter(p=>p.starter).slice(0,15).map(p=>p.name+': '+weeklyScheduleCount(p.games,es)).join('; ')
+ return f.leagueName+' · '+f.sport+' · '+f.from+' → '+f.through+' UTC. '+rows+'. '+(es?'Calendario regular almacenado; no confirma participación ni aperturas. Confirma el período de puntuación, el formato y los límites. No inventes categorías ni datos que falten.':'Stored regular-season schedule; this does not confirm appearances or starts. Confirm the scoring period, format and limits. Do not invent missing category totals or data.')
+}
+
+export function weeklyScheduleCount(games:number|null,es=false):string {
+ if(games==null || !Number.isInteger(games) || games<=0)return es?'calendario no disponible':'schedule unavailable'
+ return (es?'al menos ':'at least ')+games+(es?(games===1?' partido del equipo':' partidos del equipo'):(games===1?' team game':' team games'))
+}

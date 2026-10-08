@@ -1,6 +1,6 @@
 // @vitest-environment node
 import {describe,it,expect} from 'vitest'
-import {buildWeeklyScheduleForecast,type WeeklyScheduledGame} from '@/lib/core-app/weeklyScheduleForecast'
+import {buildWeeklyScheduleForecast,weeklySchedulePrompt,type WeeklyScheduledGame} from '@/lib/core-app/weeklyScheduleForecast'
 import type {MyTeamRow} from '@/lib/core-app/myTeamPulse'
 const now=new Date('2026-10-07T12:00:00Z')
 const row={leagueId:'A',leagueName:'Test league',sport:'NHL',leagueSeason:2026,season:2026,players:[{id:'1',name:'Goalie',team:'BOS',position:'G',starter:true}]} as MyTeamRow
@@ -33,4 +33,11 @@ describe('weekly schedule evidence',()=>{
   const out=buildWeeklyScheduleForecast({...row,players:[row.players![0],row.players![0]]},[game('2026-10-08T23:00:00Z',{sport:'NBA'})],now)
   expect(out.players).toHaveLength(1);expect(out.players[0].games).toBeNull()
  })
+})
+
+it('gives Chimmy the displayed evidence with an explicit rolling-window scope',()=>{
+ const out=buildWeeklyScheduleForecast(row,[game('2026-10-08T23:00:00Z')],now)
+ const prompt=weeklySchedulePrompt(out)
+ expect(prompt).toContain('Test league · NHL');expect(prompt).toContain('2026-10-07T12:00:00.000Z')
+ expect(prompt).toContain('Goalie: at least 1 team game');expect(prompt).toContain('does not confirm appearances or starts')
 })
