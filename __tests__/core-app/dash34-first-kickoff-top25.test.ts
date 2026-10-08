@@ -13,13 +13,18 @@ vi.mock('@/lib/player-values/latestPlayerValueSnapshots', () => ({
   loadLatestPlayerValueSnapshots: vi.fn(async () => []),
 }))
 
-const { db, rows } = vi.hoisted(() => ({
+/*
+ * ⚠ THE KICKOFF TIMES LIVE IN vi.hoisted. `vi.mock` factories are hoisted above every top-level
+ * `const`, so a factory reading a plain `const SOON` throws "Cannot access before initialization"
+ * whenever prisma is first imported early — which depends on shard order. It passed locally and
+ * crashed the whole file in CI (2026-10-08).
+ */
+const { db, rows, SOON, LATER } = vi.hoisted(() => ({
   db: { book: null as unknown },
   rows: (list: unknown[]) => ({ findMany: vi.fn(async () => list) }),
+  SOON: new Date(Date.now() + 2 * 3_600_000),
+  LATER: new Date(Date.now() + 5 * 3_600_000),
 }))
-
-const SOON = new Date(Date.now() + 2 * 3_600_000)
-const LATER = new Date(Date.now() + 5 * 3_600_000)
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
