@@ -47,6 +47,13 @@
  * gets one message for the week. The rule is the home card's (dash34 depthAlerts), red only. It
  * reports under `bestBallDepth` and records `cron-chimmy-best-ball-depth` only on a run that ran.
  *
+ * AND A LOCK CHECK BEFORE EVERY OTHER SLATE (2026-10-08, lib/chimmy-alerts/runSlateLockCheck.ts): the
+ * weekly lineup check covers only the main slate, so Thursday, Sunday night and Monday locked with no
+ * check at all. 90 to 20 minutes before each of those, a manager with a swap worth taking, a starter
+ * with no projection in that game, or an empty slot (once a week) gets one push for that slate.
+ * Ruled-out starters stay with the injured-starter sweep above. It reports under `slateLock` and
+ * records `cron-chimmy-slate-lock` only on a run that ran.
+ *
  * A THIRD, SHIPPED OFF: THE GUILLOTINE CHOP-RELEASE ALERT (lib/chimmy-alerts/chopRelease.ts). When a
  * guillotine league's chopped roster hits waivers, each surviving member gets their own FAAB bid plan
  * for it. It does nothing — not one read — unless the service carries CHOP_RELEASE_ALERTS_ENABLED=1.
@@ -60,6 +67,8 @@
  *   lineupCheck=off     skip the lineup check this run
  *   bestBallDepth=force run the best ball depth check outside its window (the weekly claim still holds)
  *   bestBallDepth=off   skip the best ball depth check this run
+ *   slateLock=force     run the slate lock check for the next non-main slate (its claims still hold)
+ *   slateLock=off       skip the slate lock check this run
  *   waiverCheck=force   run the waiver check outside its window (the weekly claim still holds)
  *   waiverCheck=off     skip the waiver check this run
  *   sportWaiverCheck=force  run the other-sport waiver check outside its windows (in-season sports
@@ -90,6 +99,7 @@ import { teamSweepTelemetry } from '@/lib/core-app/teamSweepPolicy'
 import { recordSyncJobRun, withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 import { runLineupCheck, type LineupCheckRun } from '@/lib/chimmy-alerts/runLineupCheck'
 import { runBestBallDepthCheck, type BestBallDepthRun } from '@/lib/chimmy-alerts/runBestBallDepthCheck'
+import { runSlateLockCheck, type SlateLockRun } from '@/lib/chimmy-alerts/runSlateLockCheck'
 import { runWaiverCheck, type WaiverCheckRun } from '@/lib/chimmy-alerts/runWaiverCheck'
 import { runSportWaiverCheck, type SportWaiverCheckRun } from '@/lib/chimmy-alerts/runSportWaiverCheck'
 import type { ChopReleaseRun } from '@/lib/chimmy-alerts/runChopReleaseCheck'
@@ -123,6 +133,7 @@ const JOB = 'cron-alert-sweep'
 /** Recorded only when a weekly check actually ran for users — see the header. */
 const LINEUP_CHECK_JOB = 'cron-chimmy-lineup-check'
 const BEST_BALL_DEPTH_JOB = 'cron-chimmy-best-ball-depth'
+const SLATE_LOCK_JOB = 'cron-chimmy-slate-lock'
 const WAIVER_CHECK_JOB = 'cron-chimmy-waiver-check'
 const SPORT_WAIVER_CHECK_JOB = 'cron-chimmy-sport-waiver-check'
 const CHOP_RELEASE_JOB = 'cron-chimmy-chop-release'
@@ -145,6 +156,7 @@ const SWEEP_CEILING_MS = 240_000
 type PhaseRefusal = { ran: false; reason: 'disabled' | 'error'; error?: string }
 type LineupCheckReport = LineupCheckRun | PhaseRefusal
 type BestBallDepthReport = BestBallDepthRun | PhaseRefusal
+type SlateLockReport = SlateLockRun | PhaseRefusal
 type WaiverCheckReport = WaiverCheckRun | PhaseRefusal
 type SportWaiverCheckReport = SportWaiverCheckRun | PhaseRefusal
 type ChopReleaseReport = ChopReleaseRun | PhaseRefusal
@@ -221,6 +233,24 @@ function bestBallDepthPhase(args: PhaseArgs): Promise<BestBallDepthReport> {
       errors: r.errors.map((e) => `${e.userId}: ${e.error}`),
       status: r.errors.length > 0 ? 'partial' : 'success',
       metadata: { week: r.week, mainSlate: r.mainSlate, users: r.users, outcomes: r.outcomes },
+    },
+  }))
+}
+
+/**
+ * Runs before every non-main slate (Thursday, Sunday night, Monday). Never inside the lineup check's
+ * window, which is the main slate's, so the two do not share a run's budget.
+ */
+function slateLockPhase(args: PhaseArgs): Promise<SlateLockReport> {
+  return weeklyCheckPhase('slate lock check', args, runSlateLockCheck, (r) => ({
+    jobName: SLATE_LOCK_JOB,
+    outcome: {
+      rowsRead: r.leaguesChecked,
+      rowsWritten: r.outcomes.sent ?? 0,
+      rowsSkipped: r.notReached,
+      errors: r.errors.map((e) => `${e.userId}: ${e.error}`),
+      status: r.errors.length > 0 ? 'partial' : 'success',
+      metadata: { week: r.week, slate: r.slate, users: r.users, outcomes: r.outcomes },
     },
   }))
 }
@@ -695,6 +725,12 @@ async function handle(req: NextRequest) {
       singleUser,
       sweepStartedAt: startedAt,
     })
+    const slateLock = await slateLockPhase({
+      mode: (url.searchParams.get('slateLock') ?? '').trim().toLowerCase(),
+      dryRun,
+      singleUser,
+      sweepStartedAt: startedAt,
+    })
     const waiverCheck = await waiverCheckPhase({
       mode: (url.searchParams.get('waiverCheck') ?? '').trim().toLowerCase(),
       dryRun,
@@ -737,6 +773,8 @@ async function handle(req: NextRequest) {
       lineupCheck,
       /** The best ball depth check — the lineup check's window; red positions only. */
       bestBallDepth,
+      /** The lock check before each non-main slate — mostly `{ ran: false, reason: 'no_slate' }`. */
+      slateLock,
       /** Chimmy's Tuesday waiver check — the same shape, the same rules. */
       waiverCheck,
       /** The other sports' waiver check — per-sport windows; mostly `{ ran: false, reason: 'closed' }`. */
