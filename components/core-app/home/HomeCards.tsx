@@ -102,8 +102,6 @@ export type HomeLoads = {
   trades: Promise<ComponentProps<typeof DashTradeBand>['trades']>
   brief: Promise<ComponentProps<typeof DashSinceLastVisit>['brief']>
   drafts: Promise<ComponentProps<typeof DashDraftsBand>['data']>
-  /** Not a card: settles once the trade scan's pending-offers cache write has. The tab badges wait on it. */
-  offersSettled: Promise<void>
 }
 
 /**
@@ -131,7 +129,6 @@ export function emptyHomeLoads(): HomeLoads {
     trades: none([]) as HomeLoads['trades'],
     brief: none(null),
     drafts: none(null),
-    offersSettled: none(undefined),
   }
 }
 
