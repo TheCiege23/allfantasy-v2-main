@@ -19,9 +19,9 @@ import { HomeReadFailure } from '@/components/core-app/home/HomePanels'
  *   3. With the summary read failed — null OR rejected — the honest "could not read your leagues"
  *      panel still stands in the issues card, no summary card claims emptiness, and the shell's
  *      signals still settle rather than taking the screen down.
- *   4. No screen waits for its tab badges — and on the home the badges wait for the trade scan's
- *      pending-offers write, because both rewrite the same cache row whole. They wait ONLY when a
- *      write is actually coming: with no Sleeper identity the scan writes nothing.
+ *   4. No screen waits for its tab badges. Home badges wait for the lineup summary, while the
+ *      trade scan and its pending-offers write proceed independently: lineup and offers now use
+ *      separate cache rows, tested for both write completion orders in urgency-badges.test.ts.
  *   5. A trades read that cannot stand behind what it returned does not advance the "since your
  *      last visit" TRADE boundary — a total failure, and the three ways the read resolves while
  *      blind to part of the picture. The visit itself moves either way: the standings and injury
@@ -400,18 +400,22 @@ describe('/core home cards stream independently', () => {
     expect(published.props.weekLabel).toBeNull()
   })
 
-  it('makes the home badges wait for the pending-offers write, not just the summary', { timeout: 180_000 }, async () => {
+  it('streams home badges after the summary while the trade scan and offers write remain pending', { timeout: 180_000 }, async () => {
     await render(await homeBody())
+    expect(called('urgency'), 'the lineup summary is still unknown').toBe(0)
     g.gate('dash34').open(SUMMARY)
     await tick()
-    expect(called('urgency'), 'badges ran before the trade scan').toBe(0)
+    await tick()
+    expect(called('urgency'), 'badges should not wait for the trade scan').toBe(1)
+    expect(called('trades')).toBe(0)
+    expect(called('offersWrite')).toBe(0)
 
     g.gate('tradeWeek').open(3)
     await tick()
     g.gate('trades').open([])
     await tick()
-    expect(called('offersWrite'), 'the scan reported its pending offers').toBe(1)
-    expect(called('urgency'), 'badges ran while the offers write was still in flight').toBe(0)
+    expect(called('offersWrite'), 'the scan still reports its pending offers').toBe(1)
+    expect(called('urgency'), 'an in-flight offer write must not block or repeat the badge read').toBe(1)
 
     g.gate('offersWrite').open(undefined)
     await tick()
@@ -419,11 +423,7 @@ describe('/core home cards stream independently', () => {
     expect(called('urgency')).toBe(1)
   })
 
-  /*
-   * The other half of that rule, and the reason it is not simply "always wait". Without a Sleeper
-   * identity the scan reports nothing and writes nothing, so chaining the badges behind the trades
-   * read would put the slowest read on the page in front of the tab counts for no reason at all.
-   */
+  // The same independence holds without a Sleeper identity, when no offers write is coming.
   it('does not make the badges wait for a pending-offers write that is never coming', { timeout: 180_000 }, async () => {
     g.account.sleeperUserId = null
     await render(await homeBody())
