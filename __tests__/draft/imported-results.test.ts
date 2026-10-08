@@ -126,3 +126,11 @@ it('preserves verified teams when one weekly roster is malformed without ranking
  expect(await captureImportedResults('l','imported:222')).toEqual({weeks:0,state:'partial'});
  const stored=db.create.mock.calls[0][0].data.snapshotData;expect(stored.report.teams[0].starterPoints).toBe(10);expect(stored.report.teams[1].coveredPicks).toBe(0);expect(stored.report.teams.every((t:any)=>t.rank===null)).toBe(true);
 });
+it('reconciles a stale provisional cache only with independent stable provider evidence and its original cache values',async()=>{
+ await captureImportedResults('l','imported:222');const prior=db.create.mock.calls[0][0].data.snapshotData;prior.observedAt=new Date(Date.now()-13*3600000).toISOString();db.create.mockClear();db.history.mockResolvedValue({snapshotData:prior});db.games.mockResolvedValue([{week:1,startTime:new Date('2026-09-10'),status:'final'}]);db.finalScores.mockResolvedValue([{week:1,playerId:'p',rosterId:1,points:9,isStarter:false,isFinalized:false}]);db.finalWrite.mockResolvedValue(2);
+ await captureImportedResults('l','imported:222');expect(db.create.mock.calls[0][0].data.snapshotData.report.provisional).toBe(false);const payload=db.finalWrite.mock.calls[0][0].values.find((v:unknown)=>typeof v==='string'&&v.startsWith('[{'));expect(JSON.parse(payload)[0]).toMatchObject({points:10,isStarter:true,previousPoints:9,previousRosterId:1,previousStarter:false});
+});
+it('never offers a conflicting finalized cache for replacement',async()=>{
+ await captureImportedResults('l','imported:222');const prior=db.create.mock.calls[0][0].data.snapshotData;prior.observedAt=new Date(Date.now()-13*3600000).toISOString();db.create.mockClear();db.history.mockResolvedValue({snapshotData:prior});db.games.mockResolvedValue([{week:1,startTime:new Date('2026-09-10'),status:'final'}]);db.finalScores.mockResolvedValue([{week:1,playerId:'p',rosterId:1,points:9,isStarter:true,isFinalized:true}]);db.finalWrite.mockResolvedValue(1);
+ await expect(captureImportedResults('l','imported:222')).rejects.toThrow('changed during finalization');expect(db.create).not.toHaveBeenCalled();const payload=db.finalWrite.mock.calls[0][0].values.find((v:unknown)=>typeof v==='string'&&v.startsWith('[{'));expect(JSON.parse(payload)[0].previousPoints).toBeNull();
+});
