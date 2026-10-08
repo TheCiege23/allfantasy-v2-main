@@ -699,3 +699,47 @@ describe('getRecentTrades', () => {
     })
   })
 })
+
+
+describe('visible trade grade overlap', () => {
+  it('starts four grades while the first is pending, preserves order and contains a rejected grade', async () => {
+    const template = payload().data.trades[0]!
+    cacheFindMany.mockResolvedValue([payload({ trades: Array.from({ length: 9 }, (_, index) => ({
+      ...template, id: `overlap-${index}`, createdIso: new Date(NOW.getTime() - index * 60_000).toISOString(),
+    })) })])
+    let active = 0
+    let peak = 0
+    let calls = 0
+    const releases: Array<() => void> = []
+    oneGradeForCompletedTrade.mockImplementation(() => {
+      const index = calls++
+      active += 1
+      peak = Math.max(peak, active)
+      return new Promise((resolve, reject) => {
+        releases.push(() => {
+          active -= 1
+          if (index === 1) reject(new Error('one archived grade is unavailable'))
+          else resolve({ graded: false, reason: 'no complete grade', basis: null })
+        })
+      })
+    })
+    let finished = false
+    const pending = getRecentTrades(LEAGUES, NOW, 9).then(rows => { finished = true; return rows })
+    await vi.waitFor(() => expect(oneGradeForCompletedTrade).toHaveBeenCalledTimes(4))
+    expect(active).toBe(4)
+    expect(finished).toBe(false)
+    releases.splice(0).forEach(release => release())
+    await vi.waitFor(() => expect(oneGradeForCompletedTrade).toHaveBeenCalledTimes(8))
+    expect(active).toBe(4)
+    releases.splice(0).forEach(release => release())
+    await vi.waitFor(() => expect(oneGradeForCompletedTrade).toHaveBeenCalledTimes(9))
+    expect(finished).toBe(false)
+    releases.splice(0).forEach(release => release())
+    const rows = await pending
+    expect(peak).toBe(4)
+    expect(active).toBe(0)
+    expect(rows.map(row => row.id)).toEqual(Array.from({ length: 9 }, (_, index) => `overlap-${index}`))
+    expect(rows).toHaveLength(9)
+    expect(rows[1]!.verdict).toBeNull()
+  })
+})

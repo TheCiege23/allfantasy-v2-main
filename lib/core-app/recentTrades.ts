@@ -1,4 +1,5 @@
 import 'server-only'
+import { recentTradesTiming } from '@/lib/observability/recentTradesTiming'
 import { persistedRecentTrades } from './persistedRecentTrades'
 
 import { prisma } from '@/lib/prisma'
@@ -608,15 +609,23 @@ export async function getRecentTrades(
   limit = 20,
   live?: RecentTradesLiveOptions,
 ): Promise<RecentTrade[]> {
+  const timing = recentTradesTiming()
+  try { return await loadRecentTrades(leagues, now, limit, live, timing) } finally { timing.finish() }
+}
+
+async function loadRecentTrades(
+  leagues: RecentTradesLeague[], now: Date, limit: number,
+  live: RecentTradesLiveOptions | undefined, timing: ReturnType<typeof recentTradesTiming>,
+): Promise<RecentTrade[]> {
   const byPlatformId = new Map<string, RecentTradesLeague>()
   for (const l of leagues) {
     if (l.platformLeagueId && (!l.platform || String(l.platform).toLowerCase() === 'sleeper')) byPlatformId.set(l.platformLeagueId, l)
   }
   const cutoff = now.getTime() - RECENT_DAYS * 24 * 60 * 60 * 1000
-  const [nativeRecent, persisted] = await Promise.all([
+  const [nativeRecent, persisted] = await timing.read('ledger', () => Promise.all([
     loadNativeRecentTrades(leagues, new Date(cutoff), live?.viewerUserId),
     persistedRecentTrades(leagues, new Date(cutoff)).catch(() => { reportIncomplete(live, 'league-scan-unanswered'); return [] }),
-  ])
+  ]))
 
   const keys = [...byPlatformId.keys()].map((id) => `${CACHE_PREFIX}${id}`)
   /*
@@ -627,28 +636,30 @@ export async function getRecentTrades(
    * graded trade it holds, so the failure is reported rather than swallowed.
    */
   let rows = keys.length > 0
-    ? await prisma.sportsDataCache
+    ? await timing.read('grade-cache', () => prisma.sportsDataCache
       .findMany({ where: { cacheKey: { in: keys } }, select: { cacheKey: true, data: true } })
       .catch(() => {
         reportIncomplete(live, 'grade-cache-unreadable')
         return [] as { cacheKey: string; data: unknown }[]
-      })
+      }))
     : []
 
   if (live?.reconcileLive) {
     const liveRows: { cacheKey: string; data: unknown }[] = []
     const ids = [...byPlatformId.keys()]
-    for (let i = 0; i < ids.length; i += 4) {
-      const chunk = ids.slice(i, i + 4)
-      const settled = await Promise.all(chunk.map(async (id) => ({
-        id,
-        result: await getReconciledTradeGrades(id).catch(() => null),
-      })))
-      for (const item of settled) {
-        if (!item.result || item.result.incomplete) reportIncomplete(live, 'league-scan-unanswered')
-        if (item.result?.grades) liveRows.push({ cacheKey: `${CACHE_PREFIX}${item.id}`, data: item.result.grades })
+    await timing.read('reconcile', async () => {
+      for (let i = 0; i < ids.length; i += 4) {
+        const chunk = ids.slice(i, i + 4)
+        const settled = await Promise.all(chunk.map(async (id) => ({
+          id,
+          result: await getReconciledTradeGrades(id).catch(() => null),
+        })))
+        for (const item of settled) {
+          if (!item.result || item.result.incomplete) reportIncomplete(live, 'league-scan-unanswered')
+          if (item.result?.grades) liveRows.push({ cacheKey: `${CACHE_PREFIX}${item.id}`, data: item.result.grades })
+        }
       }
-    }
+    })
     if (liveRows.length > 0) {
       const liveKeys = new Set(liveRows.map((r) => r.cacheKey))
       rows = [...liveRows, ...rows.filter((r) => !liveKeys.has(r.cacheKey))]
@@ -723,17 +734,19 @@ export async function getRecentTrades(
       .slice(0, live.maxLeagues ?? 8)
     const scans: Array<Awaited<ReturnType<typeof scanPendingSleeperTrades>> | null> = new Array(liveLeagues.length).fill(null)
     const concurrency = 4
-    for (let start = 0; start < liveLeagues.length; start += concurrency) {
-      await Promise.all(liveLeagues.slice(start, start + concurrency).map(async (league, offset) => {
-        scans[start + offset] = await scanPendingSleeperTrades({
-          platformLeagueId: league.platformLeagueId!,
-          ownerSleeperId: live.ownerSleeperId!,
-          sport: 'NFL',
-          weeks,
-          alertOnNewOffers: true,
-        }).catch(() => null)
-      }))
-    }
+    await timing.read('provider', async () => {
+      for (let start = 0; start < liveLeagues.length; start += concurrency) {
+        await Promise.all(liveLeagues.slice(start, start + concurrency).map(async (league, offset) => {
+          scans[start + offset] = await scanPendingSleeperTrades({
+            platformLeagueId: league.platformLeagueId!,
+            ownerSleeperId: live.ownerSleeperId!,
+            sport: 'NFL',
+            weeks,
+            alertOnNewOffers: true,
+          }).catch(() => null)
+        }))
+      }
+    })
     /*
      * What this pass could NOT see, reported before anything is returned. `scanned` alone hides
      * all of it: a league whose scan threw is `null`, one Sleeper refused is `scanned: false`, and
@@ -828,99 +841,106 @@ export async function getRecentTrades(
   const currentSeason = now.getUTCFullYear()
   let mediaByPlayerId = new Map<string, ResolvedPlayerMedia>()
   if (playerIds.size > 0) {
-    mediaByPlayerId = await attachPlayerMediaBatch(
+    mediaByPlayerId = await timing.read('media', () => attachPlayerMediaBatch(
       [...playerIds].map((playerId) => ({ playerId, sport: 'nfl' })),
-    ).catch(() => new Map<string, ResolvedPlayerMedia>())
+    ).catch(() => new Map<string, ResolvedPlayerMedia>()))
   }
-  for (const t of visible) {
-    const src = graded.get(`${t.platformLeagueId}:${t.id}`)
-    if (!src) {
-      /*
-       * A provider trade the graded ledger has not reached yet — just accepted, read live or from the
-       * durable feed. These used to sit at "Grade pending" for as long as the ledger lagged; they are
-       * graded from their own assets now. A native trade (`status` set) keeps its frozen receipt.
-       */
-      await gradeProviderRecentTrade(t, now)
-      continue
-    }
-    const oneGrade = await oneGradeForCompletedTrade(t.leagueId, src, currentSeason).catch(() => null)
-    t.verdict = gradeOf(src, oneGrade)
-    /*
-     * The receipt for that grade (Trade OS). No stored link: completed imported trades have no loader yet.
-     * ⚠ FAILURE-CONTAINED: recording a receipt is bookkeeping, and must never cost the card its trade.
-     */
-    if (oneGrade) {
-      try {
-        const inputs = completedTradeInputs(src, currentSeason)
-        if (inputs) {
-          t.receiptId = await receiptIdForGrade({
-            surface: 'dashboard-trades',
-            leagueId: t.leagueId,
-            userId: live?.viewerUserId ?? null,
-            give: inputs.give,
-            get: inputs.get,
-            viewerSide: false,
-            grade: oneGrade,
-          })
+  // Grade only visible trades, in bounded groups. Independent receipts and league
+  // context reads overlap without changing display order or provider scan limits.
+  await timing.read('grading', async () => {
+    const gradeConcurrency = 4
+    for (let start = 0; start < visible.length; start += gradeConcurrency) {
+      await Promise.all(visible.slice(start, start + gradeConcurrency).map(async (t) => {
+        const src = graded.get(`${t.platformLeagueId}:${t.id}`)
+        if (!src) {
+          /*
+           * A provider trade the graded ledger has not reached yet — just accepted, read live or from the
+           * durable feed. These used to sit at "Grade pending" for as long as the ledger lagged; they are
+           * graded from their own assets now. A native trade (`status` set) keeps its frozen receipt.
+           */
+          await gradeProviderRecentTrade(t, now)
+          return
         }
-      } catch {
-        t.receiptId = null
-      }
-    }
-    for (const side of t.sides) {
-      for (const asset of side.received) {
-        if (!asset.playerId) continue
-        const media = mediaByPlayerId.get(asset.playerId)
-        asset.team = media?.teamAbbr ?? null
-        asset.headshotUrl = media?.media.headshotUrl ?? null
-        asset.teamLogoUrl = media?.media.teamLogoUrl ?? null
-      }
-    }
+        const oneGrade = await oneGradeForCompletedTrade(t.leagueId, src, currentSeason).catch(() => null)
+        t.verdict = gradeOf(src, oneGrade)
+        /*
+         * The receipt for that grade (Trade OS). No stored link: completed imported trades have no loader yet.
+         * ⚠ FAILURE-CONTAINED: recording a receipt is bookkeeping, and must never cost the card its trade.
+         */
+        if (oneGrade) {
+          try {
+            const inputs = completedTradeInputs(src, currentSeason)
+            if (inputs) {
+              t.receiptId = await receiptIdForGrade({
+                surface: 'dashboard-trades',
+                leagueId: t.leagueId,
+                userId: live?.viewerUserId ?? null,
+                give: inputs.give,
+                get: inputs.get,
+                viewerSide: false,
+                grade: oneGrade,
+              })
+            }
+          } catch {
+            t.receiptId = null
+          }
+        }
+        for (const side of t.sides) {
+          for (const asset of side.received) {
+            if (!asset.playerId) continue
+            const media = mediaByPlayerId.get(asset.playerId)
+            asset.team = media?.teamAbbr ?? null
+            asset.headshotUrl = media?.media.headshotUrl ?? null
+            asset.teamLogoUrl = media?.media.teamLogoUrl ?? null
+          }
+        }
 
-    if (oneGrade?.graded && t.verdict) {
-      // `t.verdict` set means a two-team trade — the only kind one letter per side can describe.
-      const srcByRoster = new Map(src.sides.map((s) => [String(s.rosterId), s]))
-      /*
-       * ⚠ GUARDED: `hasNoSignal` reads `seasonNets[0]` and THROWS on a ledger row without it. The note
-       * is a nicety; an unreadable row means "no realized points to report", never a lost card.
-       */
-      const noSignal = (() => { try { return hasNoSignal(src) } catch { return true } })()
-      applyOneGrade(t, oneGrade, src.sides[0]!.rosterId, (side) => {
-        const realized = srcByRoster.get(String(side.rosterId))
-        return !noSignal && realized && typeof realized.cumulativeNet === 'number' ? realized.cumulativeNet : null
-      })
-    } else if (live?.enrichLeagueContext && hasNoSignal(src)) {
-      const expectation = await loadTradeExpectation(t.platformLeagueId, src, { afLeagueId: t.leagueId }).catch(() => null)
-      for (const side of t.sides) {
-        const exp = expectation?.sides.find((s) => s.rosterId === side.rosterId)
-        side.grade = exp?.projected?.letter ?? null
-        side.gradeBasis = exp?.projected ? 'Market' : null
-        const edge = exp?.projected ? Math.round(exp.projected.valueEdge * 100) : null
-        const needs = exp?.starterGaps == null
-          ? 'Roster needs unavailable.'
-          : exp.starterGaps.length === 0
-            ? 'No required starter gaps detected.'
-            : `Starter gaps: ${exp.starterGaps.map((g) => `${g.position} ${g.rostered}/${g.required}`).join(', ')}.`
-        delete side.gradeParts
-        side.gradeReason = expectation?.evaluation.withheldReason
-          ?? (edge == null
-            ? `No complete market grade is available for ${expectation?.leagueNote ?? 'this league'}.`
-            : `${edge >= 0 ? '+' : ''}${edge}% market-value edge in ${expectation?.leagueNote}. ${needs} Full context remains withheld until playoff probability and every required league input are available.`)
-      }
-    } else {
-      const srcByRoster = new Map(src.sides.map((s) => [String(s.rosterId), s]))
-      for (const side of t.sides) {
-        const realized = srcByRoster.get(String(side.rosterId))
-        const hasRealizedGrade = Boolean(realized?.currentGrade && typeof realized.cumulativeNet === 'number')
-        side.grade = hasRealizedGrade ? realized!.currentGrade : null
-        side.gradeBasis = hasRealizedGrade ? 'Realized' : null
-        side.gradeReason = hasRealizedGrade
-          ? `Net ${realized!.cumulativeNet.toFixed(1)} fantasy points under this league's scoring while the assets were held.`
-          : 'No grade is available for this side.'
-        if (hasRealizedGrade) side.gradeParts = { kind: 'realized', net: realized!.cumulativeNet }
-      }
+        if (oneGrade?.graded && t.verdict) {
+          // `t.verdict` set means a two-team trade — the only kind one letter per side can describe.
+          const srcByRoster = new Map(src.sides.map((s) => [String(s.rosterId), s]))
+          /*
+           * ⚠ GUARDED: `hasNoSignal` reads `seasonNets[0]` and THROWS on a ledger row without it. The note
+           * is a nicety; an unreadable row means "no realized points to report", never a lost card.
+           */
+          const noSignal = (() => { try { return hasNoSignal(src) } catch { return true } })()
+          applyOneGrade(t, oneGrade, src.sides[0]!.rosterId, (side) => {
+            const realized = srcByRoster.get(String(side.rosterId))
+            return !noSignal && realized && typeof realized.cumulativeNet === 'number' ? realized.cumulativeNet : null
+          })
+        } else if (live?.enrichLeagueContext && hasNoSignal(src)) {
+          const expectation = await loadTradeExpectation(t.platformLeagueId, src, { afLeagueId: t.leagueId }).catch(() => null)
+          for (const side of t.sides) {
+            const exp = expectation?.sides.find((s) => s.rosterId === side.rosterId)
+            side.grade = exp?.projected?.letter ?? null
+            side.gradeBasis = exp?.projected ? 'Market' : null
+            const edge = exp?.projected ? Math.round(exp.projected.valueEdge * 100) : null
+            const needs = exp?.starterGaps == null
+              ? 'Roster needs unavailable.'
+              : exp.starterGaps.length === 0
+                ? 'No required starter gaps detected.'
+                : `Starter gaps: ${exp.starterGaps.map((g) => `${g.position} ${g.rostered}/${g.required}`).join(', ')}.`
+            delete side.gradeParts
+            side.gradeReason = expectation?.evaluation.withheldReason
+              ?? (edge == null
+                ? `No complete market grade is available for ${expectation?.leagueNote ?? 'this league'}.`
+                : `${edge >= 0 ? '+' : ''}${edge}% market-value edge in ${expectation?.leagueNote}. ${needs} Full context remains withheld until playoff probability and every required league input are available.`)
+          }
+        } else {
+          const srcByRoster = new Map(src.sides.map((s) => [String(s.rosterId), s]))
+          for (const side of t.sides) {
+            const realized = srcByRoster.get(String(side.rosterId))
+            const hasRealizedGrade = Boolean(realized?.currentGrade && typeof realized.cumulativeNet === 'number')
+            side.grade = hasRealizedGrade ? realized!.currentGrade : null
+            side.gradeBasis = hasRealizedGrade ? 'Realized' : null
+            side.gradeReason = hasRealizedGrade
+              ? `Net ${realized!.cumulativeNet.toFixed(1)} fantasy points under this league's scoring while the assets were held.`
+              : 'No grade is available for this side.'
+            if (hasRealizedGrade) side.gradeParts = { kind: 'realized', net: realized!.cumulativeNet }
+          }
+        }
+      }))
     }
-  }
+  })
 
   return visible
 }
