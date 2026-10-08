@@ -1,0 +1,93 @@
+/* Swipe between leagues on a phone (LeagueSwipe.tsx, 2026-10-08). Mounted only in the phone layout,
+   so nothing here needs a media query. Token-authored on the af-core palette. */
+
+.af-lswipe {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+.af-lswipe-btn,
+.af-core .af-lswipe-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  min-height: 44px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  text-decoration: none;
+}
+.af-lswipe-btn[data-dir='next'] {
+  justify-content: flex-end;
+}
+.af-lswipe-btn > span[aria-hidden] {
+  flex-shrink: 0;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--accent);
+}
+.af-lswipe-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.af-lswipe-count {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--muted);
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+/* The peek: where the swipe will land, sliding in from the side it comes from. */
+.af-lswipe-peek {
+  position: fixed;
+  top: 45%;
+  z-index: 60;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 70vw;
+  padding: 10px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line2);
+  box-shadow: 0 8px 24px color-mix(in srgb, #000 30%, transparent);
+  pointer-events: none;
+  transition: transform 120ms ease-out, border-color 120ms ease-out;
+}
+.af-lswipe-peek span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.af-lswipe-peek img {
+  border-radius: 6px;
+  object-fit: cover;
+}
+.af-lswipe-peek[data-dir='next'] {
+  right: 12px;
+}
+.af-lswipe-peek[data-dir='prev'] {
+  left: 12px;
+}
+/* Far enough to switch: the pill says so before the finger lifts. */
+.af-lswipe-peek[data-ready='true'] {
+  border-color: var(--accent);
+  transform: scale(1.04);
+}
+@media (prefers-reduced-motion: reduce) {
+  .af-lswipe-peek {
+    transition: none;
+  }
+  .af-lswipe-peek[data-ready='true'] {
+    transform: none;
+  }
+}
