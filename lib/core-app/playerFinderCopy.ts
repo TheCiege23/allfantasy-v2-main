@@ -1,4 +1,5 @@
 import { coreUiCopy } from './coreUiCopy'
+import { kickoffText } from './kickoffText'
 
 /**
  * Player Finder's own words — components/core-app/screens/PlayerFinder.tsx — in the reader's
@@ -14,6 +15,10 @@ import { coreUiCopy } from './coreUiCopy'
  * through `coreUiCopy`'s table and patterns (adc631a91, #2043), the report time through its
  * `reported …` patterns, the freshness age through shellCopy's `ageText`, the slot chip through
  * playerMovesCopy's `slotText`.
+ *
+ * The rail's "Most added this week" card (player-finder/TrendingAdds.tsx) takes its words from here
+ * too (`trend*`), since it sits beside "Recently searched"; its pinned en-US date ("Sep 28") reads
+ * "28 sep" through `kickoffText`. Counts, names, clubs and links do not follow the language.
  *
  * ⚠ THE LOADERS' REASONS ARE TRANSLATED WHOLE OR NOT AT ALL. `reasonText` knows the exact sentences
  * playerFinder.ts, playerImpact.ts, playerLeagueView.ts, snapShare.ts and scoringFit.ts write, each
@@ -33,6 +38,11 @@ export type FinderCopy = {
   noPosition: string
   compareWithName: (name: string) => string
   recentlySearched: string
+  /** "Most added this week" (TrendingAdds.tsx): the heading, the freshness line, a row's count label. */
+  trendHeading: string
+  /** `through` is the pinned en-US short date ("Sep 28"), or null when no transaction carries one. */
+  trendSub: (activeLeagues: number, through: string | null) => string
+  trendAddedIn: (leagues: number) => string
   otherMatches: string
   alsoMatched: string
   railFoot: string
@@ -127,6 +137,9 @@ const EN: FinderCopy = {
   noPosition: 'no position on file',
   compareWithName: (name) => `Compare with ${name}`,
   recentlySearched: 'Recently searched',
+  trendHeading: 'Most added this week',
+  trendSub: (n, through) => `of ${n} ${n === 1 ? 'league' : 'leagues'} adding${through ? ` · through ${through}` : ''}`,
+  trendAddedIn: (n) => `added in ${n} leagues`,
   otherMatches: 'Other matches',
   alsoMatched: 'Also matched',
   railFoot: 'Stats, injuries and news come from live sports data — never an invented number.',
@@ -221,6 +234,10 @@ const ES: FinderCopy = {
   noPosition: 'sin posición registrada',
   compareWithName: (name) => `Comparar con ${name}`,
   recentlySearched: 'Búsquedas recientes',
+  trendHeading: 'Los más añadidos esta semana',
+  // «altas», as the app says for adds elsewhere ("altas y bajas").
+  trendSub: (n, through) => `de ${n} ${n === 1 ? 'liga' : 'ligas'} con altas${through ? ` · hasta el ${kickoffText(through, 'es')}` : ''}`,
+  trendAddedIn: (n) => `añadido en ${n} ${n === 1 ? 'liga' : 'ligas'}`,
   otherMatches: 'Otras coincidencias',
   alsoMatched: 'También coinciden',
   railFoot: 'Las estadísticas, las lesiones y las noticias vienen de datos deportivos en vivo: nunca un número inventado.',
