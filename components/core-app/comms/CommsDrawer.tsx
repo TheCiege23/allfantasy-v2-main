@@ -523,7 +523,7 @@ export function CommsDrawer({
    * last one it followed.
    *
    * ⚠ IT DOES NOT STAY MOUNTED ACROSS A /core NAVIGATION, as this comment used to say:
-   * the page's loading boundary replaces it on every screen change. Where the user was
+   * every screen change mounts a new shell, and a new drawer with it. Where the user was
    * is restored from commsUiMemory.ts below instead.
    */
   const followedPageLeague = useRef(pageLeagueId)
