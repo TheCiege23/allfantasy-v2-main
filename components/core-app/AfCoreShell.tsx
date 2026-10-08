@@ -19,6 +19,7 @@ import { CoreNavIcon } from '@/components/core-app/CoreNavIcon'
 import { LeagueMark } from '@/components/core-app/LeagueMark'
 import SyncNowButton from '@/components/core-app/SyncNowButton'
 import LeagueSwipe from '@/components/core-app/LeagueSwipe'
+import PullToRefresh from '@/components/core-app/PullToRefresh'
 import { LEAGUE_SWIPE_SCREENS } from '@/lib/core-app/leagueSwipe'
 import PlayerCardProvider from '@/components/core-app/player-card/PlayerCardProvider'
 import { COMMS_OPEN_EVENT, SUPPORT_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
@@ -2396,6 +2397,11 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             content area. Phone layout only, only with a league selected and somewhere to go, and
             only on league-scoped screens (LEAGUE_SWIPE_SCREENS) — never a draft room or the desk.
           */}
+          {/*
+            Pull to refresh on a phone (2026-10-08): reloads this screen's data in place, and starts
+            the league sync too when the shell's own sync age says the leagues are stale.
+          */}
+          {phoneLayout ? <PullToRefresh syncStale={syncAge.stale && syncEligibleCount !== 0} /> : null}
           {phoneLayout && props.selectedLeagueId && leagues.length > 1 && LEAGUE_SWIPE_SCREENS.has(active) ? (
             <LeagueSwipe
               leagues={leagues.map((l) => ({ id: l.id, name: l.name, imageUrl: l.imageUrl ?? null, mark: l.mark }))}
