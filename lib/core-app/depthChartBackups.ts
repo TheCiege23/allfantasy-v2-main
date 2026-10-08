@@ -15,7 +15,7 @@ import {
 } from './depthChart'
 import { resolveLeagueSlots } from './playerFinder'
 import { waiverClaimLink } from './platformLinks'
-import { playerRef } from './playerRef'
+import { roundTripRefs } from './sleeperPlayerRefs'
 
 /**
  * Loader for the finder's depth-chart card (depthChart.ts has the shape and the rules).
@@ -92,37 +92,6 @@ export async function loadDepthChartView(args: {
   return { team: row.team, slot: row.position, asOfIso: fetchedAt.toISOString(), hisDepth: row.depth, entries, presence }
 }
 
-/** sleeperId -> `NFL:<externalId>` for the ids whose ref resolves back to them (see the header). */
-async function roundTripRefs(sleeperIds: readonly string[]): Promise<Map<string, string>> {
-  const out = new Map<string, string>()
-  if (sleeperIds.length === 0) return out
-  const own = await prisma.sportsPlayer.findMany({
-    where: { sport: 'NFL', sleeperId: { in: [...sleeperIds] } },
-    select: { externalId: true, sleeperId: true, source: true, fetchedAt: true },
-  })
-  // Prefer the vendor's own row (the one search results link to), then the newest.
-  own.sort((a, b) => Number(b.source === 'rolling_insights') - Number(a.source === 'rolling_insights') || +new Date(b.fetchedAt) - +new Date(a.fetchedAt))
-  const chosen = new Map<string, string>()
-  for (const r of own) if (r.sleeperId && !chosen.has(r.sleeperId)) chosen.set(r.sleeperId, r.externalId)
-  if (chosen.size === 0) return out
-
-  const sharing = await prisma.sportsPlayer.findMany({
-    // externalid-audited: unscoped ON PURPOSE — it must see every row the `NFL:<externalId>` resolver can reach
-    where: { sport: 'NFL', externalId: { in: [...new Set(chosen.values())] }, sleeperId: { not: null } },
-    select: { externalId: true, sleeperId: true },
-  })
-  const claimants = new Map<string, Set<string>>()
-  for (const r of sharing) {
-    const set = claimants.get(r.externalId) ?? new Set<string>()
-    if (r.sleeperId) set.add(r.sleeperId)
-    claimants.set(r.externalId, set)
-  }
-  for (const [sid, ext] of chosen) {
-    const who = claimants.get(ext)
-    if (who && who.size === 1 && who.has(sid)) out.set(sid, playerRef('NFL', ext))
-  }
-  return out
-}
 
 async function loadPresence(entries: readonly DepthEntry[], userId: string, leagueIds: readonly string[]): Promise<Record<string, BackupCell[]> | null> {
   const backups = entries.filter((e) => !e.isHim && e.sleeperId).slice(0, BACKUP_CAP)

@@ -192,6 +192,24 @@ describe('Player Finder — core view', () => {
     expect(link.getAttribute('href')).toBe('/core/players?q=Isaiah%20Likely&player=NFL%3Ari-9')
   })
 
+  it('shows "Most added this week" in the rail, each row opening that player', () => {
+    renderCore({
+      trendingAdds: {
+        rows: [{ sleeperId: '1339', name: 'Zach Ertz', position: 'TE', team: 'PHI', imageUrl: null, ref: 'NFL:E1339', leagues: 66 }],
+        activeLeagues: 189,
+        through: '2026-09-28T14:59:00.000Z',
+      },
+    })
+    const region = screen.getByRole('region', { name: 'Most added this week' })
+    expect(within(region).getByRole('link', { name: /Zach Ertz/ }).getAttribute('href')).toBe('/core/players?q=Zach%20Ertz&player=NFL%3AE1339')
+    expect(within(region).getByLabelText('added in 66 leagues')).toHaveTextContent('+66')
+  })
+
+  it('no trending list, no empty card', () => {
+    renderCore({ trendingAdds: null })
+    expect(screen.queryByRole('region', { name: 'Most added this week' })).toBeNull()
+  })
+
   it('shows the league strip — one chip per league, FA where nobody has him, "?" where we cannot read', () => {
     renderCore({
       signedIn: true,
