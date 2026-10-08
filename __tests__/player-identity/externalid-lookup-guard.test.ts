@@ -22,7 +22,7 @@
  * reason is required, and it is line-scoped so the rest of the file stays watched. The three in use
  * (2026-09-30): ids already filtered to self-describing tokens (`resolveAiTeamContext`), a round-trip
  * check that must see every row under an externalId because the resolver it mirrors does
- * (`depthChartBackups`), and a match that is rejected unless the names agree (`getPlayerDataForSurface`).
+ * (`sleeperPlayerRefs`, shared by the depth chart and the trending-adds list), and a match that is rejected unless the names agree (`getPlayerDataForSurface`).
  */
 import { execSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'

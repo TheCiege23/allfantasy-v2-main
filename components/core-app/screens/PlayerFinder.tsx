@@ -49,6 +49,8 @@ import type { PlayerTradeVisual } from '@/lib/core-app/playerTradeVisual'
 import type { ManagerPresence } from '@/lib/core-app/managerPresence'
 import type { PitchPackage } from '@/lib/core-app/tradePitch'
 import type { RecentPlayerSearch } from '@/lib/core-app/recentPlayerSearches'
+import { TrendingAdds } from '@/components/core-app/player-finder/TrendingAdds'
+import type { TrendingAdds as TrendingAddsData } from '@/lib/core-app/trendingAdds'
 import type { SectionState } from '@/lib/core-app/leagueHome'
 import type { PlayerDepth } from '@/lib/core-app/playerDepth'
 import type { PlayerShares } from '@/lib/core-app/playerShares'
@@ -152,6 +154,8 @@ export type PlayerFinderProps = {
   leagueView?: PlayerLeagueView | null
   /** The account's recent searches for the rail, newest first. Empty when signed out. */
   recent?: RecentPlayerSearch[]
+  /** Most added this week across Sleeper-synced leagues — an aggregate, shown to everyone (trendingAdds.ts). */
+  trendingAdds?: TrendingAddsData | null
   /**
    * "Trade for him", as a visual: loaded by the page only when the held
    * league's card says another manager has him. Null otherwise.
@@ -396,6 +400,7 @@ export function PlayerFinder({
   selectedLeagueId = null,
   leagueView = null,
   recent = [],
+  trendingAdds = null,
   tradeVisual = null,
   presence = null,
   windows = null,
@@ -728,6 +733,9 @@ export function PlayerFinder({
             </ul>
           </section>
         ) : null}
+
+        {/* Most added this week across Sleeper-synced leagues (trendingAdds.ts) — everyone, signed in or not. */}
+        <TrendingAdds data={trendingAdds} leagueParam={leagueParam} />
 
         {detail && otherMatches.length > 0 ? (
           <div className="af-pf-m-only af-pf-others" aria-label={t.otherMatches}>
