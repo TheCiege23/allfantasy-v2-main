@@ -8,7 +8,8 @@ const db = vi.hoisted(() => ({
  sportsInjury: { findMany: vi.fn(async () => [{sport:'NFL',playerName:'Omar Cooper Jr.',status:'IR',team:'NYJ'}]) },
  sportsGame: { findMany: vi.fn(async () => [{homeTeam:'ATL',awayTeam:'GB',startTime:new Date('2026-09-25T00:15:00Z')},{homeTeam:'NYJ',awayTeam:'DET',startTime:new Date('2026-09-27T17:00:00Z')}]) },
 }))
-vi.mock('@/lib/prisma', () => ({prisma:db}))
+const identities = vi.hoisted(() => vi.fn(async () => []))
+vi.mock('@/lib/prisma', () => ({prisma:{...db,playerIdentityMap:{findMany:identities}}}))
 vi.mock('@/lib/core-app/sportsWeek', () => ({resolveSportsWeek:vi.fn(async () => ({season:2026,week:3,seasonType:'regular'}))}))
 vi.mock('@/lib/core-app/byeWeeks', () => ({getByeWeeks:vi.fn(async () => ({byWeek:new Map([[3,[]]])}))}))
 vi.mock('@/lib/core-app/leagueHome', () => ({leagueDisplayName:(name:string)=>name}))
@@ -126,4 +127,43 @@ it('🛑 a starter on bye is a bye on the row, not a starter "without a kickoff"
  const row = [...pulse.needs, ...pulse.set][0]
  expect(row).toMatchObject({ leagueId: 'L0', bye: 1, out: 1, unknownKickoffs: 0 })
  expect(row.actionableSeverity).toBe(2)
+})
+
+it('starts elimination reads while the roster read is still pending', async () => {
+ const rosterRows=await db.roster.findMany()
+ vi.clearAllMocks()
+ let release!: (rows: typeof rosterRows) => void
+ db.roster.findMany.mockImplementationOnce(() => new Promise(resolve => {release=resolve}))
+ const loading=getMyTeamPulse('user',new Date('2026-09-27T12:00:00Z'))
+ try { await vi.waitFor(() => expect(db.guillotineElimination.findMany).toHaveBeenCalledTimes(1)) }
+ finally { release(rosterRows) }
+ expect((await loading).checked).toBe(65)
+})
+it('batches selected ESPN lineups without translating paused or opponent rosters', async () => {
+ const claims=[0,1,2].map(i=>({...oneLeague('espn')[0],leagueId:`L${i}`,league:{...oneLeague('espn')[0].league,id:`L${i}`,platformLeagueId:`${1000+i}`}}))
+ db.leagueTeam.findMany.mockResolvedValueOnce(claims)
+ db.roster.findMany.mockResolvedValueOnce([0,1,2].flatMap(i=>[
+  {leagueId:`L${i}`,platformUserId:'su',playerData:{players:[`${10+i}`],starters:[`${10+i}`]}},
+  {leagueId:`L${i}`,platformUserId:'opponent',playerData:{players:['999'],starters:['999']}},
+ ]) as any)
+ identities.mockResolvedValueOnce([{espnId:'10',sleeperId:'healthy'},{espnId:'11',sleeperId:'out'}] as any)
+ const pulse=await getMyTeamPulse('user',new Date('2026-09-27T12:00:00Z'),new Set(['L2']))
+ expect(identities).toHaveBeenCalledTimes(1)
+ expect(identities).toHaveBeenCalledWith(expect.objectContaining({where:{espnId:{in:['10','11']},sleeperId:{not:null}}}))
+ expect(pulse).toMatchObject({checked:2,paused:1,needsTotal:1})
+ expect(pulse.needs[0]).toMatchObject({leagueId:'L1',out:1})
+})
+it('starts schedule and bye reads before independent injury and kickoff reads finish', async () => {
+ const injuryRows=await db.sportsInjury.findMany()
+ const gameRows=await db.sportsGame.findMany()
+ vi.clearAllMocks()
+ let releaseInjury!: (rows: typeof injuryRows) => void
+ let releaseGames!: (rows: typeof gameRows) => void
+ db.sportsInjury.findMany.mockImplementationOnce(() => new Promise(resolve => {releaseInjury=resolve}))
+ db.sportsGame.findMany.mockImplementationOnce(() => new Promise(resolve => {releaseGames=resolve}))
+ const {getByeWeeks}=await import('@/lib/core-app/byeWeeks')
+ const loading=getMyTeamPulse('user',new Date('2026-09-27T12:00:00Z'))
+ try { await vi.waitFor(() => {expect(db.sportsGame.findMany).toHaveBeenCalledTimes(1);expect(getByeWeeks).toHaveBeenCalledTimes(1)}) }
+ finally { releaseInjury(injuryRows);releaseGames(gameRows) }
+ expect((await loading).needs[0]).toMatchObject({out:1,locked:false,bye:0})
 })

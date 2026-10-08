@@ -17,3 +17,13 @@ describe('slow team diagnostics',()=>{
   time=3000;expect(()=>timing.finish()).not.toThrow()
  })
 })
+
+it('records fixed portfolio phases without exposing translated roster data',async()=>{
+ let time=0;vi.spyOn(performance,'now').mockImplementation(()=>time)
+ const log=vi.spyOn(console,'info').mockImplementation(()=>{})
+ const timing=teamLoadTiming('portfolio')
+ expect(await timing.read('identities',async()=>{time=3100;return {privatePlayer:'fixture-id'}})).toEqual({privatePlayer:'fixture-id'})
+ timing.finish()
+ expect(log).toHaveBeenCalledWith('[team-load-timing]',JSON.stringify({mode:'portfolio',totalMs:3100,phases:{identities:3100}}))
+ expect(JSON.stringify(log.mock.calls)).not.toContain('fixture-id')
+})
