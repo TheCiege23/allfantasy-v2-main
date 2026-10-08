@@ -7,7 +7,7 @@ import { formatPct1 } from './weeklyPercent'
 import type { WeeklyCalendar } from './weeklyCalendar'
 import { isAtRisk,isRuledOut } from './injuryStatus'
 
-export type WeeklyAction = { id: string; leagueId: string; leagueName: string; kind: 'lineup' | 'monitor' | 'sync' | 'playoff' | 'review' | 'deadline'; count: number; href: string; gameAt: string | null; source: 'stored-lineup' | 'season-outlook' | 'league-context' | 'weekly-calendar'; season?: number | null; period?: number | null; deadlineKind?: 'lineup' | 'waivers' | 'trade'; playoffScenarios?: {ifWin:number;ifLose:number}; evidence?: { empty: number; out: number; bye: number | null; questionable: number; players?: string[] } }
+export type WeeklyAction = { id: string; leagueId: string; leagueName: string; kind: 'lineup' | 'monitor' | 'sync' | 'playoff' | 'review' | 'deadline'; count: number; href: string; gameAt: string | null; source: 'stored-lineup' | 'season-outlook' | 'league-context' | 'weekly-calendar'; season?: number | null; period?: number | null; sport?: string; deadlineKind?: 'lineup' | 'waivers' | 'trade'; playoffScenarios?: {ifWin:number;ifLose:number}; evidence?: { empty: number; out: number; bye: number | null; questionable: number; players?: string[] } }
 export type WeeklyBlueprint = {
   name: string | null; teamName: string | null; leagueCount: number; sports: string[]; focusLeagueId: string | null
   actions: WeeklyAction[]; actionCount: number; attentionLeagueIds: string[]; lineupReadFailed: boolean
@@ -105,7 +105,7 @@ export function buildWeeklyBlueprint(input: {
   const probability = outlook?.you?.playoffPct
   return { name: input.name?.trim() || null, teamName: input.board.leagueBoard?.yourTeamName ?? null, leagueCount: leagues.length,
     sports: [...new Set(leagues.map(l => l.sport?.trim()).filter((s): s is string => Boolean(s)))], focusLeagueId: focus,
-    actions: actions.slice(0, 3), actionCount: actions.length, attentionLeagueIds, lineupReadFailed: input.pulse == null || (leagues.length > 0 && rows.length === 0), coverage,
+    actions: actions.slice(0, 3).map(a=>({...a,sport:leagues.find(l=>l.id===a.leagueId)?.sport?.trim().toUpperCase()})), actionCount: actions.length, attentionLeagueIds, lineupReadFailed: input.pulse == null || (leagues.length > 0 && rows.length === 0), coverage,
     sportPlans: leagues.map(l=>({leagueId:l.id,leagueName:l.name?.trim() || 'League',sport:l.sport?.trim().toUpperCase() || 'UNKNOWN'})),
     calendar: input.calendar,
     commissionerLeagueIds: input.commissionerLeagueIds?.filter(id => allowed.has(id)) ?? [],
@@ -125,6 +125,7 @@ export function weeklyActionText(action: WeeklyAction, es = false): string {
   return ({ lineup: `Review ${action.count} lineup issue${action.count === 1 ? '' : 's'}`, monitor: `Monitor ${action.count} questionable starter${action.count === 1 ? '' : 's'}`, sync: 'Refresh your team data', playoff: `Explore period ${action.count} playoff scenarios`, review: 'Review your team and its rules' })[action.kind]
 }
 export function weeklyActionReason(action: WeeklyAction, es = false): string {
+  if(action.kind==='lineup' && action.sport && !['NFL','NCAAF'].includes(action.sport)) return es ? 'Los huecos y las ausencias pueden afectar tu resultado; compara opciones elegibles según el formato.' : 'Empty slots and unavailable starters can affect your result; compare eligible options under your scoring format.'
   if(action.kind==='deadline')return es ? 'Hay una fecha confirmada guardada para esta liga. Comprueba las reglas y completa tu decisión antes del plazo.' : 'A confirmed date is stored for this league. Check the rules and complete your decision before the deadline.'
   return es ? ({lineup:'Los huecos, las ausencias o los descansos pueden costarte puntos. Revisa las opciones elegibles.',monitor:'Una designación de duda puede cambiar. Comprueba las noticias antes de decidir.',sync:'Los datos están incompletos o no coinciden con el período. Actualízalos antes de elegir jugadores.',playoff:'Compara los escenarios de victoria y derrota y revisa las reglas del modelo.',review:'Revisa los titulares y las reglas de esta liga para preparar tu próxima decisión.'})[action.kind]
     : ({lineup:'Empty slots, absences or byes can cost points. Review eligible options.',monitor:'A questionable designation can change. Check the latest status before deciding.',sync:'Team data is incomplete or differs from the matchup period. Refresh it before choosing players.',playoff:'Compare the win and loss scenarios and review the model’s rules.',review:'Review this league’s starters and rules to prepare your next decision.'})[action.kind]
