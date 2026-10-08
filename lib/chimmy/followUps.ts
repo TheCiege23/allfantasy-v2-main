@@ -44,6 +44,7 @@ const AFTER: Record<string, readonly Suggestion[]> = {
   evaluate_trade: [COUNTER, FIND_TRADE, LINEUP],
   find_trade_ideas: [GRADE_IDEA, LINEUP, PLAYOFFS],
   get_league_trade_activity: [COUNTER, LINEUP, PLAYOFFS],
+  get_league_trade_history: [FIND_TRADE, LINEUP, PLAYOFFS],
   get_player_value: [COUNTER, LINEUP, PLAYOFFS],
   evaluate_waiver_move: [FAAB_PLAN, LINEUP, MATCHUP],
   get_available_players: [FAAB_PLAN, LINEUP, MATCHUP],

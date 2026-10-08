@@ -8,6 +8,13 @@ const h = vi.hoisted(() => ({
   findLeague: vi.fn(),
   tradeBlock: vi.fn(),
   injuries: vi.fn(),
+  tradeHistory: vi.fn(),
+}))
+
+vi.mock('@/lib/chimmy-trade/leagueTradeHistoryGrounding', () => ({
+  buildLeagueTradeHistoryOutcome: h.tradeHistory,
+  TOOL_TRADES_SHOWN: 30,
+  TOOL_TRADE_SCAN_LIMIT: 600,
 }))
 
 vi.mock('@/lib/chimmy/tools/myRosterInjuriesTool', () => ({ buildMyRosterInjuriesContext: h.injuries }))
@@ -108,6 +115,13 @@ describe('tool specs', () => {
        * nothing; the marking itself is the player card's, never the model's.
        */
       'get_trade_block',
+      /*
+       * Completed trades, itemized with both managers. SELECT-only over `LeagueTrade` for the
+       * membership-proven league, plus the FROZEN original grades already in
+       * `trade_analysis_snapshots` — it reads them and never takes one. The model's filters narrow
+       * the read and never name a league.
+       */
+      'get_league_trade_history',
       'get_upcoming_games',
       /*
        * The ONLY tool here that spans every league at once, and the only one
@@ -212,6 +226,53 @@ describe('executeChimmyTool', () => {
     const out = await executeChimmyTool('get_trade_block', {}, { leagueId: null, userId: null })
     expect(out).toMatch(/no league is selected/i)
     expect(h.tradeBlock).not.toHaveBeenCalled()
+  })
+
+  it("reads completed trades of the SESSION league, passing the model's filters through", async () => {
+    h.tradeHistory.mockResolvedValue({ kind: 'ok', text: 'TheCiege24 got [Mike Evans] from Layes23 for [2027 R1].' })
+    const out = await executeChimmyTool(
+      'get_league_trade_history',
+      { leagueId: 'somebody-elses', manager: 'Layes23', season: '2026', player: 'Evans' },
+      CTX,
+    )
+    expect(out).toContain('from Layes23')
+    expect(h.tradeHistory).toHaveBeenCalledWith('l1', 'u1', {
+      season: 2026,
+      manager: 'Layes23',
+      player: 'Evans',
+      maxShown: 30,
+      scanLimit: 600,
+      frozenGrades: true,
+    })
+  })
+
+  /*
+   * The route holds an answer to the letters the tools gave (`tradeGradeCheck.ts`). A frozen original
+   * this tool printed has to reach that list, or quoting it would be refused as an invented grade.
+   */
+  it('hands the frozen letters it prints to the route\'s trade-letter check', async () => {
+    const tradeGrades: { letters: string[]; summary: string }[] = []
+    h.tradeHistory.mockImplementation(async (_l: string, _u: string, q: { onGrade?: (g: { letters: string[]; summary: string }) => void }) => {
+      q.onGrade?.({ letters: ['B', 'D'], summary: 'B for TheCiege24, D for Layes23.' })
+      return { kind: 'ok', text: 'ok' }
+    })
+    await executeChimmyTool('get_league_trade_history', {}, { ...CTX, tradeGrades })
+    expect(tradeGrades).toEqual([{ letters: ['B', 'D'], summary: 'B for TheCiege24, D for Layes23.' }])
+  })
+
+  /* "Only Sleeper syncs trades" must never come back to the reader as "this league never traded". */
+  it('keeps "not synced" and "none on file" from reading as "no trades happened"', async () => {
+    h.tradeHistory.mockResolvedValue({ kind: 'not-sleeper', platform: 'espn' })
+    expect(await executeChimmyTool('get_league_trade_history', {}, CTX)).toMatch(/do NOT say the league has made no trades/)
+
+    h.tradeHistory.mockResolvedValue({ kind: 'no-trade-rows', historyCount: 2 })
+    expect(await executeChimmyTool('get_league_trade_history', {}, CTX)).toMatch(/not that none have happened/)
+  })
+
+  it('refuses trade history with no league in scope', async () => {
+    const out = await executeChimmyTool('get_league_trade_history', {}, { leagueId: null, userId: null })
+    expect(out).toMatch(/no league is selected/i)
+    expect(h.tradeHistory).not.toHaveBeenCalled()
   })
 
   /*
