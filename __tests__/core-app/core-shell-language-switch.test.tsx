@@ -114,10 +114,18 @@ describe('the shell follows en → es → en', () => {
     expect(screen.getByRole('button').textContent).toContain('Sincronizar')
     expect(screen.getByRole('button').getAttribute('title')).toBe('Trae la actividad nueva de tus ligas conectadas')
     cleanup()
-    render(<SyncNowButton variant="panel" eligibleCount={12} />)
-    expect(text()).toContain('¿Ligas desactualizadas?')
-    expect(text()).toContain('tus 12 ligas conectadas')
-    expect(text()).not.toMatch(/Pick up|Leagues out of date|We only read/)
+    render(<SyncNowButton variant="panel" eligibleCount={12} syncAge={{ label: '4m ago', stale: false }} />)
+    expect(text()).toContain('Tus 12 ligas')
+    expect(text()).toContain('Actualizado hace 4 min')
+    // The panel is a status row now: no "out of date?" question, no read-only plumbing (2026-10-08).
+    expect(text()).not.toMatch(/desactualizadas|Pick up|Leagues out of date|We only read|Solo leemos/)
+    cleanup()
+    h.language = 'en'
+    render(<SyncNowButton variant="panel" eligibleCount={1} syncAge={{ label: '3d ago', stale: true }} />)
+    expect(text()).toContain('Your 1 league')
+    expect(text()).toContain('Updated 3d ago')
+    expect(text()).not.toMatch(/out of date/i)
+    expect(document.querySelector('.af-syncnow-panel')?.getAttribute('data-stale')).toBe('true')
   })
 
   it('CoreLeagueContextBar: import chip, sync chip, surface, league type and decision chip', () => {

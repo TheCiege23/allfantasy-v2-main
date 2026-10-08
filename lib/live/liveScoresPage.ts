@@ -22,6 +22,8 @@ import { loadGameHighlights } from '@/lib/live/gameHighlights'
 import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 import { buildLockAlerts, type LiveLockAlert } from '@/lib/live/lockAlerts'
 import { isLiveSport, type LiveSport } from '@/lib/sport-scope'
+import { isTop25Sport, pollIsKnown, rankOf, showCollegeGame, type FollowedTeam, type RankBook } from '@/lib/live/collegeTop25'
+import { readFollowedTeams, readRankBook } from '@/lib/live/collegeTop25Store'
 import {
   basketballPeriodLabel,
   espnScoreboardDatesForWindow,
@@ -118,6 +120,8 @@ export type LiveTeamSide = {
   leaders: LiveGameLeader[]
   /** Basketball: made-attempted and percentage from the field, from three and at the line. */
   shooting: TeamShooting | null
+  /** College only: the Top-25 rank ("#5 Georgia"), or null when unranked or unknown. */
+  rank?: number | null
 }
 
 /** One PASS / RUSH / REC leader, with the feed's own stat line. */
@@ -876,6 +880,45 @@ export async function getLivePageData(opts: {
    *
    * Build rule 6: a zero-count tab stays visible, so every sport is still here.
    */
+  /*
+   * ⚠ COLLEGE TABS SHOW THE TOP 25, PLUS YOUR TEAMS (founder, 2026-10-08) — see collegeTop25.ts.
+   * The rank book and the viewer's followed teams are read once here, from Postgres only.
+   */
+  const top25 = new Map<string, { book: RankBook | null; follows: FollowedTeam[] }>(
+    await Promise.all(
+      LIVE_SPORTS.filter((s) => isTop25Sport(s)).map(async (s) => {
+        const [book, follows] = await Promise.all([
+          readRankBook(s).catch(() => null),
+          readFollowedTeams(opts.userId, s).catch(() => [] as FollowedTeam[]),
+        ])
+        return [s, { book, follows }] as const
+      }),
+    ),
+  )
+  const sideOf = (s: string, teamId: string | null | undefined, abbrev: string, name: string, rowRank: number | null | undefined) => ({
+    teamId: teamId ?? null,
+    abbrev,
+    name,
+    rank: rowRank ?? rankOf(top25.get(s)?.book ?? null, { teamId, abbrev, name }),
+  })
+  const top25Rows = (s: string, rows: LiveScoreRow[], yours: (row: LiveScoreRow) => boolean = () => false) => {
+    const t = top25.get(s)
+    if (!t) return rows
+    const known = pollIsKnown(t.book, rows)
+    return rows.filter((r) =>
+      showCollegeGame(
+        {
+          home: sideOf(s, r.homeTeamId, r.homeTeam, r.homeTeamFull, r.homeRank),
+          away: sideOf(s, r.awayTeamId, r.awayTeam, r.awayTeamFull, r.awayRank),
+          yours: yours(r),
+        },
+        t.book,
+        t.follows,
+        known,
+      ),
+    )
+  }
+
   const perSport = await Promise.all(
     LIVE_SPORTS.map(async (s) => {
       const isActive = s === sport
@@ -933,7 +976,8 @@ export async function getLivePageData(opts: {
   const counts = perSport.map((entry) => ({
     sport: entry.sport,
     label: SPORT_LABELS[entry.sport] ?? entry.sport,
-    slateCount: entry.rows.length,
+    // College tabs count the Top-25 slate they will actually show (games with your players are added below).
+    slateCount: top25Rows(entry.sport, entry.rows).length,
   }))
 
   const active = perSport.find((entry) => entry.sport === sport)
@@ -1025,6 +1069,7 @@ export async function getLivePageData(opts: {
         errors: played ? row.homeErrors ?? null : null,
         leaders: played ? teamLeaders(row.homeTeamLeaders, home) : [],
         shooting: played ? row.homeShooting ?? null : null,
+        ...(isTop25Sport(sport) ? { rank: sideOf(sport, row.homeTeamId, home, row.homeTeamFull, row.homeRank).rank } : {}),
       },
       away: {
         abbrev: away,
@@ -1037,6 +1082,7 @@ export async function getLivePageData(opts: {
         errors: played ? row.awayErrors ?? null : null,
         leaders: played ? teamLeaders(row.awayTeamLeaders, away) : [],
         shooting: played ? row.awayShooting ?? null : null,
+        ...(isTop25Sport(sport) ? { rank: sideOf(sport, row.awayTeamId, away, row.awayTeamFull, row.awayRank).rank } : {}),
       },
       leaders: (row.leaders ?? []).map((l) => {
         const side = sideFor(l.teamId)
@@ -1094,7 +1140,29 @@ export async function getLivePageData(opts: {
    * Build rule 2: sorted strictly by leagues affected, ties broken by closeness
    * (win probability nearest 50/50), never by kickoff time.
    */
-  const visible = scope === 'my' ? games.filter((g) => g.leaguesAffected > 0) : games
+  const scoped = scope === 'my' ? games.filter((g) => g.leaguesAffected > 0) : games
+  /*
+   * Top 25 for the college tabs: a game stays when a side is ranked, a side is a team you follow, or
+   * one of your players is in it. Fails open when no poll is held yet (collegeTop25.ts).
+   */
+  const t25 = top25.get(sport)
+  const visible = t25
+    ? (() => {
+        const known = pollIsKnown(t25.book, rows)
+        return scoped.filter((g) =>
+          showCollegeGame(
+            {
+              home: { abbrev: g.home.abbrev, name: g.home.name, rank: g.home.rank ?? null },
+              away: { abbrev: g.away.abbrev, name: g.away.name, rank: g.away.rank ?? null },
+              yours: g.leaguesAffected > 0,
+            },
+            null,
+            t25.follows,
+            known,
+          ),
+        )
+      })()
+    : scoped
   visible.sort((a, b) => {
     if (b.leaguesAffected !== a.leaguesAffected) return b.leaguesAffected - a.leaguesAffected
     const closeness = (g: LiveGameCard) =>

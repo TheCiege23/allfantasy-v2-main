@@ -1683,6 +1683,8 @@ function Side({
       )}
       <span className="af-live-team-text">
         <span className="af-live-team-name">
+          {/* College Top 25: the poll rank leads the name, the way every scoreboard prints it. */}
+          {side.rank != null ? <span className="af-live-team-rank af-num">{side.rank}</span> : null}
           {side.name}
           {hasBall ? (
             <span className="af-live-possession" role="img" aria-label="has the ball" title="Possession" />

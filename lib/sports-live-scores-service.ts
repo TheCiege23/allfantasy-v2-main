@@ -1,6 +1,8 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { isTop25Sport, top25Rank } from '@/lib/live/collegeTop25'
+import { recordCollegeRanks } from '@/lib/live/collegeTop25Store'
 import { redactSecrets } from '@/lib/security/redactSecrets'
 import { liveTeamAbbreviation } from '@/lib/live/teamAbbreviation'
 import type { LeagueSport } from '@prisma/client'
@@ -218,12 +220,19 @@ export interface LiveScoreRow {
    */
   homeScore: number | null
   homeRecord: string | null
+  /**
+   * College only: the team's Top-25 rank from ESPN's `curatedRank` (1–25), NULL when ESPN says it is
+   * unranked, and absent when the feed said nothing (every non-ESPN source). See lib/live/collegeTop25.
+   */
+  homeRank?: number | null
   awayTeam: string
   awayTeamId?: string | null
   awayTeamFull: string
   awayLogo: string
   awayScore: number | null
   awayRecord: string | null
+  /** As `homeRank`. */
+  awayRank?: number | null
   status: string
   statusDetail: string
   period: number
@@ -402,6 +411,8 @@ export function mapChainScoreToLiveScore(raw: Record<string, unknown>, _sport: L
 
 interface ESPNCompetitor {
   team: { abbreviation: string; displayName: string; logo: string; id: string }
+  /** College scoreboards: the poll rank, `current: 99` when unranked. Dropped until 2026-10-08. */
+  curatedRank?: { current?: number }
   score: string
   homeAway: 'home' | 'away'
   records?: Array<{ summary: string }>
@@ -570,12 +581,14 @@ export async function fetchEspnScoreboard(
         homeLogo: home.team.logo,
         homeScore: parseInt(home.score, 10) || 0,
         homeRecord: home.records?.[0]?.summary ?? null,
+        ...(isTop25Sport(sport) && home.curatedRank ? { homeRank: top25Rank(home.curatedRank.current) } : {}),
         awayTeam: abbrev(away.team.abbreviation),
         awayTeamId: away.team.id,
         awayTeamFull: away.team.displayName,
         awayLogo: away.team.logo,
         awayScore: parseInt(away.score, 10) || 0,
         awayRecord: away.records?.[0]?.summary ?? null,
+        ...(isTop25Sport(sport) && away.curatedRank ? { awayRank: top25Rank(away.curatedRank.current) } : {}),
         status: comp.status.type.name,
         statusDetail: comp.status.type.shortDetail,
         period: comp.status.period,
@@ -1685,6 +1698,8 @@ export async function getLiveScoresForSport(options: {
             : await fetchEspnScoreboard(sport)
       if (rows.length === 0) continue
       await syncLiveScoresToDb(sport, rows, candidate)
+      // The college Top 25 rides along on the same scoreboard — kept for the cached readers.
+      if (isTop25Sport(sport)) await recordCollegeRanks(sport, rows)
       scores = rows
       refreshed = true
       source = candidate

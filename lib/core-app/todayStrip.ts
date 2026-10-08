@@ -1,4 +1,6 @@
 import { normalizeTeamAbbrev, getTeamInfo } from '@/lib/team-abbrev'
+import { isTop25Sport, pollIsKnown, showCollegeGame } from '@/lib/live/collegeTop25'
+import { readFollowedTeams, readRankBook } from '@/lib/live/collegeTop25Store'
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
@@ -376,6 +378,7 @@ function oddsClock(at: Date): string {
 async function resolveNext24(
   leagues: TodayStripLeague[],
   now: Date,
+  userId: string | null = null,
 ): Promise<Next24Row[]> {
   if (leagues.length === 0) return []
 
@@ -385,7 +388,7 @@ async function resolveNext24(
   // The LeagueWaiverSettings read is gone with the waiver rows — see the header.
   // Querying a column we have proven we cannot trust would just invite someone to
   // render it again.
-  const games = await prisma.sportsGame
+  const slate = await prisma.sportsGame
     .findMany({
       where: { sport: { in: sports }, startTime: { gte: now, lte: horizon } },
       orderBy: { startTime: 'asc' },
@@ -393,6 +396,29 @@ async function resolveNext24(
       select: { sport: true, externalId: true, source: true, startTime: true, week: true, homeTeam: true, awayTeam: true },
     })
     .catch(() => [])
+
+  /*
+   * College fixtures: the current Top 25 plus the teams you follow (founder, 2026-10-08) — the same
+   * rule as /core/live, read from the same rank book (lib/live/collegeTop25.ts). A Saturday is 50+
+   * NCAAF games and eight slots; unranked strangers should not take them. Fails open with no poll.
+   */
+  const top25 = new Map(
+    await Promise.all(
+      sports.filter((s) => isTop25Sport(s)).map(async (s) => {
+        const [book, follows] = await Promise.all([
+          readRankBook(s).catch(() => null),
+          readFollowedTeams(userId, s).catch(() => []),
+        ])
+        return [s, { book, follows, known: pollIsKnown(book, []) }] as const
+      }),
+    ),
+  )
+  const games = slate.filter((g) => {
+    const t = top25.get(g.sport.toUpperCase())
+    if (!t) return true
+    const side = (team: string | null) => ({ abbrev: team, name: team, rank: null })
+    return showCollegeGame({ home: side(g.homeTeam), away: side(g.awayTeam) }, t.book, t.follows, t.known)
+  })
 
   const rows: Next24Row[] = []
   /*
@@ -544,7 +570,7 @@ export async function getTodayStrip(
         reason: 'league health could not be read',
       }),
     ),
-    resolveNext24(leagues, now).catch(() => [] as Next24Row[]),
+    resolveNext24(leagues, now, userId).catch(() => [] as Next24Row[]),
   ])
 
   return { record, health, next24 }

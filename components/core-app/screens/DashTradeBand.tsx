@@ -2,6 +2,7 @@ import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-dash-trade.css'
 import type { RecentTrade } from '@/lib/core-app/recentTrades'
 import { DashTradeBandView, type TradeBandCard } from '@/components/core-app/screens/DashTradeBandView'
+import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 
 /**
  * Latest trade activity in your leagues.
@@ -30,11 +31,32 @@ import { DashTradeBandView, type TradeBandCard } from '@/components/core-app/scr
  * the two managers traded the pick, and resolving it would rewrite the deal
  * they actually made.
  *
- * Renders nothing when no trade landed in the last two weeks. A trade from
- * March is not news, and an empty "recent trades" band is furniture.
+ * ⚠ THE HOME SHOWS THE LAST 24 HOURS ONLY (founder, 2026-10-08). The loader reads two weeks so the
+ * quiet row below has something to point at, but on the home a trade from last Tuesday is not news.
+ * Older trades are one tap away on the league's Trades page; when nothing landed in the window, one
+ * quiet row says so and links to where the last one did. Nothing renders at all when the loader's two
+ * weeks held no trade either — an empty band is furniture.
+ *
+ * ⚠ THE "WHY" IS AF PRO'S, AND A LOCKED VIEWER NEVER RECEIVES IT. The letters stay free; the grade
+ * reason is the Trade Center's paid breakdown (`trade_depth`). Stripped here, on the server, so it is
+ * not sitting in the RSC payload behind a CSS lock.
  */
 
 const VISIBLE_ASSETS = 4
+export const TRADE_BAND_WINDOW_MS = 24 * 60 * 60 * 1000
+
+/** The league's Trades tab on /core — where every older trade lives. */
+export function leagueTradesHref(leagueId: string): string {
+  return `/core/trades?league=${encodeURIComponent(leagueId)}`
+}
+
+function inWindow(iso: string, now: Date): boolean {
+  const t = new Date(iso).getTime()
+  if (!Number.isFinite(t)) return false
+  const age = now.getTime() - t
+  // A few minutes of clock skew into the future still counts as "just now".
+  return age <= TRADE_BAND_WINDOW_MS && age >= -5 * 60_000
+}
 
 /**
  * The verdict, in names rather than the engine's A/B.
@@ -84,8 +106,20 @@ function statusLabel(status?: string): string | null {
   } as Record<string, string>)[status] ?? status.replaceAll('_', ' ')
 }
 
-export function DashTradeBand({ trades, now }: { trades: RecentTrade[]; now: Date }) {
+export function DashTradeBand({
+  trades,
+  now,
+  depth = null,
+}: {
+  trades: RecentTrade[]
+  now: Date
+  /** AF Pro's trade depth. Null (unread) locks the "why" line — fail closed, like the Trade Center. */
+  depth?: CoreDepthAccess | null
+}) {
   if (!trades || trades.length === 0) return null
+  const unlocked = depth?.unlocked === true
+  const recent = trades.filter((t) => inWindow(t.acceptedAt, now))
+  const latest = [...trades].sort((a, b) => new Date(b.acceptedAt).getTime() - new Date(a.acceptedAt).getTime())[0]!
 
   /*
    * ⚠ THE WORDS ARE SAID IN THE CLIENT (2026-10-04). This band keeps the decisions — each trade's age
@@ -95,10 +129,16 @@ export function DashTradeBand({ trades, now }: { trades: RecentTrade[]; now: Dat
   return (
     <DashTradeBandView
       visibleAssets={VISIBLE_ASSETS}
-      trades={trades.map((t) => ({
+      why={{ unlocked, upgradePath: depth?.upgradePath ?? '/upgrade?plan=pro', planName: depth?.planName ?? 'AF Pro' }}
+      quiet={
+        recent.length === 0
+          ? { leagueName: latest.leagueName, href: leagueTradesHref(latest.leagueId), ago: agoLabel(latest.acceptedAt, now) }
+          : null
+      }
+      trades={recent.map((t) => ({
         key: `${t.platformLeagueId}:${t.id}`,
         leagueId: t.leagueId,
-        href: `/league/${t.leagueId}?view=trades`,
+        href: leagueTradesHref(t.leagueId),
         leagueName: t.leagueName,
         leagueAvatarUrl: t.leagueAvatarUrl,
         sport: t.sport ?? 'NFL',
@@ -113,8 +153,8 @@ export function DashTradeBand({ trades, now }: { trades: RecentTrade[]; now: Dat
           receivedCount: s.received.length,
           grade: s.grade,
           gradeBasis: s.gradeBasis,
-          gradeReason: s.gradeReason,
-          gradeParts: s.gradeParts ?? null,
+          gradeReason: unlocked ? s.gradeReason : '',
+          gradeParts: unlocked ? s.gradeParts ?? null : null,
         })),
         verdict: verdictOf(t),
         confidence: t.verdict?.confidence ?? 0,

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Dash3ATriageView } from '@/components/core-app/screens/Dash3ATriageView'
+import { Dash3ATriageView, type TriageViewDepthAlert } from '@/components/core-app/screens/Dash3ATriageView'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-dash-triage.css'
 
@@ -61,6 +61,8 @@ export type TriageBookRow = {
   benchIn?: number
   irIn?: number
   taxiIn?: number
+  /** Rostered in a best ball league, where the platform sets the lineup — never "starting". */
+  bestBallIn?: number
   /** What the feed said, e.g. "Ruled out — ankle." Null when none was given. */
   description?: string | null
   /** Market price, or null. Absent means no price on file — never "worthless". */
@@ -84,9 +86,15 @@ export function Dash3ATriage({
   now,
   valueBasis,
   freshness = null,
+  depthAlerts = [],
 }: {
   book: TriageBookRow[] | null
   now: Date
+  /**
+   * Best ball positions where the healthy room has thinned (lib/core-app/bestBallDepth.ts). A best
+   * ball league has no starters to be in doubt, so this is what the panel says about one instead.
+   */
+  depthAlerts?: TriageViewDepthAlert[]
   /** The strip's freshness line — rendered only when the strip itself renders. */
   freshness?: ReactNode
   /**
@@ -106,7 +114,7 @@ export function Dash3ATriage({
    * renders nothing at all, and that is the intended resting state.
    */
   const rows = (book ?? []).filter((p) => p.tone === 'bad' && p.startingIn > 0)
-  if (rows.length === 0) return null
+  if (rows.length === 0 && depthAlerts.length === 0) return null
   const visible = rows.slice(0, 6)
   const overflow = rows.length - visible.length
 
@@ -135,6 +143,7 @@ export function Dash3ATriage({
         benchIn: p.benchIn ?? 0,
         irIn: p.irIn ?? 0,
         taxiIn: p.taxiIn ?? 0,
+        bestBallIn: p.bestBallIn ?? 0,
         value: p.value ? { overallRank: p.value.overallRank, positionRank: p.value.positionRank } : null,
         reportedAgo: p.reportedAgo,
         kickoffMins: kickoffMins(p.nextKickoffAt, now),
@@ -153,6 +162,7 @@ export function Dash3ATriage({
           .map((l) => ({ id: l.id, name: l.name, href: `/core/waivers?league=${encodeURIComponent(l.id)}` })),
       }))}
       overflow={overflow}
+      depthAlerts={depthAlerts.slice(0, 4)}
       valueBasis={valueBasis && rows.some((r) => r.value) ? valueBasis : null}
       freshness={freshness}
     />

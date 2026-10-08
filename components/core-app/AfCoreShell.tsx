@@ -2373,7 +2373,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             where they land, not where they have to go looking.
           */}
           {active === 'home' ? (
-            <SyncNowButton variant="panel" eligibleCount={syncEligibleCount} />
+            <SyncNowButton variant="panel" eligibleCount={syncEligibleCount} syncAge={syncAge} />
           ) : null}
           {/*
             The player card pop-up (design handoff 2026-09-07, STATE 6/7), mounted

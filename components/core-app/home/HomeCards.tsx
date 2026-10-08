@@ -32,6 +32,7 @@ import { DashSinceLastVisit } from '@/components/core-app/screens/DashSinceLastV
 import { DashTradeBand } from '@/components/core-app/screens/DashTradeBand'
 import { DashUserOs } from '@/components/core-app/screens/DashUserOs'
 import type { Dash34Result } from '@/lib/core-app/dash34'
+import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 import type { PortfolioSummaryMeta } from '@/lib/core-app/homePortfolioSummary'
 import { platformCountsOf } from '@/components/core-app/screens/dash3aPortfolio'
 
@@ -100,6 +101,8 @@ export type HomeLoads = {
   plays: Promise<ComponentProps<typeof DashGameDayBand>['plays']>
   regularSeason: Promise<ComponentProps<typeof DashGameDayBand>['regularSeasonUnderway']>
   trades: Promise<ComponentProps<typeof DashTradeBand>['trades']>
+  /** AF Pro's trade depth — gates the band's "why this grade" line. Null when it could not be read. */
+  tradeDepth: Promise<CoreDepthAccess | null>
   brief: Promise<ComponentProps<typeof DashSinceLastVisit>['brief']>
   drafts: Promise<ComponentProps<typeof DashDraftsBand>['data']>
 }
@@ -127,6 +130,7 @@ export function emptyHomeLoads(): HomeLoads {
     plays: none([]) as HomeLoads['plays'],
     regularSeason: none(false),
     trades: none([]) as HomeLoads['trades'],
+    tradeDepth: none(null),
     brief: none(null),
     drafts: none(null),
   }
@@ -294,6 +298,7 @@ async function TriageCard({ dash34, now }: { dash34: HomeLoads['dash34']; now: D
       book={(data.book ?? null) as unknown as TriageBookRow[] | null}
       now={now}
       valueBasis={data.valueBasis ?? null}
+      depthAlerts={data.depthAlerts ?? []}
       freshness={
         <Stamps stamps={[freshnessStamp('Injury feed checked', injuriesAt(data), now, { staleRule: 'injuries', parts: { kind: 'injuries' } })]} />
       }
@@ -301,8 +306,9 @@ async function TriageCard({ dash34, now }: { dash34: HomeLoads['dash34']; now: D
   )
 }
 
-async function TradeBandCard({ trades, now }: { trades: HomeLoads['trades']; now: Date }) {
-  return <><CoreTradeRefresh /><DashTradeBand trades={await trades} now={now} /></>
+async function TradeBandCard({ trades, tradeDepth, now }: { trades: HomeLoads['trades']; tradeDepth: HomeLoads['tradeDepth']; now: Date }) {
+  const [rows, depth] = await Promise.all([trades, tradeDepth.catch(() => null)])
+  return <><CoreTradeRefresh /><DashTradeBand trades={rows} now={now} depth={depth} /></>
 }
 
 async function CarryoverCard({ dash34 }: { dash34: HomeLoads['dash34'] }) {
@@ -497,7 +503,7 @@ export function CoreHomeCards({
     ),
     drafts: card('drafts', <DraftsCard drafts={loads.drafts} now={now} />),
     triage: card('triage', <TriageCard dash34={loads.dash34} now={now} />),
-    'trade-band': card('trade-band', <TradeBandCard trades={loads.trades} now={now} />),
+    'trade-band': card('trade-band', <TradeBandCard trades={loads.trades} tradeDepth={loads.tradeDepth} now={now} />),
     carryover: card('carryover', <CarryoverCard dash34={loads.dash34} />),
     'user-os': card('user-os', <UserOsCard userOs={loads.userOs} />),
     schedule: card('schedule', <ScheduleCard schedule={loads.schedule} syncLabel={syncLabel} />),

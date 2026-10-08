@@ -345,7 +345,7 @@ describe('Latest league trades (home)', () => {
   it('explains a completed trade’s grade once, beside its heading', () => {
     const trade = {
       id: 't1', leagueId: 'l1', leagueName: 'League One', leagueAvatarUrl: null, platformLeagueId: 'p1',
-      acceptedAt: '2026-10-02T12:00:00Z', partial: false, status: 'processed', gradedAt: '2026-10-02T13:00:00Z',
+      acceptedAt: '2026-10-03T09:00:00Z', partial: false, status: 'processed', gradedAt: '2026-10-02T13:00:00Z',
       sides: [
         { rosterId: 1, managerName: 'A', teamName: 'A', avatarUrl: null, received: [], grade: 'B', gradeBasis: 'League', gradeReason: 'got more' },
         { rosterId: 2, managerName: 'B', teamName: 'B', avatarUrl: null, received: [], grade: 'D', gradeBasis: 'League', gradeReason: 'got less' },
@@ -354,6 +354,6 @@ describe('Latest league trades (home)', () => {
     } as unknown as RecentTrade
     const { container } = render(<DashTradeBand trades={[trade]} now={new Date('2026-10-03T12:00:00Z')} />)
     expect(tipFor('completedTradeGrade').closest('.af-trade-head')).not.toBeNull()
-    expect(container.querySelector('.af-trade-kicker')!.textContent).toBe('Latest league trades')
+    expect(container.querySelector('.af-trade-kicker')!.textContent).toBe('Trades')
   })
 })

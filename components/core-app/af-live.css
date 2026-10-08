@@ -2859,3 +2859,11 @@
  .af-live-side .af-live-card:has(.af-live-plays) { max-height:180px; overflow:auto; }
  .af-live-grid { gap:16px; }
 }
+
+/* College Top-25 rank before the team name (2026-10-08). Appended after every @media block on purpose. */
+.af-live-team-rank {
+  margin-right: 4px;
+  font-size: 0.78em;
+  font-weight: 800;
+  color: var(--muted);
+}

@@ -30,6 +30,23 @@ export type TriageViewLeague = {
   bench: string[]
 }
 
+/** One best ball position worth a glance (lib/core-app/bestBallDepth.ts, built in dash34). */
+export type TriageViewDepthAlert = {
+  leagueId: string
+  leagueName: string
+  platform: string
+  href: string
+  waiversHref: string | null
+  position: string
+  rostered: number
+  healthy: number
+  out: number
+  questionable: number
+  needed: number
+  tone: 'bad' | 'warn'
+  flagged: Array<{ name: string; status: string }>
+}
+
 export type TriageViewRow = {
   key: string
   name: string
@@ -48,6 +65,8 @@ export type TriageViewRow = {
   benchIn: number
   irIn: number
   taxiIn: number
+  /** Rostered in a best ball league — the platform sets that lineup. */
+  bestBallIn?: number
   value: { overallRank: number | null; positionRank: number | null } | null
   reportedAgo: string | null
   /** Minutes from the server's `now` to his club's next kickoff; null when none is held. */
@@ -84,9 +103,64 @@ function slotSummary(p: TriageViewRow, es: boolean): string {
     p.benchIn > 0 ? (es ? `en la banca en ${p.benchIn}` : `benched in ${p.benchIn}`) : null,
     p.irIn > 0 ? (es ? `en IR en ${p.irIn}` : `on IR in ${p.irIn}`) : null,
     p.taxiIn > 0 ? (es ? `en el taxi en ${p.taxiIn}` : `on taxi in ${p.taxiIn}`) : null,
+    (p.bestBallIn ?? 0) > 0 ? (es ? `best ball en ${p.bestBallIn}` : `best ball in ${p.bestBallIn}`) : null,
   ]
     .filter(Boolean)
     .join(', ')
+}
+
+/** "1 healthy of 3 · 1 out · 1 questionable" — the room in one line. */
+function depthLine(a: TriageViewDepthAlert, es: boolean): string {
+  return [
+    es ? `${a.healthy} sano${a.healthy === 1 ? '' : 's'} de ${a.rostered}` : `${a.healthy} healthy of ${a.rostered}`,
+    a.out > 0 ? (es ? `${a.out} fuera` : `${a.out} out`) : null,
+    a.questionable > 0 ? (es ? `${a.questionable} en duda` : `${a.questionable} questionable`) : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+}
+
+function DepthChecks({ alerts, es, language }: { alerts: TriageViewDepthAlert[]; es: boolean; language: string }) {
+  return (
+    <div className="af-depth">
+      <h3 className="af-depth-title">{es ? 'Profundidad en best ball' : 'Best ball depth check'}</h3>
+      <p className="af-depth-sub">
+        {es
+          ? 'Best ball arma tu alineación solo; esto marca posiciones donde casi no quedan sanos.'
+          : 'Best ball sets your lineup for you — these are the spots running out of healthy bodies.'}
+      </p>
+      <ul className="af-depth-list">
+        {alerts.map((a) => (
+          <li key={`${a.leagueId}:${a.position}`} className="af-depth-card" data-tone={a.tone}>
+            <span className="af-depth-pos" data-tone={a.tone} aria-hidden>
+              {a.position}
+            </span>
+            <div className="af-depth-main">
+              <div className="af-depth-line1">
+                <Link href={a.href} className="af-depth-league">
+                  <span className="af-triage-league-platform">{a.platform.toUpperCase()}</span>
+                  {a.leagueName}
+                </Link>
+              </div>
+              <div className="af-depth-count af-num">{depthLine(a, es)}</div>
+              <div className="af-depth-names">
+                {a.flagged.map((f) => (
+                  <span key={f.name} className="af-depth-name">
+                    {f.name} <em>{coreUiCopy(f.status, language)}</em>
+                  </span>
+                ))}
+              </div>
+            </div>
+            {a.waiversHref ? (
+              <Link className="af-depth-cta" href={a.waiversHref}>
+                {es ? `Buscar ${a.position}` : `Find a ${a.position}`}
+              </Link>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
 }
 
 export function Dash3ATriageView({
@@ -94,26 +168,34 @@ export function Dash3ATriageView({
   overflow,
   valueBasis,
   freshness,
+  depthAlerts = [],
 }: {
   rows: TriageViewRow[]
   overflow: number
+  depthAlerts?: TriageViewDepthAlert[]
   /** Present only when a row carries a price — see the band. */
   valueBasis: { format: string; qbFormat: string } | null
   freshness: ReactNode
 }) {
   const { language } = useOptionalLanguage()
   const es = language === 'es'
-  const title = es ? 'Titulares en duda' : 'Starters in doubt'
+  const hasStarters = rows.length > 0
+  const title = hasStarters
+    ? es ? 'Titulares en duda' : 'Starters in doubt'
+    : es ? 'Revisa tu plantilla' : 'Roster check'
 
   return (
     <section className="af-core af-triage" aria-label={title}>
       <div className="af-triage-head">
         <h2 className="af-triage-title">{title}</h2>
         <TopicTip topic="startersInDoubt" />
-        <span className="af-triage-sub">
-          {es ? 'puede que no jueguen esta semana · los más valiosos primero' : 'may not play this week · most valuable first'}
-        </span>
+        {hasStarters ? (
+          <span className="af-triage-sub">
+            {es ? 'puede que no jueguen esta semana · los más valiosos primero' : 'may not play this week · most valuable first'}
+          </span>
+        ) : null}
       </div>
+      {hasStarters ? (
       <ul className="af-triage-list">
         {rows.map((p) => {
           const kickoff = kickoffLabel(p.kickoffMins, es)
@@ -249,6 +331,8 @@ export function Dash3ATriageView({
           )
         })}
       </ul>
+      ) : null}
+      {depthAlerts.length > 0 ? <DepthChecks alerts={depthAlerts} es={es} language={language} /> : null}
       {overflow > 0 ? (
         <Link className="af-triage-overflow" href="/my-players">
           {es
