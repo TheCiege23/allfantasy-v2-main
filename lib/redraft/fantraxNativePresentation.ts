@@ -69,7 +69,7 @@ export async function loadFantraxNativePresentation(season: { id: string; league
       const rowCount = coverage.reduce((sum,c) => sum + c._count._all,0)
       const starterPoints = coverage.filter(c=>c.isStarter).reduce((sum,c)=>sum+(c._sum.points??0),0)
       const fixture = (s.fantrax_schedule as FantraxScheduleRow[]).find(row=>row.week===data.period && (row.homeTeamId===data.sourceTeamId || row.awayTeamId===data.sourceTeamId))
-      const total = fixture?.homeTeamId===data.sourceTeamId ? fixture.homeScore : fixture?.awayScore
+      const total = fixture ? fixture.homeTeamId===data.sourceTeamId ? fixture.homeScore : fixture.awayScore : null
       if (data.verified === true && Number.isInteger(data.period) && Number.isInteger(data.rosterId) && typeof data.sourceTeamId === 'string' && data.rows > 0 && rowCount===data.rows && total!=null && Math.abs(starterPoints-total)<0.001) sourceActualTeamPeriods.add(`${data.period}:${data.sourceTeamId}`)
     }
   }
