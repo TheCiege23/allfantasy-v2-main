@@ -38,6 +38,7 @@ import { MatchupCenter } from '@/components/decide/MatchupCenter'
 import { WaiverIntel } from '@/components/decide/WaiverIntel'
 import { CommissionerPulse } from '@/components/decide/CommissionerPulse'
 import { ThisWeekStrip } from '@/components/decide/ThisWeekStrip'
+import { pointsAgainstText } from '@/components/decide/pointsAgainst'
 import {
   buildLeagueHomePulse,
   type LeaguePulseViewModel,
@@ -390,7 +391,16 @@ export function DecideHome({
               )}
             </div>
 
-            {/* Recommended moves — Decision OS action queue */}
+            {/*
+             * Recommended moves — Decision OS action queue, ONLY when there are moves.
+             *
+             * 🛑 NO EMPTY CARD HERE. /api/decision-os/manager-intelligence has returned
+             * `recommendations: null` for every user and league since the 2026-09-10 privacy pass
+             * (dcaaa6946 — inferred manager profiles are no longer produced), so the old
+             * "No grounded recommendations yet · waiting on behavior signals" card promised
+             * something that cannot arrive, on every league, forever. The cards stay wired for the
+             * day the route returns real moves again; until then the queue holds what is real.
+             */}
             {recs.status === 'ready' ? (
               recs.recommendations.map((r) => (
                 <div className={`bdx-card c-${recSev(r.priority)}`} key={r.title}>
@@ -418,21 +428,7 @@ export function DecideHome({
                   </div>
                 </div>
               ))
-            ) : (
-              <div className="bdx-empty">
-                <div className="t">{recs.insufficientData?.title ?? t('decide.rec.emptyTitle')}</div>
-                <div className="m">
-                  {recs.insufficientData?.message ?? t('decide.rec.emptyMessage')}
-                </div>
-                {recs.insufficientData?.missing?.length ? (
-                  <div className="missing">
-                    {recs.insufficientData.missing.map((m) => (
-                      <span key={m}>{m}</span>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            )}
+            ) : null}
 
             {/* Trades in flight (waiting on others / commissioner review) */}
             {otherTrades.map((t) => (
@@ -475,7 +471,7 @@ export function DecideHome({
               <div className="bdx-row"><span className="k">{t('decide.team')}</span><span className="x">{myTeam.teamName || '—'}</span></div>
               <div className="bdx-row"><span className="k">{t('decide.record')}</span><span className="x">{record}</span></div>
               <div className="bdx-row"><span className="k">{t('decide.pointsFor')}</span><span className="x">{myTeam.pointsFor.toFixed(1)}</span></div>
-              <div className="bdx-row"><span className="k">{t('decide.pointsAgainst')}</span><span className="x">{myTeam.pointsAgainst.toFixed(1)}</span></div>
+              <div className="bdx-row"><span className="k">{t('decide.pointsAgainst')}</span><span className="x">{pointsAgainstText(myTeam.pointsAgainst)}</span></div>
               <div className="bdx-row"><span className="k">{t('decide.faabLeft')}</span><span className="x">{faab}</span></div>
             </div>
           ) : (
