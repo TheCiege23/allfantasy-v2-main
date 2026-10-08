@@ -188,8 +188,10 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
     const seq = ++seqRef.current
     setRefreshing(true)
     try {
+      // "Show all games" on a college tab is the page's own query (`?t25=off`); every refresh keeps it.
+      const t25 = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('t25') === 'off' ? '&t25=off' : ''
       const res = await fetch(
-        `/api/dashboard/live-scores?view=live&sport=${encodeURIComponent(nextSport)}&scope=${nextScope}`,
+        `/api/dashboard/live-scores?view=live&sport=${encodeURIComponent(nextSport)}&scope=${nextScope}${t25}`,
         {
           cache: 'no-store',
           signal: AbortSignal.timeout(15_000),
@@ -637,6 +639,28 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
             <TopicTip topic="liveGameWinEstimate" />
           </h2>
 
+          {data.top25 && (data.top25.hidden > 0 || data.top25.showingAll) ? (
+            /*
+             * The college Top 25 filter says what it did (2026-10-08). A hidden game must be one tap
+             * away: the rank book only knows teams it has seen, so early in a season a ranked team can
+             * be missing from it.
+             */
+            <p className="af-live-top25-note">
+              {data.top25.showingAll ? (
+                <>
+                  Showing every game.{' '}
+                  <a href={top25Href(data.sport, scope, false)}>Top 25 and your teams only</a>
+                </>
+              ) : (
+                <>
+                  Top 25 and teams you follow · {data.top25.hidden} other{' '}
+                  {data.top25.hidden === 1 ? 'game' : 'games'} hidden.{' '}
+                  <a href={top25Href(data.sport, scope, true)}>Show all games</a>
+                </>
+              )}
+            </p>
+          ) : null}
+
           {visibleGames.length === 0 ? (
             query.trim() ? (
               <div className="af-live-empty">
@@ -651,6 +675,8 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
                 hasRosterData={data.hasRosterData}
                 loadFailed={data.loadFailed}
                 rosterFailed={data.rosterFailed}
+                top25Hidden={data.top25 && !data.top25.showingAll ? data.top25.hidden : 0}
+                showAllHref={top25Href(data.sport, scope, true)}
               />
             )
           ) : (
@@ -1722,6 +1748,14 @@ export function liveViewUrl(current: string, sport: string, scope: 'my' | 'all')
   return `${url.pathname}${url.search}${url.hash}`
 }
 
+/** This slate with the college Top 25 filter on or off — a page load, so the server builds it. */
+export function top25Href(sport: string, scope: 'my' | 'all', showAll: boolean): string {
+  const q = new URLSearchParams({ sport })
+  if (scope === 'all') q.set('scope', 'all')
+  if (showAll) q.set('t25', 'off')
+  return `/core/live?${q.toString()}`
+}
+
 function syncViewToUrl(sport: string, scope: 'my' | 'all') {
   try {
     window.history.replaceState(window.history.state, '', liveViewUrl(window.location.href, sport, scope))
@@ -1754,11 +1788,16 @@ function EmptySlate({
   hasRosterData,
   loadFailed,
   rosterFailed,
+  top25Hidden = 0,
+  showAllHref = null,
 }: {
   scope: 'my' | 'all'
   hasRosterData: boolean
   loadFailed: boolean
   rosterFailed: boolean
+  /** Games the college Top 25 filter hid from this slate — the reason it is empty, when > 0. */
+  top25Hidden?: number
+  showAllHref?: string | null
 }) {
   if (loadFailed) {
     return (
@@ -1781,7 +1820,28 @@ function EmptySlate({
    * field. Below loadFailed because a dead slate is the larger fault; above the
    * normal state because that state asserts something we do not know.
    */
-  if (rosterFailed) {
+  /*
+   * ⚠ THE TOP 25 FILTER EMPTIED IT — SAY THAT, NOT A ROSTER FAULT. On "All games" rosters decide
+   * nothing about what shows, so a roster read that failed is not why the panel is empty; the filter
+   * is. Measured 2026-10-08: an all-unranked Thursday slate read "We could not read your rosters.
+   * Switch to All games" — on the All games tab.
+   */
+  if (top25Hidden > 0 && (scope === 'all' || !rosterFailed)) {
+    return (
+      <div className="af-live-empty">
+        <p className="af-live-empty-title">No Top 25 games on this slate.</p>
+        <p className="af-live-empty-body">
+          {top25Hidden} {top25Hidden === 1 ? 'game' : 'games'} between unranked teams{' '}
+          {top25Hidden === 1 ? 'is' : 'are'} hidden.{' '}
+          {showAllHref ? <a href={showAllHref}>Show all games</a> : null}
+          {' · '}
+          <a href="/settings?tab=notifications">Follow a team</a> to always see its games.
+        </p>
+      </div>
+    )
+  }
+
+  if (rosterFailed && scope === 'my') {
     return (
       <div className="af-live-empty" data-tone="bad">
         <p className="af-live-empty-title">We could not read your rosters.</p>

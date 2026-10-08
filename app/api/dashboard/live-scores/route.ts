@@ -194,6 +194,7 @@ export async function GET(request: NextRequest) {
       userId: session?.user?.id ?? null,
       sport: request.nextUrl.searchParams.get('sport'),
       scope: request.nextUrl.searchParams.get('scope') === 'all' ? 'all' : 'my',
+      top25: request.nextUrl.searchParams.get('t25') === 'off' ? 'off' : 'on',
     })
 
     /*

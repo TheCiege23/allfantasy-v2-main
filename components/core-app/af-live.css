@@ -2867,3 +2867,15 @@
   font-weight: 800;
   color: var(--muted);
 }
+
+/* The college Top 25 filter's note above the slate (2026-10-08). */
+.af-live-top25-note {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.af-live-top25-note a,
+.af-live-empty-body a {
+  color: var(--accent);
+  font-weight: 700;
+}
