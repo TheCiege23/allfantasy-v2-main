@@ -47,6 +47,28 @@ describe('authenticated live rail endpoint', () => {
     expect(data.updates).toEqual({})
     expect(data.unavailable).toEqual(['mine'])
   })
+  /*
+   * Reported from an iPhone 2026-10-08: every league's opponent read "Unknown" with no projection. That is
+   * the importer's placeholder for an open roster slot, which the server-rendered rail already names
+   * "Team N" (rosterLabel) — this refresh replaced that with the raw placeholder seconds after paint.
+   */
+  it("names an open slot by its roster, never by the importer's \"Unknown\"", async () => {
+    h.teams.mockReset()
+    h.teams.mockResolvedValueOnce([{ externalId: '1', league: { id: 'mine', platform: 'sleeper', platformLeagueId: '123456789012345678', guillotineMode: false } }])
+      .mockResolvedValueOnce([
+        { leagueId: 'mine', externalId: '1', teamName: 'Unknown', ownerName: 'allfantasyreview' },
+        { leagueId: 'mine', externalId: '2', teamName: 'Unknown', ownerName: 'Unknown' },
+      ])
+    const data = await (await GET(request('mine'))).json()
+    expect(data.updates.mine).toMatchObject({ yourTeam: 'allfantasyreview', opponentTeam: 'Team 2' })
+  })
+  it('still names an opponent whose team row is missing', async () => {
+    h.teams.mockReset()
+    h.teams.mockResolvedValueOnce([{ externalId: '1', league: { id: 'mine', platform: 'sleeper', platformLeagueId: '123456789012345678', guillotineMode: false } }])
+      .mockResolvedValueOnce([{ leagueId: 'mine', externalId: '1', teamName: 'Home' }])
+    const data = await (await GET(request('mine'))).json()
+    expect(data.updates.mine).toMatchObject({ yourTeam: 'Home', opponentTeam: 'Team 2' })
+  })
   it('reports provider failure instead of inventing zeros', async () => {
     h.feed.mockRejectedValue(new Error('Offline'))
     expect((await GET(request('mine'))).status).toBe(503)
