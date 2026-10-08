@@ -71,7 +71,9 @@ export const SLOW_TIER_EXCLUSIONS = {
     reason:
       'RETIRED -- the 2026 final was 2026-07-19 and .github/workflows/wc-cron.yml already disabled ' +
       'its own schedule at the cutoff. Its provider jobs were removed in July because the ' +
-      'API-Football plan does not cover the 2026 season.',
+      'API-Football plan does not cover the 2026 season. Its cron-schedule.json entry was removed ' +
+      '2026-10-07 to free a slot under the 60-cron ceiling (it never fired: excluded here); this ' +
+      'entry stays so a re-declaration is still classified rather than dispatched.',
   },
 }
 
