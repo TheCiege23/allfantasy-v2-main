@@ -61,10 +61,16 @@ export async function loadFantraxNativePresentation(season: { id: string; league
   const sourceActualTeamPeriods = new Set<string>()
   if (league.platformLeagueId) {
     const keys: string[] = s.fantrax_schedule.flatMap((row: FantraxScheduleRow) => [row.homeTeamId, row.awayTeamId].map(id => `fantrax-actuals-receipt:${league.platformLeagueId}:${season.season}:${row.week}:${id}`))
+    const scoreCoverage = await prisma.leaguePlayerWeeklyScore.groupBy({by:['week','rosterId','isStarter'],where:{leagueId:league.platformLeagueId,seasonYear:season.season,source:'fantrax'},_count:{_all:true},_sum:{points:true}})
     const receipts = await prisma.sportsDataCache.findMany({where:{cacheKey:{in:keys}},select:{data:true}})
     for (const receipt of receipts) {
       const data = record(receipt.data)
-      if (data.verified === true && Number.isInteger(data.period) && typeof data.sourceTeamId === 'string' && data.rows > 0) sourceActualTeamPeriods.add(`${data.period}:${data.sourceTeamId}`)
+      const coverage = scoreCoverage.filter(c => c.week === data.period && c.rosterId === data.rosterId)
+      const rowCount = coverage.reduce((sum,c) => sum + c._count._all,0)
+      const starterPoints = coverage.filter(c=>c.isStarter).reduce((sum,c)=>sum+(c._sum.points??0),0)
+      const fixture = (s.fantrax_schedule as FantraxScheduleRow[]).find(row=>row.week===data.period && (row.homeTeamId===data.sourceTeamId || row.awayTeamId===data.sourceTeamId))
+      const total = fixture?.homeTeamId===data.sourceTeamId ? fixture.homeScore : fixture?.awayScore
+      if (data.verified === true && Number.isInteger(data.period) && Number.isInteger(data.rosterId) && typeof data.sourceTeamId === 'string' && data.rows > 0 && rowCount===data.rows && total!=null && Math.abs(starterPoints-total)<0.001) sourceActualTeamPeriods.add(`${data.period}:${data.sourceTeamId}`)
     }
   }
   return projectFantraxHistory({ seasonId: season.id, leagueId: season.leagueId, info: { scoringPeriods, playoffs: s.fantrax_playoffs }, rows: s.fantrax_schedule, teamIds: record(s.fantrax_native_team_ids), rosters, sourceActualTeamPeriods, now })
