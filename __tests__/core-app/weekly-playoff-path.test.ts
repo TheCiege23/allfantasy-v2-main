@@ -38,3 +38,5 @@ describe('weekly playoff snapshots',()=>{
     expect(h.write).not.toHaveBeenCalled()
   })
 })
+
+it('stores comparable inputs with a current-period model and retains legacy points',async()=>{h.read.mockResolvedValue([{data:point(3,5)}]);const model={...league,weeksRemaining:8,you:{...league.you!,wins:2,losses:2,ties:0,seed:6,pointsFor:400,weeklyMean:100}};const out=await readWeeklyPlayoffPath('u',model,null,2026,4);expect(out.points[0].inputs).toBeUndefined();expect(out.points[1].inputs).toEqual({wins:2,losses:2,ties:0,seed:6,pointsFor:400,weeksRemaining:8,weeklyMean:100});expect(h.write.mock.calls[0][0].create.data.inputs).toEqual(out.points[1].inputs)})

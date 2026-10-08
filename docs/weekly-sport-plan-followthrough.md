@@ -2,6 +2,7 @@
 
 ## Changes
 - Reads the full roster inventory, scopes by exact league, excludes archived and automatic lineups.
+- Promotes confirmed lineup, waiver and trade deadlines; game times never become inferred locks.
 - Adds stored lineup counts and up to three unstarted flagged starters to the top weekly decisions.
 - Adds NFL, NCAAF, NBA, NCAAB, NHL, MLB and soccer preparation guidance and league links. Guidance is advisory, not a computed schedule-volume or category projection.
 - Keeps points/category/roto and basketball Game Pick/Lock-In format verification explicit.
@@ -18,7 +19,7 @@ https://ca.help.yahoo.com/kb/fantasy-basketball/standard-leagues-sln6868.html
 These differences require verified league settings before schedule volume, category outcomes or playoff eligibility are inferred.
 
 ## Verification
-75 focused tests passed (51 pure/server, 24 DOM). Four synthetic device fixtures passed including movement input comparison, sport guidance, saved task status, seven caption copies, calendar payload, exact-league draft handoffs and no horizontal overflow. Canvas card preview visually reviewed.
+77 focused tests passed (53 pure/server, 24 DOM). Four synthetic device fixtures passed including movement input comparison, sport guidance, saved task status, seven caption copies, calendar payload, exact-league draft handoffs and no horizontal overflow. Canvas card preview visually reviewed.
 No production messages, social posts, polls or arbitrary tasks were created.
 
 ## Limits
