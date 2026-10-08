@@ -26,15 +26,22 @@ export async function reconcileFantraxActuals(leagueId: string, info: FantraxLea
     const stats=await prisma.playerGameStat.findMany({where:{sportType:'NCAAF',season:league.season,playerId:{in:bridge.cfbdIds},gameDate:{gte:new Date(period.startDate.slice(0,10)),lte:new Date(period.endDate.slice(0,10))}},select:{playerId:true,gameId:true,normalizedStatMap:true,source:true},take:10001})
     if(stats.length>10000)throw new Error('Fantrax stat comparison exceeds tick budget')
     const calculated=new Map<string,number>()
+    const gapReason=new Map(ids.map(id=>[id,'identity_unresolved']))
     for(const id of bridge.cfbdIds) {
       const rosterId=bridge.rosterIdFor(id), rows=stats.filter(p=>p.playerId===id)
-      if(!rosterId || !rows.length)continue // Unknown stats and byes remain explicit coverage gaps.
+      if(!rosterId)continue
+      gapReason.set(rosterId,'provider_game_rows_missing')
+      if(!rows.length)continue // Unknown stats and byes remain explicit coverage gaps.
       const identity=identities.find(p=>p.fantraxId===rosterId)
+      gapReason.set(rosterId,'identity_position_missing')
       if(!identity?.position)continue
-      const normalized=aggregateNcaafWeek(rows.map(p=>p.normalizedStatMap)).stats
+      const aggregate=aggregateNcaafWeek(rows.map(p=>p.normalizedStatMap))
+      gapReason.set(rosterId,aggregate.unmappedKeys.length?'unmapped_provider_stats':'provider_appearance_unverified')
+      if(aggregate.unmappedKeys.length || !aggregate.gamesCounted)continue
+      const normalized=aggregate.stats
       calculated.set(rosterId,scoreStatsWithCategories(rules.categories,{...normalized,te_premium:identity.position==='TE'?(normalized.rec??0):0},rules.overrides))
     }
-    const rows=compareFantraxActuals(actuals.map(p=>({...p,name:identities.find(i=>i.fantraxId===p.playerId)?.canonicalName??p.playerId})),calculated)
+    const rows=compareFantraxActuals(actuals.map(p=>({...p,name:identities.find(i=>i.fantraxId===p.playerId)?.canonicalName??p.playerId})),calculated).map(row=>({...row,coverageGap:row.status==='missing_calculation'?gapReason.get(row.playerId)??'calculation_unavailable':null}))
     compared+=rows.filter(p=>p.status!=='missing_calculation').length
     discrepancies+=rows.filter(p=>p.status==='discrepancy').length
     gaps+=rows.filter(p=>p.status==='missing_calculation').length

@@ -68,7 +68,7 @@ async function main() {
     }
     for(const entry of manifest.exports) {
       const key=`fantrax-actuals-receipt:${league.platformLeagueId}:${manifest.season}:${entry.period}:${entry.sourceTeamId}`
-      const data={importedAt:new Date().toISOString(),period:entry.period,sourceTeamId:entry.sourceTeamId,sha256:planned.find(p=>p.week===entry.period&&p.sourceTeamId===entry.sourceTeamId)!.sha256,rows:planned.filter(p=>p.week===entry.period&&p.sourceTeamId===entry.sourceTeamId).length,transport:'operator-csv',verified:true}
+      const data={importedAt:new Date().toISOString(),period:entry.period,sourceTeamId:entry.sourceTeamId,rosterId:planned.find(p=>p.week===entry.period&&p.sourceTeamId===entry.sourceTeamId)!.rosterId,sha256:planned.find(p=>p.week===entry.period&&p.sourceTeamId===entry.sourceTeamId)!.sha256,rows:planned.filter(p=>p.week===entry.period&&p.sourceTeamId===entry.sourceTeamId).length,transport:'operator-csv',verified:true}
       await tx.sportsDataCache.upsert({where:{cacheKey:key},create:{cacheKey:key,data,expiresAt:new Date(Date.now()+365*86400000)},update:{data,expiresAt:new Date(Date.now()+365*86400000)}})
     }
   },{timeout:120000})
