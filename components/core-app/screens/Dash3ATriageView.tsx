@@ -185,7 +185,7 @@ export function Dash3ATriageView({
     : es ? 'Revisa tu plantilla' : 'Roster check'
 
   return (
-    <section className="af-core af-triage" aria-label={title}>
+    <section id="af-home-triage" className="af-core af-triage" aria-label={title}>
       <div className="af-triage-head">
         <h2 className="af-triage-title">{title}</h2>
         <TopicTip topic="startersInDoubt" />
