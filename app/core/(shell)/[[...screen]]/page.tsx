@@ -3061,6 +3061,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           userId,
           sport: typeof sp.sport === 'string' ? sp.sport : liveDefaultSport,
           scope: sp.scope === 'all' ? 'all' : 'my',
+          top25: sp.t25 === 'off' ? 'off' : 'on',
         }).catch((err) => {
           /*
            * ⚠ LOG IT. A bare `.catch(() => null)` here is what made the

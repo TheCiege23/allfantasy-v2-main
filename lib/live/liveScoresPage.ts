@@ -304,6 +304,11 @@ export type LivePageData = {
    * not know.
    */
   rosterFailed: boolean
+  /**
+   * College tabs only (NCAAF/NCAAB): the Top 25 filter's effect on this slate, so the view can say
+   * what it hid and offer to show everything. Null on every other tab.
+   */
+  top25: { hidden: number; showingAll: boolean } | null
 }
 
 /** A rostered player of yours, resolved to a real-world team. */
@@ -860,6 +865,12 @@ export async function getLivePageData(opts: {
   userId: string | null
   sport?: string | null
   scope?: 'my' | 'all'
+  /**
+   * 'off' shows every college game (the view's "Show all games" link, `?t25=off`). Needed because the
+   * rank book only knows teams it has SEEN on a fetched scoreboard: early in a season, or before a
+   * Saturday slate is fetched, a ranked team can be missing from it — and its game would be hidden.
+   */
+  top25?: 'on' | 'off'
 }): Promise<LivePageData> {
   const requested = String(opts.sport ?? 'NFL').toUpperCase()
   const sport: LiveSport = isLiveSport(requested) ? requested : 'NFL'
@@ -1145,7 +1156,7 @@ export async function getLivePageData(opts: {
    * Top 25 for the college tabs: a game stays when a side is ranked, a side is a team you follow, or
    * one of your players is in it. Fails open when no poll is held yet (collegeTop25.ts).
    */
-  const t25 = top25.get(sport)
+  const t25 = opts.top25 === 'off' ? undefined : top25.get(sport)
   const visible = t25
     ? (() => {
         const known = pollIsKnown(t25.book, rows)
@@ -1198,6 +1209,9 @@ export async function getLivePageData(opts: {
     fetchedAt: active?.fetchedAt ?? null,
     hasRosterData,
     loadFailed: active?.failed ?? false,
+    top25: isTop25Sport(sport)
+      ? { hidden: Math.max(0, scoped.length - visible.length), showingAll: opts.top25 === 'off' }
+      : null,
     rosterFailed,
   }
 }

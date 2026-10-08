@@ -143,8 +143,15 @@ export function showCollegeGame(
   return false
 }
 
-/** Whether a poll is in hand: the book has teams, or a row carries an explicit rank. */
+/**
+ * Whether a poll is in hand: the book has teams, or a row carries rank information at all.
+ *
+ * ⚠ `null` IS INFORMATION, `undefined` IS NOT. A row from ESPN's college scoreboard says `null` for a
+ * team it reports as unranked (curatedRank 99); a row from any other feed has no rank field. This
+ * tested `typeof === 'number'`, so a slate of nothing but unranked teams — a Thursday — read as "no
+ * poll" and was shown unfiltered (measured live 2026-10-08: four unranked games through the filter).
+ */
 export function pollIsKnown(book: RankBook | null, rows: Array<{ homeRank?: number | null; awayRank?: number | null }>): boolean {
   if (book && Object.keys(book.teams).length > 0) return true
-  return rows.some((r) => typeof r.homeRank === 'number' || typeof r.awayRank === 'number')
+  return rows.some((r) => r.homeRank !== undefined || r.awayRank !== undefined)
 }
