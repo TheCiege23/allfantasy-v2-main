@@ -659,14 +659,17 @@ export function ChimmyPanel({
    * message to insert our own is the one way this could cost someone anything.
    */
   const appliedDraftRequest = useRef<string | null>(null)
+  const [pendingScreenQuestion, setPendingScreenQuestion] = useState<{scopeKey:string;userId?:string;text:string}|null>(null)
   useEffect(() => {
-    if (!initialDraft || !conversationReady) return
+    if (!initialDraft) { setPendingScreenQuestion(null); return }
+    if (!conversationReady) return
     if (initialDraftScopeId !== undefined && initialDraftScopeId !== scopeId) return
-    const request = JSON.stringify([userId, draftRequestKey, initialDraftScopeId, initialDraft])
+    const request = JSON.stringify([userId, threadKey(scopeId), draftRequestKey, initialDraftScopeId, initialDraft])
     if (appliedDraftRequest.current === request) return
     appliedDraftRequest.current = request
-    setDraft((d) => (d.trim() ? d : initialDraft))
-  }, [initialDraft, initialDraftScopeId, draftRequestKey, scopeId, userId, conversationReady, setDraft])
+    if (draft.trim() && draft !== initialDraft) setPendingScreenQuestion({scopeKey:threadKey(scopeId),userId,text:initialDraft})
+    else { setPendingScreenQuestion(null); setDraft(initialDraft) }
+  }, [initialDraft, initialDraftScopeId, draftRequestKey, scopeId, userId, conversationReady, draft, setDraft, threadKey])
 
   const send = useCallback(
     async (text: string) => {
@@ -1370,6 +1373,18 @@ export function ChimmyPanel({
           </button>
         </div>
       ) : null}
+      {pendingScreenQuestion && pendingScreenQuestion.scopeKey === threadKey(scopeId) && pendingScreenQuestion.userId === userId && (
+        <aside className="af-cm-hint" role="status" aria-label="Suggested question">
+          <p>Your unsent message is preserved. This screen also supplied a question:</p>
+          <p>{pendingScreenQuestion.text}</p>
+          <button type="button" className="af-cm-quickbtn" disabled={busy} onClick={() => {
+            const question = pendingScreenQuestion.text
+            setDraft(current => current.trim() ? current.trimEnd() + '\n\n' + question : question)
+            setPendingScreenQuestion(null)
+          }}>Add suggested question</button>
+          <button type="button" className="af-cm-quickbtn" onClick={() => setPendingScreenQuestion(null)}>Keep current message</button>
+        </aside>
+      )}
       <form
         className="af-cm-composer"
         onSubmit={(e) => {

@@ -402,6 +402,14 @@ const ALLOWED_PATH_PATTERNS = [
    */
   /^scripts\/deploy-verify-wait\.mjs$/,
   /^lib\/.*(ingest|ingestion|sync)/i,
+  // Explicit commissioner-triggered ingestion only: this builder supplies the
+  // verified download contract to the browser connector; it is not a scoreboard
+  // read path. The extension downloader feeds verified CSVs into Postgres through
+  // the owned-league import API. These two fixture tests assert request shapes
+  // and use mocked fetches, never live provider calls. Keep exemptions exact.
+  /^lib\/import-os\/collector\/fantraxBrowserContext\.ts$/,
+  /^tools\/fantrax-browser-connector\/download\.js$/,
+  /^__tests__\/fantrax-browser-(context|download)\.test\.ts$/,
   /^app\/api\/sports\/news\/sync-helper\.(ts|tsx|js|jsx|mjs|cjs)$/i,
   /^app\/api\/cron\//i,
   /*

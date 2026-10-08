@@ -225,6 +225,33 @@ describe('the lineup tile only takes a row the My Team board would vouch for', (
   })
 })
 
+describe('🛑 the Decide home lays out by its OWN width', () => {
+  /*
+   * Measured on the live page (2026-10-07): the desktop league page is three columns, so the deck is
+   * ~370px wide at 1280 and ~590px at 1920 and the 960px viewport rules never fire. The KPI row
+   * needed 420px in 320 and Matchup Center's inline `1fr 1fr` (which out-ranked every collapse) made
+   * the page scroll sideways at 375. jsdom does no layout, so this pins the mechanism in the source.
+   */
+  const read = async (p: string) => {
+    const { readFileSync } = await import('node:fs')
+    const { resolve } = await import('node:path')
+    return readFileSync(resolve(__dirname, '..', p), 'utf8').replace(/\r\n/g, '\n')
+  }
+  it('the root is a named inline-size container, and the narrow-deck rules are container queries', async () => {
+    const css = await read('components/decide/broadcast-deck.css')
+    expect(css).toMatch(/\.bdx\.bdx-home\s*\{\s*container:\s*bdx-home\s*\/\s*inline-size;\s*\}/)
+    expect(css).toMatch(/@container bdx-home \(max-width: 480px\) \{\s*\.bdx \.bdx-kpis \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\); \}/)
+    expect(css).toMatch(/@container bdx-home \(max-width: 560px\) \{\s*\.bdx \.bdx-week-grid \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/)
+    expect(css).toMatch(/@container bdx-home \(max-width: 720px\) \{\s*\.bdx \.bdx-support\.bdx-support--pair \{ grid-template-columns: minmax\(0, 1fr\); \}/)
+    expect(await read('components/decide/DecideHome.tsx')).toContain('<div className="bdx bdx-home" data-testid="decide-home">')
+  })
+  it('Matchup Center pairs use the class, never an inline grid that out-ranks the collapse', async () => {
+    const src = await read('components/decide/MatchupCenter.tsx')
+    expect(src).toContain('className="bdx-support bdx-support--pair"')
+    expect(src).not.toMatch(/gridTemplateColumns/)
+  })
+})
+
 describe('countdown', () => {
   it('is coarse, and never negative', () => {
     expect(countdown(12 * 60_000)).toBe('12m')
