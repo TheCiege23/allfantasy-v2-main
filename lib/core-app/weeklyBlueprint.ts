@@ -1,3 +1,4 @@
+import type { WeeklyScheduleForecast } from './weeklyScheduleForecast'
 import type { MyTeamPulse } from './myTeamPulse'
 import type { WeekBoard, WeekMatchup } from './weekBoard'
 import type { SeasonOutlook, SwingMatchup } from './seasonOutlook'
@@ -15,6 +16,7 @@ export type WeeklyBlueprint = {
   matchup?: { opponent: string; period: number; leagueName: string; leagueId?: string; season?: number }
   playoff?: { probability: number; leagueName: string; leagueId?: string; season?: number; period?: number }
   rivalry?: { opponent: string; wins: number; losses: number; ties: number; winningStreak: number; losingStreak: number; final: boolean }
+  scheduleForecasts?: WeeklyScheduleForecast[]
   sportPlans?: Array<{ leagueId: string; leagueName: string; sport: string }>
   calendar?: WeeklyCalendar
   commissionerLeagueIds?: string[]

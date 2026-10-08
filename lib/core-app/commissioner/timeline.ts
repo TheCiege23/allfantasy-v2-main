@@ -127,6 +127,8 @@ export type AuditLogRow = {
   actionType: string
   entityType: string
   metadata: unknown
+  beforeState?: unknown
+  afterState?: unknown
   createdAt: Date
   actorName: string | null
 }
@@ -150,11 +152,16 @@ const ACTION_WORDING: Record<string, string> = {
   trade_reversal_out: 'Reversed a trade',
   post_recap: 'Posted a recap',
   season_snapshot_created: 'Saved a season snapshot',
+  'workspace.weekly_task_created': 'Saved a reviewed weekly task',
+  'workspace.task_status_changed': 'Changed task status',
 }
 
 export function fromAuditLog(r: AuditLogRow): TimelineEntry {
   const isSettings = r.actionType === 'settings_patch'
   const meta = r.metadata && typeof r.metadata === 'object' ? (r.metadata as Record<string, unknown>) : {}
+  const obj=(value:unknown):Record<string,unknown>=>value&&typeof value==='object'&&!Array.isArray(value)?value as Record<string,unknown>:{}
+  const before=obj(r.beforeState),after=obj(r.afterState)
+  const weeklyDetail=r.actionType==='workspace.weekly_task_created' && typeof after.title==='string' ? clip(after.title) : r.actionType==='workspace.task_status_changed' && typeof before.status==='string' && typeof after.status==='string' ? [typeof after.title==='string'?clip(after.title):null,humanize(before.status)+' → '+humanize(after.status)].filter(Boolean).join(' · ') : null
   const fields = Array.isArray(meta.updatedFields)
     ? meta.updatedFields.filter((f): f is string => typeof f === 'string')
     : []
@@ -163,12 +170,12 @@ export function fromAuditLog(r: AuditLogRow): TimelineEntry {
     kind: isSettings ? 'rules' : 'commissioner',
     at: r.createdAt.toISOString(),
     title: ACTION_WORDING[r.actionType] ?? humanize(r.actionType),
-    detail:
+    detail: weeklyDetail ?? (
       isSettings && fields.length > 0
         ? `Updated ${fields.slice(0, 5).map(humanize).join(', ')}${fields.length > 5 ? ` and ${fields.length - 5} more` : ''}.`
         : isSettings
           ? null
-          : humanize(r.entityType),
+          : humanize(r.entityType)),
     actor: r.actorName,
     tone: 'neutral',
   }

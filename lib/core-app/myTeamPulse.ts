@@ -115,7 +115,7 @@ export type MyTeamRow = {
   coverageReason?: string | null
   automatic?: boolean
   readAt?: string | null
-  players?: Array<{ id: string; name: string; status: string | null; kickoff: string | null; onBye: boolean; starter: boolean; opponents: number }>
+  players?: Array<{ id: string; name: string; team?: string | null; position?: string | null; status: string | null; kickoff: string | null; onBye: boolean; starter: boolean; opponents: number }>
   leagueId: string
   leagueName: string
   platform: string
@@ -551,13 +551,14 @@ async function loadMyTeamPulse(
   const players = await timing.read('players', () => prisma.sportsPlayer
     .findMany({
       where: { sleeperId: { in: everyStarter } },
-      select: { sleeperId: true, name: true, team: true, sport: true },
+      select: { sleeperId: true, name: true, team: true, sport: true, position: true, expiresAt: true },
+      orderBy: { fetchedAt: 'desc' },
     }))
 
-  const playerBy = new Map<string, { name: string; team: string | null }>()
+  const playerBy = new Map<string, { name: string; team: string | null; forecastTeam: string | null; position: string | null }>()
   for (const p of players) {
     if (!p.sleeperId || playerBy.has(`${p.sport ?? 'NFL'}:${p.sleeperId}`)) continue
-    playerBy.set(`${p.sport ?? 'NFL'}:${p.sleeperId}`, { name: p.name, team: p.team })
+    playerBy.set(`${p.sport ?? 'NFL'}:${p.sleeperId}`, { name: p.name, team: p.team, forecastTeam: p.expiresAt > now ? p.team : null, position: p.position })
   }
 
   const sports = [...new Set(pending.map((p) => p.sport))]
@@ -710,7 +711,7 @@ async function loadMyTeamPulse(
         const player = playerBy.get(`${p.sport}:${id}`)
         if (!player) return []
         const club = normalizeTeamAbbrev(player.team)
-        return [{ id, name: player.name, status: archived ? null : injuryByName.get(`${p.sport}:${injuryNameKey(player.name)}`)?.find(injury => !club || !injury.team || normalizeTeamAbbrev(injury.team) === club)?.status ?? null, kickoff: archived ? null : (club ? kickoffs.get(club) : null)?.toISOString() ?? null, onBye: archived ? false : byeIds?.has(id) ?? false, starter: p.ids.includes(id), opponents: 0 }]
+        return [{ id, name: player.name, team: player.forecastTeam, position: player.position, status: archived ? null : injuryByName.get(`${p.sport}:${injuryNameKey(player.name)}`)?.find(injury => !club || !injury.team || normalizeTeamAbbrev(injury.team) === club)?.status ?? null, kickoff: archived ? null : (club ? kickoffs.get(club) : null)?.toISOString() ?? null, onBye: archived ? false : byeIds?.has(id) ?? false, starter: p.ids.includes(id), opponents: 0 }]
       }),
       leagueId: p.leagueId,
       leagueName: p.leagueName,
