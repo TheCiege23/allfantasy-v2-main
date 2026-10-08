@@ -3469,3 +3469,38 @@ html[data-mode='light'] .af-core {
  .af-core.af-shell:not([data-rail-open='true']) .af-nav-label { flex-basis:100%; font-size:12px; line-height:1.25; overflow-wrap:anywhere; }
  .af-core.af-shell:not([data-rail-open='true']) .af-nav-heading,.af-core.af-shell:not([data-rail-open='true']) .af-nav-foot .af-import-cta { display:none; }
 }
+
+/*
+ * ── Phone league tray: it must never pan sideways (2026-10-08) ──────────────
+ *
+ * Reported from an iPhone as "stuck, looks half full screen" from both the header switcher and the
+ * handle. Measured at 430px: the foot's three tiles (Create / Import / Profile) are each held at their
+ * nowrap text width, so the row was 466px in a 402px box, and the tray's scrollWidth was 480 against
+ * 430. The tray is `overflow-y: auto`, which makes overflow-x auto too, so iOS panned the whole tray
+ * 50px sideways — the clipped crest and cut-off profile tile in the report — and diagonal swipes went
+ * to that horizontal pan instead of the league list.
+ *
+ * Two halves, both needed: the foot wraps (the profile tile takes its own row) and its tiles may shrink,
+ * so nothing overflows; and the tray clips the x axis anyway, so a future wide child cannot reintroduce
+ * the pan. Its own top-level @media, appended, per this file's convention.
+ */
+@media (max-width: 720px) {
+  .af-core.af-shell .af-rail {
+    overflow-x: hidden;
+    touch-action: pan-y;
+  }
+  .af-core .af-rail-foot {
+    flex-wrap: wrap;
+  }
+  .af-core .af-rail-foot .af-rail-tile {
+    flex: 1 1 140px;
+    min-width: 0;
+  }
+  /* The account avatar is a `width: 100%` img; once the tile may shrink it must not take the row. */
+  .af-core .af-rail-foot .af-rail-profile > .af-rail-tile-img {
+    flex: none;
+    width: 24px;
+    height: 24px;
+    border-radius: 8px;
+  }
+}
