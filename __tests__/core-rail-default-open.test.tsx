@@ -132,6 +132,27 @@ describe('the desktop rail opens without being asked', () => {
     expect(handle?.getAttribute('aria-label')).toBe('Close leagues')
   })
 
+  /* The open tray's header row is its close control at the top: a ✕ that says so, and that closes it. */
+  it('turns the tray header into a close control on mobile, and only while open', () => {
+    setViewport(false)
+    const { container } = render(shell())
+    const toggle = container.querySelector<HTMLButtonElement>('.af-rail-toggle')!
+    expect(toggle.getAttribute('aria-label')).toBeNull()
+    fireEvent.click(container.querySelector<HTMLButtonElement>('.af-rail-handle')!)
+    expect(toggle.getAttribute('aria-label')).toBe('Close leagues')
+    expect(toggle.querySelector('.af-rail-toggle-icon')?.textContent).toBe('✕')
+    fireEvent.click(toggle)
+    expect(railFlag(container)).toBe('false')
+  })
+
+  it('keeps the desktop collapse arrow above 720px', () => {
+    setViewport(true)
+    const { container } = render(shell())
+    const toggle = container.querySelector<HTMLButtonElement>('.af-rail-toggle')!
+    expect(toggle.getAttribute('aria-label')).toBeNull()
+    expect(toggle.querySelector('.af-rail-toggle-icon')?.textContent).toBe('«')
+  })
+
   it('contains phone tray focus, closes with Escape, and restores the page', () => {
     setViewport(false)
     // jsdom has no layout; treat these rendered controls as visible here.
