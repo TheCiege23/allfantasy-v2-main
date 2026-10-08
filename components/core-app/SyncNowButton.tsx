@@ -55,9 +55,16 @@ export type SyncNowButtonProps = {
    * panel says nothing about age rather than inventing one when it is absent.
    */
   syncAge?: { label: string; stale: boolean } | null
+  /**
+   * Every league in the reader's list — the number the rail and the league pager count. The panel's
+   * title says THIS, not `eligibleCount`: titled with the syncable count it read "Your 57 leagues"
+   * over a pager reading "19 / 65" (2026-10-08), because native leagues and a paused connection are
+   * leagues you have but nothing to re-read. `eligibleCount` still decides what the button can do.
+   */
+  totalLeagues?: number | null
 }
 
-export function SyncNowButton({ variant = 'chip', eligibleCount, onlyKey, syncAge = null }: SyncNowButtonProps) {
+export function SyncNowButton({ variant = 'chip', eligibleCount, onlyKey, syncAge = null, totalLeagues = null }: SyncNowButtonProps) {
   const router = useRouter()
   const accountId = useClientSyncAccount()
   const { phase, message, completion } = useSyncExternalStore(subscribeClientSync, getClientSyncSnapshot, getServerSyncSnapshot)
@@ -147,6 +154,7 @@ export function SyncNowButton({ variant = 'chip', eligibleCount, onlyKey, syncAg
       ? es ? 'Aún no se ha sincronizado' : 'Not synced yet'
       : es ? `Actualizado ${ageText(syncAge.label, 'es')}` : `Updated ${syncAge.label}`
   const showStatus = phase === 'busy' || Boolean(message)
+  const titleCount = totalLeagues != null && totalLeagues > 0 ? totalLeagues : eligibleCount
   return (
     <section
       className="af-syncnow-panel"
@@ -156,11 +164,11 @@ export function SyncNowButton({ variant = 'chip', eligibleCount, onlyKey, syncAg
       <span className="af-syncnow-panel-dot" aria-hidden />
       <div className="af-syncnow-panel-text">
         <span className="af-syncnow-panel-title">
-          {nothingToSync
+          {nothingToSync && !totalLeagues
             ? es ? 'Aún no hay ligas' : 'No leagues yet'
             : es
-              ? eligibleCount == null ? 'Tus ligas' : `Tus ${eligibleCount} liga${eligibleCount === 1 ? '' : 's'}`
-              : eligibleCount == null ? 'Your leagues' : `Your ${eligibleCount} league${eligibleCount === 1 ? '' : 's'}`}
+              ? titleCount == null ? 'Tus ligas' : `Tus ${titleCount} liga${titleCount === 1 ? '' : 's'}`
+              : titleCount == null ? 'Your leagues' : `Your ${titleCount} league${titleCount === 1 ? '' : 's'}`}
         </span>
         {nothingToSync ? (
           /*
@@ -168,7 +176,18 @@ export function SyncNowButton({ variant = 'chip', eligibleCount, onlyKey, syncAg
             reason beside it reads as broken, and the person's next move is to press it repeatedly.
           */
           <span className="af-syncnow-panel-sub">
-            {es ? (
+            {totalLeagues ? (
+              /*
+               * Leagues, but none to re-read — native leagues (AllFantasy is their record) or connections
+               * that are paused. Not "import a league": they have leagues. Neutral, because which of
+               * the two it is is not known here.
+               */
+              es ? (
+                'Nada que sincronizar por ahora.'
+              ) : (
+                'Nothing to sync right now.'
+              )
+            ) : es ? (
               <>
                 <a href="/import">Importa una liga</a> para empezar.
               </>

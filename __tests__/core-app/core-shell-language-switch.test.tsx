@@ -126,6 +126,17 @@ describe('the shell follows en → es → en', () => {
     expect(text()).toContain('Updated 3d ago')
     expect(text()).not.toMatch(/out of date/i)
     expect(document.querySelector('.af-syncnow-panel')?.getAttribute('data-stale')).toBe('true')
+    cleanup()
+    // Titled with every league the reader has — the rail's and the pager's count — not the syncable one.
+    render(<SyncNowButton variant="panel" eligibleCount={57} totalLeagues={65} syncAge={{ label: '35m ago', stale: false }} />)
+    expect(text()).toContain('Your 65 leagues')
+    expect(text()).not.toContain('57')
+    cleanup()
+    // Leagues, none to sync (native or paused): no "import a league" told to someone who has leagues.
+    render(<SyncNowButton variant="panel" eligibleCount={0} totalLeagues={7} />)
+    expect(text()).toContain('Your 7 leagues')
+    expect(text()).toContain('Nothing to sync right now.')
+    expect(text()).not.toMatch(/Import a league/)
   })
 
   it('CoreLeagueContextBar: import chip, sync chip, surface, league type and decision chip', () => {

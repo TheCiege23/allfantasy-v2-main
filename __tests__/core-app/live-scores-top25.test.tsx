@@ -65,8 +65,11 @@ describe('college Top 25 on /core/live', () => {
     expect(text).toContain('No Top 25 games on this slate.')
     expect(text).toContain('4 games between unranked teams are hidden.')
     expect(text).not.toContain('We could not read your rosters.')
-    const showAll = [...container.querySelectorAll('a')].find((a) => a.textContent === 'Show all games')
-    expect(showAll?.getAttribute('href')).toBe('/core/live?sport=NCAAF&scope=all&t25=off')
+    const showAll = [...container.querySelectorAll('a')].filter((a) => a.textContent === 'Show all games')
+    // 🛑 Once, not twice: the note above the slate stands down when the empty state already says it.
+    expect(showAll).toHaveLength(1)
+    expect(showAll[0]!.getAttribute('href')).toBe('/core/live?sport=NCAAF&scope=all&t25=off')
+    expect(container.querySelector('.af-live-top25-note')).toBeNull()
   })
 
   it('says how many games it hid above a slate it did not empty, and draws the rank', () => {

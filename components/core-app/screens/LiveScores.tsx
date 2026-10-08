@@ -313,6 +313,18 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
     () => orderedGames.filter((game) => matchesLiveGameQuery(game, query)),
     [orderedGames, query],
   )
+  /*
+   * The college Top 25 filter emptied this slate, so EmptySlate says so and carries its own "Show all
+   * games". The note above the slate stands down then, rather than offering the same link twice
+   * (seen live 2026-10-08). The same conditions EmptySlate uses to pick its Top 25 branch.
+   */
+  const top25Hidden = data.top25 && !data.top25.showingAll ? data.top25.hidden : 0
+  const top25Empty =
+    visibleGames.length === 0 &&
+    !query.trim() &&
+    !data.loadFailed &&
+    top25Hidden > 0 &&
+    (scope === 'all' || !data.rosterFailed)
 
   /*
    * ⚠ REMEMBERED IN AN EFFECT, NOT DURING RENDER. Writing a ref while rendering
@@ -639,7 +651,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
             <TopicTip topic="liveGameWinEstimate" />
           </h2>
 
-          {data.top25 && (data.top25.hidden > 0 || data.top25.showingAll) ? (
+          {data.top25 && (data.top25.hidden > 0 || data.top25.showingAll) && !top25Empty ? (
             /*
              * The college Top 25 filter says what it did (2026-10-08). A hidden game must be one tap
              * away: the rank book only knows teams it has seen, so early in a season a ranked team can
@@ -675,7 +687,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
                 hasRosterData={data.hasRosterData}
                 loadFailed={data.loadFailed}
                 rosterFailed={data.rosterFailed}
-                top25Hidden={data.top25 && !data.top25.showingAll ? data.top25.hidden : 0}
+                top25Hidden={top25Hidden}
                 showAllHref={top25Href(data.sport, scope, true)}
               />
             )
