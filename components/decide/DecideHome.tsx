@@ -275,7 +275,7 @@ export function DecideHome({
   const isLoading = tradesLoading || intelLoading
 
   return (
-    <div className="bdx" data-testid="decide-home">
+    <div className="bdx bdx-home" data-testid="decide-home">
       {/* ── This week: the clocks the week runs on, first because they are the ones that move ── */}
       <ThisWeekStrip leagueId={league.id} currentWeek={league.currentWeek ?? null} onOpenTab={onOpenTab} />
 
