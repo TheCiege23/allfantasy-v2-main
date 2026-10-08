@@ -23,6 +23,7 @@
 
 import * as Sentry from '@sentry/nextjs'
 import { recordBudgetOnActiveSpan } from '@/lib/sports-os/budgetTelemetry'
+import { loopBusyPctSince, markLoop } from '@/lib/observability/loopBusy'
 
 export type CoreCardRead =
   | 'dash34'
@@ -56,9 +57,11 @@ export function traceCard<T>(card: CoreCardRead, load: () => Promise<T>): Promis
   }
   let pending: Promise<T> | undefined
   try {
-    return Sentry.startSpan({ name: card, op: 'core.card', onlyIfParent: true, attributes: { 'af.card': card } }, () => {
+    return Sentry.startSpan({ name: card, op: 'core.card', onlyIfParent: true, attributes: { 'af.card': card } }, (span) => {
       const startedAt = Date.now()
       const clockStart = performance.now()
+      // How busy the thread was while this card waited — see lib/observability/loopBusy.ts.
+      const loopMark = markLoop()
       pending = run()
       /*
        * The card's duration against its declared budget (`lib/sports-os/budgets.ts`), written on
@@ -84,7 +87,9 @@ export function traceCard<T>(card: CoreCardRead, load: () => Promise<T>): Promis
         try {
           recordBudgetOnActiveSpan({ phase: 'card', name: card }, Date.now() - startedAt)
           const durationMs=Math.max(0,Math.round(performance.now()-clockStart))
-          if(durationMs>=2500)console.info('[core-card-timing]',JSON.stringify({card,durationMs}))
+          const busyPct = loopBusyPctSince(loopMark)
+          if (busyPct !== null) span?.setAttribute('af.loop.busy_pct', busyPct)
+          if(durationMs>=2500)console.info('[core-card-timing]',JSON.stringify({card,durationMs,busyPct}))
         } catch {
           // Telemetry must never break a card.
         }

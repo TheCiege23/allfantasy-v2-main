@@ -267,7 +267,8 @@ import CoreScreenSkeleton from '@/components/core-app/CoreScreenSkeleton'
 import { CoreScreenArea } from '@/components/core-app/coreNavPending'
 import CoreScreenErrorBoundary from '@/components/core-app/CoreScreenErrorBoundary'
 import { PublishShellSignals, type ShellUrgencyBadges } from '@/components/core-app/shellSignals'
-import { recordCompletedSpan, recordRootDuration } from '@/lib/observability/rootTiming'
+import { recordCompletedSpan, recordRootDuration, recordRootNumber } from '@/lib/observability/rootTiming'
+import { loopBusyPctSince, markLoop } from '@/lib/observability/loopBusy'
 import { CoreHomeCards, emptyHomeLoads, type HomeLoads } from '@/components/core-app/home/HomeCards'
 import { ConnectLeagueCard } from '@/components/core-app/home/ConnectLeagueCard'
 import { traceCard } from '@/lib/observability/cardTelemetry'
@@ -676,6 +677,8 @@ export default async function AfCorePage({
 
   // `af.shell_ms` on the request's root span measures from here to "the shell has everything".
   const shellStartedAt = Date.now()
+  // And `af.loop.busy_shell_pct`: how busy the thread was over that same window (lib/observability/loopBusy.ts).
+  const shellLoopMark = markLoop()
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string; email?: string | null } } | null
   const userId = session?.user?.id
   if (!userId) {
@@ -1479,6 +1482,7 @@ export default async function AfCorePage({
   }
 
   recordRootDuration('af.shell_ms', shellStartedAt)
+  recordRootNumber('af.loop.busy_shell_pct', loopBusyPctSince(shellLoopMark))
   try{const durationMs=Math.max(0,Date.now()-shellStartedAt);if(durationMs>=2500)console.info('[core-shell-timing]',JSON.stringify({durationMs}))}catch{/* Diagnostics cannot fail the shell. */}
 
   /*

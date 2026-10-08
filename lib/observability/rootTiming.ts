@@ -24,6 +24,20 @@ export function recordRootDuration(attribute: string, startedAtMs: number, nowMs
   }
 }
 
+/** A number stamped on the request's root span as-is; null does nothing. Same guarantees as above. */
+export function recordRootNumber(attribute: string, value: number | null): void {
+  if (value === null || !Number.isFinite(value)) return
+  try {
+    const active = Sentry.getActiveSpan()
+    if (!active) return
+    const root = Sentry.getRootSpan(active)
+    if (!root.isRecording()) return
+    root.setAttributes({ [attribute]: value })
+  } catch {
+    // Telemetry must never fail a render.
+  }
+}
+
 /**
  * Record a phase that has ALREADY FINISHED as its own span, back-dated to when it started.
  *
