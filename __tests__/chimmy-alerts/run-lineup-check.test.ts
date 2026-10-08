@@ -164,6 +164,13 @@ describe('runLineupCheck', () => {
     expect(deps.dispatch).not.toHaveBeenCalled()
   })
 
+  it('🛑 skips an IMPORTED best ball league — the flag lives in settings, not the column (2026-10-08)', async () => {
+    deps.loadAudience = vi.fn(async () => new Map([['u1', [league('BB', { settings: { best_ball: 1 } })]]]))
+    expect(await runLineupCheck({}, deps)).toMatchObject({ outcomes: { no_leagues: 1 } })
+    expect(deps.optimize).not.toHaveBeenCalled()
+    expect(deps.dispatch).not.toHaveBeenCalled()
+  })
+
   it('stays quiet about a lineup that is already right', async () => {
     deps.optimize = vi.fn(async () => ALREADY_RIGHT)
     expect(await runLineupCheck({}, deps)).toMatchObject({ outcomes: { clean: 1 } })
