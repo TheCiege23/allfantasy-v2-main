@@ -5,7 +5,7 @@ import { resolveFantraxSeasonPosition, type FantraxLeagueInfo, type FantraxSched
 
 const record = (v: unknown): Record<string, any> => v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, any> : {}
 const stableJson = (v: any): string => JSON.stringify(v, (_, value) => value && typeof value === 'object' && !Array.isArray(value) ? Object.fromEntries(Object.entries(value).sort(([a],[b]) => a.localeCompare(b))) : value)
-export function projectFantraxHistory(input: { seasonId: string; leagueId: string; info: Pick<FantraxLeagueInfo, 'scoringPeriods' | 'playoffs'>; rows: FantraxScheduleRow[]; teamIds: Record<string, string>; rosters: any[]; now?: Date }) {
+export function projectFantraxHistory(input: { seasonId: string; leagueId: string; info: Pick<FantraxLeagueInfo, 'scoringPeriods' | 'playoffs'>; rows: FantraxScheduleRow[]; teamIds: Record<string, string>; rosters: any[]; sourceActualTeamPeriods?: Set<string>; now?: Date }) {
   const position = resolveFantraxSeasonPosition(input.info as FantraxLeagueInfo, input.now ?? new Date())
   const periods = input.info.scoringPeriods ?? []
   const matchups = input.rows.flatMap(row => {
@@ -14,7 +14,8 @@ export function projectFantraxHistory(input: { seasonId: string; leagueId: strin
     const period = periods.find(p => p.number === row.week)
     const complete = Boolean(period?.endDate && new Date(period.endDate).getTime() < (input.now ?? new Date()).getTime())
     const scored = row.played && row.homeScore != null && row.awayScore != null
-    return [{ id: `fantrax:${input.seasonId}:${row.week}:${row.homeTeamId}`, seasonId: input.seasonId, leagueId: input.leagueId, week: row.week, type: row.isPlayoff ? 'playoff' : 'regular', homeRosterId: home.id, awayRosterId: away.id, homeRoster: home, awayRoster: away, homeScore: scored ? row.homeScore : null, awayScore: scored ? row.awayScore : null, status: scored ? complete ? 'final' : 'live' : 'scheduled', isMedianMatchup: false, source: 'fantrax', readOnly: true, scoringEvidence: { teamScores: 'fantrax', individualSourceScores: 'unavailable', message: 'Fantrax provides team totals for this period; individual source scores are unavailable.' }, periodStart: period?.startDate ?? null, periodEnd: period?.endDate ?? null }]
+    const actualsAvailable = input.sourceActualTeamPeriods?.has(`${row.week}:${row.homeTeamId}`) && input.sourceActualTeamPeriods?.has(`${row.week}:${row.awayTeamId}`)
+    return [{ id: `fantrax:${input.seasonId}:${row.week}:${row.homeTeamId}`, seasonId: input.seasonId, leagueId: input.leagueId, week: row.week, type: row.isPlayoff ? 'playoff' : 'regular', homeRosterId: home.id, awayRosterId: away.id, homeRoster: home, awayRoster: away, homeScore: scored ? row.homeScore : null, awayScore: scored ? row.awayScore : null, status: scored ? complete ? 'final' : 'live' : 'scheduled', isMedianMatchup: false, source: 'fantrax', readOnly: true, scoringEvidence: { teamScores: 'fantrax', individualSourceScores: actualsAvailable ? 'available' : 'unavailable', message: actualsAvailable ? 'Verified Fantrax individual actual points are imported for both teams in this period.' : 'Fantrax provides team totals for this period; individual source scores are unavailable.' }, periodStart: period?.startDate ?? null, periodEnd: period?.endDate ?? null }]
   })
   const firstPlayoffPeriod = input.info.playoffs?.used ? Number(input.info.playoffs.firstPlayoffPeriod) : null
   const playoffStartWeek = firstPlayoffPeriod && Number.isInteger(firstPlayoffPeriod) && firstPlayoffPeriod > 1 ? firstPlayoffPeriod : null
@@ -52,12 +53,21 @@ export async function syncFantraxNativePresentation(leagueId: string, info: Fant
 }
 
 export async function loadFantraxNativePresentation(season: { id: string; leagueId: string; season: number }, now = new Date()) {
-  const league = await prisma.league.findUnique({ where: { id: season.leagueId }, select: { platform: true, sport: true, settings: true, season: true } })
+  const league = await prisma.league.findUnique({ where: { id: season.leagueId }, select: { platform: true, platformLeagueId: true, sport: true, settings: true, season: true } })
   if (league?.platform?.toLowerCase() !== 'fantrax' || !isNcaafSport(String(league.sport)) || league.season !== season.season) return null
   const s = record(league.settings), rosters = await prisma.redraftRoster.findMany({ where: { seasonId: season.id } })
   const scoringPeriods = s.fantrax_scoring_periods ?? s.fantrax_settings?.scoringPeriods
   if (!Array.isArray(s.fantrax_schedule) || !Array.isArray(scoringPeriods)) return null
-  return projectFantraxHistory({ seasonId: season.id, leagueId: season.leagueId, info: { scoringPeriods, playoffs: s.fantrax_playoffs }, rows: s.fantrax_schedule, teamIds: record(s.fantrax_native_team_ids), rosters, now })
+  const sourceActualTeamPeriods = new Set<string>()
+  if (league.platformLeagueId) {
+    const keys: string[] = s.fantrax_schedule.flatMap((row: FantraxScheduleRow) => [row.homeTeamId, row.awayTeamId].map(id => `fantrax-actuals-receipt:${league.platformLeagueId}:${season.season}:${row.week}:${id}`))
+    const receipts = await prisma.sportsDataCache.findMany({where:{cacheKey:{in:keys}},select:{data:true}})
+    for (const receipt of receipts) {
+      const data = record(receipt.data)
+      if (data.verified === true && Number.isInteger(data.period) && typeof data.sourceTeamId === 'string' && data.rows > 0) sourceActualTeamPeriods.add(`${data.period}:${data.sourceTeamId}`)
+    }
+  }
+  return projectFantraxHistory({ seasonId: season.id, leagueId: season.leagueId, info: { scoringPeriods, playoffs: s.fantrax_playoffs }, rows: s.fantrax_schedule, teamIds: record(s.fantrax_native_team_ids), rosters, sourceActualTeamPeriods, now })
 }
 
 /** Standard head-to-head standings from finalized source results, never persisted as native actuals. */
