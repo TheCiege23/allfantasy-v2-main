@@ -52,6 +52,12 @@ vi.mock('@/lib/decision-os/trade/completedTradeGrade', async (importOriginal) =>
   completedTradeGraderFor,
 }))
 
+const { receiptIdForGrade } = vi.hoisted(() => ({ receiptIdForGrade: vi.fn() }))
+vi.mock('@/lib/decision-os/trade/recordTradeGrade', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/decision-os/trade/recordTradeGrade')>()),
+  receiptIdForGrade,
+}))
+
 import { getRecentTrades } from '@/lib/core-app/recentTrades'
 import { gradeTrade } from '@/lib/decision-os/trade/tradeGrade'
 
@@ -98,6 +104,8 @@ function payload(over: Record<string, unknown> = {}) {
 }
 
 beforeEach(() => {
+  receiptIdForGrade.mockReset()
+  receiptIdForGrade.mockResolvedValue(null)
   oneGradeForCompletedTrade.mockReset()
   // Default: no grade on file — a verdict appears only where a test supplies one.
   oneGradeForCompletedTrade.mockResolvedValue({ graded: false, reason: 'not priced in this test', basis: null })
@@ -742,4 +750,36 @@ describe('visible trade grade overlap', () => {
     expect(rows).toHaveLength(9)
     expect(rows[1]!.verdict).toBeNull()
   })
+})
+
+
+it('overlaps visible grades while serializing receipt reuse writes', async () => {
+  const base = payload().data.trades[0]!
+  const template = { ...base, sides: base.sides.map((side, index) => ({
+    ...side, playersOut: base.sides[1 - index]!.playersIn, picksOut: base.sides[1 - index]!.picksIn,
+  })) }
+  cacheFindMany.mockResolvedValue([payload({ trades: Array.from({ length: 4 }, (_, index) => ({
+    ...template, id: `receipt-${index}`, createdIso: new Date(NOW.getTime() - index * 60_000).toISOString(),
+  })) })])
+  oneGradeForCompletedTrade.mockResolvedValue(grade(1000, 1150))
+  let release!: () => void
+  const firstWrite = new Promise<void>(resolve => { release = resolve })
+  let stored = false
+  let writes = 0
+  receiptIdForGrade.mockImplementation(async () => {
+    if (stored) return 'reused-receipt'
+    writes += 1
+    await firstWrite
+    stored = true
+    return 'reused-receipt'
+  })
+  const pending = getRecentTrades(LEAGUES, NOW, 4)
+  await vi.waitFor(() => expect(oneGradeForCompletedTrade).toHaveBeenCalledTimes(4))
+  await vi.waitFor(() => expect(receiptIdForGrade).toHaveBeenCalledTimes(1))
+  expect(writes).toBe(1)
+  release()
+  const rows = await pending
+  expect(receiptIdForGrade).toHaveBeenCalledTimes(4)
+  expect(writes).toBe(1)
+  expect(rows.map(row => row.receiptId)).toEqual(Array(4).fill('reused-receipt'))
 })

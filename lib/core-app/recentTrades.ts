@@ -845,8 +845,15 @@ async function loadRecentTrades(
       [...playerIds].map((playerId) => ({ playerId, sport: 'nfl' })),
     ).catch(() => new Map<string, ResolvedPlayerMedia>()))
   }
-  // Grade only visible trades, in bounded groups. Independent receipts and league
-  // context reads overlap without changing display order or provider scan limits.
+  // Receipt reuse reads before creating. Preserve serialized writes within this
+  // read while independent grades and league context run in bounded groups.
+  let receiptWrites = Promise.resolve()
+  const saveReceipt = (input: Parameters<typeof receiptIdForGrade>[0]) => {
+    const save = receiptWrites.then(() => receiptIdForGrade(input))
+    receiptWrites = save.then(() => undefined, () => undefined)
+    return save
+  }
+  // Grade only visible trades without changing display order or provider scan limits.
   await timing.read('grading', async () => {
     const gradeConcurrency = 4
     for (let start = 0; start < visible.length; start += gradeConcurrency) {
@@ -871,7 +878,7 @@ async function loadRecentTrades(
           try {
             const inputs = completedTradeInputs(src, currentSeason)
             if (inputs) {
-              t.receiptId = await receiptIdForGrade({
+              t.receiptId = await saveReceipt({
                 surface: 'dashboard-trades',
                 leagueId: t.leagueId,
                 userId: live?.viewerUserId ?? null,
