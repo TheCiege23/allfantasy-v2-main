@@ -21,14 +21,14 @@ async function handle(req:Request){
   if(!body||typeof body!=='object'||Array.isArray(body))return NextResponse.json({error:'Invalid task'},{status:400})
   if(req.method==='POST'){
     const task=validateWeeklyTask(body)
-    if(!task)return NextResponse.json({error:'Invalid weekly task'},{status:400})
+    if(!task || (task.issueId && !task.issueId.startsWith(`${leagueId}:`)))return NextResponse.json({error:'Invalid weekly task'},{status:400})
     const saved=await prisma.$transaction(async tx=>{
       if(!await isCommissioner(leagueId,userId,tx))return null
       const sourceKey=`weekly:task:${task.requestId}`
       const created=await tx.commissionerWorkspaceTask.createMany({data:[{
         leagueId,sourceKey,title:task.title,description:task.description,dueAt:task.dueAt,
         priority:'standard',status:'open',automationCandidate:false,
-        relatedLinks:[{label:'Your Week',moduleId:'week',href:`/core/week?league=${encodeURIComponent(leagueId)}`}],
+        relatedLinks:[{label:'Your Week',moduleId:'week',href:`/core/week?league=${encodeURIComponent(leagueId)}${task.issueId ? `#weekly-issue-${encodeURIComponent(task.issueId)}` : ''}`}],
       }],skipDuplicates:true})
       const row=await tx.commissionerWorkspaceTask.findFirst({where:{leagueId,sourceKey}})
       if(created.count&&row)await tx.leagueAuditLog.create({data:{leagueId,userId,actionType:'workspace.weekly_task_created',entityType:'workspace_task',entityId:row.id,afterState:{title:task.title,status:'open'},metadata:{source:'reviewed-weekly-plan'}}})

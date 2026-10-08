@@ -93,3 +93,5 @@ describe('cross-sport closeness', () => {
   })
   it('puts a close deficit ahead of a blowout deficit', () => expect(matchupCloseness({live:{you:90,them:100,margin:-10}})).toBeLessThan(matchupCloseness({live:{you:10,them:100,margin:-90}})))
 })
+
+describe('complete weekly inventory',()=>{it('uses uncapped inventory and skips archived lineups',()=>{const out=buildWeeklyBlueprint({leagues:[{id:'outside',sport:'NHL'},{id:'old',sport:'MLB'}],board,pulse:{needs:[],set:[],inventory:[row('outside',{empty:1,out:0,bye:null,questionable:0}),row('old',{archived:true})]} as unknown as MyTeamPulse,outlook:null,now:new Date('2026-10-07')});expect(out.actions.map(a=>a.leagueId)).toEqual(['outside']);expect(out.actions[0].evidence?.bye).toBeNull();expect(out.sportPlans?.[0].sport).toBe('NHL')})})

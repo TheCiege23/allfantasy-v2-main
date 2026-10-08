@@ -44,3 +44,5 @@ describe('league-scoped weekly tasks', () => {
     expect(m.audit).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('weekly issue traceability',()=>{it('stores an exact-league issue link and rejects foreign issue IDs',async()=>{expect((await POST(req('POST',{...body,issueId:'B:lineup'}))).status).toBe(400);expect(m.create).not.toHaveBeenCalled();expect((await POST(req('POST',{...body,issueId:'A:lineup'}))).status).toBe(200);expect(m.create.mock.calls[0][0].data[0].relatedLinks[0].href).toBe('/core/week?league=A#weekly-issue-A%3Alineup')})})

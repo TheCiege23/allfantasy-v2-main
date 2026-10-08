@@ -5,8 +5,9 @@ import { lineupProjectionFor } from './weekLineups'
 import type { WeekLineups } from './weekLineups'
 import { formatPct1 } from './weeklyPercent'
 import type { WeeklyCalendar } from './weeklyCalendar'
+import { isAtRisk,isRuledOut } from './injuryStatus'
 
-export type WeeklyAction = { id: string; leagueId: string; leagueName: string; kind: 'lineup' | 'monitor' | 'sync' | 'playoff' | 'review'; count: number; href: string; gameAt: string | null; source: 'stored-lineup' | 'season-outlook' | 'league-context'; season?: number | null; period?: number | null }
+export type WeeklyAction = { id: string; leagueId: string; leagueName: string; kind: 'lineup' | 'monitor' | 'sync' | 'playoff' | 'review'; count: number; href: string; gameAt: string | null; source: 'stored-lineup' | 'season-outlook' | 'league-context'; season?: number | null; period?: number | null; evidence?: { empty: number; out: number; bye: number | null; questionable: number; players?: string[] } }
 export type WeeklyBlueprint = {
   name: string | null; teamName: string | null; leagueCount: number; sports: string[]; focusLeagueId: string | null
   actions: WeeklyAction[]; actionCount: number; attentionLeagueIds: string[]; lineupReadFailed: boolean
@@ -14,6 +15,7 @@ export type WeeklyBlueprint = {
   matchup?: { opponent: string; period: number; leagueName: string; leagueId?: string; season?: number }
   playoff?: { probability: number; leagueName: string; leagueId?: string; season?: number; period?: number }
   rivalry?: { opponent: string; wins: number; losses: number; ties: number; winningStreak: number; losingStreak: number; final: boolean }
+  sportPlans?: Array<{ leagueId: string; leagueName: string; sport: string }>
   calendar?: WeeklyCalendar
   commissionerLeagueIds?: string[]
 }
@@ -41,12 +43,12 @@ export function buildWeeklyBlueprint(input: {
   const focus = input.focusLeagueId ?? null
   const leagues = input.leagues.filter(l => !focus || l.id === focus)
   const allowed = new Set(leagues.map(l => l.id))
-  const rows = [...input.pulse?.needs ?? [], ...input.pulse?.set ?? []].filter(r => allowed.has(r.leagueId))
+  const rows = (input.pulse?.inventory ?? [...input.pulse?.needs ?? [], ...input.pulse?.set ?? []]).filter(r => allowed.has(r.leagueId))
   const cards = [...input.board.coinFlips, ...input.board.leaning, ...input.board.unprojected].filter(m => allowed.has(m.leagueId))
   const actions: WeeklyAction[] = []
   const now = input.now.getTime()
   for (const row of rows) {
-    if (row.bestBall || row.automatic) continue
+    if (row.bestBall || row.automatic || row.archived) continue
     const game = row.lockAt ? Date.parse(row.lockAt) : NaN
     const card = cards.find(m => m.leagueId === row.leagueId)
     // My Team already reading the week after a FINISHED board week is the Tuesday gap above, not stale data.
@@ -59,7 +61,7 @@ export function buildWeeklyBlueprint(input: {
     actions.push({ id: `${row.leagueId}:${kind}`, leagueId: row.leagueId, leagueName: row.leagueName, kind,
       count: kind === 'lineup' ? count : kind === 'monitor' ? row.questionable : row.unresolved,
       href: `/core/${kind === 'sync' ? 'league-sync' : 'my-team'}?league=${encodeURIComponent(row.leagueId)}`,
-      gameAt: !unreadable && game > now ? new Date(game).toISOString() : null, source: 'stored-lineup', season: row.season, period: row.week })
+      gameAt: !unreadable && game > now ? new Date(game).toISOString() : null, source: 'stored-lineup', season: row.season, period: row.week, evidence: unreadable || ![row.empty,row.out,row.questionable].every(Number.isFinite) ? undefined : {empty:row.empty,out:row.out,bye:row.bye,questionable:row.questionable,players:row.players?.filter(p=>p.starter && (p.onBye || isRuledOut(p.status) || isAtRisk(p.status)) && (!p.kickoff || Date.parse(p.kickoff)>now)).slice(0,3).map(p=>p.name)} })
     // A lineup repair and an injury watch are distinct decisions in a focused league.
     if (kind === 'lineup' && row.questionable > 0) actions.push({...actions[actions.length-1],id:`${row.leagueId}:monitor`,kind:'monitor',count:row.questionable})
   }
@@ -96,6 +98,7 @@ export function buildWeeklyBlueprint(input: {
   return { name: input.name?.trim() || null, teamName: input.board.leagueBoard?.yourTeamName ?? null, leagueCount: leagues.length,
     sports: [...new Set(leagues.map(l => l.sport?.trim()).filter((s): s is string => Boolean(s)))], focusLeagueId: focus,
     actions: actions.slice(0, 3), actionCount: actions.length, attentionLeagueIds, lineupReadFailed: input.pulse == null || (leagues.length > 0 && rows.length === 0), coverage,
+    sportPlans: leagues.map(l=>({leagueId:l.id,leagueName:l.name?.trim() || 'League',sport:l.sport?.trim().toUpperCase() || 'UNKNOWN'})),
     calendar: input.calendar,
     commissionerLeagueIds: input.commissionerLeagueIds?.filter(id => allowed.has(id)) ?? [],
     // Prior meetings must belong to the exact displayed opponent and period.
