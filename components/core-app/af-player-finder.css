@@ -3610,7 +3610,7 @@
   color: var(--text);
 }
 .af-core .af-pf-strip-caret {
-  font-size: 10px;
+  font-size: 11px;
   transition: transform 0.15s ease;
 }
 .af-core .af-pf-strip-fold[aria-expanded='true'] .af-pf-strip-caret {
