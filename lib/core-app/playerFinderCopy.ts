@@ -99,6 +99,10 @@ export type FinderCopy = {
   connectLeague: string
   notOnRosterHere: string
   notOnAnyRoster: (leagueCount: number) => string
+  /** The folded table: rows where someone else has him, behind one toggle (OTHERS_FOLD_AFTER). */
+  showOtherRows: (n: number) => string
+  hideOtherRows: string
+  notOnYourRosters: string
   colLeague: string
   colSlot: string
   colStatus: string
@@ -200,6 +204,9 @@ const EN: FinderCopy = {
   connectLeague: 'Connect a league — it is free',
   notOnRosterHere: 'Not on any roster we can read in this league.',
   notOnAnyRoster: (count) => `He is not on any roster in the ${count} ${leaguesWord(count)} you have connected.`,
+  showOtherRows: (n) => `Show the ${n} ${leaguesWord(n)} where someone else has him`,
+  hideOtherRows: 'Show only your leagues',
+  notOnYourRosters: 'Not on any of your rosters — other managers have him.',
   colLeague: 'League',
   colSlot: 'Slot',
   colStatus: 'Status',
@@ -301,6 +308,9 @@ const ES: FinderCopy = {
     count === 1
       ? 'No está en ninguna plantilla de la liga que conectaste.'
       : `No está en ninguna plantilla de las ${count} ligas que conectaste.`,
+  showOtherRows: (n) => (n === 1 ? 'Ver la liga donde lo tiene otro equipo' : `Ver las ${n} ligas donde lo tiene otro equipo`),
+  hideOtherRows: 'Ver solo tus ligas',
+  notOnYourRosters: 'No está en ninguna de tus plantillas: lo tienen otros equipos.',
   colLeague: 'Liga',
   colSlot: 'Puesto',
   colStatus: 'Estado',

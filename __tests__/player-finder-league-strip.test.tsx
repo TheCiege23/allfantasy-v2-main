@@ -1,7 +1,7 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
-import { LeagueStrip } from '@/components/core-app/player-finder/LeagueStrip'
+import { FOLD_AFTER, LeagueStrip } from '@/components/core-app/player-finder/LeagueStrip'
 import { buildLeagueStrip } from '@/lib/core-app/leagueStrip'
 import type { LeagueSlot } from '@/lib/core-app/playerFinder'
 
@@ -83,5 +83,51 @@ describe('LeagueStrip', () => {
   it('renders nothing with no leagues', () => {
     const { container } = render(<LeagueStrip chips={[]} leagueHref={() => '#'} />)
     expect(container.innerHTML).toBe('')
+  })
+
+  /*
+   * Guap, 2026-10-08: a 65-league manager got 65 chips, 4 of them his. Yours always show; past
+   * FOLD_AFTER everything else folds behind one toggle per group.
+   */
+  describe('folds the leagues that are not yours', () => {
+    const many = Array.from({ length: 20 }, (_, i) => ({ id: `L${i}`, name: `League ${i}` }))
+    const manySlots = [
+      slot('L0', 'STARTER', true, { leagueName: 'League 0' }),
+      slot('L1', 'BENCH', true, { leagueName: 'League 1' }),
+      ...Array.from({ length: 14 }, (_, i) => slot(`L${i + 2}`, 'NOT YOURS', false, { leagueName: `League ${i + 2}` })),
+    ]
+    const chips = () => buildLeagueStrip({ ...base, leagues: many, slots: manySlots, unmatched: [{ leagueId: 'L19' }] })
+
+    it('shows only your chips until a group is opened', () => {
+      render(<LeagueStrip chips={chips()} leagueHref={(id) => `#${id}`} />)
+      expect(screen.getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual(['#L0', '#L1'])
+      expect(screen.getByRole('button', { name: /Available in 3/ })).toHaveAttribute('aria-expanded', 'false')
+      expect(screen.getByRole('button', { name: /Can't read 1/ })).toBeInTheDocument()
+      // The tally still counts every league — folding hides chips, not facts.
+      expect(screen.getByText(/Yours in 2 · available in 3 · elsewhere in 14/)).toBeInTheDocument()
+    })
+
+    it('opening "Taken" lists the other managers’ leagues; tapping again folds them', () => {
+      render(<LeagueStrip chips={chips()} leagueHref={(id) => `#${id}`} />)
+      const taken = screen.getByRole('button', { name: /Taken in 14/ })
+      fireEvent.click(taken)
+      expect(taken).toHaveAttribute('aria-expanded', 'true')
+      expect(screen.getAllByRole('link')).toHaveLength(2 + 14)
+      fireEvent.click(taken)
+      expect(screen.getAllByRole('link')).toHaveLength(2)
+    })
+
+    it('says so when none are yours, rather than showing an empty row', () => {
+      const none = buildLeagueStrip({ ...base, leagues: many, slots: manySlots.slice(2), unmatched: [] })
+      render(<LeagueStrip chips={none} leagueHref={(id) => `#${id}`} />)
+      expect(screen.getByText('Not on any of your rosters.')).toBeInTheDocument()
+      expect(screen.queryAllByRole('link')).toHaveLength(0)
+    })
+
+    it(`does not fold at or under ${FOLD_AFTER} — a small account sees every chip`, () => {
+      render(<LeagueStrip chips={buildLeagueStrip(base)} leagueHref={(id) => `#${id}`} />)
+      expect(screen.queryByRole('button', { name: /Taken in/ })).toBeNull()
+      expect(screen.getAllByRole('link')).toHaveLength(6)
+    })
   })
 })

@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 import type { PlayerDetail, RecommendedMove } from '@/lib/core-app/playerFinder'
@@ -363,6 +363,24 @@ describe('Player Finder — core view', () => {
     expect(gang).toHaveAttribute('data-tone', 'other')
     expect(within(gang).getByText('rostered by @tashaR')).toBeInTheDocument()
     expect(within(gang).getByRole('link', { name: /Trade for Kincaid/ })).toHaveAttribute('href', '/core/trades?league=L-gang')
+  })
+
+  /*
+   * Guap, 2026-10-08: a 65-league manager read 4 rows of his and 52 of other people's. Past
+   * OTHERS_FOLD_AFTER, other managers' rows fold behind one toggle; yours never do.
+   */
+  it('folds other managers’ rows behind one toggle once there are more than a few, and never folds yours', () => {
+    const gang = DETAIL.leagues.available ? DETAIL.leagues.data[3]! : null
+    const others = Array.from({ length: 6 }, (_, i) => ({ ...gang!, leagueId: `L-o${i}`, leagueName: `Other ${i}` }))
+    const leagues = DETAIL.leagues.available ? [...DETAIL.leagues.data, ...others] : []
+    renderCore({ detail: { ...DETAIL, leagues: { available: true, data: leagues } }, leagueCount: 12 })
+    expect(screen.getAllByRole('row').slice(1)).toHaveLength(3)
+    const toggle = screen.getByRole('button', { name: 'Show the 7 leagues where someone else has him' })
+    fireEvent.click(toggle)
+    expect(screen.getAllByRole('row').slice(1)).toHaveLength(10)
+    expect(screen.getByRole('button', { name: 'Show only your leagues' })).toHaveAttribute('aria-expanded', 'true')
+    // The header still counts them — folding hides rows, not facts.
+    expect(screen.getByText(/rostered by others in 7/)).toBeInTheDocument()
   })
 
   it('a benched player who beats a starter is a red row that links to the platform lineup', () => {
