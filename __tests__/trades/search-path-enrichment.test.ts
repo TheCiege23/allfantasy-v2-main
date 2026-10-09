@@ -136,12 +136,13 @@ describe('a searched player with no value says why (item #5)', () => {
     expect(body[0].unpricedReason?.code).toBe('no_feed_for_sport')
   })
 
-  it('[control] a valued row carries no reason', async () => {
-    // Stored sport values use the grader's conversion before they reach search.
+  it('🛑 a stored dynasty_value is not a price — it is a list position (trade grade audit, 2026-10-09)', async () => {
+    // `sports_players.dynasty_value` is the row's place in a provider list squeezed to 1–100. It used
+    // to reach search as `× 75` (20 → 1500) and the grade priced soccer deals on it; neither does now.
     searchRows.current = [record('Jaylen Brown', 'NBA', 20)]
     const body = await (await (await route())(req('jaylen', 'NBA'))).json()
-    expect(body[0].value).toBe(1500)
-    expect(body[0].unpricedReason).toBeNull()
+    expect(body[0].value).toBeNull()
+    expect(body[0].unpricedReason?.code).toBe('no_feed_for_sport')
   })
 
   it('the ALL search attaches it too', async () => {

@@ -195,12 +195,31 @@ export function pricesOnDynastyChart(variant: { dynasty: boolean; keeper: boolea
   return variant.keeperShare == null || variant.keeperShare >= KEEPER_DYNASTY_SHARE
 }
 
+/**
+ * The league's lineup as `NAME` / `NAME:count` entries. Imported leagues store `roster_positions`;
+ * leagues created here store only `starter_slots` (`{ QB: 1, SUPER_FLEX: 1, … }`), and reading the first
+ * alone left every such league on the 1QB chart (trade grade audit, 2026-10-09: 7 manual leagues).
+ *
+ * ⚠ `starter_slots` is read ONLY WHEN IT HAS A QB SLOT. `SF` is a superflex slot in football and the
+ * small-forward slot in basketball (`SportDefaultsRegistry`), and this rule carries no sport.
+ */
+export function lineupEntriesFromSettings(s: Record<string, unknown>): unknown[] {
+  if (Array.isArray(s.roster_positions)) return s.roster_positions
+  const slots = s.starter_slots ?? s.starterSlots
+  if (!slots || typeof slots !== 'object' || Array.isArray(slots)) return []
+  const entries = Object.entries(slots as Record<string, unknown>)
+  if (!entries.some(([name]) => name.trim().toUpperCase() === 'QB')) return []
+  return entries
+    .filter(([, count]) => Number(count) > 0)
+    .map(([name, count]) => `${name}:${Number(count)}`)
+}
+
 export function leagueVariantFor(
   settings: unknown,
   leagueType: string | null
 ): { superflex: boolean; dynasty: boolean; keeper: boolean; keeperShare: number | null } {
   const s = (settings && typeof settings === 'object' && !Array.isArray(settings) ? settings : {}) as Record<string, unknown>
-  const positions = Array.isArray(s.roster_positions) ? s.roster_positions : []
+  const positions = lineupEntriesFromSettings(s)
   const type = (resolveLeagueConcept(settings, leagueType) ?? '').toLowerCase()
   const confirmed = readConfirmedLeagueConcept(settings) != null
   /*

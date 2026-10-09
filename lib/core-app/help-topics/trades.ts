@@ -73,11 +73,11 @@ export const TRADES_TOPICS = {
   tradeLeagueValue: {
     en: {
       title: 'Market value and league value',
-      body: 'Market value is the trade-chart price for this league’s format: dynasty or redraft, 1QB or superflex, team count and PPR. League value adjusts it for this league’s own scoring, such as a real tight-end premium, and the combined change stays between half and double the market price. The letter is graded on league value; each asset listed here shows its change and the rule behind it.',
+      body: 'Market value is the trade-chart price for this league’s format: dynasty or redraft, 1QB or superflex, team count and PPR. League value adjusts it for this league’s reception scoring, such as a real tight-end premium, and the combined change stays between half and double the market price. Other scoring rules, such as 6-point passing touchdowns, do not change it yet. The letter is graded on league value; each asset listed here shows its change and the rule behind it.',
     },
     es: {
       title: 'Valor de mercado y valor de liga',
-      body: 'El valor de mercado es el precio de la tabla de intercambios para el formato de esta liga: dinastía o redraft, 1QB o superflex, número de equipos y PPR. El valor de liga lo ajusta según la puntuación propia de esta liga, como un premio real para tight ends, y el cambio total se queda entre la mitad y el doble del precio de mercado. La letra se califica con el valor de liga; cada activo de esta lista muestra su cambio y la regla que lo explica.',
+      body: 'El valor de mercado es el precio de la tabla de intercambios para el formato de esta liga: dinastía o redraft, 1QB o superflex, número de equipos y PPR. El valor de liga lo ajusta según la puntuación por recepción de esta liga, como un premio real para tight ends, y el cambio total se queda entre la mitad y el doble del precio de mercado. Otras reglas de puntuación, como 6 puntos por touchdown de pase, todavía no lo cambian. La letra se califica con el valor de liga; cada activo de esta lista muestra su cambio y la regla que lo explica.',
     },
   },
   tradeRosterFit: {

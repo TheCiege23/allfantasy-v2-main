@@ -75,6 +75,7 @@ import '@/components/core-app/af-trade-center.css'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { FallbackImg } from '@/components/core-app/FallbackImg'
+import { isBlockingFormatNote } from '@/lib/trade-intel/formatNoteBlocking'
 
 /**
  * Screen 36a — Trade Center.
@@ -1105,9 +1106,7 @@ export function TradeCenter(props: {
    * transaction — showing it beneath a blocking banner would still invite
    * someone to read it.
    */
-  const blocked = (result?.formatNotes ?? []).length > 0 && /cannot|does not exist|not a deal/i.test(
-    (result?.formatNotes ?? [])[0] ?? '',
-  )
+  const blocked = isBlockingFormatNote((result?.formatNotes ?? [])[0])
 
   const noSignal = useMemo(() => {
     if (!result) return false
@@ -1618,7 +1617,7 @@ export function TradeCenter(props: {
         <div className="af-label">{copy("Core · ")}{copy('Trades')}</div>
         <h1>{copy('Trade Center')}</h1>
         <p className="af-tc-lede">
-          {copy('Choose a league, add what you send and get, then review the grade. League scoring, roster fit, schedule and strategy stay beside the result.')}
+          {copy('Choose a league, add what you send and get, then review the grade. The grade compares market value for this league’s format and scoring; roster fit and lineup change are shown beside it.')}
         </p>
         {/*
           🛑 WHERE THE TRADE IS ACTUALLY SENT, AND THIS SCREEN HAD NO SUCH LINK.

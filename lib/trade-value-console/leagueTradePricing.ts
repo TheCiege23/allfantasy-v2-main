@@ -13,12 +13,17 @@ import { prisma } from '@/lib/prisma'
 import { loadLeagueTradeValues } from '@/lib/league-values/leagueTradeValues'
 import type { NormalizedLeagueContext } from '@/lib/league-context-engine/types'
 import { normalizedFaabValue } from '@/lib/trade-value/faabValue'
-import { analysisUnpricedReason, noPickMarketUnpricedReason, type UnpricedReason } from '@/lib/trade-value/unpricedReason'
+import {
+  analysisUnpricedReason,
+  noPickMarketUnpricedReason,
+  noSportPickMarketUnpricedReason,
+  sportHasPickMarket,
+  type UnpricedReason,
+} from '@/lib/trade-value/unpricedReason'
 import { belowChartFloorAsset, isFloorEligible } from '@/lib/trade-value/belowChartFloor'
 import { marketContextFor } from '@/lib/trade-intel/marketContext'
 import { pricesOnDynastyChart } from '@/lib/core-app/valueBook'
 import type { LoadedTradeLeague } from './league-loader'
-import { sportsRecordToPricedAsset } from './sports-db-valuation'
 import { tradeFormatCoverage } from './formatCoverage'
 import type { TradeAssetInput, TradeConsoleLeagueSnapshot, TradeConsolePlayerLine } from './types'
 
@@ -325,6 +330,32 @@ export async function priceLeagueTradePick(
   }
 }
 
+function ordinalRound(round: number): string {
+  return round === 1 ? '1st' : round === 2 ? '2nd' : round === 3 ? '3rd' : `${round}th`
+}
+
+/**
+ * An asset found but priced by nothing: a placeholder 0 carrying `unpriced` and the reason, which
+ * `gradeTrade` turns into a withheld grade and every line renders as "Unpriced", never as a 0.
+ */
+export function unpricedAsset(args: {
+  name: string
+  type: PricedAsset['type']
+  position?: string | null
+  reason: UnpricedReason
+}): PricedAsset {
+  return {
+    name: args.name,
+    type: args.type,
+    value: 0,
+    assetValue: { marketValue: 0, impactValue: 0, vorpValue: 0, volatility: 0 },
+    source: 'unknown',
+    unpriced: true,
+    unpricedReason: args.reason,
+    ...(args.position ? { position: args.position } : {}),
+  }
+}
+
 export async function resolveAssets(
   items: TradeAssetInput[],
   args: {
@@ -358,6 +389,31 @@ export async function resolveAssets(
   const belowFloor: string[] = []
 
   for (const raw of items) {
+    if (raw.kind === 'pick' && !sportHasPickMarket(args.effectiveSport)) {
+      /*
+       * 🛑 THE PICK BRANCH HAD NO SPORT CHECK (trade grade audit, 2026-10-09). Every pick went to the
+       * FantasyCalc chart, which is the NFL's, so in the open analyzer — where no league asset policy
+       * runs — an NBA "2027 1st" was graded at an NFL first-round price. Inside a league,
+       * `pickPolicyRefusal` already withheld it; this is the same rule for every caller.
+       */
+      const p = unpricedAsset({
+        name: `${raw.year} ${ordinalRound(raw.round)}`,
+        type: 'pick',
+        reason: noSportPickMarketUnpricedReason(args.effectiveSport),
+      })
+      priced.push(p)
+      lines.push(
+        lineFromPriced(p, {
+          sport: args.effectiveSport,
+          position: 'PICK',
+          team: `${raw.year}`,
+          pricedSource: 'pick',
+          playerId: null,
+          dataSource: 'no_pick_market',
+        }),
+      )
+      continue
+    }
     if (raw.kind === 'pick') {
       const { priced: p, dataSource } = await priceLeagueTradePick(raw, args)
       priced.push(p)
@@ -509,15 +565,25 @@ export async function resolveAssets(
       continue
     }
 
-    const pa = sportsRecordToPricedAsset(row)
-    if (!pa) {
-      // Pricing can now REFUSE (slice 11: no market value and no projection ->
-      // null rather than a fabricated number). An unpriceable asset belongs in
-      // `unresolved` so the grader sees a short side and reports insufficient
-      // data, instead of being handed a zero that reads as "worthless".
-      unresolved.push(displayName || raw.playerId || row.id)
-      continue
-    }
+    /*
+     * 🛑 FOUND IS NOT PRICED, AND OUTSIDE THE NFL NOTHING ON FILE IS A TRADE VALUE (trade grade audit,
+     * 2026-10-09). This used to price the row with `sportsRecordToPricedAsset`: `dynasty_value × 75`,
+     * else `projections.points × 45`. Measured in production, neither is a value —
+     *   - `dynasty_value` is the row's POSITION in a provider list squeezed to 1–100
+     *     (`sports-data-importer.ts` `buildDynastyValueMap`), so 800 soccer players were graded on
+     *     their list order;
+     *   - no row in any sport carries a projection key the fallback reads, so every NBA, NHL and
+     *     NCAAB player fell through — and was then reported as "Could not resolve … fix spelling".
+     * The player was found; he is unpriced, with the sport's reason. The deal is withheld by the grade
+     * like any other unpriced asset, and a college redraft league still reaches its own
+     * points-over-replacement grade, which the "not found" exit used to block.
+     */
+    const pa = unpricedAsset({
+      name: row.name,
+      type: 'player',
+      position: row.position,
+      reason: analysisUnpricedReason({ position: row.position, sport: row.sport ?? args.effectiveSport }),
+    })
     priced.push(pa)
     lines.push(
       lineFromPriced(pa, {
@@ -532,10 +598,10 @@ export async function resolveAssets(
         headshotUrl: row.headshotUrl ?? row.headshotUrlLg ?? row.headshotUrlSm,
         logoUrl: row.logoUrl,
         injuryStatus: row.injuryStatus,
-        pricedSource: 'sports_db',
+        pricedSource: 'unknown',
         dataSource: row.dataSource,
         position: row.position,
-      }),
+      }, { reasonPosition: row.position, unpricedReason: pa.unpricedReason }),
     )
   }
 
