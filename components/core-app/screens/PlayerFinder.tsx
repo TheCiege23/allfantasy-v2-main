@@ -62,6 +62,10 @@ import { InjuryTimelineChip } from '@/components/core-app/player-finder/InjuryTi
 import { LeaguePicker } from '@/components/core-app/player-finder/LeaguePicker'
 import { LeagueCalls } from '@/components/core-app/player-finder/LeagueCalls'
 import { LeagueStrip } from '@/components/core-app/player-finder/LeagueStrip'
+import { FollowButton } from '@/components/core-app/player-finder/FollowButton'
+import { FollowingBoard } from '@/components/core-app/player-finder/FollowingBoard'
+import { followCopy } from '@/lib/core-app/finderFollowCopy'
+import type { FollowingCardData } from '@/lib/core-app/followingCard'
 import { FreeAgentBids } from '@/components/core-app/player-finder/FreeAgentBids'
 import type { FreeAgentBids as FreeAgentBidsData } from '@/lib/core-app/freeAgentBids'
 import { DepthChartBackups } from '@/components/core-app/player-finder/DepthChartBackups'
@@ -203,6 +207,10 @@ export type PlayerFinderProps = {
   depth?: PlayerDepth | null
   /** "Your shares" (Phase 2): the players you roster most across the picked leagues; home only. */
   shares?: SectionState<PlayerShares> | null
+  /** "Following" on the "My players" home (2026-10-08); null = follows unavailable, and the board is hidden. Home only. */
+  following?: FollowingCardData | null
+  /** Is the open player followed? Null = follows unavailable, and "Alert me" is not offered. */
+  followingPlayer?: boolean | null
   /** League mode: the same players read in the held league (holder, value, season points). */
   leagueShares?: LeagueShareView | null
   /** Every league the account plays, for the "pick leagues" control. */
@@ -414,6 +422,8 @@ export function PlayerFinder({
   depthAccess = null,
   depth = null,
   shares = null,
+  following = null,
+  followingPlayer = null,
   leagueShares = null,
   pickLeagues = [],
   savedPicks = null,
@@ -448,6 +458,9 @@ export function PlayerFinder({
    * screen honest if a loader ever returns more than it was asked for.
    */
   const leagueMode = Boolean(signedIn && selectedLeagueId)
+  // The signed-in home with no player open: "My players" (2026-10-08).
+  const myPlayersHome = Boolean(signedIn && !detail && !compareRequested)
+  const fc = followCopy(language)
   const inScope = (leagueId: string) => !leagueMode || leagueId === selectedLeagueId
   // The table's "someone else has him" rows fold once there are more than OTHERS_FOLD_AFTER of them.
   const [showOtherRows, setShowOtherRows] = useState(false)
@@ -615,7 +628,7 @@ export function PlayerFinder({
     : matches
 
   return (
-    <div className="af-core af-pf af-pf--2a" data-public={!signedIn} data-has-detail={Boolean(detail)}>
+    <div className={`af-core af-pf af-pf--2a${myPlayersHome ? ' af-pf--home' : ''}`} data-public={!signedIn} data-has-detail={Boolean(detail)}>
       {/* ── Search rail (360px) ─────────────────────────────────────── */}
       {/*
         The rail owns the search, the matches and the live-data promise. h1 is
@@ -643,7 +656,7 @@ export function PlayerFinder({
           and the OTHER matches collapse to a chip row under the search — the
           player card is what the screen was opened for, and it goes first.
         */}
-        {signedIn || matches.length > 0 ? (
+        {(signedIn || matches.length > 0) && !(myPlayersHome && matches.length === 0 && query.trim() === '') ? (
           <section className={`af-card af-pf-matches${detail ? ' af-pf-d-only' : ''}`}>
             <header className="af-pf-section-head">
               <h2 className="af-label">{t.matches(matches.length)}</h2>
@@ -784,9 +797,21 @@ export function PlayerFinder({
       <section className="af-pf-main" aria-label={t.mainLabel}>
         {/* ── Game day home: your flagged starters, before any search ──── */}
         {/* Pick the leagues the finder reads — only on the all-leagues home; a held league is the switcher's. */}
+        {/*
+          "My players" (Guap, 2026-10-08): the home leads with YOUR players — who is flagged today, who
+          you roster most, who you follow — instead of an empty search card. On a phone the rail's
+          recent and trending lists drop below this (af-player-finder.css `.af-pf--home`).
+        */}
+        {myPlayersHome ? (
+          <header className="af-pf-home-head">
+            <h2 className="af-display af-pf-home-title">{fc.homeTitle}</h2>
+            <p className="af-pf-home-sub">{fc.homeSub}</p>
+          </header>
+        ) : null}
         {!detail && signedIn && !selectedLeagueId && pickLeagues.length > 1 ? <LeaguePicker leagues={pickLeagues} saved={savedPicks} /> : null}
         {!detail && signedIn && triage ? <GameDayTriage state={triage} nowIso={nowIso} leagueCount={leagueCount} /> : null}
         {!detail && signedIn && shares ? <PlayerSharesBoard state={shares} league={leagueShares} valuesLocked={depthLocked} /> : null}
+        {myPlayersHome ? <FollowingBoard data={following} /> : null}
 
         {/* ── The league in context: who has him HERE ─────────────────── */}
         {detail && leagueView ? <LeagueOwnershipCard view={leagueView} playerName={detail.player.name} /> : null}
@@ -848,6 +873,16 @@ export function PlayerFinder({
                     <span className="af-chip af-num af-pf-ready af-pf-bye" data-tone={byeMark.tone}>
                       {coreUiCopy(byeMark.label, language)}
                     </span>
+                  ) : null}
+                  {/* Follow him across every league: news, and when he is free in one of yours (2026-10-08). */}
+                  {signedIn && followingPlayer !== null ? (
+                    <FollowButton
+                      sport={detail.player.sport}
+                      sleeperId={detail.player.sleeperId}
+                      externalId={detail.player.externalId}
+                      playerName={detail.player.name}
+                      following={followingPlayer}
+                    />
                   ) : null}
                 </div>
                 <div className="af-pf-line">
@@ -1333,7 +1368,7 @@ export function PlayerFinder({
               )}
             </section>
           </section>
-        ) : (
+        ) : myPlayersHome ? null : (
           <section className="af-card af-pf-detail af-pf-detail--empty">
             <p className="af-pf-unavailable">{t.pickAMatch}</p>
           </section>

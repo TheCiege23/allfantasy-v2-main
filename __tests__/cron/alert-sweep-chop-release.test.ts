@@ -34,6 +34,9 @@ vi.mock('@/lib/chimmy-alerts/injuryFanOut', () => ({ buildFanOutLeagues: vi.fn(a
 vi.mock('@/lib/chimmy-alerts/runLineupCheck', () => ({ runLineupCheck: h.runLineupCheck }))
 vi.mock('@/lib/chimmy-alerts/runWaiverCheck', () => ({ runWaiverCheck: h.runWaiverCheck }))
 vi.mock('@/lib/chimmy-alerts/runSportWaiverCheck', () => ({ runSportWaiverCheck: h.runSportWaiverCheck }))
+// The followed-player free-agent phase (2026-10-08): mocked, so it never runs against the stub prisma above.
+vi.mock('@/lib/follows/followFreeAgentDeps', () => ({ followFreeAgentDeps: {} }))
+vi.mock('@/lib/follows/followFreeAgentCheck', () => ({ runFollowFreeAgentCheck: async () => ({ ran: false, reason: 'no_follows' }) }))
 vi.mock('@/lib/chimmy-alerts/runChopReleaseCheck', () => ({ runChopReleaseCheck: h.runChop }))
 vi.mock('@/lib/production-health/syncJobRunTelemetry', () => ({
   withSyncJobRun: async (_ctx: unknown, fn: () => Promise<unknown>) => fn(),

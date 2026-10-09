@@ -383,6 +383,14 @@ describe('Player Finder — core view', () => {
     expect(screen.getByText(/rostered by others in 7/)).toBeInTheDocument()
   })
 
+  it('offers "Alert me" on the open card when follows are available, and nothing when they are not', () => {
+    const { unmount } = renderCore({ followingPlayer: false })
+    expect(screen.getByRole('button', { name: /Alert me about Dalton Kincaid/ })).toHaveAttribute('aria-pressed', 'false')
+    unmount()
+    renderCore()
+    expect(screen.queryByRole('button', { name: /Alert me/ })).toBeNull()
+  })
+
   it('a benched player who beats a starter is a red row that links to the platform lineup', () => {
     renderCore()
     const rows = screen.getAllByRole('row').slice(1)

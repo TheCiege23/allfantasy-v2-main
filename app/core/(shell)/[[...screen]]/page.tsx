@@ -85,6 +85,7 @@ import { getFinderLeaguePicks } from '@/lib/core-app/finderLeaguePicksStore'
 import { getLeaguePreferences } from '@/lib/core-app/leaguePreferencesStore'
 import { hasSmsConsent } from '@/lib/sms/smsConsent'
 import { shouldShowTeamFollowPrompt } from '@/lib/follows/teamFollows'
+import { followKeyFor, isFollowingPlayer } from '@/lib/follows/playerFollows'
 import { teamFollowPromptSport } from '@/lib/follows/teamFollowPromptSport'
 import { applyLeagueOrder } from '@/lib/core-app/leaguePreferences'
 import { listRecentPlayerSearches, recordRecentPlayerSearch } from '@/lib/core-app/recentPlayerSearches'
@@ -2503,8 +2504,40 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * (no player open). With a league held, the same players are also read IN that league: who has
    * each one there, his value there (AF Pro), and his season points under its scoring.
    */
-  const playerShares =
-    activeKey === 'players' && userId && !playerDetail ? await loadPlayerShares(userId, finderLeagueIds).catch(() => null) : null
+  /*
+   * "Following" on the finder home (2026-10-08, "My players"): the players you follow — status, next
+   * game, and the leagues of yours where he is unclaimed — read in the same wave as the shares board.
+   * Null when follows are unavailable, which hides the board. The same leagues the finder reads.
+   */
+  const finderLeagueSet = new Set(finderLeagueIds)
+  const [playerShares, playerFollowing] =
+    activeKey === 'players' && userId && !playerDetail
+      ? await Promise.all([
+          loadPlayerShares(userId, finderLeagueIds).catch(() => null),
+          getFollowingCard(
+            userId,
+            new Date(),
+            playedLeagues
+              .filter((l) => finderLeagueSet.has(l.id))
+              .map((l) => ({
+                id: l.id,
+                name: l.name,
+                platform: String((l as { platform?: string | null }).platform ?? ''),
+                sport: (l as { sport?: string | null }).sport ?? null,
+              })),
+          ).catch(() => null),
+        ])
+      : [null, null]
+  /*
+   * The open card's "Alert me" state (2026-10-08): is this player followed? `null` = follows are
+   * unavailable (or the read failed), and the button is then not offered — a bell that cannot save
+   * is worse than none.
+   */
+  const openPlayerFollowKey = playerDetail ? followKeyFor(playerDetail.player) : null
+  const followingOpenPlayer =
+    activeKey === 'players' && userId && playerDetail && openPlayerFollowKey
+      ? await isFollowingPlayer(userId, playerDetail.player.sport, openPlayerFollowKey).catch(() => null)
+      : null
   const playerLeagueShares =
     playerShares?.available && selectedLeagueId && userId
       ? await loadLeagueShareView(userId, selectedLeagueId, playerShares.data.rows, {
@@ -4922,6 +4955,8 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           leagueCount={finderScope.count}
           selectedLeagueId={selectedLeagueId}
           shares={playerShares}
+          following={playerFollowing}
+          followingPlayer={followingOpenPlayer}
           leagueShares={playerLeagueShares}
           pickLeagues={playedLeagues.map((l) => ({ id: l.id, name: String(l.name ?? 'League'), platform: (l as { platform?: string | null }).platform ?? null }))}
           savedPicks={finderScope.picked ? finderLeagueIds : null}

@@ -71,6 +71,7 @@
  *   slateLock=off       skip the slate lock check this run
  *   waiverCheck=force   run the waiver check outside its window (the weekly claim still holds)
  *   waiverCheck=off     skip the waiver check this run
+ *   followFree=off      skip the followed-player free-agent check this run (it runs every sweep)
  *   sportWaiverCheck=force  run the other-sport waiver check outside its windows (in-season sports
  *                           only; the daily claim still holds)
  *   sportWaiverCheck=off    skip the other-sport waiver check this run
@@ -104,6 +105,8 @@ import { runWaiverCheck, type WaiverCheckRun } from '@/lib/chimmy-alerts/runWaiv
 import { runSportWaiverCheck, type SportWaiverCheckRun } from '@/lib/chimmy-alerts/runSportWaiverCheck'
 import type { ChopReleaseRun } from '@/lib/chimmy-alerts/runChopReleaseCheck'
 import { chopReleaseEnabled } from '@/lib/chimmy-alerts/chopRelease'
+import { runFollowFreeAgentCheck, type FollowFreeAgentRun } from '@/lib/follows/followFreeAgentCheck'
+import { followFreeAgentDeps } from '@/lib/follows/followFreeAgentDeps'
 import { injuredStarterDedupeKey, injuredStarterHref, mergeAudience } from '@/lib/chimmy-alerts/sweepAudience'
 import { buildFanOutLeagues } from '@/lib/chimmy-alerts/injuryFanOut'
 import { fanOutCopy, groupAlertsByPlayer } from '@/lib/chimmy-alerts/injuryFanOutCopy'
@@ -134,6 +137,8 @@ const JOB = 'cron-alert-sweep'
 const LINEUP_CHECK_JOB = 'cron-chimmy-lineup-check'
 const BEST_BALL_DEPTH_JOB = 'cron-chimmy-best-ball-depth'
 const SLATE_LOCK_JOB = 'cron-chimmy-slate-lock'
+/** "He's free in your league" for followed players (lib/follows/followFreeAgentCheck.ts). */
+const FOLLOW_FREE_AGENT_JOB = 'cron-follow-free-agent'
 const WAIVER_CHECK_JOB = 'cron-chimmy-waiver-check'
 const SPORT_WAIVER_CHECK_JOB = 'cron-chimmy-sport-waiver-check'
 const CHOP_RELEASE_JOB = 'cron-chimmy-chop-release'
@@ -157,6 +162,7 @@ type PhaseRefusal = { ran: false; reason: 'disabled' | 'error'; error?: string }
 type LineupCheckReport = LineupCheckRun | PhaseRefusal
 type BestBallDepthReport = BestBallDepthRun | PhaseRefusal
 type SlateLockReport = SlateLockRun | PhaseRefusal
+type FollowFreeAgentReport = FollowFreeAgentRun | PhaseRefusal
 type WaiverCheckReport = WaiverCheckRun | PhaseRefusal
 type SportWaiverCheckReport = SportWaiverCheckRun | PhaseRefusal
 type ChopReleaseReport = ChopReleaseRun | PhaseRefusal
@@ -253,6 +259,30 @@ function slateLockPhase(args: PhaseArgs): Promise<SlateLockReport> {
       metadata: { week: r.week, slate: r.slate, users: r.users, outcomes: r.outcomes },
     },
   }))
+}
+
+/**
+ * Followed players who just went from a roster to nobody's in one of your leagues (2026-10-08, the
+ * Finder's "Alert me"). Every sweep, not a weekly window: a drop can land any day and is worth most
+ * in the first hour. A transition alert — the first run per follow only writes its baseline.
+ */
+function followFreeAgentPhase(args: PhaseArgs): Promise<FollowFreeAgentReport> {
+  return weeklyCheckPhase(
+    'follow free-agent check',
+    args,
+    (o) => runFollowFreeAgentCheck({ dryRun: o.dryRun, userId: o.userId, budgetMs: o.budgetMs }, followFreeAgentDeps),
+    (r) => ({
+      jobName: FOLLOW_FREE_AGENT_JOB,
+      outcome: {
+        rowsRead: r.followsChecked,
+        rowsWritten: r.alerts,
+        rowsSkipped: r.notReached,
+        errors: r.errors.map((e) => `${e.userId}: ${e.error}`),
+        status: r.errors.length > 0 ? 'partial' : 'success',
+        metadata: { users: r.users, seeded: r.seeded, deduped: r.deduped },
+      },
+    }),
+  )
 }
 
 function waiverCheckPhase(args: PhaseArgs): Promise<WaiverCheckReport> {
@@ -749,6 +779,12 @@ async function handle(req: NextRequest) {
       singleUser,
       sweepStartedAt: startedAt,
     })
+    const followFreeAgent = await followFreeAgentPhase({
+      mode: (url.searchParams.get('followFree') ?? '').trim().toLowerCase(),
+      dryRun,
+      singleUser,
+      sweepStartedAt: startedAt,
+    })
 
     return {
       // Zero alerts is a legitimate outcome (off-season, healthy rosters) and must not fail.
@@ -781,6 +817,8 @@ async function handle(req: NextRequest) {
       sportWaiverCheck,
       /** The guillotine chop-release alert — `{ ran: false, reason: 'disabled' }` until the flag is set. */
       chopRelease,
+      /** Followed players newly free in one of your leagues — `seeded` counts follows seen for the first time. */
+      followFreeAgent,
       durationMs: Date.now() - startedAt,
       timestamp: new Date().toISOString(),
     }

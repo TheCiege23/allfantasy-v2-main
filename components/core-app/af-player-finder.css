@@ -4479,3 +4479,119 @@
     min-height: 44px;
   }
 }
+
+/* ── "My players" home + Alert me (2026-10-08): PlayerFinder `.af-pf--home`, FollowButton, FollowingBoard ── */
+.af-core .af-pf-home-head {
+  margin: 0 0 12px;
+}
+.af-core .af-pf-home-title {
+  margin: 0;
+  font-size: 22px;
+}
+.af-core .af-pf-home-sub {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.af-core .af-pf-following {
+  margin-top: 14px;
+}
+/* No rank column on a follow: avatar, then who. */
+.af-core .af-pf-follow-row .af-pf-share-link {
+  grid-template-columns: 36px minmax(0, 1fr);
+}
+.af-core .af-pf-follow-free {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 9px 10px 55px;
+}
+.af-core .af-pf-follow-free-chip {
+  min-height: 28px;
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.af-core .af-pf-follow-wrap {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+.af-core .af-pf-follow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 4px 12px;
+  border: 1px solid var(--accent-line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+.af-core .af-pf-follow:hover,
+.af-core .af-pf-follow:focus-visible {
+  background: var(--accent-soft);
+}
+.af-core .af-pf-follow:active {
+  transform: scale(0.96);
+}
+.af-core .af-pf-follow[data-on='true'] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--bg);
+}
+.af-core .af-pf-follow[disabled] {
+  opacity: 0.7;
+  cursor: progress;
+}
+.af-core .af-pf-follow-note {
+  color: var(--muted);
+  font-size: 12px;
+}
+@media (max-width: 720px) {
+  .af-core .af-pf-follow {
+    min-height: 44px;
+    padding: 6px 14px;
+  }
+  .af-core .af-pf-follow-free-chip {
+    min-height: 44px;
+  }
+  .af-core .af-pf-follow-free {
+    padding-left: 9px;
+  }
+}
+/*
+ * The phone "My players" home: the search stays on top, then YOUR players, then recent and
+ * trending. The rail's children join the page grid (`display: contents`) so `order` can put the
+ * main column between them — a rail on top made a phone scroll past three search lists before
+ * reaching a single player of its own.
+ */
+@media (max-width: 860px) {
+  .af-core.af-pf--home .af-pf-rail {
+    display: contents;
+  }
+  .af-core.af-pf--home .af-pf-rail > * {
+    margin: 0 16px 14px;
+  }
+  .af-core.af-pf--home .af-pf-h1 {
+    margin-top: 16px;
+  }
+  .af-core.af-pf--home .af-pf-main {
+    order: 1;
+    padding-top: 4px;
+    border-top: 1px solid var(--line);
+  }
+  .af-core.af-pf--home .af-pf-recent,
+  .af-core.af-pf--home .af-pf-rail-foot {
+    order: 2;
+  }
+}
