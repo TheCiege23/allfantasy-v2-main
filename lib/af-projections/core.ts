@@ -7,6 +7,8 @@
  * joined to nothing, and a season aggregate stored in a column named `projections`.
  */
 
+import { normalizeMlbGameStats } from '@/lib/scoring-runtime/mlbStatNormalization'
+
 import type {
   ConfidenceInput,
   ConfidenceResult,
@@ -110,6 +112,63 @@ export function perGameRates(aggregate: SeasonAggregate): Record<string, number>
     out[key] = total / aggregate.gamesPlayed
   }
   return out
+}
+
+/**
+ * MLB per-game rates in the ENGINE's keys (`hr`, `rbi`, `tb`, `so`, `ip`, `sv`, … — the keys of
+ * lib/sportConfig/configs/mlb.ts), built from the season's `batting` and `pitching` groups.
+ *
+ * WHY NOT `perGameRates`. Every hit, homer and strikeout lives under `regular_season.batting` /
+ * `.pitching`, which `components` deliberately leaves out, so `perGameRates` stored only `E` and `PO`
+ * for every baseball player (measured on production 2026-10-09: Aaron Judge `{E, PO}`). And the
+ * vendor's names are not the ones anything scores: a league, the waiver board and the draft archive
+ * all rescore stored rates against league keys, which for MLB are the engine's.
+ *
+ * So each group's season totals go through the same normalizer the weekly scorer uses, which keeps
+ * the two groups apart (a pitcher's hits ALLOWED land on `p_h`, never on `h`) and converts innings
+ * from baseball notation (`187.2` is 187⅔). Then, per game:
+ *   - SINGLES are derived when the line has no `1B` (297 of 1,049 2026 batting lines), from
+ *     H − 2B − 3B − HR, or total bases would undercount every one of those hitters.
+ *   - QUALITY STARTS are dropped: the normalizer derives one from ONE game's innings and earned runs,
+ *     and on a season total that test is meaningless. Absent, not zero — a league that scores them
+ *     sees an unmatched key rather than a starter who never threw one.
+ *   - RATE STATS (`ERA`, and AVG, which the vendor does not send) are never divided by games.
+ *
+ * ⚠ A "GAME" IS AN APPEARANCE. `games_played` counts the player's own games: 32 for a starter (his
+ * starts), 48 for a closer, 158 for Ohtani as a hitter. A starter's per-game line is per START, about
+ * one team game in five, so anything that values the rest of a season must scale by his share of
+ * team games, never multiply by team games remaining. The count is in the row's confidence reasons.
+ *
+ * Null when the line carries neither group — a fielding-only line has nothing to score.
+ */
+export function mlbPerGameRates(aggregate: SeasonAggregate): Record<string, number> | null {
+  const grouped = aggregate.groupedComponents ?? {}
+  const totals: Record<string, number> = {}
+  let groups = 0
+  for (const group of ['batting', 'pitching'] as const) {
+    const prefix = `${group}.`
+    const stats: Record<string, number> = {}
+    for (const [key, value] of Object.entries(grouped)) {
+      if (key.startsWith(prefix)) stats[key.slice(prefix.length)] = value
+    }
+    if (Object.keys(stats).length === 0) continue
+    groups += 1
+    if (group === 'batting' && stats['1B'] == null && stats.H != null) {
+      stats['1B'] = Math.max(0, stats.H - (stats['2B'] ?? 0) - (stats['3B'] ?? 0) - (stats.HR ?? 0))
+    }
+    const { stats: normalized } = normalizeMlbGameStats({ group, stats })
+    delete normalized.qs
+    Object.assign(totals, normalized)
+  }
+  if (groups === 0) return null
+  const out: Record<string, number> = {}
+  for (const [key, total] of Object.entries(totals)) out[key] = total / aggregate.gamesPlayed
+  return out
+}
+
+/** The per-game rates a projection row stores for this sport. */
+export function perGameRatesFor(sport: string, aggregate: SeasonAggregate): Record<string, number> | null {
+  return sport.trim().toUpperCase() === 'MLB' ? mlbPerGameRates(aggregate) : perGameRates(aggregate)
 }
 
 const POINTS_FIELD: Record<ScoringFormat, keyof WeeklyObservation> = {

@@ -26,7 +26,7 @@ import {
   computeDefenseVsPositionAdjustment,
   computeOpponentAdjustment,
 } from '@/lib/projections/opponentAdjustment'
-import { extractSeasonAggregate, perGameRates, toWeeklyObservation } from './core'
+import { extractSeasonAggregate, perGameRatesFor, toWeeklyObservation } from './core'
 import { rosFromPerGame, weeksRemaining } from './restOfSeason'
 import { KICKER_CANONICAL_RULES } from './kickerScoring'
 import { IDP_PBP_SOURCE } from '@/lib/idp/realStatLines'
@@ -597,8 +597,9 @@ export async function writeAfProjectionSnapshotsForSeason(
       confidenceScore: outcome.confidence.score,
       confidenceReasons: outcome.confidence.reasons,
       // Component rates let a league rescore without re-running the engine — the Phase 4
-      // lever, and the reason a single-format row is not a dead end.
-      perGameRates: aggregate ? perGameRates(aggregate) : null,
+      // lever, and the reason a single-format row is not a dead end. MLB's are in the engine's keys
+      // and per APPEARANCE (see `mlbPerGameRates`).
+      perGameRates: aggregate ? perGameRatesFor(sport, aggregate) : null,
       idp: outcome.idp ?? null,
       accuracyCalibration: outcome.calibration ?? null,
     }
@@ -723,7 +724,7 @@ export async function writeAfProjectionSnapshotsForSeason(
               adjustmentsApplied: weeklyOutcome.adjustmentsApplied,
               // Null when no opponent was on file for the target week — stated, not guessed.
               opponentAdjustment: opponentFactors,
-              perGameRates: aggregate ? perGameRates(aggregate) : null,
+              perGameRates: aggregate ? perGameRatesFor(sport, aggregate) : null,
               idp: weeklyOutcome.idp ?? null,
               accuracyCalibration: weeklyOutcome.calibration ?? null,
             }),
