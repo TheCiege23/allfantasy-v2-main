@@ -12,6 +12,7 @@ import { TradeComparisonSnapshots } from './TradeComparisonSnapshots'
 import { TradeValueChart } from './TradeImpactCharts'
 import { TradeReaction, TradeReactionSettings } from './TradeReactions'
 import styles from './GenericTradeAnalyzer.module.css'
+import { rosterSpotRowLabel } from '@/lib/trade-value/rosterSpotCharge'
 
 type Result = {
   grade?: TradeGradeView
@@ -301,7 +302,13 @@ export function GenericTradeAnalyzer({ viewerId }: { viewerId?: string | null } 
                       <span>{copy(line.marketValue == null ? 'Value unavailable' : `${line.marketValue.toLocaleString(locale)} market value`)}</span>
                       <small>{copy(line.valueSource ?? line.source ?? 'Source unavailable')}{copy(line.valueAsOf && Number.isFinite(Date.parse(line.valueAsOf)) ? ` · as of ${new Date(line.valueAsOf).toLocaleDateString(locale)}` : ' · source date unavailable')}</small>
                     </li>
-                  ))}</ul>
+                  ))}
+                  {result.grade.rosterSpot ? (
+                    <li data-testid="generic-roster-spot">
+                      <strong>{copy(rosterSpotRowLabel(result.grade.rosterSpot, 'teams'))}</strong>
+                      <span>{copy(`${result.grade.rosterSpot.value.toLocaleString(locale)} — the last rostered player in a league this size`)}</span>
+                    </li>
+                  ) : null}</ul>
                 </details>
               ) : null}
               {result.grade.lines.some((line) => line.marketValue == null || line.leagueValue == null) ? (

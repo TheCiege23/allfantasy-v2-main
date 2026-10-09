@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import type { TradeEvaluationReceipt as Receipt } from '@/lib/decision-os/trade/evaluationReceipt'
 import { evaluationReceiptSchema } from '@/lib/decision-os/trade/evaluationReceipt'
+import { rosterSpotRowLabel } from '@/lib/trade-value/rosterSpotCharge'
 
 const number = (value: number | null, locale: string) => value == null ? 'Unpriced' : value.toLocaleString(locale)
 
@@ -22,7 +23,8 @@ function Evaluation({ title, grade }: { title: string; grade: Receipt['grade'] }
           <h4>{copy(side === 'give' ? 'You give' : 'You get')}{copy(" · ")}{copy(number(side === 'give' ? grade.giveValue : grade.getValue, locale))}</h4>
           <ul>{grade.lines.filter(line => line.side === side).map((line, index) => <li key={index} style={{ overflowWrap: 'anywhere' }}>
             {line.name}{copy(": ")}<strong>{copy(number(line.leagueValue, locale))}</strong>{copy(line.marketValue !== line.leagueValue ? ` (base ${number(line.marketValue, locale)})` : '')}
-          </li>)}</ul>
+          </li>)}
+          {grade.rosterSpot?.side === side ? <li style={{ overflowWrap: 'anywhere' }}>{copy(rosterSpotRowLabel(grade.rosterSpot, 'viewer'))}{copy(": ")}<strong>{copy(number(grade.rosterSpot.value, locale))}</strong></li> : null}</ul>
         </div>)}
       </div>
       {grade.recommendation ? <p>{copy(grade.recommendation)}</p> : null}

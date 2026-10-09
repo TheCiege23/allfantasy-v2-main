@@ -75,6 +75,29 @@ describe('league-free trade analyzer', () => {
     expect(screen.getByText(/fantasycalc · as of/)).toBeTruthy()
   })
 
+  it('shows the roster-spot credit that is inside the totals, so the values add up', async () => {
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({
+      grade: { graded: true, letter: 'C', partnerLetter: 'C', sideAdvantage: 'even', percentDiff: -2,
+        label: 'Even', recommendation: 'Quoted values: even.',
+        giveMarket: 9190, getMarket: 9000, basis: 'General market values',
+        lines: [
+          { side: 'give', name: 'Star Player', marketValue: 9000, leagueValue: 9000, valueSource: 'fantasycalc', valueAsOf: '2026-10-09T00:00:00Z' },
+          { side: 'get', name: 'Depth One', marketValue: 4500, leagueValue: 4500, valueSource: 'fantasycalc', valueAsOf: '2026-10-09T00:00:00Z' },
+          { side: 'get', name: 'Depth Two', marketValue: 4500, leagueValue: 4500, valueSource: 'fantasycalc', valueAsOf: '2026-10-09T00:00:00Z' },
+        ],
+        rosterSpot: { side: 'give', spots: 1, valuePerSpot: 190, value: 190 },
+      },
+    }) })
+    render(<GenericTradeAnalyzer />)
+    fireEvent.change(screen.getByLabelText('Team A sends'), { target: { value: 'Star Player' } })
+    fireEvent.change(screen.getByLabelText('Team B sends'), { target: { value: 'Depth One' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Analyze trade' }))
+    fireEvent.click(await screen.findByText('Why this grade? View asset values and sources'))
+    const row = screen.getByTestId('generic-roster-spot')
+    expect(row.textContent).toContain('Open roster spot Team B gains (it receives fewer players)')
+    expect(row.textContent).toContain('190')
+  })
+
   it('converts a known overall pick into a 12-team reference tier', () => {
     render(<GenericTradeAnalyzer />)
     fireEvent.change(screen.getByLabelText('Overall pick, if known'), { target: { value: '13' } })
