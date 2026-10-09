@@ -525,7 +525,10 @@ describe('Player Finder — the screen’s own words, in Spanish', () => {
       expectSpanish(out, query)
       expect(out).toContain(want)
       expect(out).toContain('Coincidencias · 0')
-      expect(out).toContain('Elige una coincidencia para ver puestos, lesión e historial de temporadas.')
+      // Signed in with no player open, the home leads with "Mis jugadores" instead of the
+      // "pick a match" card (2026-10-08, "My players").
+      expect(out).toContain('Mis jugadores')
+      expect(out).not.toContain('Elige una coincidencia para ver puestos, lesión e historial de temporadas.')
       unmount()
     }
     for (const count of [1, 4]) {
