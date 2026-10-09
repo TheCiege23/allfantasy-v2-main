@@ -25,6 +25,7 @@ import { loadRosterNeedFactors, loadViewerNeedFactors, type NeedFactors } from '
 import { unpriceableReason, type GradeInputs } from './tradeGradeInputs'
 import { proposalEligibilityReason } from '@/lib/trade-value-console/tradeEligibility'
 import { createNcaafLeagueGrader } from './ncaafLeagueGrader'
+import { createSportPointsGrader } from './sportPointsGrader'
 import { createLeagueAssetPolicy } from './leagueAssetPolicy'
 import { DEVY_BASIS_NOTE } from './leagueAssetRules'
 import { belowChartFloorNote } from '@/lib/trade-value/belowChartFloor'
@@ -328,6 +329,15 @@ export async function createLeagueTradeGrader(args: {
     sport === 'NCAAF'
       ? createNcaafLeagueGrader({ id: args.leagueId, platform: leagueRow.platform ?? null, settings: leagueRow.settings, leagueType })
       : null
+  /*
+   * NBA, college basketball and NHL: points over replacement under the league's own rules
+   * (`./sportPointsGrader.ts`, trade grade audit 2026-10-09). Before this they had no value source at
+   * all and every deal was withheld. Its view is final — it never falls through to the NFL chart.
+   */
+  const sportPoints = createSportPointsGrader({
+    sport,
+    league: { id: args.leagueId, settings: leagueRow.settings, leagueType: leagueType.type, leagueSize: leagueRow.leagueSize ?? null },
+  })
   /* Phase 9: picks refused where nothing prices them, and devy prospects this league holds priced. */
   const assets = createLeagueAssetPolicy({
     id: args.leagueId,
@@ -356,6 +366,7 @@ export async function createLeagueTradeGrader(args: {
     try {
       const collegeView = college ? await college.grade(give, get) : null
       if (collegeView) return collegeView
+      if (sportPoints) return await sportPoints.grade(give, get)
       const pickWhy = assets.pickRefusal([...give, ...get])
       if (pickWhy) return { graded: false, reason: pickWhy, basis: null }
       const dataGaps: string[] = []
