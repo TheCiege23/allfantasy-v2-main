@@ -77,10 +77,12 @@ beforeEach(() => {
 })
 
 describe('alert sweep — Chimmy alert controls', () => {
-  it('sends the most urgent alert when nothing is muted', async () => {
+  it('says every flagged player when nothing is muted, most urgent first (the game-day digest)', async () => {
     const body = await (await call('userId=u1')).json()
-    expect(h.dispatch).toHaveBeenCalledTimes(1)
+    // One in-app row per player since the digest (2026-10-08); the phone gets one push for both.
+    expect(h.dispatch).toHaveBeenCalledTimes(2)
     expect(h.dispatch.mock.calls[0]![0]).toMatchObject({ title: 'Jayden Reed is Out', leagueId: 'L1' })
+    expect(h.dispatch.mock.calls[1]![0]).toMatchObject({ title: 'Tank Dell is Out', leagueId: 'L2' })
     expect(body.usersMutedByChimmy).toBe(0)
   })
 
@@ -101,7 +103,7 @@ describe('alert sweep — Chimmy alert controls', () => {
   it('a preferences read that fails mutes nothing', async () => {
     h.loadPrefs.mockRejectedValue(new Error('db down'))
     await call('userId=u1')
-    expect(h.dispatch).toHaveBeenCalledTimes(1)
+    expect(h.dispatch).toHaveBeenCalledTimes(2)
   })
 })
 
@@ -142,7 +144,7 @@ describe('alert sweep — the lineup check rides along', () => {
     const res = await call('userId=u1')
     const body = await res.json()
     expect(res.status).toBe(200)
-    expect(h.dispatch).toHaveBeenCalledTimes(1)
+    expect(h.dispatch).toHaveBeenCalledTimes(2)
     expect(body.lineupCheck).toEqual({ ran: false, reason: 'error', error: 'optimizer exploded' })
   })
 
