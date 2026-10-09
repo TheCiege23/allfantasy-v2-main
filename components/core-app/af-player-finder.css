@@ -3572,10 +3572,62 @@
   color: var(--muted);
   font-size: 11px;
 }
+/* The folded strip (LeagueStrip.tsx): yours inline, everything else one toggle per group. */
+.af-core .af-pf-strip-none {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.af-core .af-pf-strip-folds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.af-core .af-pf-strip-fold {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 3px 10px;
+  border: 1px dashed var(--line2);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.af-core .af-pf-strip-fold[data-group='free'] {
+  border-style: solid;
+  border-color: var(--accent-line);
+  color: var(--accent);
+}
+.af-core .af-pf-strip-fold[aria-expanded='true'] {
+  border-style: solid;
+  background: var(--accent-soft);
+  color: var(--text);
+}
+.af-core .af-pf-strip-caret {
+  font-size: 11px;
+  transition: transform 0.15s ease;
+}
+.af-core .af-pf-strip-fold[aria-expanded='true'] .af-pf-strip-caret {
+  transform: rotate(180deg);
+}
+.af-core .af-pf-strip-list--more {
+  margin-top: 8px;
+}
 @media (max-width: 720px) {
   .af-core .af-pf-strip-chip {
     min-height: 44px;
     max-width: 100%;
+  }
+}
+@media (max-width: 720px) {
+  .af-core .af-pf-strip-fold {
+    min-height: 44px;
   }
 }
 
@@ -4398,4 +4450,32 @@
   font-size: 12px;
   font-weight: 800;
   white-space: nowrap;
+}
+
+/* ── The folded league table (PlayerFinder.tsx OTHERS_FOLD_AFTER): other managers' rows on demand ── */
+.af-core .af-pf-rows-toggle {
+  display: block;
+  width: 100%;
+  min-height: 36px;
+  margin-top: 8px;
+  padding: 8px 12px;
+  border: 1px dashed var(--line2);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+  cursor: pointer;
+}
+.af-core .af-pf-rows-toggle:hover,
+.af-core .af-pf-rows-toggle:focus-visible {
+  border-color: var(--accent-line);
+  color: var(--text);
+}
+@media (max-width: 720px) {
+  .af-core .af-pf-rows-toggle {
+    min-height: 44px;
+  }
 }

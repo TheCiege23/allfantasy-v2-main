@@ -351,6 +351,9 @@ type LeagueRow = {
 
 const ROW_RANK: Record<string, number> = { bad: 0, warn: 1, none: 2, good: 3, other: 4 }
 
+/** Up to this many "someone else has him" rows render inline in the cross-league table. */
+export const OTHERS_FOLD_AFTER = 3
+
 function rowTone(r: LeagueRow): 'bad' | 'warn' | 'none' | 'good' | 'other' {
   if (!r.slot.isYours) return 'other'
   if (r.move) return r.move.tone === 'good' ? 'none' : r.move.tone
@@ -446,6 +449,8 @@ export function PlayerFinder({
    */
   const leagueMode = Boolean(signedIn && selectedLeagueId)
   const inScope = (leagueId: string) => !leagueMode || leagueId === selectedLeagueId
+  // The table's "someone else has him" rows fold once there are more than OTHERS_FOLD_AFTER of them.
+  const [showOtherRows, setShowOtherRows] = useState(false)
 
   /*
    * Compare links. `vs` holds the second player; Swap turns the pair round and
@@ -524,6 +529,14 @@ export function PlayerFinder({
     })
 
   const yoursCount = leagueRows.filter((r) => r.slot.isYours).length
+  /*
+   * Guap, 2026-10-08: "I only need the few leagues I have him on my roster." A 65-league manager
+   * read 4 rows of his and 52 of other people's. Yours (and the held league) always show; the rest
+   * fold behind one toggle past OTHERS_FOLD_AFTER — still there for a trade, no longer the page.
+   */
+  const otherRowCount = leagueRows.filter((r) => !r.slot.isYours && !r.held).length
+  const foldOtherRows = !leagueMode && otherRowCount > OTHERS_FOLD_AFTER
+  const shownRows = foldOtherRows && !showOtherRows ? leagueRows.filter((r) => r.slot.isYours || r.held) : leagueRows
   const unmatched = (detail?.rosterCoverage.unmatched ?? []).filter((u) => inScope(u.leagueId))
 
   // The league strip: every league in scope as one chip — cross-league view only (leagueStrip.ts).
@@ -1108,9 +1121,9 @@ export function PlayerFinder({
                   </Link>
                 </>
               ) : detail.leagues.available ? (
-                leagueRows.length === 0 ? (
+                shownRows.length === 0 ? (
                   <p className="af-pf-unavailable">
-                    {leagueMode ? t.notOnRosterHere : t.notOnAnyRoster(leagueCount)}
+                    {leagueRows.length > 0 ? t.notOnYourRosters : leagueMode ? t.notOnRosterHere : t.notOnAnyRoster(leagueCount)}
                   </p>
                 ) : (
                   <table className="af-pf-table">
@@ -1126,7 +1139,7 @@ export function PlayerFinder({
                       </tr>
                     </thead>
                     <tbody>
-                      {leagueRows.map((r) => {
+                      {shownRows.map((r) => {
                         const l = r.slot
                         const tone = rowTone(r)
                         return (
@@ -1230,6 +1243,16 @@ export function PlayerFinder({
               ) : (
                 <Unavailable reason={gatedReason(detail.leagues)} />
               )}
+              {signedIn && foldOtherRows ? (
+                <button
+                  type="button"
+                  className="af-pf-rows-toggle"
+                  aria-expanded={showOtherRows}
+                  onClick={() => setShowOtherRows((v) => !v)}
+                >
+                  {showOtherRows ? t.hideOtherRows : t.showOtherRows(otherRowCount)}
+                </button>
+              ) : null}
               {signedIn && detail.leagues.available && leagueRows.some((r) => r.slot.isYours) && !detail.impact.available ? (
                 <p className="af-pf-unavailable">{why(detail.impact.reason)}</p>
               ) : null}
