@@ -25,8 +25,28 @@ type Result = {
 const SPORTS = ['NFL', 'NBA', 'MLB', 'NHL', 'NCAAF', 'NCAAB', 'SOCCER'] as const
 
 type SearchPlayer = { playerId: string | null; name: string; position: string | null; team: string | null; value: number | null }
-/** How an NBA deal is graded with no league: a standard category preset, or fantasy points. */
-type NbaScoring = 'nba_9cat' | 'nba_8cat_standard' | 'points'
+/**
+ * How a deal is graded with no league, for the sports that offer a choice: a standard category preset, or
+ * fantasy points. The first choice is the default — most NBA and MLB leagues are category leagues.
+ */
+const SCORING_CHOICES: Readonly<Record<string, { label: string; choices: ReadonlyArray<{ value: string; label: string }> }>> = {
+  NBA: {
+    label: 'NBA scoring',
+    choices: [
+      { value: 'nba_9cat', label: '9-category head-to-head' },
+      { value: 'nba_8cat_standard', label: '8-category (no turnovers)' },
+      { value: 'points', label: 'Points' },
+    ],
+  },
+  MLB: {
+    label: 'MLB scoring',
+    choices: [
+      { value: 'mlb_5x5', label: '5x5 categories' },
+      { value: 'mlb_6x6', label: '6x6 categories (adds TB and holds)' },
+      { value: 'points', label: 'Points' },
+    ],
+  },
+}
 
 function assets(text: string, sport: string, verified: Record<string, string>) {
   return text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((name) => {
@@ -84,7 +104,8 @@ export function GenericTradeAnalyzer({ viewerId }: { viewerId?: string | null } 
 
   const comparisonScope = `generic:${viewerId ?? 'device'}`
   const [sport, setSport] = useState<string>('NFL')
-  const [nbaScoring, setNbaScoring] = useState<NbaScoring>('nba_9cat')
+  const [scoringBySport, setScoringBySport] = useState<Record<string, string>>({ NBA: 'nba_9cat', MLB: 'mlb_5x5' })
+  const scoring = SCORING_CHOICES[sport] ? scoringBySport[sport] ?? SCORING_CHOICES[sport]!.choices[0]!.value : null
   const [teamA, setTeamA] = useState('')
   const [teamB, setTeamB] = useState('')
   const [result, setResult] = useState<Result | null>(null)
@@ -200,7 +221,7 @@ export function GenericTradeAnalyzer({ viewerId }: { viewerId?: string | null } 
           sideGive,
           sideGet,
           skipAi: true,
-          ...(sport === 'NBA' ? { scoringFormat: nbaScoring } : {}),
+          ...(scoring ? { scoringFormat: scoring } : {}),
         }),
       })
       const data = await response.json() as Result
@@ -241,12 +262,10 @@ export function GenericTradeAnalyzer({ viewerId }: { viewerId?: string | null } 
           {SPORTS.map((value) => <option key={value} value={value}>{copy(value)}</option>)}
         </select>
       </label>
-      {/* NBA leagues are mostly category leagues; the grade values each the way it is won. */}
-      {sport === 'NBA' ? (
-        <label className="af-tc-generic-sport">{copy("Scoring ")}<select aria-label={copy("NBA scoring")} value={nbaScoring} onChange={(event) => { setNbaScoring(event.target.value as NbaScoring); setResult(null) }}>
-            <option value="nba_9cat">{copy("9-category head-to-head")}</option>
-            <option value="nba_8cat_standard">{copy("8-category (no turnovers)")}</option>
-            <option value="points">{copy("Points")}</option>
+      {/* NBA and MLB leagues are mostly category leagues; the grade values each the way it is won. */}
+      {scoring && SCORING_CHOICES[sport] ? (
+        <label className="af-tc-generic-sport">{copy("Scoring ")}<select aria-label={copy(SCORING_CHOICES[sport]!.label)} value={scoring} onChange={(event) => { const value = event.target.value; setScoringBySport((prev) => ({ ...prev, [sport]: value })); setResult(null) }}>
+            {SCORING_CHOICES[sport]!.choices.map((choice) => <option key={choice.value} value={choice.value}>{copy(choice.label)}</option>)}
           </select>
         </label>
       ) : null}

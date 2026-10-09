@@ -50,6 +50,8 @@ async function main() {
     ],
     NCAAB: [[['JT Toppin'], ['Boopie Miller']]],
     NHL: [[['Connor McDavid'], ['Nathan MacKinnon']]],
+    // Needs #2192's rates on the board; until the projection writer has run with it, MLB refuses.
+    MLB: [[['Aaron Judge'], ['Paul Skenes']], [['Tarik Skubal'], ['Juan Soto']], [['Shohei Ohtani'], ['Aaron Judge']]],
   }
 
   deals.NBA!.push([['Giannis Antetokounmpo'], ['Shai Gilgeous-Alexander']], [['Rudy Gobert'], ['Tyrese Haliburton']])
@@ -58,6 +60,8 @@ async function main() {
     { sport: 'NBA', format: 'nba_9cat' },
     { sport: 'NCAAB', format: 'points' },
     { sport: 'NHL', format: 'points' },
+    { sport: 'MLB', format: 'points' },
+    { sport: 'MLB', format: 'mlb_5x5' },
   ] as const
   for (const { sport, format } of runs) {
     const t0 = Date.now()

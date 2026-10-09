@@ -24,21 +24,26 @@
  * ⚠ GAMES REMAINING DOES NOT MOVE THE LETTER. It is one multiplier on every player (the schedule gives
  * every team within a couple of games of each other), and the grade is a percentage gap. It sets the size
  * of the numbers a manager is shown and whether there is a season left to grade.
+ *
+ * ⚠ EXCEPT THAT A BASEBALL PITCHER DOES NOT PLAY EVERY GAME. MLB's projection rates are per APPEARANCE —
+ * a starter's line is per start, about one team game in five — so the loader scales every pitcher to his
+ * share of team games BEFORE anything is compared, and `perGame` on an MLB board is per TEAM game. Times
+ * team games left, a starter's line taken per start would be worth five times his season.
  */
 
 import { gradeTrade, type TradeGradeLine, type TradeGradeView } from './tradeGrade'
 import type { TradeAssetInput } from '@/lib/trade-value-console/types'
 import { playerNamesAgree } from '@/lib/player-identity/externalIdNamespace'
 
-/** Sports this grade covers. MLB is not here: its projection board carries no batting or pitching rates. */
-export type PointsGradedSport = 'NBA' | 'NCAAB' | 'NHL'
+/** Sports this grade covers. Soccer is not here: the vendor serves no player season stats for it. */
+export type PointsGradedSport = 'NBA' | 'NCAAB' | 'NHL' | 'MLB'
 
 export function isPointsGradedSport(sport: string | null | undefined): sport is PointsGradedSport {
   const s = String(sport ?? '').trim().toUpperCase()
-  return s === 'NBA' || s === 'NCAAB' || s === 'NHL'
+  return s === 'NBA' || s === 'NCAAB' || s === 'NHL' || s === 'MLB'
 }
 
-const SPORT_LABEL: Record<PointsGradedSport, string> = { NBA: 'NBA', NCAAB: 'college basketball', NHL: 'NHL' }
+const SPORT_LABEL: Record<PointsGradedSport, string> = { NBA: 'NBA', NCAAB: 'college basketball', NHL: 'NHL', MLB: 'MLB' }
 
 /** Fewer games than this behind a projection and it is not a price. */
 export const MIN_SAMPLE_GAMES = 10
@@ -58,6 +63,12 @@ export type BoardPlayer = {
   aliases: readonly string[]
   /** The season the projection's numbers come from (last season, until this one has games). */
   sourceSeason?: number | null
+  /**
+   * A sport-specific sample bar, replacing the games bar when present. Baseball's: ten games is a weekend
+   * hot streak (31 at-bats put a September call-up among the top five hitters, measured 2026-10-09), so an
+   * MLB projection needs at-bats or innings behind it instead — `has` and `needs` are said in those terms.
+   */
+  sampleBar?: { ok: boolean; has: string; needs: string }
 }
 
 /**
@@ -76,6 +87,11 @@ export type SportSeasonWindow = {
   gamesRemaining: number
   /** When the projections still come from an earlier season, that season's label ("2025-26"). */
   baselineSeasonLabel?: string | null
+  /**
+   * False when `gamesRemaining` is the sport's standard regular season because the season's schedule is
+   * not posted yet (MLB in the offseason). The basis says so rather than presenting it as counted.
+   */
+  scheduleKnown?: boolean
 }
 
 export type SportPointsContext = {
@@ -110,7 +126,13 @@ export function sportPointsBasis(
   const baseline = ctx.window.baselineSeasonLabel
     ? ` Projections are built from the ${ctx.window.baselineSeasonLabel} season until this one has enough games.`
     : ''
-  const season = `the rest of the ${ctx.window.seasonLabel} ${label} regular season (about ${ctx.window.gamesRemaining} games)`
+  const season =
+    ctx.window.scheduleKnown === false
+      ? `the ${ctx.window.seasonLabel} ${label} regular season (${ctx.window.gamesRemaining} games — the schedule is not posted yet)`
+      : `the rest of the ${ctx.window.seasonLabel} ${label} regular season (about ${ctx.window.gamesRemaining} games)`
+  const mlb = ctx.sport === 'MLB'
+  // MLB rates are per appearance; the loader puts every pitcher on the team-game scale first.
+  const pitchers = mlb ? ' Pitchers count for the share of team games they pitched in that season — a starter about one in five.' : ''
   if (ctx.valueKind === 'categories') {
     const where =
       ctx.scoringBasis === 'league'
@@ -118,19 +140,28 @@ export function sportPointsBasis(
         : `a standard ${ctx.teams}-team head-to-head category league`
     // Only what this league's categories actually hold: the 8-category standard has no turnovers.
     const named = new Set((ctx.categoryList ?? '').split(/, | and /))
-    const notes = [
-      named.has('FG%') || named.has('FT%') ? 'percentages are weighted by shot volume' : null,
-      named.has('TO') ? 'turnovers count against' : null,
-    ].filter(Boolean)
-    const how = notes.length ? ` ${notes.join(' and ').replace(/^./, (c) => c.toUpperCase())}.` : ''
-    return `Category value over the best free agent at each position for ${season}, on ${where}: each category is scored as standard deviations above or below the rosterable player pool, per game, then summed across ${ctx.categoryList ?? 'the categories'}.${how} Punting a category is not modelled.${baseline}`
+    const notes = mlb
+      ? [
+          named.has('AVG') ? 'AVG is weighted by at-bats' : null,
+          named.has('ERA') || named.has('WHIP') ? `${named.has('ERA') && named.has('WHIP') ? 'ERA and WHIP' : named.has('ERA') ? 'ERA' : 'WHIP'} by innings` : null,
+          'hitters are measured against hitters and pitchers against pitchers',
+        ].filter(Boolean)
+      : [
+          named.has('FG%') || named.has('FT%') ? 'percentages are weighted by shot volume' : null,
+          named.has('TO') ? 'turnovers count against' : null,
+        ].filter(Boolean)
+    const how = notes.length ? ` ${notes.join(mlb ? '; ' : ' and ').replace(/^./, (c) => c.toUpperCase())}.` : ''
+    const per = mlb ? 'per team game' : 'per game'
+    return `Category value over the best free agent at each position for ${season}, on ${where}: each category is scored as standard deviations above or below the rosterable player pool, ${per}, then summed across ${ctx.categoryList ?? 'the categories'}.${how}${pitchers} Punting a category is not modelled.${baseline}`
   }
   const scoring =
     ctx.scoringBasis === 'league'
       ? 'scored under this league’s rules'
       : `scored on AllFantasy’s default ${label} points for a ${ctx.teams}-team league with standard lineups`
-  const bonus = ctx.sport === 'NHL' ? '' : ' Double-double and triple-double bonuses are not projected.'
-  return `Points over the best free agent at each position for ${season}, ${scoring}.${bonus}${baseline}`
+  const bonus = ctx.sport === 'NBA' || ctx.sport === 'NCAAB' ? ' Double-double and triple-double bonuses are not projected.' : ''
+  // A quality start is a one-game test that a season line cannot pass or fail.
+  const qs = mlb ? ' Quality starts are not projected.' : ''
+  return `Points over the best free agent at each position for ${season}, ${scoring}.${bonus}${pitchers}${qs}${baseline}`
 }
 
 /**
@@ -155,7 +186,12 @@ export function boardReadinessReason(args: {
       return `College rosters turn over every year, and these projections still come from last season, which includes players who have since left. College basketball grades start once the ${args.seasonLabel} season has games behind it.`
     }
   }
-  const cleared = args.board.filter(meetsSampleBar).length
+  /*
+   * Games, not a sport's own bar: this asks whether the season the board projects from has started to
+   * replace the last one. Baseball's at-bat bar would count every call-up as "not ready" and pause a
+   * complete board.
+   */
+  const cleared = args.board.filter(meetsGamesBar).length
   if (cleared / args.board.length < MIN_BOARD_COVERAGE) {
     return `${label[0]!.toUpperCase()}${label.slice(1)} projections are switching to the ${args.seasonLabel} season, and most players have fewer than ${MIN_SAMPLE_GAMES} games behind them, so grades pause until the board fills in.`
   }
@@ -187,7 +223,13 @@ export function categoryLeagueReason(settings: unknown, sport: PointsGradedSport
     .filter(Boolean)
   const category = modes.some((m) => m === 'head' || m.includes('cat') || m.includes('roto'))
   if (!category) return null
-  return `This league scores ${SPORT_LABEL[sport]} by categories we could not read — category grades cover the standard 8- and 9-category head-to-head setups so far — and a points total would answer a different question, so this deal is not graded.`
+  const covered =
+    sport === 'NBA'
+      ? 'category grades cover the standard 8- and 9-category head-to-head setups so far'
+      : sport === 'MLB'
+        ? 'category grades cover the standard 5x5 and 6x6 setups so far'
+        : `there are no ${SPORT_LABEL[sport]} category grades yet`
+  return `This league scores ${SPORT_LABEL[sport]} by categories we could not read — ${covered} — and a points total would answer a different question, so this deal is not graded.`
 }
 
 /**
@@ -202,7 +244,13 @@ export function multiSeasonFormatReason(leagueType: string | null | undefined, s
   return `This is a ${t.replace('_', ' ')} league, and ${SPORT_LABEL[sport]} grades so far count this season only — that would ignore every season after it, young players most of all. This deal is not graded.`
 }
 
-export function meetsSampleBar(p: Pick<BoardPlayer, 'sampleGames'>): boolean {
+export function meetsSampleBar(p: Pick<BoardPlayer, 'sampleGames' | 'sampleBar'>): boolean {
+  if (p.sampleBar) return p.sampleBar.ok
+  return meetsGamesBar(p)
+}
+
+/** The games bar alone — what says a whole board is mid-switch to a new season, in every sport. */
+function meetsGamesBar(p: Pick<BoardPlayer, 'sampleGames'>): boolean {
   return p.sampleGames == null || p.sampleGames >= MIN_SAMPLE_GAMES
 }
 
@@ -320,9 +368,9 @@ function priceSide(
     if (!found.ok) return { withheld: `${found.reason} This deal is not graded.` }
     const { player } = found
     if (!meetsSampleBar(player)) {
-      return {
-        withheld: `${player.name}’s projection rests on ${player.sampleGames} game${player.sampleGames === 1 ? '' : 's'}, too few to price — grades start at ${MIN_SAMPLE_GAMES} games. This deal is not graded.`,
-      }
+      const has = player.sampleBar?.has ?? `${player.sampleGames} game${player.sampleGames === 1 ? '' : 's'}`
+      const needs = player.sampleBar?.needs ?? `${MIN_SAMPLE_GAMES} games`
+      return { withheld: `${player.name}’s projection rests on ${has}, too few to price — grades start at ${needs}. This deal is not graded.` }
     }
     const pos = player.position.trim().toUpperCase()
     const replacement = ctx.replacementByPosition.get(pos)

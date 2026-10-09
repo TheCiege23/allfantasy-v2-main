@@ -10,7 +10,8 @@ import { getCategoryPresetDefinitions } from '@/lib/category-scoring'
 import { nativeCategoryScoringContext } from '@/lib/category-scoring/nativeCategoryScoringContext'
 import type { CategoryDefinition } from '@/lib/category-scoring/types'
 import { rosteredIdsOf } from './ncaafRedraftContext'
-import { categoryList, categoryPerGameValues } from './sportCategoryValue'
+import { categoryList, categoryPerGameValues, groupedCategoryValues } from './sportCategoryValue'
+import { isPitchingCategory, isPitchingSlot, MLB_REGULAR_SEASON_GAMES, toTeamGameLines } from './mlbTeamGame'
 import {
   boardReadinessReason,
   categoryLeagueReason,
@@ -60,6 +61,15 @@ function readRates(adjustmentFactors: unknown): Record<string, unknown> | null {
   return rates && typeof rates === 'object' && !Array.isArray(rates) ? (rates as Record<string, unknown>) : null
 }
 
+/** A stored MLB line, already in the engine's keys: its finite numbers, as they are. */
+function engineKeyedLine(raw: unknown): { stats: Record<string, number>; unmappedKeys: string[] } {
+  const stats: Record<string, number> = {}
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    for (const [k, v] of Object.entries(raw)) if (typeof v === 'number' && Number.isFinite(v)) stats[k] = v
+  }
+  return { stats, unmappedKeys: [] }
+}
+
 function reasonsOf(adjustmentFactors: unknown): unknown {
   return adjustmentFactors && typeof adjustmentFactors === 'object' ? (adjustmentFactors as Record<string, unknown>).confidenceReasons : null
 }
@@ -78,9 +88,25 @@ function baselineSeasonOf(board: readonly BoardPlayer[], season: number): number
   return top && top[1] / board.length > 0.5 ? top[0] : null
 }
 
-/** "2026-27" for a season keyed 2026 — these seasons span two calendar years. */
-export function seasonLabelFor(season: number): string {
+/** "2026-27" for a season keyed 2026 — winter seasons span two calendar years. Baseball's is one: "2027". */
+export function seasonLabelFor(season: number, sport?: PointsGradedSport): string {
+  if (sport === 'MLB') return String(season)
   return `${season}-${String((season + 1) % 100).padStart(2, '0')}`
+}
+
+/**
+ * Regular-season games each team still has. Null when the schedule has no row for the season (unknown,
+ * not over) — except baseball's, whose length is fixed: an MLB season with no schedule posted yet is the
+ * offseason, and the grade prices the whole 162-game season ahead, saying so (`scheduleKnown: false`).
+ */
+async function seasonGamesLeft(
+  sport: PointsGradedSport,
+  season: number,
+  now: Date,
+): Promise<{ games: number; scheduleKnown: boolean } | null> {
+  const counted = await gamesRemaining(sport, season, now)
+  if (counted != null) return { games: counted, scheduleKnown: true }
+  return sport === 'MLB' ? { games: MLB_REGULAR_SEASON_GAMES, scheduleKnown: false } : null
 }
 
 /**
@@ -127,15 +153,17 @@ export function lineupSlotsFor(sport: PointsGradedSport, settings: unknown): { s
 }
 
 /** How the open analyzer (no league) is asked to score a daily-sport deal. */
-export type SportScoringFormat = 'points' | 'nba_9cat' | 'nba_8cat_standard'
+export type SportScoringFormat = 'points' | 'nba_9cat' | 'nba_8cat_standard' | 'mlb_5x5' | 'mlb_6x6'
 
 /** Category presets the open analyzer offers, per sport. */
 const OPEN_CATEGORY_PRESETS: Partial<Record<PointsGradedSport, readonly SportScoringFormat[]>> = {
   /*
-   * NBA only. College basketball's stat feed carries no shot attempts (its normalizer maps points through
+   * Not college basketball: its stat feed carries no shot attempts (its normalizer maps points through
    * threes, no FGA/FTA), so FG% and FT% would read as zero for everyone and silently drop out.
    */
   NBA: ['nba_9cat', 'nba_8cat_standard'],
+  // Every stat the 5x5 and 6x6 read is on the board (h/ab for AVG, er/outs for ERA, p_h/p_bb for WHIP).
+  MLB: ['mlb_5x5', 'mlb_6x6'],
 }
 
 type Valuation =
@@ -185,7 +213,13 @@ export async function loadSportPointsBase(args: {
   }
   const valuation = valuationFor(sport, league, args.format)
   if ('refuse' in valuation) return { ok: false, reason: valuation.refuse }
-  const normalize = getDailySportNormalizer(sport)
+  /*
+   * NBA, NHL and college projections store the vendor's stat names and go through the box-score
+   * normalizer here. MLB's are stored ALREADY in the engine's keys (`mlbPerGameRates`) — the normalizer
+   * expects one game's batting OR pitching box and would read a stored line as nothing — so they are read
+   * as they are.
+   */
+  const normalize = sport === 'MLB' ? engineKeyedLine : getDailySportNormalizer(sport)
   if (!normalize) return { ok: false, reason: `No ${sport} scoring is configured, so this deal cannot be graded.` }
 
   const latest = await prisma.aFProjectionSnapshot
@@ -205,10 +239,10 @@ export async function loadSportPointsBase(args: {
         select: { playerId: true, playerName: true, position: true, adjustmentFactors: true },
       })
       .catch(() => null),
-    gamesRemaining(sport, season, now),
+    seasonGamesLeft(sport, season, now),
   ])
   if (!rows) return { ok: false, reason: `The ${sport} projections could not be read just now.` }
-  if (games == null) return { ok: false, reason: `The ${seasonLabelFor(season)} ${sport} schedule is not on file, so the games left to play cannot be counted.` }
+  if (games == null) return { ok: false, reason: `The ${seasonLabelFor(season, sport)} ${sport} schedule is not on file, so the games left to play cannot be counted.` }
 
   const identities = await prisma.playerIdentityMap
     .findMany({
@@ -242,7 +276,11 @@ export async function loadSportPointsBase(args: {
     })
   }
 
-  let perGameOf: (line: (typeof lines)[number]) => number
+  // Baseball onto one scale first: per TEAM game, pitchers split into SP and RP (`./mlbTeamGame.ts`).
+  const valued: Array<(typeof lines)[number] & { hitter?: boolean; pitcher?: boolean }> =
+    sport === 'MLB' ? toTeamGameLines(lines) : lines
+
+  let perGameOf: (line: (typeof valued)[number]) => number
   if (valuation.kind === 'points') {
     perGameOf = (line) => valuation.scorer(line.stats, line.position)
   } else {
@@ -252,21 +290,31 @@ export async function loadSportPointsBase(args: {
      * the scale. Thin projections are valued but never set it (`meetsSampleBar`).
      */
     const starters = lineup.slots.reduce((s, slot) => s + slot.count, 0)
-    const values = categoryPerGameValues(
-      lines.map((l) => ({ id: l.id, stats: l.stats, eligible: meetsSampleBar(l) })),
-      valuation.categories,
-      teams * (starters + lineup.benchPerTeam),
-    )
+    const asPlayer = (l: (typeof valued)[number]) => ({ id: l.id, stats: l.stats, eligible: meetsSampleBar(l) })
+    let values: ReturnType<typeof categoryPerGameValues>
+    if (sport === 'MLB') {
+      // Hitters against hitters on the hitting categories, pitchers against pitchers on the pitching ones;
+      // each pool is the league's slots for that group plus its share of the bench.
+      const pitchingSlots = lineup.slots.filter((s) => isPitchingSlot(s.eligible)).reduce((s, slot) => s + slot.count, 0)
+      const hittingSlots = starters - pitchingSlots
+      const pool = (slots: number) => teams * (slots + (starters > 0 ? (lineup.benchPerTeam * slots) / starters : 0))
+      values = groupedCategoryValues([
+        { players: valued.filter((l) => l.hitter).map(asPlayer), categories: valuation.categories.filter((c) => !isPitchingCategory(c)), poolSize: pool(hittingSlots) },
+        { players: valued.filter((l) => l.pitcher).map(asPlayer), categories: valuation.categories.filter(isPitchingCategory), poolSize: pool(pitchingSlots) },
+      ])
+    } else {
+      values = categoryPerGameValues(valued.map(asPlayer), valuation.categories, teams * (starters + lineup.benchPerTeam))
+    }
     perGameOf = (line) => values.get(line.id)?.total ?? Number.NaN
   }
   const board: BoardPlayer[] = []
-  for (const line of lines) {
+  for (const line of valued) {
     const perGame = perGameOf(line)
     if (!Number.isFinite(perGame)) continue
     const { stats: _stats, ...player } = line
     board.push({ ...player, perGame })
   }
-  const notReady = boardReadinessReason({ sport, board, season, seasonLabel: seasonLabelFor(season) })
+  const notReady = boardReadinessReason({ sport, board, season, seasonLabel: seasonLabelFor(season, sport) })
   if (notReady) return { ok: false, reason: notReady }
   const baseline = baselineSeasonOf(board, season)
 
@@ -298,9 +346,10 @@ export async function loadSportPointsBase(args: {
       replacementByPosition,
       window: {
         season,
-        seasonLabel: seasonLabelFor(season),
-        gamesRemaining: games,
-        baselineSeasonLabel: baseline != null ? seasonLabelFor(baseline) : null,
+        seasonLabel: seasonLabelFor(season, sport),
+        gamesRemaining: games.games,
+        baselineSeasonLabel: baseline != null ? seasonLabelFor(baseline, sport) : null,
+        ...(games.scheduleKnown ? {} : { scheduleKnown: false }),
       },
       scoringBasis: league ? 'league' : 'default',
       teams,

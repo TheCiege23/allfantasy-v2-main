@@ -120,6 +120,17 @@ describe('league-free trade analyzer', () => {
     expect(await analyze()).toMatchObject({ sportFilter: 'NBA', scoringFormat: 'nba_9cat' })
     fireEvent.change(screen.getByLabelText('NBA scoring'), { target: { value: 'points' } })
     expect(await analyze()).toMatchObject({ scoringFormat: 'points' })
+
+    // MLB asks its own question, defaulting to 5x5; each sport keeps its own answer.
+    const sportSelect = view.container.querySelector('.af-tc-generic-sport select')!
+    fireEvent.change(sportSelect, { target: { value: 'MLB' } })
+    expect(screen.queryByLabelText('NBA scoring')).toBeNull()
+    expect((screen.getByLabelText('MLB scoring') as HTMLSelectElement).value).toBe('mlb_5x5')
+    expect(await analyze()).toMatchObject({ sportFilter: 'MLB', scoringFormat: 'mlb_5x5' })
+    fireEvent.change(screen.getByLabelText('MLB scoring'), { target: { value: 'mlb_6x6' } })
+    expect(await analyze()).toMatchObject({ scoringFormat: 'mlb_6x6' })
+    fireEvent.change(sportSelect, { target: { value: 'NBA' } })
+    expect((screen.getByLabelText('NBA scoring') as HTMLSelectElement).value).toBe('points')
   })
 
   it('converts a known overall pick into a 12-team reference tier', () => {

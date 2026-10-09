@@ -59,7 +59,7 @@ export type TradeConsoleAnalyzeInput = {
    * With no league: how a daily-sport deal is scored — fantasy points, or a standard category preset
    * (`lib/decision-os/trade/sportPointsContext.ts`). Ignored in a league, which uses its own settings.
    */
-  scoringFormat?: 'points' | 'nba_9cat' | 'nba_8cat_standard' | null
+  scoringFormat?: 'points' | 'nba_9cat' | 'nba_8cat_standard' | 'mlb_5x5' | 'mlb_6x6' | null
 }
 
 export type TradeConsoleLeagueSnapshot = {

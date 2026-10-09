@@ -3,7 +3,7 @@
  * per game — z-scores against the rosterable pool, percentages weighted by volume, turnovers against.
  */
 import { describe, expect, it } from 'vitest'
-import { categoryList, categoryPerGameValues, type CategoryPlayer } from '@/lib/decision-os/trade/sportCategoryValue'
+import { categoryList, categoryPerGameValues, groupedCategoryValues, type CategoryPlayer } from '@/lib/decision-os/trade/sportCategoryValue'
 import { getCategoryPresetDefinitions } from '@/lib/category-scoring'
 import type { CategoryDefinition } from '@/lib/category-scoring/types'
 
@@ -75,5 +75,33 @@ describe('categoryList', () => {
   it('names the categories a grade was valued on', () => {
     expect(categoryList(getCategoryPresetDefinitions('nba_9cat')!)).toBe('PTS, REB, AST, STL, BLK, TO, FG%, FT% and 3PM')
     expect(categoryList([PTS])).toBe('PTS')
+  })
+})
+
+describe('groupedCategoryValues', () => {
+  const HR: CategoryDefinition = { id: 'hr', label: 'HR', direction: 'higher', computation: { kind: 'sum', statKey: 'hr' } }
+  const K: CategoryDefinition = { id: 'k', label: 'K', direction: 'higher', computation: { kind: 'sum', statKey: 'so' } }
+  const hitters = [player('a', { hr: 0.4 }), player('b', { hr: 0.2 }), player('c', { hr: 0.1 })]
+  const pitchers = [player('p', { so: 1.4 }), player('q', { so: 0.8 })]
+
+  it('values each group only against its own pool and on its own categories', () => {
+    const v = groupedCategoryValues([
+      { players: hitters, categories: [HR], poolSize: 3 },
+      { players: pitchers, categories: [K], poolSize: 2 },
+    ])
+    // The hitters' scale is the hitters' alone: the same as valuing them with no pitchers anywhere.
+    expect(v.get('b')!.total).toBeCloseTo(categoryPerGameValues(hitters, [HR], 3).get('b')!.total, 9)
+    expect(Object.keys(v.get('a')!.byCategory)).toEqual(['hr'])
+    expect(Object.keys(v.get('p')!.byCategory)).toEqual(['k'])
+  })
+
+  it('sums a two-way player across both groups', () => {
+    const twoWay = player('two', { hr: 0.3, so: 1.1 })
+    const v = groupedCategoryValues([
+      { players: [...hitters, twoWay], categories: [HR], poolSize: 4 },
+      { players: [...pitchers, twoWay], categories: [K], poolSize: 3 },
+    ])
+    const two = v.get('two')!
+    expect(two.total).toBeCloseTo(two.byCategory.hr! + two.byCategory.k!, 9)
   })
 })
