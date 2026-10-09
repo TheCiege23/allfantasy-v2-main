@@ -405,6 +405,8 @@ export async function runTradeConsoleAnalysis(
           leagueRow && consoleLeagueType && input.leagueId
             ? { id: input.leagueId.trim(), settings: leagueRow.settings, leagueType: consoleLeagueType.type, leagueSize: leagueRow.leagueSize ?? null }
             : null,
+        // The open analyzer's scoring choice (points, 9-cat, 8-cat); a league is scored by its own settings.
+        format: input.scoringFormat ?? null,
       })
   const sportView = sportPointsGrader ? await sportPointsGrader.grade(input.sideGive, input.sideGet) : null
   if (sportView) applyCollegeGrade(leagueGrade, sportView)

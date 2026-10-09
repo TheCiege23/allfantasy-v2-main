@@ -2,7 +2,12 @@ import 'server-only'
 
 import type { TradeAssetInput } from '@/lib/trade-value-console/types'
 import type { TradeGradeView } from './tradeGrade'
-import { loadSportPointsBase, type SportPointsBaseResult, type SportPointsLeague } from './sportPointsContext'
+import {
+  loadSportPointsBase,
+  type SportPointsBaseResult,
+  type SportPointsLeague,
+  type SportScoringFormat,
+} from './sportPointsContext'
 import { gradeSportPointsDeal, isPointsGradedSport } from './sportPointsValue'
 
 /**
@@ -21,7 +26,12 @@ export type SportPointsGrader = {
 export type SportPointsGraderDeps = { loadBase: typeof loadSportPointsBase }
 
 export function createSportPointsGrader(
-  args: { sport: string | null | undefined; league: SportPointsLeague | null },
+  args: {
+    sport: string | null | undefined
+    league: SportPointsLeague | null
+    /** The open analyzer's scoring choice (points, or a category preset). A league uses its own settings. */
+    format?: SportScoringFormat | null
+  },
   deps: SportPointsGraderDeps = { loadBase: loadSportPointsBase },
 ): SportPointsGrader | null {
   const sport = String(args.sport ?? '').trim().toUpperCase()
@@ -29,7 +39,7 @@ export function createSportPointsGrader(
   let base: Promise<SportPointsBaseResult> | null = null
   const baseOnce = () =>
     (base ??= deps
-      .loadBase({ sport, league: args.league })
+      .loadBase({ sport, league: args.league, format: args.league ? null : args.format ?? null })
       .catch((): SportPointsBaseResult => ({ ok: false, reason: `This league’s ${sport} values could not be loaded just now.` })))
 
   return {

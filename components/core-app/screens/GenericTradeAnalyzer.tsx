@@ -25,6 +25,8 @@ type Result = {
 const SPORTS = ['NFL', 'NBA', 'MLB', 'NHL', 'NCAAF', 'NCAAB', 'SOCCER'] as const
 
 type SearchPlayer = { playerId: string | null; name: string; position: string | null; team: string | null; value: number | null }
+/** How an NBA deal is graded with no league: a standard category preset, or fantasy points. */
+type NbaScoring = 'nba_9cat' | 'nba_8cat_standard' | 'points'
 
 function assets(text: string, sport: string, verified: Record<string, string>) {
   return text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((name) => {
@@ -82,6 +84,7 @@ export function GenericTradeAnalyzer({ viewerId }: { viewerId?: string | null } 
 
   const comparisonScope = `generic:${viewerId ?? 'device'}`
   const [sport, setSport] = useState<string>('NFL')
+  const [nbaScoring, setNbaScoring] = useState<NbaScoring>('nba_9cat')
   const [teamA, setTeamA] = useState('')
   const [teamB, setTeamB] = useState('')
   const [result, setResult] = useState<Result | null>(null)
@@ -197,6 +200,7 @@ export function GenericTradeAnalyzer({ viewerId }: { viewerId?: string | null } 
           sideGive,
           sideGet,
           skipAi: true,
+          ...(sport === 'NBA' ? { scoringFormat: nbaScoring } : {}),
         }),
       })
       const data = await response.json() as Result
@@ -237,6 +241,15 @@ export function GenericTradeAnalyzer({ viewerId }: { viewerId?: string | null } 
           {SPORTS.map((value) => <option key={value} value={value}>{copy(value)}</option>)}
         </select>
       </label>
+      {/* NBA leagues are mostly category leagues; the grade values each the way it is won. */}
+      {sport === 'NBA' ? (
+        <label className="af-tc-generic-sport">{copy("Scoring ")}<select aria-label={copy("NBA scoring")} value={nbaScoring} onChange={(event) => { setNbaScoring(event.target.value as NbaScoring); setResult(null) }}>
+            <option value="nba_9cat">{copy("9-category head-to-head")}</option>
+            <option value="nba_8cat_standard">{copy("8-category (no turnovers)")}</option>
+            <option value="points">{copy("Points")}</option>
+          </select>
+        </label>
+      ) : null}
       <div className="af-tc-generic-sides">
         <div className="af-tc-generic-side">
           <label>{copy("Team A sends ")}<textarea value={teamA} onChange={(event) => { setTeamA(event.target.value); setScreenshotConfirmed(false); setResult(null) }} placeholder={copy('Player name\n2027 round 1')} rows={5} />

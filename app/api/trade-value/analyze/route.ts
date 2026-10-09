@@ -96,6 +96,8 @@ const bodySchema = z.object({
   skipAi: z.boolean().optional(),
   allowMultisportFairness: z.boolean().optional(),
   opponentTeamExternalId: z.string().min(1).max(128).nullable().optional(),
+  // The open analyzer's scoring choice for a daily-sport deal; a league is scored by its own settings.
+  scoringFormat: z.enum(['points', 'nba_9cat', 'nba_8cat_standard']).nullable().optional(),
 })
 
 export const POST = withApiUsage({ endpoint: '/api/trade-value/analyze', tool: 'TradeValueConsole' })(
