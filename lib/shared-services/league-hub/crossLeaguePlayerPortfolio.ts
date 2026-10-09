@@ -346,6 +346,11 @@ export async function assembleCrossLeaguePlayerPortfolio(args: {
   sport?: string
   provider?: LeagueHubProvider
   season?: number
+  /**
+   * A per-league keep rule, applied with the filters above. The injured-starter sweep uses it to
+   * read every sport but only the leagues being played now (lib/chimmy-alerts/gameDayScope.ts).
+   */
+  leagueFilter?: (league: { sport: string; season: number; platform: string; lastSyncedAt: Date | null }) => boolean
   requestTime?: Date
 }): Promise<CrossLeaguePlayerPortfolioResult> {
   const emptyInjuryPort = { ambiguousPlayers: [], feedStale: true, newestFetchedAt: null }
@@ -389,6 +394,7 @@ export async function assembleCrossLeaguePlayerPortfolio(args: {
     if (args.sport && r.league.sport !== args.sport) return false
     if (args.provider && toProvider(r.league.platform) !== args.provider) return false
     if (args.season && r.league.season !== args.season) return false
+    if (args.leagueFilter && !args.leagueFilter(r.league)) return false
     return true
   })
 
