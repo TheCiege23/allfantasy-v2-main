@@ -672,7 +672,7 @@ async function handle(req: NextRequest) {
             meta: { chimmyAlert: true, class: top.class, alertType: top.type, ...(top.metadata ?? {}) },
             dedupePrefix: u.key,
             skipChannels: { email: !withEmail, sms: true, push: true },
-            ...(withEmail ? { emailOverride: injuryEmail } : {}),
+            ...(withEmail && injuryEmail ? { emailOverride: injuryEmail } : {}),
           })
         }
         result.playersSent = unsent.length
@@ -705,7 +705,8 @@ async function handle(req: NextRequest) {
         )
         const pushable = unsent.map((u, i) => ({ u, i })).filter(({ i }) => gates[i]?.allowed)
         if (pushable.length === 0) {
-          result.pushSkipped = gates[0] ? gates[0].reason : 'settings_unavailable'
+          const first = gates[0]
+          result.pushSkipped = first && !first.allowed ? first.reason : 'settings_unavailable'
           totalPushSkipped += 1
           results.push(result)
           continue
