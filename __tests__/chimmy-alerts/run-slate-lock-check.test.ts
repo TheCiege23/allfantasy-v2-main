@@ -10,7 +10,7 @@ vi.mock('@/lib/chimmy-alerts/ChimmyAlertPreferencesService', () => ({ loadChimmy
 
 import type { LineupOptimization, OptimizerPlayer } from '@/lib/chimmy/lineupOptimizerGrounding'
 import { getDefaultNotificationPreferences } from '@/lib/notification-settings/NotificationPreferenceResolver'
-import { openSlate, playsInSlate, slateIssues, slateKickoffs } from '@/lib/chimmy-alerts/slateLockCheck'
+import { openSlate, playsInSlate, renderSlateLock, slateIssueLine, slateIssues, slateKickoffs } from '@/lib/chimmy-alerts/slateLockCheck'
 import { runSlateLockCheck, type SlateLockDeps } from '@/lib/chimmy-alerts/runSlateLockCheck'
 
 /**
@@ -106,6 +106,52 @@ describe('slate lock check — the rules', () => {
     ]
     expect(slateIssues(issues, inTnf, { includeEmptySlots: true }).map((i) => i.kind)).toEqual(['empty_slots', 'no_projection'])
     expect(slateIssues(issues, inTnf, { includeEmptySlots: false }).map((i) => i.kind)).toEqual(['no_projection'])
+  })
+})
+
+describe('slate lock check — only what locks now (2026-10-08)', () => {
+  const kickoffs = new Map([['GB', TNF], ['DAL', TNF], ['BUF', MAIN], ['CHI', MAIN]])
+  const inTnf = playsInSlate(kickoffs, TNF)
+
+  it('names only the players in the locking game, and does not credit Sunday’s gain to Thursday', () => {
+    const line = slateIssueLine(
+      { kind: 'reshuffle', gain: 18.2, start: [player('1', 'Jayden Reed', 'GB'), player('3', 'Rome Odunze', 'CHI')], bench: [player('2', 'Khalil Shakir', 'BUF')] },
+      inTnf,
+    )
+    expect(line).toBe('Start Jayden Reed (WR, GB) before kickoff; the rest of that swap can wait for later games.')
+    expect(line).not.toContain('Odunze')
+    expect(line).not.toContain('Shakir')
+    expect(line).not.toContain('18.2')
+  })
+
+  it('a swap entirely inside the locking game keeps its projected gain', () => {
+    const line = slateIssueLine(
+      { kind: 'reshuffle', gain: 4.4, start: [player('1', 'Jayden Reed', 'GB')], bench: [player('9', 'CeeDee Lamb', 'DAL')] },
+      inTnf,
+    )
+    expect(line).toBe('Start Jayden Reed (WR, GB) and bench CeeDee Lamb (WR, DAL) (+4.4 projected pts).')
+  })
+
+  it('a bench-only Thursday move reads as one', () => {
+    const line = slateIssueLine(
+      { kind: 'reshuffle', gain: 6.4, start: [player('3', 'Rome Odunze', 'CHI')], bench: [player('5', 'Kenneth Gainwell', 'DAL', { position: 'RB' })] },
+      inTnf,
+    )
+    expect(line).toBe('Bench Kenneth Gainwell (RB, DAL) before kickoff; the rest of that swap can wait for later games.')
+  })
+
+  it('a league with nothing locking now drops out of the message and the count', () => {
+    const m = renderSlateLock(
+      [
+        { leagueId: 'L1', leagueName: 'League L1', week: 6, issues: [{ kind: 'reshuffle', gain: 5, start: [player('1', 'Jayden Reed', 'GB')], bench: [player('2', 'Khalil Shakir', 'BUF')] }] },
+        { leagueId: 'L2', leagueName: 'League L2', week: 6, issues: [{ kind: 'reshuffle', gain: 9, start: [player('3', 'Rome Odunze', 'CHI')], bench: [player('2', 'Khalil Shakir', 'BUF')] }] },
+      ],
+      TNF,
+      BEFORE_TNF,
+      inTnf,
+    )!
+    expect(m.title).toBe('Lineups lock in 60 min (8:15 PM ET): 1 fix in League L1')
+    expect(m.body).not.toContain('League L2')
   })
 })
 
