@@ -1,12 +1,6 @@
 import type { OptimizerPlayer } from '@/lib/chimmy/lineupOptimizerGrounding'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
-import {
-  countFixes,
-  renderLineupCheck,
-  type LeagueLineupCheck,
-  type LineupIssue,
-  type ScheduledGame,
-} from './lineupCheck'
+import { lineupCheckHref, type LeagueLineupCheck, type LineupIssue, type ScheduledGame } from './lineupCheck'
 
 /**
  * CHIMMY'S SLATE LOCK CHECK — a lineup check before EVERY slate locks, not just Sunday's (2026-10-08).
@@ -90,26 +84,79 @@ export function slateClock(slate: Date): string {
 
 export type SlateLockMessage = { title: string; body: string; actionHref: string }
 
+const BODY_MAX = 280
+
+function shortName(name: string): string {
+  const n = name.trim()
+  return n.length > 28 ? `${n.slice(0, 27).trimEnd()}…` : n
+}
+
+function who(p: OptimizerPlayer): string {
+  const bits = [p.position, p.team].filter(Boolean).join(', ')
+  return bits ? `${p.name} (${bits})` : p.name
+}
+
+function names(ps: readonly OptimizerPlayer[]): string {
+  const list = ps.map(who)
+  return list.length <= 1 ? list.join('') : `${list.slice(0, -1).join(', ')} and ${list[list.length - 1]}`
+}
+
 /**
- * The weekly check's own body and link — the same sentences for the same issues — under a title
- * that says what makes this one urgent: when it locks.
+ * One issue, said ONLY as far as it locks in this slate (founder, 2026-10-08).
+ *
+ * ⚠ THE FIRST VERSION REPEATED THE WEEKLY CHECK'S WHOLE RESHUFFLE. A Thursday message read "Start
+ * DeVonta Smith, Tyler Higbee and Jaylen Wright, bench Ryan Flournoy, Dohnte Meyers and Kenneth
+ * Gainwell (+18.2)" because one of six players played Thursday — measured on the 19 messages sent
+ * before 2026-10-08's TNF, one titled "16 fixes across 4 leagues". Only the moves touching THIS
+ * game have to happen before it locks; the rest are Sunday's business, and the weekly lineup check
+ * says them then. So a reshuffle names only its players in this slate, and quotes the projected
+ * gain only when the whole swap is in this slate — otherwise the number would credit Thursday's
+ * move with Sunday's points.
  */
+export function slateIssueLine(issue: LineupIssue, inSlate: (p: OptimizerPlayer) => boolean): string | null {
+  if (issue.kind === 'empty_slots') {
+    return issue.count === 1 ? 'A starting spot is empty.' : `${issue.count} starting spots are empty.`
+  }
+  if (issue.kind === 'no_projection') {
+    return `${who(issue.player)} is starting with no projection for this game — check he is active.`
+  }
+  if (issue.kind === 'ruled_out') return null
+  const start = issue.start.filter(inSlate)
+  const bench = issue.bench.filter(inSlate)
+  if (start.length === 0 && bench.length === 0) return null
+  const rest = issue.start.length + issue.bench.length - start.length - bench.length
+  const moves = [start.length ? `start ${names(start)}` : null, bench.length ? `bench ${names(bench)}` : null]
+    .filter(Boolean)
+    .join(' and ')
+  const said = `${moves.charAt(0).toUpperCase()}${moves.slice(1)}`
+  if (rest > 0) return `${said} before kickoff; the rest of that swap can wait for later games.`
+  return issue.gain != null ? `${said} (+${issue.gain.toFixed(1)} projected pts).` : `${said}.`
+}
+
+/** "Lineups lock in 60 min (8:15 PM ET): 2 fixes in League" — with only this slate's moves in the body. */
 export function renderSlateLock(
   found: readonly LeagueLineupCheck[],
   slate: Date,
   now: Date,
-  opts: { baseUrl?: string | null } = {},
+  inSlate: (p: OptimizerPlayer) => boolean,
 ): SlateLockMessage | null {
-  const base = renderLineupCheck(found, opts)
-  if (!base) return null
-  const withIssues = found.filter((l) => l.issues.length > 0)
-  const fixes = countFixes(withIssues)
+  const lines: Array<{ leagueId: string; leagueName: string; text: string[]; fixes: number }> = []
+  for (const l of found) {
+    const text = l.issues.map((i) => slateIssueLine(i, inSlate)).filter((t): t is string => Boolean(t))
+    if (text.length === 0) continue
+    const fixes = l.issues.reduce((n, i) => n + (i.kind === 'empty_slots' ? i.count : i.kind === 'ruled_out' ? 0 : 1), 0)
+    lines.push({ leagueId: l.leagueId, leagueName: l.leagueName, text, fixes })
+  }
+  if (lines.length === 0) return null
+  const fixes = lines.reduce((n, l) => n + l.fixes, 0)
   const mins = Math.max(1, Math.round((slate.getTime() - now.getTime()) / 60_000))
   const what = `${fixes} ${fixes === 1 ? 'fix' : 'fixes'}`
-  const where = withIssues.length === 1 ? `in ${withIssues[0]!.leagueName}` : `across ${withIssues.length} leagues`
+  const where = lines.length === 1 ? `in ${shortName(lines[0]!.leagueName)}` : `across ${lines.length} leagues`
+  let body = lines.map((l) => `${shortName(l.leagueName)}: ${l.text.join(' ')}`).join('\n')
+  if (body.length > BODY_MAX) body = `${body.slice(0, BODY_MAX - 1).trimEnd()}…`
   return {
     title: `Lineups lock in ${mins} min (${slateClock(slate)}): ${what} ${where}`,
-    body: base.body,
-    actionHref: base.actionHref,
+    body,
+    actionHref: lineupCheckHref(lines[0]!.leagueId),
   }
 }

@@ -205,7 +205,7 @@ export async function runSlateLockCheck(
       )
       const found = kept.map((c) => c.check)
 
-      const message = renderSlateLock(found, slate, now, { baseUrl: deps.baseUrl() })
+      const message = renderSlateLock(found, slate, now, inSlate)
       if (!message) {
         tally('clean')
         continue
