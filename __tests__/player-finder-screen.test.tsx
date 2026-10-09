@@ -343,8 +343,9 @@ describe('Player Finder — core view', () => {
     renderCore({
       detail: { ...DETAIL, rosterCoverage: { unmatched: [{ leagueId: 'L-espn2', leagueName: 'Office Pool', platform: 'espn' }] } },
     })
-    expect(screen.getByText(/Not checked: Office Pool/)).toBeInTheDocument()
-    expect(screen.getByText(/ESPN player ids/)).toBeInTheDocument()
+    // Twice in the DOM: under the phone's league cards and under the desktop table — CSS shows one per width.
+    expect(screen.getAllByText(/Not checked: Office Pool/)).toHaveLength(2)
+    expect(screen.getAllByText(/ESPN player ids/)).toHaveLength(2)
   })
 
   it('says where he is across your leagues, and that someone else has him elsewhere', () => {
@@ -375,10 +376,12 @@ describe('Player Finder — core view', () => {
     const leagues = DETAIL.leagues.available ? [...DETAIL.leagues.data, ...others] : []
     renderCore({ detail: { ...DETAIL, leagues: { available: true, data: leagues } }, leagueCount: 12 })
     expect(screen.getAllByRole('row').slice(1)).toHaveLength(3)
-    const toggle = screen.getByRole('button', { name: 'Show the 7 leagues where someone else has him' })
-    fireEvent.click(toggle)
+    // One toggle under the phone's cards, one under the desktop table — one state, CSS shows one per width.
+    const [phoneToggle, tableToggle] = screen.getAllByRole('button', { name: 'Show the 7 leagues where someone else has him' })
+    expect(phoneToggle!.closest('.af-pf-cards')).not.toBeNull()
+    fireEvent.click(tableToggle!)
     expect(screen.getAllByRole('row').slice(1)).toHaveLength(10)
-    expect(screen.getByRole('button', { name: 'Show only your leagues' })).toHaveAttribute('aria-expanded', 'true')
+    for (const b of screen.getAllByRole('button', { name: 'Show only your leagues' })) expect(b).toHaveAttribute('aria-expanded', 'true')
     // The header still counts them — folding hides rows, not facts.
     expect(screen.getByText(/rostered by others in 7/)).toBeInTheDocument()
   })
@@ -642,9 +645,10 @@ describe('Player Finder — game day', () => {
     expect(buttons[0]).toHaveAttribute('target', '_blank')
     // The fixture's Yahoo slot carries no team id, so the verified lineup format cannot build; the league page is offered and labelled as such.
     expect(buttons[0].textContent).toMatch(/^Open (lineup in Yahoo|in Yahoo · League)/)
-    // The banner sits above the tiles, at the top of the card.
+    // The banner sits above the tiles, at the top of the card — with the phone's league cards right under it (2026-10-08).
     const card = banner.closest('.af-pf-detail') as HTMLElement
-    expect(card.querySelector('.af-pf-gameday + .af-pf-compare-entry')).not.toBeNull()
+    expect(card.querySelector('.af-pf-gameday + .af-pf-cards')).not.toBeNull()
+    expect(card.querySelector('.af-pf-cards ~ .af-pf-compare-entry')).not.toBeNull()
   })
 
   it('offers no Open-lineup button for a best-ball league — the platform sets that lineup itself', () => {

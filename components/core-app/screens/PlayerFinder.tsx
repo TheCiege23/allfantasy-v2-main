@@ -63,6 +63,11 @@ import { LeaguePicker } from '@/components/core-app/player-finder/LeaguePicker'
 import { LeagueCalls } from '@/components/core-app/player-finder/LeagueCalls'
 import { LeagueStrip } from '@/components/core-app/player-finder/LeagueStrip'
 import { FollowButton } from '@/components/core-app/player-finder/FollowButton'
+import { LeagueActionCards } from '@/components/core-app/player-finder/LeagueActionCards'
+import { PhoneFold } from '@/components/core-app/player-finder/PhoneFold'
+import { PhoneSearchDock } from '@/components/core-app/player-finder/PhoneSearchDock'
+import { buildLeagueCards } from '@/lib/core-app/leagueActions'
+import { leagueActionsCopy } from '@/lib/core-app/leagueActionsCopy'
 import { FollowingBoard } from '@/components/core-app/player-finder/FollowingBoard'
 import { followCopy } from '@/lib/core-app/finderFollowCopy'
 import type { FollowingCardData } from '@/lib/core-app/followingCard'
@@ -550,6 +555,16 @@ export function PlayerFinder({
   const otherRowCount = leagueRows.filter((r) => !r.slot.isYours && !r.held).length
   const foldOtherRows = !leagueMode && otherRowCount > OTHERS_FOLD_AFTER
   const shownRows = foldOtherRows && !showOtherRows ? leagueRows.filter((r) => r.slot.isYours || r.held) : leagueRows
+  /*
+   * The phone's league cards (2026-10-08, leagueActions.ts): the same rows as the table plus every
+   * league where he is free, each with its one-tap move. Cross-league view only — a held league
+   * already has its ownership card and the sticky bar. On a phone they replace the table.
+   */
+  const leagueCards =
+    detail && signedIn && !leagueMode && detail.leagues.available ? buildLeagueCards(shownRows.map((r) => r.slot), freeAgentBids?.rows ?? []) : []
+  const cardProj: Record<string, string | null> = {}
+  for (const r of leagueRows) cardProj[r.slot.leagueId] = r.impact?.afPoints.available ? r.impact.afPoints.data.points.toFixed(1) : null
+  const ac = leagueActionsCopy(language)
   const unmatched = (detail?.rosterCoverage.unmatched ?? []).filter((u) => inScope(u.leagueId))
 
   // The league strip: every league in scope as one chip — cross-league view only (leagueStrip.ts).
@@ -629,6 +644,8 @@ export function PlayerFinder({
 
   return (
     <div className={`af-core af-pf af-pf--2a${myPlayersHome ? ' af-pf--home' : ''}`} data-public={!signedIn} data-has-detail={Boolean(detail)}>
+      {/* Phones: the search, within thumb reach once it scrolls away. The league-mode bar owns that lane. */}
+      {detail && leagueView ? null : <PhoneSearchDock />}
       {/* ── Search rail (360px) ─────────────────────────────────────── */}
       {/*
         The rail owns the search, the matches and the live-data promise. h1 is
@@ -955,6 +972,30 @@ export function PlayerFinder({
             {/* Live or final: his game this week and his points in your leagues, as each platform scored them. */}
             <LiveGameBadge data={liveGame} nowIso={nowIso} />
 
+            {/* Phones: your move in each league, one tap each — in place of the table below. */}
+            <LeagueActionCards
+              cards={leagueCards}
+              playerName={detail.player.name}
+              proj={cardProj}
+              footer={
+                <>
+                  {foldOtherRows ? (
+                    <button type="button" className="af-pf-rows-toggle" aria-expanded={showOtherRows} onClick={() => setShowOtherRows((v) => !v)}>
+                      {showOtherRows ? t.hideOtherRows : t.showOtherRows(otherRowCount)}
+                    </button>
+                  ) : null}
+                  {unmatched.length > 0 ? (
+                    <p className="af-pf-unavailable af-pf-unmatched">
+                      {t.notChecked(
+                        unmatched.map((u) => u.leagueName),
+                        [...new Set(unmatched.map((u) => platformLabel(u.platform)))].join(` ${t.and} `),
+                      )}
+                    </p>
+                  ) : null}
+                </>
+              }
+            />
+
             {/* Compare: a second name beside this one. Suggestions link to ?vs= (2026-09-06). */}
             {detailRef ? (
               <div className="af-pf-compare-entry">
@@ -1109,7 +1150,11 @@ export function PlayerFinder({
 
             {/* ── Next game + news (Phase 1): every width — the late news IS the game-day story ── */}
             {depth ? <PlayerNextGames next={depth.nextGame} upcoming={depth.upcoming} matchups={matchupOutlook} /> : null}
-            {depth ? <PlayerNews state={depth.news} nowIso={nowIso} /> : null}
+            {depth ? (
+              <PhoneFold title={ac.foldNews}>
+                <PlayerNews state={depth.news} nowIso={nowIso} />
+              </PhoneFold>
+            ) : null}
 
             {/* ── Every platform, every league ──────────────────────── */}
             {/*
@@ -1120,7 +1165,7 @@ export function PlayerFinder({
               fix it, or "nothing to do", or "trade for him" when someone else
               has him.
             */}
-            <section className="af-pf-block af-pf-leagues" aria-labelledby="af-pf-leagues-h">
+            <section className={`af-pf-block af-pf-leagues${leagueCards.length > 0 ? ' af-pf-d-only' : ''}`} aria-labelledby="af-pf-leagues-h">
               <header className="af-pf-block-head">
                 <h3 className="af-pf-h3" id="af-pf-leagues-h">
                   {leagueMode ? t.inThisLeagueHeading : t.everyLeagueHeading}
@@ -1313,20 +1358,36 @@ export function PlayerFinder({
             {signedIn ? <FreeAgentBids data={freeAgentBids} playerName={detail.player.name} access={depthAccess} /> : null}
 
             {/* ── Market value, last 30 days ──: facts free; the buy-low / sell-high call is AF Pro. */}
-            <ValueTrend data={valueTrend} access={depthAccess} />
+            {valueTrend && valueTrend.books.length > 0 ? (
+              <PhoneFold title={ac.foldValue}>
+                <ValueTrend data={valueTrend} access={depthAccess} />
+              </PhoneFold>
+            ) : null}
 
             {/* ── Next man up ──: his depth chart, and where each player around him is in your leagues (free). */}
-            <DepthChartBackups
-              data={depthChart}
-              playerName={detail.player.name}
-              hrefFor={(ref, name) => `/core/players?q=${encodeURIComponent(name)}&player=${encodeURIComponent(ref)}${leagueParam}`}
-            />
+            {depthChart && depthChart.entries.length >= 2 ? (
+              <PhoneFold title={ac.foldDepth}>
+                <DepthChartBackups
+                  data={depthChart}
+                  playerName={detail.player.name}
+                  hrefFor={(ref, name) => `/core/players?q=${encodeURIComponent(name)}&player=${encodeURIComponent(ref)}${leagueParam}`}
+                />
+              </PhoneFold>
+            ) : null}
 
             {/* ── Who'd start him ──: the sell side where he is yours (AF Pro, withheld server-side when locked). */}
-            {signedIn ? <WhoStartsHim data={whoStartsHim} playerName={detail.player.name} access={depthAccess} /> : null}
+            {signedIn && whoStartsHim ? (
+              <PhoneFold title={ac.foldWhoStarts}>
+                <WhoStartsHim data={whoStartsHim} playerName={detail.player.name} access={depthAccess} />
+              </PhoneFold>
+            ) : null}
 
             {/* ── This season: projected against scored, week by week (Phase 1) ── */}
-            {depth ? <PlayerSeasonCard state={depth.season} name={detail.player.name} /> : null}
+            {depth ? (
+              <PhoneFold title={ac.foldSeason}>
+                <PlayerSeasonCard state={depth.season} name={detail.player.name} />
+              </PhoneFold>
+            ) : null}
 
             {/* ── Recommended moves ─────────────────────────────────── */}
             {signedIn ? (
