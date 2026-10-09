@@ -165,6 +165,10 @@ export function receiptPromptBlock(receipt: ReceiptLike): string {
     ...g.lines.filter((l) => l.side === 'get').map(line),
     'Team A sends:',
     ...g.lines.filter((l) => l.side === 'give').map(line),
+    // The roster-spot credit is inside the totals above but is not a line (`rosterSpotCharge.ts`).
+    ...(g.rosterSpot
+      ? [`Roster-spot credit, already in the totals: ${g.rosterSpot.value} added to what Team ${g.rosterSpot.side === 'get' ? 'A' : 'B'} receives. That team receives fewer players, so it gains ${g.rosterSpot.spots === 1 ? 'an open roster spot' : `${g.rosterSpot.spots} open roster spots`} worth the league’s last rostered player each; the other side must drop.`]
+      : []),
     'This grade is FINAL and is what the user will see. Explain why the values support it — do NOT argue for a different grade or re-price any asset.',
     '--- END TRADE GRADE ---',
   ].join('\n')

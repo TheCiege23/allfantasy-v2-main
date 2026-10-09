@@ -2310,7 +2310,11 @@ export function TradeCenter(props: {
             <p>{copy(result.grade?.basis ?? result.valueBasis?.label ?? 'Current available market values.')}</p>
             <p>{copy('The grade compares trade value. Roster fit, acceptance, and realized production are separate.')}</p>
             {analyzedAt ? <p>{copy('Evaluated')} {new Date(analyzedAt).toLocaleString(tradeIntlLocale(language))}{copy(".")}</p> : null}
-            {serverGrade?.graded ? <ul>{serverGrade.lines.map((line, index) => <li key={`${line.side}-${line.name}-${index}`}>{copy(line.side === 'give' ? 'You send' : 'You receive')} {line.name}{copy(": ")}{line.leagueValue == null ? copy('unpriced') : money(line.leagueValue)}</li>)}</ul> : null}
+            {serverGrade?.graded ? <ul>{serverGrade.lines.map((line, index) => <li key={`${line.side}-${line.name}-${index}`}>{copy(line.side === 'give' ? 'You send' : 'You receive')} {line.name}{copy(": ")}{line.leagueValue == null ? copy('unpriced') : money(line.leagueValue)}</li>)}
+              {/* The roster-spot credit is already inside the totals (`rosterSpotCharge.ts`); shown so they add up. */}
+              {serverGrade.rosterSpot ? <li data-testid="trade-roster-spot">{copy(serverGrade.rosterSpot.side === 'give'
+                ? 'Roster spot you give up — you receive more players, so a full roster drops one'
+                : 'Roster spot you gain — you receive fewer players, so you can add one')}{serverGrade.rosterSpot.spots > 1 ? ` ×${serverGrade.rosterSpot.spots}` : ''}{copy(": ")}{money(serverGrade.rosterSpot.value)}</li> : null}</ul> : null}
           </details>
           {/*
             Which league type that chart is for, and whether anyone confirmed it. The league-type

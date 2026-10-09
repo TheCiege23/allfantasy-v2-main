@@ -25,6 +25,7 @@ import { marketContextFor } from '@/lib/trade-intel/marketContext'
 import { pricesOnDynastyChart } from '@/lib/core-app/valueBook'
 import type { LoadedTradeLeague } from './league-loader'
 import { tradeFormatCoverage } from './formatCoverage'
+import { rosterSpotsFromSettings } from '@/lib/trade-value/rosterSpotCharge'
 import type { TradeAssetInput, TradeConsoleLeagueSnapshot, TradeConsolePlayerLine } from './types'
 
 /**
@@ -640,6 +641,8 @@ export type LeagueTradeChart = {
   fcSyncedAt?: string | null
   nflCtx: ValuationContext
   valuationGaps?: string[]
+  /** Active roster spots per team (starters + bench) the league states, or null — see `rosterSpotCharge.ts`. */
+  rosterSpots?: number | null
 }
 
 /**
@@ -769,6 +772,7 @@ export async function resolveLeagueTradeChart(args: {
     fcSyncedAt,
     nflCtx,
     valuationGaps: coverage.gaps,
+    rosterSpots: leagueRow ? rosterSpotsFromSettings(leagueRow.settings) : null,
   }
 }
 

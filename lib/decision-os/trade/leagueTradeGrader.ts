@@ -19,7 +19,14 @@ import { marketBookFor, type ChartProfile, type DatedMarket, type MarketBook } f
 import { fantasyCalcSettingsForChart } from '@/lib/fantasycalc-profile-capture'
 import { snapshotFromLoaded } from '@/lib/trade-value-console/quick-badges'
 import type { TradeAssetInput, TradeConsolePlayerLine } from '@/lib/trade-value-console/types'
-import { gradeTrade, type TradeGradeLine, type TradeGradeMove, type TradeGradeView } from './tradeGrade'
+import { gradeTrade, signedGapPct, type TradeGradeLine, type TradeGradeMove, type TradeGradeView } from './tradeGrade'
+import {
+  rosterSpotBasisSentence,
+  rosterSpotCredit,
+  rosterSpotPrice,
+  type RosterSpotCredit,
+  type RosterSpotPrice,
+} from '@/lib/trade-value/rosterSpotCharge'
 import { tradeValueAsOf, tradeValueSourceOf } from './valueSource'
 import { loadRosterNeedFactors, loadViewerNeedFactors, type NeedFactors } from '@/lib/trade-value/viewerNeedFactors'
 import { unpriceableReason, type GradeInputs } from './tradeGradeInputs'
@@ -107,6 +114,45 @@ export function linesOf(
   return [...leagueGrade.giveLines.map(one('give')), ...leagueGrade.getLines.map(one('get'))]
 }
 
+/**
+ * The roster-spot charge for a deal priced on `chart` (`lib/trade-value/rosterSpotCharge.ts`), or null for
+ * an even player count. Players are the lines that hold a roster spot: not picks, not FAAB, not a devy
+ * prospect (who sits on a devy slot).
+ */
+export function rosterSpotFor(
+  chart: Pick<LeagueTradeChart, 'fcPlayers' | 'leagueSize' | 'rosterSpots'>,
+  giveLines: readonly TradeConsolePlayerLine[],
+  getLines: readonly TradeConsolePlayerLine[],
+): { credit: RosterSpotCredit; price: RosterSpotPrice } | null {
+  const players = (lines: readonly TradeConsolePlayerLine[]) =>
+    lines.filter((l) => !isNonPlayerLine(l) && l.dataSource !== 'devy-option').length
+  const givePlayers = players(giveLines)
+  const getPlayers = players(getLines)
+  if (givePlayers === getPlayers) return null
+  const price = rosterSpotPrice({
+    chartPlayers: chart.fcPlayers.map((p) => ({ name: p.player.name, value: p.value, position: p.player.position })),
+    teams: chart.leagueSize,
+    rosterSpots: chart.rosterSpots ?? null,
+  })
+  if (!price) return null
+  const credit = rosterSpotCredit({ givePlayers, getPlayers, valuePerSpot: price.valuePerSpot })
+  return credit ? { credit, price } : null
+}
+
+/** Add the credit to the receiving side's totals and re-take the gap — the numbers the letter is graded on. */
+export function applyRosterSpotCredit(grade: Pick<LeagueGrade, 'totals'>, credit: RosterSpotCredit): void {
+  const t = grade.totals
+  if (credit.side === 'give') {
+    t.giveLeague += credit.value
+    t.giveBase += credit.value
+  } else {
+    t.getLeague += credit.value
+    t.getBase += credit.value
+  }
+  t.percentDiff = t.giveLeague > 0 ? signedGapPct(t.giveLeague, t.getLeague) : 0
+}
+
+
 export async function gradePricedSides(args: {
   chart: LeagueTradeChart
   giveLines: TradeConsolePlayerLine[]
@@ -171,12 +217,26 @@ export async function gradePricedSides(args: {
       })
     : null
 
+  /*
+   * 🛑 AN UNEVEN DEAL COSTS ROSTER SPOTS (trade grade audit, 2026-10-09). The side receiving more players
+   * must drop to make room; the side receiving fewer gains a spot to fill. Summing quoted prices ignored
+   * that, and 447 real trades showed the cost: the many-player side read a median 7.9% ahead. The side
+   * receiving fewer players is credited one last-roster-spot player per player of difference
+   * (`rosterSpotCharge.ts` holds the measurement), as a visible line, before the gap is taken.
+   */
+  const spot = rosterSpotFor(chart, args.giveLines, args.getLines)
+  if (spot) {
+    applyRosterSpotCredit(leagueGrade, spot.credit)
+    if (rosterFitGrade) applyRosterSpotCredit(rosterFitGrade, spot.credit)
+  }
+
   const placeholder = [...leagueGrade.giveLines, ...leagueGrade.getLines].find((l) => l.dataSource === 'placeholder')
   leagueGrade.valueBasis.needGap = args.need ? needFactors?.gap ?? null : null
   if (chart.valuationGaps?.length) {
     leagueGrade.valueBasis.label += ` — scope: chart and league scoring only. ${chart.valuationGaps.join(' ')}`
   }
   if (args.basisNotes?.length) leagueGrade.valueBasis.label += ` ${args.basisNotes.join(' ')}`
+  if (spot) leagueGrade.valueBasis.label += ` ${rosterSpotBasisSentence(spot.credit, spot.price)}`
   const withheld =
     args.withheld ??
     proposalEligibilityReason(chart.proposalRules, [...args.giveLines, ...args.getLines]) ??
@@ -196,9 +256,12 @@ export async function gradePricedSides(args: {
     scoringApplied: leagueGrade.valueBasis.scoringAdjusted,
     needApplied: leagueGrade.valueBasis.needAdjusted,
     needGap: args.need ? needFactors?.gap ?? null : null,
+    // One line per traded asset — completed-trade pricing and every per-asset table rely on it — so the
+    // roster-spot credit travels as its own field, already inside the totals above.
     lines: linesOf(leagueGrade, { give: args.givePriced, get: args.getPriced }, chart.fcSyncedAt ?? null),
     moves: movesOf(leagueGrade),
     withheld,
+    rosterSpot: spot?.credit ?? null,
   })
   return {
     leagueGrade,

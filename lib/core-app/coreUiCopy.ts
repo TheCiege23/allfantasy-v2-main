@@ -817,6 +817,8 @@ const spanish: Record<string, string> = {
   'Trade Center': 'Centro de intercambios',
   'Choose a league, add what you send and get, then review the grade. The grade compares market value for this league’s format and scoring; roster fit and lineup change are shown beside it.': 'Elige una liga, añade lo que envías y recibes, y revisa la calificación. La calificación compara el valor de mercado para el formato y la puntuación de esta liga; el encaje en tu plantilla y el cambio en tu alineación aparecen al lado.',
   'AllFantasy never sends a trade for you — build it here, then send it there.': 'AllFantasy no envía el intercambio por ti. Prepáralo aquí y envíalo en tu plataforma.',
+  'Roster spot you give up — you receive more players, so a full roster drops one': 'Plaza de plantilla que cedes: recibes más jugadores, así que una plantilla llena tiene que soltar uno',
+  'Roster spot you gain — you receive fewer players, so you can add one': 'Plaza de plantilla que ganas: recibes menos jugadores, así que puedes fichar uno',
   'Switch league': 'Cambiar de liga',
   connected: 'conectadas',
   'tradeable asset types': 'tipos de activos intercambiables',

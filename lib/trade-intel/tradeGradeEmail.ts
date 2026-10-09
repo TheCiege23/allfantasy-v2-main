@@ -5,7 +5,7 @@ import type {
   TradeSideGrade,
 } from '@/lib/trade-intel/sleeperTradeGradeService'
 // Type-only: the grade is computed by the caller, never here. This module renders.
-import type { TradeGradeLine, TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
+import type { TradeGradeLine, TradeGradeView, TradeRosterSpot } from '@/lib/decision-os/trade/tradeGrade'
 import { assetValues, type DisplayedAsset } from '@/lib/decision-os/trade/gradeLineValues'
 import { giveawaySide } from '@/lib/trade-intel/tradeGiveaway'
 import { gradeMoment } from '@/lib/decision-os/trade/gradeMoment'
@@ -164,6 +164,22 @@ function faabName(amount: number): string {
 type Line = { name: string; detail: string | null; value: number | null }
 
 /**
+ * The roster-spot credit as a table row, appended to the side whose total already includes it
+ * (`lib/trade-value/rosterSpotCharge.ts`), so the rows add up to the printed total. `table` is that side's
+ * column: 'received' for a completed trade (the side receiving fewer players gains the spot), 'viewer' for
+ * an offer's "you get" / "you give" columns.
+ */
+function withRosterSpot(lines: Line[], spot: TradeRosterSpot | null | undefined, side: 'give' | 'get', table: 'received' | 'viewer'): Line[] {
+  if (!spot || spot.side !== side) return lines
+  const name = spot.spots === 1 ? 'Open roster spot' : `${spot.spots} open roster spots`
+  const detail =
+    table === 'received' || side === 'get'
+      ? 'Fewer players received, so there is room to add one'
+      : 'More players received, so a full roster drops one'
+  return [...lines, { name, detail, value: spot.value }]
+}
+
+/**
  * The value THE grade priced each displayed asset at, matched by name, then pick year + round, then
  * place (`assetValues`) — and only when the counts agree; a mismatch prints names without values.
  *
@@ -255,7 +271,7 @@ function sideViews(trade: GradedTrade, grade: TradeGradeView | null, viewerOwner
     side,
     letter: completedSideLetter(trade, grade, i),
     pct: g ? (i === 0 ? g.percentDiff : -g.percentDiff) : null,
-    lines: receivedLines(side, g ? g.lines : null, i === 0 ? 'get' : 'give'),
+    lines: withRosterSpot(receivedLines(side, g ? g.lines : null, i === 0 ? 'get' : 'give'), g?.rosterSpot, i === 0 ? 'get' : 'give', 'received'),
     total: g ? (i === 0 ? g.getValue : g.giveValue) : null,
     isViewer: Boolean(viewerOwnerId) && side.ownerId != null && String(side.ownerId) === String(viewerOwnerId),
   }))
@@ -641,7 +657,7 @@ export function buildPendingTradeOfferEmail(params: {
       detail: a.isPick ? 'Draft pick' : a.faabAmount != null ? 'FAAB' : [a.position, a.team].filter((v) => v && v !== '—').join(' · ') || null,
       value: null as number | null,
     }))
-    return withGradeValues(lines, assets.map((a) => ({ label: a.playerName })), g ? g.lines : null, side)
+    return withRosterSpot(withGradeValues(lines, assets.map((a) => ({ label: a.playerName })), g ? g.lines : null, side), g?.rosterSpot, side, 'viewer')
   }
   const cell = (label: string, accent: string, lines: Line[], total: number | null, divider: boolean) =>
     `<td width="50%" valign="top" style="padding:16px;${divider ? `border-right:1px solid ${BORDER};` : ''}">${eyebrow(label, accent)}${assetTable(lines, total)}</td>`

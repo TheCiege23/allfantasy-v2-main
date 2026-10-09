@@ -40,6 +40,14 @@ import {
 import type { LeagueTypeBasis } from '@/lib/league/leagueTypeGrading'
 import type { TradeValueSource } from './valueSource'
 import { tradePackageReview } from './tradeEvidence'
+import type { RosterSpotCredit } from '@/lib/trade-value/rosterSpotCharge'
+
+/**
+ * The open-roster-spot credit an uneven deal earned (`lib/trade-value/rosterSpotCharge.ts`), already inside
+ * `giveValue`/`getValue`. `side` is the total it joined, in this view's frame. Not a line: the lines stay one
+ * per traded asset, which completed-trade pricing and every per-asset table rely on.
+ */
+export type TradeRosterSpot = RosterSpotCredit
 
 export type TradeGradeAction = 'accept' | 'review' | 'counter' | 'decline'
 
@@ -111,6 +119,8 @@ export type TradeGradeView =
       /** Every asset, so a card can print the value it was graded on beside each one. */
       lines: TradeGradeLine[]
       moves: TradeGradeMove[]
+      /** The roster-spot credit inside the totals, when the player counts differ. Absent on older grades. */
+      rosterSpot?: TradeRosterSpot | null
       /** Changes in personal utility never replace the league-wide trade-value grade. */
       rosterFit?: TradeRosterFit | null
       /**
@@ -229,6 +239,8 @@ export function gradeTrade(args: {
   moves: TradeGradeMove[]
   /** Set when the caller already knows the grade cannot be trusted (e.g. a data gap it reported). */
   withheld?: string | null
+  /** The roster-spot credit ALREADY inside `giveValue`/`getValue`, carried so every surface can show it. */
+  rosterSpot?: TradeRosterSpot | null
 }): TradeGradeView {
   const basis = args.basis || null
   if (args.withheld) return { graded: false, reason: args.withheld, basis }
@@ -256,7 +268,7 @@ export function gradeTrade(args: {
   if (!letter || !partnerLetter) return { graded: false, reason: 'The value gap could not be measured.', basis }
 
   const { label, sideAdvantage } = tradeGradeLabel(percentDiff)
-  const packageReview = tradePackageReview(args.lines)
+  const packageReview = tradePackageReview(args.lines, { rosterSpotCharged: Boolean(args.rosterSpot) })
   return {
     graded: true,
     letter,
@@ -278,6 +290,7 @@ export function gradeTrade(args: {
     needGap: args.needGap,
     lines: args.lines,
     moves: args.moves,
+    ...(args.rosterSpot ? { rosterSpot: args.rosterSpot } : {}),
   }
 }
 
@@ -308,7 +321,10 @@ export function mirrorTradeGrade(view: TradeGradeView): TradeGradeView {
   if (!view.graded) return view
   const percentDiff = -view.percentDiff
   const { label, sideAdvantage } = tradeGradeLabel(percentDiff)
-  const packageReview = tradePackageReview(view.lines.map(line => ({ ...line, side: line.side === 'give' ? 'get' : 'give' })))
+  const packageReview = tradePackageReview(
+    view.lines.map(line => ({ ...line, side: line.side === 'give' ? 'get' : 'give' })),
+    { rosterSpotCharged: Boolean(view.rosterSpot) },
+  )
   return {
     ...view,
     letter: view.partnerLetter,
@@ -326,6 +342,8 @@ export function mirrorTradeGrade(view: TradeGradeView): TradeGradeView {
     getMarket: view.giveMarket,
     lines: view.lines.map((l) => ({ ...l, side: l.side === 'give' ? 'get' : 'give' })),
     moves: view.moves.map((m) => ({ ...m, side: m.side === 'give' ? 'get' : 'give' })),
+    // The credit stays with the same TOTAL, which this view calls the other side.
+    ...(view.rosterSpot ? { rosterSpot: { ...view.rosterSpot, side: view.rosterSpot.side === 'give' ? 'get' : 'give' } as TradeRosterSpot } : {}),
     // The original viewer's personal utility is not the other manager's roster fit.
     rosterFit: null,
     // Today's re-evaluation flips with the original, or the other side reads the wrong "now".
