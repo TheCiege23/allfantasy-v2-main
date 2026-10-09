@@ -181,6 +181,28 @@ export async function listFollowerIdsForPlayer(
   }
 }
 
+/**
+ * Everyone following at least one player of this sport who carries a Sleeper id — the audience of
+ * the "he's free in your league" alert (lib/follows/followFreeAgentCheck.ts), whose roster join is
+ * Sleeper-keyed. Most recently active followers first, so a capped run reaches people still using
+ * the feature. `null` when follows are unavailable.
+ */
+export async function listFollowingUserIds(sport: string, limit = 500): Promise<string[] | null> {
+  try {
+    const rows = await prisma.$queryRaw<Array<{ user_id: string }>>`
+      SELECT "user_id" FROM "player_follows"
+      WHERE "sport" = ${normalizeFollowSport(sport)} AND "sleeper_id" IS NOT NULL
+      GROUP BY "user_id"
+      ORDER BY max("created_at") DESC
+      LIMIT ${Math.max(1, limit)}
+    `
+    return rows.map((r) => r.user_id)
+  } catch (err) {
+    if (isMissingDatabaseObjectError(err)) return null
+    throw err
+  }
+}
+
 export async function unfollowPlayer(
   userId: string,
   sport: string,

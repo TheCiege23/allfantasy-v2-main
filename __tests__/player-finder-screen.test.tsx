@@ -343,8 +343,9 @@ describe('Player Finder — core view', () => {
     renderCore({
       detail: { ...DETAIL, rosterCoverage: { unmatched: [{ leagueId: 'L-espn2', leagueName: 'Office Pool', platform: 'espn' }] } },
     })
-    expect(screen.getByText(/Not checked: Office Pool/)).toBeInTheDocument()
-    expect(screen.getByText(/ESPN player ids/)).toBeInTheDocument()
+    // Twice in the DOM: under the phone's league cards and under the desktop table — CSS shows one per width.
+    expect(screen.getAllByText(/Not checked: Office Pool/)).toHaveLength(2)
+    expect(screen.getAllByText(/ESPN player ids/)).toHaveLength(2)
   })
 
   it('says where he is across your leagues, and that someone else has him elsewhere', () => {
@@ -352,6 +353,8 @@ describe('Player Finder — core view', () => {
     expect(screen.getByText(/on 3 of your 6 leagues, across Yahoo, Sleeper and ESPN/)).toBeInTheDocument()
     expect(screen.getByText(/rostered by others in 1/)).toBeInTheDocument()
     expect(screen.getByText('Ready · Ankle')).toBeInTheDocument()
+    // 3 of the 6 leagues the finder reads: half your fantasy life (playerFun.exposureOf, 2026-10-08).
+    expect(screen.getByText('50% exposure · Core piece')).toBeInTheDocument()
   })
 
   it('renders every league as a row, with the manager who has him named', () => {
@@ -375,12 +378,22 @@ describe('Player Finder — core view', () => {
     const leagues = DETAIL.leagues.available ? [...DETAIL.leagues.data, ...others] : []
     renderCore({ detail: { ...DETAIL, leagues: { available: true, data: leagues } }, leagueCount: 12 })
     expect(screen.getAllByRole('row').slice(1)).toHaveLength(3)
-    const toggle = screen.getByRole('button', { name: 'Show the 7 leagues where someone else has him' })
-    fireEvent.click(toggle)
+    // One toggle under the phone's cards, one under the desktop table — one state, CSS shows one per width.
+    const [phoneToggle, tableToggle] = screen.getAllByRole('button', { name: 'Show the 7 leagues where someone else has him' })
+    expect(phoneToggle!.closest('.af-pf-cards')).not.toBeNull()
+    fireEvent.click(tableToggle!)
     expect(screen.getAllByRole('row').slice(1)).toHaveLength(10)
-    expect(screen.getByRole('button', { name: 'Show only your leagues' })).toHaveAttribute('aria-expanded', 'true')
+    for (const b of screen.getAllByRole('button', { name: 'Show only your leagues' })) expect(b).toHaveAttribute('aria-expanded', 'true')
     // The header still counts them — folding hides rows, not facts.
     expect(screen.getByText(/rostered by others in 7/)).toBeInTheDocument()
+  })
+
+  it('offers "Alert me" on the open card when follows are available, and nothing when they are not', () => {
+    const { unmount } = renderCore({ followingPlayer: false })
+    expect(screen.getByRole('button', { name: /Alert me about Dalton Kincaid/ })).toHaveAttribute('aria-pressed', 'false')
+    unmount()
+    renderCore()
+    expect(screen.queryByRole('button', { name: /Alert me/ })).toBeNull()
   })
 
   it('a benched player who beats a starter is a red row that links to the platform lineup', () => {
@@ -634,9 +647,10 @@ describe('Player Finder — game day', () => {
     expect(buttons[0]).toHaveAttribute('target', '_blank')
     // The fixture's Yahoo slot carries no team id, so the verified lineup format cannot build; the league page is offered and labelled as such.
     expect(buttons[0].textContent).toMatch(/^Open (lineup in Yahoo|in Yahoo · League)/)
-    // The banner sits above the tiles, at the top of the card.
+    // The banner sits above the tiles, at the top of the card — with the phone's league cards right under it (2026-10-08).
     const card = banner.closest('.af-pf-detail') as HTMLElement
-    expect(card.querySelector('.af-pf-gameday + .af-pf-compare-entry')).not.toBeNull()
+    expect(card.querySelector('.af-pf-gameday + .af-pf-cards')).not.toBeNull()
+    expect(card.querySelector('.af-pf-cards ~ .af-pf-compare-entry')).not.toBeNull()
   })
 
   it('offers no Open-lineup button for a best-ball league — the platform sets that lineup itself', () => {

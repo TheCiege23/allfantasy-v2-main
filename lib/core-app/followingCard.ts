@@ -98,10 +98,26 @@ export async function freeAgentLeaguesFor(
   leagues: readonly FollowingLeague[],
   sleeperIds: readonly string[],
 ): Promise<Map<string, FollowingFreeAgentLeague[]>> {
+  return (await scanFreeAgentLeagues(userId, leagues, sleeperIds)).free
+}
+
+/**
+ * `freeAgentLeaguesFor`, plus the leagues it could actually READ (`checked`). The "he's free in
+ * your league" alert (lib/follows/followFreeAgentCheck.ts) needs both: a league that drops out of
+ * `free` because it became unreadable is not a league where he was picked up, and one that comes
+ * back is not a league where he was dropped. Only a league read on both sides can say either.
+ */
+export async function scanFreeAgentLeagues(
+  userId: string,
+  leagues: readonly FollowingLeague[],
+  sleeperIds: readonly string[],
+): Promise<{ free: Map<string, FollowingFreeAgentLeague[]>; checked: string[] }> {
   const out = new Map<string, FollowingFreeAgentLeague[]>()
+  const checked: string[] = []
+  const done = () => ({ free: out, checked })
   const ids = [...new Set(sleeperIds.filter(Boolean))]
   const nfl = leagues.filter((l) => String(l.sport ?? 'NFL').toUpperCase() === 'NFL')
-  if (ids.length === 0 || nfl.length === 0) return out
+  if (ids.length === 0 || nfl.length === 0) return done()
 
   const teams = await prisma.leagueTeam
     .findMany({
@@ -109,7 +125,7 @@ export async function freeAgentLeaguesFor(
       select: { leagueId: true, claimedByUserId: true },
     })
     .catch(() => null)
-  if (!teams) return out
+  if (!teams) return done()
   const teamCount = new Map<string, number>()
   const yours = new Set<string>()
   for (const t of teams) {
@@ -117,14 +133,14 @@ export async function freeAgentLeaguesFor(
     if (t.claimedByUserId === userId) yours.add(t.leagueId)
   }
   const scoped = nfl.filter((l) => yours.has(l.id)).slice(0, MAX_FREE_AGENT_LEAGUES)
-  if (scoped.length === 0) return out
+  if (scoped.length === 0) return done()
 
   const raw = await prisma.roster
     .findMany({ where: { leagueId: { in: scoped.map((l) => l.id) } }, select: { leagueId: true, playerData: true } })
     .catch(() => null)
-  if (!raw) return out
+  if (!raw) return done()
   const rosters = await translateRostersByLeague(raw, new Map(scoped.map((l) => [l.id, l.platform]))).catch(() => null)
-  if (!rosters) return out
+  if (!rosters) return done()
 
   const byLeague = new Map<string, unknown[]>()
   for (const r of rosters) {
@@ -141,7 +157,7 @@ export async function freeAgentLeaguesFor(
           .findMany({ where: { sleeperId: { in: union } }, select: { sleeperId: true }, distinct: ['sleeperId'] })
           .catch(() => null)
       : []
-  if (!known) return out
+  if (!known) return done()
   const knownIds = new Set(known.map((k) => k.sleeperId).filter((x): x is string => Boolean(x)))
 
   for (const l of scoped) {
@@ -149,6 +165,7 @@ export async function freeAgentLeaguesFor(
     const teamsInLeague = teamCount.get(l.id) ?? 0
     if (pds.length === 0 || pds.length < teamsInLeague) continue
     if (!rosterIdCoverage(samples.get(l.id) ?? [], knownIds).usable) continue
+    checked.push(l.id)
     const held = new Set(collectRosterIds(pds))
     for (const id of ids) {
       if (held.has(id)) continue
@@ -161,7 +178,7 @@ export async function freeAgentLeaguesFor(
       out.set(id, list)
     }
   }
-  return out
+  return done()
 }
 
 export async function getFollowingCard(
