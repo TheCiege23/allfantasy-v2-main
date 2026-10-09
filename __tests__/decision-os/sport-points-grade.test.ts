@@ -15,6 +15,7 @@ import {
   categoryLeagueReason,
   gradeSportPointsDeal,
   indexBoard,
+  meetsSampleBar,
   multiSeasonFormatReason,
   replacementFromLineups,
   replacementFromRosters,
@@ -66,6 +67,15 @@ describe('projection sample size', () => {
     const view = gradeSportPointsDeal({ give: [player('pim-stanley', 'Hoyt Stanley')], get: [player('pim-jokic', 'Nikola Jokic')], ctx: ctx({ board: thin }) })
     expect(view.graded).toBe(false)
     if (!view.graded) expect(view.reason).toContain(`rests on 2 games, too few to price — grades start at ${MIN_SAMPLE_GAMES} games`)
+  })
+
+  it('says a baseball sample in at-bats, and holds it to that bar even past ten games', () => {
+    const callUp = p('pim-callup', 'Hot Call-Up', 'C', 94, { sampleGames: 11, sampleBar: { ok: false, has: '31 at-bats', needs: '100 at-bats or 30 innings' } })
+    const view = gradeSportPointsDeal({ give: [player('pim-callup', 'Hot Call-Up')], get: [player('pim-jokic', 'Nikola Jokic')], ctx: ctx({ board: [...board, callUp] }) })
+    expect(view).toMatchObject({ graded: false, reason: expect.stringContaining('rests on 31 at-bats, too few to price — grades start at 100 at-bats or 30 innings') })
+    // Nor does he set a replacement level: a thin line is never "the best free agent".
+    expect(replacementFromRosters([...board, callUp], new Set()).get('C')!.name).toBe('Nikola Jokic')
+    expect(meetsSampleBar(callUp)).toBe(false)
   })
 })
 
@@ -187,6 +197,25 @@ describe('a board that is not ready to grade on', () => {
     expect(eight).toContain('Percentages are weighted by shot volume.')
   })
 
+  it('explains an MLB grade: the team-game scale, the unposted schedule, and no basketball bonuses', () => {
+    const offseason = { season: 2027, seasonLabel: '2027', gamesRemaining: 162, scheduleKnown: false, baselineSeasonLabel: '2026' }
+    const points = sportPointsBasis(ctx({ sport: 'MLB', scoringBasis: 'default', window: offseason }))
+    expect(points).toContain('the 2027 MLB regular season (162 games — the schedule is not posted yet)')
+    expect(points).toContain('Pitchers count for the share of team games they pitched in that season — a starter about one in five.')
+    expect(points).toContain('Quality starts are not projected.')
+    expect(points).not.toMatch(/double-double/i)
+
+    const cats = sportPointsBasis(ctx({ sport: 'MLB', valueKind: 'categories', categoryList: 'R, HR, RBI, SB, AVG, W, SV, K, ERA and WHIP', window: offseason }))
+    expect(cats).toContain('per team game')
+    expect(cats).toContain('AVG is weighted by at-bats; ERA and WHIP by innings; hitters are measured against hitters and pitchers against pitchers.')
+    expect(cats).not.toMatch(/shot volume|turnovers/)
+    // A counted schedule reads as before.
+    expect(sportPointsBasis(ctx({ sport: 'MLB', window: { season: 2027, seasonLabel: '2027', gamesRemaining: 90 } }))).toContain('the rest of the 2027 MLB regular season (about 90 games)')
+    // Basketball keeps its bonus disclaimer; hockey never had one.
+    expect(sportPointsBasis(ctx({ sport: 'NBA' }))).toMatch(/double-double/i)
+    expect(sportPointsBasis(ctx({ sport: 'NHL' }))).not.toMatch(/double-double/i)
+  })
+
   it('names the season the projections come from in the basis', () => {
     expect(sportPointsBasis(ctx({ window: { season: 2026, seasonLabel: '2026-27', gamesRemaining: 80, baselineSeasonLabel: '2025-26' } })))
       .toMatch(/Projections are built from the 2025-26 season until this one has enough games\.$/)
@@ -200,6 +229,9 @@ describe('leagues this grade must not answer for', () => {
     expect(categoryLeagueReason({ scoring_type: 'head' }, 'NBA')).toMatch(/by categories/)
     expect(categoryLeagueReason({ scoring_mode: 'points' }, 'NBA')).toBeNull()
     expect(categoryLeagueReason({ scoring_type: 'headpoint' }, 'NBA')).toBeNull()
+    // Each sport names what it does cover, never another sport's setups.
+    expect(categoryLeagueReason({ scoring_mode: 'roto' }, 'MLB')).toMatch(/standard 5x5 and 6x6 setups/)
+    expect(categoryLeagueReason({ scoring_mode: 'h2h_category' }, 'NHL')).toMatch(/no NHL category grades yet/)
   })
 
   it('refuses a dynasty or keeper league, which this-season points would misprice', () => {
@@ -211,10 +243,10 @@ describe('leagues this grade must not answer for', () => {
 })
 
 describe('the grader', () => {
-  it('is null for the sports it does not cover', () => {
+  it('is null for the sports it does not cover, and covers MLB', () => {
     expect(createSportPointsGrader({ sport: 'NFL', league: null })).toBeNull()
-    expect(createSportPointsGrader({ sport: 'MLB', league: null })).toBeNull()
     expect(createSportPointsGrader({ sport: 'SOCCER', league: null })).toBeNull()
+    expect(createSportPointsGrader({ sport: 'mlb', league: null })).not.toBeNull()
   })
 
   it('loads once per grader and returns the loader refusal as the grade', async () => {

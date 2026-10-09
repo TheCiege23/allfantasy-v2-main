@@ -102,6 +102,89 @@ describe('loadSportPointsBase', () => {
     expect(dyn).toMatchObject({ ok: false })
   })
 
+  describe('MLB', () => {
+    // Stored the way `mlbPerGameRates` writes them: engine keys, per APPEARANCE, target 2027 from 2026.
+    function mlbPlayer(id: string, name: string, position: string, rates: Record<string, number>, sample: number) {
+      db.projections.push({
+        playerId: id, playerName: name, position, season: 2027,
+        adjustmentFactors: { perGameRates: rates, confidenceReasons: [`${sample} games in the season sample`], sourceSeason: 2026 },
+      })
+      db.identities.push({ id, rollingInsightsId: `ri-${id}`, sleeperId: null })
+    }
+    const hitter = (hr: number) => ({ ab: 3.8, h: 1, r: 0.6, hr, rbi: 0.6, sb: 0.1, tb: 1.6, bb: 0.4, bat_so: 0.9 })
+    const starter = { ip: 6, outs: 18, so: 6.5, w: 0.4, l: 0.3, er: 2.2, p_h: 5, p_bb: 1.8 }
+    function mlbBoard() {
+      for (let i = 0; i < 12; i++) mlbPlayer(`h${i}`, `Hitter ${i}`, ['C', '1B', '2B', '3B', 'SS', 'LF'][i % 6]!, hitter(0.1 + i * 0.02), 150)
+      mlbPlayer('ace', 'Ace', 'P', { ...starter, so: 7.5, er: 1.8 }, 32)
+      mlbPlayer('half', 'Half Season', 'P', { ...starter, so: 7.5, er: 1.8 }, 16)
+      mlbPlayer('closer', 'Closer', 'P', { ip: 1, outs: 3, so: 1.2, sv: 0.6, er: 0.3, p_h: 0.8, p_bb: 0.3 }, 60)
+      for (let i = 0; i < 6; i++) mlbPlayer(`sp${i}`, `Starter ${i}`, 'P', { ...starter, so: 4 + i * 0.3 }, 30)
+    }
+
+    it('prices the whole 162-game season ahead when the schedule is not posted, and says so', async () => {
+      mlbBoard()
+      const out = await loadSportPointsBase({ sport: 'MLB', league: null, now: NOW })
+      if (!out.ok) throw new Error(out.reason)
+      expect(out.ctx.window).toMatchObject({ season: 2027, seasonLabel: '2027', gamesRemaining: 162, scheduleKnown: false, baselineSeasonLabel: '2026' })
+    })
+
+    it('puts a starter on the team-game scale — the same line over half the starts is worth half', async () => {
+      mlbBoard()
+      const out = await loadSportPointsBase({ sport: 'MLB', league: null, format: 'points', now: NOW })
+      if (!out.ok) throw new Error(out.reason)
+      const value = (name: string) => out.ctx.board.find((p) => p.name === name)!.perGame
+      expect(value('Half Season') / value('Ace')).toBeCloseTo(0.5, 6)
+      // Per start the ace scores far more than an everyday hitter scores per game; per team game he does not.
+      expect(value('Ace')).toBeLessThan(value('Hitter 11') * 2)
+    })
+
+    it('files pitchers as SP and RP so they fill the lineup’s pitching slots', async () => {
+      mlbBoard()
+      const out = await loadSportPointsBase({ sport: 'MLB', league: null, format: 'points', now: NOW })
+      if (!out.ok) throw new Error(out.reason)
+      const pos = (name: string) => out.ctx.board.find((p) => p.name === name)!.position
+      expect(pos('Ace')).toBe('SP')
+      expect(pos('Closer')).toBe('RP')
+      expect([...out.ctx.replacementByPosition.keys()]).not.toContain('P')
+    })
+
+    it('measures hitters only against hitters in a 5x5 — adding pitchers moves no hitter', async () => {
+      for (let i = 0; i < 12; i++) mlbPlayer(`h${i}`, `Hitter ${i}`, ['C', '1B', '2B', '3B', 'SS', 'LF'][i % 6]!, hitter(0.1 + i * 0.02), 150)
+      mlbPlayer('ace', 'Ace', 'P', starter, 32)
+      const few = await loadSportPointsBase({ sport: 'MLB', league: null, format: 'mlb_5x5', now: NOW })
+      for (let i = 0; i < 6; i++) mlbPlayer(`sp${i}`, `Starter ${i}`, 'P', { ...starter, so: 4 + i * 0.3 }, 30)
+      const many = await loadSportPointsBase({ sport: 'MLB', league: null, format: 'mlb_5x5', now: NOW })
+      if (!few.ok || !many.ok) throw new Error('not loaded')
+      expect(many.ctx.valueKind).toBe('categories')
+      expect(many.ctx.categoryList).toBe('R, HR, RBI, SB, AVG, W, SV, K, ERA and WHIP')
+      const hitterValue = (ctx: typeof few.ctx) => ctx.board.find((p) => p.name === 'Hitter 5')!.perGame
+      expect(hitterValue(many.ctx)).toBeCloseTo(hitterValue(few.ctx), 9)
+    })
+
+    it('values a league on its own stored 5x5, roto included', async () => {
+      mlbBoard()
+      const settings = { scoring_mode: 'roto', category_preset_id: 'mlb_5x5', category_record_mode: 'roto' }
+      const out = await loadSportPointsBase({ sport: 'MLB', league: { id: 'L', settings, leagueType: 'redraft', leagueSize: 12 }, now: NOW })
+      if (!out.ok) throw new Error(out.reason)
+      expect(out.ctx.valueKind).toBe('categories')
+    })
+
+    it('does not pause a complete board because most of it is call-ups short of the at-bat bar', async () => {
+      mlbBoard()
+      // Two call-ups for every regular: past ten games, under a hundred at-bats.
+      for (let i = 0; i < 40; i++) mlbPlayer(`cu${i}`, `Call-Up ${i}`, '2B', { ...hitter(0.05), ab: 2.5 }, 15)
+      const out = await loadSportPointsBase({ sport: 'MLB', league: null, format: 'points', now: NOW })
+      if (!out.ok) throw new Error(out.reason)
+      expect(out.ctx.board.find((p) => p.name === 'Call-Up 0')!.sampleBar).toMatchObject({ ok: false, has: '38 at-bats' })
+    })
+
+    it('grades nothing off the old fielding-only rows', async () => {
+      mlbPlayer('old', 'Old Row', 'SS', { E: 0.05, PO: 1.2 }, 140)
+      const out = await loadSportPointsBase({ sport: 'MLB', league: null, format: 'points', now: NOW })
+      expect(out).toMatchObject({ ok: false, reason: expect.stringMatching(/^No MLB projection could be scored/) })
+    })
+  })
+
   describe('category leagues', () => {
     // Same points, rebounds and assists; one makes his shots and protects the ball, the other does not.
     function categoryBoard() {

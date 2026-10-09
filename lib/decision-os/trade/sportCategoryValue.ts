@@ -120,6 +120,25 @@ export function categoryPerGameValues(
   return scoreAgainst(players, categories, pool)
 }
 
+/**
+ * Category value when a sport's categories split between two kinds of player — baseball's hitters and
+ * pitchers. Each group is valued only on its own categories and only against its own pool, then a
+ * player's groups are summed (a two-way player is in both). Pooled together, a pitcher's zero home runs
+ * would sink the hitting average and flatter every hitter, and the reverse for strikeouts.
+ */
+export function groupedCategoryValues(
+  groups: ReadonlyArray<{ players: readonly CategoryPlayer[]; categories: readonly CategoryDefinition[]; poolSize: number }>,
+): Map<string, CategoryValue> {
+  const out = new Map<string, CategoryValue>()
+  for (const g of groups) {
+    for (const [id, v] of categoryPerGameValues(g.players, g.categories, g.poolSize)) {
+      const held = out.get(id)
+      out.set(id, held ? { total: held.total + v.total, byCategory: { ...held.byCategory, ...v.byCategory } } : v)
+    }
+  }
+  return out
+}
+
 /** "PTS, REB, AST, STL, BLK, 3PM, FG%, FT% and TO" — the categories a grade was valued on. */
 export function categoryList(categories: readonly Pick<CategoryDefinition, 'label'>[]): string {
   const labels = categories.map((c) => c.label)
