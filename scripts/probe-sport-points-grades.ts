@@ -52,10 +52,17 @@ async function main() {
     NHL: [[['Connor McDavid'], ['Nathan MacKinnon']]],
   }
 
-  for (const sport of ['NBA', 'NCAAB', 'NHL'] as const) {
+  deals.NBA!.push([['Giannis Antetokounmpo'], ['Shai Gilgeous-Alexander']], [['Rudy Gobert'], ['Tyrese Haliburton']])
+  const runs = [
+    { sport: 'NBA', format: 'points' },
+    { sport: 'NBA', format: 'nba_9cat' },
+    { sport: 'NCAAB', format: 'points' },
+    { sport: 'NHL', format: 'points' },
+  ] as const
+  for (const { sport, format } of runs) {
     const t0 = Date.now()
-    const loaded = await loadSportPointsBase({ sport, league: null })
-    console.log(`\n=== ${sport} (${Date.now() - t0} ms)`)
+    const loaded = await loadSportPointsBase({ sport, league: null, format })
+    console.log(`\n=== ${sport} · ${format} (${Date.now() - t0} ms)`)
     if (!loaded.ok) {
       console.log(`  not graded: ${loaded.reason}`)
       continue
@@ -63,7 +70,8 @@ async function main() {
     const { ctx } = loaded
     const gated = ctx.board.filter((p) => p.sampleGames == null || p.sampleGames >= 10)
     console.log(`  board ${ctx.board.length} players (${gated.length} meet the sample bar), season ${ctx.window.seasonLabel}, ~${ctx.window.gamesRemaining} games left`)
-    console.log(`  top 8 per game: ${gated.slice().sort((a, b) => b.perGame - a.perGame).slice(0, 8).map((p) => `${p.name} ${p.position} ${p.perGame.toFixed(1)}`).join(' | ')}`)
+    const top = format === 'points' ? 8 : 20
+    console.log(`  top ${top} per game: ${gated.slice().sort((a, b) => b.perGame - a.perGame).slice(0, top).map((p) => `${p.name} ${p.position} ${p.perGame.toFixed(1)}`).join(' | ')}`)
     console.log(`  replacement: ${[...ctx.replacementByPosition].map(([pos, r]) => `${pos} ${r.name} ${r.perGame.toFixed(1)}`).join(' | ')}`)
     for (const [give, get] of deals[sport] ?? []) {
       const view = gradeSportPointsDeal({

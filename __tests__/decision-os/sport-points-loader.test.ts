@@ -102,6 +102,59 @@ describe('loadSportPointsBase', () => {
     expect(dyn).toMatchObject({ ok: false })
   })
 
+  describe('category leagues', () => {
+    // Same points, rebounds and assists; one makes his shots and protects the ball, the other does not.
+    function categoryBoard() {
+      const base = { points: 22, total_rebounds: 6, assists: 5, steals: 1, blocks: 0.5, three_points_made: 2 }
+      nbaPlayer('eff', 'Efficient', 'SF', { ...base, field_goals_made: 9, field_goals_attempted: 16, free_throws_made: 4, free_throws_attempted: 4.5, turnovers: 1.5 })
+      nbaPlayer('ineff', 'Inefficient', 'SF', { ...base, field_goals_made: 8, field_goals_attempted: 22, free_throws_made: 3, free_throws_attempted: 6, turnovers: 4 })
+      nbaPlayer('mid', 'Middle', 'SF', { ...base, points: 15, field_goals_made: 6, field_goals_attempted: 13, free_throws_made: 2, free_throws_attempted: 2.6, turnovers: 2 })
+      schedule(['T1', 'T2'], 10, null)
+    }
+    const NINE_CAT = { scoring_mode: 'h2h_category', category_preset_id: 'nba_9cat', category_record_mode: 'each' }
+
+    it('values a league on its own stored 9-category preset', async () => {
+      categoryBoard()
+      const out = await loadSportPointsBase({ sport: 'NBA', league: { id: 'L', settings: NINE_CAT, leagueType: 'redraft', leagueSize: 12 }, now: NOW })
+      if (!out.ok) throw new Error(out.reason)
+      expect(out.ctx.valueKind).toBe('categories')
+      expect(out.ctx.categoryList).toBe('PTS, REB, AST, STL, BLK, TO, FG%, FT% and 3PM')
+      const value = (name: string) => out.ctx.board.find((p) => p.name === name)!.perGame
+      // A points scorer could not tell these two apart; categories can.
+      expect(value('Efficient')).toBeGreaterThan(value('Inefficient'))
+    })
+
+    it('scores the open analyzer on the category preset it was asked for, and on points by default', async () => {
+      categoryBoard()
+      const cats = await loadSportPointsBase({ sport: 'NBA', league: null, format: 'nba_9cat', now: NOW })
+      if (!cats.ok) throw new Error(cats.reason)
+      expect(cats.ctx.valueKind).toBe('categories')
+      const points = await loadSportPointsBase({ sport: 'NBA', league: null, now: NOW })
+      if (!points.ok) throw new Error(points.reason)
+      expect(points.ctx.valueKind).toBe('points')
+      expect(points.ctx.categoryList).toBeNull()
+    })
+
+    it('scores a league by its own settings even when the analyzer asked for categories', async () => {
+      categoryBoard()
+      const out = await loadSportPointsBase({ sport: 'NBA', league: { id: 'L', settings: { scoring_mode: 'points' }, leagueType: 'redraft', leagueSize: 12 }, format: 'nba_9cat', now: NOW })
+      if (!out.ok) throw new Error(out.reason)
+      expect(out.ctx.valueKind).toBe('points')
+    })
+
+    it('refuses categories for college basketball, whose feed carries no shot attempts', async () => {
+      categoryBoard()
+      const out = await loadSportPointsBase({ sport: 'NCAAB', league: null, format: 'nba_9cat', now: NOW })
+      expect(out).toMatchObject({ ok: false, reason: expect.stringMatching(/^Category grades are not available for NCAAB/) })
+    })
+
+    it('refuses a category league it cannot read rather than grading it on points', async () => {
+      categoryBoard()
+      const out = await loadSportPointsBase({ sport: 'NBA', league: { id: 'L', settings: { scoring_mode: 'roto', category_preset_id: 'nba_9cat', category_record_mode: 'roto' }, leagueType: 'redraft', leagueSize: 12 }, now: NOW })
+      expect(out).toMatchObject({ ok: false, reason: expect.stringMatching(/category grades cover the standard 8- and 9-category head-to-head setups/) })
+    })
+  })
+
   it('says the schedule is missing rather than that the season is over', async () => {
     nbaPlayer('a', 'Alpha', 'C', { points: 30 })
     const out = await loadSportPointsBase({ sport: 'NBA', league: null, now: NOW })

@@ -1,16 +1,21 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
-import { buildLeagueStatScorer } from '@/lib/redraft/scoringEngine'
+import { buildLeagueStatScorer, type LeagueStatScorer } from '@/lib/redraft/scoringEngine'
 import { getDailySportNormalizer } from '@/lib/scoring-runtime/dailySportStatNormalization'
 import { resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
 import { allowedPositionsForSlot } from '@/lib/redraft/lineupValidation'
 import { normalizeSeasonType } from '@/lib/scores/gameScoreProviders'
+import { getCategoryPresetDefinitions } from '@/lib/category-scoring'
+import { nativeCategoryScoringContext } from '@/lib/category-scoring/nativeCategoryScoringContext'
+import type { CategoryDefinition } from '@/lib/category-scoring/types'
 import { rosteredIdsOf } from './ncaafRedraftContext'
+import { categoryList, categoryPerGameValues } from './sportCategoryValue'
 import {
   boardReadinessReason,
   categoryLeagueReason,
   indexBoard,
+  meetsSampleBar,
   multiSeasonFormatReason,
   replacementFromLineups,
   replacementFromRosters,
@@ -121,9 +126,54 @@ export function lineupSlotsFor(sport: PointsGradedSport, settings: unknown): { s
   return { slots, benchPerTeam: config.benchSlots }
 }
 
+/** How the open analyzer (no league) is asked to score a daily-sport deal. */
+export type SportScoringFormat = 'points' | 'nba_9cat' | 'nba_8cat_standard'
+
+/** Category presets the open analyzer offers, per sport. */
+const OPEN_CATEGORY_PRESETS: Partial<Record<PointsGradedSport, readonly SportScoringFormat[]>> = {
+  /*
+   * NBA only. College basketball's stat feed carries no shot attempts (its normalizer maps points through
+   * threes, no FGA/FTA), so FG% and FT% would read as zero for everyone and silently drop out.
+   */
+  NBA: ['nba_9cat', 'nba_8cat_standard'],
+}
+
+type Valuation =
+  | { kind: 'points'; scorer: LeagueStatScorer }
+  | { kind: 'categories'; categories: readonly CategoryDefinition[] }
+
+/**
+ * How this deal is valued: a league's stored category preset when it has one it can read, its own points
+ * scoring otherwise; with no league, the format the open analyzer asked for (points by default).
+ */
+function valuationFor(
+  sport: PointsGradedSport,
+  league: SportPointsLeague | null,
+  format: SportScoringFormat | null | undefined,
+): Valuation | { refuse: string } {
+  if (league) {
+    const native = nativeCategoryScoringContext(league.settings, sport)
+    const categories = native ? getCategoryPresetDefinitions(native.presetId) : null
+    if (categories?.length) return { kind: 'categories', categories }
+    // A category league whose categories cannot be read must never fall back to a points grade.
+    const unreadable = categoryLeagueReason(league.settings, sport)
+    if (unreadable) return { refuse: unreadable }
+  } else if (format && format !== 'points') {
+    if (!(OPEN_CATEGORY_PRESETS[sport] ?? []).includes(format)) {
+      return { refuse: `Category grades are not available for ${sport} yet, so this deal is not graded on categories.` }
+    }
+    const categories = getCategoryPresetDefinitions(format)
+    if (categories?.length) return { kind: 'categories', categories }
+  }
+  const scorer = buildLeagueStatScorer({ sport, settings: league?.settings ?? null })
+  return scorer ? { kind: 'points', scorer } : { refuse: `No ${sport} scoring is configured, so this deal cannot be graded.` }
+}
+
 export async function loadSportPointsBase(args: {
   sport: PointsGradedSport
   league: SportPointsLeague | null
+  /** The open analyzer's scoring choice; ignored in a league, which is scored by its own settings. */
+  format?: SportScoringFormat | null
   now?: Date
 }): Promise<SportPointsBaseResult> {
   const { sport, league } = args
@@ -132,13 +182,11 @@ export async function loadSportPointsBase(args: {
   if (league) {
     const format = multiSeasonFormatReason(league.leagueType, sport)
     if (format) return { ok: false, reason: format }
-    const category = categoryLeagueReason(league.settings, sport)
-    if (category) return { ok: false, reason: category }
   }
-
-  const scorer = buildLeagueStatScorer({ sport, settings: league?.settings ?? null })
+  const valuation = valuationFor(sport, league, args.format)
+  if ('refuse' in valuation) return { ok: false, reason: valuation.refuse }
   const normalize = getDailySportNormalizer(sport)
-  if (!scorer || !normalize) return { ok: false, reason: `No ${sport} scoring is configured, so this deal cannot be graded.` }
+  if (!normalize) return { ok: false, reason: `No ${sport} scoring is configured, so this deal cannot be graded.` }
 
   const latest = await prisma.aFProjectionSnapshot
     .findFirst({
@@ -170,7 +218,11 @@ export async function loadSportPointsBase(args: {
     .catch(() => [] as Array<{ id: string; rollingInsightsId: string | null; sleeperId: string | null }>)
   const aliasesById = new Map(identities.map((i) => [i.id, [i.rollingInsightsId, i.sleeperId].filter((v): v is string => Boolean(v))]))
 
-  const board: BoardPlayer[] = []
+  const teams = league?.leagueSize && league.leagueSize > 1 ? league.leagueSize : DEFAULT_TEAMS
+  const lineup = lineupSlotsFor(sport, league?.settings ?? null)
+
+  // Every scoreable projection as a per-game stat line first; the valuation is applied once all are read.
+  const lines: Array<Omit<BoardPlayer, 'perGame'> & { stats: Record<string, number> }> = []
   for (const r of rows) {
     const rates = readRates(r.adjustmentFactors)
     if (!rates) continue
@@ -179,24 +231,44 @@ export async function loadSportPointsBase(args: {
     // Derived from ONE game's line by the normalizer; on a season average they would fire every night.
     delete stats.dbl_dbl
     delete stats.trpl_dbl
-    const perGame = scorer(stats, r.position)
-    if (!Number.isFinite(perGame)) continue
-    board.push({
+    lines.push({
       id: r.playerId,
       name: r.playerName,
       position: String(r.position ?? '').trim().toUpperCase(),
-      perGame,
       sampleGames: sampleGamesFromReasons(reasonsOf(r.adjustmentFactors)),
       aliases: aliasesById.get(r.playerId) ?? [],
       sourceSeason: sourceSeasonOf(r.adjustmentFactors),
+      stats,
     })
+  }
+
+  let perGameOf: (line: (typeof lines)[number]) => number
+  if (valuation.kind === 'points') {
+    perGameOf = (line) => valuation.scorer(line.stats, line.position)
+  } else {
+    /*
+     * The pool a category's average and spread are measured over is the players the league rosters —
+     * teams × (starters + bench) — never the whole board, where hundreds of deep-bench lines would set
+     * the scale. Thin projections are valued but never set it (`meetsSampleBar`).
+     */
+    const starters = lineup.slots.reduce((s, slot) => s + slot.count, 0)
+    const values = categoryPerGameValues(
+      lines.map((l) => ({ id: l.id, stats: l.stats, eligible: meetsSampleBar(l) })),
+      valuation.categories,
+      teams * (starters + lineup.benchPerTeam),
+    )
+    perGameOf = (line) => values.get(line.id)?.total ?? Number.NaN
+  }
+  const board: BoardPlayer[] = []
+  for (const line of lines) {
+    const perGame = perGameOf(line)
+    if (!Number.isFinite(perGame)) continue
+    const { stats: _stats, ...player } = line
+    board.push({ ...player, perGame })
   }
   const notReady = boardReadinessReason({ sport, board, season, seasonLabel: seasonLabelFor(season) })
   if (notReady) return { ok: false, reason: notReady }
   const baseline = baselineSeasonOf(board, season)
-
-  const teams = league?.leagueSize && league.leagueSize > 1 ? league.leagueSize : DEFAULT_TEAMS
-  const lineup = lineupSlotsFor(sport, league?.settings ?? null)
 
   let replacementByPosition = replacementFromLineups(board, { teams, slots: lineup.slots, benchPerTeam: lineup.benchPerTeam })
   if (league) {
@@ -232,6 +304,8 @@ export async function loadSportPointsBase(args: {
       },
       scoringBasis: league ? 'league' : 'default',
       teams,
+      valueKind: valuation.kind,
+      categoryList: valuation.kind === 'categories' ? categoryList(valuation.categories) : null,
     },
   }
 }

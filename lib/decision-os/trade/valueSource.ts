@@ -14,7 +14,7 @@
  *   faab_formula       FAAB scaled to this league's budget              computed at grading
  *   devy_option        a held college prospect's option value           static rate tables
  *   ncaaf_projection   college points over replacement                  computed at grading
- *   sport_projection   NBA / college hoops / NHL points over replacement computed at grading
+ *   sport_projection   NBA / college hoops / NHL points or category value over replacement, at grading
  *   historical_file    the name-keyed historical value file             its snapshot date
  *   draft_analytics    a draft-capital lifetime value                   no date recorded
  *   position_baseline  a flat per-position constant                     no date recorded
@@ -48,7 +48,7 @@ export function tradeValueSourceOf(priced: PricedLike | null | undefined, line: 
   if (line.dataSource === 'league_waiver_budget') return 'faab_formula'
   if (line.dataSource === 'devy-option' || priced?.source === 'devy-option') return 'devy_option'
   if (line.dataSource === 'ncaaf-redraft-vorp') return 'ncaaf_projection'
-  if (/^(nba|ncaab|nhl)-points-vorp$/.test(String(line.dataSource ?? ''))) return 'sport_projection'
+  if (/^(nba|ncaab|nhl)-(points|category)-vorp$/.test(String(line.dataSource ?? ''))) return 'sport_projection'
   switch (priced?.source) {
     case 'fantasycalc':
       return String(line.position ?? '').toUpperCase() === 'PICK' ? 'fantasycalc_pick' : 'fantasycalc'

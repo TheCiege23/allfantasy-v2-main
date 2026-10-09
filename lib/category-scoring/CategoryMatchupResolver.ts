@@ -23,6 +23,15 @@ import type {
 const NBA_STAT_KEYS: Record<string, string> = { points_scored: 'pts', rebound: 'reb', assist: 'ast', steal: 'stl', block: 'blk', turnover: 'to', three_point_made: 'threes', field_goals_made: 'fgm', field_goals_attempted: 'fga', free_throws_made: 'ftm', free_throws_attempted: 'fta' }
 const categoryStat = (totals: TeamStatTotals, key: string) => totals[key] ?? totals[NBA_STAT_KEYS[key]]
 
+/**
+ * A category's stat from a stat line — the lookup matchups use, exported so a trade grade valuing projected
+ * lines (`lib/decision-os/trade/sportCategoryValue.ts`) reads a category exactly as a weekly matchup does.
+ */
+export function categoryStatValue(totals: TeamStatTotals, key: string): number {
+  const v = categoryStat(totals, key)
+  return typeof v === 'number' && Number.isFinite(v) ? v : 0
+}
+
 export function computeCategoryValue(totals: TeamStatTotals, category: CategoryDefinition): number | null {
   const comp = category.computation
   if (comp.kind === 'sum') {

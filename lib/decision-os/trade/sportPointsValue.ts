@@ -87,26 +87,50 @@ export type SportPointsContext = {
   /** How the scoring was chosen: this league's rules, or the sport's defaults with no league. */
   scoringBasis: 'league' | 'default'
   teams: number
+  /**
+   * What `perGame` measures: fantasy points, or — in a category league — the sum of the player's per-game
+   * category scores (`./sportCategoryValue.ts`). Absent means points.
+   */
+  valueKind?: 'points' | 'categories'
+  /** In a category league, the categories valued ("PTS, REB, … and TO"). */
+  categoryList?: string | null
 }
 
 export const SPORT_PICKS_REASON = (sport: PointsGradedSport) =>
   `Draft picks have no ${SPORT_LABEL[sport]} price yet, so a deal carrying one is not graded.`
 export const SPORT_FAAB_REASON =
-  'FAAB has no price on the points-over-replacement scale this sport is graded on, so a deal carrying it is not graded.'
+  'FAAB has no price on the over-replacement scale this sport is graded on, so a deal carrying it is not graded.'
 
 const round1 = (n: number) => Math.round(n * 10) / 10
 
-export function sportPointsBasis(ctx: Pick<SportPointsContext, 'sport' | 'window' | 'scoringBasis' | 'teams'>): string {
+export function sportPointsBasis(
+  ctx: Pick<SportPointsContext, 'sport' | 'window' | 'scoringBasis' | 'teams' | 'valueKind' | 'categoryList'>,
+): string {
   const label = SPORT_LABEL[ctx.sport]
+  const baseline = ctx.window.baselineSeasonLabel
+    ? ` Projections are built from the ${ctx.window.baselineSeasonLabel} season until this one has enough games.`
+    : ''
+  const season = `the rest of the ${ctx.window.seasonLabel} ${label} regular season (about ${ctx.window.gamesRemaining} games)`
+  if (ctx.valueKind === 'categories') {
+    const where =
+      ctx.scoringBasis === 'league'
+        ? 'this league’s categories'
+        : `a standard ${ctx.teams}-team head-to-head category league`
+    // Only what this league's categories actually hold: the 8-category standard has no turnovers.
+    const named = new Set((ctx.categoryList ?? '').split(/, | and /))
+    const notes = [
+      named.has('FG%') || named.has('FT%') ? 'percentages are weighted by shot volume' : null,
+      named.has('TO') ? 'turnovers count against' : null,
+    ].filter(Boolean)
+    const how = notes.length ? ` ${notes.join(' and ').replace(/^./, (c) => c.toUpperCase())}.` : ''
+    return `Category value over the best free agent at each position for ${season}, on ${where}: each category is scored as standard deviations above or below the rosterable player pool, per game, then summed across ${ctx.categoryList ?? 'the categories'}.${how} Punting a category is not modelled.${baseline}`
+  }
   const scoring =
     ctx.scoringBasis === 'league'
       ? 'scored under this league’s rules'
       : `scored on AllFantasy’s default ${label} points for a ${ctx.teams}-team league with standard lineups`
   const bonus = ctx.sport === 'NHL' ? '' : ' Double-double and triple-double bonuses are not projected.'
-  const baseline = ctx.window.baselineSeasonLabel
-    ? ` Projections are built from the ${ctx.window.baselineSeasonLabel} season until this one has enough games.`
-    : ''
-  return `Points over the best free agent at each position for the rest of the ${ctx.window.seasonLabel} ${label} regular season (about ${ctx.window.gamesRemaining} games), ${scoring}.${bonus}${baseline}`
+  return `Points over the best free agent at each position for ${season}, ${scoring}.${bonus}${baseline}`
 }
 
 /**
@@ -151,9 +175,10 @@ export function sampleGamesFromReasons(reasons: unknown): number | null {
 const isRecord = (v: unknown): v is Record<string, unknown> => Boolean(v) && typeof v === 'object' && !Array.isArray(v)
 
 /**
- * Why a league that scores by CATEGORIES is not graded here. This grade sums fantasy points; a category
- * league is won category by category, and a points total answers a different question — a punt-FT%
- * build would be graded as if free throws counted. Read only from stored modes, never from a label.
+ * Why a CATEGORY league whose categories could not be read is not graded. A category league is won
+ * category by category, so a points total answers a different question — it must never fall back to the
+ * points grade. The loader values the standard presets it can read (`./sportCategoryValue.ts`); this is
+ * for the rest (custom category lists, roto basketball). Read only from stored modes, never from a label.
  */
 export function categoryLeagueReason(settings: unknown, sport: PointsGradedSport): string | null {
   const s = isRecord(settings) ? settings : {}
@@ -162,7 +187,7 @@ export function categoryLeagueReason(settings: unknown, sport: PointsGradedSport
     .filter(Boolean)
   const category = modes.some((m) => m === 'head' || m.includes('cat') || m.includes('roto'))
   if (!category) return null
-  return `This league scores ${SPORT_LABEL[sport]} by categories. Category grades are not built yet, and a points total would answer a different question, so this deal is not graded.`
+  return `This league scores ${SPORT_LABEL[sport]} by categories we could not read — category grades cover the standard 8- and 9-category head-to-head setups so far — and a points total would answer a different question, so this deal is not graded.`
 }
 
 /**
@@ -342,7 +367,7 @@ export function gradeSportPointsDeal(args: {
       basis,
     }
   }
-  const source = `${ctx.sport.toLowerCase()}-points-vorp`
+  const source = `${ctx.sport.toLowerCase()}-${ctx.valueKind === 'categories' ? 'category' : 'points'}-vorp`
   const lines: TradeGradeLine[] = [
     ...give.priced.map((p) => ({ side: 'give' as const, name: p.name, marketValue: round1(p.value), leagueValue: round1(p.value), source, valueSource: 'sport_projection' as const, valueAsOf: null })),
     ...get.priced.map((p) => ({ side: 'get' as const, name: p.name, marketValue: round1(p.value), leagueValue: round1(p.value), source, valueSource: 'sport_projection' as const, valueAsOf: null })),

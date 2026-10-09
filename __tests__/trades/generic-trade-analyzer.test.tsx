@@ -98,6 +98,30 @@ describe('league-free trade analyzer', () => {
     expect(row.textContent).toContain('190')
   })
 
+  it('asks how an NBA deal is scored, defaulting to 9-category, and sends nothing extra for other sports', async () => {
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({
+      grade: { graded: true, letter: 'B', partnerLetter: 'D', sideAdvantage: 'you', label: 'Slightly favors you',
+        recommendation: 'Review the market gap.', giveMarket: 100, getMarket: 120, basis: 'Category value', lines: [] },
+    }) })
+    const view = render(<GenericTradeAnalyzer />)
+    expect(screen.queryByLabelText('NBA scoring')).toBeNull()
+    const analyze = async () => {
+      fireEvent.change(screen.getByLabelText('Team A sends'), { target: { value: 'Player One' } })
+      fireEvent.change(screen.getByLabelText('Team B sends'), { target: { value: 'Player Two' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Analyze trade' }))
+      await waitFor(() => expect(fetchMock).toHaveBeenCalled())
+      const body = JSON.parse(fetchMock.mock.calls.at(-1)![1].body)
+      fetchMock.mockClear()
+      return body
+    }
+    expect(await analyze()).not.toHaveProperty('scoringFormat')
+    fireEvent.change(view.container.querySelector('.af-tc-generic-sport select')!, { target: { value: 'NBA' } })
+    expect((screen.getByLabelText('NBA scoring') as HTMLSelectElement).value).toBe('nba_9cat')
+    expect(await analyze()).toMatchObject({ sportFilter: 'NBA', scoringFormat: 'nba_9cat' })
+    fireEvent.change(screen.getByLabelText('NBA scoring'), { target: { value: 'points' } })
+    expect(await analyze()).toMatchObject({ scoringFormat: 'points' })
+  })
+
   it('converts a known overall pick into a 12-team reference tier', () => {
     render(<GenericTradeAnalyzer />)
     fireEvent.change(screen.getByLabelText('Overall pick, if known'), { target: { value: '13' } })

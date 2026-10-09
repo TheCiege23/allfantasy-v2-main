@@ -150,6 +150,7 @@ describe('the grade', () => {
   it('records where each value came from on saved grades', () => {
     expect(tradeValueSourceOf({ source: 'unknown' }, { dataSource: 'nba-points-vorp' })).toBe('sport_projection')
     expect(tradeValueSourceOf({ source: 'unknown' }, { dataSource: 'nhl-points-vorp' })).toBe('sport_projection')
+    expect(tradeValueSourceOf({ source: 'unknown' }, { dataSource: 'nba-category-vorp' })).toBe('sport_projection')
   })
 })
 
@@ -171,6 +172,19 @@ describe('a board that is not ready to grade on', () => {
     const board = many(100, 30, 2025)
     expect(boardReadinessReason({ sport: 'NCAAB', board, season: 2026, seasonLabel: '2026-27' })).toMatch(/College rosters turn over every year/)
     expect(boardReadinessReason({ sport: 'NCAAB', board: many(100, 20, 2026), season: 2026, seasonLabel: '2026-27' })).toBeNull()
+  })
+
+  it('explains a category grade by the categories it was valued on', () => {
+    const nine = sportPointsBasis(ctx({ valueKind: 'categories', categoryList: 'PTS, REB, AST, STL, BLK, TO, FG%, FT% and 3PM', scoringBasis: 'default' }))
+    expect(nine).toMatch(/^Category value over the best free agent/)
+    expect(nine).toContain('a standard 12-team head-to-head category league')
+    expect(nine).toContain('Percentages are weighted by shot volume and turnovers count against.')
+    expect(nine).toContain('Punting a category is not modelled.')
+    // The 8-category standard has no turnovers, so the basis must not claim they count.
+    const eight = sportPointsBasis(ctx({ valueKind: 'categories', categoryList: 'PTS, REB, AST, STL, BLK, FG%, FT% and 3PM' }))
+    expect(eight).toContain('this league’s categories')
+    expect(eight).not.toMatch(/turnovers/)
+    expect(eight).toContain('Percentages are weighted by shot volume.')
   })
 
   it('names the season the projections come from in the basis', () => {
