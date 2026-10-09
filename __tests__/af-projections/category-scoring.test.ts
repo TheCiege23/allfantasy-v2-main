@@ -120,16 +120,22 @@ describe('NBA and NHL rules', () => {
 })
 
 describe('sport gating', () => {
-  it('covers MLB, NBA, NHL and NCAAB', () => {
+  it('covers MLB, NBA, NHL, NCAAB and soccer', () => {
     expect(isCategoryScoredSport('MLB')).toBe(true)
     expect(isCategoryScoredSport('nba')).toBe(true)
     expect(isCategoryScoredSport('NHL')).toBe(true)
     expect(isCategoryScoredSport('NCAAB')).toBe(true)
-    // Football keeps its own bases and must never reach category scoring. SOCCER has no rules
-    // because the vendor serves no player season stats for it — nothing to score, not a default
-    // withheld on principle.
+    // Soccer's lines are built from its per-match rows (soccerSeasonLines.ts) since 2026-10-09.
+    expect(isCategoryScoredSport('SOCCER')).toBe(true)
+    // Football keeps its own bases and must never reach category scoring.
     expect(isCategoryScoredSport('NFL')).toBe(false)
-    expect(isCategoryScoredSport('SOCCER')).toBe(false)
+  })
+
+  it('scores soccer on the soccer config’s own defaults, every zero-weight category left out', () => {
+    expect(getCategoryScoringRules('SOCCER')).toEqual({
+      goals: 6, assists: 3, clean_sheet_def: 4, clean_sheet_gk: 4, saves: 0.5,
+      yellow_card: -1, red_card: -3, own_goal: -2, pen_miss: -2, pen_save: 5,
+    })
   })
 
   it('NCAAB scores on the same rules as NBA, because it has the same measured vocabulary', () => {
@@ -147,7 +153,7 @@ describe('sport gating', () => {
 
   it('returns null rules for an unscored sport, never an empty map', () => {
     // `{}` would score every player to 0.0 and call it a projection.
-    expect(getCategoryScoringRules('SOCCER')).toBeNull()
+    expect(getCategoryScoringRules('NFL')).toBeNull()
     expect(getCategoryScoringRules(null)).toBeNull()
   })
 })

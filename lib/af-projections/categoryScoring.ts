@@ -13,8 +13,9 @@
  * commissioner says it scores. What these give is a defensible baseline so a projection can exist
  * at all; `rescoreForLeague` remains the path for a league's own settings.
  *
- * SOCCER is the only supported sport with no rules here, and that is not squeamishness: the vendor
- * serves no player season stats for it at all, so there is nothing to score. NCAAB shares NBA's
+ * SOCCER had no rules here until 2026-10-09, because the vendor serves no player season stats for it.
+ * Its season lines are now built from the per-match rows (`./soccerSeasonLines.ts`), already in the
+ * engine's keys, and scored on the soccer config's own defaults — see SOCCER_RULES. NCAAB shares NBA's
  * rules because it shares NBA's measured stat vocabulary — see RULES_BY_SPORT.
  *
  * WHY DRAFTKINGS CONVENTIONS. Not arbitrary preference — this codebase already treats DK as the
@@ -24,14 +25,16 @@
  * checkable reference rather than a number somebody made up here.
  */
 
+import { SOCCER_CONFIG } from '@/lib/sportConfig/configs/soccer'
+
 import type { SeasonAggregate } from './types'
 
 /** Sports this module can score. Anything else must keep refusing rather than be defaulted. */
-export type CategorySport = 'MLB' | 'NBA' | 'NHL' | 'NCAAB'
+export type CategorySport = 'MLB' | 'NBA' | 'NHL' | 'NCAAB' | 'SOCCER'
 
 export function isCategoryScoredSport(sport: string | null | undefined): sport is CategorySport {
   const s = String(sport ?? '').trim().toUpperCase()
-  return s === 'MLB' || s === 'NBA' || s === 'NHL' || s === 'NCAAB'
+  return s === 'MLB' || s === 'NBA' || s === 'NHL' || s === 'NCAAB' || s === 'SOCCER'
 }
 
 /**
@@ -113,10 +116,21 @@ const NHL_RULES: Record<string, number> = {
   shutouts: 4,
 }
 
+/**
+ * Soccer, on the house soccer scoring (lib/sportConfig/configs/soccer.ts, FPL-style) — read from that
+ * config, not restated, so a change there is a change here. Not DraftKings: soccer leagues here are
+ * built on that config, and its keys are the ones `soccerSeasonLines` emits. Zero-weight categories are
+ * left out; `own_goal` never matches because the vendor sends no own-goal field.
+ */
+const SOCCER_RULES: Record<string, number> = Object.fromEntries(
+  SOCCER_CONFIG.scoringCategories.filter((c) => c.defaultPoints !== 0).map((c) => [c.key, c.defaultPoints]),
+)
+
 const RULES_BY_SPORT: Record<CategorySport, Record<string, number>> = {
   MLB: MLB_RULES,
   NBA: NBA_RULES,
   NHL: NHL_RULES,
+  SOCCER: SOCCER_RULES,
   /*
    * College basketball scores the same categories as the NBA, on the SAME MEASURED VOCABULARY —
    * not an assumption from the sports being alike. Checked against production: `points`,
