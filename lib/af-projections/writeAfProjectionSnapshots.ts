@@ -27,6 +27,7 @@ import {
   computeOpponentAdjustment,
 } from '@/lib/projections/opponentAdjustment'
 import { extractSeasonAggregate, perGameRatesFor, toWeeklyObservation } from './core'
+import { soccerSeasonLines } from './soccerSeasonLines'
 import { rosFromPerGame, weeksRemaining } from './restOfSeason'
 import { KICKER_CANONICAL_RULES } from './kickerScoring'
 import { IDP_PBP_SOURCE } from '@/lib/idp/realStatLines'
@@ -153,6 +154,37 @@ function gamesPlayedOf(stats: unknown): number {
     : 0
 }
 
+/** One player's season line, whatever it was read from: a vendor stat line, or built from match rows. */
+type SeasonLine = { playerId: string; stats: unknown }
+
+/*
+ * ── SOCCER'S SEASON LINES COME FROM ITS MATCH ROWS ───────────────────────────────────────
+ * The vendor serves no soccer season stat lines, so this writer threw on every soccer run (15 of 15 in
+ * the fortnight to 2026-10-09). The per-match rows exist; `soccerSeasonLines` builds the same shape from
+ * them and everything below — refusals, confidence, rates, the upsert — is unchanged. The seasons are
+ * the match rows' seasons, so the prior-season blend works for soccer exactly as for every other sport.
+ */
+async function soccerSeasonWithRows(where: { lt?: number } = {}): Promise<{ season: string } | null> {
+  const row = await prisma.playerGameStat.findFirst({
+    where: { sportType: 'SOCCER', ...(where.lt != null ? { season: { lt: where.lt } } : {}) },
+    orderBy: { season: 'desc' },
+    select: { season: true },
+  })
+  return row ? { season: String(row.season) } : null
+}
+
+async function loadSoccerSeasonLines(season: number): Promise<SeasonLine[]> {
+  const rows = await prisma.playerGameStat.findMany({
+    where: { sportType: 'SOCCER', season },
+    select: { playerId: true, team: true, gameDate: true, normalizedStatMap: true },
+  })
+  const ids = [...new Set(rows.map((r) => r.playerId))]
+  const names = ids.length
+    ? await prisma.playerIdentityMap.findMany({ where: { id: { in: ids } }, select: { id: true, canonicalName: true } })
+    : []
+  return soccerSeasonLines(rows, new Map(names.map((n) => [n.id, n.canonicalName])), season)
+}
+
 /**
  * One pass at ONE source season. Exported for tests; production callers use
  * {@link writeAfProjectionSnapshots}, which adds the fallback described there.
@@ -167,14 +199,21 @@ export async function writeAfProjectionSnapshotsForSeason(
   const errors: string[] = []
 
   // --- resolve the source season ------------------------------------------------------
-  const newest = await prisma.fantasyStatLine.findFirst({
-    where: { sport, source: SEASON_LINE_SOURCE_FILTER },
-    orderBy: { season: 'desc' },
-    select: { season: true },
-  })
+  const soccer = sport === 'SOCCER'
+  const newest = soccer
+    ? await soccerSeasonWithRows()
+    : await prisma.fantasyStatLine.findFirst({
+        where: { sport, source: SEASON_LINE_SOURCE_FILTER },
+        orderBy: { season: 'desc' },
+        select: { season: true },
+      })
   const sourceSeason = opts.sourceSeason ?? (newest ? Number(newest.season) : NaN)
   if (!Number.isFinite(sourceSeason)) {
-    throw new Error(`no fantasy_stat_lines found for sport=${sport}; run import-stat-lines first`)
+    throw new Error(
+      soccer
+        ? 'no player_game_stats found for sport=SOCCER; run import-player-game-stats (multiSport) first'
+        : `no fantasy_stat_lines found for sport=${sport}; run import-stat-lines first`,
+    )
   }
 
   /*
@@ -182,11 +221,13 @@ export async function writeAfProjectionSnapshotsForSeason(
    * `writeAfProjectionSnapshots` and the route's carve-out can ask the same question of the same
    * data, rather than each forming its own opinion.
    */
-  const older = await prisma.fantasyStatLine.findFirst({
-    where: { sport, season: { lt: String(sourceSeason) }, source: SEASON_LINE_SOURCE_FILTER },
-    orderBy: { season: 'desc' },
-    select: { season: true },
-  })
+  const older = soccer
+    ? await soccerSeasonWithRows({ lt: sourceSeason })
+    : await prisma.fantasyStatLine.findFirst({
+        where: { sport, season: { lt: String(sourceSeason) }, source: SEASON_LINE_SOURCE_FILTER },
+        orderBy: { season: 'desc' },
+        select: { season: true },
+      })
   const olderSeasonAvailable = older != null
   /*
    * Current-week resolution (Sleeper season state). The Sleeper forward look and the weekly
@@ -277,9 +318,11 @@ export async function writeAfProjectionSnapshotsForSeason(
     }
   }
 
-  const statLines = await prisma.fantasyStatLine.findMany({
-    where: { sport, season: String(sourceSeason), source: SEASON_LINE_SOURCE_FILTER },
-  })
+  const statLines: SeasonLine[] = soccer
+    ? await loadSoccerSeasonLines(sourceSeason)
+    : await prisma.fantasyStatLine.findMany({
+        where: { sport, season: String(sourceSeason), source: SEASON_LINE_SOURCE_FILTER },
+      })
 
   /*
    * ── THE PER-PLAYER BASIS, WHILE A SEASON IS BEING PLAYED ────────────────────────────────
@@ -296,11 +339,13 @@ export async function writeAfProjectionSnapshotsForSeason(
   const priorSeason = older ? Number(older.season) : null
   const seasonUnderway = statLines.some((l) => gamesPlayedOf(l.stats) >= 1)
   const blend = opts.sourceSeason == null && priorSeason != null && seasonUnderway
-  const priorLines = blend
-    ? await prisma.fantasyStatLine.findMany({
-        where: { sport, season: String(priorSeason), source: SEASON_LINE_SOURCE_FILTER },
-      })
-    : []
+  const priorLines: SeasonLine[] = !blend
+    ? []
+    : soccer
+      ? await loadSoccerSeasonLines(priorSeason as number)
+      : await prisma.fantasyStatLine.findMany({
+          where: { sport, season: String(priorSeason), source: SEASON_LINE_SOURCE_FILTER },
+        })
   const priorByPlayer = new Map(priorLines.map((l) => [l.playerId, l]))
   const plan: Array<{ line: (typeof statLines)[number]; season: number }> = []
   const planned = new Set<string>()
