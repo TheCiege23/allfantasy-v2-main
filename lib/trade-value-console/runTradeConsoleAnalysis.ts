@@ -45,6 +45,7 @@ import { applyChartTePremium, resolveAssets, resolveLeagueTradeChart } from './l
 import { gradePricedSides } from '@/lib/decision-os/trade/leagueTradeGrader'
 import { createNcaafLeagueGrader } from '@/lib/decision-os/trade/ncaafLeagueGrader'
 import { applyCollegeGrade } from '@/lib/decision-os/trade/ncaafRedraftValue'
+import { createSportPointsGrader } from '@/lib/decision-os/trade/sportPointsGrader'
 import { createLeagueAssetPolicy } from '@/lib/decision-os/trade/leagueAssetPolicy'
 import { DEVY_BASIS_NOTE } from '@/lib/decision-os/trade/leagueAssetRules'
 import { tradeGradeLabel } from '@/lib/decision-os/trade/tradeGrade'
@@ -390,14 +391,31 @@ export async function runTradeConsoleAnalysis(
       : null
   const collegeView = collegeGrader ? await collegeGrader.grade(input.sideGive, input.sideGet) : null
   if (collegeView) applyCollegeGrade(leagueGrade, collegeView)
+  /*
+   * NBA, college basketball and NHL take the points-over-replacement grade `createLeagueTradeGrader` gives
+   * them — in a league on its rules and rosters, in the open analyzer on the sport's defaults. Its numbers
+   * replace the console's (which had no value for these sports at all), through the same rewrite the
+   * college grade uses, so the letter and the values beside it are one basis.
+   */
+  const sportPointsGrader = collegeView
+    ? null
+    : createSportPointsGrader({
+        sport: effectiveSport,
+        league:
+          leagueRow && consoleLeagueType && input.leagueId
+            ? { id: input.leagueId.trim(), settings: leagueRow.settings, leagueType: consoleLeagueType.type, leagueSize: leagueRow.leagueSize ?? null }
+            : null,
+      })
+  const sportView = sportPointsGrader ? await sportPointsGrader.grade(input.sideGive, input.sideGet) : null
+  if (sportView) applyCollegeGrade(leagueGrade, sportView)
   /**
    * THE grade — the same object every other trade surface shows for this deal — with the league type
    * it was priced under and how we know it, as `createLeagueTradeGrader` attaches it. Global mode (no
    * league) has no league type to name.
    */
   const grade = consoleLeagueType
-    ? { ...(collegeView ?? graded.grade), leagueType: consoleLeagueType }
-    : graded.grade
+    ? { ...(collegeView ?? sportView ?? graded.grade), leagueType: consoleLeagueType }
+    : sportView ?? graded.grade
   giveLines = leagueGrade.giveLines
   getLines = leagueGrade.getLines
   const giveTotal = leagueGrade.totals.giveLeague
