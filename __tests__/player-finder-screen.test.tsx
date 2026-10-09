@@ -353,6 +353,8 @@ describe('Player Finder — core view', () => {
     expect(screen.getByText(/on 3 of your 6 leagues, across Yahoo, Sleeper and ESPN/)).toBeInTheDocument()
     expect(screen.getByText(/rostered by others in 1/)).toBeInTheDocument()
     expect(screen.getByText('Ready · Ankle')).toBeInTheDocument()
+    // 3 of the 6 leagues the finder reads: half your fantasy life (playerFun.exposureOf, 2026-10-08).
+    expect(screen.getByText('50% exposure · Core piece')).toBeInTheDocument()
   })
 
   it('renders every league as a row, with the manager who has him named', () => {

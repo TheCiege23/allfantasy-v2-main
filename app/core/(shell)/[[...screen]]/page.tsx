@@ -86,6 +86,8 @@ import { getLeaguePreferences } from '@/lib/core-app/leaguePreferencesStore'
 import { hasSmsConsent } from '@/lib/sms/smsConsent'
 import { shouldShowTeamFollowPrompt } from '@/lib/follows/teamFollows'
 import { followKeyFor, isFollowingPlayer } from '@/lib/follows/playerFollows'
+import { loadWeeklyMvp } from '@/lib/core-app/weeklyMvp'
+import { loadTrendingFreeIn } from '@/lib/core-app/trendingFree'
 import { teamFollowPromptSport } from '@/lib/follows/teamFollowPromptSport'
 import { applyLeagueOrder } from '@/lib/core-app/leaguePreferences'
 import { listRecentPlayerSearches, recordRecentPlayerSearch } from '@/lib/core-app/recentPlayerSearches'
@@ -2510,24 +2512,30 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * Null when follows are unavailable, which hides the board. The same leagues the finder reads.
    */
   const finderLeagueSet = new Set(finderLeagueIds)
-  const [playerShares, playerFollowing] =
+  const finderLeagueRefs = playedLeagues
+    .filter((l) => finderLeagueSet.has(l.id))
+    .map((l) => ({
+      id: l.id,
+      name: l.name,
+      platform: String((l as { platform?: string | null }).platform ?? ''),
+      sport: (l as { sport?: string | null }).sport ?? null,
+    }))
+  /*
+   * Also on the home, in the same wave (2026-10-08): last week's MVP for the share card
+   * (weeklyMvp.ts), and where each "Most added" player is still free in YOUR leagues
+   * (trendingFree.ts) — the rail's "Free in 9 of yours · add" line. Each fails to null, which
+   * hides only its own piece.
+   */
+  const trendingIds = trendingAdds?.rows.map((r) => r.sleeperId) ?? []
+  const [playerShares, playerFollowing, weeklyMvp, trendingFreeIn] =
     activeKey === 'players' && userId && !playerDetail
       ? await Promise.all([
           loadPlayerShares(userId, finderLeagueIds).catch(() => null),
-          getFollowingCard(
-            userId,
-            new Date(),
-            playedLeagues
-              .filter((l) => finderLeagueSet.has(l.id))
-              .map((l) => ({
-                id: l.id,
-                name: l.name,
-                platform: String((l as { platform?: string | null }).platform ?? ''),
-                sport: (l as { sport?: string | null }).sport ?? null,
-              })),
-          ).catch(() => null),
+          getFollowingCard(userId, new Date(), finderLeagueRefs).catch(() => null),
+          loadWeeklyMvp(userId).catch(() => null),
+          trendingIds.length > 0 ? loadTrendingFreeIn(userId, finderLeagueRefs, trendingIds).catch(() => null) : Promise.resolve(null),
         ])
-      : [null, null]
+      : [null, null, null, null]
   /*
    * The open card's "Alert me" state (2026-10-08): is this player followed? `null` = follows are
    * unavailable (or the read failed), and the button is then not offered — a bell that cannot save
@@ -4957,6 +4965,8 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           shares={playerShares}
           following={playerFollowing}
           followingPlayer={followingOpenPlayer}
+          weeklyMvp={weeklyMvp}
+          trendingFreeIn={trendingFreeIn}
           leagueShares={playerLeagueShares}
           pickLeagues={playedLeagues.map((l) => ({ id: l.id, name: String(l.name ?? 'League'), platform: (l as { platform?: string | null }).platform ?? null }))}
           savedPicks={finderScope.picked ? finderLeagueIds : null}

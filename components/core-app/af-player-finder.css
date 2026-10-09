@@ -4895,3 +4895,257 @@
     font-size: 18px;
   }
 }
+
+/* ── The fun layer (2026-10-08): exposure + form chips, coin flips, weekly MVP, trending "add" ─── */
+.af-core .af-pf-exposure {
+  border-color: var(--line2);
+  color: var(--text2);
+}
+.af-core .af-pf-exposure[data-tier='core'],
+.af-core .af-pf-exposure[data-tier='big'] {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.af-core .af-pf-form {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+.af-core .af-pf-form[data-call='hot'] {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+.af-core .af-pf-form[data-call='cold'] {
+  border-color: var(--accent-line);
+  color: var(--accent);
+}
+.af-core .af-pf-form-spark {
+  display: block;
+}
+/* Coin flips (CoinFlips.tsx). */
+.af-core .af-pf-flips {
+  margin: 14px 0 4px;
+  padding: 12px;
+  border: 1px solid var(--line2);
+  border-radius: 14px;
+  background: var(--surface);
+}
+.af-core .af-pf-flips-head {
+  margin-bottom: 10px;
+}
+.af-core .af-pf-flips-sub {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.af-core .af-pf-flip-list {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.af-core .af-pf-flip-league {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+.af-core .af-pf-flip-pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: stretch;
+  gap: 8px;
+  touch-action: pan-y;
+  transition: transform 0.12s ease-out;
+  user-select: none;
+}
+.af-core .af-pf-flip-side {
+  display: grid;
+  gap: 2px;
+  justify-items: center;
+  min-height: 72px;
+  padding: 10px 8px;
+  border: 1px solid var(--line2);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, opacity 0.15s ease;
+}
+.af-core .af-pf-flip-side:hover:not([disabled]) {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+}
+.af-core .af-pf-flip-side[data-picked='true'] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.af-core .af-pf-flip-side[data-picked='false'] {
+  opacity: 0.55;
+}
+.af-core .af-pf-flip-side[data-lean='true'] {
+  box-shadow: inset 0 0 0 2px var(--good);
+}
+.af-core .af-pf-flip-side[disabled] {
+  cursor: default;
+}
+.af-core .af-pf-flip-name {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.af-core .af-pf-flip-pts {
+  font-size: 20px;
+  font-weight: 900;
+}
+.af-core .af-pf-flip-role {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.af-core .af-pf-flip-vs {
+  align-self: center;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+.af-core .af-pf-flip-reveal {
+  margin-top: 8px;
+  font-size: 13px;
+  animation: af-pf-sheet-up 0.18s ease-out;
+}
+.af-core .af-pf-flip-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+.af-core .af-pf-flip-go {
+  min-height: 40px;
+  text-decoration: none;
+}
+.af-core .af-pf-flip-again {
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--line2);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+@media (prefers-reduced-motion: reduce) {
+  .af-core .af-pf-flip-pair,
+  .af-core .af-pf-flip-reveal {
+    transition: none;
+    animation: none;
+  }
+}
+/* Weekly MVP (WeeklyMvpCard.tsx). */
+.af-core .af-pf-mvp {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 14px;
+  padding: 14px;
+  overflow: hidden;
+  border-color: var(--accent-line);
+  background: linear-gradient(135deg, var(--accent-soft), transparent 70%), var(--surface);
+}
+.af-core .af-pf-mvp-art {
+  font-size: 34px;
+  line-height: 1;
+}
+.af-core .af-pf-mvp-kicker {
+  margin: 0 0 6px;
+  color: var(--accent);
+}
+.af-core .af-pf-mvp-who {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.af-core .af-pf-mvp-text {
+  display: grid;
+  min-width: 0;
+}
+.af-core .af-pf-mvp-name {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 900;
+  white-space: nowrap;
+  text-decoration: none;
+  text-overflow: ellipsis;
+}
+.af-core .af-pf-mvp-meta {
+  color: var(--muted);
+  font-size: 12px;
+}
+.af-core .af-pf-mvp-points {
+  margin: 8px 0 0;
+  font-size: 14px;
+  font-weight: 800;
+}
+.af-core .af-pf-mvp-beat {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.af-core .af-pf-mvp-leagues {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 11px;
+}
+.af-core .af-pf-mvp-share {
+  align-self: start;
+  min-height: 40px;
+}
+@media (max-width: 720px) {
+  .af-core .af-pf-mvp {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .af-core .af-pf-mvp-art {
+    position: absolute;
+    top: 12px;
+    right: 14px;
+  }
+  .af-core .af-pf-mvp-share {
+    width: 100%;
+    min-height: 44px;
+  }
+}
+/* Trending "Free in N of yours · add" (TrendingAdds.tsx). */
+.af-core .af-pf-trend-free {
+  display: inline-flex;
+  margin: -2px 0 6px 44px;
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 800;
+  text-decoration: none;
+}
+@media (max-width: 720px) {
+  .af-core .af-pf-trend-free {
+    min-height: 36px;
+    align-items: center;
+  }
+}

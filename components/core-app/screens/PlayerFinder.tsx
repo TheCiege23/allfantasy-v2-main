@@ -23,7 +23,7 @@ import type { GameDayTriage as GameDayTriageData } from '@/lib/core-app/gameDayT
 import { LockClock } from '@/components/core-app/player-finder/LockClock'
 import { playerRef } from '@/lib/core-app/playerRef'
 import { composePlayerMoves, readiness, type PlayerMove } from '@/lib/core-app/playerMoves'
-import { lineupLink, platformLabel } from '@/lib/core-app/platformLinks'
+import { lineupFixLink, lineupLink, platformLabel } from '@/lib/core-app/platformLinks'
 import { reportedLabel } from '@/lib/core-app/injuryReport'
 import { pregameInactive } from '@/lib/core-app/pregameInactive'
 import { byeChip, byeStatus } from '@/lib/core-app/byeStatus'
@@ -67,6 +67,12 @@ import { LeagueActionCards } from '@/components/core-app/player-finder/LeagueAct
 import { PhoneFold } from '@/components/core-app/player-finder/PhoneFold'
 import { PhoneSearchDock } from '@/components/core-app/player-finder/PhoneSearchDock'
 import { buildLeagueCards } from '@/lib/core-app/leagueActions'
+import { ExposureChip, FormSpark } from '@/components/core-app/player-finder/PlayerFunChips'
+import { CoinFlips, type FlipLink } from '@/components/core-app/player-finder/CoinFlips'
+import { WeeklyMvpCard } from '@/components/core-app/player-finder/WeeklyMvpCard'
+import { coinFlipsOf, exposureOf, formOf } from '@/lib/core-app/playerFun'
+import type { WeeklyMvp } from '@/lib/core-app/weeklyMvp'
+import type { TrendingFreeIn } from '@/lib/core-app/trendingFree'
 import { leagueActionsCopy } from '@/lib/core-app/leagueActionsCopy'
 import { FollowingBoard } from '@/components/core-app/player-finder/FollowingBoard'
 import { followCopy } from '@/lib/core-app/finderFollowCopy'
@@ -216,6 +222,10 @@ export type PlayerFinderProps = {
   following?: FollowingCardData | null
   /** Is the open player followed? Null = follows unavailable, and "Alert me" is not offered. */
   followingPlayer?: boolean | null
+  /** Last week's MVP for you, for the share card on the home (weeklyMvp.ts). Home only. */
+  weeklyMvp?: WeeklyMvp | null
+  /** Where each "Most added" player is free in your leagues (trendingFree.ts). Home only. */
+  trendingFreeIn?: TrendingFreeIn | null
   /** League mode: the same players read in the held league (holder, value, season points). */
   leagueShares?: LeagueShareView | null
   /** Every league the account plays, for the "pick leagues" control. */
@@ -429,6 +439,8 @@ export function PlayerFinder({
   shares = null,
   following = null,
   followingPlayer = null,
+  weeklyMvp = null,
+  trendingFreeIn = null,
   leagueShares = null,
   pickLeagues = [],
   savedPicks = null,
@@ -565,6 +577,21 @@ export function PlayerFinder({
   const cardProj: Record<string, string | null> = {}
   for (const r of leagueRows) cardProj[r.slot.leagueId] = r.impact?.afPoints.available ? r.impact.afPoints.data.points.toFixed(1) : null
   const ac = leagueActionsCopy(language)
+  /*
+   * The fun layer (2026-10-08, playerFun.ts): exposure across the leagues the finder reads (not in a
+   * held league — "1 of 1" is not exposure), his form from the season the card already loaded, and
+   * the coin flips in your non-best-ball leagues, each with that league's verified lineup screen.
+   */
+  const exposure = detail && signedIn && !leagueMode ? exposureOf(yoursCount, leagueCount) : null
+  const form = depth?.season.available ? formOf(depth.season.data.weeks) : null
+  const bestBallLeagues = new Set(leagueRows.filter((r) => r.slot.bestBall).map((r) => r.slot.leagueId))
+  const flips = detail && signedIn ? coinFlipsOf(impactRows.filter((i) => !bestBallLeagues.has(i.leagueId)), detail.player.name) : []
+  const flipLink = (leagueId: string): FlipLink | null => {
+    const s = leagueRows.find((r) => r.slot.leagueId === leagueId)?.slot
+    if (!s) return null
+    const l = lineupFixLink({ id: s.leagueId, platform: s.platform, platformLeagueId: s.platformLeagueId, season: s.season, name: s.leagueName, teamId: s.teamExternalId })
+    return l ? { href: l.href, external: l.external, platformLabel: l.platformLabel } : null
+  }
   const unmatched = (detail?.rosterCoverage.unmatched ?? []).filter((u) => inScope(u.leagueId))
 
   // The league strip: every league in scope as one chip — cross-league view only (leagueStrip.ts).
@@ -778,7 +805,7 @@ export function PlayerFinder({
         ) : null}
 
         {/* Most added this week across Sleeper-synced leagues (trendingAdds.ts) — everyone, signed in or not. */}
-        <TrendingAdds data={trendingAdds} leagueParam={leagueParam} />
+        <TrendingAdds data={trendingAdds} leagueParam={leagueParam} freeIn={trendingFreeIn} />
 
         {detail && otherMatches.length > 0 ? (
           <div className="af-pf-m-only af-pf-others" aria-label={t.otherMatches}>
@@ -825,6 +852,7 @@ export function PlayerFinder({
             <p className="af-pf-home-sub">{fc.homeSub}</p>
           </header>
         ) : null}
+        {myPlayersHome ? <WeeklyMvpCard mvp={weeklyMvp} /> : null}
         {!detail && signedIn && !selectedLeagueId && pickLeagues.length > 1 ? <LeaguePicker leagues={pickLeagues} saved={savedPicks} /> : null}
         {!detail && signedIn && triage ? <GameDayTriage state={triage} nowIso={nowIso} leagueCount={leagueCount} /> : null}
         {!detail && signedIn && shares ? <PlayerSharesBoard state={shares} league={leagueShares} valuesLocked={depthLocked} /> : null}
@@ -891,6 +919,9 @@ export function PlayerFinder({
                       {coreUiCopy(byeMark.label, language)}
                     </span>
                   ) : null}
+                  {/* His form (🔥 / 🧊 with a sparkline) and how much of your fantasy life rides on him (2026-10-08). */}
+                  <FormSpark form={form} />
+                  <ExposureChip exposure={exposure} />
                   {/* Follow him across every league: news, and when he is free in one of yours (2026-10-08). */}
                   {signedIn && followingPlayer !== null ? (
                     <FollowButton
@@ -995,6 +1026,9 @@ export function PlayerFinder({
                 </>
               }
             />
+
+            {/* Close start/sit calls as a quick pick — yours, then our lean and the lineup button (2026-10-08). */}
+            <CoinFlips flips={flips} linkFor={flipLink} />
 
             {/* Compare: a second name beside this one. Suggestions link to ?vs= (2026-09-06). */}
             {detailRef ? (
