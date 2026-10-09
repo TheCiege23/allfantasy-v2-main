@@ -93,3 +93,43 @@ export function fanOutCopy(group: readonly FanOutAlert[], leagues: readonly FanO
   const caveat = stale ? ' This designation has not updated recently — check before acting.' : ''
   return { title, body: `${lead} ${lines.join(' ')}${caveat}` }
 }
+
+/**
+ * The game-day digest (2026-10-08): ONE phone notification for EVERY flagged starter not yet told
+ * about today, naming the leagues to fix — "Josh Allen (inactive): KBFL, Maye 26. Travis Kelce
+ * (Out): Dynasty." — instead of one player per sweep, which on a Sunday with three starters out
+ * took three sweeps and three buzzes to say one thing.
+ *
+ * With one player it is that player's fan-out copy, unchanged. Each line names at most
+ * MAX_LEAGUES_PER_LINE leagues and then "+N more"; the whole body stops at DIGEST_BODY_MAX so a
+ * lock screen shows the first players whole rather than every player cut off.
+ */
+export const MAX_LEAGUES_PER_LINE = 3
+export const DIGEST_BODY_MAX = 240
+
+export function digestCopy(groups: ReadonlyArray<readonly FanOutAlert[]>): { title: string; body: string } {
+  const lines = groups.map((g) => {
+    const top = g[0]!
+    const name = str(top.metadata?.playerName) ?? top.title.split(' is ')[0] ?? 'Your starter'
+    const tag = top.metadata?.inactive === true ? 'inactive' : (str(top.metadata?.designation) ?? 'flagged')
+    const leagues = [...new Set(g.map((a) => str(a.metadata?.leagueName) ?? a.leagueId ?? '').filter(Boolean))]
+    const shown = leagues.slice(0, MAX_LEAGUES_PER_LINE).join(', ')
+    const more = leagues.length > MAX_LEAGUES_PER_LINE ? ` +${leagues.length - MAX_LEAGUES_PER_LINE} more` : ''
+    return `${name} (${tag}): ${shown}${more}.`
+  })
+  const leagueCount = new Set(groups.flatMap((g) => g.map((a) => a.leagueId ?? str(a.metadata?.leagueName) ?? ''))).size
+  const allOut = groups.every((g) => g[0]!.metadata?.inactive === true || /^out$/i.test(str(g[0]!.metadata?.designation) ?? ''))
+  const n = groups.length
+  const title = `${n} of your starters ${allOut ? 'are out' : 'are flagged'} — fix ${leagueCount} lineup${leagueCount === 1 ? '' : 's'}`
+  let body = ''
+  for (const line of lines) {
+    const next = body ? `${body} ${line}` : line
+    if (next.length > DIGEST_BODY_MAX) {
+      // A first line too long on its own is cut, never dropped — the body is never just "…".
+      body = body ? `${body} …` : `${line.slice(0, DIGEST_BODY_MAX - 1)}…`
+      break
+    }
+    body = next
+  }
+  return { title, body }
+}

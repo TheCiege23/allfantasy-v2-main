@@ -109,7 +109,8 @@ import { runFollowFreeAgentCheck, type FollowFreeAgentRun } from '@/lib/follows/
 import { followFreeAgentDeps } from '@/lib/follows/followFreeAgentDeps'
 import { injuredStarterDedupeKey, injuredStarterHref, mergeAudience } from '@/lib/chimmy-alerts/sweepAudience'
 import { buildFanOutLeagues } from '@/lib/chimmy-alerts/injuryFanOut'
-import { fanOutCopy, groupAlertsByPlayer } from '@/lib/chimmy-alerts/injuryFanOutCopy'
+import { digestCopy, fanOutCopy, groupAlertsByPlayer } from '@/lib/chimmy-alerts/injuryFanOutCopy'
+import { allSportsInjuryAlertsEnabled, onGameDay } from '@/lib/chimmy-alerts/gameDayScope'
 import { liveFirstSeen } from '@/lib/chimmy-alerts/liveStatusFold'
 import type { ChimmyAlertContext } from '@/lib/chimmy-alerts/types'
 import { loadChimmyAlertPreferences } from '@/lib/chimmy-alerts/ChimmyAlertPreferencesService'
@@ -473,6 +474,8 @@ interface SweepUserResult {
   pushSkipped?: string
   /** Every detected alert was muted in Chimmy's alert controls (class, type or league). */
   mutedByChimmyPrefs?: boolean
+  /** Players named in this sweep's message — more than one is the game-day digest. */
+  playersSent?: number
   errors: string[]
 }
 
@@ -514,7 +517,12 @@ async function handle(req: NextRequest) {
       : await Promise.all([
           prisma.webPushSubscription.findMany({ select: { userId: true }, distinct: ['userId'], take: limit }),
           prisma.leagueTeam.findMany({
-            where: { claimedByUserId: { not: null }, league: { season } },
+            /*
+             * season + 1 since every sport joined the sweep (2026-10-08): ESPN stores an NBA/NHL
+             * 2026-27 league as 2027, so a manager whose only team is one of those was outside the
+             * audience. Which of their leagues count is gameDayScope.isCurrentSeasonLeague's call.
+             */
+            where: { claimedByUserId: { not: null }, league: { season: { in: [season, season + 1] } } },
             select: { claimedByUserId: true },
             distinct: ['claimedByUserId'],
             take: limit,
@@ -548,7 +556,15 @@ async function handle(req: NextRequest) {
     for (const sub of subscribers) {
       const result: SweepUserResult = { userId: sub.userId, injuredStarters: 0, alerts: 0, pushed: 0, deduped: false, errors: [] }
       try {
-        const signal = await hydrateInjuredStarters({ appUserId: sub.userId })
+        /*
+         * EVERY SPORT, not only the NFL (Guap, 2026-10-08: "do the same for all game days for all
+         * sports"). `sport: null` reads every sport's current leagues; gameDayScope.onGameDay keeps
+         * the NFL exactly as it was and lets a daily sport speak only when his game starts within
+         * GAME_DAY_HOURS. INJURY_ALERTS_NFL_ONLY=1 puts it back to the NFL without a deploy.
+         */
+        const hydrated = await hydrateInjuredStarters({ appUserId: sub.userId, sport: allSportsInjuryAlertsEnabled() ? null : 'NFL' })
+        const sweepNow = new Date()
+        const signal = { ...hydrated, injuredStarters: hydrated.injuredStarters.filter((s) => onGameDay(s, sweepNow)) }
         result.injuredStarters = signal.injuredStarters.length
         if (signal.injuredStarters.length === 0) {
           results.push(result)
@@ -595,58 +611,55 @@ async function handle(req: NextRequest) {
         }
 
         /*
-         * ONE message per sweep, about ONE player — but covering EVERY league he starts in (the
-         * injury fan-out, injuryFanOutCopy.ts). A burst of six notifications for six leagues is how
-         * someone turns notifications off permanently; one notification about one league, when he
-         * starts in three, is how the other two get missed.
+         * ONE message per player covering EVERY league he starts in (the injury fan-out,
+         * injuryFanOutCopy.ts) — and, since 2026-10-08, ONE phone notification for EVERY player not
+         * yet told about today: the game-day digest. Guap's ask: when the inactives land, one
+         * notification with the list of who is out and the leagues to fix.
          *
-         * 🛑 THE FIRST PLAYER NOT YET SENT TODAY, NOT THE MOST URGENT ONE. This took the single most
-         * urgent alert and, when that one was already sent, skipped the user for the sweep — so a
-         * second ruled-out starter waited until he happened to rank first, which on a Sunday can be
-         * never. Players are walked in urgency order and the first unsent one goes.
+         * 🛑 BEFORE THE DIGEST THIS SENT THE FIRST UNSENT PLAYER AND STOPPED. Three starters ruled
+         * out at 11:30 on a Sunday took three sweeps — 45 minutes, three buzzes — to say one thing,
+         * and the third could land after a 1pm lock. Every unsent player is now said in this sweep.
+         *
+         * Each player still gets his OWN in-app row under his own dedupe key: the bell lists them
+         * one by one, and that row's sourceKey is what tells the next sweep he was already said.
+         * The email rides the first row only and lists everyone; the phone gets one push.
          */
         const now = new Date()
         const groups = groupAlertsByPlayer(alerts)
-        let group: (typeof alerts)[number][] | null = null
-        let dedupePrefix = ''
+        const unsent: Array<{ group: (typeof alerts)[number][]; key: string }> = []
         for (const g of groups) {
           const key = injuredStarterDedupeKey(g[0]!, now)
           // Today's message about this player and designation already went out: say nothing again.
           const already = await prisma.platformNotification
             .findFirst({ where: { sourceKey: `${key}:${sub.userId}` }, select: { id: true } })
             .catch(() => null)
-          if (!already) {
-            group = g
-            dedupePrefix = key
-            break
-          }
+          if (!already) unsent.push({ group: g, key })
         }
-        if (!group) {
+        if (unsent.length === 0) {
           result.deduped = true
           totalDeduped += 1
           results.push(result)
           continue
         }
-        const top = group[0]!
-        const href = injuredStarterHref(top, await alertPlayerRef(top))
-        // The backup to start in each league (the finder's league-scored picker) and where to fix it.
-        const fanOutLeagues = await buildFanOutLeagues(sub.userId, group, now).catch(() => [])
-        const copy = fanOutCopy(group, fanOutLeagues)
+        // The backup to start in each league (the finder's league-scored picker) and where to fix it, per player.
+        const fanOuts = await Promise.all(unsent.map((u) => buildFanOutLeagues(sub.userId, u.group, now).catch(() => [])))
+        const copies = unsent.map((u, i) => fanOutCopy(u.group, fanOuts[i]!))
+        const hrefs = await Promise.all(unsent.map(async (u) => injuredStarterHref(u.group[0]!, await alertPlayerRef(u.group[0]!))))
+        const severityOf = (u: (typeof unsent)[number]): 'high' | 'medium' => (u.group[0]!.urgencySignal >= 78 ? 'high' : 'medium')
 
         /*
-         * The email lists EVERY flagged player, not just the one this sweep sends about. A phone
-         * banner has room for one sentence; an email does not, and a manager with three starters
-         * out is badly served by an email about one of them. The sent player carries his per-league
-         * fix links; the others say what the detector said and how many leagues they touch.
+         * The email lists EVERY flagged player, not just the ones this sweep sends about. The
+         * players sent now carry their per-league fix links; the others say what the detector said.
          */
         const injuryEmail = renderInjuryEmail({
           alerts: groups.map((g) => {
-            if (g === group) {
+            const i = unsent.findIndex((u) => u.group === g)
+            if (i >= 0) {
               return {
-                title: copy.title,
-                message: copy.body,
-                leagueId: top.leagueId ?? null,
-                fixLinks: fanOutLeagues
+                title: copies[i]!.title,
+                message: copies[i]!.body,
+                leagueId: g[0]!.leagueId ?? null,
+                fixLinks: fanOuts[i]!
                   .filter((l) => l.fixHref)
                   .map((l) => ({ leagueName: l.leagueName, href: l.fixHref! })),
               }
@@ -658,42 +671,41 @@ async function handle(req: NextRequest) {
         })
 
         /*
-         * In-app row first, so the bell and the notifications centre carry the
+         * In-app rows first, so the bell and the notifications centre carry the
          * alert even when push is unconfigured or the subscription has gone
-         * stale. The UTC-day bucket in the dedupe prefix keeps a 15-minute
+         * stale. The Eastern-day bucket in the dedupe prefix keeps a 15-minute
          * cadence from writing 96 rows for the same injury.
          *
-         * ⚠ EMAIL IS NO LONGER SKIPPED. It was, on the reasoning that this
-         * sweep never promised one — but the effect was that an injured
-         * starter, the single most time-critical thing this product knows,
-         * had no email at all while digests and trade alerts did. The dedupe
-         * prefix is what makes it safe at a 15-minute cadence: one send per
-         * league per day, not ninety-six.
-         *
-         * It rides `emailOverride` deliberately. The dispatcher's default
+         * Email rides `emailOverride` deliberately. The dispatcher's default
          * sender strips its own HTML — every tag replaced with a space — so
          * anything designed must come through the override, which is the only
          * path to sendTemplatedEmail. SMS and push stay skipped: the targeted
-         * push below is the only push, and SMS is not configured.
+         * push below is the only push, and SMS has no registered sender yet
+         * (Twilio A2P 10DLC).
          */
-        const alertSeverity: 'high' | 'medium' = top.urgencySignal >= 78 ? 'high' : 'medium'
-        await dispatchNotification({
-          userIds: [sub.userId],
-          category: 'injury_alerts',
-          productType: 'app',
-          type: 'chimmy_alert',
-          title: copy.title,
-          body: copy.body,
-          // The Player Finder card: it leads with the game-day banner and the verified lineup buttons.
-          actionHref: href,
-          actionLabel: 'Open his card',
-          leagueId: top.leagueId ?? null,
-          severity: alertSeverity,
-          meta: { chimmyAlert: true, class: top.class, alertType: top.type, ...(top.metadata ?? {}) },
-          dedupePrefix,
-          skipChannels: { email: injuryEmail == null, sms: true, push: true },
-          ...(injuryEmail ? { emailOverride: injuryEmail } : {}),
-        })
+        for (let i = 0; i < unsent.length; i++) {
+          const u = unsent[i]!
+          const top = u.group[0]!
+          const withEmail = i === 0 && injuryEmail != null
+          await dispatchNotification({
+            userIds: [sub.userId],
+            category: 'injury_alerts',
+            productType: 'app',
+            type: 'chimmy_alert',
+            title: copies[i]!.title,
+            body: copies[i]!.body,
+            // The Player Finder card: it leads with the game-day banner and the verified lineup buttons.
+            actionHref: hrefs[i]!,
+            actionLabel: 'Open his card',
+            leagueId: top.leagueId ?? null,
+            severity: severityOf(u),
+            meta: { chimmyAlert: true, class: top.class, alertType: top.type, ...(top.metadata ?? {}) },
+            dedupePrefix: u.key,
+            skipChannels: { email: !withEmail, sms: true, push: true },
+            ...(withEmail && injuryEmail ? { emailOverride: injuryEmail } : {}),
+          })
+        }
+        result.playersSent = unsent.length
 
         if (!pushConfigured) {
           result.errors.push('push not configured')
@@ -708,26 +720,39 @@ async function handle(req: NextRequest) {
          * this line buzzed the phone regardless. pushGate holds the dispatcher's own rule.
          * A high-severity alert passes quiet hours only when the user allows critical
          * alerts (user decision, 2026-09-14). A settings read that fails sends nothing.
+         *
+         * Asked per player: a league the user muted keeps its player out of the digest
+         * without silencing the others.
          */
-        const pushGate = await decidePushForUser(sub.userId, {
-          category: 'injury_alerts',
-          leagueId: top.leagueId ?? null,
-          severity: alertSeverity,
-        }).catch(() => null)
-        if (!pushGate || !pushGate.allowed) {
-          result.pushSkipped = pushGate ? pushGate.reason : 'settings_unavailable'
+        const gates = await Promise.all(
+          unsent.map((u) =>
+            decidePushForUser(sub.userId, {
+              category: 'injury_alerts',
+              leagueId: u.group[0]!.leagueId ?? null,
+              severity: severityOf(u),
+            }).catch(() => null),
+          ),
+        )
+        const pushable = unsent.map((u, i) => ({ u, i })).filter(({ i }) => gates[i]?.allowed)
+        if (pushable.length === 0) {
+          const first = gates[0]
+          result.pushSkipped = first && !first.allowed ? first.reason : 'settings_unavailable'
           totalPushSkipped += 1
           results.push(result)
           continue
         }
 
+        // One player: his own fan-out copy and card. Several: the digest, landing on the finder's
+        // game-day list ("Game day · your flagged starters"), which shows every one with its lock.
+        const single = pushable.length === 1 ? pushable[0]! : null
+        const pushCopy = single ? copies[single.i]! : digestCopy(pushable.map(({ u }) => u.group))
         const sent = await sendPushToUser(sub.userId, {
-          title: copy.title,
-          body: copy.body,
-          href,
-          tag: dedupePrefix,
+          title: pushCopy.title,
+          body: pushCopy.body,
+          href: single ? hrefs[single.i]! : '/core/players',
+          tag: pushable[0]!.u.key,
           type: 'lineup',
-          leagueId: top.leagueId ?? null,
+          leagueId: single ? (single.u.group[0]!.leagueId ?? null) : null,
         })
         const okCount = sent.filter((s) => s.ok).length
         result.pushed = okCount

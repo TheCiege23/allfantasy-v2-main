@@ -93,6 +93,8 @@ export function detectInjuredStarterAlerts(context: ChimmyAlertContext): ChimmyA
         // With `sport`, what the tap needs to open his card directly (sweepAudience.injuredStarterHref).
         sleeperId: player.sleeperId ?? null,
         sport: player.sport ?? null,
+        // The game-day digest names the league without parsing the message (injuryFanOutCopy.digestCopy).
+        leagueName: player.leagueName ?? null,
         minutesToLock: mins,
         designation: player.designation,
         inactive: Boolean(inactive),

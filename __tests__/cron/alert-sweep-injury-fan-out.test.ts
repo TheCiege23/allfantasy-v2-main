@@ -14,6 +14,8 @@ const h = vi.hoisted(() => ({
   fanOut: vi.fn(),
   teamSweep: vi.fn(),
   outcome: vi.fn(),
+  sendPush: vi.fn(),
+  decidePush: vi.fn(),
 }))
 
 vi.mock('server-only', () => ({}))
@@ -33,8 +35,8 @@ vi.mock('@/lib/chimmy-alerts/hydrateInjuredStarters', () => ({ hydrateInjuredSta
 vi.mock('@/lib/chimmy-alerts/ChimmyAlertDetectors', () => ({ detectInjuredStarterAlerts: h.detect }))
 vi.mock('@/lib/chimmy-alerts/ChimmyAlertPreferencesService', () => ({ loadChimmyAlertPreferences: h.loadPrefs }))
 vi.mock('@/lib/notifications/NotificationDispatcher', () => ({ dispatchNotification: h.dispatch }))
-vi.mock('@/lib/push-notifications', () => ({ sendPushToUser: vi.fn(async () => []) }))
-vi.mock('@/lib/notifications/pushGate', () => ({ decidePushForUser: vi.fn(async () => ({ allowed: false, reason: 'test' })) }))
+vi.mock('@/lib/push-notifications', () => ({ sendPushToUser: h.sendPush }))
+vi.mock('@/lib/notifications/pushGate', () => ({ decidePushForUser: h.decidePush }))
 vi.mock('@/lib/chimmy-alerts/injuryFanOut', () => ({ buildFanOutLeagues: h.fanOut }))
 vi.mock('@/lib/chimmy-alerts/runLineupCheck', () => ({ runLineupCheck: h.runLineupCheck }))
 // Mocked, not left real: unmocked, it ran against the stub prisma above and failed into
@@ -78,6 +80,8 @@ beforeEach(() => {
   h.findFirst.mockResolvedValue(null)
   h.dispatch.mockResolvedValue(undefined)
   h.fanOut.mockResolvedValue([])
+  h.sendPush.mockResolvedValue([])
+  h.decidePush.mockResolvedValue({ allowed: false, reason: 'test' })
   h.runLineupCheck.mockResolvedValue({ ran: false, reason: 'early', week: null, mainSlate: null })
   h.runWaiverCheck.mockResolvedValue({ ran: false, reason: 'early', week: null, firstKickoff: null })
   h.runSportWaiverCheck.mockResolvedValue({ ran: false, reason: 'closed', day: '2026-09-29', sports: {} })
@@ -124,6 +128,96 @@ describe('alert sweep — injury fan-out', () => {
     await call('userId=u1')
     expect(h.dispatch).toHaveBeenCalledTimes(1)
     expect(h.dispatch.mock.calls[0]![0]).toMatchObject({ title: 'Tank Dell is Out and still starting', body: 'Tank Dell starts for you in L1.' })
+  })
+})
+
+/*
+ * The game-day digest and every sport (Guap, 2026-10-08): every flagged starter not yet told about
+ * today goes out in this sweep — one in-app row each, the email once, ONE push naming them all —
+ * and a daily sport speaks only on its game day.
+ */
+describe('alert sweep — game-day digest', () => {
+  it('two players out: an in-app row each, the email once, and ONE push naming both and their leagues', async () => {
+    vi.stubEnv('VAPID_PUBLIC_KEY', 'test-public')
+    vi.stubEnv('VAPID_PRIVATE_KEY', 'test-private')
+    try {
+      h.decidePush.mockResolvedValue({ allowed: true })
+      h.sendPush.mockResolvedValue([{ ok: true }])
+      const a = (leagueId: string, leagueName: string, player: string, urgencySignal: number, inactive = false) => ({
+        ...alert(leagueId, player, urgencySignal),
+        metadata: { playerName: player, designation: 'Out', leagueName, inactive, minutesToLock: 45 },
+      })
+      h.detect.mockReturnValue([a('L1', 'KBFL', 'Josh Allen', 99, true), a('L2', 'Maye 26', 'Josh Allen', 99, true), a('L3', 'Dynasty', 'Travis Kelce', 80)])
+
+      await call('userId=u1')
+
+      expect(h.dispatch).toHaveBeenCalledTimes(2)
+      const [first, second] = h.dispatch.mock.calls.map((c) => c[0])
+      expect(first.skipChannels).toEqual({ email: false, sms: true, push: true })
+      expect(first.emailOverride.html).toContain('Travis Kelce')
+      expect(second.skipChannels).toEqual({ email: true, sms: true, push: true })
+      expect(second.emailOverride).toBeUndefined()
+      expect([first.dedupePrefix, second.dedupePrefix]).toEqual([expect.stringContaining('josh-allen'), expect.stringContaining('travis-kelce')])
+
+      expect(h.sendPush).toHaveBeenCalledTimes(1)
+      const push = h.sendPush.mock.calls[0]![1]
+      expect(push.title).toBe('2 of your starters are out — fix 3 lineups')
+      expect(push.body).toBe('Josh Allen (inactive): KBFL, Maye 26. Travis Kelce (Out): Dynasty.')
+      expect(push.href).toBe('/core/players')
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
+  it('a muted league keeps its player out of the push, and one player left is his own card', async () => {
+    vi.stubEnv('VAPID_PUBLIC_KEY', 'test-public')
+    vi.stubEnv('VAPID_PRIVATE_KEY', 'test-private')
+    try {
+      h.decidePush.mockImplementation(async (_u: string, { leagueId }: { leagueId: string }) => (leagueId === 'L2' ? { allowed: false, reason: 'league_muted' } : { allowed: true }))
+      h.sendPush.mockResolvedValue([{ ok: true }])
+      h.detect.mockReturnValue([alert('L1', 'Jayden Reed', 95), alert('L2', 'Tank Dell', 70)])
+      await call('userId=u1')
+      expect(h.sendPush).toHaveBeenCalledTimes(1)
+      expect(h.sendPush.mock.calls[0]![1].title).toBe('Jayden Reed is Out and still starting')
+      expect(h.sendPush.mock.calls[0]![1].href).toContain('Jayden%20Reed')
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
+  it('reads every sport, and INJURY_ALERTS_NFL_ONLY=1 puts it back to the NFL', async () => {
+    h.detect.mockReturnValue([])
+    await call('userId=u1')
+    expect(h.hydrate).toHaveBeenCalledWith({ appUserId: 'u1', sport: null })
+    vi.stubEnv('INJURY_ALERTS_NFL_ONLY', '1')
+    try {
+      h.hydrate.mockClear()
+      await call('userId=u1')
+      expect(h.hydrate).toHaveBeenCalledWith({ appUserId: 'u1', sport: 'NFL' })
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
+  it('🛑 a daily-sport starter with no game today says nothing; one tipping off tonight does', async () => {
+    const soon = new Date(Date.now() + 3 * 3_600_000).toISOString()
+    const nextWeek = new Date(Date.now() + 5 * 24 * 3_600_000).toISOString()
+    h.hydrate.mockResolvedValue({
+      injuredStarters: [
+        { playerName: 'A', sport: 'NBA', lockAt: nextWeek },
+        { playerName: 'B', sport: 'NHL', lockAt: null },
+      ],
+      leaguesScanned: 2,
+      feedStale: false,
+    })
+    await call('userId=u1')
+    expect(h.detect).not.toHaveBeenCalled()
+
+    h.hydrate.mockResolvedValue({ injuredStarters: [{ playerName: 'C', sport: 'NBA', lockAt: soon }], leaguesScanned: 1, feedStale: false })
+    h.detect.mockReturnValue([])
+    await call('userId=u1')
+    expect(h.detect).toHaveBeenCalledTimes(1)
+    expect(h.detect.mock.calls[0]![0].signalBundle.injuredStarters.map((s: { playerName: string }) => s.playerName)).toEqual(['C'])
   })
 })
 
