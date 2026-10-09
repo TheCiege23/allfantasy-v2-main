@@ -1,4 +1,4 @@
-import { leagueVariantFor } from '@/lib/core-app/valueBook'
+import { leagueVariantFor, lineupEntriesFromSettings } from '@/lib/core-app/valueBook'
 import type { LeagueContextEnvelope } from '@/lib/league-context/leagueContextService'
 
 /*
@@ -9,6 +9,33 @@ import type { LeagueContextEnvelope } from '@/lib/league-context/leagueContextSe
  */
 const IDP_SLOTS = new Set(['DL', 'LB', 'DB', 'IDP_FLEX', 'DE', 'DT', 'CB', 'S'])
 
+const isRecord = (v: unknown): v is Record<string, unknown> => Boolean(v) && typeof v === 'object' && !Array.isArray(v)
+
+/**
+ * The league's numeric scoring weights. Imported leagues store Sleeper-shaped `scoring_settings`; leagues
+ * created here store `scoringSettings`, whose weights sit at the top level and under `rules`. A
+ * top-level weight wins over the same name under `rules`.
+ */
+export function numericScoringOf(s: Record<string, unknown>): Record<string, number> {
+  const out: Record<string, number> = {}
+  const take = (o: Record<string, unknown>) => {
+    for (const [k, v] of Object.entries(o)) {
+      if (typeof v === 'boolean' || v == null || v === '') continue
+      const n = Number(v)
+      if (Number.isFinite(n)) out[k] = n
+    }
+  }
+  if (isRecord(s.scoring_settings)) {
+    take(s.scoring_settings)
+    return out
+  }
+  if (isRecord(s.scoringSettings)) {
+    if (isRecord(s.scoringSettings.rules)) take(s.scoringSettings.rules)
+    take(s.scoringSettings)
+  }
+  return out
+}
+
 /** The market-value context the value service keys its cache on, from the league's own settings. */
 export function marketContextFor(
   settings: unknown,
@@ -16,14 +43,16 @@ export function marketContextFor(
   teams: number
 ): Pick<LeagueContextEnvelope, 'variant' | 'scoring' | 'teams'> {
   const s = (settings ?? {}) as Record<string, unknown>
-  const rawScoring = (s.scoring_settings ?? {}) as Record<string, unknown>
-  const scoringSettings: Record<string, number> = {}
-  for (const [k, v] of Object.entries(rawScoring)) {
-    const n = Number(v)
-    if (Number.isFinite(n)) scoringSettings[k] = n
-  }
-  const rec = scoringSettings.rec ?? 0
-  const positions = Array.isArray(s.roster_positions) ? s.roster_positions.map((p) => String(p).toUpperCase()) : []
+  const scoringSettings = numericScoringOf(s)
+  /*
+   * 🛑 A LEAGUE WITH NO `rec` WAS PRICED AS STANDARD SCORING (trade grade audit, 2026-10-09). Leagues
+   * created here store `scoringSettings: { ppr: 0.5, rules: {…} }` — camelCase, with the reception
+   * weight named `ppr` — and only snake_case `rec` was read, so all of them were priced on the 0-PPR
+   * chart whatever they score. A weight the league never states still reads 0, as before.
+   */
+  const rec = scoringSettings.rec ?? scoringSettings.ppr ?? 0
+  // `NAME:count` entries (ESPN, Yahoo, MFL, starter_slots) name the slot before the colon.
+  const positions = lineupEntriesFromSettings(s).map((p) => String(p).toUpperCase().replace(/:\d+(?:-\d+)?$/, '').trim())
   const type = (leagueType ?? '').toLowerCase()
   /*
    * ⚠ `superflex` / `dynasty` / `keeper` COME FROM `valueBook.ts`, NOT FROM A

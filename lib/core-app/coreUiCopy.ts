@@ -815,7 +815,7 @@ const spanish: Record<string, string> = {
   'Search league or platform': 'Buscar liga o plataforma',
   'No connected league matches that search.': 'Ninguna liga conectada coincide con la búsqueda.',
   'Trade Center': 'Centro de intercambios',
-  'Choose a league, add what you send and get, then review the grade. League scoring, roster fit, schedule and strategy stay beside the result.': 'Elige una liga, añade lo que envías y recibes, y revisa la calificación. Junto al resultado verás la puntuación, las plantillas, el calendario y la estrategia.',
+  'Choose a league, add what you send and get, then review the grade. The grade compares market value for this league’s format and scoring; roster fit and lineup change are shown beside it.': 'Elige una liga, añade lo que envías y recibes, y revisa la calificación. La calificación compara el valor de mercado para el formato y la puntuación de esta liga; el encaje en tu plantilla y el cambio en tu alineación aparecen al lado.',
   'AllFantasy never sends a trade for you — build it here, then send it there.': 'AllFantasy no envía el intercambio por ti. Prepáralo aquí y envíalo en tu plataforma.',
   'Switch league': 'Cambiar de liga',
   connected: 'conectadas',

@@ -25,8 +25,10 @@ import { loadLeagueTradeHistory } from '@/lib/trade-intel/partnerHistory'
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { resolveCoreDepth } from '@/lib/core-app/corePaywall'
 import {
+  noSportPickMarketUnpricedReason,
   pickUnpricedReason,
   playerUnpricedReason,
+  sportHasPickMarket,
   type UnpricedReason,
 } from '@/lib/trade-value/unpricedReason'
 import { loadImportedFuturePicks, type RosterFuturePick } from '@/lib/league-trade-engine/importedFuturePicks'
@@ -786,7 +788,16 @@ export async function GET(
   // The pricer's own reason for a pick it refuses (no market in this format), so the preview does not
   // call a pick with no market "could not be loaded".
   const pickRefusals = new Map<string, UnpricedReason>()
+  // Outside the NFL nothing prices a pick — the chart is the NFL's — so the preview refuses it with the
+  // sport's reason, as the analysis does (`resolveAssets`), rather than quoting a football price.
+  const leagueSportForPicks = String(league?.sport ?? 'NFL')
+  const pickSportRefusal = sportHasPickMarket(leagueSportForPicks) ? null : noSportPickMarketUnpricedReason(leagueSportForPicks)
   await Promise.all([...requestedPicks].map(async ([key, pick]) => {
+    if (pickSportRefusal) {
+      pickPreviewBook.values[key] = null
+      pickRefusals.set(key, pickSportRefusal)
+      return
+    }
     const resolved = loadedMarketRows == null ? null
       : await priceLeagueTradePick(pick, pickPricing).catch(() => null)
     pickPreviewBook.values[key] = resolved && !resolved.priced.unpriced

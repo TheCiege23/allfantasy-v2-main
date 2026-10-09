@@ -10,7 +10,6 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { loadLeagueForTrade } from '@/lib/trade-value-console/league-loader'
 import { resolveLeagueTradeChart, type LeagueTradeChart } from '@/lib/trade-value-console/leagueTradePricing'
-import { sportsRecordToPricedAsset } from '@/lib/trade-value-console/sports-db-valuation'
 
 let fcCache: { players: Awaited<ReturnType<typeof getFantasyCalcValuesDbFirst>>; at: number } | null = null
 const FC_TTL = 5 * 60 * 1000
@@ -75,6 +74,28 @@ function unpricedReasonForRow(row: { dynastyValue?: number | null; position?: st
   return playerUnpricedReason({ identified: true, position: row.position, sport: row.sport, marketLoaded: true })
 }
 
+/**
+ * One non-NFL search row. It carries NO value: the player table's `dynasty_value` is a list position
+ * squeezed to 1–100 and its projections are raw provider rows, so the number this used to show
+ * (`sportsRecordToPricedAsset`) was not a trade value — and the analysis no longer prices it either
+ * (`resolveAssets`, trade grade audit 2026-10-09). The picker and the grade must say the same thing.
+ */
+function nonNflSearchRow(row: Awaited<ReturnType<typeof searchPlayers>>[number], sport: SupportedSport) {
+  return {
+    kind: 'player' as const,
+    sport,
+    playerId: row.id,
+    name: row.name,
+    position: row.position,
+    team: row.team,
+    headshotUrl: row.headshotUrl ?? row.headshotUrlLg ?? row.headshotUrlSm,
+    value: null as number | null,
+    unpricedReason: unpricedReasonForRow(row),
+    rank: null as number | null,
+    source: row.dataSource,
+  }
+}
+
 export async function GET(req: NextRequest) {
   const ip = getClientIp(req as any) || 'unknown'
   const rl = rateLimit(`trade-value-search:${ip}`, 80, 60_000)
@@ -115,21 +136,7 @@ export async function GET(req: NextRequest) {
       const rest = await Promise.all(
         restSports.map(async (s) => {
           const rows = await searchPlayers(q, s)
-          return rows.slice(0, 5).map((row) => {
-            const priced = sportsRecordToPricedAsset(row)
-            return ({
-            kind: 'player' as const,
-            sport: s as SupportedSport,
-            playerId: row.id,
-            name: row.name,
-            position: row.position,
-            team: row.team,
-            headshotUrl: row.headshotUrl ?? row.headshotUrlLg ?? row.headshotUrlSm,
-            value: priced?.assetValue.marketValue ?? null,
-            unpricedReason: priced ? null : unpricedReasonForRow(row),
-            rank: null as number | null,
-            source: row.dataSource,
-          })})
+          return rows.slice(0, 5).map((row) => nonNflSearchRow(row, s as SupportedSport))
         }),
       )
       return NextResponse.json([...nfl, ...rest.flat()].slice(0, 24))
@@ -137,23 +144,7 @@ export async function GET(req: NextRequest) {
 
     const sp = normalizeToSupportedSport(sportParam)
     const rows = await searchPlayers(q, sp)
-    return NextResponse.json(
-      rows.slice(0, 12).map((row) => {
-        const priced = sportsRecordToPricedAsset(row)
-        return ({
-        kind: 'player' as const,
-        sport: sp,
-        playerId: row.id,
-        name: row.name,
-        position: row.position,
-        team: row.team,
-        headshotUrl: row.headshotUrl ?? row.headshotUrlLg ?? row.headshotUrlSm,
-        value: priced?.assetValue.marketValue ?? null,
-        unpricedReason: priced ? null : unpricedReasonForRow(row),
-        rank: null as number | null,
-        source: row.dataSource,
-      })}),
-    )
+    return NextResponse.json(rows.slice(0, 12).map((row) => nonNflSearchRow(row, sp)))
   } catch {
     return NextResponse.json([])
   }
