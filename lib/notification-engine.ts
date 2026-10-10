@@ -397,7 +397,10 @@ export function tradeEvent(opts: {
   tradeId: string
   title: string
   body?: string
+  /** The other manager's face for the push (https or same-site path only). */
+  iconUrl?: string | null
 }): NotificationEvent {
+  const icon = typeof opts.iconUrl === 'string' ? opts.iconUrl.trim() : ''
   return {
     type: opts.type,
     title: opts.title,
@@ -408,7 +411,17 @@ export function tradeEvent(opts: {
     // The Trades tab can use it to focus the same record shown on Core and in league history.
     actionHref: `/league/${opts.leagueId}?view=trades&tradeId=${encodeURIComponent(opts.tradeId)}`,
     actionLabel: 'View Trade',
-    meta: { tradeId: opts.tradeId },
+    meta: {
+      tradeId: opts.tradeId,
+      /*
+       * One device notification per TRADE. Without it every trade notice fell back to the
+       * category tag (`notif-trade_proposals-global`), so a second offer from any league
+       * silently replaced the first on the lock screen before it was read. A later notice
+       * about the SAME trade (accepted, vetoed) replacing the offer is the right behaviour.
+       */
+      pushTag: `trade-${opts.tradeId}`,
+      ...(icon.startsWith('https://') || (icon.startsWith('/') && !icon.startsWith('//')) ? { iconUrl: icon } : {}),
+    },
     source: 'trade-engine',
   }
 }
