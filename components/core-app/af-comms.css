@@ -3623,3 +3623,81 @@
 .af-cm-image-dialog::backdrop { background: rgba(0,0,0,.75); }
 .af-cm-image-dialog img { display: block; max-width: 100%; max-height: calc(100dvh - 110px); object-fit: contain; margin-top: 12px; }
 .af-cm-image-dialog button { min-height: 40px; padding: 8px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--chip); color: var(--text); cursor: pointer; }
+
+/*
+ * ══ 2026-10-10 chat polish layer ══
+ *
+ * Appended as one layer, like the 09-13 handoff above, so every earlier rule keeps its history.
+ * Each change is a measured defect from the 2026-10-10 chat audit, not taste:
+ *
+ *  1. Launcher icon was white on #22d3ee (about 1.8:1, under the 3:1 icon minimum) -> dark ink.
+ *  2. Badge was 17px with no ring, and a mention was accent-on-accent -> 20px, ringed, white.
+ *  3. Their bubbles were #191f24 on #111519 (about 1.1:1) -> a lifted surface with a hairline.
+ *     The hairline is an OUTLINE on purpose: Chimmy's ring and the menu/flash states all use
+ *     box-shadow, and an appended box-shadow would silently erase them.
+ *  4. Bubble text 13.5px, times 11px -> 15px and 12px.
+ *  5. Inputs were 12-13px outside the 520px phone query, so iPhone LANDSCAPE zoomed on focus
+ *     -> 16px at every width.
+ *  6. League / DM / Huddle send was a 14px grey ghost icon -> a filled accent circle once it can send.
+ *  7. Reply quote was a 2px near-invisible bar with 11px faint text -> 3px accent bar, 12.5px, 2 lines.
+ *  8. Motion: messages rise in, sheets slide up, the launcher presses, Chimmy's thinking line
+ *     breathes — all inside the reduced-motion gate, like the open motion near the top.
+ */
+.af-cm { --af-bubble-in: #232b33; }
+
+.af-cm-launch { color: #04121a; transition: transform 160ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 160ms ease, filter 160ms ease; }
+.af-cm-launch:active:not([data-dragging='true']) { transform: scale(0.94); }
+.af-cm-launchdot { top: -4px; right: -4px; min-width: 20px; height: 20px; padding: 0 6px; box-shadow: 0 0 0 2px #0b0f14; }
+.af-cm-launchdot[data-kind='mention'] { background: #ffffff; color: #04121a; }
+
+.af-cm-bubble { font-size: 15px; line-height: 1.42; }
+.af-cm-row:not([data-mine='true']) .af-cm-bubble:not([data-deleted='true']):not(:has(> .af-cm-rich:only-child)) {
+  background: var(--af-bubble-in);
+  outline: 1px solid var(--line2);
+  outline-offset: -1px;
+}
+.af-cm-col > .af-cm-msg-author { font-size: 12px; }
+.af-cm-msg-time { font-size: 12px; }
+
+.af-cm .af-cm-input,
+.af-cm textarea { font-size: 16px; }
+
+.af-cm .af-chat-send:not(:disabled) {
+  display: inline-grid;
+  place-items: center;
+  min-width: 36px;
+  min-height: 36px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.af-cm .af-chat-send:not(:disabled):hover { background: var(--accent); color: var(--accent-ink); filter: brightness(1.08); }
+.af-cm .af-chat-send svg { width: 16px; height: 16px; }
+
+.af-cm-quote-bar { flex-basis: 3px; background: var(--accent); }
+.af-cm-quote-body { font-size: 12.5px; color: var(--text2); }
+.af-cm-quote-text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+}
+
+.af-cm-sheet { margin-bottom: max(8px, env(safe-area-inset-bottom)); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .af-cm-row,
+  .af-cm-turn { animation: af-cm-msg-in 160ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+  .af-cm-sheet { animation: af-cm-sheet-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+  .af-cm-typing { animation: af-cm-breathe 1.4s ease-in-out infinite; }
+}
+
+@keyframes af-cm-msg-in {
+  from { opacity: 0; transform: translateY(4px); }
+}
+@keyframes af-cm-sheet-in {
+  from { opacity: 0; transform: translateY(16px); }
+}
+@keyframes af-cm-breathe {
+  50% { opacity: 0.55; }
+}

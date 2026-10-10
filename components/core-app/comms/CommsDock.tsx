@@ -74,6 +74,11 @@ export type CommsDockProps = {
  */
 export { COMMS_OPEN_EVENT, SUPPORT_OPEN_EVENT }
 
+/** The launcher badge's count: exact up to 99, then "99+". */
+export function badgeCount(n: number): string {
+  return n > 99 ? '99+' : String(n)
+}
+
 export function CommsDock({
   leagues,
   pageLeagueId,
@@ -242,7 +247,8 @@ export function CommsDock({
           */}
           {badge.unread > 0 || badge.mentions > 0 ? (
             <span className="af-cm-launchdot" data-kind={badge.mentions > 0 ? 'mention' : 'unread'}>
-              {badge.mentions > 0 ? `@${badge.mentions}` : badge.unread}
+              {/* Capped: a four-digit count overflows a 56px bubble and says nothing 99+ does not. */}
+              {badge.mentions > 0 ? `@${badgeCount(badge.mentions)}` : badgeCount(badge.unread)}
             </span>
           ) : null}
         </button>
