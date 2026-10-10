@@ -34,16 +34,17 @@
 import { gradeTrade, type TradeGradeLine, type TradeGradeView } from './tradeGrade'
 import type { TradeAssetInput } from '@/lib/trade-value-console/types'
 import { playerNamesAgree } from '@/lib/player-identity/externalIdNamespace'
+import { PRIOR_SEASON_APPEARANCES as SOCCER_PRIOR_APPEARANCES } from './soccerBoard'
 
-/** Sports this grade covers. Soccer is not here: the vendor serves no player season stats for it. */
-export type PointsGradedSport = 'NBA' | 'NCAAB' | 'NHL' | 'MLB'
+/** Sports this grade covers. Soccer's board comes from its match rows, not projections (`./soccerBoard.ts`). */
+export type PointsGradedSport = 'NBA' | 'NCAAB' | 'NHL' | 'MLB' | 'SOCCER'
 
 export function isPointsGradedSport(sport: string | null | undefined): sport is PointsGradedSport {
   const s = String(sport ?? '').trim().toUpperCase()
-  return s === 'NBA' || s === 'NCAAB' || s === 'NHL' || s === 'MLB'
+  return s === 'NBA' || s === 'NCAAB' || s === 'NHL' || s === 'MLB' || s === 'SOCCER'
 }
 
-const SPORT_LABEL: Record<PointsGradedSport, string> = { NBA: 'NBA', NCAAB: 'college basketball', NHL: 'NHL', MLB: 'MLB' }
+const SPORT_LABEL: Record<PointsGradedSport, string> = { NBA: 'NBA', NCAAB: 'college basketball', NHL: 'NHL', MLB: 'MLB', SOCCER: 'soccer' }
 
 /** Fewer games than this behind a projection and it is not a price. */
 export const MIN_SAMPLE_GAMES = 10
@@ -126,10 +127,14 @@ export function sportPointsBasis(
   const baseline = ctx.window.baselineSeasonLabel
     ? ` Projections are built from the ${ctx.window.baselineSeasonLabel} season until this one has enough games.`
     : ''
+  const soccer = ctx.sport === 'SOCCER'
+  const games = soccer ? 'matches' : 'games'
   const season =
     ctx.window.scheduleKnown === false
-      ? `the ${ctx.window.seasonLabel} ${label} regular season (${ctx.window.gamesRemaining} games — the schedule is not posted yet)`
-      : `the rest of the ${ctx.window.seasonLabel} ${label} regular season (about ${ctx.window.gamesRemaining} games)`
+      ? `the ${ctx.window.seasonLabel} ${label} regular season (${ctx.window.gamesRemaining} ${games} — the schedule is not posted yet)`
+      : soccer
+        ? `the rest of the ${ctx.window.seasonLabel} ${label} season (about ${ctx.window.gamesRemaining} ${games} a club)`
+        : `the rest of the ${ctx.window.seasonLabel} ${label} regular season (about ${ctx.window.gamesRemaining} ${games})`
   const mlb = ctx.sport === 'MLB'
   // MLB rates are per appearance; the loader puts every pitcher on the team-game scale first.
   const pitchers = mlb ? ' Pitchers count for the share of team games they pitched in that season — a starter about one in five.' : ''
@@ -161,7 +166,12 @@ export function sportPointsBasis(
   const bonus = ctx.sport === 'NBA' || ctx.sport === 'NCAAB' ? ' Double-double and triple-double bonuses are not projected.' : ''
   // A quality start is a one-game test that a season line cannot pass or fail.
   const qs = mlb ? ' Quality starts are not projected.' : ''
-  return `Points over the best free agent at each position for ${season}, ${scoring}.${bonus}${pitchers}${qs}${baseline}`
+  // Soccer's board blends two seasons and scales to club matches (`./soccerBoard.ts`); the feed names no
+  // own-goal scorer, so own goals cannot be projected for anyone.
+  const clubs = soccer
+    ? ` Players count for the share of their club’s matches they play. Each line is this season’s matches plus last season counted as up to ${SOCCER_PRIOR_APPEARANCES} more, so last season fades as this one fills in. Own goals are not projected.`
+    : ''
+  return `Points over the best free agent at each position for ${season}, ${scoring}.${bonus}${pitchers}${qs}${clubs}${baseline}`
 }
 
 /**

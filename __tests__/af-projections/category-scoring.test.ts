@@ -131,10 +131,12 @@ describe('sport gating', () => {
     expect(isCategoryScoredSport('NFL')).toBe(false)
   })
 
-  it('scores soccer on the soccer config’s own defaults, every zero-weight category left out', () => {
+  it('scores soccer on what an unsaved soccer league scores — the panel’s AF default, not the engine config', () => {
+    // Minutes, shots and a keeper's goals against score here; the engine config leaves them at 0.
     expect(getCategoryScoringRules('SOCCER')).toEqual({
       goals: 6, assists: 3, clean_sheet_def: 4, clean_sheet_gk: 4, saves: 0.5,
       yellow_card: -1, red_card: -3, own_goal: -2, pen_miss: -2, pen_save: 5,
+      shots_on_target: 0.5, shots: 0.2, minutes_played: 0.02, gk_goals_against: -1,
     })
   })
 

@@ -197,6 +197,15 @@ describe('a board that is not ready to grade on', () => {
     expect(eight).toContain('Percentages are weighted by shot volume.')
   })
 
+  it('explains a soccer grade: club matches, the two-season blend, no own goals, no basketball bonuses', () => {
+    const basis = sportPointsBasis(ctx({ sport: 'SOCCER', scoringBasis: 'default', window: { season: 2026, seasonLabel: '2026-27', gamesRemaining: 31 } }))
+    expect(basis).toContain('the rest of the 2026-27 soccer season (about 31 matches a club)')
+    expect(basis).toContain('Players count for the share of their club’s matches they play.')
+    expect(basis).toContain('last season counted as up to 10 more')
+    expect(basis).toContain('Own goals are not projected.')
+    expect(basis).not.toMatch(/double-double|regular season/i)
+  })
+
   it('explains an MLB grade: the team-game scale, the unposted schedule, and no basketball bonuses', () => {
     const offseason = { season: 2027, seasonLabel: '2027', gamesRemaining: 162, scheduleKnown: false, baselineSeasonLabel: '2026' }
     const points = sportPointsBasis(ctx({ sport: 'MLB', scoringBasis: 'default', window: offseason }))
@@ -243,10 +252,12 @@ describe('leagues this grade must not answer for', () => {
 })
 
 describe('the grader', () => {
-  it('is null for the sports it does not cover, and covers MLB', () => {
+  it('is null for the sports it does not cover, and covers MLB and soccer', () => {
+    // NFL and college football have their own graders; every daily sport and soccer come through here.
     expect(createSportPointsGrader({ sport: 'NFL', league: null })).toBeNull()
-    expect(createSportPointsGrader({ sport: 'SOCCER', league: null })).toBeNull()
+    expect(createSportPointsGrader({ sport: 'NCAAF', league: null })).toBeNull()
     expect(createSportPointsGrader({ sport: 'mlb', league: null })).not.toBeNull()
+    expect(createSportPointsGrader({ sport: 'SOCCER', league: null })).not.toBeNull()
   })
 
   it('loads once per grader and returns the loader refusal as the grade', async () => {

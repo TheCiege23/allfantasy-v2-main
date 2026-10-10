@@ -15,7 +15,7 @@
  *
  * SOCCER had no rules here until 2026-10-09, because the vendor serves no player season stats for it.
  * Its season lines are now built from the per-match rows (`./soccerSeasonLines.ts`), already in the
- * engine's keys, and scored on the soccer config's own defaults — see SOCCER_RULES. NCAAB shares NBA's
+ * engine's keys, and scored on the soccer panel's AF default — see SOCCER_RULES. NCAAB shares NBA's
  * rules because it shares NBA's measured stat vocabulary — see RULES_BY_SPORT.
  *
  * WHY DRAFTKINGS CONVENTIONS. Not arbitrary preference — this codebase already treats DK as the
@@ -25,7 +25,7 @@
  * checkable reference rather than a number somebody made up here.
  */
 
-import { SOCCER_CONFIG } from '@/lib/sportConfig/configs/soccer'
+import { bridgeSportUiScoringStore } from '@/lib/redraft/uiScoringStoreBridge'
 
 import type { SeasonAggregate } from './types'
 
@@ -117,13 +117,19 @@ const NHL_RULES: Record<string, number> = {
 }
 
 /**
- * Soccer, on the house soccer scoring (lib/sportConfig/configs/soccer.ts, FPL-style) — read from that
- * config, not restated, so a change there is a change here. Not DraftKings: soccer leagues here are
- * built on that config, and its keys are the ones `soccerSeasonLines` emits. Zero-weight categories are
- * left out; `own_goal` never matches because the vendor sends no own-goal field.
+ * Soccer, on what an UNSAVED soccer league actually scores: the scoring panel's AF default, read through
+ * the same bridge the league scorer uses (`lib/redraft/uiScoringStoreBridge.ts`), already in the engine's
+ * keys — the ones `soccerSeasonLines` emits.
+ *
+ * 🛑 NOT THE ENGINE CONFIG'S `defaultPoints` (lib/sportConfig/configs/soccer.ts). Those leave minutes,
+ * shots and a keeper's goals against at 0; the panel default scores 0.02 a minute (1.8 for a full match),
+ * 0.5 a shot on target, 0.2 a shot and -1 a goal conceded, and the bridge's own comment says that is what
+ * an unsaved league scores. This read the config for one commit (#2194) and so projected a different
+ * scoring from the one every soccer league and the soccer trade grade use. Zero weights are left out;
+ * `own_goal` never matches because the vendor sends no own-goal field.
  */
 const SOCCER_RULES: Record<string, number> = Object.fromEntries(
-  SOCCER_CONFIG.scoringCategories.filter((c) => c.defaultPoints !== 0).map((c) => [c.key, c.defaultPoints]),
+  Object.entries(bridgeSportUiScoringStore('SOCCER', null) ?? {}).filter(([, weight]) => weight !== 0),
 )
 
 const RULES_BY_SPORT: Record<CategorySport, Record<string, number>> = {

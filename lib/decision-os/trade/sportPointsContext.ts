@@ -12,6 +12,8 @@ import type { CategoryDefinition } from '@/lib/category-scoring/types'
 import { rosteredIdsOf } from './ncaafRedraftContext'
 import { categoryList, categoryPerGameValues, groupedCategoryValues } from './sportCategoryValue'
 import { isPitchingCategory, isPitchingSlot, MLB_REGULAR_SEASON_GAMES, toTeamGameLines } from './mlbTeamGame'
+import { blendSoccerSeasons, clubMatchCounts } from './soccerBoard'
+import { soccerSeasonLines } from '@/lib/af-projections/soccerSeasonLines'
 import {
   boardReadinessReason,
   categoryLeagueReason,
@@ -222,6 +224,63 @@ export async function loadSportPointsBase(args: {
   const normalize = sport === 'MLB' ? engineKeyedLine : getDailySportNormalizer(sport)
   if (!normalize) return { ok: false, reason: `No ${sport} scoring is configured, so this deal cannot be graded.` }
 
+  const source = sport === 'SOCCER' ? await loadSoccerLines(now) : await loadSnapshotLines(sport, normalize, now)
+  if (!source.ok) return source
+  const { season, games, lines } = source
+  return finishBoard({ sport, league, valuation, season, games, lines })
+}
+
+type BoardLine = Omit<BoardPlayer, 'perGame'> & { stats: Record<string, number> }
+type LinesResult =
+  | { ok: true; season: number; games: { games: number; scheduleKnown: boolean }; lines: BoardLine[] }
+  | { ok: false; reason: string }
+
+/**
+ * Soccer reads its MATCH ROWS, both seasons, never the stored projections — those choose one season per
+ * player and so rest on four to six matches in October. `./soccerBoard.ts` blends the seasons and puts
+ * every player on his club's match scale; only players who have played this season are on the board.
+ */
+async function loadSoccerLines(now: Date): Promise<LinesResult> {
+  const latest = await prisma.playerGameStat
+    .findFirst({ where: { sportType: 'SOCCER' }, orderBy: { season: 'desc' }, select: { season: true } })
+    .catch(() => null)
+  if (!latest) return { ok: false, reason: 'No soccer match data is on file, so this deal cannot be graded yet.' }
+  const season = latest.season
+  const select = { playerId: true, gameId: true, team: true, gameDate: true, normalizedStatMap: true } as const
+  const [current, prior, games] = await Promise.all([
+    prisma.playerGameStat.findMany({ where: { sportType: 'SOCCER', season }, select }).catch(() => null),
+    prisma.playerGameStat.findMany({ where: { sportType: 'SOCCER', season: season - 1 }, select }).catch(() => null),
+    seasonGamesLeft('SOCCER', season, now),
+  ])
+  if (!current || !prior) return { ok: false, reason: 'The soccer match data could not be read just now.' }
+  if (games == null) {
+    return { ok: false, reason: `The ${seasonLabelFor(season, 'SOCCER')} soccer schedule is not on file, so the matches left to play cannot be counted.` }
+  }
+
+  const ids = [...new Set(current.map((r) => r.playerId))]
+  const identities = await prisma.playerIdentityMap
+    .findMany({ where: { id: { in: ids } }, select: { id: true, canonicalName: true, rollingInsightsId: true, sleeperId: true } })
+    .catch(() => [] as Array<{ id: string; canonicalName: string; rollingInsightsId: string | null; sleeperId: string | null }>)
+  const board = blendSoccerSeasons({
+    current: soccerSeasonLines(current, new Map(identities.map((i) => [i.id, i.canonicalName])), season),
+    prior: soccerSeasonLines(prior, new Map(), season - 1),
+    clubMatches: { current: clubMatchCounts(current), prior: clubMatchCounts(prior) },
+  })
+  const aliasesById = new Map(identities.map((i) => [i.id, [i.rollingInsightsId, i.sleeperId].filter((v): v is string => Boolean(v))]))
+  const lines: BoardLine[] = []
+  for (const b of board) {
+    if (!b.name || !b.position) continue
+    lines.push({ id: b.playerId, name: b.name, position: b.position, sampleGames: b.sampleGames, aliases: aliasesById.get(b.playerId) ?? [], sourceSeason: season, stats: b.stats })
+  }
+  return { ok: true, season, games, lines }
+}
+
+/** Every other sport reads its stored projections (`AFProjectionSnapshot`), one row per player. */
+async function loadSnapshotLines(
+  sport: PointsGradedSport,
+  normalize: (raw: unknown) => { stats: Record<string, number> },
+  now: Date,
+): Promise<LinesResult> {
   const latest = await prisma.aFProjectionSnapshot
     .findFirst({
       where: { sport: { equals: sport, mode: 'insensitive' }, week: null },
@@ -252,11 +311,8 @@ export async function loadSportPointsBase(args: {
     .catch(() => [] as Array<{ id: string; rollingInsightsId: string | null; sleeperId: string | null }>)
   const aliasesById = new Map(identities.map((i) => [i.id, [i.rollingInsightsId, i.sleeperId].filter((v): v is string => Boolean(v))]))
 
-  const teams = league?.leagueSize && league.leagueSize > 1 ? league.leagueSize : DEFAULT_TEAMS
-  const lineup = lineupSlotsFor(sport, league?.settings ?? null)
-
   // Every scoreable projection as a per-game stat line first; the valuation is applied once all are read.
-  const lines: Array<Omit<BoardPlayer, 'perGame'> & { stats: Record<string, number> }> = []
+  const lines: BoardLine[] = []
   for (const r of rows) {
     const rates = readRates(r.adjustmentFactors)
     if (!rates) continue
@@ -275,6 +331,21 @@ export async function loadSportPointsBase(args: {
       stats,
     })
   }
+  return { ok: true, season, games, lines }
+}
+
+/** Value every line under the league's scoring, then build the board, its readiness and its waiver wire. */
+async function finishBoard(args: {
+  sport: PointsGradedSport
+  league: SportPointsLeague | null
+  valuation: Valuation
+  season: number
+  games: { games: number; scheduleKnown: boolean }
+  lines: BoardLine[]
+}): Promise<SportPointsBaseResult> {
+  const { sport, league, valuation, season, games, lines } = args
+  const teams = league?.leagueSize && league.leagueSize > 1 ? league.leagueSize : DEFAULT_TEAMS
+  const lineup = lineupSlotsFor(sport, league?.settings ?? null)
 
   // Baseball onto one scale first: per TEAM game, pitchers split into SP and RP (`./mlbTeamGame.ts`).
   const valued: Array<(typeof lines)[number] & { hitter?: boolean; pitcher?: boolean }> =
