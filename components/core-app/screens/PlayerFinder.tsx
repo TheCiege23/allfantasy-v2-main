@@ -75,6 +75,7 @@ import type { WeeklyMvp } from '@/lib/core-app/weeklyMvp'
 import type { TrendingFreeIn } from '@/lib/core-app/trendingFree'
 import { leagueActionsCopy } from '@/lib/core-app/leagueActionsCopy'
 import { FollowingBoard } from '@/components/core-app/player-finder/FollowingBoard'
+import { PushAsk } from '@/components/core-app/player-finder/PushAsk'
 import { followCopy } from '@/lib/core-app/finderFollowCopy'
 import type { FollowingCardData } from '@/lib/core-app/followingCard'
 import { FreeAgentBids } from '@/components/core-app/player-finder/FreeAgentBids'
@@ -852,6 +853,8 @@ export function PlayerFinder({
             <p className="af-pf-home-sub">{fc.homeSub}</p>
           </header>
         ) : null}
+        {/* Push reaches 2 of 42 managers (2026-10-10); ask here on the days the game-day banner does not. */}
+        {myPlayersHome ? <PushAsk placement="finder_home" notOnGameDays /> : null}
         {myPlayersHome ? <WeeklyMvpCard mvp={weeklyMvp} /> : null}
         {!detail && signedIn && !selectedLeagueId && pickLeagues.length > 1 ? <LeaguePicker leagues={pickLeagues} saved={savedPicks} /> : null}
         {!detail && signedIn && triage ? <GameDayTriage state={triage} nowIso={nowIso} leagueCount={leagueCount} /> : null}

@@ -21,7 +21,7 @@ import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { SendTestPushButton } from '@/components/notifications/SendTestPushButton'
 import { useWebPushSubscription } from '@/lib/push-notifications/useWebPushSubscription'
 
-function isIosSafariWithoutStandalone(): boolean {
+export function isIosSafariWithoutStandalone(): boolean {
   if (typeof window === 'undefined') return false
   const ua = navigator.userAgent
   const isIos = /iPad|iPhone|iPod/.test(ua)

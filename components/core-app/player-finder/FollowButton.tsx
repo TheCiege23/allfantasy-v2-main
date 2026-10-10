@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { followCopy } from '@/lib/core-app/finderFollowCopy'
+import { PushAsk } from '@/components/core-app/player-finder/PushAsk'
 
 /**
  * "Alert me" on the open player's card (Guap, 2026-10-08): follow him across every league from the
@@ -89,6 +90,8 @@ export function FollowButton({
           {shownNote}
         </span>
       ) : null}
+      {/* Right after a follow: the alert he just asked for only reaches a phone with push on (2026-10-10). */}
+      {on && shownNote ? <PushAsk placement="follow" /> : null}
     </span>
   )
 }
