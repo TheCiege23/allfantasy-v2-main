@@ -2308,7 +2308,9 @@ export function TradeCenter(props: {
           <details className="af-tc-grade-method">
             <summary>{copy('How this was graded')}</summary>
             <p>{copy(result.grade?.basis ?? result.valueBasis?.label ?? 'Current available market values.')}</p>
-            <p>{copy('The grade compares trade value. Roster fit, acceptance, and realized production are separate.')}</p>
+            <p>{copy(serverGrade?.graded && serverGrade.letterBasis === 'your_team'
+              ? 'Your grade compares trade value adjusted for your roster. Acceptance and realized production are separate.'
+              : 'The grade compares trade value. Roster fit, acceptance, and realized production are separate.')}</p>
             {analyzedAt ? <p>{copy('Evaluated')} {new Date(analyzedAt).toLocaleString(tradeIntlLocale(language))}{copy(".")}</p> : null}
             {serverGrade?.graded ? <ul>{serverGrade.lines.map((line, index) => <li key={`${line.side}-${line.name}-${index}`}>{copy(line.side === 'give' ? 'You send' : 'You receive')} {line.name}{copy(": ")}{line.leagueValue == null ? copy('unpriced') : money(line.leagueValue)}</li>)}
               {/* The roster-spot credit is already inside the totals (`rosterSpotCharge.ts`); shown so they add up. */}
@@ -2326,20 +2328,30 @@ export function TradeCenter(props: {
           {result.visualImpact ? <><LineupImpactChart impact={result.visualImpact.impact} /><p className="af-tc-row-sub">{copy(result.visualImpact.reason??'')} {result.visualImpact.rostersStale ? copy('Roster data may be stale; sync before acting.') : ''} {copy('Picks and FAAB are outside the weekly lineup simulation.')}</p></> : null}
           <TradeReactionSettings />
           <TradePackageCost cost={result.visualImpact?.packageCost} />
-          {serverGrade?.graded ? <div className="af-tc-grade-row"><span>{copy('Your grade')} {serverGrade.letter} <TradeReaction letter={serverGrade.letter} /></span><span>{copy('Their grade')} {serverGrade.partnerLetter} <TradeReaction letter={serverGrade.partnerLetter} /></span></div> : null}
+          {serverGrade?.graded ? (
+            <div className="af-tc-grade-row" data-testid="trade-grade-row">
+              <span>{copy(serverGrade.letterBasis === 'your_team' ? 'Your grade, for your team' : 'Your grade')} {serverGrade.letter} <TradeReaction letter={serverGrade.letter} /></span>
+              {serverGrade.letterBasis === 'your_team' && serverGrade.market ? (
+                <span data-testid="trade-grade-market">{copy('Market')} {serverGrade.market.letter}</span>
+              ) : null}
+              <span>{copy(serverGrade.letterBasis === 'your_team' ? 'Their grade, on the market' : 'Their grade')} {serverGrade.partnerLetter} <TradeReaction letter={serverGrade.partnerLetter} /></span>
+            </div>
+          ) : null}
           <LeagueTypeGradeNote basis={result.grade?.leagueType} confirmHref="#league-type" />
           {serverGrade?.graded ? (
             <p className="af-tc-row-sub" data-testid="trade-value-grade-basis">
-              {copy('This trade-value grade uses the same league scoring and asset-price rules as trade history and email. Roster fit does not change the letter. Refreshed market values can change a later evaluation.')}
+              {copy(serverGrade.letterBasis === 'your_team'
+                ? 'Your grade is for your team: league value adjusted for your roster — an open starting slot you cannot fill off waivers raises a player, surplus depth lowers one. The market letter is the same deal on league value alone, which is what trade history and the other manager see. Your team’s place in the standings does not change the letter. Refreshed market values can change a later evaluation.'
+                : 'This trade-value grade uses the same league scoring and asset-price rules as trade history and email. Refreshed market values can change a later evaluation.')}
             </p>
           ) : null}
           {result?.evaluationReceipt?.status === 'saved' ? <p><Link href={result.evaluationReceipt.href}>{copy('Open this saved evaluation')}</Link>{copy(" · ")}{copy('Original values preserved at')} {new Date(result.evaluationReceipt.evaluatedAt).toLocaleString(tradeIntlLocale(language))}{copy(".")}</p>
             : result?.evaluationReceipt?.status === 'unavailable' ? <p role="status">{copy('This evaluation could not be saved. Keep a copy before relying on it later.')}</p> : null}
           {serverGrade?.graded && serverGrade.rosterFit ? (
             <div className="af-tc-cap-check" data-testid="trade-roster-fit">
-              <div className="af-label">{copy('Your roster fit · separate from the trade-value grade')} <TopicTip topic="tradeRosterFit" /></div>
+              <div className="af-label">{copy(serverGrade.letterBasis === 'your_team' ? 'Your roster fit · what your grade is taken on' : 'Your roster fit')} <TopicTip topic="tradeRosterFit" /></div>
               <p>{copy('Personal utility:')} {money(serverGrade.rosterFit.giveValue)} {copy('given,')} {money(serverGrade.rosterFit.getValue)} {copy('received.')}
-                {' '}{copy('This is a roster-fit estimate, not a win probability or the grade sent by email.')}</p>
+                {' '}{copy('This is a roster-fit estimate, not a win probability.')}</p>
               {serverGrade.rosterFit.moves.map((move, index) => (
                 <p key={`${move.side}:${move.name}:${index}`}>
                   {move.name}{copy(": ")}{money(move.base)} {copy('base →')} {money(move.leagueValue)} {copy('personal utility.')} {move.reasons.map(reason=>copy(reason)).join('; ')}{copy(". ")}</p>
@@ -2373,8 +2385,17 @@ export function TradeCenter(props: {
             {yourGrade || theirGrade ? (
               <div className="af-tc-grade-row">
                 {[
-                  { label: copy('You'), letter: yourGrade },
-                  { label: theirLabel, letter: theirGrade },
+                  // A your-team letter is labelled as one, and the league-value letter sits beside it (2026-10-10).
+                  ...(serverGrade?.graded && serverGrade.letterBasis === 'your_team' && serverGrade.market
+                    ? [
+                        { label: copy('You, for your team'), letter: yourGrade },
+                        { label: copy('Market'), letter: serverGrade.market.letter },
+                        { label: `${theirLabel}${copy(', on the market')}`, letter: theirGrade },
+                      ]
+                    : [
+                        { label: copy('You'), letter: yourGrade },
+                        { label: theirLabel, letter: theirGrade },
+                      ]),
                 ].map((g) =>
                   g.letter ? (
                     <div key={g.label} className="af-tc-grade" data-letter={g.letter}>

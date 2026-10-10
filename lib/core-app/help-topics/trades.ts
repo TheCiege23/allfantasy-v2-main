@@ -14,7 +14,7 @@ import type { HelpTopic } from '../helpTopics'
  *   tradeValueBalance ........ TradeCenter.tsx `balance` (pricedTotal, pct ÷ max), valueOf (market → league)
  *   tradeLeagueValue ......... lib/trade-value/leagueTradeValue.ts LeagueValuedLine.base, LEAGUE_FACTOR_MIN/MAX;
  *                              leagueTradeGrader.ts (the letter's pass has needFactors: null — scoring only)
- *   tradeRosterFit ........... leagueTradeGrader.ts rosterFitGrade (second pass, never the letter);
+ *   tradeRosterFit ........... leagueTradeGrader.ts rosterFitGrade (the your-team letter, tradeGrade.ts withYourTeamLetter);
  *                              lib/trade-value/viewerNeedFactors.ts allocateNeedFactors; rosterNeed.ts counterpartyPriceDelta
  *   tradeAfThisWeek .......... TradeCenter.tsx afWeekTotal (display only); trades/rosters/route.ts afEngineForLeague
  *   tradeProductionLean ...... lib/trade-value-console/build-trade-intelligence.ts whoWinsNow (|net| < 1 = even),
@@ -83,11 +83,11 @@ export const TRADES_TOPICS = {
   tradeRosterFit: {
     en: {
       title: 'Your roster fit',
-      body: 'The same deal re-priced for your roster. A player who fills a starting slot you would otherwise leave open is worth more to you, most of all when the waiver wire has nobody at that position; sending a starter the deal doesn’t replace costs more, and sending surplus depth costs a little less. It’s a second calculation beside the grade: it never changes the letter, and it isn’t a win probability.',
+      body: 'The same deal re-priced for your roster. A player who fills a starting slot you would otherwise leave open is worth more to you, most of all when the waiver wire has nobody at that position; sending a starter the deal doesn’t replace costs more, and sending surplus depth costs a little less. On your own trades your letter is taken on it — that is your grade for your team — and the market letter beside it is the same deal on league value alone, which is what the other manager and trade history see. Your team’s place in the standings doesn’t change it, and it isn’t a win probability.',
     },
     es: {
       title: 'Encaje en tu plantilla',
-      body: 'El mismo intercambio, revalorado para tu plantilla. Un jugador que cubre un puesto titular que quedaría vacío vale más para ti, sobre todo si no hay nadie en esa posición entre los agentes libres; enviar a un titular que el intercambio no reemplaza cuesta más, y enviar profundidad sobrante cuesta un poco menos. Es un segundo cálculo junto a la calificación: nunca cambia la letra y no es una probabilidad de ganar.',
+      body: 'El mismo intercambio, revalorado para tu plantilla. Un jugador que cubre un puesto titular que quedaría vacío vale más para ti, sobre todo si no hay nadie en esa posición entre los agentes libres; enviar a un titular que el intercambio no reemplaza cuesta más, y enviar profundidad sobrante cuesta un poco menos. En tus propios intercambios tu letra se calcula con él — es tu calificación para tu equipo — y la letra de mercado a su lado es el mismo intercambio solo por valor de liga, que es lo que ven el otro mánager y el historial. Tu posición en la clasificación no la cambia, y no es una probabilidad de ganar.',
     },
   },
   tradeAfThisWeek: {

@@ -21,7 +21,10 @@ export function buildTradeIntelligence(args: {
   teamContext: TeamContextMode
   fairnessLabel: string
   sideAdvantage: 'even' | 'you' | 'opponent' | 'mixed'
+  /** The league-value gap — the market read, whichever basis the headline letter is on. */
   percentDiff: number
+  /** The headline letter is the your-team letter (`withYourTeamLetter`): league value adjusted for the viewer's roster. */
+  yourTeamLetter?: boolean
   giveTotal: number
   getTotal: number
   confidenceScore: number
@@ -73,7 +76,7 @@ export function buildTradeIntelligence(args: {
   const whoWinsLongTerm: TradeIntelligence['whoWinsLongTerm'] = args.proposalGraded === false ? 'unknown' : marketWho
 
   const fairnessVerdict = proposalGraded
-    ? `${args.fairnessLabel} · League value delta ${args.percentDiff}%. The trade-value grade uses the displayed asset values and league scoring. Personal roster fit is separate and does not change the letter. Asset projections describe production, not a change in starting-lineup points or win probability. Data confidence: ${args.confidenceLabel ?? 'MEDIUM'} (quality score ${Math.round(args.confidenceScore)}/100).${args.scoringSummary ? ` ${args.scoringSummary}` : ''}`
+    ? `${args.fairnessLabel} · League value delta ${args.percentDiff}%. The trade-value grade uses the displayed asset values and league scoring.${args.yourTeamLetter ? ' Your letter is for your team: these league values adjusted for your roster fit; the delta here is the market read.' : ''} Asset projections describe production, not a change in starting-lineup points or win probability. Data confidence: ${args.confidenceLabel ?? 'MEDIUM'} (quality score ${Math.round(args.confidenceScore)}/100).${args.scoringSummary ? ` ${args.scoringSummary}` : ''}`
     : 'Proposal grade unavailable. The shared evaluator withheld this grade; priced assets and roster context alone do not establish that the complete trade is fair.'
 
   const tradeWarnings: string[] = []

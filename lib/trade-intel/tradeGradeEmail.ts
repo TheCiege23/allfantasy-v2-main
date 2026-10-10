@@ -385,9 +385,10 @@ function rosterFitCard(grade: TradeGradeView | null): string {
   const fit = grade.rosterFit
   const moves = fit.moves.map(move =>
     `${move.name}: ${fmtValue(move.base)} base → ${fmtValue(move.leagueValue)} personal utility. ${move.reasons.join('; ')}.`)
-  return card(eyebrow('Your roster fit · separate from the trade-value grade') +
+  const yourTeam = grade.letterBasis === 'your_team'
+  return card(eyebrow(yourTeam ? 'Your roster fit · what your grade is taken on' : 'Your roster fit') +
     `<div style="font-size:13px;line-height:1.6;color:${MUTED};margin-top:6px">` +
-    escapeHtml(`Personal utility: ${fmtValue(fit.giveValue)} given, ${fmtValue(fit.getValue)} received. This estimate does not change the headline letter or predict your chances of winning.`) +
+    escapeHtml(`Personal utility: ${fmtValue(fit.giveValue)} given, ${fmtValue(fit.getValue)} received.${yourTeam ? ' Your letter above is taken on these.' : ''} This is a roster-fit estimate, not a prediction of your chances of winning.`) +
     moves.map(move => `<div style="margin-top:6px">${escapeHtml(move)}</div>`).join('') + '</div>')
 }
 
@@ -670,8 +671,12 @@ export function buildPendingTradeOfferEmail(params: {
   const verdict = g
     ? `<tr><td style="padding:16px;background:${CARD};border:1px solid ${BORDER};border-radius:16px">` +
       `<table role="presentation" cellspacing="0" cellpadding="0"><tr><td valign="middle">${chip(g.letter, 48)}</td>` +
-      `<td valign="middle" style="padding-left:14px">${eyebrow('Our read, from your side')}` +
+      `<td valign="middle" style="padding-left:14px">${eyebrow(g.letterBasis === 'your_team' ? 'Our read, for your team' : 'Our read, from your side')}` +
       `<div style="font-size:17px;font-weight:800;color:${GRADE_COLORS[g.letter].fg};margin-top:3px">${escapeHtml(g.label)} · ${escapeHtml(gapText(g.percentDiff))}</div></td></tr></table>` +
+      // A your-team letter is shown with the deal's league-value letter, which is what the other manager sees.
+      (g.letterBasis === 'your_team' && g.market
+        ? `<div style="font-size:12px;line-height:1.5;color:${MUTED};margin-top:8px">${escapeHtml(`Market: ${g.market.letter} (${gapText(g.market.percentDiff)}) — the same deal on league value alone, which is what the other manager sees.`)}</div>`
+        : '') +
       `<div style="font-size:13px;line-height:1.6;color:${MUTED};margin-top:12px">${escapeHtml(g.recommendation)}</div>` +
       `<div style="font-size:11px;line-height:1.5;color:${FAINT};margin-top:6px">${escapeHtml(`On ${g.basis ? `${g.basis} ` : 'this league’s '}values as of today${g.needApplied ? ', counting how it fits your roster' : ''}; values at email time. The site uses the same evaluator with the latest data. Realized fantasy points after a completed trade are a separate result.`)}</div>` +
       `</td></tr><tr><td style="height:12px"></td></tr>`

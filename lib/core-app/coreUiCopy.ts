@@ -928,7 +928,7 @@ const spanish: Record<string, string> = {
   'Pricing this deal against your league’s values and rosters — usually 5 to 15 seconds.': 'Calculando el valor según tu liga y las plantillas. Suele tardar entre 5 y 15 segundos.',
   'trade value today — roster fit and realized production are separate': 'Valor actual del intercambio · el ajuste a tu plantilla y el rendimiento real se muestran aparte',
   'Graded on market value': 'Calificado según el valor de mercado',
-  'This trade-value grade uses the same league scoring and asset-price rules as trade history and email. Roster fit does not change the letter. Refreshed market values can change a later evaluation.': 'Esta calificación usa las mismas reglas de puntuación y valoración que el historial y el correo. El ajuste a tu plantilla no cambia la letra. Una evaluación posterior puede variar si cambian los valores de mercado.',
+  'This trade-value grade uses the same league scoring and asset-price rules as trade history and email. Refreshed market values can change a later evaluation.': 'Esta calificación usa las mismas reglas de puntuación y valoración que el historial y el correo. Una evaluación posterior puede variar si cambian los valores de mercado.',
   'Grade unavailable': 'Calificación no disponible',
   'No verdict': 'Sin evaluación',
   Favours: 'Favorece a',
