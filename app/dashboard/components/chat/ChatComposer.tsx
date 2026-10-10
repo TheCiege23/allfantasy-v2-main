@@ -858,6 +858,7 @@ export function ChatComposer({
           {isRecording ? (
             <VoiceRecorder
               leagueId={leagueId}
+              threadId={threadId}
               onComplete={(p) => {
                 setAttachments((a) => [
                   ...a,
