@@ -88,7 +88,8 @@ const LEGIT = {
     previewUrl: 'https://media.giphy.com/media/abc/200w.gif',
     title: 'touchdown',
   },
-  attachments: [{ type: 'image', url: '/uploads/chat/a.png', mimeType: 'image/png' }],
+  // The shape every chat uploader returns (chatUploadReadUrl) — the only attachment URL kept.
+  attachments: [{ type: 'image', url: '/api/chat/upload?path=chat%2FL1%2Fimage%2Fa.png', mimeType: 'image/png' }],
 }
 
 async function postLeagueChat(body: Record<string, unknown>) {
@@ -161,6 +162,22 @@ describe('S4 /api/league/chat — client metadata is allowlisted', () => {
     const res = await postLeagueChat({ leagueId: 'L1', message: '', metadata: { discordAuthorName: 'Commissioner' } })
     expect(res.status).toBe(400)
     expect(h.created).toHaveLength(0)
+  })
+
+  it('🛑 drops an attachment that points anywhere but our own uploader — a tracking pixel', async () => {
+    await postLeagueChat({
+      leagueId: 'L1',
+      message: 'look',
+      metadata: {
+        attachments: [
+          { type: 'image', url: 'https://tracker.example/p.gif?u=victim' },
+          { type: 'image', url: '/api/some/other/endpoint' },
+          { type: 'voice', url: '//evil.example/a.mp3' },
+          ...LEGIT.attachments,
+        ],
+      },
+    })
+    expect(storedMetadata().attachments).toEqual(LEGIT.attachments)
   })
 })
 

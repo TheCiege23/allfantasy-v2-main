@@ -80,7 +80,7 @@ function token(value: unknown, max: number): string | null {
  */
 export function sanitizeClientMessageMetadata(raw: unknown): Record<string, unknown> | undefined {
   if (!isPlainRecord(raw)) return undefined
-  const out: Record<string, unknown> = { ...sanitizeDraftChatRichMeta(raw) }
+  const out: Record<string, unknown> = keepOwnUploadAttachments({ ...sanitizeDraftChatRichMeta(raw) })
 
   const alt = boundedString(raw.alt, 300)
   if (alt) out.alt = alt
@@ -94,6 +94,28 @@ export function sanitizeClientMessageMetadata(raw: unknown): Record<string, unkn
   if (challengeId) out.challengeId = challengeId
 
   return Object.keys(out).length > 0 ? out : undefined
+}
+
+/**
+ * Photo, video and voice attachments reduced to OUR OWN upload links.
+ *
+ * 🛑 `sanitizeDraftChatRichMeta` keeps any `https://` attachment URL, and the bubble renders it as
+ * `<img>` / `<video>` / `<audio>` with no host check (GIFs ARE host-checked on render; attachments
+ * are not). So a DM could carry `{ type: 'image', url: 'https://tracker.example/p.gif?u=…' }` and
+ * learn when — and from which IP — the recipient opened it. Every uploader we ship returns
+ * `chatUploadReadUrl(path)` (/api/chat/upload, /api/shared/chat/upload), so that is the one shape
+ * kept; the reader re-checks membership on every open. Existing rows are untouched — this runs on
+ * the way in. The draft-chat contract itself cannot apply this: it is imported by a client
+ * component, and the upload-path parser reads the database.
+ */
+export function keepOwnUploadAttachments(meta: Record<string, unknown>): Record<string, unknown> {
+  if (!Array.isArray(meta.attachments)) return meta
+  const kept = (meta.attachments as Array<Record<string, unknown>>).flatMap((a) => {
+    const url = isPlainRecord(a) && typeof a.url === 'string' && a.url.startsWith('/') ? sanitizeClientImageUrl(a.url) : null
+    return url ? [{ ...a, url }] : []
+  })
+  const { attachments: _dropped, ...rest } = meta
+  return kept.length > 0 ? { ...rest, attachments: kept } : rest
 }
 
 /**
