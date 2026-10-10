@@ -5149,3 +5149,79 @@
     align-items: center;
   }
 }
+
+/* ── In-context push ask (PushAsk.tsx, 2026-10-10) ─────────────────────────────────────────── */
+.af-core .af-pf-pushask {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px 12px;
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--accent-line);
+  border-radius: 14px;
+  background: var(--accent-soft);
+}
+.af-core .af-pf-follow-wrap .af-pf-pushask {
+  flex-basis: 100%;
+  margin: 6px 0 0;
+}
+.af-core .af-pf-pushask-icon {
+  font-size: 20px;
+}
+.af-core .af-pf-pushask-title {
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 800;
+}
+.af-core .af-pf-pushask-body {
+  margin: 2px 0 0;
+  color: var(--text2);
+  font-size: 12px;
+}
+.af-core .af-pf-pushask-error {
+  margin: 4px 0 0;
+  color: var(--bad);
+  font-size: 12px;
+}
+.af-core .af-pf-pushask-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+.af-core .af-pf-pushask-go {
+  min-height: 36px;
+}
+.af-core .af-pf-pushask-later {
+  min-height: 36px;
+  padding: 0 10px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.af-core .af-pf-pushask-done {
+  margin: 0 0 14px;
+  color: var(--good);
+  font-size: 13px;
+  font-weight: 700;
+}
+@media (max-width: 720px) {
+  .af-core .af-pf-pushask {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .af-core .af-pf-pushask-actions {
+    grid-column: 1 / -1;
+    justify-content: stretch;
+  }
+  .af-core .af-pf-pushask-go,
+  .af-core .af-pf-pushask-later {
+    flex: 1 1 auto;
+    min-height: 44px;
+  }
+}
