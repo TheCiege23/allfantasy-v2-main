@@ -879,8 +879,13 @@ export function ChimmyPanel({
          * line that matters.
          */
         const reported = payload.meta?.leagueGrounding ?? null
+        /*
+         * `league_not_read`: a league was selected but the answer never looked inside it (a stats
+         * question, say). It claims nothing about the league, so it shows no line either way.
+         */
         const grounding =
-          reported && !(reported.grounded === false && reported.reason === 'no_league_selected')
+          reported &&
+          !(reported.grounded === false && (reported.reason === 'no_league_selected' || reported.reason === 'league_not_read'))
             ? reported
             : null
 
