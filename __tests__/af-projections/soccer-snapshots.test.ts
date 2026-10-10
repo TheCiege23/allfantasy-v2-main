@@ -72,8 +72,9 @@ describe('the soccer projection run', () => {
     expect(fwd.adjustmentFactors.basis).toBe('season_category_components')
     expect(fwd.adjustmentFactors.perGameRates).toMatchObject({ goals: 1, assists: 0.5, shots_on_target: 1.5, minutes_played: 85 })
     expect(fwd.adjustmentFactors.confidenceReasons).toContain('2 games in the season sample')
-    // A goal (6) a game and an assist (3) every other: 7.5 points an appearance on the house soccer scoring.
-    expect(fwd.afProjection).toBeCloseTo(7.5, 6)
+    // Per appearance, on what an unsaved soccer league scores: a goal (6), half an assist (1.5), 1.5 shots
+    // on target (0.75), 1.5 shots (0.3) and 85 minutes (1.7).
+    expect(fwd.afProjection).toBeCloseTo(6 + 1.5 + 0.75 + 0.3 + 1.7, 6)
 
     const gk = stored('gk')
     expect(gk.position).toBe('GK')

@@ -62,9 +62,10 @@ describe('soccerSeasonLines', () => {
     expect(line([row('def', 'ATA', '2026-08-31', { ...DEF_FULL_CLEAN_SHEET, group: 'unknown' })], 'def')).toBeUndefined()
   })
 
-  it('scores to points on the soccer config’s defaults, through the same category scorer', () => {
+  it('scores to points on what an unsaved soccer league scores, through the same category scorer', () => {
     const l = line([row('fwd', 'RAC', '2026-09-05', FWD_GOAL)], 'fwd')!
     const scored = scoreCategoryComponents({ components: extractSeasonAggregate(l.stats)!.components, rules: getCategoryScoringRules('SOCCER')! })!
-    expect(scored.points).toBe(6) // one goal; shots, fouls and minutes score 0 by default
+    // A goal (6), two shots on target (1), three shots (0.6) and 97 minutes (1.94); fouls score 0.
+    expect(scored.points).toBeCloseTo(6 + 1 + 0.6 + 1.94, 9)
   })
 })

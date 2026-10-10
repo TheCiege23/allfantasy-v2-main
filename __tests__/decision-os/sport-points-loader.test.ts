@@ -8,8 +8,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const db = vi.hoisted(() => ({
   projections: [] as Array<{ playerId: string; playerName: string; position: string; season: number; adjustmentFactors: unknown }>,
   games: [] as Array<{ homeTeam: string; awayTeam: string; seasonType: string | null; startTime: Date }>,
-  identities: [] as Array<{ id: string; rollingInsightsId: string | null; sleeperId: string | null }>,
+  identities: [] as Array<{ id: string; rollingInsightsId: string | null; sleeperId: string | null; canonicalName?: string }>,
   rosters: [] as Array<{ playerData: unknown }>,
+  // Soccer's per-match rows (`player_game_stats`), both seasons.
+  matchRows: [] as Array<{ playerId: string; season: number; team: string; gameId: string; gameDate: Date; normalizedStatMap: unknown }>,
 }))
 
 vi.mock('server-only', () => ({}))
@@ -25,6 +27,10 @@ vi.mock('@/lib/prisma', () => ({
     },
     playerIdentityMap: { findMany: vi.fn(async () => db.identities) },
     roster: { findMany: vi.fn(async () => db.rosters) },
+    playerGameStat: {
+      findFirst: vi.fn(async () => (db.matchRows.length ? { season: Math.max(...db.matchRows.map((r) => r.season)) } : null)),
+      findMany: vi.fn(async ({ where }: { where: { season: number } }) => db.matchRows.filter((r) => r.season === where.season)),
+    },
   },
 }))
 
@@ -53,6 +59,7 @@ beforeEach(() => {
   db.games = []
   db.identities = []
   db.rosters = []
+  db.matchRows = []
 })
 
 describe('loadSportPointsBase', () => {
@@ -100,6 +107,66 @@ describe('loadSportPointsBase', () => {
     expect(cat).toMatchObject({ ok: false })
     const dyn = await loadSportPointsBase({ sport: 'NBA', league: { id: 'L', settings: {}, leagueType: 'dynasty', leagueSize: 12 }, now: NOW })
     expect(dyn).toMatchObject({ ok: false })
+  })
+
+  describe('soccer', () => {
+    const GROUP: Record<string, string> = { Goalkeeper: 'goalkeepers' }
+    // One player's matches: `apps` of `clubMatches`, each with the given per-match stats.
+    function soccerPlayer(id: string, position: string, season: number, team: string, apps: number, stats: Record<string, number>, clubMatches = apps) {
+      for (let m = 0; m < clubMatches; m++) {
+        db.matchRows.push({
+          playerId: id, season, team, gameId: `${season}-${team}-${m}:${GROUP[position] ?? 'fielders'}`,
+          gameDate: new Date(Date.UTC(season, 8, 1 + m)),
+          normalizedStatMap: { group: GROUP[position] ?? 'fielders', position, stats: { minutes_played: m < apps ? 90 : 0, ...(m < apps ? stats : {}) } },
+        })
+      }
+      if (!db.identities.some((i) => i.id === id)) db.identities.push({ id, rollingInsightsId: `ri-${id}`, sleeperId: null, canonicalName: id })
+    }
+    function soccerBoard() {
+      soccerPlayer('ace', 'Forward', 2026, 'ARS', 4, { goals: 0.75 })
+      soccerPlayer('ace', 'Forward', 2025, 'ARS', 38, { goals: 0.25 })
+      soccerPlayer('rookie', 'Forward', 2026, 'CHE', 4, { goals: 1 })
+      soccerPlayer('gone', 'Forward', 2025, 'CHE', 35, { goals: 0.6 })
+      soccerPlayer('keeper', 'Goalkeeper', 2026, 'ARS', 4, { saves: 3 })
+      soccerPlayer('keeper', 'Goalkeeper', 2025, 'ARS', 38, { saves: 3 })
+      soccerPlayer('back', 'Defender', 2026, 'CHE', 4, { assists: 0.25 })
+      soccerPlayer('back', 'Defender', 2025, 'CHE', 30, { assists: 0.1 })
+      soccerPlayer('wing', 'Forward', 2026, 'ARS', 4, { goals: 0.25 })
+      soccerPlayer('wing', 'Forward', 2025, 'ARS', 30, { goals: 0.2 })
+      schedule(['ARS', 'CHE'], 30, null)
+    }
+
+    it('grades from both seasons of match rows, on the 2026-27 season, never from stored projections', async () => {
+      soccerBoard()
+      const out = await loadSportPointsBase({ sport: 'SOCCER', league: null, now: NOW })
+      if (!out.ok) throw new Error(out.reason)
+      expect(out.ctx.window).toMatchObject({ season: 2026, seasonLabel: '2026-27', gamesRemaining: 30 })
+      expect(out.ctx.valueKind).toBe('points')
+      const ace = out.ctx.board.find((p) => p.name === 'ace')!
+      // Four matches this season steadied by ten of last season's, on what an unsaved soccer league
+      // scores: 6 a goal and 0.02 a minute (90 a match, every match).
+      expect(ace).toMatchObject({ position: 'FWD', sampleGames: 14 })
+      expect(ace.perGame).toBeCloseTo(6 * ((3 + 10 * 0.25) / 14) + 0.02 * 90, 6)
+    })
+
+    it('leaves last season’s departures off the board, and holds a newcomer to his own sample', async () => {
+      soccerBoard()
+      const out = await loadSportPointsBase({ sport: 'SOCCER', league: null, now: NOW })
+      if (!out.ok) throw new Error(out.reason)
+      expect(out.ctx.board.map((p) => p.name)).not.toContain('gone')
+      expect(out.ctx.board.find((p) => p.name === 'rookie')!.sampleGames).toBe(4)
+    })
+
+    it('values a rotation player on the matches he plays, not on every match his club plays', async () => {
+      soccerBoard()
+      soccerPlayer('sub', 'Forward', 2026, 'ARS', 2, { goals: 0.75 }, 4)
+      soccerPlayer('sub', 'Forward', 2025, 'ARS', 19, { goals: 0.25 }, 38)
+      const out = await loadSportPointsBase({ sport: 'SOCCER', league: null, now: NOW })
+      if (!out.ok) throw new Error(out.reason)
+      const value = (name: string) => out.ctx.board.find((p) => p.name === name)!.perGame
+      // His per-appearance line sits near the ace's; he plays about half the matches.
+      expect(value('sub') / value('ace')).toBeLessThan(0.6)
+    })
   })
 
   describe('MLB', () => {
