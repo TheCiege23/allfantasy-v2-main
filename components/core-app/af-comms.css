@@ -3701,3 +3701,19 @@
 @keyframes af-cm-breathe {
   50% { opacity: 0.55; }
 }
+
+/* Who is around: a dot on a DM row's avatar, and "Active 5m ago" beside the open DM's name. */
+.af-cm-dmrow-presence {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #34d399;
+  box-shadow: 0 0 0 2px var(--bg);
+}
+.af-cm-dmrow-muted { display: inline-flex; align-items: center; margin-left: 4px; color: var(--faint); }
+.af-cm-dmrow[data-muted='true'] .af-cm-threadrow-unread { background: var(--chip); color: var(--muted); }
+.af-cm-threadactive { margin-left: 8px; font-size: 12px; font-weight: 500; white-space: nowrap; color: var(--muted); }
+.af-cm-threadactive[data-now='true'] { color: #34d399; }
