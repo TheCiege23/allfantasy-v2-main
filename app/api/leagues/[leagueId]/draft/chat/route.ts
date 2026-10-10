@@ -34,6 +34,7 @@ import {
 import { loadDraftChatWireMessages } from '@/lib/draft-room/draftRoomChatWireLoad'
 import { BlockListUnavailableError } from '@/lib/moderation/BlockUserService'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { keepOwnUploadAttachments } from '@/lib/chat-core/clientMessageInput'
 
 export const dynamic = 'force-dynamic'
 
@@ -200,7 +201,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
    * GIFs, photos and composer polls, in the metadata shape league chat stores — so a row
    * posted here renders the same in the league's chat, and the other way round.
    */
-  const richMeta = sanitizeDraftChatRichMeta(body?.metadata)
+  // Attachments only from our own uploader — never a host the sender picked (see keepOwnUploadAttachments).
+  const richMeta = keepOwnUploadAttachments(sanitizeDraftChatRichMeta(body?.metadata))
   const hasRich = Object.keys(richMeta).length > 0
   /* A reply, on the same column league chat uses for one. */
   const parentMessageId =

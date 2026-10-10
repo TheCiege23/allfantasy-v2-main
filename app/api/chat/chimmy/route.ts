@@ -178,6 +178,7 @@ import { buildDecisionOsGroundingPacket } from '@/lib/decision-os/grounding/pack
 import { recordChatWaiverAdvice } from '@/lib/chimmy-advice/chatWaiverAdvice'
 import { recordChatStartSitAdvice } from '@/lib/chimmy-advice/chatStartSitAdvice'
 import type { ChatStartCall, ChimmyEliminationSettleRun, ChimmyFaabPlanRun, ChimmyToolRun } from '@/lib/chimmy/tools/chimmyTools'
+import { answerReadLeague } from '@/lib/chimmy/tools/answerReadLeague'
 import type { ChimmyActionCard } from '@/lib/chimmy/actions/types'
 import type { ChimmyTradeGrade } from '@/lib/chimmy/tradeGradeCheck'
 import { answerKeysFrom, eliminationSettleVerdict, faabCardFromPlan, faabPlanVerdict, tradeTargetVerdict } from '@/lib/chimmy/answerPolishBuild'
@@ -3337,15 +3338,22 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
               : { openai: 'skipped', deepseek: 'skipped', grok: 'ok' },
           /* The model that actually answered — the one thing a quality complaint needs first. */
           ...(loop.model ? { model: loop.model } : {}),
+          /*
+           * "Read from <league>" only when a league lookup actually ran (answerReadLeague). A league
+           * being SELECTED is not a league being read: a stats-only answer, or one where no tool ran,
+           * reports `league_not_read`, which the panel shows as no line at all — it never claimed one.
+           */
           leagueGrounding: boundLeague
-            ? {
-                grounded: true as const,
-                leagueId: boundLeague.id,
-                leagueName: boundLeague.name,
-                platform: boundLeague.platform,
-                season: boundLeague.season,
-                lastSyncedAt: boundLeague.lastSyncedAt?.toISOString() ?? null,
-              }
+            ? answerReadLeague(loop.toolsUsed)
+              ? {
+                  grounded: true as const,
+                  leagueId: boundLeague.id,
+                  leagueName: boundLeague.name,
+                  platform: boundLeague.platform,
+                  season: boundLeague.season,
+                  lastSyncedAt: boundLeague.lastSyncedAt?.toISOString() ?? null,
+                }
+              : { grounded: false as const, leagueId: boundLeague.id, reason: 'league_not_read' as const }
             : { grounded: false as const, leagueId: null, reason: 'no_league_selected' as const },
           /* Which lookups the model chose, so the answer's sourcing is visible. */
           toolsUsed: loop.toolsUsed,

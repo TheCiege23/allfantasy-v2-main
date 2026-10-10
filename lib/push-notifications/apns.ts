@@ -100,6 +100,12 @@ export function apnsBody(payload: ApnsPayload): string {
        * text, so the flag costs nothing to an old app and is pointless without an image.
        */
       ...(imageUrl ? { "mutable-content": 1 } : {}),
+      /*
+       * Groups a conversation's (or a trade's) notifications into one stack on the lock screen —
+       * the same key the web uses as its tag. `apns-collapse-id` (below) REPLACES; this only GROUPS,
+       * so ten DMs from three people read as three stacks instead of ten loose rows.
+       */
+      ...(payload.tag ? { "thread-id": payload.tag.slice(0, 64) } : {}),
     },
     href: payload.href ?? null,
     type: payload.type ?? "notification",

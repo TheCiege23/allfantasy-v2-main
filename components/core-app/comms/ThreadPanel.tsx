@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Lock, MoreHorizontal, Search, Users } from 'lucide-react'
 import type { ReportReason } from '@/lib/moderation/shared'
-import { ThreadListRow, type ThreadRowContext } from './ThreadListRow'
+import { ThreadListRow, formatLastActive, type ThreadRowContext } from './ThreadListRow'
 import { HuddleMembersSheet, HuddleOptionsSheet, type HuddleMember } from './HuddleSheets'
 import RichMessage from './RichMessage'
 import { notifyMentions } from '@/lib/chat-core/notifyMentions'
@@ -174,7 +174,9 @@ export function ThreadPanel({
       setNow(new Date())
       setThreads((data.threads ?? []).filter((t) => t.threadType === kind))
     } catch (e) {
-      setThreads([])
+      // A failed REFRESH keeps the list on screen (as a failed message poll does); only a first
+      // load with nothing to show falls back to empty.
+      setThreads((prev) => prev ?? [])
       setError(e instanceof Error ? e.message : 'Could not load conversations.')
     }
   }, [kind])
@@ -182,6 +184,20 @@ export function ThreadPanel({
   useEffect(() => {
     void loadThreads()
   }, [loadThreads])
+
+  /*
+   * The list used to load once and never again while you looked at it, so a new DM, an unread count
+   * and who is active only changed when you navigated away and back. Every 30s while the list is on
+   * screen and the tab is visible — slower than a conversation's own poll, because the list read is
+   * heavier and nothing in it is a live exchange.
+   */
+  useEffect(() => {
+    if (openThread) return
+    const id = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void loadThreads()
+    }, 30_000)
+    return () => window.clearInterval(id)
+  }, [openThread, loadThreads])
 
   const loadMessages = useCallback(async (thread: PlatformThread) => {
     if (activeThreadId.current !== thread.id) return
@@ -696,6 +712,15 @@ export function ThreadPanel({
           </button>
           <span className="af-cm-threadtitle">
             {openThread.title || `${openThread.memberCount} people`}
+            {kind === 'dm' && formatLastActive(openThread.context?.otherLastActiveAt, now) ? (
+              <span
+                className="af-cm-threadactive"
+                data-now={formatLastActive(openThread.context?.otherLastActiveAt, now) === 'Active now' || undefined}
+                title="When they last had a conversation open on AllFantasy"
+              >
+                {formatLastActive(openThread.context?.otherLastActiveAt, now)}
+              </span>
+            ) : null}
             <button
               type="button"
               className="af-cm-mute"

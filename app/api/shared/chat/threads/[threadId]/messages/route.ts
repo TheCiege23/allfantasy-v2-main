@@ -36,6 +36,7 @@ import {
   sanitizeClientMessageType,
 } from '@/lib/chat-core/clientMessageInput'
 import { publishDraftIntelState } from '@/lib/draft-intelligence'
+import { chatRateLimitResponse } from '@/lib/chat-core/chatRateLimits'
 import { DETERMINISTIC_SOURCE, tryDeterministicAnswer } from '@/lib/ai/deterministic'
 import {
   queueDirectMessageNotifications,
@@ -233,6 +234,8 @@ export async function POST(req: NextRequest, props: { params: Promise<{ threadId
   if (!user.appUserId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+  const limited = chatRateLimitResponse(user.appUserId, 'message_send')
+  if (limited) return limited
 
   const threadId = decodeURIComponent(params.threadId)
   const body = await req.json().catch(() => ({}))

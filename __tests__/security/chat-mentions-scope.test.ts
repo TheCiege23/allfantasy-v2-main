@@ -15,8 +15,16 @@ const db = vi.hoisted(() => ({
   users: [] as Row[],
   leagueMembers: [] as string[],
   threadMembers: [] as string[],
-  leagueMessage: null as null | { id: string; messageSubtype: string | null },
+  leagueMessage: null as null | {
+    id: string
+    messageSubtype: string | null
+    isPrivate?: boolean
+    message?: string
+    type?: string
+  },
   ownDm: true,
+  mutedMembers: [] as string[],
+  blockers: [] as string[],
   dispatch: vi.fn(),
   dmUpdate: vi.fn(),
   appUserFindMany: vi.fn(),
@@ -31,14 +39,24 @@ vi.mock('@/lib/prisma', () => ({
     bracketLeagueMember: { findUnique: async () => null, findMany: async () => [] },
     platformChatThreadMember: {
       findFirst: async ({ where }: { where: { userId: string } }) => (db.threadMembers.includes(where.userId) ? { id: 'm' } : null),
-      findMany: async () => db.threadMembers.map((userId) => ({ userId })),
+      findMany: async () => db.threadMembers.map((userId) => ({ userId, isMuted: db.mutedMembers.includes(userId) })),
     },
     platformChatMessage: {
-      findFirst: async () => (db.ownDm ? { id: 'msg1' } : null),
+      findFirst: async () => (db.ownDm ? { id: 'msg1', body: 'you up @dana?', messageType: 'text', metadata: null } : null),
       update: db.dmUpdate,
     },
+    platformBlockedUser: {
+      findMany: async ({ where }: { where: { blockerUserId: { in: string[] } } }) =>
+        db.blockers.filter((id) => where.blockerUserId.in.includes(id)).map((blockerUserId) => ({ blockerUserId })),
+    },
+    league: { findUnique: async () => ({ name: 'Cream Bowl' }) },
     appUser: {
-      findUnique: async () => ({ displayName: null, username: 'sender', email: 'sender@secret.example' }),
+      findUnique: async () => ({
+        displayName: null,
+        username: 'sender',
+        email: 'sender@secret.example',
+        avatarUrl: 'https://cdn.example/sender.png',
+      }),
       // A faithful fake of the query the route makes: filters by id-in-members AND username.
       findMany: db.appUserFindMany,
     },
@@ -72,8 +90,48 @@ beforeEach(() => {
   ]
   db.leagueMembers = ['sender', 'mike-in-league', 'dana']
   db.threadMembers = ['sender', 'dana']
-  db.leagueMessage = { id: 'msg1', messageSubtype: null }
+  db.leagueMessage = { id: 'msg1', messageSubtype: null, isPrivate: false, message: 'nice trade @dana', type: 'text' }
   db.ownDm = true
+  db.mutedMembers = []
+  db.blockers = []
+})
+
+describe('🛑 who a mention must NOT reach', () => {
+  it('a private @chimmy question naming someone notifies nobody — they cannot see it', async () => {
+    db.leagueMessage = { id: 'msg1', messageSubtype: null, isPrivate: true, message: '@chimmy should I trade @dana' }
+    await post({ threadId: 'league:L1', messageId: 'msg1', mentionedUsernames: ['dana', 'all'] })
+    expect(db.dispatch).not.toHaveBeenCalled()
+  })
+
+  it('someone who muted the conversation is not pinged by a mention in it', async () => {
+    db.mutedMembers = ['dana']
+    await post({ threadId: 'thread-1', messageId: 'msg1', mentionedUsernames: ['dana'] })
+    expect(db.dispatch).not.toHaveBeenCalled()
+  })
+
+  it('someone who blocked the sender is not pinged by a mention', async () => {
+    db.blockers = ['dana']
+    await post({ threadId: 'league:L1', messageId: 'msg1', mentionedUsernames: ['dana', 'mike'] })
+    expect(notified()).toEqual(['mike-in-league'])
+  })
+})
+
+describe('what a mention says', () => {
+  it('names the sender and the league, previews the words, and carries the sender’s face', async () => {
+    await post({ threadId: 'league:L1', messageId: 'msg1', mentionedUsernames: ['dana'] })
+    const call = db.dispatch.mock.calls[0]![0] as { title: string; body: string; meta: Record<string, unknown> }
+    expect(call.title).toBe('sender mentioned you · Cream Bowl')
+    expect(call.body).toBe('nice trade @dana')
+    expect(call.meta.iconUrl).toBe('https://cdn.example/sender.png')
+    expect(call.meta.pushTag).toBe('mention-league:L1')
+  })
+
+  it('in a DM it shares the DM alert’s tag, so one message is one buzz', async () => {
+    await post({ threadId: 'thread-1', messageId: 'msg1', mentionedUsernames: ['dana'] })
+    const call = db.dispatch.mock.calls[0]![0] as { body: string; meta: Record<string, unknown> }
+    expect(call.body).toBe('you up @dana?')
+    expect(call.meta.pushTag).toBe('dm-thread-1')
+  })
 })
 
 describe('league chat', () => {

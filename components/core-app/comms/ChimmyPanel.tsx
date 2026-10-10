@@ -97,7 +97,14 @@ export type CommsLeague = {
   }
 }
 
-export const PUBLIC_ANSWER_NOTICE = 'Everyone in the league can see this answer.'
+/*
+ * 🛑 THIS SAID "Everyone in the league can see this answer." AND NOTHING EVER POSTED IT. `publicMode`
+ * only changes the transcript key and this label; no code writes the answer to league chat, so the
+ * asker was told the league saw something nobody else could. Until a deliberate "share to league"
+ * exists, the notice says what is true. (The server still keeps home signals out of this tab, which is
+ * the conservative side of the same line.)
+ */
+export const PUBLIC_ANSWER_NOTICE = 'Only you see this answer. It is about this league and is not posted to its chat.'
 
 /**
  * The only phrasing allowed when Chimmy suggests a roster change.
@@ -872,8 +879,13 @@ export function ChimmyPanel({
          * line that matters.
          */
         const reported = payload.meta?.leagueGrounding ?? null
+        /*
+         * `league_not_read`: a league was selected but the answer never looked inside it (a stats
+         * question, say). It claims nothing about the league, so it shows no line either way.
+         */
         const grounding =
-          reported && !(reported.grounded === false && reported.reason === 'no_league_selected')
+          reported &&
+          !(reported.grounded === false && (reported.reason === 'no_league_selected' || reported.reason === 'league_not_read'))
             ? reported
             : null
 

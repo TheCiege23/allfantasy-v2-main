@@ -201,7 +201,12 @@ async function resolveUnreadCountForMember(
   }
 }
 
-async function normalizeThread(row: any, memberRow: any, appUserId: string): Promise<PlatformChatThread> {
+async function normalizeThread(
+  row: any,
+  memberRow: any,
+  appUserId: string,
+  lastActive?: ReadonlyMap<string, Date>,
+): Promise<PlatformChatThread> {
   const visibleRows: any[] = Array.isArray(row?.messages) ? row.messages : []
   const latestMessage = visibleRows[0] ?? null
   /*
@@ -274,6 +279,11 @@ async function normalizeThread(row: any, memberRow: any, appUserId: string): Pro
       otherUserId: otherDmMember?.user?.id || null,
       otherUsername: otherDmMember?.user?.username || null,
       otherDisplayName: otherDmMember?.user?.displayName || null,
+      /** DM only: when the other person last had a conversation open (see lastChatActivityOf). */
+      otherLastActiveAt:
+        otherDmMember?.user?.id && lastActive?.get(String(otherDmMember.user.id))
+          ? toIso(lastActive.get(String(otherDmMember.user.id)))
+          : null,
       showInDmList: isDraftIntelThread,
       verifiedBadge: isDraftIntelThread || latestMetadata?.verifiedBadge === true,
       botLabel:
@@ -305,10 +315,42 @@ async function getUnifiedThreads(appUserId: string): Promise<PlatformChatThread[
       take: 100,
     })
 
-    return Promise.all(rows.map((m: any) => normalizeThread(m.thread, m, appUserId)))
+    const lastActive = await lastChatActivityOf(
+      rows.flatMap((m: any) =>
+        m?.thread?.threadType === 'dm' && Array.isArray(m.thread.members)
+          ? m.thread.members.map((x: any) => x?.userId).filter((id: unknown) => typeof id === 'string' && id !== appUserId)
+          : [],
+      ),
+    )
+    return Promise.all(rows.map((m: any) => normalizeThread(m.thread, m, appUserId, lastActive)))
   } catch {
     return null
   }
+}
+
+/**
+ * When each person last had a DM or huddle open, from the read stamp every open conversation writes
+ * on each poll (getPlatformThreadMessages) and every send writes too. ONE grouped query for the whole
+ * list. It is chat activity, not site activity, and the UI words it that way; an empty map on any
+ * failure, so a list never fails over a "last active" line.
+ */
+async function lastChatActivityOf(userIds: string[]): Promise<Map<string, Date>> {
+  const out = new Map<string, Date>()
+  const ids = [...new Set(userIds)]
+  if (ids.length === 0) return out
+  try {
+    const rows = await (prisma as any).platformChatThreadMember.groupBy({
+      by: ['userId'],
+      where: { userId: { in: ids }, lastReadAt: { not: null } },
+      _max: { lastReadAt: true },
+    })
+    for (const r of rows as Array<{ userId: string; _max: { lastReadAt: Date | null } }>) {
+      if (r._max?.lastReadAt) out.set(r.userId, new Date(r._max.lastReadAt))
+    }
+  } catch {
+    /* no presence line rather than no list */
+  }
+  return out
 }
 
 async function getLegacyFallbackThreads(appUserId: string): Promise<PlatformChatThread[]> {
