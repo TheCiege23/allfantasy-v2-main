@@ -116,7 +116,8 @@ describe("sendApns — what reaches Apple", () => {
     expect(decodeProtectedHeader(jwt)).toMatchObject({ alg: "ES256", kid: "KEYID12345" })
     await expect(jwtVerify(jwt, await importSPKI(PUB, "ES256"), { issuer: "TEAMID1234" })).resolves.toBeTruthy()
     expect(JSON.parse(body)).toEqual({
-      aps: { alert: { title: "Injury: Josh Allen", body: "Out for Sunday" }, sound: "default" },
+      // thread-id groups one tag's notifications into a stack on the lock screen.
+      aps: { alert: { title: "Injury: Josh Allen", body: "Out for Sunday" }, sound: "default", "thread-id": "injury-1" },
       href: "/core/players?id=1",
       type: "notification",
       leagueId: "L1",
