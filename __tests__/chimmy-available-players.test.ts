@@ -23,6 +23,39 @@ vi.mock('@/lib/fantasycalc-db', () => ({
 vi.mock('@/lib/chimmy/tools/availablePlayersOtherSports', () => ({
   buildOtherSportAvailableContext: h.otherSport,
 }))
+/*
+ * The id-space rule is real (isForeignIdSpace); only the ESPN identity-map read and the by-name hide
+ * are stubbed, so a test can say which ESPN ids translate and which rostered names to hide.
+ */
+const idSpace = vi.hoisted(() => ({
+  espnMap: new Map<string, string>(),
+  hideNames: new Set<string>(),
+}))
+vi.mock('@/lib/core-app/rosterIdSpace', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@/lib/core-app/rosterIdSpace')>()
+  return {
+    ...real,
+    sleeperReadableRostersWithGaps: async (rosters: Array<{ playerData: unknown }>, platform: string | null) => {
+      if (real.rosterIdSpaceOf(platform) !== 'espn') return real.sleeperReadableRostersWithGaps(rosters, platform)
+      const untranslated: string[] = []
+      const out = rosters.map((r) => {
+        const players = ((r.playerData as { players?: string[] })?.players ?? []).flatMap((id) => {
+          const sid = idSpace.espnMap.get(id)
+          if (!sid) untranslated.push(id)
+          return sid ? [sid] : []
+        })
+        return { ...r, playerData: { players } }
+      })
+      return { rosters: out, untranslatedEspnIds: untranslated }
+    },
+  }
+})
+vi.mock('@/lib/decision-os/waiver/pool', () => ({
+  excludeUntranslatedEspn: async () => ({
+    hides: (row: { full_name?: string | null }) => idSpace.hideNames.has(String(row.full_name ?? '')),
+    summary: () => null,
+  }),
+}))
 
 import { buildAvailablePlayersContext } from '@/lib/chimmy/tools/availablePlayersTool'
 
@@ -41,6 +74,8 @@ function fc(sleeperId: string, name: string, position: string, overallRank: numb
 
 beforeEach(() => {
   vi.resetAllMocks()
+  idSpace.espnMap = new Map()
+  idSpace.hideNames = new Set()
   h.fantasyCalc.mockResolvedValue([])
   h.leagueFind.mockResolvedValue({ name: 'Beta 1 Zombie League', sport: 'NFL' })
   h.rosterFindMany.mockResolvedValue([{ playerData: { players: ['9488', '9226'] } }])
@@ -680,5 +715,38 @@ describe('positions no source can rank are named, not silently dropped', () => {
     expect(out).toContain('best FantasyCalc dynasty rank first')
     expect(out).toMatch(/the rankings behind this list do not cover those positions/)
     expect(out).toContain('linebackers')
+  })
+})
+
+describe('🛑 a roster that is not in Sleeper ids is never subtracted raw', () => {
+  it('a Yahoo league refuses with the real reason instead of listing its own rostered players', async () => {
+    h.leagueFind.mockResolvedValue({ name: 'Yahoo Bros', sport: 'NFL', platform: 'yahoo' })
+    // Yahoo ids: subtracting these from Sleeper-keyed values would remove nobody.
+    h.rosterFindMany.mockResolvedValue([{ playerData: { players: ['nfl.p.33393', 'nfl.p.40052'] } }])
+    const out = await buildAvailablePlayersContext(LEAGUE, USER)
+    expect(out).toMatch(/cannot yet match yahoo roster entries/i)
+    expect(out).toMatch(/do NOT name anyone/)
+    expect(out).not.toContain('Ashton Jeanty')
+    expect(h.valueFindMany).not.toHaveBeenCalled()
+  })
+
+  it('an ESPN league subtracts translated ids AND hides an untranslated rostered player by name', async () => {
+    h.leagueFind.mockResolvedValue({ name: 'ESPN League', sport: 'NFL', platform: 'espn' })
+    // ESPN 4430807 → Sleeper 9488 (JSN). ESPN 4262921 has no mapping, but it IS Achane, on a roster.
+    h.rosterFindMany.mockResolvedValue([{ playerData: { players: ['4430807', '4262921'] } }])
+    idSpace.espnMap = new Map([['4430807', '9488']])
+    idSpace.hideNames = new Set(["De'Von Achane"])
+    const out = await buildAvailablePlayersContext(LEAGUE, USER)
+    expect(out).toContain('Ashton Jeanty')
+    expect(out).not.toContain('Jaxon Smith-Njigba')
+    expect(out).not.toContain('Achane')
+  })
+
+  it('a non-NFL ESPN league with players the map cannot place refuses rather than guessing', async () => {
+    h.leagueFind.mockResolvedValue({ name: 'ESPN Hoops', sport: 'NBA', platform: 'espn' })
+    h.rosterFindMany.mockResolvedValue([{ playerData: { players: ['3112335'] } }])
+    const out = await buildAvailablePlayersContext(LEAGUE, USER)
+    expect(out).toMatch(/could not be matched from ESPN/)
+    expect(h.otherSport).not.toHaveBeenCalled()
   })
 })

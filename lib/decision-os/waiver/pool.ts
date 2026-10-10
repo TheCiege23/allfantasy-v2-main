@@ -433,8 +433,11 @@ type WireRow = { full_name?: string | null; position?: string | null; team_abbre
  * and no name rule joins them; such a player can still surface. The real fix is upstream — the ESPN
  * linker refuses these rows because the canonical birthday it corroborates against is wrong for them
  * (Jefferson 1999-01-16 against ESPN's 1999-06-16), and a fixed link removes the id from this set.
+ *
+ * Exported for Chimmy's available-players tool, which subtracts rosters the same way and must hide the
+ * same players — one rule, not a second copy of it.
  */
-async function excludeUntranslatedEspn(
+export async function excludeUntranslatedEspn(
   espnIds: readonly string[],
   sport: string,
 ): Promise<{ hides: (row: WireRow) => boolean; summary: () => WaiverPool['untranslatedRostered'] }> {
