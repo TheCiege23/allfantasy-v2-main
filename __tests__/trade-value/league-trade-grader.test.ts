@@ -83,6 +83,8 @@ import { createLeagueTradeGrader, gradeDeal } from '@/lib/decision-os/trade/leag
 import { oneGradeForCompletedTrade } from '@/lib/decision-os/trade/completedTradeGrade'
 import { buildTradeGradeEmail } from '@/lib/trade-intel/tradeGradeEmail'
 import type { GradedTrade } from '@/lib/trade-intel/sleeperTradeGradeService'
+import { marketView } from '@/lib/decision-os/trade/tradeGrade'
+import { projectedLetterFor } from '@/lib/trade-intel/gradeScale'
 
 beforeEach(() => {
   h.leagueType = 'dynasty'
@@ -108,7 +110,7 @@ const graded = <T extends { graded: boolean }>(v: T) => {
 }
 
 describe('createLeagueTradeGrader', () => {
-  it('reproduces the earlier chart’s minus-eight-percent roster utility without using it as the letter', async () => {
+  it('takes the viewer’s letter on the roster utility and keeps the league-value letter beside it (2026-10-10)', async () => {
     h.prices.set('DK Metcalf', 1774)
     h.chart = [{ player: { name: '2027 2nd', position: 'PICK' }, value: 1574 }]
     h.needFactor = 0.96
@@ -118,8 +120,12 @@ describe('createLeagueTradeGrader', () => {
     const proposal = graded(await grader.grade({ ...deal, viewerSide: true }))
     const completion = graded(await grader.grade({ ...deal, viewerSide: false }))
     expect(proposal.rosterFit).toMatchObject({ giveValue: 1703, getValue: 1574, percentDiff: -8 })
-    expect([proposal.letter, proposal.partnerLetter, proposal.percentDiff]).toEqual(['D', 'B', -11])
-    expect([completion.letter, completion.partnerLetter, completion.percentDiff]).toEqual(['D', 'B', -11])
+    // For your team: -8 is even. On league value alone: -11, a D — and that is what the partner sees.
+    expect([proposal.letterBasis, proposal.letter, proposal.percentDiff, proposal.partnerLetter]).toEqual(['your_team', 'C', -8, 'B'])
+    expect(proposal.market).toMatchObject({ letter: 'D', partnerLetter: 'B', percentDiff: -11 })
+    // The totals stay the league values the lines add up to.
+    expect([proposal.giveValue, proposal.getValue]).toEqual([completion.giveValue, completion.getValue])
+    expect([completion.letter, completion.partnerLetter, completion.percentDiff, completion.letterBasis]).toEqual(['D', 'B', -11, undefined])
   })
   it('keeps DK Metcalf for a 2027 second D/B across proposal, completion and email despite surplus WR utility', async () => {
     h.prices.set('DK Metcalf', 1766)
@@ -141,12 +147,17 @@ describe('createLeagueTradeGrader', () => {
       ],
     } as unknown as GradedTrade
     const completion = graded(await oneGradeForCompletedTrade('L1', trade, 2026, { graderFor: async () => grader }))
-    for (const read of [proposal, completion]) {
+    // The Metcalf guarantee (2026-09-28), in its 2026-10-10 form: the LEAGUE-VALUE letter is one letter across
+    // proposal, completion and email. The proposal adds the your-team letter beside it; it never replaces it.
+    for (const read of [marketView(proposal), completion]) {
+      if (!read.graded) throw new Error('withheld')
       expect([read.letter, read.partnerLetter, read.percentDiff, read.giveValue, read.getValue]).toEqual(['D', 'B', -10, 1766, 1584])
       expect(read.lines.map(line => line.leagueValue)).toEqual([1766, 1584])
       expect(read.needApplied).toBe(false)
       expect(read.moves).toEqual([])
     }
+    // Surplus WR depth makes Metcalf worth less to this roster: -7 for your team, an even C.
+    expect([proposal.letterBasis, proposal.letter, proposal.percentDiff, proposal.partnerLetter]).toEqual(['your_team', 'C', -7, 'B'])
     expect(proposal.rosterFit).toMatchObject({ giveValue: 1695, getValue: 1584, percentDiff: -7 })
     expect(proposal.rosterFit?.moves[0]?.reasons).toContain('after this trade you have surplus WR depth')
     expect(completion.rosterFit).toBeNull()
@@ -297,7 +308,7 @@ describe('P0 package and team-direction regression through the shared league gra
     expect(view.recommendation).toContain('may require drops')
     expect(view.lines.map(line => line.assetKind)).toEqual(['player', 'player', 'player'])
   })
-  it.each([0.85, 1.2])('roster utility factor %s changes fit while preserving the trade-value letter', async factor => {
+  it.each([0.85, 1.2])('roster utility factor %s moves the your-team letter and leaves the market letter alone', async factor => {
     h.needFactor = factor
     const grader = (await createLeagueTradeGrader({ leagueId: 'L1', userId: 'u' }))!
     const assets = {
@@ -307,7 +318,12 @@ describe('P0 package and team-direction regression through the shared league gra
     const withRoster = graded(await grader.grade({ ...assets, viewerSide: true }))
     const shared = graded(await grader.grade({ ...assets, viewerSide: false }))
     expect(withRoster.rosterFit?.giveValue).toBe(Math.round(4000 * factor))
-    expect([withRoster.letter, withRoster.partnerLetter]).toEqual(['B', 'D'])
-    expect([withRoster.letter, withRoster.giveValue, withRoster.getValue]).toEqual([shared.letter, shared.giveValue, shared.getValue])
+    // The headline is taken on the fit, on the same bands as any letter.
+    expect(withRoster.letter).toBe(projectedLetterFor({ percentDiff: withRoster.rosterFit!.percentDiff, hasSignal: true }))
+    expect(withRoster.percentDiff).toBe(withRoster.rosterFit!.percentDiff)
+    // The market letter, the partner's letter and the totals are the shared grade's, untouched.
+    expect(withRoster.market).toMatchObject({ letter: shared.letter, partnerLetter: shared.partnerLetter, percentDiff: shared.percentDiff })
+    expect([withRoster.partnerLetter, withRoster.giveValue, withRoster.getValue]).toEqual([shared.partnerLetter, shared.giveValue, shared.getValue])
+    expect([shared.letter, shared.partnerLetter]).toEqual(['B', 'D'])
   })
 })

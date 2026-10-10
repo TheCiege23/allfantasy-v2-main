@@ -99,8 +99,13 @@ export type ReadyTradeScenario = {
     basis?: string | null
     /** Why there is no grade, when there is none. */
     withheld?: string | null
-    /** The other team's letter for the same deal — the exact mirror of `grade`, never a second computation. */
+    /** The other team's letter for the same deal, on league value — the mirror of the market letter. */
     partnerGrade?: string | null
+    /**
+     * Set when `grade` is the YOUR-TEAM letter (league value adjusted for the viewer's roster need,
+     * 2026-10-10): the same deal's league-value letter, which the other manager and trade history see.
+     */
+    marketGrade?: string | null
   }
   /**
    * The saved evaluation receipt (`evaluateTrade`), so a reply can point at the one record every

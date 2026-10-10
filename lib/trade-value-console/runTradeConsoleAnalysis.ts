@@ -870,6 +870,7 @@ export async function runTradeConsoleAnalysis(
     fairnessLabel,
     sideAdvantage,
     percentDiff,
+    yourTeamLetter: grade.graded && grade.letterBasis === 'your_team',
     giveTotal,
     getTotal,
     confidenceScore,

@@ -19,7 +19,7 @@ import { marketBookFor, type ChartProfile, type DatedMarket, type MarketBook } f
 import { fantasyCalcSettingsForChart } from '@/lib/fantasycalc-profile-capture'
 import { snapshotFromLoaded } from '@/lib/trade-value-console/quick-badges'
 import type { TradeAssetInput, TradeConsolePlayerLine } from '@/lib/trade-value-console/types'
-import { gradeTrade, signedGapPct, type TradeGradeLine, type TradeGradeMove, type TradeGradeView } from './tradeGrade'
+import { gradeTrade, signedGapPct, withYourTeamLetter, type TradeGradeLine, type TradeGradeMove, type TradeGradeView } from './tradeGrade'
 import {
   rosterSpotBasisSentence,
   rosterSpotCredit,
@@ -263,9 +263,16 @@ export async function gradePricedSides(args: {
     withheld,
     rosterSpot: spot?.credit ?? null,
   })
+  /*
+   * 🛑 THE YOUR-TEAM LETTER (Guap's ruling, 2026-10-10). On the viewer's own trades — `need` is only ever
+   * set from the viewer's side — the headline moves onto the roster fit and the league-value grade is
+   * kept in `market` (`withYourTeamLetter`). Every viewer surface (Trade Center, offers, email, push,
+   * Chimmy) reads this one view, so they change together; completed-trade history and the open analyzer
+   * pass no `need` and keep the league-value letter.
+   */
   return {
     leagueGrade,
-    grade: grade.graded ? {
+    grade: grade.graded ? withYourTeamLetter({
       ...grade,
       rosterFit: rosterFitGrade && rosterFitGrade.totals.unpriced === 0 ? {
         giveValue: rosterFitGrade.totals.giveLeague,
@@ -275,7 +282,7 @@ export async function gradePricedSides(args: {
           rosterFitGrade[move.side === 'give' ? 'giveLines' : 'getLines'].some((line) =>
             line.name === move.name && line.valueAdjustments?.some((adjustment) => adjustment.kind === 'need'))),
       } : null,
-    } : grade,
+    }) : grade,
     needFactors,
   }
 }
@@ -292,7 +299,8 @@ export type LeagueTradeGrader = {
   pirateLeague?: boolean
   /**
    * Price and grade one deal on this league's chart. `give` is what the graded side sends.
-   * `viewerSide: true` adds personal roster utility separately; it does not change the letter.
+   * `viewerSide: true` prices the viewer's roster need, and when it can be priced the headline is the
+   * YOUR-TEAM letter with the league-value grade in `market` (`withYourTeamLetter`).
    */
   grade(args: {
     give: TradeAssetInput[]

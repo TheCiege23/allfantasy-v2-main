@@ -20,6 +20,7 @@ import { readFormatRules } from '@/lib/trade-intel/leagueFormatRules'
 import { marketContextFor } from '@/lib/trade-intel/marketContext'
 import { getMarketValues } from '@/lib/trade-intel/marketValueService'
 import { createLeagueTradeGrader, type LeagueTradeGrader } from './leagueTradeGrader'
+import { marketLetterOf, marketView } from './tradeGrade'
 import {
   agentLeagueRefusal,
   dealKeyOf,
@@ -154,22 +155,25 @@ export async function runTradeAgentForLeague(leagueId: string, runDate: string, 
         const viewer = await grader.grade({ give: toInputs(give), get: toInputs(get), viewerSide: true, needRoster: { playerData: myRoster.playerData } })
         result.graded += 1
         // The cheap half first: most packages fail on the viewer's side, and need not be graded twice.
-        if (!viewer.graded || viewer.letter !== 'C' || !(viewer.rosterFit && viewer.rosterFit.percentDiff > 0)) continue
+        // "Fair on paper" is the league-value letter, never the your-team headline (`qualifyDeal`).
+        if (!viewer.graded || marketLetterOf(viewer) !== 'C' || !(viewer.rosterFit && viewer.rosterFit.percentDiff > 0)) continue
         const theirs = await grader.grade({ give: toInputs(get), get: toInputs(give), viewerSide: true, needRoster: { playerData: partnerRoster.playerData } })
         result.graded += 1
         const verdict = qualifyDeal(viewer, theirs)
-        if (!verdict.ok || !viewer.graded) continue
+        // A suggestion is stored on league value — its premise — and carries each side's fit beside it.
+        const market = marketView(viewer)
+        if (!verdict.ok || !market.graded) continue
         found.push({
           partnerRosterId: partner.rosterId,
           partnerName: partner.managerDisplayName ?? partner.teamName ?? null,
           give,
           get,
           dealKey: dealKeyOf(give, get),
-          letter: viewer.letter,
-          partnerLetter: viewer.partnerLetter,
-          percentDiff: viewer.percentDiff,
-          giveValue: viewer.giveValue,
-          getValue: viewer.getValue,
+          letter: market.letter,
+          partnerLetter: market.partnerLetter,
+          percentDiff: market.percentDiff,
+          giveValue: market.giveValue,
+          getValue: market.getValue,
           viewerFitPct: verdict.viewerFitPct,
           partnerFitPct: verdict.partnerFitPct,
           basis: viewer.basis,

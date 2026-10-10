@@ -12,7 +12,7 @@
  *   - **In-app list only**, at most three per manager per league per night, shown only to that manager.
  */
 
-import type { TradeGradeView } from './tradeGrade'
+import { marketLetterOf, type TradeGradeView } from './tradeGrade'
 
 export const AGENT_MAX_PER_MANAGER = 3
 
@@ -68,8 +68,16 @@ export function qualifyDeal(
 ): { ok: true; viewerFitPct: number; partnerFitPct: number } | { ok: false; why: string } {
   if (!viewer.graded) return { ok: false, why: `not graded: ${viewer.reason}` }
   if (!partner.graded) return { ok: false, why: `not graded for the partner: ${partner.reason}` }
-  if (viewer.letter !== AGENT_LETTER || partner.letter !== AGENT_LETTER) {
-    return { ok: false, why: `reads ${viewer.letter}/${partner.letter}, not ${AGENT_LETTER}/${AGENT_LETTER}` }
+  /*
+   * "Fair on paper" is the LEAGUE-VALUE letter. Since 2026-10-10 both grades here carry a your-team
+   * headline (each is graded with its own roster's need), and a your-team letter already counts the fit
+   * this rule checks separately — reading it would ask for a deal that is even AFTER the fit gain, i.e.
+   * one where nobody gains.
+   */
+  const viewerMarket = marketLetterOf(viewer)
+  const partnerMarket = marketLetterOf(partner)
+  if (viewerMarket !== AGENT_LETTER || partnerMarket !== AGENT_LETTER) {
+    return { ok: false, why: `reads ${viewerMarket}/${partnerMarket}, not ${AGENT_LETTER}/${AGENT_LETTER}` }
   }
   const mine = viewer.rosterFit
   const theirs = partner.rosterFit

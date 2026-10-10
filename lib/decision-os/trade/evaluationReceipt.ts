@@ -19,7 +19,12 @@ const grade = z.discriminatedUnion('graded', [
     recommendation: z.string().max(6000).optional(),
     rosterFit: z.object({ giveValue: z.number().finite(), getValue: z.number().finite(), percentDiff: z.number().finite(), moves: z.array(move).max(48) }).nullable().optional(),
     // The roster-spot credit inside giveValue/getValue (`rosterSpotCharge.ts`); kept so a receipt still adds up.
-    rosterSpot: z.object({ side: z.enum(['give', 'get']), spots: z.number().int().positive(), valuePerSpot: z.number().finite().nonnegative(), value: z.number().finite().nonnegative() }).nullable().optional() }),
+    rosterSpot: z.object({ side: z.enum(['give', 'get']), spots: z.number().int().positive(), valuePerSpot: z.number().finite().nonnegative(), value: z.number().finite().nonnegative() }).nullable().optional(),
+    // How the letter was taken (`withYourTeamLetter`, 2026-10-10) and, under a your-team headline, the
+    // league-value grade beside it — so a saved receipt shows both letters it was shown with.
+    letterBasis: z.enum(['market', 'your_team']).optional(),
+    market: z.object({ letter: z.enum(['A', 'B', 'C', 'D', 'F']), partnerLetter: z.enum(['A', 'B', 'C', 'D', 'F']), percentDiff: z.number().finite(),
+      label: z.string().max(256), giveValue: z.number().finite(), getValue: z.number().finite() }).nullable().optional() }),
   z.object({ graded: z.literal(false), reason: z.string().max(6000), basis: z.string().max(6000).nullable(), leagueType: leagueTypeBasis }),
 ])
 
