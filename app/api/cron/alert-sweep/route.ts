@@ -659,9 +659,14 @@ async function handle(req: NextRequest) {
                 title: copies[i]!.title,
                 message: copies[i]!.body,
                 leagueId: g[0]!.leagueId ?? null,
-                fixLinks: fanOuts[i]!
-                  .filter((l) => l.fixHref)
-                  .map((l) => ({ leagueName: l.leagueName, href: l.fixHref! })),
+                // Each league's lineup screen, and — where no bench player can come in — its claim screen,
+                // named for the free agent when one was picked (injuryFanOut.ts, 2026-10-09).
+                fixLinks: fanOuts[i]!.flatMap((l) => [
+                  ...(l.fixHref ? [{ leagueName: l.leagueName, href: l.fixHref }] : []),
+                  ...(l.claimHref
+                    ? [{ leagueName: l.leagueName, href: l.claimHref, label: l.freeAgent ? `Add ${l.freeAgent.name} in ${l.leagueName}` : `Free agents in ${l.leagueName}` }]
+                    : []),
+                ]),
               }
             }
             const other = fanOutCopy(g, [])

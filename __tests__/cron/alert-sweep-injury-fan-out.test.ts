@@ -104,6 +104,19 @@ describe('alert sweep — injury fan-out', () => {
     expect(h.fanOut.mock.calls[0]![1].map((a: { leagueId: string }) => a.leagueId)).toEqual(['L1', 'L2'])
   })
 
+  it('no bench player in a league: the message names the free agent and the email links his claim screen (2026-10-09)', async () => {
+    h.detect.mockReturnValue([alert('L1', 'Kyle Monangai', 90)])
+    h.fanOut.mockResolvedValue([
+      { leagueId: 'L1', leagueName: 'Jacksonville', startName: null, fixHref: 'https://sleeper.com/leagues/2/team', fixLabel: 'Open in Sleeper', freeAgent: { name: 'Chris Rodriguez', projectedPoints: 9.4 }, claimHref: 'https://sleeper.com/leagues/2/players' },
+    ])
+    await call('userId=u1')
+    const sent = h.dispatch.mock.calls[0]![0]
+    expect(sent.body).toContain("Jacksonville: no bench player can come in — add Chris Rodriguez (9.4 proj), he's a free agent.")
+    expect(sent.emailOverride.html).toContain('Fix your lineup in Jacksonville')
+    expect(sent.emailOverride.html).toContain('Add Chris Rodriguez in Jacksonville')
+    expect(sent.emailOverride.html).toContain('https://sleeper.com/leagues/2/players')
+  })
+
   it('🛑 the most urgent player already sent today does not starve the next one', async () => {
     h.detect.mockReturnValue([alert('L1', 'Jayden Reed', 95), alert('L2', 'Tank Dell', 70)])
     h.findFirst.mockImplementation(async ({ where }: { where: { sourceKey: string } }) =>
