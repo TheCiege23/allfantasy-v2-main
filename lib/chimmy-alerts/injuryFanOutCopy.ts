@@ -27,6 +27,13 @@ export type FanOutLeague = {
   /** Where to make the change — a verified platform lineup screen, or the in-app team tab. */
   fixHref: string | null
   fixLabel: string | null
+  /**
+   * No bench player can come in: the free agent who can (freeAgentFallback.ts) — named only for a
+   * viewer with AF Pro player depth, the same gate as the Finder's pickup options. Absent otherwise.
+   */
+  freeAgent?: { name: string; projectedPoints: number | null } | null
+  /** That league's VERIFIED claim screen (platformLinks.waiverClaimLink), when no bench player can come in. */
+  claimHref?: string | null
 }
 
 function str(v: unknown): string | null {
@@ -87,9 +94,16 @@ export function fanOutCopy(group: readonly FanOutAlert[], leagues: readonly FanO
   const lead =
     (inactive ? `${name} was declared inactive` : `${name} is listed ${designation}`) +
     (mins != null ? `, ${mins} minutes to lock.` : '.')
-  const lines = leagues.map((l) =>
-    l.startName ? `${l.leagueName}: start ${l.startName}.` : `${l.leagueName}: no bench player can come in for him.`,
-  )
+  const lines = leagues.map((l) => {
+    if (l.startName) return `${l.leagueName}: start ${l.startName}.`
+    // 2026-10-09: the dead end the first live digest hit — say who to add, or at least where.
+    if (l.freeAgent) {
+      const proj = l.freeAgent.projectedPoints != null ? ` (${l.freeAgent.projectedPoints.toFixed(1)} proj)` : ''
+      return `${l.leagueName}: no bench player can come in — add ${l.freeAgent.name}${proj}, he's a free agent.`
+    }
+    if (l.claimHref) return `${l.leagueName}: no bench player can come in — check free agents.`
+    return `${l.leagueName}: no bench player can come in for him.`
+  })
   const caveat = stale ? ' This designation has not updated recently — check before acting.' : ''
   return { title, body: `${lead} ${lines.join(' ')}${caveat}` }
 }
