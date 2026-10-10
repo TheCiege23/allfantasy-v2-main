@@ -5,7 +5,7 @@ vi.mock("@/lib/prisma", () => ({ prisma: { playerIdentityMap: { findMany: vi.fn(
 vi.mock("@/lib/get-base-url", () => ({ getBaseUrl: () => "https://allfantasy.ai" }))
 
 import { apnsBody } from "@/lib/push-notifications/apns"
-import { absolutePushImageUrl } from "@/lib/push-notifications/push-service"
+import { absolutePushImageUrl, shouldRenotify } from "@/lib/push-notifications/push-service"
 import { injuryAlert } from "@/lib/notification-engine"
 import { headshotsByRiId } from "@/lib/live/bigPlayNotifier"
 import { prisma } from "@/lib/prisma"
@@ -27,6 +27,20 @@ describe("APNs body carries a picture only when there is one", () => {
     const body = JSON.parse(apnsBody({ title: "TD", imageUrl: "http://example.com/x.jpg" }))
     expect(body.aps).not.toHaveProperty("mutable-content")
     expect(body).not.toHaveProperty("imageUrl")
+  })
+})
+
+describe("a conversation's notifications stack and re-alert", () => {
+  it("iPhone: the tag becomes thread-id, so a conversation groups into one stack", () => {
+    expect(JSON.parse(apnsBody({ title: "Sam", tag: "dm-t1" })).aps["thread-id"]).toBe("dm-t1")
+    expect(JSON.parse(apnsBody({ title: "Sam" })).aps).not.toHaveProperty("thread-id")
+  })
+
+  it("web: a chat alert that replaces the previous one still buzzes; other alerts keep replacing quietly", () => {
+    expect(shouldRenotify("direct_message", "dm-t1")).toBe(true)
+    expect(shouldRenotify("mention", "mention-league:L1")).toBe(true)
+    expect(shouldRenotify("injury_alert", "notif-injury_alerts-L1")).toBe(false)
+    expect(shouldRenotify("direct_message", null)).toBe(false)
   })
 })
 
