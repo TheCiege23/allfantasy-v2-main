@@ -267,7 +267,21 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
             const results=await sending, accepted=results.filter(r=>r.ok).length
             set('push',results.length===0?{status:'suppressed',reason:'no_subscriptions'}:{status:accepted===results.length?'accepted':accepted>0?'partial':'failed',reason:accepted>0?'provider_accepted':'provider_failed',endpoints:results.length,acceptedEndpoints:accepted})
           } catch { set('push',{status:'failed',reason:'push_attempt_failed'}) }
-        } else sending.catch((e) => console.error("[NotificationDispatcher] push error for user", userId, e))
+        } else {
+          /*
+           * 🛑 A PUSH THAT FAILED WITHOUT THROWING WAS INVISIBLE. `sendPushToUser` reports per-device
+           * results and only throws on a bug, so a missing VAPID or APNs key turned every push into a
+           * no-op with zero log lines. Say so when NOTHING got through — the error class only, never
+           * an endpoint URL (those are capability URLs).
+           */
+          sending
+            .then((results) => {
+              if (results.length === 0 || results.some((r) => r.ok)) return
+              const errors = [...new Set(results.map((r) => String(r.error ?? 'unknown').replace(/https?:\/\/\S+/g, '<url>').slice(0, 120)))]
+              console.warn("[NotificationDispatcher] push not delivered", { userId, type, endpoints: results.length, errors })
+            })
+            .catch((e) => console.error("[NotificationDispatcher] push error for user", userId, e))
+        }
       } else set('push',{status:'suppressed',reason:skipChannels?.push?'caller_excluded':!push.allowed?push.reason:'channel_off'})
     } catch (e) {
       for (const channel of Object.keys(channels) as Array<keyof typeof channels>) if(channels[channel].status==='unknown') set(channel,{status:'unknown',reason:'dispatch_interrupted'})
