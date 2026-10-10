@@ -128,6 +128,29 @@ async function blockersOf(senderUserId: string, recipientIds: string[]): Promise
   return new Set(rows.map((r) => r.blockerUserId))
 }
 
+/**
+ * When each recipient last sent a message in this thread. Their send stamps their own read
+ * marker, and the alert rule needs to tell that apart from "reading right now" (alertThrottle.ts).
+ * Empty on any failure — the rule then behaves exactly as it did before.
+ */
+async function lastSentBy(threadId: string, userIds: string[]): Promise<Map<string, Date>> {
+  const out = new Map<string, Date>()
+  if (userIds.length === 0) return out
+  try {
+    const rows = await prisma.platformChatMessage.groupBy({
+      by: ['senderUserId'],
+      where: { threadId, senderUserId: { in: userIds } },
+      _max: { createdAt: true },
+    })
+    for (const r of rows) {
+      if (r.senderUserId && r._max.createdAt) out.set(r.senderUserId, r._max.createdAt)
+    }
+  } catch {
+    /* fall back to the plain rule */
+  }
+  return out
+}
+
 /** A mail-level unsubscribe (the link in every notification email) also stops these. */
 async function emailUnsubscribed(email: string): Promise<boolean> {
   const row = await prisma.emailPreference
@@ -154,6 +177,7 @@ async function throttle(args: {
   now: Date
   messageAt: Date
   lastReadAt: Date | null
+  lastOwnMessageAt?: Date | null
   trackReads: boolean
 }): Promise<ThrottleResult> {
   const key = chatAlertStateKey(args.scope, args.userId)
@@ -168,6 +192,7 @@ async function throttle(args: {
     now: args.now,
     messageAt: args.messageAt,
     lastReadAt: args.lastReadAt,
+    lastOwnMessageAt: args.lastOwnMessageAt ?? null,
     state: stored.state,
     trackReads: args.trackReads,
   })
@@ -225,6 +250,7 @@ export async function notifyDirectMessageRecipients(input: DirectMessageNotifyIn
   if (others.length === 0) return { recipients: [] }
 
   const blockers = await blockersOf(input.senderUserId, others.map((m) => m.userId))
+  const ownLastSent = await lastSentBy(thread.id, others.map((m) => m.userId))
   const { name: senderName, avatarUrl: senderAvatarUrl } = await senderOf(input.senderUserId)
   const isGroup = thread.threadType === 'group'
   const threadTitle = isGroup ? safeDisplayName([thread.title], 'your huddle', 60) : null
@@ -255,6 +281,7 @@ export async function notifyDirectMessageRecipients(input: DirectMessageNotifyIn
         now,
         messageAt,
         lastReadAt: member.lastReadAt ?? null,
+        lastOwnMessageAt: ownLastSent.get(userId) ?? null,
         trackReads: true,
       })
       if (!gate.go) {
