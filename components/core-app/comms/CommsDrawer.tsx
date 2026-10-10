@@ -45,8 +45,9 @@ export type { CommsLeague } from './ChimmyPanel'
  * ⚠ THE COPY CONTRACTS, AND WHERE EACH LIVES. Every one is a trust disclosure,
  * not decoration, and none of them is conditional:
  *
- *   1. A LEAGUE-TAB ANSWER SAYS IT IS PUBLIC — `PUBLIC_ANSWER_NOTICE`, rendered
- *      on every @chimmy answer in the league tab. Everyone in the league sees it.
+ *   1. A LEAGUE-TAB ANSWER SAYS WHO SEES IT — `PUBLIC_ANSWER_NOTICE`, rendered
+ *      on every @chimmy answer in the league tab. It used to say "everyone in the
+ *      league" while nothing posted it; it now says only the asker sees it.
  *   2. HUDDLE SAYS IT CANNOT SEE ROSTERS — `HUDDLE_PRIVACY`, rendered on the
  *      panel every time it opens, not once on first visit.
  *   3. DMs SAY THEY ARE ALLFANTASY-ONLY — `DM_PRIVACY`. We do not read or mirror
@@ -210,9 +211,9 @@ function LeaguePanel({
   }
 
   /*
-   * @chimmy in the league tab answers PUBLICLY. That is the whole reason the
-   * league tab and the Chimmy tab are different tabs, so the toggle is explicit
-   * and the disclosure is attached to every answer it produces.
+   * @chimmy in the league tab answers about THIS league, with no home signals.
+   * It was described as public, but no code posts the answer to league chat —
+   * the disclosure attached to every answer now says so.
    */
   if (askChimmy) {
     return (
@@ -259,7 +260,7 @@ function LeaguePanel({
           <span className="af-cm-scope-label">League</span>
           <LeagueScopePicker leagues={leagues} value={scopeId} onChange={onScope} />
           <button type="button" className="af-cm-summon" onClick={() => setAskChimmy(true)}>
-            @chimmy — ask Chimmy, publicly
+            @chimmy — ask Chimmy about this league
           </button>
         </>
       }
