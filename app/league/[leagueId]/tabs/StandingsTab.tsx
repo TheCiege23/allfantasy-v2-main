@@ -1,5 +1,8 @@
 'use client'
 
+import '@/components/core-app/af-core.css'
+import '@/components/league/league-overview.css'
+
 import type { UserLeague } from '@/app/dashboard/types'
 import { LeagueTabPlaceholder } from './LeagueTabPlaceholder'
 
@@ -22,11 +25,11 @@ export function StandingsTab({
   idpLeagueUi?: boolean
 }) {
   if (!idpLeagueUi) {
-    return <LeagueTabPlaceholder league={league} tabLabel={tabLabel} />
+    return <div className="af-core af-league-overview"><LeagueTabPlaceholder league={league} tabLabel={tabLabel} /></div>
   }
 
   return (
-    <div className="space-y-3 p-5" data-testid="idp-standings-unavailable">
+    <div className="af-core af-league-overview space-y-3 p-5" data-testid="idp-standings-unavailable">
       <h3 className="text-base font-black text-white">IDP standings unavailable</h3>
       <p className="max-w-md text-sm text-white/60">
         Standings will appear after this league has imported or recorded real IDP scoring

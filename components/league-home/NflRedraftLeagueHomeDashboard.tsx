@@ -1,5 +1,8 @@
 'use client'
 
+import '@/components/core-app/af-core.css'
+import '@/components/league/league-overview.css'
+
 import Link from 'next/link'
 import {
   Activity,
@@ -70,7 +73,7 @@ function Card({
   testId: string
 }) {
   const content = (
-    <div className="flex h-full flex-col rounded-2xl border border-white/[0.08] bg-white/[0.035] p-4 text-left transition hover:border-violet-400/30 hover:bg-white/[0.055]">
+    <div className="af-overview-card flex h-full flex-col rounded-2xl border border-white/[0.08] bg-white/[0.035] p-4 text-left transition hover:border-violet-400/30 hover:bg-white/[0.055]">
       <div className="flex items-start justify-between gap-3">
         <h3 className="text-sm font-black text-white">{tile.title}</h3>
         {tile.locked ? <Lock className="h-4 w-4 shrink-0 text-amber-300" aria-hidden /> : null}
@@ -114,7 +117,7 @@ function Metric({
   value: string
 }) {
   return (
-    <div className="rounded-2xl border border-white/[0.08] bg-black/20 p-3">
+    <div className="af-overview-metric rounded-2xl border border-white/[0.08] bg-black/20 p-3">
       <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-white/45">
         <Icon className="h-3.5 w-3.5 text-violet-300" aria-hidden />
         {label}
@@ -351,8 +354,8 @@ export function NflRedraftLeagueHomeDashboard({
       : 'Get ready for draft night, keep league chat nearby, and track the next steps before kickoff.'
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-5 lg:px-6" data-testid="g32-nfl-redraft-home">
-      <section className="relative overflow-hidden rounded-3xl border border-violet-500/20 bg-gradient-to-br from-violet-500/[0.12] via-[#050814] to-[#ff3d81]/[0.06] p-5 shadow-[0_18px_70px_rgba(0,0,0,0.32)]">
+    <div className="af-core af-league-overview flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-5 lg:px-6" data-testid="g32-nfl-redraft-home">
+      <section className="af-overview-header relative overflow-hidden rounded-3xl border border-violet-500/20 bg-gradient-to-br from-violet-500/[0.12] via-[#050814] to-[#ff3d81]/[0.06] p-5 shadow-[0_18px_70px_rgba(0,0,0,0.32)]">
         <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl">
             <p className="text-[11px] font-black uppercase tracking-[0.2em] text-violet-200/75">
@@ -380,14 +383,14 @@ export function NflRedraftLeagueHomeDashboard({
         </div>
       </section>
 
-      <section className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4" aria-label="League home actions">
+      <section className="af-overview-grid mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4" aria-label="League home actions">
         {baseTiles.map((tile) => (
           <Card key={tile.title} tile={tile} testId={`g32-home-card-${tile.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`} />
         ))}
       </section>
 
-      <section className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(300px,380px)]">
-        <div className="rounded-3xl border border-white/[0.08] bg-white/[0.035] p-4">
+      <section className="af-overview-grid mt-5 grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(300px,380px)]">
+        <div className="af-overview-card rounded-3xl border border-white/[0.08] bg-white/[0.035] p-4">
           <div className="flex items-center gap-2">
             {isCommissioner ? <ShieldCheck className="h-5 w-5 text-violet-200" aria-hidden /> : <ClipboardList className="h-5 w-5 text-violet-200" aria-hidden />}
             <h3 className="text-base font-black text-white">{isCommissioner ? 'Suggested checklist' : 'Suggested reminders'}</h3>
@@ -419,7 +422,7 @@ export function NflRedraftLeagueHomeDashboard({
           </div>
         </div>
 
-        <div className="rounded-3xl border border-white/[0.08] bg-white/[0.035] p-4" data-testid="g32-chat-visibility-card">
+        <div className="af-overview-card rounded-3xl border border-white/[0.08] bg-white/[0.035] p-4" data-testid="g32-chat-visibility-card">
           <div className="flex items-center gap-2">
             <MessageSquare className="h-5 w-5 text-[#ffb8d1]" aria-hidden />
             <h3 className="text-base font-black text-white">League chat</h3>
@@ -446,7 +449,7 @@ export function NflRedraftLeagueHomeDashboard({
               {hasCommissionerIntelligence ? 'League Intelligence' : 'Locked Commissioner Intelligence preview'}
             </h3>
           </div>
-          <div className="grid gap-3 md:grid-cols-3">
+          <div className="af-overview-grid grid gap-3 md:grid-cols-3">
             {commissionerTiles.map((tile) => (
               <Card key={tile.title} tile={tile} testId={`g32-commissioner-card-${tile.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`} />
             ))}
@@ -460,7 +463,7 @@ export function NflRedraftLeagueHomeDashboard({
               {hasManagerIntelligence ? 'Manager Intelligence' : 'Locked Manager Intelligence preview'}
             </h3>
           </div>
-          <div className="grid gap-3 md:grid-cols-3">
+          <div className="af-overview-grid grid gap-3 md:grid-cols-3">
             {managerTiles.map((tile) => (
               <Card key={tile.title} tile={tile} testId={`g32-manager-card-${tile.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`} />
             ))}
