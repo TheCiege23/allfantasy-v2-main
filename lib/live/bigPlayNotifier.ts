@@ -1,7 +1,8 @@
+import type { LeagueSport } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { ingestBatch, type NotificationEvent } from '@/lib/notification-engine'
 import type { LiveEvent } from '@/lib/live/eventDetector'
-import { headlineFor } from '@/lib/live/playFeedPresentation'
+import { headlineFor, PLAY_FEED_SPORT } from '@/lib/live/playFeedPresentation'
 import { headshotUrl } from '@/lib/media-url'
 import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidation'
 
@@ -81,19 +82,44 @@ function idsFrom(value: unknown): string[] {
 }
 
 /**
+ * 🛑 EVERY LOOKUP BELOW IS SCOPED TO ONE SPORT, AND A CALL WITHOUT ONE RESOLVES NOBODY.
+ *
+ * Every id in play here is per provider AND per sport: Rolling Insights numbers players per sport,
+ * and ESPN, Fantrax and Sleeper ids overlap numerically across people and sports. Measured on
+ * production 2026-10-11: all 9,567 NFL RI ids are also the RI id of some MLB / NBA / NHL / NCAAB /
+ * NCAAF / soccer identity row; 2,824 MLB and 8,056 NCAAF identity rows carry a `fantraxId` and
+ * 2,346 NCAAB rows an `espnId`. Unscoped, an NFL play's RI id pulled those rows in, their ids were
+ * matched against every league's starters, and a push could say an NFL play happened "Starting in"
+ * a college league. The roster side has the same hazard — 4 NHL rosters start an id that is also
+ * an RI-linked NFL Sleeper id — so the LEAGUE is scoped too, not only the identity row.
+ *
+ * Returns the sport normalised, or null when none was given; callers return an empty map on null
+ * rather than run an unscoped query.
+ */
+function scopeSport(sport: string | null | undefined): string | null {
+  const value = typeof sport === 'string' ? sport.trim().toUpperCase() : ''
+  return value || null
+}
+
+/**
  * Resolve the exact imported leagues in which each player is starting. The
  * identity crosswalk covers every supported provider; Yahoo imports use the
  * normalized Sleeper id until the schema gains a Yahoo-specific identity.
  */
-export async function starterImpactsByPlayerId(playerIds: string[]): Promise<Map<string, UserImpact[]>> {
+export async function starterImpactsByPlayerId(
+  playerIds: string[],
+  sportInput: string,
+): Promise<Map<string, UserImpact[]>> {
   const out = new Map<string, UserImpact[]>()
+  const sport = scopeSport(sportInput)
   const unique = [...new Set(playerIds.filter(Boolean))]
-  if (unique.length === 0) return out
+  if (unique.length === 0 || !sport) return out
 
   const identities = await prisma.playerIdentityMap.findMany({
-    where: { rollingInsightsId: { in: unique } },
+    where: { sport, rollingInsightsId: { in: unique } },
     select: {
       rollingInsightsId: true,
+      sport: true,
       sleeperId: true,
       espnId: true,
       fantraxId: true,
@@ -105,6 +131,8 @@ export async function starterImpactsByPlayerId(playerIds: string[]): Promise<Map
   const riByCandidate = new Map<string, string>()
   for (const identity of identities) {
     if (!identity.rollingInsightsId) continue
+    // Belt and braces for the `where`: another sport's row never contributes an id.
+    if ((identity.sport ?? '').toUpperCase() !== sport) continue
     for (const candidate of [
       identity.sleeperId,
       identity.espnId,
@@ -120,6 +148,8 @@ export async function starterImpactsByPlayerId(playerIds: string[]): Promise<Map
   const candidates = [...riByCandidate.keys()]
   const rosters = await prisma.roster.findMany({
     where: {
+      // The same numeric id names a different player in another sport's league.
+      league: { sport: sport as LeagueSport },
       OR: candidates.map((id) => ({ playerData: { path: ['starters'], array_contains: [id] } })),
     },
     select: {
@@ -205,13 +235,16 @@ export async function starterImpactsByPlayerId(playerIds: string[]): Promise<Map
  * Exported for reuse by the injury importer — same recipients question, same
  * id-space rules (Rolling Insights ids in, AF user ids out; no identity row,
  * no guess). The importer wants the whole roster, so `startersOnly` defaults off.
+ *
+ * `sport` is required and scopes the identity rows AND the leagues — see `scopeSport`.
  */
 export async function ownersByPlayerId(
   playerIds: string[],
-  opts: { startersOnly?: boolean } = {},
+  opts: { startersOnly?: boolean; sport: string },
 ): Promise<Map<string, string[]>> {
   const out = new Map<string, string[]>()
-  if (playerIds.length === 0) return out
+  const sport = scopeSport(opts?.sport)
+  if (playerIds.length === 0 || !sport) return out
 
   /*
    * ⚠ THE FEED AND THE ROSTERS SPEAK DIFFERENT ID LANGUAGES. Play events carry
@@ -221,12 +254,14 @@ export async function ownersByPlayerId(
    * PlayerIdentityMap once here and share the translation with both branches.
    * A player with no identity row is skipped, not guessed at.
    */
-  const identities = await prisma.playerIdentityMap
+  const found = await prisma.playerIdentityMap
     .findMany({
-      where: { rollingInsightsId: { in: playerIds }, sleeperId: { not: null } },
-      select: { rollingInsightsId: true, sleeperId: true },
+      where: { sport, rollingInsightsId: { in: playerIds }, sleeperId: { not: null } },
+      select: { rollingInsightsId: true, sleeperId: true, sport: true },
     })
     .catch(() => [])
+  // Belt and braces for the `where`: another sport's row never contributes an id.
+  const identities = (found ?? []).filter((identity) => (identity.sport ?? '').toUpperCase() === sport)
 
   const riIdBySleeperId = new Map<string, string>()
   for (const identity of identities) {
@@ -241,7 +276,7 @@ export async function ownersByPlayerId(
       where: {
         playerId: { in: [...riIdBySleeperId.keys()] },
         droppedAt: null,
-        roster: { season: { status: 'active' } },
+        roster: { season: { status: 'active', sport } },
         ...(opts.startersOnly ? { NOT: { slotType: { in: NON_STARTER_SLOTS } } } : {}),
       },
       select: { playerId: true, roster: { select: { ownerId: true } } },
@@ -272,20 +307,25 @@ export async function ownersByPlayerId(
    * so this crosses through PlayerIdentityMap, which carries both spellings on
    * the same row. A player with no identity row is skipped, not guessed at.
    */
-  await addImportedLeagueOwners(identities, out, opts.startersOnly === true)
+  await addImportedLeagueOwners(identities, out, opts.startersOnly === true, sport)
   return out
 }
 
 /*
  * Two fixed statements rather than one with an interpolated key: the JSON key is
  * never built from a string at runtime, so there is nothing to inject into.
+ * The sport is a bound parameter ($2) for the same reason.
  */
 const ROSTERED_SQL = `SELECT DISTINCT r."platformUserId"
          FROM rosters r
-         WHERE r."playerData"->'players' @> $1::jsonb`
+         JOIN leagues l ON l.id = r."leagueId"
+         WHERE l.sport::text = $2
+           AND r."playerData"->'players' @> $1::jsonb`
 const STARTING_SQL = `SELECT DISTINCT r."platformUserId"
          FROM rosters r
-         WHERE r."playerData"->'starters' @> $1::jsonb`
+         JOIN leagues l ON l.id = r."leagueId"
+         WHERE l.sport::text = $2
+           AND r."playerData"->'starters' @> $1::jsonb`
 
 /**
  * Resolve imported-league owners for the same players.
@@ -298,6 +338,7 @@ async function addImportedLeagueOwners(
   identities: Array<{ rollingInsightsId: string | null; sleeperId: string | null }>,
   out: Map<string, string[]>,
   startersOnly: boolean,
+  sport: string,
 ): Promise<void> {
   try {
     if (identities.length === 0) return
@@ -312,6 +353,7 @@ async function addImportedLeagueOwners(
       const rosters = await prisma.$queryRawUnsafe<Array<{ platformUserId: string }>>(
         startersOnly ? STARTING_SQL : ROSTERED_SQL,
         JSON.stringify([sleeperId]),
+        sport,
       )
 
       const list = sleeperOwnersByRiId.get(riId) ?? []
@@ -411,18 +453,23 @@ function passerSide(event: LiveEvent): LiveEvent | null {
  * Headshot per Rolling Insights player id, for the push picture. The feed speaks RI ids and the
  * headshot CDN speaks Sleeper ids, so this crosses PlayerIdentityMap like ownersByPlayerId does.
  * A player with no Sleeper identity gets no picture — the alert still goes out as text.
+ *
+ * Scoped to `sport` like every lookup here (see `scopeSport`). And `headshotUrl` builds Sleeper's
+ * NFL CDN path, so a Sleeper id is only turned into a picture for NFL — anything else gets none.
  */
-export async function headshotsByRiId(riIds: string[]): Promise<Map<string, string>> {
+export async function headshotsByRiId(riIds: string[], sportInput: string): Promise<Map<string, string>> {
   const out = new Map<string, string>()
+  const sport = scopeSport(sportInput)
   const unique = [...new Set(riIds.filter(Boolean))]
-  if (unique.length === 0) return out
+  if (unique.length === 0 || sport !== 'NFL') return out
   const identities = await prisma.playerIdentityMap
     .findMany({
-      where: { rollingInsightsId: { in: unique }, sleeperId: { not: null } },
-      select: { rollingInsightsId: true, sleeperId: true },
+      where: { sport, rollingInsightsId: { in: unique }, sleeperId: { not: null } },
+      select: { rollingInsightsId: true, sleeperId: true, sport: true },
     })
     .catch(() => [])
   for (const identity of identities ?? []) {
+    if ((identity.sport ?? '').toUpperCase() !== sport) continue
     const url = headshotUrl(identity.sleeperId)
     if (identity.rollingInsightsId && url) out.set(identity.rollingInsightsId, url)
   }
@@ -518,9 +565,10 @@ export async function notifyBigPlays(events: LiveEvent[]): Promise<NotifyResult>
     ids.add(e.playerId)
     if (e.passerId) ids.add(e.passerId)
   }
+  // The play feed is NFL by construction; `LiveEvent` carries no sport, so it is stated here.
   const [owners, impacts] = await Promise.all([
-    ownersByPlayerId([...ids], { startersOnly: true }),
-    starterImpactsByPlayerId([...ids]),
+    ownersByPlayerId([...ids], { startersOnly: true, sport: PLAY_FEED_SPORT }),
+    starterImpactsByPlayerId([...ids], PLAY_FEED_SPORT),
   ])
   for (const [playerId, rows] of impacts) {
     const users = owners.get(playerId) ?? []
@@ -537,7 +585,7 @@ export async function notifyBigPlays(events: LiveEvent[]): Promise<NotifyResult>
   }
 
   // After the recipient lookups, so a missing picture can never cost anyone the alert.
-  const headshots = await headshotsByRiId([...ids]).catch(() => new Map<string, string>())
+  const headshots = await headshotsByRiId([...ids], PLAY_FEED_SPORT).catch(() => new Map<string, string>())
 
   const batch: NotificationEvent[] = []
   const enqueue = (event: LiveEvent, userIds: string[], side: 'subject' | 'passer') => {

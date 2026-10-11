@@ -85,10 +85,24 @@ describe("headshotsByRiId", () => {
 
   it("maps a Rolling Insights id to its Sleeper headshot, and skips a player with no identity", async () => {
     vi.mocked(prisma.playerIdentityMap.findMany).mockResolvedValue([
-      { rollingInsightsId: "ri-1", sleeperId: "8155" },
+      { sport: "NFL", rollingInsightsId: "ri-1", sleeperId: "8155" },
     ] as never)
-    const map = await headshotsByRiId(["ri-1", "ri-2"])
+    const map = await headshotsByRiId(["ri-1", "ri-2"], "NFL")
     expect(map.get("ri-1")).toBe("https://sleepercdn.com/content/nfl/players/thumb/8155.jpg")
     expect(map.has("ri-2")).toBe(false)
+  })
+
+  it("scopes the identity lookup to the sport, and draws no NFL headshot for another sport's id", async () => {
+    // RI numbers are per sport: the same number is an NFL player and somebody else elsewhere.
+    vi.mocked(prisma.playerIdentityMap.findMany).mockImplementation(((args?: { where?: { sport?: string } }) =>
+      Promise.resolve([{ sport: "NFL", rollingInsightsId: "3036", sleeperId: "4046" }]
+        .filter((r) => args?.where?.sport == null || r.sport === args.where.sport))) as never)
+
+    const nfl = await headshotsByRiId(["3036"], "NFL")
+    expect(nfl.get("3036")).toBe("https://sleepercdn.com/content/nfl/players/thumb/4046.jpg")
+    expect(vi.mocked(prisma.playerIdentityMap.findMany).mock.calls[0]![0]).toMatchObject({ where: { sport: "NFL" } })
+
+    // An injury alert for an NBA player numbered 3036 must not wear Patrick Mahomes' face.
+    expect((await headshotsByRiId(["3036"], "NBA")).size).toBe(0)
   })
 })

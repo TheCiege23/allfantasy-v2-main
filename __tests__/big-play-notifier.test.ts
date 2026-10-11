@@ -47,7 +47,7 @@ beforeEach(() => {
   h.findMany.mockResolvedValue(rostered())
   h.ingestBatch.mockResolvedValue([])
   h.identityFind.mockReset()
-  h.identityFind.mockResolvedValue([{ rollingInsightsId: '101', sleeperId: '11560' }])
+  h.identityFind.mockResolvedValue([{ sport: 'NFL', rollingInsightsId: '101', sleeperId: '11560' }])
   h.rawQuery.mockReset(); h.rawQuery.mockResolvedValue([])
   h.profileFind.mockReset(); h.profileFind.mockResolvedValue([])
   h.rosterFind.mockReset(); h.rosterFind.mockResolvedValue([])
@@ -87,7 +87,7 @@ describe('who gets told', () => {
   })
 
   it('control: the injury importer still gets the whole roster by default', async () => {
-    await ownersByPlayerId(['101'])
+    await ownersByPlayerId(['101'], { sport: 'NFL' })
     expect(h.findMany.mock.calls[0][0].where.NOT).toBeUndefined()
     expect(h.rawQuery.mock.calls[0][0]).toContain(`->'players'`)
   })
@@ -112,8 +112,8 @@ describe('a passing play is told to both ends', () => {
 
   beforeEach(() => {
     h.identityFind.mockResolvedValue([
-      { rollingInsightsId: '101', sleeperId: '11560' },
-      { rollingInsightsId: '202', sleeperId: '5000' },
+      { sport: 'NFL', rollingInsightsId: '101', sleeperId: '11560' },
+      { sport: 'NFL', rollingInsightsId: '202', sleeperId: '5000' },
     ])
     h.findMany.mockResolvedValue([
       { playerId: '11560', roster: { ownerId: 'user-wr' } },
@@ -233,7 +233,7 @@ describe('imported leagues', () => {
   it('names the affected starter league and guillotine rank', async () => {
     h.findMany.mockResolvedValue([])
     h.identityFind.mockResolvedValue([{
-      rollingInsightsId: '101', sleeperId: '11560', espnId: null,
+      sport: 'NFL', rollingInsightsId: '101', sleeperId: '11560', espnId: null,
       fantraxId: 'fx-101', mflId: null, fleaflickerId: null,
     }])
     h.rosterFind.mockResolvedValue([{
@@ -293,5 +293,101 @@ describe('imported leagues', () => {
     h.profileFind.mockResolvedValue([{ userId: 'af-user-9', sleeperUserId: 'sleeper-user-9' }])
     await notifyBigPlays([ev()])
     expect(h.ingestBatch.mock.calls[0][0][0].userIds).toEqual(['redraft-user', 'af-user-9'])
+  })
+})
+
+/*
+ * 2026-10-11: ids are per provider AND per sport. A database double that honours the `where` it is
+ * given, holding what production holds: one Rolling Insights number that is an NFL player AND a
+ * college player with a Fantrax id, and an NHL league whose lineup holds a number that is also an
+ * NFL Sleeper id. A query that forgets to scope gets exactly what the real database would hand it.
+ */
+describe('one sport per play — no cross-sport recipients', () => {
+  type Identity = {
+    sport: string; rollingInsightsId: string; sleeperId: string | null
+    espnId: string | null; fantraxId: string | null; mflId: string | null; fleaflickerId: string | null
+  }
+  const IDENTITIES: Identity[] = [
+    { sport: 'NFL', rollingInsightsId: '101', sleeperId: '11560', espnId: null, fantraxId: null, mflId: null, fleaflickerId: null },
+    // Same RI number, different people: production has 8,056 NCAAF and 2,824 MLB rows with a fantraxId.
+    { sport: 'NCAAF', rollingInsightsId: '101', sleeperId: null, espnId: null, fantraxId: '06k5m', mflId: null, fleaflickerId: null },
+    { sport: 'NCAAB', rollingInsightsId: '101', sleeperId: null, espnId: '4433', fantraxId: null, mflId: null, fleaflickerId: null },
+  ]
+  const leagueRoster = (sport: string, leagueName: string, userId: string, starter: string) => ({
+    sport,
+    platformUserId: userId,
+    playerData: { starters: [starter], players: [starter] },
+    redraftRoster: null,
+    league: {
+      id: `league-${sport}`, name: leagueName, platform: 'fantrax', guillotineMode: false,
+      teams: [{ platformUserId: userId, claimedByUserId: userId, currentRank: null }],
+    },
+  })
+  const ROSTERS = [
+    leagueRoster('NFL', 'Dynasty Bros', 'af-nfl', '11560'),
+    leagueRoster('NCAAF', 'Saturday CFB', 'af-cfb', '06k5m'),
+    leagueRoster('NCAAB', 'March Pool', 'af-cbb', '4433'),
+    // An NHL lineup holding the number 11560, which is NOT Bijan Robinson in hockey.
+    leagueRoster('NHL', 'Puck League', 'af-nhl', '11560'),
+  ]
+
+  beforeEach(() => {
+    h.identityFind.mockImplementation(async ({ where }: { where: Record<string, any> }) =>
+      IDENTITIES.filter((row) =>
+        (where.sport == null || row.sport === where.sport)
+        && where.rollingInsightsId.in.includes(row.rollingInsightsId)
+        && (where.sleeperId?.not !== null || row.sleeperId !== null)))
+    h.rosterFind.mockImplementation(async ({ where }: { where: Record<string, any> }) => {
+      const wanted = new Set<string>(where.OR.map((clause: any) => clause.playerData.array_contains[0]))
+      return ROSTERS.filter((r) =>
+        (where.league?.sport == null || r.sport === where.league.sport)
+        && r.playerData.starters.some((id) => wanted.has(id)))
+    })
+    h.appUserFind.mockResolvedValue(ROSTERS.map((r) => ({ id: r.platformUserId })))
+    // Redraft rows: the NFL season's and an NHL season's, both holding the number 11560.
+    h.findMany.mockImplementation(async ({ where }: { where: Record<string, any> }) =>
+      [
+        { sport: 'NFL', playerId: '11560', roster: { ownerId: 'redraft-nfl' } },
+        { sport: 'NHL', playerId: '11560', roster: { ownerId: 'redraft-nhl' } },
+      ].filter((row) => where.roster.season.sport == null || row.sport === where.roster.season.sport))
+    // Imported Sleeper rosters: $2 is the league sport.
+    h.rawQuery.mockImplementation(async (_sql: string, _ids: string, sport?: string) =>
+      [
+        { sport: 'NFL', platformUserId: 'sleeper-nfl' },
+        { sport: 'NHL', platformUserId: 'sleeper-nhl' },
+      ].filter((row) => sport == null || row.sport === sport))
+    h.profileFind.mockResolvedValue([
+      { userId: 'af-sleeper-nfl', sleeperUserId: 'sleeper-nfl' },
+      { userId: 'af-sleeper-nhl', sleeperUserId: 'sleeper-nhl' },
+    ])
+  })
+
+  const recipients = () => h.ingestBatch.mock.calls.flatMap((call) => call[0].flatMap((n: any) => n.userIds))
+  const bodies = () => h.ingestBatch.mock.calls.flatMap((call) => call[0].map((n: any) => n.body as string))
+
+  it('REGRESSION: an NFL play never says "Starting in" a college league that shares the RI number', async () => {
+    await notifyBigPlays([ev({ type: 'TOUCHDOWN', delta: 20 })])
+
+    expect(bodies().join(' | ')).not.toMatch(/Saturday CFB|March Pool/)
+    expect(recipients()).not.toContain('af-cfb')
+    expect(recipients()).not.toContain('af-cbb')
+    // The genuine NFL starter still hears it, with his league named.
+    expect(recipients()).toContain('af-nfl')
+    expect(bodies().find((b) => b.includes('Dynasty Bros'))).toBeTruthy()
+  })
+
+  it('REGRESSION: another sport\'s league whose lineup holds the same number is not told about an NFL play', async () => {
+    await notifyBigPlays([ev({ type: 'TOUCHDOWN', delta: 20 })])
+
+    for (const wrong of ['af-nhl', 'redraft-nhl', 'af-sleeper-nhl']) expect(recipients()).not.toContain(wrong)
+    expect(bodies().join(' | ')).not.toContain('Puck League')
+    // ...while every NFL path still delivers.
+    for (const right of ['af-nfl', 'redraft-nfl', 'af-sleeper-nfl']) expect(recipients()).toContain(right)
+  })
+
+  it('refuses to resolve anyone when no sport is named, rather than run an unscoped lookup', async () => {
+    const owners = await (ownersByPlayerId as (ids: string[], opts?: unknown) => Promise<Map<string, string[]>>)(['101'])
+    expect(owners.size).toBe(0)
+    expect(h.identityFind).not.toHaveBeenCalled()
   })
 })
