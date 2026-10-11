@@ -459,6 +459,7 @@ export async function createLeagueTradeGrader(args: {
         effectiveSport: sport,
         nflCtx: chart.nflCtx,
         waiverBudget: chart.waiverBudget,
+        faabState: chart.faabState ?? null,
         dataGaps,
         fcPlayers: chart.fcPlayers,
         resolveEnrichmentIds: false,

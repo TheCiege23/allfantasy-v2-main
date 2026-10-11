@@ -13,7 +13,9 @@ import { collapseSamePersonRows } from '@/lib/data/samePersonRows'
 import { prisma } from '@/lib/prisma'
 import { loadLeagueTradeValues } from '@/lib/league-values/leagueTradeValues'
 import type { NormalizedLeagueContext } from '@/lib/league-context-engine/types'
-import { normalizedFaabValue } from '@/lib/trade-value/faabValue'
+import { leagueFaabValue, normalizedFaabValue, type LeagueFaabState } from '@/lib/trade-value/faabValue'
+import { resolveSportWeek } from '@/lib/season-week/seasonWeekService'
+import { isTeamEliminated } from '@/lib/core-app/teamElimination'
 import {
   analysisUnpricedReason,
   noPickMarketUnpricedReason,
@@ -45,7 +47,38 @@ import type { TradeAssetInput, TradeConsoleLeagueSnapshot, TradeConsolePlayerLin
  * board, and checks it per file. Splitting them would satisfy neither half of that guard.
  */
 
-function priceFaabAsset(amount: number, budget: number): PricedAsset {
+/**
+ * This league's FAAB state for `leagueFaabValue`, or null when it cannot be told — and FAAB then prices on
+ * the linear formula exactly as before. NFL only: the season length is the league's own
+ * `playoff_start_week − 1` (every Sleeper league carries it; ESPN and manual leagues do not, measured
+ * 2026-10-11), and the week FAAB bought now first helps is the schedule's (`resolveSportWeek`), never a
+ * stored `current_week`. Never throws.
+ */
+export async function loadLeagueFaabState(league: LoadedTradeLeague | null): Promise<LeagueFaabState | null> {
+  try {
+    if (!league?.id || String(league.sport ?? '').toUpperCase() !== 'NFL' || !league.season) return null
+    const psw = Number((league.settings ?? {})['playoff_start_week'])
+    if (!Number.isFinite(psw) || psw < 2) return null
+    const seasonWeeks = psw - 1
+    const [week, rosters] = await Promise.all([
+      resolveSportWeek('NFL', league.season),
+      prisma.roster.findMany({ where: { leagueId: league.id }, select: { playerData: true, faabRemaining: true } }),
+    ])
+    if (!week.ok) return null
+    // FAAB bought now first helps this week while its games have not started, else the next one.
+    const firstWeek = week.state === 'upcoming' ? week.sportWeek : week.nextSportWeek ?? week.sportWeek + 1
+    const balances = rosters
+      .filter((r) => !isTeamEliminated({ playerData: r.playerData, league: { leagueVariant: league.leagueVariant }, eliminationRecorded: false }))
+      .map((r) => r.faabRemaining)
+      .filter((b): b is number => typeof b === 'number' && Number.isFinite(b) && b >= 0)
+    if (balances.length === 0) return null
+    return { balances, weeksLeft: Math.max(0, seasonWeeks - firstWeek + 1), seasonWeeks }
+  } catch {
+    return null
+  }
+}
+
+function priceFaabAsset(amount: number, budget: number, state?: LeagueFaabState | null): PricedAsset {
   /*
    * 🛑 WAS `round(clamp(amount / budget, 0, 1) * 2800)` — this console's OWN conversion, and
    * the last of the three the app used to carry. Measured 2026-09-11, $10 of FAAB out of a
@@ -63,7 +96,8 @@ function priceFaabAsset(amount: number, budget: number): PricedAsset {
    * 2800 here and raising the other two — would have re-priced every canonical snapshot ever
    * written, which is evidence, not a display value.
    */
-  const mv = normalizedFaabValue(amount, budget)
+  // The league's own state when the chart carries it (`leagueFaabValue`); the linear formula otherwise.
+  const mv = leagueFaabValue(amount, state) ?? normalizedFaabValue(amount, budget)
   return {
     name: `FAAB $${amount}`,
     type: 'player',
@@ -387,6 +421,8 @@ export async function resolveAssets(
     effectiveSport: SupportedSport
     nflCtx: ValuationContext
     waiverBudget: number
+    /** The league's FAAB state (`loadLeagueFaabState`): FAAB at its purchasing power. Absent: the linear formula. */
+    faabState?: LeagueFaabState | null
     dataGaps: string[]
     fcPlayers: FantasyCalcPlayer[]
     /** Resolve the Decision OS enrichment id per player. Default true; the grader turns it off. */
@@ -456,7 +492,7 @@ export async function resolveAssets(
     }
 
     if (raw.kind === 'faab') {
-      const p = priceFaabAsset(raw.amount, args.waiverBudget)
+      const p = priceFaabAsset(raw.amount, args.waiverBudget, args.faabState)
       priced.push(p)
       lines.push(
         lineFromPriced(p, {
@@ -658,6 +694,11 @@ export type LeagueTradeChart = {
   tePremium: boolean
   isSuperFlex: boolean
   waiverBudget: number
+  /**
+   * This league's FAAB state (`loadLeagueFaabState`), or null: FAAB then prices on the linear formula. TODAY's
+   * balances and week — so a dated chart (`withDatedMarket`) drops it rather than price a past trade on them.
+   */
+  faabState?: LeagueFaabState | null
   /** The reception weight the chart was REQUESTED with — `scoringFit` measures against this. */
   pprNfl: 0 | 0.5 | 1
   fcPlayers: FantasyCalcPlayer[]
@@ -768,6 +809,9 @@ export async function resolveLeagueTradeChart(args: {
       }).catch(() => null)
     : null
 
+  // Today's balances and week: never for a marketless (dated re-pricing) chart.
+  const faabState = args.marketless ? null : await loadLeagueFaabState(leagueRow)
+
   const nflCtx: ValuationContext = {
     asOfDate: asOf,
     isSuperFlex,
@@ -791,6 +835,7 @@ export async function resolveLeagueTradeChart(args: {
     tePremium: Boolean(tePremium),
     isSuperFlex,
     waiverBudget,
+    faabState,
     pprNfl,
     fcPlayers,
     fcSyncedAt,
@@ -811,7 +856,9 @@ export async function resolveLeagueTradeChart(args: {
  *   - the market rows → the dated capture's rows (players, and pick rows where the capture has them);
  *   - this league's defender/kicker board (`loadLeagueTradeValues`) → dropped. It is built from the
  *     CURRENT projection week and has no dated history, so a defender, kicker or team defense is
- *     unpriced here — and an unpriced asset sends the whole trade back to its first-graded original.
+ *     unpriced here — and an unpriced asset sends the whole trade back to its first-graded original;
+ *   - this league's FAAB state (today's balances and week) → dropped: FAAB in a past trade prices on
+ *     the linear formula, never on balances and a week the trade did not happen in.
  *
  * 🛑 `asOfDate` STAYS TODAY. It is NOT the trade date, on purpose: `pricePlayer` treats a past
  * `asOfDate` as a hindsight query and routes it to `data/historical-values/*.json` — name-joined,
@@ -824,6 +871,7 @@ export function withDatedMarket(
 ): LeagueTradeChart {
   return {
     ...chart,
+    faabState: null,
     fcPlayers: market.players,
     fcSyncedAt: `${market.capturedOn}T00:00:00.000Z`,
     nflCtx: {
