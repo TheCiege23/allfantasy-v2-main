@@ -1,3 +1,21 @@
+.af-team-highlights-controls { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+.af-team-highlights-controls select { min-height: 44px; margin-left: 8px; padding: 8px; background: var(--panel, #191b29); color: inherit; border: 1px solid var(--line, #303344); border-radius: 8px; }
+.af-team-highlights-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 20px; }
+.af-team-highlights .af-pc-highlight { margin-top: 4px; }
+.af-pc-highlights { margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--line, #303344); min-width: 0; }
+.af-pc-highlights-load { margin: 12px 0; padding: 10px 14px; min-height: 44px; border: 1px solid var(--line, #303344); border-radius: 8px; color: inherit; background: var(--surface, transparent); cursor: pointer; font: inherit; }
+.af-pc-highlights-load:disabled { opacity: .6; cursor: wait; }
+.af-pc-highlight { margin: 16px 0; min-width: 0; }
+.af-pc-highlight-kind { display: block; margin-bottom: 7px; font-size: 10px; letter-spacing: .08em; color: var(--muted, #a3a3b4); }
+.af-pc-highlight-preview { display: block; width: 100%; padding: 0; overflow: hidden; border: 1px solid var(--line, #303344); border-radius: 8px; background: #12121b; color: #fff; cursor: pointer; text-align: left; text-decoration: none; }
+.af-pc-highlight-preview img { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; object-fit: cover; }
+.af-pc-highlight-preview span { display: block; padding: 10px; font-size: 12px; }
+.af-pc-highlight-player { display: block; width: 100%; min-height: 200px; aspect-ratio: 16 / 9; border: 0; border-radius: 8px; }
+.af-pc-highlight-title { display: block; margin: 9px 0 4px; color: inherit; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.af-pc-highlight .af-pc-faint a { color: inherit; text-decoration: underline; }
+.af-pc-highlight-disclosure { margin-top: 12px; color: var(--muted, #a3a3b4); font-size: 11px; line-height: 1.6; }
+.af-pc-highlight-disclosure a { color: inherit; text-decoration: underline; }
+
 /*
  * AF Core — the player card pop-up (STATE 6 / STATE 7 of the 2026-09-07 design
  * handoff, `AF Trade Price Transparency.dc.html`).
