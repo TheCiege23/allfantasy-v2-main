@@ -37,6 +37,8 @@ export interface FetchPreviewResult {
   status?: number;
   /** True when the provider can't be auto-verified; caller must resubmit with an attestation. */
   requiresAttestation?: boolean;
+  /** The account has not verified its email or phone yet; see `isVerificationRequiredBody`. */
+  verificationRequired?: boolean;
 }
 
 export interface SubmitImportResult {
@@ -56,6 +58,8 @@ export interface SubmitImportResult {
    * two-implementations-of-one-rule shape this repo has been bitten by before.
    */
   code?: string;
+  /** The account has not verified its email or phone yet; see `isVerificationRequiredBody`. */
+  verificationRequired?: boolean;
   /**
    * True when the commit was an idempotent replay — the league was already
    * imported and nothing was written. Distinct from `ok: false, status: 409`,
@@ -76,6 +80,21 @@ export interface DiscoverProviderLeaguesResult {
   data?: unknown;
   error?: string;
   status?: number;
+  /** The account has not verified its email or phone yet; see `isVerificationRequiredBody`. */
+  verificationRequired?: boolean;
+}
+
+/**
+ * The import routes refuse an unverified account with 403 `VERIFICATION_REQUIRED`
+ * (`requireVerifiedUser`, lib/auth-guard.ts). It is the one refusal the screen can
+ * fix on the spot — send the link, wait, carry on — so it travels as a flag beside
+ * the sentence instead of being re-recognised from the sentence's words.
+ *
+ * Measured 2026-10-11: 14 accounts linked Sleeper, read ~24 pages each, and never
+ * imported. All the import screen gave them was the sentence, with nothing to press.
+ */
+function isVerificationRequiredBody(data: Record<string, unknown> | null): boolean {
+  return (data as { error?: unknown } | null)?.error === 'VERIFICATION_REQUIRED';
 }
 
 function getImportApiErrorMessage(
@@ -241,6 +260,7 @@ export async function fetchImportPreview(
         error: failedResponseMessage(data, res.status, 'Failed to load league'),
         status: res.status,
         requiresAttestation: Boolean((data as { requiresAttestation?: boolean } | null)?.requiresAttestation),
+        verificationRequired: isVerificationRequiredBody(data),
       };
     }
     if (!data) return { ok: false, error: IMPORT_SERVER_FAILURE_MESSAGE, status: res.status };
@@ -307,6 +327,7 @@ export async function submitImportCreation(
         status: res.status,
         requiresAttestation: Boolean((data as { requiresAttestation?: boolean } | null)?.requiresAttestation),
         code: (data as { code?: string } | null)?.code,
+        verificationRequired: isVerificationRequiredBody(data),
       };
     }
     if (!data) return { ok: false, error: IMPORT_SERVER_FAILURE_MESSAGE, status: res.status };
@@ -361,6 +382,7 @@ export async function discoverProviderLeagues(
         ok: false,
         error: failedResponseMessage(data, res.status, 'Failed to discover leagues'),
         status: res.status,
+        verificationRequired: isVerificationRequiredBody(data),
       };
     }
     if (!data) return { ok: false, error: IMPORT_SERVER_FAILURE_MESSAGE, status: res.status };

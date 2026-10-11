@@ -50,6 +50,7 @@ import {
 } from '@/lib/league-import/previewCoverageView'
 import { toYahooLeagueKey } from '@/lib/league-import/yahooLeagueKey'
 import { postImportChimmyHref } from '@/lib/core-app/connectLeague'
+import { ImportVerifyGate } from '@/components/core-app/import/ImportVerifyGate'
 
 /**
  * Import & connect — the "landing, auth & import" handoff, wired to the real job.
@@ -812,6 +813,28 @@ export type ImportV4Props = {
   /** Yahoo's own sentence, when it gave one. Far more useful than the code. */
   yahooErrorDesc?: string
   yahooConnected?: boolean
+  /** The signed-in account's email, so the verify step can say where its link went. */
+  viewerEmail?: string | null
+}
+
+/**
+ * The import step the server refused with VERIFICATION_REQUIRED, kept as a description rather than
+ * a closure so "continue" re-runs it through the CURRENT callbacks instead of ones captured with
+ * stale state. See ImportVerifyGate.
+ */
+type VerifyResume =
+  | { k: 'discover'; identifier: string }
+  | { k: 'preview'; sourceId: string; attest: boolean }
+  | { k: 'commit'; sourceId: string; attested: boolean; force: boolean; claimTeamId: string | null }
+  | { k: 'bulk' }
+  | { k: 'row'; sourceId: string }
+
+/** Where the emailed link lands: this screen, already pointed at what was being imported. */
+function verifyReturnTo(provider: ImportProvider, resume: VerifyResume): string {
+  const qs = new URLSearchParams({ provider })
+  if (resume.k === 'discover' && resume.identifier.trim()) qs.set('username', resume.identifier.trim())
+  if (resume.k === 'preview' || resume.k === 'commit') qs.set('leagueId', resume.sourceId)
+  return `/import?${qs.toString()}`
 }
 
 export function ImportV4({
@@ -823,6 +846,7 @@ export function ImportV4({
   yahooError,
   yahooErrorDesc,
   yahooConnected,
+  viewerEmail,
 }: ImportV4Props) {
   const [provider, setProvider] = useState<ImportProvider>(defaultProvider ?? 'sleeper')
   const [account, setAccount] = useState(initialAccount ?? '')
@@ -830,6 +854,9 @@ export function ImportV4({
   const [accountLabel, setAccountLabel] = useState<string | null>(null)
   const [phase, setPhase] = useState<Phase>({ k: 'idle' })
   const [error, setError] = useState<string | null>(null)
+  /* The step an unverified account was refused at, or null. Cleared by any other outcome. */
+  const [verifyGate, setVerifyGate] = useState<VerifyResume | null>(null)
+  const [verifyResuming, setVerifyResuming] = useState(false)
   /* Fantrax Secret ID: stored via the same encrypted `leagueAuth` row every other
      provider uses, never held in component state after it is saved. */
   const [fxSecret, setFxSecret] = useState('')
@@ -911,6 +938,12 @@ export function ImportV4({
       setHandleLinkedElsewhere(false)
       setPhase({ k: 'discovering' })
       const res = await discoverProviderLeagues(provider, identifier, { sport: 'nfl' })
+      if (!res.ok && res.verificationRequired) {
+        setVerifyGate({ k: 'discover', identifier })
+        setPhase({ k: 'idle' })
+        return
+      }
+      setVerifyGate(null)
       if (!res.ok) {
         // The service already translates the gate's codes into sentences a person
         // can act on ("Connect Yahoo in League Sync…"), so it is surfaced as-is.
@@ -987,11 +1020,24 @@ export function ImportV4({
    * usually means "not connected yet", which is not an error until they ask.
    */
   useEffect(() => {
+    // A refusal for the previous provider says nothing about this one.
+    setVerifyGate(null)
     if (!isImportProviderAvailable(provider)) return
     if (!supportsImportProviderDiscovery(provider)) return
     let cancelled = false
     void discoverProviderLeagues(provider, '', { sport: 'nfl' }).then((res) => {
-      if (cancelled || !res.ok) return
+      if (cancelled) return
+      /*
+       * ⚠ THE ONE FAILURE THAT IS NOT SILENT HERE. "Usually not connected yet" (below) is not this:
+       * a linked Sleeper account that has not confirmed its email is refused BEFORE discovery, so
+       * staying quiet showed an empty list to exactly the people who had done everything right
+       * except one step — and nothing on screen said which.
+       */
+      if (!res.ok && res.verificationRequired) {
+        setVerifyGate({ k: 'discover', identifier: '' })
+        return
+      }
+      if (!res.ok) return
       const payload = res.data as { leagues?: DiscoveredLeague[]; accountLabel?: string }
       if (!payload?.leagues?.length) return
       setLeagues(payload.leagues)
@@ -1067,6 +1113,12 @@ export function ImportV4({
         attest ? { accepted: true } : undefined,
         { allowPreviewOnly: true },
       )
+      if (!res.ok && res.verificationRequired) {
+        setVerifyGate({ k: 'preview', sourceId, attest })
+        setPhase({ k: 'idle' })
+        return
+      }
+      setVerifyGate(null)
       if (!res.ok) {
         if (res.requiresAttestation) {
           setPhase({
@@ -1146,6 +1198,12 @@ export function ImportV4({
             }
           : undefined
       )
+      if (!res.ok && res.verificationRequired) {
+        setVerifyGate({ k: 'commit', sourceId, attested, force, claimTeamId })
+        setPhase({ k: 'idle' })
+        return
+      }
+      setVerifyGate(null)
       if (!res.ok) {
         /**
          * ⚠ COMMIT CAN DEMAND AN ATTESTATION THAT PREVIEW DID NOT. The commit route
@@ -1276,6 +1334,8 @@ export function ImportV4({
     leagueId: string
     status: BulkStatus
     reason: string | null
+    /** Refused because the account is unverified — true of every row, so the run stops. */
+    verificationRequired?: boolean
   }
 
   /**
@@ -1382,6 +1442,19 @@ export function ImportV4({
         confirmReimportOfDeleted ? { confirmReimportOfDeleted: true } : undefined,
       )
       /*
+       * An unverified account is refused for EVERY row, so marking this one "failed" would be the
+       * first of fifty identical failures. Leave the row untouched and let the caller stop the run
+       * and show the verify step instead.
+       */
+      if (!res.ok && res.verificationRequired) {
+        setBulkStatus((prev) => {
+          const next = { ...prev }
+          delete next[sourceId]
+          return next
+        })
+        return { leagueId: sourceId, status: 'failed', reason: null, verificationRequired: true }
+      }
+      /*
        * Attestation is deliberately NOT auto-accepted here. The server asks for it
        * when someone imports a league they do not commission, and answering that on
        * their behalf across dozens of leagues would be attesting to something they
@@ -1448,6 +1521,13 @@ export function ImportV4({
     const results: BulkLeagueResult[] = []
     for (let i = 0; i < selectedLeagues.length; i++) {
       const result = await importOneLeague(selectedLeagues[i].sourceId)
+      if (result.verificationRequired) {
+        // Not "done": nothing was attempted past the gate, and the summary would say otherwise.
+        setVerifyGate({ k: 'bulk' })
+        setBulkRunning(false)
+        return results
+      }
+      setVerifyGate(null)
       results.push(result)
       const isLast = i === selectedLeagues.length - 1
       if (!isLast) {
@@ -1490,10 +1570,31 @@ export function ImportV4({
     async (sourceId: string) => {
       if (bulkRunning) return
       setError(null)
-      await importOneLeague(sourceId)
+      const result = await importOneLeague(sourceId)
+      setVerifyGate(result.verificationRequired ? { k: 'row', sourceId } : null)
     },
     [bulkRunning, importOneLeague]
   )
+
+  /*
+   * "I've confirmed — continue": re-run exactly the step that was refused. Each runner clears the
+   * gate on any other outcome and re-opens it if the account is still unverified, so the card stays
+   * mounted (and keeps "sent to …") across a retry that came too early.
+   */
+  const resumeAfterVerify = useCallback(async () => {
+    const gate = verifyGate
+    if (!gate || verifyResuming) return
+    setVerifyResuming(true)
+    try {
+      if (gate.k === 'discover') await runDiscover(gate.identifier)
+      else if (gate.k === 'preview') await runPreview(gate.sourceId, gate.attest)
+      else if (gate.k === 'commit') await runCommit(gate.sourceId, gate.attested, gate.force, gate.claimTeamId)
+      else if (gate.k === 'bulk') await runBulkImport()
+      else await retryLeague(gate.sourceId)
+    } finally {
+      setVerifyResuming(false)
+    }
+  }, [verifyGate, verifyResuming, runDiscover, runPreview, runCommit, runBulkImport, retryLeague])
 
   const bulkCounts = (() => {
     const v = Object.values(bulkStatus)
@@ -2325,6 +2426,17 @@ export function ImportV4({
             </p>
 
             {phase.k === 'discovering' ? <Working label="Looking up your leagues…" /> : null}
+
+            {verifyGate ? (
+              <ImportVerifyGate
+                email={viewerEmail ?? null}
+                returnTo={verifyReturnTo(provider, verifyGate)}
+                step={verifyGate.k === 'row' ? 'bulk' : verifyGate.k}
+                autoResume={verifyGate.k === 'discover' || verifyGate.k === 'preview'}
+                resuming={verifyResuming}
+                onResume={() => void resumeAfterVerify()}
+              />
+            ) : null}
 
             {error ? (
               <div className="af-im-error" role="alert" ref={errorRef}>
