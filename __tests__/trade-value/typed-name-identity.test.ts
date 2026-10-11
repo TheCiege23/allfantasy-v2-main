@@ -21,9 +21,9 @@ vi.mock('server-only', () => ({}))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     playerIdentityMap: {
-      findMany: vi.fn(async ({ where, take }: { where: { sport: string; normalizedName: string }; take?: number }) => {
+      findMany: vi.fn(async ({ where }: { where: { sport: string; normalizedName: { in: string[] } } }) => {
         if (db.identityFails) throw new Error('db down')
-        return db.people.filter((p) => p.sport === where.sport && p.normalizedName === where.normalizedName).slice(0, take ?? 1000)
+        return db.people.filter((p) => p.sport === where.sport && where.normalizedName.in.includes(p.normalizedName))
       }),
     },
   },
