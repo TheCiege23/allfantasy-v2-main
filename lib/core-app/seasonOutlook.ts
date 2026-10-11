@@ -24,7 +24,7 @@ import {
 } from './outlookSim'
 import { readPlayoffFormat, type FormatSource } from './outlookFormat'
 import { liveWeeks, withLiveScores } from './outlookLiveShare'
-import { lineupShareKey, loadLineupShares, type LineupShareTarget } from './outlookLiveWeekLoader'
+import { lineupShareKey, loadLineupBoards, type LineupShareTarget } from './outlookLiveWeekLoader'
 import {
   computeLeagueSim,
   leagueSimCost,
@@ -720,14 +720,26 @@ async function attachLiveBoards(prepared: Prepared[], sportOf: ReadonlyMap<strin
   for (const p of prepared) {
     const platformLeagueId = p.league.platformLeagueId
     if (!platformLeagueId || String(sportOf.get(p.league.id) ?? p.league.sport ?? '').toUpperCase() !== 'NFL') continue
-    const weeks = liveWeeks(p.sim.remaining, p.unscored)
+    /*
+     * The earliest unplayed week is always read too: the live tick writes its per-player points
+     * minutes after kickoff, while its matchup rows can still read zero until the league's matchup
+     * sync next runs. A week nobody has scored in yet reads no board and stays an unplayed draw.
+     */
+    const current = p.sim.remaining.reduce((m, g) => Math.min(m, g.week), Number.POSITIVE_INFINITY)
+    const weeks = [...new Set([...liveWeeks(p.sim.remaining, p.unscored), ...(Number.isFinite(current) ? [current] : [])])]
     if (weeks.length) targets.set(p, weeks.map((week) => ({ platformLeagueId, season: p.season, week })))
   }
   if (targets.size === 0) return
-  const shares = await loadLineupShares([...targets.values()].flat())
+  const boards = await loadLineupBoards([...targets.values()].flat())
   for (const [p, list] of targets) {
     const key = new Map(list.map((t) => [t.week, lineupShareKey(t)]))
-    const { games, attached, unread } = withLiveScores(p.sim.remaining, p.unscored, (week, rosterId) => shares.get(key.get(week) ?? '')?.get(rosterId))
+    const board = (week: number, rosterId: string) => boards.get(key.get(week) ?? '')?.get(rosterId)
+    const { games, attached, unread } = withLiveScores(
+      p.sim.remaining,
+      p.unscored,
+      (week, rosterId) => board(week, rosterId)?.share,
+      (week, rosterId) => board(week, rosterId)?.points,
+    )
     p.sim = { ...p.sim, remaining: games }
     for (const w of new Set(attached)) {
       p.missing.push(`Week ${w} is under way: points already scored count, and only the share of each lineup still to play is simulated (a starter whose game cannot be read is judged by whether it has points yet; a lineup mostly unreadable is simulated as unplayed).`)
