@@ -25,6 +25,11 @@ import { getTeamLogo } from '@/lib/players/getTeamLogo'
 import { resolveRedraftRosterLookup } from '@/lib/redraft/redraftRosterIdentity'
 import { recordRedraftRosterMoveHistory } from '@/lib/redraft/rosterMoveHistory'
 import { parseOptionalRedraftPositiveInteger } from '@/lib/redraft/betaRouteInput'
+import { leagueIdentityColumns } from '@/lib/player-identity/externalIdNamespace'
+import {
+  crosswalkToRollingInsightsIds,
+  type RiCrosswalkDb,
+} from '@/lib/player-identity/rollingInsightsCrosswalk'
 
 export const dynamic = 'force-dynamic'
 
@@ -108,6 +113,106 @@ function buildLineupValidation(args: {
   return validateRedraftLineup(args)
 }
 
+/**
+ * Each roster player's OWN Rolling Insights regular-season row, keyed `${rosterPlayerId}:${sport}`.
+ *
+ * 🛑 NEVER `playerSeasonStats.playerId IN <roster ids>` (fixed 2026-10-11). Those rows are keyed on the
+ * PROVIDER's own number and an NFL roster holds Sleeper ids (ESPN / Fleaflicker rosters, their own ids):
+ * the same digits are a different man. Measured on production: 251 rostered NFL ids joined a stranger's
+ * 2026 RI row — Justin Jefferson (Sleeper 6794) read DaRon Bland's line (RI 6794), Saquon Barkley (4866)
+ * Anthony Nelson's, Bijan Robinson (9509) Malachi Fields' — and that stranger's games fed the projection
+ * confidence and, with no other projection, his PPG became the weekly projection.
+ *
+ * Every roster id is asked of the ONE identity column its league speaks (`leagueIdentityColumns`), its
+ * `rollingInsightsId` reaches the stats table, and an id that does not map one-to-one gets nothing.
+ *
+ * `api_sports` rows are NOT read: `PlayerIdentityMap.apiSportsId` is empty for every NFL row (0 of the
+ * table, 2026-10-11), so there is no crosswalk to reach them by — the 11 the old query attached were all
+ * strangers. `thesportsdb` rows are not Rolling Insights and were mislabeled as such.
+ */
+async function loadOwnRollingInsightsSeasonStats(args: {
+  players: Array<{ playerId: string; sport: string }>
+  platform: string | null | undefined
+  season: string
+}): Promise<Map<string, SeasonStatsRow>> {
+  const out = new Map<string, SeasonStatsRow>()
+  const idsBySport = new Map<string, string[]>()
+  for (const p of args.players) {
+    const sport = String(p.sport ?? '').trim().toUpperCase()
+    if (!sport || !p.playerId) continue
+    idsBySport.set(sport, [...(idsBySport.get(sport) ?? []), p.playerId])
+  }
+  for (const [sport, ids] of idsBySport) {
+    const lookups = leagueIdentityColumns(ids, sport, args.platform)
+    if (lookups.length === 0) continue
+    const { byId } = await crosswalkToRollingInsightsIds(prisma as unknown as RiCrosswalkDb, { sport, lookups })
+    const rosterIdByRi = new Map<string, string>()
+    for (const [rosterId, identity] of byId) rosterIdByRi.set(identity.rollingInsightsId, rosterId)
+    if (rosterIdByRi.size === 0) continue
+    const rows = (await prisma.playerSeasonStats.findMany({
+      where: {
+        sport,
+        source: 'rolling_insights',
+        season: args.season,
+        seasonType: 'regular',
+        playerId: { in: [...rosterIdByRi.keys()] },
+      },
+      orderBy: [{ fetchedAt: 'desc' }],
+      select: {
+        playerId: true,
+        sport: true,
+        fantasyPointsPerGame: true,
+        gamesPlayed: true,
+        stats: true,
+        fetchedAt: true,
+        source: true,
+      },
+    })) as SeasonStatsRow[]
+    const byRosterId = new Map<string, SeasonStatsRow>()
+    for (const row of rows) {
+      if (row.source !== 'rolling_insights') continue
+      const rosterId = rosterIdByRi.get(row.playerId)
+      if (rosterId && !byRosterId.has(rosterId)) byRosterId.set(rosterId, { ...row, playerId: rosterId })
+    }
+    // Keyed with the roster row's own sport spelling — the same key the caller reads with.
+    for (const p of args.players) {
+      if (String(p.sport ?? '').trim().toUpperCase() !== sport) continue
+      const row = byRosterId.get(p.playerId)
+      if (row) out.set(`${p.playerId}:${p.sport}`, row)
+    }
+  }
+  return out
+}
+
+/**
+ * `fantasy_projections` holds TWO different projections under one Sleeper id: the provider's line
+ * (`source: 'sleeper'`) and AllFantasy's own engine number mirrored in (`source: 'allfantasy'`, see
+ * `writeAfProjectionSnapshots`). The read used to take whichever row came last and hand it to the engine
+ * as the PROVIDER projection — so the AF engine's number went out labelled `provider_projection`.
+ * Each row now goes to the input it actually is.
+ */
+function splitProjectionRows(rows: FantasyProjectionRow[]): {
+  provider: Map<string, FantasyProjectionRow>
+  afMirror: Map<string, FantasyProjectionRow>
+} {
+  const provider = new Map<string, FantasyProjectionRow>()
+  const afMirror = new Map<string, FantasyProjectionRow>()
+  for (const row of rows) {
+    const key = `${row.playerId}:${row.sport}`
+    const target = row.source === 'allfantasy' ? afMirror : provider
+    const held = target.get(key)
+    if (!held || row.fetchedAt > held.fetchedAt) target.set(key, row)
+  }
+  return { provider, afMirror }
+}
+
+function afMirrorConfidenceLevel(row: FantasyProjectionRow | undefined): string | null {
+  const stats = row?.stats
+  if (!stats || typeof stats !== 'object' || Array.isArray(stats)) return null
+  const level = (stats as Record<string, unknown>).confidenceLevel
+  return typeof level === 'string' && level.trim() ? level : null
+}
+
 export async function GET(req: NextRequest) {
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
@@ -147,7 +252,7 @@ export async function GET(req: NextRequest) {
   // downstream rejects moving a locked player.
   const leagueForLock = await prisma.league.findUnique({
     where: { id: roster.leagueId },
-    select: { settings: true },
+    select: { settings: true, platform: true },
   })
   const lockHydrated = await hydrateRedraftLineupLocks(prisma, {
     sport: roster.season.sport,
@@ -168,14 +273,14 @@ export async function GET(req: NextRequest) {
   let scores: PlayerWeeklyScoreRow[] = []
   let fantasyProjectionRows: FantasyProjectionRow[] = []
   let afProjectionRows: AfProjectionRow[] = []
-  let seasonStatRows: SeasonStatsRow[] = []
+  let seasonStatsByPlayer = new Map<string, SeasonStatsRow>()
   let adpRows: Array<{ playerKey: string | null; averageOverallPick: number }> = []
   if (playerIds.length) {
     ;[
       scores,
       fantasyProjectionRows,
       afProjectionRows,
-      seasonStatRows,
+      seasonStatsByPlayer,
       adpRows,
     ] = await Promise.all([
       prisma.playerWeeklyScore.findMany({
@@ -194,7 +299,7 @@ export async function GET(req: NextRequest) {
             season: seasonString,
             sport: { in: sports },
           },
-          select: { playerId: true, sport: true, projectedPoints: true, fetchedAt: true },
+          select: { playerId: true, sport: true, projectedPoints: true, fetchedAt: true, source: true, stats: true },
         })
         .catch(() => []) as Promise<FantasyProjectionRow[]>,
       prisma.aFProjectionSnapshot
@@ -209,26 +314,11 @@ export async function GET(req: NextRequest) {
           select: { playerId: true, sport: true, afProjection: true, confidenceLevel: true, computedAt: true },
         })
         .catch(() => []) as Promise<AfProjectionRow[]>,
-      prisma.playerSeasonStats
-        .findMany({
-          where: {
-            playerId: { in: playerIds },
-            season: seasonString,
-            seasonType: 'regular',
-            sport: { in: sports },
-          },
-          orderBy: [{ source: 'desc' }, { fetchedAt: 'desc' }],
-          select: {
-            playerId: true,
-            sport: true,
-            fantasyPointsPerGame: true,
-            gamesPlayed: true,
-            stats: true,
-            fetchedAt: true,
-            source: true,
-          },
-        })
-        .catch(() => []) as Promise<SeasonStatsRow[]>,
+      loadOwnRollingInsightsSeasonStats({
+        players: roster.players,
+        platform: leagueForLock?.platform ?? null,
+        season: seasonString,
+      }).catch(() => new Map<string, SeasonStatsRow>()),
       prisma.allFantasyAdpSnapshot
         .findMany({
           where: {
@@ -244,21 +334,11 @@ export async function GET(req: NextRequest) {
     ])
   }
   const scoreByPlayer = new Map(scores.map((score) => [`${score.playerId}:${score.sport}`, score]))
-  const projectionByPlayer = new Map(fantasyProjectionRows.map((row) => [`${row.playerId}:${row.sport}`, row]))
+  const { provider: projectionByPlayer, afMirror: afMirrorByPlayer } = splitProjectionRows(fantasyProjectionRows)
   const afProjectionByPlayer = new Map<string, AfProjectionRow>()
   for (const row of afProjectionRows) {
     const key = `${row.playerId}:${row.sport}`
     if (!afProjectionByPlayer.has(key)) afProjectionByPlayer.set(key, row)
-  }
-  const seasonStatsByPlayer = new Map<string, SeasonStatsRow>()
-  for (const row of seasonStatRows) {
-    const key = `${row.playerId}:${row.sport}`
-    const existing = seasonStatsByPlayer.get(key)
-    const rowIsRi = row.source === 'rolling_insights'
-    const existingIsRi = existing?.source === 'rolling_insights'
-    if (!existing || (rowIsRi && !existingIsRi) || (rowIsRi === existingIsRi && row.fetchedAt > existing.fetchedAt)) {
-      seasonStatsByPlayer.set(key, row)
-    }
   }
   const adpByPlayerKey = new Map<string, number>()
   for (const row of adpRows) {
@@ -275,6 +355,7 @@ export async function GET(req: NextRequest) {
       const projectionKey = `${player.playerId}:${player.sport}`
       const providerProjection = projectionByPlayer.get(projectionKey)
       const afProjection = afProjectionByPlayer.get(projectionKey)
+      const afMirror = afMirrorByPlayer.get(projectionKey)
       const seasonStats = seasonStatsByPlayer.get(projectionKey)
       const adp = adpByPlayerKey.get(buildPlayerKey(player.playerName, player.position)) ?? null
       const canonical =
@@ -303,8 +384,9 @@ export async function GET(req: NextRequest) {
         injuryStatus: canonical ? canonical.injuryStatus : player.injuryStatus,
         adp,
         providerWeeklyProjection: providerProjection?.projectedPoints ?? null,
-        allFantasyWeeklyProjection: afProjection?.afProjection ?? null,
-        allFantasyConfidenceLevel: afProjection?.confidenceLevel ?? null,
+        // The engine snapshot, else its Sleeper-keyed mirror row — the same AF number, never the provider's.
+        allFantasyWeeklyProjection: afProjection?.afProjection ?? afMirror?.projectedPoints ?? null,
+        allFantasyConfidenceLevel: afProjection ? afProjection.confidenceLevel : afMirrorConfidenceLevel(afMirror),
         rollingInsightsFantasyPointsPerGame: seasonStats?.fantasyPointsPerGame ?? null,
         rollingInsightsGamesPlayed: seasonStats?.gamesPlayed ?? null,
         rollingInsightsStats: seasonStats?.stats ?? null,
@@ -449,6 +531,8 @@ type FantasyProjectionRow = {
   sport: string
   projectedPoints: number
   fetchedAt: Date
+  source?: string | null
+  stats?: unknown
 }
 
 type AfProjectionRow = {
