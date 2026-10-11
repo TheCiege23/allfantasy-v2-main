@@ -43,6 +43,7 @@ vi.mock('@/lib/prisma', () => {
         })),
       },
       league: { findUnique: vi.fn(async () => ({ settings: {} })) },
+      playerIdentityMap: { findMany: vi.fn(async () => rows()) },
       playerWeeklyScore: { findMany: vi.fn(async () => rows()) },
       fantasyProjection: { findMany: vi.fn(async () => rows()) },
       aFProjectionSnapshot: { findMany: vi.fn(async () => rows()) },

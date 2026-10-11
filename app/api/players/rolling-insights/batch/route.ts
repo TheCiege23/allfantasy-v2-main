@@ -7,6 +7,10 @@ import {
   parseRollingInsightsStatsJson,
   type RollingInsightsTableStats,
 } from '@/lib/players/rolling-insights-stats-display'
+import {
+  crosswalkToRollingInsightsIds,
+  type RiCrosswalkDb,
+} from '@/lib/player-identity/rollingInsightsCrosswalk'
 
 export type RollingInsightsBatchPlayer = {
   season: string | null
@@ -50,28 +54,17 @@ export async function POST(req: NextRequest) {
       ? String(body.season)
       : null
 
-  const maps = await prisma.playerIdentityMap.findMany({
-    where: {
-      sleeperId: { in: sleeperIds },
-      sport,
-      rollingInsightsId: { not: null },
-    },
-    select: {
-      sleeperId: true,
-      rollingInsightsId: true,
-      canonicalName: true,
-      currentTeam: true,
-      position: true,
-    },
+  /*
+   * Sleeper id → RI id through `PlayerIdentityMap` (sport-scoped), refusing any id whose mapping is
+   * not one-to-one. Shared with `/api/redraft/roster` — see `rollingInsightsCrosswalk.ts`.
+   */
+  const crosswalk = await crosswalkToRollingInsightsIds(prisma as unknown as RiCrosswalkDb, {
+    sport,
+    lookups: [{ column: 'sleeperId', ids: sleeperIds }],
   })
+  const maps = [...crosswalk.byId].map(([sleeperId, identity]) => ({ sleeperId, ...identity }))
 
-  const riIds = [
-    ...new Set(
-      maps
-        .map((m) => m.rollingInsightsId)
-        .filter((id): id is string => typeof id === 'string' && id.length > 0),
-    ),
-  ]
+  const riIds = [...new Set(maps.map((m) => m.rollingInsightsId))]
 
   if (riIds.length === 0) {
     const empty: Record<string, RollingInsightsBatchPlayer> = {}
