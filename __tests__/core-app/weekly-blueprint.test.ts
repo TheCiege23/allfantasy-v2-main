@@ -99,3 +99,16 @@ describe('complete weekly inventory',()=>{it('uses uncapped inventory and skips 
 describe('verified weekly deadlines',()=>{it('promotes future confirmed deadlines without treating a game as lineup lock',()=>{const events=[{id:'game',leagueId:'A',leagueName:'A',kind:'game',at:'2026-10-08T20:00:00Z',href:'/core/my-team?league=A'},{id:'waivers',leagueId:'A',leagueName:'A',kind:'waivers',at:'2026-10-08T08:00:00Z',href:'/core/waivers?league=A'},{id:'foreign',leagueId:'B',leagueName:'B',kind:'trade',at:'2026-10-08T20:00:00Z',href:'/core/trades?league=B'}];const out=buildWeeklyBlueprint({leagues:[{id:'A',sport:'NBA'}],board,pulse:null,outlook:null,calendar:{events} as any,now:new Date('2026-10-07')});expect(out.actions).toHaveLength(1);expect(out.actions[0]).toMatchObject({kind:'deadline',deadlineKind:'waivers',leagueId:'A',gameAt:'2026-10-08T08:00:00Z'})})})
 
 it('does not turn unchecked inventory into a healthy lineup',()=>{const out=buildWeeklyBlueprint({leagues:[{id:'A',sport:'MLB'}],board,pulse:{needs:[],set:[],inventory:[row('A',{week:null,severity:0,coverageReason:'Roster unavailable'})]} as unknown as MyTeamPulse,outlook:null,now:new Date('2026-10-07')});expect(out.lineupReadFailed).toBe(true);expect(out.actions[0]).toMatchObject({kind:'review',unavailable:true});expect(out.actions[0].evidence).toBeUndefined()})
+
+// The brief is Chimmy's prefill. An unlabelled "Period 4: facing Paid" read as the next game while it was being played.
+describe('the brief labels a board game that already has points', () => {
+  const card = (live: {you:number;them:number;margin:number;final:boolean} | null) => ({leagueId:'H',leagueName:'HailShiva',season:2026,week:4,opponent:{name:'Paid'},live})
+  const brief = (c: ReturnType<typeof card>, es = false) => weeklyBrief(buildWeeklyBlueprint({ leagues:[{id:'H',name:'HailShiva',sport:'NFL'}], board:{...board,leaning:[c]} as unknown as WeekBoard, pulse:null, outlook:null, focusLeagueId:'H', now:new Date('2026-10-05T23:00:00Z') }), es)
+  it('says in progress, final, or nothing before kickoff', () => {
+    expect(brief(card({you:98.1,them:120.4,margin:-22.3,final:false}))).toContain('Period 4 (in progress): facing Paid in HailShiva.')
+    expect(brief(card({you:135.5,them:129.9,margin:5.6,final:true}))).toContain('Period 4 (final): played Paid in HailShiva.')
+    expect(brief(card(null))).toContain('Period 4: facing Paid in HailShiva.')
+    expect(brief(card({you:98.1,them:120.4,margin:-22.3,final:false}),true)).toContain('Período 4 (en juego): frente a Paid en HailShiva.')
+    expect(brief(card({you:135.5,them:129.9,margin:5.6,final:true}),true)).toContain('Período 4 (finalizado): jugó contra Paid en HailShiva.')
+  })
+})

@@ -268,3 +268,73 @@ describe('buildMatchupPreviewContext — AF and API lineup projections', () => {
     expect(failed).toBe(plain)
   })
 })
+
+/*
+ * Production 2026-10-06, HailShiva: week 4 was already WON 135.5–129.9 and this tool still printed
+ * "underdog by 28.4 — win probability 29%", while the optimizer and season simulator had moved on to
+ * week 5. Chimmy then told the user it could not tell which week was live. Once a game has points,
+ * the block reports the scoreboard and never the pre-game probability.
+ */
+describe('buildMatchupPreviewContext — a game that already has points', () => {
+  const preGame = { you: 126.4, them: 154.8, margin: -28.4, winProbability: 0.29 }
+  const paid = (live: WeekMatchup['live']) =>
+    matchup({ leagueName: 'HailShiva', week: 4, opponent: { rosterId: '7', name: 'Paid', avatarUrl: null }, projection: preGame, live })
+  const oneLeague = (m: WeekMatchup) => board({ week: 4, leagueBoard: { ...board().leagueBoard!, leagueName: 'HailShiva', week: 4, yours: m } })
+  const withLineups = (): MatchupPreviewDeps => ({
+    ...deps,
+    loadLineupProjections: vi.fn(async () => new Map([['L1', {
+      season: 2026, week: 4, unpaired: false, projectionWeek: { season: '2026', week: 4 },
+      you: { projected: 158.4, afProjected: 158.4, afEngine: 164.8, afEngineFrom: 9, pricedFrom: 9, starterCount: 9 },
+      them: { projected: 156.6, afProjected: 156.6, afEngine: 161.4, afEngineFrom: 9, pricedFrom: 9, starterCount: 9 },
+    } as never]])),
+  })
+
+  it('reads a FINAL week as decided — the result, no probability, no pre-game odds for other games', async () => {
+    getBoard.mockResolvedValue(oneLeague(paid({ you: 135.5, them: 129.9, margin: 5.6, final: true })))
+    const out = await buildMatchupPreviewContext({ leagueId: 'L1', userId: 'u1' }, withLineups())
+    expect(out).toMatch(/WEEK 4 in HailShiva \(FINAL\)/)
+    expect(out).toMatch(/HailShiva, week 4 vs Paid: FINAL — they WON 135\.5–129\.9\. This game is decided/)
+    expect(out).toMatch(/a later week from those tools is their next game, not a conflict/)
+    expect(out).not.toMatch(/win probability \d|underdog|29%/)
+    expect(out).not.toContain('LINEUP projections')
+    expect(out).not.toContain('Other games in the league')
+    // Records and the rivalry are still facts worth repeating.
+    expect(out).toMatch(/All-time vs this opponent: 3-1/)
+  })
+
+  it('says LOST and TIE plainly', async () => {
+    getBoard.mockResolvedValue(oneLeague(paid({ you: 101, them: 120.2, margin: -19.2, final: true })))
+    expect(await buildMatchupPreviewContext({ leagueId: 'L1', userId: 'u1' }, deps)).toMatch(/FINAL — they LOST 101\.0–120\.2/)
+    getBoard.mockResolvedValue(oneLeague(paid({ you: 110, them: 110, margin: 0, final: true })))
+    expect(await buildMatchupPreviewContext({ leagueId: 'L1', userId: 'u1' }, deps)).toMatch(/FINAL — a TIE, 110\.0–110\.0/)
+  })
+
+  it('reads an unfinished week as the live score, without full-week totals that read as points to come', async () => {
+    getBoard.mockResolvedValue(oneLeague(paid({ you: 98.1, them: 120.4, margin: -22.3, final: false })))
+    const out = await buildMatchupPreviewContext({ leagueId: 'L1', userId: 'u1' }, withLineups())
+    expect(out).toMatch(/WEEK 4 in HailShiva \(in progress\)/)
+    expect(out).toMatch(/week 4 vs Paid: IN PROGRESS \(not final\) — they have 98\.1, the opponent 120\.4, behind by 22\.3\./)
+    expect(out).not.toMatch(/win probability \d/)
+    expect(out).not.toContain('LINEUP projections')
+    expect(out).toContain('Other games in the league')
+    // Control: the same fixture before kickoff does carry them, so the absence above is the live score's doing.
+    getBoard.mockResolvedValue(oneLeague(paid(null)))
+    const before = await buildMatchupPreviewContext({ leagueId: 'L1', userId: 'u1' }, withLineups())
+    expect(before).toContain("AF (AllFantasy's own engine) them 164.8 vs opponent 161.4")
+    expect(before).toMatch(/underdog by 28\.4 — win probability 29%/)
+  })
+
+  it('lists a scored game under the scoreboard across leagues, never under Underdog', async () => {
+    getBoard.mockResolvedValue(board({
+      coinFlips: [],
+      leaning: [
+        paid({ you: 135.5, them: 129.9, margin: 5.6, final: true }),
+        matchup({ leagueName: 'Redraft', projection: { you: 90, them: 120, margin: -30, winProbability: 0.12 } }),
+      ],
+    }))
+    const out = await buildMatchupPreviewContext({ leagueId: null, userId: 'u1' }, deps)
+    expect(out).toMatch(/Already scoring \(the scoreboard, not a forecast\):\n  • HailShiva, week 4 vs Paid: FINAL — they WON/)
+    expect(out).toMatch(/Underdog:\n  • Redraft/)
+    expect(out).not.toMatch(/Underdog:\n  • HailShiva/)
+  })
+})
