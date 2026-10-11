@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { buildRateLimit429, consumeRateLimit, getClientIp } from '@/lib/rate-limit'
 import { getPlayerHighlights } from '@/lib/highlights/youtube'
+import { selectAuthoritativePlayerRow } from '@/lib/player-match/authoritativePlayerRow'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,6 +12,22 @@ const query = z.object({
   externalId: z.string().trim().min(1).max(64).optional(),
   sleeperId: z.string().trim().min(1).max(64).optional(),
 }).refine((value) => value.externalId || value.sleeperId)
+
+/**
+ * A Sleeper id names whoever its `source = 'sleeper'` row names. The newest row used to
+ * win, and TheSportsDB's rows (which carry Sleeper ids matched by name) are usually
+ * newest — so the Vikings CB Byron Murphy was searched as the Seahawks DT, and TE E.J.
+ * Jenkins as "Elgton Jenkins". See lib/player-match/authoritativePlayerRow.ts.
+ */
+async function resolveBySleeperId(sport: string, sleeperId: string) {
+  const rows = await prisma.sportsPlayer.findMany({
+    where: { sport: { equals: sport, mode: 'insensitive' }, sleeperId: { equals: sleeperId, mode: 'insensitive' } },
+    orderBy: [{ fetchedAt: 'desc' }],
+    select: { name: true, sport: true, team: true, position: true, source: true, sleeperId: true, fetchedAt: true },
+  })
+  const picked = selectAuthoritativePlayerRow(rows)?.row
+  return picked ? { name: picked.name, sport: picked.sport, team: picked.team } : null
+}
 
 export async function GET(req: Request) {
   const rl = consumeRateLimit({
@@ -26,11 +43,13 @@ export async function GET(req: Request) {
   if (sport !== 'NFL') return NextResponse.json(await getPlayerHighlights({ sport, name: '', team: null }))
   try {
     // Public catalog only. Names come from canonical player identity, never a caller's search string.
-    const player = await prisma.sportsPlayer.findFirst({
-      where: { sport: { equals: sport, mode: 'insensitive' }, ...(externalId ? { externalId } : { sleeperId: { equals: sleeperId!, mode: 'insensitive' } }) },
-      orderBy: [{ fetchedAt: 'desc' }],
-      select: { name: true, sport: true, team: true },
-    })
+    const player = externalId
+      ? await prisma.sportsPlayer.findFirst({
+          where: { sport: { equals: sport, mode: 'insensitive' }, externalId },
+          orderBy: [{ fetchedAt: 'desc' }],
+          select: { name: true, sport: true, team: true },
+        })
+      : await resolveBySleeperId(sport, sleeperId!)
     if (!player) return NextResponse.json({ error: 'Player not found.' }, { status: 404 })
     return NextResponse.json(await getPlayerHighlights(player), { headers: { 'Cache-Control': 'private, no-store' } })
   } catch {
