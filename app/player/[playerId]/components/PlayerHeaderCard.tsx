@@ -5,6 +5,7 @@ import { TrendingUp, TrendingDown, Minus, AlertTriangle } from 'lucide-react'
 import type { PlayerIdentity } from '../PlayerProfileClient'
 import { getTeamLogoUrl } from '@/lib/player-media-urls'
 import { FallbackImg } from '@/components/core-app/FallbackImg'
+import { isDisplayableInjuryDesignation, rosterBadgeStatus } from '@/lib/injuries/injuryStatusDisplay'
 
 type OutlookSnippet = {
   currentValue?: number
@@ -27,7 +28,14 @@ function statusBadge(status: string) {
     suspended: 'bg-violet-500/15 text-violet-300 border-violet-500/25',
     pup: 'bg-orange-500/15 text-orange-300 border-orange-500/25',
   }
-  const cls = colors[s] ?? 'bg-white/10 text-white/50 border-white/10'
+  const bucket = rosterBadgeStatus(status)
+  const cls =
+    colors[s] ??
+    (bucket === 'ir' || bucket === 'out'
+      ? colors.out
+      : bucket === 'q'
+        ? colors.questionable
+        : 'bg-white/10 text-white/50 border-white/10')
   return (
     <span className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] font-bold uppercase ${cls}`}>
       <AlertTriangle className="h-2.5 w-2.5" /> {status}
@@ -75,7 +83,12 @@ export function PlayerHeaderCard({
   }, [player.name, player.sport])
 
   const teamLogoUrl = getTeamLogoUrl(player.team, player.sport) ?? ''
-  const injuryDisplay = outlook?.injuryStatus && outlook.injuryStatus !== 'Active' ? outlook.injuryStatus : player.status !== 'active' ? player.status : null
+  /*
+   * ONLY the live-feed designation the page resolved. Not `player.status` — a roster code ("ACT"),
+   * which put "⚠ ACT" on healthy players — and not `outlook.injuryStatus`, which descends from a
+   * one-off name-matched CSV snapshot.
+   */
+  const injuryDisplay = isDisplayableInjuryDesignation(player.injuryStatus) ? String(player.injuryStatus).trim() : null
 
   return (
     <div className="relative overflow-hidden rounded-2xl border border-white/[0.08] bg-gradient-to-br from-[#0c1025] to-[#0a0e1a]">
