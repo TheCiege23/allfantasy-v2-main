@@ -3,6 +3,7 @@ import 'server-only'
 import { resolveNames } from '@/lib/ai-payload/resolveAiTeamContext'
 import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
 import { isForeignIdSpace } from '@/lib/core-app/rosterIdSpace'
+import { bridgeColumnFor, isUnbridgedId } from '@/lib/core-app/bridgedRosterIds'
 import {
   defaultLeagueWeekPricingDeps,
   isLeagueWeekRefusal,
@@ -178,10 +179,28 @@ export async function buildLineupOptimization(
   if (!roster) {
     return unresolved('no_viewer_roster', 'Your team in this league is not claimed or has no synced roster.')
   }
-  // The port strips a foreign league's roster ids, so the roster reads empty and every refusal below
-  // ("no player on your roster has a projection") would be a false claim about the team.
-  if (isForeignIdSpace(world.provenance?.provider)) {
-    return unresolved('roster_ids_unreadable', `${FOREIGN_IDS_UNREADABLE}, so your roster cannot be read to build a lineup.`)
+  /*
+   * A foreign league's roster reads empty unless the port could read it through the Fleaflicker /
+   * MFL identity bridge (decision-os/world/port.ts). Empty, every refusal below ("no player on your
+   * roster has a projection") would be a false claim about the team.
+   *
+   * 🛑 BRIDGED, IT MUST STILL BE COMPLETE FOR THIS ROSTER. An unidentified player cannot be priced,
+   * so a "best lineup" would quietly leave him out — and this result drives push alerts telling
+   * someone to bench a player. One unidentified ACTIVE player refuses, with the count.
+   */
+  const provider = world.provenance?.provider
+  if (isForeignIdSpace(provider)) {
+    if (!bridgeColumnFor(provider) || roster.playerIds.length === 0) {
+      return unresolved('roster_ids_unreadable', `${FOREIGN_IDS_UNREADABLE}, so your roster cannot be read to build a lineup.`)
+    }
+    const activeIds = activePlayerIds(roster)
+    const unseen = activeIds.filter((id) => isUnbridgedId(id)).length
+    if (unseen > 0) {
+      return unresolved(
+        'roster_ids_unreadable',
+        `${unseen} of ${activeIds.length} active players on your roster could not be identified, so a best lineup could leave one of them out.`,
+      )
+    }
   }
 
   const slots = world.league.rosterSettings.starterSlots

@@ -12,7 +12,12 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const state = { platform: 'fleaflicker' }
+const state = {
+  platform: 'fleaflicker',
+  playerData: { players: ['6038'], starters: ['6038'] } as Record<string, unknown>,
+  /** PlayerIdentityMap rows the Fleaflicker/MFL bridge reads; none = the league is not readable. */
+  bridgeRows: [] as Array<{ fleaflickerId?: string; mflId?: string; sleeperId: string }>,
+}
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
@@ -45,11 +50,13 @@ vi.mock('@/lib/prisma', () => ({
     },
     leagueTeam: { findMany: vi.fn(async () => []) },
     roster: {
+      // Both the port's roster read and the bridge's coverage read come through here.
       findMany: vi.fn(async () => [
         {
           id: 'r1',
+          leagueId: 'L1',
           platformUserId: 'u1',
-          playerData: { players: ['6038'], starters: ['6038'] },
+          playerData: state.playerData,
           faabRemaining: null,
           waiverPriority: null,
           settings: null,
@@ -57,6 +64,7 @@ vi.mock('@/lib/prisma', () => ({
         },
       ]),
     },
+    playerIdentityMap: { findMany: vi.fn(async () => state.bridgeRows) },
     redraftRoster: { findMany: vi.fn(async () => []) },
     teamPerformance: { findMany: vi.fn(async () => []) },
     sportsPlayer: {
@@ -84,6 +92,35 @@ async function namesFor(platform: string) {
 
 beforeEach(() => {
   state.platform = 'fleaflicker'
+  state.playerData = { players: ['6038'], starters: ['6038'] }
+  state.bridgeRows = []
+})
+
+describe('canonical world — a Fleaflicker league the identity bridge can read', () => {
+  it('bridged ids become Sleeper ids; an unbridged one stays in its slot, prefixed, never bare', async () => {
+    // 4 of 5 translate: exactly the 80% the bridge requires before a league is read through it.
+    state.playerData = { players: ['6038', '7000', '7001', '7002', '7003'], starters: ['6038', '7003'] }
+    state.bridgeRows = [
+      { fleaflickerId: '6038', sleeperId: 's9999' },
+      { fleaflickerId: '7000', sleeperId: 's7000' },
+      { fleaflickerId: '7001', sleeperId: 's7001' },
+      { fleaflickerId: '7002', sleeperId: 's7002' },
+    ]
+    state.platform = 'fleaflicker'
+    const world = await resolveCanonicalWorld('L1')
+    const roster = world!.rosters[0]!
+    expect(roster.playerIds).toEqual(['s9999', 's7000', 's7001', 's7002', 'unbridged:7003'])
+    expect(roster.starterIds).toEqual(['s9999', 'unbridged:7003'])
+    const rows = await loadPlayerMetadataRows('NFL', roster.playerIds)
+    expect(rows.map((r) => r.name)).not.toContain('Wrong Player')
+  })
+
+  it('below the bridge’s coverage rule the roster is stripped exactly as before', async () => {
+    state.playerData = { players: ['6038', '7000', '7001'], starters: ['6038'] }
+    state.bridgeRows = [{ fleaflickerId: '7000', sleeperId: 's7000' }] // 1 of 3
+    const world = await resolveCanonicalWorld('L1')
+    expect(world!.rosters.flatMap((r) => r.playerIds)).toEqual([])
+  })
 })
 
 describe('canonical world — a foreign league’s roster ids', () => {
