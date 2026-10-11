@@ -1,4 +1,5 @@
 import 'server-only'
+import { injuryStatusLookup } from '@/lib/injuries/matchInjuryRows'
 
 import { prisma } from '@/lib/prisma'
 import { isRuledOut } from '@/lib/core-app/injuryStatus'
@@ -172,7 +173,7 @@ async function rosterNeedFactors(args: {
 
     const rows = await prisma.sportsPlayer.findMany({
       where: { sleeperId: { in: rosterIds } },
-      select: { sleeperId: true, position: true, name: true },
+      select: { sleeperId: true, position: true, name: true, team: true },
     })
     /*
      * 🛑 ONE PLAYER PER ROSTER ID, NOT ONE PER ROW. `SportsPlayer` carries several rows for many
@@ -182,24 +183,21 @@ async function rosterNeedFactors(args: {
      * `buildTradeContextNotes` keys the same rows through a Map, which is why its notes never showed
      * it. Positions are normalised too: some rows spell them "TightEnd".
      */
-    const byId = new Map<string, { sleeperId: string; position: string; name: string }>()
+    const byId = new Map<string, { sleeperId: string; position: string; name: string; team: string | null }>()
     for (const r of rows) {
       if (!r.sleeperId || byId.has(r.sleeperId)) continue
-      byId.set(r.sleeperId, { sleeperId: r.sleeperId, position: normalizePosition(r.position), name: r.name })
+      byId.set(r.sleeperId, { sleeperId: r.sleeperId, position: normalizePosition(r.position), name: r.name, team: r.team ?? null })
     }
     const players = rosterIds.map((id) => byId.get(id)).filter((p): p is NonNullable<typeof p> => Boolean(p))
     const injuries = await prisma.sportsInjury
       .findMany({
         where: { sport: args.sport, playerName: { in: players.map((p) => p.name) } },
         orderBy: { fetchedAt: 'desc' },
-        select: { playerName: true, status: true },
+        select: { playerName: true, status: true, team: true, position: true },
       })
-      .catch(() => [] as Array<{ playerName: string; status: string | null }>)
-    const statusByName = new Map<string, string | null>()
-    for (const i of injuries) {
-      const k = i.playerName.toLowerCase()
-      if (!statusByName.has(k)) statusByName.set(k, i.status)
-    }
+      .catch(() => [] as Array<{ playerName: string; status: string | null; team: string | null; position: string | null }>)
+    // Bound per athlete (name + team/position), not first row per NAME — see matchInjuryRows.ts.
+    const statusOf = injuryStatusLookup(injuries, args.sport)
 
     // Outgoing matched by name against the roster — the only handle the console has, and an
     // unmatched give simply stays on the roster, which errs toward reporting LESS need.
@@ -207,9 +205,9 @@ async function rosterNeedFactors(args: {
     const outgoing = new Set(
       give.map((g) => byName.get(g.name.toLowerCase())?.sleeperId).filter((x): x is string => Boolean(x)),
     )
-    const slotOf = (p: { position: string | null; name: string }): RosteredSlot => ({
+    const slotOf = (p: { position: string | null; name: string; team?: string | null }): RosteredSlot => ({
       position: p.position ?? '',
-      unavailable: isRuledOut(statusByName.get(p.name.toLowerCase()) ?? null),
+      unavailable: isRuledOut(statusOf({ name: p.name, team: p.team ?? null, position: p.position })),
     })
     const remaining = players.filter((p) => p.sleeperId && !outgoing.has(p.sleeperId)).map(slotOf)
     const incoming: RosteredSlot[] = get

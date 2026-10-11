@@ -1,4 +1,5 @@
 import 'server-only'
+import { injuryStatusLookup } from '@/lib/injuries/matchInjuryRows'
 
 import { prisma } from '@/lib/prisma'
 import { computeLeagueProjectedPoints, extractScoringSettings } from '@/lib/projections/leagueScoring'
@@ -279,23 +280,21 @@ export async function getPlayerImpact(
        */
       prisma.sportsInjury
         .findMany({
-          where: { sport: 'NFL' },
+          // Live rows only: `expiresAt` is each writer's own freshness contract.
+          where: { sport: 'NFL', expiresAt: { gt: new Date() } },
           orderBy: { fetchedAt: 'desc' },
-          select: { playerName: true, status: true },
+          select: { playerName: true, status: true, team: true, position: true },
           take: 4000,
         })
         .catch(() => []),
     ])
 
-    const injuryByName = new Map<string, string>()
-    for (const i of injuries) {
-      const k = i.playerName.trim().toLowerCase()
-      // `status` is nullable — a row with no designation carries no information
-      // and must not overwrite a real one, nor be rendered as a blank badge.
-      if (!i.status) continue
-      // First wins — the list is newest-first, so this keeps the latest report.
-      if (!injuryByName.has(k)) injuryByName.set(k, i.status)
-    }
+    /*
+     * Newest designation per ATHLETE (name verified by team/position), not per name: keyed by name,
+     * a replacement option could wear a same-named player's badge (WR vs LB Justin Jefferson).
+     * Rows with no status carry no information and are skipped (matchInjuryRows).
+     */
+    const injuryStatusOf = injuryStatusLookup(injuries, 'NFL')
 
     const playerById = new Map<string, PlayerRow>(
       players.filter((p) => p.sleeperId).map((p) => [p.sleeperId as string, p as PlayerRow])
@@ -421,7 +420,7 @@ export async function getPlayerImpact(
         team: row.team,
         afPoints: priced?.points ?? null,
         delta: priced && mine ? Math.round((priced.points - mine.points) * 100) / 100 : null,
-        injuryStatus: injuryByName.get(row.name.trim().toLowerCase()) ?? null,
+        injuryStatus: injuryStatusOf({ name: row.name, team: row.team, position: row.position }),
         from,
       })
     }

@@ -12,9 +12,9 @@ import { unstable_cache } from 'next/cache'
 
 import { prisma } from '@/lib/prisma'
 import { loadLatestPlayerValueSnapshots } from '@/lib/player-values/latestPlayerValueSnapshots'
-import { buildNameIndex, resolveVerifiedMatch } from '@/lib/player-match/verifiedNameMatch'
+import { createInjuryRowMatcher } from '@/lib/injuries/matchInjuryRows'
 import { composePlayerIdentities } from './playerIdentityCompose'
-import { getTeamInfo, normalizeTeamAbbrev } from '@/lib/team-abbrev'
+import { getTeamInfo } from '@/lib/team-abbrev'
 import { leagueDisplayName } from './leagueHome'
 import { selectKickoffLeague } from './kickoffContext'
 import { isBestBallLeagueRow } from './leagueBestBall'
@@ -1001,45 +1001,54 @@ async function loadDash34Data(
    * upper-cased, which is exactly what the matcher's own `normalizeToken` was
    * going to do to them anyway.
    */
-  const injuryIndex = buildNameIndex(
-    injuryRows
-      .filter((i) => Boolean(i.status))
-      .map((i) => ({
-        name: i.playerName,
-        position: i.position ?? null,
-        team: normalizeTeamAbbrev(i.team) ?? null,
-        row: i,
-      })),
+  /*
+   * 🛑 ONE CANDIDATE PER (NAME, TEAM), NOT ONE PER ROW — AND THE STATUS COMES FROM THAT CANDIDATE.
+   * Measured 2026-10-11, two defects in the read this replaced:
+   *  - The index held every ROW, so one athlete reported by several feeds (ESPN writes a row per
+   *    news item, plus RI and the live Sleeper fold) was several candidates. When two of them shared
+   *    his position the matcher could not narrow to one and REFUSED — 77 live NFL names, among them
+   *    DeVonta Smith (Out). A refusal reads as "no designation", so an Out starter looked healthy.
+   *  - After verifying the athlete, the status was read from a map keyed by NAME alone, first row
+   *    wins — so a verified Vikings WR Justin Jefferson could still be handed a Browns LB's status.
+   * `createInjuryRowMatcher` collapses rows to one candidate per (name, team) with NFL teams folded
+   * to codes (the vocabulary fold described above), and hands back that athlete's own rows.
+   *
+   * ⚠ AND THE NEWEST ROW DECIDES, HEALTHY INCLUDED. Rows arrive newest `fetchedAt` first. A healthy
+   * newest row used to be skipped, so an older "Out" from another feed survived after the player was
+   * cleared — the founder-reported false "Out" (2026-10-11) had exactly that shape available to it.
+   */
+  const matchInjury = createInjuryRowMatcher(
+    injuryRows.filter((i) => Boolean(i.status)),
+    'NFL',
   )
   const ambiguousInjuryNames = new Set<string>()
 
-  const injuryByName = new Map<
-    string,
-    { status: string; description: string | null; reportedAt: Date | null }
-  >()
-  for (const i of injuryRows) {
-    if (!i.status) continue
-    const key = i.playerName.trim().toLowerCase()
-    if (injuryByName.has(key)) continue
-    if (HEALTHY.has(i.status.trim().toLowerCase())) continue
-    /*
-     * ⚠ THE FRESHNESS GATE LIVES HERE, IN THE LOADER, so the brief, the triage
-     * chips, the urgent counts and the book all inherit it at once. A dated
-     * report older than 45 days is last season's news unless the status itself
-     * spans a season (IR, PUP, NFI, suspension — `isSeasonScoped`). A row with
-     * no `date` cannot be judged stale and is kept: it already passed the
-     * writer's own `expiresAt`, and dropping it would hide a designation on
-     * the strength of a missing timestamp rather than a stale one. Kept rows
-     * still carry `reportedAt`, so "reported 3w ago" renders exactly as before.
-     */
-    if (
-      i.date != null &&
-      now.getTime() - i.date.getTime() > STALE_REPORT_MS &&
-      !isSeasonScoped(i.status)
-    ) {
-      continue
+  function currentDesignation(
+    rows: ReadonlyArray<(typeof injuryRows)[number]>,
+  ): { status: string; description: string | null; reportedAt: Date | null } | null {
+    for (const i of rows) {
+      if (!i.status) continue
+      if (HEALTHY.has(i.status.trim().toLowerCase())) return null
+      /*
+       * ⚠ THE FRESHNESS GATE LIVES HERE, IN THE LOADER, so the brief, the triage
+       * chips, the urgent counts and the book all inherit it at once. A dated
+       * report older than 45 days is last season's news unless the status itself
+       * spans a season (IR, PUP, NFI, suspension — `isSeasonScoped`). A row with
+       * no `date` cannot be judged stale and is kept: it already passed the
+       * writer's own `expiresAt`, and dropping it would hide a designation on
+       * the strength of a missing timestamp rather than a stale one. Kept rows
+       * still carry `reportedAt`, so "reported 3w ago" renders exactly as before.
+       */
+      if (
+        i.date != null &&
+        now.getTime() - i.date.getTime() > STALE_REPORT_MS &&
+        !isSeasonScoped(i.status)
+      ) {
+        continue
+      }
+      return { status: i.status, description: i.description, reportedAt: i.date }
     }
-    injuryByName.set(key, { status: i.status, description: i.description, reportedAt: i.date })
+    return null
   }
 
   /** Designation for a roster id, or null when we hold none. Never "healthy". */
@@ -1060,18 +1069,14 @@ async function loadDash34Data(
      * Verified identity first. A refusal is recorded and treated as "we hold
      * nothing" — which is the honest answer, and never "healthy".
      */
-    const verified = resolveVerifiedMatch(injuryIndex, {
-      name: p.name,
-      position: p.position,
-      team: p.team,
-    })
-    if (verified.reason === 'ambiguous') {
+    const hit = matchInjury({ name: p.name, position: p.position, team: p.team })
+    if (hit && 'ambiguous' in hit) {
       ambiguousInjuryNames.add(p.name)
       return null
     }
-    if (!verified.match) return null
+    if (!hit) return null
 
-    const inj = injuryByName.get(verified.match.row.playerName.trim().toLowerCase())
+    const inj = currentDesignation(hit.rows)
     if (!inj) return null
     return {
       name: p.name,

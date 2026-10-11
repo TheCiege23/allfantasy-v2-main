@@ -1,4 +1,5 @@
 import 'server-only'
+import { injuryStatusLookup } from '@/lib/injuries/matchInjuryRows'
 
 import { prisma } from '@/lib/prisma'
 import { getByeWeeks } from '@/lib/core-app/byeWeeks'
@@ -309,14 +310,12 @@ export async function buildTradeContextNotes(args: {
     .findMany({
       where: { sport: league.sport ?? 'NFL', playerName: { in: players.map((p) => p.name) } },
       orderBy: { fetchedAt: 'desc' },
-      select: { playerName: true, status: true },
+      select: { playerName: true, status: true, team: true, position: true },
     })
     .catch(() => [])
-  const statusByName = new Map<string, string | null>()
-  for (const i of rosterInjuries) {
-    const k = i.playerName.toLowerCase()
-    if (!statusByName.has(k)) statusByName.set(k, i.status)
-  }
+  // Bound to each athlete by name + team/position, not "first row per NAME" — that handed a
+  // same-named player's status to this roster (WR vs LB Justin Jefferson). See matchInjuryRows.ts.
+  const statusOf = injuryStatusLookup(rosterInjuries, league.sport ?? 'NFL')
 
   const byes = await getByeWeeks({
     sport: league.sport ?? 'NFL',
@@ -376,7 +375,7 @@ export async function buildTradeContextNotes(args: {
       .filter((id) => !outgoing.has(id))
       .map((id) => ({
         position: byId.get(id)?.position ?? '',
-        unavailable: isRuledOut(statusByName.get((byId.get(id)?.name ?? '').toLowerCase()) ?? null),
+        unavailable: isRuledOut(statusOf({ name: byId.get(id)?.name ?? '', team: byId.get(id)?.team, position: byId.get(id)?.position })),
       })),
   })
 
@@ -1393,7 +1392,7 @@ async function buildLeverageNotes(args: {
   const players = await prisma.sportsPlayer
     .findMany({
       where: { sleeperId: { in: ids } },
-      select: { sleeperId: true, name: true, position: true },
+      select: { sleeperId: true, name: true, position: true, team: true },
     })
     .catch(() => [])
   const byId = new Map(players.filter((p) => p.sleeperId).map((p) => [p.sleeperId as string, p]))
@@ -1402,14 +1401,11 @@ async function buildLeverageNotes(args: {
     .findMany({
       where: { sport, playerName: { in: players.map((p) => p.name) } },
       orderBy: { fetchedAt: 'desc' },
-      select: { playerName: true, status: true },
+      select: { playerName: true, status: true, team: true, position: true },
     })
     .catch(() => [])
-  const statusByName = new Map<string, string | null>()
-  for (const i of injuries) {
-    const k = i.playerName.toLowerCase()
-    if (!statusByName.has(k)) statusByName.set(k, i.status)
-  }
+  // Bound to each athlete by name + team/position (matchInjuryRows), not first row per NAME.
+  const statusOf = injuryStatusLookup(injuries, sport)
 
   /* Their roster after the deal removes what they are sending you. */
   const leaving = new Set(
@@ -1421,7 +1417,7 @@ async function buildLeverageNotes(args: {
       .filter((id) => !leaving.has((byId.get(id)?.name ?? '').toLowerCase()))
       .map((id) => ({
         position: byId.get(id)?.position ?? '',
-        unavailable: isRuledOut(statusByName.get((byId.get(id)?.name ?? '').toLowerCase()) ?? null),
+        unavailable: isRuledOut(statusOf({ name: byId.get(id)?.name ?? '', team: byId.get(id)?.team, position: byId.get(id)?.position })),
       })),
   })
 

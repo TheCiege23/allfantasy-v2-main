@@ -56,3 +56,13 @@ describe('foldInjuryTeam', () => {
     expect(foldInjuryTeam('  ', 'NFL')).toBeNull()
   })
 })
+
+describe('injuryStatusLookup', () => {
+  it('returns the newest status of THIS athlete, and nothing for a shared name it cannot split', async () => {
+    const { injuryStatusLookup } = await import('@/lib/injuries/matchInjuryRows')
+    const statusOf = injuryStatusLookup(rows, 'NFL')
+    expect(statusOf({ name: 'Justin Jefferson', team: 'MIN', position: 'WR' })).toBe('Questionable')
+    expect(statusOf({ name: 'Justin Jefferson', team: 'CLE' })).toBe('Active')
+    expect(statusOf({ name: 'Justin Jefferson' })).toBeNull()
+  })
+})
