@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  resolveRedraftTeamWindow, resolveRequestingTeam,
+  availabilityLoader, resolveRedraftTeamWindow, resolveRequestingTeam,
   WINDOW_GAP_TEAM_READ_FAILED, WINDOW_GAP_LEAGUE_MISSING, WINDOW_GAP_PERIOD_UNRESOLVED,
   WINDOW_GAP_TEAM_AMBIGUOUS, WINDOW_GAP_ARCHIVAL_UNPROVABLE, WINDOW_GAP_TEAM_ID_MISSING,
   WINDOW_GAP_TEAM_NOT_CLAIMED,
@@ -465,5 +465,58 @@ describe('rest-of-season projections are reached through PlayerIdentityMap on a 
     const proj = reads.find(r => r.model === 'aFProjectionSnapshot.findMany')!.args as { where: { playerId: { in: string[] } } }
     expect(new Set(proj.where.playerId.in)).toEqual(new Set(['e1', 'e2', 'e3']))
     expect(rosOf(d)!.share).toBeCloseTo(200 / 400, 10)
+  })
+})
+
+/*
+ * 🛑 A NON-SLEEPER LEAGUE'S ROSTER IDS COLLIDE WITH OTHER PROVIDERS' IDS TOO (2026-10-11).
+ *
+ * The non-Sleeper branch matched roster ids against bare `externalId`, and every NFL match across
+ * live non-Sleeper redraft rosters named someone else — Bijan Robinson (a Sleeper id in a manual
+ * league) became Rolling Insights' "Malachi Fields", Fleaflicker's Chargers D/ST became "T.J. Watt".
+ * NHL manual leagues store RI/TSDB ids and matched correctly. A match now counts only when its name
+ * agrees with the roster row's own name.
+ */
+describe('availabilityLoader — a non-sleeper match must name the roster\'s player', () => {
+  const rows = [
+    { externalId: '9509', status: 'INACT', name: 'Malachi Fields' },   // RI 9509, not Bijan
+    { externalId: '2353', status: 'ACT', name: 'T.J. Watt' },          // RI 2353, not the Chargers D/ST
+    { externalId: '1086', status: 'Out', name: "Ryan O'Reilly" },      // RI id in a manual NHL league
+  ]
+  const fake = () => {
+    const calls: unknown[] = []
+    const prisma = {
+      sportsPlayer: {
+        findMany: async (args: { where: { externalId?: { in: string[] } } }) => {
+          calls.push(args)
+          const ids = args.where.externalId?.in ?? []
+          return rows.filter(r => ids.includes(r.externalId))
+        },
+      },
+    }
+    return { prisma: prisma as never, calls }
+  }
+
+  it('drops a match whose name disagrees with the roster, and keeps one that agrees', async () => {
+    const { prisma } = fake()
+    const names = new Map([
+      ['9509', 'Bijan Robinson'],
+      ['2353', 'Los Angeles Chargers'],
+      ['1086', 'Ryan OReilly'],
+    ])
+    const out = await availabilityLoader(prisma, 'manual', names)('NHL', ['9509', '2353', '1086'])
+    expect([...out.keys()]).toEqual(['1086'])
+  })
+
+  it('drops a match when the roster has no name to check it against', async () => {
+    const { prisma } = fake()
+    const out = await availabilityLoader(prisma, 'espn', new Map())('NFL', ['1086'])
+    expect(out.size).toBe(0)
+  })
+
+  it('a sleeper league is untouched: sleeperId + source, no name check needed', async () => {
+    const { prisma, calls } = fake()
+    await availabilityLoader(prisma, 'sleeper', new Map())('NFL', ['9509'])
+    expect(calls[0]).toMatchObject({ where: { sport: 'NFL', sleeperId: { in: ['9509'] }, source: 'sleeper' } })
   })
 })

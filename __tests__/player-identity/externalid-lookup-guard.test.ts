@@ -35,16 +35,7 @@ import { describe, expect, it } from 'vitest'
  * Every unscoped read in the repo is now either scoped or carries an `externalid-audited:` reason, so
  * the list should stay empty; adding to it is a regression that needs saying so in the commit.
  */
-const UNAUDITED = new Set<string>([
-  /*
-   * RE-OPENED 2026-10-11, AND NOT BY A NEW READ. The non-Sleeper branch of `availabilityLoader`
-   * (`externalId IN (rosterIds)` for ESPN/Yahoo/MFL/… leagues) was always unscoped; the Sleeper
-   * branch's `source: 'sleeper'` a few lines above it hid it from this detector, the same blind spot
-   * that hid the alert sweep's live fold. Nobody has shown which id space those roster ids are in —
-   * ESPN 12483 is Matthew Stafford and RI 12483 is not — so it is listed, not marked audited.
-   */
-  'lib/decision-os/value-v2/redraftWindowServerAdapter.ts',
-])
+const UNAUDITED = new Set<string>([])
 
 const AUDITED_MARKER = /externalid-audited:\s*\S.{9,}/
 
