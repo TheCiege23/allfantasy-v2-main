@@ -31,11 +31,12 @@ import { classifyAvatarSource } from '@/lib/draft-room/classify-avatar-source'
 import { resolveNflRedraftCanonicalHeadshot } from '@/lib/nfl-provider/nflRedraftProviderCertification'
 import {
   PLAYER_IMAGE_TYPE_HEADSHOT,
+  headshotResolverStamp,
   readPrimaryPlayerImage,
   writePrimaryPlayerImage,
 } from '@/lib/player-assets/playerImageStore'
 import { deriveCanonicalPlayerIdentity } from '@/lib/canonical/canonicalIdentity'
-import { normalizePlayerName } from '@/lib/player-assets/headshotCandidateMatch'
+import { normalizePlayerName, pickHeadshotFromRosterRows } from '@/lib/player-assets/headshotCandidateMatch'
 import { isPlaceholderHeadshot } from '@/lib/player-assets/apiSportsPlaceholder'
 
 export type HeadshotProvider =
@@ -348,6 +349,8 @@ async function resolveOnce(
       url: resolved.imageUrl,
       provider: resolved.source,
       confidence: confidenceToScore(resolved.confidence),
+      // Marks the row as written by the identity-checked resolver; rows without it are retired.
+      rawPayload: headshotResolverStamp(),
     })
     return { ...resolved, cacheHit: false, persisted: write.written }
   }
@@ -517,6 +520,11 @@ async function resolveFromProviders(
   }
 
   // ── 4. SportsPlayer DB cache ──
+  // 🛑 This used to accept the first row agreeing on team OR position, then `?? dbRows[0]` —
+  // any same-named row at all. Measured in production 2026-10-11: DL Chris Jones (KC) served CB
+  // Chris Jones's photo (Sleeper 5815), LB Cole McDonald (KC) a QB's, S Tre Thomas an LB's. Every
+  // namesake is now read (not five arbitrary ones), and `pickHeadshotFromRosterRows` binds only
+  // a row that agrees on team AND position wherever both sides state them, or refuses.
   try {
     const dbRows: SportsPlayerHeadshotCacheRow[] = await prisma.sportsPlayer.findMany({
       where: {
@@ -524,17 +532,17 @@ async function resolveFromProviders(
         name: { equals: input.name, mode: 'insensitive' },
       },
       select: { imageUrl: true, team: true, position: true },
-      take: 5,
+      take: 50,
     })
-    const exact = dbRows.find((row) => {
-      const sameTeam = !targetTeam || normalizeTeam(row.team) === targetTeam
-      const samePos = !targetPos || normalizePosition(row.position) === targetPos
-      return sameTeam || samePos
-    }) ?? dbRows[0]
+    const url = pickHeadshotFromRosterRows(
+      dbRows,
+      { sport, team: input.team ?? null, position: input.position ?? null },
+      isValidHeadshotUrl,
+    )
 
-    if (exact?.imageUrl && isValidHeadshotUrl(exact.imageUrl)) {
+    if (url) {
       return {
-        imageUrl: exact.imageUrl,
+        imageUrl: url,
         source: 'sportsplayer',
         confidence: targetTeam || targetPos ? 'exact' : 'name_only',
       }
