@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { leagueWorkspaceHref, leagueWorkspaceMode } from '@/lib/league/league-workspace-navigation'
 import { useEffect, useRef } from 'react'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
@@ -135,6 +136,12 @@ export function LeagueTabs({
         what this league can show, used for both, rather than a prewarm list
         that can drift out of step with the tabs it is meant to anticipate.
       */}
+      <div className="af-lt-workspace">
+        <Link className="af-lt-workspace-open" href={leagueWorkspaceHref(leagueId)}>
+          {language === 'es' ? 'Abrir liga' : 'Open League'} <span aria-hidden>↗</span>
+        </Link>
+        <span>{leagueWorkspaceMode(platform, language).description}</span>
+      </div>
       <LeagueTabsPrewarm
         leagueId={leagueId}
         activeKey={activeKey}

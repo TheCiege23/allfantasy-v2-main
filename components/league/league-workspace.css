@@ -135,3 +135,12 @@
   .af-league-workspace .af-league-draft-facts { grid-template-columns: minmax(0, 1fr); }
   .af-league-workspace .af-league-draft-actions :is(a, button) { flex: 1 1 100%; }
 }
+
+.af-workspace-navigation { padding: 16px; border-bottom: 1px solid var(--line); background: var(--bg); color: var(--text); }
+.af-workspace-navigation-links { display: flex; flex-wrap: wrap; gap: 8px; }
+.af-workspace-navigation.af-core .af-workspace-navigation-links a { display: inline-flex; align-items: center; min-height: 44px; padding: 10px 14px; background: var(--surface); border: 1px solid var(--line2); border-radius: 8px; color: var(--text); text-decoration: none; font-size: 13px; font-weight: 650; }
+.af-workspace-navigation.af-core .af-workspace-navigation-links a:hover { background: var(--accent-soft); color: var(--accent); }
+.af-workspace-navigation-mode { margin-top: 12px; }
+.af-workspace-navigation-mode > span { font-size: 12px; font-weight: 750; color: var(--accent); }
+.af-workspace-navigation-mode p { margin: 6px 0 0; max-width: 75ch; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.af-workspace-navigation :is(a, button):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }

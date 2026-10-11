@@ -914,3 +914,12 @@
 .af-ml-card {
   min-width: 0;
 }
+
+.af-ml-card-actions { display: flex; flex-direction: column; gap: 8px; }
+.af-ml-card[data-view='list'] .af-ml-card-actions { margin-left: auto; flex-direction: row; flex-wrap: wrap; }
+.af-core .af-ml-card-actions .af-ml-open { margin: 0; }
+.af-core .af-ml-open--workspace { background: var(--surface2); color: var(--text); border: 1px solid var(--line2); }
+@media (max-width: 599px) {
+  .af-ml-card[data-view='list'] .af-ml-card-actions { width: 100%; margin-left: 0; }
+  .af-ml-card-actions .af-ml-open { flex: 1 1 auto; }
+}
