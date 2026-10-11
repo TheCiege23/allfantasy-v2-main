@@ -729,7 +729,7 @@ export function ChatComposer({
 
   return (
     <div
-      className="flex min-w-0 flex-1 flex-col"
+      className="af-chat-composer flex min-w-0 flex-1 flex-col"
       data-testid="league-chat-composer"
       data-current-user-id={currentUserId ?? ''}
     >
@@ -773,7 +773,7 @@ export function ChatComposer({
             )
           : null}
 
-        <div className="rounded-xl border border-white/[0.08] bg-white/[0.03]">
+        <div className="af-chat-box rounded-xl border border-white/[0.08] bg-white/[0.03]">
           {bbSuggest?.options.length ? (
             <div
               className="max-h-36 overflow-y-auto border-b border-white/[0.06] px-2 py-1.5"
