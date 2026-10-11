@@ -39,6 +39,31 @@ describe('checkStartedGames', () => {
     expect(r.unverified).toEqual([])
   })
 
+  it('reports the next kickoff of a player not yet started', async () => {
+    h.findMany.mockResolvedValue([game('KC', 'BUF', '2026-09-28T00:20:00Z'), game('KC', 'BUF', '2026-10-04T17:00:00Z')])
+    const r = await checkStartedGames({ sport: 'NFL', season: 2026, week: 4, players: [p('mahomes', 'KC')], now: NOW })
+    expect(r.kickoffs?.get('mahomes')?.toISOString()).toBe('2026-09-28T00:20:00.000Z')
+  })
+
+  it('takes the lineup row time when it is earlier than the schedule, and gives a started player none', async () => {
+    h.findMany.mockResolvedValue([game('KC', 'BUF', '2026-09-28T00:20:00Z'), game('Kansas City Chiefs', 'Buffalo Bills', '2026-09-27T17:00:00Z')])
+    const later = await checkStartedGames({ sport: 'NFL', season: 2026, week: 4, players: [p('allen', 'BUF', '2026-09-27T23:00:00Z')], now: new Date('2026-09-27T12:00:00Z') })
+    expect(later.kickoffs?.get('allen')?.toISOString()).toBe('2026-09-27T17:00:00.000Z')
+    const row = await checkStartedGames({ sport: 'NFL', season: 2026, week: 4, players: [p('allen', 'BUF', '2026-09-27T16:00:00Z')], now: new Date('2026-09-27T12:00:00Z') })
+    expect(row.kickoffs?.get('allen')?.toISOString()).toBe('2026-09-27T16:00:00.000Z')
+    const begun = await checkStartedGames({ sport: 'NFL', season: 2026, week: 4, players: [p('allen', 'BUF')], now: NOW })
+    expect(begun.started.has('allen')).toBe(true)
+    expect(begun.kickoffs?.has('allen')).toBe(false)
+  })
+
+  it('gives a team on bye no kickoff from NEXT week\'s game, and no unverified either', async () => {
+    // Window opens Tue 2026-09-22; Thursday 2026-10-01 is next week.
+    h.findMany.mockResolvedValue([game('KC', 'BUF', '2026-10-02T00:15:00Z')])
+    const r = await checkStartedGames({ sport: 'NFL', season: 2026, week: 4, players: [p('mahomes', 'KC')], now: NOW })
+    expect(r.kickoffs?.has('mahomes')).toBe(false)
+    expect(r.unverified).toEqual([])
+  })
+
   it('locks on the stored game time alone, without reading the schedule', async () => {
     const r = await checkStartedGames({ sport: 'NBA', season: 2026, week: 1, players: [p('lebron', 'LAL', '2026-09-27T17:00:00Z')], now: NOW })
     expect(r.started.has('lebron')).toBe(true)
