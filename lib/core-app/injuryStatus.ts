@@ -44,6 +44,16 @@ function words(status: string): string[] {
  */
 const ABSENT_TOKENS = new Set(['ir', 'il', 'pup', 'nfi', 'out'])
 
+/**
+ * A word that means a suspension: the long spellings ("Suspension", "Suspended") by their `suspen`
+ * prefix, and the abbreviations providers and depth charts actually write — "Sus" (the same token
+ * `rosterDesignation` reads) and "Susp". Whole words only, so nothing merely containing the letters
+ * ("Suspicious", "Sustain") reads as a suspension.
+ */
+function isSuspensionToken(t: string): boolean {
+  return t.startsWith('suspen') || t === 'sus' || t === 'susp'
+}
+
 /** He is declared absent. A starter carrying this scores zero. */
 export function isRuledOut(status: string | null | undefined): boolean {
   if (!status) return false
@@ -57,7 +67,7 @@ export function isRuledOut(status: string | null | undefined): boolean {
    * suspended player only if a provider happened to write the verb. Every
    * suspension in `sportsInjury` today was being priced as available.
    */
-  if (w.some((t) => t.startsWith('suspen'))) return true
+  if (w.some(isSuspensionToken)) return true
   /* Reserve and list are the two long spellings; both are an absence. */
   if (w.includes('injured') && (w.includes('reserve') || w.includes('list'))) return true
   return w.join(' ').includes('did not play')
@@ -73,7 +83,7 @@ export function isOutDesignation(status: string | null | undefined): boolean {
   if (!status) return false
   const w = words(status)
   if (!w.includes('out')) return false
-  if (w.some((t) => t === 'ir' || t === 'il' || t === 'pup' || t === 'nfi' || t.startsWith('suspen'))) return false
+  if (w.some((t) => t === 'ir' || t === 'il' || t === 'pup' || t === 'nfi' || isSuspensionToken(t))) return false
   return true
 }
 
