@@ -5,6 +5,8 @@ import { normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scop
 import { fetchNewsContext } from '@/lib/upstream-apis'
 import { mergeInjuryNewsLayer } from '@/lib/news-injury-aggregation/mergeLayer'
 import { normalizePlayerName } from '@/lib/player-identity/playerIdentityResolution'
+import { createInjuryRowMatcher, foldInjuryTeam, injuryClaimAsOf } from '@/lib/injuries/matchInjuryRows'
+import { INJURY_STALE_AFTER_HOURS } from '@/lib/injuries/injuryRecency'
 import type {
   InjuryNewsBatchPlayerInput,
   InjuryNewsSourceRow,
@@ -45,16 +47,24 @@ export async function resolvePlayerInjuryNewsBatch(args: {
   const nameOr = names.map((n) => ({ playerName: { equals: n, mode: 'insensitive' as const } }))
   const ids = [...new Set(list.map((p) => p.playerId).filter((x): x is string => Boolean(x)))]
 
-  const sinceInj = subDays(21)
-  const sinceSi = subDays(14)
+  /*
+   * 🛑 THE TWO LOG TABLES ARE BOUNDED TO THE STALE WINDOW, AND `SportsInjury` TO ROWS A FEED STILL
+   * CARRIES (2026-10-11). This read used to take three weeks of `injury_reports`, two weeks of
+   * `SportsInjury` by `updatedAt` with no `expiresAt`, and ten days of status events, and the merge
+   * then kept the WORST status among them. A player who was Out last week and cleared this morning
+   * read Out, and the trade analyzer multiplied his projection by 0.05. A live `SportsInjury` row is
+   * the feed's current word whatever its age; a log row with no expiry says nothing about today once
+   * it is older than the window every other injury reader uses.
+   */
+  const now = new Date()
+  const sinceLog = new Date(now.getTime() - INJURY_STALE_AFTER_HOURS * 3_600_000)
   const sinceNews = subDays(7)
-  const sinceEv = subDays(10)
 
   const [injuryReports, sportsInjuries, playerNews, statusEvents] = await Promise.all([
     args.prisma.injuryReportRecord.findMany({
       where: {
         sport,
-        reportDate: { gte: sinceInj },
+        reportDate: { gte: sinceLog },
         OR: [
           ...(ids.length ? [{ playerId: { in: ids } }] : []),
           ...(nameOr.length ? [{ OR: nameOr }] : []),
@@ -66,13 +76,24 @@ export async function resolvePlayerInjuryNewsBatch(args: {
     args.prisma.sportsInjury.findMany({
       where: {
         sport,
-        updatedAt: { gte: sinceSi },
+        expiresAt: { gt: now },
         OR: [
           ...(ids.length ? [{ playerId: { in: ids } }] : []),
           ...(nameOr.length ? [{ OR: nameOr }] : []),
         ],
       },
-      orderBy: { updatedAt: 'desc' },
+      select: {
+        playerName: true,
+        playerId: true,
+        team: true,
+        position: true,
+        status: true,
+        description: true,
+        source: true,
+        date: true,
+        fetchedAt: true,
+      },
+      orderBy: { fetchedAt: 'desc' },
       take: 600,
     }),
     args.prisma.playerNewsRecord.findMany({
@@ -92,7 +113,7 @@ export async function resolvePlayerInjuryNewsBatch(args: {
           where: {
             sport,
             externalId: { in: ids },
-            detectedAt: { gte: sinceEv },
+            detectedAt: { gte: sinceLog },
           },
           orderBy: { detectedAt: 'desc' },
           take: 400,
@@ -118,35 +139,19 @@ export async function resolvePlayerInjuryNewsBatch(args: {
     newsItems = nc.items ?? []
   }
 
-  const irByName = new Map<string, typeof injuryReports>()
-  for (const r of injuryReports) {
-    const k = r.playerName.toLowerCase()
-    const arr = irByName.get(k) ?? []
-    arr.push(r)
-    irByName.set(k, arr)
-  }
-  const irByPid = new Map<string, typeof injuryReports>()
-  for (const r of injuryReports) {
-    const arr = irByPid.get(r.playerId) ?? []
-    arr.push(r)
-    irByPid.set(r.playerId, arr)
-  }
-
-  const siByName = new Map<string, typeof sportsInjuries>()
-  for (const r of sportsInjuries) {
-    const k = r.playerName.toLowerCase()
-    const arr = siByName.get(k) ?? []
-    arr.push(r)
-    siByName.set(k, arr)
-  }
-  const siByPid = new Map<string, typeof sportsInjuries>()
-  for (const r of sportsInjuries) {
-    if (r.playerId) {
-      const arr = siByPid.get(r.playerId) ?? []
-      arr.push(r)
-      siByPid.set(r.playerId, arr)
-    }
-  }
+  /*
+   * Both injury tables bind through the shared matcher: by name, verified by team, a lone namesake
+   * refused. A name join alone handed the Browns LB Justin Jefferson's row to the Vikings WR. Rows
+   * reached only through a colliding provider id never match, because the matcher reads the name.
+   * `injury_reports` writes "UNKNOWN" for a team it could not read; that is no team, not a club.
+   */
+  const matchReport = createInjuryRowMatcher(
+    injuryReports.map((r) => ({ ...r, team: r.team?.trim().toUpperCase() === 'UNKNOWN' ? null : r.team })),
+    sport,
+  )
+  const matchLive = createInjuryRowMatcher(sportsInjuries, sport)
+  const rowsFor = <R,>(res: { rows: R[] } | { ambiguous: true } | null): R[] =>
+    res && 'rows' in res ? res.rows : []
 
   const pnByName = new Map<string, typeof playerNews>()
   for (const r of playerNews) {
@@ -190,9 +195,9 @@ export async function resolvePlayerInjuryNewsBatch(args: {
     const extraHeadlines: string[] = []
 
     const pid = p.playerId ?? null
-    const irList = [...(pid ? (irByPid.get(pid) ?? []).filter((r) => sameName(r.playerName, p.playerName)) : []), ...(irByName.get(key) ?? [])]
+    const lookup = { name: p.playerName, team: p.teamAbbrev ?? null }
     const seenIr = new Set<string>()
-    for (const r of irList) {
+    for (const r of rowsFor(matchReport(lookup))) {
       const dedupe = `${r.playerId}|${r.reportDate.toISOString()}|${r.status}`
       if (seenIr.has(dedupe)) continue
       seenIr.add(dedupe)
@@ -208,44 +213,43 @@ export async function resolvePlayerInjuryNewsBatch(args: {
       })
     }
 
-    const siList = [...(pid ? (siByPid.get(pid) ?? []).filter((r) => sameName(r.playerName, p.playerName)) : []), ...(siByName.get(key) ?? [])]
-    const seenSi = new Set<string>()
-    for (const r of siList) {
-      const dedupe = `${r.externalId}|${r.updatedAt.toISOString()}`
-      if (seenSi.has(dedupe)) continue
-      seenSi.add(dedupe)
+    // Stamped with the CLAIM time, not `updatedAt`: Rolling Insights re-pulls Friday's report every
+    // 30 minutes, and that must not make it newer than ESPN's "Active" from Sunday morning.
+    for (const r of rowsFor(matchLive(lookup))) {
       rows.push({
         kind: 'sports_injury',
         label: r.source || 'sports_injury',
         statusRaw: r.status ?? 'unknown',
-        atIso: r.updatedAt.toISOString(),
+        atIso: injuryClaimAsOf(r).toISOString(),
         detail: r.description,
         confidence: 0.85,
       })
     }
 
+    /*
+     * A story or feed item on ANOTHER club is a namesake's, not this player's. The summary line is
+     * built from these, and "Justin Jefferson (CLE) — Out" sat in the Vikings receiver's summary.
+     * Only a stated team that disagrees drops a row; no team on either side keeps it.
+     */
+    const ownTeam = foldInjuryTeam(p.teamAbbrev, sport)
+    const sameTeam = (team: string | null | undefined) => {
+      const t = foldInjuryTeam(team, sport)
+      return !ownTeam || !t || t === ownTeam
+    }
+
     const pnList = [...(pid ? (pnByPid.get(pid) ?? []).filter((r) => sameName(r.playerName, p.playerName)) : []), ...(pnByName.get(key) ?? [])]
+      .filter((r) => sameTeam(r.team))
     const seenPn = new Set<string>()
     for (const r of pnList.slice(0, 8)) {
       const dedupe = `${r.headline}|${r.publishedAt.toISOString()}`
       if (seenPn.has(dedupe)) continue
       seenPn.add(dedupe)
+      /*
+       * A headline is NOT a designation. It used to be pushed as a status row and read by regex:
+       * "Nacua returns from IR, will start" became IR and "Waddle out of walking boot" became Out.
+       * Headlines feed the summary only; designations come from the injury feeds above.
+       */
       extraHeadlines.push(r.headline)
-      if (
-        r.fantasyRelevant &&
-        /\b(out|questionable|doubtful|probable|injury|injured|ir\b|suspended|active)\b/i.test(
-          `${r.headline} ${r.body ?? ''}`,
-        )
-      ) {
-        rows.push({
-          kind: 'player_news',
-          label: r.source,
-          statusRaw: r.headline,
-          atIso: r.publishedAt.toISOString(),
-          detail: r.body?.slice(0, 280) ?? null,
-          confidence: 0.52,
-        })
-      }
     }
 
     if (pid) {
@@ -263,8 +267,9 @@ export async function resolvePlayerInjuryNewsBatch(args: {
 
     const playerNewsItems = newsItems.filter(
       (it) =>
-        it.title.toLowerCase().includes(key) ||
-        (it.playerName?.toLowerCase() === key && Boolean(it.playerName)),
+        (it.title.toLowerCase().includes(key) ||
+          (it.playerName?.toLowerCase() === key && Boolean(it.playerName))) &&
+        sameTeam(it.team),
     )
 
     if (rows.length === 0 && extraHeadlines.length === 0 && playerNewsItems.length === 0) {
