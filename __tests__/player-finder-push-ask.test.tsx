@@ -110,7 +110,13 @@ describe('PushAsk', () => {
     const { container, unmount } = render(<PushAsk placement="finder_home" />)
     fireEvent.click(await screen.findByRole('button', { name: 'Not now' }))
     expect(container.innerHTML).toBe('')
-    expect(tracked().map((e) => e.event)).toEqual(['push_ask_shown', 'push_ask_dismissed'])
+    // `push_ask_shown` is sent from an effect. When the click lands before that effect has run, the
+    // click's `push_ask_dismissed` is sent first and the pending effect sends `shown` right after
+    // (red on CI shard 3/4 for #2232). Each must be counted exactly once; their order is not a promise.
+    await waitFor(() =>
+      expect(tracked().map((e) => e.event).sort()).toEqual(['push_ask_dismissed', 'push_ask_shown']),
+    )
+    expect(tracked().every((e) => e.meta.placement === 'finder_home')).toBe(true)
     unmount()
     const again = render(<PushAsk placement="finder_home" />)
     await act(async () => {
