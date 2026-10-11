@@ -111,9 +111,9 @@ export async function getPositionScarcity(args: {
    */
   const injuries = await prisma.sportsInjury
     .findMany({
-      where: { sport, playerName: { in: candidates.map((c) => c.name) } },
+      where: { sport, playerName: { in: candidates.map((c) => c.name) }, expiresAt: { gt: new Date() } },
       orderBy: { fetchedAt: 'desc' },
-      select: { playerName: true, status: true, team: true, position: true },
+      select: { playerName: true, status: true, team: true, position: true, date: true, fetchedAt: true },
     })
     .catch(() => [])
   // Bound per athlete (name + team/position): a name-keyed map ruled a free agent out on a

@@ -153,6 +153,8 @@ async function readRecentInjuries(
     where: {
       sport: normSport,
       updatedAt: { gte: since },
+      // Only rows a feed still carries; the matcher then takes each athlete's newest CLAIM.
+      expiresAt: { gt: new Date() },
       ...(rosterPlayerNames.length > 0
         ? {
             OR: rosterPlayerNames.map((name) => ({
@@ -163,7 +165,7 @@ async function readRecentInjuries(
     },
     orderBy: { updatedAt: 'desc' },
     take: 200,
-    select: { playerName: true, team: true, position: true, status: true, type: true },
+    select: { playerName: true, team: true, position: true, status: true, type: true, date: true, fetchedAt: true },
   })
   /*
    * 🛑 THE QUERY IS A SUBSTRING MATCH ON NAMES, SO IT RETURNS OTHER PEOPLE. A roster's "Justin

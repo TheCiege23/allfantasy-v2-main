@@ -1174,9 +1174,9 @@ async function loadPlayerFacts(refSport: string | null | undefined, externalId: 
           where: { sport: row.sport, playerName: { equals: row.name, mode: 'insensitive' } },
           orderBy: { fetchedAt: 'desc' },
           take: 8,
-          select: { status: true, description: true, date: true, fetchedAt: true },
+          select: { status: true, description: true, date: true, fetchedAt: true, expiresAt: true },
         })
-        .catch(() => [] as Array<{ status: string | null; description: string | null; date: Date | null; fetchedAt: Date }>)
+        .catch(() => [] as Array<{ status: string | null; description: string | null; date: Date | null; fetchedAt: Date; expiresAt: Date | null }>)
   const injuryRow = designationOnset(injuryRows)
 
   /*

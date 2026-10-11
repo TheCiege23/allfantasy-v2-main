@@ -427,7 +427,7 @@ export async function writeAfProjectionSnapshotsForSeason(
   const injuries = await prisma.sportsInjury.findMany({
     where: { sport, expiresAt: { gt: new Date() } },
     orderBy: { fetchedAt: 'desc' },
-    select: { playerName: true, status: true, team: true, position: true },
+    select: { playerName: true, status: true, team: true, position: true, date: true, fetchedAt: true },
   })
   const matchInjury = createInjuryRowMatcher(
     injuries.filter((inj) => Boolean(inj.status)),

@@ -308,9 +308,9 @@ export async function buildTradeContextNotes(args: {
    */
   const rosterInjuries = await prisma.sportsInjury
     .findMany({
-      where: { sport: league.sport ?? 'NFL', playerName: { in: players.map((p) => p.name) } },
+      where: { sport: league.sport ?? 'NFL', playerName: { in: players.map((p) => p.name) }, expiresAt: { gt: new Date() } },
       orderBy: { fetchedAt: 'desc' },
-      select: { playerName: true, status: true, team: true, position: true },
+      select: { playerName: true, status: true, team: true, position: true, date: true, fetchedAt: true },
     })
     .catch(() => [])
   // Bound to each athlete by name + team/position, not "first row per NAME" — that handed a
@@ -1399,9 +1399,9 @@ async function buildLeverageNotes(args: {
 
   const injuries = await prisma.sportsInjury
     .findMany({
-      where: { sport, playerName: { in: players.map((p) => p.name) } },
+      where: { sport, playerName: { in: players.map((p) => p.name) }, expiresAt: { gt: new Date() } },
       orderBy: { fetchedAt: 'desc' },
-      select: { playerName: true, status: true, team: true, position: true },
+      select: { playerName: true, status: true, team: true, position: true, date: true, fetchedAt: true },
     })
     .catch(() => [])
   // Bound to each athlete by name + team/position (matchInjuryRows), not first row per NAME.

@@ -429,6 +429,8 @@ async function resolveInjurySignal(
       sport,
       source: 'espn',
       playerName: { contains: playerName, mode: 'insensitive' },
+      // A healed player drops off ESPN's report; his last row is not today's word.
+      expiresAt: { gt: new Date() },
     },
     orderBy: [{ date: 'desc' }, { updatedAt: 'desc' }],
     take: 12,
@@ -439,6 +441,8 @@ async function resolveInjurySignal(
       status: true,
       description: true,
       type: true,
+      date: true,
+      fetchedAt: true,
     },
   });
 

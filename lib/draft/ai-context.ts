@@ -56,9 +56,11 @@ export async function buildDraftAiContext(input: {
     ? { sport, playerName: { in: names, mode: 'insensitive' as const } }
     : { sport }
 
+  // Only rows a feed still carries: a healed player drops off the reports rather than being cleared.
+  const live = { expiresAt: { gt: new Date() } }
   const injuryWhere = names.length
-    ? { sport, playerName: { in: names, mode: 'insensitive' as const } }
-    : { sport }
+    ? { sport, playerName: { in: names, mode: 'insensitive' as const }, ...live }
+    : { sport, ...live }
 
   const [newsRows, injuryRows] = await Promise.all([
     prisma.sportsNews

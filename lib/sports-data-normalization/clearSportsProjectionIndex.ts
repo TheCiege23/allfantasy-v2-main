@@ -39,10 +39,15 @@ export function pickProjectionRowForPlayer(args: {
   index: ReturnType<typeof indexClearSportsProjections>
 }): CsRow | null {
   return (
-    resolveVerifiedMatch(args.index.byName, {
-      name: args.name,
-      team: foldInjuryTeam(args.team, args.sport ?? 'NFL'),
-      position: args.position?.trim().toUpperCase() || null,
-    }).match?.row ?? null
+    resolveVerifiedMatch(
+      args.index.byName,
+      {
+        name: args.name,
+        team: foldInjuryTeam(args.team, args.sport ?? 'NFL'),
+        position: args.position?.trim().toUpperCase() || null,
+      },
+      // Projections cover offensive players only, so LB Justin Jefferson's lone namesake here is the WR.
+      { refuseContradictedSingle: true },
+    ).match?.row ?? null
   )
 }

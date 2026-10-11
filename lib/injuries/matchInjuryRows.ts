@@ -31,6 +31,20 @@ export interface InjuryRowLike {
   playerName: string
   team?: string | null
   position?: string | null
+  /** The provider's report time. With `fetchedAt`, orders a player's rows by claim (see below). */
+  date?: Date | null
+  fetchedAt?: Date | null
+}
+
+/**
+ * How fresh a row's claim can be: the OLDER of the provider's report date and our fetch. The same
+ * clock `injuryReadPort` ranks by — a report written last week is not news because we re-pulled it
+ * this morning, and a row we last saw yesterday says nothing about today whatever its `date` says.
+ */
+export function injuryClaimAsOf(row: { date?: Date | null; fetchedAt?: Date | null }): Date {
+  const fetched = row.fetchedAt ?? row.date ?? new Date(0)
+  const reported = row.date ?? fetched
+  return reported.getTime() < fetched.getTime() ? reported : fetched
 }
 
 export interface InjuryPlayerLookup {
@@ -92,19 +106,41 @@ export function createInjuryRowMatcher<R extends InjuryRowLike>(
       candidates.push(...teams.values())
     }
   }
-  // Restore the caller's row order inside a merged candidate.
+  /*
+   * Newest CLAIM first, then the caller's order. Rows that carry `fetchedAt` are ordered by
+   * `injuryClaimAsOf`, the clock the read port uses; rows without it keep the caller's order.
+   *
+   * 🛑 CALLERS ORDERED BY `fetchedAt` / `updatedAt`, AND THAT IS WHEN WE PULLED A ROW, NOT WHEN IT
+   * WAS SAID (2026-10-11). Rolling Insights re-pulls Friday's "Questionable for Week 5" every 30
+   * minutes, so on Sunday it out-ranked ESPN's "Active" from that morning whenever its run landed
+   * later — Ja'Marr Chase, Justin Jefferson, Ashton Jeanty and 12 more read Questionable after
+   * being cleared, flipping with every cron run.
+   */
   const order = new Map<R, number>()
   rows.forEach((r, i) => order.set(r, i))
-  for (const c of candidates) c.rows.sort((x, y) => order.get(x)! - order.get(y)!)
+  for (const c of candidates) {
+    c.rows.sort((x, y) => {
+      if (x.fetchedAt && y.fetchedAt) {
+        const byClaim = injuryClaimAsOf(y).getTime() - injuryClaimAsOf(x).getTime()
+        if (byClaim !== 0) return byClaim
+      }
+      return order.get(x)! - order.get(y)!
+    })
+  }
 
   const index = buildNameIndex(candidates)
   return (p) => {
     if (!normalizeMatchName(p.name)) return null
-    const res = resolveVerifiedMatch(index, {
-      name: p.name,
-      position: p.position?.trim().toUpperCase() || null,
-      team: foldInjuryTeam(p.team, sport),
-    })
+    const res = resolveVerifiedMatch(
+      index,
+      {
+        name: p.name,
+        position: p.position?.trim().toUpperCase() || null,
+        team: foldInjuryTeam(p.team, sport),
+      },
+      // The index holds only athletes WITH a row, so a lone candidate is not proof of identity.
+      { refuseContradictedSingle: true },
+    )
     if (res.reason === 'ambiguous') return { ambiguous: true }
     return res.match ? { rows: res.match.rows } : null
   }
@@ -132,7 +168,8 @@ export function matchInjuryRowsToPlayers<R extends InjuryRowLike>(
 /**
  * `player → newest status`, for the readers that used to build `Map<name, status>` with "first row
  * wins". Same binding as `createInjuryRowMatcher`: the athlete's OWN rows, refused (null) when a
- * shared name cannot be told apart. Rows must arrive newest first; a row with no status is skipped.
+ * shared name cannot be told apart. Pass `date` and `fetchedAt` so the newest CLAIM wins; without
+ * them rows must arrive newest first. A row with no status is skipped.
  */
 export function injuryStatusLookup<R extends InjuryRowLike & { status: string | null }>(
   rows: readonly R[],
@@ -143,4 +180,35 @@ export function injuryStatusLookup<R extends InjuryRowLike & { status: string | 
     const hit = match(player)
     return hit && 'rows' in hit ? hit.rows[0]?.status ?? null : null
   }
+}
+
+/** Statuses that state no designation: a cleared player ("Active") is not an injury item. */
+export function isInjuryDesignation(status: string | null | undefined): boolean {
+  const t = String(status ?? '').trim().toLowerCase()
+  return t !== '' && t !== 'active' && t !== 'healthy' && t !== 'na'
+}
+
+/**
+ * One row per athlete (normalized name + folded team): his newest CLAIM. For LIST readers — "current
+ * injuries" panels and AI context — which used to filter `status <> 'Active'` in SQL.
+ *
+ * 🛑 FILTERING "ACTIVE" OUT BEFORE PICKING THE NEWEST IS HOW A CLEARED PLAYER STAYS HURT. Rolling
+ * Insights' Friday "Questionable" and ESPN's Sunday "Active" are both live rows; drop the Active one
+ * first and the Questionable is all that is left. Pick the newest claim, THEN drop non-designations.
+ */
+export function latestInjuryClaims<R extends InjuryRowLike>(rows: readonly R[], sport: string): R[] {
+  const best = new Map<string, R>()
+  for (const row of rows) {
+    const name = normalizeMatchName(row.playerName)
+    if (!name) continue
+    const key = `${name}|${foldInjuryTeam(row.team, sport) ?? ''}`
+    const cur = best.get(key)
+    if (!cur) {
+      best.set(key, row)
+      continue
+    }
+    const byClaim = injuryClaimAsOf(row).getTime() - injuryClaimAsOf(cur).getTime()
+    if (byClaim > 0 || (byClaim === 0 && (row.fetchedAt?.getTime() ?? 0) > (cur.fetchedAt?.getTime() ?? 0))) best.set(key, row)
+  }
+  return [...best.values()].sort((a, b) => injuryClaimAsOf(b).getTime() - injuryClaimAsOf(a).getTime())
 }

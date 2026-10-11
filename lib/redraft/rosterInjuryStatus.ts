@@ -1,4 +1,5 @@
 import { normalizePlayerName } from '@/lib/player-identity/playerIdentityResolution'
+import { injuryClaimAsOf } from '@/lib/injuries/matchInjuryRows'
 
 type InjuryKeyed = { playerId?: string | null; playerName?: string | null; sport?: string | null }
 
@@ -20,15 +21,30 @@ export function playerInjuryKey(player: InjuryKeyed): string {
 }
 
 /**
- * Stamp each roster player with the first matching designation. `rows` arrive newest first, so the
- * first row per key wins. A player with an id is matched by id + name; one without, by name. Pure.
+ * Stamp each roster player with the newest matching designation. Rows carrying `fetchedAt` are taken
+ * newest CLAIM first (`injuryClaimAsOf`); the rest in the order given. A player with an id is matched
+ * by id + name; one without, by name. Pure.
+ *
+ * ⚠ NOT NEWEST FETCH. The route reads rows by `fetchedAt`, and Rolling Insights re-pulls Friday's
+ * "Questionable" every 30 minutes, so after ESPN cleared a starter on Sunday his status still
+ * flipped with each cron run — and with it the `starter_ineligible_injury` lineup error.
  */
 export function applyInjuryStatuses<T extends InjuryKeyed>(
   players: T[],
-  rows: Array<InjuryKeyed & { status: string | null }>,
+  rows: Array<InjuryKeyed & { status: string | null; date?: Date | null; fetchedAt?: Date | null }>,
 ): Array<T | (T & { injuryStatus: string })> {
+  const ordered = rows
+    .map((row, i) => ({ row, i }))
+    .sort((a, b) => {
+      if (a.row.fetchedAt && b.row.fetchedAt) {
+        const byClaim = injuryClaimAsOf(b.row).getTime() - injuryClaimAsOf(a.row).getTime()
+        if (byClaim !== 0) return byClaim
+      }
+      return a.i - b.i
+    })
+    .map((x) => x.row)
   const statusByKey = new Map<string, string | null>()
-  for (const row of rows) {
+  for (const row of ordered) {
     const idKey = playerInjuryKey(row)
     if (!statusByKey.has(idKey)) statusByKey.set(idKey, row.status ?? null)
     const nameKey = playerInjuryKey({ sport: row.sport, playerName: row.playerName })
