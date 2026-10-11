@@ -12,6 +12,8 @@ const h = vi.hoisted(() => ({
   focus: vi.fn(),
   leagueMetadata: {} as Record<string, unknown>,
   finishedWeeks: new Set<string>(),
+  /** `lineupShareKey` → roster → share of the week still to play. Empty: no lineup could be read. */
+  shares: new Map<string, Map<string, number>>(),
 }))
 
 vi.mock('@/lib/prisma', () => ({
@@ -37,6 +39,10 @@ vi.mock('@/lib/prisma', () => ({
 }))
 vi.mock('@/lib/core-app/seasonPhase', () => ({ getFirstStatedKickoff: async () => null }))
 vi.mock('@/lib/core-app/finishedNflWeeks', () => ({ loadFinishedNflWeeks: async () => h.finishedWeeks }))
+vi.mock('@/lib/core-app/outlookLiveWeekLoader', async (orig) => ({
+  ...(await orig<typeof import('@/lib/core-app/outlookLiveWeekLoader')>()),
+  loadLineupShares: vi.fn(async () => h.shares),
+}))
 vi.mock('@/lib/core-app/seasonOutlookFocus', () => ({
   BRANCH_ITERATIONS: 400,
   loadScenarioModel: h.focus,
@@ -103,6 +109,7 @@ beforeEach(() => {
   h.cache.clear()
   h.leagueMetadata = {}
   h.finishedWeeks.clear()
+  h.shares = new Map()
   h.upsert.mockImplementation(async (args: { create: { cacheKey: string; data: unknown } }) => {
     h.cache.set(args.create.cacheKey, args.create.data)
     return {}
@@ -163,6 +170,26 @@ describe('getSeasonOutlook', () => {
     const out = await getSeasonOutlook('me', [LEAGUE], 'L1')
     expect(out.swingByLeague['L1']?.week).toBe(5)
     expect(out.leagues[0].period).toBe(4)
+  })
+  /*
+   * HailShiva, week 4 of 2026: a game already won on the board was still simulated from the pre-game
+   * fits. Roster 5 (you) is the weakest fit in this league and meets roster 4 in week 4.
+   */
+  it('counts a week under way as its board: a finished win is a win in every run', async () => {
+    h.leagueMetadata = { season: 2026, settings: { leg: 4 } }
+    const board = () => { for (const r of h.matchups) if (r.week === 4) { r.pointsFor = r.rosterId === '5' ? 160 : 90; r.pointsAgainst = r.rosterId === '5' ? 90 : 160; r.win = 0 } }
+    board()
+    const unread = await getSeasonOutlook('me', [LEAGUE], 'L1')
+    expect(unread.leagues[0].assumptions.missing.join(' ')).toMatch(/Week 4 has started, but not every lineup could be read/)
+
+    h.shares = new Map([[`${PID}|2026|4`, new Map(IDS.map((id) => [id, 0]))]])
+    h.cache.clear()
+    const settled = await getSeasonOutlook('me', [LEAGUE], 'L1')
+    expect(settled.leagues[0].assumptions.missing.join(' ')).toMatch(/Week 4 is under way: points already scored count/)
+    expect(settled.leagues[0].you!.playoffPct).toBeGreaterThan(unread.leagues[0].you!.playoffPct)
+    // The record still counts only final weeks; the board enters the simulation, not the standings.
+    expect(settled.leagues[0].you).toMatchObject({ wins: unread.leagues[0].you!.wins, losses: unread.leagues[0].you!.losses })
+    expect(settled.leagues[0].weeksRemaining).toBe(3)
   })
   it('still swings the current week before anybody has scored in it', async () => {
     const out = await getSeasonOutlook('me', [LEAGUE], 'L1')
