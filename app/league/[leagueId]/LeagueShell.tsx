@@ -70,6 +70,7 @@ import { cn } from '@/lib/utils'
 import type { League, LeagueInvite, LeagueTeam } from '@prisma/client'
 import { DEFAULT_SPORT, normalizeToSupportedSport } from '@/lib/sport-scope'
 import { mapLeagueTeamsToSlots } from '@/lib/league/map-league-teams-to-slots'
+import { countAssignedManagers, leagueLifecycleLabel } from '@/lib/league/setup-readiness'
 import type { LeagueSeasonSnapshot } from '@/lib/league/sort-teams-standings'
 import type { LeagueDashboardView } from '@/app/league/[leagueId]/league-dashboard-types'
 import AppShell from '@/app/components/AppShell'
@@ -212,6 +213,7 @@ function prismaLeagueToUserLeague(
     teamCount: l.leagueSize ?? 10,
     season: l.season ?? new Date().getFullYear(),
     status: l.status ?? undefined,
+    lifecycleState: l.lifecycleState,
     // Only override when a real RedraftSeason.currentWeek was resolved by the
     // caller (nflRedraftCore leagues); otherwise preserve the exact prior
     // behavior (`undefined` when settings carry no week) so non-redraft
@@ -1392,7 +1394,7 @@ export function LeagueShell({
                 sport={String(selectedLeague.sport)}
                 season={Number(selectedLeague.season ?? new Date().getFullYear())}
                 teamCount={league.leagueSize ?? selectedLeague.teamCount ?? 12}
-                teamsFilled={league.teams?.length ?? 0}
+                teamsFilled={countAssignedManagers(teamSlots)}
                 variant={specialtyHeroVariant}
                 tournamentContext={specialtyHeroVariant === 'tournament' ? tournamentHeroContext : null}
                 draftDateIso={draftDateIso}
@@ -1857,7 +1859,8 @@ function LeagueTabRouter({
 
   const renderPredraftDraftSetup = () => {
     const teamCount = selectedLeague.teamCount ?? teamSlots.length
-    const joinedTeams = teamSlots.filter((team) => Boolean(team.id)).length
+    const joinedTeams = countAssignedManagers(teamSlots)
+    const openManagerSlots = Math.max(0, teamCount - joinedTeams)
     const settings =
       selectedLeague.settings && typeof selectedLeague.settings === 'object' && !Array.isArray(selectedLeague.settings)
         ? (selectedLeague.settings as Record<string, unknown>)
@@ -1936,9 +1939,14 @@ function LeagueTabRouter({
               </p>
             </div>
             <div className="af-league-draft-fill rounded-2xl border border-[#ff3d81]/30 bg-gradient-to-br from-[#ff3d81]/[0.12] via-[#ff3d81]/[0.06] to-transparent px-4 py-3 text-right shadow-[0_0_20px_rgba(255,61,129,0.08)]">
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb8d1]/70">League fill</p>
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb8d1]/70">Managers assigned</p>
               <p className="mt-1 text-lg font-bold text-white">
                 {joinedTeams}/{teamCount}
+              </p>
+              <p className="mt-1 text-xs">
+                {openManagerSlots > 0
+                  ? `${openManagerSlots} open ${openManagerSlots === 1 ? 'slot' : 'slots'}`
+                  : 'All slots assigned'}
               </p>
             </div>
           </div>
@@ -2431,13 +2439,7 @@ function LeagueHeader({
   })
   const headerSportLabel = String(league.sport ?? 'NFL').toUpperCase() === 'NCAAF' ? 'NCAAF' : String(league.sport ?? 'NFL').toUpperCase()
   const headerSeasonLabel = Number.isFinite(Number(league.season)) ? `${Number(league.season)} season` : 'Current season'
-  const headerStatusLabel = (() => {
-    const status = String(league.status ?? '').trim().toLowerCase()
-    if (status === 'active' || status === 'in_season') return 'In season'
-    if (status === 'completed' || status === 'complete') return 'Season complete'
-    if (status === 'drafting' || status === 'in_draft') return 'Draft in progress'
-    return 'League active'
-  })()
+  const headerStatusLabel = leagueLifecycleLabel(league.lifecycleState, league.status)
 
   useEffect(() => {
     setHeaderAvatarFailed(false)
