@@ -13,6 +13,7 @@
  * second write.
  */
 
+import { createInjuryRowMatcher } from '@/lib/injuries/matchInjuryRows'
 import type { Prisma } from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
@@ -416,15 +417,22 @@ export async function writeAfProjectionSnapshotsForSeason(
   }
 
   // --- injury designations ------------------------------------------------------------
+  /*
+   * 🛑 LIVE ROWS, NEWEST FIRST, BOUND BY VERIFIED NAME. This read took EVERY row for the sport —
+   * expired ones included, in no order — and kept the first status seen per lower-cased name. So a
+   * long-dead row could win, and two athletes sharing a name (WR vs LB Justin Jefferson) shared
+   * whichever status the database happened to return first. Now: unexpired rows, newest first, and
+   * a name shared by two athletes binds only when this player's team/position tells them apart.
+   */
   const injuries = await prisma.sportsInjury.findMany({
-    where: { sport },
-    select: { playerName: true, status: true },
+    where: { sport, expiresAt: { gt: new Date() } },
+    orderBy: { fetchedAt: 'desc' },
+    select: { playerName: true, status: true, team: true, position: true },
   })
-  const injuryByName = new Map<string, string>()
-  for (const inj of injuries) {
-    const name = inj.playerName?.trim().toLowerCase()
-    if (name && inj.status && !injuryByName.has(name)) injuryByName.set(name, inj.status)
-  }
+  const matchInjury = createInjuryRowMatcher(
+    injuries.filter((inj) => Boolean(inj.status)),
+    sport,
+  )
 
   const { getIdpPresetScoring } = await import('@/lib/idp/IDPScoringPresets')
   const idpRules = getIdpPresetScoring(idpPreset, sport)
@@ -595,7 +603,11 @@ export async function writeAfProjectionSnapshotsForSeason(
       sleeperProjection: sleeperId ? weekBoard?.[sleeperId]?.stats ?? null : null,
       position,
       depthSlot: slotByName.get(nameKey) ?? null,
-      injuryStatus: injuryByName.get(nameKey) ?? null,
+      injuryStatus: (() => {
+        if (!playerName) return null
+        const hit = matchInjury({ name: playerName, team: aggregate?.team ?? null, position })
+        return hit && 'rows' in hit ? hit.rows[0]?.status ?? null : null
+      })(),
       scoringFormat,
       basisIsPriorSeason: lineSeason < targetSeason,
       idpRules,

@@ -1033,6 +1033,9 @@ export async function fetchCrossSportSignals(
     try {
       const injuryHistory = await deps.prisma.sportsInjury.findMany({
         where: {
+          // Scoped to the entity's sport: unscoped, a same-name athlete in another sport's
+          // history counted toward this one's "recurring injury" signal.
+          sport: (entity.sport || DEFAULT_SPORT).toUpperCase(),
           playerName: { equals: entity.name, mode: 'insensitive' },
         },
         orderBy: { updatedAt: 'desc' },

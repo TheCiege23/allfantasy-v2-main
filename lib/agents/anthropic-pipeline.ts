@@ -1,6 +1,8 @@
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
 
+import { matchInjuryRowsToPlayers } from '@/lib/injuries/matchInjuryRows'
+import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 import { getInsightBundle, type InsightType } from '@/lib/ai-simulation-integration'
 import {
   CHIMMY_DEFAULT_UPGRADE_PATH,
@@ -1227,19 +1229,38 @@ async function buildPlayerContextMap(
 
       const playerId = await resolvePlayerRecordId(playerName, sport).catch(() => null)
       const [injuryHistory, last3Games, trendRow, newsRows] = await Promise.all([
-        prisma.sportsInjury.findMany({
-          where: {
-            sport,
-            playerName: { contains: playerName, mode: 'insensitive' },
-          },
-          orderBy: [{ updatedAt: 'desc' }],
-          take: 3,
-          select: {
-            status: true,
-            type: true,
-            updatedAt: true,
-          },
-        }),
+        /*
+         * Substring-matched, then BOUND to the resolved player: "Jefferson" pulls every Jefferson,
+         * and a shared name (WR vs LB Justin Jefferson) pulls both athletes. `matchInjuryRows`
+         * keeps only the rows of the player `resolvePlayerStats` resolved, by name verified with
+         * his team and position, and none when it cannot tell — never the other player's history.
+         */
+        prisma.sportsInjury
+          .findMany({
+            where: {
+              sport,
+              playerName: { contains: playerName, mode: 'insensitive' },
+            },
+            orderBy: [{ updatedAt: 'desc' }],
+            take: 40,
+            select: {
+              playerName: true,
+              team: true,
+              position: true,
+              status: true,
+              type: true,
+              updatedAt: true,
+            },
+          })
+          .then((rows) =>
+            (
+              matchInjuryRowsToPlayers(
+                rows,
+                [{ name: playerStats.name, team: playerStats.team, position: playerStats.position }],
+                sport,
+              ).byPlayer.get(normalizeMatchName(playerStats.name)) ?? []
+            ).slice(0, 3),
+          ),
         playerId
           ? prisma.playerGameFact.findMany({
               where: {

@@ -32,6 +32,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { buildNameIndex, normalizeMatchName, resolveVerifiedMatch } from '@/lib/player-match/verifiedNameMatch'
+import { foldInjuryTeam } from '@/lib/injuries/matchInjuryRows'
 import type { InjuryDesignation } from '@/lib/injuries/rollingInsightsInjuries'
 import {
   INJURY_PRIOR_SEASON_AFTER_HOURS,
@@ -353,7 +354,7 @@ export async function resolveInjuryFacts(args: {
   // providers never presents as an ambiguous collision.
   const bestByExact = new Map<string, InjuryRow>()
   for (const r of rows) {
-    const key = `${normalizeMatchName(r.playerName)}|${(r.team ?? '').toUpperCase()}`
+    const key = `${normalizeMatchName(r.playerName)}|${foldInjuryTeam(r.team, sport) ?? ''}`
     const existing = bestByExact.get(key)
     bestByExact.set(key, existing ? preferred(existing, r) : r)
   }
@@ -362,7 +363,10 @@ export async function resolveInjuryFacts(args: {
     [...bestByExact.values()].map((r) => ({
       name: r.playerName,
       position: r.position,
-      team: r.team,
+      // Folded to a code, as is the lookup below: the feeds write "Minnesota Vikings", rosters
+      // say "MIN", and the matcher compares verbatim — so without it team narrowing never fires
+      // and a shared name (WR vs LB Justin Jefferson) is refused even when the caller knew.
+      team: foldInjuryTeam(r.team, sport),
       row: r,
     })),
   )
@@ -376,7 +380,7 @@ export async function resolveInjuryFacts(args: {
     const res = resolveVerifiedMatch(index, {
       name: lookup.name,
       position: lookup.position ?? null,
-      team: lookup.team ?? null,
+      team: foldInjuryTeam(lookup.team, sport),
     })
     if (res.reason === 'ambiguous') {
       // Refusing is the point. RI supplies no position on injury rows, so a
@@ -543,7 +547,7 @@ export async function listInjuryFacts(args: {
   // One row per player — same collapse rule as resolveInjuryFacts.
   const bestByExact = new Map<string, InjuryRow & { id: string }>()
   for (const r of rows) {
-    const key = `${normalizeMatchName(r.playerName)}|${(r.team ?? '').toUpperCase()}`
+    const key = `${normalizeMatchName(r.playerName)}|${foldInjuryTeam(r.team, sport) ?? ''}`
     const existing = bestByExact.get(key)
     bestByExact.set(key, existing ? (preferred(existing, r) as InjuryRow & { id: string }) : r)
   }

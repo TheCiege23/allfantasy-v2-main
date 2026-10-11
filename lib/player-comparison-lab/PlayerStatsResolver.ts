@@ -8,6 +8,8 @@
  * - League scoring settings
  */
 
+import { matchInjuryRowsToPlayers } from '@/lib/injuries/matchInjuryRows';
+import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch';
 import { prisma } from '@/lib/prisma';
 import { findLiveAdp } from '@/lib/adp/liveAdpFallback';
 import { findMultiADP } from '@/lib/multi-platform-adp';
@@ -153,7 +155,7 @@ export async function resolvePlayerStats(
       resolveInternalAdp(name, sport, options?.scoringFormat),
       resolveMarketAdp(name, sport),
       resolveInternalProjectionPoints(name, sport, historicalResolved.rollingInsightsPlayerId),
-      resolveInjurySignal(name, sport),
+      resolveInjurySignal(name, sport, { team: historicalResolved.team, position: historicalResolved.position }),
       resolveSleeperSignal(name, sport, historicalResolved.team),
       resolveScheduleDifficultyScore(
         sport,
@@ -419,7 +421,8 @@ async function resolveInternalAdp(
 
 async function resolveInjurySignal(
   playerName: string,
-  sport: string
+  sport: string,
+  identity: { team?: string | null; position?: string | null } = {}
 ): Promise<InjurySignal> {
   const injuries = await prisma.sportsInjury.findMany({
     where: {
@@ -431,17 +434,22 @@ async function resolveInjurySignal(
     take: 12,
     select: {
       playerName: true,
+      team: true,
+      position: true,
       status: true,
       description: true,
       type: true,
     },
   });
 
-  const normalized = normalizePlayerName(playerName);
+  /*
+   * 🛑 NO MORE `?? injuries[0]`. The query is a substring match, so its first row could be anyone
+   * whose name CONTAINS this one — and a name shared by two athletes (WR vs LB Justin Jefferson)
+   * returned whichever was reported last. Bind by name verified with team and position, or not at all.
+   */
   const match =
-    injuries.find((item) => normalizePlayerName(item.playerName) === normalized) ??
-    injuries[0] ??
-    null;
+    matchInjuryRowsToPlayers(injuries, [{ name: playerName, ...identity }], sport)
+      .byPlayer.get(normalizeMatchName(playerName))?.[0] ?? null;
 
   if (!match) {
     return { status: null, source: 'none', riskScore: null, note: null };

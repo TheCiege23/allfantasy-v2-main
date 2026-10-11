@@ -1,0 +1,130 @@
+import { buildNameIndex, normalizeMatchName, resolveVerifiedMatch } from '@/lib/player-match/verifiedNameMatch'
+import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
+
+/**
+ * Bind `SportsInjury` rows to the players a caller asked about — by name, VERIFIED by team and
+ * position when a name belongs to more than one athlete. Pure: callers keep their own query (its
+ * recency window, its ordering, its fields) and pass the rows through this.
+ *
+ * 🛑 A NAME IS NOT AN IDENTITY. Measured 2026-10-11: 15 names belong to 2+ active NFL players, and
+ * 7 of them had live injury rows at once — the Vikings WR Justin Jefferson was Questionable while a
+ * Browns LB Justin Jefferson was Active; the Jaguars CB Jaylon Jones was Out while a Titans DB of the
+ * same name was Active. A reader keyed on `playerName` and taking the newest row hands one of them the
+ * other's designation, and for a star that reads as "healthy" on the day he is questionable.
+ *
+ * Rules, the same ones `injuryReadPort.resolveInjuryFacts` and dash34 use:
+ *  - rows are grouped into one candidate per (name, team) — the same athlete reported by several
+ *    providers is ONE candidate, not a collision;
+ *  - one candidate → bind; several → narrow by position, then team; still several → REFUSE.
+ *    A missing badge is a gap; another player's badge is a falsehood.
+ *
+ * ⚠ NFL TEAMS ARE FOLDED TO CODES ON BOTH SIDES. Injury feeds write "Minnesota Vikings"; rosters say
+ * "MIN". `resolveVerifiedMatch` compares teams verbatim, so without the fold team narrowing never
+ * fires and every shared name is refused even when the caller knew the team. Other sports pass
+ * through upper-cased, which is what the matcher does to them anyway.
+ *
+ * ⚠ A ROW WITH NO TEAM joins its name's only team-bearing candidate when there is exactly one, and is
+ * its own candidate otherwise — so it can never tip a genuine collision either way.
+ */
+
+export interface InjuryRowLike {
+  playerName: string
+  team?: string | null
+  position?: string | null
+}
+
+export interface InjuryPlayerLookup {
+  name: string
+  team?: string | null
+  position?: string | null
+}
+
+export interface InjuryRowMatch<R> {
+  /** Keyed by `normalizeMatchName(lookup.name)`. Rows keep the caller's order. */
+  byPlayer: Map<string, R[]>
+  /** Lookup names refused because the name belongs to several athletes we could not tell apart. */
+  ambiguous: string[]
+}
+
+export function foldInjuryTeam(team: string | null | undefined, sport: string | null | undefined): string | null {
+  const raw = String(team ?? '').trim()
+  if (!raw) return null
+  return String(sport ?? '').toUpperCase() === 'NFL' ? normalizeTeamAbbrev(raw) : raw.toUpperCase()
+}
+
+export type InjuryRowLookupResult<R> = { rows: R[] } | { ambiguous: true } | null
+
+/**
+ * Index the rows ONCE and resolve players against it — for a caller resolving thousands of players
+ * against one load (the projection writer), where rebuilding per player would be quadratic.
+ * `null` means no row names this player (no news); `{ ambiguous: true }` means the name belongs to
+ * several athletes the lookup could not tell apart.
+ */
+export function createInjuryRowMatcher<R extends InjuryRowLike>(
+  rows: readonly R[],
+  sport: string,
+): (player: InjuryPlayerLookup) => InjuryRowLookupResult<R> {
+  type Candidate = { name: string; team: string | null; position: string | null; rows: R[] }
+  const byName = new Map<string, Map<string, Candidate>>()
+  for (const row of rows) {
+    const name = normalizeMatchName(row.playerName)
+    if (!name) continue
+    const team = foldInjuryTeam(row.team, sport)
+    const teams = byName.get(name) ?? new Map<string, Candidate>()
+    const key = team ?? ''
+    const c = teams.get(key) ?? { name: row.playerName, team, position: null, rows: [] }
+    c.rows.push(row)
+    if (!c.position && row.position?.trim()) c.position = row.position.trim().toUpperCase()
+    teams.set(key, c)
+    byName.set(name, teams)
+  }
+
+  const candidates: Candidate[] = []
+  for (const teams of byName.values()) {
+    const teamless = teams.get('')
+    const withTeam = [...teams.values()].filter((c) => c.team)
+    if (teamless && withTeam.length === 1) {
+      const only = withTeam[0]!
+      only.rows = [...only.rows, ...teamless.rows]
+      only.position ??= teamless.position
+      candidates.push(only)
+    } else {
+      candidates.push(...teams.values())
+    }
+  }
+  // Restore the caller's row order inside a merged candidate.
+  const order = new Map<R, number>()
+  rows.forEach((r, i) => order.set(r, i))
+  for (const c of candidates) c.rows.sort((x, y) => order.get(x)! - order.get(y)!)
+
+  const index = buildNameIndex(candidates)
+  return (p) => {
+    if (!normalizeMatchName(p.name)) return null
+    const res = resolveVerifiedMatch(index, {
+      name: p.name,
+      position: p.position?.trim().toUpperCase() || null,
+      team: foldInjuryTeam(p.team, sport),
+    })
+    if (res.reason === 'ambiguous') return { ambiguous: true }
+    return res.match ? { rows: res.match.rows } : null
+  }
+}
+
+export function matchInjuryRowsToPlayers<R extends InjuryRowLike>(
+  rows: readonly R[],
+  players: readonly InjuryPlayerLookup[],
+  sport: string,
+): InjuryRowMatch<R> {
+  const match = createInjuryRowMatcher(rows, sport)
+  const byPlayer = new Map<string, R[]>()
+  const ambiguous: string[] = []
+  for (const p of players) {
+    const key = normalizeMatchName(p.name)
+    if (!key || byPlayer.has(key)) continue
+    const res = match(p)
+    if (!res) continue
+    if ('ambiguous' in res) ambiguous.push(p.name)
+    else byPlayer.set(key, res.rows)
+  }
+  return { byPlayer, ambiguous }
+}
