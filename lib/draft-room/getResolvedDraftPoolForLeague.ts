@@ -65,6 +65,7 @@ import {
 import { PlayerMismatchCollector } from '@/lib/player-identity/playerMismatchLogger'
 import { isFreeAgentTeam as isNormalizedFreeAgentTeam } from '@/lib/player-identity/playerIdentityResolution'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { foldInjuryTeam } from '@/lib/injuries/matchInjuryRows'
 
 const DEFAULT_LIMIT = 300
 const DEVY_POOL_LIMIT = 200
@@ -1229,7 +1230,9 @@ export async function getResolvedDraftPoolForLeague(
         injuryByPlayerId.set(injuryRow.playerId, injuryRow)
       }
 
-      const nameTeam = injuryNameTeamKey(injuryRow.playerName, injuryRow.team)
+      // Folded to a code: the feeds write "Minnesota Vikings" and the pool says "MIN", so an unfolded
+      // key never matched and every NFL badge fell through to the name-only tier below.
+      const nameTeam = injuryNameTeamKey(injuryRow.playerName, foldInjuryTeam(injuryRow.team, sport))
       if (nameTeam && !injuryByNameTeam.has(nameTeam)) {
         injuryByNameTeam.set(nameTeam, injuryRow)
       }
@@ -1243,7 +1246,7 @@ export async function getResolvedDraftPoolForLeague(
         const existing = injuryByName.get(nameOnly)
         if (!existing) {
           injuryByName.set(nameOnly, injuryRow)
-        } else if ((existing.team || '') !== (injuryRow.team || '')) {
+        } else if ((foldInjuryTeam(existing.team, sport) ?? '') !== (foldInjuryTeam(injuryRow.team, sport) ?? '')) {
           injuryNameCollisions.add(nameOnly)
         }
       }
@@ -2169,17 +2172,22 @@ export async function getResolvedDraftPoolForLeague(
     if (!dbInjuryHit) {
       const teamCandidate =
         row.team ?? row.teamAbbr ?? poolMatch?.team_abbreviation ?? null
-      const byNameTeam = injuryByNameTeam.get(injuryNameTeamKey(name, teamCandidate))
+      const byNameTeam = injuryByNameTeam.get(injuryNameTeamKey(name, foldInjuryTeam(teamCandidate, sport)))
       dbInjuryHit = byNameTeam ?? null
     }
     if (!dbInjuryHit) {
       // Name-only is the last resort and is REFUSED when that name is shared by
       // more than one athlete. A missing injury badge is a gap; the wrong
       // player's injury badge on a draft board is a false statement.
+      //
+      // 🛑 AND REFUSED WHEN THE ROW NAMES ANOTHER CLUB (2026-10-11). The collision set only fills
+      // when BOTH namesakes have a row, so with only the Browns' LB Justin Jefferson on the report
+      // the Vikings WR's board badge read the LB's status.
       const nameKey = injuryNameKey(name)
-      dbInjuryHit = nameKey && !injuryNameCollisions.has(nameKey)
-        ? injuryByName.get(nameKey) ?? null
-        : null
+      const hit = nameKey && !injuryNameCollisions.has(nameKey) ? injuryByName.get(nameKey) ?? null : null
+      const theirs = foldInjuryTeam(hit?.team, sport)
+      const ours = foldInjuryTeam(row.team ?? row.teamAbbr ?? poolMatch?.team_abbreviation ?? null, sport)
+      dbInjuryHit = hit && (!theirs || !ours || theirs === ours) ? hit : null
     }
 
     const resolvedRawInjuryStatus =

@@ -8,7 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const h = vi.hoisted(() => ({
   news: [] as Array<Record<string, unknown>>,
-  roster: [] as Array<{ roster: { ownerId: string; leagueId: string } }>,
+  roster: [] as Array<{ playerName: string; team: string; sport: string; roster: { ownerId: string; leagueId: string } }>,
   followers: [] as string[],
   cache: new Map<string, Date>(),
   cacheDown: false,
@@ -48,7 +48,7 @@ const MCVAY = "McVay says Nacua's injury not 'long-term' concern, but Rams being
 const row = (id: string, headline: string) => ({
   id, sport: 'NFL', playerName: 'Puka Nacua', team: 'LAR', headline, body: null, impact: 'high',
 })
-const roster = (ownerId: string, leagueId: string) => ({ roster: { ownerId, leagueId } })
+const roster = (ownerId: string, leagueId: string) => ({ playerName: 'Puka Nacua', team: 'LAR', sport: 'NFL', roster: { ownerId, leagueId } })
 const toldUsers = () => h.dispatch.mock.calls.flatMap((c) => (c[0] as { userIds: string[] }).userIds)
 
 async function run(...rows: Array<Record<string, unknown>>) {

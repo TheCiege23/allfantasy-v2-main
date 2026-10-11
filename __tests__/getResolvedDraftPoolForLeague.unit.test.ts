@@ -20,6 +20,12 @@ const hm = vi.hoisted(() => ({
   loadRollingInsightsStatsDetailByPlayerIds: vi.fn(),
   adpDataFindFirst: vi.fn(),
   adpDataFindMany: vi.fn(),
+  listInjuryFacts: vi.fn(),
+}))
+
+vi.mock('@/lib/injuries/injuryReadPort', async (orig) => ({
+  ...(await orig<Record<string, unknown>>()),
+  listInjuryFacts: (...a: unknown[]) => hm.listInjuryFacts(...a),
 }))
 
 vi.mock('@/lib/prisma', () => ({
@@ -147,6 +153,7 @@ describe('normalizeDraftPoolNameForDedupe', () => {
 describe('getResolvedDraftPoolForLeague', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    hm.listInjuryFacts.mockResolvedValue({ facts: [], newestFetchedAt: null, feedStale: false, coverage: { sourceAvailable: true, reason: null } })
     hm.leagueFindUnique.mockResolvedValue({
       sport: 'NFL',
       leagueVariant: null,
@@ -234,6 +241,34 @@ describe('getResolvedDraftPoolForLeague', () => {
       const pos = String(e.position ?? e.display?.metadata?.position ?? '').toUpperCase()
       expect(pos === 'K' || pos === 'PK').toBe(false)
     }
+  })
+
+  /*
+   * 🛑 The name-only fallback bound a lone namesake (2026-10-11): with only the Browns' LB Justin
+   * Jefferson on the report, the Vikings WR's board badge read the LB's Out. The feed's full team name
+   * also never matched the pool's code, so EVERY NFL badge came through that fallback.
+   */
+  it("a namesake's injury on another club never lands on a draft-board player", async () => {
+    const getResolvedDraftPoolForLeague = await loadPool()
+    const fact = (team: string) => ({
+      playerName: 'Justin Jefferson', team, position: null, status: 'Out', type: 'Hamstring', description: null,
+      date: new Date(), week: null, source: 'espn', fetchedAt: new Date(), reportedAt: new Date(), ageHours: 1, fetchAgeHours: 1, stale: false, id: 'i1',
+    })
+    hm.getLiveADP.mockResolvedValue([{ name: 'Justin Jefferson', position: 'WR', team: 'MIN', adp: 1, bye: 6 }])
+    hm.getPlayerPoolForLeague.mockResolvedValue([
+      { full_name: 'Justin Jefferson', position: 'WR', team_abbreviation: 'MIN', external_source_id: 'jj', injury_status: null, secondary_positions: [], image_url: null, player_id: null, status: null, age: null },
+    ])
+    const statusOf = async () =>
+      (await getResolvedDraftPoolForLeague('league-unit', { effectiveLeagueTemplate: effectiveNflNoK() })).entries.find((e) =>
+        e.name.toLowerCase().includes('jefferson'),
+      )?.injuryStatus ?? null
+
+    hm.listInjuryFacts.mockResolvedValue({ facts: [fact('Cleveland Browns')], newestFetchedAt: new Date(), feedStale: false, coverage: { sourceAvailable: true, reason: null } })
+    expect(String(await statusOf()).toLowerCase()).not.toContain('out')
+
+    // His own club's row, written with the feed's full name, still binds.
+    hm.listInjuryFacts.mockResolvedValue({ facts: [fact('Minnesota Vikings')], newestFetchedAt: new Date(), feedStale: false, coverage: { sourceAvailable: true, reason: null } })
+    expect(String(await statusOf()).toLowerCase()).toContain('out')
   })
 
   it('merges DB pool onto ADP rows preserving ADP order and enriching playerId, sleeperId, imageUrl, and display headshot', async () => {
