@@ -4,7 +4,7 @@ const m=vi.hoisted(()=>({cacheFind:vi.fn(),cacheCreate:vi.fn(),cacheDelete:vi.fn
 vi.mock('server-only',()=>({}))
 vi.mock('@/lib/prisma',()=>{const db={sportsDataCache:{findUnique:m.cacheFind,create:m.cacheCreate,deleteMany:m.cacheDelete,update:m.cacheUpdate},authAccount:{findFirst:m.accountFind,findUnique:m.accountUnique,deleteMany:m.accountDelete,create:m.accountCreate,updateMany:m.accountUpdate}};return {prisma:{...db,$transaction:async(fn:(tx:unknown)=>unknown)=>fn(db)}}})
 import { encrypt } from '@/lib/league-auth-crypto'
-import { assertWeeklyXOrigin,beginWeeklyXConnection,completeWeeklyXConnection,publishWeeklyXPost,validWeeklyXPost,weeklyXStateKey,weeklyXStatus } from '@/lib/core-app/weeklyXPublishing'
+import { WeeklyXError,assertWeeklyXOrigin,beginWeeklyXConnection,completeWeeklyXConnection,publishWeeklyXPost,validWeeklyXPost,weeklyXStateKey,weeklyXStatus } from '@/lib/core-app/weeklyXPublishing'
 const request={requestId:'03c894a2-2d36-4f13-9060-d1d44fe45aee',text:'My fantasy week'}
 beforeEach(()=>{
   vi.clearAllMocks();vi.stubGlobal('fetch',m.fetch)
@@ -22,7 +22,7 @@ describe('weekly X connection isolation',()=>{
   it('stores a session-bound encrypted verifier and uses S256 PKCE',async()=>{
     const url=new URL(await beginWeeklyXConnection('user-A','league-A'))
     expect(url.origin).toBe('https://x.com');expect(url.searchParams.get('code_challenge_method')).toBe('S256')
-    expect(url.searchParams.get('scope')).toBe('tweet.read tweet.write users.read')
+    expect(url.searchParams.get('scope')).toBe('tweet.read tweet.write users.read offline.access')
     const data=m.cacheCreate.mock.calls[0][0].data
     expect(data.cacheKey).toBe(weeklyXStateKey(url.searchParams.get('state')!));expect(data.data.user).not.toBe('user-A')
     expect(data.data.verifier).toMatch(/^v1:/);expect(data.data.verifier).not.toBe(url.searchParams.get('code_challenge'))
@@ -104,4 +104,65 @@ it('updates an existing connection only with an explicit owning-user condition',
  await completeWeeklyXConnection('user-A',state,'code')
  expect(m.accountUpdate.mock.calls[0][0].where).toEqual({id:'owned',userId:'user-A',provider:'x-weekly-publish'})
  expect(m.accountCreate).not.toHaveBeenCalled()
+})
+
+describe('offline access and token refresh',()=>{
+  const SCOPE='tweet.read tweet.write users.read offline.access'
+  const expired=()=>({id:'acct',access_token:'v1:'+encrypt('old-token'),refresh_token:'v1:'+encrypt('old-refresh'),expires_at:Math.floor(Date.now()/1000)-10,scope:SCOPE,session_state:'manager'})
+  async function connectWith(tokenResponse:Response) {
+    const url=new URL(await beginWeeklyXConnection('user-A',null)),state=url.searchParams.get('state')!
+    m.cacheFind.mockResolvedValue(m.cacheCreate.mock.calls[0][0].data)
+    m.fetch.mockResolvedValueOnce(tokenResponse).mockResolvedValueOnce(Response.json({data:{id:'12345',username:'manager'}}))
+    return completeWeeklyXConnection('user-A',state,'code')
+  }
+  it('stores the refresh token X issues, encrypted',async()=>{
+    await connectWith(Response.json({access_token:'new-token',refresh_token:'new-refresh',token_type:'bearer',expires_in:7200,scope:SCOPE}))
+    const saved=m.accountCreate.mock.calls[0][0].data
+    expect(saved.refresh_token).toMatch(/^v1:/);expect(saved.refresh_token).not.toContain('new-refresh')
+  })
+  it('reports which step failed, without the code or any credential',async()=>{
+    const error=await connectWith(Response.json({error:'invalid_client',error_description:'Missing valid authorization header'},{status:401})).catch(e=>e)
+    expect(error).toBeInstanceOf(WeeklyXError);expect(error.code).toBe('connection_failed')
+    expect(error.detail).toContain('token_exchange: HTTP 401 invalid_client')
+    expect(error.detail).not.toContain('secret');expect(error.detail).not.toContain('code')
+    m.fetch.mockReset();m.cacheDelete.mockResolvedValue({count:1})
+    const url=new URL(await beginWeeklyXConnection('user-A',null)),state=url.searchParams.get('state')!
+    m.cacheFind.mockResolvedValue(m.cacheCreate.mock.calls.at(-1)![0].data)
+    m.fetch.mockResolvedValueOnce(Response.json({access_token:'t',token_type:'bearer',expires_in:7200,scope:SCOPE})).mockResolvedValueOnce(Response.json({title:'Client Forbidden',detail:'client-not-enrolled'},{status:403}))
+    const identityError=await completeWeeklyXConnection('user-A',state,'code').catch(e=>e)
+    expect(identityError.detail).toBe('users_me: HTTP 403 Client Forbidden / client-not-enrolled')
+  })
+  it('stays connected past access-token expiry when it can refresh',async()=>{
+    m.accountFind.mockResolvedValue(expired())
+    expect(await weeklyXStatus('user-A')).toMatchObject({connected:true,handle:'manager',expiresAt:null})
+    m.accountFind.mockResolvedValue({...expired(),refresh_token:null})
+    expect((await weeklyXStatus('user-A')).connected).toBe(false)
+  })
+  it('refreshes an expiring token, stores the rotated pair only over the one it used, and posts with the new token',async()=>{
+    const stored=expired()
+    m.accountFind.mockResolvedValue(stored)
+    m.fetch.mockResolvedValueOnce(Response.json({access_token:'fresh-token',refresh_token:'rotated-refresh',token_type:'bearer',expires_in:7200,scope:SCOPE})).mockResolvedValueOnce(Response.json({data:{id:'555'}}))
+    expect((await publishWeeklyXPost('user-A',request)).id).toBe('555')
+    const refreshBody=new URLSearchParams(m.fetch.mock.calls[0][1].body)
+    expect(refreshBody.get('grant_type')).toBe('refresh_token');expect(refreshBody.get('refresh_token')).toBe('old-refresh')
+    const write=m.accountUpdate.mock.calls[0][0]
+    expect(write.where).toEqual({id:'acct',userId:'user-A',provider:'x-weekly-publish',refresh_token:stored.refresh_token})
+    expect(write.data.refresh_token).not.toBe(stored.refresh_token)
+    expect(write.data.access_token).toMatch(/^v1:/);expect(write.data.refresh_token).toMatch(/^v1:/);expect(JSON.stringify(write.data)).not.toContain('rotated-refresh')
+    expect(m.fetch.mock.calls[1][1].headers.Authorization).toBe('Bearer fresh-token')
+  })
+  it('uses a token a concurrent request just refreshed instead of failing',async()=>{
+    const first=expired()
+    m.accountFind.mockResolvedValueOnce(first).mockResolvedValueOnce({...first,access_token:'v1:'+encrypt('peer-token'),expires_at:Math.floor(Date.now()/1000)+7200})
+    m.fetch.mockResolvedValueOnce(Response.json({error:'invalid_request'},{status:400})).mockResolvedValueOnce(Response.json({data:{id:'777'}}))
+    expect((await publishWeeklyXPost('user-A',request)).id).toBe('777')
+    expect(m.fetch.mock.calls[1][1].headers.Authorization).toBe('Bearer peer-token')
+    expect(m.accountUpdate).not.toHaveBeenCalled()
+  })
+  it('asks to reconnect when the refresh is refused and nobody else refreshed',async()=>{
+    m.accountFind.mockResolvedValue(expired())
+    m.fetch.mockResolvedValueOnce(Response.json({error:'invalid_request'},{status:400}))
+    await expect(publishWeeklyXPost('user-A',request)).rejects.toThrow('reconnect')
+    expect(m.fetch).toHaveBeenCalledTimes(1);expect(m.cacheCreate).not.toHaveBeenCalled()
+  })
 })
