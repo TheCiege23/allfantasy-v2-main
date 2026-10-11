@@ -42,6 +42,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { confirmTokenSpend } from '@/lib/tokens/client-confirm'
 import { FREE_CHIMMY_QUESTIONS_PER_DAY } from '@/lib/tokens/freeChimmyQuestions'
 import '@/components/core-app/af-comms.css'
+import { ImportVerifyGate } from '@/components/core-app/import/ImportVerifyGate'
 import type { CoreSurfaceKey } from '@/lib/core-app/coreSurface'
 import ChimmyActionCard from '@/components/chimmy/ChimmyActionCard'
 import { readActionCards, type ChimmyActionCard as ChimmyActionCardData } from '@/lib/chimmy-chat/actionCards'
@@ -328,9 +329,12 @@ export function describeChimmyFailure(status: number | null, code: unknown): { m
 /** A failed ask, carrying whether a retry is worth offering. */
 class ChimmyAskError extends Error {
   readonly retryable: boolean
-  constructor(failure: { message: string; retryable: boolean }) {
+  /** The route's own code, when it sent one — VERIFICATION_REQUIRED opens the verify card. */
+  readonly code: string | null
+  constructor(failure: { message: string; retryable: boolean }, code: unknown = null) {
     super(failure.message)
     this.retryable = failure.retryable
+    this.code = typeof code === 'string' && code ? code : null
   }
 }
 
@@ -632,6 +636,14 @@ export function ChimmyPanel({
    * resend under a sentence about something else.
    */
   const [retryAsk, setRetryAsk] = useState<{ message: string; question: string } | null>(null)
+  /*
+   * ⚠ AN UNVERIFIED ACCOUNT CANNOT USE CHIMMY AT ALL, AND THIS WAS A SENTENCE. "Verify your email to
+   * use Chimmy — open Settings, or go to /verify" sent the person somewhere else at the moment they
+   * had a question. The same card /import uses (2026-10-11) sends the link here and, once confirmed,
+   * asks the question they typed. Measured that day: email-and-password sign-ups confirm 33 of 71,
+   * and people confirm in the first session or not at all.
+   */
+  const [verifyAsk, setVerifyAsk] = useState<{ question: string } | null>(null)
   /* Out of tokens: a card with ways to keep going, not an error line. See lib/chimmy/outOfAnswers.ts. */
   const [outOfAnswers, setOutOfAnswers] = useState<OutOfAnswers | null>(null)
   /* Fast or Deep, per user. Sent with every question; see ChimmyAnswerMode.tsx. */
@@ -868,8 +880,10 @@ export function ChimmyPanel({
             ])
             return
           }
-          throw new ChimmyAskError(describeChimmyFailure(res.status, payload.code ?? payload.error))
+          throw new ChimmyAskError(describeChimmyFailure(res.status, payload.code ?? payload.error), payload.code ?? payload.error)
         }
+        // Answered: any verify card from an earlier refusal has done its job.
+        setVerifyAsk(null)
 
         /*
          * Only meaningful when the user actually picked a league. On a GLOBAL
@@ -979,10 +993,16 @@ export function ChimmyPanel({
           const shown = question || `Screenshot: ${attached?.name ?? 'image'}`
           setTurns((t) => (t.length && t[t.length - 1].role === 'you' && t[t.length - 1].text === shown ? t.slice(0, -1) : t))
           setScreenshot(attached)
-          const failure =
-            e instanceof ChimmyAskError ? e : { message: 'Chimmy hit a snag on that one.', retryable: true }
-          setError(failure.message)
-          setRetryAsk(failure.retryable ? { message: failure.message, question } : null)
+          if (e instanceof ChimmyAskError && e.code === 'VERIFICATION_REQUIRED') {
+            setError(null)
+            setRetryAsk(null)
+            setVerifyAsk({ question })
+          } else {
+            const failure =
+              e instanceof ChimmyAskError ? e : { message: 'Chimmy hit a snag on that one.', retryable: true }
+            setError(failure.message)
+            setRetryAsk(failure.retryable ? { message: failure.message, question } : null)
+          }
         }
       } finally {
         setBusy(false)
@@ -1342,6 +1362,19 @@ export function ChimmyPanel({
           * says nothing about charging, which is the honest position when we
           * genuinely do not know.
           */}
+        {verifyAsk ? (
+          /* Asking again spends tokens, so it never re-sends on its own — only on a tap. */
+          <ImportVerifyGate
+            email={null}
+            returnTo={typeof window === 'undefined' ? '/core' : `${window.location.pathname}${window.location.search}`}
+            step="chimmy"
+            autoResume={false}
+            resuming={busy}
+            onResume={() => void send(verifyAsk.question)}
+            title="Confirm your email to ask Chimmy"
+            resumeNote="your question is still in the box, so tap Continue to send it"
+          />
+        ) : null}
         {error ? <p className="af-cm-error">{error}</p> : null}
         {error && retryAsk?.message === error ? (
           <div className="af-cm-retryrow">

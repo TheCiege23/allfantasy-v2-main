@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { inboxShortcutFor, readSendOutcome } from '@/lib/core-app/importVerifyGate'
+import '@/components/core-app/af-verify-gate.css'
 
 /**
  * The import screen's verify step (2026-10-11), shown where the import routes answer 403
@@ -50,17 +51,23 @@ export function ImportVerifyGate({
   autoResume,
   resuming,
   onResume,
+  title = 'Confirm your email to bring your leagues in',
+  resumeNote = 'your import picks up where you left off',
 }: {
   /** The signed-in account's address, so the card can say where the link went. */
   email: string | null
   /** Where the emailed link brings them back to: this screen, with its query. */
   returnTo: string
   /** Which step was blocked, for the analytics only. */
-  step: 'discover' | 'preview' | 'commit' | 'bulk'
+  step: 'discover' | 'preview' | 'commit' | 'bulk' | 'chimmy'
   /** Retry on its own when the tab comes back. Never for a step that writes. */
   autoResume: boolean
   resuming: boolean
   onResume: () => void
+  /** The card's heading; the import's by default. */
+  title?: string
+  /** What carrying on does, said after the link is sent; the import's by default. */
+  resumeNote?: string
 }) {
   const [send, setSend] = useState<SendState>({ k: 'idle' })
   /* Once a link has gone out, the card stays on "check your inbox" — a resend refused by the
@@ -134,11 +141,11 @@ export function ImportVerifyGate({
 
   return (
     <div className="af-im-verify" ref={rootRef} role="region" aria-label="Confirm your email" data-testid="import-verify-gate">
-      <p className="af-im-verify-title">Confirm your email to bring your leagues in</p>
+      <p className="af-im-verify-title">{title}</p>
       {sentOnce ? (
         <p className="af-im-verify-body" role="status">
-          Sent to {where}. Tap the link in that email, then come back here — your import picks up where you
-          left off. Not there? Check Spam or Promotions.
+          Sent to {where}. Tap the link in that email, then come back here — {resumeNote}. Not there? Check
+          Spam or Promotions.
         </p>
       ) : (
         <p className="af-im-verify-body">
@@ -156,13 +163,13 @@ export function ImportVerifyGate({
         {sentOnce ? (
           <>
             {inbox ? (
-              <a className="af-btn af-im-verify-primary" href={inbox.href} target="_blank" rel="noopener noreferrer">
+              <a className="af-im-verify-primary" href={inbox.href} target="_blank" rel="noopener noreferrer">
                 {inbox.label}
               </a>
             ) : null}
             <button
               type="button"
-              className={inbox ? 'af-btn af-btn--ghost' : 'af-btn af-im-verify-primary'}
+              className={inbox ? 'af-im-verify-ghost' : 'af-im-verify-primary'}
               disabled={resuming}
               onClick={() => resume('tap')}
             >
@@ -172,7 +179,7 @@ export function ImportVerifyGate({
         ) : (
           <button
             type="button"
-            className="af-btn af-im-verify-primary"
+            className="af-im-verify-primary"
             disabled={send.k === 'sending'}
             onClick={() => void sendLink()}
           >
