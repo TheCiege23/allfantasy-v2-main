@@ -32,6 +32,11 @@ export function repairHyphenCasing(name: string): string {
 /** "A.St", "S.La", "J. Smith": an initial and a dot, then a fragment. */
 const SHORT_FORM = /^\p{Lu}\p{Ll}?\.\s?\S/u
 
+/** True for a vendor short form ("A.St") — a name that cannot be looked up as a full name. */
+export function isShortFormName(name: string): boolean {
+  return SHORT_FORM.test(name.trim())
+}
+
 /**
  * The name to print for a play's subject, given the vendor's spelling and the canonical name of the
  * identity the play's own player id resolved to (null when it did not resolve).

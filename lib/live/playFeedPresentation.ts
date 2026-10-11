@@ -12,7 +12,7 @@ import { getPrimaryLogoUrlForTeam } from '@/lib/sport-teams/SportTeamMetadataReg
 import { headshotUrl } from '@/lib/media-url'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { buildNameIndex, normalizeMatchName, resolveVerifiedMatch } from '@/lib/player-match/verifiedNameMatch'
-import { displayPlayName } from '@/lib/player-match/displayNameCasing'
+import { displayPlayName, isShortFormName } from '@/lib/player-match/displayNameCasing'
 
 /**
  * The sport every play in this feed belongs to. Not a guess: `refreshPlayByPlayFeed` polls only
@@ -125,11 +125,43 @@ type HeadshotCandidate = {
   sleeperId: string | null
 }
 
-async function resolveHeadshots(riPlayerIds: string[]): Promise<Map<string, Resolved>> {
+/** The identity fields every lookup below selects. */
+const IDENTITY_SELECT = {
+  rollingInsightsId: true,
+  canonicalName: true,
+  position: true,
+  sport: true,
+  currentTeam: true,
+  sleeperId: true,
+} as const
+
+async function resolveHeadshots(
+  events: ReadonlyArray<{ playerId: string; playerName: string }>,
+): Promise<Map<string, Resolved>> {
   const out = new Map<string, Resolved>()
   // `name:<x>` is the parser's fallback when a play carries no player id at all.
-  const ids = [...new Set(riPlayerIds.filter((id) => id && !id.startsWith('name:')))]
-  if (ids.length === 0) return out
+  const ids = [...new Set(events.map((e) => e.playerId).filter((id) => id && !id.startsWith('name:')))]
+  /*
+   * 🛑 PLAYS WITH NO VENDOR ID, AND SINCE 2026-10-11 ~22:25Z THAT IS NEARLY ALL OF THEM. A read-only
+   * probe of the cached feed found 19 of 20 plays carrying the parser's `name:` fallback (no
+   * `players[].id`, and no `teamAbbr` either) — so every play on /core/live rendered unresolved:
+   * no face, position, club or Sleeper id. Recorded as a contract gap (GAPS.md N-18).
+   *
+   * Those plays are matched by FULL NAME against NFL identities, and only when exactly ONE NFL
+   * identity carries that name — two namesakes, a short form ("A.St"), or a single-word name resolve
+   * to nothing. Looked up on the indexed `normalizedName` column and RE-CHECKED with this module's
+   * own normaliser, so a column normalised differently can only miss, never mis-match.
+   */
+  const byNameKey = new Map<string, string[]>() // normalised name -> the `name:` player ids carrying it
+  for (const e of events) {
+    if (!e.playerId?.startsWith('name:')) continue
+    const name = e.playerName?.trim() ?? ''
+    if (!name || isShortFormName(name) || name.split(/\s+/).length < 2) continue
+    const key = normalizeMatchName(name)
+    if (!key) continue
+    byNameKey.set(key, [...(byNameKey.get(key) ?? []), e.playerId])
+  }
+  if (ids.length === 0 && byNameKey.size === 0) return out
 
   try {
     /*
@@ -142,7 +174,7 @@ async function resolveHeadshots(riPlayerIds: string[]): Promise<Map<string, Reso
      * with a TCU badge and no face. The schema's `@@unique([sport, rollingInsightsId])` makes
      * (sport, id) the key — never the id alone.
      */
-    const identities = await prisma.playerIdentityMap.findMany({
+    const identities = ids.length === 0 ? [] : await prisma.playerIdentityMap.findMany({
       where: { sport: PLAY_FEED_SPORT, rollingInsightsId: { in: ids } },
       /*
        * `currentTeam` rides along on a query we were already making, so the
@@ -156,14 +188,7 @@ async function resolveHeadshots(riPlayerIds: string[]): Promise<Map<string, Reso
        * crosswalk, and the Sleeper id is what the headshot fallback and the
        * player card both key on.
        */
-      select: {
-        rollingInsightsId: true,
-        canonicalName: true,
-        position: true,
-        sport: true,
-        currentTeam: true,
-        sleeperId: true,
-      },
+      select: IDENTITY_SELECT,
     })
 
     // Belt and braces for the `where` above: a row from another sport, or two rows for one id
@@ -177,7 +202,29 @@ async function resolveHeadshots(riPlayerIds: string[]): Promise<Map<string, Reso
       list.push(identity)
       rowsByRiId.set(identity.rollingInsightsId, list)
     }
-    const resolved = [...rowsByRiId.values()].filter((rows) => rows.length === 1).map((rows) => rows[0]!)
+    const resolved = [...rowsByRiId.values()]
+      .filter((rows) => rows.length === 1)
+      .map((rows) => ({ key: rows[0]!.rollingInsightsId!, identity: rows[0]! }))
+
+    if (byNameKey.size > 0) {
+      const named = await prisma.playerIdentityMap
+        .findMany({ where: { sport: PLAY_FEED_SPORT, normalizedName: { in: [...byNameKey.keys()] } }, select: IDENTITY_SELECT })
+        .catch((err: unknown) => {
+          console.error('[play-feed] name fallback read failed:', err instanceof Error ? err.message : err)
+          return []
+        })
+      const rowsByName = new Map<string, typeof named>()
+      for (const row of named) {
+        if ((row.sport ?? '').toUpperCase() !== PLAY_FEED_SPORT) continue
+        const key = normalizeMatchName(row.canonicalName)
+        if (!byNameKey.has(key)) continue
+        rowsByName.set(key, [...(rowsByName.get(key) ?? []), row])
+      }
+      for (const [key, rows] of rowsByName) {
+        if (rows.length !== 1) continue // namesakes: refuse rather than pick one
+        for (const playerId of new Set(byNameKey.get(key))) resolved.push({ key: playerId, identity: rows[0]! })
+      }
+    }
     if (resolved.length === 0) return out
 
     /*
@@ -196,7 +243,7 @@ async function resolveHeadshots(riPlayerIds: string[]): Promise<Map<string, Reso
      *   3. Sleeper's CDN by the identity row's Sleeper id — an id-keyed join, so it cannot pick
      *      the wrong person; a CDN miss falls back to initials in the row.
      */
-    const names = [...new Set(resolved.map((i) => i.canonicalName).filter(Boolean))]
+    const names = [...new Set(resolved.map(({ identity: i }) => i.canonicalName).filter(Boolean))]
     /*
      * 🛑 ITS OWN FAILURE, NOT THE IDENTITY READ'S. This query sat inside the one `try` whose `catch`
      * returned an empty map, so any error here — a column the production table lacks, a timeout —
@@ -226,7 +273,7 @@ async function resolveHeadshots(riPlayerIds: string[]): Promise<Map<string, Reso
       })),
     )
 
-    for (const identity of resolved) {
+    for (const { key, identity } of resolved) {
       const sleeperId = identity.sleeperId ?? null
       const namesakes = index.get(normalizeMatchName(identity.canonicalName)) ?? []
       const byId = sleeperId ? namesakes.filter((c) => c.sleeperId === sleeperId) : []
@@ -246,7 +293,7 @@ async function resolveHeadshots(riPlayerIds: string[]): Promise<Map<string, Reso
         hit = verified && !(verified.sleeperId && sleeperId && verified.sleeperId !== sleeperId) ? verified : null
       }
 
-      out.set(identity.rollingInsightsId!, {
+      out.set(key, {
         imageUrl: hit?.imageUrl ?? (sleeperId ? headshotUrl(sleeperId) || null : null),
         position: identity.position ?? hit?.position ?? null,
         team: identity.currentTeam ?? null,
@@ -433,7 +480,7 @@ export async function getPlayFeed(limit = 12): Promise<PlayFeedItem[]> {
   }
   if (events.length === 0) return []
 
-  const headshots = await resolveHeadshots(events.map((e) => e.playerId))
+  const headshots = await resolveHeadshots(events)
 
   return events.map((event) => {
     const extra = headshots.get(event.playerId)

@@ -242,3 +242,14 @@ describe('a fumble is a turnover only when the other side recovers it (2026-10-1
     expect(playsToLiveEvents(g)[0]).toMatchObject({ type: 'TOUCHDOWN', playerName: 'Own Receiver' })
   })
 })
+
+describe('player ids (GAPS N-18)', () => {
+  it('accepts a numeric-string id rather than dropping to the name fallback', () => {
+    const g = parsePlayByPlay(game([{ ...basePlay, yardsGained: 25, players: [{ ...basePlay.players[0], id: '4242' }] }]))[0]!
+    expect(playsToLiveEvents(g)[0]!.playerId).toBe('4242')
+  })
+  it('control: a missing id still falls back to the name', () => {
+    const g = parsePlayByPlay(game([{ ...basePlay, yardsGained: 25, players: [{ ...basePlay.players[0], id: null }] }]))[0]!
+    expect(playsToLiveEvents(g)[0]!.playerId).toBe('name:James Cook')
+  })
+})

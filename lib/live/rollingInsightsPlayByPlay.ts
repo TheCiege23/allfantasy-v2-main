@@ -107,7 +107,9 @@ export function parsePlayByPlay(payload: unknown, sport = 'NFL'): PbpGame[] {
             const action = str(x.action)
             if (!name || !role || !action) return []
             return [{
-              id: num(x.id),
+              /* The contract says INTEGER; a numeric string is accepted too, because a null here
+                 forces the `name:` fallback and costs every downstream join (GAPS.md N-18). */
+              id: num(x.id) ?? (typeof x.id === 'string' && /^\d+$/.test(x.id.trim()) ? Number(x.id.trim()) : null),
               name,
               role,
               action,

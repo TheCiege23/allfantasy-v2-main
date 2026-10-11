@@ -82,11 +82,14 @@ describe('getPlayFeed', () => {
     expect(feed[0].playerName).toBe('Jerry Jeudy')
   })
 
-  it('never queries the crosswalk for the parser\'s name: fallback ids', async () => {
+  it('never sends the parser\'s name: fallback as a vendor id', async () => {
     h.readPlayByPlayFeed.mockResolvedValue([event({ playerId: 'name:Unknown Guy' })])
     await getPlayFeed()
-    // Only real ids are worth a round trip; `name:` means the play had no id.
-    expect(h.identityFindMany).not.toHaveBeenCalled()
+    // `name:` means the play had no id. Since GAPS N-18 such a play is looked up by FULL NAME
+    // (`normalizedName`) — never by a fabricated `rollingInsightsId`.
+    for (const [args] of h.identityFindMany.mock.calls) {
+      expect((args as { where: Record<string, unknown> }).where.rollingInsightsId).toBeUndefined()
+    }
   })
 
   it('degrades to an empty feed instead of throwing when the store is down', async () => {
@@ -334,5 +337,38 @@ describe('getPlayFeed — names and a failed headshot read (2026-10-11)', () => 
     h.readPlayByPlayFeed.mockResolvedValue([pbp({ playerId: '903', playerName: 'Jaxon Smith-njigba', team: null })])
     const [item] = await getPlayFeed()
     expect(item!.playerName).toBe('Jaxon Smith-Njigba')
+  })
+})
+
+describe('getPlayFeed — plays with no vendor id (GAPS N-18, 2026-10-11)', () => {
+  const idRow = (canonicalName: string, sleeperId: string, currentTeam = 'DET') =>
+    ({ rollingInsightsId: null, canonicalName, position: 'RB', sport: 'NFL', currentTeam, sleeperId })
+
+  it('resolves a full name that exactly ONE NFL identity carries', async () => {
+    h.readPlayByPlayFeed.mockResolvedValue([pbp({ playerId: 'name:Jahmyr Gibbs', playerName: 'Jahmyr Gibbs', team: null })])
+    h.identityFindMany.mockImplementation(async (args: { where: Record<string, unknown> }) =>
+      args.where.normalizedName ? [idRow('Jahmyr Gibbs', '9221')] : [])
+    const [item] = await getPlayFeed()
+    expect(item).toMatchObject({ sleeperId: '9221', position: 'RB', team: 'DET' })
+    const nameCall = h.identityFindMany.mock.calls.find((c: unknown[]) => (c[0] as { where: Record<string, unknown> }).where.normalizedName)
+    expect(nameCall![0].where).toEqual({ sport: 'NFL', normalizedName: { in: ['jahmyr gibbs'] } })
+  })
+
+  it('refuses namesakes rather than picking one', async () => {
+    h.readPlayByPlayFeed.mockResolvedValue([pbp({ playerId: 'name:Mike Williams', playerName: 'Mike Williams', team: null })])
+    h.identityFindMany.mockImplementation(async (args: { where: Record<string, unknown> }) =>
+      args.where.normalizedName ? [idRow('Mike Williams', '1'), idRow('Mike Williams', '2', 'NYJ')] : [])
+    const [item] = await getPlayFeed()
+    expect(item!.sleeperId).toBeNull()
+    expect(item!.position).toBeNull()
+  })
+
+  it('does not look up a short form or a one-word name at all', async () => {
+    h.readPlayByPlayFeed.mockResolvedValue([
+      pbp({ playerId: 'name:A.St', playerName: 'A.St', team: null }),
+      pbp({ playerId: 'name:Myers', playerName: 'Myers', team: null, idempotencyKey: 'k2' }),
+    ])
+    await getPlayFeed()
+    expect(h.identityFindMany).not.toHaveBeenCalled()
   })
 })
