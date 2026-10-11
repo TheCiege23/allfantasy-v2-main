@@ -302,6 +302,35 @@ describe('buildMatchupPreviewContext — a game that already has points', () => 
     expect(out).toMatch(/All-time vs this opponent: 3-1/)
   })
 
+  it('names the NEXT game from the stored schedule once the board week is final', async () => {
+    const b = oneLeague(paid({ you: 135.5, them: 129.9, margin: 5.6, final: true }))
+    getBoard.mockResolvedValue({ ...b, leagueBoard: { ...b.leagueBoard!, records: { ...b.leagueBoard!.records, '9': { wins: 2, losses: 2 } } } })
+    const loadNextGame = vi.fn().mockResolvedValue({ week: 5, opponentRosterId: '9', opponentName: 'Rittnasty' })
+    const out = await buildMatchupPreviewContext({ leagueId: 'L1', userId: 'u1' }, { ...deps, loadNextGame })
+    expect(out).toMatch(/Their NEXT game: week 5 vs Rittnasty \(2-2\), from the stored schedule\./)
+    expect(out).toMatch(/for its odds call get_playoff_outlook/)
+    expect(loadNextGame).toHaveBeenCalledWith({ league: expect.objectContaining({ id: 'L1', platformLeagueId: 'p-L1' }), season: 2026, week: 4, yourRosterId: '3' })
+  })
+
+  it('says next week is not on file rather than naming anyone, including when the read fails', async () => {
+    getBoard.mockResolvedValue(oneLeague(paid({ you: 135.5, them: 129.9, margin: 5.6, final: true })))
+    for (const loadNextGame of [vi.fn().mockResolvedValue(null), vi.fn().mockRejectedValue(new Error('db down'))]) {
+      const out = await buildMatchupPreviewContext({ leagueId: 'L1', userId: 'u1' }, { ...deps, loadNextGame })
+      expect(out).toMatch(/Week 5's opponent is not on file yet .* Do not name one\./)
+      expect(out).not.toMatch(/NEXT game/)
+    }
+  })
+
+  it('does not look for a next game while the board week is still being played', async () => {
+    const loadNextGame = vi.fn()
+    getBoard.mockResolvedValue(oneLeague(paid({ you: 98.1, them: 120.4, margin: -22.3, final: false })))
+    const live = await buildMatchupPreviewContext({ leagueId: 'L1', userId: 'u1' }, { ...deps, loadNextGame })
+    getBoard.mockResolvedValue(oneLeague(paid(null)))
+    const before = await buildMatchupPreviewContext({ leagueId: 'L1', userId: 'u1' }, { ...deps, loadNextGame })
+    expect(loadNextGame).not.toHaveBeenCalled()
+    expect(`${live}${before}`).not.toMatch(/NEXT game|not on file yet/)
+  })
+
   it('says LOST and TIE plainly', async () => {
     getBoard.mockResolvedValue(oneLeague(paid({ you: 101, them: 120.2, margin: -19.2, final: true })))
     expect(await buildMatchupPreviewContext({ leagueId: 'L1', userId: 'u1' }, deps)).toMatch(/FINAL — they LOST 101\.0–120\.2/)

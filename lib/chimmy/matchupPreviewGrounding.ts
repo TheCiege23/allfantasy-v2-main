@@ -7,6 +7,8 @@ import { listMemberLeagues } from './tools/leagueByName'
 import { settleSentence, type EliminationSettle } from '@/lib/core-app/eliminationSettle'
 import { loadEliminationSettle } from '@/lib/core-app/eliminationSettleLoader'
 import { getRailMatchups, type RailSideProjection } from '@/lib/core-app/railMatchups'
+import { rosterLabel } from '@/lib/core-app/managerName'
+import { nativeWeeklyLeague } from '@/lib/core-app/weeklyCapabilities'
 
 /**
  * "How does my matchup look this week?" — from the same Week board the /core matchup screens render.
@@ -45,7 +47,21 @@ export interface MatchupPreviewDeps {
     userId: string,
     leagues: Parameters<typeof getWeekBoard>[1],
   ) => Promise<ReadonlyMap<string, LineupProjectionPair>>
+  /**
+   * The user's game in the week AFTER a finished board week. The board stays on a final week until
+   * the platform advances its marker (Sleeper: Wednesday), so without this the chat could only point
+   * at other tools for who is next. Optional: without it the block says the next week is not on file.
+   */
+  loadNextGame?: (args: NextGameQuery) => Promise<NextGame | null>
 }
+
+export type NextGameQuery = {
+  league: Parameters<typeof getWeekBoard>[1][number]
+  season: number
+  week: number
+  yourRosterId: string
+}
+export type NextGame = { week: number; opponentRosterId: string; opponentName: string }
 
 /** One league's lineup projections, with the week they describe. */
 export type LineupProjectionPair = {
@@ -61,6 +77,29 @@ export type LineupProjectionPair = {
 
 /** How many elimination leagues get a settle read in the all-leagues view. Four queries each. */
 const MAX_SETTLE_READS = 10
+
+/**
+ * The stored schedule for the very next week: the user's row, paired on `matchupId` — the same
+ * pairing the board and the season simulator use. Exactly two rows or nothing: an unpaired week
+ * (a bye, a playoff week they are not in, a schedule not synced yet) is not an opponent.
+ * AllFantasy-hosted leagues keep their schedule elsewhere and are skipped.
+ */
+export async function loadNextGameFromSchedule({ league, season, week, yourRosterId }: NextGameQuery): Promise<NextGame | null> {
+  if (!league.platformLeagueId || nativeWeeklyLeague(league)) return null
+  const rows = await prisma.weeklyMatchup.findMany({
+    where: { leagueId: league.platformLeagueId, seasonYear: season, week: week + 1, matchupId: { not: null } },
+    select: { rosterId: true, matchupId: true },
+  })
+  const mine = rows.find((r) => r.rosterId === yourRosterId)
+  const pair = mine ? rows.filter((r) => r.matchupId === mine.matchupId) : []
+  const opponent = pair.length === 2 ? pair.find((r) => r.rosterId !== yourRosterId) : undefined
+  if (!opponent) return null
+  const team = await prisma.leagueTeam.findFirst({
+    where: { leagueId: league.id, externalId: opponent.rosterId },
+    select: { teamName: true, ownerName: true },
+  })
+  return { week: week + 1, opponentRosterId: opponent.rosterId, opponentName: rosterLabel([team?.teamName, team?.ownerName], opponent.rosterId) }
+}
 
 const defaultDeps: MatchupPreviewDeps = {
   loadLeagues: async (ids) => {
@@ -93,6 +132,7 @@ const defaultDeps: MatchupPreviewDeps = {
       : e.yourScore == null
         ? Promise.resolve(null)
         : loadEliminationSettle({ platformLeagueId: e.platformLeagueId, season: e.season, week: e.week, yourRosterId: e.yourRosterId }),
+  loadNextGame: (q) => loadNextGameFromSchedule(q),
   loadLineupProjections: async (userId, leagues) => {
     const rail = await getRailMatchups(
       userId,
@@ -249,6 +289,7 @@ function leagueBlock(
   leagueId: string,
   settle: EliminationSettle | null = null,
   lineups: ReadonlyMap<string, LineupProjectionPair> | null = null,
+  next: NextGame | null = null,
 ): string | null {
   const lb = board.leagueBoard
   const elimination = board.eliminationWeeks.find((e) => e.leagueId === leagueId)
@@ -267,6 +308,15 @@ function leagueBlock(
     lines.push('- They have no game this week (a bye, or their team is not matched). Say so.')
   } else {
     lines.push(`- ${matchupLine(lb.yours, lineups?.get(lb.yours.leagueId))}`)
+    if (lb.yours.live?.final) {
+      const rec = next ? lb.records[next.opponentRosterId] : undefined
+      lines.push(
+        next
+          ? `- Their NEXT game: week ${next.week} vs ${next.opponentName}${rec ? ` (${rec.wins}-${rec.losses})` : ''}, from the stored schedule. ` +
+              'The board has not advanced to it yet, so it has no win probability here: for its odds call get_playoff_outlook, for the lineup optimize_my_lineup.'
+          : `- Week ${lb.week + 1}'s opponent is not on file yet (not synced, a bye, or past the regular season). Do not name one.`,
+      )
+    }
     const recYou = lb.yourRosterId ? lb.records[lb.yourRosterId] : undefined
     const recThem = lb.records[lb.yours.opponent.rosterId]
     if (recYou || recThem) {
@@ -343,6 +393,18 @@ function crossLeagueBlock(
   return lines.join('\n')
 }
 
+/** Only for a FINISHED board week — the one case where the board's own game is no longer next. */
+async function nextGameFor(
+  board: WeekBoard,
+  leagues: Parameters<typeof getWeekBoard>[1],
+  deps: MatchupPreviewDeps,
+): Promise<NextGame | null> {
+  const lb = board.leagueBoard
+  const league = lb ? leagues.find((l) => l.id === lb.leagueId) : undefined
+  if (!deps.loadNextGame || !lb?.yours?.live?.final || !lb.yourRosterId || !league) return null
+  return deps.loadNextGame({ league, season: lb.season, week: lb.week, yourRosterId: lb.yourRosterId }).catch(() => null)
+}
+
 /** One single-league read's settle verdict, handed to the chat as DATA (the answer's SAFE / OUT chip). */
 export type MatchupSettleRun = { leagueId: string; settle: EliminationSettle | null }
 
@@ -382,8 +444,9 @@ export async function buildMatchupPreviewContext(
       } catch {
         /* A collector that throws must not cost the user the matchup. */
       }
+      const next = await nextGameFor(board, leagues, deps)
       return (
-        leagueBlock(board, args.leagueId, settle, lineups) ??
+        leagueBlock(board, args.leagueId, settle, lineups, next) ??
         'This league has no matchup on file for the current week (not synced, or the season has not started). Say so; do not invent an opponent.'
       )
     }
