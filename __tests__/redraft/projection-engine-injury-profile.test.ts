@@ -7,6 +7,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { buildAllFantasyProjection } from '@/lib/redraft/projectionEngine'
+import { isOutDesignation, isRosterAbsence, isRuledOut } from '@/lib/core-app/injuryStatus'
 
 const BASE = 20
 
@@ -33,14 +34,28 @@ describe('projectionEngine injury profile — words, not letter runs', () => {
     expect(weeklyFor(status)).toBeCloseTo(BASE * multiplier, 1)
   })
 
-  it.each(['Out', 'IR', 'Injured Reserve', 'I.L.', '60-Day IL', 'Suspension', 'PUP', 'Inactive', 'Out (Hamstring)'])(
+  it.each([
+    'Out',
+    'IR',
+    'Injured Reserve',
+    'I.L.',
+    '60-Day IL',
+    'Suspension',
+    'Susp',
+    'SUSP',
+    'Sus',
+    'PUP',
+    'Physically Unable to Perform',
+    'Inactive',
+    'Out (Hamstring)',
+  ])(
     '%s zeroes the week',
     (status) => {
       expect(weeklyFor(status)).toBe(0)
     },
   )
 
-  it.each(['Active', 'ACT', 'Healthy', 'NA', null])('%s is no designation — no discount', (status) => {
+  it.each(['Active', 'ACT', 'INACT', 'Practice Squad', 'Healthy', 'NA', null])('%s is no designation — no discount', (status) => {
     expect(weeklyFor(status)).toBe(BASE)
   })
 
@@ -51,5 +66,17 @@ describe('projectionEngine injury profile — words, not letter runs', () => {
     expect(weeklyFor('Probable')).toBeCloseTo(BASE * 0.94, 1)
     // An unrecognised word on the report is still a risk, not an absence.
     expect(weeklyFor('Hamstring')).toBeCloseTo(BASE * 0.88, 1)
+  })
+})
+
+describe('isRuledOut — the abbreviated suspension spellings', () => {
+  it.each(['Susp', 'SUSP', 'Sus', 'sus.', 'Suspended', 'Suspension'])('%s is ruled out, as a season-scale absence', (status) => {
+    expect(isRuledOut(status)).toBe(true)
+    expect(isOutDesignation(status)).toBe(false)
+    expect(isRosterAbsence(status)).toBe(true)
+  })
+
+  it.each(['Suspicious', 'Sustained', 'Questionable'])('%s is not', (status) => {
+    expect(isRuledOut(status)).toBe(false)
   })
 })

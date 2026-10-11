@@ -1,4 +1,6 @@
 import { isHealthyDesignation, isRuledOut } from '@/lib/core-app/injuryStatus'
+import { isRosterStatusCode } from '@/lib/injuries/injuryStatusDisplay'
+import { rosterDesignation } from '@/lib/injuries/rosterDesignation'
 
 export type AllFantasyProjectionSource =
   | 'allfantasy_snapshot'
@@ -266,14 +268,24 @@ function injuryProfile(status: string | null | undefined): {
     return { weeklyMultiplier: 1, rosMultiplier: 1, confidencePenalty: 0, reason: null }
   }
   const words = statusWords(normalized)
-  // A game-day "Inactive" is an absence too (the NFL's 90-minute list), matched as a word.
-  if (isRuledOut(status) || words.includes('inactive')) {
+  // Absence: the shared tokenized rule (incl. "Sus"/"Susp"), the season-scale roster spellings
+  // `rosterDesignation` reads ("Physically Unable to Perform", "Non-Football Injury"), and a game-day
+  // "Inactive" (the NFL's 90-minute list), matched as a word.
+  if (isRuledOut(status) || rosterDesignation(status) != null || words.includes('inactive')) {
     return {
       weeklyMultiplier: 0,
       rosMultiplier: 0.62,
       confidencePenalty: 26,
       reason: `Listed ${status}; weekly projection reduced to zero.`,
     }
+  }
+  /*
+   * A ROSTER code is not a designation, so it carries no discount: Rolling Insights' "ACT"/"INACT",
+   * "Practice Squad", "FA", "RET". "INACT" used to fall through to the 0.88 "status risk" bucket below,
+   * discounting a healthy player for a word that only says which roster he is on.
+   */
+  if (isRosterStatusCode(status)) {
+    return { weeklyMultiplier: 1, rosMultiplier: 1, confidencePenalty: 0, reason: null }
   }
   if (words.includes('doubtful') || normalized === 'd') {
     return {
