@@ -1,3 +1,5 @@
+import { findSportsPlayerByLeagueId } from '@/lib/player-identity/findSportsPlayerByLeagueId'
+import { identityWhereForLeagueId } from '@/lib/player-identity/externalIdNamespace'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { assignIdpCapSalaryForWaiverClaim } from '@/lib/idp/capEngine'
@@ -35,14 +37,11 @@ function isDefensivePosition(position: string): boolean {
 
 async function resolvePlayerMeta(addPlayerId: string, addPlayerName: string, sport: string) {
   const sportKeys = [sport.toUpperCase(), sport.toLowerCase()]
+  // By our id / Sleeper id first, a provider's own number only when it cannot be a Sleeper id —
+  // the old `externalId OR sleeperId OR id` findFirst could roster RI's player of the same number.
   const player = await prisma.sportsPlayer
-    .findFirst({
-      where: {
-        sport: { in: sportKeys },
-        OR: [{ externalId: addPlayerId }, { sleeperId: addPlayerId }, { id: addPlayerId }],
-      },
-      select: { name: true, position: true, team: true },
-    })
+    .findFirst({ where: { id: addPlayerId }, select: { name: true, position: true, team: true } })
+    .then((own) => own ?? findSportsPlayerByLeagueId(sport, addPlayerId))
     .catch(() => null)
   if (player) {
     return {
@@ -57,14 +56,7 @@ async function resolvePlayerMeta(addPlayerId: string, addPlayerName: string, spo
     .findFirst({
       where: {
         sport: { in: sportKeys },
-        OR: [
-          { sleeperId: addPlayerId },
-          { fantasyCalcId: addPlayerId },
-          { rollingInsightsId: addPlayerId },
-          { apiSportsId: addPlayerId },
-          { espnId: addPlayerId },
-          { clearSportsId: addPlayerId },
-        ],
+        ...identityWhereForLeagueId(addPlayerId, sport),
       },
       select: { canonicalName: true, position: true, currentTeam: true },
     })
