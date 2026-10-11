@@ -53,7 +53,10 @@ describe('PushAsk', () => {
     expect(screen.getByText('Get this alert on your phone')).toBeInTheDocument()
     fireEvent.click(go)
     expect(h.subscribe).toHaveBeenCalledTimes(1)
-    expect(tracked()).toEqual([expect.objectContaining({ event: 'push_ask_shown', meta: { placement: 'follow' } })])
+    // `push_ask_shown` is sent from an effect, which can run after the button is already in the DOM.
+    await waitFor(() =>
+      expect(tracked()).toEqual([expect.objectContaining({ event: 'push_ask_shown', meta: { placement: 'follow' } })]),
+    )
   })
 
   it('once subscribed, says so and counts the conversion', async () => {
