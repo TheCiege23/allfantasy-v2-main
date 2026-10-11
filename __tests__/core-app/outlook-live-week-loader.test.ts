@@ -21,7 +21,7 @@ const target = { platformLeagueId: '1313536441829068800', season: 2026, week: 4 
 const game = (home: string, away: string, status: string, startTime: string) =>
   ({ season: 2026, week: 4, homeTeam: home, awayTeam: away, status, startTime: new Date(startTime), fetchedAt: new Date('2026-10-06T02:55:00Z'), seasonType: 'regular' })
 const player = (sleeperId: string, team: string) => ({ sleeperId, name: sleeperId, position: 'WR', team, sport: 'NFL', imageUrl: null })
-const starter = (playerId: string, rosterId: number | null) => ({ leagueId: target.platformLeagueId, seasonYear: 2026, week: 4, playerId, rosterId })
+const starter = (playerId: string, rosterId: number | null, points = 0) => ({ leagueId: target.platformLeagueId, seasonYear: 2026, week: 4, playerId, rosterId, points })
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -38,8 +38,16 @@ describe('loadLineupShares', () => {
     const out = await loadLineupShares([target], now)
     const shares = out.get(lineupShareKey(target))!
     expect(shares.get('1')).toBe(0) // both finished
-    expect(shares.get('7')).toBeCloseTo((0.5 + 0 + 1) / 3) // live, final, unresolved id counts as to play
+    expect(shares.get('7')).toBeCloseTo((0.5 + 0 + 1) / 3) // live, final, an unresolved id with no points yet
     expect(shares.size).toBe(2)
+    expect(h.starters.mock.calls[0][0].select).toMatchObject({ points: true })
+  })
+
+  it('reads an unresolved starter with points as played, and leaves a mostly unreadable lineup out', async () => {
+    h.starters.mockResolvedValue([starter('p1', 1), starter('p4', 1), starter('px', 1, 14.2), starter('qx', 2, 9), starter('qy', 2, 0), starter('p3', 2)])
+    const shares = (await loadLineupShares([target], now)).get(lineupShareKey(target))!
+    expect(shares.get('1')).toBeCloseTo(0.5 / 3)
+    expect(shares.has('2')).toBe(false)
     expect(h.starters.mock.calls[0][0].where).toMatchObject({ isStarter: true, OR: [{ leagueId: target.platformLeagueId, seasonYear: 2026, week: 4 }] })
   })
 

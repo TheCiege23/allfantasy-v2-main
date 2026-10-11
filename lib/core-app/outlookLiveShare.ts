@@ -1,19 +1,31 @@
 import type { StarterGameState } from './matchupGameState'
 import type { SimGame } from './outlookSim'
 
+/** One starter as the board reads it: its game state, and the points it already carries. */
+export type StarterRead = { state: StarterGameState; points: number }
+
 /**
- * The share of one lineup's week still to play, from its starters' game states. Null with no starters.
+ * The share of one lineup's week still to play, from its starters. Null when it cannot be read.
  *
- * ⚠ AN UNREADABLE STARTER COUNTS AS STILL TO PLAY. `unknown` covers an unresolved player id (about
- * one in eight Sleeper ids), a bye, and a live feed more than an hour stale — so treating it as
- * finished would freeze a score while players are still on the field. Counting it as unplayed only
- * widens the draw toward the old pre-game model. A game in progress is half played.
+ * final 0, live ½, upcoming 1. An `unknown` starter (an unresolved id, a bye, a live feed more than
+ * an hour stale) is judged by its own points: on the board means it has played, so ½; nothing yet, 1.
+ *
+ * 🛑 "UNREADABLE COUNTS AS STILL TO PLAY" WAS THE FIRST RULE AND IT DOUBLE-COUNTED. A starter whose
+ * points are already on the board was drawn again for a whole game — and a lineup nobody could read
+ * (a Fantrax college league: 0 of 120 starters resolve) became its board PLUS an entire extra week.
+ * So a lineup with more unreadable starters than readable ones is not read at all: its game falls
+ * back to the unplayed pre-game draw, which ignores the board rather than adding to it.
  */
-export function remainingShare(states: readonly StarterGameState[]): number | null {
-  if (states.length === 0) return null
+export function remainingShare(starters: readonly StarterRead[]): number | null {
+  if (starters.length === 0) return null
+  const unknown = starters.filter((s) => s.state === 'unknown').length
+  if (unknown * 2 > starters.length) return null
   let left = 0
-  for (const s of states) left += s === 'final' ? 0 : s === 'live' ? 0.5 : 1
-  return left / states.length
+  for (const s of starters) {
+    if (s.state === 'final') continue
+    left += s.state === 'live' ? 0.5 : s.state === 'upcoming' ? 1 : s.points > 0 ? 0.5 : 1
+  }
+  return left / starters.length
 }
 
 export type LiveRow = { week: number; rosterId: string; pointsFor: number; pointsAgainst: number }
