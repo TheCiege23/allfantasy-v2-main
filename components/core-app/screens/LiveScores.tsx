@@ -17,7 +17,7 @@ import PlayerName from '@/components/core-app/player-card/PlayerName'
 import { gameDetailHref } from '@/lib/live/gameDetailLink'
 import type { LiveGameCard, LivePageData } from '@/lib/live/liveScoresPage'
 import { matchesLiveGameQuery } from '@/lib/live/liveGameSearch'
-import { deriveImpact, impactTotalLabel } from '@/lib/live/liveImpact'
+import { playAgeLabel, starterStageDetail } from '@/lib/live/liveImpact'
 import { GameHighlight } from '@/components/live/GameHighlight'
 import { formatStarterPoints, groupStartersByPlayer, type StarterGroup } from '@/lib/live/liveTieInGroups'
 import { buildLockAlerts, type LiveLockAlert } from '@/lib/live/lockAlerts'
@@ -774,18 +774,24 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
               </>
             ) : data.hasRosterData ? (
               <>
+                {/*
+                  ⚠ A COUNT OF YOUR STARTERS, NOT SUMMED POINTS — see `starterStageCounts`. The old
+                  headline added one player once per league and only counted live games, so it fell
+                  when a game ended. Points are per league, in "Contributions by league" below.
+                */}
                 <p className="af-live-impact-total">
-                  <span className="af-num">{impact.totalPoints.toFixed(1)}</span>
-                  <span>{impactTotalLabel(impact, leagueFilterId != null)}</span>
+                  <span className="af-num">{impact.livePlayers}</span>
+                  <span>
+                    {impact.livePlayers === 1 ? 'starter' : 'starters'} playing now
+                    {leagueFilterId ? ' in this league' : ''}
+                  </span>
                 </p>
                 <p className="af-live-impact-sub">
-                  {impact.livePlayers === 0
-                    ? 'None of your players are on the field at the moment.'
-                    : `${impact.livePlayers} of your players ${
-                        impact.livePlayers === 1 ? 'is' : 'are'
-                      } live across ${impact.liveGames} ${
-                        impact.liveGames === 1 ? 'game' : 'games'
-                      }.`}
+                  {impact.livePlayers === 0 && !impact.upcomingPlayers && !impact.finishedPlayers
+                    ? 'None of your starters are on this slate.'
+                    : impact.livePlayers === 0
+                      ? `None on the field right now · ${starterStageDetail(impact)}`
+                      : starterStageDetail(impact)}
                 </p>
               </>
             ) : (
@@ -819,8 +825,9 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
 
           {impact.biggestMover ? (
             <div className="af-live-card">
+              {/* Renamed from "Biggest mover" (2026-10-11): it is the newest play, never a ranking. */}
               <h2 className="af-label">
-                Biggest mover <TopicTip topic="biggestMover" />
+                Latest for you <TopicTip topic="biggestMover" />
               </h2>
               <div className="af-live-mover">
                 <MiniPlayerImg
@@ -831,6 +838,9 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
                 <div className="af-live-mover-text">
                   <span className="af-live-mover-name">{impact.biggestMover.playerName}</span>
                   <span className="af-live-mover-line">{impact.biggestMover.headline}</span>
+                  {playAgeLabel(impact.biggestMover.detectedAt, now) ? (
+                    <span className="af-live-mover-age af-num">{playAgeLabel(impact.biggestMover.detectedAt, now)}</span>
+                  ) : null}
                   {impact.biggestMover.leagues.length > 0 ? (
                     <span className="af-live-mover-leagues">
                       {impact.biggestMover.leagues.join(' · ')}

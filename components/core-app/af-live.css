@@ -694,6 +694,10 @@
   font-size: 11px;
   color: var(--faint);
 }
+.af-live-mover-age {
+  font-size: 11px;
+  color: var(--faint);
+}
 
 /* The play feed. Sits with the mover card because it is the same PlayFeedItem
    shape, one row per play instead of a single highlight. */

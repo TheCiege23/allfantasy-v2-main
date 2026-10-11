@@ -186,3 +186,45 @@ describe('your matchups strip', () => {
     expect(strip.textContent).not.toContain('no single opponent')
   })
 })
+
+describe('your live impact — starters in action, not points summed across leagues', () => {
+  it('leads with starters playing now, then what is still to play and what is done', () => {
+    const shared = tie({ playerId: 'same', playerName: 'Same Guy', leagueId: 'L2', leagueName: 'Bravo League', points: 30 })
+    const live = game('1', { tieIns: [tie({ playerId: 'same', playerName: 'Same Guy', points: 20 }), shared, tie({ playerId: 'x', playerName: 'Other' })] })
+    const later = game('2', { isLive: false, completed: false, clockLabel: null, tieIns: [tie({ playerId: 'y', playerName: 'Later' })] })
+    const { container } = render(<LiveScores data={page([live, later, final('3')])} />)
+    const panel = container.querySelector('.af-live-impact') as HTMLElement
+    // 'same' starts in two leagues and counts once; 'x' is the other live starter.
+    expect(panel.querySelector('.af-live-impact-total')!.textContent).toBe('2starters playing now')
+    expect(panel.querySelector('.af-live-impact-sub')!.textContent).toBe('across 1 game · 1 still to play · 1 done')
+    // The old headline summed 20 + 30 + 8.4 across leagues; that number must not lead the panel.
+    expect(panel.textContent).not.toContain('58.4')
+    expect(panel.textContent).not.toMatch(/fantasy pts scored/)
+  })
+
+  it('names the play card for what it is', () => {
+    const data = page([game('1', { tieIns: [tie({ playerId: 'p1', playerName: 'Player One' })] })])
+    data.impact.plays = [
+      {
+        id: 'pbp:1',
+        gameId: 'rig-1',
+        canonicalGameId: '1',
+        type: 'TOUCHDOWN',
+        playerName: 'Player One',
+        sleeperId: 'p1',
+        team: null,
+        teamLogoUrl: null,
+        imageUrl: null,
+        position: 'RB',
+        headline: 'Player One 3-yard rushing TD',
+        action: '3-yard rushing TD',
+        yards: 3,
+        detectedAt: new Date(Date.now() - 4 * 60_000).toISOString(),
+      },
+    ]
+    render(<LiveScores data={data} />)
+    expect(screen.getByRole('heading', { name: /^Latest for you/ })).toBeInTheDocument()
+    expect(screen.queryByText(/Biggest mover/)).toBeNull()
+    expect(screen.getByText('4 min ago')).toBeInTheDocument()
+  })
+})
