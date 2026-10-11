@@ -1,9 +1,17 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 type Connection={configured:boolean;connected:boolean;handle:string|null;expiresAt:string|null}
-export function WeeklyXPublisher({post,leagueId,es=false}:{post:string;leagueId:string|null;es?:boolean}) {
+/** What the X callback reported, carried back as ?xConnection=… on /core/week. */
+function connectionResultMessage(result:string|null|undefined,es:boolean) {
+  if(result==='connected')return es?'X conectado.':'X connected.'
+  if(result==='denied')return es?'Se canceló la conexión con X.':'X connection was cancelled.'
+  if(result==='sign_in')return es?'Inicia sesión de nuevo y vuelve a conectar X.':'Sign in again, then connect X.'
+  if(result==='failed')return es?'X no terminó de conectarse. Inténtalo de nuevo.':'X didn’t finish connecting. Try Connect X again.'
+  return ''
+}
+export function WeeklyXPublisher({post,leagueId,es=false,connectionResult=null}:{post:string;leagueId:string|null;es?:boolean;connectionResult?:string|null}) {
   const [connection,setConnection]=useState<Connection|null>(null),[text,setText]=useState(post),[reviewed,setReviewed]=useState(false)
-  const [busy,setBusy]=useState(false),[message,setMessage]=useState(''),[url,setUrl]=useState<string|null>(null),[uncertain,setUncertain]=useState(false)
+  const [busy,setBusy]=useState(false),[message,setMessage]=useState(()=>connectionResultMessage(connectionResult,es)),[url,setUrl]=useState<string|null>(null),[uncertain,setUncertain]=useState(false)
   const requestId=useRef<string|null>(null)
   useEffect(()=>{setText(post);setReviewed(false);requestId.current=null},[post])
   useEffect(()=>{
@@ -57,7 +65,9 @@ export function WeeklyXPublisher({post,leagueId,es=false}:{post:string;leagueId:
     <h4>{es?'Publicar con mi cuenta de X':'Publish with my X account'}</h4>
     {!connection ? <p>{es?'Comprobando conexión…':'Checking connection…'}</p> : !connection.configured ? <p>{es?'La conexión con X está pendiente de configuración. Puedes abrir el borrador de X arriba.':'Connected X publishing isn’t available yet. You can open the X draft above.'}</p> : <>
       <p>{connection.connected? '@'+connection.handle : es?'Conecta tu cuenta para revisar y publicar aquí.':'Connect your account to review and publish here.'}</p>
-      <p><small>{es?'La conexión caduca; vuelve a autorizar cuando se solicite. Esta opción publica solo texto.':'The connection expires; reauthorize when prompted. This option publishes text only.'}</small></p>
+      <p><small>{connection.connected && !connection.expiresAt
+        ? (es?'Sigue conectada hasta que la desconectes aquí o revoques el acceso en X. Esta opción publica solo texto.':'Stays connected until you disconnect here or revoke access on X. This option publishes text only.')
+        : (es?'La conexión caduca; vuelve a autorizar cuando se solicite. Esta opción publica solo texto.':'The connection expires; reauthorize when prompted. This option publishes text only.')}</small></p>
       <button type="button" onClick={connect} disabled={busy}>{connection.connected?(es?'Cambiar cuenta':'Reconnect or change account'):(es?'Conectar X':'Connect X')}</button>
       {connection.connected ? <>
         <button type="button" onClick={disconnect} disabled={busy}>{es?'Desconectar de AllFantasy':'Disconnect from AllFantasy'}</button>

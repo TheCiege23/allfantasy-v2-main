@@ -36,4 +36,13 @@ describe('reviewed connected X publishing',()=>{
   await screen.findByText(/Connected X publishing isn’t available yet/)
   expect(screen.queryByRole('button',{name:'Publish now on X'})).toBeNull()
  })
+ it('says what happened when X sends the user back after a failed connection',async()=>{
+  fetchMock.mockResolvedValue({ok:true,json:async()=>({configured:true,connected:false,handle:null,expiresAt:null})})
+  render(<WeeklyXPublisher post="My week" leagueId={null} connectionResult="failed"/>)
+  expect((await screen.findByRole('status')).textContent).toBe('X didn’t finish connecting. Try Connect X again.')
+ })
+ it('tells a refreshable connection that it stays connected',async()=>{
+  render(<WeeklyXPublisher post="My week" leagueId="A"/>)
+  await screen.findByText(/Stays connected until you disconnect here/)
+ })
 })
