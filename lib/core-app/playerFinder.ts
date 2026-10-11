@@ -8,6 +8,7 @@ import { latestProjectionWeek, lookupAfEngineProjections, lookupProjections, pos
 import { normalizePosition } from './positionNormalization'
 import { asHeadshotUrl } from './playerIdentityCompose'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
+import { selectAuthoritativePlayerRow } from '@/lib/player-match/authoritativePlayerRow'
 import { loadSnapShare } from './snapShare'
 import { isIdpPosition } from '@/lib/core-app/scoringNotes'
 import { getCanonicalDefenderValue } from '@/lib/values/canonicalDefenderBoardCache'
@@ -1459,10 +1460,20 @@ async function loadWeekSchedule(sport: string) {
  * The slug carries sport + sleeperId (see lib/core-app/playerSlug.ts for why
  * neither the name nor externalId can be the key). One athlete has one row per
  * ingest source, so this picks between them deterministically instead of letting
- * the planner decide: prefer a row that actually carries a team and a position
- * over a bare stub, then the freshest. Without the explicit order the same URL
- * rendered "Justin Jefferson, WR, MIN" and "Justin Jefferson, no team" on
- * alternating requests.
+ * the planner decide. Without an explicit choice the same URL rendered "Justin
+ * Jefferson, WR, MIN" and "Justin Jefferson, no team" on alternating requests.
+ *
+ * 🛑 THE SLEEPER ROW SPEAKS FOR A SLEEPER ID — NOT THE FRESHEST, NOT THE FULLEST.
+ * This used to prefer "has team and position, then freshest", which on production
+ * (2026-10-11) resolved 391 Sleeper ids to their TheSportsDB row — and TheSportsDB
+ * stamps Sleeper ids by name, so three of those rows are a different athlete:
+ * `/players/byron-murphy-nfl-5864` rendered "Byron Murphy (DT · Seattle Seahawks)"
+ * for the Vikings corner, 11304 rendered Elgton Jenkins (G, CLE) for TE E.J. Jenkins,
+ * 6273 rendered Jackson Powers-Johnson for DT P.J. Johnson. The rule and the
+ * measurement live in lib/player-match/authoritativePlayerRow.ts.
+ *
+ * ⚠ It also means ~121 free agents lose the stale "last team" another feed carried,
+ * because a null team on the Sleeper row is Sleeper saying he has none.
  *
  * `canonicalSlug` is returned so the page can redirect a URL whose name head has
  * gone stale — a player changing their listed name must not orphan an already
@@ -1487,16 +1498,14 @@ export async function resolvePublicPlayer(
         sleeperId: true,
         team: true,
         position: true,
+        source: true,
+        fetchedAt: true,
       },
     })
     .catch(() => [])
 
-  if (rows.length === 0) return null
-
-  const best =
-    rows.find((r) => r.team != null && r.position != null) ??
-    rows.find((r) => r.position != null) ??
-    rows[0]
+  // `base`, not the merged row: the reference must name the authoritative row itself.
+  const best = selectAuthoritativePlayerRow(rows)?.base
   if (!best || !best.sleeperId) return null
 
   return {
@@ -1519,6 +1528,14 @@ export async function resolvePublicPlayer(
  *
  * DISTINCT on sleeperId because one athlete has one row per ingest source; six
  * "Justin Jefferson" rows would render as six identical suggestions.
+ *
+ * 🛑 SLEEPER ROWS ONLY. A TheSportsDB row carries a Sleeper id it matched BY NAME,
+ * so it can sit on another club under another man's id: the Seahawks DT Byron Murphy
+ * row carries the Vikings CB's id 5864, and Elgton Jenkins (G, CLE) carries TE E.J.
+ * Jenkins's 11304. Reading every source listed "Elgton Jenkins" among the Browns
+ * guards and linked him to the Eagles tight end's page. The Sleeper row is the one
+ * that speaks for the id (lib/player-match/authoritativePlayerRow.ts), and the
+ * page's own team and position now come from it too, so the vocabularies match.
  */
 export async function getRelatedPlayers(
   sport: string,
@@ -1533,6 +1550,7 @@ export async function getRelatedPlayers(
     .findMany({
       where: {
         sport,
+        source: 'sleeper',
         team,
         position,
         sleeperId: { not: null },
