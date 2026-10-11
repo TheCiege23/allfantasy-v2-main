@@ -165,11 +165,37 @@ const pts = (n: number) => n.toFixed(1)
 const pct = (p: number) => `${Math.round(p * 100)}%`
 
 function matchupLine(m: WeekMatchup, pair?: LineupProjectionPair): string {
-  return matchupLineBase(m) + lineupSentence(m.season, m.week, pair, false)
+  // Full-week lineup totals beside a scoreboard read as points still to come.
+  return matchupLineBase(m) + (m.live ? '' : lineupSentence(m.season, m.week, pair, false))
+}
+
+/**
+ * 🛑 ONCE POINTS EXIST, THE SCOREBOARD — NEVER THE PRE-GAME PROBABILITY. `WeekMatchup.live` says the
+ * surfaces stop showing it, and this tool kept printing it. Production 2026-10-06, HailShiva: week 4
+ * was already WON 135.5–129.9 and Chimmy said "underdog by 28.4, 29% win probability", while the
+ * optimizer and the season simulator had moved on to week 5 — so it told the user it could not tell
+ * which week was live. A FINAL week here means the board has not advanced yet, not that it is next.
+ */
+function scoreboardLine(m: WeekMatchup, live: NonNullable<WeekMatchup['live']>, vs: string): string {
+  const score = `${pts(live.you)}–${pts(live.them)}`
+  if (live.final) {
+    const result = live.margin > 0 ? `they WON ${score}` : live.margin < 0 ? `they LOST ${score}` : `a TIE, ${score}`
+    return (
+      `${m.leagueName}, week ${m.week} vs ${vs}: FINAL — ${result}. This game is decided: give no win probability or projection for it ` +
+      'and do not present it as upcoming. The board has not moved to the next week yet; optimize_my_lineup and get_playoff_outlook ' +
+      'look ahead to it, so a later week from those tools is their next game, not a conflict.'
+    )
+  }
+  const state = live.margin > 0 ? `ahead by ${pts(live.margin)}` : live.margin < 0 ? `behind by ${pts(-live.margin)}` : 'level'
+  return (
+    `${m.leagueName}, week ${m.week} vs ${vs}: IN PROGRESS (not final) — they have ${pts(live.you)}, the opponent ${pts(live.them)}, ${state}. ` +
+    'The pre-game win probability no longer applies and is not given; describe the scoreboard.'
+  )
 }
 
 function matchupLineBase(m: WeekMatchup): string {
   const vs = m.opponent.name ?? 'an unnamed opponent'
+  if (m.live) return scoreboardLine(m, m.live, vs)
   if (m.projection) {
     const p = m.projection
     const lean =
@@ -231,8 +257,11 @@ function leagueBlock(
   }
   if (!lb || lb.leagueId !== leagueId) return null
 
+  const live = lb.yours?.live
   const lines: string[] = [
-    `THIS WEEK in ${lb.leagueName} (week ${lb.week}), from AllFantasy's week model — team-level averages, not player projections. Repeat these numbers:`,
+    live
+      ? `WEEK ${lb.week} in ${lb.leagueName} (${live.final ? 'FINAL' : 'in progress'}), from the scoreboard on file. Repeat these numbers:`
+      : `THIS WEEK in ${lb.leagueName} (week ${lb.week}), from AllFantasy's week model — team-level averages, not player projections. Repeat these numbers:`,
   ]
   if (!lb.yours) {
     lines.push('- They have no game this week (a bye, or their team is not matched). Say so.')
@@ -254,7 +283,8 @@ function leagueBlock(
       lines.push('- They have never played this opponent before (first meeting on file).')
     }
   }
-  const sidelines = lb.sidelines.filter((s) => s.aWinProbability != null).slice(0, 8)
+  // Pre-game odds for the rest of a finished week describe games already played.
+  const sidelines = live?.final ? [] : lb.sidelines.filter((s) => s.aWinProbability != null).slice(0, 8)
   if (sidelines.length) {
     lines.push(
       `- Other games in the league: ${sidelines
@@ -274,15 +304,23 @@ function crossLeagueBlock(
 ): string {
   const line = (m: WeekMatchup) => matchupLine(m, lineups?.get(m.leagueId))
   const all = [...board.coinFlips, ...board.leaning, ...board.unprojected]
+  // The board buckets on the pre-game projection; a game with points goes under the scoreboard instead.
+  const unscored = (list: WeekMatchup[]) => list.filter((m) => !m.live)
+  const scored = all.filter((m) => m.live)
+  const coinFlips = unscored(board.coinFlips)
   const lines: string[] = [
     `THIS WEEK ACROSS THEIR LEAGUES (week ${board.week ?? '?'}), from AllFantasy's week model — repeat these numbers:`,
   ]
-  if (board.coinFlips.length) {
-    lines.push(`- Coin flips (within ${COIN_FLIP_POINTS} pts) — where a lineup call matters most:`)
-    for (const m of board.coinFlips) lines.push(`  • ${line(m)}`)
+  if (scored.length) {
+    lines.push('- Already scoring (the scoreboard, not a forecast):')
+    for (const m of scored) lines.push(`  • ${line(m)}`)
   }
-  const favoured = board.leaning.filter((m) => (m.projection?.margin ?? 0) > 0)
-  const underdog = board.leaning.filter((m) => (m.projection?.margin ?? 0) < 0)
+  if (coinFlips.length) {
+    lines.push(`- Coin flips (within ${COIN_FLIP_POINTS} pts) — where a lineup call matters most:`)
+    for (const m of coinFlips) lines.push(`  • ${line(m)}`)
+  }
+  const favoured = unscored(board.leaning).filter((m) => (m.projection?.margin ?? 0) > 0)
+  const underdog = unscored(board.leaning).filter((m) => (m.projection?.margin ?? 0) < 0)
   if (favoured.length) {
     lines.push('- Favoured:')
     for (const m of favoured) lines.push(`  • ${line(m)}`)
@@ -291,9 +329,10 @@ function crossLeagueBlock(
     lines.push('- Underdog:')
     for (const m of underdog) lines.push(`  • ${line(m)}`)
   }
-  if (board.unprojected.length) {
+  const unprojected = unscored(board.unprojected)
+  if (unprojected.length) {
     lines.push('- Not projected yet:')
-    for (const m of board.unprojected) lines.push(`  • ${line(m)}`)
+    for (const m of unprojected) lines.push(`  • ${line(m)}`)
   }
   for (const e of board.eliminationWeeks) lines.push(`- ${eliminationLine(e, settles.get(e.leagueId), lineups?.get(e.leagueId))}`)
   if (all.length === 0 && board.eliminationWeeks.length === 0) {

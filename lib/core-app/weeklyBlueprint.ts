@@ -12,7 +12,8 @@ export type WeeklyBlueprint = {
   name: string | null; teamName: string | null; leagueCount: number; sports: string[]; focusLeagueId: string | null
   actions: WeeklyAction[]; actionCount: number; attentionLeagueIds: string[]; lineupReadFailed: boolean
   coverage: Array<{ leagueId: string; leagueName: string; af: boolean; provider: boolean; partial: boolean }>
-  matchup?: { opponent: string; period: number; leagueName: string; leagueId?: string; season?: number }
+  /** `status` is set only for the board's own game once it has points; a forward-looking game has none. */
+  matchup?: { opponent: string; period: number; leagueName: string; leagueId?: string; season?: number; status?: 'live' | 'final' }
   playoff?: { probability: number; leagueName: string; leagueId?: string; season?: number; period?: number }
   rivalry?: { opponent: string; wins: number; losses: number; ties: number; winningStreak: number; losingStreak: number; final: boolean }
   sportPlans?: Array<{ leagueId: string; leagueName: string; sport: string }>
@@ -120,7 +121,7 @@ export function buildWeeklyBlueprint(input: {
       losingStreak: input.board.leagueBoard.rivalry.losingStreak ?? 0, final: input.board.leagueBoard.yours.live?.final ?? false,
     } } : {}),
     ...(upcoming ? { matchup: { opponent: upcoming.opponentName!, period: upcoming.week, leagueName: featured!.leagueName, leagueId: featured!.leagueId, season: featured!.season } }
-      : featured?.opponent.name ? { matchup: { opponent: featured.opponent.name, period: featured.week, leagueName: featured.leagueName, leagueId: featured.leagueId, season: featured.season } } : {}),
+      : featured?.opponent.name ? { matchup: { opponent: featured.opponent.name, period: featured.week, leagueName: featured.leagueName, leagueId: featured.leagueId, season: featured.season, ...(featured.live ? { status: featured.live.final ? 'final' as const : 'live' as const } : {}) } } : {}),
     ...(outlook && probability != null && Number.isFinite(probability) && probability >= 0 && probability <= 100 ? { playoff: { probability, leagueName: outlook.leagueName, leagueId: outlook.leagueId, season: outlook.season, period: outlook.period } } : {}) }
 }
 export function weeklyActionText(action: WeeklyAction, es = false): string {
@@ -145,7 +146,10 @@ export function weeklyBrief(data: WeeklyBlueprint, es = false): string {
   const scope = data.teamName ?? (es ? `${data.leagueCount} liga${data.leagueCount === 1 ? '' : 's'}` : `${data.leagueCount} league${data.leagueCount === 1 ? '' : 's'}`)
   const sports = data.sports.length ? ` (${data.sports.join(', ')})` : ''
   const next = data.actions[0]
-  const matchup = data.matchup ? es ? `Período ${data.matchup.period}: frente a ${data.matchup.opponent} en ${data.matchup.leagueName}. ` : `Period ${data.matchup.period}: facing ${data.matchup.opponent} in ${data.matchup.leagueName}. ` : ''
+  // The brief is Chimmy's prefill: an unlabelled period read as the next game while it was being played (HailShiva, 2026-10-06).
+  const m = data.matchup, final = m?.status === 'final'
+  const state = !m?.status ? '' : es ? (final ? ' (finalizado)' : ' (en juego)') : (final ? ' (final)' : ' (in progress)')
+  const matchup = m ? es ? `Período ${m.period}${state}: ${final ? 'jugó contra' : 'frente a'} ${m.opponent} en ${m.leagueName}. ` : `Period ${m.period}${state}: ${final ? 'played' : 'facing'} ${m.opponent} in ${m.leagueName}. ` : ''
   const playoff = data.playoff ? es ? `Probabilidad estimada de playoffs en ${data.playoff.leagueName}: ${formatPct1(data.playoff.probability)}%. ` : `Estimated playoff probability in ${data.playoff.leagueName}: ${formatPct1(data.playoff.probability)}%. ` : ''
   return es ? `Tu plan para ${scope}${sports}. ${matchup}${playoff}${next ? `Primero: ${weeklyActionText(next, true)} en ${next.leagueName}. ` : ''}Chimmy puede ayudarte a evaluar tus opciones con el contexto de tus ligas.`
     : `Your plan for ${scope}${sports}. ${matchup}${playoff}${next ? `First: ${weeklyActionText(next)} in ${next.leagueName}. ` : ''}Chimmy can help you weigh your options with your league context.`
