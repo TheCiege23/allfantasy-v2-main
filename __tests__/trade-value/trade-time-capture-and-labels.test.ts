@@ -16,7 +16,7 @@ import {
   sleeperTransactionTime,
   tradeTimeOf,
 } from '@/lib/decision-os/trade/tradeTimeCapture'
-import { gradeMoment, gradeMomentToSpanish } from '@/lib/decision-os/trade/gradeMoment'
+import { gradeMoment, gradeMomentOf, gradeMomentToSpanish } from '@/lib/decision-os/trade/gradeMoment'
 import { tradeUiCopy } from '@/lib/core-app/tradeUiCopy'
 import { readTradeCardGrade, tradeCardGradeBasisLabel } from '@/lib/league-chat/tradeCardGradeView'
 import { tradeGradeLabel } from '@/lib/activity/tradeGradeLabel'
@@ -103,6 +103,18 @@ describe('every surface says how a frozen letter was priced — EN and ES', () =
     expect(gradeMoment(g, 'es')).toBe('del 30 sep 2026, 16 días después del traspaso (no hay registro del mercado de la fecha del traspaso)')
     expect(gradeMoment({ ...g, pricedAsOf: '2026-09-15T15:00:00.000Z' })).toBe('from Sep 15, 2026, 1 day after the trade (no market record from the trade date)')
     expect(gradeMoment({ ...g, pricedAsOf: '2026-09-14T23:00:00.000Z' })).toBe('from Sep 14, 2026, the day of the trade (no market record from the trade date)')
+  })
+
+  it('a guillotine grade says what it was priced on, never a market it never used (2026-10-11)', () => {
+    const g = { frozenAt: FROZEN_AT, frozenBasis: 'first_graded' as const, pricedAsOf: '2026-09-14T23:00:00.000Z', tradeAt: TRADE_AT }
+    const lines = [{ valueSource: 'guillotine_points' }, { valueSource: 'guillotine_faab' }]
+    expect(gradeMoment({ ...g, lines })).toBe('from Sep 14, 2026, the day of the trade (guillotine lineup and FAAB values)')
+    expect(gradeMoment({ ...g, lines }, 'es')).toBe('del 14 sep 2026, el mismo día del traspaso (valores de guillotina: alineación y FAAB)')
+    // The compact copy surfaces carry keeps it, and a market line anywhere keeps the market wording.
+    expect(gradeMoment(gradeMomentOf({ ...g, lines }))).toBe('from Sep 14, 2026, the day of the trade (guillotine lineup and FAAB values)')
+    expect(gradeMoment({ ...g, lines: [...lines, { valueSource: 'faab_formula' }] })).toMatch(/no market record from the trade date\)$/)
+    expect(gradeMomentToSpanish('from Sep 14, 2026, the day of the trade (guillotine lineup and FAAB values)'))
+      .toBe('del 14 sep 2026, el mismo día del traspaso (valores de guillotina: alineación y FAAB)')
   })
 
   it('a v1 original (no basis): the old wording, never a claim about the trade-date record', () => {

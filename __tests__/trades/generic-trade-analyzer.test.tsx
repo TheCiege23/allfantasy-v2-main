@@ -75,6 +75,28 @@ describe('league-free trade analyzer', () => {
     expect(screen.getByText(/fantasycalc · as of/)).toBeTruthy()
   })
 
+  it('ends the value basis with one full stop, whether or not the basis already has one (2026-10-11)', async () => {
+    const run = async (basis: string) => {
+      fetchMock.mockResolvedValue({ ok: true, json: async () => ({
+        grade: { graded: true, letter: 'B', partnerLetter: 'D', sideAdvantage: 'you', percentDiff: 12, label: 'Slightly favors you',
+          recommendation: 'x', giveMarket: 776, getMarket: 883, basis, lines: [] },
+      }) })
+      const view = render(<GenericTradeAnalyzer />)
+      fireEvent.change(screen.getByLabelText('Team A sends'), { target: { value: 'Player One' } })
+      fireEvent.change(screen.getByLabelText('Team B sends'), { target: { value: 'Player Two' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Analyze trade' }))
+      const hint = await screen.findByText(/^Value basis:/)
+      const text = hint.textContent ?? ''
+      view.unmount()
+      return text
+    }
+    // The live MLB basis on allfantasy.ai read "…until this one has enough games.. Valuation checked".
+    const sentence = await run('Projections are built from the 2026 season until this one has enough games.')
+    expect(sentence).toContain('enough games. Valuation checked')
+    expect(sentence).not.toContain('..')
+    expect(await run('General market values')).toContain('General market values. Valuation checked')
+  })
+
   it('shows the roster-spot credit that is inside the totals, so the values add up', async () => {
     fetchMock.mockResolvedValue({ ok: true, json: async () => ({
       grade: { graded: true, letter: 'C', partnerLetter: 'C', sideAdvantage: 'even', percentDiff: -2,
