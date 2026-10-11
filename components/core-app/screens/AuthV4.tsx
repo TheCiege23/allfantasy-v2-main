@@ -202,10 +202,13 @@ function OAuthGrid({ callbackUrl, lead = false }: { callbackUrl: string; lead?: 
         {PROVIDERS.map((p) => {
           const enabled = isSocialProviderEnabled(p.id)
           const busy = pending === p.id
+          /* Leading the page, a "soon" tile is clutter between the visitor and the form. */
+          if (lead && !enabled) return null
           return (
             <button
               key={p.id}
               type="button"
+              data-provider={p.id}
               className="af-au-oauth-btn"
               disabled={!enabled || pending !== null}
               aria-disabled={!enabled}

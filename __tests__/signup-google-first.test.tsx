@@ -52,6 +52,14 @@ describe('sign-up', () => {
     expect(screen.queryByText('Or continue with')).toBeNull()
   })
 
+  it('leading the page, only providers that work are shown — no "soon" tiles in front of the form', async () => {
+    render(<AuthV4 mode="signup" />)
+    const lead = await screen.findByTestId('signup-oauth-lead')
+    const names = [...lead.querySelectorAll('button')].map((b) => b.getAttribute('data-provider'))
+    expect(names).toEqual(['google', 'discord'])
+    expect(lead.querySelector("[data-provider='google']")).toBe(lead.querySelector('button'))
+  })
+
   it('the 18+ / not-in-WA facts sit with the buttons that skip the form', async () => {
     render(<AuthV4 mode="signup" />)
     const lead = await screen.findByTestId('signup-oauth-lead')
@@ -89,6 +97,8 @@ describe('sign-in is unchanged', () => {
     expect(submit.compareDocumentPosition(google) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(screen.getByText('Or continue with')).toBeTruthy()
     expect(screen.queryByTestId('signup-oauth-lead')).toBeNull()
+    // Sign-in still names the providers that are coming, as before.
+    expect(document.querySelectorAll('.af-au-oauth-btn')).toHaveLength(5)
     fireEvent.click(google)
     await waitFor(() => expect(signIn).toHaveBeenCalledWith('google', expect.anything()))
     expect(tracked()).toEqual([])

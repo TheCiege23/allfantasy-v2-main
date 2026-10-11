@@ -226,10 +226,13 @@
 
 /* Sign-up leads with the social buttons (AuthV4 `lead`): Google, the path that verifies itself,
    gets the full row; the note keeps the 18+ / not-in-WA facts beside the buttons that skip the form. */
-.af-au-oauth--lead .af-au-oauth-btn:first-child {
+.af-au-oauth--lead .af-au-oauth-btn[data-provider='google'] {
   grid-column: 1 / -1;
   min-height: 48px;
   font-size: 14px;
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--text);
 }
 
 .af-au-oauth-note {
