@@ -37,7 +37,7 @@ export function PostCreateSetupGuideBanner({
   ]
 
   return (
-    <div className="border-b border-cyan-500/25 bg-gradient-to-r from-[#081a28]/95 to-[#0a1228]/95 px-4 py-3">
+    <div className="af-league-setup-guide border-b border-cyan-500/25 bg-gradient-to-r from-[#081a28]/95 to-[#0a1228]/95 px-4 py-3">
       <div className="mx-auto flex max-w-6xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-3">
           <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-cyan-400/25 bg-cyan-500/10 text-cyan-200">

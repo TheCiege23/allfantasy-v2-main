@@ -1,5 +1,8 @@
 'use client'
 
+import '@/components/core-app/af-core.css'
+import '@/components/league/league-workspace.css'
+
 import { isIdpLeagueVariant } from '@/lib/core-app/idpLeagueVariant'
 import { DefenseHubClient } from '@/app/idp/defense-hub/[leagueId]/DefenseHubClient'
 import { KickerValuePanel } from '@/components/league/KickerValuePanel'
@@ -1295,7 +1298,7 @@ export function LeagueShell({
           immersive={specialtyImmersive}
           // Global top nav + bottom tabs are hidden on /league/* (layout hideHeader),
           // so the shell owns the full viewport at every breakpoint.
-          rootClassName="af-league-deck-ground h-[100dvh] min-h-0"
+          rootClassName={`${specialtyImmersive ? 'af-league-deck-ground' : 'af-core af-league-workspace'} h-[100dvh] min-h-0`}
           rightRailCollapsed={myLeaguesRail.collapsed}
           onRightRailExpand={() => myLeaguesRail.setCollapsed(false)}
           rightRailCollapsedHint={leagueList.length ? String(leagueList.length) : undefined}
@@ -1910,12 +1913,12 @@ function LeagueTabRouter({
     return (
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-5 lg:px-6">
         <section
-          className="relative overflow-hidden rounded-2xl border border-[#ff3d81]/[0.15] bg-gradient-to-br from-[#ff3d81]/[0.07] via-[#050814] to-violet-500/[0.04] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.28)]"
+          className="af-league-draft-card relative overflow-hidden rounded-2xl border border-[#ff3d81]/[0.15] bg-gradient-to-br from-[#ff3d81]/[0.07] via-[#050814] to-violet-500/[0.04] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.28)]"
           data-testid="league-command-center-card"
         >
           <div
             aria-hidden
-            className="pointer-events-none absolute inset-x-0 top-0 h-32 opacity-70"
+            className="af-league-draft-glow pointer-events-none absolute inset-x-0 top-0 h-32 opacity-70"
             style={{
               background:
                 'radial-gradient(ellipse 80% 60% at 50% -10%, rgba(255,61,129,0.16) 0%, transparent 70%)',
@@ -1923,7 +1926,7 @@ function LeagueTabRouter({
           />
           <div className="relative flex flex-wrap items-start justify-between gap-3">
             <div className="space-y-1">
-              <p className="text-[11px] font-bold uppercase tracking-widest text-[#ff3d81]/60">Draft setup</p>
+              <p className="af-league-eyebrow text-[11px] font-bold uppercase tracking-widest text-[#ff3d81]/60">Draft setup</p>
               <h2 className="text-[26px] font-black leading-tight tracking-tight text-white sm:text-[30px]">
                 Draft setup is ready
               </h2>
@@ -1932,7 +1935,7 @@ function LeagueTabRouter({
                 when the commissioner is ready.
               </p>
             </div>
-            <div className="rounded-2xl border border-[#ff3d81]/30 bg-gradient-to-br from-[#ff3d81]/[0.12] via-[#ff3d81]/[0.06] to-transparent px-4 py-3 text-right shadow-[0_0_20px_rgba(255,61,129,0.08)]">
+            <div className="af-league-draft-fill rounded-2xl border border-[#ff3d81]/30 bg-gradient-to-br from-[#ff3d81]/[0.12] via-[#ff3d81]/[0.06] to-transparent px-4 py-3 text-right shadow-[0_0_20px_rgba(255,61,129,0.08)]">
               <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb8d1]/70">League fill</p>
               <p className="mt-1 text-lg font-bold text-white">
                 {joinedTeams}/{teamCount}
@@ -1940,7 +1943,7 @@ function LeagueTabRouter({
             </div>
           </div>
 
-          <div className="relative mt-5 grid gap-3 md:grid-cols-3">
+          <div className="af-league-draft-facts relative mt-5 grid gap-3 md:grid-cols-3">
             <div className="rounded-2xl border border-white/[0.07] bg-white/[0.04] p-4">
               <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/45">Draft date</p>
               <p className="mt-1 text-sm font-semibold text-white">{draftDateLabel}</p>
@@ -1957,7 +1960,7 @@ function LeagueTabRouter({
             </div>
           </div>
 
-          <div className="relative mt-3 flex flex-wrap gap-2">
+          <div className="af-league-draft-actions relative mt-3 flex flex-wrap gap-2">
             <Link
               href={`/league/${leagueId}/draft`}
               data-testid="predraft-open-draft-room"
