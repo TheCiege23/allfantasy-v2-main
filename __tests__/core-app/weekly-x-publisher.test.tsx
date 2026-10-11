@@ -15,7 +15,10 @@ describe('reviewed connected X publishing',()=>{
   fireEvent.change(screen.getByLabelText('Text to publish on X'),{target:{value:'Reviewed caption'}})
   fireEvent.click(screen.getByRole('checkbox'))
   fireEvent.click(button)
-  await screen.findByRole('link',{name:'View post'})
+  const link=await screen.findByRole('link',{name:'View post'})
+  // The result shows beside the button that produced it, not below the fold.
+  expect(link.closest('.af-wbp-x-publish-row')?.contains(button)).toBe(true)
+  expect(screen.getAllByRole('status')).toHaveLength(1)
   expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toMatchObject({action:'publish',text:'Reviewed caption'})
   expect(sessionStorage.getItem('af-weekly-x:pending')).toBeNull()
  })
