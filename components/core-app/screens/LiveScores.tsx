@@ -19,7 +19,13 @@ import type { LiveGameCard, LivePageData } from '@/lib/live/liveScoresPage'
 import { matchesLiveGameQuery } from '@/lib/live/liveGameSearch'
 import { playAgeLabel, starterStageDetail } from '@/lib/live/liveImpact'
 import { GameHighlight } from '@/components/live/GameHighlight'
-import { formatStarterPoints, groupStartersByPlayer, type StarterGroup } from '@/lib/live/liveTieInGroups'
+import {
+  formatLeagueProjection,
+  formatStarterPoints,
+  formatStarterProjection,
+  groupStartersByPlayer,
+  type StarterGroup,
+} from '@/lib/live/liveTieInGroups'
 import { buildLockAlerts, type LiveLockAlert } from '@/lib/live/lockAlerts'
 import {
   connectionDetail,
@@ -1186,6 +1192,7 @@ export function GameCard({
           groups={starters}
           selectedLeagueId={selectedLeagueId}
           limit={starterLimit}
+          upcoming={!game.isLive && !game.completed}
         />
       ) : null}
     </article>
@@ -1738,6 +1745,7 @@ export function MyStarters({
   selectedLeagueId,
   renderStatLine,
   limit,
+  upcoming = false,
 }: {
   gameId: string
   sport: string
@@ -1754,6 +1762,8 @@ export function MyStarters({
    * for both, so the points and the league breakdown cannot drift apart.
    */
   renderStatLine?: (group: StarterGroup) => ReactNode
+  /** The game has not kicked off: rows show this week's projection instead of points. */
+  upcoming?: boolean
 }) {
   /*
    * The whole list collapses (user request, 2026-09-13): on a game you start
@@ -1798,6 +1808,7 @@ export function MyStarters({
               group={g}
               selectedLeagueId={selectedLeagueId}
               statLine={renderStatLine ? renderStatLine(g) : null}
+              upcoming={upcoming}
             />
           ))}
         </ul>
@@ -1823,12 +1834,14 @@ function StarterRow({
   group,
   selectedLeagueId,
   statLine = null,
+  upcoming = false,
 }: {
   gameId: string
   sport: string
   group: StarterGroup
   selectedLeagueId: string | null
   statLine?: ReactNode
+  upcoming?: boolean
 }) {
   const lowDataOn = useLowData().lowData
   const [open, setOpen] = useState(false)
@@ -1841,7 +1854,12 @@ function StarterRow({
    * shows THAT league's points; across leagues it is a range, and the disclosure
    * lists every league's own number. An em dash when nobody has reported.
    */
-  const points = formatStarterPoints(group, selectedLeagueId)
+  /*
+   * ⚠ BEFORE KICKOFF A ROW SHOWED "0.0 pts" — a real-looking score for a game nobody has played
+   * (17 of them on one card, 2026-10-11). It now shows this week's projection under each league's
+   * own rules, labelled "proj", or a dash when it could not be priced.
+   */
+  const points = upcoming ? formatStarterProjection(group, selectedLeagueId) : formatStarterPoints(group, selectedLeagueId)
 
   return (
     <li className="af-live-mine-row" data-open={open} data-selected={selected != null}>
@@ -1874,7 +1892,17 @@ function StarterRow({
           <span className="af-live-mine-count">
             {n} {n === 1 ? 'league' : 'leagues'}
           </span>
-          <span className="af-live-mine-pts af-num" title={selected ? `Points in ${selected.leagueName}` : undefined}>
+          <span
+            className="af-live-mine-pts af-num"
+            data-kind={upcoming ? 'projection' : undefined}
+            title={
+              upcoming
+                ? `Projection for this week${selected ? ` in ${selected.leagueName}` : ''}, under each league’s own scoring`
+                : selected
+                  ? `Points in ${selected.leagueName}`
+                  : undefined
+            }
+          >
             {points}
           </span>
           <span className="af-live-mine-chev" aria-hidden />
@@ -1887,7 +1915,7 @@ function StarterRow({
             <li key={l.leagueId} data-selected={l.leagueId === selectedLeagueId}>
               <span className="af-live-mine-league">{l.leagueName}</span>
               <span className="af-live-mine-league-pts af-num">
-                {l.points == null ? '—' : `${l.points.toFixed(1)} pts`}
+                {upcoming ? formatLeagueProjection(l) : l.points == null ? '—' : `${l.points.toFixed(1)} pts`}
               </span>
             </li>
           ))}
