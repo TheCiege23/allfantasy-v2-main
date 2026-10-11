@@ -111,7 +111,8 @@ import { injuredStarterDedupeKey, injuredStarterHref, mergeAudience } from '@/li
 import { buildFanOutLeagues } from '@/lib/chimmy-alerts/injuryFanOut'
 import { digestCopy, fanOutCopy, groupAlertsByPlayer } from '@/lib/chimmy-alerts/injuryFanOutCopy'
 import { allSportsInjuryAlertsEnabled, onGameDay } from '@/lib/chimmy-alerts/gameDayScope'
-import { liveFirstSeen } from '@/lib/chimmy-alerts/liveStatusFold'
+import { liveFirstSeen, planLiveFold, sleeperIdentities } from '@/lib/chimmy-alerts/liveStatusFold'
+import { sleeperIdWhere } from '@/lib/player-identity/externalIdNamespace'
 import type { ChimmyAlertContext } from '@/lib/chimmy-alerts/types'
 import { loadChimmyAlertPreferences } from '@/lib/chimmy-alerts/ChimmyAlertPreferencesService'
 import { preferenceMuteReason } from '@/lib/chimmy-alerts/ChimmyAlertSuppressionEngine'
@@ -383,29 +384,44 @@ async function foldLiveSleeperStatusesForGameWindow(now: Date): Promise<void> {
   if (gamesInWindow === 0) return
 
   const statuses = await fetchSleeperStatuses('nfl')
-  const urgent: Array<{ externalId: string; status: string }> = []
-  for (const [externalId, status] of statuses) {
-    if (!LIVE_URGENT_STATUSES.has(status.trim().toLowerCase())) continue
-    urgent.push({ externalId, status: status.trim() })
-    if (urgent.length >= LIVE_FOLD_MAX_ROWS) break
-  }
+  const urgentIds = [...statuses]
+    .filter(([, status]) => LIVE_URGENT_STATUSES.has(status.trim().toLowerCase()))
+    .map(([sleeperId]) => sleeperId)
+
+  /*
+   * 🛑 NAME THE SLEEPER ID BY `sleeperId` / `sleeper:<id>`, NEVER BY BARE
+   * `externalId` — that column is each provider's own id, and this lookup used to
+   * hand Sleeper 8394's "Out" (Percy Butler) to Rolling Insights 8394 (Rome
+   * Odunze). See `sleeperIdentities`.
+   */
+  const identityRows =
+    urgentIds.length > 0
+      ? await prisma.sportsPlayer.findMany({
+          where: sleeperIdWhere(urgentIds, 'NFL'),
+          orderBy: { updatedAt: 'desc' },
+          select: { externalId: true, sleeperId: true, source: true, name: true, team: true, position: true },
+        })
+      : []
+  const plan = planLiveFold(
+    statuses,
+    sleeperIdentities(urgentIds, identityRows),
+    LIVE_URGENT_STATUSES,
+    LIVE_FOLD_MAX_ROWS,
+  )
 
   // A player who recovered must not keep an old live row outranking the feed —
-  // clear live rows the current blob no longer marks urgent.
+  // clear every live row this pass does not rewrite: no longer urgent, or no
+  // longer nameable. Run AFTER naming, so a row filed under the wrong player
+  // cannot outlive the pass that stops vouching for it.
   await prisma.sportsInjury.deleteMany({
     where: {
       sport: 'NFL',
       source: LIVE_STATUS_SOURCE,
-      ...(urgent.length > 0 ? { externalId: { notIn: urgent.map((u) => u.externalId) } } : {}),
+      ...(plan.length > 0 ? { externalId: { notIn: plan.map((u) => u.sleeperId) } } : {}),
     },
   })
-  if (urgent.length === 0) return
+  if (plan.length === 0) return
 
-  const meta = await prisma.sportsPlayer.findMany({
-    where: { sport: 'NFL', externalId: { in: urgent.map((u) => u.externalId) } },
-    select: { externalId: true, name: true, team: true, position: true },
-  })
-  const metaById = new Map(meta.map((m) => [m.externalId, m]))
   const expiresAt = new Date(now.getTime() + LIVE_STATUS_TTL_MS)
 
   /*
@@ -419,28 +435,24 @@ async function foldLiveSleeperStatusesForGameWindow(now: Date): Promise<void> {
    * shows Friday when ESPN carries it.
    */
   const existingLive = await prisma.sportsInjury.findMany({
-    where: { sport: 'NFL', source: LIVE_STATUS_SOURCE, externalId: { in: urgent.map((u) => u.externalId) } },
+    where: { sport: 'NFL', source: LIVE_STATUS_SOURCE, externalId: { in: plan.map((u) => u.sleeperId) } },
     select: { externalId: true, status: true, date: true },
   })
   const existingById = new Map(existingLive.map((e) => [e.externalId, e]))
 
-  for (const u of urgent) {
-    const m = metaById.get(u.externalId)
-    // No identity, no claim — a row the port would bind by a wrong or empty
-    // name is worse than no row.
-    if (!m?.name?.trim()) continue
-    const date = liveFirstSeen(existingById.get(u.externalId), u.status, now)
+  for (const u of plan) {
+    const date = liveFirstSeen(existingById.get(u.sleeperId), u.status, now)
     await prisma.sportsInjury.upsert({
       where: {
-        sport_externalId_source: { sport: 'NFL', externalId: u.externalId, source: LIVE_STATUS_SOURCE },
+        sport_externalId_source: { sport: 'NFL', externalId: u.sleeperId, source: LIVE_STATUS_SOURCE },
       },
       create: {
         sport: 'NFL',
-        externalId: u.externalId,
-        playerName: m.name,
-        playerId: u.externalId,
-        team: m.team,
-        position: m.position,
+        externalId: u.sleeperId,
+        playerName: u.name,
+        playerId: u.sleeperId,
+        team: u.team,
+        position: u.position,
         status: u.status,
         date,
         source: LIVE_STATUS_SOURCE,
@@ -448,9 +460,9 @@ async function foldLiveSleeperStatusesForGameWindow(now: Date): Promise<void> {
         expiresAt,
       },
       update: {
-        playerName: m.name,
-        team: m.team,
-        position: m.position,
+        playerName: u.name,
+        team: u.team,
+        position: u.position,
         status: u.status,
         date,
         fetchedAt: now,
