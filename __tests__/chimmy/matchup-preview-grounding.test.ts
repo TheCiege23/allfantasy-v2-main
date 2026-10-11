@@ -353,6 +353,30 @@ describe('buildMatchupPreviewContext — a game that already has points', () => 
     expect(before).toMatch(/underdog by 28\.4 — win probability 29%/)
   })
 
+  it('names each finished league’s next opponent across leagues, in one batched read', async () => {
+    const other = matchup({ leagueId: 'L2', leagueName: 'Redraft', week: 4, opponent: { rosterId: '4', name: 'Bench Mob', avatarUrl: null },
+      live: { you: 101, them: 120.2, margin: -19.2, final: true } })
+    const playing = matchup({ leagueId: 'L3', leagueName: 'Dynasty', week: 4, live: { you: 60, them: 40, margin: 20, final: false } })
+    getBoard.mockResolvedValue(board({ coinFlips: [], leaning: [paid({ you: 135.5, them: 129.9, margin: 5.6, final: true }), other, playing] }))
+    listLeagueIds.mockResolvedValue(['L1', 'L2', 'L3'])
+    const loadNextGames = vi.fn().mockResolvedValue(new Map([['L1', { week: 5, opponentRosterId: '9', opponentName: 'Rittnasty' }]]))
+    const out = await buildMatchupPreviewContext({ leagueId: null, userId: 'u1' }, { ...deps, loadNextGames })
+    expect(out).toMatch(/HailShiva, week 4 vs Paid: FINAL — they WON .* NEXT: week 5 vs Rittnasty \(from the stored schedule; no win probability for it here\)\./)
+    expect(out).toMatch(/Redraft, week 4 vs Bench Mob: FINAL — they LOST .* Week 5's opponent is not on file yet; do not name one\./)
+    expect(out).not.toMatch(/Dynasty[^\n]*(NEXT|not on file)/)
+    expect(loadNextGames).toHaveBeenCalledTimes(1)
+    const [userId, items] = loadNextGames.mock.calls[0]
+    expect(userId).toBe('u1')
+    expect(items.map((i: { league: { id: string }; week: number }) => [i.league.id, i.week])).toEqual([['L1', 4], ['L2', 4]])
+  })
+
+  it('names nobody across leagues when the batched read fails', async () => {
+    getBoard.mockResolvedValue(board({ coinFlips: [], leaning: [paid({ you: 135.5, them: 129.9, margin: 5.6, final: true })] }))
+    const out = await buildMatchupPreviewContext({ leagueId: null, userId: 'u1' }, { ...deps, loadNextGames: vi.fn().mockRejectedValue(new Error('db down')) })
+    expect(out).toMatch(/Week 5's opponent is not on file yet; do not name one\./)
+    expect(out).not.toMatch(/NEXT:/)
+  })
+
   it('lists a scored game under the scoreboard across leagues, never under Underdog', async () => {
     getBoard.mockResolvedValue(board({
       coinFlips: [],
