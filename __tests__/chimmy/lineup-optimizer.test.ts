@@ -359,3 +359,50 @@ describe('buildLineupOptimization — AF beside the provider number', () => {
     expect(r.best.slots.some((s) => 'af' in s.player)).toBe(false)
   })
 })
+
+/*
+ * Production 2026-10-11, HailShiva: Bhayshul Tuten (12.7) out-projected a starter, but Jacksonville
+ * had kicked off in London, and the only trace was a generic "known started games" line. A started
+ * bench player who would make the best lineup is now named, with what the lock costs.
+ */
+describe('a started bench player who would have made the lineup', () => {
+  it('is named as already locked, with the cost, and never as a swap', async () => {
+    // Reed (12) on the bench has kicked off; without the lock he would take a WR spot from Wilson (11).
+    deps.checkLocks = async () => ({ started: new Map([['rb3', 'started'], ['wr3', 'started']]), unverified: [] })
+    const r = await run()
+    expect(r.status).toBe('ready')
+    if (r.status !== 'ready') return
+    expect(r.lockedOut).toEqual({ players: [expect.objectContaining({ playerId: 'wr3', points: 12 })], cost: 1 })
+    expect(r.startInstead.some((p) => p.playerId === 'wr3')).toBe(false)
+    const block = renderLineupOptimizationBlock(r)
+    expect(block).toContain('- 🔒 ALREADY LOCKED: Jayden Reed (WR, GB) (12.0 pts) would be in the best lineup, but his game has already started, so he can no longer be moved in (1.0 projected pts the lock costs).')
+    expect(block).toContain('never recommend starting him')
+  })
+
+  it('says nothing when the started bench player would not have started anyway', async () => {
+    // The best lineup is already set; Bigsby (7) has kicked off from the bench and would not start anyway.
+    starterIds = ['qb1', 'rb1', 'rb2', 'wr1', 'wr3', 'te1', 'wr2']
+    deps.checkLocks = async () => ({ started: new Map([['rb3', 'started']]), unverified: [] })
+    const r = await run()
+    expect(r.status).toBe('ready')
+    if (r.status !== 'ready') return
+    expect(r.lockedOut).toBeNull()
+    expect(renderLineupOptimizationBlock(r)).not.toContain('ALREADY LOCKED')
+    // Control: the same lineup with nobody started has no lock to report either.
+    deps.checkLocks = async () => ({ started: new Map(), unverified: [] })
+    const open = await run()
+    expect(open.status === 'ready' && open.lockedOut).toBeNull()
+  })
+
+  it('names every locked player and the joint cost when more than one is lost', async () => {
+    // Reed (12) and Wilson (11) both kicked off from the bench: the WR spots fall to nobody better.
+    starterIds = ['qb1', 'rb1', 'rb2', 'wr1', 'te1', 'rb3']
+    deps.checkLocks = async () => ({ started: new Map([['wr2', 'started'], ['wr3', 'started']]), unverified: [] })
+    const r = await run()
+    expect(r.status).toBe('ready')
+    if (r.status !== 'ready' || !r.lockedOut) throw new Error('expected a lock cost')
+    expect(r.lockedOut.players.map((p) => p.playerId)).toEqual(['wr3', 'wr2'])
+    expect(r.lockedOut.cost).toBeGreaterThan(0)
+    expect(renderLineupOptimizationBlock(r)).toMatch(/their games have already started, so they can no longer be moved in/)
+  })
+})
