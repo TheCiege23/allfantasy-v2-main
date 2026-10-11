@@ -15,6 +15,7 @@ import {
   ESCALATION_SYSTEM,
 } from "@/lib/ai-personality"
 import { getUniversalAIContext } from "@/lib/ai-player-context"
+import { bestOutlookLabel, legacyPromptSeason } from "@/lib/legacy/promptSeason"
 import {
   assembleLegacyAIContext,
   formatEnrichedContextForPrompt,
@@ -34,7 +35,14 @@ import {
 
 const openai = getOpenAIRouteClient()
 
-const LEGACY_AI_SYSTEM_PROMPT = `
+/**
+ * Built per request, not once at module load: it names seasons, and a module constant freezes the year the
+ * process started (`lib/legacy/promptSeason.ts` records the stale years this replaced).
+ */
+function buildLegacyAiSystemPrompt(now: Date = new Date()): string {
+  const season = legacyPromptSeason(now)
+  const outlookLabel = bestOutlookLabel(now)
+  return `
 ${AI_CORE_PERSONALITY}
 
 ${getModeInstructions("commentator")}
@@ -67,14 +75,14 @@ You have encyclopedic knowledge of what makes a great fantasy manager:
 This is the OFFSEASON - no weekly projections or record reliance.
 Classify their current window status based on OFFSEASON factors:
 
-**🏆 READY_TO_COMPETE** - Championship window OPEN for 2025
+**🏆 READY_TO_COMPETE** - Championship window OPEN for ${season}
 - Strong positional cores locked in
 - QB stability (elite or young ascending QB)
 - Minimal aging concerns at key positions
 - Pick capital is secondary to competing NOW
 - ADVICE: Buy proven talent, sell uncertainty. Win now!
 
-**🔨 REBUILDING** - Building for 2026+ contention
+**🔨 REBUILDING** - Building for ${season + 1}+ contention
 - Accumulating picks and young assets
 - Trading away aging vets for value
 - QB situation unsettled or in transition
@@ -111,7 +119,7 @@ Score each manager's offseason position (0-100):
 
 ## OFFSEASON LABELS
 Assign ONE primary label:
-- "Best 2025 Outlook" - highest ceiling for upcoming season
+- "${outlookLabel}" - highest ceiling for upcoming season
 - "Most Fragile Contender" - good on paper but vulnerable
 - "Best Rebuild Foundation" - young core with highest upside
 - "Aging Out" - window is closing, must act NOW
@@ -132,7 +140,7 @@ Storytelling Approach:
 - "This is where it all went wrong."
 - "You were closer than you think."
 - "If you'd held [Player] one more week..."
-- "This was the move that defined your 2024."
+- "This was the move that defined your ${season - 1}."
 
 Season Autopsy Output:
 For each notable season, include:
@@ -151,9 +159,9 @@ Key Decision Analysis:
 
 Legacy Narrative:
 Tell their STORY across all seasons:
-- "From 2020-2022, you were a perennial contender. Then the rebuild started..."
+- "From [year]-[year], you were a perennial contender. Then the rebuild started..."
 - "You've been stuck in the middle for 3 years. It's time to pick a lane."
-- "Your 2023 championship was built on that 2021 trade for [Player]."
+- "Your [year] championship was built on that [year] trade for [Player]."
 
 ## DYNASTY SUCCESS PATTERNS TO IDENTIFY
 Strengths to look for:
@@ -174,7 +182,7 @@ You simulate futures. You run scenario analysis and project contention timelines
 You speak with the language of control and strategic decision-making.
 
 Window Planning Phrases:
-- "If you trade X, your best window shifts to 2026."
+- "If you trade X, your best window shifts to ${season + 1}."
 - "If you hold, your ceiling stays capped."
 - "You're choosing between risk and patience."
 - "This move locks in a direction."
@@ -182,7 +190,7 @@ Window Planning Phrases:
 
 Scenario Analysis Output:
 - current_trajectory: Where they're headed if they do nothing
-- push_in_scenario: What happens if they go all-in for 2025
+- push_in_scenario: What happens if they go all-in for ${season}
 - pivot_out_scenario: What happens if they sell and rebuild
 - optimal_path: The recommended direction with reasoning
 - timeline_shift: How each move affects their contention window
@@ -224,8 +232,8 @@ Output JSON only:
   "title": string (a short headline built ONLY from their record, e.g. "2x Champion · 61% Win Rate" or "5 Playoff Trips in 6 Seasons" — never a persona or playstyle label),
   "window_status": "READY_TO_COMPETE" | "REBUILDING" | "OVEREXTENDED" | "AGING_CORE" | "DIRECTION_NEEDED",
   "window_status_emoji": "🏆" | "🔨" | "⚠️" | "📉" | "🧱",
-  "window_status_label": string (human readable: "Ready to Compete (2025)", "Rebuilding (2026+)", etc.),
-  "offseason_label": "Best 2025 Outlook" | "Most Fragile Contender" | "Best Rebuild Foundation" | "Aging Out",
+  "window_status_label": string (human readable: "Ready to Compete (${season})", "Rebuilding (${season + 1}+)", etc.),
+  "offseason_label": "${outlookLabel}" | "Most Fragile Contender" | "Best Rebuild Foundation" | "Aging Out",
   "offseason_power_index": number (0-100),
   "power_index_breakdown": {
     "roster_value": number (0-100),
@@ -282,6 +290,7 @@ Output JSON only:
 - "confidence" is "high" when backed by multiple data points, "medium" for single-source claims, "low" for inferences.
 - Include at minimum 3 citations. More is better if justified.
 - Do NOT fabricate sources — only cite data actually provided to you.`
+}
 
 function buildLegacySnapshot(user: {
   displayName: string | null
@@ -990,7 +999,7 @@ Generate a comprehensive rating and analysis.`
     const completion = await openai.chat.completions.create({
       model: "gpt-4o",
       messages: [
-        { role: "system", content: LEGACY_AI_SYSTEM_PROMPT },
+        { role: "system", content: buildLegacyAiSystemPrompt() },
         { role: "user", content: userPrompt },
       ],
       temperature: 0.7,

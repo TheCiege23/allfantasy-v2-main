@@ -1,5 +1,6 @@
 import { TIER_0_UNTOUCHABLES, TIER_1_CORNERSTONES, TIER_2_HIGH_END, TIER_3_STARTERS, TIER_4_REPLACEABLE } from './dynasty-tiers';
 import { getRedraftAIContext } from './redraft-tiers';
+import { legacyPromptSeason, nflDraftClassReminder } from '@/lib/legacy/promptSeason';
 
 export const UNIVERSAL_PLAYER_VALUE_RULES = `
 ## UNIVERSAL DYNASTY PLAYER VALUE RULES (NON-NEGOTIABLE)
@@ -132,27 +133,29 @@ This means:
 If your analysis never says "this is unrealistic" or "this won't work", you lose credibility.
 `.trim();
 
-export const CURRENT_DATE_CONTEXT = `
+/**
+ * 🛑 THIS WAS A MODULE CONSTANT NAMING "THE 2024 NFL DRAFT CLASS" AS HAVING JUST FINISHED ITS ROOKIE SEASON
+ * (fixed 2026-10-11, when that class had played two). A constant also froze "Today's date" at process start.
+ * Built per call from the clock now, with no player list to go stale (`lib/legacy/promptSeason.ts`).
+ */
+export function currentDateContext(now: Date = new Date()): string {
+  return `
 ## CURRENT DATE & NFL CONTEXT
 
-Today's date: ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+Today's date: ${now.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+Current fantasy season: ${legacyPromptSeason(now)}
 
-The 2024 NFL Draft class has ALREADY been drafted and completed their rookie seasons. These are NOW active NFL players with game experience:
-- Marvin Harrison Jr (WR, Cardinals) - Active NFL WR, NOT a prospect
-- Jayden Daniels, Caleb Williams, Drake Maye - Active NFL QBs with starts
-- Malik Nabers, Rome Odunze, Brian Thomas Jr - Active NFL WRs
-- Brock Bowers - Active NFL TE with production
-
-NEVER describe 2024 draft picks as "prospects entering the NFL" - they are current NFL players with game tape.
+${nflDraftClassReminder(now)}
 `.trim();
+}
 
 export function getUniversalAIContext(): string {
-  return `${CURRENT_DATE_CONTEXT}\n\n${UNIVERSAL_PLAYER_VALUE_RULES}`;
+  return `${currentDateContext()}\n\n${UNIVERSAL_PLAYER_VALUE_RULES}`;
 }
 
 export function getFormatAwareAIContext(format: 'dynasty' | 'keeper' | 'redraft' = 'dynasty'): string {
   if (format === 'redraft') {
-    return `${CURRENT_DATE_CONTEXT}\n\n${getRedraftAIContext()}`;
+    return `${currentDateContext()}\n\n${getRedraftAIContext()}`;
   }
   return getUniversalAIContext();
 }

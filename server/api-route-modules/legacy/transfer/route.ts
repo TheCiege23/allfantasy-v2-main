@@ -13,6 +13,7 @@ import {
   type SleeperTransaction,
 } from '@/lib/sleeper-client'
 import { computeRivalryWeek, type RivalryWeekData } from '@/lib/rivalry-engine'
+import { legacyPromptSeason } from '@/lib/legacy/promptSeason'
 
 const openai = getOpenAIRouteClient()
 
@@ -311,9 +312,12 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/transfer", tool: "Lega
 - Seasons of history: ${previousSeasons.length + 1}
 - Win-loss spread: ${topManager?.wins - (bottomManager?.wins || 0)} games between 1st and last`
 
+    // From the clock (`lib/legacy/promptSeason.ts`); the prompt and fallbacks below used to say 2025.
+    const season = legacyPromptSeason()
+
     let storylines: StorylineV2[] = []
     try {
-      const storylinePrompt = `You are a fantasy sports analyst creating data-backed storylines for an upcoming 2025 fantasy football season.
+      const storylinePrompt = `You are a fantasy sports analyst creating data-backed storylines for the ${season} fantasy football season.
 
 CRITICAL GROUNDING RULES:
 - You may ONLY reference managers, records, point totals, and trades that appear in the data below.
@@ -376,7 +380,7 @@ Example:
       storylines = [
         {
           title: 'The Championship Chase',
-          description: `${topManager?.displayName} leads at ${topManager?.wins}-${topManager?.losses} with ${topManager?.pointsFor} pts. With ${previousSeasons.length + 1} seasons of history, ${league.name} enters 2025 with unfinished business.`,
+          description: `${topManager?.displayName} leads at ${topManager?.wins}-${topManager?.losses} with ${topManager?.pointsFor} pts. With ${previousSeasons.length + 1} seasons of history, ${league.name} enters ${season} with unfinished business.`,
           type: 'contender',
           confidence: 75,
           evidence: [
@@ -387,7 +391,7 @@ Example:
         },
         {
           title: 'Trade Season Heats Up',
-          description: `${trades.length} trades this season${topTraderManager ? `, led by ${topTraderManager.displayName} with ${topTrader![1]} deals` : ''}. Who will make the move that defines the 2025 campaign?`,
+          description: `${trades.length} trades this season${topTraderManager ? `, led by ${topTraderManager.displayName} with ${topTrader![1]} deals` : ''}. Who will make the move that defines the ${season} campaign?`,
           type: 'trade_war',
           confidence: trades.length > 5 ? 80 : 55,
           evidence: [
