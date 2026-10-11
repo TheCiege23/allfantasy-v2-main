@@ -34,6 +34,11 @@ export type TradeAssetInput =
       round: number
       tier?: 'early' | 'mid' | 'late'
       label?: string
+      /**
+       * The provider roster id of the team the pick ORIGINALLY belonged to (`LeagueTeam.externalId`), when
+       * known — its landing spot follows that team's finish (`loadPickSlotProjection`).
+       */
+      originalRosterId?: string
     }
   | { kind: 'faab'; amount: number }
 
