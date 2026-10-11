@@ -135,7 +135,7 @@ const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
    * server/ or scripts/ ever starts fetching one, this classification fails rather than
    * quietly exempting a data read.
    */
-  { name: 'browser-only', why: 'loaded by the visitor\'s browser (SDK, embed, beacon) and listed in the CSP allowlist; never fetched by our code', test: /^(sdk\.scdn\.co|open\.spotify\.com|www\.youtube-nocookie\.com|api\.stripe\.com|www\.google-analytics\.com)$/i },
+  { name: 'browser-only', why: 'loaded by the visitor\'s browser (SDK, embed, beacon) and listed in the CSP allowlist; never fetched by our code', test: /^(sdk\.scdn\.co|open\.spotify\.com|www\.youtube-nocookie\.com|platform\.twitter\.com|syndication\.twitter\.com|api\.stripe\.com|www\.google-analytics\.com)$/i },
   { name: 'share-link', why: 'a URL we hand the user, never fetched', test: /^(twitter\.com|x\.com|www\.reddit\.com|www\.facebook\.com|www\.linkedin\.com|wa\.me|api\.whatsapp\.com|discord\.gg|discord\.new|www\.youtube\.com|fancred\.app)$/i },
   /*
    * Bare sleeper.com is a DEEP LINK, not a feed — href targets like
@@ -180,11 +180,11 @@ const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
    * these; they are not reads that Postgres could have served, which is what the
    * DB-first rule is about. api.twitter.com is /2/tweets from the X publish providers,
    * and graph.facebook.com is the Facebook/Instagram publishers plus Meta CAPI pixel
-   * events and the OAuth /me lookup. api.x.com is the same X API under its new host:
-   * lib/core-app/weeklyXPublishing.ts exchanges an OAuth code, reads /2/users/me, and
-   * POSTs /2/tweets.
+   * events and the OAuth /me lookup. api.x.com now also serves recent-post reads
+   * for the X highlights catalog, so it is monitored by the DB-first guard instead
+   * of remaining in this publishing category.
    */
-  { name: 'platform-infra', why: 'social publishing, analytics and OAuth — we write to these, not read feeds', test: /^(api\.twitter\.com|api\.x\.com|graph\.facebook\.com)$/i },
+  { name: 'platform-infra', why: 'social publishing, analytics and OAuth — we write to these, not read feeds', test: /^(api\.twitter\.com|graph\.facebook\.com)$/i },
   /*
    * INFRASTRUCTURE CONTROL PLANE, not a data read. console.neon.tech is Neon's own management
    * API: scripts/neon-prune-preview-branches.mjs lists database branches and deletes the ones
@@ -412,6 +412,13 @@ describe('DB-first boundary — outbound host census', () => {
   it('monitors the draft market API separately from its public attribution link', () => {
     expect(classify('api.statsguyfantasy.com', monitoredPatterns())).toBe('monitored')
     expect(classify('statsguyfantasy.com', monitoredPatterns())).toBe('share-link')
+  })
+
+  it('monitors X catalog reads separately from browser-only embed hosts', () => {
+    const monitored = monitoredPatterns()
+    expect(classify('api.x.com', monitored)).toBe('monitored')
+    expect(classify('platform.twitter.com', monitored)).toBe('browser-only')
+    expect(classify('syndication.twitter.com', monitored)).toBe('browser-only')
   })
 
   it('every outbound host is classified', () => {

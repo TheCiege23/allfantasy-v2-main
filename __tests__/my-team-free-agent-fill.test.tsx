@@ -8,6 +8,9 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
 }))
 
+// This suite pins waiver-board requests; the independent X feed is covered separately.
+vi.mock('@/components/core-app/highlights/MyTeamRecentClips', () => ({ default: () => null }))
+
 import { MyTeam } from '@/components/core-app/screens/MyTeam'
 import type { LineupPlayer, LineupSlot, MyTeamData } from '@/lib/core-app/myTeam'
 
