@@ -32,6 +32,7 @@ import { rosterSpotsFromSettings } from '@/lib/trade-value/rosterSpotCharge'
 import type { TradeAssetInput, TradeConsoleLeagueSnapshot, TradeConsolePlayerLine } from './types'
 import {
   describeOdds,
+  gamesPerWeekFrom,
   projectedPickPrice,
   projectPickSlots,
   type PickSlotProjection,
@@ -449,15 +450,24 @@ export async function loadPickSlotProjection(args: {
   settings: unknown
   season: number | null | undefined
 }): Promise<PickSlotProjection | null> {
-  const seasonGames = regularSeasonWeeks(args.settings)
-  if (!seasonGames || !args.season) return null
-  const rows = await prisma.leagueTeam.findMany({
-    where: { leagueId: args.leagueId, lifecycleState: { not: 'ARCHIVED' } },
-    select: { externalId: true, wins: true, losses: true, ties: true, pointsFor: true },
-  })
+  const seasonWeeks = regularSeasonWeeks(args.settings)
+  if (!seasonWeeks || !args.season) return null
+  const [rows, week] = await Promise.all([
+    prisma.leagueTeam.findMany({
+      where: { leagueId: args.leagueId, lifecycleState: { not: 'ARCHIVED' } },
+      select: { externalId: true, wins: true, losses: true, ties: true, pointsFor: true },
+    }),
+    resolveSportWeek('NFL', args.season).catch(() => null),
+  ])
+  const teams = rows.map((r) => ({ id: r.externalId, wins: r.wins, losses: r.losses, ties: r.ties, pointsFor: r.pointsFor }))
+  // Weeks the schedule says are over: the median-game test needs it (`gamesPerWeekFrom`).
+  const weeksDone = week?.ok
+    ? week.seasonType === 'post' ? seasonWeeks : week.state === 'played' ? week.sportWeek : week.sportWeek - 1
+    : null
   return projectPickSlots({
-    teams: rows.map((r) => ({ id: r.externalId, wins: r.wins, losses: r.losses, ties: r.ties, pointsFor: r.pointsFor })),
-    seasonGames,
+    teams,
+    seasonWeeks,
+    gamesPerWeek: gamesPerWeekFrom(Math.max(0, ...teams.map((t) => t.wins + t.losses + t.ties)), weeksDone, seasonWeeks),
     season: args.season,
   })
 }
