@@ -272,3 +272,19 @@ describe('before kickoff a starter shows his projection, not 0.0', () => {
     expect(pts.getAttribute('data-kind')).toBeNull()
   })
 })
+
+describe('phone order: one summary above the games, the rest of the panel after them (2026-10-11)', () => {
+  it('renders the summary twice — before the grid (phone) and inside the side panel (desktop)', () => {
+    const { container } = render(<LiveScores data={page([game('1')])} />)
+    const inline = container.querySelector('.af-live-impact[data-placement="inline"]') as HTMLElement
+    const side = container.querySelector('.af-live-side .af-live-impact[data-placement="side"]') as HTMLElement
+    const grid = container.querySelector('.af-live-grid') as HTMLElement
+    const slate = container.querySelector('.af-live-slate') as HTMLElement
+    expect(inline).not.toBeNull()
+    expect(side).not.toBeNull()
+    expect(inline.compareDocumentPosition(grid) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // In DOM order the side panel follows the slate; with `order: -1` gone, a phone shows it there.
+    expect(slate.compareDocumentPosition(container.querySelector('.af-live-side')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(inline.textContent).toBe(side.textContent)
+  })
+})

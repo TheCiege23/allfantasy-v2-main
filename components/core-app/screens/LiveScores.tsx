@@ -664,6 +664,16 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
       </div>
 
       {/* ── Slate + impact ──────────────────────────────────────────── */}
+      {/*
+        ⚠ PHONE ONLY (≤1080px, the breakpoint where the grid goes single-column). The side panel used to
+        be pulled ABOVE every game there with `order: -1` (2026-10-06), so a manager saw their own
+        numbers first — at the price of the first game card sitting a whole panel down. Since the
+        matchups strip leads the page, only this one summary stays above the games; the rest of the
+        panel follows them. The side copy is hidden on phones and this one on desktop, both with
+        `display: none`, so a screen reader meets exactly one.
+      */}
+      <ImpactSummary data={data} impact={impact} leagueScoped={leagueFilterId != null} placement="inline" />
+
       <div className="af-live-grid">
         <section
           className="af-live-slate"
@@ -755,68 +765,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
 
         <aside className="af-live-side" aria-label="Your live impact">
 
-          <div className="af-live-impact">
-            <h2 className="af-label">
-              Your live impact <TopicTip topic="liveImpactTotal" />
-            </h2>
-            {data.rosterFailed ? (
-              /*
-               * ⚠ THE SAME RULE AS THE BRANCH BELOW, FOR A DIFFERENT REASON.
-               * The em dash is right — we have no number we can stand behind —
-               * but "claim your team" is the wrong explanation and an actively
-               * misleading instruction: the team IS claimed, the read failed.
-               * "We could not read it" and "you have not created one" are
-               * different facts, exactly as that branch argues about 0.0.
-               */
-              <>
-                <p className="af-live-impact-total" data-missing="true">
-                  <span className="af-num">—</span>
-                  <span>we could not read your rosters</span>
-                </p>
-                <p className="af-live-impact-sub">
-                  This is a problem on our end, not an empty roster. The scores themselves are
-                  fine.
-                </p>
-              </>
-            ) : data.hasRosterData ? (
-              <>
-                {/*
-                  ⚠ A COUNT OF YOUR STARTERS, NOT SUMMED POINTS — see `starterStageCounts`. The old
-                  headline added one player once per league and only counted live games, so it fell
-                  when a game ended. Points are per league, in "Contributions by league" below.
-                */}
-                <p className="af-live-impact-total">
-                  <span className="af-num">{impact.livePlayers}</span>
-                  <span>
-                    {impact.livePlayers === 1 ? 'starter' : 'starters'} playing now
-                    {leagueFilterId ? ' in this league' : ''}
-                  </span>
-                </p>
-                <p className="af-live-impact-sub">
-                  {impact.livePlayers === 0 && !impact.upcomingPlayers && !impact.finishedPlayers
-                    ? 'None of your starters are on this slate.'
-                    : impact.livePlayers === 0
-                      ? `None on the field right now · ${starterStageDetail(impact)}`
-                      : starterStageDetail(impact)}
-                </p>
-              </>
-            ) : (
-              /*
-               * ⚠ NOT "0.0 PTS". Nobody has claimed a team, so there is no
-               * roster to score — which is a different fact from scoring
-               * nothing, and the em dash is the house rule for exactly this.
-               */
-              <>
-                <p className="af-live-impact-total" data-missing="true">
-                  <span className="af-num">—</span>
-                  <span>no roster to score against yet</span>
-                </p>
-                <p className="af-live-impact-sub">
-                  Claim your team in one of your leagues and this fills in automatically.
-                </p>
-              </>
-            )}
-          </div>
+          <ImpactSummary data={data} impact={impact} leagueScoped={leagueFilterId != null} placement="side" />
 
           <details className="af-live-card af-live-contributions" open={!!leagueFilterId}>
             <summary>Contributions by league</summary>
@@ -954,6 +903,87 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
       </div>
     </div>
     </LowDataProvider>
+  )
+}
+
+/**
+ * "Your live impact": your starters playing now, still to play, and done. Rendered twice — in the side
+ * panel (desktop) and above the games (phone) — and CSS shows one; see the note where it is placed.
+ */
+function ImpactSummary({
+  data,
+  impact,
+  leagueScoped,
+  placement,
+}: {
+  data: Pick<LivePageData, 'rosterFailed' | 'hasRosterData'>
+  impact: LivePageData['impact']
+  leagueScoped: boolean
+  placement: 'side' | 'inline'
+}) {
+  return (
+    <div className="af-live-impact" data-placement={placement}>
+      <h2 className="af-label">
+        Your live impact <TopicTip topic="liveImpactTotal" />
+      </h2>
+      {data.rosterFailed ? (
+        /*
+         * ⚠ THE SAME RULE AS THE BRANCH BELOW, FOR A DIFFERENT REASON.
+         * The em dash is right — we have no number we can stand behind —
+         * but "claim your team" is the wrong explanation and an actively
+         * misleading instruction: the team IS claimed, the read failed.
+         * "We could not read it" and "you have not created one" are
+         * different facts, exactly as that branch argues about 0.0.
+         */
+        <>
+          <p className="af-live-impact-total" data-missing="true">
+            <span className="af-num">—</span>
+            <span>we could not read your rosters</span>
+          </p>
+          <p className="af-live-impact-sub">
+            This is a problem on our end, not an empty roster. The scores themselves are
+            fine.
+          </p>
+        </>
+      ) : data.hasRosterData ? (
+        <>
+          {/*
+            ⚠ A COUNT OF YOUR STARTERS, NOT SUMMED POINTS — see `starterStageCounts`. The old
+            headline added one player once per league and only counted live games, so it fell
+            when a game ended. Points are per league, in "Contributions by league" below.
+          */}
+          <p className="af-live-impact-total">
+            <span className="af-num">{impact.livePlayers}</span>
+            <span>
+              {impact.livePlayers === 1 ? 'starter' : 'starters'} playing now
+              {leagueScoped ? ' in this league' : ''}
+            </span>
+          </p>
+          <p className="af-live-impact-sub">
+            {impact.livePlayers === 0 && !impact.upcomingPlayers && !impact.finishedPlayers
+              ? 'None of your starters are on this slate.'
+              : impact.livePlayers === 0
+                ? `None on the field right now · ${starterStageDetail(impact)}`
+                : starterStageDetail(impact)}
+          </p>
+        </>
+      ) : (
+        /*
+         * ⚠ NOT "0.0 PTS". Nobody has claimed a team, so there is no
+         * roster to score — which is a different fact from scoring
+         * nothing, and the em dash is the house rule for exactly this.
+         */
+        <>
+          <p className="af-live-impact-total" data-missing="true">
+            <span className="af-num">—</span>
+            <span>no roster to score against yet</span>
+          </p>
+          <p className="af-live-impact-sub">
+            Claim your team in one of your leagues and this fills in automatically.
+          </p>
+        </>
+      )}
+    </div>
   )
 }
 

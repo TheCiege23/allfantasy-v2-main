@@ -2796,10 +2796,30 @@
  * 620px the rest of this file's phone rules use. The burial starts the moment
  * the grid collapses to one column, which is here — a 900px tablet has it too.
  */
+/*
+ * ✅ REPLACED 2026-10-11 — the whole panel no longer moves; ONE SUMMARY DOES. With the panel pulled
+ * above the games, a phone opened on the impact total, contributions, the latest play, the play feed
+ * and Up next before the first scoreboard — the 2026-10-11 audit measured the first game card ~1.5
+ * screens down. The matchups strip now leads the page, which answers "how am I doing" before any of
+ * that, so on a phone only the "Your live impact" summary stays above the games (a second, phone-only
+ * copy rendered before the grid) and the rest of the panel follows the slate in DOM order. One copy
+ * is shown at a time, both hidden with `display: none`, so a screen reader meets exactly one.
+ */
+.af-live-impact[data-placement='inline'] {
+  display: none;
+}
 @media (max-width: 1080px) {
-  .af-live-side {
-    order: -1;
+  .af-live-impact[data-placement='inline'] {
+    display: flex;
+    margin-bottom: 14px;
   }
+  .af-live-side .af-live-impact[data-placement='side'] {
+    display: none;
+  }
+}
+/* The league-scoped view hides the whole panel (see Grid); its phone summary goes with it. */
+.af-live[data-league-scoped='true'] .af-live-impact[data-placement='inline'] {
+  display: none;
 }
 
 /* ── Your matchup strip ─────────────────────────────────────────── */
@@ -2865,7 +2885,6 @@
  .af-live-sport,.af-live-scope-btn,.af-live-search input { font-size:14px; }
  .af-live-scope-btn,.af-live-search { min-height:48px; }
  .af-live-freshness { font-size:12px; letter-spacing:0; text-transform:none; }
- .af-live-side .af-live-card:has(.af-live-plays) { max-height:180px; overflow:auto; }
  .af-live-grid { gap:16px; }
 }
 
