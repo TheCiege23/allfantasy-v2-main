@@ -19,12 +19,15 @@ import { sleeperHeadshotUrl } from '@/lib/player-media-urls'
 import { toImageUrl } from '@/lib/media/imageUrl'
 import {
   indexSleeperCandidates,
+  isDefensePosition,
   loadSleeperCandidatesByName,
+  loadSleeperDefenses,
   resolveSleeperCandidate,
+  sleeperDefenseId,
 } from '@/lib/draft/sleeperNameCandidates'
 
 export interface SleeperBoardPlayer {
-  /** Bare Sleeper id. */
+  /** Bare Sleeper id — a number for a player, the team abbreviation (`BUF`) for a team defense. */
   id: string
   name: string
   position: string
@@ -58,22 +61,38 @@ export async function loadSleeperAdpBoard(opts: { sport: string; take: number })
     .sort((a, b) => a.adp - b.adp)
     .slice(0, opts.take * NAME_LOOKUP_MULTIPLIER)
 
-  const candidates = await loadSleeperCandidatesByName(
-    sport,
-    ranked.map((e) => e.name),
-  )
+  /*
+   * Team defenses are bound by TEAM, never by name: `adp_data` writes them as "Buffalo Defense" /
+   * "LA Rams Defense" with `position: 'DEF'` and the team abbreviation, and Sleeper's id for a defense
+   * IS that abbreviation (its row: `sleeperId: 'BUF'`, name "Buffalo Bills").
+   */
+  const defenseEntries = ranked.filter((e) => isDefensePosition(e.position))
+  const playerEntries = ranked.filter((e) => !isDefensePosition(e.position))
+  const [candidates, defenses] = await Promise.all([
+    loadSleeperCandidatesByName(
+      sport,
+      playerEntries.map((e) => e.name),
+    ),
+    loadSleeperDefenses(
+      sport,
+      defenseEntries.map((e) => sleeperDefenseId(e.team)).filter((id): id is string => id != null),
+    ),
+  ])
   const index = indexSleeperCandidates(candidates)
 
   const seen = new Set<string>()
   const out: SleeperBoardPlayer[] = []
   for (const entry of ranked) {
     if (out.length >= opts.take) break
-    const match = resolveSleeperCandidate(
-      index,
-      { name: entry.name, position: entry.position ?? null, team: entry.team ?? null },
-      // The ADP board's team lags trades; it may narrow namesakes but never veto a lone match.
-      { teamMayBeStale: true },
-    )
+    const defenseId = isDefensePosition(entry.position) ? sleeperDefenseId(entry.team) : null
+    const match = isDefensePosition(entry.position)
+      ? (defenseId ? defenses.get(defenseId) ?? null : null)
+      : resolveSleeperCandidate(
+          index,
+          { name: entry.name, position: entry.position ?? null, team: entry.team ?? null },
+          // The ADP board's team lags trades; it may narrow namesakes but never veto a lone match.
+          { teamMayBeStale: true },
+        )
     // Unresolved or ambiguous: no id we can stand behind, so the player is not draftable here.
     if (!match || seen.has(match.sleeperId)) continue
     seen.add(match.sleeperId)
@@ -82,7 +101,8 @@ export async function loadSleeperAdpBoard(opts: { sport: string; take: number })
       name: match.name,
       position: match.position ?? entry.position ?? '',
       team: match.team ?? '',
-      imageUrl: toImageUrl(match.imageUrl) ?? sleeperHeadshotUrl(match.sleeperId, 'nfl'),
+      // The CDN headshot path takes a PLAYER id; a defense without its own image has none.
+      imageUrl: toImageUrl(match.imageUrl) ?? (defenseId ? null : sleeperHeadshotUrl(match.sleeperId, 'nfl')),
       status: match.status,
       adp: entry.adp,
     })
