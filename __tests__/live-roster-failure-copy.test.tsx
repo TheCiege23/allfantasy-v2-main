@@ -140,10 +140,14 @@ describe('impact panels — an unmeasured total must not render as 0.0', () => {
     expect(screen.queryByText('—')).toBeNull()
   })
 
-  it('/core/live impact panel shows an em dash, not 0.0', () => {
-    render(<LiveScores data={pageData({ rosterFailed: true })} />)
+  it('/core/live impact panel shows an em dash, not 0.0 — in BOTH copies', () => {
+    // Since 2026-10-11 the summary renders twice (side panel for desktop, above the games for phones;
+    // CSS shows one). Neither may claim a number we did not measure.
+    const { container } = render(<LiveScores data={pageData({ rosterFailed: true })} />)
 
-    expect(screen.getByText('—')).toBeInTheDocument()
+    const copies = [...container.querySelectorAll('.af-live-impact')]
+    expect(copies.map((c) => c.getAttribute('data-placement')).sort()).toEqual(['inline', 'side'])
+    for (const copy of copies) expect(copy.querySelector('.af-num')!.textContent).toBe('—')
     expect(screen.queryByText('0.0')).toBeNull()
   })
 })
