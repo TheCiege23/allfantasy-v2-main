@@ -162,10 +162,11 @@ export async function runInjuryImporter(options?: {
       const capped = highSeverity.slice(0, 5)
       if (capped.length > 0) {
         const cappedIds = Array.from(new Set(capped.map((r) => r.playerId).filter(Boolean)))
-        const owners = await ownersByPlayerId(cappedIds).catch(() => new Map<string, string[]>())
+        // Scoped to this pass's sport: a player id is only unique within one sport.
+        const owners = await ownersByPlayerId(cappedIds, { sport }).catch(() => new Map<string, string[]>())
         // Only for players someone rosters, and never at the cost of the alert itself.
         const headshots = owners.size > 0
-          ? await headshotsByRiId([...owners.keys()]).catch(() => new Map<string, string>())
+          ? await headshotsByRiId([...owners.keys()], sport).catch(() => new Map<string, string>())
           : new Map<string, string>()
         for (const row of capped) {
           const userIds = owners.get(row.playerId)
