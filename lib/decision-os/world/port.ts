@@ -201,8 +201,11 @@ export const defaultCanonicalWorldPort: CanonicalWorldPort = {
       const verdict = bridged?.get(leagueId)
       if (verdict?.readable) bridgedMap = verdict.map
     }
+    const prepared: Array<Omit<(typeof rawRows)[number], 'playerData'> & { playerData: unknown }> = bridgedMap
+      ? rawRows.map((r) => ({ ...r, playerData: applyBridgeKeepingSlots(r.playerData, bridgedMap!) }))
+      : rawRows
     const rows = await sleeperReadableRosters(
-      bridgedMap ? rawRows.map((r) => ({ ...r, playerData: applyBridgeKeepingSlots(r.playerData, bridgedMap!) })) : rawRows,
+      prepared,
       // Bridged rows are already in Sleeper's space; anything else goes through the one translator.
       (row: { league: { platform: string | null } | null }) => (bridgedMap ? 'sleeper' : row.league?.platform),
     )
