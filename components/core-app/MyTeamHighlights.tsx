@@ -1,5 +1,7 @@
 'use client'
 
+import { useHighlightCopy } from './player-card/highlightCopy'
+
 import { useEffect, useRef, useState } from 'react'
 import type { MyTeamData } from '@/lib/core-app/myTeam'
 import type { TeamHighlightsResult } from '@/lib/highlights/types'
@@ -17,6 +19,7 @@ export default function MyTeamHighlights({ data }: { data: MyTeamData }) {
 }
 
 function TeamHighlights({ groups }: { groups: Record<'all' | 'starters' | 'bench', string[]> }) {
+  const { copy } = useHighlightCopy()
   const [scope, setScope] = useState<'all' | 'starters' | 'bench'>('all')
   const [result, setResult] = useState<TeamHighlightsResult | null>(null)
   const [loading, setLoading] = useState(false)
@@ -37,15 +40,15 @@ function TeamHighlights({ groups }: { groups: Record<'all' | 'starters' | 'bench
     finally { if (!request.signal.aborted) setLoading(false) }
   }
   const videos = result?.videos.filter(video => video.players.some(player => groups[scope].includes(player.sleeperId))) ?? []
-  return <section className="af-frame af-mt-section af-team-highlights" aria-label="My Team Highlights">
-    <header className="af-mt-section-head"><h2 className="af-label">My Team Highlights</h2><span className="af-mt-section-note">Official NFL · YouTube</span></header>
-    <p className="af-pc-faint">Recent clips for your current roster. Team recaps may not feature every player.</p>
+  return <section className="af-frame af-mt-section af-team-highlights" aria-label={copy("My Team Highlights")}>
+    <header className="af-mt-section-head"><h2 className="af-label">{copy("My Team Highlights")}</h2><span className="af-mt-section-note">{copy("Official NFL · YouTube")}</span></header>
+    <p className="af-pc-faint">{copy("Recent clips for your current roster. Team recaps may not feature every player.")}</p>
     <div className="af-team-highlights-controls">
-      <label>Show <select aria-label="Highlights roster filter" value={scope} onChange={event => setScope(event.target.value as typeof scope)}><option value="all">Full roster</option><option value="starters">Starters</option><option value="bench">Bench</option></select></label>
-      <button type="button" className="af-pc-highlights-load" disabled={loading} onClick={load}>{loading ? 'Finding highlights…' : result || error ? 'Refresh highlights' : 'Find team highlights'}</button>
+      <label>{copy("Show")} <select aria-label={copy("Highlights roster filter")} value={scope} onChange={event => setScope(event.target.value as typeof scope)}><option value="all">{copy("Full roster")}</option><option value="starters">{copy("Starters")}</option><option value="bench">{copy("Bench")}</option></select></label>
+      <button type="button" className="af-pc-highlights-load" disabled={loading} onClick={load}>{loading ? copy("Finding highlights…") : result || error ? copy("Refresh highlights") : copy("Find team highlights")}</button>
     </div>
-    <div role="status" aria-live="polite">{error ? <p>Highlights could not be loaded. Please try again later.</p> : result?.message ? <p>{result.message}</p> : result && !videos.length ? <p>No recent highlights for this roster filter.</p> : null}</div>
+    <div role="status" aria-live="polite">{error ? <p>{copy("Highlights could not be loaded. Please try again later.")}</p> : result?.message ? <p>{copy(result.message)}</p> : result && !videos.length ? <p>{copy("No recent highlights for this roster filter.")}</p> : null}</div>
     <div className="af-team-highlights-grid">{videos.map(video => <div key={video.videoId}><p className="af-pc-faint">{video.players.filter(p => groups[scope].includes(p.sleeperId)).map(p => p.name).join(' · ')}</p><HighlightVideos videos={[video]} /></div>)}</div>
-    <p className="af-pc-highlight-disclosure">Finding highlights loads YouTube thumbnails. Videos open on YouTube in a new tab. <a href="/privacy#youtube-highlights">Privacy</a>{' · '}<a href="https://www.youtube.com/t/terms" target="_blank" rel="noopener noreferrer">YouTube Terms</a></p>
+    <p className="af-pc-highlight-disclosure">{copy("Finding highlights loads YouTube thumbnails. Videos open on YouTube in a new tab.")} <a href="/privacy#youtube-highlights">{copy("Privacy")}</a>{' · '}<a href="https://www.youtube.com/t/terms" target="_blank" rel="noopener noreferrer">{copy("YouTube Terms")}</a></p>
   </section>
 }

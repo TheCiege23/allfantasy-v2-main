@@ -1,5 +1,7 @@
 'use client'
 
+import { useHighlightCopy } from './highlightCopy'
+
 import { useEffect, useRef, useState } from 'react'
 import type { PlayerCardIdentity } from '@/lib/core-app/playerCard'
 import type { PlayerHighlightsResult } from '@/lib/highlights/types'
@@ -11,6 +13,7 @@ export default function PlayerHighlights({ player }: { player: PlayerCardIdentit
 }
 
 function NflPlayerHighlights({ player }: { player: PlayerCardIdentity }) {
+  const { language, copy } = useHighlightCopy()
   const [result, setResult] = useState<PlayerHighlightsResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(false)
@@ -40,23 +43,23 @@ function NflPlayerHighlights({ player }: { player: PlayerCardIdentity }) {
   }
 
   return (
-    <section className="af-pc-highlights" aria-label={`${player.name} highlights`}>
-      <div className="af-pc-label">HIGHLIGHTS · YouTube</div>
-      <p className="af-pc-faint">Recent official NFL uploads. Team recaps may not feature {player.name}.</p>
+    <section className="af-pc-highlights" aria-label={language === 'es' ? `Videos de ${player.name}` : `${player.name} highlights`}>
+      <div className="af-pc-label">{copy("HIGHLIGHTS · YouTube")}</div>
+      <p className="af-pc-faint">{language === 'es' ? `Publicaciones recientes del canal oficial de la NFL. Los resúmenes de equipo pueden no mostrar a ${player.name}.` : `Recent official NFL uploads. Team recaps may not feature ${player.name}.`}</p>
       {!result || result.status === 'unavailable' ? (
         <button className="af-pc-highlights-load" type="button" onClick={load} disabled={loading}>
-          {loading ? 'Finding highlights…' : error || result ? 'Try highlights again' : 'Find highlights'}
+          {loading ? copy("Finding highlights…") : error || result ? copy("Try highlights again") : copy("Find highlights")}
         </button>
       ) : null}
       <div role="status" aria-live="polite">
-        {error ? <p className="af-pc-absent">Highlights could not be loaded. Please try again later.</p> : null}
-        {result?.message ? <p className="af-pc-absent">{result.message}</p> : null}
+        {error ? <p className="af-pc-absent">{copy("Highlights could not be loaded. Please try again later.")}</p> : null}
+        {result?.message ? <p className="af-pc-absent">{copy(result.message)}</p> : null}
       </div>
       <HighlightVideos videos={result?.videos ?? []} />
       <p className="af-pc-highlight-disclosure">
-        Finding highlights loads YouTube thumbnails. Videos open on YouTube in a new tab.
-        {' '}<a href="/privacy#youtube-highlights">Privacy</a>
-        {' · '}<a href="https://www.youtube.com/t/terms" target="_blank" rel="noopener noreferrer">YouTube Terms</a>
+        {copy("Finding highlights loads YouTube thumbnails. Videos open on YouTube in a new tab.")}
+        {' '}<a href="/privacy#youtube-highlights">{copy("Privacy")}</a>
+        {' · '}<a href="https://www.youtube.com/t/terms" target="_blank" rel="noopener noreferrer">{copy("YouTube Terms")}</a>
       </p>
     </section>
   )
