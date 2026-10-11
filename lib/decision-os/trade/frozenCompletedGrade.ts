@@ -5,6 +5,8 @@ import { prisma } from '@/lib/prisma'
 import type { TradeAssetInput } from '@/lib/trade-value-console/types'
 import { mirrorTradeGrade, type TradeGradeView } from './tradeGrade'
 import type { GradeInputs } from './tradeGradeInputs'
+import { leagueTypeBasis } from '@/lib/league/leagueTypeGrading'
+import { isGuillotineBasisGrade, isGuillotineTradeLeague } from './guillotineValue'
 
 /**
  * THE ORIGINAL GRADE OF A COMPLETED PROVIDER TRADE, FROZEN THE FIRST TIME ANY SURFACE GRADES IT.
@@ -47,6 +49,13 @@ import type { GradeInputs } from './tradeGradeInputs'
  *   as `current`, and `frozenAt` says when the original was taken. The two are never merged.
  *
  * Failure-contained: a read or write failure returns today's grade exactly as before this existed.
+ *
+ * 🛑 A GUILLOTINE LEAGUE'S ORIGINAL MUST BE ON THE GUILLOTINE BASIS (Guap, 2026-10-11). Until then every
+ * NFL guillotine trade was graded on the market chart — a 2-QB board for a one-QB lineup and FAAB as a
+ * flat share of the budget — and 58 originals in 7 guillotine leagues were frozen that way ("Malik
+ * Willis + $75 FAAB for Joe Burrow" F/A among them). His ruling: those trades show the guillotine grade.
+ * So in such a league a row not taken on that basis (`isGuillotineBasisGrade`) is SKIPPED on read, never
+ * edited or deleted; the first read then freezes a guillotine original, which wins from then on.
  */
 
 const SNAPSHOT_TYPE_V1 = 'completed_trade_grade_v1'
@@ -164,20 +173,42 @@ export async function loadFrozenCompletedGrades(
         orderBy: { createdAt: 'asc' },
         select: { contextKey: true, payloadJson: true },
       }))().catch(() => [] as SnapshotRow[])
-  const [v1Rows, v2Rows] = await Promise.all([read(SNAPSHOT_TYPE_V1), read(COMPLETED_GRADE_SNAPSHOT_TYPE)])
+  const [v1Rows, v2Rows, accept] = await Promise.all([read(SNAPSHOT_TYPE_V1), read(COMPLETED_GRADE_SNAPSHOT_TYPE), originalBasisFor(afLeagueId)])
   const v1 = new Map<string, FrozenCompletedGradeV1>()
   for (const row of v1Rows as SnapshotRow[]) {
     const p = readV1(row.payloadJson as Partial<FrozenCompletedGradeV1> | null)
+    if (p && accept && !accept(p.grade)) continue
     if (row.contextKey && p && !v1.has(row.contextKey)) v1.set(row.contextKey, p) // earliest wins
   }
   for (const row of v2Rows as SnapshotRow[]) {
     const p = readV2(row.payloadJson as Partial<FrozenCompletedGradeV2> | null)
+    if (p && accept && !accept(p.grade)) continue
     if (!row.contextKey || !p || out.has(row.contextKey)) continue // earliest wins
     const prior = v1.get(row.contextKey)
     out.set(row.contextKey, prior ? { ...p, prior } : p)
   }
   for (const [key, p] of v1) if (!out.has(key)) out.set(key, p)
   return out
+}
+
+/**
+ * Which frozen originals this league row may show, or null when any may. An NFL guillotine league — by
+ * the league type the grader itself uses (`leagueTypeBasis`) — shows only originals taken on the
+ * guillotine basis. Never throws: an unreadable league row means no filter, as before this existed.
+ */
+async function originalBasisFor(afLeagueId: string): Promise<((grade: Graded) => boolean) | null> {
+  try {
+    const row = await prisma.league.findUnique({
+      where: { id: afLeagueId },
+      select: { sport: true, leagueType: true, leagueVariant: true, settings: true, platform: true },
+    })
+    if (!row) return null
+    const type = leagueTypeBasis({ settings: row.settings, leagueType: row.leagueType, platform: row.platform ?? null }).type
+    if (!isGuillotineTradeLeague({ sport: String(row.sport), leagueType: type, leagueVariant: row.leagueVariant })) return null
+    return (grade) => isGuillotineBasisGrade(grade)
+  } catch {
+    return null
+  }
 }
 
 /** The stored payload: never the read-time `prior`. */

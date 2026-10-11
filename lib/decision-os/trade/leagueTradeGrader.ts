@@ -33,6 +33,7 @@ import { unpriceableReason, type GradeInputs } from './tradeGradeInputs'
 import { proposalEligibilityReason } from '@/lib/trade-value-console/tradeEligibility'
 import { createNcaafLeagueGrader } from './ncaafLeagueGrader'
 import { createSportPointsGrader } from './sportPointsGrader'
+import { createGuillotineGrader } from './guillotineGrader'
 import { createLeagueAssetPolicy } from './leagueAssetPolicy'
 import { DEVY_BASIS_NOTE } from './leagueAssetRules'
 import { belowChartFloorNote } from '@/lib/trade-value/belowChartFloor'
@@ -409,6 +410,18 @@ export async function createLeagueTradeGrader(args: {
     sport,
     league: { id: args.leagueId, settings: leagueRow.settings, leagueType: leagueType.type, leagueSize: leagueRow.leagueSize ?? null },
   })
+  /*
+   * An NFL guillotine league: points over the free agent for the same lineup slot, over the weeks a team
+   * can expect to survive, and FAAB at its purchasing power (`./guillotineGrader.ts`, Guap 2026-10-11).
+   * Its view is final — the market chart priced a 4 FLEX + 1 SUPER_FLEX lineup on the 2-QB board and FAAB
+   * as a flat share of the budget.
+   */
+  const guillotine = createGuillotineGrader({
+    sport,
+    leagueType: leagueType.type,
+    leagueVariant: leagueRow.leagueVariant ?? null,
+    league: { id: args.leagueId, settings: leagueRow.settings, leagueSize: leagueRow.leagueSize ?? null },
+  })
   /* Phase 9: picks refused where nothing prices them, and devy prospects this league holds priced. */
   const assets = createLeagueAssetPolicy({
     id: args.leagueId,
@@ -438,6 +451,7 @@ export async function createLeagueTradeGrader(args: {
       const collegeView = college ? await college.grade(give, get) : null
       if (collegeView) return collegeView
       if (sportPoints) return await sportPoints.grade(give, get)
+      if (guillotine) return await guillotine.grade(give, get)
       const pickWhy = assets.pickRefusal([...give, ...get])
       if (pickWhy) return { graded: false, reason: pickWhy, basis: null }
       const dataGaps: string[] = []

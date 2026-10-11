@@ -46,6 +46,7 @@ import { gradePricedSides } from '@/lib/decision-os/trade/leagueTradeGrader'
 import { createNcaafLeagueGrader } from '@/lib/decision-os/trade/ncaafLeagueGrader'
 import { applyCollegeGrade } from '@/lib/decision-os/trade/ncaafRedraftValue'
 import { createSportPointsGrader } from '@/lib/decision-os/trade/sportPointsGrader'
+import { createGuillotineGrader } from '@/lib/decision-os/trade/guillotineGrader'
 import { createLeagueAssetPolicy } from '@/lib/decision-os/trade/leagueAssetPolicy'
 import { DEVY_BASIS_NOTE } from '@/lib/decision-os/trade/leagueAssetRules'
 import { tradeGradeLabel } from '@/lib/decision-os/trade/tradeGrade'
@@ -410,13 +411,29 @@ export async function runTradeConsoleAnalysis(
       })
   const sportView = sportPointsGrader ? await sportPointsGrader.grade(input.sideGive, input.sideGet) : null
   if (sportView) applyCollegeGrade(leagueGrade, sportView)
+  /*
+   * An NFL guillotine league takes the guillotine grade `createLeagueTradeGrader` gives it (points over the
+   * free agent for the same lineup slot, FAAB at its purchasing power — Guap, 2026-10-11), rewritten into
+   * the console's numbers the same way, so the console never shows a market letter the other surfaces do not.
+   */
+  const guillotineGrader =
+    !collegeView && !sportView && leagueRow && consoleLeagueType && input.leagueId
+      ? createGuillotineGrader({
+          sport: effectiveSport,
+          leagueType: consoleLeagueType.type,
+          leagueVariant: leagueRow.leagueVariant ?? null,
+          league: { id: input.leagueId.trim(), settings: leagueRow.settings, leagueSize: leagueRow.leagueSize ?? null },
+        })
+      : null
+  const guillotineView = guillotineGrader ? await guillotineGrader.grade(input.sideGive, input.sideGet) : null
+  if (guillotineView) applyCollegeGrade(leagueGrade, guillotineView)
   /**
    * THE grade — the same object every other trade surface shows for this deal — with the league type
    * it was priced under and how we know it, as `createLeagueTradeGrader` attaches it. Global mode (no
    * league) has no league type to name.
    */
   const grade = consoleLeagueType
-    ? { ...(collegeView ?? sportView ?? graded.grade), leagueType: consoleLeagueType }
+    ? { ...(collegeView ?? sportView ?? guillotineView ?? graded.grade), leagueType: consoleLeagueType }
     : sportView ?? graded.grade
   giveLines = leagueGrade.giveLines
   getLines = leagueGrade.getLines

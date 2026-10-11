@@ -34,6 +34,19 @@ vi.mock('@/lib/trade-value-console/league-loader', () => ({
   }),
 }))
 vi.mock('@/lib/league-context-engine', () => ({ resolveNormalizedLeagueContext: async () => ({ ok: false }) }))
+// A guillotine league is graded on its own context (`guillotineContext.ts`), never the market chart.
+vi.mock('@/lib/decision-os/trade/guillotineContext', () => ({
+  loadGuillotineContext: async () => ({
+    ok: true,
+    ctx: {
+      board: [{ id: 'puka', name: 'Puka Nacua', position: 'WR', perGame: 20, sampleGames: 5, aliases: ['p1'] }],
+      seats: [{ slot: 'FLEX', eligible: ['RB', 'WR', 'TE'] }, { slot: 'SUPER_FLEX', eligible: ['QB', 'RB', 'WR', 'TE'] }],
+      replacementBySlot: new Map([['FLEX', { name: 'Free', perGame: 12 }], ['SUPER_FLEX', { name: 'Free', perGame: 13 }]]),
+      teamsAlive: 3, startingTeams: 12, nflWeeksLeft: 13, survival: [1, 1 / 3, 0],
+      liveFaab: 300, wireValue: 30, releaseValue: 30, lineupLabel: '1 FLEX, 1 SUPER_FLEX',
+    },
+  }),
+}))
 vi.mock('@/lib/fantasycalc-db', () => ({
   getFantasyCalcValuesDbFirst: async () => h.chart,
   // The chart now carries its sync time, so every grade line can date its market value.
@@ -325,5 +338,25 @@ describe('P0 package and team-direction regression through the shared league gra
     expect(withRoster.market).toMatchObject({ letter: shared.letter, partnerLetter: shared.partnerLetter, percentDiff: shared.percentDiff })
     expect([withRoster.partnerLetter, withRoster.giveValue, withRoster.getValue]).toEqual([shared.partnerLetter, shared.giveValue, shared.getValue])
     expect([shared.letter, shared.partnerLetter]).toEqual(['B', 'D'])
+  })
+
+  it('grades a guillotine league on points over the free level and FAAB’s purchasing power, never the market chart (2026-10-11)', async () => {
+    h.leagueType = 'guillotine'
+    const grader = await createLeagueTradeGrader({ leagueId: 'L1', userId: 'u1' })
+    const view = graded(await grader!.grade({ give: [{ kind: 'player', name: 'Puka Nacua' }], get: [{ kind: 'faab', amount: 50 }], viewerSide: false }))
+    // Puka: (20 − 12) a week × W(0) = 1 week = 8. $50 of $300 live FAAB × (30 + 30) = 10.
+    expect(view.lines.map((l) => [l.name, l.leagueValue, l.valueSource])).toEqual([
+      ['Puka Nacua', 8, 'guillotine_points'],
+      ['$50 FAAB', 10, 'guillotine_faab'],
+    ])
+    expect(view.basis).toMatch(/^Guillotine value/)
+    expect(view.leagueType).toMatchObject({ type: 'guillotine' })
+  })
+
+  it('leaves every other league on the market chart', async () => {
+    h.leagueType = 'redraft'
+    const grader = await createLeagueTradeGrader({ leagueId: 'L1', userId: 'u1' })
+    const view = graded(await grader!.grade({ give: [{ kind: 'player', name: 'Puka Nacua' }], get: [{ kind: 'player', name: 'Drake London' }], viewerSide: false }))
+    expect(view.lines.every((l) => l.valueSource === 'fantasycalc')).toBe(true)
   })
 })
