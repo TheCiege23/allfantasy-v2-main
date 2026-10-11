@@ -263,12 +263,13 @@ export async function runTradeConsoleAnalysis(
   })
   dataGaps.push(...(chart.valuationGaps ?? []))
   // The chart and its request settings now live in `leagueTradePricing.ts`, shared with every grade.
-  const { marketCtx, tePremium, isSuperFlex, waiverBudget, fcPlayers, nflCtx } = chart
+  const { marketCtx, tePremium, isSuperFlex, waiverBudget, fcPlayers, nflCtx, faabState } = chart
 
   let { priced: givePriced, lines: giveLines, unresolved: giveUnresolved } = await resolveAssets(give, {
     effectiveSport,
     nflCtx,
     waiverBudget,
+    faabState,
     dataGaps,
     fcPlayers,
   })
@@ -277,6 +278,7 @@ export async function runTradeConsoleAnalysis(
     effectiveSport,
     nflCtx,
     waiverBudget,
+    faabState,
     dataGaps,
     fcPlayers,
   })
@@ -775,7 +777,7 @@ export async function runTradeConsoleAnalysis(
       if (collegeCounter) return collegeCounter
       const counterPickWhy = assetPolicy?.pickRefusal([...counterGive, ...counterGet]) ?? null
       if (counterPickWhy) return { graded: false, reason: counterPickWhy, basis: null }
-      const opts = { effectiveSport, nflCtx: chart.nflCtx, waiverBudget: chart.waiverBudget,
+      const opts = { effectiveSport, nflCtx: chart.nflCtx, waiverBudget: chart.waiverBudget, faabState: chart.faabState ?? null,
         dataGaps: [] as string[], fcPlayers: chart.fcPlayers, resolveEnrichmentIds: false }
       const [g, t] = await Promise.all([resolveAssets(counterGive, opts), resolveAssets(counterGet, opts)])
       if (g.unresolved.length || t.unresolved.length) return { graded: false, reason: 'Counter assets could not be resolved.', basis: null }
