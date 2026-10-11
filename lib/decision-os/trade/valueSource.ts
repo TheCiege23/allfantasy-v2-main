@@ -15,6 +15,8 @@
  *   devy_option        a held college prospect's option value           static rate tables
  *   ncaaf_projection   college points over replacement                  computed at grading
  *   sport_projection   NBA / college hoops / NHL points or category value over replacement, at grading
+ *   guillotine_points  guillotine: points over the free agent for the same lineup slot × weeks of survival
+ *   guillotine_faab    guillotine: FAAB's share of what the remaining chops will release, at grading
  *   historical_file    the name-keyed historical value file             its snapshot date
  *   draft_analytics    a draft-capital lifetime value                   no date recorded
  *   position_baseline  a flat per-position constant                     no date recorded
@@ -31,6 +33,8 @@ export type TradeValueSource =
   | 'devy_option'
   | 'ncaaf_projection'
   | 'sport_projection'
+  | 'guillotine_points'
+  | 'guillotine_faab'
   | 'historical_file'
   | 'draft_analytics'
   | 'position_baseline'
@@ -49,6 +53,8 @@ export function tradeValueSourceOf(priced: PricedLike | null | undefined, line: 
   if (line.dataSource === 'devy-option' || priced?.source === 'devy-option') return 'devy_option'
   if (line.dataSource === 'ncaaf-redraft-vorp') return 'ncaaf_projection'
   if (/^(nba|ncaab|nhl|mlb|soccer)-(points|category)-vorp$/.test(String(line.dataSource ?? ''))) return 'sport_projection'
+  if (line.dataSource === 'guillotine-vorp') return 'guillotine_points'
+  if (line.dataSource === 'guillotine-faab') return 'guillotine_faab'
   switch (priced?.source) {
     case 'fantasycalc':
       return String(line.position ?? '').toUpperCase() === 'PICK' ? 'fantasycalc_pick' : 'fantasycalc'
