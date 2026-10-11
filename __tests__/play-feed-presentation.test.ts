@@ -56,8 +56,9 @@ describe('getPlayFeed', () => {
 
     // The lookup must be keyed on the RI id. A name-keyed query would attach the
     // wrong face, since most same-name groups here are different people.
+    // ...and scoped to the feed's sport, because an RI id is only unique within one.
     expect(h.identityFindMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { rollingInsightsId: { in: ['5474'] } } }),
+      expect.objectContaining({ where: { sport: 'NFL', rollingInsightsId: { in: ['5474'] } } }),
     )
     expect(h.identityFindMany.mock.calls[0][0].select.sleeperId).toBe(true)
     expect(feed[0].imageUrl).toBe('https://img/jeudy.png')
@@ -105,6 +106,115 @@ describe('getPlayFeed', () => {
   it('is empty on a quiet day rather than an error state', async () => {
     h.readPlayByPlayFeed.mockResolvedValue([])
     await expect(getPlayFeed()).resolves.toEqual([])
+  })
+})
+
+/*
+ * The identity map and Player table as production holds them (measured 2026-10-11), behind doubles
+ * that honour the `where` they are given — so a query that forgets to scope gets what the real
+ * database would hand it.
+ */
+type IdentityRow = {
+  sport: string; rollingInsightsId: string; canonicalName: string; position: string | null
+  currentTeam: string | null; sleeperId: string | null
+}
+type PlayerRow = { name: string; imageUrl: string; position: string; team: string | null; providerIds: unknown; sport?: string }
+
+function fakeIdentityMap(rows: IdentityRow[]) {
+  h.identityFindMany.mockImplementation(async ({ where }: { where: { sport?: string; rollingInsightsId: { in: string[] } } }) =>
+    rows.filter((r) => (where.sport == null || r.sport === where.sport) && where.rollingInsightsId.in.includes(r.rollingInsightsId)))
+}
+function fakePlayers(rows: PlayerRow[]) {
+  h.playerFindMany.mockImplementation(async ({ where }: { where: { sport?: string; name: { in: string[] } } }) =>
+    rows.filter((r) => (r.sport ?? 'NFL') === (where.sport ?? r.sport ?? 'NFL') && where.name.in.includes(r.name)))
+}
+
+const MAHOMES_NFL: IdentityRow = { sport: 'NFL', rollingInsightsId: '3036', canonicalName: 'Patrick Mahomes', position: 'QB', currentTeam: 'KC', sleeperId: '4046' }
+// Every other sport's RI 3036, in the order that let the last one win.
+const RI_3036_ELSEWHERE: IdentityRow[] = [
+  { sport: 'MLB', rollingInsightsId: '3036', canonicalName: 'Anthony Castro', position: 'P', currentTeam: 'CLEVELAND GUARDIANS', sleeperId: null },
+  { sport: 'NHL', rollingInsightsId: '3036', canonicalName: 'Martin Rysavy', position: 'RW', currentTeam: 'COLUMBUS BLUE JACKETS', sleeperId: null },
+  { sport: 'NCAAF', rollingInsightsId: '3036', canonicalName: 'John Stephens Jr.', position: 'WR', currentTeam: 'Texas Christian University', sleeperId: null },
+]
+
+const JEFFERSON_WR: IdentityRow = { sport: 'NFL', rollingInsightsId: '5904', canonicalName: 'Justin Jefferson', position: 'WR', currentTeam: 'MIN', sleeperId: '6794' }
+const JEFFERSON_LB: IdentityRow = { sport: 'NFL', rollingInsightsId: '9728', canonicalName: 'Justin Jefferson', position: 'LB', currentTeam: 'CLE', sleeperId: '13524' }
+const WR_FACE = 'https://r2.thesportsdb.com/images/media/player/cutout/h21n4i1732915488.png'
+const LB_FACE = 'https://sleepercdn.com/content/nfl/players/thumb/13524.jpg'
+const JEFFERSON_PLAYERS: PlayerRow[] = [
+  { name: 'Justin Jefferson', position: 'WR', team: 'MIN', imageUrl: WR_FACE, providerIds: { sleeper: 'sleeper:6794', rolling_insights: '5904' } },
+  { name: 'Justin Jefferson', position: 'LB', team: 'CLE', imageUrl: LB_FACE, providerIds: { sleeper: 'sleeper_13524' } },
+]
+
+describe('getPlayFeed — whose face, whose team (2026-10-11)', () => {
+  it('REGRESSION: RI 3036 is Patrick Mahomes in the NFL feed, not the NCAAF WR who shares the number', async () => {
+    h.readPlayByPlayFeed.mockResolvedValue([
+      pbp({ playerId: '3036', playerName: 'Patrick Mahomes', team: null, type: 'TOUCHDOWN', stat: 'run', role: 'rusher', delta: 8 }),
+    ])
+    fakeIdentityMap([MAHOMES_NFL, ...RI_3036_ELSEWHERE])
+    fakePlayers([{ name: 'Patrick Mahomes', position: 'QB', team: 'KC', imageUrl: 'https://img/mahomes.png', providerIds: { sleeper: 'sleeper:4046' } }])
+
+    const [play] = await getPlayFeed()
+
+    expect(play.position).toBe('QB')
+    expect(play.team).toBe('KC')
+    expect(play.sleeperId).toBe('4046')
+    expect(play.imageUrl).toBe('https://img/mahomes.png')
+    expect(play.headline).toBe('Patrick Mahomes (QB) 8-yard rushing TD')
+    expect(play.team).not.toBe('Texas Christian University')
+  })
+
+  it('REGRESSION: WR and LB Justin Jefferson each wear their own face, whichever Player row comes last', async () => {
+    h.readPlayByPlayFeed.mockResolvedValue([
+      pbp({ playerId: '5904', playerName: 'Justin Jefferson', idempotencyKey: 'k-wr', type: 'TOUCHDOWN', stat: 'pass', role: 'receiver' }),
+      pbp({ playerId: '9728', playerName: 'Justin Jefferson', idempotencyKey: 'k-lb', type: 'TURNOVER', stat: 'interception', role: 'interceptor' }),
+    ])
+    fakeIdentityMap([JEFFERSON_WR, JEFFERSON_LB])
+
+    fakePlayers(JEFFERSON_PLAYERS)
+    let feed = await getPlayFeed()
+    expect(feed.find((p) => p.id === 'k-wr')?.imageUrl).toBe(WR_FACE)
+    expect(feed.find((p) => p.id === 'k-lb')?.imageUrl).toBe(LB_FACE)
+
+    // Row order is not identity: reversed, the answer must not move.
+    fakePlayers([...JEFFERSON_PLAYERS].reverse())
+    feed = await getPlayFeed()
+    expect(feed.find((p) => p.id === 'k-wr')?.imageUrl).toBe(WR_FACE)
+    expect(feed.find((p) => p.id === 'k-lb')?.imageUrl).toBe(LB_FACE)
+  })
+
+  it('without provider ids on the Player rows, binds the namesake on POSITION, not on row order', async () => {
+    h.readPlayByPlayFeed.mockResolvedValue([pbp({ playerId: '3348', playerName: 'Josh Allen', type: 'TOUCHDOWN' })])
+    fakeIdentityMap([{ sport: 'NFL', rollingInsightsId: '3348', canonicalName: 'Josh Allen', position: 'QB', currentTeam: 'BUF', sleeperId: '4984' }])
+    fakePlayers([
+      { name: 'Josh Allen', position: 'QB', team: 'BUF', imageUrl: 'https://img/allen-qb.png', providerIds: null },
+      { name: 'Josh Allen', position: 'G', team: null, imageUrl: 'https://img/allen-g.png', providerIds: null },
+    ])
+    const [play] = await getPlayFeed()
+    expect(play.imageUrl).toBe('https://img/allen-qb.png')
+  })
+
+  it('refuses an ambiguous or contradicting namesake and falls back to the id-keyed Sleeper headshot', async () => {
+    h.readPlayByPlayFeed.mockResolvedValue([
+      pbp({ playerId: '5904', playerName: 'Justin Jefferson', idempotencyKey: 'k-wr' }),
+    ])
+    fakeIdentityMap([JEFFERSON_WR])
+    const sleeperFace = 'https://sleepercdn.com/content/nfl/players/thumb/6794.jpg'
+
+    // The only stored image is the LINEBACKER's: a lone namesake on the other side of the ball.
+    fakePlayers([{ name: 'Justin Jefferson', position: 'LB', team: 'CLE', imageUrl: LB_FACE, providerIds: null }])
+    expect((await getPlayFeed())[0].imageUrl).toBe(sleeperFace)
+
+    // Two same-position rows and nothing to tell them apart: ambiguous, so no bind.
+    fakePlayers([
+      { name: 'Justin Jefferson', position: 'WR', team: null, imageUrl: 'https://img/a.png', providerIds: null },
+      { name: 'Justin Jefferson', position: 'WR', team: null, imageUrl: 'https://img/b.png', providerIds: null },
+    ])
+    expect((await getPlayFeed())[0].imageUrl).toBe(sleeperFace)
+
+    // A verified-looking namesake whose own Sleeper id names somebody else is somebody else.
+    fakePlayers([{ name: 'Justin Jefferson', position: 'WR', team: 'MIN', imageUrl: 'https://img/other.png', providerIds: { sleeper: 'sleeper:999' } }])
+    expect((await getPlayFeed())[0].imageUrl).toBe(sleeperFace)
   })
 })
 

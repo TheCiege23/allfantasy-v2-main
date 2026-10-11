@@ -9,6 +9,17 @@ import type { LiveEvent } from '@/lib/live/eventDetector'
  * a dependency on anything that talks to a provider.
  */
 import { getPrimaryLogoUrlForTeam } from '@/lib/sport-teams/SportTeamMetadataRegistry'
+import { headshotUrl } from '@/lib/media-url'
+import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
+import { buildNameIndex, normalizeMatchName, resolveVerifiedMatch } from '@/lib/player-match/verifiedNameMatch'
+
+/**
+ * The sport every play in this feed belongs to. Not a guess: `refreshPlayByPlayFeed` polls only
+ * `sport: 'NFL'` Rolling Insights games, asks `/play-by-play/NFL`, and writes `pbp:feed:NFL`.
+ * `LiveEvent` carries no sport of its own, so every identity lookup keyed on a play's player id
+ * must be scoped with THIS — see `resolveHeadshots` for what happens when it is not.
+ */
+export const PLAY_FEED_SPORT = 'NFL'
 
 /**
  * Turn the raw play feed into something renderable.
@@ -77,8 +88,8 @@ export type PlayFeedItem = {
 
 /**
  * ⚠ THE FEED CARRIES ROLLING INSIGHTS IDS, NOT OURS. The join is
- * `PlayerIdentityMap.rollingInsightsId` — 1,933 rows, all populated — and never
- * on name. `player-and-roster-id-join-hazards` is explicit that a name is not a
+ * (`PlayerIdentityMap.sport`, `rollingInsightsId`) — the id alone is NOT a key,
+ * see the query below — and never on name. `player-and-roster-id-join-hazards` is explicit that a name is not a
  * safe key here: most same-name groups in this database are genuinely different
  * people, so a name join would confidently attach the wrong face to a highlight.
  *
@@ -88,6 +99,24 @@ export type PlayFeedItem = {
  */
 type Resolved = { imageUrl: string | null; position: string | null; team: string | null; sleeperId: string | null }
 
+/** The Sleeper id a `Player` row carries in `providerIds.sleeper` ("sleeper:4984" / "sleeper_13524"), or null. */
+function sleeperIdOfPlayer(providerIds: unknown): string | null {
+  if (!providerIds || typeof providerIds !== 'object' || Array.isArray(providerIds)) return null
+  const raw = (providerIds as Record<string, unknown>).sleeper
+  if (typeof raw !== 'string') return null
+  // Team-defense rows carry "sleeper_KC" — not a player id, so not a match key.
+  const m = /^(?:sleeper[:_])?(\d+)$/.exec(raw.trim())
+  return m ? m[1]! : null
+}
+
+type HeadshotCandidate = {
+  name: string
+  imageUrl: string | null
+  position: string | null
+  team: string | null
+  sleeperId: string | null
+}
+
 async function resolveHeadshots(riPlayerIds: string[]): Promise<Map<string, Resolved>> {
   const out = new Map<string, Resolved>()
   // `name:<x>` is the parser's fallback when a play carries no player id at all.
@@ -95,12 +124,22 @@ async function resolveHeadshots(riPlayerIds: string[]): Promise<Map<string, Reso
   if (ids.length === 0) return out
 
   try {
+    /*
+     * 🛑 SCOPED TO THE FEED'S SPORT, BECAUSE A ROLLING INSIGHTS ID IS ONLY UNIQUE WITHIN ONE.
+     * RI numbers players per sport, and the identity map holds every sport it ingests. Measured on
+     * production 2026-10-11: all 9,567 NFL RI ids are ALSO the RI id of some MLB / NBA / NHL /
+     * NCAAB / NCAAF / soccer identity row. RI 3036 is Patrick Mahomes in NFL and John Stephens Jr.
+     * (WR, Texas Christian University) in NCAAF, among four others; unscoped, the rows came back
+     * in arbitrary order, the LAST one won, and the Game Day band printed "Patrick Mahomes (WR)"
+     * with a TCU badge and no face. The schema's `@@unique([sport, rollingInsightsId])` makes
+     * (sport, id) the key — never the id alone.
+     */
     const identities = await prisma.playerIdentityMap.findMany({
-      where: { rollingInsightsId: { in: ids } },
+      where: { sport: PLAY_FEED_SPORT, rollingInsightsId: { in: ids } },
       /*
        * `currentTeam` rides along on a query we were already making, so the
        * team costs no extra round trip. It is also the RIGHT source rather
-       * than merely the cheap one: measured on prod, all 1,933 NFL identity
+       * than merely the cheap one: measured on prod, all NFL identity
        * rows carry BOTH `rollingInsightsId` and `currentTeam`, while the
        * `Player` join below is lossy — D'Ernest Johnson resolves to a Player
        * row whose `team` is null but whose identity row says "NE".
@@ -118,29 +157,79 @@ async function resolveHeadshots(riPlayerIds: string[]): Promise<Map<string, Reso
         sleeperId: true,
       },
     })
-    if (identities.length === 0) return out
 
-    /*
-     * The identity map holds the crosswalk but not the image, so the headshot
-     * comes from `Player`. Matched on normalised name WITHIN the sport, because
-     * the identity map has no foreign key to Player — and scoped by sport
-     * because `externalId` and names are only unique within one.
-     */
-    const names = identities.map((i) => i.canonicalName).filter(Boolean)
-    const players = await prisma.player.findMany({
-      where: { name: { in: names }, sport: 'NFL', imageUrl: { not: null } },
-      select: { name: true, imageUrl: true, position: true },
-    })
-    const byName = new Map(players.map((p) => [p.name.toLowerCase(), p]))
-
+    // Belt and braces for the `where` above: a row from another sport, or two rows for one id
+    // (the unique constraint forbids it, but a refusal costs a face and a guess costs the wrong
+    // one), resolves to nothing rather than to whichever came last.
+    const rowsByRiId = new Map<string, typeof identities>()
     for (const identity of identities) {
       if (!identity.rollingInsightsId) continue
-      const hit = byName.get((identity.canonicalName ?? '').toLowerCase())
-      out.set(identity.rollingInsightsId, {
-        imageUrl: hit?.imageUrl ?? null,
+      if ((identity.sport ?? '').toUpperCase() !== PLAY_FEED_SPORT) continue
+      const list = rowsByRiId.get(identity.rollingInsightsId) ?? []
+      list.push(identity)
+      rowsByRiId.set(identity.rollingInsightsId, list)
+    }
+    const resolved = [...rowsByRiId.values()].filter((rows) => rows.length === 1).map((rows) => rows[0]!)
+    if (resolved.length === 0) return out
+
+    /*
+     * The identity map holds the crosswalk but not the image, so a stored headshot comes from
+     * `Player`, which has no foreign key to the identity map.
+     *
+     * 🛑 NEVER A NAME → ROW MAP. This used to be `new Map(players.map(p => [name, p]))`, which
+     * keeps the LAST row per name. Measured on production 2026-10-11: 1,009 NFL names have more
+     * than one `Player` row with an image, 895 of them with DIFFERENT images — so WR Justin
+     * Jefferson (MIN) could wear LB Justin Jefferson's (CLE) face, and QB Josh Allen a guard's.
+     * The bind now goes, strongest first:
+     *   1. the namesake `Player` row whose Sleeper provider id IS the identity row's Sleeper id;
+     *   2. a name match VERIFIED on position / team (`resolveVerifiedMatch`), refused when
+     *      ambiguous, when the lone namesake contradicts, or when its own Sleeper id names
+     *      somebody else;
+     *   3. Sleeper's CDN by the identity row's Sleeper id — an id-keyed join, so it cannot pick
+     *      the wrong person; a CDN miss falls back to initials in the row.
+     */
+    const names = [...new Set(resolved.map((i) => i.canonicalName).filter(Boolean))]
+    const players = names.length
+      ? await prisma.player.findMany({
+          where: { name: { in: names }, sport: PLAY_FEED_SPORT, imageUrl: { not: null } },
+          select: { name: true, imageUrl: true, position: true, team: true, providerIds: true },
+        })
+      : []
+    const index = buildNameIndex<HeadshotCandidate>(
+      players.map((p) => ({
+        name: p.name,
+        imageUrl: p.imageUrl ?? null,
+        position: p.position ?? null,
+        team: normalizeTeamAbbrev(p.team) ?? p.team ?? null,
+        sleeperId: sleeperIdOfPlayer(p.providerIds),
+      })),
+    )
+
+    for (const identity of resolved) {
+      const sleeperId = identity.sleeperId ?? null
+      const namesakes = index.get(normalizeMatchName(identity.canonicalName)) ?? []
+      const byId = sleeperId ? namesakes.filter((c) => c.sleeperId === sleeperId) : []
+      let hit: HeadshotCandidate | null = byId.length === 1 ? byId[0]! : null
+      if (!hit) {
+        const verified = resolveVerifiedMatch(
+          index,
+          {
+            name: identity.canonicalName ?? '',
+            position: identity.position,
+            team: normalizeTeamAbbrev(identity.currentTeam) ?? identity.currentTeam,
+          },
+          // The index holds only rows WITH an image, so a lone namesake is not proof of identity.
+          { refuseContradictedSingle: true },
+        ).match
+        // A verified namesake whose own Sleeper id names a different player IS a different player.
+        hit = verified && !(verified.sleeperId && sleeperId && verified.sleeperId !== sleeperId) ? verified : null
+      }
+
+      out.set(identity.rollingInsightsId!, {
+        imageUrl: hit?.imageUrl ?? (sleeperId ? headshotUrl(sleeperId) || null : null),
         position: identity.position ?? hit?.position ?? null,
         team: identity.currentTeam ?? null,
-        sleeperId: identity.sleeperId ?? null,
+        sleeperId,
       })
     }
   } catch {
@@ -345,7 +434,7 @@ export async function getPlayFeed(limit = 12): Promise<PlayFeedItem[]> {
       sleeperId: extra?.sleeperId ?? null,
       team,
       // Only ever derived from a team we actually resolved — see the field doc.
-      teamLogoUrl: team ? getPrimaryLogoUrlForTeam('NFL', team) : null,
+      teamLogoUrl: team ? getPrimaryLogoUrlForTeam(PLAY_FEED_SPORT, team) : null,
       imageUrl: extra?.imageUrl ?? null,
       position,
       headline: headlineFor(event, position),
