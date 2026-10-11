@@ -35,6 +35,14 @@ export default async function TermsPage({ searchParams }: TermsPageProps) {
       backLabel={back.label}
     >
       <TermsOfServiceBody />
+      <section id="youtube-highlights"><h2>YouTube highlights</h2>
+        <p>
+          AllFantasy uses YouTube API Services for public sports highlights. By using the YouTube
+          highlights feature, you agree to be bound by the{' '}
+          <a href="https://www.youtube.com/t/terms" target="_blank" rel="noopener noreferrer">YouTube Terms of Service</a>.
+          Video availability and playback restrictions are controlled by YouTube and the publisher.
+        </p>
+      </section>
 
       <section id="sms-terms" className="af-legal-appendix">
         <h2>SMS Terms</h2>

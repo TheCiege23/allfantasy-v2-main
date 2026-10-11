@@ -106,6 +106,8 @@ const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
    * api.cloudinary.com is the ONLY cloudinary host in the tree, so this alternation had
    * no other work to do.
    */
+  { name: 'cdn-media', why: 'YouTube thumbnails loaded by the browser, not data-API reads', test: /^i\.ytimg\.com$/i },
+  { name: 'share-link', why: 'Google Privacy Policy attribution link, never fetched', test: /^policies\.google\.com$/i },
   { name: 'cdn-media', why: 'image/asset host consumed as a src, not a data read', test: /(^|\.)(sleepercdn|espncdn|flagcdn|mlbstatic|nhle)\.com$/i },
   { name: 'cdn-media', why: 'image/asset host', test: /^(cdn\.nba\.com|cdn\.discordapp\.com|media\.api-sports\.io|img\.mlbstatic\.com|assets\.nhle\.com)$/i },
   /*
