@@ -24,7 +24,7 @@
 .af-setup-steps h3 { font-size: 13px; font-weight: 650; }
 .af-setup-icon { color: var(--muted, #a3acc9); }
 .af-setup-steps [data-done='true'] .af-setup-icon { color: var(--setup-accent); }
-.af-setup-optional { margin-left: 8px; font-size: 10px; font-weight: 400; color: var(--muted, #a3acc9); }
+.af-setup-optional { margin-left: 8px; font-size: 11px; font-weight: 400; color: var(--muted, #a3acc9); }
 .af-setup-steps :is(button, a) { display: inline-flex; justify-content: center; align-items: center; min-height: 44px; padding: 8px 12px; border: 1px solid var(--setup-line); border-radius: 8px; font-size: 12px; color: var(--text, #eef0fa); }
 .af-setup-steps :is(button, a):hover { border-color: var(--setup-accent); }
 .af-setup-checklist :is(button, a):focus-visible { outline: 2px solid var(--setup-accent); outline-offset: 3px; }
