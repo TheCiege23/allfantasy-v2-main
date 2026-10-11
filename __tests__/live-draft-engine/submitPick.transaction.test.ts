@@ -18,6 +18,7 @@ import {
 const completeDraftSessionMock = vi.fn(async () => true)
 const postDraftPickChatEventMock = vi.fn(async () => {})
 const recordTrendSignalMock = vi.fn(async () => {})
+const resolveTrendPlayerIdsMock = vi.fn(async (lookups: unknown[]) => lookups.map(() => null as string | null))
 const leagueLifecycleTransitionMock = vi.fn(async () => {})
 
 const ctx = vi.hoisted(() => {
@@ -204,6 +205,8 @@ vi.mock('@/lib/live-draft-engine/DraftSessionService', async (importOriginal) =>
 
 vi.mock('@/lib/player-trend/signal-integration', () => ({
   recordTrendSignalByPlayerId: (...args: unknown[]) => recordTrendSignalMock(...args),
+  // The name fallback (no playerId) binds through this; mirrors the old player.findFirst -> null.
+  resolveTrendPlayerIds: (...args: unknown[]) => resolveTrendPlayerIdsMock(...args),
 }))
 
 vi.mock('@/lib/salary-cap/SalaryCapLeagueConfig', () => ({
@@ -266,6 +269,32 @@ describe('PickSubmissionService.submitPick (mocked Prisma transaction)', () => {
    * the id — an NFL Sleeper URL for every sport. A real URL is kept; the pool's "AF" data: URI
    * placeholder is not a photo and is not stored.
    */
+  /*
+   * 🛑 With no playerId the trend signal used to bind by `player.findFirst` on the NAME — whichever
+   * Justin Jefferson Postgres returned. It now binds through resolveTrendPlayerIds WITH the pick's
+   * position and team, and records only the player that comes back.
+   */
+  it('a name-only pick binds its trend signal by name + position + team', async () => {
+    resolveTrendPlayerIdsMock.mockResolvedValueOnce(['nfl-justin-jefferson-28fd81ce'])
+    await submitPick({
+      leagueId: 'league-1',
+      playerName: 'Justin Jefferson',
+      position: 'WR',
+      team: 'MIN',
+      playerId: null,
+      rosterId: 'roster-a',
+      source: 'user',
+      expectedOverall: 1,
+    })
+    expect(resolveTrendPlayerIdsMock).toHaveBeenCalledWith(
+      [{ name: 'Justin Jefferson', position: 'WR', team: 'MIN' }],
+      expect.anything(),
+    )
+    expect(recordTrendSignalMock).toHaveBeenCalledWith(
+      expect.objectContaining({ playerId: 'nfl-justin-jefferson-28fd81ce', signalType: 'draft_pick' }),
+    )
+  })
+
   it('stores the photo the picked card showed, but never a data: placeholder', async () => {
     await submitPick({
       leagueId: 'league-1',

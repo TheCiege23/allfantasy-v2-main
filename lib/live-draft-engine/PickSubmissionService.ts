@@ -17,7 +17,7 @@ import { resolvePickOwner } from './PickOwnershipResolver'
 import { getDraftUISettingsForLeague } from '@/lib/draft-defaults/DraftUISettingsResolver'
 import { getManagerColorBySeed } from '@/lib/draft-room'
 import { completeDraftSession } from './DraftSessionService'
-import { recordTrendSignalByPlayerId } from '@/lib/player-trend/signal-integration'
+import { recordTrendSignalByPlayerId, resolveTrendPlayerIds } from '@/lib/player-trend/signal-integration'
 import { resolveSportForTrend } from '@/lib/player-trend/SportTrendContextResolver'
 import type { SlotOrderEntry } from './types'
 import { buildKeeperLocks } from './keeper/KeeperDraftOrder'
@@ -451,14 +451,16 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
     const sport = resolveSportForTrend(league?.sport)
     let resolvedPlayerId = pick.playerId ?? input.playerId ?? null
     if (!resolvedPlayerId) {
-      const byName = await prisma.player.findFirst({
-        where: {
-          sport,
-          name: { equals: input.playerName.trim(), mode: 'insensitive' },
-        },
-        select: { id: true },
-      })
-      resolvedPlayerId = byName?.id ?? null
+      /*
+       * Bound by name AND the pick's position/team — `findFirst` by name took whichever namesake
+       * Postgres returned, so drafting the receiver could log a draft signal on the linebacker.
+       * An unverifiable shared name records nothing.
+       */
+      const [byName] = await resolveTrendPlayerIds(
+        [{ name: input.playerName, position: input.position, team: input.team ?? null }],
+        sport,
+      )
+      resolvedPlayerId = byName ?? null
     }
 
     if (resolvedPlayerId) {
