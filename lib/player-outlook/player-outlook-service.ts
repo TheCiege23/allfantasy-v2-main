@@ -15,6 +15,7 @@ import {
   getVolatilityProfile,
 } from '@/lib/trade-engine/sport-tuning-registry'
 import { computePlayerAdjustments, type RawNewsItem, scoreNewsItems } from '@/lib/trade-engine/news-impact-engine'
+import { resolveCurrentInjuryDesignations } from '@/lib/injuries/currentInjuryDesignations'
 import { computePlayerOutlookScores } from './player-outlook-engine'
 import { buildOutlookUserPrompt, PLAYER_OUTLOOK_SYSTEM_PROMPT } from './player-outlook-prompt'
 import type {
@@ -126,12 +127,32 @@ async function gatherDataBundle(
   // Build age from analytics rawData or FantasyCalc when available
   const age = (analytics?.rawData as Record<string, unknown> | null)?.age ?? (fc as any)?.age ?? null
 
+  const team = (fc as any)?.team ?? analytics?.currentTeam ?? null
+
+  /*
+   * 🛑 INJURY STATUS COMES FROM THE LIVE FEED, NOT `analytics.status`. `PlayerAnalyticsSnapshot` is a
+   * one-off CSV import matched by name only, so its status is neither current nor necessarily this
+   * player's — and the engine states it as fact ("Currently Out"), scores risk on it, and feeds it to
+   * the AI narrative. No live designation (healthy, stale, namesake refused) → null, which drops the
+   * sentence rather than inventing one.
+   */
+  let injuryStatus: string | null = null
+  try {
+    const designations = await resolveCurrentInjuryDesignations({
+      sport,
+      players: [{ key: 'player', name: playerName, team, position: position === 'UNKNOWN' ? null : position }],
+    })
+    injuryStatus = designations.get('player')?.status ?? null
+  } catch {
+    injuryStatus = null
+  }
+
   return {
     playerName,
     playerId: null,
     sport,
     position,
-    team: (fc as any)?.team ?? analytics?.currentTeam ?? null,
+    team,
     age,
     fantasyCalc: fc ?? null,
     analytics,
@@ -144,7 +165,7 @@ async function gatherDataBundle(
     seasonStats: null,
     trend30Day: fc?.trend30Day ?? null,
     trendType: null,
-    injuryStatus: analytics?.status ?? null,
+    injuryStatus,
     weeklyVolatility: analytics?.weeklyVolatility ?? null,
     newsVolatilityIncrease,
     breakoutAge: (analytics as any)?.college?.breakoutAge ?? (analytics as any)?.breakoutAge ?? null,

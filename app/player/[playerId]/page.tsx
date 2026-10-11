@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { resolveCurrentInjuryDesignations } from '@/lib/injuries/currentInjuryDesignations'
 import { PlayerProfileClient } from './PlayerProfileClient'
 import type { Metadata } from 'next'
 
@@ -61,6 +62,21 @@ export default async function PlayerProfilePage({
     })
     .catch(() => null)
 
+  /*
+   * The header's injury badge comes from the LIVE injury feed, never from `identity.status` — that
+   * column is a Rolling Insights roster code ("ACT" / "INACT"), and showing it put "⚠ ACT" on every
+   * healthy player. Only an identified player is looked up: a slug-derived name with no team or
+   * position is exactly the namesake the read port would have to refuse anyway.
+   */
+  let injuryStatus: string | null = null
+  if (identity?.canonicalName) {
+    const designations = await resolveCurrentInjuryDesignations({
+      sport: identity.sport ?? 'NFL',
+      players: [{ key: 'player', name: identity.canonicalName, team: identity.currentTeam, position: identity.position }],
+    }).catch(() => null)
+    injuryStatus = designations?.get('player')?.status ?? null
+  }
+
   const playerData = identity
     ? {
         id: identity.id,
@@ -70,6 +86,7 @@ export default async function PlayerProfilePage({
         sport: identity.sport ?? 'NFL',
         sleeperId: identity.sleeperId ?? null,
         status: identity.status ?? 'active',
+        injuryStatus,
       }
     : {
         id: playerId,
@@ -79,6 +96,7 @@ export default async function PlayerProfilePage({
         sport: 'NFL',
         sleeperId: null,
         status: 'unknown',
+        injuryStatus: null,
       }
 
   return <PlayerProfileClient player={playerData} />
