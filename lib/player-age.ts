@@ -29,6 +29,7 @@
 
 import { prisma } from '@/lib/prisma'
 import { normalizePlayerName } from '@/lib/player-identity/playerIdentityResolution'
+import { REFERENCE_NFL_BUCKETS } from '@/lib/sports-data-gateway/canonical/canonicalPosition'
 
 /**
  * In-process cache. Ages do not change inside a request, and these lookups sit on AI paths that
@@ -71,27 +72,29 @@ export interface AgeRow {
 /*
  * Position GROUPS, not labels: feeds disagree on sub-positions for the same athlete (Byron Young
  * is "LB" in Sleeper and "OLB" in TheSportsDB; the Eagles' Byron Young is "DL" and "DT"). A label
- * outside this table is compared as itself, which keeps other sports exact.
+ * outside these groups is compared as itself, which keeps other sports exact.
+ *
+ * The defensive groups come from the governed canonical buckets (`REFERENCE_NFL_BUCKETS`), not a
+ * local collapse map — `canonicalPosition.ts` is the one place that decides DE/DT belong to DL.
  */
-const POSITION_GROUP: Record<string, string> = {
-  QB: 'QB',
-  RB: 'RB', HB: 'RB', FB: 'RB',
-  WR: 'WR',
-  TE: 'TE',
-  K: 'K', PK: 'K',
-  P: 'P',
-  OL: 'OL', OT: 'OL', OG: 'OL', T: 'OL', G: 'OL', C: 'OL', IOL: 'OL',
-  DL: 'DL', DE: 'DL', DT: 'DL', NT: 'DL', EDGE: 'DL',
-  LB: 'LB', ILB: 'LB', OLB: 'LB', MLB: 'LB',
-  DB: 'DB', CB: 'DB', S: 'DB', SS: 'DB', FS: 'DB', SAF: 'DB',
+const OFFENSE_ALIASES: Record<string, string> = {
+  HB: 'RB', FB: 'RB',
+  PK: 'K',
+  OT: 'OL', OG: 'OL', T: 'OL', G: 'OL', C: 'OL', IOL: 'OL',
+  SAF: 'DB',
 }
+
+const DEFENSE_GROUPS = ['DL', 'LB', 'DB'] as const
 
 const NO_POSITION = new Set(['', 'UNK', 'UNKNOWN', 'NA', 'N/A'])
 
 function positionGroup(position: string | null | undefined): string | null {
   const p = String(position ?? '').trim().toUpperCase()
   if (NO_POSITION.has(p)) return null
-  return POSITION_GROUP[p] ?? p
+  for (const group of DEFENSE_GROUPS) {
+    if ((REFERENCE_NFL_BUCKETS.buckets[group] ?? []).includes(p)) return group
+  }
+  return OFFENSE_ALIASES[p] ?? p
 }
 
 function toLookup(input: string | AgeLookup): AgeLookup {
