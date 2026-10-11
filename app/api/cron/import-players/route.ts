@@ -418,6 +418,8 @@ async function handle(req: NextRequest) {
           staleFallbackApplied: result.staleFallbackApplied,
           pagedSeeds: result.pagedSeeds,
           seedCursors: result.seedCursors,
+          // Rows whose `injuryStatus` the importer cleared, and why — see sports-data-importer.ts.
+          injuryCleanup: result.injuryCleanup,
         }),
       },
     })
@@ -874,6 +876,7 @@ async function handle(req: NextRequest) {
               staleFallbackApplied: result.staleFallbackApplied,
               pagedSeeds: result.pagedSeeds,
               seedCursors: result.seedCursors,
+              injuryCleanup: result.injuryCleanup,
               // [] means "every phase ran", which is a different fact from a missing field.
               deferredPhases,
               budgetExhausted: budget.exhausted(),
