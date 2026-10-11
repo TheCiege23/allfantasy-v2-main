@@ -4,6 +4,7 @@ import type { AppPrismaClient } from '@/lib/sports-data-normalization/appPrismaC
 import { normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
 import { fetchNewsContext } from '@/lib/upstream-apis'
 import { mergeInjuryNewsLayer } from '@/lib/news-injury-aggregation/mergeLayer'
+import { normalizePlayerName } from '@/lib/player-identity/playerIdentityResolution'
 import type {
   InjuryNewsBatchPlayerInput,
   InjuryNewsSourceRow,
@@ -170,13 +171,26 @@ export async function resolvePlayerInjuryNewsBatch(args: {
     evByExt.set(r.externalId, arr)
   }
 
+  /*
+   * 🛑 AN ID MATCH COUNTS ONLY WHEN THE NAME AGREES. `playerId` on these tables is whatever id the
+   * writing provider uses — Rolling Insights, ESPN, Sleeper, API-Sports, canonical — and the caller's
+   * id is in its own platform's space, so a bare id match is routinely a different person: Sleeper
+   * and RI share a numeric range (Sleeper 8394 is Percy Butler, RI 8394 is Rome Odunze). Measured
+   * 2026-10-11, the same join on redraft rosters attached 5,515 RI injury rows to the wrong player.
+   * Same-name rows already arrive through the name maps, so this drops only the impostors.
+   */
+  const sameName = (a: string | null | undefined, b: string) => {
+    const x = normalizePlayerName(a)
+    return x !== '' && x === normalizePlayerName(b)
+  }
+
   for (const p of list) {
     const key = p.playerName.toLowerCase()
     const rows: InjuryNewsSourceRow[] = []
     const extraHeadlines: string[] = []
 
     const pid = p.playerId ?? null
-    const irList = [...(pid ? irByPid.get(pid) ?? [] : []), ...(irByName.get(key) ?? [])]
+    const irList = [...(pid ? (irByPid.get(pid) ?? []).filter((r) => sameName(r.playerName, p.playerName)) : []), ...(irByName.get(key) ?? [])]
     const seenIr = new Set<string>()
     for (const r of irList) {
       const dedupe = `${r.playerId}|${r.reportDate.toISOString()}|${r.status}`
@@ -194,7 +208,7 @@ export async function resolvePlayerInjuryNewsBatch(args: {
       })
     }
 
-    const siList = [...(pid ? siByPid.get(pid) ?? [] : []), ...(siByName.get(key) ?? [])]
+    const siList = [...(pid ? (siByPid.get(pid) ?? []).filter((r) => sameName(r.playerName, p.playerName)) : []), ...(siByName.get(key) ?? [])]
     const seenSi = new Set<string>()
     for (const r of siList) {
       const dedupe = `${r.externalId}|${r.updatedAt.toISOString()}`
@@ -210,7 +224,7 @@ export async function resolvePlayerInjuryNewsBatch(args: {
       })
     }
 
-    const pnList = [...(pid ? pnByPid.get(pid) ?? [] : []), ...(pnByName.get(key) ?? [])]
+    const pnList = [...(pid ? (pnByPid.get(pid) ?? []).filter((r) => sameName(r.playerName, p.playerName)) : []), ...(pnByName.get(key) ?? [])]
     const seenPn = new Set<string>()
     for (const r of pnList.slice(0, 8)) {
       const dedupe = `${r.headline}|${r.publishedAt.toISOString()}`
@@ -235,7 +249,7 @@ export async function resolvePlayerInjuryNewsBatch(args: {
     }
 
     if (pid) {
-      for (const ev of (evByExt.get(pid) ?? []).slice(0, 4)) {
+      for (const ev of (evByExt.get(pid) ?? []).filter((e) => sameName(e.playerName, p.playerName)).slice(0, 4)) {
         rows.push({
           kind: 'player_status_event',
           label: ev.source,

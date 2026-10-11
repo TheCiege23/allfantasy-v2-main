@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { applyInjuryStatuses } from '@/lib/redraft/rosterInjuryStatus'
 import { assertLeagueMember } from '@/lib/league/league-access'
 import { buildPlayerKey } from '@/lib/adp/computeAllFantasyAdp'
 import { buildAllFantasyProjection } from '@/lib/redraft/projectionEngine'
@@ -60,13 +61,6 @@ type RedraftRosterRouteRow = {
   [key: string]: unknown
 }
 
-function playerInjuryKey(player: { playerId?: string | null; playerName?: string | null; sport?: string | null }) {
-  const sport = String(player.sport ?? '').toUpperCase()
-  const playerId = String(player.playerId ?? '').trim()
-  if (playerId) return `${sport}:id:${playerId}`
-  return `${sport}:name:${String(player.playerName ?? '').trim().toLowerCase()}`
-}
-
 async function hydrateCurrentInjuryStatuses<T extends RosterPlayerRow>(
   players: T[],
   season: number,
@@ -90,18 +84,7 @@ async function hydrateCurrentInjuryStatuses<T extends RosterPlayerRow>(
     take: Math.max(50, players.length * 3),
   })) as SportsInjuryRow[]
 
-  const statusByKey = new Map<string, string | null>()
-  for (const row of rows) {
-    const idKey = playerInjuryKey(row)
-    if (!statusByKey.has(idKey)) statusByKey.set(idKey, row.status ?? null)
-    const nameKey = `${String(row.sport ?? '').toUpperCase()}:name:${String(row.playerName ?? '').trim().toLowerCase()}`
-    if (!statusByKey.has(nameKey)) statusByKey.set(nameKey, row.status ?? null)
-  }
-
-  return players.map((player) => {
-    const status = statusByKey.get(playerInjuryKey(player))
-    return status ? { ...player, injuryStatus: status } : player
-  })
+  return applyInjuryStatuses(players, rows) as T[]
 }
 
 function buildLineupValidation(args: {
