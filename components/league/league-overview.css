@@ -26,7 +26,7 @@ html[data-mode='light'] .af-league-overview :is(input, select, textarea) { color
 .af-league-overview :is([class~='text-sky-200/45'], [class~='text-sky-200/55']) { color: var(--muted); }
 .af-league-overview [class*='divide-white/'] > :not([hidden]) ~ :not([hidden]) { border-color: var(--line); }
 .af-league-overview .card-premium { border-color: var(--line2); background: var(--surface); border-radius: 12px; box-shadow: none; }
-.af-league-overview .af-overview-header { padding: 20px; border-color: var(--line2); background: var(--surface); border-radius: 12px; box-shadow: none; }
+.af-league-overview .af-overview-header { flex-shrink: 0; padding: 20px; border-color: var(--line2); background: var(--surface); border-radius: 12px; box-shadow: none; }
 .af-league-overview .af-overview-header h2 { font-size: 24px; }
 .af-league-overview .af-overview-header > div { flex-direction: row; flex-wrap: wrap; }
 .af-league-overview .af-overview-header > div > div { min-width: 0; }
