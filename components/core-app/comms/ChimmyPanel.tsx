@@ -1466,7 +1466,12 @@ export function ChimmyPanel({
           }}
           placeholder={publicMode ? 'Ask the league, or @chimmy…' : 'Ask Chimmy…'}
           aria-label="Message"
-          disabled={busy}
+          /*
+           * NOT disabled while Chimmy answers: disabling the box dropped the phone keyboard on every
+           * question. You can type the next one; `send` already refuses while busy and keeps the draft,
+           * and the send button stays disabled until the answer lands.
+           */
+          aria-busy={busy || undefined}
         />
         <button
           type="submit"
