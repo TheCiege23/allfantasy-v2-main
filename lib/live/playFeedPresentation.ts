@@ -12,6 +12,7 @@ import { getPrimaryLogoUrlForTeam } from '@/lib/sport-teams/SportTeamMetadataReg
 import { headshotUrl } from '@/lib/media-url'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { buildNameIndex, normalizeMatchName, resolveVerifiedMatch } from '@/lib/player-match/verifiedNameMatch'
+import { displayPlayName } from '@/lib/player-match/displayNameCasing'
 
 /**
  * The sport every play in this feed belongs to. Not a guess: `refreshPlayByPlayFeed` polls only
@@ -97,7 +98,14 @@ export type PlayFeedItem = {
  * guessing. A missing headshot is a cosmetic gap; the wrong headshot on a
  * touchdown alert is a visible, embarrassing error.
  */
-type Resolved = { imageUrl: string | null; position: string | null; team: string | null; sleeperId: string | null }
+type Resolved = {
+  imageUrl: string | null
+  position: string | null
+  team: string | null
+  sleeperId: string | null
+  /** The identity row's canonical name — what a shortened vendor name ("A.St") is shown as. */
+  name: string | null
+}
 
 /** The Sleeper id a `Player` row carries in `providerIds.sleeper` ("sleeper:4984" / "sleeper_13524"), or null. */
 function sleeperIdOfPlayer(providerIds: unknown): string | null {
@@ -189,11 +197,24 @@ async function resolveHeadshots(riPlayerIds: string[]): Promise<Map<string, Reso
      *      the wrong person; a CDN miss falls back to initials in the row.
      */
     const names = [...new Set(resolved.map((i) => i.canonicalName).filter(Boolean))]
+    /*
+     * 🛑 ITS OWN FAILURE, NOT THE IDENTITY READ'S. This query sat inside the one `try` whose `catch`
+     * returned an empty map, so any error here — a column the production table lacks, a timeout —
+     * erased the position, club, Sleeper id and name the identity rows had ALREADY resolved, and every
+     * play rendered as a bare name with initials. Seen on prod 2026-10-11, with nothing logged. A
+     * failure now costs only the stored headshot (the Sleeper CDN fallback below still applies), and
+     * it says so in the logs.
+     */
     const players = names.length
-      ? await prisma.player.findMany({
-          where: { name: { in: names }, sport: PLAY_FEED_SPORT, imageUrl: { not: null } },
-          select: { name: true, imageUrl: true, position: true, team: true, providerIds: true },
-        })
+      ? await prisma.player
+          .findMany({
+            where: { name: { in: names }, sport: PLAY_FEED_SPORT, imageUrl: { not: null } },
+            select: { name: true, imageUrl: true, position: true, team: true, providerIds: true },
+          })
+          .catch((err: unknown) => {
+            console.error('[play-feed] Player headshot read failed; identities kept:', err instanceof Error ? err.message : err)
+            return []
+          })
       : []
     const index = buildNameIndex<HeadshotCandidate>(
       players.map((p) => ({
@@ -230,11 +251,13 @@ async function resolveHeadshots(riPlayerIds: string[]): Promise<Map<string, Reso
         position: identity.position ?? hit?.position ?? null,
         team: identity.currentTeam ?? null,
         sleeperId,
+        name: identity.canonicalName ?? null,
       })
     }
-  } catch {
+  } catch (err) {
     // A headshot lookup must never break the feed. Plays without faces still
-    // beat no plays.
+    // beat no plays — but a lookup that resolves nobody must be visible somewhere.
+    console.error('[play-feed] identity read failed; plays render unresolved:', err instanceof Error ? err.message : err)
     return out
   }
   return out
@@ -424,20 +447,22 @@ export async function getPlayFeed(limit = 12): Promise<PlayFeedItem[]> {
      * if RI ever starts populating `teamAbbr`, this needs no change.
      */
     const team = event.team ?? extra?.team ?? null
+    /* "A.St" → "Amon-Ra St. Brown" when the play's own id resolved; casing repaired either way. */
+    const name = displayPlayName(event.playerName, extra?.name)
     return {
       // The parser's idempotency key is already game+sequence+type, so it is a
       // stable React key and survives the same play being re-read each poll.
       id: event.idempotencyKey,
       gameId: event.gameId,
       type: event.type,
-      playerName: event.playerName,
+      playerName: name,
       sleeperId: extra?.sleeperId ?? null,
       team,
       // Only ever derived from a team we actually resolved — see the field doc.
       teamLogoUrl: team ? getPrimaryLogoUrlForTeam(PLAY_FEED_SPORT, team) : null,
       imageUrl: extra?.imageUrl ?? null,
       position,
-      headline: headlineFor(event, position),
+      headline: headlineFor({ ...event, playerName: name }, position),
       action: playActionFor(event),
       actionParts: playActionParts(event) ?? undefined,
       yards: playYards(event),

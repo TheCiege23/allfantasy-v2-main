@@ -1,4 +1,5 @@
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
+import { betterCasedName, repairHyphenCasing } from '@/lib/player-match/displayNameCasing'
 
 /**
  * One athlete, composed from every `SportsPlayer` row that shares his Sleeper id.
@@ -117,6 +118,12 @@ function isUsableClub(value: string | null): boolean {
  * order is whatever Postgres returned. Rows with no `sleeperId` are dropped:
  * they cannot be addressed by the callers, which all key on that id.
  */
+/** Trimmed, with a lowercase letter after a hyphen repaired. Display only; matching lower-cases anyway. */
+function displayName(raw: string | null | undefined): string | null {
+  const v = raw?.trim()
+  return v ? repairHyphenCasing(v) : null
+}
+
 export function composePlayerIdentities(
   rows: readonly PlayerIdentityRow[],
 ): Map<string, ComposedPlayerIdentity> {
@@ -126,7 +133,7 @@ export function composePlayerIdentities(
     const held = out.get(r.sleeperId)
     if (!held) {
       out.set(r.sleeperId, {
-        name: r.name?.trim() || null,
+        name: displayName(r.name),
         position: r.position ?? null,
         sport: r.sport ?? null,
         team: foldClub(r.team, r.sport),
@@ -134,7 +141,13 @@ export function composePlayerIdentities(
       })
       continue
     }
-    held.name ??= r.name?.trim() || null
+    /*
+     * ⚠ THE NAME WAS FIRST-ROW-WINS, WHICH THE HEADER ABOVE PROMISES IT IS NOT. One vendor writes
+     * "Jaxon Smith-njigba"; whichever row Postgres returned first decided what /core/live printed
+     * (2026-10-11). Among spellings of the same name the better-cased one now wins in any order.
+     */
+    const name = displayName(r.name)
+    held.name = held.name == null ? name : name == null ? held.name : betterCasedName(held.name, name)
     held.position ??= r.position ?? null
     held.sport ??= r.sport ?? null
     held.imageUrl ??= asHeadshotUrl(r.imageUrl)
