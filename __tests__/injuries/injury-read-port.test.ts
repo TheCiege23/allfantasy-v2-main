@@ -113,6 +113,22 @@ describe('resolveInjuryFacts', () => {
     expect(res.ambiguous).toEqual([])
   })
 
+  /*
+   * 🛑 THE FEEDS WRITE FULL TEAM NAMES AND ROSTERS SAY CODES (2026-10-11). Compared verbatim, "MIN"
+   * never matched "Minnesota Vikings", so team narrowing never fired against live rows and every
+   * shared name was refused even when the caller knew the team — the Vikings WR Justin Jefferson's
+   * Questionable went missing beside a Browns LB's Active. NFL teams are now folded on both sides.
+   */
+  it('splits a collision when the feed writes the full team name and the caller a code', async () => {
+    mocks.findMany.mockResolvedValue([
+      row({ playerName: 'Justin Jefferson', team: 'Cleveland Browns', position: 'LB', status: 'Active' }),
+      row({ playerName: 'Justin Jefferson', team: 'Minnesota Vikings', status: 'Questionable', date: hoursAgo(2) }),
+    ])
+    const res = await resolveInjuryFacts({ sport: 'NFL', players: [{ name: 'Justin Jefferson', team: 'MIN' }], now: NOW })
+    expect(res.byPlayer.get('justin jefferson')?.status).toBe('Questionable')
+    expect(res.ambiguous).toEqual([])
+  })
+
   it('omits players with no injury row — absence is "no news", not "healthy"', async () => {
     mocks.findMany.mockResolvedValue([row()])
     const res = await resolveInjuryFacts({

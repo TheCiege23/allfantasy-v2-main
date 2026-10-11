@@ -2,6 +2,7 @@
  * AI League Advisor — aggregates roster, injuries, and optional waiver/trade context; calls OpenAI for advice.
  */
 
+import { matchInjuryRowsToPlayers, type InjuryPlayerLookup } from '@/lib/injuries/matchInjuryRows'
 import { prisma } from '@/lib/prisma'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import { isForeignIdSpace, sleeperReadablePlayerDataOf } from '@/lib/core-app/rosterIdSpace'
@@ -47,7 +48,10 @@ async function getLeagueAndRoster(leagueId: string, userId: string) {
 /** Resolve roster player IDs to names for NFL (Sleeper). Other sports may get IDs only. */
 async function resolveRosterPlayerNames(
   playerIds: string[],
-  sport: string
+  sport: string,
+  /** Filled with team/position where the source has them — the injury read needs them to tell
+   *  same-name athletes apart. */
+  identities?: Map<string, { team: string | null; position: string | null }>
 ): Promise<Map<string, string>> {
   const map = new Map<string, string>()
   if (playerIds.length === 0) return map
@@ -60,8 +64,10 @@ async function resolveRosterPlayerNames(
       for (const id of playerIds) {
         const p = all[id]
         const name = p?.full_name || (p ? `${(p as any).first_name ?? ''} ${(p as any).last_name ?? ''}`.trim() : null)
-        if (name) map.set(id, name)
-        else map.set(id, `Player ${id.slice(0, 8)}`)
+        if (name) {
+          map.set(id, name)
+          identities?.set(id, { team: (p as any)?.team ?? null, position: (p as any)?.position ?? null })
+        } else map.set(id, `Player ${id.slice(0, 8)}`)
       }
     } catch {
       playerIds.forEach((id) => map.set(id, `Player ${id.slice(0, 8)}`))
@@ -73,10 +79,13 @@ async function resolveRosterPlayerNames(
   try {
     const rows = await prisma.playerIdentityMap.findMany({
       where: { sleeperId: { in: playerIds }, sport: upper },
-      select: { sleeperId: true, canonicalName: true },
+      select: { sleeperId: true, canonicalName: true, currentTeam: true, position: true },
     })
     for (const r of rows) {
-      if (r.sleeperId) map.set(r.sleeperId, r.canonicalName)
+      if (r.sleeperId) {
+        map.set(r.sleeperId, r.canonicalName)
+        identities?.set(r.sleeperId, { team: r.currentTeam ?? null, position: r.position ?? null })
+      }
     }
   } catch {
     // ignore
@@ -105,25 +114,10 @@ function buildRosterSummary(
 
 /** Fetch injuries for league sport; filter by roster player names if we have them. */
 async function getInjurySummary(sport: string, rosterPlayerNames: string[]): Promise<string> {
-  const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
-  const normSport = normalizeToSupportedSport(sport)
+  // Same bound read as getRecentInjuries — the unbound copy of this query re-admitted the
+  // substring and same-name matches that read now refuses.
   try {
-    const injuries = await prisma.sportsInjury.findMany({
-      where: {
-        sport: normSport,
-        updatedAt: { gte: since },
-        ...(rosterPlayerNames.length > 0
-          ? {
-              OR: rosterPlayerNames.map((name) => ({
-                playerName: { contains: name, mode: 'insensitive' as const },
-              })),
-            }
-          : {}),
-      },
-      orderBy: { updatedAt: 'desc' },
-      take: 20,
-      select: { playerName: true, team: true, status: true, type: true },
-    })
+    const injuries = await readRecentInjuries(sport, rosterPlayerNames)
     if (injuries.length === 0) return 'No recent injuries for your roster.'
     return injuries
       .map((i) => `${i.playerName} (${i.team ?? '?'}): ${i.status}${i.type ? ` — ${i.type}` : ''}`)
@@ -133,32 +127,58 @@ async function getInjurySummary(sport: string, rosterPlayerNames: string[]): Pro
   }
 }
 
+type RecentInjury = { playerName: string; team: string | null; status: string | null; type: string | null }
+
 async function getRecentInjuries(
   sport: string,
-  rosterPlayerNames: string[]
-): Promise<Array<{ playerName: string; team: string | null; status: string | null; type: string | null }>> {
-  const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
-  const normSport = normalizeToSupportedSport(sport)
+  rosterPlayerNames: string[],
+  lookups?: InjuryPlayerLookup[]
+): Promise<RecentInjury[]> {
   try {
-    return await prisma.sportsInjury.findMany({
-      where: {
-        sport: normSport,
-        updatedAt: { gte: since },
-        ...(rosterPlayerNames.length > 0
-          ? {
-              OR: rosterPlayerNames.map((name) => ({
-                playerName: { contains: name, mode: 'insensitive' as const },
-              })),
-            }
-          : {}),
-      },
-      orderBy: { updatedAt: 'desc' },
-      take: 20,
-      select: { playerName: true, team: true, status: true, type: true },
-    })
+    return await readRecentInjuries(sport, rosterPlayerNames, lookups)
   } catch {
     return []
   }
+}
+
+/** Throws on a failed read, so the summary can say "unavailable" rather than "none". */
+async function readRecentInjuries(
+  sport: string,
+  rosterPlayerNames: string[],
+  lookups: InjuryPlayerLookup[] = rosterPlayerNames.map((name) => ({ name }))
+): Promise<RecentInjury[]> {
+  const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+  const normSport = normalizeToSupportedSport(sport)
+  const rows = await prisma.sportsInjury.findMany({
+    where: {
+      sport: normSport,
+      updatedAt: { gte: since },
+      ...(rosterPlayerNames.length > 0
+        ? {
+            OR: rosterPlayerNames.map((name) => ({
+              playerName: { contains: name, mode: 'insensitive' as const },
+            })),
+          }
+        : {}),
+    },
+    orderBy: { updatedAt: 'desc' },
+    take: 200,
+    select: { playerName: true, team: true, position: true, status: true, type: true },
+  })
+  /*
+   * 🛑 THE QUERY IS A SUBSTRING MATCH ON NAMES, SO IT RETURNS OTHER PEOPLE. A roster's "Justin
+   * Jefferson" (Vikings WR) also matched a Browns LB of the same name, and the advisor was told
+   * "Justin Jefferson (Cleveland Browns): Active". Keep only rows bound to a ROSTERED athlete —
+   * name verified by team/position, nothing when they cannot be told apart — newest per player.
+   */
+  if (lookups.length === 0) return rows.slice(0, 20).map(({ position: _p, ...r }) => r)
+  const { byPlayer } = matchInjuryRowsToPlayers(rows, lookups, normSport)
+  const out: RecentInjury[] = []
+  for (const matched of byPlayer.values()) {
+    const r = matched[0]
+    if (r) out.push({ playerName: r.playerName, team: r.team, status: r.status, type: r.type })
+  }
+  return out.slice(0, 20)
 }
 
 async function getRosterTrendSummary(
@@ -346,11 +366,17 @@ export async function getLeagueAdvisorAdvice(input: GetAdvisorInput): Promise<Le
   // Sleeper's 12483 (Jack Bech) by the Sleeper player blob below.
   const playerData = await sleeperReadablePlayerDataOf(league.platform, roster.playerData)
   const playerIds = getRosterPlayerIds(playerData)
-  const nameMap = await resolveRosterPlayerNames(playerIds, sport)
+  const identityById = new Map<string, { team: string | null; position: string | null }>()
+  const nameMap = await resolveRosterPlayerNames(playerIds, sport, identityById)
   const rosterNames = [...nameMap.values()]
+  const injuryLookups: InjuryPlayerLookup[] = [...nameMap.entries()].map(([id, name]) => ({
+    name,
+    team: identityById.get(id)?.team ?? null,
+    position: identityById.get(id)?.position ?? null,
+  }))
   const [rosterTrends, injuries] = await Promise.all([
     getRosterTrendSummary(sport, playerIds, nameMap),
-    unreadable ? [] : getRecentInjuries(sport, rosterNames),
+    unreadable ? [] : getRecentInjuries(sport, rosterNames, injuryLookups),
   ])
   const rosterSummary = unreadable
     ? "Roster: this platform's player ids cannot be resolved to players yet."

@@ -4,7 +4,7 @@ import { resolveVenueForTeam } from '@/lib/weather/venueResolver'
 import { fetchWeatherForTeamHomeWindow } from '@/lib/weather/venueResolver'
 import { defaultNflGameTime } from '@/lib/weather/defaultGameTimes'
 import { calculateWeatherImpact } from '@/lib/weather/weatherImpactEngine'
-import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
+import { getTeamInfo, normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { findPlayerByName, getTrendingPlayers, getValueTier, type FantasyCalcPlayer } from '@/lib/fantasycalc'
 import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import { getLiveAdpByName, lookupLiveAdp, type LiveAdpEntry } from '@/lib/adp/liveAdpFallback'
@@ -218,11 +218,22 @@ export async function enrichChatWithData(
           }
         }
 
+        /*
+         * Scoped to the sport and to live rows: with neither, a months-old row from any sport
+         * could be presented as today's report. Each line below names the row's own team, so
+         * two athletes sharing a name stay distinguishable to the reader.
+         */
         const whereClause: any = {
+          sport,
           status: { not: 'Active' },
+          expiresAt: { gt: new Date() },
         }
         if (teams.length > 0) {
-          whereClause.team = { in: teams }
+          // Feeds write "Minnesota Vikings"; the message gave "MIN". Ask for both spellings, or
+          // this branch matches nothing at all.
+          whereClause.team = {
+            in: teams.flatMap((t) => [t, getTeamInfo(t)?.fullName].filter((x): x is string => Boolean(x))),
+          }
         }
         if (players.length > 0 && teams.length === 0) {
           whereClause.playerName = {
