@@ -118,10 +118,10 @@ describe('slate lock check — only what locks now (2026-10-08)', () => {
       { kind: 'reshuffle', gain: 18.2, start: [player('1', 'Jayden Reed', 'GB'), player('3', 'Rome Odunze', 'CHI')], bench: [player('2', 'Khalil Shakir', 'BUF')] },
       inTnf,
     )
-    expect(line).toBe('Start Jayden Reed (WR, GB) before kickoff; the rest of that swap can wait for later games.')
-    expect(line).not.toContain('Odunze')
-    expect(line).not.toContain('Shakir')
-    expect(line).not.toContain('18.2')
+    expect(line).toEqual({ text: 'Start Jayden Reed (WR, GB).', partial: true })
+    expect(line!.text).not.toContain('Odunze')
+    expect(line!.text).not.toContain('Shakir')
+    expect(line!.text).not.toContain('18.2')
   })
 
   it('a swap entirely inside the locking game keeps its projected gain', () => {
@@ -129,7 +129,7 @@ describe('slate lock check — only what locks now (2026-10-08)', () => {
       { kind: 'reshuffle', gain: 4.4, start: [player('1', 'Jayden Reed', 'GB')], bench: [player('9', 'CeeDee Lamb', 'DAL')] },
       inTnf,
     )
-    expect(line).toBe('Start Jayden Reed (WR, GB) and bench CeeDee Lamb (WR, DAL) (+4.4 projected pts).')
+    expect(line).toEqual({ text: 'Start Jayden Reed (WR, GB) and bench CeeDee Lamb (WR, DAL) (+4.4 projected pts).', partial: false })
   })
 
   it('a bench-only Thursday move reads as one', () => {
@@ -137,7 +137,7 @@ describe('slate lock check — only what locks now (2026-10-08)', () => {
       { kind: 'reshuffle', gain: 6.4, start: [player('3', 'Rome Odunze', 'CHI')], bench: [player('5', 'Kenneth Gainwell', 'DAL', { position: 'RB' })] },
       inTnf,
     )
-    expect(line).toBe('Bench Kenneth Gainwell (RB, DAL) before kickoff; the rest of that swap can wait for later games.')
+    expect(line).toEqual({ text: 'Bench Kenneth Gainwell (RB, DAL).', partial: true })
   })
 
   it('a league with nothing locking now drops out of the message and the count', () => {
@@ -152,6 +152,68 @@ describe('slate lock check — only what locks now (2026-10-08)', () => {
     )!
     expect(m.title).toBe('Lineups lock in 60 min (8:15 PM ET): 1 fix in League L1')
     expect(m.body).not.toContain('League L2')
+  })
+})
+
+describe('slate lock body — the "later games" note said once (2026-10-11)', () => {
+  const kickoffs = new Map([['GB', TNF], ['DAL', TNF], ['BUF', MAIN], ['CHI', MAIN]])
+  const inTnf = playsInSlate(kickoffs, TNF)
+  const TAIL_ONE = 'The rest of that swap can wait for later games.'
+  const TAIL_MANY = 'The rest of those swaps can wait for later games.'
+  /** A Thursday move with a Sunday half — the shape behind every line of the London messages. */
+  const partial = (i: number, name = `Thursday Guy ${i}`) => ({
+    leagueId: `L${i}`,
+    leagueName: `League ${i}`,
+    week: 6,
+    issues: [{ kind: 'reshuffle' as const, gain: 5, start: [player(`t${i}`, name, 'GB')], bench: [player(`s${i}`, `Sunday Guy ${i}`, 'BUF')] }],
+  })
+  const whole = (i: number) => ({
+    leagueId: `W${i}`,
+    leagueName: `Whole ${i}`,
+    week: 6,
+    issues: [{ kind: 'reshuffle' as const, gain: 4.4, start: [player(`a${i}`, 'Jayden Reed', 'GB')], bench: [player(`b${i}`, 'CeeDee Lamb', 'DAL')] }],
+  })
+  const render = (found: Parameters<typeof renderSlateLock>[0]) => renderSlateLock(found, TNF, BEFORE_TNF, inTnf)!
+
+  it('says the note once, after every league line, plural when more than one swap is partial', () => {
+    const m = render([partial(1), partial(2)])
+    expect(m.body).toBe(['League 1: Start Thursday Guy 1 (WR, GB).', 'League 2: Start Thursday Guy 2 (WR, GB).', TAIL_MANY].join('\n'))
+    expect(m.body.match(/later games/g)).toHaveLength(1)
+    expect(render([partial(1)]).body).toBe(['League 1: Start Thursday Guy 1 (WR, GB).', TAIL_ONE].join('\n'))
+  })
+
+  it('no note when every swap is whole in this slate', () => {
+    expect(render([whole(1)]).body).toBe('Whole 1: Start Jayden Reed (WR, GB) and bench CeeDee Lamb (WR, DAL) (+4.4 projected pts).')
+  })
+
+  it('a 10-league message keeps whole leagues, counts the rest, and never cuts the note', () => {
+    const found = Array.from({ length: 10 }, (_, i) => partial(i + 1, `Dallas Goedert ${i + 1}`))
+    const m = render(found)
+    expect(m.title).toContain('across 10 leagues')
+    expect(m.body.length).toBeLessThanOrEqual(280)
+    expect(m.body).not.toContain('…')
+    expect(m.body.endsWith(TAIL_MANY)).toBe(true)
+    const lines = m.body.split('\n')
+    const shown = lines.filter((l) => l.startsWith('League '))
+    expect(shown.length).toBeGreaterThanOrEqual(4)
+    expect(lines).toContain(`+${10 - shown.length} more leagues.`)
+    // Each shown league line is whole, never cut mid-name.
+    for (const [i, l] of shown.entries()) expect(l).toBe(`League ${i + 1}: Start Dallas Goedert ${i + 1} (WR, GB).`)
+  })
+
+  it('the note follows only the leagues SHOWN: a partial swap folded into "+N more" does not earn it', () => {
+    const found = [...Array.from({ length: 6 }, (_, i) => whole(i + 1)), partial(9)]
+    const m = render(found)
+    expect(m.body).toContain('+')
+    expect(m.body).not.toContain('League 9')
+    expect(m.body).not.toContain('later games')
+  })
+
+  it('one league too long on its own is cut, with its note kept whole', () => {
+    const many = Array.from({ length: 12 }, (_, i) => player(`m${i}`, `Very Long Player Name ${i}`, 'GB'))
+    const m = render([{ leagueId: 'X', leagueName: 'Big', week: 6, issues: [{ kind: 'reshuffle', gain: 5, start: many, bench: [player('z', 'Sunday Guy', 'BUF')] }] }])
+    expect(m.body.length).toBeLessThanOrEqual(280)
+    expect(m.body.endsWith(`…\n${TAIL_ONE}`)).toBe(true)
   })
 })
 
