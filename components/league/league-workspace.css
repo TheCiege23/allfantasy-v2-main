@@ -117,7 +117,7 @@
   box-shadow: none;
   border-radius: 10px;
 }
-.af-league-workspace .af-league-draft-fill p:last-child { color: var(--accent); font-variant-numeric: tabular-nums; }
+.af-league-workspace .af-league-draft-fill p:nth-child(2) { color: var(--accent); font-variant-numeric: tabular-nums; }
 .af-league-workspace .af-league-draft-facts > div { background: var(--surface2); border-color: var(--line); border-radius: 10px; }
 .af-league-workspace .af-league-draft-facts p:last-child { color: var(--text); }
 .af-league-workspace .af-league-draft-actions { margin-top: 24px; gap: 10px; }
