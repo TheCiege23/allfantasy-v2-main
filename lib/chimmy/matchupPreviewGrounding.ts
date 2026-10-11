@@ -53,7 +53,15 @@ export interface MatchupPreviewDeps {
    * at other tools for who is next. Optional: without it the block says the next week is not on file.
    */
   loadNextGame?: (args: NextGameQuery) => Promise<NextGame | null>
+  /**
+   * The same, for the all-leagues view: one batched read for every league whose board week is final,
+   * keyed by AllFantasy league id. The cross-league board carries no roster id of the user's, so the
+   * reader resolves it from their claimed team — exactly how the board decides which side is theirs.
+   */
+  loadNextGames?: (userId: string, items: NextGamesItem[]) => Promise<ReadonlyMap<string, NextGame>>
 }
+
+export type NextGamesItem = Omit<NextGameQuery, 'yourRosterId'>
 
 export type NextGameQuery = {
   league: Parameters<typeof getWeekBoard>[1][number]
@@ -90,15 +98,62 @@ export async function loadNextGameFromSchedule({ league, season, week, yourRoste
     where: { leagueId: league.platformLeagueId, seasonYear: season, week: week + 1, matchupId: { not: null } },
     select: { rosterId: true, matchupId: true },
   })
-  const mine = rows.find((r) => r.rosterId === yourRosterId)
-  const pair = mine ? rows.filter((r) => r.matchupId === mine.matchupId) : []
-  const opponent = pair.length === 2 ? pair.find((r) => r.rosterId !== yourRosterId) : undefined
+  const opponent = pairedOpponent(rows, yourRosterId)
   if (!opponent) return null
   const team = await prisma.leagueTeam.findFirst({
     where: { leagueId: league.id, externalId: opponent.rosterId },
     select: { teamName: true, ownerName: true },
   })
   return { week: week + 1, opponentRosterId: opponent.rosterId, opponentName: rosterLabel([team?.teamName, team?.ownerName], opponent.rosterId) }
+}
+
+/** The one row sharing the user's `matchupId` — or nothing unless the pairing is exactly two rows. */
+function pairedOpponent<R extends { rosterId: string; matchupId: number | null }>(rows: readonly R[], yourRosterId: string): R | undefined {
+  const mine = rows.find((r) => r.rosterId === yourRosterId)
+  const pair = mine ? rows.filter((r) => r.matchupId === mine.matchupId) : []
+  return pair.length === 2 ? pair.find((r) => r.rosterId !== yourRosterId) : undefined
+}
+
+/**
+ * `loadNextGameFromSchedule` for many leagues at once: three reads in all, whatever the league count.
+ * A league with no claimed team, two claimed teams, or no clean pairing is simply absent.
+ */
+export async function loadNextGamesFromSchedule(userId: string, items: readonly NextGamesItem[]): Promise<Map<string, NextGame>> {
+  const out = new Map<string, NextGame>()
+  const wanted = items.filter((i) => i.league.platformLeagueId && !nativeWeeklyLeague(i.league))
+  if (wanted.length === 0) return out
+  const claimed = await prisma.leagueTeam.findMany({
+    where: { leagueId: { in: wanted.map((i) => i.league.id) }, claimedByUserId: userId },
+    select: { leagueId: true, externalId: true },
+  })
+  const mineByLeague = new Map<string, string | null>()
+  for (const t of claimed) {
+    if (!t.externalId) continue
+    // Two claimed teams in one league is ambiguous, not a choice to make here.
+    mineByLeague.set(t.leagueId, mineByLeague.has(t.leagueId) ? null : t.externalId)
+  }
+  const ready = wanted.filter((i) => mineByLeague.get(i.league.id))
+  if (ready.length === 0) return out
+  const rows = await prisma.weeklyMatchup.findMany({
+    where: { matchupId: { not: null }, OR: ready.map((i) => ({ leagueId: i.league.platformLeagueId!, seasonYear: i.season, week: i.week + 1 })) },
+    select: { leagueId: true, seasonYear: true, week: true, rosterId: true, matchupId: true },
+  })
+  const found: Array<{ item: NextGamesItem; opponentRosterId: string }> = []
+  for (const item of ready) {
+    const weekRows = rows.filter((r) => r.leagueId === item.league.platformLeagueId && r.seasonYear === item.season && r.week === item.week + 1)
+    const opponent = pairedOpponent(weekRows, mineByLeague.get(item.league.id)!)
+    if (opponent) found.push({ item, opponentRosterId: opponent.rosterId })
+  }
+  if (found.length === 0) return out
+  const teams = await prisma.leagueTeam.findMany({
+    where: { OR: found.map((f) => ({ leagueId: f.item.league.id, externalId: f.opponentRosterId })) },
+    select: { leagueId: true, externalId: true, teamName: true, ownerName: true },
+  })
+  for (const { item, opponentRosterId } of found) {
+    const team = teams.find((t) => t.leagueId === item.league.id && t.externalId === opponentRosterId)
+    out.set(item.league.id, { week: item.week + 1, opponentRosterId, opponentName: rosterLabel([team?.teamName, team?.ownerName], opponentRosterId) })
+  }
+  return out
 }
 
 const defaultDeps: MatchupPreviewDeps = {
@@ -133,6 +188,7 @@ const defaultDeps: MatchupPreviewDeps = {
         ? Promise.resolve(null)
         : loadEliminationSettle({ platformLeagueId: e.platformLeagueId, season: e.season, week: e.week, yourRosterId: e.yourRosterId }),
   loadNextGame: (q) => loadNextGameFromSchedule(q),
+  loadNextGames: (userId, items) => loadNextGamesFromSchedule(userId, items),
   loadLineupProjections: async (userId, leagues) => {
     const rail = await getRailMatchups(
       userId,
@@ -351,8 +407,9 @@ function crossLeagueBlock(
   board: WeekBoard,
   settles: ReadonlyMap<string, EliminationSettle | null> = new Map(),
   lineups: ReadonlyMap<string, LineupProjectionPair> | null = null,
+  nexts: ReadonlyMap<string, NextGame> | null = null,
 ): string {
-  const line = (m: WeekMatchup) => matchupLine(m, lineups?.get(m.leagueId))
+  const line = (m: WeekMatchup) => matchupLine(m, lineups?.get(m.leagueId)) + (m.live?.final ? nextSentence(m, nexts?.get(m.leagueId)) : '')
   const all = [...board.coinFlips, ...board.leaning, ...board.unprojected]
   // The board buckets on the pre-game projection; a game with points goes under the scoreboard instead.
   const unscored = (list: WeekMatchup[]) => list.filter((m) => !m.live)
@@ -391,6 +448,29 @@ function crossLeagueBlock(
   if (board.withoutSchedule > 0) lines.push(`- ${board.withoutSchedule} league(s) carry no schedule for this week.`)
   lines.push(`- Model: ${board.model.basis}`)
   return lines.join('\n')
+}
+
+/** The next-game clause after a FINAL line in the all-leagues view. Never a guessed opponent. */
+function nextSentence(m: WeekMatchup, next: NextGame | undefined): string {
+  return next && next.week === m.week + 1
+    ? ` NEXT: week ${next.week} vs ${next.opponentName} (from the stored schedule; no win probability for it here).`
+    : ` Week ${m.week + 1}'s opponent is not on file yet; do not name one.`
+}
+
+/** Every league whose board week is FINAL, in one batched read. A failed read names nobody. */
+async function nextGamesFor(
+  userId: string,
+  board: WeekBoard,
+  leagues: Parameters<typeof getWeekBoard>[1],
+  deps: MatchupPreviewDeps,
+): Promise<ReadonlyMap<string, NextGame> | null> {
+  if (!deps.loadNextGames) return null
+  const items = [...board.coinFlips, ...board.leaning, ...board.unprojected].flatMap((m) => {
+    const league = m.live?.final ? leagues.find((l) => l.id === m.leagueId) : undefined
+    return league ? [{ league, season: m.season, week: m.week }] : []
+  })
+  if (items.length === 0) return null
+  return deps.loadNextGames(userId, items).catch(() => null)
 }
 
 /** Only for a FINISHED board week — the one case where the board's own game is no longer next. */
@@ -453,7 +533,8 @@ export async function buildMatchupPreviewContext(
     const settled = await Promise.all(
       board.eliminationWeeks.slice(0, MAX_SETTLE_READS).map(async (e) => [e.leagueId, await settleFor(e, deps)] as const),
     )
-    return crossLeagueBlock(board, new Map(settled), lineups)
+    const nexts = await nextGamesFor(args.userId, board, leagues, deps)
+    return crossLeagueBlock(board, new Map(settled), lineups, nexts)
   } catch {
     return 'The matchup preview failed to load. Say that you could not read it rather than answering as though you had.'
   }
