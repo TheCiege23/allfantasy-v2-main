@@ -836,7 +836,7 @@ export function DraftRoomPageClient({
 
   const getAssistantRoomContext = useCallback(
     (player: PlayerEntry): DraftAssistantRoomContext | null => {
-      const snap = getAssistantFeedForPlayer(assistantFeedByName, player.name)
+      const snap = getAssistantFeedForPlayer(assistantFeedByName, player.name, player.team)
       const digestRaw = draftAssistantContext?.sportsFeed?.digest?.trim()
       const digestPreview =
         digestRaw && digestRaw.length > 280 ? `${digestRaw.slice(0, 277)}…` : digestRaw ?? null
@@ -3143,7 +3143,7 @@ export function DraftRoomPageClient({
             p.name.trim().toLowerCase() === rec.player.name.trim().toLowerCase() &&
             p.position.trim().toLowerCase() === rec.player.position.trim().toLowerCase(),
         )
-        const feedSnap = getAssistantFeedForPlayer(assistantFeedByName, rec.player.name)
+        const feedSnap = getAssistantFeedForPlayer(assistantFeedByName, rec.player.name, poolRow?.team)
         const playerContext = poolRow
           ? buildDraftChatPlayerContextFromDisplay(poolRow, {
               headlineSnippet: feedSnap?.headlineTitle ?? null,
@@ -3182,7 +3182,7 @@ export function DraftRoomPageClient({
             p.name.trim().toLowerCase() === w.name.trim().toLowerCase() &&
             p.position.trim().toLowerCase() === w.position.trim().toLowerCase(),
         )
-        const feedSnap = getAssistantFeedForPlayer(assistantFeedByName, w.name)
+        const feedSnap = getAssistantFeedForPlayer(assistantFeedByName, w.name, poolRow?.team)
         const playerContext = poolRow
           ? buildDraftChatPlayerContextFromDisplay(poolRow, {
               headlineSnippet: feedSnap?.headlineTitle ?? null,
@@ -3210,7 +3210,7 @@ export function DraftRoomPageClient({
             players.find(
               (p) => normalizeDraftedPlayerName(p.name) === normalizeDraftedPlayerName(top.playerName),
             ) ?? null
-          const feedSnap = poolRow ? getAssistantFeedForPlayer(assistantFeedByName, poolRow.name) : null
+          const feedSnap = poolRow ? getAssistantFeedForPlayer(assistantFeedByName, poolRow.name, poolRow.team) : null
           const playerContext = poolRow
             ? buildDraftChatPlayerContextFromDisplay(poolRow, {
                 headlineSnippet: feedSnap?.headlineTitle ?? null,

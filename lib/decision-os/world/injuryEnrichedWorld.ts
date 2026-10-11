@@ -25,6 +25,7 @@ import { loadInjuryContextRows } from './port'
 import type { EnrichedCanonicalWorld, EnrichedPlayer, EnrichedRosterFacts } from './enrichedWorld'
 import { resolveEnrichedCanonicalWorld } from './enrichedWorld'
 import type { ResolveCanonicalWorldOptions } from './index'
+import { indexRowsByLeagueId } from './rowKeys'
 
 export type InjuryAvailabilityCategory = 'available' | 'uncertain' | 'unavailable' | 'unknown'
 
@@ -253,11 +254,8 @@ export async function resolveInjuryContext(
     }
   }
 
-  const rowByKey = new Map<string, RawInjuryContextRow>()
-  for (const row of rows) {
-    if (row.externalId && !rowByKey.has(row.externalId)) rowByKey.set(row.externalId, row)
-    if (row.sleeperId && !rowByKey.has(row.sleeperId)) rowByKey.set(row.sleeperId, row)
-  }
+  // One key per row, in the space it belongs to — never a provider number as a Sleeper id (rowKeys.ts).
+  const rowByKey = indexRowsByLeagueId(rows)
 
   const byId = new Map<string, InjuryContext>()
   const unresolvedIds: string[] = []

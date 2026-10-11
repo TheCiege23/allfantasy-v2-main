@@ -81,7 +81,7 @@ describe('team followers', () => {
   })
 
   it('🛑 someone who rosters the player, or follows him, is told ONCE — by that path, not again as a team fan', async () => {
-    h.rosterFind.mockResolvedValue([{ roster: { ownerId: 'mgr-1', leagueId: 'lg-1' } }])
+    h.rosterFind.mockResolvedValue([{ playerName: 'Jordan Love', team: null, sport: 'NFL', roster: { ownerId: 'mgr-1', leagueId: 'lg-1' } }])
     h.playerFollowers.mockResolvedValue(['pfan-1'])
     h.teamFollowers.mockResolvedValue(['mgr-1', 'pfan-1', 'tfan-1'])
     await dispatchPendingPlayerNewsNotifications()

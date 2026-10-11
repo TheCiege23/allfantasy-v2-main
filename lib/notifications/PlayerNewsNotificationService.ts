@@ -14,6 +14,8 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { foldInjuryTeam } from '@/lib/injuries/matchInjuryRows'
+import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 import type { RunBudget } from '@/lib/cron/runBudget'
 import type { NotificationCategoryId } from '@/lib/notification-settings/types'
 import type { NewsCategory } from '@/lib/workers/x-news-ingestion'
@@ -75,6 +77,39 @@ const CATEGORY_LABELS: Record<string, string> = {
 }
 
 /**
+ * Rostered copies of the player a news item names: the same name (suffixes and punctuation folded),
+ * the same sport, and — when both carry one — the same club.
+ *
+ * 🛑 THIS WAS `playerName CONTAINS …` WITH NO SPORT OR CLUB (2026-10-11). A story about the Browns'
+ * LB Justin Jefferson pushed "🏥 Injury Update: Justin Jefferson" to every manager of the Vikings WR,
+ * and a substring also hits longer names ("Josh Allen" inside "Josh Allen Jr."-style variants and
+ * other sports' namesakes). The query stays broad; the bind is decided here.
+ */
+async function rosterRowsForNewsPlayer(
+  playerName: string,
+  team: string | null | undefined,
+  sport: string | null | undefined,
+): Promise<Array<{ roster: { ownerId: string; leagueId: string } | null }>> {
+  const want = normalizeMatchName(playerName)
+  if (!want) return []
+  const sk = String(sport ?? '').trim().toUpperCase()
+  const club = foldInjuryTeam(team, sk)
+  const rows = await prisma.redraftRosterPlayer
+    .findMany({
+      where: { playerName: { contains: playerName.trim(), mode: 'insensitive' }, droppedAt: null },
+      select: { playerName: true, team: true, sport: true, roster: { select: { ownerId: true, leagueId: true } } },
+      take: 500,
+    })
+    .catch(() => [])
+  return rows.filter((r) => {
+    if (normalizeMatchName(r.playerName) !== want) return false
+    if (sk && r.sport && r.sport.trim().toUpperCase() !== sk) return false
+    const theirs = foldInjuryTeam(r.team, sk)
+    return !club || !theirs || theirs === club
+  })
+}
+
+/**
  * Dispatch notifications for a new player news item.
  * Finds all managers who roster the player and notifies them.
  */
@@ -93,21 +128,7 @@ export async function dispatchPlayerNewsNotifications(
   if (impact === 'low' && category !== 'injury') return 0
 
   // Find all rosters containing this player across all leagues
-  const rosterPlayers = await prisma.redraftRosterPlayer.findMany({
-    where: {
-      playerName: { contains: playerName, mode: 'insensitive' },
-      droppedAt: null, // still on roster
-    },
-    select: {
-      roster: {
-        select: {
-          ownerId: true,
-          leagueId: true,
-        },
-      },
-    },
-    take: 500,
-  }).catch(() => [])
+  const rosterPlayers = await rosterRowsForNewsPlayer(playerName, team, sport)
 
   if (rosterPlayers.length === 0) return 0
 
@@ -392,13 +413,7 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
     const isInjury = category === 'injury'
     if (row.impact !== 'high' && !isInjury) continue
 
-    const rosterPlayers = await prisma.redraftRosterPlayer
-      .findMany({
-        where: { playerName: { contains: row.playerName, mode: 'insensitive' }, droppedAt: null },
-        select: { roster: { select: { ownerId: true, leagueId: true } } },
-        take: 500,
-      })
-      .catch(() => [])
+    const rosterPlayers = await rosterRowsForNewsPlayer(row.playerName, row.team, row.sport)
 
     // dispatchNotification takes ONE leagueId, so group recipients by league rather than
     // calling it per user — one call per league instead of one per manager.

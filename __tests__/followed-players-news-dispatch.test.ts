@@ -38,7 +38,7 @@ const ROW = {
   impact: 'medium',
 }
 
-const roster = (ownerId: string, leagueId: string) => ({ roster: { ownerId, leagueId } })
+const roster = (ownerId: string, leagueId: string) => ({ playerName: 'Jahmyr Gibbs', team: 'DET', sport: 'NFL', roster: { ownerId, leagueId } })
 
 beforeEach(() => {
   for (const f of Object.values(h)) f.mockReset()
@@ -120,5 +120,25 @@ describe('followers of a player in the news', () => {
     const out = await dispatchPendingPlayerNewsNotifications()
     expect(out).toMatchObject({ notified: 0, noRoster: 1, scanned: 1 })
     expect(h.newsUpdate).toHaveBeenCalledWith({ where: { id: { in: ['news-1'] } }, data: expect.any(Object) })
+  })
+})
+
+/*
+ * 🛑 The roster lookup was `playerName CONTAINS …` with no sport or club (2026-10-11), so a story
+ * about the Browns' LB Justin Jefferson buzzed every manager of the Vikings WR.
+ */
+describe('which rostered player a story is about', () => {
+  it("a namesake on another club, or in another sport, is not told", async () => {
+    h.newsFind.mockResolvedValue([{ ...ROW, playerName: 'Justin Jefferson', team: 'CLE', headline: 'Jefferson (hamstring) ruled out' }])
+    h.rosterFind.mockResolvedValue([
+      { playerName: 'Justin Jefferson', team: 'MIN', sport: 'NFL', roster: { ownerId: 'vikings-wr-mgr', leagueId: 'lg-1' } },
+      { playerName: 'Justin Jefferson', team: 'CLE', sport: 'NFL', roster: { ownerId: 'browns-lb-mgr', leagueId: 'lg-2' } },
+      { playerName: 'Justin Jefferson Jr.', team: null, sport: 'NBA', roster: { ownerId: 'nba-mgr', leagueId: 'lg-3' } },
+    ])
+    await dispatchPendingPlayerNewsNotifications({ lookbackHours: 6 })
+    const told = h.dispatch.mock.calls.flatMap((c) => c[0].userIds ?? [])
+    expect(told).toContain('browns-lb-mgr')
+    expect(told).not.toContain('vikings-wr-mgr')
+    expect(told).not.toContain('nba-mgr')
   })
 })

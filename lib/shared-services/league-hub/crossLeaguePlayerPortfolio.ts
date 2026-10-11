@@ -447,10 +447,16 @@ export async function assembleCrossLeaguePlayerPortfolio(args: {
   })
 
   // Part 6 — injury enrichment. Batched by sport, since resolveInjuryContext is sport-scoped.
+  /*
+   * 🛑 ONLY IDS IN THE SPACE THE READER ASKS (2026-10-11). `resolveInjuryContext` looks an id up as a
+   * Sleeper id first, and `row.playerId` is the PLATFORM's own id: an ESPN, Yahoo or MFL league's
+   * 4–5 digit number reached it untranslated and named whoever holds that number on Sleeper (ESPN
+   * 12483 is Matthew Stafford). Those leagues' rows are left to the name-verified read port below.
+   */
   const idsBySport = new Map<string, Set<string>>()
   for (const acc of byCanonicalId.values()) {
     const set = idsBySport.get(acc.sport) ?? new Set<string>()
-    for (const row of acc.rows) set.add(row.playerId)
+    for (const row of acc.rows) if (row.provider === 'sleeper' || row.provider === 'allfantasy') set.add(row.playerId)
     idsBySport.set(acc.sport, set)
   }
   const injuryBySport = new Map<string, Map<string, InjuryContext>>()
@@ -636,7 +642,12 @@ export async function assembleCrossLeaguePlayerPortfolio(args: {
     // an ESPN id in another) — try each real row's id in order until one resolves, rather than only
     // ever checking the first row's id.
     const injuryLookup = injuryBySport.get(acc.sport)
-    const injuryContext = injuryLookup ? acc.rows.map((r) => injuryLookup.get(r.playerId)).find((ctx): ctx is InjuryContext => Boolean(ctx?.resolved)) : undefined
+    const injuryContext = injuryLookup
+      ? acc.rows
+          .filter((r) => r.provider === 'sleeper' || r.provider === 'allfantasy')
+          .map((r) => injuryLookup.get(r.playerId))
+          .find((ctx): ctx is InjuryContext => Boolean(ctx?.resolved))
+      : undefined
     const scheduleResult = scheduleBySport.get(acc.sport)
     const teamSchedule = acc.professionalTeam ? scheduleResult?.byTeam.get(acc.professionalTeam) : undefined
     const nextGameResult = nextGameBySport.get(acc.sport)
