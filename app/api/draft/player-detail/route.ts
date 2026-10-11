@@ -11,7 +11,7 @@ import {
   nonSleeperExternalIdWhere,
   sleeperIdWhere,
 } from '@/lib/player-identity/externalIdNamespace'
-import { matchTeam } from '@/lib/draft/sleeperNameCandidates'
+import { isSleeperDefenseId, matchTeam } from '@/lib/draft/sleeperNameCandidates'
 import { sleeperHeadshotUrl } from '@/lib/player-media-urls'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 
@@ -109,6 +109,9 @@ export async function GET(req: NextRequest) {
   const sleeperPrefixed = /^sleeper:/i.test(id)
   if (sleeperPrefixed) id = id.slice('sleeper:'.length)
   const isSleeperId = mayBeSleeperId(id, sport)
+  // A team defense on the board carries Sleeper's DEF id — the team abbreviation (`BUF`).
+  const isDefenseId = !isSleeperId && isSleeperDefenseId(id, sport)
+  const inSleeperSpace = isSleeperId || isDefenseId
 
   const seedSelect = {
     name: true,
@@ -125,7 +128,7 @@ export async function GET(req: NextRequest) {
   } as const
 
   let anchor: Anchor | null = null
-  if (isSleeperId) {
+  if (inSleeperSpace) {
     const rows = (await prisma.sportsPlayer
       .findMany({ where: sleeperIdWhere([id], sport), select: seedSelect, orderBy: { fetchedAt: 'desc' } })
       .catch(() => [])) as SeedRow[]
@@ -160,7 +163,7 @@ export async function GET(req: NextRequest) {
   }
 
   // SportsPlayerRecord (richer: stats / projections / headshot) — only when it is the anchor's person.
-  const recordIds = isSleeperId ? [`${sport}:sleeper:${id}`, `${sport}:${id}`] : sleeperPrefixed ? [] : [`${sport}:${id}`]
+  const recordIds = inSleeperSpace ? [`${sport}:sleeper:${id}`, `${sport}:${id}`] : sleeperPrefixed ? [] : [`${sport}:${id}`]
   const recordRows = anchor && recordIds.length
     ? await prisma.sportsPlayerRecord.findMany({ where: { id: { in: recordIds } } }).catch(() => [])
     : []

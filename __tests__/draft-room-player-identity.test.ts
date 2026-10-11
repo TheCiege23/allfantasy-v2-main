@@ -100,6 +100,8 @@ const SPORTS_PLAYER: Row[] = [
   sp({ id: 'sl-7564', source: 'sleeper', externalId: 'sleeper:7564', sleeperId: '7564', name: "Ja'Marr Chase", position: 'WR', team: 'Cincinnati Bengals' }),
   sp({ id: 'sl-5859', source: 'sleeper', externalId: 'sleeper:5859', sleeperId: '5859', name: 'A.J. Brown', position: 'WR', team: 'New England Patriots' }),
   sp({ id: 'sl-7000', source: 'sleeper', externalId: 'sleeper:7000', sleeperId: '7000', name: 'Right Guy', position: 'WR', team: 'Detroit Lions' }),
+  // Sleeper's team-defense row: its id IS the team abbreviation.
+  sp({ id: 'sl-BUF', source: 'sleeper', externalId: 'sleeper:BUF', sleeperId: 'BUF', name: 'Buffalo Bills', position: 'DEF', team: 'Buffalo Bills', imageUrl: 'https://img/def-buf.png' }),
 ]
 
 const IDENTITY: Row[] = [
@@ -130,6 +132,8 @@ const ADP_BOARD = [
   adpEntry('A.J. Brown', 15.7, 'WR', 'PHI'),
   adpEntry('Josh Allen', 24.4, 'QB', 'BUF'),
   adpEntry('Travis Etienne Jr.', 90.57, 'RB', 'JAX'),
+  // How adp_data writes a team defense (production row: "Buffalo Defense", DEF, BUF, adp 157).
+  adpEntry('Buffalo Defense', 157, 'DEF', 'BUF'),
   adpEntry('Mike Williams', 400, 'WR', 'LAC'),
 ]
 
@@ -227,8 +231,16 @@ describe('/api/draft/players — the board speaks Sleeper ids', () => {
 
   it('every id is a bare Sleeper id, ordered by ADP', async () => {
     const b = await board()
-    expect(b.map((p) => p.id)).toEqual(['7564', '6794', '5859', '4984', '7543'])
-    for (const p of b) expect(p.id).toMatch(/^\d+$/)
+    expect(b.map((p) => p.id)).toEqual(['7564', '6794', '5859', '4984', '7543', 'BUF'])
+    for (const p of b) expect(p.id).toMatch(/^(\d+|BUF)$/)
+  })
+
+  it('keeps team defenses: "Buffalo Defense" is Sleeper DEF id BUF (the team abbreviation)', async () => {
+    const def = (await board()).find((p) => p.position === 'DEF')
+    expect(def?.id).toBe('BUF')
+    expect(def?.team).toBe('BUF')
+    expect(def?.name).toBe('Buffalo Bills')
+    expect(def?.imageUrl).toBe('https://img/def-buf.png')
   })
 
   it('a stale ADP team does not drop a lone match (A.J. Brown PHI on the board, NE in Sleeper)', async () => {
@@ -260,6 +272,14 @@ describe('/api/draft/player-detail — reads the id in its own namespace', () =>
     expect(j.profile.name).toBe('Right Guy')
     expect(j.stats).toBeNull()
     expect(j.profile.headshotUrl).not.toBe('https://img/wrong-guy.png')
+  })
+
+  it('a team-defense id (BUF) opens Sleeper’s Bills DEF row', async () => {
+    const j = await detail('BUF')
+    expect(j.profile.name).toBe('Buffalo Bills')
+    expect(j.profile.position).toBe('DEF')
+    expect(j.profile.team).toBe('BUF')
+    expect(j.profile.headshotUrl).toBe('https://img/def-buf.png')
   })
 
   it('4984 opens Josh Allen QB BUF with his record, and news matched on name AND team (not the JAX story)', async () => {
@@ -301,6 +321,25 @@ describe('/api/draft/worker and /api/draft/mock/cpu-pick — draft from the Slee
     expect(arg.playerId).toBe('6794')
     // Alphabetically first in the table — what `orderBy: { name: 'asc' }` used to draft.
     expect(arg.playerName).not.toBe('A.J. Brown')
+  })
+
+  it('a queued team defense (BUF) is drafted as BUF', async () => {
+    h.queue = { playerIds: ['BUF'] }
+    await postSession('@/app/api/draft/worker/route')
+    const arg = h.executeDraftPick.mock.calls[0]![0] as Record<string, unknown>
+    expect(arg.playerId).toBe('BUF')
+    expect(arg.position).toBe('DEF')
+    expect(arg.team).toBe('BUF')
+  })
+
+  it('a CPU pick takes a team defense when it is the best available', async () => {
+    h.picks = ['7564', '6794', '5859', '4984', '7543'].map((playerId) => ({ playerId }))
+    // overall 6 in a 2-team snake -> round 3, pick 2 -> slot 1
+    h.state = { ...h.state, pickOrder: [{ id: 'u1' }, { id: 'cpu-1' }] }
+    await postSession('@/app/api/draft/mock/cpu-pick/route')
+    const arg = h.executeDraftPick.mock.calls[0]![0] as Record<string, unknown>
+    expect(arg.playerId).toBe('BUF')
+    expect(arg.playerName).toBe('Buffalo Bills')
   })
 
   it('a CPU pick takes the best available ADP, not the alphabet', async () => {

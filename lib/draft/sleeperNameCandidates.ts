@@ -27,7 +27,7 @@ import {
   resolveVerifiedMatch,
   type NameMatchCandidate,
 } from '@/lib/player-match/verifiedNameMatch'
-import { normalizePlayerName, normalizeTeamAbbrev } from '@/lib/team-abbrev'
+import { getTeamInfo, normalizePlayerName, normalizeTeamAbbrev } from '@/lib/team-abbrev'
 
 export interface SleeperCandidate extends NameMatchCandidate {
   /** Bare Sleeper id, e.g. `4984`. */
@@ -58,7 +58,7 @@ function nameVariants(name: string): string[] {
   return stripped && stripped !== base ? [base, stripped] : [base]
 }
 
-/** Sleeper ids are bare numbers. Team defenses (`BUF`) are not players and are not handled here. */
+/** Sleeper PLAYER ids are bare numbers. Team defenses (`BUF`) are resolved by team, not name — see `sleeperDefenseId`. */
 function isNumericSleeperId(id: string | null | undefined): id is string {
   return /^\d+$/.test(String(id ?? '').trim())
 }
@@ -129,6 +129,58 @@ export async function loadSleeperCandidatesByName(
     })
   }
   return [...bySleeperId.values()]
+}
+
+// ---------------------------------------------------------------- team defenses
+
+const DEFENSE_POSITIONS = new Set(['DEF', 'DST', 'D/ST'])
+
+/** A team-defense board entry (`adp_data` writes `position: 'DEF'`, name "Buffalo Defense"). */
+export function isDefensePosition(position: string | null | undefined): boolean {
+  return DEFENSE_POSITIONS.has(String(position ?? '').trim().toUpperCase())
+}
+
+/**
+ * Sleeper's id for a team defense: the team ABBREVIATION (`BUF`, `LAR`), which is also what its own
+ * `SportsPlayer` row carries in `sleeperId` (`externalId: 'sleeper:BUF'`). Null for anything that is
+ * not one of the 32 canonical teams — `FA`, a typo, a college team.
+ */
+export function sleeperDefenseId(team: string | null | undefined): string | null {
+  const t = matchTeam(team)
+  return t && getTeamInfo(t)?.canonical === t ? t : null
+}
+
+/** Is this id a Sleeper team-defense id? Only in NFL, and only exactly a canonical abbreviation. */
+export function isSleeperDefenseId(id: string | null | undefined, sport: string | null | undefined): boolean {
+  const raw = String(id ?? '').trim()
+  return String(sport ?? '').trim().toUpperCase() === 'NFL' && raw.length > 0 && sleeperDefenseId(raw) === raw
+}
+
+/**
+ * Sleeper's own team-defense rows for these ids, keyed by id. A defense with no Sleeper row is not
+ * returned, so it is not draftable — the id is only ever handed out for a row that exists.
+ */
+export async function loadSleeperDefenses(sport: string, ids: readonly string[]): Promise<Map<string, SleeperCandidate>> {
+  const want = [...new Set(ids.filter((id) => isSleeperDefenseId(id, sport)))]
+  const out = new Map<string, SleeperCandidate>()
+  if (want.length === 0) return out
+  const rows = (await prisma.sportsPlayer.findMany({
+    where: { sport: sport.toUpperCase(), source: 'sleeper', position: 'DEF', sleeperId: { in: want } },
+    select: { sleeperId: true, name: true, position: true, team: true, imageUrl: true, status: true },
+  })) as Array<{ sleeperId: string | null; name: string; position: string | null; team: string | null; imageUrl: string | null; status: string | null }>
+  for (const row of rows) {
+    const id = String(row.sleeperId ?? '').trim()
+    if (!want.includes(id) || out.has(id)) continue
+    out.set(id, {
+      sleeperId: id,
+      name: row.name,
+      position: 'DEF',
+      team: id,
+      imageUrl: row.imageUrl ?? null,
+      status: row.status ?? null,
+    })
+  }
+  return out
 }
 
 export function indexSleeperCandidates(candidates: readonly SleeperCandidate[]): Map<string, SleeperCandidate[]> {
