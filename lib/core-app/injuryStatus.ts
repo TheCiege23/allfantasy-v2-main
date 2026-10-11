@@ -126,3 +126,34 @@ export function ruledOutByFact(fact: { status: string | null; stale: boolean } |
   if (fact.stale && isOutDesignation(fact.status)) return false
   return true
 }
+
+/**
+ * The designation a dated injury FACT still supports right now — or null when it supports none.
+ *
+ * The same staleness rule as {@link ruledOutByFact}, applied to every designation rather than only
+ * to absences: a game-day word ("Out", "Questionable", "Doubtful") that has gone stale is last week's
+ * news and is suppressed; a season-scale ruling (IR, PUP, NFI, a suspension) still holds when stale.
+ * A healthy word ("Active", "ACT") is not a designation at all, so it is null too.
+ *
+ * ⚠ NULL IS "NOTHING TO REPORT", NEVER "HEALTHY". A missing fact and a cleared player read the
+ * same here on purpose — both mean there is no injury badge to draw — but callers must not turn
+ * either into a claim that the player is fine.
+ */
+export function currentDesignationFromFact(
+  fact: { status: string | null; stale: boolean } | null | undefined,
+): string | null {
+  const status = fact?.status?.trim() || null
+  if (!fact || !status || isHealthyDesignation(status)) return null
+  if (fact.stale && !ruledOutByFact(fact)) return null
+  return status
+}
+
+/**
+ * A ROSTER status that is itself an absence: a SEASON-SCALE placement (injured reserve, PUP, NFI, a
+ * suspension). Never a game-day "Out" — that is an injury-report word, which a roster status does not
+ * carry, and it is exactly the value `PlayerStatusAggregator` stamps onto `SportsPlayer` rows and never
+ * clears. Callers must only pass a value they know is a roster status (Sleeper's own row).
+ */
+export function isRosterAbsence(status: string | null | undefined): boolean {
+  return isRuledOut(status) && !isOutDesignation(status)
+}

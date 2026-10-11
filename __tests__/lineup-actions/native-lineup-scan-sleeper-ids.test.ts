@@ -10,12 +10,27 @@
  */
 import { describe, expect, it, vi } from 'vitest'
 
-type Row = { externalId: string; sleeperId: string | null; source: string; name: string; position: string; status: string | null }
+type Row = { externalId: string; sleeperId: string | null; source: string; name: string; position: string; team: string | null; status: string | null }
 const ROWS: Row[] = [
-  // Sleeper's own row: the real starter, ruled Out.
-  { externalId: 'sleeper:9228', sleeperId: '9228', source: 'sleeper', name: 'Bryce Young', position: 'QB', status: 'Out' },
+  // Sleeper's own row: the real starter. Its `status` is Sleeper's ROSTER word — "Active" while he is Out.
+  { externalId: 'sleeper:9228', sleeperId: '9228', source: 'sleeper', name: 'Bryce Young', position: 'QB', team: 'Carolina Panthers', status: 'Active' },
   // Rolling Insights' row for a different person that happens to carry 9228 as ITS id.
-  { externalId: '9228', sleeperId: null, source: 'rolling_insights', name: 'Michael Tarquin', position: 'OT', status: null },
+  { externalId: '9228', sleeperId: null, source: 'rolling_insights', name: 'Michael Tarquin', position: 'OT', team: null, status: null },
+]
+/* The live injury feed: Young is Out. Read by name + team + position, never by the shared number. */
+const INJURIES = [
+  {
+    playerName: 'Bryce Young',
+    status: 'Out',
+    type: 'Ankle',
+    description: null,
+    date: new Date(),
+    week: null,
+    source: 'rolling_insights',
+    fetchedAt: new Date(),
+    team: 'Carolina Panthers',
+    position: 'QB',
+  },
 ]
 type Clause = { sleeperId?: { in: string[] }; externalId?: { in: string[] } }
 
@@ -32,6 +47,7 @@ vi.mock('@/lib/prisma', () => ({
         ),
       ),
     },
+    sportsInjury: { findMany: vi.fn(async () => INJURIES) },
   },
 }))
 vi.mock('@/lib/multi-sport/MultiSportRosterService', () => ({

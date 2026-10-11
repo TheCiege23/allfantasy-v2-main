@@ -16,6 +16,7 @@ import { cachedFetch, cacheKey } from '@/lib/api-cache'
 import { dbFirstMode } from '@/lib/db-first-mode'
 import { createTtlMemo } from '@/lib/ttl-memo'
 import { isDailyStatSport } from '@/lib/scoring-runtime/dailySportStatNormalization'
+import { resolveCurrentInjuryDesignations } from '@/lib/injuries/currentInjuryDesignations'
 
 /**
  * In-process memos in front of the DB-backed cache. That cache saved CPU but not egress: the NFL
@@ -278,9 +279,41 @@ export async function getPlayerPoolForSport(
   return pool
 }
 
+/**
+ * 🛑 `injury_status` IS THE INJURY FEED'S CURRENT DESIGNATION, NOT `SportsPlayer.status` (2026-10-11).
+ * That column is Sleeper's ROSTER status on Sleeper's rows ("Active" for an Out player), Rolling
+ * Insights' "ACT"/"INACT" on its own, and on some provider rows an 'out' that `PlayerStatusAggregator`
+ * wrote and nothing clears — so the waiver badges and the "injured" filter missed every
+ * Out/Questionable/Doubtful player and kept flagging some who had long recovered. A Sleeper roster
+ * absence ("Injured Reserve") still counts when no fresh feed fact says otherwise. One batched read
+ * for the whole pool, inside the pool's own memo TTL. `status` keeps the raw roster value.
+ */
 async function buildPlayerPoolForSport(
   sportType: SportType | LeagueSport | string,
   options?: { limit?: number; teamId?: string; position?: string }
+): Promise<PoolPlayerRecord[]> {
+  const rosterStatusById = new Map<string, string | null>()
+  const pool = await buildPlayerPoolRecords(sportType, options, rosterStatusById)
+  const lookups = pool.filter((p) => p.metadata?.source !== 'synthetic_team_defense')
+  if (lookups.length === 0) return pool
+  const designations = await resolveCurrentInjuryDesignations({
+    sport: normalizeSport(sportType),
+    players: lookups.map((p) => ({
+      key: p.player_id,
+      name: p.full_name,
+      team: p.team ?? p.team_abbreviation ?? null,
+      position: p.position,
+      rosterStatus: rosterStatusById.get(p.player_id) ?? null,
+    })),
+  })
+  for (const p of pool) p.injury_status = designations.get(p.player_id)?.status ?? null
+  return pool
+}
+
+async function buildPlayerPoolRecords(
+  sportType: SportType | LeagueSport | string,
+  options: { limit?: number; teamId?: string; position?: string } | undefined,
+  rosterStatusById: Map<string, string | null>,
 ): Promise<PoolPlayerRecord[]> {
   const sport = normalizeSport(sportType)
   const teamIdByAbbrev = getTeamIdByAbbreviationMap(sport)
@@ -443,6 +476,8 @@ async function buildPlayerPoolForSport(
     })
     .slice(0, requestedTake)
 
+  for (const r of dedupedRows) rosterStatusById.set(r.id, r.source === 'sleeper' ? r.status ?? null : null)
+
   const primary = dedupedRows.map((r) => ({
     team_abbreviation: r.team ?? null,
     player_id: r.id,
@@ -455,7 +490,7 @@ async function buildPlayerPoolForSport(
     full_name: r.name,
     position: normalizePoolPosition(sport, r.position),
     status: r.status ?? null,
-    injury_status: deriveInjuryStatus(r.status),
+    injury_status: null as string | null, // filled from the injury feed by buildPlayerPoolForSport
     external_source_id: r.sleeperId ?? r.externalId ?? null,
     // Kept SEPARATE from `external_source_id`, which is the coalesce above and so
     // cannot tell a Sleeper id from a provider id that merely looks like one.
@@ -559,7 +594,7 @@ async function buildPlayerPoolForSport(
       full_name: fullName,
       position,
       status: row.status ?? null,
-      injury_status: deriveInjuryStatus(row.status ?? null),
+      injury_status: null, // filled from the injury feed by buildPlayerPoolForSport
       external_source_id: String(externalId),
       // `externalId` above falls back through apiSports/fantasyCalc/row id, so only
       // the Sleeper column answers "is this addressable by the NFL scoring path".
@@ -618,16 +653,6 @@ export async function isPlayerInSportPool(
     },
   })
   return !!byIdentity
-}
-
-/** Injury-like status values; when status matches, use it as injury_status. */
-const INJURY_STATUS_PATTERNS = ['OUT', 'IR', 'DOUBTFUL', 'QUESTIONABLE', 'PUP', 'SUSPENDED', 'DNR', 'DNP', 'INJURED']
-
-function deriveInjuryStatus(status: string | null): string | null {
-  if (status == null || !status.trim()) return null
-  const upper = status.toUpperCase().trim()
-  if (INJURY_STATUS_PATTERNS.some((p) => upper === p || upper.startsWith(p + ' ') || upper.includes(' ' + p))) return status
-  return null
 }
 
 function normalizeSport(s: SportType | LeagueSport | string): string {
