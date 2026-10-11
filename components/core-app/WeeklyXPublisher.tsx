@@ -61,6 +61,9 @@ export function WeeklyXPublisher({post,leagueId,es=false,connectionResult=null}:
     }catch{setUncertain(true);setMessage(es?'No se pudo confirmar el resultado. Comprueba tu cuenta de X antes de intentar publicar otra vez.':'Could not confirm the result. Check your X account before attempting another post.')}
     finally{setBusy(false)}
   }
+  const status=<p role="status" className="af-wbp-x-status">{message}{url ? <> <a href={url} target="_blank" rel="noopener noreferrer">{es?'Ver publicación':'View post'}</a></> : null}</p>
+  const allowAnother=uncertain ? <button type="button" disabled={busy} onClick={()=>{try{sessionStorage.removeItem('af-weekly-x:pending')}catch{};setUncertain(false);setReviewed(false);requestId.current=null;setMessage('')}}>{es?'Comprobé X; permitir otra publicación':'I checked X; allow another post'}</button> : null
+  const canPublish=!!connection?.configured && connection.connected
   return <div className="af-wbp-x-publisher">
     <h4>{es?'Publicar con mi cuenta de X':'Publish with my X account'}</h4>
     {!connection ? <p>{es?'Comprobando conexión…':'Checking connection…'}</p> : !connection.configured ? <p>{es?'La conexión con X está pendiente de configuración. Puedes abrir el borrador de X arriba.':'Connected X publishing isn’t available yet. You can open the X draft above.'}</p> : <>
@@ -74,10 +77,14 @@ export function WeeklyXPublisher({post,leagueId,es=false,connectionResult=null}:
         <label>{es?'Texto para publicar en X':'Text to publish on X'}<textarea rows={5} value={text} disabled={busy} onChange={e=>{setText(e.target.value);setReviewed(false);requestId.current=null}}/></label>
         <p>{text.length}/280 {es?'caracteres; X valida su propio límite.':'characters; X validates its own limit.'}</p>
         <label><input type="checkbox" checked={reviewed} disabled={busy||uncertain} onChange={e=>setReviewed(e.target.checked)}/>{es?'Revisé el texto. Quiero publicarlo en':'I reviewed the text and want to publish it on'} @{connection.handle}.</label>
-        <button type="button" onClick={publish} disabled={busy||uncertain||!reviewed||!text.trim()||text.length>280}>{busy?(es?'Publicando…':'Publishing…'):(es?'Publicar ahora en X':'Publish now on X')}</button>
+        {/* The result sits beside the button that produced it: below the fold it read as "nothing happened". */}
+        <div className="af-wbp-x-publish-row">
+          <button type="button" onClick={publish} disabled={busy||uncertain||!reviewed||!text.trim()||text.length>280}>{busy?(es?'Publicando…':'Publishing…'):(es?'Publicar ahora en X':'Publish now on X')}</button>
+          {allowAnother}
+          {status}
+        </div>
       </> : null}
     </>}
-    {uncertain ? <button type="button" disabled={busy} onClick={()=>{try{sessionStorage.removeItem('af-weekly-x:pending')}catch{};setUncertain(false);setReviewed(false);requestId.current=null;setMessage('')}}>{es?'Comprobé X; permitir otra publicación':'I checked X; allow another post'}</button> : null}
-    <p role="status">{message}{url ? <> <a href={url} target="_blank" rel="noopener noreferrer">{es?'Ver publicación':'View post'}</a></> : null}</p>
+    {canPublish ? null : <>{allowAnother}{status}</>}
   </div>
 }
