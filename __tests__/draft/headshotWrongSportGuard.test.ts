@@ -21,7 +21,7 @@ const imageStoreMock = vi.hoisted(() => ({
   PLAYER_IMAGE_TYPE_HEADSHOT: 'headshot',
   readPrimaryPlayerImage: vi.fn(async () => null),
   writePrimaryPlayerImage: vi.fn(async () => ({ written: true, skippedReason: null })),
-  // The resolver stamps every row it writes (see TRUSTED_PLAYER_IMAGE_WHERE in the real module).
+  // The resolver stamps every row it writes (see HEADSHOT_RESOLVER_VERSION in the real module).
   headshotResolverStamp: () => ({ headshotResolver: 'v2' }),
 }))
 

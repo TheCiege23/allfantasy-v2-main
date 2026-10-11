@@ -10,7 +10,9 @@
  *
  * Two passes, both bounded by `limit` and a wall-clock budget:
  *   A. **fill**    — players with no image yet; resolve and persist.
- *   B. **refresh** — players whose cached image is past its TTL (team changes, new photos).
+ *   B. **refresh** — players whose cached image is past its TTL (team changes, new photos), or
+ *      was written by the pre-2026-10-11 resolver (unstamped). Unstamped images that are
+ *      detectably another person's run first, BEFORE pass A.
  *
  * Resolution goes through `resolvePlayerHeadshot`, which is the same code path a live
  * request uses, so the cron and the request path cannot drift. That call persists into
@@ -30,10 +32,10 @@ import { NextResponse } from "next/server";
 import { requireCronAuth } from "@/app/api/cron/_auth";
 import { prisma } from "@/lib/prisma";
 import { createBatchPlayerHeadshotResolver } from "@/lib/player-assets/resolvePlayerHeadshot";
-import { Prisma } from "@prisma/client";
 import {
-  NAME_SEARCH_RESOLVER_PROVIDERS,
   PLAYER_IMAGE_TYPE_HEADSHOT,
+  UNSTAMPED_RESOLVER_IMAGE_WHERE,
+  listDetectablyWrongPlayerImageIds,
 } from "@/lib/player-assets/playerImageStore";
 import {
   TEAM_IMAGE_TYPE_LOGO,
@@ -500,37 +502,46 @@ async function handle(req: NextRequest) {
 
         const missing = [...priority, ...backfill];
 
-        // ── Pass B: players whose canonical image has aged out ──
+        /*
+         * ── Pass B: re-resolve images that are aged out, or written by the pre-2026-10-11
+         * resolver (unstamped) ──
+         *
+         * Unstamped rows are still SERVED (stale-while-revalidate; see HEADSHOT_RESOLVER_VERSION),
+         * except the ones that are detectably another person's photo — those readers suppress.
+         * So the suppressed ones go first, and they run BEFORE Pass A below: Pass A's backlog is
+         * tens of thousands of unresolvable college players in some sports and routinely spends
+         * the whole budget, which would leave a blanked face waiting behind it indefinitely.
+         */
+        const wrongIds = (await listDetectablyWrongPlayerImageIds(sport)).slice(0, limit);
         const stale = await prisma.playerImage.findMany({
           where: {
             sportKey: sport,
             imageType: PLAYER_IMAGE_TYPE_HEADSHOT,
             isPrimary: true,
-            // Aged out, OR written by the pre-2026-10-11 resolver (unstamped): readers no longer
-            // serve those, so re-resolve them here rather than waiting up to 14 days for expiry.
-            OR: [
-              { expiresAt: { lt: new Date() } },
-              {
-                provider: { in: [...NAME_SEARCH_RESOLVER_PROVIDERS] },
-                // The stamp is the only thing ever written to raw_payload for these providers,
-                // so SQL NULL is exactly "unstamped". (A `NOT path-equals` would drop NULL rows.)
-                rawPayload: { equals: Prisma.DbNull },
-              },
-            ],
+            OR: [{ expiresAt: { lt: new Date() } }, UNSTAMPED_RESOLVER_IMAGE_WHERE],
+            ...(wrongIds.length ? { playerId: { notIn: wrongIds } } : {}),
           },
-          take: limit,
+          take: Math.max(limit - wrongIds.length, 0),
           orderBy: { expiresAt: "asc" },
           select: { playerId: true },
         });
         const staleIds = stale
           .map((row) => row.playerId)
           .filter((id): id is string => Boolean(id));
-        const stalePlayers = staleIds.length
-          ? await prisma.player.findMany({
-              where: { id: { in: staleIds } },
-              select: canonicalSelect,
-            })
+        const refreshIds = [...wrongIds, ...staleIds];
+        const refreshOrder = new Map(refreshIds.map((id, index) => [id, index]));
+        // `findMany({ id: { in } })` returns table order, so restore wrong-first explicitly.
+        const refreshPlayers = refreshIds.length
+          ? (
+              await prisma.player.findMany({
+                where: { id: { in: refreshIds } },
+                select: canonicalSelect,
+              })
+            ).sort((a, b) => (refreshOrder.get(a.id) ?? 0) - (refreshOrder.get(b.id) ?? 0))
           : [];
+        const wrongSet = new Set(wrongIds);
+        const wrongPlayers = refreshPlayers.filter((p) => wrongSet.has(p.id));
+        const stalePlayers = refreshPlayers.filter((p) => !wrongSet.has(p.id));
 
         if (dryRun) {
           fill = {
@@ -540,18 +551,27 @@ async function handle(req: NextRequest) {
             timedOut: false,
           };
           refresh = {
-            considered: stalePlayers.length,
+            considered: refreshPlayers.length,
             resolved: 0,
             failed: 0,
             timedOut: false,
           };
         } else {
+          const wrongFirst = await resolveBatch(wrongPlayers, sport, deadline, {
+            skipCache: true,
+          });
           fill = await resolveBatch(missing, sport, deadline, {
             skipCache: false,
           });
-          refresh = await resolveBatch(stalePlayers, sport, deadline, {
+          const rest = await resolveBatch(stalePlayers, sport, deadline, {
             skipCache: true,
           });
+          refresh = {
+            considered: wrongFirst.considered + rest.considered,
+            resolved: wrongFirst.resolved + rest.resolved,
+            failed: wrongFirst.failed + rest.failed,
+            timedOut: wrongFirst.timedOut || rest.timedOut,
+          };
         }
       }
 
