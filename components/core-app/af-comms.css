@@ -3757,3 +3757,63 @@
   color: var(--accent-ink);
   font-size: 11px;
 }
+
+/*
+ * ── LIGHT MODE ──────────────────────────────────────────────────────────────────────────────────
+ * `.af-cm` pins a dark palette on itself (`color-scheme: dark`), so a light-mode user got a dark slab
+ * over a light page. Under the page's own light theme the drawer now takes the light palette —
+ * the SAME values `html[data-mode='light'] .af-core` uses in af-core.css, including its darker,
+ * contrast-measured accent — and the handful of white-alpha literals that were only ever right on a
+ * dark ground get dark-alpha counterparts. Everything else in this file is written on tokens and
+ * follows automatically.
+ */
+html[data-mode='light'] .af-cm {
+  --bg: #f4f6fc;
+  --surface: #ffffff;
+  --surface2: #eef1f9;
+  --text: #0b1020;
+  --text2: #333c5c;
+  --muted: #484f69;
+  --faint: #5c6587;
+  --accent: #096d8e;
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(9, 109, 142, 0.1);
+  --accent-line: rgba(9, 109, 142, 0.3);
+  --line: rgba(11, 16, 32, 0.09);
+  --line2: rgba(11, 16, 32, 0.16);
+  --chip: rgba(11, 16, 32, 0.05);
+  --af-bubble-in: #e9edf6;
+  color-scheme: light;
+}
+html[data-mode='light'] .af-cm[data-mode='overlay'] {
+  border-color: rgba(11, 16, 32, 0.12);
+  box-shadow: 0 40px 120px -60px rgba(11, 16, 32, 0.35);
+}
+html[data-mode='light'] .af-cm-tabs { background: rgba(11, 16, 32, 0.05); }
+html[data-mode='light'] .af-cm-tab[data-on='true'] { color: #ffffff; }
+html[data-mode='light'] .af-cm-thread { scrollbar-color: #c5ccdc transparent; }
+html[data-mode='light'] .af-cm-threadrow:hover,
+html[data-mode='light'] .af-cm-pick-opt:hover { background: rgba(11, 16, 32, 0.04); }
+html[data-mode='light'] .af-cm-sheet-btn[data-danger='true'],
+html[data-mode='light'] .af-cm-sheet-safety-err { color: #be123c; }
+html[data-mode='light'] .af-cm-scrim { background: rgba(11, 16, 32, 0.35); }
+/*
+ * The league / DM / huddle composer (ChatComposer) is painted with dark-only Tailwind utilities
+ * (`text-white`, `bg-white/[0.03]`, `text-white/40`), so in light mode its typing was white on
+ * white. Scoped to the drawer by the composer's own class hooks — the league page's other chat
+ * keeps its look.
+ */
+html[data-mode='light'] .af-cm .af-chat-box { background: var(--surface); border-color: var(--line2); }
+html[data-mode='light'] .af-cm .af-chat-composer textarea { color: var(--text); }
+html[data-mode='light'] .af-cm .af-chat-composer textarea::placeholder { color: var(--faint); }
+html[data-mode='light'] .af-cm .af-chat-tool:not([aria-pressed='true']) { color: var(--muted); }
+html[data-mode='light'] .af-cm .af-chat-uploading { color: var(--muted); }
+/*
+ * The attachment preview and the @mention list sit on the composer with no ground of their own, in
+ * `text-white/*`. The GIF, emoji and poll pop-ups paint their own dark ground (`bg-[#0c0c1e]`) and
+ * stay as they are, so anything inside one is excluded — dark text on that ground would vanish.
+ */
+/* Not the textarea (it has its own rule above) and not the send circle (white on the accent). */
+html[data-mode='light'] .af-cm .af-chat-composer [class*='text-white']:not(textarea):not(.af-chat-send):not([class*='bg-[#0c0c1e]'] *) { color: var(--text2); }
+html[data-mode='light'] .af-cm .af-chat-composer .af-chat-send:disabled { color: var(--faint); }
+html[data-mode='light'] .af-cm .af-chat-composer [class*='border-white']:not([class*='bg-[#0c0c1e]']):not([class*='bg-[#0c0c1e]'] *) { border-color: var(--line2); }
