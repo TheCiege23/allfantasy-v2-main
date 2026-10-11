@@ -12,6 +12,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const findMany = vi.fn()
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/prisma', () => ({ prisma: { leagueTeam: { findMany: (...a: unknown[]) => findMany(...a) } } }))
+const resolveSportWeek = vi.fn()
+vi.mock('@/lib/season-week/seasonWeekService', () => ({ resolveSportWeek: (...a: unknown[]) => resolveSportWeek(...a) }))
 
 import type { FantasyCalcPlayer } from '@/lib/fantasycalc'
 import {
@@ -24,6 +26,7 @@ import {
 } from '@/lib/trade-value-console/leagueTradePricing'
 import {
   describeOdds,
+  gamesPerWeekFrom,
   oddsCertainty,
   projectedPickPrice,
   projectedPicksNote,
@@ -75,23 +78,23 @@ const WEEK5 = Array.from({ length: 12 }, (_, i) => team(`t${i}`, Math.round((i *
 
 describe('projectPickSlots', () => {
   it('a finished season is certain: the worst four pick early, the best four late', () => {
-    const p = projectPickSlots({ teams: WEEK5, seasonGames: 5, season: 2026 })!
+    const p = projectPickSlots({ teams: WEEK5, seasonWeeks: 5, season: 2026 })!
     expect(p.draftYear).toBe(2027)
-    expect(p.gamesLeft).toBe(0)
+    expect(p.weeksLeft).toBe(0)
     expect(p.oddsByTeam.get('t0')).toEqual({ early: 1, mid: 0, late: 0 })
     expect(p.oddsByTeam.get('t5')).toEqual({ early: 0, mid: 1, late: 0 })
     expect(p.oddsByTeam.get('t11')).toEqual({ early: 0, mid: 0, late: 1 })
   })
 
   it('a tie in record picks earlier for the team that scored less', () => {
-    const p = projectPickSlots({ teams: [team('a', 2, 3, 600), team('b', 2, 3, 500), team('c', 4, 1, 700)], seasonGames: 5, season: 2026 })!
+    const p = projectPickSlots({ teams: [team('a', 2, 3, 600), team('b', 2, 3, 500), team('c', 4, 1, 700)], seasonWeeks: 5, season: 2026 })!
     expect(p.oddsByTeam.get('b')!.early).toBe(1)
     expect(p.oddsByTeam.get('a')!.mid).toBe(1)
   })
 
   it('in week 5 of 14 a 0-5 team is likeliest early and a 5-0 team likeliest late, odds summing to 1', () => {
-    const p = projectPickSlots({ teams: WEEK5, seasonGames: 14, season: 2026 })!
-    expect(p.gamesLeft).toBe(9)
+    const p = projectPickSlots({ teams: WEEK5, seasonWeeks: 14, season: 2026 })!
+    expect(p.weeksLeft).toBe(9)
     const worst = p.oddsByTeam.get('t0')!
     const best = p.oddsByTeam.get('t11')!
     expect(worst.early).toBeGreaterThan(0.6)
@@ -102,25 +105,49 @@ describe('projectPickSlots', () => {
   it('four games are a noisy read of a team: early odds stay spread, and firm up as the season runs', () => {
     const recs = [[0, 4], [1, 3], [1, 3], [1, 3], [2, 2], [2, 2], [2, 2], [2, 2], [3, 1], [3, 1], [3, 1], [4, 0]]
     const teams = recs.map(([w, l], i) => team(`t${i}`, w!, l!, 4 * (98 + i * 3.2)))
-    const early = projectPickSlots({ teams, seasonGames: 14, season: 2026 })!
-    const late = projectPickSlots({ teams, seasonGames: 6, season: 2026 })!
+    const early = projectPickSlots({ teams, seasonWeeks: 14, season: 2026 })!
+    const late = projectPickSlots({ teams, seasonWeeks: 6, season: 2026 })!
     // A 2-2 team in week 5 can still land in any third.
     expect(early.oddsByTeam.get('t5')!.early).toBeGreaterThan(0.15)
     expect(early.oddsByTeam.get('t5')!.late).toBeGreaterThan(0.1)
     // The 4-0, top-scoring team is likeliest late, but not yet certain.
-    expect(early.oddsByTeam.get('t11')!.late).toBeLessThan(0.95)
+    // Calibrated 2026-10-11: ~82% here. The first, uncalibrated noise said ~90% — and its 90%s happened 86%.
+    expect(early.oddsByTeam.get('t11')!.late).toBeLessThan(0.86)
     expect(late.oddsByTeam.get('t11')!.late).toBeGreaterThan(early.oddsByTeam.get('t11')!.late)
   })
 
   it('is reproducible: the same standings give the same odds', () => {
-    const a = projectPickSlots({ teams: WEEK5, seasonGames: 14, season: 2026 })!
-    const b = projectPickSlots({ teams: WEEK5, seasonGames: 14, season: 2026 })!
+    const a = projectPickSlots({ teams: WEEK5, seasonWeeks: 14, season: 2026 })!
+    const b = projectPickSlots({ teams: WEEK5, seasonWeeks: 14, season: 2026 })!
     expect([...a.oddsByTeam]).toEqual([...b.oddsByTeam])
   })
 
   it('nothing to project: fewer than three teams, or no season length', () => {
-    expect(projectPickSlots({ teams: WEEK5.slice(0, 2), seasonGames: 14, season: 2026 })).toBeNull()
-    expect(projectPickSlots({ teams: WEEK5, seasonGames: 0, season: 2026 })).toBeNull()
+    expect(projectPickSlots({ teams: WEEK5.slice(0, 2), seasonWeeks: 14, season: 2026 })).toBeNull()
+    expect(projectPickSlots({ teams: WEEK5, seasonWeeks: 0, season: 2026 })).toBeNull()
+  })
+})
+
+describe('gamesPerWeekFrom', () => {
+  it('twice as many games as weeks gone by is a median league, with a week of feed lag either way', () => {
+    expect(gamesPerWeekFrom(8, 4, 14)).toBe(2)
+    expect(gamesPerWeekFrom(6, 4, 14)).toBe(2)
+    expect(gamesPerWeekFrom(10, 4, 14)).toBe(2)
+    expect(gamesPerWeekFrom(4, 4, 14)).toBe(1)
+    expect(gamesPerWeekFrom(5, 4, 14)).toBe(1)
+    expect(gamesPerWeekFrom(3, 4, 14)).toBe(1)
+  })
+  it('without the schedule only a record longer than the season proves it', () => {
+    expect(gamesPerWeekFrom(16, null, 14)).toBe(2)
+    expect(gamesPerWeekFrom(8, null, 14)).toBe(1)
+    expect(gamesPerWeekFrom(0, 0, 14)).toBe(1)
+  })
+  it('a median league projects over its weeks, counting both games a week', () => {
+    const teams = WEEK5.map((t, i) => team(t.id, Math.min(8, i), 8 - Math.min(8, i), 4 * (100 + i * 4)))
+    const one = projectPickSlots({ teams, seasonWeeks: 14, season: 2026 })!
+    const two = projectPickSlots({ teams, seasonWeeks: 14, gamesPerWeek: 2, season: 2026 })!
+    expect(one.weeksLeft).toBe(6)
+    expect(two.weeksLeft).toBe(10)
   })
 })
 
@@ -146,7 +173,7 @@ describe('projectedPickPrice', () => {
 
 const SLOTS: PickSlotProjection = {
   draftYear: 2027,
-  gamesLeft: 9,
+  weeksLeft: 9,
   oddsByTeam: new Map([
     ['1', { early: 1, mid: 0, late: 0 }],
     ['12', { early: 0, mid: 0, late: 1 }],
@@ -210,14 +237,35 @@ describe('the chart', () => {
     expect(withDatedMarket(chart, { capturedOn: '2026-09-01', players: CHART }).pickSlots).toBeNull()
   })
 
-  beforeEach(() => findMany.mockReset())
+  beforeEach(() => {
+    findMany.mockReset()
+    resolveSportWeek.mockReset()
+    resolveSportWeek.mockResolvedValue({ ok: true, sportWeek: 6, seasonType: 'regular', state: 'live', nextSportWeek: 7 })
+  })
 
   it('loads current franchises by provider roster id, the season length from the league’s playoff week', async () => {
     findMany.mockResolvedValue(WEEK5.map((t) => ({ externalId: t.id, wins: t.wins, losses: t.losses, ties: 0, pointsFor: t.pointsFor })))
     const p = await loadPickSlotProjection({ leagueId: 'L1', settings: { playoff_week_start: 15 }, season: 2026 })
     expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { leagueId: 'L1', lifecycleState: { not: 'ARCHIVED' } } }))
-    expect(p).toMatchObject({ draftYear: 2027, gamesLeft: 9 })
+    expect(p).toMatchObject({ draftYear: 2027, weeksLeft: 9 })
     expect(p!.oddsByTeam.size).toBe(12)
+  })
+
+  it('🛑 a median league (two games a week) is read as one: weeks left from the schedule, not doubled games', async () => {
+    // Four weeks in, eight games played each — the league also plays the week's median.
+    const median = WEEK5.map((t, i) => ({ externalId: t.id, wins: Math.min(8, i), losses: 8 - Math.min(8, i), ties: 0, pointsFor: 4 * (100 + i * 4) }))
+    findMany.mockResolvedValue(median)
+    resolveSportWeek.mockResolvedValue({ ok: true, sportWeek: 5, seasonType: 'regular', state: 'live', nextSportWeek: 6 })
+    const p = await loadPickSlotProjection({ leagueId: 'L1', settings: { playoff_week_start: 15 }, season: 2026 })
+    expect(p!.weeksLeft).toBe(10)
+    expect(p!.oddsByTeam.get('t11')!.late).toBeLessThan(0.99)
+  })
+
+  it('no schedule: the median test falls back to records longer than the season', async () => {
+    findMany.mockResolvedValue(WEEK5.map((t) => ({ externalId: t.id, wins: t.wins, losses: t.losses, ties: 0, pointsFor: t.pointsFor })))
+    resolveSportWeek.mockRejectedValue(new Error('no schedule'))
+    const p = await loadPickSlotProjection({ leagueId: 'L1', settings: { playoff_week_start: 15 }, season: 2026 })
+    expect(p!.weeksLeft).toBe(9)
   })
 
   it('no season length or no season: nothing loaded', async () => {
