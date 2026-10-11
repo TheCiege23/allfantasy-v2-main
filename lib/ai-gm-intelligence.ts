@@ -561,7 +561,7 @@ export async function buildComprehensiveTradeContext(
   const allTeams = new Set<string>();
   const allPlayersWithTeams = [...userParty.players, ...otherParties.flatMap(op => op.players)];
   for (const player of allPlayersWithTeams) {
-    const fcPlayer = findPlayerByName(fcValues, player.name);
+    const fcPlayer = findPlayerByName(fcValues, player.name, { position: player.position });
     if (fcPlayer?.player?.maybeTeam) {
       allTeams.add(fcPlayer.player.maybeTeam);
     }
@@ -584,7 +584,7 @@ export async function buildComprehensiveTradeContext(
   ]);
 
   const enrichPlayer = (player: { name: string; position: string }) => {
-    const fcPlayer = findPlayerByName(fcValues, player.name);
+    const fcPlayer = findPlayerByName(fcValues, player.name, { position: player.position });
     const tiered = findPlayerTier(player.name);
     /*
      * 🛑 THE TIER LIST'S `age` IS A 2024 SNAPSHOT — 0 of 64 correct, median +2 years. It feeds

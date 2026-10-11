@@ -925,7 +925,7 @@ async function runSingleSportAnalysis(args: RunArgs): Promise<{
       const nflRec = await resolveRecordForFreeAgent(sportStr, c.externalId)
       if (nflRec) recordId = nflRec.id
     } else if (sportStr === 'NFL' && nflBundle) {
-      const matched = findPlayerByName(nflBundle.fc, c.name)
+      const matched = findPlayerByName(nflBundle.fc, c.name, { position: c.position, team: c.team })
       try {
         let priced = await pricePlayer(c.name, nflBundle.ctx)
         priced = applyTePremiumToPlayerValue(priced, nflBundle.tePremium)
