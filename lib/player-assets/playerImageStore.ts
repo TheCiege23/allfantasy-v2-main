@@ -31,8 +31,13 @@
  *      So the write below verifies the row exists rather than trusting the id's shape.
  */
 
-import type { Prisma } from '@prisma/client'
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import {
+  compactPlayerName,
+  headshotPositionRelation,
+  headshotTeamRelation,
+} from '@/lib/player-assets/headshotCandidateMatch'
 
 /** `image_type` discriminator for a player headshot. */
 export const PLAYER_IMAGE_TYPE_HEADSHOT = 'headshot'
@@ -46,27 +51,42 @@ export const PLAYER_IMAGE_TYPE_HEADSHOT = 'headshot'
 export const PLAYER_IMAGE_TTL_MS = 14 * 24 * 60 * 60 * 1000
 
 /*
- * ── Retiring rows written by the name-search resolver before 2026-10-11 ─────────────────────
+ * ── Rows written by the name-search resolver before 2026-10-11: served, unless detectably wrong ──
  *
- * 🛑 THOSE ROWS CANNOT BE TRUSTED, AND THEY ARE NOT DELETED — THEY ARE NOT SERVED.
  * Until 2026-10-11 `resolvePlayerHeadshot` could bind a namesake's photo: its NFL canonical tier
  * took the first TheSportsDB search hit across every sport, and its `SportsPlayer` tier took a row
  * agreeing on team OR position, then any row at all. Each result was persisted here as the
- * player's primary image, so the wrong face outlived the bug by up to the 14-day TTL — and past it,
- * since a stale row is served when re-resolution comes back empty.
+ * player's primary image.
  *
- * The broken resolver is the ONLY writer of the provider values below; the other writer
- * (`writeCanonicalHeadshot`, identity-verified, `provider: 'espn'` today) is untouched. Rows from
- * the fixed resolver carry `rawPayload.headshotResolver = HEADSHOT_RESOLVER_VERSION`, which
- * nothing wrote before. So a row from one of these providers WITHOUT that stamp came from the
- * broken resolver: readers treat it as absent, the resolver re-resolves through the fixed path,
- * and the rewrite stamps it. Measured 2026-10-11: 5,293 primary rows (6,035 in all) retire;
- * every `espn` row (6,539) is unaffected.
+ * Those rows are identifiable: the broken resolver is the ONLY writer of the provider values
+ * below, and the fixed resolver stamps `rawPayload.headshotResolver = HEADSHOT_RESOLVER_VERSION`,
+ * which nothing wrote before (`raw_payload` was NULL on every row, measured 2026-10-11). A version
+ * stamp rather than a write-time cutoff, because rows the OLD code writes between commit and
+ * deploy would carry a post-cutoff time. No schema change.
  *
- * ⚠ A version stamp, not a write-time cutoff, on purpose: rows the OLD code writes between this
- * commit and its deploy would carry a post-cutoff `fetchedAt` and be trusted. Nothing but the new
- * code writes the stamp. No schema change: `raw_payload` is an existing nullable JSON column that
- * was NULL on every row when measured.
+ * ⚠ STALE-WHILE-REVALIDATE, NOT RETIREMENT. 5,293 primary rows are unstamped and almost all of
+ * them are correct, so hiding them all would trade a few hundred wrong faces for thousands of
+ * blank ones. Unstamped rows ARE served, EXCEPT where they are detectably wrong (below); the image
+ * cron's refresh pass re-resolves every unstamped row through the fixed path, wrong-first, and
+ * the rewrite stamps it.
+ *
+ * "Detectably wrong" uses only signals that cannot be explained by the row being right:
+ *   1. SHARED WITH A DIFFERENT PERSON. The URL is also the primary `PlayerImage`, or the
+ *      `Player.imageUrl`, of another canonical player who is demonstrably somebody else — another
+ *      sport, another name, a contradicting football position, or (when the other holder's image
+ *      is identity-verified) another team. Same-name, same-sport sharers are NOT enough on their
+ *      own: measured, most of those are duplicate `Player` rows for one human (Jordan Poyer,
+ *      Lavonte David, Harrison Smith…) or a traded player listed twice, and both rows are right.
+ *   2. A SLEEPER THUMBNAIL OF SOMEBODY ELSE. `sleepercdn.com/…/thumb/<id>.jpg` names its owner,
+ *      so when Sleeper's own row for that id has another name or a contradicting position, the
+ *      photo is that person's. This is the DL Chris Jones (KC) case: his row held Sleeper 5815,
+ *      which is CB Chris Jones; LB Cole McDonald held 6954 (a QB), S Tre Thomas 6526 (an LB).
+ * Either signal failing to compute (DB error) fails OPEN — the row is served, as it was before.
+ *
+ * Measured 2026-10-11 by feeding production rows through `findDetectablyWrongPlayerImages`: 201 of
+ * the 5,293 unstamped primaries are suppressed (NCAAF 57, NFL 48, NBA 37, NCAAB 22, SOCCER 18,
+ * NHL 10, MLB 9) — including all four named above and NFL Cam Jackson's NCAAB photo — and 5,092
+ * stay served until re-resolved. Duplicate rows for one person (Jordan Poyer) are not touched.
  */
 export const HEADSHOT_RESOLVER_VERSION = 'v2'
 
@@ -85,19 +105,15 @@ export function headshotResolverStamp(): { headshotResolver: string } {
   return { headshotResolver: HEADSHOT_RESOLVER_VERSION }
 }
 
-/**
- * Prisma `where` fragment for rows a reader may serve. Spread it into any `playerImage` query
- * that reads a URL; a reader without it re-opens the poisoned cache.
- */
-export const TRUSTED_PLAYER_IMAGE_WHERE: Prisma.PlayerImageWhereInput = {
-  OR: [
-    { provider: null },
-    { provider: { notIn: [...NAME_SEARCH_RESOLVER_PROVIDERS] } },
-    { rawPayload: { path: ['headshotResolver'], equals: HEADSHOT_RESOLVER_VERSION } },
-  ],
+/** Prisma `where` fragment selecting unstamped rows from the pre-2026-10-11 resolver. */
+export const UNSTAMPED_RESOLVER_IMAGE_WHERE: Prisma.PlayerImageWhereInput = {
+  provider: { in: [...NAME_SEARCH_RESOLVER_PROVIDERS] },
+  // The stamp is the only thing ever written to raw_payload for these providers, so SQL NULL is
+  // exactly "unstamped". (A `NOT path-equals` filter would also drop the NULL rows.)
+  rawPayload: { equals: Prisma.DbNull },
 }
 
-/** In-memory twin of `TRUSTED_PLAYER_IMAGE_WHERE`, for rows already loaded. */
+/** False for a row the pre-2026-10-11 resolver wrote (it may still be served — see above). */
 export function isTrustedPlayerImageRow(row: { provider?: string | null; rawPayload?: unknown }): boolean {
   if (!row.provider) return true
   if (!(NAME_SEARCH_RESOLVER_PROVIDERS as readonly string[]).includes(row.provider)) return true
@@ -110,21 +126,205 @@ export function isTrustedPlayerImageRow(row: { provider?: string | null; rawPayl
   )
 }
 
+type ImageHolder = {
+  playerId: string
+  /** True when this player's hold on the URL includes a trusted (verified or stamped) row. */
+  trusted: boolean
+  name: string
+  sport: string
+  team: string | null
+  position: string | null
+}
+
+const SHARED_URL_SNAPSHOT_TTL_MS = 10 * 60 * 1000
+let sharedUrlSnapshot: { at: number; byUrl: Map<string, ImageHolder[]> } | null = null
+let sharedUrlInflight: Promise<Map<string, ImageHolder[]>> | null = null
+
+/** Test hook: forget the cached shared-URL snapshot. */
+export function resetPlayerImageSuspicionCache(): void {
+  sharedUrlSnapshot = null
+  sharedUrlInflight = null
+}
+
+/**
+ * Every headshot URL held by two or more canonical players, with who holds it. One aggregate
+ * query (≈12.5k image rows + 91k `Player` rows, measured) cached in-process for 10 minutes — the
+ * set only ever SHRINKS as the cron restamps rows, so a slightly old snapshot errs toward caution.
+ */
+async function sharedUrlHolders(now: number): Promise<Map<string, ImageHolder[]>> {
+  if (sharedUrlSnapshot && now - sharedUrlSnapshot.at < SHARED_URL_SNAPSHOT_TTL_MS) return sharedUrlSnapshot.byUrl
+  if (sharedUrlInflight) return sharedUrlInflight
+  sharedUrlInflight = (async () => {
+    try {
+      const providers = [...NAME_SEARCH_RESOLVER_PROVIDERS]
+      const rows = await prisma.$queryRaw<Array<{
+        url: string
+        player_id: string
+        trusted: boolean
+        name: string
+        sport: string
+        team: string | null
+        position: string | null
+      }>>`
+        WITH holders AS (
+          SELECT i.url, i.player_id,
+                 (i.provider IS NULL OR NOT (i.provider = ANY(${providers}::text[]))
+                  OR i.raw_payload->>'headshotResolver' = ${HEADSHOT_RESOLVER_VERSION}) AS trusted
+            FROM sports_core_player_images i
+           WHERE i.is_primary AND i.image_type = ${PLAYER_IMAGE_TYPE_HEADSHOT} AND i.player_id IS NOT NULL
+          UNION ALL
+          SELECT p.image_url, p.id, false FROM "Player" p WHERE p.image_url IS NOT NULL
+        ),
+        shared AS (SELECT url FROM holders GROUP BY url HAVING count(DISTINCT player_id) > 1)
+        SELECT h.url, h.player_id, bool_or(h.trusted) AS trusted, p.name, p.sport, p.team, p.position
+          FROM holders h JOIN shared s ON s.url = h.url JOIN "Player" p ON p.id = h.player_id
+         GROUP BY h.url, h.player_id, p.name, p.sport, p.team, p.position`
+      const byUrl = new Map<string, ImageHolder[]>()
+      for (const row of rows) {
+        const list = byUrl.get(row.url) ?? []
+        list.push({
+          playerId: row.player_id,
+          trusted: Boolean(row.trusted),
+          name: row.name,
+          sport: String(row.sport ?? '').toUpperCase(),
+          team: row.team,
+          position: row.position,
+        })
+        byUrl.set(row.url, list)
+      }
+      sharedUrlSnapshot = { at: now, byUrl }
+      return byUrl
+    } catch (err) {
+      console.warn('[playerImageStore] shared-url snapshot failed:', err instanceof Error ? err.message : String(err))
+      return new Map<string, ImageHolder[]>()
+    } finally {
+      sharedUrlInflight = null
+    }
+  })()
+  return sharedUrlInflight
+}
+
+/** Two holders of one URL who are demonstrably not the same human. */
+function differentPeople(subject: Omit<ImageHolder, 'trusted'>, other: ImageHolder): boolean {
+  if (subject.sport !== other.sport) return true
+  if (compactPlayerName(subject.name) !== compactPlayerName(other.name)) return true
+  if (headshotPositionRelation(subject.sport, subject.position, other.position) === 'different') return true
+  return other.trusted && headshotTeamRelation(subject.sport, subject.team, other.team) === 'different'
+}
+
+const SLEEPER_THUMB = /sleepercdn\.com\/content\/nfl\/players\/thumb\/(\d+)\.jpg/i
+
+/** The Sleeper id a Sleeper CDN thumbnail URL belongs to, or null. */
+export function sleeperIdFromThumbUrl(url: string | null | undefined): string | null {
+  const match = SLEEPER_THUMB.exec(String(url ?? ''))
+  return match ? match[1]! : null
+}
+
+/**
+ * Which of these (player, URL) pairs are detectably another person's photo. Pass only rows that
+ * are NOT trusted — a verified or stamped row is never second-guessed here. Returns player ids.
+ * Never throws; a failed lookup suppresses nothing.
+ */
+export async function findDetectablyWrongPlayerImages(
+  entries: ReadonlyArray<{ playerId: string; url: string }>,
+  opts: { now?: number } = {},
+): Promise<Set<string>> {
+  const wrong = new Set<string>()
+  if (entries.length === 0) return wrong
+  const byUrl = await sharedUrlHolders(opts.now ?? Date.now())
+  const candidates = entries.filter((e) => byUrl.has(e.url) || sleeperIdFromThumbUrl(e.url))
+  if (candidates.length === 0) return wrong
+
+  try {
+    const players = await prisma.player.findMany({
+      where: { id: { in: [...new Set(candidates.map((e) => e.playerId))] } },
+      select: { id: true, name: true, sport: true, team: true, position: true },
+    })
+    const subjectById = new Map(
+      players.map((p) => [p.id, { playerId: p.id, name: p.name, sport: String(p.sport ?? '').toUpperCase(), team: p.team, position: p.position }]),
+    )
+
+    const sleeperIds = [...new Set(candidates.map((e) => sleeperIdFromThumbUrl(e.url)).filter((id): id is string => Boolean(id)))]
+    const sleeperRows = sleeperIds.length
+      ? await prisma.sportsPlayer.findMany({
+          where: { sport: 'NFL', source: 'sleeper', externalId: { in: sleeperIds.map((id) => `sleeper:${id}`) } },
+          select: { externalId: true, name: true, position: true, team: true },
+        })
+      : []
+    const sleeperOwner = new Map(sleeperRows.map((r) => [r.externalId.replace(/^sleeper:/, ''), r]))
+
+    for (const entry of candidates) {
+      const subject = subjectById.get(entry.playerId)
+      if (!subject) continue
+      const others = (byUrl.get(entry.url) ?? []).filter((h) => h.playerId !== entry.playerId)
+      if (others.some((other) => differentPeople(subject, other))) {
+        wrong.add(entry.playerId)
+        continue
+      }
+      const sleeperId = sleeperIdFromThumbUrl(entry.url)
+      const owner = sleeperId ? sleeperOwner.get(sleeperId) : undefined
+      if (
+        owner &&
+        differentPeople(subject, {
+          playerId: `sleeper:${sleeperId}`,
+          trusted: false,
+          name: owner.name,
+          sport: 'NFL',
+          team: owner.team,
+          position: owner.position,
+        })
+      ) {
+        wrong.add(entry.playerId)
+      }
+    }
+  } catch (err) {
+    console.warn('[playerImageStore] suspicion check failed:', err instanceof Error ? err.message : String(err))
+  }
+  return wrong
+}
+
+/**
+ * Player ids in one sport whose primary image is an unstamped pre-fix row that is detectably
+ * wrong — the image cron re-resolves these before any other refresh.
+ */
+export async function listDetectablyWrongPlayerImageIds(sportKey: string): Promise<string[]> {
+  try {
+    const byUrl = await sharedUrlHolders(Date.now())
+    const rows = await prisma.playerImage.findMany({
+      where: {
+        sportKey,
+        imageType: PLAYER_IMAGE_TYPE_HEADSHOT,
+        isPrimary: true,
+        ...UNSTAMPED_RESOLVER_IMAGE_WHERE,
+        OR: [{ url: { in: [...byUrl.keys()] } }, { url: { contains: 'sleepercdn.com/content/nfl/players/thumb/' } }],
+      },
+      select: { playerId: true, url: true },
+    })
+    const entries = rows
+      .filter((r): r is { playerId: string; url: string } => Boolean(r.playerId))
+    return [...(await findDetectablyWrongPlayerImages(entries))]
+  } catch (err) {
+    console.warn('[playerImageStore] wrong-image listing failed:', err instanceof Error ? err.message : String(err))
+    return []
+  }
+}
+
 /**
  * The image URL a batch reader should serve for one player, given his primary `PlayerImage` row
- * (if any) and the denormalised `Player.imageUrl`.
+ * (if any), the denormalised `Player.imageUrl`, and whether that row is detectably wrong.
  *
- * ⚠ FILTERING `PlayerImage` ALONE DOES NOT RETIRE A ROW. The image cron copies every resolution
- * into `Player.imageUrl` too — measured 2026-10-11, all 5,293 retired primaries had an identical
- * `Player.imageUrl` — and the batch readers fall back to that column. So a retired row also
- * suppresses `Player.imageUrl` when it is the same URL; a different URL came from elsewhere.
+ * ⚠ SUPPRESSING THE ROW ALONE DOES NOT SUPPRESS THE IMAGE. The image cron copies every
+ * resolution into `Player.imageUrl` too — measured 2026-10-11, all 5,293 unstamped primaries had
+ * an identical `Player.imageUrl` — and the batch readers fall back to that column. So a
+ * suppressed row also suppresses `Player.imageUrl` when it is the same URL.
  */
 export function servedPlayerImageUrl(
   primary: { url: string; provider?: string | null; rawPayload?: unknown } | null | undefined,
   playerImageUrl: string | null | undefined,
+  detectablyWrong = false,
 ): string | null {
   if (primary) {
-    if (isTrustedPlayerImageRow(primary)) return primary.url
+    if (!detectablyWrong || isTrustedPlayerImageRow(primary)) return primary.url
     return playerImageUrl && playerImageUrl !== primary.url ? playerImageUrl : null
   }
   return playerImageUrl ?? null
@@ -193,12 +393,19 @@ export async function readPrimaryPlayerImage(args: {
 
   try {
     const row = await prisma.playerImage.findFirst({
-      // Rows the pre-2026-10-11 resolver wrote are not served; see TRUSTED_PLAYER_IMAGE_WHERE.
-      where: { playerId, imageType, ...TRUSTED_PLAYER_IMAGE_WHERE },
+      where: { playerId, imageType },
       orderBy: [{ isPrimary: 'desc' }, { fetchedAt: 'desc' }],
-      select: { url: true, provider: true, confidence: true, fetchedAt: true, expiresAt: true },
+      select: { url: true, provider: true, confidence: true, fetchedAt: true, expiresAt: true, rawPayload: true },
     })
     if (!row?.url) return null
+
+    // A pre-2026-10-11 resolver row is served unless it is detectably somebody else's photo
+    // (see the note on HEADSHOT_RESOLVER_VERSION). Returning null here also keeps the resolver
+    // from serving it as a stale fallback.
+    if (!isTrustedPlayerImageRow(row)) {
+      const wrong = await findDetectablyWrongPlayerImages([{ playerId, url: row.url }], { now: now.getTime() })
+      if (wrong.has(playerId)) return null
+    }
 
     return {
       url: row.url,

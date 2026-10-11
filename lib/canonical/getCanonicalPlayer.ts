@@ -47,6 +47,8 @@
 import { prisma } from '@/lib/prisma'
 import {
   PLAYER_IMAGE_TYPE_HEADSHOT,
+  findDetectablyWrongPlayerImages,
+  isTrustedPlayerImageRow,
   readPrimaryPlayerImage,
   servedPlayerImageUrl,
   type StoredPlayerImage,
@@ -445,7 +447,7 @@ export async function getCanonicalPlayersBySleeperIds(
           imageType: PLAYER_IMAGE_TYPE_HEADSHOT,
           isPrimary: true,
         },
-        // provider + rawPayload decide whether the row is trusted; see servedPlayerImageUrl.
+        // provider + rawPayload say whether a pre-fix resolver wrote it; see servedPlayerImageUrl.
         select: { playerId: true, url: true, provider: true, rawPayload: true },
       }),
     ])
@@ -453,6 +455,9 @@ export async function getCanonicalPlayersBySleeperIds(
     const byId = new Map(players.map((p) => [p.id, p]))
     const imageById = new Map(
       images.filter((i) => i.playerId).map((i) => [i.playerId as string, i]),
+    )
+    const wrongImage = await findDetectablyWrongPlayerImages(
+      [...imageById].filter(([, i]) => !isTrustedPlayerImageRow(i)).map(([playerId, i]) => ({ playerId, url: i.url })),
     )
 
     for (const identity of identities) {
@@ -468,7 +473,7 @@ export async function getCanonicalPlayersBySleeperIds(
         team: player.team,
         active: player.active,
         injuryStatus: player.injuryStatus ?? null,
-        imageUrl: servedPlayerImageUrl(imageById.get(player.id), player.imageUrl),
+        imageUrl: servedPlayerImageUrl(imageById.get(player.id), player.imageUrl, wrongImage.has(player.id)),
       })
 
       if (opts.maxAgeMs !== undefined) {
@@ -552,6 +557,7 @@ export async function getCanonicalPlayerMapForSport(
 
   type PrimaryImageRow = { url: string; provider: string | null; rawPayload: unknown }
   let imageById = new Map<string, PrimaryImageRow>()
+  let wrongImage = new Set<string>()
   if (opts.includeImages) {
     const images = await prisma.playerImage.findMany({
       where: {
@@ -559,10 +565,13 @@ export async function getCanonicalPlayerMapForSport(
         imageType: PLAYER_IMAGE_TYPE_HEADSHOT,
         isPrimary: true,
       },
-      // provider + rawPayload decide whether the row is trusted; see servedPlayerImageUrl.
+      // provider + rawPayload say whether a pre-fix resolver wrote it; see servedPlayerImageUrl.
       select: { playerId: true, url: true, provider: true, rawPayload: true },
     })
     imageById = new Map(images.filter((i) => i.playerId).map((i) => [i.playerId as string, i]))
+    wrongImage = await findDetectablyWrongPlayerImages(
+      [...imageById].filter(([, i]) => !isTrustedPlayerImageRow(i)).map(([playerId, i]) => ({ playerId, url: i.url })),
+    )
   }
 
   const now = Date.now()
@@ -582,7 +591,7 @@ export async function getCanonicalPlayerMapForSport(
       active: player.active,
       injuryStatus: player.injuryStatus ?? null,
       imageUrl: opts.includeImages
-        ? servedPlayerImageUrl(imageById.get(player.id), player.imageUrl)
+        ? servedPlayerImageUrl(imageById.get(player.id), player.imageUrl, wrongImage.has(player.id))
         : player.imageUrl ?? null,
     })
 

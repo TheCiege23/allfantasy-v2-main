@@ -42,8 +42,10 @@ vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 vi.mock('@/lib/player-assets/playerImageStore', async (importOriginal) => ({
   PLAYER_IMAGE_TYPE_HEADSHOT: 'headshot',
   readPrimaryPlayerImage: vi.fn(async () => null),
-  // Pure: decides which image URL a batch read serves. Kept real so the mock tracks the contract.
+  // Pure: decide which image URL a batch read serves. Kept real so the mock tracks the contract.
   servedPlayerImageUrl: (await importOriginal<typeof import('@/lib/player-assets/playerImageStore')>()).servedPlayerImageUrl,
+  isTrustedPlayerImageRow: (await importOriginal<typeof import('@/lib/player-assets/playerImageStore')>()).isTrustedPlayerImageRow,
+  findDetectablyWrongPlayerImages: vi.fn(async () => new Set<string>()),
 }))
 vi.mock('@/lib/sport-teams/teamImageStore', () => ({ readPrimaryTeamImage: vi.fn(async () => null) }))
 vi.mock('@/lib/player-assets/resolvePlayerHeadshot', () => ({ resolvePlayerHeadshot: vi.fn(async () => null) }))
