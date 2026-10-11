@@ -3730,3 +3730,30 @@
 @media (prefers-reduced-motion: no-preference) {
   .af-cm-row[data-pending='true'] .af-cm-bubble { transition: opacity 160ms ease; }
 }
+
+/*
+ * The Chimmy tab used to look like a different app from the chats beside it: your questions were grey
+ * and labelled "You", Chimmy had no face, and the text was 13px against 15px everywhere else. It now
+ * uses the same language — your words in the accent bubble on the right, Chimmy's answers marked by a
+ * small sparkle avatar, one text size.
+ */
+.af-cm-turn .af-cm-turn-text { font-size: 15px; line-height: 1.5; }
+.af-cm-turn[data-role='you'] { background: var(--accent); padding: 9px 14px; }
+.af-cm-turn[data-role='you'] .af-cm-turn-text,
+.af-cm-turn[data-role='you'] > .af-cm-turn-author { color: var(--accent-ink); }
+/* Your own words need no name tag — except an earlier, carried-over turn, which says so. */
+.af-cm-turn[data-role='you']:not([data-carried='true']) > .af-cm-turn-author { display: none; }
+.af-cm-turn[data-role='chimmy'] > .af-cm-turn-author { display: flex; align-items: center; gap: 6px; }
+.af-cm-turn[data-role='chimmy'] > .af-cm-turn-author::before {
+  content: '\2726';
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  /* Accent, not `--chimmy`: that token is a near-black gradient and the dark sparkle vanished on it. */
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 11px;
+}
