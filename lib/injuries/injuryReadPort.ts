@@ -37,6 +37,7 @@ import type { InjuryDesignation } from '@/lib/injuries/rollingInsightsInjuries'
 import {
   INJURY_PRIOR_SEASON_AFTER_HOURS,
   INJURY_STALE_AFTER_HOURS,
+  injuryStaleAfterHours,
 } from '@/lib/injuries/injuryRecency'
 
 /**
@@ -49,8 +50,9 @@ import {
  * Every existing `from '@/lib/injuries/injuryReadPort'` import keeps working.
  *
  * Beyond INJURY_STALE_AFTER_HOURS, a status is treated as a claim we can no
- * longer stand behind. NFL injury reports move daily and hard on game day; 36h
- * spans a normal report cycle without blessing week-old data.
+ * longer stand behind — for daily-schedule sports. NFL and NCAAF report once per
+ * game week and a feed re-dates a row only when its word changes, so they use a
+ * week (`injuryStaleAfterHours`); 36h flagged every Friday "Out" stale by Sunday.
  */
 export { INJURY_STALE_AFTER_HOURS, INJURY_PRIOR_SEASON_AFTER_HOURS }
 
@@ -144,7 +146,8 @@ export interface InjuryFact {
   /** Age of our INGEST in hours. Use for feed health ("has the importer stopped?"). */
   fetchAgeHours: number
   /**
-   * True when this row is older than INJURY_STALE_AFTER_HOURS. Callers should
+   * True when this row's claim is older than the sport's horizon (`injuryStaleAfterHours`: a week
+   * for NFL/NCAAF, INJURY_STALE_AFTER_HOURS otherwise). Callers should
    * suppress or caveat the status rather than render it plainly — a stale
    * injury badge is a confident false statement, which is worse than none.
    */
@@ -218,7 +221,7 @@ function reportedAt(row: InjuryRow): Date {
   return row.date ?? row.fetchedAt
 }
 
-function toFact(row: InjuryRow, now: Date): InjuryFact {
+function toFact(row: InjuryRow, now: Date, staleAfterHours: number = INJURY_STALE_AFTER_HOURS): InjuryFact {
   /*
    * 🛑 AGE IS MEASURED FROM THE REPORT DATE, NOT FROM `fetchedAt`.
    *
@@ -253,7 +256,7 @@ function toFact(row: InjuryRow, now: Date): InjuryFact {
     reportedAt: reportedAt(row),
     ageHours,
     fetchAgeHours,
-    stale: ageHours > INJURY_STALE_AFTER_HOURS,
+    stale: ageHours > staleAfterHours,
   }
 }
 
@@ -396,7 +399,7 @@ export async function resolveInjuryFacts(args: {
       continue
     }
     if (!res.match) continue
-    byPlayer.set(key, toFact(res.match.row, now))
+    byPlayer.set(key, toFact(res.match.row, now, injuryStaleAfterHours(sport)))
   }
 
   return {
@@ -584,7 +587,7 @@ export async function listInjuryFacts(args: {
     })
     .slice(0, limit)
     .map((r) => ({
-      ...toFact(r, now),
+      ...toFact(r, now, injuryStaleAfterHours(sport)),
       id: r.id,
       team: r.team,
       position: r.position,

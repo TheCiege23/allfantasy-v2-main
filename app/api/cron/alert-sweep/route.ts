@@ -436,7 +436,7 @@ async function foldLiveSleeperStatusesForGameWindow(now: Date): Promise<void> {
    */
   const existingLive = await prisma.sportsInjury.findMany({
     where: { sport: 'NFL', source: LIVE_STATUS_SOURCE, externalId: { in: plan.map((u) => u.sleeperId) } },
-    select: { externalId: true, status: true, date: true },
+    select: { externalId: true, status: true, date: true, expiresAt: true },
   })
   const existingById = new Map(existingLive.map((e) => [e.externalId, e]))
 
