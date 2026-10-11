@@ -20,7 +20,7 @@ export function leagueWorkspaceMode(platform: string | null | undefined, languag
     authority,
     badge: es ? 'Importada · Gestionada en ' + source : 'Imported · Hosted on ' + source,
     description: es
-      ? 'Los cambios de alineación, intercambios y waivers aquí se guardan solo en AllFantasy. Completa los movimientos oficiales en ' + source + '.'
+      ? 'Los cambios de alineación, intercambios y reclamos aquí se guardan solo en AllFantasy. Completa los movimientos oficiales en ' + source + '.'
       : 'Lineup, trade and waiver changes here stay in AllFantasy. Complete official moves in ' + source + '.',
   }
   if (authority === 'CONNECTED') return {
