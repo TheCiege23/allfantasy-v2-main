@@ -5154,7 +5154,19 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             backHref={`/core/live?sport=${encodeURIComponent(liveGameSport)}${selectedLeagueId ? `&league=${encodeURIComponent(selectedLeagueId)}` : ''}`}
           />
         ) : liveScores ? (
-          <LiveScores data={liveScores} selectedLeagueId={selectedLeagueId} matchupStrip={liveMatchupStrip} />
+          <LiveScores
+            data={liveScores}
+            selectedLeagueId={selectedLeagueId}
+            matchupStrip={liveMatchupStrip}
+            leagueWeek={{
+              byLeague: ctx.weekLineups?.byLeague ?? null,
+              leagues: playedLeagues.map((l) => ({
+                id: l.id,
+                name: String(l.name ?? 'League'),
+                sport: normalizeToLiveSport(String(l.sport ?? 'NFL')),
+              })),
+            }}
+          />
         ) : (
           <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
             <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
