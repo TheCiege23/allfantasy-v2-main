@@ -94,6 +94,8 @@ type LeagueMessage = {
   metadata?: Record<string, unknown> | null
   /** `'draft'` when it was posted in the draft room. */
   source: string | null
+  /** The viewer's own message, shown before the server has it (see `pending` below). */
+  pending?: boolean
 }
 
 function leagueToListMessage(m: LeagueMessage): ChatListMessage {
@@ -107,6 +109,7 @@ function leagueToListMessage(m: LeagueMessage): ChatListMessage {
     parentMessageId: m.parentMessageId,
     metadata: m.metadata ?? null,
     messageType: m.messageType,
+    ...(m.pending ? { pending: true } : {}),
   }
 }
 
@@ -184,6 +187,8 @@ export function LeagueConversation({
   const room = `league:${leagueId}`
 
   const [messages, setMessages] = useState<LeagueMessage[]>([])
+  /* The viewer's own sends that the server has not returned yet — see `listMessages`. */
+  const [pendingSends, setPendingSends] = useState<LeagueMessage[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
@@ -338,6 +343,7 @@ export function LeagueConversation({
   /* A different league is a different conversation: nothing carries over from the last one. */
   useEffect(() => {
     setMessages([])
+    setPendingSends([])
     setPresence([])
     setReactionOverride({})
     setReplyTo(null)
@@ -589,7 +595,16 @@ export function LeagueConversation({
     [messages, presence],
   )
 
-  const listMessages = useMemo(() => messages.map(leagueToListMessage), [messages])
+  /*
+   * 🛑 A SENT MESSAGE APPEARED ONLY AFTER TWO ROUND TRIPS (the POST, then a reload of the list), with
+   * nothing on screen in between — the "feels slow" every chat app is judged on. The viewer's message
+   * now shows at once as a pending bubble. It lives in its OWN list, appended after the server's:
+   * a poll that lands mid-send replaces `messages` wholesale and would otherwise erase it.
+   */
+  const listMessages = useMemo(
+    () => [...messages, ...pendingSends].map(leagueToListMessage),
+    [messages, pendingSends],
+  )
   const sourceById = useMemo(() => {
     const map = new Map<string, string | null>()
     for (const m of messages) map.set(m.id, m.source)
@@ -670,6 +685,24 @@ export function LeagueConversation({
       if (!displayText && Object.keys(metadata).length === 0) throw new Error('nothing to send')
 
       setSending(true)
+      const pendingId = `pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+      setPendingSends((prev) => [
+        ...prev,
+        {
+          id: pendingId,
+          parentMessageId: replyTo?.id ?? null,
+          authorId: viewerUserId ?? viewerId ?? null,
+          author: 'You',
+          avatarUrl: null,
+          message: displayText,
+          createdAt: new Date().toISOString(),
+          messageType: 'text',
+          metadata: Object.keys(metadata).length > 0 ? metadata : null,
+          source: tribe ?? null,
+          pending: true,
+        },
+      ])
+      const dropPending = () => setPendingSends((prev) => prev.filter((p) => p.id !== pendingId))
       try {
         const res = tribe
           ? await fetch(`/api/shared/chat/threads/${encodeURIComponent(room)}/messages`, {
@@ -710,7 +743,11 @@ export function LeagueConversation({
         setReplyTo(null)
         /* Quiet: a full reload flashed "Loading…" over the chat after every send. */
         await load(true)
+        // The real row is in `messages` now; the pending copy goes in the same render.
+        dropPending()
       } catch (e) {
+        // The draft comes back to the composer (below), so the bubble must not linger as if sent.
+        dropPending()
         setError(e instanceof Error ? `Message not sent (${e.message}).` : 'Message not sent.')
         /*
          * ⚠ RETHROW. Setting the inline error is not enough: the composer has already
@@ -722,7 +759,7 @@ export function LeagueConversation({
         setSending(false)
       }
     },
-    [load, leagueId, room, tribe, sending, replyTo],
+    [load, leagueId, room, tribe, sending, replyTo, viewerUserId, viewerId],
   )
 
   const commissionerLeagues = useMemo(

@@ -3717,3 +3717,16 @@
 .af-cm-dmrow[data-muted='true'] .af-cm-threadrow-unread { background: var(--chip); color: var(--muted); }
 .af-cm-threadactive { margin-left: 8px; font-size: 12px; font-weight: 500; white-space: nowrap; color: var(--muted); }
 .af-cm-threadactive[data-now='true'] { color: #34d399; }
+
+/*
+ * ══ 2026-10-11 visual pass 2 ══
+ * A message you send shows at once, slightly faded with "Sending…" where its time goes, and takes no
+ * taps until the server has it (there is nothing yet to react to, reply to or edit).
+ */
+.af-cm-row[data-pending='true'] { pointer-events: none; }
+.af-cm-row[data-pending='true'] .af-cm-bubble { opacity: 0.65; }
+.af-cm-sending { font-style: italic; color: var(--faint); }
+.af-cm-col > .af-cm-edited { font-size: 12px; color: var(--faint); }
+@media (prefers-reduced-motion: no-preference) {
+  .af-cm-row[data-pending='true'] .af-cm-bubble { transition: opacity 160ms ease; }
+}
