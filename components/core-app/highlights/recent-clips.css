@@ -7,7 +7,7 @@
 .af-recent-clips select,.af-recent-clips button{font:inherit;min-height:40px;padding:8px 12px;color:inherit;background:var(--panel,#101625);border:1px solid var(--border,#39465b);border-radius:8px;cursor:pointer}
 .af-recent-clips button:hover,.af-recent-clips button:focus-visible{border-color:#22d3ee}
 .af-recent-clips a{color:#6fe1f4;text-underline-offset:3px}
-.af-x-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.af-x-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:12px}
 .af-x-card{padding:12px;border:1px solid var(--border,#283345);border-radius:10px;min-width:0}
 .af-x-caption{white-space:pre-wrap;overflow-wrap:anywhere;margin:8px 0;font-size:14px}
 .af-x-badges{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
