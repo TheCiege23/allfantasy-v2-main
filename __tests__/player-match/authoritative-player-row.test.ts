@@ -22,11 +22,11 @@ type Row = {
 const at = (iso: string) => new Date(iso)
 
 const MURPHY: Row[] = [
-  { externalId: 'tsdb_34249738', source: 'thesportsdb', sleeperId: '5864', name: 'Byron Murphy', position: 'DT', team: 'Seattle Seahawks', imageUrl: 'https://r2.thesportsdb.com/dt.png', fetchedAt: at('2026-10-11T08:42:36Z') },
+  { externalId: 'tsdb_34249738', source: 'thesportsdb', sleeperId: '5864', name: 'Byron Murphy', position: 'DT', team: 'Seattle Seahawks', imageUrl: 'https://img.example.test/dt.png', fetchedAt: at('2026-10-11T08:42:36Z') },
   { externalId: 'sleeper:5864', source: 'sleeper', sleeperId: '5864', name: 'Byron Murphy', position: 'CB', team: 'Minnesota Vikings', imageUrl: 'https://sleepercdn.com/content/nfl/players/thumb/5864.jpg', fetchedAt: at('2026-10-10T12:06:58Z') },
 ]
 const JENKINS: Row[] = [
-  { externalId: 'tsdb_34201216', source: 'thesportsdb', sleeperId: '11304', name: 'Elgton Jenkins', position: 'G', team: 'Cleveland Browns', imageUrl: 'https://r2.thesportsdb.com/g.png', fetchedAt: at('2026-10-11T08:42:36Z') },
+  { externalId: 'tsdb_34201216', source: 'thesportsdb', sleeperId: '11304', name: 'Elgton Jenkins', position: 'G', team: 'Cleveland Browns', imageUrl: 'https://img.example.test/g.png', fetchedAt: at('2026-10-11T08:42:36Z') },
   { externalId: 'sleeper:11304', source: 'sleeper', sleeperId: '11304', name: 'E.J. Jenkins', position: 'TE', team: 'Philadelphia Eagles', imageUrl: null, fetchedAt: at('2026-10-10T18:07:45Z') },
   { externalId: '7601', source: 'rolling_insights', sleeperId: '11304', name: 'E.J. Jenkins', position: 'TE', team: 'Philadelphia Eagles', imageUrl: 'https://ri.example/ej.png', fetchedAt: at('2026-10-10T09:15:02Z') },
 ]
