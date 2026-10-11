@@ -227,13 +227,27 @@ export type LiveGameCard = {
 export type LivePlay = PlayFeedItem & { slateGameId?: string | null }
 
 export type LiveImpact = {
-  /** Sum of your live points across every rostered player in a live game. */
+  /**
+   * Sum of your live points across every rostered player in a live game, once per (player, league).
+   * NOT a headline: it spans leagues with different scoring and falls when a game ends. See
+   * `starterStageCounts` for what the panel leads with instead.
+   */
   totalPoints: number
+  /** Distinct starters in a game being played now, each counted once across leagues. */
   livePlayers: number
+  /** Distinct starters whose game has not started. Optional for payloads built before it existed. */
+  upcomingPlayers?: number
+  /** Distinct starters whose game is over. */
+  finishedPlayers?: number
   /** Distinct leagues those live players count in. `totalPoints` sums across them. */
   liveLeagues?: number
   liveGames: number
-  /** The most recent notable play involving a player you roster. */
+  /**
+   * The most recent notable play by one of your STARTERS in a live game — shown as "Latest for you".
+   * ⚠ NOT A RANKING BY POINTS, whatever the field name says: nothing on this page holds a starter's
+   * point history, so "biggest" could not be measured. It was labelled "Biggest mover" until
+   * 2026-10-11, which promised a comparison the data never made.
+   */
   biggestMover: (LivePlay & { leagues: string[] }) | null
   /**
    * The recent play feed for this slate, newest first — the very rows

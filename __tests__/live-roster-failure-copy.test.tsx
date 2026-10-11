@@ -131,10 +131,12 @@ describe('impact panels — an unmeasured total must not render as 0.0', () => {
     expect(screen.queryByText(/fantasy pts scored live right now/i)).toBeNull()
   })
 
-  it('control: a real zero IS 0.0 — the em dash means "unknown", not "none"', () => {
+  it('control: a real zero IS 0 — the em dash means "unknown", not "none"', () => {
+    // The headline is a starter count since 2026-10-11, not summed points, so a real zero reads "0".
     render(<LiveImpactPanel impact={EMPTY_IMPACT} hasRosterData rosterFailed={false} />)
 
-    expect(screen.getByText('0.0')).toBeInTheDocument()
+    expect(screen.getByText('0')).toBeInTheDocument()
+    expect(screen.getByText('starters playing now')).toBeInTheDocument()
     expect(screen.queryByText('—')).toBeNull()
   })
 

@@ -1,6 +1,7 @@
 import type { LiveGameCard, LiveImpact } from './liveScoresPage'
 import type { PlayFeedItem } from './playFeedPresentation'
 import { isRosteredPlayer, rosterNameKeys } from './rosterPlayMatch'
+import { starterStageCounts } from './liveImpact'
 
 /** Vendor game IDs are namespaced. A resolved club and player must agree. */
 export function playBelongsToGame(play: PlayFeedItem, game: LiveGameCard): boolean {
@@ -30,9 +31,12 @@ export function liveWorkspace(games: LiveGameCard[], plays: PlayFeedItem[], leag
     } else row.remaining++
     leagues.set(t.leagueId, row)
   }
+  const stages = starterStageCounts(scoped)
   const impact: LiveImpact = {
     totalPoints: [...leagues.values()].reduce((sum, l) => sum + l.live, 0),
-    livePlayers: new Set(live.flatMap(g => g.tieIns.map(t => t.playerId))).size,
+    livePlayers: stages.live,
+    upcomingPlayers: stages.upcoming,
+    finishedPlayers: stages.finished,
     liveGames: live.filter(g => g.tieIns.length).length,
     plays: relevantPlays,
     biggestMover: mover ? { ...mover, leagues: [...new Set(live.filter(g => playBelongsToGame(mover, g)).flatMap(g => g.tieIns.filter(t => mover.sleeperId ? t.playerId === mover.sleeperId : isRosteredPlayer(rosterNameKeys([t.playerName]), mover.playerName)).map(t => t.leagueName)))] } : null,
