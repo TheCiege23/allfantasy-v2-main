@@ -46,59 +46,178 @@ export function __clearPlayerAgeCacheForTest(): void {
 }
 
 /**
- * Real ages for the given player names, keyed by NORMALISED name.
+ * One player to resolve. A bare string is a name with no verifying context.
  *
- * ⚠ KEYED ON THE NORMALISED NAME BECAUSE THE CALLER'S SPELLING IS NOT THE DATABASE'S. The tier
- * list alone carries "Marvin Harrison Jr.", "Marvin Harrison Jr" and "MHJ" for one player. Look
- * up with `normalizePlayerName` too, or use `ageOf`.
+ * 🛑 A NAME IS NOT AN IDENTITY (2026-10-11). Measured on `SportsPlayer` that day: "Justin
+ * Jefferson" carries age 27 (WR, MIN) and 23 (LB, CLE); 5,278 NFL names carry ages that differ by
+ * two years or more across rows. The old lookup took whichever row came back LAST, so the
+ * linebacker's 23 could price the receiver as a rising asset. Pass `sleeperId` when the caller
+ * holds it, and `position` otherwise — a name alone binds only when every row agrees.
+ */
+export interface AgeLookup {
+  name: string
+  position?: string | null
+  sleeperId?: string | null
+}
+
+/** A `SportsPlayer` row as the age resolver needs it. */
+export interface AgeRow {
+  name: string
+  age: number | null
+  position?: string | null
+  sleeperId?: string | null
+}
+
+/*
+ * Position GROUPS, not labels: feeds disagree on sub-positions for the same athlete (Byron Young
+ * is "LB" in Sleeper and "OLB" in TheSportsDB; the Eagles' Byron Young is "DL" and "DT"). A label
+ * outside this table is compared as itself, which keeps other sports exact.
+ */
+const POSITION_GROUP: Record<string, string> = {
+  QB: 'QB',
+  RB: 'RB', HB: 'RB', FB: 'RB',
+  WR: 'WR',
+  TE: 'TE',
+  K: 'K', PK: 'K',
+  P: 'P',
+  OL: 'OL', OT: 'OL', OG: 'OL', T: 'OL', G: 'OL', C: 'OL', IOL: 'OL',
+  DL: 'DL', DE: 'DL', DT: 'DL', NT: 'DL', EDGE: 'DL',
+  LB: 'LB', ILB: 'LB', OLB: 'LB', MLB: 'LB',
+  DB: 'DB', CB: 'DB', S: 'DB', SS: 'DB', FS: 'DB', SAF: 'DB',
+}
+
+const NO_POSITION = new Set(['', 'UNK', 'UNKNOWN', 'NA', 'N/A'])
+
+function positionGroup(position: string | null | undefined): string | null {
+  const p = String(position ?? '').trim().toUpperCase()
+  if (NO_POSITION.has(p)) return null
+  return POSITION_GROUP[p] ?? p
+}
+
+function toLookup(input: string | AgeLookup): AgeLookup {
+  return typeof input === 'string' ? { name: input } : input
+}
+
+/** The key a resolved age is stored under. `ageOf` builds the same key from the same lookup. */
+export function ageLookupKey(input: string | AgeLookup): string {
+  const l = toLookup(input)
+  const name = normalizePlayerName(l.name)
+  if (!name) return ''
+  const sid = String(l.sleeperId ?? '').trim()
+  return `${name}|${positionGroup(l.position) ?? ''}|${sid}`
+}
+
+/*
+ * ⚠ WHY A ONE-YEAR SPREAD IS TOLERATED AND TWO IS NOT. The SAME athlete routinely carries ages one
+ * apart across sources — a stored age goes stale on his birthday until that source re-syncs
+ * (Lamar Jackson CB: 28 in Rolling Insights, 27 in Sleeper, one DOB). Refusing that would blank
+ * most of the league. Two years apart is not staleness, it is two people (or a broken row), and
+ * that is refused. Inside one year the HIGHER value wins, because a stale age only ever lags.
+ */
+const MAX_AGREEING_SPREAD = 1
+
+function agreedAge(rows: readonly AgeRow[]): number | null {
+  const ages = rows.map((r) => r.age).filter((a): a is number => typeof a === 'number' && a > 0)
+  if (ages.length === 0) return null
+  const lo = Math.min(...ages)
+  const hi = Math.max(...ages)
+  return hi - lo > MAX_AGREEING_SPREAD ? null : hi
+}
+
+/**
+ * The age the given rows agree on for ONE player, or null when they do not identify one.
+ *
+ * Rules, in order:
+ *  1. `sleeperId` given and some row carries it → only those rows speak (an id IS an identity).
+ *  2. Otherwise rows whose normalised name matches, narrowed to the lookup's position GROUP when it
+ *     states one. A row with no position cannot be verified and is dropped once a position is asked.
+ *  3. Whatever survives must agree (see `MAX_AGREEING_SPREAD`) — rows that disagree are two
+ *     people, and two people's ages averaged or "first wins" is a fabricated input. Refuse.
+ *
+ * Pure: `trajectory.ts` `loadExperience` is the model (disagreement → say nothing).
+ */
+export function pickAgreedAge(rows: readonly AgeRow[], lookup: string | AgeLookup): number | null {
+  const l = toLookup(lookup)
+  const sid = String(l.sleeperId ?? '').trim()
+  if (sid) {
+    const byId = rows.filter((r) => String(r.sleeperId ?? '').trim() === sid)
+    if (byId.length > 0) return agreedAge(byId)
+  }
+  const name = normalizePlayerName(l.name)
+  if (!name) return null
+  let candidates = rows.filter((r) => normalizePlayerName(r.name) === name)
+  const group = positionGroup(l.position)
+  if (group) candidates = candidates.filter((r) => positionGroup(r.position) === group)
+  return agreedAge(candidates)
+}
+
+/**
+ * Real ages for the given players, keyed by `ageLookupKey` — read them back with `ageOf`, passing
+ * the SAME name/position/sleeperId you resolved with.
+ *
+ * ⚠ THE NAME IS NORMALISED BECAUSE THE CALLER'S SPELLING IS NOT THE DATABASE'S. The tier
+ * list alone carries "Marvin Harrison Jr.", "Marvin Harrison Jr" and "MHJ" for one player.
+ *
+ * 🛑 A NAMESAKE IS REFUSED, NOT GUESSED. A bare name whose rows disagree (Justin Jefferson WR 27 /
+ * LB 23) resolves to nothing; pass `position` or `sleeperId` to bind it. See `pickAgreedAge`.
  *
  * Never throws: an unreachable database yields an empty map, and every consumer treats a missing
  * age as "no opinion" rather than as an error.
  */
-export async function resolveNflAges(names: readonly string[]): Promise<Map<string, number>> {
+export async function resolveNflAges(
+  players: ReadonlyArray<string | AgeLookup>,
+): Promise<Map<string, number>> {
   const out = new Map<string, number>()
-  const wanted: string[] = []
+  const wanted: AgeLookup[] = []
+  const seen = new Set<string>()
 
-  for (const raw of names) {
-    const key = normalizePlayerName(raw)
-    if (!key) continue
+  for (const raw of players) {
+    const lookup = toLookup(raw)
+    const key = ageLookupKey(lookup)
+    if (!key || seen.has(key)) continue
+    seen.add(key)
     if (cache.has(key)) {
       const hit = cache.get(key)
       if (typeof hit === 'number') out.set(key, hit)
       continue
     }
-    wanted.push(raw)
+    wanted.push(lookup)
   }
   if (wanted.length === 0) return out
 
+  const names = [...new Set(wanted.map((l) => l.name))]
+  const sleeperIds = [
+    ...new Set(wanted.map((l) => String(l.sleeperId ?? '').trim()).filter(Boolean)),
+  ]
   const rows = await prisma.sportsPlayer
     .findMany({
-      where: { sport: 'NFL', name: { in: wanted }, age: { not: null } },
-      select: { name: true, age: true },
+      where: {
+        sport: 'NFL',
+        age: { not: null },
+        ...(sleeperIds.length > 0
+          ? { OR: [{ name: { in: names } }, { sleeperId: { in: sleeperIds } }] }
+          : { name: { in: names } }),
+      },
+      select: { name: true, age: true, position: true, sleeperId: true },
     })
-    .catch(() => [] as Array<{ name: string; age: number | null }>)
+    .catch(() => [] as AgeRow[])
 
-  for (const r of rows) {
-    const key = normalizePlayerName(r.name)
-    if (!key || typeof r.age !== 'number') continue
-    cache.set(key, r.age)
-    out.set(key, r.age)
-  }
-
-  /*
-   * ⚠ NEGATIVE RESULTS ARE CACHED TOO. Without this, a name the database does not carry is
-   * re-queried on every enrichment for the life of the process — and roughly 7% of NFL rows have
-   * no age at all, so the miss is common rather than exotic.
-   */
-  for (const raw of wanted) {
-    const key = normalizePlayerName(raw)
-    if (key && !out.has(key)) cache.set(key, null)
+  for (const lookup of wanted) {
+    const key = ageLookupKey(lookup)
+    const age = pickAgreedAge(rows as AgeRow[], lookup)
+    /*
+     * ⚠ NEGATIVE RESULTS ARE CACHED TOO. Without this, a name the database does not carry is
+     * re-queried on every enrichment for the life of the process — and roughly 7% of NFL rows
+     * have no age at all, so the miss is common rather than exotic.
+     */
+    cache.set(key, age)
+    if (age != null) out.set(key, age)
   }
 
   return out
 }
 
-/** One player's age from a resolved map, or undefined. Handles the caller's raw spelling. */
-export function ageOf(ages: Map<string, number>, name: string): number | undefined {
-  return ages.get(normalizePlayerName(name))
+/** One player's age from a resolved map, or undefined. Pass the same lookup you resolved with. */
+export function ageOf(ages: Map<string, number>, player: string | AgeLookup): number | undefined {
+  return ages.get(ageLookupKey(player))
 }
