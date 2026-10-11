@@ -310,21 +310,90 @@ async function fetchProviderPlayerSeeds(sport: SupportedSport, season: number, t
   return seeds
 }
 
-async function loadIdentitySeeds(sport: SupportedSport, teamCtx: TeamCodeContext): Promise<PlayerSeed[]> {
-  const rows = await prisma.playerIdentityMap.findMany({
-    where: { sport },
-    select: {
-      canonicalName: true,
-      currentTeam: true,
-      position: true,
-      sleeperId: true,
-      clearSportsId: true,
-      status: true,
-    },
-    take: 5000,
-  })
+/**
+ * Identity-map seeds are read in pages of this many rows, in `id` order.
+ *
+ * 🛑 THIS WAS ONE `take: 5000` WITH NO `orderBy` (2026-10-11), SO WHICH ATHLETES WERE SEEDED WAS
+ * WHATEVER POSTGRES HANDED BACK FIRST. Measured that day: NFL holds 9,567 identity rows, MLB 7,320,
+ * NCAAB 18,209 and NCAAF 62,751 — so 4,567 NFL and 2,320 MLB athletes were never seeded from the
+ * identity map, and which ones was decided by heap order, not by anything about the player.
+ */
+export const IDENTITY_SEED_PAGE_SIZE = 5_000
 
-  return rows
+/**
+ * Ceiling on identity rows read for ONE non-college sport in one run — a guard, not a window. The
+ * largest such sport is NFL at 9,567 (2026-10-11), two pages. A sport that outgrows it is read up to
+ * the ceiling, in the same order every run, and says so in `identitySeeds` telemetry.
+ */
+export const IDENTITY_SEED_MAX_ROWS = 25_000
+
+/** Cursor key for a college sport's identity rotation inside the run record's `seedCursors`. */
+export function identitySeedCursorKey(sport: string): string {
+  return `identity:${sport}`
+}
+
+/**
+ * The sport's identity-map seeds, in a STABLE order (`id` ascending), paged by `id > cursor`.
+ *
+ *  - Every sport outside `COLLEGE_PAGED_SPORTS` is read COMPLETELY each run (up to
+ *    `IDENTITY_SEED_MAX_ROWS`): NFL 9,567 rows is two reads. Reading all of them matters beyond
+ *    coverage: after a successful upsert, every row of the sport the run did NOT write has its injury
+ *    fields cleared, so an athlete seeded only every other run would lose a live designation every
+ *    other run.
+ *  - NCAAF (62,751) and NCAAB (18,209) cannot be written whole inside a run, so — exactly like their
+ *    `SportsPlayer` source pages — they rotate: ONE page per run from the cursor the last run left,
+ *    wrapping to the start once the end is reached. Same row volume as before, but every athlete now
+ *    comes round instead of the same 5,000 forever.
+ *
+ * `id > cursor` rather than Prisma's `cursor:` option: a deleted cursor row still resumes correctly.
+ */
+async function loadIdentitySeeds(
+  sport: SupportedSport,
+  teamCtx: TeamCodeContext,
+  cursor: string | null,
+): Promise<{ seeds: PlayerSeed[]; telemetry: PagedSeedTelemetry }> {
+  const rotate = COLLEGE_PAGED_SPORTS.has(sport)
+  const rows: Array<{
+    id: string
+    canonicalName: string
+    currentTeam: string | null
+    position: string | null
+    sleeperId: string | null
+    clearSportsId: string | null
+    status: string | null
+  }> = []
+  let after = rotate ? cursor : null
+  let exhausted = false
+  for (;;) {
+    const page = await prisma.playerIdentityMap.findMany({
+      where: { sport, ...(after ? { id: { gt: after } } : {}) },
+      orderBy: { id: 'asc' },
+      take: IDENTITY_SEED_PAGE_SIZE,
+      select: {
+        id: true,
+        canonicalName: true,
+        currentTeam: true,
+        position: true,
+        sleeperId: true,
+        clearSportsId: true,
+        status: true,
+      },
+    })
+    rows.push(...page)
+    if (page.length < IDENTITY_SEED_PAGE_SIZE) {
+      exhausted = true
+      break
+    }
+    after = page[page.length - 1]!.id
+    if (rotate || rows.length >= IDENTITY_SEED_MAX_ROWS) break
+  }
+  if (!rotate && !exhausted) {
+    console.warn(
+      `[sports-data-importer] ${sport} identity seeds stopped at the ${IDENTITY_SEED_MAX_ROWS}-row ceiling — later rows by id were not seeded this run`,
+    )
+  }
+
+  const seeds = rows
     .map((row) => ({
       id: buildPlayerId(sport, row.sleeperId ?? row.clearSportsId ?? null, row.canonicalName, row.currentTeam),
       name: row.canonicalName,
@@ -334,6 +403,16 @@ async function loadIdentitySeeds(sport: SupportedSport, teamCtx: TeamCodeContext
       source: 'manual',
     }))
     .filter((row) => Boolean(row.name))
+  return {
+    seeds,
+    telemetry: {
+      count: seeds.length,
+      cursorStart: rotate ? cursor : null,
+      // Rotating sports resume here next run; a complete read, or the end of a rotation, wraps.
+      cursorEnd: rotate && !exhausted ? after : null,
+      exhausted,
+    },
+  }
 }
 
 export type SleeperIdOwner = { sleeperId: string; name: string; position?: string | null }
@@ -579,6 +658,8 @@ export async function runSportsDataImporter(options?: {
   teamCodeCounts: Record<string, TeamCodeCounts>
   rowsSkippedByGuard: number
   pagedSeeds: Record<string, PagedSeedTelemetry>
+  /** Per sport: identity-map rows read this run, and the college rotation cursor. */
+  identitySeeds: Record<string, PagedSeedTelemetry>
   seedCursors: Record<string, string>
   injuryCleanup: StoredInjuryCleanup
 }> {
@@ -610,6 +691,7 @@ export async function runSportsDataImporter(options?: {
     ? await loadSeedCheckpoints()
     : {}
   const pagedSeeds: Record<string, PagedSeedTelemetry> = {}
+  const identitySeedTelemetry: Record<string, PagedSeedTelemetry> = {}
   const seedCursors: Record<string, string> = { ...seedCheckpoints }
   const injuryCleanup: StoredInjuryCleanup = {
     unwrittenCleared: {},
@@ -652,9 +734,9 @@ export async function runSportsDataImporter(options?: {
     }
     teamCodeCounts[sport] = teamCtx.counts
 
-    const [identitySeeds, sleeperIdOwners, riToSleeperId, providerSeeds, latestStats, latestInjuries, latestNews, latestAdp, metaTrends, projectionsResponse, rankingsResponse] =
+    const [identityPage, sleeperIdOwners, riToSleeperId, providerSeeds, latestStats, latestInjuries, latestNews, latestAdp, metaTrends, projectionsResponse, rankingsResponse] =
       await Promise.all([
-        loadIdentitySeeds(sport, teamCtx),
+        loadIdentitySeeds(sport, teamCtx, seedCheckpoints[identitySeedCursorKey(sport)] ?? null),
         loadSleeperIdOwners(sport),
         loadRollingInsightsToSleeperIds(sport),
         // The only UNBOUNDED provider read in this block. `projections` and `rankings` below were
@@ -757,6 +839,11 @@ export async function runSportsDataImporter(options?: {
 
     const projectionRows = asArrayRecords(projectionsResponse.data)
     const rankingRows = asArrayRecords(rankingsResponse.data)
+
+    const identitySeeds = identityPage.seeds
+    identitySeedTelemetry[sport] = identityPage.telemetry
+    if (identityPage.telemetry.cursorEnd) seedCursors[identitySeedCursorKey(sport)] = identityPage.telemetry.cursorEnd
+    else delete seedCursors[identitySeedCursorKey(sport)]
 
     // Supplementary paged source read for college sports (see COLLEGE_PAGED_SPORTS note).
     let pagedSportSeeds: PlayerSeed[] = []
@@ -1055,6 +1142,7 @@ export async function runSportsDataImporter(options?: {
     teamCodeCounts,
     rowsSkippedByGuard,
     pagedSeeds,
+    identitySeeds: identitySeedTelemetry,
     seedCursors,
     injuryCleanup,
   }
