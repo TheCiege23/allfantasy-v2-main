@@ -112,13 +112,18 @@ function names(ps: readonly OptimizerPlayer[]): string {
  * says them then. So a reshuffle names only its players in this slate, and quotes the projected
  * gain only when the whole swap is in this slate — otherwise the number would credit Thursday's
  * move with Sunday's points.
+ *
+ * `partial` marks a swap with moves left for later games. The line itself does not say so: the
+ * message says it ONCE (see `slateLockBody`), because per line it cost ~60 of 280 characters.
  */
-export function slateIssueLine(issue: LineupIssue, inSlate: (p: OptimizerPlayer) => boolean): string | null {
+export type SlateIssueLine = { text: string; partial: boolean }
+
+export function slateIssueLine(issue: LineupIssue, inSlate: (p: OptimizerPlayer) => boolean): SlateIssueLine | null {
   if (issue.kind === 'empty_slots') {
-    return issue.count === 1 ? 'A starting spot is empty.' : `${issue.count} starting spots are empty.`
+    return { text: issue.count === 1 ? 'A starting spot is empty.' : `${issue.count} starting spots are empty.`, partial: false }
   }
   if (issue.kind === 'no_projection') {
-    return `${who(issue.player)} is starting with no projection for this game — check he is active.`
+    return { text: `${who(issue.player)} is starting with no projection for this game — check he is active.`, partial: false }
   }
   if (issue.kind === 'ruled_out') return null
   const start = issue.start.filter(inSlate)
@@ -129,8 +134,41 @@ export function slateIssueLine(issue: LineupIssue, inSlate: (p: OptimizerPlayer)
     .filter(Boolean)
     .join(' and ')
   const said = `${moves.charAt(0).toUpperCase()}${moves.slice(1)}`
-  if (rest > 0) return `${said} before kickoff; the rest of that swap can wait for later games.`
-  return issue.gain != null ? `${said} (+${issue.gain.toFixed(1)} projected pts).` : `${said}.`
+  if (rest > 0) return { text: `${said}.`, partial: true }
+  return { text: issue.gain != null ? `${said} (+${issue.gain.toFixed(1)} projected pts).` : `${said}.`, partial: false }
+}
+
+/**
+ * The body: one line per league, then the "later games" note once. Measured on 2026-10-11's London
+ * game: 5 of 15 messages hit the 280 cap mid-word, because every line carried "before kickoff; the
+ * rest of that swap can wait for later games." and a 10-league message named only two leagues.
+ *
+ * Whole leagues are kept while they fit; the rest are counted ("+3 more leagues.") rather than cut
+ * mid-name. The note has reserved room so it is never the part that gets cut, and it is said only
+ * when a league actually SHOWN has a partial swap.
+ */
+function slateLockBody(lines: ReadonlyArray<{ leagueName: string; said: SlateIssueLine[] }>): string {
+  const rendered = lines.map((l) => ({
+    text: `${shortName(l.leagueName)}: ${l.said.map((s) => s.text).join(' ')}`,
+    partial: l.said.some((s) => s.partial),
+  }))
+  const tailFor = (kept: typeof rendered): string | null => {
+    const n = kept.filter((r) => r.partial).length
+    return n === 0 ? null : n === 1 ? 'The rest of that swap can wait for later games.' : 'The rest of those swaps can wait for later games.'
+  }
+  const more = (k: number): string | null => (k === 0 ? null : `+${k} more ${k === 1 ? 'league' : 'leagues'}.`)
+  const assemble = (parts: Array<string | null>): string => parts.filter((p): p is string => Boolean(p)).join('\n')
+
+  for (let k = rendered.length; k >= 1; k--) {
+    const kept = rendered.slice(0, k)
+    const body = assemble([...kept.map((r) => r.text), more(rendered.length - k), tailFor(kept)])
+    if (body.length <= BODY_MAX) return body
+  }
+  // Even one league is too long on its own: cut that line, keep the count and the note whole.
+  const first = rendered[0]!
+  const after = assemble([more(rendered.length - 1), tailFor([first])])
+  const room = BODY_MAX - (after ? after.length + 1 : 0)
+  return assemble([`${first.text.slice(0, room - 1).trimEnd()}…`, after || null])
 }
 
 /** "Lineups lock in 60 min (8:15 PM ET): 2 fixes in League" — with only this slate's moves in the body. */
@@ -140,23 +178,21 @@ export function renderSlateLock(
   now: Date,
   inSlate: (p: OptimizerPlayer) => boolean,
 ): SlateLockMessage | null {
-  const lines: Array<{ leagueId: string; leagueName: string; text: string[]; fixes: number }> = []
+  const lines: Array<{ leagueId: string; leagueName: string; said: SlateIssueLine[]; fixes: number }> = []
   for (const l of found) {
-    const text = l.issues.map((i) => slateIssueLine(i, inSlate)).filter((t): t is string => Boolean(t))
-    if (text.length === 0) continue
+    const said = l.issues.map((i) => slateIssueLine(i, inSlate)).filter((t): t is SlateIssueLine => Boolean(t))
+    if (said.length === 0) continue
     const fixes = l.issues.reduce((n, i) => n + (i.kind === 'empty_slots' ? i.count : i.kind === 'ruled_out' ? 0 : 1), 0)
-    lines.push({ leagueId: l.leagueId, leagueName: l.leagueName, text, fixes })
+    lines.push({ leagueId: l.leagueId, leagueName: l.leagueName, said, fixes })
   }
   if (lines.length === 0) return null
   const fixes = lines.reduce((n, l) => n + l.fixes, 0)
   const mins = Math.max(1, Math.round((slate.getTime() - now.getTime()) / 60_000))
   const what = `${fixes} ${fixes === 1 ? 'fix' : 'fixes'}`
   const where = lines.length === 1 ? `in ${shortName(lines[0]!.leagueName)}` : `across ${lines.length} leagues`
-  let body = lines.map((l) => `${shortName(l.leagueName)}: ${l.text.join(' ')}`).join('\n')
-  if (body.length > BODY_MAX) body = `${body.slice(0, BODY_MAX - 1).trimEnd()}…`
   return {
     title: `Lineups lock in ${mins} min (${slateClock(slate)}): ${what} ${where}`,
-    body,
+    body: slateLockBody(lines),
     actionHref: lineupCheckHref(lines[0]!.leagueId),
   }
 }
