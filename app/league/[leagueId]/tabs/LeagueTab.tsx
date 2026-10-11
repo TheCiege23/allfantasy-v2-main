@@ -1,5 +1,8 @@
 'use client'
 
+import '@/components/core-app/af-core.css'
+import '@/components/league/league-overview.css'
+
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Settings, Zap, RotateCcw, Calendar, Trophy, Users, ClipboardList, CreditCard } from 'lucide-react'
@@ -670,7 +673,7 @@ export function LeagueTab({
   }, [league.id])
 
   return (
-    <div className="space-y-4 p-5">
+    <div className="af-core af-league-overview space-y-4 p-5">
       {/* Decision OS launchers — Manager Intelligence (all members; entry shown only when the
           hub client flag is on) + Commissioner "League Intelligence" (member-readable; the
           commissioner-only cards are API-gated with 403 + an honest restricted state in the hub).

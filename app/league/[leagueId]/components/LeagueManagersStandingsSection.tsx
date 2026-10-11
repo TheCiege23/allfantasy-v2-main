@@ -1,5 +1,8 @@
 'use client'
 
+import '@/components/core-app/af-core.css'
+import '@/components/league/league-overview.css'
+
 import { useMemo, type ReactNode } from 'react'
 import Link from 'next/link'
 import { GitBranch } from 'lucide-react'
@@ -355,7 +358,7 @@ export function LeagueManagersStandingsSection({
 
   return (
     <section
-      className="overflow-hidden rounded-2xl border border-white/[0.06] bg-[#11182b]"
+      className="af-core af-league-overview af-overview-standings-card overflow-hidden rounded-2xl border border-white/[0.06] bg-[#11182b]"
       aria-label={preDraft ? 'Teams' : 'Standings'}
       data-testid="league-managers-standings"
     >
