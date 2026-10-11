@@ -12,11 +12,18 @@
  * is the inactive announcement. Pure.
  */
 export function liveFirstSeen(
-  existing: { status: string | null; date: Date | null } | null | undefined,
+  existing: { status: string | null; date: Date | null; expiresAt?: Date | null } | null | undefined,
   status: string,
   now: Date,
 ): Date {
   if (!existing?.date) return now
+  /*
+   * 🛑 ONLY A ROW STILL LIVE CARRIES ITS FIRST-SEEN TIME FORWARD (2026-10-11). The fold runs only in
+   * game windows, so between them its rows lapse but are not deleted — and the next window found a
+   * September "Out" and kept its date. Six live "Out" rows were dated 2026-09-09 that day, read as
+   * last week's news, and so counted as playing. A lapsed row is a previous episode.
+   */
+  if (existing.expiresAt && existing.expiresAt.getTime() <= now.getTime()) return now
   const same = (existing.status ?? '').trim().toLowerCase() === status.trim().toLowerCase()
   return same ? existing.date : now
 }

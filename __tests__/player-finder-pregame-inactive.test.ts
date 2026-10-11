@@ -108,5 +108,8 @@ describe('liveFirstSeen', () => {
     expect(liveFirstSeen({ status: 'out', date: first }, 'OUT', now)).toEqual(first)
     expect(liveFirstSeen({ status: 'Doubtful', date: first }, 'Out', now)).toEqual(now)
     expect(liveFirstSeen({ status: 'Out', date: null }, 'Out', now)).toEqual(now)
+    // A row that lapsed between game windows is a previous episode, not this one's start.
+    expect(liveFirstSeen({ status: 'Out', date: first, expiresAt: new Date(now.getTime() - 60_000) }, 'Out', now)).toEqual(now)
+    expect(liveFirstSeen({ status: 'Out', date: first, expiresAt: new Date(now.getTime() + 60_000) }, 'Out', now)).toEqual(first)
   })
 })
