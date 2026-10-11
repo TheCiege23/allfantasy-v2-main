@@ -11,7 +11,7 @@ import { nativeCategoryScoringContext } from '@/lib/category-scoring/nativeCateg
 import type { CategoryDefinition } from '@/lib/category-scoring/types'
 import { rosteredIdsOf } from './ncaafRedraftContext'
 import { categoryList, categoryPerGameValues, groupedCategoryValues } from './sportCategoryValue'
-import { isPitchingCategory, isPitchingSlot, MLB_REGULAR_SEASON_GAMES, toTeamGameLines } from './mlbTeamGame'
+import { isPitchingCategory, isPitchingSlot, MLB_CLUBS, MLB_REGULAR_SEASON_GAMES, toTeamGameLines } from './mlbTeamGame'
 import { blendSoccerSeasons, clubMatchCounts } from './soccerBoard'
 import { soccerSeasonLines } from '@/lib/af-projections/soccerSeasonLines'
 import {
@@ -96,26 +96,42 @@ export function seasonLabelFor(season: number, sport?: PointsGradedSport): strin
   return `${season}-${String((season + 1) % 100).padStart(2, '0')}`
 }
 
+type GamesLeft = { season: number; games: number; scheduleKnown: boolean }
+
 /**
- * Regular-season games each team still has. Null when the schedule has no row for the season (unknown,
- * not over) — except baseball's, whose length is fixed: an MLB season with no schedule posted yet is the
- * offseason, and the grade prices the whole 162-game season ahead, saying so (`scheduleKnown: false`).
+ * The season a deal is priced over and the regular-season games each team still has in it. Null when the
+ * schedule has no row for the season (unknown, not over) — except baseball's, whose length is fixed: an
+ * MLB season with no schedule posted yet is the offseason, and the grade prices the whole 162-game season
+ * ahead, saying so (`scheduleKnown: false`).
+ *
+ * 🛑 AN MLB SEASON WHOSE REGULAR SEASON IS OVER IS PRICED AS THE NEXT ONE. Postseason games carry a NULL
+ * `seasonType` (production, 2026-10-10: five 2026 games left, all untyped, among the clubs still playing),
+ * so the count below cannot tell them from regular-season games and would price an October deal on the
+ * three or four playoff games a handful of clubs have left. Fantasy baseball ends with the regular season;
+ * what an October deal buys is next season. Every club plays to the last regular-season day, so fewer than
+ * half of them with a game left is the end of it — whatever the rows are labelled.
  */
-async function seasonGamesLeft(
-  sport: PointsGradedSport,
-  season: number,
-  now: Date,
-): Promise<{ games: number; scheduleKnown: boolean } | null> {
+async function seasonGamesLeft(sport: PointsGradedSport, season: number, now: Date): Promise<GamesLeft | null> {
   const counted = await gamesRemaining(sport, season, now)
-  if (counted != null) return { games: counted, scheduleKnown: true }
-  return sport === 'MLB' ? { games: MLB_REGULAR_SEASON_GAMES, scheduleKnown: false } : null
+  if (sport !== 'MLB') return counted == null ? null : { season, games: counted.games, scheduleKnown: true }
+  if (counted == null) return { season, games: MLB_REGULAR_SEASON_GAMES, scheduleKnown: false }
+  if (counted.teams * 2 >= MLB_CLUBS) return { season, games: counted.games, scheduleKnown: true }
+  const next = await gamesRemaining(sport, season + 1, now)
+  return next != null && next.teams * 2 >= MLB_CLUBS
+    ? { season: season + 1, games: next.games, scheduleKnown: true }
+    : { season: season + 1, games: MLB_REGULAR_SEASON_GAMES, scheduleKnown: false }
 }
 
 /**
- * Regular-season games each team still has, averaged across teams. Null when the schedule has no row for
- * the season at all (unknown, not over); 0 when it has rows and none are still to be played.
+ * Regular-season games each team still has, averaged across the teams that have one, and how many teams
+ * that is. Null when the schedule has no row for the season at all (unknown, not over); zero games when it
+ * has rows and none are still to be played.
  */
-async function gamesRemaining(sport: PointsGradedSport, season: number, now: Date): Promise<number | null> {
+async function gamesRemaining(
+  sport: PointsGradedSport,
+  season: number,
+  now: Date,
+): Promise<{ games: number; teams: number } | null> {
   const [anyRow, upcoming] = await Promise.all([
     prisma.sportsGame.findFirst({ where: { sport: { equals: sport, mode: 'insensitive' }, season }, select: { id: true } }).catch(() => null),
     prisma.sportsGame
@@ -138,9 +154,9 @@ async function gamesRemaining(sport: PointsGradedSport, season: number, now: Dat
     if (type === 'pre' || type === 'post') continue
     for (const t of [g.homeTeam, g.awayTeam]) perTeam.set(t, (perTeam.get(t) ?? 0) + 1)
   }
-  if (perTeam.size === 0) return 0
+  if (perTeam.size === 0) return { games: 0, teams: 0 }
   const total = [...perTeam.values()].reduce((a, b) => a + b, 0)
-  return Math.round(total / perTeam.size)
+  return { games: Math.round(total / perTeam.size), teams: perTeam.size }
 }
 
 /** The lineup the waiver wire is estimated from: the league's slots, or the sport's defaults. */
@@ -231,8 +247,9 @@ export async function loadSportPointsBase(args: {
 }
 
 type BoardLine = Omit<BoardPlayer, 'perGame'> & { stats: Record<string, number> }
+/** `season` is the one priced: the lines' own, or the next one once an MLB regular season is over. */
 type LinesResult =
-  | { ok: true; season: number; games: { games: number; scheduleKnown: boolean }; lines: BoardLine[] }
+  | { ok: true; season: number; games: GamesLeft; lines: BoardLine[] }
   | { ok: false; reason: string }
 
 /**
@@ -281,10 +298,19 @@ async function loadSnapshotLines(
   normalize: (raw: unknown) => { stats: Record<string, number> },
   now: Date,
 ): Promise<LinesResult> {
+  /*
+   * 🛑 THE NEWEST RUN'S SEASON, NEVER THE HIGHEST SEASON ON FILE. The projection writer stamps MLB with the
+   * newest season that still has an unplayed game (`writeAfProjectionSnapshots`' target-season bound), and
+   * between postseason rounds there is none: production went 2026 (to 10-07) -> 2027 (10-08, 10-09) ->
+   * 2026 (10-10). A label change writes NEW rows, so the 2027 rows of 10-09 stayed behind, stale, and the
+   * highest season was theirs — fielding-only lines, from before the batting and pitching rates landed —
+   * while the day's run sat under 2026 and no MLB deal could be graded. One run writes one season, so the
+   * newest row names it.
+   */
   const latest = await prisma.aFProjectionSnapshot
     .findFirst({
       where: { sport: { equals: sport, mode: 'insensitive' }, week: null },
-      orderBy: { season: 'desc' },
+      orderBy: { computedAt: 'desc' },
       select: { season: true },
     })
     .catch(() => null)
@@ -331,7 +357,7 @@ async function loadSnapshotLines(
       stats,
     })
   }
-  return { ok: true, season, games, lines }
+  return { ok: true, season: games.season, games, lines }
 }
 
 /** Value every line under the league's scoring, then build the board, its readiness and its waiver wire. */

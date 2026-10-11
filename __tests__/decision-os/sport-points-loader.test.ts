@@ -6,8 +6,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const db = vi.hoisted(() => ({
-  projections: [] as Array<{ playerId: string; playerName: string; position: string; season: number; adjustmentFactors: unknown }>,
-  games: [] as Array<{ homeTeam: string; awayTeam: string; seasonType: string | null; startTime: Date }>,
+  projections: [] as Array<{ playerId: string; playerName: string; position: string; season: number; adjustmentFactors: unknown; computedAt?: Date }>,
+  // A game with no `season` stands in for every season; one with a season answers only for it.
+  games: [] as Array<{ homeTeam: string; awayTeam: string; seasonType: string | null; startTime: Date; season?: number }>,
   identities: [] as Array<{ id: string; rollingInsightsId: string | null; sleeperId: string | null; canonicalName?: string }>,
   rosters: [] as Array<{ playerData: unknown }>,
   // Soccer's per-match rows (`player_game_stats`), both seasons.
@@ -18,12 +19,20 @@ vi.mock('server-only', () => ({}))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     aFProjectionSnapshot: {
-      findFirst: vi.fn(async () => (db.projections[0] ? { season: db.projections[0].season } : null)),
-      findMany: vi.fn(async () => db.projections),
+      // Honours the ordering asked for, so a loader that asks for the wrong one reads the wrong season.
+      findFirst: vi.fn(async ({ orderBy }: { orderBy?: { season?: 'desc'; computedAt?: 'desc' } }) => {
+        if (db.projections.length === 0) return null
+        const key = (p: (typeof db.projections)[number]) => (orderBy?.computedAt ? (p.computedAt?.getTime() ?? 0) : orderBy?.season ? p.season : 0)
+        const top = db.projections.reduce((best, p) => (key(p) > key(best) ? p : best))
+        return { season: top.season }
+      }),
+      findMany: vi.fn(async ({ where }: { where?: { season?: number } }) => db.projections.filter((p) => where?.season == null || p.season === where.season)),
     },
     sportsGame: {
-      findFirst: vi.fn(async () => (db.games.length ? { id: 'g' } : null)),
-      findMany: vi.fn(async ({ where }: { where: { startTime: { gte: Date } } }) => db.games.filter((g) => g.startTime >= where.startTime.gte)),
+      findFirst: vi.fn(async ({ where }: { where: { season: number } }) =>
+        db.games.some((g) => g.season == null || g.season === where.season) ? { id: 'g' } : null),
+      findMany: vi.fn(async ({ where }: { where: { season: number; startTime: { gte: Date } } }) =>
+        db.games.filter((g) => (g.season == null || g.season === where.season) && g.startTime >= where.startTime.gte)),
     },
     playerIdentityMap: { findMany: vi.fn(async () => db.identities) },
     roster: { findMany: vi.fn(async () => db.rosters) },
@@ -46,10 +55,10 @@ function nbaPlayer(id: string, name: string, position: string, rates: Record<str
   db.identities.push({ id, rollingInsightsId: `ri-${id}`, sleeperId: null })
 }
 
-function schedule(teams: string[], gamesEach: number, seasonType: string | null) {
+function schedule(teams: string[], gamesEach: number, seasonType: string | null, season?: number) {
   for (let i = 0; i < gamesEach; i++) {
     for (let t = 0; t < teams.length; t += 2) {
-      db.games.push({ homeTeam: teams[t]!, awayTeam: teams[t + 1]!, seasonType, startTime: new Date(NOW.getTime() + (i + 1) * 86_400_000) })
+      db.games.push({ homeTeam: teams[t]!, awayTeam: teams[t + 1]!, seasonType, startTime: new Date(NOW.getTime() + (i + 1) * 86_400_000), season })
     }
   }
 }
@@ -171,22 +180,82 @@ describe('loadSportPointsBase', () => {
 
   describe('MLB', () => {
     // Stored the way `mlbPerGameRates` writes them: engine keys, per APPEARANCE, target 2027 from 2026.
-    function mlbPlayer(id: string, name: string, position: string, rates: Record<string, number>, sample: number) {
+    type Run = { season?: number; computedAt?: Date }
+    function mlbPlayer(id: string, name: string, position: string, rates: Record<string, number>, sample: number, run: Run = {}) {
       db.projections.push({
-        playerId: id, playerName: name, position, season: 2027,
+        playerId: id, playerName: name, position, season: run.season ?? 2027, computedAt: run.computedAt,
         adjustmentFactors: { perGameRates: rates, confidenceReasons: [`${sample} games in the season sample`], sourceSeason: 2026 },
       })
       db.identities.push({ id, rollingInsightsId: `ri-${id}`, sleeperId: null })
     }
     const hitter = (hr: number) => ({ ab: 3.8, h: 1, r: 0.6, hr, rbi: 0.6, sb: 0.1, tb: 1.6, bb: 0.4, bat_so: 0.9 })
     const starter = { ip: 6, outs: 18, so: 6.5, w: 0.4, l: 0.3, er: 2.2, p_h: 5, p_bb: 1.8 }
-    function mlbBoard() {
-      for (let i = 0; i < 12; i++) mlbPlayer(`h${i}`, `Hitter ${i}`, ['C', '1B', '2B', '3B', 'SS', 'LF'][i % 6]!, hitter(0.1 + i * 0.02), 150)
-      mlbPlayer('ace', 'Ace', 'P', { ...starter, so: 7.5, er: 1.8 }, 32)
-      mlbPlayer('half', 'Half Season', 'P', { ...starter, so: 7.5, er: 1.8 }, 16)
-      mlbPlayer('closer', 'Closer', 'P', { ip: 1, outs: 3, so: 1.2, sv: 0.6, er: 0.3, p_h: 0.8, p_bb: 0.3 }, 60)
-      for (let i = 0; i < 6; i++) mlbPlayer(`sp${i}`, `Starter ${i}`, 'P', { ...starter, so: 4 + i * 0.3 }, 30)
+    function mlbBoard(run: Run = {}) {
+      for (let i = 0; i < 12; i++) mlbPlayer(`h${i}`, `Hitter ${i}`, ['C', '1B', '2B', '3B', 'SS', 'LF'][i % 6]!, hitter(0.1 + i * 0.02), 150, run)
+      mlbPlayer('ace', 'Ace', 'P', { ...starter, so: 7.5, er: 1.8 }, 32, run)
+      mlbPlayer('half', 'Half Season', 'P', { ...starter, so: 7.5, er: 1.8 }, 16, run)
+      mlbPlayer('closer', 'Closer', 'P', { ip: 1, outs: 3, so: 1.2, sv: 0.6, er: 0.3, p_h: 0.8, p_bb: 0.3 }, 60, run)
+      for (let i = 0; i < 6; i++) mlbPlayer(`sp${i}`, `Starter ${i}`, 'P', { ...starter, so: 4 + i * 0.3 }, 30, run)
     }
+
+    /*
+     * Production on 2026-10-10: the writer stamped 10-09's run 2027 (no MLB game on file between postseason
+     * rounds) and 10-10's run 2026 (five playoff games on file, all with a NULL season type). The 2027 rows
+     * of 10-09 are still there, from before the batting and pitching rates landed — fielding only.
+     */
+    const CLUBS = Array.from({ length: 30 }, (_, i) => `Club ${i}`)
+    function flickeredBoard() {
+      mlbBoard({ season: 2026, computedAt: new Date('2026-10-10T07:50:55Z') })
+      for (let i = 0; i < 12; i++) {
+        mlbPlayer(`old${i}`, `Old Row ${i}`, 'SS', { E: 0.05, PO: 1.2 }, 140, { season: 2027, computedAt: new Date('2026-10-09T07:50:41Z') })
+      }
+    }
+
+    it('reads the newest run, not the highest season on file', async () => {
+      flickeredBoard()
+      schedule(CLUBS, 20, null, 2026)
+      const out = await loadSportPointsBase({ sport: 'MLB', league: null, format: 'points', now: NOW })
+      if (!out.ok) throw new Error(out.reason)
+      expect(out.ctx.board.some((p) => p.name === 'Hitter 0')).toBe(true)
+      expect(out.ctx.board.some((p) => p.name.startsWith('Old Row'))).toBe(false)
+      expect(out.ctx.window).toMatchObject({ season: 2026, seasonLabel: '2026', gamesRemaining: 20, baselineSeasonLabel: null })
+      expect(out.ctx.window.scheduleKnown).toBeUndefined()
+    })
+
+    it('prices next season once only the postseason clubs have a game left', async () => {
+      flickeredBoard()
+      // Four clubs still playing, untyped as in production: read as games left, they would price the deal on three.
+      schedule(['Club 0', 'Club 1', 'Club 2', 'Club 3'], 3, null, 2026)
+      const out = await loadSportPointsBase({ sport: 'MLB', league: null, format: 'points', now: NOW })
+      if (!out.ok) throw new Error(out.reason)
+      expect(out.ctx.window).toMatchObject({ season: 2027, seasonLabel: '2027', gamesRemaining: 162, scheduleKnown: false, baselineSeasonLabel: '2026' })
+    })
+
+    it('prices next season when this one has no game left at all, rather than refusing', async () => {
+      flickeredBoard()
+      db.games.push({ homeTeam: 'Club 0', awayTeam: 'Club 1', seasonType: null, startTime: new Date('2026-09-27T20:00:00Z'), season: 2026 })
+      const out = await loadSportPointsBase({ sport: 'MLB', league: null, format: 'points', now: NOW })
+      if (!out.ok) throw new Error(out.reason)
+      expect(out.ctx.window).toMatchObject({ season: 2027, gamesRemaining: 162, scheduleKnown: false })
+    })
+
+    it('counts next season’s schedule once it is posted', async () => {
+      flickeredBoard()
+      schedule(['Club 0', 'Club 1'], 2, null, 2026)
+      schedule(CLUBS, 40, null, 2027)
+      const out = await loadSportPointsBase({ sport: 'MLB', league: null, format: 'points', now: NOW })
+      if (!out.ok) throw new Error(out.reason)
+      expect(out.ctx.window).toMatchObject({ season: 2027, seasonLabel: '2027', gamesRemaining: 40 })
+      expect(out.ctx.window.scheduleKnown).toBeUndefined()
+    })
+
+    it('still counts the last day of the regular season, when every club plays once', async () => {
+      flickeredBoard()
+      schedule(CLUBS, 1, null, 2026)
+      const out = await loadSportPointsBase({ sport: 'MLB', league: null, format: 'points', now: NOW })
+      if (!out.ok) throw new Error(out.reason)
+      expect(out.ctx.window).toMatchObject({ season: 2026, gamesRemaining: 1 })
+    })
 
     it('prices the whole 162-game season ahead when the schedule is not posted, and says so', async () => {
       mlbBoard()
