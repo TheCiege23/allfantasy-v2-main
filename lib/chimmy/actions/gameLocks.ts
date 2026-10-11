@@ -35,6 +35,11 @@ export type LockCheck = {
   started: Map<string, string>
   /** Players whose kickoff could not be checked either way. */
   unverified: string[]
+  /**
+   * playerId → his next kickoff, for a player not yet started whose game we can see. Optional, so a
+   * caller (or a test double) that reports only locks still type-checks; absent means "not known".
+   */
+  kickoffs?: Map<string, Date>
 }
 
 type GameRow = {
@@ -93,6 +98,7 @@ export async function checkStartedGames(args: {
   const now = args.now ?? new Date()
   const sport = norm(args.sport)
   const started = new Map<string, string>()
+  const kickoffs = new Map<string, Date>()
   const needSchedule: LockCandidate[] = []
 
   for (const p of args.players) {
@@ -103,7 +109,7 @@ export async function checkStartedGames(args: {
     }
     needSchedule.push(p)
   }
-  if (needSchedule.length === 0) return { started, unverified: [] }
+  if (needSchedule.length === 0) return { started, unverified: [], kickoffs }
 
   const sports = SPORT_ALIASES[sport] ?? [sport]
   const from = windowStart(sport, now)
@@ -132,16 +138,30 @@ export async function checkStartedGames(args: {
     const futureRowTime = p.gameTime ? Date.parse(p.gameTime) : NaN
     const rowSaysLater = Number.isFinite(futureRowTime) && futureRowTime > now.getTime()
     if (!p.team || readFailed) {
-      if (!rowSaysLater) unverified.push(p.playerId)
+      if (rowSaysLater) kickoffs.set(p.playerId, new Date(futureRowTime))
+      else unverified.push(p.playerId)
       continue
     }
     const teamGames = rows.filter((r) => teamMatches(sport, p.team!, r))
     const begun = teamGames.find((r) => r.startTime instanceof Date && r.startTime.getTime() <= now.getTime())
     if (begun) {
       started.set(p.playerId, `${p.name}'s game (${begun.awayTeam ?? '?'} at ${begun.homeTeam ?? '?'}) has already started`)
-    } else if (teamGames.length === 0 && !rowSaysLater) {
-      unverified.push(p.playerId)
+      continue
     }
+    if (teamGames.length === 0 && !rowSaysLater) {
+      unverified.push(p.playerId)
+      continue
+    }
+    // His next game is the earliest kickoff still ahead; the lineup row's own time wins when it is
+    // earlier — the same either-signal rule the lock itself follows. ⚠ Only inside this scoring
+    // week: on a bye the next row is NEXT week's game, which is no deadline for this lineup.
+    const weekEnd = from.getTime() + 7 * 24 * 3600 * 1000
+    const ahead = teamGames
+      .map((r) => (r.startTime instanceof Date ? r.startTime.getTime() : NaN))
+      .filter((t) => Number.isFinite(t) && t > now.getTime() && t < weekEnd)
+    const next = ahead.length > 0 ? Math.min(...ahead) : undefined
+    const at = rowSaysLater && (next == null || futureRowTime < next) ? futureRowTime : next
+    if (at != null) kickoffs.set(p.playerId, new Date(at))
   }
-  return { started, unverified }
+  return { started, unverified, kickoffs }
 }
