@@ -19,10 +19,28 @@ vi.mock('@/lib/prisma', () => ({
         const asked = where.OR.find((c) => c.sleeperId)?.sleeperId?.in ?? []
         const table = [
           { externalId: 'ri-1', sleeperId: '6038', name: 'Wrong Player', position: 'K', status: null },
-          { externalId: 'ri-2', sleeperId: '6040', name: 'Wrong Injured', position: 'QB', status: 'Out' },
+          // `SportsPlayer.status` is a roster word, never the injury — that comes from the feed below.
+          { externalId: 'ri-2', sleeperId: '6040', name: 'Wrong Injured', position: 'QB', status: 'Active' },
         ]
         return table.filter((r) => asked.includes(r.sleeperId))
       }),
+    },
+    /* The live injury feed `resolveInjuryFacts` reads: the player it names is Out. */
+    sportsInjury: {
+      findMany: vi.fn(async () => [
+        {
+          playerName: 'Wrong Injured',
+          status: 'Out',
+          type: 'Knee',
+          description: null,
+          date: new Date(),
+          week: null,
+          source: 'rolling_insights',
+          fetchedAt: new Date(),
+          team: null,
+          position: 'QB',
+        },
+      ]),
     },
   },
 }))
