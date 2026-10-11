@@ -7113,7 +7113,7 @@ function AFLegacyContent() {
                                   </p>
                                   {(aiReport as any).offseason_label && (
                                     <div className={`mt-2 inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold ${
-                                      (aiReport as any).offseason_label === 'Best 2025 Outlook' ? 'bg-green-500/30 text-green-300' :
+                                      /^Best \d{4} Outlook$/.test(String((aiReport as any).offseason_label)) ? 'bg-green-500/30 text-green-300' :
                                       (aiReport as any).offseason_label === 'Most Fragile Contender' ? 'bg-yellow-500/30 text-yellow-300' :
                                       (aiReport as any).offseason_label === 'Best Rebuild Foundation' ? 'bg-blue-500/30 text-blue-300' :
                                       'bg-red-500/30 text-red-300'
