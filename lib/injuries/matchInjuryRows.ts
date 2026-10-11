@@ -128,3 +128,19 @@ export function matchInjuryRowsToPlayers<R extends InjuryRowLike>(
   }
   return { byPlayer, ambiguous }
 }
+
+/**
+ * `player → newest status`, for the readers that used to build `Map<name, status>` with "first row
+ * wins". Same binding as `createInjuryRowMatcher`: the athlete's OWN rows, refused (null) when a
+ * shared name cannot be told apart. Rows must arrive newest first; a row with no status is skipped.
+ */
+export function injuryStatusLookup<R extends InjuryRowLike & { status: string | null }>(
+  rows: readonly R[],
+  sport: string,
+): (player: InjuryPlayerLookup) => string | null {
+  const match = createInjuryRowMatcher(rows.filter((r) => Boolean(r.status)), sport)
+  return (player) => {
+    const hit = match(player)
+    return hit && 'rows' in hit ? hit.rows[0]?.status ?? null : null
+  }
+}

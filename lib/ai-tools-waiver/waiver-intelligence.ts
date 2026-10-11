@@ -1,3 +1,4 @@
+import { injuryStatusLookup } from '@/lib/injuries/matchInjuryRows'
 import { toImageUrl } from '@/lib/media/imageUrl'
 import 'server-only'
 
@@ -789,15 +790,21 @@ async function runSingleSportAnalysis(args: RunArgs): Promise<{
    * waiver candidates. The port serves the fed table (SportsInjury), one row
    * per player, and we drop stale rows outright: no badge beats a wrong badge.
    */
-  const injuryByName = new Map<string, string>()
+  /*
+   * Bound per athlete (name + team/position via matchInjuryRows). Keyed by lower-cased name, the
+   * LAST fact won — two athletes sharing a name (WR vs LB Justin Jefferson) swapped badges.
+   */
+  let injuryStatusOf: (p: { name: string; team?: string | null; position?: string | null }) => string | null = () => null
   if (SUPPORTED_SPORTS.includes(sportStr as (typeof SUPPORTED_SPORTS)[number])) {
     try {
       const { listInjuryFacts } = await import('@/lib/injuries/injuryReadPort')
       const factList = await listInjuryFacts({ sport: sportStr, limit: 300 })
-      for (const f of factList.facts) {
-        if (f.stale || !f.status) continue
-        injuryByName.set(f.playerName.toLowerCase(), String(f.status))
-      }
+      injuryStatusOf = injuryStatusLookup(
+        factList.facts
+          .filter((f) => !f.stale && Boolean(f.status))
+          .map((f) => ({ playerName: f.playerName, team: f.team, position: f.position, status: String(f.status) })),
+        sportStr,
+      )
     } catch {
       dataGaps.push(`Injury designations unavailable for ${sportStr}.`)
     }
@@ -913,7 +920,7 @@ async function runSingleSportAnalysis(args: RunArgs): Promise<{
     let marketValue = 1000
     let headshotUrl: string | null = null
     let imageUrl: string | null = null
-    let injuryStatus: string | null = injuryByName.get(c.name.toLowerCase()) ?? null
+    let injuryStatus: string | null = injuryStatusOf({ name: c.name, team: c.team, position: c.position })
     let recordId: string | null = null
 
     const idpTierValue = idpTierValues?.get(c.externalId) ?? null

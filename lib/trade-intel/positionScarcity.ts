@@ -1,4 +1,5 @@
 import 'server-only'
+import { injuryStatusLookup } from '@/lib/injuries/matchInjuryRows'
 
 import { prisma } from '@/lib/prisma'
 import { isRuledOut } from '@/lib/core-app/injuryStatus'
@@ -89,7 +90,7 @@ export async function getPositionScarcity(args: {
   const players = await prisma.sportsPlayer
     .findMany({
       where: { sleeperId: { in: projectedIds }, position: { in: [...wanted] } },
-      select: { sleeperId: true, name: true, position: true },
+      select: { sleeperId: true, name: true, position: true, team: true },
     })
     .catch(() => [])
 
@@ -112,18 +113,16 @@ export async function getPositionScarcity(args: {
     .findMany({
       where: { sport, playerName: { in: candidates.map((c) => c.name) } },
       orderBy: { fetchedAt: 'desc' },
-      select: { playerName: true, status: true },
+      select: { playerName: true, status: true, team: true, position: true },
     })
     .catch(() => [])
-  const statusByName = new Map<string, string | null>()
-  for (const i of injuries) {
-    const k = i.playerName.toLowerCase()
-    if (!statusByName.has(k)) statusByName.set(k, i.status)
-  }
+  // Bound per athlete (name + team/position): a name-keyed map ruled a free agent out on a
+  // same-named player's injury, dropping a healthy body from the count.
+  const statusOf = injuryStatusLookup(injuries, sport)
 
   const counts = new Map<string, number>()
   for (const c of candidates) {
-    if (isRuledOut(statusByName.get((c.name ?? '').toLowerCase()) ?? null)) continue
+    if (isRuledOut(statusOf({ name: c.name ?? '', team: c.team, position: c.position }))) continue
     const pos = (c.position ?? '').toUpperCase()
     if (!wanted.has(pos)) continue
     counts.set(pos, (counts.get(pos) ?? 0) + 1)

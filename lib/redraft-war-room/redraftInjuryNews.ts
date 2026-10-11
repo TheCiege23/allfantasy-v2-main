@@ -10,6 +10,7 @@
  * whatever the roster row already had (often null). Names like "Unknown Player" /
  * "General Update" are ignored.
  */
+import { foldInjuryTeam } from '@/lib/injuries/matchInjuryRows'
 import { prisma } from '@/lib/prisma'
 import { listInjuryFacts } from '@/lib/injuries/injuryReadPort'
 
@@ -53,16 +54,29 @@ export async function fetchRedraftInjuryNews(sport: string): Promise<RedraftInju
   const factList = await listInjuryFacts({ sport, limit: 1000 }).catch(() => null)
 
   const injuryByName = new Map<string, RedraftInjuryEntry>()
+  /*
+   * 🛑 A NAME TWO ATHLETES SHARE IS DROPPED, NOT "FIRST HIT WINS". The port returns one fact per
+   * (name, team), so the Vikings WR and the Browns LB named Justin Jefferson arrive as two facts;
+   * keying them by name alone handed the war room whichever came first (2026-10-11). This map's
+   * readers only have a name, so a shared one is answered with nothing rather than the wrong man.
+   */
+  const teamByKey = new Map<string, string>()
+  const shared = new Set<string>()
   let injuriesAsOf: Date | null = null
   for (const f of factList?.facts ?? []) {
     const key = normName(f.playerName)
     if (IGNORE_NAMES.has(key)) continue
     if (typeof f.status !== 'string' || !f.status.trim()) continue
+    const team = foldInjuryTeam(f.team, sport) ?? ''
+    const seenTeam = teamByKey.get(key)
+    if (seenTeam !== undefined && seenTeam !== team) shared.add(key)
     if (!injuryByName.has(key)) {
+      teamByKey.set(key, team)
       injuryByName.set(key, { status: f.status, gameStatus: null, reportDate: f.fetchedAt })
     }
     if (!injuriesAsOf || f.fetchedAt > injuriesAsOf) injuriesAsOf = f.fetchedAt
   }
+  for (const key of shared) injuryByName.delete(key)
 
   const latestNews = await prisma.playerNewsRecord
     .findFirst({
