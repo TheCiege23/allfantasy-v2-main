@@ -25,6 +25,12 @@ import type { CategoryDefinition } from '@/lib/category-scoring/types'
 /** MLB's regular season, for a season whose schedule is not posted yet (the offseason). */
 export const MLB_REGULAR_SEASON_GAMES = 162
 
+/**
+ * MLB's clubs. All of them play to the last day of the regular season and at most twelve reach the
+ * postseason, so fewer than half of them with a game left means the regular season is over.
+ */
+export const MLB_CLUBS = 30
+
 /** Innings an appearance at or above which a pitcher is a starter. */
 export const STARTER_INNINGS_PER_APPEARANCE = 3
 
