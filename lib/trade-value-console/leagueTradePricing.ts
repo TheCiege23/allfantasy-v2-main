@@ -733,7 +733,7 @@ export async function resolveAssets(
      * 2026-10-09). This used to price the row with `sportsRecordToPricedAsset`: `dynasty_value × 75`,
      * else `projections.points × 45`. Measured in production, neither is a value —
      *   - `dynasty_value` is the row's POSITION in a provider list squeezed to 1–100
-     *     (`sports-data-importer.ts` `buildDynastyValueMap`), so 800 soccer players were graded on
+     *     (`sports-data-importer.ts` `buildDynastyValueRows`), so 800 soccer players were graded on
      *     their list order;
      *   - no row in any sport carries a projection key the fallback reads, so every NBA, NHL and
      *     NCAAB player fell through — and was then reported as "Could not resolve … fix spelling".
