@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation'
 import { Fragment, useEffect, useId, useRef, useState } from 'react'
 import MiniPlayerImg from '@/components/MiniPlayerImg'
 import { CommissionerBadge } from '@/components/core-app/CommissionerBadge'
+import LeagueClipSpotlight from '@/components/core-app/highlights/LeagueClipSpotlight'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 /*
  * ⚠ af-core.css FIRST, AND IT IS LOAD BEARING. This screen renders at /dashboard
@@ -1287,6 +1288,7 @@ export function Dash3ALeagues({
                 ))}
               </div>
             )}
+            <LeagueClipSpotlight leagueIds={shownLeagues.map(l => l.id)} />
             {leagueTotal > shownLeagues.length ? (
               <Link className="af3a-cardlink" href="/core/portfolio">
                 {es ? <>Ver las {leagueTotal} &rarr;</> : <>Show all {leagueTotal} &rarr;</>}
