@@ -1,5 +1,8 @@
 'use client'
 
+import '@/components/core-app/af-core.css'
+import '@/components/league/league-admin.css'
+
 import { useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
@@ -121,14 +124,15 @@ export function LeagueSettingsControlCenter({
   }, [tab, tabProps, t])
 
   return (
-    <div className="flex min-h-[380px] flex-1 flex-col gap-0 md:min-h-[520px] md:flex-row">
+    <div className="af-core af-league-admin flex min-h-[380px] flex-1 flex-col gap-0 md:min-h-[520px] md:flex-row">
       {/* Mobile tabs */}
-      <div className="scrollbar-none flex gap-1 overflow-x-auto border-b border-white/[0.06] pb-2 md:hidden">
+      <nav aria-label={t('lsHub.sections')} className="af-settings-mobile-nav scrollbar-none flex gap-1 overflow-x-auto border-b border-white/[0.06] pb-2 md:hidden">
         {TABS.map((tb) => (
           <button
             key={tb.id}
             type="button"
             onClick={() => setTab(tb.id)}
+            aria-current={tab === tb.id ? 'page' : undefined}
             data-testid={`league-settings-hub-tab-${tb.id}`}
             className={`shrink-0 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold transition ${
               tab === tb.id ? 'bg-cyan-500/15 text-cyan-200' : 'text-white/45 hover:text-white/75'
@@ -137,11 +141,11 @@ export function LeagueSettingsControlCenter({
             {t(tb.shortKey)}
           </button>
         ))}
-      </div>
+      </nav>
 
       {/* Desktop sidebar */}
       <nav
-        className="hidden w-[200px] shrink-0 flex-col gap-0.5 border-r border-white/[0.06] pr-3 pt-1 md:flex"
+        className="af-settings-sidebar hidden w-[200px] shrink-0 flex-col gap-0.5 border-r border-white/[0.06] pr-3 pt-1 md:flex"
         aria-label={t('lsHub.sections')}
       >
         {TABS.map((tb) => {
@@ -151,6 +155,7 @@ export function LeagueSettingsControlCenter({
               key={tb.id}
               type="button"
               onClick={() => setTab(tb.id)}
+              aria-current={active ? 'page' : undefined}
               data-testid={`league-settings-hub-tab-${tb.id}`}
               className={`rounded-lg px-2 py-2 text-left text-[12px] font-medium transition ${
                 active ? 'bg-white/[0.08] text-cyan-200 shadow-[0_0_0_1px_rgba(34,211,238,0.12)]' : 'text-white/60 hover:bg-white/[0.04] hover:text-white'
@@ -162,7 +167,7 @@ export function LeagueSettingsControlCenter({
         })}
       </nav>
 
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-1 py-2 md:px-5 md:py-1">
+      <div className="af-settings-content min-h-0 flex-1 overflow-y-auto overscroll-contain px-1 py-2 md:px-5 md:py-1">
         <AnimatePresence mode="wait">
           <motion.div
             key={tab}

@@ -1,0 +1,77 @@
+/* League settings and commissioner operations share AF Core's visual hierarchy. */
+.af-core.af-league-admin {
+  color: var(--text);
+  background: var(--bg);
+  font-family: var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  min-width: 0;
+}
+.af-league-admin :is(h1, h2, h3) { font-style: normal; letter-spacing: -.02em; color: var(--text); }
+.af-league-admin :is(h1, h2) { font-weight: 750; }
+.af-league-admin h3 { font-size: 14px; font-weight: 650; text-transform: none; letter-spacing: 0; }
+.af-league-admin p { overflow-wrap: anywhere; }
+.af-league-admin :is(button, select, input:not([type='checkbox']):not([type='radio'])) { min-height: 44px; }
+.af-league-admin :is(input, select, textarea) { max-width: 100%; color-scheme: dark; }
+html[data-mode='light'] .af-league-admin :is(input, select, textarea) { color-scheme: light; }
+.af-league-admin :is(button, a, input, select, textarea):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.af-league-admin button:disabled { cursor: not-allowed; }
+/* Older embedded panels inherit the same surfaces and text tiers, without touching
+   their semantic warnings, destructive actions, or permission logic. */
+.af-league-admin [class~='text-white'] { color: var(--text); }
+.af-league-admin :is([class~='text-white/20'], [class~='text-white/25'], [class~='text-white/30'], [class~='text-white/35'], [class~='text-white/40'], [class~='text-white/45'], [class~='text-white/50'], [class~='text-white/55'], [class~='text-white/60'], [class~='text-white/65'], [class~='text-white/70'], [class~='text-white/75']) { color: var(--muted); }
+.af-league-admin :is([class~='text-white/80'], [class~='text-white/85'], [class~='text-white/90']) { color: var(--text2); }
+.af-league-admin [class*='border-white/'] { border-color: var(--line2); }
+.af-league-admin :is([class~='bg-black/20'], [class~='bg-black/25'], [class~='bg-black/30'], [class~='bg-black/40'], [class~='bg-black/50'], [class~='bg-black/60'], [class~='bg-black/75'], [class~='bg-black/80'], [class~='bg-white/[0.01]'], [class~='bg-white/[0.02]'], [class~='bg-white/[0.03]'], [class~='bg-white/[0.04]'], [class~='bg-white/[0.05]'], [class~='bg-white/[0.055]'], [class~='bg-white/[0.06]'], [class~='bg-white/[0.07]'], [class~='bg-white/[0.08]'], [class~='bg-white/[0.12]']):not(.fixed):not(.absolute) { background-color: var(--surface2); }
+.af-league-admin :is([class*='bg-[#0a1228]'], [class*='bg-[#1a1f3a]']) { background-color: var(--surface); }
+.af-league-admin [class*='text-cyan-'] { color: var(--accent); }
+.af-league-admin [class*='text-[#ff'] { color: var(--accent); }
+.af-league-admin [class*='border-[#ff3d81]'] { border-color: var(--line2); }
+.af-league-admin [class*='bg-[#ff3d81]'] { background-color: var(--accent-soft); }
+.af-league-admin button[aria-pressed='true'] { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); box-shadow: none; }
+.af-league-admin .af-admin-header { padding: 20px; background: var(--surface); border-color: var(--line2); border-radius: 12px; }
+.af-league-admin .af-admin-header h2 { font-size: 24px; line-height: 1.25; }
+.af-league-admin .af-admin-eyebrow { color: var(--accent); font-size: 11px; font-weight: 600; font-style: normal; letter-spacing: .08em; }
+.af-league-admin [data-testid='commissioner-league-state'] { background: var(--accent-soft); color: var(--accent); border: 1px solid var(--line2); }
+.af-league-admin .af-admin-shortcuts { display: flex; flex-wrap: wrap; gap: 8px; }
+.af-league-admin .af-admin-shortcuts a { display: inline-flex; align-items: center; min-height: 44px; padding: 8px 12px; border: 1px solid var(--line2); border-radius: 8px; color: var(--text2); background: var(--surface2); font-size: 12px; }
+.af-league-admin .af-admin-shortcuts a:hover { border-color: var(--accent); color: var(--accent); }
+.af-league-admin .af-admin-section-nav { display: grid; grid-template-columns: repeat(auto-fit, minmax(135px, 1fr)); }
+.af-league-admin .af-admin-section-title { font-size: 16px; line-height: 1.4; }
+.af-league-admin .af-admin-pulse {
+  --bdx-ground: var(--bg); --bdx-panel: var(--surface); --bdx-panel-deep: var(--surface2);
+  --bdx-border: var(--line2); --bdx-border-soft: var(--line);
+  --bdx-ink: var(--text); --bdx-ink-mid: var(--text2); --bdx-ink-dim: var(--muted);
+  --bdx-ink-faint: var(--faint); --bdx-ink-ghost: var(--faint);
+  background: var(--bg); font-family: inherit;
+}
+.af-league-admin .af-admin-pulse .bdx-disp { font-style: normal; text-transform: none; font-size: 16px; letter-spacing: 0; }
+.af-league-admin .af-admin-pulse [data-testid='commissioner-pulse'] { margin-top: 0 !important; }
+.af-league-admin .af-admin-action-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); }
+.af-league-admin .af-admin-action { border-radius: 12px; background: var(--surface); border-color: var(--line2); padding: 20px; }
+.af-league-admin .af-admin-action:enabled:hover { border-color: var(--accent); background: var(--surface2); }
+.af-league-admin .af-admin-action p { line-height: 1.6; }
+.af-league-admin .af-admin-action > div > span:first-child { background: var(--accent-soft); color: var(--accent); }
+.af-league-admin .af-admin-action > div > span:last-child { text-transform: none; letter-spacing: 0; font-weight: 550; }
+.af-league-admin [data-testid^='commissioner-group-'] { scroll-margin-top: 16px; }
+.af-league-admin .af-settings-mobile-nav { min-width: 0; padding: 8px 0; gap: 6px; }
+.af-league-admin :is(.af-settings-mobile-nav, .af-settings-sidebar) { scrollbar-width: thin; scrollbar-color: var(--line2) var(--surface2); }
+.af-league-admin :is(.af-settings-mobile-nav, .af-settings-sidebar)::-webkit-scrollbar { width: 6px; height: 6px; }
+.af-league-admin :is(.af-settings-mobile-nav, .af-settings-sidebar)::-webkit-scrollbar-thumb { background: var(--line2); border-radius: 6px; }
+.af-league-admin :is(.af-settings-mobile-nav, .af-settings-sidebar)::-webkit-scrollbar-track { background: var(--surface2); }
+.af-league-admin .af-settings-sidebar { max-height: 65dvh; overflow-y: auto; padding: 4px 12px 4px 0; }
+.af-league-admin :is(.af-settings-sidebar, .af-settings-mobile-nav) button { font-size: 12px; font-weight: 550; text-align: left; border: 1px solid transparent; box-shadow: none; }
+.af-league-admin :is(.af-settings-sidebar, .af-settings-mobile-nav) button[aria-current='page'] { color: var(--accent); background: var(--accent-soft); border-color: var(--line2); font-weight: 650; }
+.af-league-admin .af-settings-content { min-width: 0; padding-top: 16px; }
+.af-league-admin .af-settings-content label > span { text-transform: none; letter-spacing: 0; font-size: 12px; }
+.af-league-admin .af-settings-content :is(.space-y-8, .space-y-10) > :not([hidden]) ~ :not([hidden]) { margin-top: 24px; }
+.af-league-admin.af-settings-dialog { background: var(--surface); border-color: var(--line2); }
+.af-league-admin.af-settings-dialog > header { padding: 20px; }
+.af-league-admin.af-settings-dialog > header h2 { font-size: 20px; line-height: 1.3; }
+.af-league-admin.af-settings-dialog button[aria-label] { min-width: 44px; }
+@media (max-width: 767px) {
+  .af-league-admin.af-settings-dialog > header { padding: 16px; }
+  .af-league-admin .af-settings-content { padding-inline: 0; }
+  .af-league-admin .af-admin-shortcuts a { flex: 1 1 180px; }
+}
+
+.af-league-admin :is(input, textarea)::placeholder { color: var(--faint); opacity: 1; }
+.af-league-admin select option { background: var(--surface); color: var(--text); }
