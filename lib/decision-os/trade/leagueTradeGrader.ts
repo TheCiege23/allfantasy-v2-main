@@ -37,6 +37,7 @@ import { createGuillotineGrader } from './guillotineGrader'
 import { createLeagueAssetPolicy } from './leagueAssetPolicy'
 import { DEVY_BASIS_NOTE } from './leagueAssetRules'
 import { belowChartFloorNote } from '@/lib/trade-value/belowChartFloor'
+import { projectedPicksNote } from '@/lib/trade-value/pickSlotProjection'
 import { isPirateLeague } from '@/lib/trade-intel/pirateSteal'
 
 /**
@@ -463,6 +464,7 @@ export async function createLeagueTradeGrader(args: {
         dataGaps,
         fcPlayers: chart.fcPlayers,
         resolveEnrichmentIds: false,
+        pickSlots: chart.pickSlots ?? null,
       }
       let [g, t] = await Promise.all([resolveAssets(give, opts), resolveAssets(get, opts)])
       /*
@@ -480,6 +482,7 @@ export async function createLeagueTradeGrader(args: {
         }
       }
       const floorNote = belowChartFloorNote([...(g.belowFloor ?? []), ...(t.belowFloor ?? [])])
+      const pickNote = projectedPicksNote([...(g.pickProjections ?? []), ...(t.pickProjections ?? [])])
       const unresolved = [...g.unresolved, ...t.unresolved]
       if (unresolved.length > 0) {
         return {
@@ -498,7 +501,7 @@ export async function createLeagueTradeGrader(args: {
         getLines: td.lines,
         givePriced: applyChartTePremium(chart, gd.priced),
         getPriced: applyChartTePremium(chart, td.priced),
-        basisNotes: [...(gd.devyPriced + td.devyPriced > 0 ? [DEVY_BASIS_NOTE] : []), ...(floorNote ? [floorNote] : [])],
+        basisNotes: [...(gd.devyPriced + td.devyPriced > 0 ? [DEVY_BASIS_NOTE] : []), ...(floorNote ? [floorNote] : []), ...(pickNote ? [pickNote] : [])],
         need: needRoster
           ? { leagueId: args.leagueId, userId: args.userId ?? '', sport, starters: leagueRow.starters, playerData: needRoster.playerData }
           : viewerSide && args.userId

@@ -30,6 +30,13 @@ import type { LoadedTradeLeague } from './league-loader'
 import { tradeFormatCoverage } from './formatCoverage'
 import { rosterSpotsFromSettings } from '@/lib/trade-value/rosterSpotCharge'
 import type { TradeAssetInput, TradeConsoleLeagueSnapshot, TradeConsolePlayerLine } from './types'
+import {
+  describeOdds,
+  projectedPickPrice,
+  projectPickSlots,
+  type PickSlotProjection,
+} from '@/lib/trade-value/pickSlotProjection'
+import { regularSeasonWeeks } from '@/lib/core-app/seasonTimeline'
 
 /**
  * How a trade is PRICED for one league — the chart it is priced on and the pricer that reads it.
@@ -217,13 +224,22 @@ export function lineFromPriced(
  * the round when the tier is known — the rule `marketValueService.pickValue` uses. A redraft chart
  * has no pick rows, and then the old pricer answers as before.
  */
-function parseChartPickName(name: string): { season: number; round: number; slot: number | null } | null {
+/*
+ * 🛑 THE TIER ROWS WERE NEVER READ (2026-10-11). FantasyCalc names the next draft's picks by tier —
+ * "2027 1st (Early)" 4,565, "(Mid)" 3,006, "(Late)" 2,328 beside a plain "2027 1st" 2,764 on the 12-team
+ * 1-QB board — and the round pattern ended at "1st", so every tiered row was skipped: a 2027 1st priced
+ * 2,764 whether it was asked for early or late, and the analyzer's "Expected range" did nothing.
+ */
+type ChartPickName = { season: number; round: number; slot: number | null; tier: 'early' | 'mid' | 'late' | null }
+
+function parseChartPickName(name: string): ChartPickName | null {
   const exact = name.match(/^(\d{4})\s+Pick\s+(\d+)\.(\d+)$/i)
-  if (exact) return { season: Number(exact[1]), round: Number(exact[2]), slot: Number(exact[3]) }
-  const roundWord = name.match(/^(\d{4})\s+(?:Round\s+(\d+)|(\d)(?:st|nd|rd|th))$/i)
+  if (exact) return { season: Number(exact[1]), round: Number(exact[2]), slot: Number(exact[3]), tier: null }
+  const roundWord = name.match(/^(\d{4})\s+(?:Round\s+(\d+)|(\d)(?:st|nd|rd|th))(?:\s*\((Early|Mid|Late)\))?$/i)
   if (roundWord) {
     const round = Number(roundWord[2] ?? roundWord[3])
-    return Number.isFinite(round) ? { season: Number(roundWord[1]), round, slot: null } : null
+    const tier = roundWord[4] ? (roundWord[4].toLowerCase() as 'early' | 'mid' | 'late') : null
+    return Number.isFinite(round) ? { season: Number(roundWord[1]), round, slot: null, tier } : null
   }
   return null
 }
@@ -299,12 +315,25 @@ function chartRoundValue(
 ): number | null {
   const all: number[] = []
   const bySlot: Array<{ slot: number; value: number }> = []
+  const byTier: Record<'early' | 'mid' | 'late', number[]> = { early: [], mid: [], late: [] }
   for (const r of fcPlayers) {
     if (r.player?.position?.toUpperCase() !== 'PICK' || typeof r.value !== 'number') continue
     const parsed = parseChartPickName(r.player.name ?? '')
     if (!parsed || parsed.season !== year || parsed.round !== round) continue
+    // A tier row prices that tier only; an untiered pick keeps the chart's own generic row.
+    if (parsed.tier) {
+      byTier[parsed.tier].push(r.value)
+      continue
+    }
     all.push(r.value)
     if (parsed.slot != null) bySlot.push({ slot: parsed.slot, value: r.value })
+  }
+  const mean = (xs: number[]) => Math.round(xs.reduce((s, v) => s + v, 0) / xs.length)
+  if (tier && byTier[tier].length > 0) return mean(byTier[tier])
+  if (all.length === 0) {
+    // Only tier rows: an untiered pick is their average.
+    const tiered = [...byTier.early, ...byTier.mid, ...byTier.late]
+    return tiered.length > 0 ? mean(tiered) : null
   }
   if (tier && bySlot.length >= 3) {
     const slots = [...bySlot].sort((a, b) => a.slot - b.slot)
@@ -347,11 +376,19 @@ function repricedAsset(p: PricedAsset, marketValue: number, source: PricedAsset[
  * follow when no evidenced value exists. Nothing is priced as zero: `unpriced` is the signal.
  */
 export async function priceLeagueTradePick(
-  pick: { year: number; round: number; tier?: 'early' | 'mid' | 'late' | null },
-  args: { nflCtx: ValuationContext; fcPlayers: FantasyCalcPlayer[] },
-): Promise<{ priced: PricedAsset; dataSource: string }> {
+  pick: { year: number; round: number; tier?: 'early' | 'mid' | 'late' | null; originalRosterId?: string | null },
+  args: { nflCtx: ValuationContext; fcPlayers: FantasyCalcPlayer[]; pickSlots?: PickSlotProjection | null },
+): Promise<{ priced: PricedAsset; dataSource: string; projection?: string }> {
+  const curve = await pricePick({ year: pick.year, round: pick.round, tier: pick.tier ?? null }, args.nflCtx)
+  const projected = pick.tier ? null : projectedLivePick(args.fcPlayers, pick, args.pickSlots ?? null)
+  if (projected) {
+    return {
+      priced: repricedAsset(curve, projected.value, 'fantasycalc'),
+      dataSource: 'fantasycalc_pick_projected',
+      projection: projected.projection,
+    }
+  }
   const live = livePickValue(args.fcPlayers, pick.year, pick.round, pick.tier ?? null)
-  const curve = await pricePick({ ...pick, tier: pick.tier ?? null }, args.nflCtx)
   if (live != null) return { priced: repricedAsset(curve, live, 'fantasycalc'), dataSource: 'fantasycalc_pick' }
   return {
     priced: {
@@ -364,6 +401,65 @@ export async function priceLeagueTradePick(
     },
     dataSource: 'no_pick_market',
   }
+}
+
+/*
+ * ── A dynasty pick priced by where it is projected to land ───────────────────────────────────────
+ *
+ * Guap, 2026-10-11 ("go ahead with dynasty pick slots"): every grade priced a 2027 1st at FantasyCalc's
+ * generic 2,764 whether its original owner was 0-5 or 5-0, while the same board prices that pick 4,565
+ * early and 2,328 late. A pick whose original owner is known, for the draft after the season being
+ * played, is now priced from that owner's projected finish (`lib/trade-value/pickSlotProjection.ts`) —
+ * only when the chart carries all three tier rows and the generic row, and only when nobody named a tier.
+ * Any other pick is priced exactly as before.
+ */
+function projectedLivePick(
+  fcPlayers: ReadonlyArray<Pick<FantasyCalcPlayer, 'player' | 'value'>>,
+  pick: { year: number; round: number; originalRosterId?: string | null },
+  slots: PickSlotProjection | null,
+): { value: number; projection: string } | null {
+  const owner = pick.originalRosterId?.trim()
+  if (!slots || !owner || pick.year !== slots.draftYear) return null
+  const odds = slots.oddsByTeam.get(owner)
+  if (!odds) return null
+  const early = chartRoundValue(fcPlayers, pick.year, pick.round, 'early')
+  const mid = chartRoundValue(fcPlayers, pick.year, pick.round, 'mid')
+  const late = chartRoundValue(fcPlayers, pick.year, pick.round, 'late')
+  const generic = chartRoundValue(fcPlayers, pick.year, pick.round, null)
+  // Three distinct tier prices, or the chart has no tiers for this round (each lookup fell back to the
+  // round average) and there is nothing to project onto.
+  if (early == null || mid == null || late == null || generic == null) return null
+  if (!(early > mid && mid > late)) return null
+  return {
+    value: projectedPickPrice(odds, { early, mid, late, generic }),
+    projection: `${pick.year} ${ordinalRound(pick.round)} ${describeOdds(odds)}`,
+  }
+}
+
+/**
+ * Where each team's next-draft picks are projected to land, from the league's standings today. Null
+ * outside a dynasty or keeper chart, without a regular-season length, or with fewer than three teams.
+ *
+ * Teams are the league's CURRENT franchises (`lifecycleState` not ARCHIVED), keyed by `externalId` — the
+ * provider roster id that a ledger pick's `originalRosterId` and a pending offer's
+ * `pickOriginalRosterExternalId` both carry.
+ */
+export async function loadPickSlotProjection(args: {
+  leagueId: string
+  settings: unknown
+  season: number | null | undefined
+}): Promise<PickSlotProjection | null> {
+  const seasonGames = regularSeasonWeeks(args.settings)
+  if (!seasonGames || !args.season) return null
+  const rows = await prisma.leagueTeam.findMany({
+    where: { leagueId: args.leagueId, lifecycleState: { not: 'ARCHIVED' } },
+    select: { externalId: true, wins: true, losses: true, ties: true, pointsFor: true },
+  })
+  return projectPickSlots({
+    teams: rows.map((r) => ({ id: r.externalId, wins: r.wins, losses: r.losses, ties: r.ties, pointsFor: r.pointsFor })),
+    seasonGames,
+    season: args.season,
+  })
 }
 
 function ordinalRound(round: number): string {
@@ -433,8 +529,12 @@ export async function resolveAssets(
      * `lib/trade-value/belowChartFloor.ts`. Only the grader passes it.
      */
     onAnotherChart?: ReadonlySet<string>
+    /** Where each team's next-draft picks are projected to land — see `loadPickSlotProjection`. */
+    pickSlots?: PickSlotProjection | null
   },
 ): Promise<{
+  /** One line per pick priced by its original owner's projected finish ("2027 1st projected early (62%)"). */
+  pickProjections: string[]
   priced: PricedAsset[]
   lines: TradeConsolePlayerLine[]
   unresolved: string[]
@@ -448,6 +548,7 @@ export async function resolveAssets(
   const unresolved: string[] = []
   const floorCandidates: string[] = []
   const belowFloor: string[] = []
+  const pickProjections: string[] = []
 
   for (const raw of items) {
     if (raw.kind === 'pick' && !sportHasPickMarket(args.effectiveSport)) {
@@ -476,7 +577,8 @@ export async function resolveAssets(
       continue
     }
     if (raw.kind === 'pick') {
-      const { priced: p, dataSource } = await priceLeagueTradePick(raw, args)
+      const { priced: p, dataSource, projection } = await priceLeagueTradePick(raw, args)
+      if (projection) pickProjections.push(projection)
       priced.push(p)
       lines.push(
         lineFromPriced(p, {
@@ -666,7 +768,7 @@ export async function resolveAssets(
     )
   }
 
-  return { priced, lines, unresolved, floorCandidates, belowFloor }
+  return { priced, lines, unresolved, floorCandidates, belowFloor, pickProjections }
 }
 
 export function pprForNflFromLeagueContext(
@@ -705,6 +807,11 @@ export type LeagueTradeChart = {
   /** When `fcPlayers` was synced from FantasyCalc (ISO) — the age of every market value on the chart. */
   fcSyncedAt?: string | null
   nflCtx: ValuationContext
+  /**
+   * Where each team's next-draft picks are projected to land, from today's standings (dynasty and keeper
+   * charts with a league). Null on a dated chart: a past trade is not priced on today's standings.
+   */
+  pickSlots?: PickSlotProjection | null
   valuationGaps?: string[]
   /** Active roster spots per team (starters + bench) the league states, or null — see `rosterSpotCharge.ts`. */
   rosterSpots?: number | null
@@ -823,6 +930,10 @@ export async function resolveLeagueTradeChart(args: {
     leagueUnpricedReasonByNameLower: leagueValues?.unpricedReasonByNameLower,
   }
 
+  const pickSlots = leagueRow && chartIsDynasty && !args.marketless
+    ? await loadPickSlotProjection({ leagueId: leagueRow.id, settings: leagueRow.settings, season: leagueRow.season }).catch(() => null)
+    : null
+
   return {
     leagueSize,
     proposalRules: {
@@ -840,6 +951,7 @@ export async function resolveLeagueTradeChart(args: {
     fcPlayers,
     fcSyncedAt,
     nflCtx,
+    pickSlots,
     valuationGaps: coverage.gaps,
     rosterSpots: leagueRow ? rosterSpotsFromSettings(leagueRow.settings) : null,
   }
@@ -859,6 +971,8 @@ export async function resolveLeagueTradeChart(args: {
  *     unpriced here — and an unpriced asset sends the whole trade back to its first-graded original;
  *   - this league's FAAB state (today's balances and week) → dropped: FAAB in a past trade prices on
  *     the linear formula, never on balances and a week the trade did not happen in.
+ *   - the projected pick slots (`pickSlots`) → dropped: they are today's standings, so a pick in a past
+ *     trade prices on the dated board's generic round row.
  *
  * 🛑 `asOfDate` STAYS TODAY. It is NOT the trade date, on purpose: `pricePlayer` treats a past
  * `asOfDate` as a hindsight query and routes it to `data/historical-values/*.json` — name-joined,
@@ -874,6 +988,7 @@ export function withDatedMarket(
     faabState: null,
     fcPlayers: market.players,
     fcSyncedAt: `${market.capturedOn}T00:00:00.000Z`,
+    pickSlots: null,
     nflCtx: {
       asOfDate: chart.nflCtx.asOfDate,
       isSuperFlex: chart.nflCtx.isSuperFlex,

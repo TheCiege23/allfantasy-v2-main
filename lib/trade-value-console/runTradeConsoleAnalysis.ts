@@ -272,6 +272,7 @@ export async function runTradeConsoleAnalysis(
     faabState,
     dataGaps,
     fcPlayers,
+    pickSlots: chart.pickSlots ?? null,
   })
   mark('assets_give')
   let { priced: getPriced, lines: getLines, unresolved: getUnresolved } = await resolveAssets(get, {
@@ -281,6 +282,7 @@ export async function runTradeConsoleAnalysis(
     faabState,
     dataGaps,
     fcPlayers,
+    pickSlots: chart.pickSlots ?? null,
   })
 
   const unresolved = [...giveUnresolved, ...getUnresolved]
@@ -778,7 +780,8 @@ export async function runTradeConsoleAnalysis(
       const counterPickWhy = assetPolicy?.pickRefusal([...counterGive, ...counterGet]) ?? null
       if (counterPickWhy) return { graded: false, reason: counterPickWhy, basis: null }
       const opts = { effectiveSport, nflCtx: chart.nflCtx, waiverBudget: chart.waiverBudget, faabState: chart.faabState ?? null,
-        dataGaps: [] as string[], fcPlayers: chart.fcPlayers, resolveEnrichmentIds: false }
+        dataGaps: [] as string[], fcPlayers: chart.fcPlayers, resolveEnrichmentIds: false,
+        pickSlots: chart.pickSlots ?? null }
       const [g, t] = await Promise.all([resolveAssets(counterGive, opts), resolveAssets(counterGet, opts)])
       if (g.unresolved.length || t.unresolved.length) return { graded: false, reason: 'Counter assets could not be resolved.', basis: null }
       const [gd, td] = assetPolicy
