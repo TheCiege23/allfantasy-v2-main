@@ -624,7 +624,12 @@ async function resolvePlayers(
   const nextGameFor = buildNextGameMap(weekGames, rosterTeams)
 
   // The newest status per player across every spelling; shared with the /core/matchup scoreboard.
-  const injuryById = await readInjuryStatusById(sport, namesById, new Map([...identityBy].map(([id, player]) => [id, player.team])))
+  const injuryById = await readInjuryStatusById(
+    sport,
+    namesById,
+    new Map([...identityBy].map(([id, player]) => [id, player.team])),
+    new Map([...identityBy].map(([id, player]) => [id, player.position ?? null])),
+  )
 
   /*
    * ⚠ PROJECTIONS ARE JOINED HERE BECAUSE THIS IS WHERE THE IDS ALREADY ARE, and

@@ -5,6 +5,7 @@ import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { currentSeasonReportWhere } from '@/lib/injuries/injuryRecency'
 import { createInjuryRowMatcher, isInjuryDesignation } from '@/lib/injuries/matchInjuryRows'
 import { isStoredInjuryDesignation, storedInjuryFields } from '@/lib/injuries/storedInjuryDesignation'
+import { rosterDesignation } from '@/lib/injuries/rosterDesignation'
 import { SUPPORTED_SPORTS, normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
 import {
   assertTeamCodeFits,
@@ -942,20 +943,8 @@ export async function runSportsDataImporter(options?: {
   }
 }
 
-/**
- * A ROSTER status that is also an availability designation. Everything else Sleeper and Rolling
- * Insights put in `status` — "Active", "Inactive", "Practice Squad", RI's "ACT"/"INACT" — is roster
- * bookkeeping, not an injury, and is never written as one.
- */
-export function rosterDesignation(status: string | null | undefined): string | null {
-  const t = String(status ?? '').trim().toLowerCase()
-  if (!t) return null
-  if (t === 'ir' || t.includes('injured reserve')) return 'IR'
-  if (t === 'pup' || t.includes('physically unable')) return 'PUP'
-  if (t === 'nfi' || t.includes('non football') || t.includes('non-football')) return 'NFI'
-  if (t.startsWith('suspen') || t === 'sus') return 'Suspended'
-  return null
-}
+export { rosterDesignation }
+
 
 /**
  * `SportsPlayerRecord.injuryStatus` for one seed: the athlete's newest claim on a live injury feed,

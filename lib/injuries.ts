@@ -41,6 +41,8 @@ export async function getInjuries(
       sport: String(sport),
       team: options?.team ?? null,
       limit,
+      // Injuries only: a cleared player's newest claim is "Active", and he is not on this list.
+      designationsOnly: true,
     })
     return (list.facts ?? [])
       .filter((f) => !f.stale)

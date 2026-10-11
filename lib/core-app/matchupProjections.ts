@@ -255,12 +255,20 @@ export async function loadSideProjections(args: {
         where: { sleeperId: { in: lookupIds } },
         select: { sleeperId: true, name: true, team: true, sport: true, position: true },
       })
+      const identities = composePlayerIdentities(playerRows)
+      const playerTeams = new Map([...identities].map(([id, p]) => [id, p.team]))
       const [statuses, byes] = await Promise.all([
-        readInjuryStatusById(sport, namesBySleeperId(playerRows)),
+        // Club and position, so a namesake's "Out" (LB vs WR Justin Jefferson) never zeroes a starter.
+        readInjuryStatusById(
+          sport,
+          namesBySleeperId(playerRows),
+          playerTeams,
+          new Map([...identities].map(([id, p]) => [id, p.position ?? null])),
+        ),
         getByeWeeks({
           sport,
           season,
-          playerTeams: new Map([...composePlayerIdentities(playerRows)].map(([id, p]) => [id, p.team])),
+          playerTeams,
           fromWeek: week,
           horizon: 0,
         }).catch(() => null),

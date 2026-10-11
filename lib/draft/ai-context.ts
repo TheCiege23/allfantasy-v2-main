@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
+import { injuryClaimAsOf, isInjuryDesignation, latestInjuryClaims } from '@/lib/injuries/matchInjuryRows'
 
 export type DraftAiNewsBrief = {
   player: string
@@ -80,14 +81,16 @@ export async function buildDraftAiContext(input: {
     prisma.sportsInjury
       .findMany({
         where: injuryWhere,
-        orderBy: [{ date: 'desc' }],
-        take: injuryLimit,
+        // Every provider's row for these players, so the newest claim per athlete can be picked below.
+        orderBy: [{ fetchedAt: 'desc' }],
+        take: 500,
         select: {
           playerName: true,
           team: true,
           status: true,
           type: true,
           date: true,
+          fetchedAt: true,
         },
       })
       .catch(() => []),
@@ -103,8 +106,16 @@ export async function buildDraftAiContext(input: {
       source: n.source,
     }))
 
-  const injuries: DraftAiInjuryBrief[] = injuryRows
-    .filter((i) => i.status)
+  /*
+   * 🛑 ONE CURRENT CLAIM PER PLAYER, AND ONLY IF HE IS HURT (2026-10-11). This listed every
+   * provider's row ordered by `date desc` (NULLs first in Postgres), "Active" included — so the
+   * prompt carried "Chase: Questionable" and "Chase: Active" side by side with no rule for which to
+   * believe. Newest claim per athlete first, then drop the ones that are not designations.
+   */
+  const injuries: DraftAiInjuryBrief[] = latestInjuryClaims(injuryRows, sport)
+    .filter((i) => isInjuryDesignation(i.status))
+    .sort((a, b) => injuryClaimAsOf(b).getTime() - injuryClaimAsOf(a).getTime())
+    .slice(0, injuryLimit)
     .map((i) => ({
       player: i.playerName,
       team: i.team,

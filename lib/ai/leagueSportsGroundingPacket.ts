@@ -879,7 +879,7 @@ async function loadFantasyData(sport: string, season: number): Promise<LeagueGro
       // orphaned when the cron moved to sports_injuries and froze at 2026-04-28,
       // so both this count and the list below described a dead table while the
       // packet reported hasInjuryData: true.
-      listInjuryFacts({ sport, limit: 200 })
+      listInjuryFacts({ sport, limit: 200, designationsOnly: true })
         .then((l) => (l.facts ?? []).filter((f) => !f.stale).length)
         .catch(() => 0) as Promise<number>,
       (prisma as any).sportsGame.count({ where: { sport, season } }).catch(() => 0) as Promise<number>,
