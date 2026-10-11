@@ -21,8 +21,8 @@ import {
   createSeedValueBinder,
   pickLatestSeasonRow,
 } from '@/lib/workers/sports-data-importer-binding'
+import { COLLEGE_PAGED_SPORTS, SPORTS_PLAYER_TTL_MS } from '@/lib/workers/sports-player-record-freshness'
 
-const SPORTS_PLAYER_TTL_MS = 6 * 60 * 60 * 1000
 const UPSERT_BATCH_SIZE = 100
 
 export { isStoredInjuryDesignation }
@@ -174,7 +174,7 @@ function resolveTeamCode(ctx: TeamCodeContext, rawTeam: string | null | undefine
  * each run continues where the last one stopped (no rescanning), bounded per run, and wraps
  * to the start once the source is exhausted so later source changes are re-observed.
  */
-const COLLEGE_PAGED_SPORTS = new Set<SupportedSport>(['NCAAF', 'NCAAB'] as SupportedSport[])
+// `COLLEGE_PAGED_SPORTS` is defined in `sports-player-record-freshness.ts` so readers can share it.
 export const DEFAULT_SEED_PAGE_SIZE = 2_500
 export const MAX_SEED_PAGE_SIZE = 25_000
 
