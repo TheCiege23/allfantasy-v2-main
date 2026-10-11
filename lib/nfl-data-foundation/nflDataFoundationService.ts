@@ -1287,13 +1287,21 @@ export async function getCanonicalNflRosterContext(
       const warnings: string[] = []
       if (row.isLocked) warnings.push('Player is locked for the current scoring period.')
       if (player.byeWeek === week) warnings.push('Player is on bye this week.')
-      if (injuryUnavailable(row.injuryStatus ?? player.injuryStatus)) warnings.push('Player is unavailable by injury status.')
+      /*
+       * 🛑 THE CANONICAL DESIGNATION ONLY — NEVER `RedraftRosterPlayer.injuryStatus` (2026-10-11).
+       * The stored column is a snapshot written at import/refresh time and stale by construction; it
+       * used to WIN here (`row.injuryStatus ?? player.injuryStatus`), so last week's "Out" kept a
+       * cleared starter flagged unavailable and a stored "Questionable" hid a player the feed now has
+       * Out. `player.injuryStatus` is `loadInjuryStatus`: the live feed's current designation, or
+       * Sleeper's own season-scale roster absence, or null ("no news" — not "healthy").
+       */
+      if (injuryUnavailable(player.injuryStatus)) warnings.push('Player is unavailable by injury status.')
       return {
         ...player,
         rosterId,
         slotType: row.slotType,
         isLocked: row.isLocked,
-        injuryStatus: row.injuryStatus ?? player.injuryStatus,
+        injuryStatus: player.injuryStatus,
         lineupWarnings: warnings,
       } satisfies CanonicalNflRosterPlayer
     }),
