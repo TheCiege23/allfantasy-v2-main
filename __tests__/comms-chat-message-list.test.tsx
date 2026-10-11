@@ -287,3 +287,27 @@ describe('copyableText', () => {
     expect(copyableText(msg({ id: 'p', body: '📎 Media' }), false, true)).toBeNull()
   })
 })
+
+describe('instant send and edits (visual pass 2)', () => {
+  it('a pending send shows at once, says "Sending…" instead of a time, and is marked pending', () => {
+    const { container } = renderList([
+      msg({ id: 'a' }),
+      { ...msg({ id: 'pending-1', authorId: 'me', authorName: 'You', body: 'on my way', createdAt: T(2) }), pending: true },
+    ])
+    const row = container.querySelector('[data-message-id="pending-1"]') as HTMLElement
+    expect(row.getAttribute('data-pending')).toBe('true')
+    expect(row.getAttribute('data-mine')).toBe('true')
+    expect(within(row).getByText('Sending…')).toBeTruthy()
+    expect(row.querySelector('time')).toBeNull()
+  })
+
+  it('an edited message mid-run still says "edited" (it used to vanish with the time line)', () => {
+    const { container } = renderList([
+      msg({ id: 'a', metadata: { edited: true, editedAt: T(0) } }),
+      msg({ id: 'b', createdAt: T(1) }),
+    ])
+    const first = container.querySelector('[data-message-id="a"]') as HTMLElement
+    expect(first.getAttribute('data-run-end')).not.toBe('true')
+    expect(within(first).getByText('edited')).toBeTruthy()
+  })
+})
