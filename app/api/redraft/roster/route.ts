@@ -84,7 +84,17 @@ async function hydrateCurrentInjuryStatuses<T extends RosterPlayerRow>(
     take: Math.max(50, players.length * 3),
   })) as SportsInjuryRow[]
 
-  return applyInjuryStatuses(players, rows) as T[]
+  /*
+   * 🛑 THE STORED SNAPSHOT IS CLEARED FIRST (2026-10-11). `RedraftRosterPlayer.injuryStatus` is written at
+   * import/refresh time and is stale by construction, and `applyInjuryStatuses` leaves a player it finds no
+   * live row for untouched — so last week's "Out" survived into the response, the lineup validation
+   * (`starter_ineligible_injury`) and the projection. Only a live row may set a status now; none is null,
+   * "no news".
+   */
+  return applyInjuryStatuses(
+    players.map((p) => ({ ...p, injuryStatus: null })),
+    rows,
+  ) as T[]
 }
 
 function buildLineupValidation(args: {
@@ -257,32 +267,16 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // Live designations BEFORE projecting, so the projection is never priced on the stored snapshot.
+  const liveRosterPlayers = await hydrateCurrentInjuryStatuses(roster.players, roster.season.season, week)
   const scoredPlayers = await Promise.all(
-    roster.players.map(async (player) => {
+    liveRosterPlayers.map(async (player) => {
       const weeklyScore = scoreByPlayer.get(`${player.playerId}:${player.sport}`) ?? null
       const projectionKey = `${player.playerId}:${player.sport}`
       const providerProjection = projectionByPlayer.get(projectionKey)
       const afProjection = afProjectionByPlayer.get(projectionKey)
       const seasonStats = seasonStatsByPlayer.get(projectionKey)
       const adp = adpByPlayerKey.get(buildPlayerKey(player.playerName, player.position)) ?? null
-      const projection = buildAllFantasyProjection({
-        playerId: player.playerId,
-        playerName: player.playerName,
-        sport: player.sport,
-        position: player.position,
-        team: player.team,
-        currentWeek: week,
-        totalWeeks: roster.season.totalWeeks ?? 17,
-        byeWeek: player.byeWeek,
-        injuryStatus: player.injuryStatus,
-        adp,
-        providerWeeklyProjection: providerProjection?.projectedPoints ?? null,
-        allFantasyWeeklyProjection: afProjection?.afProjection ?? null,
-        allFantasyConfidenceLevel: afProjection?.confidenceLevel ?? null,
-        rollingInsightsFantasyPointsPerGame: seasonStats?.fantasyPointsPerGame ?? null,
-        rollingInsightsGamesPlayed: seasonStats?.gamesPlayed ?? null,
-        rollingInsightsStats: seasonStats?.stats ?? null,
-      })
       const canonical =
         String(player.sport).toUpperCase() === 'NFL'
           ? (await getCanonicalNflPlayerContext(player.playerId, {
@@ -295,6 +289,26 @@ export async function GET(req: NextRequest) {
               week,
             }).catch(() => null))
           : null
+      const projection = buildAllFantasyProjection({
+        playerId: player.playerId,
+        playerName: player.playerName,
+        sport: player.sport,
+        position: player.position,
+        team: player.team,
+        currentWeek: week,
+        totalWeeks: roster.season.totalWeeks ?? 17,
+        byeWeek: player.byeWeek,
+        // NFL: the canonical designation (live feed by verified name, staleness applied); otherwise the
+        // live row hydrated above. Never the stored roster snapshot.
+        injuryStatus: canonical ? canonical.injuryStatus : player.injuryStatus,
+        adp,
+        providerWeeklyProjection: providerProjection?.projectedPoints ?? null,
+        allFantasyWeeklyProjection: afProjection?.afProjection ?? null,
+        allFantasyConfidenceLevel: afProjection?.confidenceLevel ?? null,
+        rollingInsightsFantasyPointsPerGame: seasonStats?.fantasyPointsPerGame ?? null,
+        rollingInsightsGamesPlayed: seasonStats?.gamesPlayed ?? null,
+        rollingInsightsStats: seasonStats?.stats ?? null,
+      })
       const weeklyProjection = canonical?.projection?.projectedPoints ?? projection.weeklyProjection
       const restOfSeasonProjection = canonical?.projection?.restOfSeason ?? projection.restOfSeasonProjection
       const floorProjection = canonical?.projection?.floor ?? projection.floorProjection
@@ -358,7 +372,7 @@ export async function GET(req: NextRequest) {
       }
     }),
   )
-  const players = await hydrateCurrentInjuryStatuses(scoredPlayers, roster.season.season, week)
+  const players = scoredPlayers
   const unifiedRosterRows = await getNormalizedPlayerData({
     surface: 'roster',
     leagueId: lookup.season.leagueId,
