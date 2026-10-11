@@ -13,6 +13,7 @@
 import { foldInjuryTeam } from '@/lib/injuries/matchInjuryRows'
 import { prisma } from '@/lib/prisma'
 import { listInjuryFacts } from '@/lib/injuries/injuryReadPort'
+import { currentDesignationFromFact } from '@/lib/core-app/injuryStatus'
 
 function normName(name: string): string {
   return String(name ?? '').trim().toLowerCase()
@@ -24,6 +25,8 @@ export interface RedraftInjuryEntry {
   status: string
   gameStatus: string | null
   reportDate: Date
+  /** The port's verdict that this claim is past the sport's horizon (`InjuryFact.stale`). */
+  stale: boolean
 }
 
 export interface RedraftInjuryNews {
@@ -72,7 +75,7 @@ export async function fetchRedraftInjuryNews(sport: string): Promise<RedraftInju
     if (seenTeam !== undefined && seenTeam !== team) shared.add(key)
     if (!injuryByName.has(key)) {
       teamByKey.set(key, team)
-      injuryByName.set(key, { status: f.status, gameStatus: null, reportDate: f.fetchedAt })
+      injuryByName.set(key, { status: f.status, gameStatus: null, reportDate: f.fetchedAt, stale: f.stale === true })
     }
     if (!injuriesAsOf || f.fetchedAt > injuriesAsOf) injuriesAsOf = f.fetchedAt
   }
@@ -94,6 +97,20 @@ export async function fetchRedraftInjuryNews(sport: string): Promise<RedraftInju
     newsCount,
     newsAsOf: latestNews?.publishedAt ?? null,
   }
+}
+
+/**
+ * The player's CURRENT designation from the live feed, or null — the one value a war room may show
+ * or price as his injury status.
+ *
+ * 🛑 NEVER THE STORED ROSTER SNAPSHOT (2026-10-11). `RedraftRosterPlayer.injuryStatus` is written at
+ * import/refresh time and stale by construction; the redraft and keeper war rooms let it WIN
+ * (`p.injuryStatus ?? injuryByName…`), so last week's "Out" zeroed a cleared starter's projection.
+ * The feed's word goes through `currentDesignationFromFact`: a stale game-day word is suppressed, a
+ * season-scale ruling holds, and a healthy word ("Active") is no designation at all.
+ */
+export function currentInjuryDesignation(injuryByName: ReadonlyMap<string, RedraftInjuryEntry>, playerName: string): string | null {
+  return currentDesignationFromFact(injuryByName.get(injuryNameKey(playerName)) ?? null)
 }
 
 /** Normalized-name key for joining a player to injury data. */

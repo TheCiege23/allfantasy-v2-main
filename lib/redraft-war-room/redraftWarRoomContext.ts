@@ -22,7 +22,7 @@ import {
   fetchRedraftFreeAgentPool,
   rosteredPlayerKeys,
 } from './redraftFreeAgentPool'
-import { fetchRedraftInjuryNews, injuryNameKey } from './redraftInjuryNews'
+import { currentInjuryDesignation, fetchRedraftInjuryNews } from './redraftInjuryNews'
 import { buildAllFantasyProjection } from '@/lib/redraft/projectionEngine'
 import { getCanonicalNflDataCoverage } from '@/lib/nfl-data-foundation/nflDataCoverage'
 import type {
@@ -394,7 +394,8 @@ export async function buildRedraftWarRoomContext(
     const seasonStats = seasonStatsByPlayer.get(p.playerId)
     const agg = actualAgg.get(p.playerId)
     const seasonAvg = agg && agg.n > 0 ? Math.round((agg.sum / agg.n) * 100) / 100 : null
-    const injuryStatus = p.injuryStatus ?? injuryByName.get(injuryNameKey(p.playerName))?.status ?? null
+    // The live feed's current designation only — never the stored `p.injuryStatus` snapshot.
+    const injuryStatus = currentInjuryDesignation(injuryByName, p.playerName)
     const adp = adpByKey.get(buildPlayerKey(p.playerName, p.position)) ?? null
     const projection = buildAllFantasyProjection({
       playerId: p.playerId,
@@ -509,7 +510,7 @@ export async function buildRedraftWarRoomContext(
     limit: 60,
   })
   const freeAgents: RedraftPlayerFact[] = freeAgentRows.map((fa) => {
-    const injuryStatus = injuryByName.get(injuryNameKey(fa.playerName))?.status ?? null
+    const injuryStatus = currentInjuryDesignation(injuryByName, fa.playerName)
     const projection = buildAllFantasyProjection({
       playerId: fa.playerKey,
       playerName: fa.playerName,
