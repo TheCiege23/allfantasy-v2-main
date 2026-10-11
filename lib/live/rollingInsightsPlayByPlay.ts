@@ -19,6 +19,7 @@
  */
 
 import type { LiveEvent, LiveEventType } from './eventDetector'
+import { getTeamInfo } from '@/lib/team-abbrev'
 
 /** Sports the vendor actually serves play-by-play for. */
 export const PBP_SPORTS = ['MLB', 'NBA', 'NFL'] as const
@@ -145,6 +146,37 @@ export function parsePlayByPlay(payload: unknown, sport = 'NFL'): PbpGame[] {
 }
 
 /**
+ * A team as one of the 32 canonical NFL codes, or null when it is not one we know. `possession` is a
+ * FULL name ("Detroit Lions") and `teamAbbr` a code; both go through the same canonical table so they
+ * can be compared. `ARZ` is the vendor-style Arizona code the shared alias table does not carry.
+ */
+function canonicalNflTeam(raw: string | null | undefined): string | null {
+  const v = raw?.trim()
+  if (!v) return null
+  return getTeamInfo(v.toUpperCase() === 'ARZ' ? 'ARI' : v)?.canonical ?? null
+}
+
+/**
+ * Did the team with the ball recover its own fumble? Then nothing changed hands.
+ *
+ * ⚠ `event: 'fumble'` WAS READ AS A TURNOVER WHOEVER RECOVERED. On prod 2026-10-11 "Tate Ratledge
+ * recovered a fumble" and "Mike McGlinchey recovered a fumble" — both offensive linemen falling on
+ * their own team's ball — were badged TURNOVER. A fumble is a turnover only when the DEFENCE recovers it.
+ *
+ * Three answers, not two: `true` own recovery, `false` the other side, `null` when either team cannot
+ * be named — and the caller emits nothing for null, the same "no event rather than a guess" this module
+ * already applies to the ambiguous `fumbler` role (GAPS.md N-06).
+ */
+export function recoveredByOffense(play: Pick<PbpPlay, 'possession' | 'players'>): boolean | null {
+  const recoverer = play.players.find((x) => x.role === 'recoverer')
+  if (!recoverer) return null
+  const offense = canonicalNflTeam(play.possession)
+  const recovering = canonicalNflTeam(recoverer.teamAbbr)
+  if (!offense || !recovering) return null
+  return offense === recovering
+}
+
+/**
  * ⚠ TOUCHDOWN IS NOT IN THE `event` ENUM, AND THIS IS THE BIGGEST TRAP IN THE
  * SCHEMA. The contract calls it out by name: there is no `scoringType` field and
  * no `touchdown` event, so a score has to be assembled from four signals.
@@ -155,11 +187,14 @@ function classify(play: PbpPlay): LiveEventType | null {
     // Unit attribution per the contract, cross-checked against player roles
     // rather than trusting `event` alone — a defensive score carries an
     // 'interceptor' or 'recoverer'.
+    // An offence that falls on its own fumble in the end zone scored an offensive touchdown.
+    const ownRecovery = play.event === 'fumble' && recoveredByOffense(play) === true
     const defensive =
-      play.event === 'interception' ||
-      play.event === 'fumble' ||
-      play.event === 'safety' ||
-      play.players.some((x) => x.role === 'interceptor' || x.role === 'recoverer')
+      !ownRecovery &&
+      (play.event === 'interception' ||
+        play.event === 'fumble' ||
+        play.event === 'safety' ||
+        play.players.some((x) => x.role === 'interceptor' || x.role === 'recoverer'))
     if (defensive) return 'DEFENSIVE_SCORE'
     if (play.event === 'kickoff' || play.event === 'punt' || play.event === 'field_goal') {
       return 'SPECIAL_TEAMS_SCORE'
@@ -169,7 +204,10 @@ function classify(play: PbpPlay): LiveEventType | null {
 
   if (play.event === 'field_goal' && play.isScoringPlay) return 'FIELD_GOAL'
   if (play.event === 'safety') return 'DEFENSIVE_SCORE'
-  if (play.event === 'interception' || play.event === 'fumble') return 'TURNOVER'
+  if (play.event === 'interception') return 'TURNOVER'
+  // Only a fumble the OTHER side recovered changed hands. Own or unknown is not a turnover; the play
+  // can still be a big gain below.
+  if (play.event === 'fumble' && recoveredByOffense(play) === false) return 'TURNOVER'
   // The contract's own threshold for a big play.
   if ((play.yardsGained ?? 0) >= 20) return 'BIG_PLAY'
   return null
@@ -188,7 +226,7 @@ function subjectOf(play: PbpPlay, type: LiveEventType): PbpPlayer | null {
   const by = (...roles: string[]) => play.players.find((x) => roles.includes(x.role)) ?? null
   switch (type) {
     case 'TOUCHDOWN':
-      return by('rusher', 'receiver') ?? by('passer')
+      return by('rusher', 'receiver') ?? by('passer') ?? by('recoverer')
     case 'DEFENSIVE_SCORE':
       return by('interceptor', 'recoverer', 'defender')
     case 'SPECIAL_TEAMS_SCORE':

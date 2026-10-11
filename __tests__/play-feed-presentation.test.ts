@@ -294,3 +294,45 @@ describe('headlineFor — box-score events', () => {
     expect(headlineFor(event() as never, null)).toBe('Jerry Jeudy 17-yard catch')
   })
 })
+
+describe('getPlayFeed — names and a failed headshot read (2026-10-11)', () => {
+  it('a failed Player read keeps everything the identity rows resolved', async () => {
+    // On prod every play lost its position, club and Sleeper id together, with nothing logged: the
+    // Player query shared the identity read's try/catch, which returned an empty map.
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
+    h.readPlayByPlayFeed.mockResolvedValue([pbp({ playerId: '900', playerName: 'Jahmyr Gibbs', team: null })])
+    h.identityFindMany.mockResolvedValue([
+      { rollingInsightsId: '900', canonicalName: 'Jahmyr Gibbs', position: 'RB', sport: 'NFL', currentTeam: 'DET', sleeperId: '9221' },
+    ])
+    h.playerFindMany.mockRejectedValue(new Error('column players.provider_ids does not exist'))
+
+    const [item] = await getPlayFeed()
+
+    expect(item).toMatchObject({ sleeperId: '9221', position: 'RB', team: 'DET' })
+    expect(item!.imageUrl).toContain('9221') // the Sleeper CDN fallback, by id
+    expect(errors).toHaveBeenCalledWith(expect.stringContaining('[play-feed] Player headshot read failed'), expect.anything())
+    errors.mockRestore()
+  })
+
+  it('a vendor short form ("A.St") is shown as the resolved identity’s name', async () => {
+    h.readPlayByPlayFeed.mockResolvedValue([pbp({ playerId: '901', playerName: 'A.St', role: 'receiver', stat: 'pass', delta: 36, value: 36, team: null })])
+    h.identityFindMany.mockResolvedValue([
+      { rollingInsightsId: '901', canonicalName: 'Amon-Ra St. Brown', position: 'WR', sport: 'NFL', currentTeam: 'DET', sleeperId: '7547' },
+    ])
+    const [item] = await getPlayFeed()
+    expect(item!.playerName).toBe('Amon-Ra St. Brown')
+    expect(item!.headline).toBe('Amon-Ra St. Brown (WR) 36-yard catch')
+  })
+
+  it('an unresolved short form stays as sent — never a guessed name', async () => {
+    h.readPlayByPlayFeed.mockResolvedValue([pbp({ playerId: '902', playerName: 'S.La', team: null })])
+    const [item] = await getPlayFeed()
+    expect(item!.playerName).toBe('S.La')
+  })
+
+  it('repairs the casing after a hyphen even when nothing resolves', async () => {
+    h.readPlayByPlayFeed.mockResolvedValue([pbp({ playerId: '903', playerName: 'Jaxon Smith-njigba', team: null })])
+    const [item] = await getPlayFeed()
+    expect(item!.playerName).toBe('Jaxon Smith-Njigba')
+  })
+})

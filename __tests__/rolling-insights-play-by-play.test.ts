@@ -197,3 +197,48 @@ describe('playsToLiveEvents — sequence is a high-water mark, not a count', () 
     expect(a[0]!.idempotencyKey).toContain('20251221-1-26')
   })
 })
+
+describe('a fumble is a turnover only when the other side recovers it (2026-10-11)', () => {
+  const fumble = (recoverer: { name: string; teamAbbr: string | null; position?: string }, over: Record<string, unknown> = {}) =>
+    parsePlayByPlay(game([{
+      ...basePlay,
+      event: 'fumble',
+      players: [
+        { id: 9, name: 'Ball Carrier', role: 'fumbler', action: 'fumble', position: 'RB', teamAbbr: 'BUF' },
+        { id: 10, name: recoverer.name, role: 'recoverer', action: 'fumble_recovery', position: recoverer.position ?? 'G', teamAbbr: recoverer.teamAbbr },
+      ],
+      ...over,
+    }]))[0]!
+
+  it('the offence falling on its own ball is no turnover — prod showed a guard badged TURNOVER', () => {
+    expect(playsToLiveEvents(fumble({ name: 'Own Guard', teamAbbr: 'BUF' }))).toHaveLength(0)
+  })
+
+  it('the defence recovering is a turnover, and Arizona’s ARZ code is understood', () => {
+    expect(playsToLiveEvents(fumble({ name: 'Def End', teamAbbr: 'HOU', position: 'DE' }))[0]).toMatchObject({ type: 'TURNOVER', playerName: 'Def End' })
+    const azOffence = fumble({ name: 'Cards Guard', teamAbbr: 'ARZ' }, { possession: 'Arizona Cardinals' })
+    expect(playsToLiveEvents(azOffence)).toHaveLength(0)
+  })
+
+  it('an unnamed recovering team claims no turnover rather than guessing', () => {
+    expect(playsToLiveEvents(fumble({ name: 'Somebody', teamAbbr: null }))).toHaveLength(0)
+  })
+
+  it('own recovery on a long gain is still a big play', () => {
+    const g = parsePlayByPlay(game([{
+      ...basePlay,
+      event: 'fumble',
+      yardsGained: 24,
+      players: [
+        { id: 4242, name: 'James Cook', role: 'rusher', action: 'rush', position: 'RB', teamAbbr: 'BUF' },
+        { id: 11, name: 'Own Tackle', role: 'recoverer', action: 'fumble_recovery', position: 'T', teamAbbr: 'BUF' },
+      ],
+    }]))[0]!
+    expect(playsToLiveEvents(g)[0]).toMatchObject({ type: 'BIG_PLAY', playerName: 'James Cook' })
+  })
+
+  it('own recovery in the end zone is an offensive touchdown, not a defensive score', () => {
+    const g = fumble({ name: 'Own Receiver', teamAbbr: 'BUF', position: 'WR' }, { isTouchdown: true, isScoringPlay: true })
+    expect(playsToLiveEvents(g)[0]).toMatchObject({ type: 'TOUCHDOWN', playerName: 'Own Receiver' })
+  })
+})
