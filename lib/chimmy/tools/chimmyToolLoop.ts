@@ -190,6 +190,11 @@ type ChimmyToolLoopArgs = {
   context: ChimmyToolContext
   enabled: boolean
   model?: string
+  /**
+   * Wall-clock budget for the whole loop (Claude). Absent: the panel's 75s. A chat reply holds the
+   * sender's message until it arrives, so `@chimmy` in a chat thread passes less.
+   */
+  budgetMs?: number
 }
 
 export async function runChimmyToolLoop(args: ChimmyToolLoopArgs): Promise<ChimmyToolLoopResult | null> {
@@ -231,7 +236,7 @@ async function runClaudeToolLoop(args: ChimmyToolLoopArgs): Promise<ChimmyToolLo
   ]
   const toolsUsed: string[] = []
   const evidence: string[] = []
-  const deadline = Date.now() + CLAUDE_LOOP_BUDGET_MS
+  const deadline = Date.now() + Math.min(CLAUDE_LOOP_BUDGET_MS, Math.max(5_000, args.budgetMs ?? CLAUDE_LOOP_BUDGET_MS))
   let useFallbacks = true
 
   const call = async (final: boolean): Promise<Anthropic.Message> => {
