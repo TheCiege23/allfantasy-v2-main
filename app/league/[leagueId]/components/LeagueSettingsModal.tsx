@@ -1,5 +1,8 @@
 'use client'
 
+import '@/components/core-app/af-core.css'
+import '@/components/league/league-admin.css'
+
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { LucideIcon } from 'lucide-react'
@@ -463,7 +466,7 @@ export function LeagueSettingsModal(props: LeagueSettingsModalProps) {
               role="dialog"
               aria-modal="true"
               aria-labelledby="league-settings-modal-title"
-              className={`pointer-events-auto flex max-h-[100dvh] w-full flex-col overflow-hidden rounded-t-2xl border border-white/[0.08] bg-[#0d1117] shadow-2xl md:max-h-[min(92vh,900px)] md:rounded-2xl ${
+              className={`af-core af-league-admin af-settings-dialog pointer-events-auto flex max-h-[100dvh] w-full flex-col overflow-hidden rounded-t-2xl border border-white/[0.08] bg-[#0d1117] shadow-2xl md:max-h-[min(92vh,900px)] md:rounded-2xl ${
                 isCommissioner && mainTab === 'general' && !importedPlatform ? 'max-w-4xl' : 'max-w-2xl'
               }`}
               initial={modalVariants.initial}
@@ -505,6 +508,7 @@ export function LeagueSettingsModal(props: LeagueSettingsModalProps) {
                   <button
                     type="button"
                     onClick={() => setMainTab('user')}
+                    aria-pressed={mainTab === 'user'}
                     className={`flex items-center gap-1.5 rounded-full border px-4 py-2 text-[11px] font-bold tracking-wide transition ${
                       mainTab === 'user'
                         ? 'border-[#ff3d81]/45 bg-white/[0.12] text-white shadow-[0_0_0_1px_rgba(255,61,129,0.12)]'
@@ -523,6 +527,7 @@ export function LeagueSettingsModal(props: LeagueSettingsModalProps) {
                   <button
                     type="button"
                     onClick={() => setMainTab('general')}
+                    aria-pressed={mainTab === 'general'}
                     className={`rounded-full border px-4 py-2 text-[11px] font-bold tracking-wide transition ${
                       mainTab === 'general'
                         ? 'border-[#ff3d81]/45 bg-white/[0.12] text-white shadow-[0_0_0_1px_rgba(255,61,129,0.12)]'
@@ -535,6 +540,7 @@ export function LeagueSettingsModal(props: LeagueSettingsModalProps) {
                     <button
                       type="button"
                       onClick={() => setMainTab('idp')}
+                      aria-pressed={mainTab === 'idp'}
                       className={`rounded-full border px-4 py-2 text-[11px] font-bold tracking-wide transition ${
                         mainTab === 'idp'
                           ? 'border-red-500/35 bg-red-950/35 text-red-100 shadow-[0_0_0_1px_rgba(248,113,113,0.15)]'
@@ -548,6 +554,7 @@ export function LeagueSettingsModal(props: LeagueSettingsModalProps) {
                   <button
                     type="button"
                     onClick={() => setMainTab('ai')}
+                    aria-pressed={mainTab === 'ai'}
                     className={`flex items-center gap-1 rounded-full border px-4 py-2 text-[11px] font-bold tracking-wide transition ${
                       mainTab === 'ai'
                         ? 'border-violet-500/45 bg-gradient-to-r from-violet-600/25 to-fuchsia-600/20 text-white shadow-[0_0_0_1px_rgba(139,92,246,0.2)]'
@@ -637,7 +644,7 @@ export function LeagueSettingsModal(props: LeagueSettingsModalProps) {
                   onClick={() => setActivePanel(null)}
                 />
                 <motion.aside
-                  className="fixed inset-y-0 right-0 z-[70] flex w-full max-w-md flex-col border-l border-white/[0.1] bg-[#0d1117] shadow-2xl"
+                  className="af-core af-league-admin af-settings-dialog fixed inset-y-0 right-0 z-[70] flex w-full max-w-md flex-col border-l border-white/[0.1] bg-[#0d1117] shadow-2xl"
                   initial={{ x: '100%' }}
                   animate={{ x: 0 }}
                   exit={{ x: '100%' }}
