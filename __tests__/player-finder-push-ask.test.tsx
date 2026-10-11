@@ -108,7 +108,11 @@ describe('PushAsk', () => {
 
   it('"Not now" hides this placement for the week, and is counted', async () => {
     const { container, unmount } = render(<PushAsk placement="finder_home" />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Not now' }))
+    const notNow = await screen.findByRole('button', { name: 'Not now' })
+    // Same race as the "shown" test above: `push_ask_shown` is sent from an effect that can run after
+    // the button is in the DOM, so on a slow runner the click was counted first.
+    await waitFor(() => expect(tracked().map((e) => e.event)).toEqual(['push_ask_shown']))
+    fireEvent.click(notNow)
     expect(container.innerHTML).toBe('')
     expect(tracked().map((e) => e.event)).toEqual(['push_ask_shown', 'push_ask_dismissed'])
     unmount()
