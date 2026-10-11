@@ -380,22 +380,24 @@ export async function enrichChatWithData(
     tasks.push((async () => {
       try {
         for (const playerName of players.slice(0, 3)) {
-          const [firstName, ...rest] = playerName.split(' ')
-          const lastName = rest.join(' ')
-
-          const identity = await prisma.playerIdentityMap.findFirst({
-            where: {
-              OR: [
-                { canonicalName: { contains: lastName, mode: 'insensitive' } },
-                { canonicalName: { equals: playerName, mode: 'insensitive' } },
-              ],
-            },
+          /*
+           * 🛑 EXACT NAME, ONE ATHLETE, RI ID AGAINST RI ROWS. This matched `canonicalName
+           * contains <last name>` ("Allen" → any Allen) and took the first row, then read season
+           * stats by `rollingInsightsId || sleeperId` with no source — a Sleeper id there finds
+           * Rolling Insights' player of that number (Sleeper 8394 is Percy Butler; RI 8394 is Rome
+           * Odunze). A name two athletes share is skipped: a chat message gives no team to split them.
+           */
+          const identities = await prisma.playerIdentityMap.findMany({
+            where: { sport: 'NFL', canonicalName: { equals: playerName, mode: 'insensitive' } },
+            take: 2,
           })
+          const identity = identities.length === 1 ? identities[0]! : null
 
-          if (identity) {
+          if (identity?.rollingInsightsId) {
             const seasonStats = await prisma.playerSeasonStats.findFirst({
               where: {
-                playerId: identity.rollingInsightsId || identity.sleeperId || '',
+                playerId: identity.rollingInsightsId,
+                source: 'rolling_insights',
                 sport: 'NFL',
               },
               orderBy: { season: 'desc' },
