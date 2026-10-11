@@ -178,9 +178,11 @@ const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
    * these; they are not reads that Postgres could have served, which is what the
    * DB-first rule is about. api.twitter.com is /2/tweets from the X publish providers,
    * and graph.facebook.com is the Facebook/Instagram publishers plus Meta CAPI pixel
-   * events and the OAuth /me lookup.
+   * events and the OAuth /me lookup. api.x.com is the same X API under its new host:
+   * lib/core-app/weeklyXPublishing.ts exchanges an OAuth code, reads /2/users/me, and
+   * POSTs /2/tweets.
    */
-  { name: 'platform-infra', why: 'social publishing, analytics and OAuth — we write to these, not read feeds', test: /^(api\.twitter\.com|graph\.facebook\.com)$/i },
+  { name: 'platform-infra', why: 'social publishing, analytics and OAuth — we write to these, not read feeds', test: /^(api\.twitter\.com|api\.x\.com|graph\.facebook\.com)$/i },
   /*
    * INFRASTRUCTURE CONTROL PLANE, not a data read. console.neon.tech is Neon's own management
    * API: scripts/neon-prune-preview-branches.mjs lists database branches and deletes the ones
