@@ -5,6 +5,7 @@ import type { LiveEvent } from '@/lib/live/eventDetector'
 import { headlineFor, PLAY_FEED_SPORT } from '@/lib/live/playFeedPresentation'
 import { headshotUrl } from '@/lib/media-url'
 import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidation'
+import { SCORING_SEASON_STATUSES } from '@/lib/redraft/seasonStatus'
 
 /**
  * Turn live play events into notifications — but only for the managers who
@@ -227,7 +228,7 @@ export async function starterImpactsByPlayerId(
 
 /**
  * Map players to the users who roster them — or, with `startersOnly`, who have
- * them in a starting lineup — for active seasons only.
+ * them in a starting lineup — for seasons still being played (`SCORING_SEASON_STATUSES`) only.
  *
  * A dropped player keeps his row until `droppedAt` is set, so filtering on it
  * is what stops a manager being told about someone they cut last week.
@@ -276,7 +277,15 @@ export async function ownersByPlayerId(
       where: {
         playerId: { in: [...riIdBySleeperId.keys()] },
         droppedAt: null,
-        roster: { season: { status: 'active', sport } },
+        /*
+         * 🛑 NOT `status: 'active'`. `RedraftSeason.status` has two writers that disagree
+         * (`lib/redraft/seasonStatus.ts`): native drafts write 'active', imports write
+         * 'in_season'. Measured on production 2026-10-11: 534 NFL seasons are 'in_season' and
+         * ONE is 'active', so the old filter told almost no redraft manager about anything.
+         * SCORING_SEASON_STATUSES is the shared "games are still being played and scored" set —
+         * both spellings plus 'playoffs', where a starter's touchdown still decides a matchup.
+         */
+        roster: { season: { status: { in: [...SCORING_SEASON_STATUSES] }, sport } },
         ...(opts.startersOnly ? { NOT: { slotType: { in: NON_STARTER_SLOTS } } } : {}),
       },
       select: { playerId: true, roster: { select: { ownerId: true } } },

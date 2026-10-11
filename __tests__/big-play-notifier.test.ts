@@ -75,7 +75,8 @@ describe('who gets told', () => {
     expect(where.NOT.slotType.in).toEqual(expect.arrayContaining(['bench', 'BENCH', 'IR', 'TAXI']))
     // A dropped player keeps his row until droppedAt is set.
     expect(where.droppedAt).toBeNull()
-    expect(where.roster.season.status).toBe('active')
+    // Seasons still being played, in every stored spelling — see the 'which seasons' block below.
+    expect(where.roster.season.status.in).toEqual(expect.arrayContaining(['active', 'in_season', 'playoffs']))
     // ...and queries by the TRANSLATED Sleeper id, never the RI feed id.
     expect(where.playerId.in).toEqual(['11560'])
   })
@@ -389,5 +390,49 @@ describe('one sport per play — no cross-sport recipients', () => {
     const owners = await (ownersByPlayerId as (ids: string[], opts?: unknown) => Promise<Map<string, string[]>>)(['101'])
     expect(owners.size).toBe(0)
     expect(h.identityFind).not.toHaveBeenCalled()
+  })
+})
+
+/*
+ * 2026-10-11: `RedraftSeason.status` is written as 'active' by native drafts and 'in_season' by
+ * imports (lib/redraft/seasonStatus.ts). Production: 534 NFL seasons 'in_season', 1 'active'. A
+ * double that honours the status filter it is given, holding one owner per season state.
+ */
+describe('which redraft seasons are live', () => {
+  const SEASONS = [
+    { status: 'in_season', ownerId: 'owner-in-season' },
+    { status: 'active', ownerId: 'owner-active' },
+    { status: 'playoffs', ownerId: 'owner-playoffs' },
+    { status: 'complete', ownerId: 'owner-complete' },
+    { status: 'setup', ownerId: 'owner-setup' },
+    { status: 'regular_season_complete', ownerId: 'owner-between' },
+  ]
+  const matches = (filter: unknown, status: string) =>
+    typeof filter === 'string' ? filter === status
+      : Array.isArray((filter as { in?: string[] })?.in) ? (filter as { in: string[] }).in.includes(status)
+        : true
+
+  beforeEach(() => {
+    h.rawQuery.mockResolvedValue([])
+    h.findMany.mockImplementation(async ({ where }: { where: Record<string, any> }) =>
+      SEASONS
+        .filter((s) => matches(where.roster.season.status, s.status))
+        .map((s) => ({ playerId: '11560', roster: { ownerId: s.ownerId } })))
+  })
+
+  it('REGRESSION: an imported NFL league\'s manager ("in_season") IS told about his starter', async () => {
+    const owners = await ownersByPlayerId(['101'], { startersOnly: true, sport: 'NFL' })
+    expect(owners.get('101')).toEqual(expect.arrayContaining(['owner-in-season', 'owner-active', 'owner-playoffs']))
+
+    await notifyBigPlays([ev({ type: 'TOUCHDOWN', delta: 20 })])
+    const told = h.ingestBatch.mock.calls.flatMap((call) => call[0].flatMap((n: any) => n.userIds))
+    expect(told).toContain('owner-in-season')
+  })
+
+  it('a finished, not-yet-started or between-phases season\'s manager is NOT told', async () => {
+    const owners = await ownersByPlayerId(['101'], { startersOnly: true, sport: 'NFL' })
+    for (const idle of ['owner-complete', 'owner-setup', 'owner-between']) {
+      expect(owners.get('101') ?? []).not.toContain(idle)
+    }
   })
 })
