@@ -3070,6 +3070,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         gameId: liveGame.detail.gameId,
         homeAbbrev: liveGame.detail.home.abbrev,
         awayAbbrev: liveGame.detail.away.abbrev,
+        upcoming: liveGame.detail.status?.state === 'pre',
       })
     : null
 

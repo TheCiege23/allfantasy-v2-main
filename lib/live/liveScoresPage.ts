@@ -712,6 +712,11 @@ export async function getGameStarters(opts: {
   gameId: string
   homeAbbrev: string
   awayAbbrev: string
+  /**
+   * The game has not kicked off (`status.state === 'pre'`): its starters are priced with this
+   * week's projection, as on the slate card. Optional; omitted means no projections.
+   */
+  upcoming?: boolean
 }): Promise<GameStarters | null> {
   if (!opts.userId) return null
   const sport = String(opts.sport).toUpperCase()
@@ -724,15 +729,15 @@ export async function getGameStarters(opts: {
           })
           .catch(() => null)
       : null
+    const teams = [liveTeamAbbreviation(opts.homeAbbrev, sport), liveTeamAbbreviation(opts.awayAbbrev, sport)]
     const { players, hasRosterData, rosterFailed } = await loadRosteredPlayers(
       opts.userId,
       sport,
       period?.season != null && period.week != null ? { season: period.season, week: period.week } : null,
+      // Before kickoff, the same projections the slate card prints — this game's two clubs only.
+      opts.upcoming ? new Set(teams) : undefined,
     )
-    const tieIns = starterTieInsForTeams(playersByTeam(players), [
-      liveTeamAbbreviation(opts.homeAbbrev, sport),
-      liveTeamAbbreviation(opts.awayAbbrev, sport),
-    ])
+    const tieIns = starterTieInsForTeams(playersByTeam(players), teams)
     return { tieIns, hasRosterData, rosterFailed: rosterFailed === true }
   } catch (err) {
     // Same rule as the slate: a roster fault is said, never drawn as "no starters".

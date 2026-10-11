@@ -147,3 +147,27 @@ describe('football box score', () => {
     expect(screen.queryByRole('region', { name: 'Box score' })).toBeNull()
   })
 })
+
+describe('the game view before kickoff shows projections, not 0.0 (2026-10-11)', () => {
+  const pre = () => detail({ status: { state: 'pre', detail: 'Sun 1:00 PM', period: 0, clock: null } })
+  const projected = (leagueId: string, value: number | null, out = false) => ({ ...tie(leagueId, 0), projected: value, projectedOut: out })
+
+  it('a range across leagues, labelled proj, never "0.0 pts"', () => {
+    view(pre(), { tieIns: [projected('L1', 14.1), projected('L2', 11.6)], hasRosterData: true, rosterFailed: false })
+    const panel = screen.getByRole('region', { name: 'Your starters in this game' })
+    const pts = panel.querySelector('.af-live-mine-pts') as HTMLElement
+    expect(pts.textContent).toBe('proj 11.6–14.1')
+    expect(pts.getAttribute('data-kind')).toBe('projection')
+    expect(panel.textContent).not.toContain('0.0 pts')
+  })
+
+  it("the held league's own number", () => {
+    view(pre(), { tieIns: [projected('L1', 14.1), projected('L2', 11.6)], hasRosterData: true, rosterFailed: false }, 'L2')
+    expect((document.querySelector('.af-live-mine-pts') as HTMLElement).textContent).toBe('proj 11.6')
+  })
+
+  it('control: once the game is on, the same row shows points again', () => {
+    view(detail(), { tieIns: [{ ...tie('L1', 14.2), projected: 20 }], hasRosterData: true, rosterFailed: false })
+    expect((document.querySelector('.af-live-mine-pts') as HTMLElement).textContent).toBe('14.2 pts')
+  })
+})

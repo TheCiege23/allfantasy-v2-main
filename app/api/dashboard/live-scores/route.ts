@@ -182,6 +182,7 @@ export async function GET(request: NextRequest) {
           gameId: data.detail.gameId,
           homeAbbrev: data.detail.home.abbrev,
           awayAbbrev: data.detail.away.abbrev,
+          upcoming: data.detail.status?.state === 'pre',
         })
       : null
     return NextResponse.json(
