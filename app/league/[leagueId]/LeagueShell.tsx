@@ -2,6 +2,7 @@
 
 import '@/components/core-app/af-core.css'
 import '@/components/league/league-workspace.css'
+import { LeagueWorkspaceNavigation } from '@/components/league/LeagueWorkspaceNavigation'
 
 import { isIdpLeagueVariant } from '@/lib/core-app/idpLeagueVariant'
 import { DefenseHubClient } from '@/app/idp/defense-hub/[leagueId]/DefenseHubClient'
@@ -301,10 +302,10 @@ export function LeagueShell({
   const router = useRouter()
   const pathname = usePathname()
   // Use a league-specific storage key so league and dashboard have independent collapse states.
-  // Default to the dashboard-style three-panel league shell.
+  // Start with room for league controls; the league switcher remains one click away.
   const myLeaguesRail = useMyLeaguesRailCollapse({
     storageKey: 'af-league-myleagues-rail-collapsed',
-    defaultCollapsed: false,
+    defaultCollapsed: true,
   })
   const searchParams = useSearchParams()
   const openChatQuery = searchParams?.get('openChat') ?? null
@@ -312,9 +313,8 @@ export function LeagueShell({
     () => defaultOpenChat ?? normalizeOpenChatQueryParam(openChatQuery) ?? 'league',
     [defaultOpenChat, openChatQuery],
   )
-  // Left chat panel: visible by default so users can immediately interact with
-  // League/Chimmy/AF Huddle/DMs. Can be minimised via the collapse button.
-  const [desktopChatOpen, setDesktopChatOpen] = useState<boolean>(true)
+  // League details open on demand; chat remains available through Chimmy.
+  const [desktopChatOpen, setDesktopChatOpen] = useState<boolean>(false)
   useEffect(() => {
     if (openChatQuery != null) setDesktopChatOpen(true)
   }, [openChatQuery])
@@ -1299,6 +1299,7 @@ export function LeagueShell({
         ) : null}
         <AppShell
           layoutMode="balanced-three-panel"
+          embedCenterOnly={embedMode}
           immersive={specialtyImmersive}
           // Global top nav + bottom tabs are hidden on /league/* (layout hideHeader),
           // so the shell owns the full viewport at every breakpoint.
@@ -1366,6 +1367,15 @@ export function LeagueShell({
           }
         >
           <div className="flex min-h-0 flex-1 flex-col overflow-y-auto [scrollbar-gutter:stable]">
+            {!embedMode ? (
+              <LeagueWorkspaceNavigation
+                leagueId={league.id}
+                leagueName={selectedLeague.name ?? 'League'}
+                platform={league.platform}
+                sourceLeagueId={league.platformLeagueId}
+                season={league.season}
+              />
+            ) : null}
             <div className="shrink-0 border-b border-white/[0.08] bg-[#050814] px-3 py-2 md:hidden">
               <div className="flex items-center justify-between gap-2">
                 <button
@@ -1501,11 +1511,10 @@ export function LeagueShell({
             )}
 
             {/*
-              Shadow League marker — states the operating mode once, above every tab, for any
-              imported league. Renders nothing for native AF leagues.
+              Embedded views have no workspace navigation, so keep their hosting disclosure.
             */}
             <div className="px-4 pt-3 empty:hidden">
-              <ShadowLeagueBanner platform={league.platform} />
+              {embedMode ? <ShadowLeagueBanner platform={league.platform} /> : null}
             </div>
 
             {/* Renew League banner - shown to commissioner when season ends */}

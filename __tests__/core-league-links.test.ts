@@ -1,5 +1,6 @@
 /**
- * A league opened from the new shell must not land on the old one.
+ * Normal dashboard navigation stays in Core. The explicit Open League action
+ * uses leagueWorkspaceHref to enter the operational workspace intentionally.
  *
  * `/core` exists to replace `/league/{id}`. Three screens inside the new shell
  * still linked straight out to the legacy page, so the primary route into a
