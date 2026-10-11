@@ -12,6 +12,7 @@ import type {
 import type { PlayerCardRef } from './PlayerCardProvider'
 import { useOverlayContainment } from '../useOverlayContainment'
 import PlayerHighlights from './PlayerHighlights'
+import PlayerRecentClips from '../highlights/PlayerRecentClips'
 import { CoreDepthLock, FreeUntilNote } from '../CoreDepthLock'
 import { scheduleProjectionNote, scheduleRowValue } from '@/lib/core-app/scheduleProjectionNote'
 import { PROJECTION_PROVIDER_LABEL } from '@/lib/core-app/projectionProvider'
@@ -879,6 +880,7 @@ export default function PlayerCardSheet({
                 ) : (
                   <Absent reason={reason(data.news.reason)} />
                 )}
+                <PlayerRecentClips player={data.player} />
                 <PlayerHighlights key={`${data.player.sport}:${data.player.externalId}`} player={data.player} />
               </div>
             </div>

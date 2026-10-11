@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import MyTeamHighlights from '@/components/core-app/MyTeamHighlights'
+import MyTeamRecentClips from '@/components/core-app/highlights/MyTeamRecentClips'
 import TeamRosterWorkspace from '@/components/core-app/TeamRosterWorkspace'
 import { LineupVerification } from '@/components/core-app/LineupVerification'
 import PlayerName from '@/components/core-app/player-card/PlayerName'
@@ -2193,6 +2194,7 @@ export function MyTeam({ data }: MyTeamProps) {
         </section>
       ) : null}
 
+      <MyTeamRecentClips data={data} />
       <MyTeamHighlights data={data} />
 
       {/* ── Coverage footnote ───────────────────────────────────────── */}

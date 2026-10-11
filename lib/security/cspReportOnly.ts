@@ -53,6 +53,7 @@ export const CSP_REPORT_ONLY_DIRECTIVES: Record<string, string[]> = {
     'https://connect.facebook.net',
     'https://js.stripe.com', // /support's buy button
     'https://sdk.scdn.co', // Spotify Web Playback SDK
+    'https://platform.twitter.com', // opt-in X posts
   ],
   'connect-src': [
     "'self'", // also covers same-host ws(s): and PostHog, which is proxied via /ingest
@@ -60,6 +61,7 @@ export const CSP_REPORT_ONLY_DIRECTIVES: Record<string, string[]> = {
     ...META,
     ...SENTRY_INGEST,
     'https://api.stripe.com',
+    'https://syndication.twitter.com',
   ],
   'img-src': ["'self'", 'data:', 'blob:', 'https:'],
   'media-src': ["'self'", 'blob:', 'https:'],
@@ -69,6 +71,8 @@ export const CSP_REPORT_ONLY_DIRECTIVES: Record<string, string[]> = {
     "'self'",
     'https://js.stripe.com',
     'https://www.youtube-nocookie.com',
+    'https://platform.twitter.com',
+    'https://syndication.twitter.com',
     'https://sdk.scdn.co',
     'https://open.spotify.com',
     'https://www.facebook.com',

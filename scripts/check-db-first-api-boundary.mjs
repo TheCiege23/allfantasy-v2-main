@@ -8,6 +8,8 @@ import { parseChangedLineNumbers } from "./db-first-diff-lines.mjs";
 import { listGitVisibleFiles } from "./git-visible-files.mjs";
 
 const DATA_API_HOST_PATTERNS = [
+  // X now supplies recent video-post reads as well as publishing.
+  /^api\.x\.com$/i,
   // Draft market references: only ingestion workers may read this provider.
   /^api\.statsguyfantasy\.com$/i,
   // ⚠ FANTRAX WAS INVISIBLE TO THIS GUARD ENTIRELY, and it is a full data API:
@@ -362,6 +364,10 @@ const SOURCE_EXTENSIONS = new Set([
 ]);
 
 const ALLOWED_PATH_PATTERNS = [
+  // Paid recent-search fetch is called only by refreshXCatalog, reached from
+  // the authenticated import-news cron. Browser routes read the DB catalog;
+  // their xHighlightsEnabled import reads configuration without calling X.
+  /^lib\/highlights\/x-provider\.ts$/,
   /*
    * `audit` joins this list because an audit script's whole purpose is comparing what a provider
    * says against what we stored — it cannot do that without calling the provider, and a script is

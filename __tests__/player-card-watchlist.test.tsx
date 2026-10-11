@@ -2,6 +2,9 @@ import React from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, waitFor } from '@testing-library/react'
 
+// Keep the independent X catalog read out of the watchlist-write assertions.
+vi.mock('@/components/core-app/highlights/PlayerRecentClips', () => ({ default: () => null }))
+
 import PlayerCardSheet from '@/components/core-app/player-card/PlayerCardSheet'
 import type { PlayerCardData } from '@/lib/core-app/playerCard'
 
