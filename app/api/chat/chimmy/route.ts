@@ -130,7 +130,7 @@ import { buildCommissionerContext } from '@/lib/chimmy/commissionerGrounding'
 import { buildLiveSlateContext } from '@/lib/chimmy/liveSlateGrounding'
 import { applyGroundingBudget } from '@/lib/chimmy/groundingBudget'
 import { buildChimmyPlayerCards } from '@/lib/chimmy/chimmyPlayerCards'
-import { resolveImagesByPlayerName } from '@/lib/players/sleeperPlayerCrosswalk'
+import { playerImageKey, resolveImagesByPlayerName } from '@/lib/players/sleeperPlayerCrosswalk'
 import { CHIMMY_GENERIC_ERROR_MESSAGE } from '@/lib/chimmy-chat/response-copy'
 import { judgeChimmyDelivery } from '@/lib/chimmy/chargeOnDelivery'
 import { settleUndeliveredChimmyAnswer } from '@/lib/chimmy/settleDelivery'
@@ -4334,13 +4334,12 @@ ${describedTradeCtx}`
      */
     const cardsMissingImages = playerCards.filter((c) => !c.imageUrl)
     if (cardsMissingImages.length > 0) {
-      const byName = await resolveImagesByPlayerName(
-        cardsMissingImages.map((c) => c.name),
-        sport,
-      ).catch(() => new Map<string, string>())
-      for (const card of cardsMissingImages) {
-        card.imageUrl = byName.get(card.name.toLowerCase()) ?? null
-      }
+      // Position and team bind a shared name (WR vs LB Justin Jefferson) to the right face.
+      const lookups = cardsMissingImages.map((c) => ({ name: c.name, position: c.position, team: c.team }))
+      const byName = await resolveImagesByPlayerName(lookups, sport).catch(() => new Map<string, string>())
+      cardsMissingImages.forEach((card, i) => {
+        card.imageUrl = byName.get(playerImageKey(lookups[i]!)) ?? null
+      })
     }
 
     /*

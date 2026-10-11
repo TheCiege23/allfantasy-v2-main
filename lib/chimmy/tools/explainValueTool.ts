@@ -71,13 +71,88 @@ export async function buildExplainValueContext(args: {
       .catch(() => [] as Array<{ playerName: string | null; position: string | null; marketValue: number; leagueConcept: string | null }>),
   ])
 
-  const row = proj.rows[0] ?? null
   const board = published.filter((p) => normalizePlayerName(String(p.playerName ?? '')) === target)
+  const players = groupByPlayer(proj.rows, board)
+  if (players.length === 0) return notFound(asked)
 
-  if (!row && board.length === 0) return notFound(asked)
+  /*
+   * 🛑 NAMESAKES ARE LISTED, NEVER RESOLVED HERE (2026-10-11). This used to take `proj.rows[0]` and
+   * `board[0]` INDEPENDENTLY — so with two players behind one name (12 NFL namesake groups in the
+   * AF projections that day), the derivation could price one man's projection beside the other
+   * man's published value and present the pair as one player. Same rule as `playerProjectionTool`:
+   * each player gets his own derivation, and the model is told to ask rather than pick.
+   */
+  const out: string[] = []
+  if (players.length > 1) {
+    out.push(
+      `⚠ ${players.length} different players match "${asked}" in ${sport}. Each has his own derivation below; ask the user which one they mean rather than picking, and never combine numbers across them.`,
+    )
+  }
+  for (const player of players) out.push(derivationFor(player, sport))
 
-  const position = row?.position ?? board[0]?.position ?? null
-  const displayName = row?.playerName ?? board[0]?.playerName ?? asked
+  /*
+   * ⚠ THE LIMIT THAT MOST CHANGES THE ANSWER, stated rather than buried. Positional scarcity is
+   * computed from a league's real starting slots; with no league it falls back to the default, so
+   * a superflex QB or a TE-premium tight end is under-priced here relative to the user's league.
+   */
+  out.push(
+    'NOTE THE LIMIT: this derivation uses default positional scarcity, because this tool takes no league. In a superflex, 2QB or TE-premium league the real number is higher for those positions. Say so if the user asks what he is worth in THEIR league.',
+  )
+
+  return out.join('\n')
+}
+
+type ProjectionRow = Awaited<ReturnType<typeof findAfProjectionsByName>>['rows'][number]
+type BoardRow = { playerName: string | null; position: string | null; marketValue: number; leagueConcept: string | null }
+
+interface ExplainedPlayer {
+  displayName: string
+  position: string | null
+  row: ProjectionRow | null
+  /** Published board rows for THIS player, highest value first. */
+  board: BoardRow[]
+}
+
+const posKey = (p: string | null | undefined): string => String(p ?? '').trim().toUpperCase()
+
+/**
+ * One entry per PLAYER behind the name. A projection row is one player (the reader already
+ * deduped); a board row joins the player whose position it shares, and only when exactly one
+ * does. A board row at a position no projection carries is its own player. A board row with NO
+ * position can be anyone, so it joins only when the name resolves to a single player.
+ */
+function groupByPlayer(rows: ProjectionRow[], board: BoardRow[]): ExplainedPlayer[] {
+  const players: ExplainedPlayer[] = rows.map((r) => ({
+    displayName: r.playerName,
+    position: r.position,
+    row: r,
+    board: [],
+  }))
+  const positionless: BoardRow[] = []
+  for (const b of board) {
+    const k = posKey(b.position)
+    if (!k) {
+      positionless.push(b)
+      continue
+    }
+    const samePos = players.filter((p) => posKey(p.position) === k)
+    if (samePos.length === 1) samePos[0]!.board.push(b)
+    else if (samePos.length === 0) {
+      players.push({ displayName: b.playerName ?? '', position: b.position, row: null, board: [b] })
+    }
+    // Two projected players at one position (a father and son): the board row names neither.
+  }
+  if (players.length === 1) players[0]!.board.push(...positionless)
+  else if (players.length === 0 && positionless.length > 0) {
+    players.push({ displayName: positionless[0]!.playerName ?? '', position: null, row: null, board: positionless })
+  }
+  for (const p of players) p.board.sort((a, b) => b.marketValue - a.marketValue)
+  return players
+}
+
+function derivationFor(player: ExplainedPlayer, sport: string): string {
+  const { row, board, position } = player
+  const displayName = player.displayName || 'this player'
 
   /*
    * ⚠ ONLY `rosProjection` FEEDS THE ENGINE, NEVER `afProjection`. The engine expects a
@@ -118,22 +193,13 @@ export async function buildExplainValueContext(args: {
    * quietly preferring one, hides a staleness signal the user can act on.
    */
   if (board.length > 0 && derivation.basis !== 'market') {
-    const b = board[0]
+    const b = board[0]!
     if (Math.abs(b.marketValue - derivation.value) > 1) {
       lines.push(
         `⚠ The PUBLISHED market value for him is ${b.marketValue.toLocaleString()}${b.leagueConcept ? ` (${b.leagueConcept})` : ''}, which differs from this derivation. Both are real: the published figure is a stored snapshot, this one is the current inputs run through the engine. Report both and say which is which rather than picking one.`,
       )
     }
   }
-
-  /*
-   * ⚠ THE LIMIT THAT MOST CHANGES THE ANSWER, stated rather than buried. Positional scarcity is
-   * computed from a league's real starting slots; with no league it falls back to the default, so
-   * a superflex QB or a TE-premium tight end is under-priced here relative to the user's league.
-   */
-  lines.push(
-    'NOTE THE LIMIT: this derivation uses default positional scarcity, because this tool takes no league. In a superflex, 2QB or TE-premium league the real number is higher for those positions. Say so if the user asks what he is worth in THEIR league.',
-  )
 
   return lines.join('\n')
 }
