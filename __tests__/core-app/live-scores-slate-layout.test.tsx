@@ -228,3 +228,47 @@ describe('your live impact — starters in action, not points summed across leag
     expect(screen.getByText('4 min ago')).toBeInTheDocument()
   })
 })
+
+describe('before kickoff a starter shows his projection, not 0.0', () => {
+  const upcoming = (tieIns: LiveRosterTieIn[]) =>
+    game('7', { isLive: false, completed: false, clockLabel: null, statusDetail: '10/11 - 8:20 PM EDT', tieIns })
+
+  it('a range across leagues, muted and labelled proj', () => {
+    const { container } = render(
+      <LiveScores
+        data={page([
+          upcoming([
+            tie({ playerId: 'b', playerName: 'Bijan', points: 0, projected: 18.4 }),
+            tie({ playerId: 'b', playerName: 'Bijan', leagueId: 'L2', leagueName: 'Bravo League', points: 0, projected: 15.2 }),
+          ]),
+        ])}
+      />,
+    )
+    const pts = container.querySelector('.af-live-mine-pts') as HTMLElement
+    expect(pts.textContent).toBe('proj 15.2–18.4')
+    expect(pts.getAttribute('data-kind')).toBe('projection')
+    expect(container.textContent).not.toContain('0.0 pts')
+  })
+
+  it('a ruled-out starter says out, and an unpriced one a dash', () => {
+    const { container } = render(
+      <LiveScores
+        data={page([
+          upcoming([
+            tie({ playerId: 'o', playerName: 'Out Guy', points: 0, projected: 0, projectedOut: true }),
+            tie({ playerId: 'u', playerName: 'Unpriced', points: 0, projected: null }),
+          ]),
+        ])}
+      />,
+    )
+    const values = [...container.querySelectorAll('.af-live-mine-pts')].map((el) => el.textContent)
+    expect(values.sort()).toEqual(['out', '—'])
+  })
+
+  it('control: a live game still shows points, never a projection', () => {
+    const { container } = render(<LiveScores data={page([game('1', { tieIns: [tie({ points: 8.4, projected: 20 })] })])} />)
+    const pts = container.querySelector('.af-live-mine-pts') as HTMLElement
+    expect(pts.textContent).toBe('8.4 pts')
+    expect(pts.getAttribute('data-kind')).toBeNull()
+  })
+})

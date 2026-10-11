@@ -578,6 +578,11 @@
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+/* A projection is not a score: muted, so a pre-game row never reads as points banked. */
+.af-live-mine-pts[data-kind='projection'] {
+  color: var(--muted);
+  font-weight: 700;
+}
 /* Drawn with borders, not a ▾ glyph — the mono fallback font renders that as a dot. */
 .af-live-mine-chev {
   width: 7px;

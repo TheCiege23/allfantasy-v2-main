@@ -19,6 +19,7 @@ import { resolveRostersForTeams } from '@/lib/leagues/rosterTeamIdentity'
 import { leagueWeekFromSettings } from '@/lib/core-app/seasonTimeline'
 import { attachSlateGames, deriveImpact } from '@/lib/live/liveImpact'
 import { gameStageRank } from '@/lib/live/gameStage'
+import { loadStarterProjections, PROJECTED_SPORTS, type StarterProjection } from '@/lib/live/starterProjections'
 import { loadGameHighlights } from '@/lib/live/gameHighlights'
 import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 import { buildLockAlerts, type LiveLockAlert } from '@/lib/live/lockAlerts'
@@ -95,6 +96,14 @@ export type LiveRosterTieIn = {
   isStarter: boolean
   /** Points as THIS league scored them. Null when the league has not reported yet. */
   points: number | null
+  /**
+   * Before kickoff only: this week's projection under THIS league's scoring (`starterProjections.ts`).
+   * Null or absent when it could not be priced — unpriced, never zero. Optional so payloads and
+   * fixtures that predate it stay valid.
+   */
+  projected?: number | null
+  /** The projection is 0 because he is ruled out, not because the model expects nothing. */
+  projectedOut?: boolean
 }
 
 export type LiveTeamSide = {
@@ -333,7 +342,14 @@ type RosteredPlayer = {
   position: string | null
   team: string | null
   imageUrl: string | null
-  leagues: Array<{ leagueId: string; leagueName: string; isStarter: boolean; points: number | null }>
+  leagues: Array<{
+    leagueId: string
+    leagueName: string
+    isStarter: boolean
+    points: number | null
+    projected: number | null
+    projectedOut: boolean
+  }>
 }
 
 function isLiveRow(row: LiveScoreRow): boolean {
@@ -410,6 +426,8 @@ async function loadRosteredPlayers(
   userId: string,
   sport: string,
   period?: { season: number; week: number } | null,
+  /** Clubs whose game on this slate has not started. Their starters get a projection. */
+  upcomingTeams?: ReadonlySet<string>,
 ): Promise<{ players: Map<string, RosteredPlayer>; hasRosterData: boolean; rosterFailed?: boolean }> {
   const players = new Map<string, RosteredPlayer>()
 
@@ -535,6 +553,35 @@ async function loadRosteredPlayers(
    */
   const identityById = composePlayerIdentities(identities)
 
+  /*
+   * Projections for starters whose game has not kicked off. An ENHANCEMENT, like the tie-ins
+   * themselves: a failed read leaves the rows unpriced (a dash) and never fails the roster read.
+   */
+  const projections =
+    upcomingTeams && upcomingTeams.size > 0 && PROJECTED_SPORTS.has(sport)
+      ? await loadStarterProjections({
+          leagues: leagues.flatMap((league) => {
+            const week = statedWeek.get(league.platformLeagueId)
+            if (week == null || league.season == null) return []
+            const playerIds = [...(startedByLeague.get(league.platformLeagueId) ?? [])].filter((id) => {
+              const team = identityById.get(id)?.team
+              return team != null && upcomingTeams.has(team)
+            })
+            return [{ key: league.platformLeagueId, season: Number(league.season), week, settings: league.settings, playerIds }]
+          }),
+          // Every vendor spelling for the injury match, with the composed club and position.
+          identities: identities.map((row) => ({
+            sleeperId: row.sleeperId,
+            name: row.name,
+            team: identityById.get(row.sleeperId ?? '')?.team ?? null,
+            position: identityById.get(row.sleeperId ?? '')?.position ?? null,
+          })),
+        }).catch((err) => {
+          console.error('[live] starter projections failed, rows stay unpriced:', err instanceof Error ? err.message : err)
+          return new Map<string, StarterProjection>()
+        })
+      : new Map<string, StarterProjection>()
+
   for (const r of current) {
     const identity = identityById.get(r.playerId)
     // Unresolvable ids are skipped, not rendered as a blank player row.
@@ -547,6 +594,8 @@ async function loadRosteredPlayers(
       leagueName: league.name ?? 'League',
       isStarter: startedByLeague.get(r.leagueId)?.has(r.playerId) ?? false,
       points: Number.isFinite(r.points) ? r.points : null,
+      projected: projections.get(`${r.leagueId}:${r.playerId}`)?.projected ?? null,
+      projectedOut: projections.get(`${r.leagueId}:${r.playerId}`)?.out ?? false,
     }
     const existing = players.get(r.playerId)
     if (existing) {
@@ -574,6 +623,17 @@ async function loadRosteredPlayers(
   }
 
   return { players, hasRosterData: true, rosterFailed: incomplete }
+}
+
+/** Clubs whose game on this slate has not started — the same "played" test the cards use. */
+function upcomingTeamsOf(rows: readonly LiveScoreRow[], sport: string): Set<string> {
+  const teams = new Set<string>()
+  for (const row of rows) {
+    if (hasStarted(row.status) || row.completed) continue
+    teams.add(liveTeamAbbreviation(row.homeTeam, sport))
+    teams.add(liveTeamAbbreviation(row.awayTeam, sport))
+  }
+  return teams
 }
 
 /** Real-world team -> your players on it. */
@@ -618,6 +678,8 @@ function starterTieInsForTeams(
           team,
           isStarter: l.isStarter,
           points: l.points,
+          projected: l.projected,
+          projectedOut: l.projectedOut,
         })
       }
     }
@@ -1048,7 +1110,12 @@ export async function getLivePageData(opts: {
     ? rows.find((row) => row.season != null && row.week != null)
     : null
   const { players, hasRosterData } = opts.userId
-    ? await loadRosteredPlayers(opts.userId, sport, footballPeriod?.season != null && footballPeriod.week != null ? { season: footballPeriod.season, week: footballPeriod.week } : null).then((result) => {
+    ? await loadRosteredPlayers(
+        opts.userId,
+        sport,
+        footballPeriod?.season != null && footballPeriod.week != null ? { season: footballPeriod.season, week: footballPeriod.week } : null,
+        upcomingTeamsOf(rows, sport),
+      ).then((result) => {
         rosterFailed = result.rosterFailed === true
         return result
       }).catch((err) => {
