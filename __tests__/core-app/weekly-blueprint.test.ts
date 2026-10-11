@@ -112,3 +112,22 @@ describe('the brief labels a board game that already has points', () => {
     expect(brief(card({you:135.5,them:129.9,margin:5.6,final:true}),true)).toContain('Período 4 (finalizado): jugó contra Paid en HailShiva.')
   })
 })
+
+// HailShiva 2026-10-06: the card's 51.9% was simulated before the week-4 win; Chimmy's later run said 65.12%.
+describe('the brief says when its playoff odds predate the live period', () => {
+  const card = (live: {you:number;them:number;margin:number;final:boolean} | null) => ({leagueId:'H',leagueName:'HailShiva',season:2026,week:4,opponent:{name:'Paid'},live})
+  const outlook = (period: number, playoffPct: number, swingWeek?: number) => ({leagues:[{leagueId:'H',leagueName:'HailShiva',season:2026,period,you:{modelled:true,playoffPct}}],
+    swingByLeague: swingWeek ? {H:{leagueId:'H',leagueName:'HailShiva',week:swingWeek,opponentName:'Rittnasty',ifWin:76.4,ifLose:55.55,swing:20.85}} : {}}) as unknown as SeasonOutlook
+  const brief = (c: ReturnType<typeof card>, o: SeasonOutlook, es = false) => weeklyBrief(buildWeeklyBlueprint({ leagues:[{id:'H',name:'HailShiva',sport:'NFL'}], board:{...board,leaning:[c]} as unknown as WeekBoard, pulse:null, outlook:o, focusLeagueId:'H', now:new Date('2026-10-05T23:00:00Z') }), es)
+  it('labels odds beside a period still being played', () => {
+    expect(brief(card({you:98.1,them:120.4,margin:-22.3,final:false}), outlook(4, 51.9))).toContain("Estimated playoff probability in HailShiva: 51.9% (simulated before period 4's result; that game is not counted yet).")
+    expect(brief(card({you:98.1,them:120.4,margin:-22.3,final:false}), outlook(4, 51.9), true)).toContain('51.9% (simulada antes del resultado del período 4; aún no cuenta ese partido).')
+  })
+  it('adds nothing before kickoff, or once the card has moved on to the next game', () => {
+    expect(brief(card(null), outlook(4, 51.9))).toContain('Estimated playoff probability in HailShiva: 51.9%. ')
+    const after = brief(card({you:135.5,them:129.9,margin:5.6,final:true}), outlook(5, 65.12, 5))
+    expect(after).toContain('Period 5: facing Rittnasty in HailShiva.')
+    expect(after).toContain('Estimated playoff probability in HailShiva: 65.1%. ')
+    expect(after).not.toContain('simulated before')
+  })
+})
