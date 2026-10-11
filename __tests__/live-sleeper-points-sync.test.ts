@@ -28,7 +28,7 @@ import {
 import { sleeperScoreTargetWeeks } from '@/lib/sleeper/sync/sleeperScoreTargetWeeks'
 
 const NOW = new Date('2026-09-13T18:00:00Z')
-const live = { liveGameIds: async () => ['20260913-1-26'], clock: () => 0 }
+const live = { liveGameIds: async () => ['20260913-1-26'], clock: () => 0, slateDigests: async () => 0 }
 const leagues = (n: number) => Array.from({ length: n }, (_, i) => ({ platformLeagueId: `L${String(i).padStart(2, '0')}` }))
 
 beforeEach(() => {
@@ -95,53 +95,47 @@ describe('refreshLiveSleeperPoints', () => {
   })
 
   /*
-   * The writer rewrites every row and reports no diff, so a swing only exists if the
-   * rows are read immediately BEFORE it runs — and is only worth checking after a
-   * refresh that actually wrote scores.
+   * The per-swing alerts were replaced by one summary per slate (owner's decision, 2026-10-11;
+   * lib/live/slateDigest.ts). The pass no longer snapshots before writing — nothing compares
+   * before and after any more — and asks for the digest once, after the points.
    */
-  it('snapshots each league-week before refreshing it, and checks for swings after', async () => {
-    h.leagueFindMany.mockResolvedValue(leagues(1))
+  it("refreshes points, then asks for the slate summary once with this pass's time and season", async () => {
+    h.leagueFindMany.mockResolvedValue(leagues(3))
     const order: string[] = []
-    h.ingest.mockImplementation(async (_l: string, _s: number, week: number) => {
-      order.push(`ingest:${week}`)
-      return week === 2 ? { scoresUpserted: 4, error: null } : { scoresUpserted: 0, error: null }
+    h.ingest.mockImplementation(async (league: string, _s: number, week: number) => {
+      order.push(`ingest:${league}:${week}`)
+      return { scoresUpserted: 4, error: null }
     })
-    const snapshotScores = vi.fn(async (_l: string, _s: number, week: number) => {
-      order.push(`snapshot:${week}`)
-      return [{ playerId: 'p', rosterId: 1, isStarter: true, points: week }]
+    const slateDigests = vi.fn(async () => {
+      order.push('digest')
+      return 7
     })
-    const notifySwings = vi.fn(async () => 2)
 
-    const res = await refreshLiveSleeperPoints(NOW, { ...live, snapshotScores, notifySwings })
+    const res = await refreshLiveSleeperPoints(NOW, { ...live, slateDigests })
 
-    expect(order.indexOf('snapshot:2')).toBeLessThan(order.indexOf('ingest:2'))
-    expect(notifySwings).toHaveBeenCalledTimes(1)
-    expect(notifySwings).toHaveBeenCalledWith({
-      platformLeagueId: 'L00',
-      season: 2026,
-      week: 2,
-      beforeRows: [{ playerId: 'p', rosterId: 1, isStarter: true, points: 2 }],
-    })
-    expect(res.swingAlerts).toBe(2)
+    expect(slateDigests).toHaveBeenCalledTimes(1)
+    expect(slateDigests).toHaveBeenCalledWith({ now: NOW, season: 2026 })
+    expect(order[order.length - 1]).toBe('digest')
+    expect(order.filter((o) => o.startsWith('ingest'))).toHaveLength(6)
+    expect(res.slateDigests).toBe(7)
   })
 
-  it('a failing swing check never costs the points refresh', async () => {
+  it('a failing summary never costs the points refresh', async () => {
     h.leagueFindMany.mockResolvedValue(leagues(1))
     const res = await refreshLiveSleeperPoints(NOW, {
       ...live,
-      snapshotScores: async () => [],
-      notifySwings: async () => {
+      slateDigests: async () => {
         throw new Error('boom')
       },
     })
-    expect(res).toMatchObject({ leaguesSynced: 1, errors: 0, swingAlerts: 0 })
+    expect(res).toMatchObject({ leaguesSynced: 1, errors: 0, slateDigests: 0 })
   })
 
   it('stops at its time budget and resumes from the first league it did not reach', async () => {
     h.leagueFindMany.mockResolvedValue(leagues(5))
     // The first read sets the deadline; every later read is past it.
     let calls = 0
-    const res = await refreshLiveSleeperPoints(NOW, { liveGameIds: live.liveGameIds, clock: () => (calls++ === 0 ? 0 : 60_000) })
+    const res = await refreshLiveSleeperPoints(NOW, { liveGameIds: live.liveGameIds, slateDigests: live.slateDigests, clock: () => (calls++ === 0 ? 0 : 60_000) })
     expect(h.ingest).not.toHaveBeenCalled()
     expect(res.leaguesSynced).toBe(0)
     expect(h.cacheUpsert.mock.calls[0][0].update.data).toEqual({ offset: 0 })
