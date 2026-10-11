@@ -121,6 +121,11 @@ export type LineupOptimization =
       unfilledSlots: string[]
       lockedPlayers?: OptimizerPlayer[]
       unverifiedLocks?: OptimizerPlayer[]
+      /**
+       * Bench players the best lineup WOULD use if their game had not already started, and what that
+       * costs. Null when no started bench player would have made it.
+       */
+      lockedOut?: { players: OptimizerPlayer[]; cost: number } | null
     }
 
 export interface LineupOptimizerDeps extends LeagueWeekPricingDeps {
@@ -249,7 +254,18 @@ export async function buildLineupOptimization(
     fixed.set(index, id)
   }
   const remainingSlots = startingSlots.filter((_, index) => !fixed.has(index))
-  const best = fillLineup(impact.filter((p) => !locks.started.has(p.playerId) && !unavailableForLineup(meta.get(p.playerId)?.injury)), remainingSlots)
+  const playable = (p: { playerId: string }) => !unavailableForLineup(meta.get(p.playerId)?.injury)
+  const best = fillLineup(impact.filter((p) => !locks.started.has(p.playerId) && playable(p)), remainingSlots)
+  /*
+   * 🛑 A STARTED BENCH PLAYER WAS DROPPED IN SILENCE. Production 2026-10-11, HailShiva: Bhayshul Tuten
+   * (12.7) out-projected a starter (Devaughn Vele, 9.7), but Jacksonville kicked off in London at
+   * 9:30 AM ET, so the fill left him out and the only trace was a generic "known started games"
+   * line. The same fill, run once more with started bench players allowed, names who the lock cost.
+   */
+  const fixedIds = new Set(fixed.values())
+  const unlocked = fillLineup(impact.filter((p) => !fixedIds.has(p.playerId) && playable(p)), remainingSlots)
+  const lockedOutIds = unlocked.starterIds.filter((id) => locks.started.has(id) && !currentSet.has(id))
+  const lockedOutCost = round2(unlocked.points - best.points)
   let remainingIndex = 0
   const remainingAssignments = best.assignments.slice()
   best.assignments = startingSlots.flatMap((slot, index) => {
@@ -334,6 +350,7 @@ export async function buildLineupOptimization(
     unfilledSlots: best.unfilledSlots,
     lockedPlayers: active.filter((id) => locks.started.has(id)).map(player),
     unverifiedLocks: locks.unverified.map(player),
+    lockedOut: lockedOutIds.length > 0 && lockedOutCost > 0 ? { players: lockedOutIds.map(player).sort(byPoints), cost: lockedOutCost } : null,
   }
 }
 
@@ -424,6 +441,13 @@ export function renderLineupOptimizationBlock(result: LineupOptimization): strin
   }
   if (r.unpricedActive > 0) {
     lines.push(`- ${r.unpricedActive} active player(s) have no week ${wk} projection and were left out of the maths.`)
+  }
+  if (r.lockedOut) {
+    lines.push(
+      `- 🔒 ALREADY LOCKED: ${r.lockedOut.players.map((p) => `${who(p)} (${pts(p, wk)})`).join(', ')} would be in the best lineup, but ` +
+        `${r.lockedOut.players.length === 1 ? 'his game has' : 'their games have'} already started, so ${r.lockedOut.players.length === 1 ? 'he' : 'they'} can no longer be moved in ` +
+        `(${fmt(r.lockedOut.cost)} projected pts the lock costs). Say this plainly, and never recommend starting ${r.lockedOut.players.length === 1 ? 'him' : 'them'}.`,
+    )
   }
   if (r.lockedPlayers?.length) lines.push(`- Known started games: ${r.lockedPlayers.map(who).join(', ')}. Current starters were kept in place and started bench players were excluded.`)
   if (r.unverifiedLocks?.length) lines.push(`- Kickoff locks could not be verified for ${r.unverifiedLocks.map(who).join(', ')}. Confirm them on the provider before acting.`)
