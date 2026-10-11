@@ -182,12 +182,17 @@ Consider this manager's style when making recommendations.
 
     try {
       const topAdds = Array.isArray(responseData?.top_adds) ? responseData.top_adds : []
-      const recommendedNames = topAdds
-        .map((a: any) => (typeof a?.player_name === 'string' ? a.player_name.trim() : ''))
-        .filter(Boolean)
-      if (recommendedNames.length > 0) {
+      // Position and team travel with the name, so a shared name binds to ONE player or none.
+      const recommended = topAdds
+        .map((a: any) => ({
+          name: typeof a?.player_name === 'string' ? a.player_name.trim() : '',
+          position: typeof a?.position === 'string' ? a.position : null,
+          team: typeof a?.team === 'string' ? a.team : null,
+        }))
+        .filter((a: { name: string }) => a.name)
+      if (recommended.length > 0) {
         await recordTrendSignalsByPlayerNames({
-          playerNames: recommendedNames,
+          players: recommended,
           sport: waiverRequest.league?.sport,
           signalType: 'ai_recommendation',
           leagueId: waiverRequest.league?.league_id,
