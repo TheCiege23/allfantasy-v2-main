@@ -9,7 +9,7 @@ import { leagueValueForPlayer, valuePositionsAgree } from '@/lib/league-values/p
 import { getFantasyCalcChartDbFirst } from '@/lib/fantasycalc-db'
 import { pricePlayer, pricePick, compositeScore, type ValuationContext, type PricedAsset } from '@/lib/hybrid-valuation'
 import type { SupportedSport } from '@/lib/sport-scope'
-import { normalizePlayerName } from '@/lib/team-abbrev'
+import { collapseSamePersonRows } from '@/lib/data/samePersonRows'
 import { prisma } from '@/lib/prisma'
 import { loadLeagueTradeValues } from '@/lib/league-values/leagueTradeValues'
 import type { NormalizedLeagueContext } from '@/lib/league-context-engine/types'
@@ -367,37 +367,18 @@ export function unpricedAsset(args: {
  * Soto" both came back "could not resolve … fix spelling" in the open analyzer (2026-10-11), while the
  * same players picked from the search graded. Measured in production that day: of the names carried by
  * more than one row, ONE identity holds 1,517 of 1,562 in MLB, 1,621 of 1,629 in the NBA and 1,782 of
- * 1,798 in the NHL.
+ * 1,798 in the NHL. Namesakes (Will Smith, four Luis Garcias) stay unresolved for the search to settle.
  *
- * ⚠ BUT SOME ARE NAMESAKES, so the rows are never just merged. Will Smith is the Dodgers' catcher AND a
- * Royals pitcher; four Luis Garcias are on file. `PlayerIdentityMap` keeps one row per athlete — the id
- * space the projection board is keyed on — so it decides: one identity by that name in this sport, and
- * the copies are his; two or more, and the name stays unresolved, as before, for the search to settle.
- * His display row is the one keyed on his Rolling Insights id when there is one (it carries the current
- * club — Skubal's 2026 rows say LAD, an April row still says DETROIT TIGERS), else the newest copy.
+ * `collapseSamePersonRows` decides, from `PlayerIdentityMap` — the same rule the player search shows its
+ * rows by, so a name the search lists once is a name that resolves when typed.
  */
 async function onePersonNamed(
   rows: readonly SportsPlayerRecord[],
-  name: string,
   sport: SupportedSport,
 ): Promise<SportsPlayerRecord | null> {
   if (rows.length < 2) return null
-  const normalizedName = normalizePlayerName(name)
-  if (!normalizedName) return null
-  let people: Array<{ rollingInsightsId: string | null }> | null
-  try {
-    people = await prisma.playerIdentityMap.findMany({
-      where: { sport, normalizedName },
-      select: { rollingInsightsId: true },
-      take: 2,
-    })
-  } catch {
-    people = null
-  }
-  if (!people || people.length !== 1) return null
-  const ri = people[0]!.rollingInsightsId?.trim()
-  // `searchPlayers` returns the newest rows first.
-  return (ri ? rows.find((r) => r.id === `${sport}:${ri}`) : undefined) ?? rows[0] ?? null
+  const kept = await collapseSamePersonRows(rows, sport)
+  return kept.length === 1 ? kept[0]! : null
 }
 
 export async function resolveAssets(
@@ -602,7 +583,7 @@ export async function resolveAssets(
     if (!row && !raw.playerId && !raw.providerIdentity && displayName.length >= 2) {
       const found = await searchPlayers(displayName, args.effectiveSport)
       const exact = found.filter(p => p.name.trim().toLowerCase() === displayName.toLowerCase())
-      row = (exact.length === 1 ? exact[0] : await onePersonNamed(exact, displayName, args.effectiveSport)) as SportsPlayerRecord | null
+      row = (exact.length === 1 ? exact[0] : await onePersonNamed(exact, args.effectiveSport)) as SportsPlayerRecord | null
     }
     if (!row) {
       unresolved.push(displayName || raw.playerId || 'unknown')

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import { searchPlayers } from '@/lib/data/players'
+import { collapseSamePersonRows } from '@/lib/data/samePersonRows'
 import { SUPPORTED_SPORTS, normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
 import { rateLimit, getClientIp } from '@/lib/rate-limit'
 import { resolveHeadshotUrl } from '@/lib/draft-sports-models/player-asset-resolver'
@@ -135,7 +136,7 @@ export async function GET(req: NextRequest) {
       const restSports = SUPPORTED_SPORTS.filter((s) => s !== 'NFL')
       const rest = await Promise.all(
         restSports.map(async (s) => {
-          const rows = await searchPlayers(q, s)
+          const rows = await collapseSamePersonRows(await searchPlayers(q, s), s)
           return rows.slice(0, 5).map((row) => nonNflSearchRow(row, s as SupportedSport))
         }),
       )
@@ -143,7 +144,8 @@ export async function GET(req: NextRequest) {
     }
 
     const sp = normalizeToSupportedSport(sportParam)
-    const rows = await searchPlayers(q, sp)
+    // One row per athlete: the table holds him once per source (`collapseSamePersonRows`).
+    const rows = await collapseSamePersonRows(await searchPlayers(q, sp), sp)
     return NextResponse.json(rows.slice(0, 12).map((row) => nonNflSearchRow(row, sp)))
   } catch {
     return NextResponse.json([])
