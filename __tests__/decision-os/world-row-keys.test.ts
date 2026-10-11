@@ -34,8 +34,21 @@ describe('indexRowsByLeagueId', () => {
 describe('the readers', () => {
   it('resolveInjuryContext gives Percy Butler his own row', async () => {
     const rows = [odunzeRi, butler].map((r) => ({ ...r, fetchedAt: null, expiresAt: null, updatedAt: null }))
-    const res = await resolveInjuryContext('NFL', ['8394', ODUNZE_SLEEPER], { loadRows: async () => rows })
-    expect(res.byId.get('8394')?.status).toBe('Active')
+    // The designation comes from the injury feed, asked about the identity on the row each id resolves to.
+    const asked: Array<{ key: string; name: unknown; rosterStatus: unknown }> = []
+    const res = await resolveInjuryContext('NFL', ['8394', ODUNZE_SLEEPER], {
+      loadRows: async () => rows,
+      resolveDesignations: async ({ players }) => {
+        for (const p of players) asked.push({ key: p.key, name: p.name, rosterStatus: p.rosterStatus ?? null })
+        return new Map([['8394', { status: 'Questionable', source: 'injury_feed' as const, fact: null }]])
+      },
+    })
+    expect(asked).toEqual([
+      { key: '8394', name: 'Percy Butler', rosterStatus: 'Active' },
+      // Odunze's id resolves to his RI row; another provider's `status` is never offered as a roster status.
+      { key: ODUNZE_SLEEPER, name: 'Rome Odunze', rosterStatus: null },
+    ])
+    expect(res.byId.get('8394')?.status).toBe('Questionable')
   })
 
   it('projectPlayerMetadata names Percy Butler, not Rome Odunze', () => {

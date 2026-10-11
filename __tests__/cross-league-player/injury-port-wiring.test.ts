@@ -198,6 +198,8 @@ describe('injury read port wiring (Slice 18)', () => {
   it('genuine player-record injury tokens still work as fallback when RI has no row', async () => {
     for (const [token, expected] of [
       ['IR', 'ir'],
+      // Sleeper's season-scale roster absence, the one roster status resolveInjuryContext passes on.
+      ['Injured Reserve', 'ir'],
       ['Out', 'out'],
       ['Questionable', 'questionable'],
       ['Suspension', 'suspended'],

@@ -124,7 +124,11 @@ export interface RawInjuryContextRow {
   externalId: string
   /** Alternate Sleeper-specific lookup key; null when absent. */
   sleeperId: string | null
-  /** Injury / availability status string as persisted (e.g. "Q", "O", "IR", "Active"); null when unknown. */
+  /**
+   * `SportsPlayer.status` as persisted. On Sleeper's row that is its ROSTER status ("Active",
+   * "Injured Reserve"), on Rolling Insights' "ACT"/"INACT" — NOT an injury designation. Only a Sleeper
+   * row's season-scale absence may be read as one (`isRosterAbsence`); see `resolveInjuryContext`.
+   */
   status: string | null
   /** Which import source produced the cached row (provenance only). */
   source: string | null
@@ -134,6 +138,13 @@ export interface RawInjuryContextRow {
   expiresAt: Date | null
   /** When the cached row was last updated. Null when not tracked. */
   updatedAt: Date | null
+  /**
+   * The player's identity on this row — what the injury FEED is matched on (by verified name, with
+   * team and position to tell namesakes apart). Optional: a row without a name cannot be asked about.
+   */
+  name?: string | null
+  team?: string | null
+  position?: string | null
 }
 
 /**
