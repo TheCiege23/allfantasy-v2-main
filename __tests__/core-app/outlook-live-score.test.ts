@@ -105,6 +105,18 @@ describe('reading a board', () => {
     expect(out.unread).toEqual([])
   })
 
+  it('takes the live starter sums over a lagging matchup row, and starts a game the row still shows at zero', () => {
+    // Production 2026-10-11: the opponent's starters summed to 44.06 while his matchup row read 39.96.
+    const lagging = withLiveScores(games, rows, () => 0.5, (w, id) => (w === 4 ? (id === 'you' ? 140 : 131.2) : undefined))
+    expect(lagging.games[0].live).toEqual({ a: 140, b: 131.2, restA: 0.5, restB: 0.5 })
+    // Week 5's rows read zero, but the live rows have points: the game is under way.
+    const started = withLiveScores(games, rows, () => 0.9, (w, id) => (w === 5 && id === 'you' ? 6.4 : w === 5 ? 0 : undefined))
+    expect(started.games[1].live).toEqual({ a: 6.4, b: 0, restA: 0.9, restB: 0.9 })
+    expect(started.attached).toEqual([4, 5])
+    // No live points anywhere: exactly the matchup-row behaviour.
+    expect(withLiveScores(games, rows, () => 0, () => undefined).games).toEqual(withLiveScores(games, rows, () => 0).games)
+  })
+
   it('never guesses a lineup it could not read', () => {
     const out = withLiveScores(games, rows, (_w, id) => (id === 'you' ? 0 : undefined))
     expect(out.games[0].live).toBeUndefined()

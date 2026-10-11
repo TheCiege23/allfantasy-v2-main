@@ -10,6 +10,7 @@ import {
   writeLeagueSimMarker,
   writeLeagueSims,
   writeLeagueSimCheck,
+  type LeagueSimResult,
 } from './seasonOutlookSims'
 
 /**
@@ -115,46 +116,7 @@ export async function runOutlookPrewarm(
       if (attempted >= maxLeagues || Date.now() - started > budgetMs || opts.budget?.exhausted()) break
       attempted += 1
       try {
-        /*
-         * One League row per provider league is enough — the run does not depend on whose row it is.
-         * The newest season's row carries the settings the page would pass.
-         */
-        const row = await prisma.league.findFirst({
-          where: { platformLeagueId: c.leagueId },
-          orderBy: [{ season: 'desc' }, { updatedAt: 'desc' }],
-          select: { id: true, name: true, platform: true, platformLeagueId: true, settings: true },
-        })
-        if (!row) {
-          out.skipped += 1
-          await writeLeagueSimMarker(c.leagueId, 'unsimulated', now)
-          continue
-        }
-        const league: LeagueInput = {
-          id: row.id,
-          name: row.name,
-          platform: String(row.platform),
-          platformLeagueId: row.platformLeagueId,
-          settings: row.settings,
-        }
-        const inputs = await loadOutlookInputs('', [league])
-        const p = inputs?.prepared[0]
-        if (!p) {
-          out.skipped += 1
-          await writeLeagueSimMarker(c.leagueId, 'unsimulated', now)
-          continue
-        }
-        const held = p.pid === c.leagueId ? stored.get(c.leagueId) : (await readLeagueSims([p.pid], now)).get(p.pid)
-        const checkedAt = new Date().toISOString()
-        if (held && held.hash === leagueSimHash(p.sim, p.seed) && held.iterations >= ITERATIONS) {
-          await writeLeagueSims([[p.pid, { ...held, checkedAt }]], now)
-          if (p.pid !== c.leagueId) await writeLeagueSimCheck(c.leagueId, now)
-          out.unchanged += 1
-          continue
-        }
-        const result = computeLeagueSim(p.sim, p.seed, ITERATIONS, now)
-        await writeLeagueSims([[p.pid, { ...result, checkedAt }]], now)
-        if (p.pid !== c.leagueId) await writeLeagueSimCheck(c.leagueId, now)
-        out.computed += 1
+        out[await refreshLeagueOutlook(c.leagueId, stored.get(c.leagueId), now)] += 1
       } catch (e) {
         out.failed += 1
         if (out.errors.length < 5) out.errors.push(`outlook_prewarm: ${e instanceof Error ? e.message : String(e)}`)
@@ -168,6 +130,117 @@ export async function runOutlookPrewarm(
   } catch (e) {
     out.failed += 1
     out.errors.push(`outlook_prewarm: ${e instanceof Error ? e.message : String(e)}`)
+  }
+  return out
+}
+
+/**
+ * Re-run one provider league's outlook if its inputs changed. `held` is what is stored under the
+ * provider id the caller looked up. Throws on a failed read or run; the caller decides what to keep.
+ *
+ * One League row per provider league is enough — the run does not depend on whose row it is. The
+ * newest season's row carries the settings the page would pass.
+ */
+async function refreshLeagueOutlook(
+  leagueId: string,
+  held: LeagueSimResult | undefined,
+  now: Date,
+): Promise<'computed' | 'unchanged' | 'skipped'> {
+  const row = await prisma.league.findFirst({
+    where: { platformLeagueId: leagueId },
+    orderBy: [{ season: 'desc' }, { updatedAt: 'desc' }],
+    select: { id: true, name: true, platform: true, platformLeagueId: true, settings: true },
+  })
+  if (!row) {
+    await writeLeagueSimMarker(leagueId, 'unsimulated', now)
+    return 'skipped'
+  }
+  const league: LeagueInput = {
+    id: row.id,
+    name: row.name,
+    platform: String(row.platform),
+    platformLeagueId: row.platformLeagueId,
+    settings: row.settings,
+  }
+  const inputs = await loadOutlookInputs('', [league])
+  const p = inputs?.prepared[0]
+  if (!p) {
+    await writeLeagueSimMarker(leagueId, 'unsimulated', now)
+    return 'skipped'
+  }
+  const current = p.pid === leagueId ? held : (await readLeagueSims([p.pid], now)).get(p.pid)
+  const checkedAt = new Date().toISOString()
+  if (current && current.hash === leagueSimHash(p.sim, p.seed) && current.iterations >= ITERATIONS) {
+    await writeLeagueSims([[p.pid, { ...current, checkedAt }]], now)
+    if (p.pid !== leagueId) await writeLeagueSimCheck(leagueId, now)
+    return 'unchanged'
+  }
+  const result = computeLeagueSim(p.sim, p.seed, ITERATIONS, now)
+  await writeLeagueSims([[p.pid, { ...result, checkedAt }]], now)
+  if (p.pid !== leagueId) await writeLeagueSimCheck(leagueId, now)
+  return 'computed'
+}
+
+/* ── Live re-run ──────────────────────────────────────────────────────────────────────────────── */
+
+const LIVE_LEAGUES_PER_PASS = 8
+const LIVE_BUDGET_MS = 20_000
+
+export type LiveOutlookCounts = { considered: number; computed: number; unchanged: number; skipped: number; deferred: number; failed: number }
+
+/**
+ * Season Outlook — re-run the leagues whose live board the live tick just rewrote.
+ *
+ * 🛑 THE SCHEDULED PRE-COMPUTE CANNOT KEEP UP WITH A SUNDAY, MEASURED. Its signal is
+ * `WeeklyMatchup.updatedAt`, which the matchup cache rewrites for nearly every league, so on
+ * 2026-10-11 every `/api/cron/domain-os-refresh` fire saw ~400 leagues due and ran 12, oldest check
+ * first: a league's odds came round about once every 17 hours, never inside a game. HailShiva's
+ * stored run was 17:13 while its board had moved at 17:25 and 17:41.
+ *
+ * So the live points pass hands over the leagues it just synced, and this re-runs them — but only
+ * when the inputs hash changed, which during a game is the board itself (`leagueSimHash` carries each
+ * live game's points and the share of each lineup still to play). Stalest stored run first, at most
+ * eight leagues and 20 s a pass; what is left waits for the next pass two minutes later, and the page
+ * still computes any league on demand. A league whose hash matches is stamped as checked, which also
+ * takes it out of the scheduled pre-compute's queue.
+ *
+ * Postgres and arithmetic only, never throws. `CORE_OUTLOOK_LIVE_RERUN_DISABLED=true` (or the
+ * pre-compute's own switch) turns it off.
+ */
+export async function rerunLiveOutlooks(
+  leagueIds: readonly string[],
+  now: Date = new Date(),
+  opts: { maxLeagues?: number; budgetMs?: number; clock?: () => number } = {},
+): Promise<LiveOutlookCounts> {
+  const out: LiveOutlookCounts = { considered: 0, computed: 0, unchanged: 0, skipped: 0, deferred: 0, failed: 0 }
+  const off = (v: string | undefined) => String(v ?? '').toLowerCase() === 'true'
+  if (off(process.env.CORE_OUTLOOK_LIVE_RERUN_DISABLED) || off(process.env.CORE_OUTLOOK_PREWARM_DISABLED)) return out
+  const ids = [...new Set(leagueIds.filter(Boolean))]
+  out.considered = ids.length
+  if (ids.length === 0) return out
+  const clock = opts.clock ?? Date.now
+  const deadline = clock() + (opts.budgetMs ?? LIVE_BUDGET_MS)
+  const maxLeagues = opts.maxLeagues ?? LIVE_LEAGUES_PER_PASS
+
+  try {
+    const stamps = await readLeagueSimStamps(ids, now)
+    const lastChecked = (id: string) => stamps.get(id)?.at ?? Number.NEGATIVE_INFINITY
+    const order = ids.slice().sort((a, b) => lastChecked(a) - lastChecked(b))
+    const stored = await readLeagueSims(ids, now)
+    let attempted = 0
+    for (const id of order) {
+      if (attempted >= maxLeagues || clock() > deadline) break
+      attempted += 1
+      try {
+        out[await refreshLeagueOutlook(id, stored.get(id), now)] += 1
+      } catch {
+        // A failed league keeps its stored run; the next pass tries again.
+        out.failed += 1
+      }
+    }
+    out.deferred = order.length - attempted
+  } catch {
+    out.failed += 1
   }
   return out
 }

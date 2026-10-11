@@ -28,7 +28,7 @@ import {
 import { sleeperScoreTargetWeeks } from '@/lib/sleeper/sync/sleeperScoreTargetWeeks'
 
 const NOW = new Date('2026-09-13T18:00:00Z')
-const live = { liveGameIds: async () => ['20260913-1-26'], clock: () => 0, slateDigests: async () => 0 }
+const live = { liveGameIds: async () => ['20260913-1-26'], clock: () => 0, slateDigests: async () => 0, outlooks: async () => 0 }
 const leagues = (n: number) => Array.from({ length: n }, (_, i) => ({ platformLeagueId: `L${String(i).padStart(2, '0')}` }))
 
 beforeEach(() => {
@@ -131,11 +131,52 @@ describe('refreshLiveSleeperPoints', () => {
     expect(res).toMatchObject({ leaguesSynced: 1, errors: 0, slateDigests: 0 })
   })
 
+  /*
+   * The odds follow the board: the leagues this pass wrote points for are handed to the outlook
+   * re-run, after the points and the summary, and a league with nothing written is not.
+   */
+  it('hands the leagues whose points it wrote to the outlook re-run, once, last', async () => {
+    h.leagueFindMany.mockResolvedValue(leagues(3))
+    const order: string[] = []
+    h.ingest.mockImplementation(async (league: string) => {
+      order.push(`ingest:${league}`)
+      return { scoresUpserted: league === 'L01' ? 0 : 3, error: null }
+    })
+    const outlooks = vi.fn(async (_input: { now: Date; leagueIds: string[] }) => {
+      order.push('outlooks')
+      return 2
+    })
+    const res = await refreshLiveSleeperPoints(NOW, {
+      ...live,
+      slateDigests: async () => {
+        order.push('digest')
+        return 0
+      },
+      outlooks,
+    })
+    expect(outlooks).toHaveBeenCalledTimes(1)
+    expect(outlooks.mock.calls[0][0].now).toBe(NOW)
+    expect([...outlooks.mock.calls[0][0].leagueIds].sort()).toEqual(['L00', 'L02'])
+    expect(order.slice(-2)).toEqual(['digest', 'outlooks'])
+    expect(res.outlooksRerun).toBe(2)
+  })
+
+  it('a failing outlook re-run never costs the points refresh', async () => {
+    h.leagueFindMany.mockResolvedValue(leagues(1))
+    const res = await refreshLiveSleeperPoints(NOW, {
+      ...live,
+      outlooks: async () => {
+        throw new Error('boom')
+      },
+    })
+    expect(res).toMatchObject({ leaguesSynced: 1, errors: 0, outlooksRerun: 0 })
+  })
+
   it('stops at its time budget and resumes from the first league it did not reach', async () => {
     h.leagueFindMany.mockResolvedValue(leagues(5))
     // The first read sets the deadline; every later read is past it.
     let calls = 0
-    const res = await refreshLiveSleeperPoints(NOW, { liveGameIds: live.liveGameIds, slateDigests: live.slateDigests, clock: () => (calls++ === 0 ? 0 : 60_000) })
+    const res = await refreshLiveSleeperPoints(NOW, { ...live, clock: () => (calls++ === 0 ? 0 : 60_000) })
     expect(h.ingest).not.toHaveBeenCalled()
     expect(res.leaguesSynced).toBe(0)
     expect(h.cacheUpsert.mock.calls[0][0].update.data).toEqual({ offset: 0 })

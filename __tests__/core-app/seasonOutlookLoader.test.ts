@@ -14,6 +14,8 @@ const h = vi.hoisted(() => ({
   finishedWeeks: new Set<string>(),
   /** `lineupShareKey` → roster → share of the week still to play. Empty: no lineup could be read. */
   shares: new Map<string, Map<string, number>>(),
+  /** Live starter sums by `${shareKey}|${rosterId}`; absent means the matchup row's points stand. */
+  livePoints: new Map<string, number>(),
 }))
 
 vi.mock('@/lib/prisma', () => ({
@@ -41,7 +43,9 @@ vi.mock('@/lib/core-app/seasonPhase', () => ({ getFirstStatedKickoff: async () =
 vi.mock('@/lib/core-app/finishedNflWeeks', () => ({ loadFinishedNflWeeks: async () => h.finishedWeeks }))
 vi.mock('@/lib/core-app/outlookLiveWeekLoader', async (orig) => ({
   ...(await orig<typeof import('@/lib/core-app/outlookLiveWeekLoader')>()),
-  loadLineupShares: vi.fn(async () => h.shares),
+  loadLineupBoards: vi.fn(async () =>
+    new Map([...h.shares].map(([k, v]) => [k, new Map([...v].map(([id, share]) => [id, { share, points: h.livePoints.get(`${k}|${id}`) }]))])),
+  ),
 }))
 vi.mock('@/lib/core-app/seasonOutlookFocus', () => ({
   BRANCH_ITERATIONS: 400,
@@ -110,6 +114,7 @@ beforeEach(() => {
   h.leagueMetadata = {}
   h.finishedWeeks.clear()
   h.shares = new Map()
+  h.livePoints = new Map()
   h.upsert.mockImplementation(async (args: { create: { cacheKey: string; data: unknown } }) => {
     h.cache.set(args.create.cacheKey, args.create.data)
     return {}
@@ -190,6 +195,17 @@ describe('getSeasonOutlook', () => {
     // The record still counts only final weeks; the board enters the simulation, not the standings.
     expect(settled.leagues[0].you).toMatchObject({ wins: unread.leagues[0].you!.wins, losses: unread.leagues[0].you!.losses })
     expect(settled.leagues[0].weeksRemaining).toBe(3)
+  })
+  it('reads the live starter rows for the current week even while its matchup rows still read zero', async () => {
+    // The live tick writes per-player points minutes after kickoff; the matchup rows wait for their sync.
+    h.leagueMetadata = { season: 2026, settings: { leg: 4 } }
+    const before = await getSeasonOutlook('me', [LEAGUE], 'L1')
+    h.shares = new Map([[`${PID}|2026|4`, new Map(IDS.map((id) => [id, 0]))]])
+    h.livePoints = new Map(IDS.map((id) => [`${PID}|2026|4|${id}`, id === '5' ? 160 : 90]))
+    h.cache.clear()
+    const live = await getSeasonOutlook('me', [LEAGUE], 'L1')
+    expect(live.leagues[0].assumptions.missing.join(' ')).toMatch(/Week 4 is under way/)
+    expect(live.leagues[0].you!.playoffPct).toBeGreaterThan(before.leagues[0].you!.playoffPct)
   })
   it('still swings the current week before anybody has scored in it', async () => {
     const out = await getSeasonOutlook('me', [LEAGUE], 'L1')

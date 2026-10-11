@@ -9,6 +9,9 @@ export type LineupShareTarget = { platformLeagueId: string; season: number; week
 
 export const lineupShareKey = (t: LineupShareTarget) => `${t.platformLeagueId}|${t.season}|${t.week}`
 
+/** One lineup under way: its share still to play, and the points its starters already carry. */
+export type LineupBoard = { share: number; points: number }
+
 /**
  * For each NFL league-week under way: each roster's share of its week still to play, by platform
  * roster id. Read the same way `loadEliminationSettle` reads a guillotine week — the week's
@@ -17,9 +20,18 @@ export const lineupShareKey = (t: LineupShareTarget) => `${t.platformLeagueId}|$
  *
  * Batched across leagues: one read per table for the whole board. Any failure returns an empty map,
  * and every game it covers is then simulated as unplayed — the old model, never a guessed board.
+ *
+ * Each readable lineup also carries the points its starters already have.
+ *
+ * ⚠ THE STARTER SUM IS THE LIVE BOARD; `WeeklyMatchup.pointsFor` LAGS IT. During games the live tick
+ * rewrites these per-player rows (lib/live/liveSleeperPointsSync.ts) — the same rows `/core/live`
+ * shows — while the matchup total moves only when the league's matchup sync next runs. Production
+ * 2026-10-11, HailShiva week 5: the opponent's starters summed to 44.06 while his matchup row still
+ * read 39.96. Only a lineup that read (a share) carries points, so an unreadable one never gets a
+ * partial sum.
  */
-export async function loadLineupShares(targets: readonly LineupShareTarget[], now = new Date()): Promise<Map<string, Map<string, number>>> {
-  const out = new Map<string, Map<string, number>>()
+export async function loadLineupBoards(targets: readonly LineupShareTarget[], now = new Date()): Promise<Map<string, Map<string, LineupBoard>>> {
+  const out = new Map<string, Map<string, LineupBoard>>()
   if (targets.length === 0) return out
   try {
     const weeks = [...new Map(targets.map((t) => [`${t.season}|${t.week}`, { season: t.season, week: t.week }])).values()]
@@ -60,12 +72,12 @@ export async function loadLineupShares(targets: readonly LineupShareTarget[], no
       byRoster.set(key, rosters)
     }
     for (const [key, rosters] of byRoster) {
-      const shares = new Map<string, number>()
+      const boards = new Map<string, LineupBoard>()
       for (const [rosterId, starters] of rosters) {
-        const s = remainingShare(starters)
-        if (s != null) shares.set(rosterId, s)
+        const share = remainingShare(starters)
+        if (share != null) boards.set(rosterId, { share, points: Math.round(starters.reduce((t, s) => t + s.points, 0) * 100) / 100 })
       }
-      out.set(key, shares)
+      out.set(key, boards)
     }
     return out
   } catch {

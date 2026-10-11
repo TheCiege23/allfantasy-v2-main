@@ -41,11 +41,16 @@ export function liveWeeks(remaining: readonly SimGame[], rows: readonly LiveRow[
 /**
  * The remaining schedule with each game under way carrying its board. A game whose two lineups cannot
  * both be read stays an unplayed draw, as before, and is counted in `unread` so the outlook can say so.
+ *
+ * `livePoints`, when given, is each read lineup's starter sum from the live per-player rows. It wins
+ * over the matchup row's `pointsFor`, which lags it during games, and it alone can start a game the
+ * matchup row still shows at zero.
  */
 export function withLiveScores(
   remaining: readonly SimGame[],
   rows: readonly LiveRow[],
   share: (week: number, rosterId: string) => number | null | undefined,
+  livePoints: (week: number, rosterId: string) => number | null | undefined = () => undefined,
 ): { games: SimGame[]; attached: number[]; unread: number[] } {
   const byKey = new Map(rows.map((r) => [`${r.week}|${r.rosterId}`, r]))
   const attached: number[] = []
@@ -53,7 +58,9 @@ export function withLiveScores(
   const games = remaining.map((g) => {
     const ra = byKey.get(`${g.week}|${g.a}`)
     const rb = byKey.get(`${g.week}|${g.b}`)
-    if (!hasPoints(ra) && !hasPoints(rb)) return g
+    const la = livePoints(g.week, g.a)
+    const lb = livePoints(g.week, g.b)
+    if (!hasPoints(ra) && !hasPoints(rb) && !(la != null && la > 0) && !(lb != null && lb > 0)) return g
     const restA = share(g.week, g.a)
     const restB = share(g.week, g.b)
     if (restA == null || restB == null) {
@@ -61,7 +68,7 @@ export function withLiveScores(
       return g
     }
     attached.push(g.week)
-    return { ...g, live: { a: ra?.pointsFor ?? 0, b: rb?.pointsFor ?? 0, restA, restB } }
+    return { ...g, live: { a: la ?? ra?.pointsFor ?? 0, b: lb ?? rb?.pointsFor ?? 0, restA, restB } }
   })
   return { games, attached, unread }
 }

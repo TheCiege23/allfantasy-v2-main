@@ -14,7 +14,10 @@ vi.mock('@/lib/prisma', () => ({
   },
 }))
 
-import { lineupShareKey, loadLineupShares } from '@/lib/core-app/outlookLiveWeekLoader'
+import { lineupShareKey, loadLineupBoards } from '@/lib/core-app/outlookLiveWeekLoader'
+
+const loadLineupShares = async (...args: Parameters<typeof loadLineupBoards>) =>
+  new Map([...(await loadLineupBoards(...args))].map(([k, v]) => [k, new Map([...v].map(([id, b]) => [id, b.share]))]))
 
 const now = new Date('2026-10-06T03:00:00Z')
 const target = { platformLeagueId: '1313536441829068800', season: 2026, week: 4 }
@@ -49,6 +52,14 @@ describe('loadLineupShares', () => {
     expect(shares.get('1')).toBeCloseTo(0.5 / 3)
     expect(shares.has('2')).toBe(false)
     expect(h.starters.mock.calls[0][0].where).toMatchObject({ isStarter: true, OR: [{ leagueId: target.platformLeagueId, seasonYear: 2026, week: 4 }] })
+  })
+
+  it('carries each read lineup\'s starter points beside its share — the live board', async () => {
+    h.starters.mockResolvedValue([starter('p1', 1, 14.2), starter('p2', 1, 9.85), starter('p3', 7, 3), starter('qx', 7, 0), starter('qy', 7, 0)])
+    const boards = (await loadLineupBoards([target], now)).get(lineupShareKey(target))!
+    expect(boards.get('1')).toEqual({ share: 0, points: 24.05 })
+    // Mostly unreadable: no share, so no partial sum either.
+    expect(boards.has('7')).toBe(false)
   })
 
   it('returns nothing on a failed read, so the games stay unplayed draws', async () => {
