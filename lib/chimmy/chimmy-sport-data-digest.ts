@@ -171,7 +171,7 @@ export async function buildChimmySportDataDigest(args: {
       // April, so Chimmy was handed 108-day-old designations with no date on them
       // and stated them as current, while the live feed sat one table away.
       // A fallback written for absence does nothing about staleness.
-      listInjuryFacts({ sport: sp, limit: args.sport === 'all' ? 12 : 35 }),
+      listInjuryFacts({ sport: sp, limit: args.sport === 'all' ? 12 : 35, designationsOnly: true }),
       wantsGames
         ? prisma.sportsGame.findMany({
             where: {

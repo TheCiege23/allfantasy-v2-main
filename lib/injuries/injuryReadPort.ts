@@ -32,7 +32,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { buildNameIndex, normalizeMatchName, resolveVerifiedMatch } from '@/lib/player-match/verifiedNameMatch'
-import { foldInjuryTeam } from '@/lib/injuries/matchInjuryRows'
+import { foldInjuryTeam, isInjuryDesignation } from '@/lib/injuries/matchInjuryRows'
 import type { InjuryDesignation } from '@/lib/injuries/rollingInsightsInjuries'
 import {
   INJURY_PRIOR_SEASON_AFTER_HOURS,
@@ -454,7 +454,7 @@ export interface InjuryFactList {
 export async function listInjuryFacts(args: {
   sport: string
   now?: Date
-  /** Exact team abbreviation filter (already-normalized by the caller). */
+  /** Team filter, compared after folding both sides to a club code ("Minnesota Vikings" = "MIN"). */
   team?: string | null
   /** Case-insensitive substring match on player name. */
   playerNameContains?: string | null
@@ -466,8 +466,14 @@ export async function listInjuryFacts(args: {
    * accident. Pass null to opt out (historical/backfill readers only).
    */
   maxReportAgeHours?: number | null
-  /** Only these designations (exact match against stored status). */
+  /** Only players whose CURRENT designation is one of these (exact match against stored status). */
   statuses?: readonly string[] | null
+  /**
+   * Only players whose current claim is an injury designation — drops "Active", "Healthy", "NA".
+   * For lists titled "injuries": on game day ESPN's "Active" rows are the newest claims, and
+   * without this they fill a capped list and push real designations past the cut.
+   */
+  designationsOnly?: boolean
   limit?: number
 }): Promise<InjuryFactList> {
   const now = args.now ?? new Date()
@@ -504,7 +510,6 @@ export async function listInjuryFacts(args: {
       where: {
         sport,
         expiresAt: { gt: now },
-        ...(args.team ? { team: args.team } : {}),
         ...(args.playerNameContains
           ? { playerName: { contains: args.playerNameContains, mode: 'insensitive' } }
           : {}),
@@ -523,7 +528,13 @@ export async function listInjuryFacts(args: {
         ...(reportCutoff
           ? { AND: [{ OR: [{ date: null }, { date: { gte: reportCutoff } }] }] }
           : {}),
-        ...(args.statuses && args.statuses.length > 0 ? { status: { in: [...args.statuses] } } : {}),
+        /*
+         * 🛑 NO `status` OR `team` PREDICATE HERE (2026-10-11). Both used to run in SQL, BEFORE the
+         * one-row-per-player collapse below — so a cleared player's newer "Active" was filtered out
+         * first and his older "Questionable" collapsed in as current (the news ticker said so all
+         * Sunday), and a team filter of "MIN" dropped every row a feed spelled "Minnesota Vikings".
+         * Both now apply to each player's CURRENT claim, after the collapse.
+         */
       },
       select: {
         id: true,
@@ -571,7 +582,12 @@ export async function listInjuryFacts(args: {
    * happened to yield, which is how a panel of practice notes could hide the
    * designations behind it.
    */
+  const wantTeam = args.team ? foldInjuryTeam(args.team, sport) : null
+  const wantStatuses = args.statuses && args.statuses.length > 0 ? new Set(args.statuses) : null
   const facts = [...bestByExact.values()]
+    .filter((r) => !wantTeam || foldInjuryTeam(r.team, sport) === wantTeam)
+    .filter((r) => !wantStatuses || (r.status != null && wantStatuses.has(r.status)))
+    .filter((r) => !args.designationsOnly || isInjuryDesignation(r.status))
     .sort((a, b) => {
       const byClaim = claimAsOf(b).getTime() - claimAsOf(a).getTime()
       if (byClaim !== 0) return byClaim

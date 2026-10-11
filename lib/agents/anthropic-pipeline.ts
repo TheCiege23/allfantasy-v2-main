@@ -1218,6 +1218,20 @@ function buildLeagueGroundingRequiredResponse(intent: IntentType): AgentResponse
   }
 }
 
+/**
+ * 🛑 THE CURRENT STATUS COMES ONLY FROM A ROW A FEED STILL CARRIES (2026-10-11). The fallback was the
+ * newest row of the player's injury HISTORY, expired or not — and the primary status is null exactly
+ * when the player has healed and dropped off the reports, so the model was told his last expired
+ * "Out" as current. `history` is claim-ordered (newest first); expired rows stay in it as history.
+ */
+export function currentInjuryStatusForContext(
+  primary: string | null | undefined,
+  history: ReadonlyArray<{ status: string | null; expiresAt: Date }>,
+  now: Date = new Date(),
+): string {
+  return primary ?? history.find((row) => row.expiresAt.getTime() > now.getTime())?.status ?? 'unknown'
+}
+
 async function buildPlayerContextMap(
   playerNames: string[],
   sport: SupportedSport,
@@ -1254,6 +1268,9 @@ async function buildPlayerContextMap(
               status: true,
               type: true,
               updatedAt: true,
+              date: true,
+              fetchedAt: true,
+              expiresAt: true,
             },
           })
           .then((rows) =>
@@ -1263,7 +1280,7 @@ async function buildPlayerContextMap(
                 [{ name: playerStats.name, team: playerStats.team, position: playerStats.position }],
                 sport,
               ).byPlayer.get(normalizeMatchName(playerStats.name)) ?? []
-            ).slice(0, 3),
+            ),
           ),
         playerId
           ? prisma.playerGameFact.findMany({
@@ -1310,16 +1327,13 @@ async function buildPlayerContextMap(
         }),
       ])
 
-      const injuryStatus =
-        playerStats.injury.status ??
-        injuryHistory[0]?.status ??
-        'unknown'
+      const injuryStatus = currentInjuryStatusForContext(playerStats.injury.status, injuryHistory)
 
       return [
         playerName,
         compactRecord({
           injuryStatus,
-          injuryHistory: injuryHistory.map((row) =>
+          injuryHistory: injuryHistory.slice(0, 3).map((row) =>
             compactRecord({
               status: row.status,
               type: row.type,
