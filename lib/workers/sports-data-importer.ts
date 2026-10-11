@@ -15,6 +15,12 @@ import {
   type TeamCodeNormalization,
 } from '@/lib/team-abbrev'
 import { apiChain } from '@/lib/workers/api-chain'
+import {
+  collapseSeedsByIdentity,
+  countNamesakes,
+  createSeedValueBinder,
+  pickLatestSeasonRow,
+} from '@/lib/workers/sports-data-importer-binding'
 
 const SPORTS_PLAYER_TTL_MS = 6 * 60 * 60 * 1000
 const UPSERT_BATCH_SIZE = 100
@@ -94,6 +100,15 @@ async function withTimeout<T>(value: Promise<T>, ms: number, label: string, onTi
 /** What `loadCurrentInjuryResolver` needs from a seed. */
 type InjurySeed = { name: string; team?: string | null; position?: string | null; status?: string | null; source?: string | null }
 
+/**
+ * ⚠ `team` AND `position` CARRY PLACEHOLDERS, AND THEY ARE NOT DATA. `SportsPlayerRecord.team` and
+ * `.position` are NOT NULL, so a seed whose source states no team is written `'FA'` and one with no
+ * position `'FLEX'` (an injury-invented seed always is). Kept because the columns require a value and
+ * inventing a real one would be worse — but read them as "unknown": `'FA'` here is indistinguishable
+ * from Sleeper's genuine free-agent `'FA'`, and `'FLEX'` is no football position at all. The value
+ * binder (`sports-data-importer-binding.ts`) treats `'FLEX'` as no position and never accepts `'FA'`
+ * as proof of identity; a reader should do the same.
+ */
 type PlayerSeed = {
   id: string
   name: string
@@ -345,6 +360,27 @@ async function loadSleeperIdOwners(sport: SupportedSport): Promise<SleeperIdOwne
 }
 
 /**
+ * Rolling Insights id → Sleeper id, from the identity map — the crosswalk that lets a season-stats row
+ * (keyed by RI's id) bind to the seed of the same athlete BY ID rather than by name.
+ *
+ * Measured 2026-10-11: all 2,774 NFL RI ids in `player_season_stats` have an identity row, 2,675 of
+ * them with a Sleeper id. `@@unique([sport, rollingInsightsId])` makes each RI id one row. Every RI
+ * id here is an id in RI's namespace and is only ever compared with a stat row's `playerId` whose
+ * `source` is Rolling Insights — never with a seed id, which is the collision recorded below.
+ */
+async function loadRollingInsightsToSleeperIds(sport: SupportedSport): Promise<Map<string, string>> {
+  const rows = await prisma.playerIdentityMap.findMany({
+    where: { sport, rollingInsightsId: { not: null }, sleeperId: { not: null } },
+    select: { rollingInsightsId: true, sleeperId: true },
+  })
+  const map = new Map<string, string>()
+  for (const row of rows) {
+    if (row.rollingInsightsId && row.sleeperId) map.set(row.rollingInsightsId, row.sleeperId)
+  }
+  return map
+}
+
+/**
  * 🛑 A BARE `<SPORT>:<n>` ID IS A SLEEPER ID TO EVERY READER, SO ONLY SLEEPER'S PLAYER MAY HOLD IT
  * (2026-09-28).
  *
@@ -402,26 +438,33 @@ export function keySeedsToSleeperIdentity<T extends { id: string; name: string; 
   })
 }
 
-function buildProjectionMap(rows: Array<Record<string, unknown>>): Map<string, Record<string, unknown>> {
-  const map = new Map<string, Record<string, unknown>>()
-  for (const row of rows) {
-    const name = String(row.name ?? row.playerName ?? row.player ?? '').trim()
-    if (!name) continue
-    map.set(normalizePlayerName(name), row)
+/** Name/team/position of a provider projection or ranking row — the fields its binding is verified by. */
+function describeProviderRow(row: Record<string, unknown>): { name: string; team: string | null; position: string | null } {
+  const text = (value: unknown): string | null => (typeof value === 'string' && value.trim() ? value.trim() : null)
+  return {
+    name: String(row.name ?? row.playerName ?? row.player ?? '').trim(),
+    team: text(row.team ?? row.teamAbbrev ?? row.team_abbr),
+    position: text(row.position ?? row.pos),
   }
-  return map
 }
 
-function buildDynastyValueMap(rows: Array<Record<string, unknown>>): Map<string, number> {
-  const map = new Map<string, number>()
-  rows.forEach((row, index) => {
-    const name = String(row.name ?? row.playerName ?? row.player ?? '').trim()
-    if (!name) return
+/** A provider row's Sleeper id, when it states one — the only id namespace a seed id is known to share. */
+function providerRowSeedId(sport: string, row: Record<string, unknown>): string | null {
+  const sid = String(row.sleeperId ?? row.sleeper_id ?? '').trim()
+  return sid ? boundPlayerId(`${sport}:${sid}`) : null
+}
+
+/**
+ * Each ranking row with its 1–100 dynasty value: the row's own value when it states one, else its
+ * POSITION in the list squeezed to 1–100. Computed per ROW, before binding, so the value a seed gets
+ * is the one its own row earned.
+ */
+function buildDynastyValueRows(rows: Array<Record<string, unknown>>): Array<{ row: Record<string, unknown>; value: number }> {
+  return rows.map((row, index) => {
     const explicit = Number(row.dynasty_value ?? row.dynastyValue ?? row.score ?? row.value)
     const derived = Number.isFinite(explicit) ? explicit : clamp(100 - index, 1, 100)
-    map.set(normalizePlayerName(name), Math.round(clamp(derived, 1, 100)))
+    return { row, value: Math.round(clamp(derived, 1, 100)) }
   })
-  return map
 }
 
 /*
@@ -609,10 +652,11 @@ export async function runSportsDataImporter(options?: {
     }
     teamCodeCounts[sport] = teamCtx.counts
 
-    const [identitySeeds, sleeperIdOwners, providerSeeds, latestStats, latestInjuries, latestNews, latestAdp, metaTrends, projectionsResponse, rankingsResponse] =
+    const [identitySeeds, sleeperIdOwners, riToSleeperId, providerSeeds, latestStats, latestInjuries, latestNews, latestAdp, metaTrends, projectionsResponse, rankingsResponse] =
       await Promise.all([
         loadIdentitySeeds(sport, teamCtx),
         loadSleeperIdOwners(sport),
+        loadRollingInsightsToSleeperIds(sport),
         // The only UNBOUNDED provider read in this block. `projections` and `rankings` below were
         // already wrapped; this one was not, and it is the same apiChain.fetch against the same
         // providers. An unbounded call here is what turns a 239s start into a 300s edge 502.
@@ -625,11 +669,32 @@ export async function runSportsDataImporter(options?: {
           `${sport} player seeds`,
           [] as PlayerSeed[],
         ),
+        /*
+         * NEWEST SEASON FIRST, NOT NEWEST FETCH — and every row a player has, so the newest season per
+         * PLAYER is chosen after binding (`pickLatestSeasonRow`). This read used to be `fetchedAt desc,
+         * take 4000` with no season at all: Rolling Insights re-pulls back seasons, so the 4,000 most
+         * recently FETCHED rows were a mix of seasons. Replayed on production 2026-10-11: of the 2,533
+         * NFL names that cut reached, 492 were written a season other than their newest on file, and
+         * 241 of the 2,774 names were not reached at all.
+         *
+         * `season` is a string — "2025", or "2024-2025" outside football — and both forms order
+         * correctly as strings. The cap is a guard, not a window: production holds 11,869 NFL rows
+         * (~4 MB of stats JSON), the largest sport.
+         */
         prisma.playerSeasonStats.findMany({
           where: { sport },
-          orderBy: { fetchedAt: 'desc' },
-          take: 4000,
-          select: { playerId: true, playerName: true, stats: true },
+          orderBy: [{ season: 'desc' }, { fetchedAt: 'desc' }],
+          take: 15_000,
+          select: {
+            playerId: true,
+            playerName: true,
+            position: true,
+            team: true,
+            season: true,
+            source: true,
+            fetchedAt: true,
+            stats: true,
+          },
         }),
         /*
          * 🛑 BOUNDED TO THE CURRENT SEASON, AND THIS READ IS WHY THE BOUND EXISTS.
@@ -705,71 +770,123 @@ export async function runSportsDataImporter(options?: {
 
     const currentInjuryOf = await loadCurrentInjuryResolver(sport)
 
-    const seedMap = new Map<string, PlayerSeed>()
-    for (const seed of [...identitySeeds, ...providerSeeds, ...pagedSportSeeds]) {
-      const key = normalizePlayerName(seed.name)
-      if (!key) continue
-      if (!seedMap.has(key) || seed.source !== 'manual') seedMap.set(key, seed)
-    }
+    /*
+     * 🛑 ONE SEED PER ATHLETE, NOT PER NAME (2026-10-11). This was `Map<normalizePlayerName(name), seed>`,
+     * so of two namesakes one survived each run and the other's row stopped refreshing. Seeds that
+     * carry one Sleeper identity (every unique name) fold exactly as before; a name Sleeper gives to
+     * two or more players keeps one seed per Sleeper id — see `collapseSeedsByIdentity`.
+     */
+    const fallbackSeeds: PlayerSeed[] = [
+      ...latestAdp.map((row) => ({
+        id: buildPlayerId(sport, row.playerId, row.playerName, row.team),
+        name: row.playerName,
+        team: resolveTeamCode(teamCtx, row.team),
+        position: normalizePositionForSport(sport, row.position) ?? 'FLEX',
+        source: row.source,
+      })),
+      ...latestInjuries.map((row) => ({
+        id: buildPlayerId(sport, row.playerId, row.playerName, row.team),
+        name: row.playerName,
+        team: resolveTeamCode(teamCtx, row.team),
+        position: 'FLEX',
+        status: row.status,
+        source: 'cached',
+      })),
+    ]
+    const collapsedSeeds = collapseSeedsByIdentity(
+      sport,
+      [...identitySeeds, ...providerSeeds, ...pagedSportSeeds],
+      fallbackSeeds,
+      sleeperIdOwners,
+    )
 
-    for (const row of latestAdp) {
-      const key = normalizePlayerName(row.playerName)
-      if (!seedMap.has(key)) {
-        seedMap.set(key, {
-          id: buildPlayerId(sport, row.playerId, row.playerName, row.team),
-          name: row.playerName,
-          team: resolveTeamCode(teamCtx, row.team),
-          position: normalizePositionForSport(sport, row.position) ?? 'FLEX',
-          source: row.source,
-        })
-      }
-    }
+    // Two seeds can still land on one id (two name/team fallbacks); write each id once, first wins.
+    const seenSeedIds = new Set<string>()
+    const seeds = keySeedsToSleeperIdentity(sport, collapsedSeeds, sleeperIdOwners).filter((seed) => {
+      if (seenSeedIds.has(seed.id)) return false
+      seenSeedIds.add(seed.id)
+      return true
+    })
 
-    for (const row of latestInjuries) {
-      const key = normalizePlayerName(row.playerName)
-      if (!seedMap.has(key)) {
-        seedMap.set(key, {
-          id: buildPlayerId(sport, row.playerId, row.playerName, row.team),
-          name: row.playerName,
-          team: resolveTeamCode(teamCtx, row.team),
-          position: 'FLEX',
-          status: row.status,
-          source: 'cached',
-        })
-      }
+    /*
+     * 🛑 EVERY VALUE BINDS TO A SEED BY ID, ELSE BY A VERIFIED NAME — NEVER BY NAME ALONE (2026-10-11).
+     * These were five `Map<name, row>`s, first row wins, so the surviving namesake took whichever row
+     * came first: LB Justin Jefferson carried the WR's ADP 21.3, guard Josh Allen carried 12.6, DB DJ
+     * Moore the WR's 47.5. See `createSeedValueBinder`; an ambiguous name binds to nobody.
+     */
+    const namesakes = countNamesakes(seeds)
+    // A value row's team, translated by the SAME normalizer the seeds went through (without tallying
+    // it in `teamCodeCounts`). Kept when it came from a table the seeds also use — the NFL canonical
+    // table, or this sport's SportsTeam name → code map — or lands on a code some seed carries.
+    // Anything else is a vocabulary we cannot compare ("Arizona Diamondbacks" with no SportsTeam row
+    // vs a seed's "ARI"), so it says nothing rather than contradicting.
+    const seedTeamCodes = new Set(seeds.map((seed) => seed.team.toUpperCase()))
+    const teamOf = (raw: string | null | undefined): string | null => {
+      const team = normalizeTeamCode({ sport, rawTeam: raw, teamCodeMap: teamCtx.teamCodeMap })
+      const code = team.code?.toUpperCase() ?? null
+      if (!code) return null
+      return team.normalization === 'canonical' || team.normalization === 'mapped' || seedTeamCodes.has(code) ? code : null
     }
-
-    const projectionMap = buildProjectionMap(projectionRows)
-    const dynastyValueMap = buildDynastyValueMap(rankingRows)
-    const statMap = new Map<string, unknown>()
-    const adpMap = new Map<string, (typeof latestAdp)[number]>()
-    const newsMap = new Map<string, Array<(typeof latestNews)[number]>>()
+    // Only the NFL's team codes are one vocabulary on both sides; elsewhere a team verifies but never
+    // refutes (see `teamContradicts` in the binder).
+    const teamContradicts = sport === 'NFL'
+    const statsOf = createSeedValueBinder(
+      sport,
+      latestStats,
+      (row) => ({ name: row.playerName, team: row.team, position: row.position }),
+      {
+        namesakes,
+        teamOf,
+        teamContradicts,
+        seedIds: seenSeedIds,
+        // Only Rolling Insights' ids are crosswalked; they are compared with RI stat rows only.
+        idOf: (row) => {
+          if (row.source !== 'rolling_insights') return null
+          const sleeperId = riToSleeperId.get(row.playerId)
+          return sleeperId ? boundPlayerId(`${sport}:${sleeperId}`) : null
+        },
+      },
+    )
+    const adpOf = createSeedValueBinder(
+      sport,
+      latestAdp,
+      (row) => ({ name: row.playerName, team: row.team, position: row.position }),
+      { namesakes, teamOf, teamContradicts },
+    )
+    const newsOf = createSeedValueBinder(
+      sport,
+      latestNews,
+      (row) => ({ name: row.playerName, team: row.team, position: null }),
+      { namesakes, teamOf, teamContradicts },
+    )
+    const projectionsOf = createSeedValueBinder(sport, projectionRows, describeProviderRow, {
+      namesakes,
+      teamOf,
+      teamContradicts,
+      seedIds: seenSeedIds,
+      idOf: (row) => providerRowSeedId(sport, row),
+    })
+    const dynastyOf = createSeedValueBinder(sport, buildDynastyValueRows(rankingRows), (ranked) => describeProviderRow(ranked.row), {
+      namesakes,
+      teamOf,
+      teamContradicts,
+      seedIds: seenSeedIds,
+      idOf: (ranked) => providerRowSeedId(sport, ranked.row),
+    })
     const trendMap = new Map<string, number>(
       metaTrends.map((row) => [String(row.playerId), Number(row.trendScore ?? 0)])
     )
 
-    for (const row of latestStats) {
-      const key = normalizePlayerName(row.playerName)
-      if (!statMap.has(key)) statMap.set(key, row.stats)
-    }
-    for (const row of latestAdp) {
-      const key = normalizePlayerName(row.playerName)
-      if (!adpMap.has(key)) adpMap.set(key, row)
-    }
-    for (const row of latestNews) {
-      const key = normalizePlayerName(row.playerName)
-      const current = newsMap.get(key) ?? []
-      if (current.length < 3) current.push(row)
-      newsMap.set(key, current)
-    }
-
-    const rows = keySeedsToSleeperIdentity(sport, Array.from(seedMap.values()), sleeperIdOwners).flatMap((seed) => {
-      const key = normalizePlayerName(seed.name)
+    const rows = seeds.flatMap((seed) => {
       const injury = currentInjuryOf(seed)
-      const adp = adpMap.get(key)
+      const adp = adpOf(seed)[0]
       const trendScore = trendMap.get(adp?.playerId ?? '')
-      const projections = projectionMap.get(key) ?? {}
-      const news = (newsMap.get(key) ?? []).map((item) => ({
+      const projectionRow = projectionsOf(seed)[0]
+      const projections = projectionRow ?? {}
+      const dynastyValue = dynastyOf(seed)[0]?.value
+      const stats = pickLatestSeasonRow(statsOf(seed))?.stats
+      // The matcher appends a name's teamless rows after its team rows, so re-sort before taking three.
+      const news = [...newsOf(seed)].sort((a, b) => b.publishedAt.getTime() - a.publishedAt.getTime()).slice(0, 3).map((item) => ({
         headline: item.headline,
         impact: item.impact,
         source: item.source,
@@ -787,16 +904,16 @@ export async function runSportsDataImporter(options?: {
           name: seed.name.slice(0, 128),
           team: assertTeamCodeFits(seed.team) ?? 'FA',
           position: (seed.position || 'FLEX').slice(0, 32),
-          stats: asRecord(statMap.get(key)) ?? {},
+          stats: asRecord(stats) ?? {},
           projections,
           adp: adp?.adp ?? null,
           dynastyValue:
-            dynastyValueMap.get(key) ??
+            dynastyValue ??
             (typeof trendScore === 'number' ? Math.round(clamp(50 + trendScore, 0, 100)) : null),
           injuryStatus: injury.status?.slice(0, 32) ?? null,
           injuryNotes: injury.notes,
           news,
-          dataSource: (projectionMap.has(key) ? projectionsResponse.source : seed.source).slice(0, 32),
+          dataSource: (projectionRow ? projectionsResponse.source : seed.source).slice(0, 32),
         }]
       } catch (guardError) {
         rowsSkippedByGuard += 1
