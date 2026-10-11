@@ -3,7 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { starterGameStates, type StarterGameState } from './matchupGameState'
 import { composePlayerIdentities } from './playerIdentityCompose'
-import { remainingShare } from './outlookLiveShare'
+import { remainingShare, type StarterRead } from './outlookLiveShare'
 
 export type LineupShareTarget = { platformLeagueId: string; season: number; week: number }
 
@@ -26,7 +26,7 @@ export async function loadLineupShares(targets: readonly LineupShareTarget[], no
     const [starterRows, games] = await Promise.all([
       prisma.leaguePlayerWeeklyScore.findMany({
         where: { isStarter: true, OR: targets.map((t) => ({ leagueId: t.platformLeagueId, seasonYear: t.season, week: t.week })) },
-        select: { leagueId: true, seasonYear: true, week: true, playerId: true, rosterId: true },
+        select: { leagueId: true, seasonYear: true, week: true, playerId: true, rosterId: true, points: true },
       }),
       prisma.sportsGame.findMany({
         where: { sport: 'NFL', OR: weeks.map((w) => ({ season: w.season, week: w.week })), AND: [{ OR: [{ seasonType: 'regular' }, { seasonType: null }] }] },
@@ -49,20 +49,20 @@ export async function loadLineupShares(targets: readonly LineupShareTarget[], no
       statesByWeek.set(`${w.season}|${w.week}`, starterGameStates(identities, weekGames, now))
     }
 
-    const byRoster = new Map<string, Map<string, StarterGameState[]>>()
+    const byRoster = new Map<string, Map<string, StarterRead[]>>()
     for (const r of starterRows) {
       if (r.rosterId == null) continue
       const key = lineupShareKey({ platformLeagueId: r.leagueId, season: r.seasonYear, week: r.week })
-      const rosters = byRoster.get(key) ?? new Map<string, StarterGameState[]>()
+      const rosters = byRoster.get(key) ?? new Map<string, StarterRead[]>()
       const list = rosters.get(String(r.rosterId)) ?? []
-      list.push(statesByWeek.get(`${r.seasonYear}|${r.week}`)?.get(r.playerId) ?? 'unknown')
+      list.push({ state: statesByWeek.get(`${r.seasonYear}|${r.week}`)?.get(r.playerId) ?? 'unknown', points: Number(r.points) || 0 })
       rosters.set(String(r.rosterId), list)
       byRoster.set(key, rosters)
     }
     for (const [key, rosters] of byRoster) {
       const shares = new Map<string, number>()
-      for (const [rosterId, states] of rosters) {
-        const s = remainingShare(states)
+      for (const [rosterId, starters] of rosters) {
+        const s = remainingShare(starters)
         if (s != null) shares.set(rosterId, s)
       }
       out.set(key, shares)

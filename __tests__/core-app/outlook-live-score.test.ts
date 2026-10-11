@@ -64,11 +64,25 @@ describe('a game already under way', () => {
 })
 
 describe('reading a board', () => {
-  it('counts final as played, live as half, and anything unreadable as still to play', () => {
-    expect(remainingShare(['final', 'final', 'final', 'final'])).toBe(0)
-    expect(remainingShare(['final', 'live', 'upcoming', 'upcoming'])).toBe(0.625)
-    expect(remainingShare(['final', 'unknown'])).toBe(0.5)
+  const st = (state: 'final' | 'live' | 'upcoming' | 'unknown', points = 0) => ({ state, points })
+
+  it('counts final as played, live as half, upcoming as still to play', () => {
+    expect(remainingShare([st('final', 12), st('final', 3), st('final', 0), st('final', 9)])).toBe(0)
+    expect(remainingShare([st('final', 12), st('live', 4), st('upcoming'), st('upcoming')])).toBe(0.625)
     expect(remainingShare([])).toBeNull()
+  })
+
+  it('judges an unreadable starter by its own points, so a played game is never drawn again in full', () => {
+    // Unresolved id or a stale feed: points on the board means it has played.
+    expect(remainingShare([st('final', 10), st('final', 8), st('unknown', 14)])).toBeCloseTo(0.5 / 3)
+    expect(remainingShare([st('final', 10), st('final', 8), st('unknown', 0)])).toBeCloseTo(1 / 3)
+  })
+
+  it('does not read a lineup that is mostly unreadable — the game stays an unplayed draw, never board + a week', () => {
+    // Production 2026-10-11: a Fantrax college league, 0 of 120 starters resolvable.
+    expect(remainingShare(Array.from({ length: 9 }, () => st('unknown', 12)))).toBeNull()
+    expect(remainingShare([st('final', 10), st('unknown', 5), st('unknown', 0)])).toBeNull()
+    expect(remainingShare([st('final', 10), st('final', 9), st('unknown', 5), st('unknown', 0)])).toBe(0.375)
   })
 
   const rows = [

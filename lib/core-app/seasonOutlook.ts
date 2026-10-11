@@ -730,7 +730,7 @@ async function attachLiveBoards(prepared: Prepared[], sportOf: ReadonlyMap<strin
     const { games, attached, unread } = withLiveScores(p.sim.remaining, p.unscored, (week, rosterId) => shares.get(key.get(week) ?? '')?.get(rosterId))
     p.sim = { ...p.sim, remaining: games }
     for (const w of new Set(attached)) {
-      p.missing.push(`Week ${w} is under way: points already scored count, and only the share of each lineup still to play is simulated (a starter whose game cannot be read counts as still to play).`)
+      p.missing.push(`Week ${w} is under way: points already scored count, and only the share of each lineup still to play is simulated (a starter whose game cannot be read is judged by whether it has points yet; a lineup mostly unreadable is simulated as unplayed).`)
     }
     for (const w of new Set(unread)) {
       p.missing.push(`Week ${w} has started, but not every lineup could be read starter by starter, so those games are simulated as if unplayed.`)
