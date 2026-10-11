@@ -18,6 +18,7 @@ import { sleeperReadablePlayerDataOf } from '@/lib/core-app/rosterIdSpace'
 import { resolveRostersForTeams } from '@/lib/leagues/rosterTeamIdentity'
 import { leagueWeekFromSettings } from '@/lib/core-app/seasonTimeline'
 import { attachSlateGames, deriveImpact } from '@/lib/live/liveImpact'
+import { gameStageRank } from '@/lib/live/gameStage'
 import { loadGameHighlights } from '@/lib/live/gameHighlights'
 import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 import { buildLockAlerts, type LiveLockAlert } from '@/lib/live/lockAlerts'
@@ -1165,8 +1166,14 @@ export async function getLivePageData(opts: {
   /*
    * Build rule 1: "My games" surfaces ONLY games containing a player you actually
    * roster — never a popular or recommended game.
-   * Build rule 2: sorted strictly by leagues affected, ties broken by closeness
-   * (win probability nearest 50/50), never by kickoff time.
+   * Build rule 2: grouped by stage first — live, then not started, then final
+   * (`gameStageRank`) — and within a stage sorted by leagues affected, ties
+   * broken by closeness (win probability nearest 50/50), never by kickoff time.
+   *
+   * ⚠ THE STAGE COMES FIRST BECAUSE "LEAGUES AFFECTED" ALONE PUT FINALS ABOVE
+   * LIVE GAMES. Seen on prod 2026-10-11: a finished CHI–GB sat second, above a
+   * live SF–SEA, because more of your leagues had a starter in it. A game that is
+   * over cannot change anything you are watching for.
    */
   const scoped = scope === 'my' ? games.filter((g) => g.leaguesAffected > 0) : games
   /*
@@ -1192,6 +1199,8 @@ export async function getLivePageData(opts: {
       })()
     : scoped
   visible.sort((a, b) => {
+    const stage = gameStageRank(a) - gameStageRank(b)
+    if (stage !== 0) return stage
     if (b.leaguesAffected !== a.leaguesAffected) return b.leaguesAffected - a.leaguesAffected
     const closeness = (g: LiveGameCard) =>
       g.winProbability ? Math.abs(g.winProbability.home - 50) : 100

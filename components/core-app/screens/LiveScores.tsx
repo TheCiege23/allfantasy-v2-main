@@ -4,6 +4,10 @@ import { TopicTip } from '@/components/core-app/TopicTip'
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { LiveMatchupStrip } from '@/components/core-app/screens/LiveMatchupStrip'
+import { LiveLeaguesGlance } from '@/components/core-app/screens/LiveLeaguesGlance'
+import { buildLeaguesAtAGlance, type LeagueRef } from '@/lib/live/leaguesAtAGlance'
+import type { RailMatchup } from '@/lib/core-app/railMatchups'
+import { gameStage, groupByStage } from '@/lib/live/gameStage'
 import type { MatchupStrip } from '@/lib/live/matchupStrip'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import LocalDateTime from '@/components/core-app/LocalDateTime'
@@ -78,6 +82,8 @@ function upNextTime(value: string): string {
   }).format(date)
 }
 const IDLE_POLL_MS = 120_000
+/** Starters listed under a slate card before "Show all" — see `MyStarters`. */
+const STARTERS_SHOWN = 3
 
 /**
  * Play-feed labels and tone.
@@ -110,6 +116,13 @@ export type LiveScoresProps = {
   selectedLeagueId?: string | null
   /** Your matchup in the held league, resolved on the server. Null when no league is held. */
   matchupStrip?: MatchupStrip | null
+  /**
+   * This week's matchup in every league — the shell rail's `getRailMatchups` read, handed down rather
+   * than re-queried — plus the leagues to name. Drives the "your matchups" strip on the cross-league
+   * view and the standing in an elimination league. Null when the rail read failed: the strip then
+   * says nothing rather than claiming a quiet week.
+   */
+  leagueWeek?: { byLeague: Record<string, RailMatchup> | null; leagues: LeagueRef[] } | null
 }
 
 export function scopeLiveGamesToLeague(
@@ -126,7 +139,7 @@ export function scopeLiveGamesToLeague(
     }))
 }
 
-export function LiveScores({ data: initial, selectedLeagueId = null, matchupStrip = null }: LiveScoresProps) {
+export function LiveScores({ data: initial, selectedLeagueId = null, matchupStrip = null, leagueWeek = null }: LiveScoresProps) {
   const router = useRouter()
   const pathname = usePathname()
   const params = useSearchParams()
@@ -305,7 +318,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
    * below drops it when the view genuinely changes.
    */
   const orderedGames = useMemo(
-    () => applyStableOrder(orderRef.current, scopedGames, (g) => g.gameId),
+    () => groupByStage(applyStableOrder(orderRef.current, scopedGames, (g) => g.gameId)),
     [scopedGames],
   )
 
@@ -439,6 +452,13 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
   const activeSportLabel =
     data.counts.find((c) => c.sport === data.sport)?.label ?? data.sport
 
+  const heldWeek = selectedLeagueId ? (leagueWeek?.byLeague?.[selectedLeagueId] ?? null) : null
+  /* Only this tab's sport: an NBA league has nothing to say about the NFL slate under it. */
+  const glance = useMemo(
+    () => (selectedLeagueId ? null : buildLeaguesAtAGlance(leagueWeek?.byLeague, leagueWeek?.leagues ?? [], data.sport)),
+    [selectedLeagueId, leagueWeek, data.sport],
+  )
+
   /*
    * Newest play per game, for the in-card panel.
    *
@@ -503,7 +523,17 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
         </p>
       </header>
 
-      {selectedLeagueId ? <LiveMatchupStrip strip={matchupStrip} leagueId={selectedLeagueId} pollMs={pollIntervalMs} /> : null}
+      {selectedLeagueId ? (
+        <LiveMatchupStrip
+          strip={matchupStrip}
+          leagueId={selectedLeagueId}
+          pollMs={pollIntervalMs}
+          standing={heldWeek?.unpaired ? heldWeek.standing : null}
+          eliminated={heldWeek?.eliminated === true}
+        />
+      ) : (
+        <LiveLeaguesGlance glance={glance} sportLabel={activeSportLabel} />
+      )}
 
       {/* ── Control bar ─────────────────────────────────────────────── */}
       <div className="af-live-bar">
@@ -647,7 +677,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
           <LockWarning alerts={lockAlerts} now={now} />
 
           <h2 className="af-label af-live-slate-head">
-            {activeSportLabel} · {leagueFilterId ? 'this league' : scope === 'my' ? 'your starters, sorted by leagues affected' : 'all games'}{' '}
+            {activeSportLabel} · {leagueFilterId ? 'this league' : scope === 'my' ? 'your starters · live first, then most leagues affected' : 'all games · live first'}{' '}
             <TopicTip topic="liveGameWinEstimate" />
           </h2>
 
@@ -692,17 +722,28 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
               />
             )
           ) : (
-            visibleGames.map((game) => (
-              <GameCard
-                key={game.gameId}
-                game={game}
+            <>
+              {visibleGames
+                .filter((game) => gameStage(game) !== 'final')
+                .map((game) => (
+                  <GameCard
+                    key={game.gameId}
+                    game={game}
+                    scope={scope}
+                    selectedLeagueId={selectedLeagueId}
+                    lastPlay={latestPlayByGame.get(game.gameId) ?? null}
+                    detailHref={gameDetailHref(game, '/core/live', selectedLeagueId)}
+                    scoreChanged={litGames.has(game.gameId)}
+                    starterLimit={STARTERS_SHOWN}
+                  />
+                ))}
+              <FinalGames
+                games={visibleGames.filter((game) => gameStage(game) === 'final')}
                 scope={scope}
                 selectedLeagueId={selectedLeagueId}
-                lastPlay={latestPlayByGame.get(game.gameId) ?? null}
-                detailHref={gameDetailHref(game, '/core/live', selectedLeagueId)}
-                scoreChanged={litGames.has(game.gameId)}
+                lastPlayByGame={latestPlayByGame}
               />
-            ))
+            </>
           )}
         </section>
 
@@ -921,6 +962,7 @@ export function GameCard({
   lastPlay,
   detailHref = null,
   scoreChanged = false,
+  starterLimit,
 }: {
   game: LiveGameCard
   /** "My games" adds your starters under the game; "All games" is the game alone. */
@@ -949,6 +991,8 @@ export function GameCard({
    * offer and must not start claiming scores changed.
    */
   scoreChanged?: boolean
+  /** Show this many of your starters before "Show all". Omitted shows every one (the public page). */
+  starterLimit?: number
 }) {
   const lowDataOn = useLowData().lowData
   const wp = game.winProbability
@@ -1126,9 +1170,136 @@ export function GameCard({
       ) : null}
 
       {starters.length > 0 ? (
-        <MyStarters gameId={game.gameId} sport={game.sport} groups={starters} selectedLeagueId={selectedLeagueId} />
+        <MyStarters
+          gameId={game.gameId}
+          sport={game.sport}
+          groups={starters}
+          selectedLeagueId={selectedLeagueId}
+          limit={starterLimit}
+        />
       ) : null}
     </article>
+  )
+}
+
+/**
+ * Finished games, one line each, under the games still in play.
+ *
+ * ⚠ A FINAL CANNOT MOVE ANY MATCHUP OF YOURS, SO IT DOES NOT GET A FULL CARD BY DEFAULT. On a Sunday
+ * afternoon most of the slate is final, and full cards — box score, leaders, venue, starters — put the
+ * three live games under thousands of pixels of settled results. Each line opens the same `GameCard`
+ * the live games use, so nothing a final showed before is gone; it is one tap away.
+ */
+function FinalGames({
+  games,
+  scope,
+  selectedLeagueId,
+  lastPlayByGame,
+}: {
+  games: LiveGameCard[]
+  scope: 'my' | 'all'
+  selectedLeagueId: string | null
+  lastPlayByGame: Map<string, LivePageData['impact']['plays'][number]>
+}) {
+  if (games.length === 0) return null
+  return (
+    <section className="af-live-finals" aria-label="Final games">
+      <h3 className="af-label af-live-finals-head">
+        Final · {games.length} {games.length === 1 ? 'game' : 'games'}
+      </h3>
+      <ul className="af-live-finals-list">
+        {games.map((game) => (
+          <FinalGameRow
+            key={game.gameId}
+            game={game}
+            scope={scope}
+            selectedLeagueId={selectedLeagueId}
+            lastPlay={lastPlayByGame.get(game.gameId) ?? null}
+          />
+        ))}
+      </ul>
+    </section>
+  )
+}
+
+function FinalGameRow({
+  game,
+  scope,
+  selectedLeagueId,
+  lastPlay,
+}: {
+  game: LiveGameCard
+  scope: 'my' | 'all'
+  selectedLeagueId: string | null
+  lastPlay: LivePageData['impact']['plays'][number] | null
+}) {
+  const lowDataOn = useLowData().lowData
+  const [open, setOpen] = useState(false)
+  const panelId = `af-live-final-${game.gameId}`
+  const starters = scope === 'my' ? groupStartersByPlayer(game.tieIns) : []
+  /* Your best starter in this game, by this league's points when one is held, else the best of any. */
+  const best = starters.reduce<{ group: StarterGroup; pts: number } | null>((top, group) => {
+    const values = group.leagues
+      .filter((l) => selectedLeagueId == null || l.leagueId === selectedLeagueId)
+      .map((l) => l.points)
+      .filter((p): p is number => p != null && Number.isFinite(p))
+    if (values.length === 0) return top
+    const pts = Math.max(...values)
+    return top == null || pts > top.pts ? { group, pts } : top
+  }, null)
+  const team = (side: LiveGameCard['home'], other: LiveGameCard['home']) => (
+    <span className="af-live-final-team" data-won={leads(side.score, other.score) ? 'true' : undefined}>
+      {!lowDataOn && side.logo ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={side.logo} alt="" width={18} height={18} loading="lazy" className="af-live-final-logo" />
+      ) : null}
+      <span className="af-live-final-abbrev">{side.abbrev}</span>
+      <span className="af-num af-live-final-score">{side.score ?? '—'}</span>
+    </span>
+  )
+  return (
+    <li className="af-live-final" data-open={open}>
+      <button
+        type="button"
+        className="af-live-final-toggle"
+        aria-expanded={open}
+        aria-controls={open ? panelId : undefined}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span className="af-live-final-teams">
+          {team(game.away, game.home)}
+          <span className="af-live-final-at" aria-hidden>
+            @
+          </span>
+          {team(game.home, game.away)}
+        </span>
+        <span className="af-live-final-status af-num">{game.statusDetail}</span>
+        {starters.length > 0 ? (
+          <span className="af-live-final-mine">
+            {starters.length} {starters.length === 1 ? 'starter' : 'starters'}
+            {best ? (
+              <>
+                {' · top '}
+                {best.group.playerName} {best.pts.toFixed(1)}
+              </>
+            ) : null}
+          </span>
+        ) : null}
+        <span className="af-live-mine-chev" aria-hidden />
+      </button>
+      {open ? (
+        <div id={panelId} className="af-live-final-card">
+          <GameCard
+            game={game}
+            scope={scope}
+            selectedLeagueId={selectedLeagueId}
+            lastPlay={lastPlay}
+            detailHref={gameDetailHref(game, '/core/live', selectedLeagueId)}
+            starterLimit={STARTERS_SHOWN}
+          />
+        </div>
+      ) : null}
+    </li>
   )
 }
 
@@ -1556,11 +1727,17 @@ export function MyStarters({
   groups,
   selectedLeagueId,
   renderStatLine,
+  limit,
 }: {
   gameId: string
   sport: string
   groups: StarterGroup[]
   selectedLeagueId: string | null
+  /**
+   * Rows shown before "Show all N". The slate passes `STARTERS_SHOWN`; the clicked-game view passes
+   * nothing and lists everyone, because there the list IS the screen.
+   */
+  limit?: number
   /**
    * The clicked-game view passes each starter's live box-score line here; the
    * slate card passes nothing and renders exactly as before. One list component
@@ -1575,6 +1752,15 @@ export function MyStarters({
    * "My games" exists.
    */
   const [open, setOpen] = useState(true)
+  /*
+   * ⚠ OPEN, BUT CAPPED. A Sunday slate carried 10–20 starters per card, all listed, and the page ran
+   * to ~22,700px on a phone (measured 2026-10-11) — the games themselves were buried under the lists.
+   * The list still opens by default (the 09-13 request stands); it shows the players in the most of
+   * your leagues first (`groupStartersByPlayer`'s order) and the rest are one tap away.
+   */
+  const [showAll, setShowAll] = useState(false)
+  const capped = limit != null && !showAll && groups.length > limit
+  const shownGroups = capped ? groups.slice(0, limit) : groups
   const listId = `af-live-mine-list-${gameId}`
   const leagueCount = new Set(groups.flatMap((g) => g.leagues.map((l) => l.leagueId))).size
   return (
@@ -1594,7 +1780,7 @@ export function MyStarters({
       </button>
       {open ? (
         <ul id={listId} className="af-live-mine">
-          {groups.map((g) => (
+          {shownGroups.map((g) => (
             <StarterRow
               key={g.playerId}
               gameId={gameId}
@@ -1605,6 +1791,17 @@ export function MyStarters({
             />
           ))}
         </ul>
+      ) : null}
+      {open && limit != null && groups.length > limit ? (
+        <button
+          type="button"
+          className="af-live-mine-more"
+          aria-expanded={showAll}
+          aria-controls={listId}
+          onClick={() => setShowAll((v) => !v)}
+        >
+          {showAll ? 'Show fewer' : `Show all ${groups.length} starters`}
+        </button>
       ) : null}
     </div>
   )
