@@ -333,6 +333,8 @@ function YourStartersPanel({
         groups={groups}
         selectedLeagueId={selectedLeagueId}
         renderStatLine={(group) => <StarterBoxLine detail={detail} group={group} />}
+        /* Before kickoff each row shows this week's projection, as on the slate card. */
+        upcoming={detail.status.state === 'pre'}
       />
     </section>
   )
