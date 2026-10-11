@@ -141,7 +141,7 @@ async function loadShared(detail: PlayerDetail): Promise<SharedDepth> {
   const [seasonRows, news, blurbs, schedule, odds] = await Promise.all([
     sport === 'NFL' && sleeperId && week ? loadSeasonRows(sleeperId, week.season, week.week).catch(() => null) : Promise.resolve(null),
     loadNews(player.name, sport).catch(() => ({ available: false as const, reason: 'News could not be read.' })),
-    loadPlayerBlurbs(sleeperId, player.name, sport).catch(() => [] as PlayerCardNews[]),
+    loadPlayerBlurbs(player.name, sport, player.team).catch(() => [] as PlayerCardNews[]),
     week ? loadSchedule(player.team, week.season, week.week, null, null, NEXT_GAMES).catch(() => null) : Promise.resolve(null),
     sport === 'NFL' && week && club
       ? readWeekMarketContextByTeam('NFL', week.season, week.week).catch(() => new Map<string, TeamMarketContext>())

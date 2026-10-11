@@ -3,7 +3,8 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { memberLeaguePlatformIdsFor } from '@/lib/league-access'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
-import { injuryNameVariants } from './injuryNames'
+import { resolveInjuryFacts } from '@/lib/injuries/injuryReadPort'
+import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 import { isWatched } from '@/lib/waiver-wire/watchlist-service'
 import { followKeyFor, isFollowingPlayer } from '@/lib/follows/playerFollows'
 import { currentListings, teamForRoster, TRADE_BLOCK_ENTRY_SELECT, tradeBlockSupport } from '@/lib/trade-block/importedTradeBlock'
@@ -262,7 +263,7 @@ export type PlayerCardInjury = {
  * injury slot's SILENCE checkable.
  *
  * 🛑 THIS EXISTS BECAUSE "NO INJURY" AND "NOBODY LOOKED" LOOK IDENTICAL. The
- * section renders "No injury designation reported in the last 14 days" for the
+ * section renders "No current injury designation on any injury report" for the
  * overwhelming majority of players, and nothing on the card distinguishes a
  * healthy player from a dead feed. Both are silence. Measured 2026-09-08:
  * `api_sports` held 1,444 rows for rostered players and NOT ONE was fresher than
@@ -978,6 +979,9 @@ export async function loadTrades(sleeperId: string | null, scope: TradeScope): P
  */
 const INJURY_WINDOW_DAYS = 14
 
+/** The injury slot's empty state: no feed carries a designation for this player right now. */
+export const NO_CURRENT_DESIGNATION = 'No current injury designation on any injury report.'
+
 /**
  * Statuses that are NOT a designation.
  *
@@ -990,55 +994,32 @@ const INJURY_WINDOW_DAYS = 14
 const NON_DESIGNATIONS = new Set(['active', 'na', 'healthy', ''])
 
 export async function loadInjury(
-  sleeperId: string | null,
   name: string,
   sport: string,
   team?: string | null,
+  position?: string | null,
 ): Promise<SectionState<PlayerCardInjury>> {
-  const cutoff = new Date(Date.now() - INJURY_WINDOW_DAYS * 86_400_000)
-
-  const rows = await prisma.sportsInjury
-    .findMany({
-      where: {
-        sport: { equals: sport, mode: 'insensitive' },
-        AND: [
-          {
-            /*
-             * ⚠ ID FIRST, NAME SECOND, AND THE NAME ARM IS LOAD-BEARING.
-             * Measured: only 51% of rows carry a `playerId` at all, and the
-             * biggest live source (espn) leaves it null — an id-only match
-             * reaches 6.7% of rostered players against 49.2% with the name.
-             * The name arm is safe HERE in a way it is not for `SportsNews`:
-             * 97.8% of this table's `playerName` values are real NFL players,
-             * against 31.4% for the news table's headline n-grams.
-             */
-            OR: [
-              ...(sleeperId ? [{ playerId: sleeperId }] : []),
-              { playerName: { in: injuryNameVariants(name), mode: 'insensitive' as const } },
-            ],
-          },
-          {
-            // `date` is the report date; fall back to `updatedAt` when absent.
-            OR: [{ date: { gte: cutoff } }, { AND: [{ date: null }, { updatedAt: { gte: cutoff } }] }],
-          },
-        ],
-      },
-      orderBy: [{ date: 'desc' }, { updatedAt: 'desc' }],
-      take: 5,
-      select: { status: true, type: true, description: true, date: true, updatedAt: true, source: true, team: true },
-    })
-    .catch(() => [])
-
-  const club = normalizeTeamAbbrev(team)
-  const hit = rows.find((r) => (!club || !r.team || normalizeTeamAbbrev(r.team) === club)
-    && r.status && !NON_DESIGNATIONS.has(r.status.trim().toLowerCase()))
-  if (!hit || !hit.status) {
-    return unavailable(
-      `No injury designation reported in the last ${INJURY_WINDOW_DAYS} days.`
-    )
+  /*
+   * 🛑 THE CANONICAL READ PORT, NOT A QUERY OF OUR OWN (2026-10-11). This read 14 days of rows
+   * with no `expiresAt`, newest REPORT first, and took the first one that was not "Active". So:
+   *   - a cleared player kept his old designation: ESPN marks him "Active" when he is cleared, that
+   *     row was skipped, and Rolling Insights' older "Questionable"/"Out" beneath it was shown;
+   *   - a healed player who simply dropped off the reports kept his last "Out" for two weeks;
+   *   - its `playerId = sleeperId` arm matched Rolling Insights' OWN numbers (RI 8394 is Rome
+   *     Odunze, Sleeper 8394 is Percy Butler) with no name check.
+   * The port reads only rows a feed still carries, binds the athlete by name verified with team and
+   * position, and takes his newest claim — and when that claim is "Active", there is no designation.
+   */
+  const res = await resolveInjuryFacts({ sport, players: [{ name, team: team ?? null, position: position ?? null }] }).catch(
+    () => null,
+  )
+  if (res && !res.coverage.sourceAvailable && res.coverage.reason) return unavailable(res.coverage.reason)
+  const hit = res?.byPlayer.get(normalizeMatchName(name)) ?? null
+  if (!hit || !hit.status || NON_DESIGNATIONS.has(hit.status.trim().toLowerCase())) {
+    return unavailable(NO_CURRENT_DESIGNATION)
   }
 
-  const reported = hit.date ?? hit.updatedAt ?? null
+  const reported = hit.reportedAt ?? null
   const status = hit.status.trim().toUpperCase()
 
   /*
@@ -1107,37 +1088,36 @@ export async function loadNews(name: string, sport: string): Promise<SectionStat
  * this supplements `loadNews` rather than replacing it.
  */
 export async function loadPlayerBlurbs(
-  sleeperId: string | null,
   name: string,
-  sport: string
+  sport: string,
+  team?: string | null,
 ): Promise<PlayerCardNews[]> {
   const cutoff = new Date(Date.now() - INJURY_WINDOW_DAYS * 86_400_000)
 
+  /*
+   * 🛑 BY NAME, AND NEVER ANOTHER CLUB'S NAMESAKE (2026-10-11). This also matched `playerId =
+   * sleeperId`, and `SportsInjury.playerId` is each provider's OWN number — Rolling Insights 8394 is
+   * Rome Odunze, Sleeper 8394 is Percy Butler — so one player's injury notes could land on another's
+   * card. A row naming a different club is a namesake (WR vs LB Justin Jefferson) and is skipped.
+   */
+  const club = normalizeTeamAbbrev(team)
   const rows = await prisma.sportsInjury
     .findMany({
       where: {
         sport: { equals: sport, mode: 'insensitive' },
-        AND: [
-          {
-            OR: [
-              ...(sleeperId ? [{ playerId: sleeperId }] : []),
-              { playerName: { equals: name, mode: 'insensitive' as const } },
-            ],
-          },
-          {
-            OR: [{ date: { gte: cutoff } }, { AND: [{ date: null }, { updatedAt: { gte: cutoff } }] }],
-          },
-        ],
+        playerName: { equals: name, mode: 'insensitive' },
+        OR: [{ date: { gte: cutoff } }, { AND: [{ date: null }, { updatedAt: { gte: cutoff } }] }],
       },
       orderBy: [{ date: 'desc' }, { updatedAt: 'desc' }],
       take: NEWS_COUNT * 4,
-      select: { description: true, status: true, date: true, updatedAt: true, source: true },
+      select: { description: true, status: true, date: true, updatedAt: true, source: true, team: true },
     })
     .catch(() => [])
 
   const seen = new Set<string>()
   const out: PlayerCardNews[] = []
   for (const r of rows) {
+    if (club && r.team && normalizeTeamAbbrev(r.team) !== club) continue
     const text = r.description?.trim()
     /*
      * ⚠ TWO THINGS THAT LOOK LIKE NEWS AND ARE NOT: a description that only
@@ -1661,8 +1641,8 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
       ? lookupProjections([player.sleeperId], projWeek, null, player.sport).catch(() => new Map())
       : Promise.resolve(new Map()),
     loadNews(player.name, player.sport),
-    loadPlayerBlurbs(player.sleeperId, player.name, player.sport),
-    loadInjury(player.sleeperId, player.name, player.sport, player.team),
+    loadPlayerBlurbs(player.name, player.sport, player.team),
+    loadInjury(player.name, player.sport, player.team, player.position),
     /*
      * ⚠ NOT INSIDE `loadInjury`. The stamp annotates the injury slot in BOTH
      * states, including the unavailable one — and `SectionState`'s unavailable

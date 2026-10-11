@@ -1203,6 +1203,8 @@ async function fetchDbInjuryMap(players: InjuryPlayerLookup[], sport = 'NFL'): P
         sport,
         playerName: { in: playerNames },
         fetchedAt: { gte: cutoff },
+        // Only rows a feed still carries: the feeds stop listing a healed player, they do not clear him.
+        expiresAt: { gt: new Date() },
       },
       orderBy: { fetchedAt: 'desc' },
       /*
@@ -1215,6 +1217,7 @@ async function fetchDbInjuryMap(players: InjuryPlayerLookup[], sport = 'NFL'): P
         playerName: true,
         status: true,
         date: true,
+        fetchedAt: true,
         type: true,
         description: true,
         team: true,

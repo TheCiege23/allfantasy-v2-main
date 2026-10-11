@@ -406,7 +406,7 @@ describe('player card — Spanish', () => {
       trades: no('No trade involving this player in your leagues.'),
       comps: no('No price for this player, so there is nothing to compare against.'),
       news: no('No recent item mentions this player.'),
-      injury: no('No injury designation reported in the last 14 days.'),
+      injury: no('No current injury designation on any injury report.'),
       injuryFeed: yes({ checkedAt: null, erroredAt: null, skipped: 0 }),
       insight: null,
     })
@@ -416,7 +416,7 @@ describe('player card — Spanish', () => {
     const out = ownText(container)
     expectSpanish(out, 'empty')
     expect(out).toContain('No hay ningún registro de mercado de este jugador.')
-    expect(out).toContain('No se reportó ninguna designación de lesión en los últimos 14 días.')
+    expect(out).toContain('Ningún reporte de lesiones le asigna una designación ahora mismo.')
     expect(out).toContain('la fuente todavía no completó una ejecución para este deporte')
     expect(out).toContain('Ninguna noticia reciente menciona a este jugador.')
 
@@ -485,8 +485,7 @@ describe('player card — loader reasons are held to their source', () => {
     expect(playerCardReasonText(key, 'es')).not.toBe(key)
   })
 
-  it('the templated ones: the injury window, too few leagues, another platform’s block', () => {
-    expect(SOURCES).toContain('`No injury designation reported in the last ${INJURY_WINDOW_DAYS} days.`')
+  it('the templated ones: too few leagues, another platform’s block', () => {
     expect(SOURCES).toContain('`Only ${ownershipBoard.leaguesCounted} leagues imported — too few for an ownership rate to mean anything yet.`')
     expect(playerCardReasonText(tradeBlockSupport('espn').note, 'es')).toBe(
       'ESPN no comparte sus jugadores en venta con AllFantasy, y por ahora solo se pueden poner en venta jugadores en ligas de Sleeper.',

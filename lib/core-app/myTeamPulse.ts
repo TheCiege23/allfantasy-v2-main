@@ -18,6 +18,7 @@ import { sleeperReadableRosters, rosterIdSpaceOf } from './rosterIdSpace'
 import { isTeamEliminated } from './teamElimination'
 import { getLeagueTypeMedia, resolveLeagueCardTypeKey } from '@/lib/league-media/leagueTypeMedia'
 import { availableFilter, boardFilterOptions, matchesBoardFilter, type BoardFilter, type BoardFilterOption } from './myTeamBoardFilter'
+import { injuryClaimAsOf } from '@/lib/injuries/matchInjuryRows'
 
 /**
  * My team pulse — the cross-league landing at `/core/my-team`.
@@ -575,9 +576,14 @@ async function loadMyTeamPulse(
   const injuriesPromise = timing.read('injuries', async () => names.length
     ? await prisma.sportsInjury
         .findMany({
-          where: { sport: { in: sports }, playerName: { in: names.flatMap(injuryNameVariants), mode: 'insensitive' } },
+          // Only rows a feed still carries: a healed player drops off the reports, he is not cleared.
+          where: {
+            sport: { in: sports },
+            playerName: { in: names.flatMap(injuryNameVariants), mode: 'insensitive' },
+            expiresAt: { gt: new Date() },
+          },
           orderBy: { fetchedAt: 'desc' },
-          select: { sport: true, playerName: true, status: true, team: true },
+          select: { sport: true, playerName: true, status: true, team: true, date: true, fetchedAt: true },
         })
         : [])
 
@@ -631,13 +637,17 @@ async function loadMyTeamPulse(
   })
   const [injuries] = await Promise.all([injuriesPromise, schedulePromise])
 
-  /* Preserve newest-first order across name aliases; resolve club matches per player. */
-  const injuryByName = new Map<string, Array<{ status: string | null; team: string | null }>>()
+  /* Newest CLAIM first across name aliases (not newest fetch: a re-pulled Friday report is not
+     Sunday's news); resolve club matches per player. */
+  const injuryByName = new Map<string, Array<{ status: string | null; team: string | null; date: Date | null; fetchedAt: Date }>>()
   for (const i of injuries) {
     const k = `${i.sport}:${injuryNameKey(i.playerName)}`
     const list = injuryByName.get(k) ?? []
     list.push(i)
     injuryByName.set(k, list)
+  }
+  for (const list of injuryByName.values()) {
+    list.sort((a, b) => injuryClaimAsOf(b).getTime() - injuryClaimAsOf(a).getTime())
   }
 
   /* ── 6. One row per checked lineup. ────────────────────────────────────── */

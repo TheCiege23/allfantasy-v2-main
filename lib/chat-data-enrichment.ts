@@ -8,6 +8,7 @@ import { getTeamInfo, normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { findPlayerByName, getTrendingPlayers, getValueTier, type FantasyCalcPlayer } from '@/lib/fantasycalc'
 import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import { getLiveAdpByName, lookupLiveAdp, type LiveAdpEntry } from '@/lib/adp/liveAdpFallback'
+import { isInjuryDesignation, latestInjuryClaims } from '@/lib/injuries/matchInjuryRows'
 import { getConsensusADP } from '@/lib/multi-platform-adp'
 import { getTrendingAdds, getTrendingDrops, getPlayerName, getAllPlayers } from '@/lib/sleeper-client'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
@@ -223,9 +224,10 @@ export async function enrichChatWithData(
          * could be presented as today's report. Each line below names the row's own team, so
          * two athletes sharing a name stay distinguishable to the reader.
          */
+        // No `status <> 'Active'` here: a cleared player's newer Active must beat an older live
+        // Questionable from another feed, so non-designations are dropped AFTER the newest claim.
         const whereClause: any = {
           sport,
-          status: { not: 'Active' },
           expiresAt: { gt: new Date() },
         }
         if (teams.length > 0) {
@@ -241,11 +243,16 @@ export async function enrichChatWithData(
           }
         }
 
-        const injuries = await prisma.sportsInjury.findMany({
-          where: whereClause,
-          orderBy: { updatedAt: 'desc' },
-          take: 10,
-        })
+        const injuries = latestInjuryClaims(
+          await prisma.sportsInjury.findMany({
+            where: whereClause,
+            orderBy: { updatedAt: 'desc' },
+            take: 200,
+          }),
+          sport,
+        )
+          .filter((i) => isInjuryDesignation(i.status))
+          .slice(0, 10)
 
         if (injuries.length > 0) {
           enrichSourcesUsed.push('injuries')

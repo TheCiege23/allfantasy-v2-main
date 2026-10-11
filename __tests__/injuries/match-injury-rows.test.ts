@@ -66,3 +66,66 @@ describe('injuryStatusLookup', () => {
     expect(statusOf({ name: 'Justin Jefferson' })).toBeNull()
   })
 })
+
+/*
+ * 🛑 THE FEED LISTS ONLY THE ATHLETES IT REPORTS ON (2026-10-11). WR DeVonta Smith (PHI) was Out and
+ * CB DeVonta Smith (CAR) had no row, so the name looked unique and the corner read as Out. A lone
+ * candidate whose club or side of the ball contradicts the lookup is somebody else.
+ */
+describe('a lone namesake on the report', () => {
+  const only = [{ id: 'wr', playerName: 'DeVonta Smith', team: 'Philadelphia Eagles', position: 'WR', status: 'Out' }]
+
+  it('is not bound to the other club', () => {
+    const m = matchInjuryRowsToPlayers(only, [{ name: 'DeVonta Smith', team: 'CAR', position: 'CB' }], 'NFL')
+    expect(m.byPlayer.has('devonta smith')).toBe(false)
+    expect(m.ambiguous).toEqual([])
+  })
+
+  it('is not bound across the side of the ball when no team is known', () => {
+    const m = matchInjuryRowsToPlayers(only, [{ name: 'DeVonta Smith', position: 'CB' }], 'NFL')
+    expect(m.byPlayer.has('devonta smith')).toBe(false)
+  })
+
+  it('still binds the athlete it belongs to, and a sub-position on the same side', () => {
+    expect(ids(matchInjuryRowsToPlayers(only, [{ name: 'DeVonta Smith', team: 'PHI', position: 'WR' }], 'NFL'), 'devonta smith')).toEqual(['wr'])
+    const edge = [{ id: 'de', playerName: 'Byron Young', team: 'Los Angeles Rams', position: 'DE', status: 'Out' }]
+    expect(ids(matchInjuryRowsToPlayers(edge, [{ name: 'Byron Young', team: 'LAR', position: 'LB' }], 'NFL'), 'byron young')).toEqual(['de'])
+  })
+})
+
+/*
+ * 🛑 NEWEST CLAIM, NOT NEWEST FETCH (2026-10-11). Rolling Insights re-pulls Friday's "Questionable"
+ * every 30 minutes; on Sunday ESPN said "Active". Callers query by `fetchedAt`, so whichever cron ran
+ * last decided — Ja'Marr Chase and 14 more flipped back to Questionable after being cleared.
+ */
+describe('claim order', () => {
+  const now = Date.UTC(2026, 9, 11, 16)
+  const H = 3_600_000
+  const friday = { id: 'ri', playerName: "Ja'Marr Chase", team: 'Cincinnati Bengals', position: null, status: 'Questionable', date: new Date(now - 50 * H), fetchedAt: new Date(now - 60_000) }
+  const sunday = { id: 'espn', playerName: "Ja'Marr Chase", team: 'Cincinnati Bengals', position: 'WR', status: 'Active', date: new Date(now - 3 * H), fetchedAt: new Date(now - 20 * 60_000) }
+
+  it('orders an athlete\'s rows by report, whatever order the caller fetched them in', () => {
+    const m = matchInjuryRowsToPlayers([friday, sunday], [{ name: "Ja'Marr Chase", team: 'CIN' }], 'NFL')
+    expect(ids(m, 'jamarr chase')).toEqual(['espn', 'ri'])
+  })
+
+  it('injuryStatusLookup returns the cleared word', async () => {
+    const { injuryStatusLookup } = await import('@/lib/injuries/matchInjuryRows')
+    expect(injuryStatusLookup([friday, sunday], 'NFL')({ name: "Ja'Marr Chase", team: 'CIN' })).toBe('Active')
+  })
+
+  it('a report re-fetched today is not newer than its own report date', async () => {
+    const { injuryClaimAsOf } = await import('@/lib/injuries/matchInjuryRows')
+    expect(injuryClaimAsOf(friday).getTime()).toBe(friday.date.getTime())
+    // A frozen row stamped with a fresh date is no fresher than when we last saw it.
+    const frozen = { date: new Date(now), fetchedAt: new Date(now - 17 * 24 * H) }
+    expect(injuryClaimAsOf(frozen).getTime()).toBe(frozen.fetchedAt.getTime())
+  })
+
+  it('latestInjuryClaims keeps one newest claim per athlete, so a cleared player drops out of an injury list', async () => {
+    const { latestInjuryClaims, isInjuryDesignation } = await import('@/lib/injuries/matchInjuryRows')
+    const other = { id: 'other', playerName: 'Tee Higgins', team: 'Cincinnati Bengals', position: 'WR', status: 'Out', date: new Date(now - 5 * H), fetchedAt: new Date(now - H) }
+    const list = latestInjuryClaims([friday, sunday, other], 'NFL').filter((r) => isInjuryDesignation(r.status))
+    expect(list.map((r) => r.id)).toEqual(['other'])
+  })
+})

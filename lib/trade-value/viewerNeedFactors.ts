@@ -191,11 +191,11 @@ async function rosterNeedFactors(args: {
     const players = rosterIds.map((id) => byId.get(id)).filter((p): p is NonNullable<typeof p> => Boolean(p))
     const injuries = await prisma.sportsInjury
       .findMany({
-        where: { sport: args.sport, playerName: { in: players.map((p) => p.name) } },
+        where: { sport: args.sport, playerName: { in: players.map((p) => p.name) }, expiresAt: { gt: new Date() } },
         orderBy: { fetchedAt: 'desc' },
-        select: { playerName: true, status: true, team: true, position: true },
+        select: { playerName: true, status: true, team: true, position: true, date: true, fetchedAt: true },
       })
-      .catch(() => [] as Array<{ playerName: string; status: string | null; team: string | null; position: string | null }>)
+      .catch(() => [] as Array<{ playerName: string; status: string | null; team: string | null; position: string | null; date: Date | null; fetchedAt: Date }>)
     // Bound per athlete (name + team/position), not first row per NAME — see matchInjuryRows.ts.
     const statusOf = injuryStatusLookup(injuries, args.sport)
 

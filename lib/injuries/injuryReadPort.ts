@@ -377,11 +377,17 @@ export async function resolveInjuryFacts(args: {
   for (const lookup of args.players) {
     const key = normalizeMatchName(lookup.name)
     if (!key) continue
-    const res = resolveVerifiedMatch(index, {
-      name: lookup.name,
-      position: lookup.position ?? null,
-      team: foldInjuryTeam(lookup.team, sport),
-    })
+    const res = resolveVerifiedMatch(
+      index,
+      {
+        name: lookup.name,
+        position: lookup.position ?? null,
+        team: foldInjuryTeam(lookup.team, sport),
+      },
+      // Only athletes WITH a row are indexed, so a lone namesake proves nothing: WR DeVonta Smith's
+      // Out was read as CB DeVonta Smith's whenever the corner had no row of his own.
+      { refuseContradictedSingle: true },
+    )
     if (res.reason === 'ambiguous') {
       // Refusing is the point. RI supplies no position on injury rows, so a
       // genuine same-name collision often CANNOT be split — and a missing

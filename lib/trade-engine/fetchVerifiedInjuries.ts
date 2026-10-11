@@ -25,7 +25,8 @@ export async function fetchVerifiedTradeInjuries(
   if (players.length === 0) return result
   try {
     const rows = await prisma.sportsInjury.findMany({
-      where: { playerName: { in: [...new Set(players.map((p) => p.name))] }, sport: 'NFL' },
+      // Only rows a feed still carries: the feeds stop listing a healed player rather than clearing him.
+      where: { playerName: { in: [...new Set(players.map((p) => p.name))] }, sport: 'NFL', expiresAt: { gt: new Date() } },
       orderBy: { fetchedAt: 'desc' },
     })
     const { byPlayer } = matchInjuryRowsToPlayers(rows, players, 'NFL')
