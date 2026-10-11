@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { currentSeasonReportWhere } from '@/lib/injuries/injuryRecency'
 import { createInjuryRowMatcher, isInjuryDesignation } from '@/lib/injuries/matchInjuryRows'
+import { isStoredInjuryDesignation, storedInjuryFields } from '@/lib/injuries/storedInjuryDesignation'
 import { SUPPORTED_SPORTS, normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
 import {
   assertTeamCodeFits,
@@ -16,6 +17,8 @@ import { apiChain } from '@/lib/workers/api-chain'
 
 const SPORTS_PLAYER_TTL_MS = 6 * 60 * 60 * 1000
 const UPSERT_BATCH_SIZE = 100
+
+export { isStoredInjuryDesignation }
 
 /**
  * DEFAULT wall-clock budget for the whole import, kept under the route's `maxDuration = 300`.
@@ -86,6 +89,9 @@ async function withTimeout<T>(value: Promise<T>, ms: number, label: string, onTi
     if (timer) clearTimeout(timer)
   }
 }
+
+/** What `loadCurrentInjuryResolver` needs from a seed. */
+type InjurySeed = { name: string; team?: string | null; position?: string | null; status?: string | null; source?: string | null }
 
 type PlayerSeed = {
   id: string
@@ -417,6 +423,92 @@ function buildDynastyValueMap(rows: Array<Record<string, unknown>>): Map<string,
   return map
 }
 
+/*
+ * ── KEEPING `injuryStatus` HONEST ON ROWS THIS RUN DID NOT WRITE ─────────────────────────────────
+ *
+ * The write path (`loadCurrentInjuryResolver`) only cleans the rows it rewrites. Measured in
+ * production 2026-10-11, rows not rewritten since that fix deployed still held 80,923 NCAAF, 22,509
+ * NCAAB and 19,409 NFL roster codes (INACT/ACT/Active…) plus 811 NFL designations nobody was
+ * reporting any more (391 "Questionable" last written 2026-09-28). They go untouched two ways:
+ * orphan rows whose id is no longer on any seed, and a sport whose upsert throws, whose catch path
+ * only relabelled `dataSource`. Three cleanups close it, below.
+ *
+ * 🛑 RAW SQL, NOT `updateMany`, BECAUSE `updateMany` BUMPS `lastUpdated` (`@updatedAt`). Readers pick
+ * the newest row per player by `lastUpdated` (lib/data/players.ts, FantasyValueSnapshotService,
+ * trade-pre-analysis…), so clearing an orphan row through Prisma would make that stale orphan the
+ * NEWEST row for its name and let it beat the current one. Raw SQL leaves `last_updated` alone, and
+ * the `IS NOT NULL` filters make every statement touch only rows that actually need clearing.
+ *
+ * ⚠ `last_updated` is TIMESTAMP(3) WITHOUT TIME ZONE holding UTC (Prisma writes it), so the cutoff is
+ * passed as a zone-less UTC string cast to timestamp(3). Passing a `Date` would compare against a
+ * timestamptz and shift by the session's TimeZone — in the direction that could reach rows this run
+ * just wrote.
+ */
+
+/**
+ * Margin subtracted from a sport's write-start before it is used as the "not written this run"
+ * cutoff. `@updatedAt` is stamped by the in-process query engine from the same clock as `Date.now()`,
+ * so written rows are already >= the write-start; the margin is insurance against a clock step, in
+ * the only safe direction (a row touched by another writer inside it merely escapes until next run).
+ */
+const UNWRITTEN_CUTOFF_MARGIN_MS = 60_000
+
+function toPgUtcTimestamp(date: Date): string {
+  // 2026-10-11T17:55:00.123Z -> 2026-10-11 17:55:00.123
+  return date.toISOString().replace('T', ' ').replace('Z', '')
+}
+
+/**
+ * Null `injuryStatus`/`injuryNotes` on every `sport` row last written before `cutoff`.
+ * Returns the number of rows changed. Never touches `last_updated` (see the note above).
+ */
+async function clearInjuryWrittenBefore(sport: string, cutoff: Date): Promise<number> {
+  return prisma.$executeRaw`
+    UPDATE "sports_players"
+       SET "injury_status" = NULL, "injury_notes" = NULL
+     WHERE "sport" = ${sport}
+       AND "last_updated" < ${toPgUtcTimestamp(cutoff)}::timestamp(3)
+       AND ("injury_status" IS NOT NULL OR "injury_notes" IS NOT NULL)
+  `
+}
+
+/**
+ * The sport-independent column guard: clear every `injuryStatus` that is not a designation per
+ * `isStoredInjuryDesignation`, and every `injuryNotes` left with no status beside it.
+ *
+ * The DISTINCT values are read and classified in JS, then cleared by exact value — so the database
+ * guard and the write path apply literally the same predicate rather than a SQL re-implementation of
+ * it. A distinct-value read over `sports_players` is one grouped scan; the column holds a few hundred
+ * distinct values, not one per row.
+ */
+export async function clearNonDesignationInjuryStatuses(): Promise<{ cleared: number; values: string[] }> {
+  const groups = await prisma.sportsPlayerRecord.groupBy({
+    by: ['injuryStatus'],
+    where: { injuryStatus: { not: null } },
+  })
+  const values = groups
+    .map((group) => group.injuryStatus)
+    .filter((value): value is string => typeof value === 'string' && !isStoredInjuryDesignation(value))
+  const cleared = await prisma.$executeRaw`
+    UPDATE "sports_players"
+       SET "injury_status" = NULL, "injury_notes" = NULL
+     WHERE "injury_status" = ANY(${values}::text[])
+        OR ("injury_status" IS NULL AND "injury_notes" IS NOT NULL)
+  `
+  return { cleared, values }
+}
+
+export type StoredInjuryCleanup = {
+  /** Per sport: rows the run did not write whose injury fields were cleared after a successful upsert. */
+  unwrittenCleared: Record<string, number>
+  /** Per sport: rows older than the TTL cleared because that sport's upsert failed. */
+  staleClearedAfterFailure: Record<string, number>
+  /** Rows cleared by the sport-independent non-designation guard, and the values it removed. */
+  nonDesignationCleared: number
+  nonDesignationValues: string[]
+  errors: string[]
+}
+
 export async function runSportsDataImporter(options?: {
   sports?: string[]
   /** College source-page size per sport per run; clamped to MAX_SEED_PAGE_SIZE. */
@@ -444,6 +536,7 @@ export async function runSportsDataImporter(options?: {
   rowsSkippedByGuard: number
   pagedSeeds: Record<string, PagedSeedTelemetry>
   seedCursors: Record<string, string>
+  injuryCleanup: StoredInjuryCleanup
 }> {
   const targetSports = (options?.sports?.length ? options.sports : SUPPORTED_SPORTS).map((sport) =>
     normalizeToSupportedSport(sport)
@@ -474,6 +567,18 @@ export async function runSportsDataImporter(options?: {
     : {}
   const pagedSeeds: Record<string, PagedSeedTelemetry> = {}
   const seedCursors: Record<string, string> = { ...seedCheckpoints }
+  const injuryCleanup: StoredInjuryCleanup = {
+    unwrittenCleared: {},
+    staleClearedAfterFailure: {},
+    nonDesignationCleared: 0,
+    nonDesignationValues: [],
+    errors: [],
+  }
+  const recordCleanupError = (step: string, error: unknown) => {
+    const message = `${step}: ${error instanceof Error ? error.message : String(error)}`
+    injuryCleanup.errors.push(message)
+    console.error('[sports-data-importer] injury cleanup failed', { step, error: message })
+  }
 
   for (const sport of uniqueSports) {
     /**
@@ -703,6 +808,14 @@ export async function runSportsDataImporter(options?: {
       }
     })
 
+    /*
+     * Captured ONCE, before the first upsert of this sport: every row this run writes is stamped
+     * (by `@updatedAt`) at or after this instant, so "last_updated < writeStartedAt - margin" can
+     * only ever select rows this run did NOT write — whatever the batch count, and without shipping
+     * tens of thousands of written ids back to the database as a NOT IN.
+     */
+    const writeStartedAt = new Date()
+    let upsertSucceeded = false
     try {
       for (const batch of chunk(rows, UPSERT_BATCH_SIZE)) {
         await prisma.$transaction(
@@ -734,8 +847,32 @@ export async function runSportsDataImporter(options?: {
         )
       }
       imported += rows.length
+      upsertSucceeded = true
     } catch (error) {
       staleFallbackApplied = true
+      /*
+       * 🛑 THE FAILURE PATH USED TO LEAVE EVERY DESIGNATION STANDING. A sport whose batch throws
+       * refreshes nothing, and the old catch only relabelled `dataSource` — so a "Questionable"
+       * written weeks ago kept being served as current (391 NFL rows last written 2026-09-28).
+       *
+       * Cleared here: injury fields on rows older than the TTL, i.e. rows that have now missed a
+       * refresh. Rows written by the previous successful run (younger than the TTL) keep theirs —
+       * they carry the same few-hours lag every row has between runs, and clearing them would let one
+       * transient failure wipe a whole sport's designations. Rows written earlier in THIS run are
+       * younger than `writeStartedAt`, hence than the TTL, so they cannot match.
+       *
+       * ⚠ RUNS BEFORE the `dataSource` relabel below, whose `updateMany` bumps `lastUpdated` on the
+       * same rows and would otherwise hide them from this predicate. Roster codes on the remaining
+       * rows are cleared by the run-wide guard at the end of the import.
+       */
+      try {
+        injuryCleanup.staleClearedAfterFailure[sport] = await clearInjuryWrittenBefore(
+          sport,
+          new Date(Date.now() - SPORTS_PLAYER_TTL_MS),
+        )
+      } catch (cleanupError) {
+        recordCleanupError(`${sport} stale-after-failure`, cleanupError)
+      }
       await prisma.sportsPlayerRecord.updateMany({
         where: {
           sport,
@@ -752,6 +889,43 @@ export async function runSportsDataImporter(options?: {
         error: error instanceof Error ? error.message : String(error),
       })
     }
+
+    /*
+     * After a SUCCESSFUL upsert: every row of this sport the run did not write is on no seed this
+     * run produced, so whatever injury it carries was not refreshed — clear it. That covers orphan
+     * ids (e.g. NFL `cached` INACT rows last touched 2026-09-07) and seeds dropped by the schema
+     * guard.
+     *
+     * ⚠ FOR THE PAGED COLLEGE SPORTS THIS INCLUDES ROWS ON LATER PAGES. NCAAF/NCAAB write one page of
+     * the source per run, so a college designation lasts until the next run and then waits for its
+     * page to come round. That is the rule working: a designation nobody refreshed is worse than none.
+     *
+     * Skipped when the sport wrote no rows at all: with nothing written there is no "this run" to
+     * compare against, and clearing the whole sport on an empty seed set is a degraded read, not a
+     * finding. The run-wide guard below still applies.
+     */
+    if (upsertSucceeded && rows.length > 0) {
+      try {
+        injuryCleanup.unwrittenCleared[sport] = await clearInjuryWrittenBefore(
+          sport,
+          new Date(writeStartedAt.getTime() - UNWRITTEN_CUTOFF_MARGIN_MS),
+        )
+      } catch (cleanupError) {
+        recordCleanupError(`${sport} unwritten`, cleanupError)
+      }
+    }
+  }
+
+  /*
+   * Once per run, over ALL sports — including ones skipped for budget or whose upsert failed: no
+   * roster code or free text may sit in the column, whoever wrote it and whenever.
+   */
+  try {
+    const guard = await clearNonDesignationInjuryStatuses()
+    injuryCleanup.nonDesignationCleared = guard.cleared
+    injuryCleanup.nonDesignationValues = guard.values
+  } catch (cleanupError) {
+    recordCleanupError('non-designation guard', cleanupError)
   }
 
   return {
@@ -764,6 +938,7 @@ export async function runSportsDataImporter(options?: {
     rowsSkippedByGuard,
     pagedSeeds,
     seedCursors,
+    injuryCleanup,
   }
 }
 
@@ -800,7 +975,7 @@ export function rosterDesignation(status: string | null | undefined): string | n
  */
 export async function loadCurrentInjuryResolver(
   sport: string,
-): Promise<(seed: { name: string; team?: string | null; position?: string | null; status?: string | null; source?: string | null }) => { status: string | null; notes: string | null }> {
+): Promise<(seed: InjurySeed) => { status: string | null; notes: string | null }> {
   let rows: Array<{ playerName: string; team: string | null; position: string | null; status: string | null; description: string | null; date: Date | null; fetchedAt: Date }> = []
   try {
     rows = await prisma.sportsInjury.findMany({
@@ -813,7 +988,7 @@ export async function loadCurrentInjuryResolver(
     rows = []
   }
   const match = createInjuryRowMatcher(rows, sport)
-  return (seed) => {
+  const resolve = (seed: InjurySeed): { status: string | null; notes: string | null } => {
     const hit = match({ name: seed.name, team: seed.team ?? null, position: seed.position ?? null })
     const newest = hit && 'rows' in hit ? hit.rows[0] ?? null : null
     if (newest) {
@@ -823,5 +998,16 @@ export async function loadCurrentInjuryResolver(
     }
     // A seed invented from an injury report has no roster behind it, so it has no roster status either.
     return { status: seed.source === 'cached' ? null : rosterDesignation(seed.status), notes: null }
+  }
+  /*
+   * Everything this resolver returns is what the importer WRITES, so it passes the same predicate the
+   * column guard applies. `isInjuryDesignation` above only rejects active/healthy/na; a live feed that
+   * publishes anything else verbatim (ESPN keeps unrecognised values) would otherwise land in the
+   * column and be cleared again by the guard six hours later.
+   */
+  return (seed) => {
+    const out = resolve(seed)
+    const stored = storedInjuryFields(out.status, out.notes)
+    return { status: stored.injuryStatus, notes: stored.injuryNotes }
   }
 }
