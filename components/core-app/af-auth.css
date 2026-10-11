@@ -224,6 +224,26 @@
   gap: 12px;
 }
 
+/* Sign-up leads with the social buttons (AuthV4 `lead`): Google, the path that verifies itself,
+   gets the full row; the note keeps the 18+ / not-in-WA facts beside the buttons that skip the form. */
+.af-au-oauth--lead .af-au-oauth-btn:first-child {
+  grid-column: 1 / -1;
+  min-height: 48px;
+  font-size: 14px;
+}
+
+.af-au-oauth-note {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.af-au-oauth-note a {
+  color: var(--text2);
+  text-decoration: underline;
+}
+
 .af-au-divider {
   display: flex;
   align-items: center;
