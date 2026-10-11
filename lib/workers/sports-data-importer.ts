@@ -3,6 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { currentSeasonReportWhere } from '@/lib/injuries/injuryRecency'
+import { createInjuryRowMatcher, isInjuryDesignation } from '@/lib/injuries/matchInjuryRows'
 import { SUPPORTED_SPORTS, normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
 import {
   assertTeamCodeFits,
@@ -532,8 +533,9 @@ export async function runSportsDataImporter(options?: {
          * MLB and NCAAB were all last written 2026-04-26, 135 days before this was
          * added). Unbounded, this read did two damaging things per non-NFL sport:
          *
-         *   - `injuryStatus`/`injuryNotes` below are written from these rows onto
-         *     SportsPlayerRecord, a column carrying NO DATE. A four-month-old
+         *   - `injuryStatus`/`injuryNotes` were written from these rows onto
+         *     SportsPlayerRecord, a column carrying NO DATE (no longer — they now come
+         *     from live SportsInjury rows, see loadCurrentInjuryResolver). A four-month-old
          *     designation became indistinguishable from one taken this morning, and
          *     FantasyValueSnapshotService reads that column FIRST.
          *   - the seed loop further down INVENTS a player from any injury row it
@@ -595,6 +597,8 @@ export async function runSportsDataImporter(options?: {
       else delete seedCursors[sport]
     }
 
+    const currentInjuryOf = await loadCurrentInjuryResolver(sport)
+
     const seedMap = new Map<string, PlayerSeed>()
     for (const seed of [...identitySeeds, ...providerSeeds, ...pagedSportSeeds]) {
       const key = normalizePlayerName(seed.name)
@@ -632,7 +636,6 @@ export async function runSportsDataImporter(options?: {
     const projectionMap = buildProjectionMap(projectionRows)
     const dynastyValueMap = buildDynastyValueMap(rankingRows)
     const statMap = new Map<string, unknown>()
-    const injuryMap = new Map<string, (typeof latestInjuries)[number]>()
     const adpMap = new Map<string, (typeof latestAdp)[number]>()
     const newsMap = new Map<string, Array<(typeof latestNews)[number]>>()
     const trendMap = new Map<string, number>(
@@ -642,10 +645,6 @@ export async function runSportsDataImporter(options?: {
     for (const row of latestStats) {
       const key = normalizePlayerName(row.playerName)
       if (!statMap.has(key)) statMap.set(key, row.stats)
-    }
-    for (const row of latestInjuries) {
-      const key = normalizePlayerName(row.playerName)
-      if (!injuryMap.has(key)) injuryMap.set(key, row)
     }
     for (const row of latestAdp) {
       const key = normalizePlayerName(row.playerName)
@@ -660,7 +659,7 @@ export async function runSportsDataImporter(options?: {
 
     const rows = keySeedsToSleeperIdentity(sport, Array.from(seedMap.values()), sleeperIdOwners).flatMap((seed) => {
       const key = normalizePlayerName(seed.name)
-      const injury = injuryMap.get(key)
+      const injury = currentInjuryOf(seed)
       const adp = adpMap.get(key)
       const trendScore = trendMap.get(adp?.playerId ?? '')
       const projections = projectionMap.get(key) ?? {}
@@ -688,8 +687,8 @@ export async function runSportsDataImporter(options?: {
           dynastyValue:
             dynastyValueMap.get(key) ??
             (typeof trendScore === 'number' ? Math.round(clamp(50 + trendScore, 0, 100)) : null),
-          injuryStatus: injury?.status?.slice(0, 32) ?? seed.status?.slice(0, 32) ?? null,
-          injuryNotes: injury?.notes ?? null,
+          injuryStatus: injury.status?.slice(0, 32) ?? null,
+          injuryNotes: injury.notes,
           news,
           dataSource: (projectionMap.has(key) ? projectionsResponse.source : seed.source).slice(0, 32),
         }]
@@ -765,5 +764,64 @@ export async function runSportsDataImporter(options?: {
     rowsSkippedByGuard,
     pagedSeeds,
     seedCursors,
+  }
+}
+
+/**
+ * A ROSTER status that is also an availability designation. Everything else Sleeper and Rolling
+ * Insights put in `status` — "Active", "Inactive", "Practice Squad", RI's "ACT"/"INACT" — is roster
+ * bookkeeping, not an injury, and is never written as one.
+ */
+export function rosterDesignation(status: string | null | undefined): string | null {
+  const t = String(status ?? '').trim().toLowerCase()
+  if (!t) return null
+  if (t === 'ir' || t.includes('injured reserve')) return 'IR'
+  if (t === 'pup' || t.includes('physically unable')) return 'PUP'
+  if (t === 'nfi' || t.includes('non football') || t.includes('non-football')) return 'NFI'
+  if (t.startsWith('suspen') || t === 'sus') return 'Suspended'
+  return null
+}
+
+/**
+ * `SportsPlayerRecord.injuryStatus` for one seed: the athlete's newest claim on a live injury feed,
+ * else his roster designation (IR / PUP / NFI / Suspended), else null.
+ *
+ * 🛑 THIS COLUMN USED TO COME FROM `injury_reports` AND THE SEED'S ROSTER STATUS (2026-10-11), AND
+ * IT WAS WRONG FOR THOUSANDS OF PLAYERS. Measured that day against live `SportsInjury`:
+ *   - `injury_reports` is written for NFL only by the news pass, which can say Out/Questionable but
+ *     never "cleared" — 295 players still carried a "Questionable" no feed reported any more, and 84
+ *     read Questionable while ESPN had them Active (DeForest Buckner, Justice Hill…);
+ *   - the seed fallback wrote Rolling Insights' roster codes as designations — 10,283 "INACT" rows,
+ *     including Malik Nabers while ESPN had him Active — plus Sleeper's "Inactive" for free agents;
+ *   - name-keyed, first row wins, so namesakes swapped statuses.
+ * League rosters, the draft room, value snapshots, trending and Chimmy all read this column. The
+ * live feeds are refreshed every 30 minutes and this importer every 6 hours, so it can lag a live
+ * change by a few hours — but it can no longer assert a designation nobody is reporting.
+ */
+export async function loadCurrentInjuryResolver(
+  sport: string,
+): Promise<(seed: { name: string; team?: string | null; position?: string | null; status?: string | null; source?: string | null }) => { status: string | null; notes: string | null }> {
+  let rows: Array<{ playerName: string; team: string | null; position: string | null; status: string | null; description: string | null; date: Date | null; fetchedAt: Date }> = []
+  try {
+    rows = await prisma.sportsInjury.findMany({
+      where: { sport, expiresAt: { gt: new Date() } },
+      select: { playerName: true, team: true, position: true, status: true, description: true, date: true, fetchedAt: true },
+      orderBy: { fetchedAt: 'desc' },
+      take: 5000,
+    })
+  } catch {
+    rows = []
+  }
+  const match = createInjuryRowMatcher(rows, sport)
+  return (seed) => {
+    const hit = match({ name: seed.name, team: seed.team ?? null, position: seed.position ?? null })
+    const newest = hit && 'rows' in hit ? hit.rows[0] ?? null : null
+    if (newest) {
+      return isInjuryDesignation(newest.status)
+        ? { status: newest.status, notes: newest.description?.trim() || null }
+        : { status: null, notes: null }
+    }
+    // A seed invented from an injury report has no roster behind it, so it has no roster status either.
+    return { status: seed.source === 'cached' ? null : rosterDesignation(seed.status), notes: null }
   }
 }
