@@ -30,7 +30,11 @@ import { NextResponse } from "next/server";
 import { requireCronAuth } from "@/app/api/cron/_auth";
 import { prisma } from "@/lib/prisma";
 import { createBatchPlayerHeadshotResolver } from "@/lib/player-assets/resolvePlayerHeadshot";
-import { PLAYER_IMAGE_TYPE_HEADSHOT } from "@/lib/player-assets/playerImageStore";
+import { Prisma } from "@prisma/client";
+import {
+  NAME_SEARCH_RESOLVER_PROVIDERS,
+  PLAYER_IMAGE_TYPE_HEADSHOT,
+} from "@/lib/player-assets/playerImageStore";
 import {
   TEAM_IMAGE_TYPE_LOGO,
   writePrimaryTeamImage,
@@ -502,7 +506,17 @@ async function handle(req: NextRequest) {
             sportKey: sport,
             imageType: PLAYER_IMAGE_TYPE_HEADSHOT,
             isPrimary: true,
-            expiresAt: { lt: new Date() },
+            // Aged out, OR written by the pre-2026-10-11 resolver (unstamped): readers no longer
+            // serve those, so re-resolve them here rather than waiting up to 14 days for expiry.
+            OR: [
+              { expiresAt: { lt: new Date() } },
+              {
+                provider: { in: [...NAME_SEARCH_RESOLVER_PROVIDERS] },
+                // The stamp is the only thing ever written to raw_payload for these providers,
+                // so SQL NULL is exactly "unstamped". (A `NOT path-equals` would drop NULL rows.)
+                rawPayload: { equals: Prisma.DbNull },
+              },
+            ],
           },
           take: limit,
           orderBy: { expiresAt: "asc" },

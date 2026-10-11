@@ -48,6 +48,7 @@ import { prisma } from '@/lib/prisma'
 import {
   PLAYER_IMAGE_TYPE_HEADSHOT,
   readPrimaryPlayerImage,
+  servedPlayerImageUrl,
   type StoredPlayerImage,
 } from '@/lib/player-assets/playerImageStore'
 import { readPrimaryTeamImage, type StoredTeamImage } from '@/lib/sport-teams/teamImageStore'
@@ -444,13 +445,14 @@ export async function getCanonicalPlayersBySleeperIds(
           imageType: PLAYER_IMAGE_TYPE_HEADSHOT,
           isPrimary: true,
         },
-        select: { playerId: true, url: true },
+        // provider + rawPayload decide whether the row is trusted; see servedPlayerImageUrl.
+        select: { playerId: true, url: true, provider: true, rawPayload: true },
       }),
     ])
 
     const byId = new Map(players.map((p) => [p.id, p]))
     const imageById = new Map(
-      images.filter((i) => i.playerId).map((i) => [i.playerId as string, i.url]),
+      images.filter((i) => i.playerId).map((i) => [i.playerId as string, i]),
     )
 
     for (const identity of identities) {
@@ -466,7 +468,7 @@ export async function getCanonicalPlayersBySleeperIds(
         team: player.team,
         active: player.active,
         injuryStatus: player.injuryStatus ?? null,
-        imageUrl: imageById.get(player.id) ?? player.imageUrl ?? null,
+        imageUrl: servedPlayerImageUrl(imageById.get(player.id), player.imageUrl),
       })
 
       if (opts.maxAgeMs !== undefined) {
@@ -548,7 +550,8 @@ export async function getCanonicalPlayerMapForSport(
 
   const byId = new Map(players.map((p) => [p.id, p]))
 
-  let imageById = new Map<string, string>()
+  type PrimaryImageRow = { url: string; provider: string | null; rawPayload: unknown }
+  let imageById = new Map<string, PrimaryImageRow>()
   if (opts.includeImages) {
     const images = await prisma.playerImage.findMany({
       where: {
@@ -556,9 +559,10 @@ export async function getCanonicalPlayerMapForSport(
         imageType: PLAYER_IMAGE_TYPE_HEADSHOT,
         isPrimary: true,
       },
-      select: { playerId: true, url: true },
+      // provider + rawPayload decide whether the row is trusted; see servedPlayerImageUrl.
+      select: { playerId: true, url: true, provider: true, rawPayload: true },
     })
-    imageById = new Map(images.filter((i) => i.playerId).map((i) => [i.playerId as string, i.url]))
+    imageById = new Map(images.filter((i) => i.playerId).map((i) => [i.playerId as string, i]))
   }
 
   const now = Date.now()
@@ -577,7 +581,9 @@ export async function getCanonicalPlayerMapForSport(
       team: player.team,
       active: player.active,
       injuryStatus: player.injuryStatus ?? null,
-      imageUrl: imageById.get(player.id) ?? player.imageUrl ?? null,
+      imageUrl: opts.includeImages
+        ? servedPlayerImageUrl(imageById.get(player.id), player.imageUrl)
+        : player.imageUrl ?? null,
     })
 
     if (opts.maxAgeMs !== undefined) {

@@ -1,4 +1,5 @@
 import { toImageUrl } from '@/lib/media/imageUrl'
+import { TRUSTED_PLAYER_IMAGE_WHERE } from '@/lib/player-assets/playerImageStore'
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
@@ -104,6 +105,8 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
           where: {
             playerId: { in: playerIds },
             isPrimary: true,
+            // Never serve a row the pre-2026-10-11 name-search resolver wrote.
+            ...TRUSTED_PLAYER_IMAGE_WHERE,
           },
           select: {
             playerId: true,

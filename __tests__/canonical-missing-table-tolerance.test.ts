@@ -39,9 +39,11 @@ const { prismaMock, mode } = vi.hoisted(() => {
 
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 // The image/headshot deps do their own DB work; stub so the test isolates the canonical reads.
-vi.mock('@/lib/player-assets/playerImageStore', () => ({
+vi.mock('@/lib/player-assets/playerImageStore', async (importOriginal) => ({
   PLAYER_IMAGE_TYPE_HEADSHOT: 'headshot',
   readPrimaryPlayerImage: vi.fn(async () => null),
+  // Pure: decides which image URL a batch read serves. Kept real so the mock tracks the contract.
+  servedPlayerImageUrl: (await importOriginal<typeof import('@/lib/player-assets/playerImageStore')>()).servedPlayerImageUrl,
 }))
 vi.mock('@/lib/sport-teams/teamImageStore', () => ({ readPrimaryTeamImage: vi.fn(async () => null) }))
 vi.mock('@/lib/player-assets/resolvePlayerHeadshot', () => ({ resolvePlayerHeadshot: vi.fn(async () => null) }))

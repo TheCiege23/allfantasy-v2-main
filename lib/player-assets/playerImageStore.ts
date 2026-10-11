@@ -31,6 +31,7 @@
  *      So the write below verifies the row exists rather than trusting the id's shape.
  */
 
+import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 
 /** `image_type` discriminator for a player headshot. */
@@ -43,6 +44,91 @@ export const PLAYER_IMAGE_TYPE_HEADSHOT = 'headshot'
  * served if re-resolution fails (see `resolvePlayerHeadshot`).
  */
 export const PLAYER_IMAGE_TTL_MS = 14 * 24 * 60 * 60 * 1000
+
+/*
+ * ── Retiring rows written by the name-search resolver before 2026-10-11 ─────────────────────
+ *
+ * 🛑 THOSE ROWS CANNOT BE TRUSTED, AND THEY ARE NOT DELETED — THEY ARE NOT SERVED.
+ * Until 2026-10-11 `resolvePlayerHeadshot` could bind a namesake's photo: its NFL canonical tier
+ * took the first TheSportsDB search hit across every sport, and its `SportsPlayer` tier took a row
+ * agreeing on team OR position, then any row at all. Each result was persisted here as the
+ * player's primary image, so the wrong face outlived the bug by up to the 14-day TTL — and past it,
+ * since a stale row is served when re-resolution comes back empty.
+ *
+ * The broken resolver is the ONLY writer of the provider values below; the other writer
+ * (`writeCanonicalHeadshot`, identity-verified, `provider: 'espn'` today) is untouched. Rows from
+ * the fixed resolver carry `rawPayload.headshotResolver = HEADSHOT_RESOLVER_VERSION`, which
+ * nothing wrote before. So a row from one of these providers WITHOUT that stamp came from the
+ * broken resolver: readers treat it as absent, the resolver re-resolves through the fixed path,
+ * and the rewrite stamps it. Measured 2026-10-11: 5,293 primary rows (6,035 in all) retire;
+ * every `espn` row (6,539) is unaffected.
+ *
+ * ⚠ A version stamp, not a write-time cutoff, on purpose: rows the OLD code writes between this
+ * commit and its deploy would carry a post-cutoff `fetchedAt` and be trusted. Nothing but the new
+ * code writes the stamp. No schema change: `raw_payload` is an existing nullable JSON column that
+ * was NULL on every row when measured.
+ */
+export const HEADSHOT_RESOLVER_VERSION = 'v2'
+
+/** Provider values written only by `resolvePlayerHeadshot` (its `HeadshotProvider` tiers). */
+export const NAME_SEARCH_RESOLVER_PROVIDERS = [
+  'sportsdb',
+  'sportsplayer',
+  'apisports',
+  'sleeper',
+  'clearsports',
+  'none',
+] as const
+
+/** The `rawPayload` the fixed resolver stamps onto every row it writes. */
+export function headshotResolverStamp(): { headshotResolver: string } {
+  return { headshotResolver: HEADSHOT_RESOLVER_VERSION }
+}
+
+/**
+ * Prisma `where` fragment for rows a reader may serve. Spread it into any `playerImage` query
+ * that reads a URL; a reader without it re-opens the poisoned cache.
+ */
+export const TRUSTED_PLAYER_IMAGE_WHERE: Prisma.PlayerImageWhereInput = {
+  OR: [
+    { provider: null },
+    { provider: { notIn: [...NAME_SEARCH_RESOLVER_PROVIDERS] } },
+    { rawPayload: { path: ['headshotResolver'], equals: HEADSHOT_RESOLVER_VERSION } },
+  ],
+}
+
+/** In-memory twin of `TRUSTED_PLAYER_IMAGE_WHERE`, for rows already loaded. */
+export function isTrustedPlayerImageRow(row: { provider?: string | null; rawPayload?: unknown }): boolean {
+  if (!row.provider) return true
+  if (!(NAME_SEARCH_RESOLVER_PROVIDERS as readonly string[]).includes(row.provider)) return true
+  const payload = row.rawPayload
+  return Boolean(
+    payload &&
+      typeof payload === 'object' &&
+      !Array.isArray(payload) &&
+      (payload as Record<string, unknown>).headshotResolver === HEADSHOT_RESOLVER_VERSION,
+  )
+}
+
+/**
+ * The image URL a batch reader should serve for one player, given his primary `PlayerImage` row
+ * (if any) and the denormalised `Player.imageUrl`.
+ *
+ * ⚠ FILTERING `PlayerImage` ALONE DOES NOT RETIRE A ROW. The image cron copies every resolution
+ * into `Player.imageUrl` too — measured 2026-10-11, all 5,293 retired primaries had an identical
+ * `Player.imageUrl` — and the batch readers fall back to that column. So a retired row also
+ * suppresses `Player.imageUrl` when it is the same URL; a different URL came from elsewhere.
+ */
+export function servedPlayerImageUrl(
+  primary: { url: string; provider?: string | null; rawPayload?: unknown } | null | undefined,
+  playerImageUrl: string | null | undefined,
+): string | null {
+  if (primary) {
+    if (isTrustedPlayerImageRow(primary)) return primary.url
+    return playerImageUrl && playerImageUrl !== primary.url ? playerImageUrl : null
+  }
+  return playerImageUrl ?? null
+}
 
 export interface StoredPlayerImage {
   url: string
@@ -66,6 +152,11 @@ export interface WritePlayerImageArgs {
   /** 0–1 confidence. The resolver's categorical confidence is mapped by the caller. */
   confidence?: number | null
   ttlMs?: number
+  /**
+   * Stored in `raw_payload`. `resolvePlayerHeadshot` passes `headshotResolverStamp()`, which is
+   * what marks its rows as trusted; omitted, the column is left as it was.
+   */
+  rawPayload?: Record<string, unknown> | null
   /** Injectable for tests. */
   now?: Date
 }
@@ -102,7 +193,8 @@ export async function readPrimaryPlayerImage(args: {
 
   try {
     const row = await prisma.playerImage.findFirst({
-      where: { playerId, imageType },
+      // Rows the pre-2026-10-11 resolver wrote are not served; see TRUSTED_PLAYER_IMAGE_WHERE.
+      where: { playerId, imageType, ...TRUSTED_PLAYER_IMAGE_WHERE },
       orderBy: [{ isPrimary: 'desc' }, { fetchedAt: 'desc' }],
       select: { url: true, provider: true, confidence: true, fetchedAt: true, expiresAt: true },
     })
@@ -175,6 +267,7 @@ export async function writePrimaryPlayerImage(
         fetchedAt: now,
         lastSeenAt: now,
         expiresAt,
+        ...(args.rawPayload ? { rawPayload: args.rawPayload as Prisma.InputJsonObject } : {}),
       }
 
       if (existing) {
