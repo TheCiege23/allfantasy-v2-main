@@ -33,10 +33,10 @@
  * Decision OS F2.2/F2.3 read-only world layers (`resolveScheduleContext`,
  * `resolveInjuryContext`) rather than the raw `InjuryReportRecord.playerId`
  * join `userOsContext.ts` uses — that join keys on an API-Sports id space
- * documented (`ADR_F2_3_INJURY_STATUS.md`) to NOT match roster player ids;
- * the Decision OS layer already exists specifically to route around that
- * mismatch via `SportsPlayer.status`, keyed by either `externalId` or
- * `sleeperId`.
+ * documented (`ADR_F2_3_INJURY_STATUS.md`) to NOT match roster player ids.
+ * `resolveInjuryContext` resolves a Sleeper id to the player's identity and
+ * asks the injury FEED for his current designation (2026-10-11) — it no
+ * longer reads `SportsPlayer.status`, which is a roster status.
  */
 import { prisma } from '@/lib/prisma'
 import { OVEREXPOSED_THRESHOLD } from './exposureThreshold'
@@ -147,6 +147,8 @@ function designationToInjuryStatus(status: string | null): InjuryStatus {
  */
 const FALLBACK_GENUINE_INJURY_TOKENS: Record<string, InjuryStatus> = {
   ir: 'ir',
+  // Sleeper's own season-scale roster absence, the one roster status `resolveInjuryContext` passes on.
+  'injured reserve': 'ir',
   pup: 'ir',
   o: 'out',
   out: 'out',
@@ -468,8 +470,8 @@ export async function assembleCrossLeaguePlayerPortfolio(args: {
   }
 
   // Slice 18 — the canonical injury read port is the PRIMARY injury source.
-  // `SportsPlayerRecord.injuryStatus` (what `resolveInjuryContext` reads) was
-  // measured in prod to be ~92% roster designation: the entire NFL carried ONE
+  // `SportsPlayerRecord.injuryStatus` (what `resolveInjuryContext` read until
+  // 2026-10-11) was measured in prod to be ~92% roster designation: the entire NFL carried ONE
   // 'Out' while Rolling Insights reported 311 live injuries, so urgency was
   // effectively blind. Position/team are passed for disambiguation only —
   // ambiguous name collisions are refused by the port and reported on the

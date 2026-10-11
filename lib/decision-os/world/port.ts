@@ -606,7 +606,9 @@ export async function loadScheduleGameRows(
  * READ-ONLY injury-context read for the F2.3 injury/availability enrichment seam.
  *
  * Reads the SAME SportsPlayer cache as F2.1 player metadata but selects freshness fields
- * (fetchedAt / expiresAt / updatedAt) that the F2.1 read does not include. One `findMany` only —
+ * (fetchedAt / expiresAt / updatedAt) that the F2.1 read does not include, plus the IDENTITY
+ * (name / team / position) the injury feed is matched on — `status` here is a ROSTER status, never
+ * the designation (see `resolveInjuryContext`). One `findMany` only —
  * no writes, no cache warming, no live API calls. Freshest row per id wins (orderBy fetchedAt desc).
  */
 export async function loadInjuryContextRows(
@@ -630,6 +632,9 @@ export async function loadInjuryContextRows(
       fetchedAt: true,
       expiresAt: true,
       updatedAt: true,
+      name: true,
+      team: true,
+      position: true,
     },
   })
   const claimed = new Set<string>()
@@ -651,6 +656,9 @@ export async function loadInjuryContextRows(
             fetchedAt: true,
             expiresAt: true,
             updatedAt: true,
+            name: true,
+            team: true,
+            position: true,
           },
         })
       : []
@@ -664,6 +672,9 @@ export async function loadInjuryContextRows(
       fetchedAt: Date
       expiresAt: Date
       updatedAt: Date
+      name?: string | null
+      team?: string | null
+      position?: string | null
     }) => ({
       externalId: row.externalId,
       sleeperId: row.sleeperId ?? null,
@@ -672,6 +683,9 @@ export async function loadInjuryContextRows(
       fetchedAt: row.fetchedAt ?? null,
       expiresAt: row.expiresAt ?? null,
       updatedAt: row.updatedAt ?? null,
+      name: row.name ?? null,
+      team: row.team ?? null,
+      position: row.position ?? null,
     }),
   )
 }
