@@ -23,6 +23,8 @@ import {
   type SimTeam,
 } from './outlookSim'
 import { readPlayoffFormat, type FormatSource } from './outlookFormat'
+import { liveWeeks, withLiveScores } from './outlookLiveShare'
+import { lineupShareKey, loadLineupShares, type LineupShareTarget } from './outlookLiveWeekLoader'
 import {
   computeLeagueSim,
   leagueSimCost,
@@ -701,7 +703,39 @@ export async function loadOutlookInputs(userId: string, leagues: LeagueInput[], 
     })
   }
 
+  await attachLiveBoards(prepared, sportOf)
   return { prepared, withheld, nameByRoster, myRosters, sportOf }
+}
+
+/**
+ * A week under way enters the simulation as its board: points already scored, plus a draw for each
+ * lineup's share still to play (`withLiveScores`). NFL only — the starter game states come from the
+ * NFL schedule. A league-week that cannot be read keeps the old whole-week draw and says so.
+ *
+ * Here rather than at the page, because the scheduled pre-compute reads through this same function:
+ * the two must never hash different inputs for the same league.
+ */
+async function attachLiveBoards(prepared: Prepared[], sportOf: ReadonlyMap<string, string>): Promise<void> {
+  const targets = new Map<Prepared, LineupShareTarget[]>()
+  for (const p of prepared) {
+    const platformLeagueId = p.league.platformLeagueId
+    if (!platformLeagueId || String(sportOf.get(p.league.id) ?? p.league.sport ?? '').toUpperCase() !== 'NFL') continue
+    const weeks = liveWeeks(p.sim.remaining, p.unscored)
+    if (weeks.length) targets.set(p, weeks.map((week) => ({ platformLeagueId, season: p.season, week })))
+  }
+  if (targets.size === 0) return
+  const shares = await loadLineupShares([...targets.values()].flat())
+  for (const [p, list] of targets) {
+    const key = new Map(list.map((t) => [t.week, lineupShareKey(t)]))
+    const { games, attached, unread } = withLiveScores(p.sim.remaining, p.unscored, (week, rosterId) => shares.get(key.get(week) ?? '')?.get(rosterId))
+    p.sim = { ...p.sim, remaining: games }
+    for (const w of new Set(attached)) {
+      p.missing.push(`Week ${w} is under way: points already scored count, and only the share of each lineup still to play is simulated (a starter whose game cannot be read counts as still to play).`)
+    }
+    for (const w of new Set(unread)) {
+      p.missing.push(`Week ${w} has started, but not every lineup could be read starter by starter, so those games are simulated as if unplayed.`)
+    }
+  }
 }
 
 export async function getSeasonOutlook(
