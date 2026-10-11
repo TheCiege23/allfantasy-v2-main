@@ -5,6 +5,8 @@ import { prisma } from '@/lib/prisma'
 import { looksLikeSleeperExternalId } from '@/lib/draft-sports-models/player-asset-resolver'
 import { sleeperHeadshotUrl } from '@/lib/player-media-urls'
 import { sleeperIdWhere } from '@/lib/player-identity/externalIdNamespace'
+import { buildNameIndex, normalizeMatchName, resolveVerifiedMatch } from '@/lib/player-match/verifiedNameMatch'
+import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 
 /**
  * SLEEPER PLAYER ID -> CANONICAL IDENTITY.
@@ -66,6 +68,58 @@ export type SleeperCrosswalkResult = {
 
 /** Guards the `IN` clauses; a trade or roster never legitimately exceeds this. */
 const MAX_IDS = 300
+
+/**
+ * 🛑 A NAME IS NOT A ROW (2026-10-11). Both name hops below used to build
+ * `new Map(rows.map(r => [name.toLowerCase(), r]))` — LAST row wins — over a `Player` table that
+ * holds Justin Jefferson twice (WR/MIN, LB/CLE), Lamar Jackson twice (QB/BAL, CB) and Josh Allen
+ * twice (QB/BUF, G). So the receiver could carry the linebacker's canonical id and headshot.
+ *
+ * Now: a name shared by several rows binds only when position and/or team single one out
+ * (`resolveVerifiedMatch`), and a LONE row whose side of the ball contradicts the asker's is
+ * refused too. Teams are compared as NFL abbreviations, because `SportsPlayer`'s Sleeper rows
+ * spell them out ("Philadelphia Eagles") where `Player` writes `PHI`.
+ */
+type CanonicalRow = { id?: string; name: string; imageUrl: string | null; position: string | null; team: string | null }
+
+function teamKey(team: string | null | undefined, sport: string): string | null {
+  const t = String(team ?? '').trim()
+  if (!t) return null
+  return sport.toUpperCase() === 'NFL' ? normalizeTeamAbbrev(t) : t.toUpperCase()
+}
+
+function canonicalIndex<T extends CanonicalRow>(rows: T[], sport: string) {
+  return buildNameIndex(rows.map((r) => ({ ...r, team: teamKey(r.team, sport), row: r })))
+}
+
+function matchCanonical<T extends CanonicalRow>(
+  index: ReturnType<typeof canonicalIndex<T>>,
+  lookup: { name: string; position?: string | null; team?: string | null },
+  sport: string,
+): T | null {
+  const bucket = index.get(normalizeMatchName(lookup.name)) ?? []
+  /*
+   * A lone row is checked for side of ball only: `Player.team` lags trades, and a stale team on
+   * the one row the name has is not evidence of a different man. A collision uses both.
+   */
+  const verifying =
+    bucket.length === 1
+      ? { name: lookup.name, position: lookup.position ?? null }
+      : { name: lookup.name, position: lookup.position ?? null, team: teamKey(lookup.team, sport) }
+  const m = resolveVerifiedMatch(index, verifying, { refuseContradictedSingle: true })
+  return m.match ? m.match.row : null
+}
+
+/** One player to find an image for. A bare string is a name with nothing to verify it by. */
+export type PlayerImageLookup = string | { name: string; position?: string | null; team?: string | null }
+
+/** The key `resolveImagesByPlayerName` stores a lookup's image under. */
+export function playerImageKey(lookup: PlayerImageLookup): string {
+  const l = typeof lookup === 'string' ? { name: lookup } : lookup
+  const pos = String(l.position ?? '').trim().toUpperCase()
+  const team = String(l.team ?? '').trim().toUpperCase()
+  return pos || team ? `${l.name.toLowerCase()}|${pos}|${team}` : l.name.toLowerCase()
+}
 
 function emptyIdentity(sleeperId: string, sport: string): SleeperPlayerIdentity {
   return {
@@ -179,13 +233,17 @@ export async function resolveSleeperPlayerIdentities(
         select: { id: true, name: true, imageUrl: true, position: true, team: true },
       })
       /*
-       * Lower-cased because the two tables were populated by different pipelines
-       * and their casing does not always agree; a case-only mismatch would drop a
-       * player who is in fact present.
+       * Normalised (case, accents, punctuation) because the two tables were populated by
+       * different pipelines and their spelling does not always agree — and verified by
+       * position/team, because a shared name is several rows. See `matchCanonical`.
        */
-      const canonical = new Map(rows.map((r) => [r.name.toLowerCase(), r]))
+      const index = canonicalIndex(rows, sport)
       for (const entry of named) {
-        const hit = canonical.get((entry.name as string).toLowerCase())
+        const hit = matchCanonical(
+          index,
+          { name: entry.name as string, position: entry.position, team: entry.team },
+          sport,
+        )
         if (!hit) continue
         entry.canonicalPlayerId = hit.id
         entry.position = entry.position ?? hit.position ?? null
@@ -210,25 +268,31 @@ export async function resolveSleeperPlayerIdentities(
  *
  * Worth its own entry point because the name hop is the strong one: 191 of 214
  * roster names reach a canonical row, and every one of those rows has an image.
- * Returns a lower-cased-name map; misses are simply absent, never a placeholder.
+ * Read the result with `playerImageKey(lookup)`; misses are simply absent, never a
+ * placeholder.
+ *
+ * 🛑 PASS POSITION AND TEAM. A bare name shared by several `Player` rows gets NO image — the
+ * initials fallback is honest, another man's face is not.
  */
 export async function resolveImagesByPlayerName(
-  names: string[],
+  lookups: PlayerImageLookup[],
   sport: string,
 ): Promise<Map<string, string>> {
   const out = new Map<string, string>()
-  const wanted = [...new Set(names.filter((n) => typeof n === 'string' && n.trim().length > 0))].slice(
-    0,
-    MAX_IDS,
-  )
+  const wanted = lookups
+    .map((l) => (typeof l === 'string' ? { name: l } : l))
+    .filter((l) => typeof l.name === 'string' && l.name.trim().length > 0)
+    .slice(0, MAX_IDS)
   if (wanted.length === 0) return out
   try {
     const rows = await prisma.player.findMany({
-      where: { name: { in: wanted }, sport: { equals: sport, mode: 'insensitive' } },
-      select: { name: true, imageUrl: true },
+      where: { name: { in: [...new Set(wanted.map((l) => l.name))] }, sport: { equals: sport, mode: 'insensitive' } },
+      select: { name: true, imageUrl: true, position: true, team: true },
     })
-    for (const r of rows) {
-      if (r.imageUrl) out.set(r.name.toLowerCase(), r.imageUrl)
+    const index = canonicalIndex(rows, sport)
+    for (const lookup of wanted) {
+      const hit = matchCanonical(index, lookup, sport)
+      if (hit?.imageUrl) out.set(playerImageKey(lookup), hit.imageUrl)
     }
   } catch {
     // No image is a legitimate outcome; the UI falls back to initials.
