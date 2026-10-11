@@ -153,6 +153,8 @@ import { c2cScoreModeChip, c2cSportPairShort } from '@/lib/c2c/c2cUiLabels'
 import { RenewLeagueBanner } from '@/components/league/RenewLeagueBanner'
 import { ShadowLeagueBanner } from '@/components/league/ShadowLeagueBanner'
 import { PostCreateSetupGuideBanner } from '@/components/league/PostCreateSetupGuideBanner'
+import { CommissionerSetupChecklist } from '@/components/league/CommissionerSetupChecklist'
+import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { LeagueConceptIntroGate } from '@/components/league/LeagueConceptIntroGate'
 import { useMyLeaguesRailCollapse } from '@/hooks/useMyLeaguesRailCollapse'
 import { SpecialtyLeagueAtmosphere } from '@/components/league-atmosphere/SpecialtyLeagueAtmosphere'
@@ -1480,7 +1482,9 @@ export function LeagueShell({
               </div>
             ) : null}
 
-            {isCommissioner && createdFromLeagueCreate ? (
+            {isCommissioner && isPredraftLifecycle && isNativePlatform(league.platform) ? (
+              <CommissionerSetupChecklist key={league.id} leagueId={league.id} settingsOpen={settingsOpen} onOpenSettings={openLeagueSettingsModal} />
+            ) : isCommissioner && createdFromLeagueCreate ? (
               <Suspense fallback={null}>
                 <PostCreateSetupGuideBanner leagueId={league.id} isCommissioner={isCommissioner} />
               </Suspense>
