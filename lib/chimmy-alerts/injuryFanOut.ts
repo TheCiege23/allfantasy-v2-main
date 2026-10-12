@@ -6,6 +6,7 @@ import { lineupFixLink, waiverClaimLink, type LinkLeague } from '@/lib/core-app/
 import { weekKickoffs } from '@/lib/core-app/playerGame'
 import { getPlayerImpact } from '@/lib/core-app/playerImpact'
 import { resolveSportsWeek } from '@/lib/core-app/sportsWeek'
+import { selectAuthoritativePlayerRow } from '@/lib/player-match/authoritativePlayerRow'
 import type { FanOutAlert, FanOutLeague } from './injuryFanOutCopy'
 import { pickFreeAgent, type FreeAgentPick } from './freeAgentFallback'
 
@@ -103,7 +104,20 @@ export async function buildFanOutLeagues(userId: string, group: readonly FanOutA
       (async () => {
         const [impacts, player] = await Promise.all([
           getPlayerImpact(sleeperId, userId, { leagueIds }),
-          prisma.sportsPlayer.findFirst({ where: { sleeperId }, select: { team: true } }).catch(() => null),
+          /*
+           * 🛑 THE SLEEPER ROW'S TEAM, NOT WHICHEVER ROW COMES BACK FIRST (2026-10-12). An unordered
+           * findFirst on `sleeperId` picks among one row per ingest source, and the non-Sleeper rows
+           * got that id by a name match: on production that day 5864 is CB Byron Murphy (MIN) on its
+           * Sleeper row and DT Byron Murphy (SEA) on TheSportsDB's — so the corner's kickoff lock
+           * could be read off the Seahawks' game.
+           */
+          prisma.sportsPlayer
+            .findMany({
+              where: { sport: 'NFL', sleeperId },
+              select: { source: true, sleeperId: true, name: true, position: true, team: true, fetchedAt: true },
+            })
+            .then((rows) => selectAuthoritativePlayerRow(rows)?.row ?? null)
+            .catch(() => null),
         ])
         const out = new Map<string, string | null>()
         for (const impact of impacts) {
