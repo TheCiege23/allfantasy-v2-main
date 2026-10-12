@@ -18,7 +18,9 @@ vi.mock('@/components/create-league-v2/CreateLeagueVideoTile', () => ({
   ),
 }))
 
-import { DraftStep, LeagueBasicsStep, ReviewCreateStep } from '@/components/create-league-v2/CreateLeagueWizard'
+import { DraftStep, LeagueBasicsStep, ReviewCreateStep, freshCreateLeagueState } from '@/components/create-league-v2/CreateLeagueWizard'
+import { submitCreateLeagueV2 } from '@/lib/create-league-v2/submit'
+import { validateCreatePayload } from '@/lib/league-creation/canonical/validateCreateLeague'
 
 const ids = (group: HTMLElement) =>
   within(group).getAllByRole('button').map((b) => b.getAttribute('data-testid')!.replace('g30-league-type-', ''))
@@ -52,6 +54,31 @@ describe('specialty formats lead the Basics step', () => {
     render(<LeagueBasicsStep state={state} onChange={onChange} fieldErrors={null} />)
     fireEvent.click(screen.getByTestId('g30-league-type-survivor'))
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ leagueType: 'survivor' }))
+  })
+})
+
+describe('a fresh create starts on Survivor', () => {
+  it('starts on Survivor with a draft type, team size and preset Survivor accepts', async () => {
+    const fresh = freshCreateLeagueState(DEFAULT_V2_STATE)
+    expect(fresh.leagueType).toBe('survivor')
+    // Only the manager's own inputs are missing — nothing left over from Redraft blocks it.
+    const codes = analyzeCreateLeagueCompletion(fresh).map((i) => i.code).sort()
+    expect(codes).toEqual(['draft_date_required', 'draft_time_required', 'league_name_invalid'])
+
+    const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ success: true, league: { id: 'l1' }, homepageUrl: '/league/l1' }) }) as Response)
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      await submitCreateLeagueV2({ ...fresh, name: 'Island League', nameTouched: true, draftScheduleLater: true })
+      const body = JSON.parse(String((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body)) as Record<string, unknown>
+      expect(body.concept).toBe('survivor')
+      expect(validateCreatePayload(body).ok).toBe(true)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('a sport without Survivor starts on Redraft', () => {
+    expect(freshCreateLeagueState({ ...DEFAULT_V2_STATE, sport: 'MLB' }).leagueType).toBe('redraft')
   })
 })
 
