@@ -10,7 +10,7 @@ import type { LiveEvent } from '@/lib/live/eventDetector'
  */
 import { getPrimaryLogoUrlForTeam } from '@/lib/sport-teams/SportTeamMetadataRegistry'
 import { headshotUrl } from '@/lib/media-url'
-import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
+import { normalizePlayerName, normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { buildNameIndex, normalizeMatchName, resolveVerifiedMatch } from '@/lib/player-match/verifiedNameMatch'
 import { displayPlayName, isShortFormName } from '@/lib/player-match/displayNameCasing'
 
@@ -151,7 +151,17 @@ async function resolveHeadshots(
    * identity carries that name — two namesakes, a short form ("A.St"), or a single-word name resolve
    * to nothing. Looked up on the indexed `normalizedName` column and RE-CHECKED with this module's
    * own normaliser, so a column normalised differently can only miss, never mis-match.
+   *
+   * 🛑 AND IT DID MISS, ON A THIRD OF THE NAMES WITH PUNCTUATION. The column is written by
+   * `normalizePlayerName` (lib/team-abbrev.ts), which KEEPS hyphens and apostrophes — "jaxon
+   * smith-njigba", "tre'davious white" — while `normalizeMatchName` strips them. Measured on prod
+   * 2026-10-12: 367 of 692 NFL identities with `-`, `'` or `.` in the name (184 / 190 / 7) could
+   * never be found by our key, Jaxon Smith-Njigba among them. So the lookup asks for the WRITER'S key
+   * as well as ours, and the identity check on what comes back is unchanged. (The first look at
+   * this reported "0 divergent of 11" — it inspected only rows our key had already found, so a row
+   * that disagreed could never be in the sample.)
    */
+  const lookupKeys = new Set<string>() // what to ask the column for: the writer's key and ours
   const byNameKey = new Map<string, string[]>() // normalised name -> the `name:` player ids carrying it
   for (const e of events) {
     if (!e.playerId?.startsWith('name:')) continue
@@ -160,6 +170,9 @@ async function resolveHeadshots(
     const key = normalizeMatchName(name)
     if (!key) continue
     byNameKey.set(key, [...(byNameKey.get(key) ?? []), e.playerId])
+    lookupKeys.add(key)
+    const written = normalizePlayerName(name)
+    if (written) lookupKeys.add(written)
   }
   if (ids.length === 0 && byNameKey.size === 0) return out
 
@@ -208,7 +221,7 @@ async function resolveHeadshots(
 
     if (byNameKey.size > 0) {
       const named = await prisma.playerIdentityMap
-        .findMany({ where: { sport: PLAY_FEED_SPORT, normalizedName: { in: [...byNameKey.keys()] } }, select: IDENTITY_SELECT })
+        .findMany({ where: { sport: PLAY_FEED_SPORT, normalizedName: { in: [...lookupKeys] } }, select: IDENTITY_SELECT })
         .catch((err: unknown) => {
           console.error('[play-feed] name fallback read failed:', err instanceof Error ? err.message : err)
           return []
