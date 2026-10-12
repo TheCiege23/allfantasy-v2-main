@@ -177,6 +177,18 @@ describe('finalizeRedraftWeek — NCAAB reads the Rolling Insights schedule', ()
 })
 
 describe('finalizeRedraftWeek — a daily sport', () => {
+  it('waits for the Exile rollover to close a saved lineup before sealing the week', async () => {
+    const { prisma } = makePrisma([game('final', LAST_PUCK, 500)])
+    prisma.league.findFirst.mockResolvedValue({ survivorMode: true, platform: 'allfantasy', bestBallMode: false, leagueType: 'survivor', leagueVariant: 'survivor' })
+    prisma.exileWeeklyEntry = { findMany: vi.fn(async () => [{ submittedLineup: {
+      version: 1, anchorId: 'exile-goalie', team: 'BOS', closedAt: null, lockedAt: null,
+      players: [{ id: 'exile-goalie', name: 'Goalie', position: 'G', team: 'BOS', slot: 'G' }],
+    } }]) }
+    const result = await finalizeRedraftWeek({ seasonId: NHL_SEASON.id, week: 1, dryRun: true }, { prisma, now: () => AFTER_GRACE })
+    expect(result.refusal).toBe('exile_roster_open')
+    expect(prisma.playerWeeklyScore.createMany).not.toHaveBeenCalled()
+  })
+
   it('never fabricates a zero for a missing closed Exile starter despite high main-roster coverage', async () => {
     const { prisma } = makePrisma([game('final', LAST_PUCK, 500)])
     prisma.league.findFirst.mockResolvedValue({ survivorMode: true, platform: 'allfantasy', bestBallMode: false, leagueType: 'survivor', leagueVariant: 'survivor' })

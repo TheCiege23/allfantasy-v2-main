@@ -93,6 +93,7 @@ export type WeekFinalizeRefusal =
   | 'week_window_open'
   | 'no_starters'
   | 'stat_coverage_below_floor'
+  | 'exile_roster_open'
   | 'exile_stat_missing'
   /**
    * A daily sport whose season opener is not recorded, so its week has no date window.
@@ -500,7 +501,13 @@ export async function finalizeRedraftWeek(
     })
     for (const entry of entries) {
       const roster = readExileRoster(entry.submittedLineup)
-      if (!roster?.closedAt) continue
+      if (!roster) continue
+      // The Exile rollover can lag the common score-sync cron. Never seal the
+      // week before that saved lineup becomes immutable.
+      if (!roster.closedAt && roster.players.some(player => player.slot !== 'BENCH')) {
+        return emptyResult(base, 'exile_roster_open', { slate, matchupsConsidered })
+      }
+      if (!roster.closedAt) continue
       for (const player of roster.players) {
         if (player.slot === 'BENCH') continue
         const key = `${sport}::${player.id}`
