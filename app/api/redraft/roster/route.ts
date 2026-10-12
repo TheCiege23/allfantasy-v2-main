@@ -25,6 +25,7 @@ import { getTeamLogo } from '@/lib/players/getTeamLogo'
 import { resolveRedraftRosterLookup } from '@/lib/redraft/redraftRosterIdentity'
 import { recordRedraftRosterMoveHistory } from '@/lib/redraft/rosterMoveHistory'
 import { parseOptionalRedraftPositiveInteger } from '@/lib/redraft/betaRouteInput'
+import { resolveEffectiveRedraftWeek } from '@/lib/season-week'
 import { leagueIdentityColumns } from '@/lib/player-identity/externalIdNamespace'
 import {
   crosswalkToRollingInsightsIds,
@@ -229,7 +230,6 @@ export async function GET(req: NextRequest) {
   if (!parsedWeek.ok) {
     return NextResponse.json({ error: parsedWeek.error }, { status: 400 })
   }
-  const week = parsedWeek.value ?? 1
 
   const lookup = await resolveRedraftRosterLookup({
     userId,
@@ -255,6 +255,8 @@ export async function GET(req: NextRequest) {
     where: { id: roster.leagueId },
     select: { settings: true, platform: true },
   })
+  // No `?week=`: an imported season's stored week is never advanced — see resolveEffectiveRedraftWeek.
+  const week = parsedWeek.value ?? (await resolveEffectiveRedraftWeek({ id: lookup.season.id, currentWeek: roster.season.currentWeek }, leagueForLock?.platform))
   const lockHydrated = await hydrateRedraftLineupLocks(prisma, {
     sport: roster.season.sport,
     season: roster.season.season,

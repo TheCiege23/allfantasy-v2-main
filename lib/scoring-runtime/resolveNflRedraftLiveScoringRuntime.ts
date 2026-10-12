@@ -9,6 +9,7 @@ import { updateStandings } from '@/lib/redraft/standingsEngine'
 import { getNormalizedPlayerData } from '@/lib/player-data/getNormalizedPlayerData'
 import { serializeUnifiedPlayerForApi } from '@/lib/player-data/serializeUnifiedPlayerForApi'
 import { crosswalkToSleeperIds, sleeperLookupId } from '@/lib/core-app/rosterIdCrosswalk'
+import { resolveEffectiveRedraftWeek } from '@/lib/season-week'
 import {
   applyNflRedraftStatCorrection,
   buildNflRedraftLiveScoringRuntimeState,
@@ -223,8 +224,13 @@ export async function resolveNflRedraftLiveScoringRuntime(input: {
   if (!rules) return { ok: false, reason: 'league_not_found' }
   if (rules.general.sport !== 'NFL' || rules.general.format !== 'redraft') return { ok: false, reason: 'not_nfl_redraft' }
 
-  const week = positiveWeek(input.week, season.currentWeek || 1)
   const league = await prisma.league.findUnique({ where: { id: season.leagueId }, select: { settings: true, platform: true } })
+  // No explicit week: an imported season's stored week is never advanced — see resolveEffectiveRedraftWeek.
+  // `== null`, not positiveWeek's fallback: the GET route passes `week: null` when absent, and
+  // `Number(null)` is a finite 0 that positiveWeek clamps to week 1 without ever reaching a fallback.
+  const week = input.week == null
+    ? await resolveEffectiveRedraftWeek(season, league?.platform)
+    : positiveWeek(input.week, season.currentWeek || 1)
   const rosterConfig = resolveRedraftRosterConfig(season.sport, league?.settings ?? null)
   const rosters = await prisma.redraftRoster.findMany({
     where: { seasonId: season.id, leagueId: season.leagueId },
