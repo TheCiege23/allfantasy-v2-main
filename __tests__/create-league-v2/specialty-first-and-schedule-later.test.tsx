@@ -26,40 +26,41 @@ const ids = (group: HTMLElement) =>
   within(group).getAllByRole('button').map((b) => b.getAttribute('data-testid')!.replace('g30-league-type-', ''))
 
 describe('specialty formats lead the Basics step', () => {
-  it('NFL: specialties first with Survivor leading, classics after in their usual order', () => {
-    const state = { ...DEFAULT_V2_STATE, sport: 'NFL' as const, leagueType: 'redraft' as const }
+  it('NBA: specialties first with Survivor leading, classics after in their usual order', () => {
+    const state = { ...DEFAULT_V2_STATE, sport: 'NBA' as const, leagueType: 'redraft' as const }
     render(<LeagueBasicsStep state={state} onChange={vi.fn()} fieldErrors={null} />)
     const specialty = screen.getByTestId('g30-specialty-formats')
     const classic = screen.getByTestId('g30-classic-formats')
     expect(ids(classic)).toEqual(['redraft', 'dynasty', 'keeper', 'best_ball'])
     const special = ids(specialty)
     expect(special[0]).toBe('survivor')
-    expect(special).toEqual(expect.arrayContaining(['guillotine', 'big_brother', 'zombie', 'idp']))
+    expect(special).toEqual(expect.arrayContaining(['guillotine', 'big_brother', 'zombie']))
+    expect(special).not.toContain('idp')
     expect(special).not.toEqual(expect.arrayContaining(['redraft']))
     // The specialty group comes before the classics in the page.
     expect(specialty.compareDocumentPosition(classic) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it('every format the sport allows is still offered exactly once', () => {
-    const state = { ...DEFAULT_V2_STATE, sport: 'NFL' as const, leagueType: 'redraft' as const }
+    const state = { ...DEFAULT_V2_STATE, sport: 'NBA' as const, leagueType: 'redraft' as const }
     render(<LeagueBasicsStep state={state} onChange={vi.fn()} fieldErrors={null} />)
     const all = screen.getAllByRole('button').map((b) => b.getAttribute('data-testid') ?? '').filter((id) => id.startsWith('g30-league-type-'))
     expect(new Set(all).size).toBe(all.length)
-    expect(all).toHaveLength(12)
+    expect(all).toHaveLength(9)
   })
 
   it('choosing a specialty tile selects that format', () => {
     const onChange = vi.fn()
-    const state = { ...DEFAULT_V2_STATE, sport: 'NFL' as const, leagueType: 'redraft' as const }
+    const state = { ...DEFAULT_V2_STATE, sport: 'NBA' as const, leagueType: 'redraft' as const }
     render(<LeagueBasicsStep state={state} onChange={onChange} fieldErrors={null} />)
     fireEvent.click(screen.getByTestId('g30-league-type-survivor'))
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ leagueType: 'survivor' }))
   })
 })
 
-describe('a fresh create starts on Survivor', () => {
+describe('a fresh NBA create starts on Survivor', () => {
   it('starts on Survivor with a draft type, team size and preset Survivor accepts', async () => {
-    const fresh = freshCreateLeagueState(DEFAULT_V2_STATE)
+    const fresh = freshCreateLeagueState({ ...DEFAULT_V2_STATE, sport: 'NBA' })
     expect(fresh.leagueType).toBe('survivor')
     // Only the manager's own inputs are missing — nothing left over from Redraft blocks it.
     const codes = analyzeCreateLeagueCompletion(fresh).map((i) => i.code).sort()
@@ -78,6 +79,8 @@ describe('a fresh create starts on Survivor', () => {
   })
 
   it('a sport without Survivor starts on Guillotine, and one without either on Big Brother', () => {
+    expect(freshCreateLeagueState({ ...DEFAULT_V2_STATE, sport: 'NFL' }).leagueType).toBe('guillotine')
+    expect(freshCreateLeagueState({ ...DEFAULT_V2_STATE, sport: 'NHL' }).leagueType).toBe('guillotine')
     expect(freshCreateLeagueState({ ...DEFAULT_V2_STATE, sport: 'MLB' }).leagueType).toBe('guillotine')
     expect(freshCreateLeagueState({ ...DEFAULT_V2_STATE, sport: 'NCAAB' }).leagueType).toBe('big_brother')
     expect(freshCreateLeagueState({ ...DEFAULT_V2_STATE, sport: 'SOCCER' }).leagueType).toBe('big_brother')

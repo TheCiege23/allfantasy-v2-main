@@ -16,6 +16,7 @@ import { TOURNAMENT_PARTICIPANT_POOL_SIZES_EXTENDED } from '@/lib/tournament-mod
 import { FEEDER_LEAGUES_BY_POOL, TOURNAMENT_TEAMS_PER_LEAGUE } from '@/lib/tournament-mode/tournament-sport-cutoffs'
 import { StepHeader } from './StepHelp'
 import { ZOMBIE_UNIVERSE_TIER_LABELS } from '@/lib/zombie/zombie-universe-tier'
+import { SURVIVOR_PAID_CREATION_ENABLED } from '@/lib/survivor/survivorCreationAvailability'
 
 const CHECKBOX_CLASS = 'mt-0.5 shrink-0 size-5 rounded border border-white/30 bg-[#020817] accent-cyan-400'
 
@@ -182,14 +183,18 @@ export function LeagueFormatOptionsPanel({ sport, leagueType, value, onChange }:
                 {sportBrandLabel(sport)} {survivorSeasonPhrase(sport)} into phases; choose tribe identities below and let the
                 app label them. Exile Island is provisioned after create.
               </p>
+              <p className="mt-2 max-w-[60ch] text-xs leading-relaxed text-amber-200/85">
+                NBA Survivor is in preview. Invite friends to explore and test the league; unattended full-season hosting
+                is still being certified.
+              </p>
             </div>
           </div>
 
           <div className="space-y-2">
             <Label className="text-white/85">League buy-in</Label>
-            <p className="text-[11px] text-white/45">Free leagues have no entry fee. Paid leagues store the per-manager amount you set (USD).</p>
+            <p className="text-[11px] text-white/45">Pilot leagues are free. Paid entry can be added after full-season hosting is certified.</p>
             <div className="flex flex-wrap gap-2">
-              {(['free', 'paid'] as const).map((mode) => {
+              {(SURVIVOR_PAID_CREATION_ENABLED ? ['free', 'paid'] as const : ['free'] as const).map((mode) => {
                 const active = (v.survivorEntryFeeMode ?? 'free') === mode
                 return (
                   <button
@@ -213,7 +218,7 @@ export function LeagueFormatOptionsPanel({ sport, leagueType, value, onChange }:
                 )
               })}
             </div>
-            {(v.survivorEntryFeeMode ?? 'free') === 'paid' && (
+            {SURVIVOR_PAID_CREATION_ENABLED && (v.survivorEntryFeeMode ?? 'free') === 'paid' && (
               <div className="space-y-1.5 pt-1">
                 <Label className="text-white/80">Buy-in per manager (USD)</Label>
                 <Input

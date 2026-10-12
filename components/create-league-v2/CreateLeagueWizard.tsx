@@ -206,9 +206,8 @@ export function nextStateForLeagueType(state: CreateLeagueV2State, leagueType: L
 
 /** The format a brand-new create starts on. */
 /**
- * Each sport's starting format, first one the sport allows (user's call, 2026-10-12: AllFantasy
- * leads with its specialty formats). NFL, NCAAF, NBA and NHL start on Survivor; MLB, which has no
- * Survivor, on Guillotine; NCAAB and Soccer, which have neither, on Big Brother.
+ * Each sport starts on its first currently available specialty. NBA opens the Survivor
+ * creation pilot; the underlying format engine remains available for existing leagues.
  */
 export const SPORT_DEFAULT_FORMATS: readonly LeagueTypeId[] = ['survivor', 'guillotine', 'big_brother']
 

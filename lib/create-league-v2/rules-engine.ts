@@ -29,11 +29,15 @@ import {
   type ScoringPresetOption,
 } from '@/lib/league-creation-preset/scoring-presets'
 import { UNIVERSAL_CREATE_TEAM_COUNTS } from '@/lib/create-league-v2/simple-create'
+import { isSurvivorCreationSportAvailable } from '@/lib/survivor/survivorCreationAvailability'
 
 // ── Sport filtering ─────────────────────────────────────────────────
 
 /** Which sports are allowed for a given league type? */
 export function getAllowedSportsForType(leagueType: LeagueTypeId): SupportedSport[] {
+  if (leagueType === 'survivor') {
+    return SUPPORTED_SPORTS.filter(isSurvivorCreationSportAvailable) as SupportedSport[]
+  }
   const catalog = getClientLeagueCreateOptionsCatalog()
   const seeded = catalog?.allowedSportsByConcept?.[leagueType]
   if (Array.isArray(seeded) && seeded.length > 0) {
