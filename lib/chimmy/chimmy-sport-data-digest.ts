@@ -4,10 +4,37 @@ import { prisma } from '@/lib/prisma'
 import { getLatestNews } from '@/lib/data/news'
 import { listInjuryFacts } from '@/lib/injuries/injuryReadPort'
 import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
+import { authoritativeRowsBySleeperId, positionGroupsAgree } from '@/lib/player-match/authoritativePlayerRow'
+import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { getNewsApiEverythingDbFirst } from '@/lib/news/newsapi-cache'
 import { SUPPORTED_SPORTS, type SupportedSport } from '@/lib/sport-scope'
 
 const NL = String.fromCharCode(10)
+
+type NamesakeRow = { name: string; position: string | null; team: string | null }
+
+/**
+ * The one namesake a set of stat rows belongs to, or null. Every row must name a club, and must
+ * agree — same club, or same position group — with exactly one namesake, the same one throughout.
+ * A row that fits two men (his club is one's, his position the other's) or none decides nothing.
+ */
+export function soleNamesakeForStatRows<N extends NamesakeRow>(
+  rows: ReadonlyArray<{ team: string | null; position: string | null }>,
+  namesakes: readonly N[],
+): N | null {
+  let owner: N | null = null
+  for (const row of rows) {
+    const club = normalizeTeamAbbrev(row.team)
+    if (!club) return null
+    const fits = namesakes.filter(
+      (n) => normalizeTeamAbbrev(n.team) === club || positionGroupsAgree(row.position, n.position),
+    )
+    if (fits.length !== 1) return null
+    if (owner && owner !== fits[0]) return null
+    owner = fits[0]!
+  }
+  return owner
+}
 
 const SPORT_NEWS_QUERY: Record<SupportedSport, string> = {
   NFL: '(NFL OR "fantasy football") AND (injury OR trade OR lineup)',
@@ -423,13 +450,18 @@ ${transactionRows
        * over every mention with ONE shared `take`, so "Michael Carter" pulled RB Michael Carter (TEN)
        * and CB "Michael Carter II" (PHI) into one list as if they were one player, and a mention with
        * a long career crowded the others out of the 10 rows. Now: a row binds only when its
-       * normalized name EQUALS the mention's, each mention gets its own share of the cap, and a name
-       * held by 2+ Sleeper ids in this sport is refused — the question carries no team or position
-       * to tell them apart, and the WR's five seasons are not an answer about the corner.
+       * normalized name EQUALS the mention's, and each mention gets its own share of the cap.
+       *
+       * A name held by 2+ Sleeper ids in this sport binds only when the STAT ROWS say whose they
+       * are: every row must carry a team, and agree (team via normalizeTeamAbbrev, or position
+       * group) with exactly ONE of the namesakes — the same one for every row. Measured that day:
+       * DeVonta Smith's 10 stat rows are all WR/PHI (or "Wide Receiver"/"Philadelphia Eagles"),
+       * so they bind to the receiver and print as "DeVonta Smith (WR, PHI)". Rows that lack a team,
+       * that fit both men, or that split between them are withheld with the reason stated.
        */
       const statCap = args.sport === 'all' ? 6 : 10
       const mentionKeys = [...new Set(playerMentions.map((n) => normalizeMatchName(n)).filter(Boolean))]
-      const sharers = await Promise.resolve()
+      const census = await Promise.resolve()
         .then(() =>
           prisma.sportsPlayer.findMany({
             where: {
@@ -437,33 +469,35 @@ ${transactionRows
               sleeperId: { not: null },
               OR: playerMentions.map((name) => ({ name: { startsWith: name, mode: 'insensitive' as const } })),
             },
-            select: { name: true, sleeperId: true },
+            select: { source: true, name: true, sleeperId: true, position: true, team: true, fetchedAt: true },
             take: 500,
           }),
         )
         .catch(() => null)
-      const idsByKey = new Map<string, Set<string>>()
-      for (const row of sharers ?? []) {
-        const key = normalizeMatchName(row.name)
-        if (!mentionKeys.includes(key) || !row.sleeperId) continue
-        const ids = idsByKey.get(key) ?? new Set<string>()
-        ids.add(row.sleeperId)
-        idsByKey.set(key, ids)
+      // One authoritative row per Sleeper id, per mention.
+      const namesakesByKey = new Map<string, NamesakeRow[]>()
+      if (census) {
+        const byKey = new Map<string, typeof census>()
+        for (const row of census) {
+          const key = normalizeMatchName(row.name)
+          if (!mentionKeys.includes(key)) continue
+          byKey.set(key, [...(byKey.get(key) ?? []), row])
+        }
+        for (const [key, rows] of byKey) namesakesByKey.set(key, [...authoritativeRowsBySleeperId(rows).values()])
       }
+      const sharedKeys = new Set(mentionKeys.filter((k) => (namesakesByKey.get(k)?.length ?? 0) > 1))
       // No census, no proof: a failed read refuses every mention rather than binding blind.
-      const refusedKeys = new Set(
-        sharers == null ? mentionKeys : mentionKeys.filter((k) => (idsByKey.get(k)?.size ?? 0) > 1),
-      )
-      const boundKeys = mentionKeys.filter((k) => !refusedKeys.has(k))
-      const boundMentions = playerMentions.filter((n) => boundKeys.includes(normalizeMatchName(n)))
-      const perMention = Math.max(2, Math.floor(statCap / Math.max(1, boundKeys.length)))
+      const queryKeys = census == null ? [] : mentionKeys
+      const queryMentions = playerMentions.filter((n) => queryKeys.includes(normalizeMatchName(n)))
+      const boundMentions = queryMentions.filter((n) => !sharedKeys.has(normalizeMatchName(n)))
+      const perMention = Math.max(2, Math.floor(statCap / Math.max(1, queryKeys.length)))
 
-      const statCandidates = boundMentions.length
+      const statCandidates = queryMentions.length
         ? await prisma.playerSeasonStats.findMany({
             where: {
               sport: sp,
               // `startsWith` reaches a suffixed spelling ("X Jr."); normalizeMatchName decides.
-              OR: boundMentions.map((name) => ({
+              OR: queryMentions.map((name) => ({
                 playerName: { startsWith: name, mode: 'insensitive' },
               })),
             },
@@ -471,23 +505,38 @@ ${transactionRows
             take: statCap * 6,
           })
         : []
+
+      const labelByKey = new Map<string, string>()
+      const withheldKeys = new Set<string>(census == null ? mentionKeys : [])
+      for (const key of sharedKeys) {
+        const rows = statCandidates.filter((r) => normalizeMatchName(r.playerName) === key)
+        if (rows.length === 0) continue
+        const owner = soleNamesakeForStatRows(rows, namesakesByKey.get(key) ?? [])
+        if (!owner) {
+          withheldKeys.add(key)
+          continue
+        }
+        const team = normalizeTeamAbbrev(owner.team) ?? owner.team
+        labelByKey.set(key, `${owner.name} (${[owner.position, team].filter(Boolean).join(', ')})`)
+      }
+
       const takenByKey = new Map<string, number>()
       const playerStatsRows = statCandidates.filter((row) => {
         const key = normalizeMatchName(row.playerName)
-        if (!boundKeys.includes(key)) return false
+        if (!queryKeys.includes(key) || withheldKeys.has(key)) return false
         const taken = takenByKey.get(key) ?? 0
         if (taken >= perMention) return false
         takenByKey.set(key, taken + 1)
         return true
       })
-      if (refusedKeys.size > 0) {
-        const refusedNames = playerMentions.filter((n) => refusedKeys.has(normalizeMatchName(n)))
+      if (withheldKeys.size > 0) {
+        const withheldNames = playerMentions.filter((n) => withheldKeys.has(normalizeMatchName(n)))
         chunks.push(
-          `### ${sp} — Player season stats withheld${NL}${refusedNames
+          `### ${sp} — Player season stats withheld${NL}${withheldNames
             .map((n) =>
-              sharers == null
+              census == null
                 ? `- ${n}: could not verify which ${sp} player this is; do not quote stats for this name`
-                : `- ${n}: more than one ${sp} player has this name; ask which team or position before quoting stats`,
+                : `- ${n}: more than one ${sp} player has this name and the stat rows do not say which; ask which team or position before quoting stats`,
             )
             .join(NL)}`,
         )
@@ -587,7 +636,10 @@ ${playerStatsRows
     pushMetric('RecYds', 'receiving_yards')
     pushMetric('Goals', 'goals')
     pushMetric('Assists', 'assists')
-    return `- ${row.playerName}${row.team ? ` (${row.team})` : ''} [${row.season}]${pieces.length ? ` · ${pieces.join(', ')}` : ''}`
+    // A shared name that bound is printed with WHICH namesake it is, so the model cannot drop it.
+    const label = labelByKey.get(normalizeMatchName(row.playerName))
+    const who = label ?? `${row.playerName}${row.team ? ` (${row.team})` : ''}`
+    return `- ${who} [${row.season}]${pieces.length ? ` · ${pieces.join(', ')}` : ''}`
   })
   .join('\n')}`
         )

@@ -34,13 +34,24 @@ vi.mock('@/lib/prisma', () => {
   }
 })
 
-const row = (playerName: string, team: string, season: number, pts: number) => ({
+const row = (playerName: string, team: string | null, season: number, pts: number, position: string | null = null) => ({
   playerName,
   team,
+  position,
   season,
   updatedAt: new Date('2026-10-01'),
   stats: { DK_fantasy_points: pts },
 })
+
+// SportsPlayer as production holds them (Sleeper rows), 2026-10-12.
+const SMITHS = [
+  { source: 'sleeper', name: 'DeVonta Smith', sleeperId: '7525', position: 'WR', team: 'Philadelphia Eagles', fetchedAt: new Date() },
+  { source: 'sleeper', name: 'DeVonta Smith', sleeperId: '13977', position: 'CB', team: 'Carolina Panthers', fetchedAt: new Date() },
+]
+const CARTERS = [
+  { source: 'sleeper', name: 'Michael Carter', sleeperId: '7607', position: 'RB', team: 'Tennessee Titans', fetchedAt: new Date() },
+  { source: 'sleeper', name: 'Michael Carter', sleeperId: '7835', position: 'CB', team: 'Philadelphia Eagles', fetchedAt: new Date() },
+]
 
 async function digest(question: string) {
   const { buildChimmySportDataDigest } = await import('@/lib/chimmy/chimmy-sport-data-digest')
@@ -56,20 +67,46 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks())
 
 describe('Chimmy player stats bind a name exactly, and refuse a shared one', () => {
-  it('withholds Michael Carter: two Sleeper ids hold the name, and neither man’s seasons are shown', async () => {
-    sportsPlayer.mockResolvedValue([
-      { name: 'Michael Carter', sleeperId: '7607' },
-      { name: 'Michael Carter', sleeperId: '7835' },
-    ])
+  it('binds DeVonta Smith’s rows to the receiver when every row says WR / PHI, and labels which one', async () => {
+    sportsPlayer.mockResolvedValue(SMITHS)
     playerSeasonStats.mockResolvedValue([
-      row('Michael Carter', 'TEN', 2025, 80),
-      row('Michael Carter II', 'PHI', 2025, 40),
+      row('DeVonta Smith', 'PHI', 2025, 190, 'WR'),
+      // TheSportsDB's vocabulary: long-form position and club. The club alone identifies him.
+      row('DeVonta Smith', 'Philadelphia Eagles', 2024, 170, 'Wide Receiver'),
+    ])
+    const d = await digest('DeVonta Smith stats')
+    expect(d.text).toContain('- DeVonta Smith (WR, PHI) [2025] · Pts: 190')
+    expect(d.text).toContain('- DeVonta Smith (WR, PHI) [2024] · Pts: 170')
+    expect(d.text).not.toContain('withheld')
+  })
+
+  it('withholds a shared name whose stat rows carry no team', async () => {
+    sportsPlayer.mockResolvedValue(SMITHS)
+    playerSeasonStats.mockResolvedValue([row('DeVonta Smith', 'PHI', 2025, 190, 'WR'), row('DeVonta Smith', null, 2024, 170, 'WR')])
+    const d = await digest('DeVonta Smith stats')
+    expect(d.text).not.toContain('Pts: 190')
+    expect(d.text).toContain('more than one NFL player has this name')
+  })
+
+  it('withholds Michael Carter: his rows split between the Titans back and the Eagles corner', async () => {
+    sportsPlayer.mockResolvedValue(CARTERS)
+    playerSeasonStats.mockResolvedValue([
+      row('Michael Carter', 'TEN', 2025, 80, 'RB'),
+      row('Michael Carter II', 'PHI', 2025, 40, 'DB'),
     ])
     const d = await digest('Michael Carter stats')
     expect(d.text).not.toContain('Pts: 80')
     expect(d.text).not.toContain('Pts: 40')
     expect(d.text).toContain('more than one NFL player has this name')
     expect(fantasyStatLine).not.toHaveBeenCalled()
+  })
+
+  it('withholds a row that fits both namesakes — one’s club, the other’s position', async () => {
+    sportsPlayer.mockResolvedValue(SMITHS)
+    // A CB row on the Eagles: PHI points at the receiver, CB at the Panthers corner.
+    playerSeasonStats.mockResolvedValue([row('DeVonta Smith', 'PHI', 2025, 12, 'CB')])
+    const d = await digest('DeVonta Smith stats')
+    expect(d.text).not.toContain('Pts: 12')
   })
 
   it('binds a unique name exactly — a longer name that merely contains it is another man', async () => {
