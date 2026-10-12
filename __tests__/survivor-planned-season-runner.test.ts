@@ -135,5 +135,6 @@ it('does not activate autonomous hosting merely because a league has a saved sea
   db.league.findMany.mockResolvedValue([{ id: 'league-1', settings: { survivor_full_season_plan: plan } }])
   delete process.env.SURVIVOR_PLANNED_SEASON_AUTOMATION_ENABLED
   expect(await runPlannedSurvivorSeasonBatch(later)).toEqual({ considered: 0, failed: 0, outcomes: { disabled: 1 } })
+  expect(db.league.findMany).not.toHaveBeenCalled()
   expect(engine.advanceWeek).not.toHaveBeenCalled()
 })

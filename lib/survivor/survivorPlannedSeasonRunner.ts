@@ -116,13 +116,13 @@ export async function runPlannedSurvivorLeague(leagueId: string, now = new Date(
 
 /** Runs inside the existing score-sync cron slot; never allocates a new slot. */
 export async function runPlannedSurvivorSeasonBatch(now = new Date()) {
-  const leagues = await prisma.league.findMany({ where: { survivorMode: true, sport: { in: ['NBA', 'NHL'] } }, select: { id: true, settings: true }, orderBy: { id: 'asc' } })
-  const planned = leagues.filter(league => readSurvivorFullSeasonPlan(league.settings))
   // Creation and scoring can ship safely while the persisted season replay,
   // tie resolution and sport-specific challenge settlement finish validation.
   if (process.env.SURVIVOR_PLANNED_SEASON_AUTOMATION_ENABLED !== 'true') {
-    return { considered: 0, failed: 0, outcomes: { disabled: planned.length } }
+    return { considered: 0, failed: 0, outcomes: { disabled: 1 } }
   }
+  const leagues = await prisma.league.findMany({ where: { survivorMode: true, sport: { in: ['NBA', 'NHL'] } }, select: { id: true, settings: true }, orderBy: { id: 'asc' } })
+  const planned = leagues.filter(league => readSurvivorFullSeasonPlan(league.settings))
   const outcomes: Record<string, number> = {}
   let failed = 0
   for (const league of rotatingBatch(planned, 4, now.getTime())) {
