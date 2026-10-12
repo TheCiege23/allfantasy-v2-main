@@ -93,7 +93,8 @@ describe('loadTrendingAdds', () => {
 describe('resolveSleeperPlayers', () => {
   it('prefers the vendor row, folds the club to its code, and takes a headshot from any row', async () => {
     const m = await resolveSleeperPlayers(['1339'])
-    expect(m.get('1339')).toMatchObject({ name: 'Zach Ertz', team: 'PHI', ref: 'NFL:E1339', imageUrl: 'https://img/ertz.png' })
+    // The ref names the chosen row's feed too: an externalId is only unique per source (playerRef.ts).
+    expect(m.get('1339')).toMatchObject({ name: 'Zach Ertz', team: 'PHI', ref: 'NFL~rolling_insights:E1339', imageUrl: 'https://img/ertz.png' })
   })
 
   it('no link when another player also claims the chosen id', async () => {
@@ -109,7 +110,7 @@ describe('TrendingAdds card', () => {
     render(<TrendingAdds data={await loadTrendingAdds(NOW)} leagueParam="&league=L1" />)
     expect(screen.getByRole('heading', { name: 'Most added this week' })).toBeTruthy()
     expect(screen.getByText(/of 189 leagues adding · through Sep 28/)).toBeTruthy()
-    expect(screen.getByRole('link', { name: /Zach Ertz/ }).getAttribute('href')).toBe('/core/players?q=Zach%20Ertz&player=NFL%3AE1339&league=L1')
+    expect(screen.getByRole('link', { name: /Zach Ertz/ }).getAttribute('href')).toBe('/core/players?q=Zach%20Ertz&player=NFL~rolling_insights%3AE1339&league=L1')
     expect(screen.getByLabelText('added in 66 leagues').textContent).toBe('+66')
     // A player whose ref is not round-trip safe is listed but not linked.
     expect(screen.getByText('Jameis Winston').closest('a')).toBeNull()

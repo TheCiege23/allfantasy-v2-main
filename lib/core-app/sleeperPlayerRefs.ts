@@ -64,7 +64,7 @@ export async function resolveSleeperPlayers(sleeperIds: readonly string[]): Prom
       // Some catalog rows carry the full club name ("Philadelphia Eagles"); rows show the code.
       team: r.team ? (normalizeTeamAbbrev(r.team) ?? r.team) : null,
       imageUrl: asHeadshotUrl(image),
-      ref: who && who.size === 1 && who.has(sid) ? playerRef('NFL', r.externalId) : null,
+      ref: who && who.size === 1 && who.has(sid) ? playerRef('NFL', r.externalId, r.source) : null,
     })
   }
   return out
