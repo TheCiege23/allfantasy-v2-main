@@ -8,6 +8,7 @@ import { getOrCreateAiResult } from '@/lib/ai/ai-result-cache'
 import { trackLegacyToolUsage } from '@/lib/analytics-server'
 // Roster-slot parsing only. The tier system's EVALUATION is not used here — see the note where it ran.
 import { detectSFFromRosterPositions } from '@/lib/dynasty-tiers'
+import { legacyPromptSeason } from '@/lib/legacy/promptSeason'
 import { formatValuesForPrompt, FantasyCalcSettings, getPickValue } from '@/lib/fantasycalc'
 import { getPlayerValuesForNamesDbFirst } from '@/lib/fantasycalc-db'
 import { buildTradeHubIntelBlock, parseTradeIntelBlockMeta } from '@/lib/trade-engine/trade-analyzer-intel'
@@ -600,7 +601,9 @@ If league size had no material impact, explicitly say: "League size did not mate
 `.trim()
 }
 
-function buildSystemPrompt(numTeams: number) {
+function buildSystemPrompt(numTeams: number, now: Date = new Date()) {
+  // The example years were literal "2025 ceiling" / "2026+ outlook" (fixed 2026-10-12, in the 2026 season).
+  const season = legacyPromptSeason(now)
   return `
 You are the AllFantasy Trade Analyzer — an ELITE fantasy sports trade evaluator for dynasty, redraft, and keeper leagues. You analyze trades like a front office war room, not ESPN hot takes.
 
@@ -675,7 +678,7 @@ You identify emotional mistakes and flag them directly.
 You're conversational and honest - speak TO the user, not AT them.
 
 Use phrases like:
-- "This trade helps you long-term but hurts your 2025 ceiling."
+- "This trade helps you long-term but hurts your ${season} ceiling."
 - "You're overpaying because you value RB certainty too much."
 - "If you send this, expect a counter."
 - "I know you love this player, but the value isn't there."
@@ -707,7 +710,7 @@ When structuredDriverData is present in the input:
   "verdict": "Fair" | "Slightly favors A" | "Slightly favors B" | "Strongly favors A" | "Strongly favors B",
   "verdict_tone": "SMART" | "RISKY" | "BOLD" | "DONT_DO_THIS",
   "verdict_emoji": "🟢" | "⚠️" | "🔥" | "❌",
-  "verdict_message": string (conversational verdict like "This trade helps you long-term but hurts your 2025 ceiling."),
+  "verdict_message": string (conversational verdict like "This trade helps you long-term but hurts your ${season} ceiling."),
   "winProbabilityShift": number (-30 to +30, how much this helps Team A's championship odds),
   
   "teamAnalysis": {
@@ -738,8 +741,8 @@ When structuredDriverData is present in the input:
   "expertAnalysis": string (conversational, like talking to the manager),
   
   "value_now_vs_future": {
-    "immediate_impact": string (what happens to your 2025 ceiling),
-    "future_impact": string (what happens to your 2026+ outlook)
+    "immediate_impact": string (what happens to your ${season} ceiling),
+    "future_impact": string (what happens to your ${season + 1}+ outlook)
   },
   
   "who_benefits_and_why": string (clear explanation of who wins and why),

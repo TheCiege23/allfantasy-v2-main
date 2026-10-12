@@ -4,7 +4,6 @@ import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db';
 import {
   calculateDynastyScore,
   findPlayerTier,
-  ALL_TIERED_PLAYERS,
   AssetTier,
 } from './dynasty-tiers';
 import { fetchPlayerNewsFromGrok } from './ai-gm-intelligence';
@@ -197,9 +196,7 @@ export async function analyzeUserTradingProfile(
       stat.acquired++;
       positionStats.set(p.position, stat);
 
-      const tieredPlayer = ALL_TIERED_PLAYERS.find(tp => 
-        tp.name.toLowerCase() === p.name.toLowerCase()
-      );
+      const tieredPlayer = findPlayerTier(p.name, p.position);
       if (tieredPlayer) {
         tiersEncountered.push(tieredPlayer.tier);
         if (tieredPlayer.age && tieredPlayer.age < 26) youthScore++;
@@ -211,9 +208,7 @@ export async function analyzeUserTradingProfile(
       stat.traded++;
       positionStats.set(p.position, stat);
 
-      const tieredPlayer = ALL_TIERED_PLAYERS.find(tp => 
-        tp.name.toLowerCase() === p.name.toLowerCase()
-      );
+      const tieredPlayer = findPlayerTier(p.name, p.position);
       if (tieredPlayer && tieredPlayer.age && tieredPlayer.age >= 28) youthScore++;
     }
 
