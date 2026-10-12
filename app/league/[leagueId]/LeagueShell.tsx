@@ -1556,6 +1556,7 @@ export function LeagueShell({
                 ?? undefined
               }
               lifecycleState={league.lifecycleState}
+              platform={league.platform}
             />
 
             <LeagueTabRouter
