@@ -6,6 +6,7 @@ import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { resolveInjuryFacts } from '@/lib/injuries/injuryReadPort'
 import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 import { newsRowMatchesPlayer } from '@/lib/legacy/playerNewsMatch'
+import { selectAuthoritativePlayerRow } from '@/lib/player-match/authoritativePlayerRow'
 import { isWatched } from '@/lib/waiver-wire/watchlist-service'
 import { followKeyFor, isFollowingPlayer } from '@/lib/follows/playerFollows'
 import { currentListings, teamForRoster, TRADE_BLOCK_ENTRY_SELECT, tradeBlockSupport } from '@/lib/trade-block/importedTradeBlock'
@@ -1622,7 +1623,24 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
   if (!sport) return null
   if (!req.externalId && !req.sleeperId) return null
 
-  const player = await prisma.sportsPlayer
+  const select = {
+    source: true,
+    fetchedAt: true,
+    externalId: true,
+    sleeperId: true,
+    sport: true,
+    name: true,
+    position: true,
+    team: true,
+    number: true,
+    imageUrl: true,
+    age: true,
+    height: true,
+    weight: true,
+    yearsExp: true,
+    college: true,
+  } as const
+  const anchor = await prisma.sportsPlayer
     .findFirst({
       where: {
         sport: { equals: sport, mode: 'insensitive' },
@@ -1630,27 +1648,35 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
           ? { externalId: req.externalId }
           : { sleeperId: { equals: req.sleeperId!, mode: 'insensitive' } }),
       },
-      // Newest row wins: the same player arrives from several providers.
       orderBy: [{ fetchedAt: 'desc' }],
-      select: {
-        externalId: true,
-        sleeperId: true,
-        sport: true,
-        name: true,
-        position: true,
-        team: true,
-        number: true,
-        imageUrl: true,
-        age: true,
-        height: true,
-        weight: true,
-        yearsExp: true,
-        college: true,
-      },
+      select,
     })
     .catch(() => null)
 
-  if (!player) return null
+  if (!anchor) return null
+
+  /*
+   * 🛑 THE SLEEPER ROW SPEAKS FOR A SLEEPER ID, NOT THE NEWEST ROW (2026-10-12). One athlete has a
+   * row per ingest source, and the non-Sleeper rows took the id by a NAME match — so "newest row
+   * wins" meant whichever feed ran last. On production that day Sleeper 5864 is CB Byron Murphy (MIN)
+   * on the Sleeper row and DT Byron Murphy (SEA) on a fresher TheSportsDB row, and the card printed
+   * the Seahawks tackle. `selectAuthoritativePlayerRow` takes the Sleeper row and fills only its gaps
+   * from rows that agree with it. A row asked for by its OWN externalId that contradicts the Sleeper
+   * row is a different man and is shown as asked, never swapped for a namesake.
+   */
+  const siblings = anchor.sleeperId
+    ? await prisma.sportsPlayer
+        .findMany({
+          where: { sport: { equals: sport, mode: 'insensitive' }, sleeperId: { equals: anchor.sleeperId, mode: 'insensitive' } },
+          select,
+        })
+        .catch(() => [] as Array<typeof anchor>)
+    : []
+  const picked = selectAuthoritativePlayerRow([
+    anchor,
+    ...siblings.filter((s) => !(s.source === anchor.source && s.externalId === anchor.externalId)),
+  ])
+  const player = !picked || (req.externalId && picked.ignored.includes(anchor)) ? anchor : picked.row
 
   const identity: PlayerCardIdentity = {
     externalId: player.externalId,
