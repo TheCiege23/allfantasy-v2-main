@@ -10,6 +10,8 @@ import { buildTeamProfile } from '@/lib/trade-value/teamProfile'
 import { normalizedPlayerValue } from '@/lib/trade-value/valueEngine'
 import { loadLeagueIdpVorp } from '@/lib/idp-projections/leagueIdpVorp'
 import type { DiscoveryRoster } from '@/lib/trade-discovery/redraftTradeDiscovery'
+import { crosswalkToSleeperIds, sleeperLookupId } from '@/lib/core-app/rosterIdCrosswalk'
+import { latestProjectionWeek } from '@/lib/core-app/playerProjections'
 
 const RECENT_DAYS = 30
 
@@ -32,7 +34,7 @@ export async function assembleDiscoveryLeague(leagueId: string): Promise<Assembl
   const [league, rosters] = await Promise.all([
     prisma.league.findUnique({
       where: { id: leagueId },
-      select: { draftPickTrading: true, settings: true, leagueType: true },
+      select: { draftPickTrading: true, settings: true, leagueType: true, platform: true },
     }),
     prisma.redraftRoster.findMany({
       where: { seasonId: season.id },
@@ -47,16 +49,46 @@ export async function assembleDiscoveryLeague(leagueId: string): Promise<Assembl
   const leagueSize = rosters.length || 12
   const allPlayerIds = [...new Set(rosters.flatMap((r) => r.players.map((p) => p.playerId)))]
 
-  // Batch projections (latest per player) → value.
-  const projRows = allPlayerIds.length
+  /*
+   * 🛑 `fantasy_projections` IS KEYED ON SLEEPER IDS AND AN IMPORTED ROSTER IS NOT. This read was
+   * `playerId IN <roster ids>` with no platform check, so an ESPN / Fleaflicker roster priced its players
+   * on whoever holds those digits in Sleeper's space (ESPN 12483 Matthew Stafford -> Jack Bech; Fleaflicker
+   * 10888 Cairo Santos -> Jalen Carter) and trade discovery, the package finder and the trade block ranked
+   * on it. Each roster id is translated through the crosswalk (`sleeperLookupId`, as matchupProjections
+   * does); one that does not translate is unpriced (`value: null`), never a stranger's number.
+   */
+  const platform = league?.platform ?? null
+  const sleeperIdByRosterId = await crosswalkToSleeperIds(String(platform ?? ''), season.sport, allPlayerIds).catch(
+    () => new Map<string, string>(),
+  )
+  const lookupOf = (id: string) => sleeperLookupId(platform, id, sleeperIdByRosterId)
+  const lookupIds = [...new Set(allPlayerIds.map(lookupOf).filter((x): x is string => x != null))]
+
+  /*
+   * ⚠ THE WEEK THE FEED HOLDS, NOT "THE NEWEST ROW PER PLAYER". With no season/week filter a player not
+   * projected this week (a bye, an injury) was priced on whatever week he last had a row for. The feed's
+   * current week comes from `latestProjectionWeek`, the reader every other current-projection surface uses.
+   */
+  const projectionWeek = lookupIds.length ? await latestProjectionWeek().catch(() => null) : null
+  const projRows = projectionWeek
     ? await prisma.fantasyProjection.findMany({
-        where: { playerId: { in: allPlayerIds }, sport: season.sport, source: { not: 'allfantasy' } },
+        where: {
+          playerId: { in: lookupIds },
+          sport: season.sport,
+          season: projectionWeek.season,
+          week: projectionWeek.week,
+          source: { not: 'allfantasy' },
+        },
         select: { playerId: true, projectedPoints: true, fetchedAt: true },
         orderBy: { fetchedAt: 'desc' },
       })
     : []
-  const projByPlayer = new Map<string, number>()
-  for (const row of projRows) if (!projByPlayer.has(row.playerId)) projByPlayer.set(row.playerId, row.projectedPoints)
+  const projBySleeperId = new Map<string, number>()
+  for (const row of projRows) if (!projBySleeperId.has(row.playerId)) projBySleeperId.set(row.playerId, row.projectedPoints)
+  const projOf = (rosterId: string) => {
+    const sid = lookupOf(rosterId)
+    return sid ? projBySleeperId.get(sid) : undefined
+  }
 
   /*
    * ⚠ DEFENDERS HAVE NO PROJECTION HERE AND NO MARKET PRICE ANYWHERE. `FantasyProjection` is an
@@ -74,13 +106,14 @@ export async function assembleDiscoveryLeague(leagueId: string): Promise<Assembl
     const raw = ((league?.settings ?? {}) as Record<string, unknown>).roster_positions
     return Array.isArray(raw) ? raw.map((x) => String(x).toUpperCase()) : null
   })()
-  const idpValues = allPlayerIds.length
+  // Keyed on Sleeper ids too (`valueBySleeperId`), so it is asked with the translated ids.
+  const idpValues = lookupIds.length
     ? (
         await loadLeagueIdpVorp({
           prisma,
           leagueId,
           rosterPositions,
-          rosterPlayerIds: allPlayerIds,
+          rosterPlayerIds: lookupIds,
           numTeams: leagueSize,
           isDynasty: (league?.leagueType ?? '').toLowerCase().includes('dynasty'),
         }).catch(() => null)
@@ -116,7 +149,7 @@ export async function assembleDiscoveryLeague(leagueId: string): Promise<Assembl
       faabBalance: r.faabBalance,
       recentTradeCount: recentByRoster.get(r.id) ?? 0,
       players: r.players.map((p) => {
-        const proj = projByPlayer.get(p.playerId)
+        const proj = projOf(p.playerId)
         return {
           playerId: p.playerId,
           playerName: p.playerName,
@@ -127,7 +160,8 @@ export async function assembleDiscoveryLeague(leagueId: string): Promise<Assembl
            * unaffected. A defender with neither stays null rather than being scored as a zero.
            */
           value: (() => {
-            const idpValue = idpValues.get(p.playerId) ?? null
+            const sid = lookupOf(p.playerId)
+            const idpValue = (sid ? idpValues.get(sid) : null) ?? null
             if (idpValue == null && typeof proj !== 'number') return null
             return normalizedPlayerValue({
               projection: typeof proj === 'number' ? proj : null,

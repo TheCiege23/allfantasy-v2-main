@@ -30,6 +30,7 @@ import {
   crosswalkToRollingInsightsIds,
   type RiCrosswalkDb,
 } from '@/lib/player-identity/rollingInsightsCrosswalk'
+import { crosswalkToSleeperIds, sleeperLookupId } from '@/lib/core-app/rosterIdCrosswalk'
 
 export const dynamic = 'force-dynamic'
 
@@ -269,6 +270,27 @@ export async function GET(req: NextRequest) {
 
   const playerIds = roster.players.map((p) => p.playerId)
   const sports = Array.from(new Set(roster.players.map((p) => p.sport).filter(Boolean)))
+  /*
+   * 🛑 AN IMPORTED ROSTER HOLDS ITS PLATFORM'S IDS, AND EVERY NFL TABLE BELOW IS KEYED ON SLEEPER'S.
+   * Same digits, different man: measured on production, 65 ESPN/Fleaflicker entries (57 ids)
+   * are also another player's Sleeper id — Fleaflicker 12892 (Christian McCaffrey) is Sleeper's Da'Quan
+   * Felton, ESPN 12483 (Matthew Stafford) read Jack Bech's 4.4-pt projection, and the canonical context
+   * (which treats any bare number as a Sleeper id) handed 48 of them a stranger's injury, bye and depth
+   * chart. Each roster id is translated ONCE here (`sleeperLookupId`, as matchupProjections/myTeam do);
+   * one that does not translate reads NOTHING by id. Results stay keyed on the roster's own id.
+   *
+   * NFL only: the other sports' rows here are written in the roster's own id space (the NCAAF score sync
+   * writes `player_weekly_scores` under the Fantrax roster id, sport NCAAFB) and filtered by sport, so a
+   * Sleeper translation there would only lose them.
+   */
+  const leaguePlatform = leagueForLock?.platform ?? null
+  const translatesToSleeper = String(roster.season.sport ?? '').trim().toUpperCase() === 'NFL'
+  const sleeperIdByRosterId = translatesToSleeper
+    ? await crosswalkToSleeperIds(String(leaguePlatform ?? ''), 'NFL', playerIds).catch(() => new Map<string, string>())
+    : new Map<string, string>()
+  const lookupOf = (id: string): string | null =>
+    translatesToSleeper ? sleeperLookupId(leaguePlatform, id, sleeperIdByRosterId) : id
+  const lookupIds = [...new Set(playerIds.map(lookupOf).filter((x): x is string => x != null))]
   const seasonString = String(roster.season.season)
   let scores: PlayerWeeklyScoreRow[] = []
   let fantasyProjectionRows: FantasyProjectionRow[] = []
@@ -285,7 +307,7 @@ export async function GET(req: NextRequest) {
     ] = await Promise.all([
       prisma.playerWeeklyScore.findMany({
         where: {
-          playerId: { in: playerIds },
+          playerId: { in: lookupIds },
           week,
           season: roster.season.season,
           sport: { in: sports },
@@ -294,7 +316,7 @@ export async function GET(req: NextRequest) {
       prisma.fantasyProjection
         .findMany({
           where: {
-            playerId: { in: playerIds },
+            playerId: { in: lookupIds },
             week,
             season: seasonString,
             sport: { in: sports },
@@ -305,7 +327,7 @@ export async function GET(req: NextRequest) {
       prisma.aFProjectionSnapshot
         .findMany({
           where: {
-            playerId: { in: playerIds },
+            playerId: { in: lookupIds },
             week,
             season: roster.season.season,
             sport: { in: sports },
@@ -351,19 +373,24 @@ export async function GET(req: NextRequest) {
   const liveRosterPlayers = await hydrateCurrentInjuryStatuses(roster.players, roster.season.season, week)
   const scoredPlayers = await Promise.all(
     liveRosterPlayers.map(async (player) => {
-      const weeklyScore = scoreByPlayer.get(`${player.playerId}:${player.sport}`) ?? null
-      const projectionKey = `${player.playerId}:${player.sport}`
-      const providerProjection = projectionByPlayer.get(projectionKey)
-      const afProjection = afProjectionByPlayer.get(projectionKey)
-      const afMirror = afMirrorByPlayer.get(projectionKey)
-      const seasonStats = seasonStatsByPlayer.get(projectionKey)
+      const lookupId = lookupOf(player.playerId)
+      // Read on the translated id; an id with none reads nothing (see `lookupOf` above).
+      const lookupKey = lookupId ? `${lookupId}:${player.sport}` : null
+      const weeklyScore = (lookupKey ? scoreByPlayer.get(lookupKey) : null) ?? null
+      const providerProjection = lookupKey ? projectionByPlayer.get(lookupKey) : undefined
+      const afProjection = lookupKey ? afProjectionByPlayer.get(lookupKey) : undefined
+      const afMirror = lookupKey ? afMirrorByPlayer.get(lookupKey) : undefined
+      // Already keyed on the roster id: `loadOwnRollingInsightsSeasonStats` does its own crosswalk.
+      const seasonStats = seasonStatsByPlayer.get(`${player.playerId}:${player.sport}`)
       const adp = adpByPlayerKey.get(buildPlayerKey(player.playerName, player.position)) ?? null
       const canonical =
         String(player.sport).toUpperCase() === 'NFL'
-          ? (await getCanonicalNflPlayerContext(player.playerId, {
-              season: roster.season.season,
-              week,
-            }).catch(() => null)) ??
+          ? (lookupId
+              ? await getCanonicalNflPlayerContext(lookupId, {
+                  season: roster.season.season,
+                  week,
+                }).catch(() => null)
+              : null) ??
             (await getCanonicalNflPlayerByNameTeam(player.playerName, player.team, {
               position: player.position,
               season: roster.season.season,
@@ -443,6 +470,8 @@ export async function GET(req: NextRequest) {
         ...projectionFields,
         weeklyScore: {
           ...weeklyScore,
+          // The row is stored under the Sleeper id; the response speaks the roster's.
+          playerId: player.playerId,
           fantasyPts: await calculateScoreFromSportConfig(
             roster.leagueId,
             player.playerId,
@@ -475,8 +504,13 @@ export async function GET(req: NextRequest) {
       playerName: canonical?.displayName ?? player.playerName,
       position: canonical?.fantasyPosition ?? player.position,
       team: canonical?.teamAbbr ?? player.team,
-      injuryStatus: canonical?.injury.designation ?? unified?.injuryStatus ?? player.injuryStatus,
-      providerInjuryLabel: canonical?.injury.designation ?? unified?.injuryStatus ?? null,
+      /*
+       * ⚠ NOT `unified?.injuryStatus`: that is the stored `sports_players` snapshot column, and it sat ABOVE
+       * the live designation hydrated into `player.injuryStatus`. Dead today (its ids are `NFL:<id>`, so 0
+       * of 153,414 roster entries can match), but the first id fix would have made the stale column win.
+       */
+      injuryStatus: canonical?.injury.designation ?? player.injuryStatus,
+      providerInjuryLabel: canonical?.injury.designation ?? null,
       activeStatus: canonical?.activeStatus ?? null,
       weeklyProjection: canonicalProjection?.weeklyProjectedPoints ?? player.weeklyProjection,
       restOfSeasonProjection: canonicalProjection?.restOfSeasonProjectedPoints ?? player.restOfSeasonProjection,

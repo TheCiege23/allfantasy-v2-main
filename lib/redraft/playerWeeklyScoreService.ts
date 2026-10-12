@@ -33,6 +33,8 @@ import { bridgeNcaafRosterIdsToCfbdIds } from '@/lib/redraft/ncaafGameLogIdBridg
 import { loadNcaafWeekParticipation, NCAAF_ZERO_VERDICTS, type NcaafNoRowVerdict } from '@/lib/redraft/ncaafWeekParticipation'
 import { ncaafReserveAvailability, type NcaafReserveAvailability } from '@/lib/player-identity/verifiedNcaafReserves'
 import { aggregateNcaafWeek, isNcaafSport } from '@/lib/scoring-runtime/ncaafStatNormalization'
+import { crosswalkToSleeperIds, sleeperLookupId } from '@/lib/core-app/rosterIdCrosswalk'
+import { rosterIdSpaceOf } from '@/lib/core-app/rosterIdSpace'
 
 export type WeeklyScoreSyncSummary = {
   leagueId: string
@@ -46,6 +48,10 @@ export type WeeklyScoreSyncSummary = {
   preseasonRowsSkipped?: number
   /** Daily sports: roster ids translated to game-log (PlayerIdentityMap) ids — see rosterGameLogIdBridge.ts. */
   gameLogIdsBridged?: number
+  /** NFL, foreign platform: roster ids translated to a Sleeper id through the crosswalk before any read or write. */
+  foreignIdsTranslated?: number
+  /** NFL, foreign platform: roster ids with no one-to-one Sleeper id — skipped, never read or written under. */
+  untranslatedForeignPlayerIds?: string[]
   /** NCAAF: roster ids resolved to a CFBD athlete id (see ncaafGameLogIdBridge.ts), and those that could not be. */
   cfbdIdsResolved?: number
   unresolvedCfbdPlayerIds?: string[]
@@ -212,12 +218,44 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
     select: { id: true },
   })
   const rosterIds = rosters.map((r) => r.id)
-  const rosterPlayers = rosterIds.length
+  const storedRosterPlayers = rosterIds.length
     ? await prisma.redraftRosterPlayer.findMany({
         where: { rosterId: { in: rosterIds }, droppedAt: null },
         select: { playerId: true, sport: true, position: true, team: true },
       })
     : []
+  const storedIds = Array.from(new Set(storedRosterPlayers.map((p: { playerId: string }) => p.playerId).filter(Boolean)))
+
+  /*
+   * 🛑 THE NFL BRANCH READS AND WRITES IN SLEEPER'S ID SPACE, AND AN IMPORTED ROSTER IS NOT IN IT.
+   * `playerGameLogCache`, Sleeper's week payload and `player_weekly_scores` (unique on playerId + week +
+   * season + sport, shared by every league) are all Sleeper-keyed. An ESPN / Fleaflicker roster holds that
+   * platform's ids, and the same digits are a different man: Fleaflicker 13761 (Josh Allen, QB) is a
+   * Sleeper DL, 12159 (Dak Prescott) is Hogan Hatten — so a sync would score the stranger's week and WRITE
+   * it under his id, over his own row. The cron is gated to native leagues; POST /api/redraft/score-sync
+   * with a leagueId is not. Each foreign id is translated through the crosswalk (as matchupProjections
+   * does) and everything below runs on the Sleeper id; one with no one-to-one Sleeper id is skipped and
+   * counted, never read or written under. Measured on production 2026-10-12: 456 of 541 distinct ESPN /
+   * Fleaflicker roster ids translate one-to-one, none ambiguously.
+   *
+   * NCAAF and the daily sports carry their own id bridges (see below) and are not touched here.
+   */
+  let rosterPlayers = storedRosterPlayers
+  let foreignIdsTranslated: number | undefined
+  let untranslatedForeignPlayerIds: string[] | undefined
+  if (!isDailySport && !isNcaaf) {
+    const sourceLeague = await prisma.league.findUnique({ where: { id: season.leagueId }, select: { platform: true } })
+    const platform = sourceLeague?.platform ?? null
+    if (rosterIdSpaceOf(platform) !== 'sleeper') {
+      const crosswalk = await crosswalkToSleeperIds(String(platform ?? ''), sport, storedIds)
+      untranslatedForeignPlayerIds = storedIds.filter((id) => sleeperLookupId(platform, id, crosswalk) == null)
+      foreignIdsTranslated = storedIds.length - untranslatedForeignPlayerIds.length
+      rosterPlayers = storedRosterPlayers.flatMap((p) => {
+        const sleeperId = sleeperLookupId(platform, p.playerId, crosswalk)
+        return sleeperId ? [{ ...p, playerId: sleeperId }] : []
+      })
+    }
+  }
 
   const playerIds: string[] = Array.from(new Set(rosterPlayers.map((p: { playerId: string }) => p.playerId).filter(Boolean)))
   const summary: WeeklyScoreSyncSummary = {
@@ -226,7 +264,9 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
     sport,
     season: seasonYear,
     week,
-    rosteredPlayers: playerIds.length,
+    rosteredPlayers: storedIds.length,
+    ...(foreignIdsTranslated !== undefined ? { foreignIdsTranslated } : {}),
+    ...(untranslatedForeignPlayerIds ? { untranslatedForeignPlayerIds } : {}),
     cacheRowsRead: 0,
     scoresUpserted: 0,
     missingCachePlayerIds: [],
@@ -236,8 +276,16 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
     warnings: [],
   }
 
+  if (untranslatedForeignPlayerIds?.length) {
+    summary.warnings.push(
+      `${untranslatedForeignPlayerIds.length} roster id(s) are this league's platform ids with no one-to-one Sleeper id; ` +
+        `they were NOT scored rather than risk scoring, and writing over, whoever holds those digits in Sleeper's space: ` +
+        `${untranslatedForeignPlayerIds.slice(0, 5).join(', ')}.`,
+    )
+  }
+
   if (!playerIds.length) {
-    summary.warnings.push('No rostered players found for this redraft season.')
+    if (!storedIds.length) summary.warnings.push('No rostered players found for this redraft season.')
     await recordScoreSyncAudit(summary, params.actorId ?? 'system')
     return summary
   }
