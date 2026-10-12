@@ -7,7 +7,7 @@ import {
   type InjuryRowLookupResult,
 } from '@/lib/injuries/matchInjuryRows'
 import { currentDesignationFromFact, isRosterAbsence, isRuledOut } from '@/lib/core-app/injuryStatus'
-import { buildPlayerKey } from '@/lib/adp/computeAllFantasyAdp'
+import { buildPlayerKey, normalizeStoredPlayerKey } from '@/lib/adp/computeAllFantasyAdp'
 import {
   canonicalName,
   canonicalPosition,
@@ -997,22 +997,35 @@ async function loadProjectionRows(
   }
 }
 
-async function loadAdp(db: DbClient, player: SportsPlayerRow, season: number): Promise<number | null> {
+export async function loadAdp(db: DbClient, player: SportsPlayerRow, season: number): Promise<number | null> {
   const key = buildPlayerKey(player.name, player.position ?? '')
-  if (!key) return null
-  const row = (await (db as any).allFantasyAdpSnapshot
-    .findFirst({
-      where: {
-        sport: 'NFL',
-        leagueType: 'redraft',
-        season: String(season),
-        playerKey: key,
-        draftMode: 'real',
-      },
-      orderBy: { lastUpdatedAt: 'desc' },
-      select: { averageOverallPick: true },
-    })
-    .catch(() => null)) as { averageOverallPick: number | null } | null
+  const bar = key.lastIndexOf('|')
+  const name = key.slice(0, bar)
+  if (!name) return null
+  /*
+   * Stored keys predate the suffix-insensitive `buildPlayerKey`, so an equality read on the new key
+   * misses `marvin harrison jr.|wr`. Candidates: the new key, the old trim+lowercase spelling of this
+   * name, and anything starting `<name> ` (the suffixed variants) — then filtered to rows whose
+   * re-keyed key IS this player. Newest row wins, as before.
+   */
+  const legacyKey = `${String(player.name ?? '').trim().toLowerCase()}|${String(player.position ?? '').trim().toLowerCase()}`
+  const rows = (await Promise.resolve()
+    .then(() =>
+      (db as any).allFantasyAdpSnapshot.findMany({
+        where: {
+          sport: 'NFL',
+          leagueType: 'redraft',
+          season: String(season),
+          draftMode: 'real',
+          OR: [{ playerKey: { in: [key, legacyKey] } }, { playerKey: { startsWith: `${name} ` } }],
+        },
+        orderBy: { lastUpdatedAt: 'desc' },
+        select: { playerKey: true, averageOverallPick: true },
+        take: 200,
+      }),
+    )
+    .catch(() => [])) as Array<{ playerKey: string; averageOverallPick: number | null }>
+  const row = rows.find((r) => normalizeStoredPlayerKey(r.playerKey) === key)
   return row?.averageOverallPick ?? null
 }
 

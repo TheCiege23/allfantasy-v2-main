@@ -4,7 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { applyInjuryStatuses } from '@/lib/redraft/rosterInjuryStatus'
 import { assertLeagueMember } from '@/lib/league/league-access'
-import { buildPlayerKey } from '@/lib/adp/computeAllFantasyAdp'
+import { buildPlayerKey, normalizeStoredPlayerKey } from '@/lib/adp/computeAllFantasyAdp'
 import { buildAllFantasyProjection } from '@/lib/redraft/projectionEngine'
 import { calculateScoreFromSportConfig } from '@/lib/redraft/scoringEngine'
 import {
@@ -371,11 +371,13 @@ export async function GET(req: NextRequest) {
     const key = `${row.playerId}:${row.sport}`
     if (!afProjectionByPlayer.has(key)) afProjectionByPlayer.set(key, row)
   }
+  // Rows arrive ADP-ascending, so first-seen is the best ADP. Stored keys are re-keyed so a stored
+  // `kenneth walker iii|rb` meets the roster's "Kenneth Walker" (see computeAllFantasyAdp.buildPlayerKey).
   const adpByPlayerKey = new Map<string, number>()
   for (const row of adpRows) {
-    if (row.playerKey && !adpByPlayerKey.has(row.playerKey)) {
-      adpByPlayerKey.set(row.playerKey, row.averageOverallPick)
-    }
+    if (!row.playerKey) continue
+    const key = normalizeStoredPlayerKey(row.playerKey)
+    if (!adpByPlayerKey.has(key)) adpByPlayerKey.set(key, row.averageOverallPick)
   }
 
   // Live designations BEFORE projecting, so the projection is never priced on the stored snapshot.

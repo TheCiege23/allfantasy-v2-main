@@ -54,7 +54,7 @@ vi.mock('@/lib/prisma', () => {
   }
 })
 vi.mock('@/lib/league/league-access', () => ({ assertLeagueMember: vi.fn().mockResolvedValue({ ok: true, status: 200 }) }))
-vi.mock('@/lib/adp/computeAllFantasyAdp', () => ({ buildPlayerKey: vi.fn(() => 'k') }))
+vi.mock('@/lib/adp/computeAllFantasyAdp', () => ({ buildPlayerKey: vi.fn(() => 'k'), normalizeStoredPlayerKey: vi.fn((k: string) => k) }))
 vi.mock('@/lib/redraft/projectionEngine', () => ({ buildAllFantasyProjection: projectionMock }))
 vi.mock('@/lib/redraft/scoringEngine', () => ({ calculateScoreFromSportConfig: vi.fn() }))
 vi.mock('@/lib/redraft/lineupValidation', () => ({ applyRedraftLineupMoves: vi.fn(), validateRedraftLineup: validateMock }))
