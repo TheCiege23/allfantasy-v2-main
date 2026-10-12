@@ -58,6 +58,7 @@ import {
   type LeagueWaiverWorldState,
   type UserRosterWaiverInfo,
 } from './waiverWorldState'
+import { isOutDesignation, isRuledOut } from '@/lib/core-app/injuryStatus'
 
 /**
  * Week/bye schedule model (scheduleBye.ts) — weekly sports. Slice 9 adds
@@ -116,8 +117,13 @@ const DESIGNATION_TO_INJURY_STATUS: Record<string, InjuryStatus> = {
   day_to_day: 'day_to_day',
   dtd: 'day_to_day',
   sus: 'suspended',
+  susp: 'suspended',
   suspended: 'suspended',
   suspension: 'suspended',
+  // ESPN spellings `isRuledOut` does not read as absences (2026-10-12: 3 and 5 rows). Reserve/Retired
+  // is a player who will not play again; "injury reserve" is ESPN's misspelling of the IR list.
+  'reserve-ret': 'ir',
+  'injury reserve': 'ir',
 }
 
 /**
@@ -125,10 +131,22 @@ const DESIGNATION_TO_INJURY_STATUS: Record<string, InjuryStatus> = {
  * designation out of the prose — "no designation stated", NOT healthy (see
  * `parseInjuryDesignation`). The row itself is still real news, so it surfaces
  * as 'unknown' rather than being hidden or coerced.
+ *
+ * ⚠ THE FEED IS NOT ONLY RI'S VOCABULARY. The read port also serves ESPN rows, and the exact-key
+ * table above turned every baseball/hockey list placement into 'unknown' — no urgency, no
+ * injured-starter alert. Fresh rows measured 2026-10-12: "60-day IL" 171, "15-day IL" 43,
+ * "10-day IL" 27, "7-day IL" 4. Anything the table misses goes through the shared absence rule
+ * (`isRuledOut`: IR/IL/I.L./PUP/NFI/Injured Reserve/suspension): a game-day Out is 'out', every
+ * season-scale placement is 'ir'.
  */
 function designationToInjuryStatus(status: string | null): InjuryStatus {
   if (status == null) return 'unknown'
-  return DESIGNATION_TO_INJURY_STATUS[status.trim().toLowerCase()] ?? 'unknown'
+  const exact = DESIGNATION_TO_INJURY_STATUS[status.trim().toLowerCase()]
+  if (exact) return exact
+  if (!isRuledOut(status)) return 'unknown'
+  if (isOutDesignation(status)) return 'out'
+  // The same suspension words `isRuledOut` accepts ("Suspended (4 games)", "Susp.").
+  return /\bsus(p|pen[a-z]*)?\b/i.test(status) ? 'suspended' : 'ir'
 }
 
 /**
@@ -150,6 +168,7 @@ const FALLBACK_GENUINE_INJURY_TOKENS: Record<string, InjuryStatus> = {
   // Sleeper's own season-scale roster absence, the one roster status `resolveInjuryContext` passes on.
   'injured reserve': 'ir',
   pup: 'ir',
+  nfi: 'ir',
   o: 'out',
   out: 'out',
   sus: 'suspended',

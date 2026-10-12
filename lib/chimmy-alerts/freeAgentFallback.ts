@@ -18,7 +18,18 @@
  * back to "check free agents" with the league's claim screen.
  */
 
-const OUT_OF_PLAY = new Set(['out', 'doubtful', 'ir', 'injured reserve', 'suspended', 'pup'])
+import { isRuledOut } from '@/lib/core-app/injuryStatus'
+
+/**
+ * Ruled out (the shared rule: Out, IR, IL, PUP, NFI, Injured Reserve, any suspension spelling) or
+ * Doubtful. The local set this replaces missed "Suspension" — the table's actual spelling — and "Sus",
+ * so a suspended free agent could be offered as the fix. `designationSeverity` is the same rule but
+ * lives in a server-only module; this file stays pure.
+ */
+function outOfPlay(status: string): boolean {
+  const s = status.trim().toLowerCase()
+  return isRuledOut(s) || /\bdoubtful\b/.test(s) || s === 'd'
+}
 
 export type FreeAgentCandidate = {
   playerId: string
@@ -44,7 +55,7 @@ export function pickFreeAgent(
 ): FreeAgentPick | null {
   for (const c of candidates) {
     const status = ctx.statusById.get(c.playerId)
-    if (status && OUT_OF_PLAY.has(status.trim().toLowerCase())) continue
+    if (status && outOfPlay(status)) continue
     const club = ctx.club(c.team)
     const kickoff = club ? ctx.kickoffs[club] : undefined
     if (!kickoff) continue

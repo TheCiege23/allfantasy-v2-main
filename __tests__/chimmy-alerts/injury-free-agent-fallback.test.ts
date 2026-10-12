@@ -67,6 +67,12 @@ describe('pickFreeAgent', () => {
     const pick = pickFreeAgent([cand('1', 'Hurt Guy', 'CHI'), cand('2', 'Iffy Guy', 'CHI'), cand('3', 'Healthy Guy', 'JAX')], ctx({ '1': 'Out', '2': 'Doubtful' }))
     expect(pick?.name).toBe('Healthy Guy')
   })
+  it('🛑 skips a suspended or listed free agent however the feed spells it', () => {
+    for (const status of ['Suspension', 'Sus', 'suspension', 'NFI', '60-day IL', 'Doubtful (ankle)']) {
+      const pick = pickFreeAgent([cand('1', 'Benched Guy', 'CHI'), cand('2', 'Healthy Guy', 'JAX')], ctx({ '1': status }))
+      expect(pick?.name, status).toBe('Healthy Guy')
+    }
+  })
   it('🛑 skips a free agent on bye, or whose game has already started', () => {
     expect(pickFreeAgent([cand('1', 'Bye Guy', 'KC'), cand('2', 'Thursday Guy', 'NYG')], ctx())).toBeNull()
   })
