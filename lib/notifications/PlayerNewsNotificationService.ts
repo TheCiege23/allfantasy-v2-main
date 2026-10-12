@@ -14,14 +14,17 @@
  */
 
 import { prisma } from '@/lib/prisma'
-import { foldInjuryTeam } from '@/lib/injuries/matchInjuryRows'
-import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
+import {
+  resolveNewsPlayerBinding,
+  rosterRowIsBoundPlayer,
+  type NewsPlayerBinding,
+} from '@/lib/notifications/newsPlayerBinding'
 import type { RunBudget } from '@/lib/cron/runBudget'
 import type { NotificationCategoryId } from '@/lib/notification-settings/types'
 import type { NewsCategory } from '@/lib/workers/x-news-ingestion'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 import { classifyPlayerNewsCategory } from '@/lib/news/player-news-category'
-import { listFollowerIdsForPlayer } from '@/lib/follows/playerFollows'
+import { listFollowerIdsForPlayerIdentity } from '@/lib/follows/playerFollows'
 import { listFollowerIdsForTeam } from '@/lib/follows/teamFollows'
 import { resolveNewsTeam, withinTeamFollowDailyCap } from '@/lib/follows/teamFollowAlerts'
 import { alreadyToldAbout, recordToldAbout } from '@/lib/notifications/playerNewsRepeatGuard'
@@ -77,36 +80,39 @@ const CATEGORY_LABELS: Record<string, string> = {
 }
 
 /**
- * Rostered copies of the player a news item names: the same name (suffixes and punctuation folded),
- * the same sport, and — when both carry one — the same club.
+ * Rostered copies of the ONE player a news row was bound to (lib/notifications/newsPlayerBinding).
  *
  * 🛑 THIS WAS `playerName CONTAINS …` WITH NO SPORT OR CLUB (2026-10-11). A story about the Browns'
- * LB Justin Jefferson pushed "🏥 Injury Update: Justin Jefferson" to every manager of the Vikings WR,
- * and a substring also hits longer names ("Josh Allen" inside "Josh Allen Jr."-style variants and
- * other sports' namesakes). The query stays broad; the bind is decided here.
+ * LB Justin Jefferson pushed "🏥 Injury Update: Justin Jefferson" to every manager of the Vikings WR.
+ *
+ * 🛑 AND THE FIRST REPAIR GATED ON THE NEWS ROW'S `team` TAG (same day), WHICH IS OFTEN THE OPPONENT.
+ * "Burrow throws 4 TDs… Bengals beat Dolphins" is stored as Ja'Marr Chase / MIA, so the gate dropped
+ * that story for every manager rostering Chase. The player's team now comes from the registry; the
+ * tag only ever chooses between namesakes. A row bound to no single player tells no roster at all.
  */
-async function rosterRowsForNewsPlayer(
-  playerName: string,
-  team: string | null | undefined,
+async function rosterRowsForBinding(
+  binding: NewsPlayerBinding,
+  newsName: string,
   sport: string | null | undefined,
 ): Promise<Array<{ roster: { ownerId: string; leagueId: string } | null }>> {
-  const want = normalizeMatchName(playerName)
-  if (!want) return []
+  if (binding.kind !== 'resolved') return []
   const sk = String(sport ?? '').trim().toUpperCase()
-  const club = foldInjuryTeam(team, sk)
+  const spellings = [...new Set([newsName.trim(), binding.identity.name.trim()].filter(Boolean))]
+  if (spellings.length === 0) return []
   const rows = await prisma.redraftRosterPlayer
     .findMany({
-      where: { playerName: { contains: playerName.trim(), mode: 'insensitive' }, droppedAt: null },
-      select: { playerName: true, team: true, sport: true, roster: { select: { ownerId: true, leagueId: true } } },
+      where: {
+        OR: spellings.map((s) => ({ playerName: { contains: s, mode: 'insensitive' as const } })),
+        droppedAt: null,
+      },
+      select: {
+        playerId: true, playerName: true, team: true, sport: true,
+        roster: { select: { ownerId: true, leagueId: true } },
+      },
       take: 500,
     })
     .catch(() => [])
-  return rows.filter((r) => {
-    if (normalizeMatchName(r.playerName) !== want) return false
-    if (sk && r.sport && r.sport.trim().toUpperCase() !== sk) return false
-    const theirs = foldInjuryTeam(r.team, sk)
-    return !club || !theirs || theirs === club
-  })
+  return rows.filter((r) => rosterRowIsBoundPlayer(binding, r, sk))
 }
 
 /**
@@ -128,7 +134,8 @@ export async function dispatchPlayerNewsNotifications(
   if (impact === 'low' && category !== 'injury') return 0
 
   // Find all rosters containing this player across all leagues
-  const rosterPlayers = await rosterRowsForNewsPlayer(playerName, team, sport)
+  const binding = await resolveNewsPlayerBinding(sport, playerName, team)
+  const rosterPlayers = await rosterRowsForBinding(binding, playerName, sport)
 
   if (rosterPlayers.length === 0) return 0
 
@@ -349,8 +356,13 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
   teamFollowerRecipients: number
   /** Team followers not told because they hit today's team-alert cap. */
   teamFollowCapped: number
-  /** Rows with no rostering manager AND no follower — nobody to tell. */
+  /** Rows with no rostering manager AND no follower — nobody to tell. Includes `unboundPlayer`. */
   noRoster: number
+  /**
+   * Of the rows worth sending, those whose name did not bind to ONE registry player — a namesake the
+   * row's tag could not settle, or a name that is not a player at all. Nobody is told about these.
+   */
+  unboundPlayer: number
   /** Rows fetched but never considered because the budget ran out. Zero means the run completed. */
   deferred: number
   /** People not alerted because they were already told this story, or this status, recently. */
@@ -384,6 +396,7 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
   let teamFollowerRecipients = 0
   let teamFollowCapped = 0
   let noRoster = 0
+  let unboundPlayer = 0
   let deferred = 0
   let repeatsSuppressed = 0
   const stamped: string[] = []
@@ -413,7 +426,29 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
     const isInjury = category === 'injury'
     if (row.impact !== 'high' && !isInjury) continue
 
-    const rosterPlayers = await rosterRowsForNewsPlayer(row.playerName, row.team, row.sport)
+    /*
+     * ONE player, and HIS team, from the registry — never the row's `team` tag, which names whatever
+     * club the article mentions (often the opponent). See lib/notifications/newsPlayerBinding.
+     *
+     * 🛑 A ROW THAT DOES NOT BIND TO ONE PLAYER TELLS NOBODY: no roster, no player follower, and no
+     * team follower. "Josh Allen" with no tag, or tagged the opponent, could be the Bills QB or the
+     * Jaguars DL; guessing puts one man's injury on the other's managers, and routing it to "the
+     * player's team" would need a team we do not have. A missed alert is a gap; a wrong one is a
+     * false statement someone acts on.
+     *
+     * ⚠ THIS INCLUDES ROWS WHOSE "PLAYER" IS A TEAM ("Dallas Cowboys"). Measured over 30 days of
+     * high-impact NFL news: 277 such rows had been reaching managers who roster that team's D/ST by
+     * name, and could reach that team's followers through the tag. They are not player news and now
+     * tell nobody; routing them by the team they name would be a separate, deliberate feature.
+     */
+    const binding = await resolveNewsPlayerBinding(row.sport, row.playerName, row.team)
+    if (binding.kind !== 'resolved') {
+      unboundPlayer++
+      noRoster++
+      continue
+    }
+    const playerTeam = binding.identity.currentTeam
+    const rosterPlayers = await rosterRowsForBinding(binding, row.playerName, row.sport)
 
     // dispatchNotification takes ONE leagueId, so group recipients by league rather than
     // calling it per user — one call per league instead of one per manager.
@@ -438,17 +473,30 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
      */
     const rostered = new Set<string>()
     for (const ids of byLeague.values()) for (const id of ids) rostered.add(id)
-    const followers = await listFollowerIdsForPlayer(row.sport, row.playerName).catch(() => null)
+    const followers = await listFollowerIdsForPlayerIdentity(row.sport, {
+      identity: binding.identity,
+      candidates: binding.candidates,
+      newsName: row.playerName,
+    }).catch(() => null)
     const allFollowersOnly = (followers ?? []).filter((id) => !rostered.has(id))
 
     /*
      * Team followers (owner's call, 2026-10-03): anyone following this player's TEAM, under their own
      * `followed_teams` switch. Same rule as above, one level wider — minus everyone already told via a
-     * roster or a player follow, so one story is one buzz. The team comes from the row's own text
-     * through the resolver (lib/follows/teamResolver), or the player's current team when the row has
-     * none; an ambiguous row resolves to no team and tells no team follower.
+     * roster or a player follow, so one story is one buzz.
+     *
+     * 🛑 THE TEAM IS THE BOUND PLAYER'S REGISTRY TEAM, NOT THE ROW'S TAG (2026-10-11). Feeding the tag
+     * sent "Bengals beat Dolphins" (tagged Chase / MIA) to DOLPHINS followers. `resolveNewsTeam` is
+     * unchanged and maps the registry's team text onto a followable team; it is simply fed the right
+     * thing now. Only a binding that did not rest on the tag is team-routed (`teamRoutable`): a
+     * namesake chosen by the tag (`team_verified`) rests on the very tag measured as wrong, and an
+     * unbound row never gets here.
+     * Passing no player name keeps resolveNewsTeam from falling back to a name lookup of its own.
      */
-    const teamAbbr = await resolveNewsTeam(row.sport, row.team, row.playerName).catch(() => null)
+    const teamAbbr =
+      binding.teamRoutable && playerTeam
+        ? await resolveNewsTeam(row.sport, playerTeam, null).catch(() => null)
+        : null
     const teamFollowers = teamAbbr ? await listFollowerIdsForTeam(row.sport, teamAbbr).catch(() => null) : null
     const playerFollowerSet = new Set(allFollowersOnly)
     const allTeamFollowersOnly = (teamFollowers ?? []).filter((id) => !rostered.has(id) && !playerFollowerSet.has(id))
@@ -492,7 +540,7 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
         leagueId,
         severity: isInjury ? 'high' : 'medium',
         dedupePrefix: `player-news:${row.id}`,
-        meta: { playerName: row.playerName, team: row.team, sport: row.sport, newsCategory: category },
+        meta: { playerName: row.playerName, team: playerTeam, sport: row.sport, newsCategory: category },
       }).catch(() => {})
       recipients += userIds.size
     }
@@ -508,7 +556,7 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
         leagueId: null,
         severity: isInjury ? 'high' : 'medium',
         dedupePrefix: `player-news:${row.id}`,
-        meta: { playerName: row.playerName, team: row.team, sport: row.sport, newsCategory: category, followed: true },
+        meta: { playerName: row.playerName, team: playerTeam, sport: row.sport, newsCategory: category, followed: true },
       }).catch(() => {})
       recipients += followersOnly.length
       followerRecipients += followersOnly.length
@@ -551,6 +599,7 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
     teamFollowerRecipients,
     teamFollowCapped,
     noRoster,
+    unboundPlayer,
     deferred,
     repeatsSuppressed,
   }

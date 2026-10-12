@@ -55,8 +55,14 @@ vi.mock('@/lib/prisma', () => ({
     },
     redraftRosterPlayer: {
       // The rostered copy of whoever the story names (the service binds by name, sport and club).
-      findMany: vi.fn(async (args: { where: { playerName: { contains: string } } }) => [
-        { playerName: args.where.playerName.contains, team: null, sport: 'NFL', roster: { ownerId: 'u1', leagueId: 'l1' } },
+      findMany: vi.fn(async (args: { where: { OR: Array<{ playerName: { contains: string } }> } }) => [
+        { playerName: args.where.OR[0].playerName.contains, team: null, sport: 'NFL', roster: { ownerId: 'u1', leagueId: 'l1' } },
+      ]),
+    },
+    // The registry the sender binds each story to; one identity per name asked for.
+    playerIdentityMap: {
+      findMany: vi.fn(async (args: { where: { OR: Array<{ canonicalName?: { contains: string } }> } }) => [
+        { id: 'pim-1', canonicalName: args.where.OR[0].canonicalName!.contains, position: 'RB', currentTeam: 'LV', sleeperId: '12527' },
       ]),
     },
     injuryReportRecord: { upsert: vi.fn(async () => ({})) },

@@ -16,15 +16,29 @@ const h = vi.hoisted(() => ({
   followers: vi.fn(),
 }))
 
+/**
+ * The identity registry the sender binds a story to (lib/notifications/newsPlayerBinding). Filtered
+ * by the name asked for, so a lookup that asks the wrong question finds nobody.
+ */
+const REGISTRY = [
+  { id: 'pim-gibbs', canonicalName: 'Jahmyr Gibbs', position: 'RB', currentTeam: 'DET', sleeperId: '9221' },
+  { id: 'pim-jj-wr', canonicalName: 'Justin Jefferson', position: 'WR', currentTeam: 'MIN', sleeperId: '6794' },
+  { id: 'pim-jj-lb', canonicalName: 'Justin Jefferson', position: 'LB', currentTeam: 'CLE', sleeperId: '13524' },
+]
+
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     playerNewsRecord: { findMany: h.newsFind, updateMany: h.newsUpdate },
     redraftRosterPlayer: { findMany: h.rosterFind },
+    playerIdentityMap: {
+      findMany: async ({ where }: { where: { OR: Array<{ canonicalName?: { contains: string } }> } }) =>
+        REGISTRY.filter((p) => where.OR.some((c) => c.canonicalName && p.canonicalName.toLowerCase().includes(c.canonicalName.contains.toLowerCase()))),
+    },
   },
 }))
 vi.mock('@/lib/notifications/NotificationDispatcher', () => ({ dispatchNotification: h.dispatch }))
 vi.mock('@/lib/news/player-news-category', () => ({ classifyPlayerNewsCategory: h.classify }))
-vi.mock('@/lib/follows/playerFollows', () => ({ listFollowerIdsForPlayer: h.followers }))
+vi.mock('@/lib/follows/playerFollows', () => ({ listFollowerIdsForPlayerIdentity: h.followers }))
 
 import { dispatchPendingPlayerNewsNotifications } from '@/lib/notifications/PlayerNewsNotificationService'
 
@@ -57,7 +71,11 @@ describe('followers of a player in the news', () => {
     h.followers.mockResolvedValue(['fan-1'])
     const out = await dispatchPendingPlayerNewsNotifications({ lookbackHours: 6 })
 
-    expect(h.followers).toHaveBeenCalledWith('NFL', 'Jahmyr Gibbs')
+    // Keyed on the bound identity (his Sleeper id), not on the name the story spelled.
+    expect(h.followers).toHaveBeenCalledWith(
+      'NFL',
+      expect.objectContaining({ identity: expect.objectContaining({ sleeperId: '9221' }), newsName: 'Jahmyr Gibbs' }),
+    )
     expect(followerCalls()).toHaveLength(1)
     expect(followerCalls()[0]).toMatchObject({
       userIds: ['fan-1'],
