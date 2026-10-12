@@ -8,7 +8,7 @@ import { prisma } from '@/lib/prisma';
 import { 
   WaiverRequestSchema, 
   WaiverResponseSchema,
-  WAIVER_AI_SYSTEM_PROMPT,
+  buildWaiverAiSystemPrompt,
   buildWaiverUserPrompt
 } from '@/lib/waiver-ai-prompt';
 import { runAiProtection } from '@/lib/ai-protection';
@@ -130,7 +130,7 @@ Consider this manager's style when making recommendations.
       userPrompt = `${userPrompt}\n\nSIMULATION/WAREHOUSE CONTEXT:\n${insightBundle.contextText}`
     }
     const enhancedSystemPrompt = [
-      WAIVER_AI_SYSTEM_PROMPT,
+      buildWaiverAiSystemPrompt({ sport: waiverRequest.league?.sport }),
       learningContext ?? '',
       openaiMetaContext ? `\nPLATFORM META (use for waiver recommendations):\n${openaiMetaContext}` : '',
       insightBundle

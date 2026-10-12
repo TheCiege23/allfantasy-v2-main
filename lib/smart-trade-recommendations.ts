@@ -345,7 +345,7 @@ export async function generateSmartRecommendations(
 
   const userRosterEnriched = userRoster.map(player => {
     const fcPlayer = findPlayerByName(fcValues, player.name, { position: player.position });
-    const tieredPlayer = findPlayerTier(player.name);
+    const tieredPlayer = findPlayerTier(player.name, player.position);
     const baseValue = fcPlayer?.value || 0;
     const position = player.position || 'WR';
     const age = tieredPlayer?.age;
@@ -364,7 +364,7 @@ export async function generateSmartRecommendations(
     ...roster,
     players: roster.players.map(p => {
       const fcPlayer = findPlayerByName(fcValues, p.name, { position: p.position });
-      const tieredPlayer = findPlayerTier(p.name);
+      const tieredPlayer = findPlayerTier(p.name, p.position);
       return {
         ...p,
         value: fcPlayer?.value || 0,

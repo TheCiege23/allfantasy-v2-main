@@ -1,7 +1,18 @@
-import { TIER_0_UNTOUCHABLES, TIER_1_CORNERSTONES, TIER_2_HIGH_END, TIER_3_STARTERS, TIER_4_REPLACEABLE } from './dynasty-tiers';
 import { getRedraftAIContext } from './redraft-tiers';
 import { legacyPromptSeason, nflDraftClassReminder } from '@/lib/legacy/promptSeason';
 
+/*
+ * 🛑 THIS BLOCK USED TO NAME EVERY TIER'S PLAYERS FROM `lib/dynasty-tiers.ts` AND CALL THEM
+ * "NON-NEGOTIABLE" (removed 2026-10-12). That list is a 2024 snapshot: Anthony Richardson a Tier 1
+ * cornerstone, Marvin Harrison Jr. Tier 0, no 2025 rookie anywhere — and every trade, waiver,
+ * trade-partner and legacy prompt that embeds this told the model it "cannot override" it.
+ *
+ * It is not rebuilt from current values because nothing current is reachable here: the DB-first
+ * source (`getFantasyCalcValuesDbFirst`) is async, and this text is assembled synchronously, by
+ * `lib/trade-partner-prompt.ts` at module load and by three legacy routes' prompt constants.
+ * So the RULES stay and the names go; who sits in which tier comes from the values each request
+ * supplies. The list itself still feeds scoring through `findPlayerTier`.
+ */
 export const UNIVERSAL_PLAYER_VALUE_RULES = `
 ## UNIVERSAL DYNASTY PLAYER VALUE RULES (NON-NEGOTIABLE)
 
@@ -9,27 +20,24 @@ These rules apply to ALL player valuations across the platform. You cannot overr
 
 ### ASSET TIER SYSTEM (0-1000 SCALE)
 
-**Tier 0 — UNTOUCHABLES (Value: 950):**
-${TIER_0_UNTOUCHABLES.map(p => `- ${p.name} (${p.position})`).join('\n')}
+Place a player in a tier from the CURRENT market values and ages supplied with this request — never from
+memory or an old ranking. If no current value is supplied for a player, say so rather than assigning a tier.
+
+**Tier 0 — UNTOUCHABLES (Value: 950):** the few elite young WRs, and elite QBs in Superflex, at the very
+top of the current market.
 
 RULE: Tier 0 assets can ONLY be moved for absurd overpays:
 - Another Tier 0 or Tier 1 asset, OR
 - Tier 1 + 2 future 1sts
 If someone suggests trading a Tier 0 for less → UNREALISTIC
 
-**Tier 1 — CORNERSTONES (Value: 775):**
-${TIER_1_CORNERSTONES.map(p => `- ${p.name} (${p.position})`).join('\n')}
+**Tier 1 — CORNERSTONES (Value: 775):** young, proven WR1/RB1/QB1 types a roster is built around.
 
-**Tier 2 — HIGH-END STARTERS (Value: 625):**
-${TIER_2_HIGH_END.map(p => `- ${p.name} (${p.position})`).join('\n')}
+**Tier 2 — HIGH-END STARTERS (Value: 625):** every-week starters with a long window; elite TEs.
 
-**Tier 3 — STARTERS / UPSIDE (Value: 475):**
-${TIER_3_STARTERS.slice(0, 10).map(p => `- ${p.name} (${p.position})`).join('\n')}
-(and similar WR2s, RB1/2 types)
+**Tier 3 — STARTERS / UPSIDE (Value: 475):** WR2s, RB1/2 types, and young players still proving it.
 
-**Tier 4 — REPLACEABLE / AGING (Value: 300):**
-${TIER_4_REPLACEABLE.slice(0, 8).map(p => `- ${p.name} (${p.position})`).join('\n')}
-(and similar aging vets, prospects, non-elite TEs)
+**Tier 4 — REPLACEABLE / AGING (Value: 300):** aging vets, prospects, non-elite TEs.
 
 ### POSITIONAL VALUE MULTIPLIERS
 
@@ -149,8 +157,8 @@ ${nflDraftClassReminder(now)}
 `.trim();
 }
 
-export function getUniversalAIContext(): string {
-  return `${currentDateContext()}\n\n${UNIVERSAL_PLAYER_VALUE_RULES}`;
+export function getUniversalAIContext(now: Date = new Date()): string {
+  return `${currentDateContext(now)}\n\n${UNIVERSAL_PLAYER_VALUE_RULES}`;
 }
 
 export function getFormatAwareAIContext(format: 'dynasty' | 'keeper' | 'redraft' = 'dynasty'): string {

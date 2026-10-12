@@ -1,4 +1,5 @@
 import { pickRoundTable } from '@/lib/pick-curve';
+import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch';
 export type AssetTier = 0 | 1 | 2 | 3 | 4;
 export type SemanticTier = 'elite' | 'high' | 'starter' | 'replaceable' | 'depth';
 
@@ -428,12 +429,35 @@ export function isIDPPosition(position: string): boolean {
   return idpPositions.includes(position.toUpperCase());
 }
 
-export function findPlayerTier(playerName: string): TieredPlayer | null {
-  const normalized = playerName.toLowerCase().trim();
-  return ALL_TIERED_PLAYERS.find(p => 
-    p.name.toLowerCase() === normalized ||
-    p.name.toLowerCase().includes(normalized) ||
-    normalized.includes(p.name.toLowerCase())
+/** QB / RB / WR / TE / IDP / K / DEF, or null when the label makes no claim (FLEX, blank, unknown). */
+function tierPositionGroup(position: string | null | undefined): string | null {
+  const p = String(position ?? '').trim().toUpperCase();
+  if (!p) return null;
+  if (p === 'QB' || p === 'WR' || p === 'TE') return p;
+  if (p === 'RB' || p === 'HB' || p === 'FB') return 'RB';
+  if (isIDPPosition(p) || ['NT', 'ILB', 'OLB', 'MLB', 'SS', 'FS', 'SAF'].includes(p)) return 'IDP';
+  if (p === 'K' || p === 'PK' || p === 'P') return 'K';
+  if (p === 'DEF' || p === 'DST' || p === 'D/ST') return 'DEF';
+  return null;
+}
+
+/**
+ * The hardcoded tier entry for a player, by exact normalized name — and, when the caller knows the
+ * player's position, only if it is the same position group.
+ *
+ * 🛑 THIS MATCHED WITH `includes` IN BOTH DIRECTIONS AND TOOK THE FIRST HIT (fixed 2026-10-12). A name
+ * is not an identity: LB Justin Jefferson (CLE) took WR Justin Jefferson's Tier 0 (950), and CB DeVonta
+ * Smith and CB Lamar Jackson took the WR and QB entries, so a depth defender priced as a cornerstone in
+ * every surface that reads this. The substring half also bound any name CONTAINED in a listed one.
+ * A caller with no position gets exact-name-only, never a substring.
+ */
+export function findPlayerTier(playerName: string, position?: string | null): TieredPlayer | null {
+  const key = normalizeMatchName(playerName);
+  if (!key) return null;
+  const wantGroup = tierPositionGroup(position);
+  return ALL_TIERED_PLAYERS.find(p =>
+    normalizeMatchName(p.name) === key &&
+    (wantGroup == null || tierPositionGroup(p.position) === wantGroup)
   ) || null;
 }
 
@@ -565,7 +589,7 @@ export function evaluateAsset(
     };
   }
 
-  const tieredPlayer = findPlayerTier(asset.name);
+  const tieredPlayer = findPlayerTier(asset.name, asset.position);
   const position = asset.position || tieredPlayer?.position || 'WR';
   const age = asset.age || tieredPlayer?.age;
   const tier = tieredPlayer?.tier ?? 4;
