@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import PlayerHighlights from '@/components/core-app/player-card/PlayerHighlights'
 
-const player = { sport: 'NFL', externalId: 'ri:123', sleeperId: '123', name: 'Josh Allen',
+const player = { sport: 'NFL', externalId: 'ri:123', source: 'rolling_insights', sleeperId: '123', name: 'Josh Allen',
   position: 'QB', team: 'BUF', number: 17, imageUrl: null }
 const result = { status: 'ready', checkedAt: '2026-10-11T12:00:00Z', message: null, videos: [{
   videoId: 'abcdefghijk', title: 'Josh Allen highlights', channelTitle: 'NFL', channelId: 'official',
@@ -19,6 +19,8 @@ describe('player highlights section', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Find highlights' }))
     await screen.findByRole('link', { name: 'Watch on YouTube: Josh Allen highlights' })
     expect(fetcher.mock.calls[0][0]).toContain('externalId=ri%3A123')
+    // The id is only unique per feed; the route refuses an ambiguous one without its source.
+    expect(fetcher.mock.calls[0][0]).toContain('source=rolling_insights')
     expect(container.querySelector('iframe')).toBeNull()
     expect(screen.getByRole('link', { name: 'Josh Allen highlights' })).toHaveAttribute('href', 'https://www.youtube.com/watch?v=abcdefghijk')
     const watch = screen.getByRole('link', { name: 'Watch on YouTube: Josh Allen highlights' })

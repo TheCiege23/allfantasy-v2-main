@@ -9,7 +9,11 @@ import { normalizePosition } from './positionNormalization'
 import { asHeadshotUrl } from './playerIdentityCompose'
 import { withoutDetectablyWrongHeadshots } from '@/lib/player-assets/playerImageStore'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
-import { selectAuthoritativePlayerRow } from '@/lib/player-match/authoritativePlayerRow'
+import {
+  rowsDescribeSamePlayer,
+  selectAuthoritativePlayerRow,
+  selectRowForExternalRef,
+} from '@/lib/player-match/authoritativePlayerRow'
 import { loadSnapShare } from './snapShare'
 import { isIdpPosition } from '@/lib/core-app/scoringNotes'
 import { getCanonicalDefenderValue } from '@/lib/values/canonicalDefenderBoardCache'
@@ -76,6 +80,12 @@ export type PlayerMatch = {
    * athlete each page load, with our projections attached to whoever came back.
    */
   sport: string
+  /**
+   * The feed that minted `externalId` — an id is only unique per (sport, source); see
+   * lib/core-app/playerRef.ts. Optional so older builders keep compiling; a ref built
+   * without it still opens, but only when the id is unambiguous.
+   */
+  source?: string | null
 }
 
 export type LeagueSlot = {
@@ -322,7 +332,7 @@ export async function searchPlayers(query: string, limit = 12): Promise<PlayerMa
     take: limit * 3,
     select: {
       externalId: true, sleeperId: true, name: true, position: true,
-      team: true, imageUrl: true, number: true, sport: true,
+      team: true, imageUrl: true, number: true, sport: true, source: true,
     },
   })
 
@@ -375,11 +385,12 @@ type CatalogRow = {
   imageUrl: string | null
   number: number | null
   sport: string
+  source?: string | null
 }
 
 const CATALOG_SELECT = {
   externalId: true, sleeperId: true, name: true, position: true,
-  team: true, imageUrl: true, number: true, sport: true,
+  team: true, imageUrl: true, number: true, sport: true, source: true,
 } as const
 
 /**
@@ -410,6 +421,7 @@ function collapseCatalog(rows: CatalogRow[], limit: number): PlayerMatch[] {
   return [...seen.values()].slice(0, limit).map(({ row: r, imageUrl }) => ({
     externalId: r.externalId,
     sport: r.sport,
+    source: r.source ?? null,
     sleeperId: r.sleeperId,
     name: r.name,
     position: r.position,
@@ -865,7 +877,7 @@ export async function getPlayerDetail(
   } = {},
 ): Promise<PlayerDetail | null> {
   const includeMoves = opts.includeMoves !== false
-  const { sport: refSport, externalId } = parsePlayerRef(playerReference)
+  const { sport: refSport, externalId, source: refSource } = parsePlayerRef(playerReference)
 
   /*
    * ⚠ TWO CACHES, AND WHAT IS NOT IN THEM. On game day the same few injured
@@ -884,7 +896,9 @@ export async function getPlayerDetail(
    * A minute is the ceiling on how old an injury designation can be here; the
    * feeds behind it move every five (alert-sweep fold) to fifteen (import-injuries).
    */
-  const facts = await playerFacts.get(cardFactsKey(refSport, externalId), () => loadPlayerFacts(refSport, externalId))
+  const facts = await playerFacts.get(cardFactsKey(refSport, externalId, refSource), () =>
+    loadPlayerFacts(refSport, externalId, refSource),
+  )
   if (!facts) return null
   const { row, identityResolved, injury, injuryTimeline, seasonStats, projection, afProjection, snapShare, idpValue, positionRank: rank } = facts
 
@@ -998,6 +1012,7 @@ export async function getPlayerDetail(
     player: {
       externalId: row.externalId,
       sport: row.sport,
+      source: row.source,
       sleeperId: row.sleeperId,
       name: row.name,
       position: row.position,
@@ -1037,8 +1052,8 @@ const CARD_FACTS_TTL_MS = 60_000
 const CARD_FACTS_CAP = 500
 const WEEK_SCHEDULE_TTL_MS = 60_000
 
-function cardFactsKey(sport: string | null | undefined, externalId: string): string {
-  return `${sport ?? '*'}:${externalId}`
+function cardFactsKey(sport: string | null | undefined, externalId: string, source: string | null | undefined): string {
+  return `${sport ?? '*'}~${source ?? '*'}:${externalId}`
 }
 
 const playerFacts = createSwrCache<Awaited<ReturnType<typeof loadPlayerFacts>>>({ ttlMs: CARD_FACTS_TTL_MS, cap: CARD_FACTS_CAP })
@@ -1060,7 +1075,11 @@ export function playerCardCacheStats() {
  * identity set, injury claim, season stats, projection, rank, snap share and
  * defender value. Null when the reference resolves to nobody.
  */
-async function loadPlayerFacts(refSport: string | null | undefined, externalId: string) {
+async function loadPlayerFacts(
+  refSport: string | null | undefined,
+  externalId: string,
+  refSource: string | null | undefined = null,
+) {
 
   /*
    * ⚠ SPORT-SCOPED AND EXPLICITLY ORDERED, BOTH FOR THE SAME REASON. `externalId`
@@ -1084,9 +1103,17 @@ async function loadPlayerFacts(refSport: string | null | undefined, externalId: 
    * statistics ingested for this player" while nine rows across five seasons sat in the
    * table. The name join used to paper over this by matching regardless of which row won.
    */
-  const found = await prisma.sportsPlayer.findFirst({
+  /*
+   * 🛑 AND SCOPED TO THE SOURCE, OR REFUSED. Sport alone did not make the id unique:
+   * SOCCER `1100` is Haaland (api_football) and James Daly (rolling_insights), and the
+   * newest row won. `selectRowForExternalRef` keeps the ordering above (Sleeper id first,
+   * then freshest) but takes the ref's own source when it names one, and refuses a
+   * source-less ref whose rows describe different men rather than picking one.
+   */
+  const candidates = await prisma.sportsPlayer.findMany({
     where: refSport ? { externalId, sport: refSport } : { externalId },
     orderBy: [{ sleeperId: { sort: 'desc', nulls: 'last' } }, { fetchedAt: 'desc' }],
+    take: 20,
     select: {
       externalId: true, sleeperId: true, name: true, position: true, team: true,
       imageUrl: true, number: true, height: true, weight: true, age: true,
@@ -1095,12 +1122,31 @@ async function loadPlayerFacts(refSport: string | null | undefined, externalId: 
       college: true, sport: true, fetchedAt: true, source: true,
     },
   })
-  if (!found) return null
+  const picked = selectRowForExternalRef(candidates ?? [], refSource)
+  if (!picked) return null
+
+  /*
+   * 🛑 A VENDOR ROW'S SLEEPER ID IS A NAME MATCH, AND IT CAN NAME SOMEBODY ELSE. Measured
+   * 2026-10-12: TheSportsDB's `tsdb_34249738` "Byron Murphy DT Seattle Seahawks" carries
+   * 5864 — the Vikings CB. Opening it showed a DT/Seattle header over the CB's leagues,
+   * projection and rank. When the Sleeper row for that id contradicts the clicked row
+   * (name or position group), the id is not this man's: drop it, so nothing Sleeper-keyed
+   * is attached. "Unresolved" is true; "the CB's fantasy life" was not.
+   */
   /*
    * The card's face. NFL DL Cam Jackson (Rolling Insights 8966) carried NCAAB forward Cameron
    * Jackson's cutout here, mirrored by the image cron; `asHeadshotUrl` only checks the shape.
    */
-  const row = (await withoutDetectablyWrongHeadshots([found]))[0] ?? found
+  let row = (await withoutDetectablyWrongHeadshots([picked]))[0] ?? picked
+  if (row.sleeperId && row.source !== 'sleeper') {
+    const owner = await prisma.sportsPlayer
+      .findFirst({
+        where: { sport: row.sport, source: 'sleeper', sleeperId: row.sleeperId },
+        select: { name: true, position: true },
+      })
+      .catch(() => null)
+    if (owner && !rowsDescribeSamePlayer(owner, row)) row = { ...row, sleeperId: null }
+  }
 
   const identityResolved = Boolean(row.sleeperId)
 

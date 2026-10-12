@@ -25,7 +25,29 @@ describe('public player highlights route', () => {
     expect(response.status).toBe(200)
     expect(response.headers.get('Cache-Control')).toBe('private, no-store')
     expect(mocks.highlights).toHaveBeenCalledWith({ sport: 'NFL', name: 'Josh Allen', team: 'BUF' })
-    expect(mocks.player.mock.calls[0][0].where.externalId).toBe('ri:123')
+    expect(mocks.players.mock.calls[0][0].where.externalId).toBe('ri:123')
+  })
+  // Production 2026-10-12: NFL `2135` is a backfill Josh Allen row AND rolling_insights' Josh Hines-Allen.
+  const ALLEN_2135 = [
+    { sport: 'NFL', name: 'Josh Hines-Allen', team: 'Jacksonville Jaguars', position: 'DL', source: 'rolling_insights', sleeperId: null, fetchedAt: new Date('2026-10-10T09:15:02Z') },
+    { sport: 'NFL', name: 'Josh Allen', team: 'Buffalo Bills', position: 'QB', source: 'backfill', sleeperId: null, fetchedAt: new Date('2026-04-25T23:49:36Z') },
+  ]
+  it('takes the row of the source the card names, not the newest row carrying the same externalId', async () => {
+    mocks.players.mockResolvedValueOnce(ALLEN_2135)
+    expect((await GET(request('sport=NFL&externalId=2135&source=backfill'))).status).toBe(200)
+    expect(mocks.highlights).toHaveBeenCalledWith({ sport: 'NFL', name: 'Josh Allen', team: 'Buffalo Bills' })
+  })
+  it('refuses a source-less externalId whose rows are different men, and accepts one whose rows agree', async () => {
+    mocks.players.mockResolvedValueOnce(ALLEN_2135)
+    expect((await GET(request('sport=NFL&externalId=2135'))).status).toBe(404)
+    expect(mocks.highlights).not.toHaveBeenCalled()
+    // DeVonta Smith's `6503`: a rolling_insights and a backfill row for the same WR.
+    mocks.players.mockResolvedValueOnce([
+      { sport: 'NFL', name: 'DeVonta Smith', team: 'PHI', position: 'WR', source: 'rolling_insights', sleeperId: '7525', fetchedAt: new Date('2026-10-10T09:15:02Z') },
+      { sport: 'NFL', name: 'DeVonta Smith', team: 'PHI', position: 'WR', source: 'backfill', sleeperId: null, fetchedAt: new Date('2026-04-25T23:49:36Z') },
+    ])
+    expect((await GET(request('sport=NFL&externalId=6503'))).status).toBe(200)
+    expect(mocks.highlights).toHaveBeenCalledWith({ sport: 'NFL', name: 'DeVonta Smith', team: 'PHI' })
   })
   it('supports Sleeper identities and handles missing players and DB failures', async () => {
     await GET(request('sport=NFL&sleeperId=123'))

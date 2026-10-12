@@ -33,6 +33,7 @@
  */
 
 import { normalizeMatchName } from './verifiedNameMatch'
+import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 
 export interface PlayerSourceRow {
   source?: string | null
@@ -169,4 +170,59 @@ export function authoritativeRowsBySleeperId<T extends PlayerSourceRow>(rows: re
     if (picked) out.set(id, picked.row)
   }
   return out
+}
+
+/**
+ * Which row an `(sport, externalId[, source])` reference names.
+ *
+ * 🛑 `externalId` IS A PROVIDER'S ID AND MEANS NOTHING WITHOUT THE PROVIDER. Measured on
+ * production 2026-10-12: SOCCER `1100` is api_football's Erling Haaland and rolling_insights'
+ * James Daly; NFL `2135` is a backfill "Josh Allen QB BUF" and rolling_insights' Josh
+ * Hines-Allen. "Newest row wins" opened Daly from Haaland's link.
+ *
+ * With a source, that source's row and nothing else. Without one (a link minted before refs
+ * carried it), the rows are accepted only when they all describe one man — DeVonta Smith's
+ * `6503` is a rolling_insights row and a backfill row for the same WR, and 252 of 262
+ * multi-source NFL ids look like that — and REFUSED otherwise, because there is no basis to
+ * pick between two different athletes. Among agreeing rows the one carrying a Sleeper id
+ * wins, then the freshest (see playerFinder's `loadPlayerFacts` for why `nulls last`).
+ */
+export function selectRowForExternalRef<T extends PlayerSourceRow>(
+  rows: readonly T[],
+  source?: string | null,
+): T | null {
+  const ordered = [...rows].sort(
+    (a, b) => Number(Boolean(b.sleeperId)) - Number(Boolean(a.sleeperId)) || fetchedMs(b) - fetchedMs(a),
+  )
+  if (source) {
+    const own = ordered.find((r) => r.source === source)
+    if (own) return own
+  }
+  const first = ordered[0]
+  if (!first) return null
+  return ordered.every((r) => r === first || rowsDescribeSamePlayer(first, r)) ? first : null
+}
+
+/**
+ * May a NON-Sleeper row carry this Sleeper player's id?
+ *
+ * The stamp is what every Sleeper-keyed read (leagues, projection, rank) follows, so a wrong
+ * one hands one man's fantasy life to another. Measured 2026-10-12: TheSportsDB's
+ * `tsdb_34249738` "Byron Murphy DT Seattle Seahawks" carries 5864, the Vikings CB, while the
+ * real DT (Sleeper 11668) has no id on his vendor rows at all. So the stamp must agree on
+ * name AND position group AND a stated team, and the name must be unique in Sleeper's
+ * universe — a namesake is refused outright, because two Byron Murphys cannot be told apart
+ * by the name that produced the match.
+ */
+export function vendorRowMayCarrySleeperId(
+  sleeper: { name: string; position?: string | null; team?: string | null },
+  vendor: { name: string; position?: string | null; team?: string | null },
+  sleeperNameCount: number,
+): boolean {
+  if (sleeperNameCount !== 1) return false
+  if (!rowsDescribeSamePlayer(sleeper, vendor)) return false
+  // Sleeper writes `SEA`, TheSportsDB "Seattle Seahawks"; JAX/JAC fold too.
+  const a = normalizeTeamAbbrev(sleeper.team)
+  const b = normalizeTeamAbbrev(vendor.team)
+  return a != null && a !== 'FA' && a === b
 }
