@@ -1,3 +1,4 @@
+import { readTribeSlots, type SurvivorTribeSlot } from './survivorTribeIdentity'
 export type SurvivorTribeAssignmentMode = 'random' | 'commissioner_manual' | 'draft_pattern'
 export type SurvivorCommissionerParticipationMode = 'non_participating_host' | 'participating_player'
 export type SurvivorCoCommissionerMode = 'disabled' | 'non_participating_host' | 'same_privacy_as_commissioner'
@@ -9,6 +10,7 @@ export type SurvivorConductPolicy = 'game_deception_allowed_platform_abuse_banne
 
 export interface SurvivorFoundationSettings {
   tribeCount: number
+  survivorTribeSlots: SurvivorTribeSlot[]
   defaultTeamCount: number
   minTeamCount: number
   maxTeamCount: number
@@ -63,6 +65,7 @@ export const SURVIVOR_CANONICAL_DRAFT_TYPE_IDS = [
 
 export const SURVIVOR_DEFAULT_FOUNDATION_SETTINGS: SurvivorFoundationSettings = {
   tribeCount: 4,
+  survivorTribeSlots: readTribeSlots({}, 20, 4),
   defaultTeamCount: 20,
   minTeamCount: 16,
   maxTeamCount: 20,
@@ -213,6 +216,7 @@ export function normalizeSurvivorFoundationSettings(
 
   return {
     tribeCount,
+    survivorTribeSlots: readTribeSlots(s, defaultTeamCount, tribeCount),
     defaultTeamCount,
     minTeamCount,
     maxTeamCount,
@@ -277,6 +281,8 @@ export function buildSurvivorSettingsSnapshotPatch(
   return {
     survivorFoundationSettingsVersion: SURVIVOR_FOUNDATION_SETTINGS_VERSION,
     survivorFoundationSettings: normalized,
+    defaultTeamCount: normalized.defaultTeamCount,
+    tribeCount: normalized.tribeCount,
     commissionerParticipationMode: normalized.commissionerParticipationMode,
     coCommissionerMode: normalized.coCommissionerMode,
     tribeAssignmentMode: normalized.tribeAssignmentMode,
@@ -285,6 +291,7 @@ export function buildSurvivorSettingsSnapshotPatch(
     teams: normalized.defaultTeamCount,
     cast_size: normalized.defaultTeamCount,
     tribe_count: normalized.tribeCount,
+    survivorTribeSlots: normalized.survivorTribeSlots,
     tribe_assignment_mode: normalized.tribeAssignmentMode,
     merge_at_count: normalized.mergeActivePlayerCount,
     jury_threshold_percent: normalized.juryThresholdPercent,

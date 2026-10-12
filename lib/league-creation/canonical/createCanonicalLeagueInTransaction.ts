@@ -1,4 +1,4 @@
-import { buildSurvivorLeagueColumnPatch, normalizeSurvivorFoundationSettings } from '@/lib/survivor/normalizeSurvivorSettings'
+import { buildSurvivorSettingsSnapshotPatch, buildSurvivorLeagueColumnPatch, normalizeSurvivorFoundationSettings } from '@/lib/survivor/normalizeSurvivorSettings'
 import { buildSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
 import { buildScoringFromPresetId, isScoringPresetValidForContext } from '@/lib/league-creation-preset/scoring-presets'
 import { tournamentRoundEnds } from '@/lib/bestball/tournamentCalendar'
@@ -429,6 +429,13 @@ export async function createCanonicalLeagueInTransaction(
   const platformLeagueId = `manual-${randomUUID()}`
   /** Calendar season year for list badges / filters (must not rely on Prisma's static default). */
   const seasonYear = resolveLeagueCreationSeason(sport)
+
+  if (formatId === 'survivor') {
+    const setup = body.conceptSetup ?? {}
+    const settings = normalizeSurvivorFoundationSettings({ ...mergedSettings, ...setup, defaultTeamCount: managerCount,
+      tribeCount: setup.survivorTribeCount ?? normalizeSurvivorFoundationSettings(mergedSettings).tribeCount })
+    Object.assign(mergedSettings, buildSurvivorSettingsSnapshotPatch({ ...settings }))
+  }
 
   if (formatId === 'survivor' && (sport === 'NBA' || sport === 'NHL')) {
     const setup = body.conceptSetup ?? {}

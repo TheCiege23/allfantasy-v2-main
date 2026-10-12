@@ -158,13 +158,16 @@ export async function scoreExileWeek(leagueId: string, week: number): Promise<bo
     if (!island?.isActive) return false
     if (await tx.survivorAuditEntry.findFirst({ where: { leagueId, week, action: 'exile_week_scored' }, select: { id: true } })) return true
     // Zero is a valid final score, but the table's default zero is not evidence of a result.
-    if (!await tx.survivorAuditEntry.findFirst({ where: { leagueId, week, action: 'exile_results_finalized' }, select: { id: true } })) return false
+    const finalized = await tx.survivorAuditEntry.findFirst({ where: { leagueId, week, action: 'exile_results_finalized' }, select: { id: true, data: true } })
+    if (!finalized) return false
+    const proof = finalized.data as { source?: string; userIds?: string[] } | null
     const league = await tx.league.findUnique({ where: { id: leagueId }, select: { survivorTokenCap: true } })
     const entries = await tx.exileWeeklyEntry.findMany({ where: { exileId: island.id, week }, orderBy: [{ weeklyScore: 'desc' }, { userId: 'asc' }] })
     // Empty/missing results are retryable; do not consume the weekly idempotency marker.
     if (!entries.length) return false
     const eligible = []
     for (const entry of entries) {
+      if (proof?.source === 'closed_exile_rosters_v1' && !proof.userIds?.includes(entry.userId)) continue
       const player = await tx.survivorPlayer.findUnique({ where: { leagueId_userId: { leagueId, userId: entry.userId } } })
       if (player?.playerState === 'exile') eligible.push({ entry, player })
     }
@@ -175,7 +178,7 @@ export async function scoreExileWeek(leagueId: string, week: number): Promise<bo
       await tx.survivorPlayer.update({ where: { id: player.id }, data: { tokenBalance: { increment: award }, totalTokensEarned: { increment: award } } })
       await tx.exileWeeklyEntry.update({ where: { id: entry.id }, data: { tokenEarned: award } })
     }
-    await tx.exileIsland.update({ where: { id: island.id }, data: { currentWeek: week } })
+    await tx.exileIsland.update({ where: { id: island.id }, data: { currentWeek: Math.max(island.currentWeek, week) } })
     const balances = await tx.survivorPlayer.findMany({ where: { leagueId, playerState: 'exile' }, select: { userId: true, tokenBalance: true, totalTokensEarned: true, eliminatedWeek: true } })
     await tx.survivorAuditEntry.create({ data: { leagueId, week, category: 'exile', action: 'exile_week_scored', data: { entryCount: entries.length, balances }, isVisibleToCommissioner: true, isVisibleToPublic: false } })
     return true

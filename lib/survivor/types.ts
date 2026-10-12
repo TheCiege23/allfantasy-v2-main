@@ -48,6 +48,8 @@ export interface SurvivorConfig {
 }
 
 export interface SurvivorTribeRow {
+  logoUrl?: string | null
+  colorHex?: string | null
   id: string
   leagueId: string
   configId: string
