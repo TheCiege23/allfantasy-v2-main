@@ -25,6 +25,7 @@ describe('NBA Survivor creation pilot and multi-sport season capabilities', () =
   })
   it('hides new Survivor creation outside NBA across both wizard paths and refuses paid NBA pilot requests', () => {
     expect(getAllowedSportsForLeagueType('survivor')).toEqual(['NBA'])
+    expect(LEAGUE_CREATE_OPTIONS_CATALOG_V1.allowedSportsByConcept.survivor).toEqual(['NBA'])
     expect(getAllowedLeagueTypesForSport('NBA')).toContain('survivor')
     for (const sport of ['NFL', 'NHL', 'NCAAF'] as const) {
       expect(getAllowedLeagueTypesForSport(sport)).not.toContain('survivor')

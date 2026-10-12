@@ -1,6 +1,7 @@
 import type { SupportedSport } from '@/lib/create-league-v2/state'
 import { SURVIVOR_CAST_SIZE_OPTIONS } from '@/lib/league-creation-wizard/sport-team-limits'
 import { getGuillotineSportConfig } from '@/lib/guillotine/sportConfig'
+import { SURVIVOR_CREATION_SPORTS } from '@/lib/survivor/survivorCreationAvailability'
 
 export type CreateMode = 'quick' | 'advanced'
 
@@ -26,7 +27,7 @@ export interface LeagueCreateOptionsCatalog {
 
 const ALL_SPORTS: SupportedSport[] = ['NFL', 'NBA', 'MLB', 'NHL', 'NCAAF', 'NCAAB', 'SOCCER']
 
-const SURVIVOR_ALLOWED_SPORTS: SupportedSport[] = ['NFL', 'NCAAF', 'NBA', 'NHL']
+const SURVIVOR_ALLOWED_SPORTS: SupportedSport[] = [...SURVIVOR_CREATION_SPORTS]
 
 const UNIVERSAL_CREATE_TEAM_COUNTS = Array.from({ length: 31 }, (_, index) => index + 2)
 
