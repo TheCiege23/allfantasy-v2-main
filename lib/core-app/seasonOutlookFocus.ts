@@ -225,7 +225,7 @@ export async function loadScenarioModel(args: {
   const identityRows = await prisma.sportsPlayer
     .findMany({
       where: { sleeperId: { in: rosteredIds }, sport: { equals: 'NFL', mode: 'insensitive' } },
-      select: { sleeperId: true, name: true, position: true, team: true, sport: true, imageUrl: true, age: true },
+      select: { sleeperId: true, name: true, position: true, team: true, sport: true, imageUrl: true, age: true, source: true, fetchedAt: true },
     })
     .catch(() => [])
   const identity = composePlayerIdentities(identityRows)

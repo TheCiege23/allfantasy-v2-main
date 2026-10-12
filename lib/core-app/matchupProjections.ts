@@ -253,7 +253,7 @@ export async function loadSideProjections(args: {
     try {
       const playerRows = await prisma.sportsPlayer.findMany({
         where: { sleeperId: { in: lookupIds } },
-        select: { sleeperId: true, name: true, team: true, sport: true, position: true },
+        select: { sleeperId: true, name: true, team: true, sport: true, position: true, source: true, fetchedAt: true },
       })
       const identities = composePlayerIdentities(playerRows)
       const playerTeams = new Map([...identities].map(([id, p]) => [id, p.team]))
@@ -363,7 +363,7 @@ export async function loadSideProjections(args: {
   const positions = bestBall && lookupIds.length > 0
     ? composePlayerIdentities(await prisma.sportsPlayer.findMany({
         where: { sleeperId: { in: lookupIds } },
-        select: { sleeperId: true, name: true, team: true, sport: true, position: true },
+        select: { sleeperId: true, name: true, team: true, sport: true, position: true, source: true, fetchedAt: true },
       }))
     : new Map()
   const candidates = (ids: string[], key: string): BestBallCandidate[] => {

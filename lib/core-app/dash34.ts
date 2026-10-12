@@ -847,6 +847,9 @@ async function loadDash34Data(
               team: true,
               sport: true,
               imageUrl: true,
+              // Identify the authoritative Sleeper row; see `composePlayerIdentities`.
+              source: true,
+              fetchedAt: true,
             },
           })
           .catch(fellBack(options, 'players', []))
