@@ -18,7 +18,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const prismaMock = vi.hoisted(() => ({
   adminAuditLog: { create: vi.fn() },
-  league: { findFirst: vi.fn() },
+  // `findUnique` is the score sync's platform read; unset -> no platform -> a native (Sleeper-id) league.
+  league: { findFirst: vi.fn(), findUnique: vi.fn() },
   playerGameLogCache: { findMany: vi.fn() },
   playerGameStat: { findMany: vi.fn() },
   playerIdentityMap: { findFirst: vi.fn() },

@@ -40,6 +40,8 @@ const {
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     redraftSeason: { findFirst: findFirstRedraftSeason },
+    // The score sync's platform read: a native league, whose roster ids ARE Sleeper ids.
+    league: { findUnique: async () => ({ platform: 'sleeper' }) },
     redraftRoster: { findMany: findManyRedraftRoster },
     redraftRosterPlayer: { findMany: findManyRedraftRosterPlayer },
     playerGameLogCache: { findMany: findManyPlayerGameLogCache },

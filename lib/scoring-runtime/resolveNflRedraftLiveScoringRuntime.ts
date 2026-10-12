@@ -269,8 +269,9 @@ export async function resolveNflRedraftLiveScoringRuntime(input: {
         team: canonical?.teamAbbr ?? player.team,
         sport: player.sport,
         slotType: player.slotType,
-        injuryStatus: canonical?.injury.designation ?? unified?.injuryStatus ?? player.injuryStatus,
-        providerInjuryLabel: canonical?.injury.designation ?? unified?.injuryStatus ?? null,
+        // Not `unified?.injuryStatus` — a stored snapshot column; see the same line in /api/redraft/roster.
+        injuryStatus: canonical?.injury.designation ?? player.injuryStatus,
+        providerInjuryLabel: canonical?.injury.designation ?? null,
         activeStatus: canonical?.activeStatus ?? null,
         isLocked: player.isLocked,
         headshotUrl: canonical?.media.headshot.url ?? unified?.headshotUrl ?? null,
