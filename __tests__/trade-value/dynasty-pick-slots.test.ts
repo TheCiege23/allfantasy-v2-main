@@ -28,6 +28,7 @@ import {
   describeOdds,
   gamesPerWeekFrom,
   oddsCertainty,
+  playBracket,
   projectedPickPrice,
   projectedPicksNote,
   projectPickSlots,
@@ -78,7 +79,7 @@ const WEEK5 = Array.from({ length: 12 }, (_, i) => team(`t${i}`, Math.round((i *
 
 describe('projectPickSlots', () => {
   it('a finished season is certain: the worst four pick early, the best four late', () => {
-    const p = projectPickSlots({ teams: WEEK5, seasonWeeks: 5, season: 2026 })!
+    const p = projectPickSlots({ teams: WEEK5, seasonWeeks: 5, season: 2026, ruleUncertainty: 0 })!
     expect(p.draftYear).toBe(2027)
     expect(p.weeksLeft).toBe(0)
     expect(p.oddsByTeam.get('t0')).toEqual({ early: 1, mid: 0, late: 0 })
@@ -87,7 +88,7 @@ describe('projectPickSlots', () => {
   })
 
   it('a tie in record picks earlier for the team that scored less', () => {
-    const p = projectPickSlots({ teams: [team('a', 2, 3, 600), team('b', 2, 3, 500), team('c', 4, 1, 700)], seasonWeeks: 5, season: 2026 })!
+    const p = projectPickSlots({ teams: [team('a', 2, 3, 600), team('b', 2, 3, 500), team('c', 4, 1, 700)], seasonWeeks: 5, season: 2026, ruleUncertainty: 0 })!
     expect(p.oddsByTeam.get('b')!.early).toBe(1)
     expect(p.oddsByTeam.get('a')!.mid).toBe(1)
   })
@@ -125,6 +126,57 @@ describe('projectPickSlots', () => {
   it('nothing to project: fewer than three teams, or no season length', () => {
     expect(projectPickSlots({ teams: WEEK5.slice(0, 2), seasonWeeks: 14, season: 2026 })).toBeNull()
     expect(projectPickSlots({ teams: WEEK5, seasonWeeks: 0, season: 2026 })).toBeNull()
+  })
+})
+
+describe('the playoffs decide the playoff teams’ picks', () => {
+  const seeds = ['s1', 's2', 's3', 's4', 's5', 's6']
+  const rates = new Map(seeds.map((id) => [id, 0.5]))
+  it('a 6-team bracket: byes to seeds 1-2, 3v6 and 4v5, then the 3rd- and 5th-place games', () => {
+    // rand() = 0: the first-listed (higher) seed wins every game.
+    expect(playBracket(seeds, rates, () => 0)).toEqual(['s1', 's2', 's3', 's4', 's5', 's6'])
+    // rand() ≈ 1: the lower seed wins every game — 6 beats 3, 5 beats 4, 5 beats 1, 6 beats 2, 6 beats 5.
+    expect(playBracket(seeds, rates, () => 0.9999)).toEqual(['s6', 's5', 's2', 's1', 's4', 's3'])
+  })
+
+  it('with the season over, non-playoff teams are certain and playoff teams are spread by the bracket', () => {
+    // Final records: t0 worst … t11 best; six make the playoffs.
+    const fin = Array.from({ length: 12 }, (_, i) => team(`t${i}`, i, 13 - i, 1400 + i * 30))
+    const rec = projectPickSlots({ teams: fin, seasonWeeks: 13, season: 2026, ruleUncertainty: 0 })!
+    const po = projectPickSlots({ teams: fin, seasonWeeks: 13, season: 2026, playoffTeams: 6, ruleUncertainty: 0 })!
+    expect(rec.oddsByTeam.get('t11')).toEqual({ early: 0, mid: 0, late: 1 })
+    expect(po.oddsByTeam.get('t0')).toEqual({ early: 1, mid: 0, late: 0 })
+    expect(po.oddsByTeam.get('t5')).toEqual({ early: 0, mid: 1, late: 0 })
+    // Seeds 1-2 have byes: their worst finish is 4th, still the late third.
+    expect(po.oddsByTeam.get('t11')).toEqual({ early: 0, mid: 0, late: 1 })
+    // Seed 3 picks in the middle when it loses its first game, and late otherwise.
+    const third = po.oddsByTeam.get('t9')!
+    expect(third.mid).toBeGreaterThan(0.1)
+    expect(third.late).toBeGreaterThan(0.3)
+    // The 6th seed picks late only by winning a game; it never picks early.
+    expect(po.oddsByTeam.get('t6')!.late).toBeGreaterThan(0.05)
+    expect(po.oddsByTeam.get('t6')!.early).toBe(0)
+    // Reverse standings alone had seed 3 certain to pick late.
+    expect(rec.oddsByTeam.get('t9')!.late).toBe(1)
+  })
+
+  it('🛑 never certain at the end: the draft-order rule itself is unknown (said 100%, happened 85%)', () => {
+    const fin = Array.from({ length: 12 }, (_, i) => team(`t${i}`, i, 13 - i, 1400 + i * 30))
+    const p = projectPickSlots({ teams: fin, seasonWeeks: 13, season: 2026, playoffTeams: 6 })!
+    expect(p.oddsByTeam.get('t0')!.early).toBeCloseTo(1 - 0.2 + 0.2 / 3, 10)
+    expect(p.oddsByTeam.get('t0')!.late).toBeCloseTo(0.2 / 3, 10)
+    // Week 4 of 14: (4/14)³ of the blend — almost none.
+    const early = projectPickSlots({ teams: WEEK5.map((t) => team(t.id, Math.min(t.wins, 4), 4 - Math.min(t.wins, 4), t.pointsFor)), seasonWeeks: 14, season: 2026 })!
+    const off = projectPickSlots({ teams: WEEK5.map((t) => team(t.id, Math.min(t.wins, 4), 4 - Math.min(t.wins, 4), t.pointsFor)), seasonWeeks: 14, season: 2026, ruleUncertainty: 0 })!
+    const e = 0.2 * (4 / 14) ** 3
+    expect(early.oddsByTeam.get('t0')!.early).toBeCloseTo((1 - e) * off.oddsByTeam.get('t0')!.early + e / 3, 10)
+  })
+
+  it('every team in the playoffs, or no playoff count: reverse standings for all', () => {
+    const fin = Array.from({ length: 6 }, (_, i) => team(`t${i}`, i, 5 - i, 600 + i * 30))
+    const none = projectPickSlots({ teams: fin, seasonWeeks: 5, season: 2026 })!
+    expect(projectPickSlots({ teams: fin, seasonWeeks: 5, season: 2026, playoffTeams: 6 })!.oddsByTeam).toEqual(none.oddsByTeam)
+    expect(projectPickSlots({ teams: fin, seasonWeeks: 5, season: 2026, playoffTeams: null })!.oddsByTeam).toEqual(none.oddsByTeam)
   })
 })
 
@@ -259,6 +311,18 @@ describe('the chart', () => {
     const p = await loadPickSlotProjection({ leagueId: 'L1', settings: { playoff_week_start: 15 }, season: 2026 })
     expect(p!.weeksLeft).toBe(10)
     expect(p!.oddsByTeam.get('t11')!.late).toBeLessThan(0.99)
+  })
+
+  it('reads the league’s playoff team count', async () => {
+    const fin = Array.from({ length: 12 }, (_, i) => ({ externalId: `t${i}`, wins: i, losses: 14 - i, ties: 0, pointsFor: 1400 + i * 30 }))
+    findMany.mockResolvedValue(fin)
+    resolveSportWeek.mockResolvedValue({ ok: true, sportWeek: 15, seasonType: 'regular', state: 'live', nextSportWeek: 16 })
+    const p = await loadPickSlotProjection({ leagueId: 'L1', settings: { playoff_week_start: 15, playoff_teams: 6 }, season: 2026 })
+    expect(p!.weeksLeft).toBe(0)
+    // Seed 3 picks in the middle when it loses its first playoff game — only the bracket can say that.
+    expect(p!.oddsByTeam.get('t9')!.mid).toBeGreaterThan(0.15)
+    // Certain by the standings, but which rule the league drafts by is not known: 1 − 0.2 + 0.2/3.
+    expect(p!.oddsByTeam.get('t0')!.early).toBeCloseTo(1 - 0.2 + 0.2 / 3, 10)
   })
 
   it('no schedule: the median test falls back to records longer than the season', async () => {
