@@ -52,6 +52,7 @@ function normalizeInitialState(state: CreateLeagueV2State): CreateLeagueV2State 
     privacy: state.privacy ?? 'private',
     draftDate: state.draftDate ?? '',
     draftTime: state.draftTime ?? '',
+    draftScheduleLater: state.draftScheduleLater === true,
   }
 }
 
