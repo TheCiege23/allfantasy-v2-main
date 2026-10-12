@@ -179,7 +179,7 @@ test('shows import provider states without broken unsupported actions', async ({
 test('locks advanced setup for non-commissioner and enables it for AF Commissioner', async ({ page }) => {
   await stubEntitlements(page, false)
   await openCreate(page)
-  await page.getByTestId('g30-step-summary').click()
+  await page.getByTestId('g30-step-review').click()
   await expect(page.getByTestId('g30-commissioner-upsell')).toBeVisible()
   await expect(page.getByTestId('g30-advanced-aiCommissionerTools').locator('input')).toBeDisabled()
   // League formats are free and are no longer in the paid checklist at all.
@@ -188,7 +188,7 @@ test('locks advanced setup for non-commissioner and enables it for AF Commission
   await page.unroute('**/api/subscription/entitlements**')
   await stubEntitlements(page, true)
   await openCreate(page)
-  await page.getByTestId('g30-step-summary').click()
+  await page.getByTestId('g30-step-review').click()
   await expect(page.getByTestId('g30-commissioner-upsell')).toHaveCount(0)
   await expect(page.getByTestId('g30-advanced-aiCommissionerTools').locator('input')).toBeEnabled()
   await page.getByTestId('g30-advanced-aiCommissionerTools').locator('input').check()

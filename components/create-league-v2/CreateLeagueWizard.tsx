@@ -41,7 +41,7 @@ import { getClientLeagueCreateOptionsCatalog } from '@/lib/create-league-v2/opti
 import { getDraftTypeMedia } from '@/lib/league-media/draftTypeMedia'
 import type { DraftTypeId, LeagueTypeId } from '@/lib/league-creation-wizard/types'
 
-type WizardStep = 'sport' | 'basics' | 'draft' | 'summary' | 'review'
+type WizardStep = 'sport' | 'basics' | 'draft' | 'review'
 
 type WizardProps = {
   state: CreateLeagueV2State
@@ -64,7 +64,11 @@ type WizardProps = {
   importedLeagues?: ImportedLeagueSummary[]
 }
 
-const STEP_ORDER: readonly WizardStep[] = ['sport', 'basics', 'draft', 'summary', 'review']
+/*
+ * Four steps. Summary used to sit between Draft and Review and repeated four settings plus the
+ * AF Commissioner panel; both now live on Review, where the manager confirms anyway.
+ */
+const STEP_ORDER: readonly WizardStep[] = ['sport', 'basics', 'draft', 'review']
 
 /** The four familiar formats, shown as a compact row beneath the specialties. */
 const CLASSIC_FORMATS: readonly string[] = ['redraft', 'dynasty', 'keeper', 'best_ball']
@@ -397,7 +401,7 @@ export function CreateLeagueWizard(props: WizardProps) {
 
           {/* scroll-mt clears the theme toggle fixed to the top-right corner on this route. */}
           <nav ref={navRef} className="scroll-mt-[4.5rem] lg:scroll-mt-3" aria-label={t('createLeague.g30.steps.aria')}>
-            <ol className="grid grid-cols-5 gap-1 sm:gap-2">
+            <ol className="grid grid-cols-4 gap-1 sm:gap-2">
               {STEP_ORDER.map((step, index) => {
                 const selected = activeStep === step
                 const visited = index < activeIndex
@@ -455,14 +459,6 @@ export function CreateLeagueWizard(props: WizardProps) {
             {activeStep === 'draft' ? (
               <DraftStep state={props.state} onChange={props.onChange} fieldErrors={props.fieldErrors} />
             ) : null}
-            {activeStep === 'summary' ? (
-              <SettingsSummaryStep
-                state={props.state}
-                onChange={props.onChange}
-                hasCommissioner={isCommissioner}
-                entitlementsLoading={entitlements.loading}
-              />
-            ) : null}
             {activeStep === 'review' ? (
               <ReviewCreateStep
                 state={props.state}
@@ -470,6 +466,10 @@ export function CreateLeagueWizard(props: WizardProps) {
                 submitError={props.submitError}
                 onFixIssue={(code) => setActiveStep(stepForIssue(code))}
                 onScheduleLater={() => props.onChange({ draftScheduleLater: true })}
+                onEditStep={setActiveStep}
+                onChange={props.onChange}
+                hasCommissioner={isCommissioner}
+                entitlementsLoading={entitlements.loading}
               />
             ) : null}
           </div>
@@ -1183,43 +1183,16 @@ export function DraftStep({
   )
 }
 
-export function SettingsSummaryStep({
-  state,
-  onChange,
-  hasCommissioner,
-  entitlementsLoading,
-}: Pick<WizardProps, 'state' | 'onChange'> & {
-  hasCommissioner: boolean
-  entitlementsLoading: boolean
-}) {
-  const { t } = useLanguage()
-
-  return (
-    <section className="space-y-5" data-testid="g30-summary-step">
-      <StepHeader title={t('createLeague.g30.summary.title')} body={t('createLeague.g30.summary.body')} />
-      <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
-        <SummaryTile label={t('createLeague.summary.sport')} value={state.sport} />
-        <SummaryTile label={t('createLeague.summary.concept')} value={conceptLabel(t, state)} />
-        <SummaryTile label={t('createLeague.summary.teams')} value={String(state.teamCount)} />
-        <SummaryTile label={t('createLeague.summary.draft')} value={draftWhenLabel(t, state)} />
-      </div>
-
-      <LockedAdvancedSetupPanel
-        state={state}
-        onChange={onChange}
-        hasCommissioner={hasCommissioner}
-        entitlementsLoading={entitlementsLoading}
-      />
-    </section>
-  )
-}
-
 export function ReviewCreateStep({
   state,
   completionIssues,
   submitError,
   onFixIssue,
   onScheduleLater,
+  onEditStep,
+  onChange,
+  hasCommissioner,
+  entitlementsLoading,
 }: {
   state: CreateLeagueV2State
   completionIssues: WizardProps['completionIssues']
@@ -1228,20 +1201,27 @@ export function ReviewCreateStep({
   onFixIssue?: (code: string) => void
   /** Resolves a missing draft date by choosing "Schedule later". */
   onScheduleLater?: () => void
+  /** Opens the step that owns a setting, from its tile. Without it the tiles are read-only. */
+  onEditStep?: (step: WizardStep) => void
+  /** With these three the AF Commissioner panel renders here (it used to be its own step). */
+  onChange?: WizardProps['onChange']
+  hasCommissioner?: boolean
+  entitlementsLoading?: boolean
 }) {
   const { t } = useLanguage()
+  const edit = (step: WizardStep) => (onEditStep ? () => onEditStep(step) : undefined)
 
   return (
     <section className="space-y-5" data-testid="g30-review-step">
       <StepHeader title={t('createLeague.g30.review.title')} body={t('createLeague.g30.review.body')} />
       <div className="rounded-2xl border border-violet-500/25 bg-violet-600/8 p-4">
         <h2 className="break-words text-lg font-black">{state.name || t('createLeague.g30.preview.unnamed')}</h2>
-        <p className="mt-1 text-sm text-[color:var(--text-secondary)]">
-          {state.teamCount} {t('createLeague.summary.teams')} · {state.sport} · {conceptLabel(t, state)}
-        </p>
-        <p className="mt-3 text-sm leading-6 text-[color:var(--text-secondary)]">
-          {t('createLeague.g30.review.why')}
-        </p>
+        <div className="mt-3 grid grid-cols-2 gap-2.5 sm:gap-3" data-testid="g30-review-settings">
+          <SummaryTile label={t('createLeague.summary.sport')} value={state.sport} onEdit={edit('sport')} testId="g30-review-edit-sport" />
+          <SummaryTile label={t('createLeague.summary.concept')} value={conceptLabel(t, state)} onEdit={edit('basics')} testId="g30-review-edit-format" />
+          <SummaryTile label={t('createLeague.summary.teams')} value={String(state.teamCount)} onEdit={edit('basics')} testId="g30-review-edit-teams" />
+          <SummaryTile label={t('createLeague.summary.draft')} value={draftWhenLabel(t, state)} onEdit={edit('draft')} testId="g30-review-edit-draft" />
+        </div>
       </div>
 
       <SurvivorSeasonPreview state={state} />
@@ -1278,6 +1258,17 @@ export function ReviewCreateStep({
               </li>
             ))}
           </ul>
+        </div>
+      ) : null}
+
+      {onChange ? (
+        <div className="border-t border-[color:var(--border-subtle)] pt-5">
+          <LockedAdvancedSetupPanel
+            state={state}
+            onChange={onChange}
+            hasCommissioner={hasCommissioner === true}
+            entitlementsLoading={entitlementsLoading === true}
+          />
         </div>
       ) : null}
 
@@ -1501,7 +1492,7 @@ export function LockedAdvancedSetupPanel({
             {hasCommissioner ? t('createLeague.g30.advanced.unlockedBody') : t('createLeague.g30.advanced.lockedBody')}
           </p>
         </div>
-        <span className="rounded-full border border-[color:var(--border-subtle)] px-3 py-1 text-xs font-black text-[color:var(--text-secondary)]">
+        <span className="self-start rounded-full border border-[color:var(--border-subtle)] px-3 py-1 text-xs font-black text-[color:var(--text-secondary)] sm:self-auto">
           {entitlementsLoading
             ? t('createLeague.g30.advanced.checking')
             : hasCommissioner
@@ -1558,12 +1549,27 @@ function StepHeader({ title, body }: { title: string; body: string }) {
   )
 }
 
-function SummaryTile({ label, value }: { label: string; value: string }) {
+function SummaryTile({ label, value, onEdit, testId }: { label: string; value: string; onEdit?: () => void; testId?: string }) {
+  const body = (
+    <>
+      <span className="block text-xs font-bold uppercase tracking-wide text-[color:var(--text-tertiary)]">{label}</span>
+      <span className="mt-1 block break-words text-sm font-black">{value}</span>
+    </>
+  )
+  if (!onEdit) {
+    return <div className="rounded-xl border border-[color:var(--border-subtle)] bg-[color:var(--surface-card-soft)] p-3">{body}</div>
+  }
   return (
-    <div className="rounded-xl border border-[color:var(--border-subtle)] bg-[color:var(--surface-card-soft)] p-3">
-      <p className="text-xs font-bold uppercase tracking-wide text-[color:var(--text-tertiary)]">{label}</p>
-      <p className="mt-1 text-sm font-black">{value}</p>
-    </div>
+    <button
+      type="button"
+      onClick={onEdit}
+      aria-label={`${label}: ${value}. Change`}
+      className="group relative min-h-16 touch-manipulation rounded-xl border border-[color:var(--border-subtle)] bg-[color:var(--surface-card-soft)] p-3 pr-9 text-left transition [@media(hover:hover)]:hover:border-violet-400"
+      data-testid={testId}
+    >
+      {body}
+      <ChevronRight aria-hidden="true" className="absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[color:var(--text-tertiary)] transition group-hover:text-violet-500" />
+    </button>
   )
 }
 
