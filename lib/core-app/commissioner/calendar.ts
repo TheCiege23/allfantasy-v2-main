@@ -58,6 +58,12 @@ export type CalendarInput = {
   leagueId: string
   platformLabel: string
   native: boolean
+  /**
+   * AllFantasy finds this platform's renewed season on its own (Sleeper: the renewal step of
+   * `sleeper-historical-refresh`, lib/league-import/sleeper/followRenewedLeagues.ts). Other platforms
+   * still need a re-import.
+   */
+  followsRenewal?: boolean
   /** The platform's league status: pre_draft | drafting | in_season | complete. */
   status: string | null
   season: number | null
@@ -313,7 +319,12 @@ export function buildLeagueCalendar(input: CalendarInput): LeagueCalendar {
       status: 'soon',
       detail: input.native
         ? L('This season is finished. Renew the league to carry rosters and managers forward.', 'Esta temporada terminó. Renueva la liga para conservar las plantillas y los mánagers.')
-        : L(
+        : input.followsRenewal
+          ? L(
+              `This season is finished. Renew it on ${input.platformLabel} — AllFantasy picks up the new season on its own within a few hours.`,
+              `Esta temporada terminó. Renuévala en ${input.platformLabel}: AllFantasy toma la nueva temporada por su cuenta en unas horas.`,
+            )
+          : L(
             `This season is finished. Renew it on ${input.platformLabel}, then re-import so AllFantasy follows the new season.`,
             `Esta temporada terminó. Renuévala en ${input.platformLabel} y vuelve a importarla para que AllFantasy siga la nueva temporada.`,
           ),
