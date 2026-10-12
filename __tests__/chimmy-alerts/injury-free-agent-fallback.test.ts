@@ -10,7 +10,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const h = vi.hoisted(() => ({
   leagueFind: vi.fn(),
   teamFind: vi.fn(),
-  playerFindFirst: vi.fn(),
+  playerFindMany: vi.fn(),
   gameFind: vi.fn(),
   impact: vi.fn(),
   leagueCall: vi.fn(),
@@ -25,7 +25,7 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     league: { findMany: h.leagueFind },
     leagueTeam: { findMany: h.teamFind },
-    sportsPlayer: { findFirst: h.playerFindFirst },
+    sportsPlayer: { findMany: h.playerFindMany },
     sportsGame: { findMany: h.gameFind },
   },
 }))
@@ -128,7 +128,7 @@ describe('buildFanOutLeagues — the fallback end to end', () => {
       { leagueId: 'L1', externalId: '3' },
       { leagueId: 'L2', externalId: '4' },
     ])
-    h.playerFindFirst.mockResolvedValue({ team: 'CHI' })
+    h.playerFindMany.mockResolvedValue([{ source: 'sleeper', name: 'X', position: 'RB', team: 'CHI' }])
     h.week.mockResolvedValue({ season: 2026, week: 6, seasonType: 'regular' })
     h.gameFind.mockResolvedValue([
       { homeTeam: 'CHI', awayTeam: 'WAS', startTime: new Date(SUNDAY), seasonType: 'regular', venue: null },
@@ -169,6 +169,23 @@ describe('buildFanOutLeagues — the fallback end to end', () => {
     expect(l1.freeAgent).toBeUndefined()
     expect(l1.claimHref).toBe('https://sleeper.com/leagues/111/players')
     expect(h.replacements).not.toHaveBeenCalled()
+  })
+
+  /*
+   * Sleeper 5864 on production 2026-10-12: CB Byron Murphy (MIN) on the Sleeper row, DT Byron Murphy
+   * (SEA) on a FRESHER TheSportsDB row that took the id by name. The unordered findFirst could hand
+   * the picker the Seahawks as the corner's club.
+   */
+  it('reads the player’s club off the Sleeper row, not a fresher namesake row from another feed', async () => {
+    h.depth.mockResolvedValue({ unlocked: false })
+    h.playerFindMany.mockResolvedValue([
+      { source: 'thesportsdb', sleeperId: '5864', name: 'Byron Murphy', position: 'DT', team: 'Seattle Seahawks', fetchedAt: new Date('2026-10-11T08:42:36Z') },
+      { source: 'sleeper', sleeperId: '5864', name: 'Byron Murphy', position: 'CB', team: 'Minnesota Vikings', fetchedAt: new Date('2026-10-10T12:06:58Z') },
+    ])
+    await buildFanOutLeagues('u1', [alert('L1')], NOW)
+    const teams = h.leagueCall.mock.calls.map((c) => (c[0] as { player: { team: string | null } }).player.team)
+    expect(teams.length).toBeGreaterThan(0)
+    expect(new Set(teams)).toEqual(new Set(['Minnesota Vikings']))
   })
 
   it('a failing engine leaves the claim link and never throws', async () => {

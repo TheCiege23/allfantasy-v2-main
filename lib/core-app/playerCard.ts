@@ -5,6 +5,7 @@ import { memberLeaguePlatformIdsFor } from '@/lib/league-access'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { resolveInjuryFacts } from '@/lib/injuries/injuryReadPort'
 import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
+import { newsRowMatchesPlayer } from '@/lib/legacy/playerNewsMatch'
 import { isWatched } from '@/lib/waiver-wire/watchlist-service'
 import { followKeyFor, isFollowingPlayer } from '@/lib/follows/playerFollows'
 import { currentListings, teamForRoster, TRADE_BLOCK_ENTRY_SELECT, tradeBlockSupport } from '@/lib/trade-block/importedTradeBlock'
@@ -1047,7 +1048,38 @@ export async function loadInjury(
 
 /* ── news ────────────────────────────────────────────────────────────────── */
 
-export async function loadNews(name: string, sport: string): Promise<SectionState<PlayerCardNews[]>> {
+export async function loadNews(
+  name: string,
+  sport: string,
+  team?: string | null,
+): Promise<SectionState<PlayerCardNews[]>> {
+  /*
+   * 🛑 A SHARED NAME NEEDS THE ROW TO NAME HIS CLUB (2026-10-12). This matched on the name alone, so
+   * the card for Panthers CB DeVonta Smith (Sleeper 13977) listed "Saquon Barkley, DeVonta Smith
+   * among 5 Eagles ruled out vs. Jags" — the Eagles receiver's news. Measured that day: 216 NFL names
+   * are held by 2+ Sleeper ids, and 503 news rows in 60 days sit on 146 of them. So the same split
+   * `playerFinder` draws for injuries and stats: a unique name IS the player and keeps every row; a
+   * shared name keeps only rows whose `team` ∪ `teams` includes his club (the scalar `team` can be the
+   * OPPONENT — see `newsRowMatchesPlayer`), and with no club to check against, nothing.
+   */
+  const nameSharers = await prisma.sportsPlayer
+    .findMany({
+      where: {
+        sport: { equals: sport, mode: 'insensitive' },
+        name: { equals: name, mode: 'insensitive' },
+        sleeperId: { not: null },
+      },
+      select: { sleeperId: true },
+      distinct: ['sleeperId'],
+      take: 2,
+    })
+    .catch(() => [] as Array<{ sleeperId: string | null }>)
+  const nameIsAmbiguous = nameSharers.length > 1
+  const club = normalizeTeamAbbrev(team)
+  if (nameIsAmbiguous && !club) {
+    return unavailable(`More than one player is named ${name}, and without his team we cannot tell whose news it is.`)
+  }
+
   const rows = await prisma.sportsNews
     .findMany({
       where: {
@@ -1055,17 +1087,37 @@ export async function loadNews(name: string, sport: string): Promise<SectionStat
         OR: [{ playerName: { equals: name, mode: 'insensitive' } }, { playerNames: { has: name } }],
       },
       orderBy: { publishedAt: 'desc' },
-      // Enough candidates for the merge below to have something to choose from.
-      take: MERGED_NEWS_COUNT,
-      select: { title: true, source: true, sourceUrl: true, publishedAt: true },
+      // Enough candidates for the merge below to have something to choose from — and, for a shared
+      // name, for the club filter to still leave some once the namesake's rows are dropped.
+      take: nameIsAmbiguous ? MERGED_NEWS_COUNT * 6 : MERGED_NEWS_COUNT,
+      select: {
+        title: true,
+        source: true,
+        sourceUrl: true,
+        publishedAt: true,
+        playerName: true,
+        playerNames: true,
+        team: true,
+        teams: true,
+      },
     })
     .catch(() => [])
 
-  if (rows.length === 0) return unavailable('No recent item mentions this player.')
+  const kept = nameIsAmbiguous
+    ? rows
+        .filter((r) => {
+          // A row that names no club makes no claim — which, for a shared name, proves nothing.
+          const rowTeams = [r.team, ...(r.teams ?? [])].filter((t) => Boolean(t?.trim()))
+          return rowTeams.length > 0 && newsRowMatchesPlayer(r, { name, team: club })
+        })
+        .slice(0, MERGED_NEWS_COUNT)
+    : rows
+
+  if (kept.length === 0) return unavailable('No recent item mentions this player.')
 
   return {
     available: true,
-    data: rows.map((r) => ({
+    data: kept.map((r) => ({
       title: r.title,
       source: r.source,
       url: r.sourceUrl,
@@ -1640,7 +1692,7 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
     player.sleeperId && projWeek
       ? lookupProjections([player.sleeperId], projWeek, null, player.sport).catch(() => new Map())
       : Promise.resolve(new Map()),
-    loadNews(player.name, player.sport),
+    loadNews(player.name, player.sport, player.team),
     loadPlayerBlurbs(player.name, player.sport, player.team),
     loadInjury(player.name, player.sport, player.team, player.position),
     /*

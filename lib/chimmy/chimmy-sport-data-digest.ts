@@ -3,6 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { getLatestNews } from '@/lib/data/news'
 import { listInjuryFacts } from '@/lib/injuries/injuryReadPort'
+import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 import { getNewsApiEverythingDbFirst } from '@/lib/news/newsapi-cache'
 import { SUPPORTED_SPORTS, type SupportedSport } from '@/lib/sport-scope'
 
@@ -417,16 +418,80 @@ ${transactionRows
     }
 
     if (wantsPlayerStats && playerMentions.length > 0) {
-      const playerStatsRows = await prisma.playerSeasonStats.findMany({
-        where: {
-          sport: sp,
-          OR: playerMentions.map((name) => ({
-            playerName: { contains: name, mode: 'insensitive' },
-          })),
-        },
-        orderBy: [{ season: 'desc' }, { updatedAt: 'desc' }],
-        take: args.sport === 'all' ? 6 : 10,
+      /*
+       * 🛑 BOUND EXACTLY, AND NOT AT ALL WHEN THE NAME IS SHARED (2026-10-12). This was `contains`
+       * over every mention with ONE shared `take`, so "Michael Carter" pulled RB Michael Carter (TEN)
+       * and CB "Michael Carter II" (PHI) into one list as if they were one player, and a mention with
+       * a long career crowded the others out of the 10 rows. Now: a row binds only when its
+       * normalized name EQUALS the mention's, each mention gets its own share of the cap, and a name
+       * held by 2+ Sleeper ids in this sport is refused — the question carries no team or position
+       * to tell them apart, and the WR's five seasons are not an answer about the corner.
+       */
+      const statCap = args.sport === 'all' ? 6 : 10
+      const mentionKeys = [...new Set(playerMentions.map((n) => normalizeMatchName(n)).filter(Boolean))]
+      const sharers = await Promise.resolve()
+        .then(() =>
+          prisma.sportsPlayer.findMany({
+            where: {
+              sport: sp,
+              sleeperId: { not: null },
+              OR: playerMentions.map((name) => ({ name: { startsWith: name, mode: 'insensitive' as const } })),
+            },
+            select: { name: true, sleeperId: true },
+            take: 500,
+          }),
+        )
+        .catch(() => null)
+      const idsByKey = new Map<string, Set<string>>()
+      for (const row of sharers ?? []) {
+        const key = normalizeMatchName(row.name)
+        if (!mentionKeys.includes(key) || !row.sleeperId) continue
+        const ids = idsByKey.get(key) ?? new Set<string>()
+        ids.add(row.sleeperId)
+        idsByKey.set(key, ids)
+      }
+      // No census, no proof: a failed read refuses every mention rather than binding blind.
+      const refusedKeys = new Set(
+        sharers == null ? mentionKeys : mentionKeys.filter((k) => (idsByKey.get(k)?.size ?? 0) > 1),
+      )
+      const boundKeys = mentionKeys.filter((k) => !refusedKeys.has(k))
+      const boundMentions = playerMentions.filter((n) => boundKeys.includes(normalizeMatchName(n)))
+      const perMention = Math.max(2, Math.floor(statCap / Math.max(1, boundKeys.length)))
+
+      const statCandidates = boundMentions.length
+        ? await prisma.playerSeasonStats.findMany({
+            where: {
+              sport: sp,
+              // `startsWith` reaches a suffixed spelling ("X Jr."); normalizeMatchName decides.
+              OR: boundMentions.map((name) => ({
+                playerName: { startsWith: name, mode: 'insensitive' },
+              })),
+            },
+            orderBy: [{ season: 'desc' }, { updatedAt: 'desc' }],
+            take: statCap * 6,
+          })
+        : []
+      const takenByKey = new Map<string, number>()
+      const playerStatsRows = statCandidates.filter((row) => {
+        const key = normalizeMatchName(row.playerName)
+        if (!boundKeys.includes(key)) return false
+        const taken = takenByKey.get(key) ?? 0
+        if (taken >= perMention) return false
+        takenByKey.set(key, taken + 1)
+        return true
       })
+      if (refusedKeys.size > 0) {
+        const refusedNames = playerMentions.filter((n) => refusedKeys.has(normalizeMatchName(n)))
+        chunks.push(
+          `### ${sp} — Player season stats withheld${NL}${refusedNames
+            .map((n) =>
+              sharers == null
+                ? `- ${n}: could not verify which ${sp} player this is; do not quote stats for this name`
+                : `- ${n}: more than one ${sp} player has this name; ask which team or position before quoting stats`,
+            )
+            .join(NL)}`,
+        )
+      }
 
       // player_season_stats holds NFL only (5,186 rows; zero for any other
       // sport). College season stats live in fantasy_stat_lines — 5,530 NCAAF
@@ -435,7 +500,7 @@ ${transactionRows
       // silently returned nothing for college and Chimmy reported no stats.
       let fallbackStatChunk: string | null = null
       let fallbackStatDates: Array<Date | null> = []
-      if (playerStatsRows.length === 0) {
+      if (playerStatsRows.length === 0 && boundMentions.length > 0) {
         // The JSON name filter is case-sensitive in Postgres and stored names
         // are Title Case, while mentions arrive as the user typed them.
         // Normalising the whole word — not just its first letter — is what lets
@@ -448,7 +513,8 @@ ${transactionRows
             .join(' ')
         const nameFilters = [
           ...new Set(
-            playerMentions.flatMap((n) => {
+            // A refused name stays refused here too — this table is no less name-bound.
+            boundMentions.flatMap((n) => {
               const title = titleCase(n)
               return title === n ? [n] : [n, title]
             })
