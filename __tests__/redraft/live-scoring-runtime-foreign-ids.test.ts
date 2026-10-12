@@ -29,9 +29,19 @@ const h = vi.hoisted(() => {
     redraftSeason: { findFirst: async () => ({ id: 'season-1', leagueId: 'league-1', sport: 'NFL', season: 2026, currentWeek: 2, status: 'in_season' }) },
     league: { findUnique: async () => ({ settings: {}, platform: state.platform }) },
     redraftRoster: { findMany: async () => [{ id: 'alpha', leagueId: 'league-1', seasonId: 'season-1', teamName: 'Alpha', ownerName: 'A' }] },
-    redraftRosterPlayer: { findMany: async () => state.rosterPlayers.map((p) => ({ ...p })) },
+    redraftRosterPlayer: {
+      findMany: async () => state.rosterPlayers.map((p) => ({ ...p })),
+      findFirst: async (args: { where: { playerId: string } }) => state.rosterPlayers.find((p) => p.playerId === args.where.playerId) ?? null,
+    },
     playerIdentityMap: { findMany: vi.fn(inFilter(() => state.identity)) },
-    playerWeeklyScore: { findMany: vi.fn(inFilter(() => state.scores)) },
+    playerWeeklyScore: {
+      findMany: vi.fn(inFilter(() => state.scores)),
+      findUnique: vi.fn(async (args: { where: { playerId_week_season_sport: { playerId: string } } }) =>
+        state.scores.find((r) => r.playerId === args.where.playerId_week_season_sport.playerId) ?? null,
+      ),
+      upsert: vi.fn(async () => ({})),
+    },
+    adminAuditLog: { create: vi.fn(async () => ({})) },
     redraftMatchup: { findMany: async () => [] },
     sportsGame: { findMany: async () => [] },
   }
@@ -70,8 +80,13 @@ vi.mock('@/lib/player-data/getNormalizedPlayerData', () => ({
   }),
 }))
 vi.mock('@/lib/player-data/serializeUnifiedPlayerForApi', () => ({ serializeUnifiedPlayerForApi: vi.fn((row: unknown) => row) }))
+vi.mock('@/lib/redraft/standingsEngine', () => ({ updateStandings: vi.fn(async () => []) }))
 
-import { resolveNflRedraftLiveScoringRuntime } from '@/lib/scoring-runtime/resolveNflRedraftLiveScoringRuntime'
+import {
+  applyNflRedraftStatCorrectionToSeason,
+  ingestNflRedraftStatPayload,
+  resolveNflRedraftLiveScoringRuntime,
+} from '@/lib/scoring-runtime/resolveNflRedraftLiveScoringRuntime'
 
 const qb = (playerId: string) => ({
   id: `rp-${playerId}`, rosterId: 'alpha', playerId, playerName: 'Josh Allen', position: 'QB', team: 'BUF', sport: 'NFL',
@@ -129,5 +144,62 @@ describe('NFL live-scoring runtime — foreign roster ids read through the cross
     expect(p.hasStats).toBe(true)
     expect(p.stats.pass_yds).toBe(250)
     expect(h.prisma.playerIdentityMap.findMany).not.toHaveBeenCalled()
+  })
+})
+
+const upsertedIds = () =>
+  h.prisma.playerWeeklyScore.upsert.mock.calls.map(
+    ([a]) => (a as { where: { playerId_week_season_sport: { playerId: string } } }).where.playerId_week_season_sport.playerId,
+  )
+
+describe('NFL stat-payload ingest — writes under the Sleeper id, never a raw foreign id', () => {
+  it('🛑 Fleaflicker 13761 unmapped: skipped and counted, nothing written under 13761 (a Sleeper DL)', async () => {
+    const result = await ingestNflRedraftStatPayload({ seasonId: 'season-1', week: 2, rows: [{ playerId: '13761', stats: { pass_yds: 300 } }] })
+
+    expect(h.prisma.playerWeeklyScore.upsert).not.toHaveBeenCalled()
+    expect(result.synced).toBe(0)
+    expect(result.untranslatedForeignPlayerIds).toEqual(['13761'])
+    expect(result.skipped).toEqual(['13761'])
+  })
+
+  it('Fleaflicker 13761 mapped to 4984: written under 4984', async () => {
+    h.state.identity = [{ sport: 'NFL', fleaflickerId: '13761', espnId: null, mflId: null, sleeperId: '4984' }]
+    const result = await ingestNflRedraftStatPayload({ seasonId: 'season-1', week: 2, rows: [{ playerId: '13761', stats: { pass_yds: 300 } }] })
+
+    expect(upsertedIds()).toEqual(['4984'])
+    expect(result.synced).toBe(1)
+    expect(result.untranslatedForeignPlayerIds).toEqual([])
+  })
+
+  it('a native league writes under its own ids, as before', async () => {
+    h.state.platform = 'sleeper'
+    h.state.rosterPlayers = [qb('4984')]
+    await ingestNflRedraftStatPayload({ seasonId: 'season-1', week: 2, rows: [{ playerId: '4984', stats: { pass_yds: 300 } }] })
+    expect(upsertedIds()).toEqual(['4984'])
+  })
+})
+
+describe('NFL stat correction — reads and writes under the Sleeper id, never a raw foreign id', () => {
+  it('🛑 Fleaflicker 13761 unmapped: refused and audited, nothing read or written under 13761', async () => {
+    h.state.scores = [weekRow('13761', { def_tkl: 7 })]
+
+    await expect(
+      applyNflRedraftStatCorrectionToSeason({ seasonId: 'season-1', week: 2, playerId: '13761', correctedStats: { pass_yds: 280 } }),
+    ).rejects.toThrow('player_id_not_translatable')
+    expect(h.prisma.playerWeeklyScore.upsert).not.toHaveBeenCalled()
+    expect(h.prisma.playerWeeklyScore.findUnique).not.toHaveBeenCalled()
+    const audit = h.prisma.adminAuditLog.create.mock.calls.map(([a]) => (a as { data: { action: string } }).data.action)
+    expect(audit).toContain('redraft_stat_correction_refused')
+  })
+
+  it('Fleaflicker 13761 mapped to 4984: corrects ALLEN\'s row, under 4984', async () => {
+    h.state.identity = [{ sport: 'NFL', fleaflickerId: '13761', espnId: null, mflId: null, sleeperId: '4984' }]
+    h.state.scores = [weekRow('13761', { def_tkl: 7 }), weekRow('4984', { pass_yds: 250 })]
+
+    await applyNflRedraftStatCorrectionToSeason({ seasonId: 'season-1', week: 2, playerId: '13761', correctedStats: { pass_yds: 280 } })
+
+    const read = h.prisma.playerWeeklyScore.findUnique.mock.calls[0]![0] as { where: { playerId_week_season_sport: { playerId: string } } }
+    expect(read.where.playerId_week_season_sport.playerId).toBe('4984')
+    expect(upsertedIds()).toEqual(['4984'])
   })
 })

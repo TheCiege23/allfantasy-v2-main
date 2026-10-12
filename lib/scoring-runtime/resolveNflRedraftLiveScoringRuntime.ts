@@ -58,6 +58,26 @@ function asNumberMap(value: unknown): Record<string, number> {
   return out
 }
 
+/**
+ * Roster id → the Sleeper id `player_weekly_scores` is keyed on, or null when there is none.
+ *
+ * 🛑 `player_weekly_scores` is unique on playerId + week + season + sport and SHARED BY EVERY LEAGUE, in
+ * Sleeper's id space. An ESPN / Fleaflicker roster holds that platform's ids, and the same digits are a
+ * different man (Fleaflicker 13761 Josh Allen is a Sleeper DL), so a read by the raw id finds a stranger's
+ * week and a write by it overwrites his row. One translation for the read and both writers in this file,
+ * the same one the score sync uses (`sleeperLookupId`): a native league's ids pass through, a foreign
+ * id goes through the crosswalk, and one with no one-to-one Sleeper id resolves to null — never itself.
+ */
+async function sleeperIdLookup(
+  platform: string | null | undefined,
+  rosterIds: readonly string[],
+): Promise<(rosterId: string) => string | null> {
+  const crosswalk = await crosswalkToSleeperIds(String(platform ?? ''), 'NFL', [...rosterIds]).catch(
+    () => new Map<string, string>(),
+  )
+  return (rosterId) => sleeperLookupId(platform, rosterId, crosswalk)
+}
+
 function categoryPointsFromLeagueSettings(settings: unknown): Record<string, number> {
   const root = asRecord(settings)
   return asNumberMap(asRecord(root.sportConfig).categoryPoints)
@@ -241,11 +261,7 @@ export async function resolveNflRedraftLiveScoringRuntime(input: {
    * row mapped back to the roster id the lineup speaks; an id that does not translate reads nothing.
    * This runtime is NFL-only (gated above), so the translation always applies.
    */
-  const leaguePlatform = league?.platform ?? null
-  const sleeperIdByRosterId = await crosswalkToSleeperIds(String(leaguePlatform ?? ''), 'NFL', playerIds).catch(
-    () => new Map<string, string>(),
-  )
-  const lookupOf = (id: string) => sleeperLookupId(leaguePlatform, id, sleeperIdByRosterId)
+  const lookupOf = await sleeperIdLookup(league?.platform, playerIds)
   const rosterIdsBySleeperId = new Map<string, string[]>()
   for (const id of playerIds) {
     const sleeperId = lookupOf(id)
@@ -433,13 +449,19 @@ export async function ingestNflRedraftStatPayload(input: {
   rows: NflRedraftStatPayloadRow[]
   actorUserId?: string | null
   source?: string | null
-}): Promise<{ synced: number; skipped: string[]; state: NflRedraftLiveScoringRuntimeState }> {
+}): Promise<{
+  synced: number
+  skipped: string[]
+  /** Roster ids of a foreign league with no one-to-one Sleeper id: not written (also listed in `skipped`). */
+  untranslatedForeignPlayerIds: string[]
+  state: NflRedraftLiveScoringRuntimeState
+}> {
   const season = await resolveSeason(input)
   if (!season) throw new Error('season_not_found')
   const rules = await resolveCanonicalLeagueRules(season.leagueId)
   if (!rules) throw new Error('league_not_found')
   const week = positiveWeek(input.week, season.currentWeek || 1)
-  const league = await prisma.league.findUnique({ where: { id: season.leagueId }, select: { settings: true } })
+  const league = await prisma.league.findUnique({ where: { id: season.leagueId }, select: { settings: true, platform: true } })
   const settings = resolveNflRedraftScoringSettings({
     rules,
     categoryPoints: categoryPointsFromLeagueSettings(league?.settings ?? null),
@@ -449,12 +471,21 @@ export async function ingestNflRedraftStatPayload(input: {
     select: { playerId: true, playerName: true, position: true, sport: true },
   })
   const playerById = new Map(rosterPlayers.map((player) => [player.playerId, player]))
+  // Rows arrive keyed on roster ids; the score is written under the Sleeper id (see `sleeperIdLookup`).
+  const sleeperIdOf = await sleeperIdLookup(league?.platform, [...playerById.keys()])
   const skipped: string[] = []
+  const untranslatedForeignPlayerIds: string[] = []
   let synced = 0
 
   for (const row of input.rows) {
     const player = playerById.get(row.playerId)
     if (!player) {
+      skipped.push(row.playerId)
+      continue
+    }
+    const scoreId = sleeperIdOf(player.playerId)
+    if (!scoreId) {
+      untranslatedForeignPlayerIds.push(row.playerId)
       skipped.push(row.playerId)
       continue
     }
@@ -471,7 +502,7 @@ export async function ingestNflRedraftStatPayload(input: {
     await prisma.playerWeeklyScore.upsert({
       where: {
         playerId_week_season_sport: {
-          playerId: player.playerId,
+          playerId: scoreId,
           week,
           season: season.season,
           sport: player.sport,
@@ -483,7 +514,7 @@ export async function ingestNflRedraftStatPayload(input: {
         isFinalized: row.isFinalized === true,
       },
       create: {
-        playerId: player.playerId,
+        playerId: scoreId,
         week,
         season: season.season,
         sport: player.sport,
@@ -499,7 +530,7 @@ export async function ingestNflRedraftStatPayload(input: {
     actorUserId: input.actorUserId ?? 'system',
     action: 'redraft_stat_payload_ingest',
     seasonId: season.id,
-    details: { week, source: input.source ?? null, synced, skipped },
+    details: { week, source: input.source ?? null, synced, skipped, untranslatedForeignPlayerIds },
   })
   const persisted = await persistNflRedraftLiveScoringWeek({
     seasonId: season.id,
@@ -507,7 +538,7 @@ export async function ingestNflRedraftStatPayload(input: {
     actorUserId: input.actorUserId,
     includePlayerEvents: true,
   })
-  return { synced, skipped, state: persisted.state }
+  return { synced, skipped, untranslatedForeignPlayerIds, state: persisted.state }
 }
 
 export async function applyNflRedraftStatCorrectionToSeason(input: {
@@ -531,10 +562,27 @@ export async function applyNflRedraftStatCorrectionToSeason(input: {
   })
   if (!rosterPlayer) throw new Error('player_not_rostered')
 
+  const league = await prisma.league.findUnique({ where: { id: season.leagueId }, select: { settings: true, platform: true } })
+  /*
+   * The previous line is READ and the correction WRITTEN under the Sleeper id (see `sleeperIdLookup`). A
+   * foreign roster id with none is refused before either — audited, so the refusal is counted — rather
+   * than correcting, and overwriting, whoever holds those digits in Sleeper's space.
+   */
+  const scoreId = (await sleeperIdLookup(league?.platform, [rosterPlayer.playerId]))(rosterPlayer.playerId)
+  if (!scoreId) {
+    await recordScoringAudit({
+      actorUserId: input.actorUserId ?? 'system',
+      action: 'redraft_stat_correction_refused',
+      seasonId: season.id,
+      details: { week, playerId: rosterPlayer.playerId, reason: 'player_id_not_translatable', platform: league?.platform ?? null },
+    })
+    throw new Error('player_id_not_translatable')
+  }
+
   const existing = await prisma.playerWeeklyScore.findUnique({
     where: {
       playerId_week_season_sport: {
-        playerId: rosterPlayer.playerId,
+        playerId: scoreId,
         week,
         season: season.season,
         sport: rosterPlayer.sport,
@@ -547,7 +595,6 @@ export async function applyNflRedraftStatCorrectionToSeason(input: {
     previousStats: asRecord(existing?.stats),
     correctedStats: input.correctedStats,
   })
-  const league = await prisma.league.findUnique({ where: { id: season.leagueId }, select: { settings: true } })
   const settings = resolveNflRedraftScoringSettings({
     rules,
     categoryPoints: categoryPointsFromLeagueSettings(league?.settings ?? null),
@@ -561,7 +608,7 @@ export async function applyNflRedraftStatCorrectionToSeason(input: {
   await prisma.playerWeeklyScore.upsert({
     where: {
       playerId_week_season_sport: {
-        playerId: rosterPlayer.playerId,
+        playerId: scoreId,
         week,
         season: season.season,
         sport: rosterPlayer.sport,
@@ -573,7 +620,7 @@ export async function applyNflRedraftStatCorrectionToSeason(input: {
       isFinalized: input.isFinalized === true || existing?.isFinalized === true,
     },
     create: {
-      playerId: rosterPlayer.playerId,
+      playerId: scoreId,
       week,
       season: season.season,
       sport: rosterPlayer.sport,
