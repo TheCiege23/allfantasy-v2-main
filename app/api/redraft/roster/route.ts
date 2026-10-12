@@ -14,6 +14,7 @@ import {
   type RedraftLineupValidationResult,
 } from '@/lib/redraft/lineupValidation'
 import { hydrateRedraftLineupLocks } from '@/lib/redraft/lineupLock'
+import { resolveCurrentLockTeams } from '@/lib/redraft/lineupLockCurrentTeam'
 import { resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
 import {
   getCanonicalNflPlayerByNameTeam,
@@ -264,6 +265,12 @@ export async function GET(req: NextRequest) {
     rosterId: roster.id,
     leagueSettings: leagueForLock?.settings ?? null,
     players: roster.players,
+    // Lock on the club he plays for now — the display is corrected further down, the lock must be too.
+    currentTeamByPlayerId: await resolveCurrentLockTeams(prisma, {
+      sport: roster.season.sport,
+      platform: leagueForLock?.platform ?? null,
+      playerIds: roster.players.map((p) => p.playerId),
+    }),
   })
   roster.players = lockHydrated.players as RosterPlayerRow[]
   // G10: resolve the commissioner roster config so lineup validation honors the
@@ -635,7 +642,7 @@ export async function PATCH(req: NextRequest) {
   // applying moves, so a player whose game has kicked off cannot be moved.
   const leagueForLock = await prisma.league.findUnique({
     where: { id: roster.leagueId },
-    select: { settings: true },
+    select: { settings: true, platform: true },
   })
   const { players: currentPlayers } = await hydrateRedraftLineupLocks(prisma, {
     sport: roster.season.sport,
@@ -644,6 +651,12 @@ export async function PATCH(req: NextRequest) {
     rosterId: roster.id,
     leagueSettings: leagueForLock?.settings ?? null,
     players: injuryHydrated,
+    // The enforcing path: lock on his current club, not the team stored when he was added.
+    currentTeamByPlayerId: await resolveCurrentLockTeams(prisma, {
+      sport: roster.season.sport,
+      platform: leagueForLock?.platform ?? null,
+      playerIds: injuryHydrated.map((p) => p.playerId),
+    }),
   })
   const rosterConfig = resolveRedraftRosterConfig(roster.season.sport, leagueForLock?.settings ?? null)
   const applied = applyRedraftLineupMoves(currentPlayers, body.moves)
