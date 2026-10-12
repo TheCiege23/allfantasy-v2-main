@@ -35,6 +35,8 @@ import { ncaafReserveAvailability, type NcaafReserveAvailability } from '@/lib/p
 import { aggregateNcaafWeek, isNcaafSport } from '@/lib/scoring-runtime/ncaafStatNormalization'
 import { crosswalkToSleeperIds, sleeperLookupId } from '@/lib/core-app/rosterIdCrosswalk'
 import { rosterIdSpaceOf } from '@/lib/core-app/rosterIdSpace'
+import { isNativePlatform } from '@/lib/dashboard/platform-label'
+import { readExileRoster } from '@/lib/survivor/exileRosterRules'
 
 export type WeeklyScoreSyncSummary = {
   leagueId: string
@@ -218,12 +220,31 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
     select: { id: true },
   })
   const rosterIds = rosters.map((r) => r.id)
-  const storedRosterPlayers = rosterIds.length
+  const ordinaryRosterPlayers = rosterIds.length
     ? await prisma.redraftRosterPlayer.findMany({
         where: { rosterId: { in: rosterIds }, droppedAt: null },
         select: { playerId: true, sport: true, position: true, team: true },
       })
     : []
+  // Exile lineups are separate from RedraftRosterPlayer. Score their saved weekly
+  // roster in the same ID space as native draft players, even after the manager
+  // has released the team for the following week.
+  const survivorLeague = await prisma.league.findUnique({
+    where: { id: season.leagueId },
+    select: { platform: true, survivorMode: true },
+  })
+  const exileEntries = survivorLeague?.survivorMode && isNativePlatform(survivorLeague.platform)
+    ? await prisma.exileWeeklyEntry.findMany({
+        where: { leagueId: season.leagueId, week },
+        select: { submittedLineup: true },
+      })
+    : []
+  const exileRosterPlayers = exileEntries.flatMap(entry =>
+    (readExileRoster(entry.submittedLineup)?.players ?? []).map(player => ({
+      playerId: player.id, sport, position: player.position, team: player.team,
+    })),
+  )
+  const storedRosterPlayers = [...ordinaryRosterPlayers, ...exileRosterPlayers]
   const storedIds = Array.from(new Set(storedRosterPlayers.map((p: { playerId: string }) => p.playerId).filter(Boolean)))
 
   /*

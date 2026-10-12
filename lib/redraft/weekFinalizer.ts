@@ -11,6 +11,8 @@ import { seasonSportToLeagueSport } from '@/lib/season-week/standardSeasonScope'
 import { enqueueTankingScan } from '@/lib/integrity/enqueueTankingScan'
 import { loadWeekLineups, weekSlotType } from './weekLineupSlots'
 import { isSealedWeek } from './weekSealed'
+import { isNativePlatform } from '@/lib/dashboard/platform-label'
+import { readExileRoster } from '@/lib/survivor/exileRosterRules'
 
 /**
  * CLOSE A WEEK, SO THE SEASON CAN MOVE.
@@ -91,6 +93,8 @@ export type WeekFinalizeRefusal =
   | 'week_window_open'
   | 'no_starters'
   | 'stat_coverage_below_floor'
+  | 'exile_roster_open'
+  | 'exile_stat_missing'
   /**
    * A daily sport whose season opener is not recorded, so its week has no date window.
    *
@@ -471,21 +475,46 @@ export async function finalizeRedraftWeek(
    * active player, so every one of them needs a sealed row — sealing starters only left bench
    * players without a row and the matchup could never go final.
    */
-  const bestBall = leagueIsBestBall(
-    await prisma.league.findFirst({
+  const league = await prisma.league.findFirst({
       where: { id: season.leagueId },
-      select: { bestBallMode: true, leagueVariant: true, leagueType: true },
-    }),
-  )
+      select: { bestBallMode: true, leagueVariant: true, leagueType: true, survivorMode: true, platform: true },
+    })
+  const bestBall = leagueIsBestBall(league)
 
   /*
    * One row per (playerId, sport): the score table is keyed that way, and two managers
    * starting the same player must not be counted as two starters to cover.
    */
   const starters = new Map<string, { playerId: string; sport: string }>()
+  const exileStarterKeys = new Set<string>()
   for (const p of rosterPlayers) {
     if (!countsTowardScore(weekSlotType(p, weekLineups), bestBall)) continue
     starters.set(`${p.sport}::${p.playerId}`, { playerId: p.playerId, sport: p.sport })
+  }
+  // Closed Exile lineups are separate from the main league roster. They must
+  // participate in the same slate and coverage proof before their score can
+  // be finalized; otherwise an Exile manager could be stranded indefinitely.
+  if (league?.survivorMode && isNativePlatform(league.platform)) {
+    const entries = await prisma.exileWeeklyEntry.findMany({
+      where: { leagueId: season.leagueId, week: params.week },
+      select: { submittedLineup: true },
+    })
+    for (const entry of entries) {
+      const roster = readExileRoster(entry.submittedLineup)
+      if (!roster) continue
+      // The Exile rollover can lag the common score-sync cron. Never seal the
+      // week before that saved lineup becomes immutable.
+      if (!roster.closedAt && roster.players.some(player => player.slot !== 'BENCH')) {
+        return emptyResult(base, 'exile_roster_open', { slate, matchupsConsidered })
+      }
+      if (!roster.closedAt) continue
+      for (const player of roster.players) {
+        if (player.slot === 'BENCH') continue
+        const key = `${sport}::${player.id}`
+        starters.set(key, { playerId: player.id, sport })
+        exileStarterKeys.add(key)
+      }
+    }
   }
   if (starters.size === 0) {
     return emptyResult(base, 'no_starters', { slate, matchupsConsidered })
@@ -514,6 +543,15 @@ export async function finalizeRedraftWeek(
 
   const startersWithStats = existing.size
   const coverage = startersWithStats / starters.size
+  // The ordinary 80% floor permits verified league starters with no box row
+  // to be recorded as DNP zeroes. Exile has a smaller pool and no independent
+  // participation proof yet; missing rows must remain pending, never be
+  // converted into a token-deciding zero by the main-league coverage ratio.
+  if ([...exileStarterKeys].some(key => !existing.has(key))) {
+    return emptyResult(base, 'exile_stat_missing', {
+      slate, matchupsConsidered, starters: starters.size, startersWithStats, coverage,
+    })
+  }
   // College sync writes explicit rows for verified byes/non-appearances. A missing college
   // row therefore means missing identity or ingestion evidence, never a zero to invent.
   if (coverage < (sport === 'NCAAF' ? 1 : coverageFloor)) {

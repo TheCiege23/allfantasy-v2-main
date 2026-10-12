@@ -1,6 +1,6 @@
 'use client'
 
-import { Users, Shield, Trophy } from 'lucide-react'
+import { Users, Trophy } from 'lucide-react'
 import type { SurvivorSummary } from './types'
 
 export interface SurvivorTribeBoardProps {
@@ -82,7 +82,7 @@ export function SurvivorTribeBoard({ summary, names }: SurvivorTribeBoardProps) 
                   <h3 className="flex items-center gap-2 font-semibold text-white">{tribe.logoUrl && <img src={tribe.logoUrl} alt="" width={64} height={64} className="h-16 w-16 object-contain" />}{tribe.name}</h3>
                   {hasImmunity && (
                     <span className="flex items-center gap-1 rounded bg-emerald-500/20 px-1.5 py-0.5 text-xs text-emerald-300">
-                      <Shield className="h-3 w-3" /> Immunity
+                      <img src="/survivor/weekly/immunity-necklace-icon.svg" alt="" className="h-5 w-5 object-contain" /> Immunity
                     </span>
                   )}
                   {isAttending && (
@@ -96,7 +96,7 @@ export function SurvivorTribeBoard({ summary, names }: SurvivorTribeBoardProps) 
                       className="flex items-center gap-2 text-sm text-white/80"
                     >
                       {member.isLeader && <Trophy className="h-3.5 w-3.5 text-amber-400" />}
-                      {rosterImmunity.has(member.rosterId) && <Shield className="h-3.5 w-3.5 text-emerald-400" />}
+                      {rosterImmunity.has(member.rosterId) && <img src="/survivor/weekly/immunity-necklace-icon.svg" alt="Immunity" className="h-5 w-5 object-contain" />}
                       {names[member.rosterId] ?? member.rosterId}
                     </li>
                   ))}

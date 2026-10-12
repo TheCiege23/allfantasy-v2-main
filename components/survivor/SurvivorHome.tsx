@@ -23,7 +23,7 @@ import {
   SURVIVOR_TIPS,
   SURVIVOR_WELCOME_BLURB,
 } from '@/lib/survivor/survivorIslandContent'
-import { getSurvivorThemeById } from '@/lib/survivor/survivorVisuals'
+import { getSurvivorThemeById, survivorSceneArtwork } from '@/lib/survivor/survivorVisuals'
 
 const VIEW_LABELS: Record<SurvivorView, string> = {
   'tribe-board': 'Tribe Board',
@@ -118,7 +118,10 @@ export function SurvivorHome({ leagueId }: SurvivorHomeProps) {
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.04),transparent_25%,rgba(0,0,0,0.28)_100%)] opacity-40" />
       <div className="relative space-y-6">
       {/* Survivor branding header */}
-      <header className="flex flex-wrap items-center gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-6">
+      <header className="relative flex min-h-48 flex-wrap items-center gap-4 overflow-hidden rounded-2xl border border-amber-200/20 bg-[#08110e] p-4 sm:p-6">
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-cover bg-center opacity-55" style={{ backgroundImage: `url(${survivorSceneArtwork(cal?.sport, theme.id)})` }} />
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-gradient-to-r from-[#07100e]/95 via-[#07100e]/70 to-[#07100e]/20" />
+        <div className="relative flex w-full flex-wrap items-center gap-4">
         <div className="flex h-16 w-16 items-center justify-center rounded-xl border border-amber-500/30 bg-amber-950/30 sm:h-20 sm:w-20">
           <Flame className="h-8 w-8 text-amber-400 sm:h-10 sm:w-10" />
         </div>
@@ -133,6 +136,7 @@ export function SurvivorHome({ leagueId }: SurvivorHomeProps) {
           <p className="mt-2 text-sm text-white/60">
             Tribes · Challenges · Elimination Council · Idols · Exile · Merge & Jury
           </p>
+        </div>
         </div>
       </header>
 
