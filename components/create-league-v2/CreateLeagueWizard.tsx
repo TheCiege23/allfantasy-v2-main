@@ -129,10 +129,13 @@ function getPremiumLabel(t: (key: string) => string, key: PremiumAdvancedCreateK
 }
 
 export function nextStateForSport(state: CreateLeagueV2State, sport: SupportedSport): Partial<CreateLeagueV2State> {
-  // A concept the new sport does not support (guillotine is not offered for NCAAB or soccer)
-  // falls back to redraft, or the wizard would submit a pairing the server refuses.
+  // A format the manager has not picked follows the sport's default. A picked format is kept when
+  // the new sport allows it; one it does not (guillotine is not offered for NCAAB or soccer) falls
+  // back to the sport's default too, or the wizard would submit a pairing the server refuses.
   const chosen = getEffectiveLeagueType(state) ?? 'redraft'
-  const leagueType = isSportAllowedForType(sport, chosen) ? chosen : 'redraft'
+  const leagueType = state.leagueTypeTouched === true && isSportAllowedForType(sport, chosen)
+    ? chosen
+    : defaultLeagueTypeForSport(sport)
   const idpSelected = state.idpSelected && (sport === 'NFL' || sport === 'NCAAF')
   const scoringPresetId = resolveValidScoringPresetIdForSelection('', {
     leagueType,
@@ -198,20 +201,25 @@ export function nextStateForLeagueType(state: CreateLeagueV2State, leagueType: L
 }
 
 /** The format a brand-new create starts on. */
-export const FRESH_CREATE_LEAGUE_TYPE: LeagueTypeId = 'survivor'
+/**
+ * Each sport's starting format, first one the sport allows (user's call, 2026-10-12: AllFantasy
+ * leads with its specialty formats). NFL, NCAAF, NBA and NHL start on Survivor; MLB, which has no
+ * Survivor, on Guillotine; NCAAB and Soccer, which have neither, on Big Brother.
+ */
+export const SPORT_DEFAULT_FORMATS: readonly LeagueTypeId[] = ['survivor', 'guillotine', 'big_brother']
+
+export function defaultLeagueTypeForSport(sport: SupportedSport): LeagueTypeId {
+  return SPORT_DEFAULT_FORMATS.find((leagueType) => isSportAllowedForType(sport, leagueType)) ?? 'redraft'
+}
 
 /**
- * The starting state for a fresh create (no import, nothing restored from this tab).
- *
- * AllFantasy leads with its specialty formats, so a new league starts on Survivor (user's call,
- * 2026-10-12). Built with the same transition a tap on the Survivor tile runs, so the draft type,
- * team size and scoring preset are ones Survivor accepts — not Redraft's left in place. A sport
- * without Survivor (MLB, NCAAB, Soccer) falls back to Redraft through `nextStateForSport`.
+ * The starting state for a fresh create (no import, nothing restored from this tab): the sport's
+ * default format, built with the same transition a tap on that tile runs, so the draft type, team
+ * size and scoring preset are ones the format accepts — not Redraft's left in place.
  */
 export function freshCreateLeagueState(base: CreateLeagueV2State): CreateLeagueV2State {
-  const start = { ...base, leagueType: base.leagueType ?? 'redraft' }
-  if (!isSportAllowedForType(start.sport, FRESH_CREATE_LEAGUE_TYPE)) return start
-  return { ...start, ...nextStateForLeagueType(start, FRESH_CREATE_LEAGUE_TYPE) }
+  const start = { ...base, leagueType: base.leagueType ?? 'redraft', leagueTypeTouched: false }
+  return { ...start, ...nextStateForLeagueType(start, defaultLeagueTypeForSport(start.sport)) }
 }
 
 /** IDP is a redraft shell with defensive players; it carries its own draft and scoring lists. */
@@ -684,7 +692,7 @@ export function LeagueBasicsStep({
       title: getLeagueTypeLabel(t, leagueType, concept.title),
       hint: tx(t, `createLeague.g30.leagueType.${leagueType}.hint`, concept.subtitle),
       selected: !state.idpSelected && getEffectiveLeagueType(state) === leagueType,
-      onSelect: () => onChange(nextStateForLeagueType(state, leagueType)),
+      onSelect: () => onChange({ ...nextStateForLeagueType(state, leagueType), leagueTypeTouched: true }),
       media: LEAGUE_TYPE_MEDIA[leagueType],
     }
   })
@@ -694,7 +702,7 @@ export function LeagueBasicsStep({
       title: 'IDP',
       hint: tx(t, 'createLeague.g30.leagueType.idp.hint', 'Draft individual defensive players'),
       selected: state.idpSelected,
-      onSelect: () => onChange(nextStateForIdp(state)),
+      onSelect: () => onChange({ ...nextStateForIdp(state), leagueTypeTouched: true }),
       media: LEAGUE_TYPE_MEDIA.idp,
     })
   }

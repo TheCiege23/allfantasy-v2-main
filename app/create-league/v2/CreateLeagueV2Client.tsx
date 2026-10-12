@@ -59,7 +59,8 @@ function normalizeInitialState(state: CreateLeagueV2State): CreateLeagueV2State 
 export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSourceName, importSourceLeagueId, importedLeagues }: CreateLeagueV2ClientProps) {
   const { t } = useLanguage()
   const router = useRouter()
-  // An import carries its own format; a fresh create starts on Survivor. A form restored from
+  // An import carries its own format; a fresh create starts on the sport's default format
+  // (Survivor for the default NFL). A form restored from
   // this tab's sessionStorage (below) keeps whatever the manager had chosen.
   const [state, setState] = useState<CreateLeagueV2State>(() => normalizeInitialState(importTemplate ?? freshCreateLeagueState(DEFAULT_V2_STATE)))
   const [acceptWeeklyLineups, setAcceptWeeklyLineups] = useState(false)
