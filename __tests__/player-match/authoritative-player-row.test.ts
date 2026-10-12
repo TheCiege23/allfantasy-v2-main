@@ -71,6 +71,15 @@ describe('selectAuthoritativePlayerRow', () => {
     expect(picked.ignored).toEqual([])
   })
 
+  it('never fills teamId either: the vendor row would hand a free agent his last club’s id', () => {
+    const picked = selectAuthoritativePlayerRow([
+      { externalId: '7781', source: 'rolling_insights', sleeperId: '3321', name: 'Tyreek Hill', position: 'WR', team: 'MIA', teamId: '19', imageUrl: null, fetchedAt: at('2026-10-12T06:00:00Z') },
+      { externalId: 'sleeper:3321', source: 'sleeper', sleeperId: '3321', name: 'Tyreek Hill', position: 'WR', team: null, teamId: null, imageUrl: null, fetchedAt: at('2026-10-12T00:00:00Z') },
+    ])!
+    expect(picked.row).toMatchObject({ team: null, teamId: null })
+    expect(picked.ignored).toEqual([])
+  })
+
   it('without a Sleeper row keeps the old order: team and position, then position, then freshest', () => {
     const picked = selectAuthoritativePlayerRow([
       { externalId: 'a', source: 'thesportsdb', sleeperId: '1', name: 'X', position: null, team: null, imageUrl: null, fetchedAt: at('2026-10-11T00:00:00Z') },

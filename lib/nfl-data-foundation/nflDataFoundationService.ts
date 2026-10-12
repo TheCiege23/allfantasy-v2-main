@@ -25,7 +25,8 @@ import {
   providerIdWhere,
   sleeperIdWhere,
 } from '@/lib/player-identity/externalIdNamespace'
-import { selectAuthoritativePlayerRow } from '@/lib/player-match/authoritativePlayerRow'
+import { positionGroupsAgree, selectAuthoritativePlayerRow } from '@/lib/player-match/authoritativePlayerRow'
+import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { getCanonicalNflDataCoverage } from './nflDataCoverage'
 import type {
   CanonicalNflAiContext,
@@ -159,10 +160,16 @@ function scoreSportsPlayer(row: SportsPlayerRow): number {
  *
  * So when the winner's Sleeper id has a `sleeper` row here, `selectAuthoritativePlayerRow`
  * decides what the player IS — name, position, club, number, headshot. The club and
- * `teamId` are the Sleeper row's own; a null there means free agent and is kept. The score
- * still picks which AGREEING row supplies the provider ids (`id`, `externalId`, `source`),
- * because season stats are keyed by the Rolling Insights id; a row that contradicts the
- * Sleeper row is never used for those either, or the namesake's stats would follow.
+ * `teamId` are the Sleeper row's own (the helper never fills either); a null there means free
+ * agent and is kept. The score still picks which AGREEING row supplies the provider ids (`id`,
+ * `externalId`, `source`), because season stats are keyed by the Rolling Insights id; a row
+ * that contradicts the Sleeper row is never used for those either, or the namesake's stats
+ * would follow.
+ *
+ * ⚠ THE CLUB IS FOLDED, BECAUSE EVERY NFL SLEEPER ROW SPELLS IT OUT — 3,452 of 3,452 with a
+ * club, 2026-10-12 ("Kansas City Chiefs"). Every consumer here keys on the code: the schedule
+ * join asks `gameSchedule.homeTeam = <team>`, and an unfolded name finds no game in a week that
+ * has games, which reads as a BYE for the whole club.
  */
 function chooseBestSportsPlayer(rows: SportsPlayerRow[]): SportsPlayerRow | null {
   const ranked = [...rows].sort((a, b) => scoreSportsPlayer(b) - scoreSportsPlayer(a))
@@ -175,14 +182,58 @@ function chooseBestSportsPlayer(rows: SportsPlayerRow[]): SportsPlayerRow | null
   const ids = ranked.find((r) => sameId.includes(r) && !picked.ignored.includes(r)) ?? picked.base
   return {
     ...ids,
-    sleeperId: picked.base.sleeperId,
+    sleeperId: picked.row.sleeperId,
     name: picked.row.name,
     position: picked.row.position,
-    team: picked.base.team,
-    teamId: picked.base.teamId,
+    team: picked.row.team == null ? null : normalizeTeamAbbrev(picked.row.team),
+    teamId: picked.row.teamId,
     number: picked.row.number,
     imageUrl: picked.row.imageUrl,
   }
+}
+
+/**
+ * One row per Sleeper id, chosen by `chooseBestSportsPlayer` over ALL of that id's rows; rows
+ * without a Sleeper id pass through untouched.
+ *
+ * ⚠ CALL THIS BEFORE GROUPING OR FILTERING BY CLUB. Sleeper's row and a vendor's row for one
+ * free agent never share a club — null against his last one — so any grouping or filter keyed on
+ * the club separates them before the authority rule can see both, and the vendor row then stands
+ * alone and wins: Tyreek Hill as a Dolphin again.
+ */
+function chooseAuthoritativePerSleeperId(rows: readonly SportsPlayerRow[]): SportsPlayerRow[] {
+  const bySleeperId = new Map<string, SportsPlayerRow[]>()
+  const out: SportsPlayerRow[] = []
+  for (const row of rows) {
+    const key = row.sleeperId?.trim().toLowerCase()
+    if (!key) {
+      out.push(row)
+      continue
+    }
+    const bucket = bySleeperId.get(key)
+    if (bucket) bucket.push(row)
+    else bySleeperId.set(key, [row])
+  }
+  for (const bucket of bySleeperId.values()) {
+    const chosen = chooseBestSportsPlayer(bucket)
+    if (chosen) out.push(chosen)
+  }
+  return out
+}
+
+/**
+ * The `sleeper` rows for every Sleeper id in `rows` whose own rows lack one — a window cut by
+ * `take` or a club filter can hold the vendor row and miss Sleeper's, which is the row that says
+ * "free agent". Returns `rows` plus those.
+ */
+async function withSleeperRows(db: DbClient, rows: SportsPlayerRow[]): Promise<SportsPlayerRow[]> {
+  const have = new Set(rows.filter((r) => r.source === 'sleeper').map((r) => r.sleeperId?.trim().toLowerCase()))
+  const missing = uniq(rows.map((r) => r.sleeperId).filter((id) => id && !have.has(id.trim().toLowerCase())))
+  if (!missing.length) return rows
+  const extra = (await (db as any).sportsPlayer
+    .findMany({ where: { sport: 'NFL', source: 'sleeper', sleeperId: { in: missing } } })
+    .catch(() => [])) as SportsPlayerRow[]
+  return [...rows, ...extra]
 }
 
 export function canonicalNflIdentityKey(input: {
@@ -547,7 +598,7 @@ async function findSportsPlayerByIds(
       orderBy: [{ updatedAt: 'desc' }],
     })
     .catch(() => [])) as SportsPlayerRow[]
-  return chooseBestSportsPlayer(rows)
+  return chooseBestSportsPlayer(await withSleeperRows(db, rows))
 }
 
 async function findIdentityByNameTeam(
@@ -585,21 +636,47 @@ async function findSportsPlayerByNameTeam(
   if (!nameKey) return null
   const teamKey = canonicalTeam(team)
   const posKey = canonicalPosition(position)
-  const rows = (await (db as any).sportsPlayer
-    .findMany({
-      where: {
-        sport: 'NFL',
-        ...(teamKey ? { team: teamKey } : {}),
-      },
-      take: teamKey ? 500 : 2500,
-      orderBy: [{ updatedAt: 'desc' }],
-    })
-    .catch(() => [])) as SportsPlayerRow[]
+  /*
+   * 🛑 THE CLUB USED TO FILTER THE FETCH, WHICH HID THE ROW THAT SAYS "FREE AGENT". A Sleeper
+   * free agent's own row has a null club, so `team = 'MIA'` returned only the vendor row still
+   * holding his last one, and it won unopposed. (It also never matched a Sleeper row on a club,
+   * because those spell it out — "Miami Dolphins".) So candidates are found by NAME — the old
+   * window plus a surname match — every Sleeper id among them gets all of its rows and is decided
+   * by the authority rule, and only THEN are position and club checked, against what the
+   * authoritative row says.
+   */
+  const surname = nameKey.split(' ').reduce((a, b) => (b.length > a.length ? b : a), '')
+  const [windowRows, nameRows] = await Promise.all([
+    (db as any).sportsPlayer
+      .findMany({
+        where: {
+          sport: 'NFL',
+          ...(teamKey ? { team: teamKey } : {}),
+        },
+        take: teamKey ? 500 : 2500,
+        orderBy: [{ updatedAt: 'desc' }],
+      })
+      .catch(() => []) as Promise<SportsPlayerRow[]>,
+    surname.length >= 3
+      ? ((db as any).sportsPlayer
+          .findMany({
+            where: { sport: 'NFL', name: { contains: surname, mode: 'insensitive' } },
+            take: 500,
+            orderBy: [{ updatedAt: 'desc' }],
+          })
+          .catch(() => []) as Promise<SportsPlayerRow[]>)
+      : Promise.resolve([] as SportsPlayerRow[]),
+  ])
+  const byId = new Map<string, SportsPlayerRow>()
+  for (const row of [...windowRows, ...nameRows]) {
+    if (canonicalName(row.name) === nameKey) byId.set(row.id, row)
+  }
+  const chosen = chooseAuthoritativePerSleeperId(await withSleeperRows(db, [...byId.values()]))
+  const club = teamKey ? normalizeTeamAbbrev(teamKey) : null
   return chooseBestSportsPlayer(
-    rows.filter((row) => {
-      if (canonicalName(row.name) !== nameKey) return false
-      if (posKey && canonicalPosition(row.position) !== posKey) return false
-      if (teamKey && canonicalTeam(row.team) !== teamKey && canonicalTeam(row.teamId) !== teamKey) return false
+    chosen.filter((row) => {
+      if (posKey && canonicalPosition(row.position) !== posKey && !positionGroupsAgree(row.position, posKey)) return false
+      if (club && normalizeTeamAbbrev(row.team) !== club && canonicalTeam(row.teamId) !== teamKey) return false
       return true
     }),
   )
@@ -1211,8 +1288,14 @@ export async function generateAndPersistCanonicalNflProjections(options?: {
       take: limit,
     })
     .catch(() => [])) as SportsPlayerRow[]
+  /*
+   * Per Sleeper id FIRST, then by name/position/club. Grouped by club straight away, a free
+   * agent's Sleeper row (club null) and his vendor row (last club) landed in different groups,
+   * and the vendor's group wrote a snapshot on his old team.
+   */
+  const perPlayer = chooseAuthoritativePerSleeperId(await withSleeperRows(db, rowsRaw))
   const grouped = new Map<string, SportsPlayerRow[]>()
-  for (const row of rowsRaw) {
+  for (const row of perPlayer) {
     const key = `${canonicalName(row.name)}|${canonicalPosition(row.position)}|${canonicalTeam(row.team)}`
     const group = grouped.get(key) ?? []
     group.push(row)

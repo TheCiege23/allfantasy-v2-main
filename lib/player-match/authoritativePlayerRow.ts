@@ -85,8 +85,15 @@ export function rowsDescribeSamePlayer(a: PlayerSourceRow, b: PlayerSourceRow): 
   return na !== '' && na === normalizeMatchName(b.name) && positionGroupsAgree(a.position, b.position)
 }
 
-/** Identity keys, plus `team` (see the header): never filled from another row. */
-const NEVER_SUPPLEMENTED = new Set(['source', 'sleeperId', 'externalId', 'sport', 'name', 'fetchedAt', 'team'])
+/**
+ * Identity keys, plus `team` (see the header): never filled from another row.
+ *
+ * `teamId` too, for the same reason and one more. No NFL Sleeper row carries one (0 of 11,960,
+ * 2026-10-12) while every Rolling Insights row does, so filling it would hand a free agent his
+ * last club's id beside a null `team` — and the id is the vendor's own team numbering anyway,
+ * meaningless next to another source's identity.
+ */
+const NEVER_SUPPLEMENTED = new Set(['source', 'sleeperId', 'externalId', 'sport', 'name', 'fetchedAt', 'team', 'teamId'])
 
 function fetchedMs(row: PlayerSourceRow): number {
   if (row.fetchedAt == null) return Number.NEGATIVE_INFINITY
