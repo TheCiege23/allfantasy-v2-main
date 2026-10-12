@@ -2,6 +2,7 @@ import type { IExternalHistoryMapper } from '../../mappers/ExternalHistoryMapper
 import type { NormalizedHistory } from '../../mappers/ExternalHistoryMapper'
 import type { NormalizedDraftPick, NormalizedTransaction, NormalizedStandingsEntry } from '../../types'
 import type { SleeperImportPayload } from './types'
+import { sleeperPointsAgainst } from './SleeperPointsAgainst'
 
 export const SleeperHistoryMapper: IExternalHistoryMapper<SleeperImportPayload> = {
   map(source) {
@@ -40,7 +41,7 @@ export const SleeperHistoryMapper: IExternalHistoryMapper<SleeperImportPayload> 
         losses: r.settings?.losses ?? 0,
         ties: r.settings?.ties ?? 0,
         points_for: (r.settings?.fpts ?? 0) + (r.settings?.fpts_decimal ?? 0) / 100,
-        points_against: undefined,
+        points_against: sleeperPointsAgainst(r.settings),
       }))
       .sort((a, b) => b.wins - a.wins || b.points_for - a.points_for)
       .map((s, i) => ({ ...s, rank: i + 1 }))
