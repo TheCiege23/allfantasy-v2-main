@@ -14,7 +14,7 @@ import {
 } from '@/lib/create-league-v2/state'
 import { analyzeCreateLeagueCompletion } from '@/lib/create-league-v2/form-completion'
 import { submitCreateLeagueV2, type CreateLeagueFieldErrors } from '@/lib/create-league-v2/submit'
-import { CreateLeagueWizard, type ImportedLeagueSummary } from '@/components/create-league-v2/CreateLeagueWizard'
+import { CreateLeagueWizard, freshCreateLeagueState, type ImportedLeagueSummary } from '@/components/create-league-v2/CreateLeagueWizard'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { setClientLeagueCreateOptionsCatalog } from '@/lib/create-league-v2/options-catalog-client'
 import type { LeagueCreateOptionsCatalog } from '@/lib/league-creation/options-catalog-seed-data'
@@ -59,7 +59,9 @@ function normalizeInitialState(state: CreateLeagueV2State): CreateLeagueV2State 
 export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSourceName, importSourceLeagueId, importedLeagues }: CreateLeagueV2ClientProps) {
   const { t } = useLanguage()
   const router = useRouter()
-  const [state, setState] = useState<CreateLeagueV2State>(() => normalizeInitialState(importTemplate ?? DEFAULT_V2_STATE))
+  // An import carries its own format; a fresh create starts on Survivor. A form restored from
+  // this tab's sessionStorage (below) keeps whatever the manager had chosen.
+  const [state, setState] = useState<CreateLeagueV2State>(() => normalizeInitialState(importTemplate ?? freshCreateLeagueState(DEFAULT_V2_STATE)))
   const [acceptWeeklyLineups, setAcceptWeeklyLineups] = useState(false)
   const [hydrated, setHydrated] = useState(false)
   const [submitting, setSubmitting] = useState(false)

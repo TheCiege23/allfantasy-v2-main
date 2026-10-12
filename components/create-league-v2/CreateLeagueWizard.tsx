@@ -197,6 +197,23 @@ export function nextStateForLeagueType(state: CreateLeagueV2State, leagueType: L
   }
 }
 
+/** The format a brand-new create starts on. */
+export const FRESH_CREATE_LEAGUE_TYPE: LeagueTypeId = 'survivor'
+
+/**
+ * The starting state for a fresh create (no import, nothing restored from this tab).
+ *
+ * AllFantasy leads with its specialty formats, so a new league starts on Survivor (user's call,
+ * 2026-10-12). Built with the same transition a tap on the Survivor tile runs, so the draft type,
+ * team size and scoring preset are ones Survivor accepts — not Redraft's left in place. A sport
+ * without Survivor (MLB, NCAAB, Soccer) falls back to Redraft through `nextStateForSport`.
+ */
+export function freshCreateLeagueState(base: CreateLeagueV2State): CreateLeagueV2State {
+  const start = { ...base, leagueType: base.leagueType ?? 'redraft' }
+  if (!isSportAllowedForType(start.sport, FRESH_CREATE_LEAGUE_TYPE)) return start
+  return { ...start, ...nextStateForLeagueType(start, FRESH_CREATE_LEAGUE_TYPE) }
+}
+
 /** IDP is a redraft shell with defensive players; it carries its own draft and scoring lists. */
 export function nextStateForIdp(state: CreateLeagueV2State): Partial<CreateLeagueV2State> {
   const next = nextStateForLeagueType(state, 'redraft')
