@@ -59,8 +59,15 @@ export async function prepareSurvivorDraftParticipants(
   }
   const existing = await db.survivorPlayer.findMany({ where: { leagueId } })
   const ownerIds = new Set(rosters.map((r) => r.platformUserId))
-  if (existing.some((p) => p.playerState !== 'active' || (!ownerIds.has(p.userId) &&
-    (!p.userId.startsWith(`open-slot-${leagueId}-`) || p.tribeId || p.idolIds.length > 0)))) {
+  // Creation initially gives the commissioner a team. After an explicit transfer,
+  // a non-playing host may still have an unused cast row; retain their account/league role.
+  const unusedHost = settings.commissionerParticipationMode === 'non_participating_host'
+    ? existing.find((p) => p.userId === league.userId && !ownerIds.has(p.userId) && p.playerState === 'active' &&
+        !p.tribeId && p.idolIds.length === 0 && p.tokenBalance === 0 && p.totalTokensEarned === 0 &&
+        p.eliminatedWeek == null && !p.isJuryMember && !p.isFinalist && !p.hasImmunityThisWeek)
+    : undefined
+  if (existing.some((p) => p.userId !== unusedHost?.userId && (p.playerState !== 'active' || (!ownerIds.has(p.userId) &&
+    (!p.userId.startsWith(`open-slot-${leagueId}-`) || p.tribeId || p.idolIds.length > 0))))) {
     return { ok: false, code: 'existing_cast_requires_review', error: 'Existing Survivor player state does not match the drafted cast. Review the cast before retrying; gameplay has been preserved.' }
   }
   const tribes = await db.survivorTribe.findMany({ where: { leagueId }, select: { id: true, members: { select: { rosterId: true } } } })
@@ -81,7 +88,15 @@ export async function prepareSurvivorDraftParticipants(
     return { ok: false, code: 'legacy_inventory_requires_review', error: 'This league has an older hidden inventory. Review its setup before starting the canonical Survivor engine; existing powers have been preserved.' }
   }
 
-  // Only unused open-seat placeholders from creation may be removed. Never remove a real player.
+  if (unusedHost) {
+    const removed = await db.survivorPlayer.deleteMany({ where: {
+      id: unusedHost.id, leagueId, userId: league.userId, playerState: 'active', tribeId: null,
+      idolIds: { isEmpty: true }, tokenBalance: 0, totalTokensEarned: 0, eliminatedWeek: null,
+      isJuryMember: false, isFinalist: false, hasImmunityThisWeek: false,
+    } })
+    if (removed.count !== 1) return { ok: false, code: 'existing_cast_requires_review', error: 'The host cast entry changed during setup. Review the cast before retrying; existing state has been preserved.' }
+  }
+  // Only unused creation placeholders may otherwise be removed. Never remove a participant.
   await db.survivorPlayer.deleteMany({
     where: { leagueId, userId: { startsWith: `open-slot-${leagueId}-`, notIn: [...ownerIds] }, playerState: 'active', tribeId: null, idolIds: { isEmpty: true } },
   })

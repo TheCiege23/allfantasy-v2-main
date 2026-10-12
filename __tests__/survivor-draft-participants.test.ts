@@ -112,4 +112,27 @@ describe('Survivor drafted cast reconciliation', () => {
     expect(await prepare()).toMatchObject({ ok: false, code: 'duplicate_owners' })
     expect(db.survivorPlayer.upsert).not.toHaveBeenCalled()
   })
+  function transferredHost(extra: Record<string, unknown> = {}) {
+    db.league.findUnique.mockResolvedValue({ userId: 'host', platform: 'allfantasy', survivorMode: true, settings: {} })
+    db.survivorPlayer.findMany.mockResolvedValue([{ id: 'host-cast', userId: 'host', playerState: 'active', tribeId: null, idolIds: [],
+      tokenBalance: 0, totalTokensEarned: 0, eliminatedWeek: null, isJuryMember: false, isFinalist: false, hasImmunityThisWeek: false, ...extra }])
+  }
+  it('removes only the unused creator cast entry after a host transfers their team', async () => {
+    transferredHost()
+    db.survivorPlayer.deleteMany.mockResolvedValue({ count: 1 })
+    expect((await prepare()).ok).toBe(true)
+    expect(db.survivorPlayer.deleteMany).toHaveBeenCalledWith({ where: expect.objectContaining({ id: 'host-cast', userId: 'host', tokenBalance: 0, totalTokensEarned: 0 }) })
+    expect(db.survivorPlayer.upsert.mock.calls.some(([args]) => args.create.userId === 'host')).toBe(false)
+  })
+  it.each([{ tokenBalance: 1 }, { totalTokensEarned: 1 }, { idolIds: ['secret'] }, { tribeId: 'tribe' }])('preserves a host entry with gameplay state: %j', async (state) => {
+    transferredHost(state)
+    expect(await prepare()).toMatchObject({ ok: false, code: 'existing_cast_requires_review' })
+    expect(db.survivorPlayer.deleteMany).not.toHaveBeenCalled()
+  })
+  it('preserves concurrent host changes instead of adding an extra tribe participant', async () => {
+    transferredHost()
+    db.survivorPlayer.deleteMany.mockResolvedValue({ count: 0 })
+    expect(await prepare()).toMatchObject({ ok: false, code: 'existing_cast_requires_review' })
+    expect(db.survivorPlayer.upsert).not.toHaveBeenCalled()
+  })
 })
