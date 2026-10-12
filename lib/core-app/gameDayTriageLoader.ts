@@ -268,9 +268,9 @@ export async function loadGameDayTriage(userId: string | null | undefined, leagu
       const players = await prisma.sportsPlayer
         .findMany({
           where: { sport, sleeperId: { in: [...ids] } },
-          select: { sleeperId: true, sport: true, externalId: true, name: true, position: true, team: true, imageUrl: true },
+          select: { sleeperId: true, sport: true, externalId: true, name: true, position: true, team: true, imageUrl: true, source: true, fetchedAt: true },
         })
-        .catch(() => [] as Array<{ sleeperId: string | null; sport: string; externalId: string; name: string; position: string | null; team: string | null; imageUrl: string | null }>)
+        .catch(() => [] as Array<{ sleeperId: string | null; sport: string; externalId: string; name: string; position: string | null; team: string | null; imageUrl: string | null; source: string; fetchedAt: Date }>)
       // The catalog holds several provider rows per Sleeper id. Compose fields, as My Team and
       // Matchup do; the arbitrary headshot-first row can carry the wrong club or position.
       const identities = composePlayerIdentities(players)

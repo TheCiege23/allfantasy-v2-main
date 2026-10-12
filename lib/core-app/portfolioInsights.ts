@@ -386,7 +386,7 @@ export async function buildPortfolioInsights(userId: string, now: Date = new Dat
         .findMany({
           /* Insensitive: several writers upsert this table and not all of them upper-case the sport. */
           where: { sleeperId: { in: [...ids] }, sport: { equals: sport, mode: 'insensitive' } },
-          select: { sleeperId: true, name: true, position: true, team: true, sport: true, imageUrl: true },
+          select: { sleeperId: true, name: true, position: true, team: true, sport: true, imageUrl: true, source: true, fetchedAt: true },
         })
         .catch(() => [])
       for (const [id, p] of composePlayerIdentities(rows)) {

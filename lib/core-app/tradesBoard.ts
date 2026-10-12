@@ -654,7 +654,7 @@ export async function getTradesBoard(
       ? prisma.sportsPlayer
           .findMany({
             where: { sleeperId: { in: [...assetIds] } },
-            select: { sleeperId: true, sport: true, name: true, position: true, team: true, imageUrl: true },
+            select: { sleeperId: true, sport: true, name: true, position: true, team: true, imageUrl: true, source: true, fetchedAt: true },
           })
           .catch(() => [])
       : Promise.resolve([]),

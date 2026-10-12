@@ -176,7 +176,7 @@ export async function readMaxPfFreezeStatus(input: ReadMaxPfInput): Promise<Read
   const identityRows = sleeperIds.length
     ? await prisma.sportsPlayer.findMany({
         where: { sleeperId: { in: sleeperIds } },
-        select: { sleeperId: true, name: true, position: true, team: true, sport: true, imageUrl: true },
+        select: { sleeperId: true, name: true, position: true, team: true, sport: true, imageUrl: true, source: true, fetchedAt: true },
       })
     : []
   const identityBy = composePlayerIdentities(identityRows)

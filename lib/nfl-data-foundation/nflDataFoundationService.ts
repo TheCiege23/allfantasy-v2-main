@@ -25,6 +25,7 @@ import {
   providerIdWhere,
   sleeperIdWhere,
 } from '@/lib/player-identity/externalIdNamespace'
+import { selectAuthoritativePlayerRow } from '@/lib/player-match/authoritativePlayerRow'
 import { getCanonicalNflDataCoverage } from './nflDataCoverage'
 import type {
   CanonicalNflAiContext,
@@ -147,8 +148,41 @@ function scoreSportsPlayer(row: SportsPlayerRow): number {
   return score
 }
 
+/**
+ * The row a canonical player is built from.
+ *
+ * 🛑 THE SCORE ALONE PUT A FREE AGENT ON HIS OLD CLUB. It ranks `rolling_insights` above
+ * `sleeper` and rewards having a team, so for a Sleeper free agent the vendor row holding his
+ * LAST club always won: Tyreek Hill (FA on Sleeper) came back as MIA and drew Miami bye and
+ * opponent warnings on the redraft roster. And a TheSportsDB namesake stamped with the same
+ * Sleeper id could outrank the real row — Byron Murphy, CB MIN, as the Seahawks' DT.
+ *
+ * So when the winner's Sleeper id has a `sleeper` row here, `selectAuthoritativePlayerRow`
+ * decides what the player IS — name, position, club, number, headshot. The club and
+ * `teamId` are the Sleeper row's own; a null there means free agent and is kept. The score
+ * still picks which AGREEING row supplies the provider ids (`id`, `externalId`, `source`),
+ * because season stats are keyed by the Rolling Insights id; a row that contradicts the
+ * Sleeper row is never used for those either, or the namesake's stats would follow.
+ */
 function chooseBestSportsPlayer(rows: SportsPlayerRow[]): SportsPlayerRow | null {
-  return [...rows].sort((a, b) => scoreSportsPlayer(b) - scoreSportsPlayer(a))[0] ?? null
+  const ranked = [...rows].sort((a, b) => scoreSportsPlayer(b) - scoreSportsPlayer(a))
+  const best = ranked[0] ?? null
+  const sleeperKey = best?.sleeperId?.trim().toLowerCase()
+  if (!best || !sleeperKey) return best
+  const sameId = ranked.filter((r) => r.sleeperId?.trim().toLowerCase() === sleeperKey)
+  const picked = selectAuthoritativePlayerRow(sameId)
+  if (!picked || picked.base.source !== 'sleeper') return best
+  const ids = ranked.find((r) => sameId.includes(r) && !picked.ignored.includes(r)) ?? picked.base
+  return {
+    ...ids,
+    sleeperId: picked.base.sleeperId,
+    name: picked.row.name,
+    position: picked.row.position,
+    team: picked.base.team,
+    teamId: picked.base.teamId,
+    number: picked.row.number,
+    imageUrl: picked.row.imageUrl,
+  }
 }
 
 export function canonicalNflIdentityKey(input: {

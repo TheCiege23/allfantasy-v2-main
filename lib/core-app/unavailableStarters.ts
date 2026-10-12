@@ -50,7 +50,7 @@ export async function loadAbsencesBySport(args: {
   const playerRows = await prisma.sportsPlayer
     .findMany({
       where: { sleeperId: { in: [...args.sleeperIds] }, sport: { in: sports } },
-      select: { sleeperId: true, name: true, team: true, sport: true, position: true },
+      select: { sleeperId: true, name: true, team: true, sport: true, position: true, source: true, fetchedAt: true },
     })
     .catch(() => [])
   await Promise.all(
