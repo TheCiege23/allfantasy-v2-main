@@ -214,7 +214,7 @@
     },
     {
       "path": "/api/cron/weekly-awards",
-      "schedule": "0 14 * * 2"
+      "schedule": "0 14-16 * * 2"
     },
     {
       "path": "/api/cron/morning-briefing",

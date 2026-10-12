@@ -57,7 +57,7 @@ describe('notifyWeeklyStories', () => {
         userIds: ['u1', 'u3'],
         category: 'matchup_results',
         dedupePrefix: 'weekly-story:2026-09-28',
-        skipChannels: { email: true, sms: true },
+        skipChannels: { email: true, sms: true, push: false },
         actionHref: '/core/career',
       }),
     )
@@ -96,5 +96,16 @@ describe('notifyWeeklyStories', () => {
     const tag = pushTagFor(call.category, call.meta)
     expect(tag).toBe('weekly-story:2026-09-28')
     expect(tag).not.toBe(pushTagFor('matchup_results', {}))
+  })
+})
+
+describe('one push per person on Tuesday', () => {
+  it('whoever the recap push just reached gets the story in-app only', async () => {
+    m.users = ['u1', 'u2', 'u3']
+    await notifyWeeklyStories(TUESDAY, new Set(['u2']))
+    const calls = m.dispatch.mock.calls.map((c) => (c as unknown as [{ userIds: string[]; skipChannels: Record<string, boolean> }])[0])
+    expect(calls).toHaveLength(2)
+    expect(calls[0]).toMatchObject({ userIds: ['u1', 'u3'], skipChannels: { email: true, sms: true, push: false } })
+    expect(calls[1]).toMatchObject({ userIds: ['u2'], skipChannels: { email: true, sms: true, push: true } })
   })
 })
