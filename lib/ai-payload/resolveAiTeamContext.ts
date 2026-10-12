@@ -3,6 +3,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { sleeperIdWhere } from '@/lib/player-identity/externalIdNamespace'
+import { selectAuthoritativePlayerRow } from '@/lib/player-match/authoritativePlayerRow'
 import { normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import { loadEspnToSleeperMap, rosterIdSpaceOf } from '@/lib/core-app/rosterIdSpace'
@@ -115,16 +116,45 @@ export async function resolveNames(
     if (!key || !asked.has(key) || out.has(key)) return
     out.set(key, { name: r.name, position: r.position, team: r.team, injury: r.status })
   }
-  const playerSelect = { externalId: true, sleeperId: true, name: true, position: true, team: true, status: true } as const
+  const playerSelect = {
+    externalId: true,
+    sleeperId: true,
+    name: true,
+    position: true,
+    team: true,
+    status: true,
+    source: true,
+    fetchedAt: true,
+  } as const
 
   const bySleeper = await prisma.sportsPlayer.findMany({
     where: sleeperIdWhere(missing, sport),
     orderBy: { fetchedAt: 'desc' },
     select: playerSelect,
   })
+  /*
+   * 🛑 NOT THE FRESHEST ROW — THE SLEEPER ROW (2026-10-12). Every source stamps the same
+   * `sleeperId`, and TheSportsDB's rows got theirs by NAME, so "freshest wins" handed Chimmy
+   * whichever feed ran last: a rostered E.J. Jenkins (TE, PHI, 11304) was described to the model
+   * as "Elgton Jenkins, G, Cleveland Browns". `selectAuthoritativePlayerRow` keeps the Sleeper
+   * row's identity and ignores a row that contradicts it (`lib/player-match/authoritativePlayerRow.ts`).
+   * A row still answers to either spelling it was reached by, and only under a key that was asked.
+   */
+  const rowsByAsked = new Map<string, typeof bySleeper>()
   for (const r of bySleeper) {
-    put(r.sleeperId, r)
-    if (r.externalId.startsWith(SLEEPER_EXTERNAL_PREFIX)) put(r.externalId.slice(SLEEPER_EXTERNAL_PREFIX.length), r)
+    const spelled = r.externalId.startsWith(SLEEPER_EXTERNAL_PREFIX)
+      ? r.externalId.slice(SLEEPER_EXTERNAL_PREFIX.length)
+      : null
+    for (const key of new Set([r.sleeperId, spelled])) {
+      if (!key || !asked.has(key)) continue
+      const bucket = rowsByAsked.get(key)
+      if (bucket) bucket.push(r)
+      else rowsByAsked.set(key, [r])
+    }
+  }
+  for (const [key, rows] of rowsByAsked) {
+    const picked = selectAuthoritativePlayerRow(rows)?.row
+    if (picked) put(key, picked)
   }
 
   const namespaced = missing.filter((id) => !out.has(id) && !BARE_NUMBER.test(id))

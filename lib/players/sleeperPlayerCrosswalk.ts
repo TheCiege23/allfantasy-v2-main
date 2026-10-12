@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { looksLikeSleeperExternalId } from '@/lib/draft-sports-models/player-asset-resolver'
 import { sleeperHeadshotUrl } from '@/lib/player-media-urls'
 import { sleeperIdWhere } from '@/lib/player-identity/externalIdNamespace'
+import { authoritativeRowsBySleeperId } from '@/lib/player-match/authoritativePlayerRow'
 import { buildNameIndex, normalizeMatchName, resolveVerifiedMatch } from '@/lib/player-match/verifiedNameMatch'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 
@@ -181,15 +182,27 @@ export async function resolveSleeperPlayerIdentities(
         position: true,
         team: true,
         imageUrl: true,
+        source: true,
+        fetchedAt: true,
       },
     })
-    for (const r of rows) {
-      // A row can arrive by either spelling; both resolve back to the bare Sleeper id we asked for.
-      const key =
-        r.sleeperId ?? (r.externalId.startsWith('sleeper:') ? r.externalId.slice('sleeper:'.length) : null)
-      if (!key) continue
+    /*
+     * 🛑 ONE ROW PER SOURCE, AND THE LAST ONE USED TO WIN (2026-10-12). TheSportsDB's rows got
+     * their `sleeperId` by NAME, so TE E.J. Jenkins (11304) could be grounded as G Elgton Jenkins.
+     * The Sleeper row speaks for the id (`lib/player-match/authoritativePlayerRow.ts`).
+     * A row can arrive by either spelling; both resolve back to the bare Sleeper id we asked for.
+     */
+    const authoritative = authoritativeRowsBySleeperId(
+      rows.map((r) => ({
+        ...r,
+        sleeperId:
+          r.sleeperId ?? (r.externalId.startsWith('sleeper:') ? r.externalId.slice('sleeper:'.length) : null),
+      })),
+    )
+    for (const key of ids) {
+      const r = authoritative.get(key.trim().toLowerCase())
       const entry = byId.get(key)
-      if (!entry || !r.name) continue
+      if (!r || !entry || !r.name) continue
       entry.name = r.name
       entry.position = r.position ?? null
       entry.team = r.team ?? null
