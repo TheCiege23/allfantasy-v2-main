@@ -66,6 +66,7 @@ import { PlayerMismatchCollector } from '@/lib/player-identity/playerMismatchLog
 import { isFreeAgentTeam as isNormalizedFreeAgentTeam } from '@/lib/player-identity/playerIdentityResolution'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { foldInjuryTeam } from '@/lib/injuries/matchInjuryRows'
+import { buildPlayerKey } from '@/lib/adp/computeAllFantasyAdp'
 
 const DEFAULT_LIMIT = 300
 const DEVY_POOL_LIMIT = 200
@@ -2102,12 +2103,11 @@ export async function getResolvedDraftPoolForLeague(
         null
     }
 
-    /** D.5 â AI ADP overlay from AllFantasyAdpSnapshot. The map is keyed by
-     * `<normalized name>|<normalized position>` matching the same shape the
-     * recompute script writes (see lib/adp/computeAllFantasyAdp.buildPlayerKey). */
-    const aiAdpHit = aiAdpByPlayerKey.get(
-      `${normalizeDraftPoolNameForDedupe(name ?? '')}|${normalizeKeyPart(position ?? '')}`,
-    )
+    /** D.5 â AI ADP overlay from AllFantasyAdpSnapshot. The board is keyed by
+     * `buildPlayerKey` (loadAdpBoard re-keys stored rows), so the lookup must be too. It used
+     * `canonicalName`, which KEEPS suffixes and so cannot meet a suffix-insensitive key - and it
+     * already missed every dotted stored key (`marvin harrison jr.|wr` vs `marvin harrison jr|wr`). */
+    const aiAdpHit = aiAdpByPlayerKey.get(buildPlayerKey(name ?? '', position ?? ''))
     const averagedAdpHit =
       averagedAdpStrict.get(adpLookupKey(name ?? '', position ?? '', team ?? null)) ??
       averagedAdpLoose.get(adpLookupKeyLoose(name ?? '', position ?? '')) ??

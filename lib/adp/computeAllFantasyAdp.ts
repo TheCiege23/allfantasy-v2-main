@@ -24,6 +24,7 @@
 
 import { createHash } from 'node:crypto'
 
+import { normalizeAdpName } from '@/lib/adp/resolveAdp'
 import { isDraftPickRowEmpty } from '@/lib/live-draft-engine/draftPickEmpty'
 
 export interface DraftContext {
@@ -70,11 +71,77 @@ export interface AdpSnapshot {
   thirtyDayTrend: number | null
 }
 
-/** Stable lowercase + position key. Pool side uses the same shape. */
+/**
+ * Stable `<name>|<position>` key. Writer (aggregateAdp) and every reader build it here.
+ *
+ * 🛑 THE NAME HALF IS `normalizeAdpName`, NOT `trim().toLowerCase()` — suffixes and punctuation
+ * DROP. Draft picks spell a name however the source did, and roster `playerData` carries Sleeper's
+ * spelling. Measured on production 2026-10-12: rosters say "Kenneth Walker" ~500 times and
+ * "Kenneth Walker III" 8; the 2026 NFL redraft snapshots held 46 suffixed keys (dynasty 37) —
+ * `james cook iii|rb` at ADP 5, `marvin harrison jr.|wr` at 7, `kenneth walker iii|rb` at 11 —
+ * plus dotted/undotted twins (`aaron jones sr.|rb` AND `aaron jones sr|rb`). The free-agent pools
+ * exclude rostered players by this key, so all three were offered as top free agents to the teams
+ * that rostered them, and the rostered "Kenneth Walker" was priced off a 1-sample stray key.
+ *
+ * Suffix-insensitive is safe HERE because a snapshot only holds players drafted this season — a
+ * retired father is never in it. (`canonicalName` keeps suffixes for exactly that reason; it serves
+ * a different table.) Stored rows written before this change still carry the old spelling, so
+ * readers re-key them with `normalizeStoredPlayerKey`.
+ */
 export function buildPlayerKey(name: string, position: string | null | undefined): string {
-  const n = (name ?? '').trim().toLowerCase()
+  const n = normalizeAdpName(name)
   const p = (position ?? '').trim().toLowerCase()
   return `${n}|${p}`
+}
+
+/**
+ * Re-key a STORED `playerKey` into today's `buildPlayerKey` shape. Idempotent, so it is safe on
+ * rows the current writer produced and on rows written under the old trim+lowercase key alike.
+ */
+export function normalizeStoredPlayerKey(stored: string | null | undefined): string {
+  const s = String(stored ?? '')
+  const bar = s.lastIndexOf('|')
+  return bar < 0 ? buildPlayerKey(s, '') : buildPlayerKey(s.slice(0, bar), s.slice(bar + 1))
+}
+
+export interface StoredAdpRowLike {
+  playerKey: string | null
+  averageOverallPick: number
+  sampleSize?: number | null
+  contextHash?: string | null
+  draftMode?: string | null
+}
+
+/**
+ * Which of two stored rows for the SAME normalized player in the SAME context to keep: more
+ * samples, then the better (lower) ADP, then the smaller stored key — so the answer never depends
+ * on row order. Samples first because the stray variant is usually the thin one (the 1-sample
+ * `kenneth walker|rb` beside 8 samples of `kenneth walker iii|rb`).
+ */
+export function preferStoredAdpRow<T extends StoredAdpRowLike>(a: T, b: T): T {
+  const sa = a.sampleSize ?? 0
+  const sb = b.sampleSize ?? 0
+  if (sa !== sb) return sa > sb ? a : b
+  if (a.averageOverallPick !== b.averageOverallPick) return a.averageOverallPick < b.averageOverallPick ? a : b
+  return String(a.playerKey ?? '') <= String(b.playerKey ?? '') ? a : b
+}
+
+/**
+ * Re-key stored rows and collapse spelling variants of one player within one
+ * (contextHash, draftMode) via `preferStoredAdpRow`. Rows from DIFFERENT contexts are not merged
+ * here — that is each reader's own cross-context rule. Rows with no key are dropped. Output keeps
+ * the order in which each surviving group was first seen.
+ */
+export function collapseStoredAdpRows<T extends StoredAdpRowLike>(rows: readonly T[]): Array<T & { playerKey: string }> {
+  // Originals are kept so the tie-break compares STORED keys, not the shared normalized one.
+  const kept = new Map<string, T>()
+  for (const row of rows) {
+    if (!row.playerKey) continue
+    const groupKey = `${normalizeStoredPlayerKey(row.playerKey)}::${row.contextHash ?? ''}::${row.draftMode ?? ''}`
+    const prev = kept.get(groupKey)
+    kept.set(groupKey, prev ? preferStoredAdpRow(prev, row) : row)
+  }
+  return [...kept.values()].map((row) => ({ ...row, playerKey: normalizeStoredPlayerKey(row.playerKey) }))
 }
 
 /** Deterministic context hash â used as the natural key alongside playerKey + draftMode. */

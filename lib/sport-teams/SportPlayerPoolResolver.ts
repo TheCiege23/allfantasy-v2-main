@@ -17,6 +17,7 @@ import { dbFirstMode } from '@/lib/db-first-mode'
 import { createTtlMemo } from '@/lib/ttl-memo'
 import { isDailyStatSport } from '@/lib/scoring-runtime/dailySportStatNormalization'
 import { resolveCurrentInjuryDesignations } from '@/lib/injuries/currentInjuryDesignations'
+import { buildPlayerKey, normalizeStoredPlayerKey } from '@/lib/adp/computeAllFantasyAdp'
 
 /**
  * In-process memos in front of the DB-backed cache. That cache saved CPU but not egress: the NFL
@@ -204,8 +205,8 @@ export function rosteredPlayerSignal(row: { team?: string | null; imageUrl?: str
 
 /**
  * Real, provider-agnostic fantasy-relevance signal for pool selection priority
- * (Phase 27, refined Phase 28). Returns a Map of `playerKey` (already
- * `name|position`, lowercased, matching this file's own key format) to that
+ * (Phase 27, refined Phase 28). Returns a Map of `playerKey` (the
+ * `buildPlayerKey` shape, re-keyed from the stored key on read) to that
  * player's BEST (lowest/most-relevant) real `averageOverallPick` across all
  * league/scoring contexts -- deliberately broad, not scoped to one specific
  * league's exact settings, since the goal here is only "how fantasy-relevant
@@ -229,10 +230,15 @@ async function loadAdpRankByPlayerKey(sport: string): Promise<Map<string, number
       where: { sport },
       _min: { averageOverallPick: true },
     })
+    // Stored keys are re-keyed to the suffix-insensitive `buildPlayerKey`; spelling variants of
+    // one player (`james cook iii|rb`, `james cook|rb`) join this same best-rank minimum.
     const bestRankByKey = new Map<string, number>()
     for (const row of rows) {
       const best = row._min.averageOverallPick
-      if (best != null) bestRankByKey.set(row.playerKey, best)
+      if (best == null) continue
+      const key = normalizeStoredPlayerKey(row.playerKey)
+      const prev = bestRankByKey.get(key)
+      if (prev == null || best < prev) bestRankByKey.set(key, best)
     }
     if (bestRankByKey.size > 0) adpRankMemo.set(sport, bestRankByKey)
     return bestRankByKey
@@ -467,8 +473,8 @@ async function buildPlayerPoolRecords(
   const adpRankByKey = await loadAdpRankByPlayerKey(sport)
   const dedupedRows = [...bestByKey.values()]
     .sort((a, b) => {
-      const aRank = adpRankByKey.get(`${String(a.name ?? '').trim().toLowerCase()}|${String(a.position ?? '').trim().toLowerCase()}`)
-      const bRank = adpRankByKey.get(`${String(b.name ?? '').trim().toLowerCase()}|${String(b.position ?? '').trim().toLowerCase()}`)
+      const aRank = adpRankByKey.get(buildPlayerKey(String(a.name ?? ''), a.position))
+      const bRank = adpRankByKey.get(buildPlayerKey(String(b.name ?? ''), b.position))
       if (aRank === undefined && bRank === undefined) return rosteredPlayerSignal(b) - rosteredPlayerSignal(a)
       if (aRank === undefined) return 1
       if (bRank === undefined) return -1

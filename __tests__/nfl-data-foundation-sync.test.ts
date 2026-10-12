@@ -549,7 +549,7 @@ describe('NFL foundation sync utilities', () => {
         count: vi.fn().mockResolvedValue(1),
         findFirst: vi.fn().mockResolvedValue({ homeTeam: 'SF', awayTeam: 'DAL' }),
       },
-      allFantasyAdpSnapshot: { findFirst: vi.fn().mockResolvedValue(null) },
+      allFantasyAdpSnapshot: { findMany: vi.fn().mockResolvedValue([]) },
       fantasyProjection: { findFirst: vi.fn().mockResolvedValue(null) },
       aFProjectionSnapshot: { findFirst: vi.fn().mockResolvedValue(null), upsert },
       sportsPlayerRecord: { findFirst: vi.fn().mockResolvedValue(null) },

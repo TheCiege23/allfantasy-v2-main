@@ -54,7 +54,7 @@ vi.mock('@/lib/auth', () => ({ authOptions: {} }))
 vi.mock('@/lib/league/league-access', () => ({ assertLeagueMember: vi.fn().mockResolvedValue({ ok: true, status: 200 }) }))
 vi.mock('@/lib/post-draft', () => ({ ensurePostDraftFinalized: vi.fn() }))
 vi.mock('@/lib/redraft/fantraxNativePresentation', () => ({ loadFantraxNativePresentation: vi.fn(async () => null) }))
-vi.mock('@/lib/adp/computeAllFantasyAdp', () => ({ buildPlayerKey: vi.fn(() => 'k') }))
+vi.mock('@/lib/adp/computeAllFantasyAdp', () => ({ buildPlayerKey: vi.fn(() => 'k'), normalizeStoredPlayerKey: vi.fn((k: string) => k) }))
 vi.mock('@/lib/redraft/projectionEngine', () => ({
   buildAllFantasyProjection: vi.fn(() => ({ weeklyProjection: 10, confidenceLevel: 'medium', source: 'provider_projection' })),
 }))
