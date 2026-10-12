@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { BigBrotherCommissionerPanel } from '@/components/big-brother/BigBrotherCommissionerPanel'
 import { BigBrotherSchedule } from '@/components/big-brother/BigBrotherSchedule'
 import { LeagueStandings } from '@/components/standings/LeagueStandings'
@@ -58,6 +58,21 @@ describe('standings across formats',()=>{
     fireEvent.change(screen.getByLabelText('Season'),{target:{value:'2024'}});await screen.findByText('No completed scoring results are available for this season yet.')
     resolveOld(response({...standings,season:2025}));await waitFor(()=>expect(screen.queryByRole('table')).toBeNull())
     expect(fetchMock.mock.calls[1][1].signal.aborted).toBe(true)
+  })
+  it('lets a manager type a season without fetching incomplete year digits',async()=>{
+    fetchMock.mockResolvedValue(response(standings));render(<LeagueStandings leagueId="l" />);await screen.findByRole('table')
+    fireEvent.change(screen.getByLabelText('Season'),{target:{value:'2'}})
+    expect((screen.getByLabelText('Season') as HTMLInputElement).value).toBe('2');expect(fetchMock).toHaveBeenCalledTimes(1)
+    fireEvent.change(screen.getByLabelText('Season'),{target:{value:'2025'}})
+    await waitFor(()=>expect(fetchMock).toHaveBeenCalledTimes(2));expect(fetchMock.mock.calls[1][0]).toContain('season=2025')
+  })
+  it('does not let an aborted authorization failure erase the new season response',async()=>{
+    let rejectOld:(value:unknown)=>void=()=>{}
+    fetchMock.mockImplementationOnce(()=>new Promise(resolve=>{rejectOld=resolve})).mockResolvedValueOnce(response(standings))
+    render(<LeagueStandings leagueId="l" />)
+    fireEvent.change(screen.getByLabelText('Season'),{target:{value:'2026'}});await screen.findByRole('table')
+    await act(async()=>{rejectOld({ok:false,status:403})});await waitFor(()=>expect(screen.getByRole('table')).toBeTruthy())
+    expect(fetchMock.mock.calls[0][1].signal.aborted).toBe(true)
   })
   it('preserves data on transient error and clears it on access loss',async()=>{
     fetchMock.mockResolvedValue(response(standings));render(<LeagueStandings leagueId="l" />);await screen.findByRole('table')

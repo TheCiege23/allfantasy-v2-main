@@ -20,6 +20,7 @@ export function BigBrotherSchedule({ leagueId }: { leagueId: string }) {
     const controller = new AbortController()
     setLoading(true); setError('')
     void fetch(`/api/leagues/${leagueId}/big-brother/schedule`, { signal: controller.signal, cache: 'no-store' }).then(async response => {
+      if (controller.signal.aborted) return
       if (!response.ok) {
         if (response.status === 401 || response.status === 403) setData(null)
         throw new Error('Unable to load the league schedule. Please retry.')

@@ -12,6 +12,7 @@ const points = (value: number) => Number.isFinite(value) ? value.toLocaleString(
 export function LeagueStandings({ leagueId, initialSeason, title = 'Standings' }: { leagueId: string; initialSeason?: number; title?: string }) {
   const [data, setData] = useState<Data | null>(null)
   const [season, setSeason] = useState(initialSeason)
+  const [seasonDraft, setSeasonDraft] = useState<string | null>(initialSeason?.toString() ?? null)
   const [query, setQuery] = useState('')
   const [refresh, setRefresh] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -20,6 +21,7 @@ export function LeagueStandings({ leagueId, initialSeason, title = 'Standings' }
     const controller = new AbortController()
     setLoading(true); setError('')
     void fetch(`/api/leagues/${leagueId}/scoring/standings${season ? `?season=${season}` : ''}`, { signal: controller.signal, cache: 'no-store' }).then(async response => {
+      if (controller.signal.aborted) return
       if (!response.ok) {
         if (response.status === 401 || response.status === 403) setData(null)
         throw new Error('Unable to load standings. Please retry.')
@@ -39,7 +41,7 @@ export function LeagueStandings({ leagueId, initialSeason, title = 'Standings' }
     <header><div><p className="league-standings__eyebrow">{data?.season ?? initialSeason ?? 'Season'} {data?.sourcePlatform ? ` / ${data.sourcePlatform}` : ''}</p><h2>{title}</h2></div>
       <button type="button" onClick={() => setRefresh(n => n + 1)} disabled={loading}>Refresh standings</button></header>
     <div className="league-standings__controls"><label>Find a team<input type="search" aria-label="Find a team" value={query} onChange={e => setQuery(e.target.value)} /></label>
-      <label>Season<input type="number" aria-label="Season" min={2000} max={2100} value={season ?? data?.season ?? ''} onChange={e => { const value = Number(e.target.value); if (Number.isInteger(value) && value >= 2000 && value <= 2100) { setData(null); setSeason(value) } }} /></label></div>
+      <label>Season<input type="number" aria-label="Season" min={2000} max={2100} value={seasonDraft ?? season ?? data?.season ?? ''} onChange={e => { setSeasonDraft(e.target.value); const value = Number(e.target.value); if (Number.isInteger(value) && value >= 2000 && value <= 2100) { setData(null); setSeason(value) } }} /></label></div>
     {error && <p role="alert">{error}</p>}
     {loading && !data && <p role="status">Loading standings...</p>}
     {data && <>
