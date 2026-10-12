@@ -7,7 +7,7 @@ import { loadCouncilContext } from './survivorCouncilService'
 /**
  * SURVIVOR VOTE TALLY (canonical Phase 3) — deterministic, no fabrication.
  *
- * Applies late-vote invalidation, Vote Shield blocks, Skip Tribal target safety, and Extra Vote
+ * Applies late-vote invalidation, Vote Shield blocks, Council Pass target safety, and Extra Vote
  * extra ballots; produces final counts, tie detection, a deterministic one-by-one reveal sequence,
  * and the eliminated candidate (only when there is a clean winner). Ties never auto-resolve — the
  * council enters `tie_pending` for a revote/commissioner tiebreak. Nothing is revealed to players
@@ -203,41 +203,29 @@ export type RevealOutcome =
   | { ok: true; councilId: string; alreadyRevealed: boolean; revealSequence: RevealScroll[]; eliminatedUserId: string | null; eliminatedName: string | null; isTie: boolean }
   | { ok: false; status: 400 | 404 | 409; code: string; error: string }
 
-/** Flip the council to revealed and return the public scroll payload. Idempotent. */
+/** Publish the public ceremony and reveal flag in one commit. Retries never announce twice. */
 export async function revealCouncil(leagueId: string, councilId: string, actorUserId?: string): Promise<RevealOutcome> {
-  const council = await prisma.survivorTribalCouncil.findFirst({ where: { id: councilId, leagueId } })
-  if (!council) return { ok: false, status: 404, code: 'not_found', error: 'Council not found.' }
-
-  const seq = Array.isArray(council.revealSequence) ? (council.revealSequence as unknown as RevealScroll[]) : []
-  if (council.isRevealed) {
-    return { ok: true, councilId, alreadyRevealed: true, revealSequence: seq, eliminatedUserId: council.eliminatedUserId, eliminatedName: council.eliminatedName, isTie: council.isTie }
-  }
-  if (council.status === 'voting_open' || council.status === 'scheduled') {
-    return { ok: false, status: 409, code: 'not_tallied', error: 'Close and tally the council before revealing.' }
-  }
-  if (seq.length === 0 && council.status !== 'tie_pending') {
-    return { ok: false, status: 409, code: 'not_tallied', error: 'No tally found — tally the votes before revealing.' }
-  }
-
-  await prisma.survivorTribalCouncil.update({
-    where: { id: councilId },
-    data: { isRevealed: true, revealStartsAt: new Date(), status: council.isTie ? 'tie_pending' : 'revealed' },
-  })
-  await prisma.survivorGameState.updateMany({ where: { leagueId, activeCouncilId: councilId }, data: { tribalRevealAt: new Date() } })
-  await prisma.survivorAuditEntry.create({
-    data: {
-      leagueId,
-      week: council.week,
-      category: 'tribal',
-      action: 'votes_revealed',
-      actorUserId: actorUserId ?? null,
-      relatedEntityId: councilId,
-      relatedEntityType: 'council',
-      data: { eliminatedUserId: council.eliminatedUserId, isTie: council.isTie },
-      isVisibleToCommissioner: true,
-      isVisibleToPublic: true,
-    },
-  })
-
-  return { ok: true, councilId, alreadyRevealed: false, revealSequence: seq, eliminatedUserId: council.eliminatedUserId, eliminatedName: council.eliminatedName, isTie: council.isTie }
+  return prisma.$transaction(async (tx: Prisma.TransactionClient): Promise<RevealOutcome> => {
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`survivor-setup:${leagueId}`}, 0))::text`
+    const council = await tx.survivorTribalCouncil.findFirst({ where: { id: councilId, leagueId } })
+    if (!council) return { ok: false, status: 404, code: 'not_found', error: 'Council not found.' }
+    const seq = Array.isArray(council.revealSequence) ? (council.revealSequence as unknown as RevealScroll[]) : []
+    const result = { councilId, revealSequence: seq, eliminatedUserId: council.eliminatedUserId, eliminatedName: council.eliminatedName, isTie: council.isTie }
+    if (council.isRevealed) return { ok: true, alreadyRevealed: true, ...result }
+    if (!['closed', 'tie_pending', 'voting_closed'].includes(council.status) || seq.length === 0) {
+      return { ok: false, status: 409, code: 'not_tallied', error: 'Close and tally the council before revealing.' }
+    }
+    const channel = await tx.survivorChatChannel.findFirst({ where: { leagueId, channelType: 'league', isArchived: false }, select: { id: true } })
+    if (!channel) return { ok: false, status: 409, code: 'chat_missing', error: 'Restore league chat before publishing the Torch Ceremony.' }
+    const ballots = seq.map((scroll, index) => `Ballot ${index + 1}: ${scroll.targetName ?? 'No eligible target'}${scroll.status === 'counts' ? '' : ' (does not count)'}.`).join('\n')
+    const outcome = council.isTie ? 'The vote is tied. A tiebreak round is required; nobody is eliminated yet.' : `${council.eliminatedName ?? 'The selected manager'} has been voted off the main island.`
+    await tx.survivorChatMessage.create({ data: { leagueId, channelId: channel.id, channelType: 'league', senderUserId: 'survivor-host-chimmy', senderName: 'Chimmy', senderIsHost: true, isSystemMessage: true,
+      contentType: 'host_announcement', content: `Torch Ceremony · Week ${council.week}\n${ballots}\n${outcome}` } })
+    const now = new Date()
+    await tx.survivorTribalCouncil.update({ where: { id: councilId }, data: { isRevealed: true, revealStartsAt: now, status: council.isTie ? 'tie_pending' : 'revealed' } })
+    await tx.survivorGameState.updateMany({ where: { leagueId, activeCouncilId: councilId }, data: { tribalRevealAt: now } })
+    await tx.survivorAuditEntry.create({ data: { leagueId, week: council.week, category: 'tribal', action: 'votes_revealed', actorUserId: actorUserId ?? null,
+      relatedEntityId: councilId, relatedEntityType: 'council', data: { eliminatedUserId: council.eliminatedUserId, isTie: council.isTie }, isVisibleToCommissioner: true, isVisibleToPublic: true } })
+    return { ok: true, alreadyRevealed: false, ...result }
+  }, { timeout: 30_000, maxWait: 10_000 })
 }

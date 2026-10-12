@@ -97,7 +97,7 @@ describe('getSurvivorDefaultContract — NFL', () => {
   })
 
   // Exile settings
-  it('exileSettings: exile is opt-in', () => expect(contract.survivorStructure.exileSettings.exileEnabled).toBe(false))
+  it('exileSettings: exile is enabled by default', () => expect(contract.survivorStructure.exileSettings.exileEnabled).toBe(true))
   it('exileSettings: automationStatus = pending (Phase 2)', () => {
     expect(contract.survivorStructure.exileSettings.exileAutomationStatus).toBe('pending')
   })
@@ -229,7 +229,7 @@ describe('buildSurvivorSettingsSnapshot — NFL', () => {
   it('challenge_automation_status = pending', () => expect(snap.challenge_automation_status).toBe('pending'))
   it('tribal_council_enabled = true', () => expect(snap.tribal_council_enabled).toBe(true))
   it('voting_automation_status = pending', () => expect(snap.voting_automation_status).toBe('pending'))
-  it('exile_enabled is opt-in', () => expect(snap.exile_enabled).toBe(false))
+  it('exile_enabled is enabled by default', () => expect(snap.exile_enabled).toBe(true))
   it('exile_automation_status = pending', () => expect(snap.exile_automation_status).toBe('pending'))
   it('idols_enabled = true', () => expect(snap.idols_enabled).toBe(true))
   it('idol_count = 24', () => expect(snap.idol_count).toBe(24))

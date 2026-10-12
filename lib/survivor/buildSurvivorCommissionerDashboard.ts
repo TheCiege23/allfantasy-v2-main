@@ -1,4 +1,5 @@
 import 'server-only'
+import { survivorPublicCouncil } from './survivorPublicCouncil'
 
 import { prisma } from '@/lib/prisma'
 import { getLeagueRole, type LeagueRole } from '@/lib/league/permissions'
@@ -125,7 +126,7 @@ export async function buildSurvivorCommissionerDashboard(
     prisma.survivorGameState.findUnique({ where: { leagueId } }),
     prisma.roster.count({ where: { leagueId } }),
     prisma.survivorChatChannel.count({ where: { leagueId } }),
-    getSurvivorAuditLog(leagueId, { limit: 12, eventTypes: undefined }),
+    access.decisions.canSeeHiddenIdolAssignments ? getSurvivorAuditLog(leagueId, { limit: 12, eventTypes: undefined }) : Promise.resolve([]),
     new EntitlementResolver().resolveSnapshot(userId, email),
     new TokenBalanceResolver().resolveForUser(userId, email),
     getCurrentlyEliminatedRosterIds(leagueId),
@@ -173,7 +174,7 @@ export async function buildSurvivorCommissionerDashboard(
     config,
     week,
     tribes,
-    council,
+    council: survivorPublicCouncil(council, access.decisions.canSeePrivateVotes),
     juryCount: jury.length,
     merged,
     rosterCount,

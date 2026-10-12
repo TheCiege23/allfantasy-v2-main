@@ -43,7 +43,7 @@ export async function submitVote(
   opts: SubmitVoteOptions = {},
 ): Promise<SubmitVoteOutcome> {
   const ctx = await loadCouncilContext(leagueId)
-  if (!ctx) return { ok: false, status: 404, code: 'no_active_council', error: 'No active Tribal Council.' }
+  if (!ctx) return { ok: false, status: 404, code: 'no_active_council', error: 'No active Elimination Council.' }
   const { council, settings, eligibility, userToRoster } = ctx
 
   if (council.isRevealed || council.status === 'cancelled') {

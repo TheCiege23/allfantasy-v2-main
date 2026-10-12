@@ -1,3 +1,4 @@
+import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/survivorSettings'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -9,6 +10,8 @@ import {
   submitExileTeamClaim,
   getExileTeamDraftStatus,
 } from '@/lib/survivor/exileTeamDraft'
+
+import { survivorHostGuard } from '@/lib/survivor/survivorHostGuard'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -33,7 +36,10 @@ export async function GET(req: NextRequest) {
 
   const island = await prisma.exileIsland.findUnique({ where: { leagueId } })
   const me = await prisma.survivorPlayer.findFirst({ where: { leagueId, userId } })
-  return NextResponse.json({ island, user: me })
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+  const settings = normalizeSurvivorFoundationSettings(league?.settings as Record<string, unknown> | null)
+  const resolved = await prisma.survivorAuditEntry.findFirst({ where: { leagueId, action: 'scheduled_exile_return_resolved' }, select: { id: true } })
+  return NextResponse.json({ island, user: me, returnRules: { enabled: settings.exileIslandEnabled, week: settings.exileReturnWeek, tokensRequired: settings.exileReturnTokens, resolved: Boolean(resolved), slots: 1 } })
 }
 
 export async function POST(req: NextRequest) {
@@ -52,6 +58,8 @@ export async function POST(req: NextRequest) {
     if (!body.leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
     const gate = await assertLeagueCommissioner(body.leagueId, userId)
     if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    const denied = await survivorHostGuard(body.leagueId, userId)
+    if (denied) return denied
     const uid = await processReturnFromExile(body.leagueId)
     return NextResponse.json({ returnedUserId: uid })
   }
@@ -62,6 +70,9 @@ export async function POST(req: NextRequest) {
     if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
     const island = await prisma.exileIsland.findUnique({ where: { leagueId: body.leagueId } })
     if (!island) return NextResponse.json({ error: 'Exile not initialized' }, { status: 400 })
+    const player = await prisma.survivorPlayer.findUnique({ where: { leagueId_userId: { leagueId: body.leagueId, userId } } })
+    if (player?.playerState !== 'exile' || !Number.isInteger(body.week) || body.week !== island.currentWeek) return NextResponse.json({ error: 'Only an exiled manager can submit for the current Exile period.' }, { status: 403 })
+    if (await prisma.survivorAuditEntry.findFirst({ where: { leagueId: body.leagueId, week: body.week, action: 'exile_week_scored' }, select: { id: true } })) return NextResponse.json({ error: 'This Exile period has been finalized.' }, { status: 409 })
     await prisma.exileWeeklyEntry.upsert({
       where: {
         exileId_userId_week: { exileId: island.id, userId, week: body.week },

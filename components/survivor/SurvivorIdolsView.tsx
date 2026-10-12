@@ -42,7 +42,7 @@ export function SurvivorIdolsView({ summary }: SurvivorIdolsViewProps) {
                   <span className="font-medium text-white">{formatPowerLabel(idol.powerType)}</span>
                 </div>
                 <span className="text-xs text-white/60">
-                  Player: {idol.playerId} · ID: {idol.id.slice(0, 8)}… · Eligible at Tribal Council
+                  Player: {idol.playerId} · ID: {idol.id.slice(0, 8)}… · Eligible at Elimination Council
                 </span>
               </li>
             ))}
@@ -78,7 +78,7 @@ export function SurvivorIdolsView({ summary }: SurvivorIdolsViewProps) {
         </h2>
         <ul className="space-y-1 text-sm text-white/60">
           <li className="flex items-center gap-2"><span className="rounded bg-white/10 px-1.5">Hidden</span> — Only you see it until played</li>
-          <li className="flex items-center gap-2"><span className="rounded bg-emerald-500/20 px-1.5 text-emerald-300">Active</span> — Can be played at Tribal Council</li>
+          <li className="flex items-center gap-2"><span className="rounded bg-emerald-500/20 px-1.5 text-emerald-300">Active</span> — Can be played at Elimination Council</li>
           <li className="flex items-center gap-2"><span className="rounded bg-rose-500/20 px-1.5 text-rose-300">Used</span> — Already played</li>
           <li className="flex items-center gap-2"><span className="rounded bg-white/10 px-1.5 text-white/50">Expired</span> — No longer valid</li>
         </ul>

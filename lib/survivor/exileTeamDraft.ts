@@ -1,3 +1,5 @@
+import { isNativePlatform } from '@/lib/dashboard/platform-label'
+import { scoreExileWeek } from './exileEngine'
 /**
  * Exile Team Draft — waiver-based claims for exile-side "real-world team" drafting.
  *
@@ -290,8 +292,12 @@ export async function awardWeeklyExileTeamToken(
     // owner/commissioner on this model.
     const league = await prisma.league.findUnique({
       where: { id: leagueId },
-      select: { userId: true },
+      select: { userId: true, platform: true },
     }).catch(() => null)
+    if (league && isNativePlatform(league.platform)) {
+      await scoreExileWeek(leagueId, island.currentWeek)
+      return { ok: true }
+    }
     const commissionerUserId = league?.userId ?? null
 
     const entries = await prisma.exileWeeklyEntry.findMany({

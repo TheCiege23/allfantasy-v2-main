@@ -4,11 +4,11 @@ import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { useSurvivorUi } from '@/lib/survivor/SurvivorUiContext'
-import { ChallengePickCard } from '@/app/survivor/components/chimmy/ChallengePickCard'
 
 type ExileGet = {
   island?: { isActive?: boolean; currentWeek?: number; bossName?: string | null } | null
   user?: { tokenBalance?: number; playerState?: string } | null
+  returnRules?: { enabled: boolean; week: number; tokensRequired: number; resolved: boolean; slots: number }
   error?: string
 }
 
@@ -30,7 +30,7 @@ export default function SurvivorExilePage() {
   const island = data?.island
   const exiledCount = (ctx.season?.players ?? []).filter((p) => p.playerState === 'exile').length
   const isExile = ctx.playerState === 'exile'
-  const viewerSummary = !isExile && !ctx.isCommissioner
+  const viewerSummary = !isExile && (!ctx.isCommissioner || ctx.survivorFairPlayActive)
 
   return (
     <div
@@ -76,7 +76,7 @@ export default function SurvivorExilePage() {
               </div>
             </div>
             <p className="mt-3 text-[12px] text-white/55">
-              Return path: commissioner rules · {island?.bossName ? `Boss: ${island.bossName}` : 'Boss optional'}
+              {data?.returnRules ? data.returnRules.resolved ? 'The return deadline has passed.' : `Earn at least ${data.returnRules.tokensRequired} tokens by the end of Week ${data.returnRules.week}. The system selects ${data.returnRules.slots} return spot after results are final.` : 'Loading return rules…'}
             </p>
             <Link href={`${base}/exile/tokens`} className="mt-3 inline-block text-[13px] font-semibold text-violet-200">
               Token pool →
@@ -84,19 +84,8 @@ export default function SurvivorExilePage() {
           </section>
 
           <section className="relative mt-6 rounded-2xl border border-violet-500/25 bg-black/30 p-4">
-            <p className="text-[11px] font-bold uppercase text-violet-200">This week&apos;s exile challenge</p>
-            <p className="mt-2 text-[12px] text-white/55">Purple-styled mirror of the challenge module.</p>
-            {ctx.canSubmitChallenge ? (
-              <div className="mt-4">
-                <ChallengePickCard
-                  title="Exile challenge"
-                  instructions="Submit your exile lineup or pick — commissioner rules apply."
-                  onLock={() => {}}
-                >
-                  <span className="text-[11px] text-white/40">Uses the same exile POST intent when wired.</span>
-                </ChallengePickCard>
-              </div>
-            ) : null}
+            <p className="text-[11px] font-bold uppercase text-violet-200">Exile challenges</p>
+            <p className="mt-2 text-[12px] text-white/55">Chimmy announces available challenges and their deadlines in Exile Chat. Your main-island roster has been released; Exile continues your season with its own competition.</p>
           </section>
 
           <section className="relative mt-6 survivor-panel p-4">

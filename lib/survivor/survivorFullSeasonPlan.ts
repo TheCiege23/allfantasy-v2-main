@@ -15,6 +15,8 @@ export interface SurvivorFullSeasonPlan {
   season: number
   castSize: number
   finalistCount: 3
+  exileReturnWeek?: number
+  exileReturnSlots?: 1
   startWeek: number
   endWeek: number
   openingWeek: number
@@ -25,7 +27,7 @@ export interface SurvivorFullSeasonPlan {
 }
 
 export function buildSurvivorFullSeasonPlan(input: {
-  sport: string; season: number; castSize: number; draftAt?: Date; now?: Date; endWeek?: number
+  sport: string; season: number; castSize: number; draftAt?: Date; now?: Date; endWeek?: number; exileEnabled?: boolean; exileReturnWeek?: number
 }): SurvivorFullSeasonPlan {
   const sport = input.sport.toUpperCase()
   if (sport !== 'NBA' && sport !== 'NHL') throw new Error('Full-season planning currently supports NBA and NHL.')
@@ -42,14 +44,16 @@ export function buildSurvivorFullSeasonPlan(input: {
   const current = dailySportWeekForInstant(sport, input.season, day)
   // Never backdate a draft into games already played. The first period is a readiness/practice week.
   const startWeek = day.getTime() < Date.parse(opener) ? 1 : (current ?? lastWeek) + 1
-  const requiredEliminations = input.castSize - 3
+  const returnWeek = input.exileEnabled ? input.exileReturnWeek ?? 10 : undefined
+  if (returnWeek !== undefined && (!Number.isInteger(returnWeek) || returnWeek <= startWeek || returnWeek >= endWeek - 1)) throw new Error('Exile return week must follow the opening week and leave at least one elimination before the finale.')
+  const requiredEliminations = input.castSize - 3 + (returnWeek !== undefined ? 1 : 0)
   const available = endWeek - startWeek - 1 // opening + finale are reserved
   if (available < requiredEliminations) throw new Error(`Not enough season remains for ${input.castSize} managers: ${requiredEliminations + 2} scoring periods are required, but only ${Math.max(0, endWeek - startWeek + 1)} remain. Choose a smaller cast, an earlier draft, or next season.`)
   // Space councils across the ENTIRE available season. At most one elimination per period.
   const eliminationWeeks = Array.from({ length: requiredEliminations }, (_, index) => startWeek + Math.ceil((index + 1) * available / requiredEliminations))
   const noEliminationWeeks = Array.from({ length: endWeek - startWeek }, (_, i) => startWeek + i).filter(week => !eliminationWeeks.includes(week))
   return { version: 1, sport, season: input.season, castSize: input.castSize, finalistCount: 3, startWeek, endWeek,
-    openingWeek: startWeek, finaleWeek: endWeek, eliminationWeeks, noEliminationWeeks, regularSeasonLastDay: lastDay }
+    openingWeek: startWeek, finaleWeek: endWeek, ...(returnWeek !== undefined ? { exileReturnWeek: returnWeek, exileReturnSlots: 1 as const } : {}), eliminationWeeks, noEliminationWeeks, regularSeasonLastDay: lastDay }
 }
 
 export function readSurvivorFullSeasonPlan(settings: unknown): SurvivorFullSeasonPlan | null {
@@ -59,9 +63,10 @@ export function readSurvivorFullSeasonPlan(settings: unknown): SurvivorFullSeaso
   const p = raw as SurvivorFullSeasonPlan
   if (p.version !== 1 || !['NBA', 'NHL'].includes(p.sport) || !Number.isInteger(p.season) || !Number.isInteger(p.castSize) || p.castSize < 16 || p.castSize > 20 || p.finalistCount !== 3 ||
     !Number.isInteger(p.startWeek) || !Number.isInteger(p.endWeek) || p.startWeek < 1 || p.endWeek <= p.startWeek || p.endWeek > 52 || p.openingWeek !== p.startWeek || p.finaleWeek !== p.endWeek ||
-    !Array.isArray(p.eliminationWeeks) || p.eliminationWeeks.length !== p.castSize - 3 || new Set(p.eliminationWeeks).size !== p.eliminationWeeks.length ||
+    !Array.isArray(p.eliminationWeeks) || p.eliminationWeeks.length !== p.castSize - 3 + (p.exileReturnSlots ?? 0) || new Set(p.eliminationWeeks).size !== p.eliminationWeeks.length ||
     p.eliminationWeeks.some(week => !Number.isInteger(week) || week <= p.startWeek || week >= p.endWeek) ||
     !resolveDailySportWeekWindow(p.sport, p.season, p.endWeek)) return null
+  if ((p.exileReturnSlots !== undefined || p.exileReturnWeek !== undefined) && (p.exileReturnSlots !== 1 || !Number.isInteger(p.exileReturnWeek) || p.exileReturnWeek! <= p.startWeek || p.exileReturnWeek! >= p.endWeek - 1)) return null
   const lastDay = LAST_DAY[p.sport]?.[p.season]
   const lastWeek = lastDay ? dailySportWeekForInstant(p.sport, p.season, new Date(lastDay + 'T00:00:00Z')) : null
   const expectedRest = Array.from({ length: p.endWeek - p.startWeek }, (_, i) => p.startWeek + i).filter(week => !p.eliminationWeeks.includes(week))

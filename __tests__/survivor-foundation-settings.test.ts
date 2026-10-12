@@ -24,6 +24,13 @@ describe('Survivor foundation settings', () => {
     expect(settings.idolExpiryRemainingPlayers).toBe(5)
     expect(settings.idolInvalidRemainingPlayers).toBe(4)
     expect(settings.noConsecutiveSitOuts).toBe(true)
+    expect(settings.exileIslandEnabled).toBe(true)
+    expect(settings.exileReturnWeek).toBe(10)
+    expect(settings.exileReturnTokens).toBe(4)
+  })
+
+  it('preserves an explicit Exile opt-out', () => {
+    expect(normalizeSurvivorFoundationSettings({ exile_enabled: false }).exileIslandEnabled).toBe(false)
   })
 
   it('reads nested survivorFoundationSettings and clamps team counts', () => {

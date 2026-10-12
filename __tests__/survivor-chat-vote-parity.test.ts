@@ -1,6 +1,6 @@
 // @vitest-environment node
 /**
- * "@Chimmy vote X" / "vote X" in chat must record the same ballot the Tribal Council panel does.
+ * "@Chimmy vote @X" privately must record the same ballot the Elimination Council panel does.
  *
  * The panel posts `submit-vote` to the consolidated survivor route, which calls
  * survivorVoteService.submitVote: it writes voterUserId/targetUserId/targetName (what the panel's
@@ -33,6 +33,7 @@ vi.mock('@/lib/survivor/SurvivorTimelineResolver', () => ({ resolveSurvivorCurre
 vi.mock('@/lib/survivor/SurvivorTribalCouncilService', () => ({ getCouncil: vi.fn(async () => ({ id: 'legacy-council' })) }))
 vi.mock('@/lib/survivor/SurvivorVoteEngine', () => ({ submitVote: hm.legacyVoteSubmit }))
 vi.mock('@/lib/survivor/survivorVoteService', () => ({ submitVote: hm.councilVoteSubmit }))
+vi.mock('@/lib/survivor/survivorCouncilService', () => ({ loadCouncilContext: vi.fn(async () => ({ scopePlayers: [{ userId: 'user-alpha', displayName: 'Team Alpha' }] })) }))
 vi.mock('@/lib/survivor/SurvivorIdolRegistry', () => ({ applyIdolPower: vi.fn(), getActiveIdolsForRoster: vi.fn() }))
 vi.mock('@/lib/survivor/SurvivorChallengeEngine', () => ({
   submitChallengeAnswer: vi.fn(),
@@ -50,10 +51,10 @@ vi.mock('@/lib/survivor/SurvivorSitOutEngine', () => ({
 
 async function run(command: string) {
   const { processSurvivorOfficialCommand } = await import('@/lib/survivor/SurvivorOfficialCommandService')
-  return processSurvivorOfficialCommand({ leagueId: 'league-1', userId: 'user-me', command })
+  return processSurvivorOfficialCommand({ leagueId: 'league-1', userId: 'user-me', command, source: 'private_chimmy' })
 }
 
-describe('Survivor chat vote uses the Tribal Council ballot service', () => {
+describe('Survivor chat vote uses the Elimination Council ballot service', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     hm.rosterFindMany.mockResolvedValue([
@@ -79,8 +80,14 @@ describe('Survivor chat vote uses the Tribal Council ballot service', () => {
     })
   })
 
+  it('refuses a public vote before writing or broadcasting the target', async () => {
+    const { processSurvivorOfficialCommand } = await import('@/lib/survivor/SurvivorOfficialCommandService')
+    const result = await processSurvivorOfficialCommand({ leagueId: 'league-1', userId: 'user-me', command: '@Chimmy vote @Team Alpha', source: 'league_chat' })
+    expect(result).toMatchObject({ ok: false, status: 422 })
+    expect(hm.councilVoteSubmit).not.toHaveBeenCalled()
+  })
   it('records "@Chimmy vote X" for the named manager\'s account through survivorVoteService', async () => {
-    const result = await run('@Chimmy vote Team Alpha')
+    const result = await run('@Chimmy vote @Team Alpha')
     expect(hm.councilVoteSubmit).toHaveBeenCalledWith('league-1', 'user-me', 'user-alpha')
     expect(hm.legacyVoteSubmit).not.toHaveBeenCalled()
     expect(result).toMatchObject({ handled: true, ok: true, status: 200, intent: 'vote' })
@@ -95,7 +102,7 @@ describe('Survivor chat vote uses the Tribal Council ballot service', () => {
       code: 'vote_locked',
       error: 'Your first valid vote is locked and cannot be changed.',
     })
-    const result = await run('vote Team Alpha')
+    const result = await run('@Chimmy vote @Team Alpha')
     expect(hm.legacyVoteSubmit).not.toHaveBeenCalled()
     expect(result).toMatchObject({
       handled: true,
@@ -106,10 +113,15 @@ describe('Survivor chat vote uses the Tribal Council ballot service', () => {
   })
 
   it('does not submit a ballot for a name that matches no manager', async () => {
-    const result = await run('@chimmy vote Nobody Here')
+    const result = await run('@chimmy vote @Nobody Here')
     expect(hm.councilVoteSubmit).not.toHaveBeenCalled()
     expect(hm.legacyVoteSubmit).not.toHaveBeenCalled()
-    expect(result).toMatchObject({ handled: true, ok: false, status: 400 })
-    expect(result.error).toContain('Could not find manager')
+    expect(result).toMatchObject({ handled: true, ok: false, status: 422 })
+    expect(result.error).toContain('does not identify')
   })
+  it('rejects an unmentioned target even in the private command endpoint', async () => {
+    expect(await run('@Chimmy vote Team Alpha')).toMatchObject({ ok: false, status: 422 })
+    expect(hm.councilVoteSubmit).not.toHaveBeenCalled()
+  })
+
 })

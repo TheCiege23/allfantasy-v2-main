@@ -115,15 +115,14 @@ export function buildSurvivorAccessContextFromSnapshot(
     settings.commissionerParticipationMode === 'participating_player'
   const isCommissionerParticipating =
     isLeagueCommissioner &&
-    (commissionerParticipationConfigured || Boolean(snapshot.player && isPlayingState(playerState)))
+    (commissionerParticipationConfigured || isParticipant)
   const coCommissionerPrivacyFollowsPlayer =
     isCoCommissioner &&
-    settings.coCommissionerMode === 'same_privacy_as_commissioner' &&
     isParticipant
   const isParticipatingCommissioner = isCommissionerParticipating || coCommissionerPrivacyFollowsPlayer
   const isNonParticipatingCommissionerHost =
     (isLeagueCommissioner && !isCommissionerParticipating) ||
-    (isCoCommissioner && settings.coCommissionerMode === 'non_participating_host')
+    (isCoCommissioner && !isParticipant && settings.coCommissionerMode === 'non_participating_host')
   const isAiHostActor = Boolean(snapshot.isAiHostActor)
   const hostCanSeeHidden = isAiHostActor || isNonParticipatingCommissionerHost
 
@@ -251,10 +250,11 @@ export function canSeeSurvivorChannel(
   },
 ): boolean {
   const type = String(channel.channelType ?? 'league')
-  if (type === 'league' || type === 'merge') return context.isLeagueMember
-  if (type === 'dm' || type === 'private') return canSeeSurvivorPrivateDm(context, channel.memberUserIds)
+  if (type === 'league') return context.isLeagueMember
+  if (type === 'merge') return context.decisions.canSeeHiddenIdolAssignments || context.canAccessMergeChat
+  if (type === 'dm' || type === 'private' || type === 'alliance') return canSeeSurvivorPrivateDm(context, channel.memberUserIds)
   if (type === 'tribe') {
-    return context.decisions.canSeeHiddenIdolAssignments || channel.tribeId === context.tribeId
+    return context.decisions.canSeeHiddenIdolAssignments || Boolean(context.canAccessTribeChat && channel.tribeId && channel.tribeId === context.tribeId)
   }
   if (type === 'exile') return context.decisions.canSeeExileChat
   if (type === 'jury') return context.decisions.canSeeJuryChat

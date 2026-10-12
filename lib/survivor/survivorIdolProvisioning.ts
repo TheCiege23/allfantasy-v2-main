@@ -1,3 +1,4 @@
+import { randomInt } from 'node:crypto'
 import 'server-only'
 
 import { withSurvivorSetupTransaction } from './survivorSetupTransaction'
@@ -61,7 +62,7 @@ export async function seedSurvivorIdols(
     (p) => ({ userId: p.userId, rosterId: p.redraftRosterId ?? p.userId }),
   )
 
-  const plan = computeIdolSeedPlan({ participants, rosterSpots, tribeCount, seed: opts.seed ?? null })
+  const plan = computeIdolSeedPlan({ participants, rosterSpots, tribeCount, seed: opts.seed ?? randomInt(0, 2_147_483_647) })
   if (!plan.ok) {
     return { ok: false, status: plan.code === 'no_participants' ? 422 : 400, code: plan.code, error: plan.error }
   }
@@ -132,7 +133,7 @@ export async function seedSurvivorIdols(
         leagueId,
         category: 'idol',
         action: 'idols_seeded',
-        actorUserId: opts.actorUserId ?? null,
+        actorUserId: null,
         data: { powerType: 'vote_shield', count: plan.voteShieldCount, rosterSpots, tribeCount, seed: plan.seed, ownerCount: ownerIds.size },
         isVisibleToCommissioner: true,
         isVisibleToPublic: false,

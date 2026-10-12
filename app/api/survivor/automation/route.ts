@@ -12,7 +12,7 @@ import {
 } from '@/lib/survivor/gameStateMachine'
 import { lockChallengeSubmissions, tallyChallengeResults } from '@/lib/survivor/challengeEngine'
 import { processNotificationQueue } from '@/lib/survivor/notificationEngine'
-import { scoreExileWeek } from '@/lib/survivor/exileEngine'
+import { scoreExileWeek, processReturnFromExile } from '@/lib/survivor/exileEngine'
 import { expireStaleIdols } from '@/lib/survivor/SurvivorIdolRegistry'
 import {
   processExileTeamClaims,
@@ -107,13 +107,15 @@ async function runAutomation(req: NextRequest) {
       }
 
       const gsExile = await prisma.survivorGameState.findUnique({ where: { leagueId } })
-      if (gsExile?.needsExileScore) {
-        await scoreExileWeek(leagueId, week)
-        await prisma.survivorGameState.update({
+      if (gsExile?.needsExileScore && gsExile.weekScoringFinalAt) {
+        const scored = await scoreExileWeek(leagueId, week)
+        if (scored) await prisma.survivorGameState.update({
           where: { leagueId },
           data: { needsExileScore: false },
         })
       }
+
+      if (gsExile?.weekScoringFinalAt && !gsExile.needsExileScore) await processReturnFromExile(leagueId, { week })
 
       try {
         await expireStaleIdols(leagueId, week)

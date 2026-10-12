@@ -64,7 +64,7 @@ export default function SurvivorLeagueHomepage() {
       { id: 2, name: 'Survivor: Merge Test', phase: 'Merge', players: '11/20', active: false },
       { id: 3, name: 'Survivor: Exile Variant', phase: 'Week 6', players: '18/20', active: false },
       { id: 4, name: 'Survivor: Jury Sandbox', phase: 'Jury', players: '8/20', active: false },
-      { id: 5, name: 'Survivor: Finale Sim', phase: 'Final Tribal', players: '3/20', active: false },
+      { id: 5, name: 'Survivor: Finale Sim', phase: 'Final Council', players: '3/20', active: false },
     ],
     [],
   )
@@ -75,7 +75,7 @@ export default function SurvivorLeagueHomepage() {
         id: 1,
         user: 'KingBuffalo',
         role: 'Host',
-        text: 'Welcome to the island. Tribal Council opens after MNF and closes Tuesday at 5 PM ET. DM @chimmy with your vote if enabled.',
+        text: 'Welcome to the island. Elimination Council opens after MNF and closes Tuesday at 5 PM ET. DM @chimmy with your vote if enabled.',
         pinned: true,
       },
       {
@@ -105,7 +105,7 @@ export default function SurvivorLeagueHomepage() {
     { id: 'draft', label: 'Draft', icon: ClipboardList },
     { id: 'roster', label: 'Roster', icon: Shield },
     { id: 'waivers', label: 'Waivers', icon: Zap },
-    { id: 'tribal', label: 'Tribal Council', icon: Vote },
+    { id: 'tribal', label: 'Elimination Council', icon: Vote },
     { id: 'jury', label: 'Jury', icon: ScrollText },
     { id: 'exile', label: 'Exile Island', icon: Compass },
     { id: 'settings', label: 'Settings', icon: Settings },
@@ -259,7 +259,7 @@ export default function SurvivorLeagueHomepage() {
                       className="inline-flex items-center justify-center gap-2 rounded-2xl bg-orange-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-orange-300"
                     >
                       <Vote className="h-4 w-4" />
-                      Tribal Council
+                      Elimination Council
                     </button>
                     <button
                       type="button"
@@ -403,7 +403,7 @@ export default function SurvivorLeagueHomepage() {
                     <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                       {(
                         [
-                          ['Tribal Council', 'Private vote intake, idol validation, and reveal flow'],
+                          ['Elimination Council', 'Private vote intake, idol validation, and reveal flow'],
                           ['Mini Games', 'Real-game challenge engine with randomizer support'],
                           ['Exile Island', 'Hidden token ladder and return path tracking'],
                           ['Jury Chamber', 'Questioning, speeches, and final vote flow'],

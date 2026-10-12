@@ -107,7 +107,7 @@ export async function postEliminationAnnouncement(
   tieOccurred: boolean,
 ): Promise<void> {
   let content = `The tribe has spoken. **${eliminatedName}** has been voted out in Week ${week}.`
-  if (idolPlayed) content += ' A hidden idol was played during this Tribal Council.'
+  if (idolPlayed) content += ' A hidden idol was played during this Elimination Council.'
   if (tieOccurred) content += ' A tie occurred before the final result.'
 
   await postToLeagueChat(leagueId, content, 'card', {
@@ -141,7 +141,7 @@ export async function postWeeklyRecap(
   if (recap.challengeWinner) lines.push(`Challenge won by ${recap.challengeWinner}`)
   if (recap.immunityHolder) lines.push(`Immunity: ${recap.immunityHolder}`)
   if (recap.topScorer) lines.push(`Top scorer: ${recap.topScorer} (${recap.topScore?.toFixed(1) ?? '?'} pts)`)
-  if (recap.tribalLoser) lines.push(`Tribal Council: ${recap.tribalLoser}`)
+  if (recap.tribalLoser) lines.push(`Elimination Council: ${recap.tribalLoser}`)
   if (recap.eliminatedPlayer) lines.push(`Voted out: ${recap.eliminatedPlayer}`)
   if (recap.idolsPlayed?.length) lines.push(`Idols played: ${recap.idolsPlayed.join(', ')}`)
   if (recap.twistSummary) lines.push(`Twist: ${recap.twistSummary}`)
@@ -197,7 +197,7 @@ export async function postChallengeAnnouncement(
 }
 
 /**
- * Post tribal council opening to league chat.
+ * Post elimination council opening to league chat.
  */
 export async function postTribalCouncilOpening(
   leagueId: string,
@@ -205,7 +205,7 @@ export async function postTribalCouncilOpening(
   week: number,
   voteDeadline: string,
 ): Promise<void> {
-  const content = `**Tribal Council — Week ${week}**\n${tribeName} must vote someone out.\nVote privately by messaging @Chimmy.\nDeadline: ${new Date(voteDeadline).toLocaleString()}`
+  const content = `**Elimination Council — Week ${week}**\n${tribeName} must vote someone out.\nVote privately by messaging @Chimmy.\nDeadline: ${new Date(voteDeadline).toLocaleString()}`
 
   await postToLeagueChat(leagueId, content, 'card', {
     type: 'tribal_opening',

@@ -8,7 +8,7 @@
  * distribution reproducible for tests/audit. The engine never invents participants.
  */
 
-export type SurvivorIdolPowerType = 'vote_shield' | 'extra_vote' | 'skip_tribal' | 'auto_waiver_pickup' | 'triple_steal'
+export type SurvivorIdolPowerType = 'vote_shield' | 'extra_vote' | 'skip_tribal' | 'auto_waiver_pickup' | 'triple_steal' | 'island_raid'
 
 export interface SurvivorIdolPowerSpec {
   powerType: SurvivorIdolPowerType
@@ -16,7 +16,7 @@ export interface SurvivorIdolPowerSpec {
   description: string
   category: 'protection' | 'voting' | 'roster'
   oneTimeUse: boolean
-  /** Phase 2 resolution status — Vote Shield / Extra Vote / Skip Tribal vs scaffold-only. */
+  /** Phase 2 resolution status — Vote Shield / Extra Vote / Council Pass vs scaffold-only. */
   resolution: 'phase2' | 'scaffold_only'
   /** Expiry boundary by remaining active players (idol invalid once this many remain - 1). */
   expiresAtRemainingPlayers: number
@@ -27,7 +27,7 @@ export const SURVIVOR_IDOL_CATALOG: Record<SurvivorIdolPowerType, SurvivorIdolPo
   vote_shield: {
     powerType: 'vote_shield',
     label: 'Vote Shield Idol',
-    description: 'When played at Tribal Council, votes cast against the holder do not count. One-time use.',
+    description: 'When played at Elimination Council, votes cast against the holder do not count. One-time use.',
     category: 'protection',
     oneTimeUse: true,
     resolution: 'phase2',
@@ -36,7 +36,7 @@ export const SURVIVOR_IDOL_CATALOG: Record<SurvivorIdolPowerType, SurvivorIdolPo
   extra_vote: {
     powerType: 'extra_vote',
     label: 'Extra Vote',
-    description: 'Adds one extra ballot at Tribal Council. One-time use.',
+    description: 'Adds one extra ballot at Elimination Council. One-time use.',
     category: 'voting',
     oneTimeUse: true,
     resolution: 'phase2',
@@ -44,7 +44,7 @@ export const SURVIVOR_IDOL_CATALOG: Record<SurvivorIdolPowerType, SurvivorIdolPo
   },
   skip_tribal: {
     powerType: 'skip_tribal',
-    label: 'Skip Tribal',
+    label: 'Council Pass',
     description: 'Protects the holder from vote exposure this round (may forfeit voting right per settings). One-time use.',
     category: 'voting',
     oneTimeUse: true,
@@ -62,12 +62,17 @@ export const SURVIVOR_IDOL_CATALOG: Record<SurvivorIdolPowerType, SurvivorIdolPo
   },
   triple_steal: {
     powerType: 'triple_steal',
-    label: 'Triple Steal',
-    description: 'Steal up to three assets. Inventory only in Phase 2; resolution arrives in a later phase.',
+    label: 'Triple Raid',
+    description: 'Choose exactly three players from one opposing team. Unavailable until roster transfers, capacity and player locks are enforced.',
     category: 'roster',
     oneTimeUse: true,
     resolution: 'scaffold_only',
     expiresAtRemainingPlayers: 5,
+  },
+  island_raid: {
+    powerType: 'island_raid', label: 'Island Raid',
+    description: 'Choose exactly three players across opposing teams. Unavailable until roster transfers, capacity and player locks are enforced.',
+    category: 'roster', oneTimeUse: true, resolution: 'scaffold_only', expiresAtRemainingPlayers: 5,
   },
 }
 

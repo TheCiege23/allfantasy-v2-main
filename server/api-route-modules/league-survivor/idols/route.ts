@@ -31,7 +31,7 @@ type IdolRow = {
 }
 
 function isPublicIdol(row: Pick<IdolRow, 'status' | 'isPubliclyKnown'>): boolean {
-  return row.isPubliclyKnown || ['played', 'expired', 'revealed', 'used'].includes(row.status)
+  return row.isPubliclyKnown
 }
 
 function redactIdol(row: IdolRow, owned: boolean, canSeeHidden: boolean) {
@@ -79,8 +79,7 @@ export async function GET(
             { currentOwnerUserId: userId },
             { rosterId: rosterId ?? '__none__' },
             { isPubliclyKnown: true },
-            { status: { in: ['played', 'expired', 'revealed', 'used'] } },
-          ],
+            ],
         },
     select: {
       id: true,

@@ -86,7 +86,7 @@ export function SurvivorTribeBoard({ summary, names }: SurvivorTribeBoardProps) 
                     </span>
                   )}
                   {isAttending && (
-                    <span className="text-xs text-amber-300">Attending Tribal Council</span>
+                    <span className="text-xs text-amber-300">Attending Elimination Council</span>
                   )}
                 </div>
                 <ul className="space-y-1">

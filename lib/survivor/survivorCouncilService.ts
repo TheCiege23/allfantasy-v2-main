@@ -12,7 +12,7 @@ import {
 /**
  * SURVIVOR COUNCIL + VOTE WINDOW SERVICE (canonical Phase 3).
  *
- * Opens a Tribal Council for the losing tribe (pre-merge) or all active players (post-merge),
+ * Opens a Elimination Council for the losing tribe (pre-merge) or all active players (post-merge),
  * manages the vote window lifecycle (scheduled → open → closed → revealed / cancelled), and
  * exposes the shared council context (scope, parsed idol plays, eligibility) used by the vote,
  * idol-resolution, tally, and state-sanitizer layers. Named to avoid the Windows case-insensitive
@@ -197,7 +197,7 @@ export interface OpenTribalOptions {
 }
 
 /**
- * Open a Tribal Council. Pre-merge requires `attendingTribeId` (the losing tribe — there is no
+ * Open a Elimination Council. Pre-merge requires `attendingTribeId` (the losing tribe — there is no
  * challenge engine yet, so the commissioner/host designates it). Post-merge attends all active
  * players. Idempotent: an existing non-finalized council is returned unchanged.
  */
@@ -225,7 +225,7 @@ export async function openTribalCouncil(leagueId: string, opts: OpenTribalOption
   const phase = mergedPhase || atOrBelowMerge ? 'merge' : 'pre_merge'
 
   if (phase === 'pre_merge' && !opts.attendingTribeId) {
-    return { ok: false, status: 422, code: 'attending_tribe_required', error: 'Pre-merge Tribal Council requires the attending (losing) tribe.' }
+    return { ok: false, status: 422, code: 'attending_tribe_required', error: 'Pre-merge Elimination Council requires the attending (losing) tribe.' }
   }
   if (opts.attendingTribeId) {
     const tribe = await prisma.survivorTribe.findFirst({ where: { id: opts.attendingTribeId, leagueId }, select: { id: true } })

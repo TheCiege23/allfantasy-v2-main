@@ -36,7 +36,7 @@ export async function GET(
 
   const revealed = council.isRevealed || council.status === 'complete' || council.status === 'reveal_in_progress'
 
-  if (access.decisions.canSeePrivateVotes || revealed) {
+  if (access.decisions.canSeePrivateVotes) {
     return NextResponse.json({
       council: { id: council.id, status: council.status, week: council.week },
       votes: council.votes,
@@ -54,7 +54,7 @@ export async function GET(
   return NextResponse.json({
     council: { id: council.id, status: council.status, week: council.week },
     votes: ownVote ? [ownVote] : [],
-    hiddenUntilReveal: true,
+    hiddenUntilReveal: !revealed,
     privacyMode: access.isParticipatingCommissioner ? 'participating_commissioner_redacted' : 'player_redacted',
   })
 }

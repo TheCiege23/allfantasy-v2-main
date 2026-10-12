@@ -153,7 +153,7 @@ export async function runSurvivorPostDraftBootstrap(
                 senderName: '@Chimmy',
                 senderIsHost: true,
                 isSystemMessage: true,
-                content: `You have been secretly assigned: **${idol.powerLabel ?? idol.powerType}**\n\n${idol.powerDesc ?? 'Use it wisely.'}\n\nThis power is hidden from other players. To play it, message me during Tribal Council.`,
+                content: `You have been secretly assigned: **${idol.powerLabel ?? idol.powerType}**\n\n${idol.powerDesc ?? 'Use it wisely.'}\n\nThis power is hidden from other players. To play it, message me during Elimination Council.`,
                 contentType: 'card',
                 cardData: {
                   type: 'idol_assigned',

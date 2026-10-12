@@ -57,7 +57,7 @@ type TabId =
 const TABS: { id: TabId; label: string; icon: ReactNode }[] = [
   { id: 'overview', label: 'Overview', icon: <LayoutDashboard className="h-4 w-4" /> },
   { id: 'tribes', label: 'Tribes', icon: <Users className="h-4 w-4" /> },
-  { id: 'tribal', label: 'Tribal Council', icon: <Vote className="h-4 w-4" /> },
+  { id: 'tribal', label: 'Elimination Council', icon: <Vote className="h-4 w-4" /> },
   { id: 'minigames', label: 'Mini Games', icon: <Zap className="h-4 w-4" /> },
   { id: 'exile', label: 'Exile Island', icon: <Skull className="h-4 w-4" /> },
   { id: 'jury', label: 'Jury', icon: <Scale className="h-4 w-4" /> },
@@ -73,6 +73,7 @@ const TABS: { id: TabId; label: string; icon: ReactNode }[] = [
 type DashboardPayload = {
   ok: true
   role?: string
+  privacy?: { blindModeActive: boolean; canSeeHiddenIdolAssignments: boolean; canSeePrivateVotes: boolean }
   league: { id: string; name: string; sport: string; leagueSize: number | null }
   config?: { visualThemeId?: string | null } | null
   shell: { draftSessionExists: boolean; survivorChatChannels: number; exileLeagueLinked: boolean }
@@ -244,6 +245,10 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
           </WarRoomHeroCard>
         </div>
 
+        {data?.privacy ? <div className="mb-4 rounded-xl border border-amber-400/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-100" role="status">
+          {data.privacy.blindModeActive ? 'Playing commissioner · hidden idols, private ballots and unrevealed results use manager visibility. General league settings remain available.' : data.privacy.canSeePrivateVotes ? 'Non-playing host · private game oversight is enabled. Personal manager DMs remain private.' : 'Manager visibility · private game information is restricted.'}
+        </div> : null}
+
         {error ? (
           <div className="mb-6 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-100" role="alert">
             {error}
@@ -286,7 +291,7 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
                 >
                   <ul className="space-y-2 text-sm text-white/75">
                     <li className="flex justify-between gap-2">
-                      <span>Tribal Council</span>
+                      <span>Elimination Council</span>
                       <Link href={`${base}/tribal`} className="text-emerald-300 hover:text-emerald-200">
                         Open
                       </Link>
@@ -321,7 +326,7 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
                       : 'No active tribal deadline in state.'}
                   </p>
                   <p className="mt-2 text-xs text-white/45">
-                    Immunity holders sync from live game state. Use Tribal Council tab for vote tools.
+                    Immunity holders sync from live game state. Use Elimination Council tab for vote tools.
                   </p>
                 </WarRoomPanel>
               </div>
@@ -408,12 +413,12 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
           )}
 
           {tab === 'tribal' && (
-            <WarRoomPanel title="Tribal Council" subtitle="Private votes, immunity, idols — processed by the Survivor engine and @Chimmy.">
+            <WarRoomPanel title="Elimination Council" subtitle="Private votes, immunity, idols — processed by the Survivor engine and @Chimmy.">
               <Link
                 href={`${base}/tribal`}
                 className="inline-flex rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm font-medium text-amber-100 hover:bg-amber-500/15"
               >
-                Open Tribal Council hub
+                Open Elimination Council hub
               </Link>
             </WarRoomPanel>
           )}

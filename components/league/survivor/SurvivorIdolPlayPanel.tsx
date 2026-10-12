@@ -5,7 +5,7 @@ export type PlayableIdol = { idolId: string; powerType: string; label: string; a
 const POWER_COPY: Record<string, { title: string; action: string; needsTarget: boolean; supported: boolean }> = {
   vote_shield: { title: 'Vote Shield', action: 'play-idol', needsTarget: false, supported: true },
   extra_vote: { title: 'Extra Vote', action: 'play-extra-vote', needsTarget: true, supported: true },
-  skip_tribal: { title: 'Skip Tribal', action: 'play-skip-tribal', needsTarget: false, supported: true },
+  skip_tribal: { title: 'Council Pass', action: 'play-skip-tribal', needsTarget: false, supported: true },
   triple_steal: { title: 'Triple Steal', action: '', needsTarget: false, supported: false },
   auto_waiver_pickup: { title: 'Auto Waiver Pickup', action: '', needsTarget: false, supported: false },
 }

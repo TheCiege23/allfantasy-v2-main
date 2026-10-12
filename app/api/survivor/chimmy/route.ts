@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { parsePrivateVoteMention, submitPrivateVoteCommand } from '@/lib/survivor/survivorPrivateVoteCommand'
 import { handleChimmyPrivateMessage } from '@/lib/survivor/chimmyHandler'
 import { resolveLeagueAccess } from '@/lib/league-access'
 
@@ -19,7 +20,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
 
-  if (!body.leagueId || !body.message) {
+  if (typeof body.leagueId !== 'string' || typeof body.message !== 'string' || !body.leagueId.trim() || !body.message.trim() || body.message.length > 2000) {
     return NextResponse.json({ error: 'leagueId and message required' }, { status: 400 })
   }
 
@@ -27,6 +28,12 @@ export async function POST(req: NextRequest) {
   // leagueId it is given. One 403 for not-found and not-member, so league existence is not leaked.
   const access = await resolveLeagueAccess(body.leagueId, userId)
   if (!access) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+  if (parsePrivateVoteMention(body.message) || /^@chimmy\s+(?:i\s+)?vote\b/i.test(body.message.trim())) {
+    const vote = await submitPrivateVoteCommand(body.leagueId, userId, body.message)
+    if (!vote.ok) return NextResponse.json({ error: vote.error }, { status: vote.status })
+    return NextResponse.json({ reply: vote.message, vote })
+  }
 
   const reply = await handleChimmyPrivateMessage(body.leagueId, userId, body.message)
   return NextResponse.json({ reply })

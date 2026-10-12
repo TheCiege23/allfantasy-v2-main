@@ -44,7 +44,7 @@ async function playPower(
   extra: { extraTargetUserId?: string; forfeitsVote?: boolean } = {},
 ): Promise<IdolPlayOutcome> {
   const ctx = await loadCouncilContext(leagueId)
-  if (!ctx) return { ok: false, status: 404, code: 'no_active_council', error: 'No active Tribal Council.' }
+  if (!ctx) return { ok: false, status: 404, code: 'no_active_council', error: 'No active Elimination Council.' }
   const { council, settings, eligibility, userToRoster } = ctx
 
   if (council.isRevealed || council.status === 'cancelled') {
@@ -141,7 +141,7 @@ async function playPower(
       ? 'Vote Shield played. Votes cast against you will not count when revealed.'
       : power === 'extra_vote'
         ? 'Extra Vote played. Your additional ballot will be counted at tally.'
-        : 'Skip Tribal played. You are safe from being voted out at this council.'
+        : 'Council Pass played. You are safe from being voted out at this council.'
   return { ok: true, idolId: idol.id, powerType: power, alreadyPlayed: false, councilId: council.id, message }
 }
 

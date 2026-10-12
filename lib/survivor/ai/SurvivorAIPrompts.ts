@@ -65,7 +65,7 @@ Finale: ${ctx.finale ? `open ${ctx.finale.open}, finalists ${ctx.finale.finalist
   switch (type) {
     case 'host_intro': {
       const system = withIslandVoice(
-        `You are the AI host for an AllFantasy Survivor league. Write a short intro post (2–4 sentences) in Survivor show style: dramatic, tribal, welcoming — fantasy football (or the league sport) meets Outwit, Outplay, Outlast. Mention tribes by name and that Tribal Council and challenges await. ${DETERMINISM_RULES}`,
+        `You are the AI host for an AllFantasy Survivor league. Write a short intro post (2–4 sentences) in Survivor show style: dramatic, tribal, welcoming — fantasy football (or the league sport) meets Outwit, Outplay, Outlast. Mention tribes by name and that Elimination Council and challenges await. ${DETERMINISM_RULES}`,
       )
       const user = `${baseUser}\n\nWrite an intro post for the league. Do not state who will be eliminated or any outcome; only set the scene.`
       return { system, user }
@@ -87,9 +87,9 @@ Finale: ${ctx.finale ? `open ${ctx.finale.open}, finalists ${ctx.finale.finalist
     }
     case 'host_council': {
       const system = withIslandVoice(
-        `You are the AI host for an AllFantasy Survivor league. Write tribal council narration (2–4 sentences): tension, votes, reading the votes. Do not state who was eliminated — the game engine does that. You set the mood. ${DETERMINISM_RULES}`,
+        `You are the AI host for an AllFantasy Survivor league. Write elimination council narration (2–4 sentences): tension, votes, reading the votes. Do not state who was eliminated — the game engine does that. You set the mood. ${DETERMINISM_RULES}`,
       )
-      const user = `${baseUser}\nAttending tribe: ${ctx.council?.attendingTribeId ?? 'N/A'}.\n\nWrite tribal council narration. Do not assert who is eliminated; only describe the council atmosphere.`
+      const user = `${baseUser}\nAttending tribe: ${ctx.council?.attendingTribeId ?? 'N/A'}.\n\nWrite elimination council narration. Do not assert who is eliminated; only describe the council atmosphere.`
       return { system, user }
     }
     case 'host_scroll': {

@@ -116,7 +116,7 @@ export const DEFAULT_IDOL_POWER_POOL = IDOL_POWER_TYPES.filter(
 export const IDOL_POWER_DESCRIPTIONS: Record<string, string> = {
   protect_self: 'Play before votes are counted — all votes against you are cancelled.',
   protect_self_plus_one: 'Protect yourself AND one ally from all votes this tribal.',
-  extra_vote: 'Cast one extra vote at tribal council.',
+  extra_vote: 'Cast one extra vote at elimination council.',
   double_vote: 'Your vote counts as two votes.',
   vote_nullifier: "Cancel one other player's vote — it won't be counted.",
   vote_steal: "Steal another player's vote. They lose theirs, you cast it.",
@@ -134,7 +134,7 @@ export const IDOL_POWER_DESCRIPTIONS: Record<string, string> = {
   idol_sniffer: 'Reveal whether a specific player holds any idol.',
   reveal_tribe_powers: 'Reveal all idols held by members of one tribe.',
   jury_influence: 'Your closing speech gets a bonus prompt with the jury.',
-  finale_advantage: 'Advantage in the final tribal council.',
+  finale_advantage: 'Advantage in the final elimination council.',
 }
 
 /** League chat source for tribe-scoped messages (filter by membership). */

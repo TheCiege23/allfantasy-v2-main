@@ -37,7 +37,11 @@ export async function provisionSurvivorChats(
     league?.settings && typeof league.settings === 'object' ? (league.settings as Record<string, unknown>) : {},
   )
   const commissionerUserId = league?.userId ?? null
-  const commissionerIsNonParticipatingHost = settings.commissionerParticipationMode === 'non_participating_host'
+  const ownerHasPlayed = commissionerUserId ? Boolean(
+    await db.survivorPlayer.findFirst({ where: { leagueId, userId: commissionerUserId, playerState: { notIn: ['host', 'non_participating_host', 'spectator', 'viewer'] } }, select: { id: true } }) ||
+    await db.roster.findFirst({ where: { leagueId, platformUserId: commissionerUserId }, select: { id: true } })
+  ) : false
+  const commissionerIsNonParticipatingHost = settings.commissionerParticipationMode === 'non_participating_host' && !ownerHasPlayed
   const hostUserIds = commissionerUserId && commissionerIsNonParticipatingHost ? [commissionerUserId] : []
 
   // Active participants (for the league channel) + their tribe.

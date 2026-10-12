@@ -34,19 +34,16 @@ export default function SurvivorTribalPage() {
   }, [council?.attendingTribeId, ctx.season?.players])
 
   const revealSteps: ScrollRevealStep[] = useMemo(() => {
-    const names = attendingPlayers.map((p) => p.displayName).filter(Boolean)
-    const picks = names.slice(0, Math.min(5, Math.max(3, names.length)))
-    const steps: ScrollRevealStep[] = []
-    for (const n of picks) {
-      steps.push({ type: 'vote', targetName: n })
-    }
-    steps.push({ type: 'pause', hostLine: 'The final vote…' })
-    steps.push({ type: 'vote', targetName: picks[picks.length - 1] ?? 'Unknown' })
-    return steps
-  }, [attendingPlayers])
+    if (!council?.isRevealed || !Array.isArray(council.revealSequence)) return []
+    return council.revealSequence.flatMap((step): ScrollRevealStep[] => {
+      if (step.status === 'counts' && step.targetName) return [{ type: 'vote', targetName: step.targetName }]
+      if (step.status && step.status !== 'counts') return [{ type: 'does_not_count' }]
+      return []
+    })
+  }, [council?.isRevealed, council?.revealSequence])
 
   const status = council?.status
-  const quiet = status === 'revealing' || status === 'voting_closed'
+  const quiet = status === 'revealing' || status === 'voting_closed' || status === 'closed'
 
   return (
     <div className="relative min-h-[75vh] px-3 pb-32 pt-4 md:px-6">
@@ -57,7 +54,7 @@ export default function SurvivorTribalPage() {
         }}
       />
       <div className="relative">
-        <p className="text-center text-[11px] font-bold uppercase tracking-[0.35em] text-red-300/80">Tribal Council</p>
+        <p className="text-center text-[11px] font-bold uppercase tracking-[0.35em] text-red-300/80">Elimination Council</p>
         <h1 className="mt-2 text-center text-2xl font-black uppercase tracking-[0.15em] text-white">
           Week {week} · {tribe?.name ?? 'Tribe'} beach
         </h1>
@@ -105,21 +102,18 @@ export default function SurvivorTribalPage() {
               <p className="text-[13px] text-white/50">Waiting for the host to read the parchment…</p>
             </div>
           ) : (
-            <p className="text-[13px] text-white/45">No open tribal session. Check back when your commissioner opens council.</p>
+            <p className="text-[13px] text-white/45">No open council. Chimmy will announce the next voting window in league chat.</p>
           )}
         </div>
 
         <div className="mx-auto mt-6 flex max-w-lg flex-col gap-2">
-          <button
+          {council?.isRevealed && revealSteps.length > 0 ? <button
             type="button"
             className="min-h-[48px] rounded-xl border border-white/15 text-[12px] text-white/70"
             onClick={() => setRevealOpen(true)}
           >
-            Preview scroll reveal (UI demo)
-          </button>
-          <p className="text-center text-[11px] text-white/30">
-            Live reveal sequences consume data from the tribal engine when available.
-          </p>
+            Replay Torch Ceremony
+          </button> : null}
         </div>
       </div>
 

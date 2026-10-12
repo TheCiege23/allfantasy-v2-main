@@ -1,3 +1,5 @@
+import { isNativePlatform } from '@/lib/dashboard/platform-label'
+import { resolveScheduledExileReturn } from './survivorExileLifecycle'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { postHostMessage } from './hostEngine'
@@ -149,33 +151,35 @@ export async function resetExileTokensOnBossWin(leagueId: string, week: number):
   })
 }
 
-export async function scoreExileWeek(leagueId: string, week: number): Promise<void> {
-  const island = await prisma.exileIsland.findUnique({ where: { leagueId } })
-  if (!island) return
-  await prisma.exileIsland.update({
-    where: { id: island.id },
-    data: { currentWeek: week },
-  })
-  const entries = await prisma.exileWeeklyEntry.findMany({
-    where: { exileId: island.id, week },
-  })
-  let top: { userId: string; weeklyScore: number } | null = null
-  for (const e of entries) {
-    if (!top || e.weeklyScore > top.weeklyScore) top = { userId: e.userId, weeklyScore: e.weeklyScore }
-  }
-  if (top) {
-    await applyExileTokenDelta({
-      leagueId,
-      userId: top.userId,
-      week,
-      delta: 1,
-      source: 'exile_weekly_top_scorer',
-    })
-    await prisma.exileWeeklyEntry.updateMany({
-      where: { exileId: island.id, week, userId: top.userId },
-      data: { tokenEarned: 1 },
-    })
-  }
+export async function scoreExileWeek(leagueId: string, week: number): Promise<boolean> {
+  return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`survivor-setup:${leagueId}`}, 0))::text`
+    const island = await tx.exileIsland.findUnique({ where: { leagueId } })
+    if (!island?.isActive) return false
+    if (await tx.survivorAuditEntry.findFirst({ where: { leagueId, week, action: 'exile_week_scored' }, select: { id: true } })) return true
+    // Zero is a valid final score, but the table's default zero is not evidence of a result.
+    if (!await tx.survivorAuditEntry.findFirst({ where: { leagueId, week, action: 'exile_results_finalized' }, select: { id: true } })) return false
+    const league = await tx.league.findUnique({ where: { id: leagueId }, select: { survivorTokenCap: true } })
+    const entries = await tx.exileWeeklyEntry.findMany({ where: { exileId: island.id, week }, orderBy: [{ weeklyScore: 'desc' }, { userId: 'asc' }] })
+    // Empty/missing results are retryable; do not consume the weekly idempotency marker.
+    if (!entries.length) return false
+    const eligible = []
+    for (const entry of entries) {
+      const player = await tx.survivorPlayer.findUnique({ where: { leagueId_userId: { leagueId, userId: entry.userId } } })
+      if (player?.playerState === 'exile') eligible.push({ entry, player })
+    }
+    if (!eligible.length) return false
+    const best = eligible[0].entry.weeklyScore
+    for (const { entry, player } of eligible.filter(row => row.entry.weeklyScore === best)) {
+      const award = league?.survivorTokenCap != null && player.tokenBalance >= league.survivorTokenCap ? 0 : 1
+      await tx.survivorPlayer.update({ where: { id: player.id }, data: { tokenBalance: { increment: award }, totalTokensEarned: { increment: award } } })
+      await tx.exileWeeklyEntry.update({ where: { id: entry.id }, data: { tokenEarned: award } })
+    }
+    await tx.exileIsland.update({ where: { id: island.id }, data: { currentWeek: week } })
+    const balances = await tx.survivorPlayer.findMany({ where: { leagueId, playerState: 'exile' }, select: { userId: true, tokenBalance: true, totalTokensEarned: true, eliminatedWeek: true } })
+    await tx.survivorAuditEntry.create({ data: { leagueId, week, category: 'exile', action: 'exile_week_scored', data: { entryCount: entries.length, balances }, isVisibleToCommissioner: true, isVisibleToPublic: false } })
+    return true
+  }, { timeout: 30_000, maxWait: 10_000 })
 }
 
 export type ExileReturnConversionMode = 'faab' | 'points' | 'expire'
@@ -189,8 +193,9 @@ export async function processReturnFromExile(
 ): Promise<string | null> {
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { survivorExileReturnTrigger: true },
+    select: { survivorExileReturnTrigger: true, platform: true },
   })
+  if (league && isNativePlatform(league.platform)) return opts?.week ? resolveScheduledExileReturn(leagueId, opts.week) : null
   if (league?.survivorExileReturnTrigger !== 'token_leader') return null
 
   const top = await prisma.survivorPlayer.findFirst({
