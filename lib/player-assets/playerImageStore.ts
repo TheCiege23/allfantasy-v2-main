@@ -204,12 +204,34 @@ async function sharedUrlHolders(now: number): Promise<Map<string, ImageHolder[]>
   return sharedUrlInflight
 }
 
+/**
+ * Who a headshot is about to be served for. `playerId` is the canonical `Player.id` when the
+ * reader holds one; a `SportsPlayer` reader has only the name, sport, position and team.
+ */
+export type HeadshotSubject = {
+  playerId?: string | null
+  name: string
+  sport: string
+  team?: string | null
+  position?: string | null
+}
+
+/*
+ * Accents folded before comparing: `SportsPlayer`'s TheSportsDB rows write "Nikola Vučević" where
+ * `Player` writes "Nikola Vucevic" (measured 2026-10-12, dozens of NBA/NHL/MLB pairs), and an
+ * accent is never evidence of a different man. Suffixes are already dropped by compactPlayerName.
+ */
+function comparableName(name: string | null | undefined): string {
+  return compactPlayerName(String(name ?? '').normalize('NFD').replace(/\p{M}/gu, ''))
+}
+
 /** Two holders of one URL who are demonstrably not the same human. */
-function differentPeople(subject: Omit<ImageHolder, 'trusted'>, other: ImageHolder): boolean {
-  if (subject.sport !== other.sport) return true
-  if (compactPlayerName(subject.name) !== compactPlayerName(other.name)) return true
-  if (headshotPositionRelation(subject.sport, subject.position, other.position) === 'different') return true
-  return other.trusted && headshotTeamRelation(subject.sport, subject.team, other.team) === 'different'
+function differentPeople(subject: HeadshotSubject, other: ImageHolder): boolean {
+  const sport = String(subject.sport ?? '').toUpperCase()
+  if (sport !== other.sport) return true
+  if (comparableName(subject.name) !== comparableName(other.name)) return true
+  if (headshotPositionRelation(sport, subject.position, other.position) === 'different') return true
+  return other.trusted && headshotTeamRelation(sport, subject.team, other.team) === 'different'
 }
 
 const SLEEPER_THUMB = /sleepercdn\.com\/content\/nfl\/players\/thumb\/(\d+)\.jpg/i
@@ -243,44 +265,114 @@ export async function findDetectablyWrongPlayerImages(
     const subjectById = new Map(
       players.map((p) => [p.id, { playerId: p.id, name: p.name, sport: String(p.sport ?? '').toUpperCase(), team: p.team, position: p.position }]),
     )
-
-    const sleeperIds = [...new Set(candidates.map((e) => sleeperIdFromThumbUrl(e.url)).filter((id): id is string => Boolean(id)))]
-    const sleeperRows = sleeperIds.length
-      ? await prisma.sportsPlayer.findMany({
-          where: { sport: 'NFL', source: 'sleeper', externalId: { in: sleeperIds.map((id) => `sleeper:${id}`) } },
-          select: { externalId: true, name: true, position: true, team: true },
-        })
-      : []
-    const sleeperOwner = new Map(sleeperRows.map((r) => [r.externalId.replace(/^sleeper:/, ''), r]))
-
-    for (const entry of candidates) {
-      const subject = subjectById.get(entry.playerId)
-      if (!subject) continue
-      const others = (byUrl.get(entry.url) ?? []).filter((h) => h.playerId !== entry.playerId)
-      if (others.some((other) => differentPeople(subject, other))) {
-        wrong.add(entry.playerId)
-        continue
-      }
-      const sleeperId = sleeperIdFromThumbUrl(entry.url)
-      const owner = sleeperId ? sleeperOwner.get(sleeperId) : undefined
-      if (
-        owner &&
-        differentPeople(subject, {
-          playerId: `sleeper:${sleeperId}`,
-          trusted: false,
-          name: owner.name,
-          sport: 'NFL',
-          team: owner.team,
-          position: owner.position,
-        })
-      ) {
-        wrong.add(entry.playerId)
-      }
-    }
+    const withSubject = candidates.flatMap((e) => {
+      const subject = subjectById.get(e.playerId)
+      return subject ? [{ url: e.url, subject }] : []
+    })
+    for (const i of await wrongForSubjects(withSubject, byUrl)) wrong.add(withSubject[i]!.subject.playerId)
   } catch (err) {
     console.warn('[playerImageStore] suspicion check failed:', err instanceof Error ? err.message : String(err))
   }
   return wrong
+}
+
+/** Indexes of `entries` whose URL is detectably another person's photo. May throw; callers catch. */
+async function wrongForSubjects(
+  entries: ReadonlyArray<{ url: string; subject: HeadshotSubject }>,
+  byUrl: Map<string, ImageHolder[]>,
+): Promise<Set<number>> {
+  const wrong = new Set<number>()
+  const sleeperIds = [...new Set(entries.map((e) => sleeperIdFromThumbUrl(e.url)).filter((id): id is string => Boolean(id)))]
+  const sleeperRows = sleeperIds.length
+    ? await prisma.sportsPlayer.findMany({
+        where: { sport: 'NFL', source: 'sleeper', externalId: { in: sleeperIds.map((id) => `sleeper:${id}`) } },
+        select: { externalId: true, name: true, position: true, team: true },
+      })
+    : []
+  const sleeperOwner = new Map((sleeperRows ?? []).map((r) => [String(r.externalId).replace(/^sleeper:/, ''), r]))
+
+  entries.forEach(({ url, subject }, i) => {
+    const holders = byUrl.get(url) ?? []
+    /*
+     * A trusted hold by this same person — his own verified row, or a duplicate `Player` row for
+     * him — is the fixed resolver vouching the photo is his; the namesake sharing it is the wrong
+     * one. Never true for the rows the pre-fix callers pass (their own hold is the untrusted row).
+     */
+    if (holders.some((h) => h.trusted && !differentPeople(subject, h))) return
+    const others = holders.filter((h) => !subject.playerId || h.playerId !== subject.playerId)
+    if (others.some((other) => differentPeople(subject, other))) {
+      wrong.add(i)
+      return
+    }
+    const sleeperId = sleeperIdFromThumbUrl(url)
+    const owner = sleeperId ? sleeperOwner.get(sleeperId) : undefined
+    if (
+      owner &&
+      differentPeople(subject, {
+        playerId: `sleeper:${sleeperId}`,
+        trusted: false,
+        name: owner.name,
+        sport: 'NFL',
+        team: owner.team,
+        position: owner.position,
+      })
+    ) {
+      wrong.add(i)
+    }
+  })
+  return wrong
+}
+
+/**
+ * Which of these (subject, URL) pairs are detectably another person's photo, for a reader that
+ * holds a NAME rather than a `PlayerImage` row — `Player.imageUrl` and `SportsPlayer.imageUrl`
+ * readers. Same two signals as `findDetectablyWrongPlayerImages`, against the same snapshot.
+ * Returns indexes into `entries`. Never throws; a failed lookup suppresses nothing.
+ *
+ * ⚠ ONLY SHARED URLS AND SLEEPER THUMBNAILS ARE JUDGED. Comparing a `SportsPlayer` name against
+ * the one `Player` holding its URL would flag the same man under two spellings: measured
+ * 2026-10-12, 189 of 386 `SportsPlayer` rows whose URL a differently-spelled `Player` holds are
+ * that alone — "Camryn Bynum"/"Cam Bynum", "Mo Bamba"/"Mohamed Bamba", accents, a college
+ * player now in the NBA. A URL two canonical players already contest is the evidence.
+ */
+export async function findDetectablyWrongHeadshots(
+  entries: ReadonlyArray<{ url: string; subject: HeadshotSubject }>,
+  opts: { now?: number } = {},
+): Promise<Set<number>> {
+  const candidates = entries
+    .map((e, i) => ({ ...e, i }))
+    .filter((e) => Boolean(e.url) && Boolean(e.subject.name))
+  if (candidates.length === 0) return new Set()
+  try {
+    const byUrl = await sharedUrlHolders(opts.now ?? Date.now())
+    const judged = candidates.filter((e) => byUrl.has(e.url) || sleeperIdFromThumbUrl(e.url))
+    if (judged.length === 0) return new Set()
+    const wrong = await wrongForSubjects(judged, byUrl)
+    return new Set([...wrong].map((j) => judged[j]!.i))
+  } catch (err) {
+    console.warn('[playerImageStore] headshot suspicion check failed:', err instanceof Error ? err.message : String(err))
+    return new Set()
+  }
+}
+
+/**
+ * `SportsPlayer` rows with `imageUrl` nulled where it is detectably another person's photo —
+ * apply right after the read, before `asHeadshotUrl` / composition. Other rows are returned as-is.
+ *
+ * ⚠ THE IMAGE CRON COPIED EVERY RESOLUTION INTO `SportsPlayer.imageUrl` TOO (`mirrorToLegacy`),
+ * so suppressing the `PlayerImage` row left the same photo one column away: NFL DL Cam Jackson's
+ * Rolling Insights row (8966) carried NCAAB forward Cameron Jackson's cutout on the player card.
+ */
+export async function withoutDetectablyWrongHeadshots<
+  T extends { name?: string | null; sport?: string | null; team?: string | null; position?: string | null; imageUrl?: string | null },
+>(rows: readonly T[]): Promise<T[]> {
+  const wrong = await findDetectablyWrongHeadshots(
+    rows.map((r) => ({
+      url: String(r.imageUrl ?? '').trim(),
+      subject: { name: String(r.name ?? ''), sport: String(r.sport ?? ''), team: r.team ?? null, position: r.position ?? null },
+    })),
+  )
+  return wrong.size === 0 ? [...rows] : rows.map((r, i) => (wrong.has(i) ? { ...r, imageUrl: null } : r))
 }
 
 /**

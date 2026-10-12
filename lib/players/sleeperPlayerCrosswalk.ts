@@ -3,6 +3,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { looksLikeSleeperExternalId } from '@/lib/draft-sports-models/player-asset-resolver'
+import { findDetectablyWrongHeadshots } from '@/lib/player-assets/playerImageStore'
 import { sleeperHeadshotUrl } from '@/lib/player-media-urls'
 import { sleeperIdWhere } from '@/lib/player-identity/externalIdNamespace'
 import { authoritativeRowsBySleeperId } from '@/lib/player-match/authoritativePlayerRow'
@@ -122,6 +123,17 @@ export function playerImageKey(lookup: PlayerImageLookup): string {
   return pos || team ? `${l.name.toLowerCase()}|${pos}|${team}` : l.name.toLowerCase()
 }
 
+/*
+ * 🛑 `Player.imageUrl` IS NOT VETTED BY ANYTHING UPSTREAM (2026-10-12). The image cron copied
+ * every pre-fix resolution into it, and the readers here served it raw: 152 `Player` rows share a
+ * URL with a differently named player — OT Trent Brown (HOU) carried CB Tre' Brown III's photo,
+ * DT C.J. West (SF) a cutout soccer's Ashley Westwood also holds. Every image this module returns
+ * goes through `findDetectablyWrongHeadshots`, the same check the canonical readers apply.
+ */
+function canonicalImageEntry(row: CanonicalRow, url: string, sport: string) {
+  return { url, subject: { playerId: row.id ?? null, name: row.name, sport, team: row.team, position: row.position } }
+}
+
 function emptyIdentity(sleeperId: string, sport: string): SleeperPlayerIdentity {
   return {
     sleeperId,
@@ -239,6 +251,8 @@ export async function resolveSleeperPlayerIdentities(
 
   // ── Hop 2: name to the canonical row, for the id and the image ─────────────
   const named = [...byId.values()].filter((e) => e.name)
+  // Entries whose image came from a vetted `Player.imageUrl`; see the legacy pass below.
+  const canonicalImaged = new Set<SleeperPlayerIdentity>()
   if (named.length > 0) {
     try {
       const rows = await prisma.player.findMany({
@@ -251,6 +265,7 @@ export async function resolveSleeperPlayerIdentities(
        * position/team, because a shared name is several rows. See `matchCanonical`.
        */
       const index = canonicalIndex(rows, sport)
+      const imaged: Array<{ entry: SleeperPlayerIdentity; hit: (typeof rows)[number]; url: string }> = []
       for (const entry of named) {
         const hit = matchCanonical(
           index,
@@ -261,12 +276,37 @@ export async function resolveSleeperPlayerIdentities(
         entry.canonicalPlayerId = hit.id
         entry.position = entry.position ?? hit.position ?? null
         entry.team = entry.team ?? hit.team ?? null
-        if (hit.imageUrl) entry.imageUrl = hit.imageUrl
+        if (hit.imageUrl) imaged.push({ entry, hit, url: hit.imageUrl })
       }
+      const wrong = await findDetectablyWrongHeadshots(imaged.map((m) => canonicalImageEntry(m.hit, m.url, sport)))
+      imaged.forEach((m, i) => {
+        if (!wrong.has(i)) {
+          m.entry.imageUrl = m.url
+          canonicalImaged.add(m.entry)
+        }
+      })
     } catch {
       /* names still stand; only the canonical id and image are missing */
     }
   }
+
+  /*
+   * The `SportsPlayer.imageUrl` hop 1a took is the same unvetted copy (the cron mirrored it there
+   * too). An id's own Sleeper thumbnail is the right face by construction and is not re-judged;
+   * anything else that is detectably another person's photo falls back to that thumbnail.
+   */
+  const legacyImaged = [...byId.values()].filter(
+    (e) => e.name && e.imageUrl && !canonicalImaged.has(e) && e.imageUrl !== emptyIdentity(e.sleeperId, sport).imageUrl,
+  )
+  const legacyWrong = await findDetectablyWrongHeadshots(
+    legacyImaged.map((e) => ({
+      url: e.imageUrl as string,
+      subject: { name: e.name as string, sport, team: e.team, position: e.position },
+    })),
+  )
+  legacyImaged.forEach((e, i) => {
+    if (legacyWrong.has(i)) e.imageUrl = emptyIdentity(e.sleeperId, sport).imageUrl
+  })
 
   let resolved = 0
   for (const entry of byId.values()) if (entry.name) resolved += 1
@@ -300,13 +340,17 @@ export async function resolveImagesByPlayerName(
   try {
     const rows = await prisma.player.findMany({
       where: { name: { in: [...new Set(wanted.map((l) => l.name))] }, sport: { equals: sport, mode: 'insensitive' } },
-      select: { name: true, imageUrl: true, position: true, team: true },
+      select: { id: true, name: true, imageUrl: true, position: true, team: true },
     })
     const index = canonicalIndex(rows, sport)
-    for (const lookup of wanted) {
+    const found = wanted.flatMap((lookup) => {
       const hit = matchCanonical(index, lookup, sport)
-      if (hit?.imageUrl) out.set(playerImageKey(lookup), hit.imageUrl)
-    }
+      return hit?.imageUrl ? [{ key: playerImageKey(lookup), hit, url: hit.imageUrl }] : []
+    })
+    const wrong = await findDetectablyWrongHeadshots(found.map((f) => canonicalImageEntry(f.hit, f.url, sport)))
+    found.forEach((f, i) => {
+      if (!wrong.has(i)) out.set(f.key, f.url)
+    })
   } catch {
     // No image is a legitimate outcome; the UI falls back to initials.
   }

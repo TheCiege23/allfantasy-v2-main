@@ -212,7 +212,13 @@ async function resolveBatch(
           where: { id: player.id },
           data: { imageUrl: result.imageUrl, lastSeenAt: new Date() },
         });
-        await mirrorToLegacy(player, result.imageUrl);
+        // Only a fresh resolution the fixed resolver persisted (and stamped) is mirrored. A cache
+        // hit or a stale fallback can be a pre-fix row, and copying those is how NFL DL Cam
+        // Jackson's Rolling Insights row came to carry NCAAB Cameron Jackson's photo — a copy the
+        // PlayerImage suppression could not reach.
+        if (result.persisted && !result.cacheHit) {
+          await mirrorToLegacy(player, result.imageUrl);
+        }
         summary.resolved++;
       } else {
         summary.failed++;

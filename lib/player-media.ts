@@ -67,11 +67,24 @@ const SPORTS_PLAYER_ROW = {
   fetchedAt: true,
   imageUrl: true,
   team: true,
+  sport: true,
 } as const
 
 async function getPrismaClient() {
   const mod = await import('@/lib/prisma')
   return mod.prisma
+}
+
+/**
+ * `SportsPlayer.imageUrl` holds the image cron's unvetted copies of pre-fix resolutions, so a
+ * row whose URL is detectably another person's photo is served as no image (the Sleeper template
+ * below takes over). Loaded lazily like the client above.
+ */
+async function scrubWrongHeadshots<T extends { name?: string | null; sport?: string | null; position?: string | null; team?: string | null; imageUrl?: string | null }>(
+  rows: T[],
+): Promise<T[]> {
+  const { withoutDetectablyWrongHeadshots } = await import('@/lib/player-assets/playerImageStore')
+  return withoutDetectablyWrongHeadshots(rows)
 }
 
 export function buildPlayerMedia(
@@ -128,11 +141,12 @@ export async function attachPlayerMedia(player: {
 
     if (!dbImageUrl) {
       // Every source's row for this Sleeper id, judged by its Sleeper row — see `SPORTS_PLAYER_ROW`.
-      const sportsPlayerRows = await prisma.sportsPlayer.findMany({
+      // A detectably wrong photo is cleared first, so the pick below can never serve it.
+      const sportsPlayerRows = await scrubWrongHeadshots(await prisma.sportsPlayer.findMany({
         where: { sleeperId: player.playerId, sport: sport.toUpperCase() },
         select: SPORTS_PLAYER_ROW,
         orderBy: { fetchedAt: 'desc' },
-      })
+      }))
       const sportsPlayer = selectAuthoritativePlayerRow(sportsPlayerRows)?.row ?? null
       if (toImageUrl(sportsPlayer?.imageUrl)) {
         dbImageUrl = toImageUrl(sportsPlayer?.imageUrl)
@@ -246,11 +260,11 @@ export async function attachPlayerMediaBatch(
       if (id.sleeperId) identityMap.set(id.sleeperId, { currentTeam: id.currentTeam })
     }
 
-    const sportsPlayers = await prisma.sportsPlayer.findMany({
+    const sportsPlayers = await scrubWrongHeadshots(await prisma.sportsPlayer.findMany({
       where: { sleeperId: { in: sleeperIds } },
       select: SPORTS_PLAYER_ROW,
       orderBy: { fetchedAt: 'desc' },
-    })
+    }))
     const authoritative = authoritativeRowsBySleeperId(sportsPlayers)
     for (const id of sleeperIds) {
       const sp = authoritative.get(id.trim().toLowerCase())

@@ -7,6 +7,7 @@ import { isBestBallLeagueRow } from './leagueBestBall'
 import { latestProjectionWeek, lookupAfEngineProjections, lookupProjections, positionRanks } from './playerProjections'
 import { normalizePosition } from './positionNormalization'
 import { asHeadshotUrl } from './playerIdentityCompose'
+import { withoutDetectablyWrongHeadshots } from '@/lib/player-assets/playerImageStore'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { selectAuthoritativePlayerRow } from '@/lib/player-match/authoritativePlayerRow'
 import { loadSnapShare } from './snapShare'
@@ -357,8 +358,11 @@ export async function searchPlayers(query: string, limit = 12): Promise<PlayerMa
    * multi-row groups and ZERO recoverable — an answer that says "leave it
    * alone". The folding is what puts the duplicate rows in the same group at
    * all, so any census of this collapse has to use the real key.
+   *
+   * Scrubbed first: `SportsPlayer.imageUrl` holds the image cron's unvetted copies, and a
+   * detectably wrong one would otherwise survive the collapse as the group's face.
    */
-  return collapseCatalog(rows, limit)
+  return collapseCatalog(await withoutDetectablyWrongHeadshots(rows), limit)
 }
 
 /** One catalog row as the two search paths read it. */
@@ -511,7 +515,7 @@ export async function suggestCatalog(
   for (const { where, take } of passes) {
     if (out.length >= limit) break
     const rows = await prisma.sportsPlayer.findMany({ where, orderBy, take, select: CATALOG_SELECT })
-    add(rows ?? [])
+    add(await withoutDetectablyWrongHeadshots(rows ?? []))
   }
   return out.slice(0, limit)
 }
@@ -1080,7 +1084,7 @@ async function loadPlayerFacts(refSport: string | null | undefined, externalId: 
    * statistics ingested for this player" while nine rows across five seasons sat in the
    * table. The name join used to paper over this by matching regardless of which row won.
    */
-  const row = await prisma.sportsPlayer.findFirst({
+  const found = await prisma.sportsPlayer.findFirst({
     where: refSport ? { externalId, sport: refSport } : { externalId },
     orderBy: [{ sleeperId: { sort: 'desc', nulls: 'last' } }, { fetchedAt: 'desc' }],
     select: {
@@ -1091,7 +1095,12 @@ async function loadPlayerFacts(refSport: string | null | undefined, externalId: 
       college: true, sport: true, fetchedAt: true, source: true,
     },
   })
-  if (!row) return null
+  if (!found) return null
+  /*
+   * The card's face. NFL DL Cam Jackson (Rolling Insights 8966) carried NCAAB forward Cameron
+   * Jackson's cutout here, mirrored by the image cron; `asHeadshotUrl` only checks the shape.
+   */
+  const row = (await withoutDetectablyWrongHeadshots([found]))[0] ?? found
 
   const identityResolved = Boolean(row.sleeperId)
 
