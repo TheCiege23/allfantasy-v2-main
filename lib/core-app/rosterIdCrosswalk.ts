@@ -2,7 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { reduceCrosswalk } from './crosswalkRules'
-import { rosterIdSpaceOf } from './rosterIdSpace'
+import { rosterIdSpaceOf, type RosterIdSport } from './rosterIdSpace'
 
 /**
  * The id to look a roster id up by on a Sleeper-keyed table — or null, when there is none.
@@ -22,8 +22,11 @@ export function sleeperLookupId(
   platform: string | null | undefined,
   rosterId: string,
   crosswalk: ReadonlyMap<string, string>,
+  sport?: RosterIdSport,
 ): string | null {
-  return crosswalk.get(rosterId) ?? (rosterIdSpaceOf(platform) === 'sleeper' ? rosterId : null)
+  // `sport` makes a native non-NFL league foreign (rosterIdSpace.ts): its Rolling Insights 1114
+  // (A.J. Greer) read by `sleeperId` is NFL WR Justin Blackmon.
+  return crosswalk.get(rosterId) ?? (rosterIdSpaceOf(platform, sport) === 'sleeper' ? rosterId : null)
 }
 
 /**

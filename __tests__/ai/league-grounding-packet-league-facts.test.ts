@@ -257,3 +257,34 @@ describe('league grounding packet — foreign roster ids', () => {
     expect(roster.starters.map((p) => p.playerName)).toContain('Patrick Mahomes')
   })
 })
+
+/*
+ * A native NHL roster holds Rolling Insights ids, and only NFL rows carry a `sleeperId`. Measured
+ * 2026-10-12 on league d41382f9… ("NHL Season Verification"): 49 of its 72 roster ids named NFL
+ * players here — Chimmy was told NHL A.J. Greer (RI 1114) was WR Justin Blackmon.
+ */
+describe('league grounding packet — a native league of another sport', () => {
+  const nativeRoster = (sport: string) => ({
+    roster: {
+      findFirst: vi.fn(async () => ({ playerData: PLAYER_DATA, settings: {}, league: { platform: 'manual', sport } })),
+    },
+  })
+
+  it('does not name the NFL player who shares a native NHL roster id', async () => {
+    const { prisma, sportsPlayerCalls } = basePrisma(nativeRoster('NHL'))
+    const packet = await buildPacket(prisma)
+    const roster = packet.rosters![0]
+    const names = [...roster.starters, ...roster.bench].map((p) => p.playerName)
+    expect(names).not.toContain('Patrick Mahomes')
+    expect(names).not.toContain('Justin Jefferson')
+    expect(names).toContain('Unidentified player (4034)')
+    expect([...roster.starters, ...roster.bench]).toHaveLength(4)
+    expect(JSON.stringify(sportsPlayerCalls)).not.toContain('4034')
+  })
+
+  it('CONTROL: a native NFL league still names them', async () => {
+    const { prisma } = basePrisma(nativeRoster('NFL'))
+    const packet = await buildPacket(prisma)
+    expect(packet.rosters![0].starters.map((p) => p.playerName)).toContain('Patrick Mahomes')
+  })
+})

@@ -162,8 +162,9 @@ async function rosterNeedFactors(args: {
      * below would price a stranger's roster — the viewer's or, via loadRosterNeedFactors, a partner's.
      * Named as a gap: the roster is not empty, it is unreadable.
      */
-    const league = await prisma.league.findUnique({ where: { id: args.leagueId }, select: { platform: true } })
-    if (isForeignIdSpace(league?.platform)) {
+    // Read off the league itself: a native NHL roster's Rolling Insights ids are NFL strangers by `sleeperId`.
+    const league = await prisma.league.findUnique({ where: { id: args.leagueId }, select: { platform: true, sport: true } })
+    if (isForeignIdSpace(league?.platform, league?.sport ?? args.sport)) {
       return none(give, get, "this league's rosters, whose player ids are the platform's own and cannot be matched to ours yet")
     }
 

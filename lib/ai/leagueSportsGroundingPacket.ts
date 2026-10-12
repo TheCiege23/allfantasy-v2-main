@@ -548,6 +548,8 @@ function unnamedRosterPlayer(playerId: string): LeagueGroundingRosterPlayer {
  */
 async function resolveRosterPlayerNames(
   ids: readonly string[],
+  /** The league's sport. Only NFL rows carry a `sleeperId`; without it another sport's id reads as an NFL player. */
+  sport: string | null | undefined,
 ): Promise<Map<string, LeagueGroundingRosterPlayer>> {
   const out = new Map<string, LeagueGroundingRosterPlayer>()
   const lookups: string[] = []
@@ -582,7 +584,7 @@ async function resolveRosterPlayerNames(
    */
   const rows = await prisma.sportsPlayer
     .findMany({
-      where: sleeperIdWhere(lookups),
+      where: sleeperIdWhere(lookups, sport ?? undefined),
       select: { name: true, position: true, team: true, sleeperId: true, source: true },
       take: 400,
     })
@@ -656,7 +658,7 @@ async function loadViewerRoster(
       select: {
         playerData: true,
         settings: true,
-        league: { select: { platform: true } },
+        league: { select: { platform: true, sport: true } },
       },
     }).catch(() => null)
     if (!roster) return null
@@ -689,10 +691,13 @@ async function loadViewerRoster(
      */
     // An ESPN roster is read in Sleeper ids (translated; an id with no identity dropped, since ESPN
     // 12483 Stafford IS Sleeper's 12483 Jack Bech). Any other foreign roster keeps its raw ids for
-    // display, and `lookupable` below keeps them out of every Sleeper-id lookup.
+    // display, and `lookupable` below keeps them out of every Sleeper-id lookup — as does a native
+    // league of another sport (a native NHL roster holds Rolling Insights ids; 49 of 72 on production
+    // league d41382f9… read as NFL strangers by `sleeperId`, so Chimmy was told A.J. Greer was a WR).
     const platform = roster.league?.platform
-    const readable = await sleeperReadablePlayerDataOf(platform, roster.playerData)
-    const playerData = (rosterIdSpaceOf(platform) === "espn" ? readable : roster.playerData) as unknown
+    const sport = roster.league?.sport != null ? String(roster.league.sport) : null
+    const readable = await sleeperReadablePlayerDataOf(platform, roster.playerData, sport)
+    const playerData = (rosterIdSpaceOf(platform, sport) === "espn" ? readable : roster.playerData) as unknown
     const allPlayers: LeagueGroundingRosterPlayer[] = []
     if (Array.isArray(playerData)) {
       for (const p of playerData) {
@@ -707,7 +712,7 @@ async function loadViewerRoster(
     // one: it stays on the roster, honestly unidentified, rather than named as a stranger.
     const lookupable = new Set(rosterPlayerIds(readable))
     if (idsNeedingNames.length > 0) {
-      const identities = await resolveRosterPlayerNames(idsNeedingNames.filter((id) => lookupable.has(id)))
+      const identities = await resolveRosterPlayerNames(idsNeedingNames.filter((id) => lookupable.has(id)), sport)
       for (const id of idsNeedingNames) allPlayers.push(identities.get(id) ?? unnamedRosterPlayer(id))
     }
 

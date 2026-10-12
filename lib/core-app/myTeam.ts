@@ -512,7 +512,7 @@ async function resolvePlayers(
     () => new Map<string, string>(),
   )
   const lookupIds = [
-    ...new Set(ids.map((id) => sleeperLookupId(platform, id, sleeperIdByRosterId)).filter((x): x is string => x != null)),
+    ...new Set(ids.map((id) => sleeperLookupId(platform, id, sleeperIdByRosterId, sport)).filter((x): x is string => x != null)),
   ]
 
   const rows = await prisma.sportsPlayer.findMany({

@@ -26,7 +26,7 @@ export async function portfolioOpponentExposure(rows: MyTeamRow[]): Promise<Oppo
     const roster=resolved.get(pair[0].rosterId)
     if(roster)selected.push({row,playerData:roster.playerData})
   }
-  const readableRosters=await sleeperReadableRosters(selected,r=>r.row.platform)
+  const readableRosters=await sleeperReadableRosters(selected,r=>r.row.platform,r=>r.row.sport)
   for(const {row,playerData:readable} of readableRosters){
     const ids=(readable as Record<string,unknown> | null)?.starters
     if(!Array.isArray(ids))continue

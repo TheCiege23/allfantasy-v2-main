@@ -206,10 +206,10 @@ export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<Waiver
    * roster is translated — read raw, ESPN 12483 (Stafford) struck Sleeper's Jack Bech off the board
    * and left Stafford himself listed as a free agent.
    */
-  const readable = await sleeperReadablePlayerDataOf(league.platform, mine.playerData)
+  const readable = await sleeperReadablePlayerDataOf(league.platform, mine.playerData, league.sport)
   const myIds = rosterPlayerIds(readable)
   if (myIds.length === 0) {
-    const unreadable = rosterIdSpaceOf(league.platform) !== 'sleeper'
+    const unreadable = rosterIdSpaceOf(league.platform, league.sport) !== 'sleeper'
     return EMPTY(
       unreadable ? 'ids_unreadable' : 'no_roster',
       unreadable ? [`${FOREIGN_IDS_UNREADABLE}, so free agents cannot be told apart from rostered players.`] : [],
@@ -222,6 +222,7 @@ export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<Waiver
       .findMany({ where: { leagueId: league.id }, select: { playerData: true } })
       .catch(() => [] as Array<{ playerData: unknown }>),
     league.platform,
+    league.sport,
   )
   const rostered = new Set<string>()
   for (const r of allRosters) for (const id of rosterPlayerIds(r.playerData)) rostered.add(id)

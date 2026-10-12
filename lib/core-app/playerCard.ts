@@ -1377,7 +1377,7 @@ async function loadLeague(
   const league = await prisma.league
     .findUnique({
       where: { id: leagueId },
-      select: { id: true, name: true, platform: true, settings: true, leagueType: true, platformLeagueId: true },
+      select: { id: true, name: true, platform: true, sport: true, settings: true, leagueType: true, platformLeagueId: true },
     })
     .catch(() => null)
   if (!league) return null
@@ -1388,7 +1388,7 @@ async function loadLeague(
       // A foreign league's ids collide with real Sleeper ids: read raw, a stranger's holder, slot and
       // position-mates would be named as his. ESPN is translated (ESPN 12483 is Stafford; read raw
       // as Sleeper 12483 the card showed Jack Bech rostered and Stafford "NOT ROSTERED").
-      .then((rs) => sleeperReadableRosters(rs, league.platform))
+      .then((rs) => sleeperReadableRosters(rs, league.platform, league.sport))
       .catch(() => []),
     prisma.leagueTeam
       .findMany({
@@ -1405,7 +1405,7 @@ async function loadLeague(
    * is who actually holds whom.
    */
   /* A foreign league's rosters were stripped above, so "not found" there is "not read". */
-  let slot = isForeignIdSpace(league.platform) ? 'UNREADABLE' : 'NOT ROSTERED'
+  let slot = isForeignIdSpace(league.platform, league.sport) ? 'UNREADABLE' : 'NOT ROSTERED'
   let holder: (typeof rosters)[number] | null = null
   if (sleeperId) {
     for (const r of rosters) {

@@ -272,14 +272,14 @@ export async function buildTradeContextNotes(args: {
    * The same league's opponent roster (`buildLeverageNotes`) is never reached past this return.
    */
   // An ESPN roster is translated into Sleeper ids (raw, ESPN 12483 Stafford is Sleeper's Jack Bech).
-  const pd = ((await sleeperReadablePlayerDataOf(league.platform, roster.playerData)) ?? {}) as Record<string, unknown>
+  const pd = ((await sleeperReadablePlayerDataOf(league.platform, roster.playerData, league.sport)) ?? {}) as Record<string, unknown>
   const rosterIds = Array.isArray(pd.players)
     ? pd.players.map((x) => String(x)).filter((x) => x && x !== '0')
     : []
   if (rosterIds.length === 0) {
     // Unread, not empty: say so under "what we couldn't see" rather than as a silent blank. An ESPN
     // roster none of whose ids has an identity yet is unread for the same reason.
-    return rosterIdSpaceOf(league.platform) !== 'sleeper'
+    return rosterIdSpaceOf(league.platform, league.sport) !== 'sleeper'
       ? { ...EMPTY, contextGap: `your roster in this league — ${FOREIGN_IDS_UNREADABLE_CLAUSE}` }
       : EMPTY
   }
@@ -1373,7 +1373,7 @@ async function buildLeverageNotes(args: {
   const roster = await prisma.roster
     .findFirst({
       where: { leagueId, platformUserId: team.platformUserId },
-      select: { playerData: true, league: { select: { platform: true } } },
+      select: { playerData: true, league: { select: { platform: true, sport: true } } },
     })
     .catch(() => null)
   if (!roster) return []
@@ -1383,7 +1383,7 @@ async function buildLeverageNotes(args: {
    * kept every foreign league from reaching here — true for Fleaflicker/MFL, never for ESPN, whose
    * roster passed that return. Raw, ESPN 12483 (Stafford) was Sleeper's Jack Bech on their side.
    */
-  const pd = ((await sleeperReadablePlayerDataOf(roster.league?.platform, roster.playerData)) ?? {}) as Record<string, unknown>
+  const pd = ((await sleeperReadablePlayerDataOf(roster.league?.platform, roster.playerData, roster.league?.sport)) ?? {}) as Record<string, unknown>
   const ids = Array.isArray(pd.players)
     ? pd.players.map((x) => String(x)).filter((x) => x && x !== '0')
     : []

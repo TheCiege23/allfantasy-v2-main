@@ -41,6 +41,17 @@ describe('buildChimmyPlayerCards', () => {
     expect(cards[0].imageUrl).toContain('5859')
   })
 
+  /* A native NHL roster's 1114 is A.J. Greer (Rolling Insights); Sleeper's NHL CDN face for 1114 is somebody else. */
+  it('derives no headshot outside NFL — the id is not a Sleeper id there', () => {
+    const cards = buildChimmyPlayerCards({
+      answer: 'Start A.J. Greer tonight.',
+      rosters: roster([['1114', 'A.J. Greer']]),
+      sport: 'NHL' as never,
+    })
+    expect(cards).toHaveLength(1)
+    expect(cards[0].imageUrl).toBeNull()
+  })
+
   it('ignores roster players the answer does not mention', () => {
     const cards = buildChimmyPlayerCards({
       answer: 'Start Brian Thomas Jr. this week.',

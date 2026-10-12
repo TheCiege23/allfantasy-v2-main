@@ -123,4 +123,12 @@ describe('sleeperLookupId', () => {
     expect(sleeperLookupId('espn', '12483', crosswalk)).toBeNull()
     expect(sleeperLookupId('espn', '12483', new Map([['12483', '421']]))).toBe('421')
   })
+  /* A native NHL roster's 1114 is A.J. Greer (Rolling Insights); read as Sleeper's 1114 he was NFL WR Justin Blackmon (2026-10-12). */
+  it('a native league of another sport resolves to nothing; native NFL, or no sport given, keeps its id', () => {
+    expect(sleeperLookupId('manual', '1114', crosswalk, 'NHL')).toBeNull()
+    expect(sleeperLookupId('allfantasy', '268', crosswalk, 'nba')).toBeNull()
+    expect(sleeperLookupId('manual', '1114', crosswalk, 'NFL')).toBe('1114')
+    expect(sleeperLookupId('manual', '1114', crosswalk)).toBe('1114')
+    expect(sleeperLookupId('sleeper', '1114', crosswalk, 'NBA')).toBe('1114')
+  })
 })

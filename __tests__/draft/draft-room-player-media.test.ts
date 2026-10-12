@@ -15,7 +15,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/lib/prisma', () => ({ prisma: {} }))
 
-import { buildHeadshotUrl } from '@/lib/player-media-urls'
+import { buildHeadshotUrl, sleeperHeadshotUrl } from '@/lib/player-media-urls'
 import { resolveHeadshotUrl } from '@/lib/draft-sports-models/player-asset-resolver'
 import { getPlayerImage } from '@/lib/players/getPlayerImage'
 import { normalizeDraftPlayer } from '@/lib/draft-sports-models/normalize-draft-player'
@@ -38,6 +38,13 @@ describe('headshots are built from an id only where the id is a Sleeper id', () 
       expect(getPlayerImage({ id: '4984', name: 'X', imageUrl: null }, sport)).toBeNull()
     }
     expect(getPlayerImage({ id: '4984', name: 'X', imageUrl: null }, 'NFL')).toContain('/nfl/players/thumb/')
+  })
+
+  /* It built NBA/MLB/NHL URLs from Rolling Insights ids — a native NHL roster's 1114 is A.J. Greer, not Sleeper's 1114. */
+  it('sleeperHeadshotUrl is NFL-only too', () => {
+    expect(sleeperHeadshotUrl('4984', 'nfl')).toBe('https://sleepercdn.com/content/nfl/players/thumb/4984.jpg')
+    expect(sleeperHeadshotUrl('4984', 'NFL')).toBe('https://sleepercdn.com/content/nfl/players/thumb/4984.jpg')
+    for (const sport of ['nba', 'mlb', 'nhl', 'NHL', 'ncaaf', 'soccer']) expect(sleeperHeadshotUrl('1114', sport)).toBeNull()
   })
 
   it('an NBA pool row with a numeric id and no photo shows the placeholder, not a Sleeper face', () => {

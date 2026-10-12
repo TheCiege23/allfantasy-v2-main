@@ -68,7 +68,7 @@ async function buildGlobalRosterCounts(): Promise<Map<string, number>> {
   // replace a good ten-minute count with an empty map — the suggestion ranking then lost its
   // "rostered globally" signal until the next refresh. The caller decides what a failure means.
   const rosters: Array<{ playerData: unknown; league: { platform: string | null } | null }> = await prisma.roster.findMany({
-    select: { playerData: true, league: { select: { platform: true } } },
+    select: { playerData: true, league: { select: { platform: true, sport: true } } },
   })
   const counts = new Map<string, number>()
   for (const r of rosters) {
@@ -77,7 +77,7 @@ async function buildGlobalRosterCounts(): Promise<Map<string, number>> {
      * own numbers in Sleeper's range, so counting them credited real Sleeper players with rosters they
      * are not on and ranked them up the suggestions (isForeignIdSpace, rosterIdSpace.ts).
      */
-    if (isForeignIdSpace(r.league?.platform)) continue
+    if (isForeignIdSpace(r.league?.platform, r.league?.sport)) continue
     for (const id of allIds((r.playerData ?? {}) as Record<string, unknown>)) counts.set(id, (counts.get(id) ?? 0) + 1)
   }
   return counts
@@ -140,8 +140,8 @@ export async function buildRosterIndex(userId: string, leagueIds: string[]): Pro
   if (leagueIds.length === 0) return { leagues: [] }
   const [leagues, teams, rawRosters] = await Promise.all([
     prisma.league
-      .findMany({ where: { id: { in: leagueIds } }, select: { id: true, name: true, platform: true } })
-      .catch(() => [] as Array<{ id: string; name: string | null; platform: string | null }>),
+      .findMany({ where: { id: { in: leagueIds } }, select: { id: true, name: true, platform: true, sport: true } })
+      .catch(() => [] as Array<{ id: string; name: string | null; platform: string | null; sport: string | null }>),
     prisma.leagueTeam
       .findMany({
         where: { leagueId: { in: leagueIds } },
@@ -157,7 +157,11 @@ export async function buildRosterIndex(userId: string, leagueIds: string[]): Pro
   ])
 
   // ESPN rosters -> Sleeper ids through the identity chain, one read for every ESPN id (rosterIdSpace.ts).
-  const rosters = await translateRostersByLeague(rawRosters, new Map(leagues.map((l) => [l.id, l.platform])))
+  const rosters = await translateRostersByLeague(
+    rawRosters,
+    new Map(leagues.map((l) => [l.id, l.platform])),
+    new Map(leagues.map((l) => [l.id, l.sport])),
+  )
 
   // One vocabulary sample per league, resolved in a single read.
   const rostersByLeague = new Map<string, typeof rosters>()

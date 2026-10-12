@@ -363,10 +363,11 @@ export async function getLeagueAdvisorAdvice(input: GetAdvisorInput): Promise<Le
   const sport = normalizeToSupportedSport(league.sport)
   // A Fleaflicker/MFL/Fantrax/Yahoo roster id collides with real Sleeper ids, so it is never named
   // as one; and with no names, the injury reads below would return the whole sport's list as "yours".
-  const unreadable = isForeignIdSpace(league.platform)
+  // A native league of another sport too: its Rolling Insights ids are not Sleeper ids (rosterIdSpace.ts).
+  const unreadable = isForeignIdSpace(league.platform, league.sport)
   // An ESPN roster is translated into Sleeper ids first — raw, ESPN 12483 (Stafford) is named as
   // Sleeper's 12483 (Jack Bech) by the Sleeper player blob below.
-  const playerData = await sleeperReadablePlayerDataOf(league.platform, roster.playerData)
+  const playerData = await sleeperReadablePlayerDataOf(league.platform, roster.playerData, league.sport)
   const playerIds = getRosterPlayerIds(playerData)
   const identityById = new Map<string, { team: string | null; position: string | null }>()
   const nameMap = await resolveRosterPlayerNames(playerIds, sport, identityById)

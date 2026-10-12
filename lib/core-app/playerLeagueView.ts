@@ -124,6 +124,7 @@ export async function getPlayerLeagueView(
           id: true,
           name: true,
           platform: true,
+          sport: true,
           platformLeagueId: true,
           season: true,
           settings: true,
@@ -165,7 +166,7 @@ export async function getPlayerLeagueView(
    * the ids they hold, against our player table. See rosterIdCoverage.ts.
    */
   // ESPN ids -> Sleeper ids through the identity chain, before any Sleeper-id read (rosterIdSpace.ts).
-  const { rosters } = await translateRostersToSleeperIds(league.platform, rawRosters)
+  const { rosters } = await translateRostersToSleeperIds(league.platform, rawRosters, league.sport)
   const sample = sampleRosterIds(rosters.map((r) => r.playerData))
   const knownRows =
     sample.length > 0
