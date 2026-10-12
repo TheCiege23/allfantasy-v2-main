@@ -20,6 +20,29 @@ describe('real standings sources',()=>{
     expect(data.standings[0]).toMatchObject({rank:3,wins:2,pointsFor:205.75,categoryWinsFor:null,allPlay:null})
     expect(m.standing).not.toHaveBeenCalled();expect(m.weeks).not.toHaveBeenCalled()
   })
+  it('excludes archived franchises while retaining current and unclassified teams', async () => {
+    // Model the database predicate, so the legacy duplicate would leak if the filter is removed.
+    const teams = [
+      { id: 'archived', teamName: 'Ciege82', lifecycleState: 'ARCHIVED', claimedByUserId: 'u', wins: 0, losses: 0, ties: 0, pointsFor: 0, pointsAgainst: 0 },
+      { id: 'current', teamName: 'Ciege82', lifecycleState: 'CURRENT', claimedByUserId: 'u', wins: 2, losses: 4, ties: 0, pointsFor: 1005.84, pointsAgainst: 0 },
+      { id: 'unclassified', teamName: 'Open team', lifecycleState: 'UNKNOWN', wins: 0, losses: 0, ties: 0, pointsFor: 0, pointsAgainst: 0 },
+    ]
+    m.teams.mockImplementation(async ({ where }) => teams.filter(t => t.lifecycleState !== where.lifecycleState?.not))
+    const data = await (await request()).json()
+    expect(m.teams).toHaveBeenCalledWith(expect.objectContaining({ where: { leagueId: 'l', lifecycleState: { not: 'ARCHIVED' } } }))
+    expect(data.standings.map((t: { rosterId: string }) => t.rosterId)).toEqual(['current', 'unclassified'])
+    expect(data.viewerRosterId).toBe('current')
+  })
+  it('leaves unreported Fantrax points-against unknown', async () => {
+    expect((await (await request()).json()).standings[0].pointsAgainst).toBeNull()
+    m.teams.mockResolvedValue([{ id: 't', wins: 0, losses: 0, ties: 0, pointsFor: 0, pointsAgainst: 200, currentRank: 1 }])
+    expect((await (await request()).json()).standings).toEqual([])
+  })
+  it.each([0, 200])('preserves a reported imported points-against value of %s', async (pointsAgainst) => {
+    m.league.mockResolvedValue({ id: 'l', platform: 'sleeper', season: 2026, settings: {} })
+    m.teams.mockResolvedValue([{ id: 't', wins: 2, losses: 1, ties: 0, pointsFor: 205.75, pointsAgainst }])
+    expect((await (await request()).json()).standings[0].pointsAgainst).toBe(pointsAgainst)
+  })
   it('does not reuse current imported records for an unimported historical season',async()=>{
     expect((await (await request('2025')).json()).standings).toEqual([])
   })

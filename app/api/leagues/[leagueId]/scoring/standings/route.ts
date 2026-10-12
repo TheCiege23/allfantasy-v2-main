@@ -4,6 +4,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { resolveLeagueAccess } from '@/lib/league-access'
+import { CURRENT_TEAMS } from '@/lib/leagues/leagueTeamLifecycle'
 import { buildRosterLabelMap } from '@/lib/scoring-engine/resolveTeamLabels'
 import {
   computeAllPlay,
@@ -52,10 +53,12 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
 
   // Imported records remain platform-owned; never substitute a native round-robin result.
   if (isImportedPlatform(league.platform)) {
-    const teams = await prisma.leagueTeam.findMany({ where: { leagueId }, orderBy: [{ currentRank: 'asc' }, { teamName: 'asc' }] })
-    const played = teams.some(t => t.wins + t.losses + t.ties > 0 || t.pointsFor !== 0 || t.pointsAgainst !== 0)
+    const teams = await prisma.leagueTeam.findMany({ where: { leagueId, ...CURRENT_TEAMS }, orderBy: [{ currentRank: 'asc' }, { teamName: 'asc' }] })
+    // Fantrax does not supply points-against. LeagueTeam's default zero is not a reported total.
+    const pointsAgainst = (value: number) => league.platform?.toLowerCase() === 'fantrax' ? null : value
+    const played = teams.some(t => t.wins + t.losses + t.ties > 0 || t.pointsFor !== 0 || (pointsAgainst(t.pointsAgainst) ?? 0) !== 0)
     const standings = season === league.season && played ? teams.map(t => ({ rosterId: t.id, teamName: t.teamName?.trim() || t.ownerName?.trim() || 'Unnamed team',
-      wins: t.wins, losses: t.losses, ties: t.ties, pointsFor: t.pointsFor, pointsAgainst: t.pointsAgainst, rank: t.currentRank,
+      wins: t.wins, losses: t.losses, ties: t.ties, pointsFor: t.pointsFor, pointsAgainst: pointsAgainst(t.pointsAgainst), rank: t.currentRank,
       categoryWinsFor: null, categoryLossesFor: null, categoryTiesFor: null, streak: null, allPlay: null })) : []
     const owned = teams.filter(t => t.claimedByUserId === session.user!.id || t.platformUserId === session.user!.id)
     return NextResponse.json({ season, standings, scoringMode, viewerRosterId: owned.length === 1 ? owned[0].id : null,
