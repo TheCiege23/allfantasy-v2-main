@@ -77,8 +77,10 @@ describe('a fresh create starts on Survivor', () => {
     }
   })
 
-  it('a sport without Survivor starts on Redraft', () => {
-    expect(freshCreateLeagueState({ ...DEFAULT_V2_STATE, sport: 'MLB' }).leagueType).toBe('redraft')
+  it('a sport without Survivor starts on Guillotine, and one without either on Big Brother', () => {
+    expect(freshCreateLeagueState({ ...DEFAULT_V2_STATE, sport: 'MLB' }).leagueType).toBe('guillotine')
+    expect(freshCreateLeagueState({ ...DEFAULT_V2_STATE, sport: 'NCAAB' }).leagueType).toBe('big_brother')
+    expect(freshCreateLeagueState({ ...DEFAULT_V2_STATE, sport: 'SOCCER' }).leagueType).toBe('big_brother')
   })
 })
 
