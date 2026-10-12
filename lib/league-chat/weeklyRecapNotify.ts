@@ -3,6 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 import { recapNotificationCopy } from '@/lib/league-chat/weeklyRecapSweep'
+import { renderRecapEmail } from '@/lib/league-chat/recapEmail'
 
 /**
  * "Your league's recap is ready — share it": one push and in-app row per person per week, after the
@@ -22,11 +23,34 @@ import { recapNotificationCopy } from '@/lib/league-chat/weeklyRecapSweep'
 
 const PREFIX = 'weekly-recap'
 
-export type PostedRecap = { leagueId: string; leagueName: string; ownerUserId: string; season: string; week: number }
+export type PostedRecap = {
+  leagueId: string
+  leagueName: string
+  ownerUserId: string
+  season: string
+  week: number
+  /** The recap as posted — the email carries it. */
+  text: string
+}
 
-export async function notifyWeeklyRecaps(posted: readonly PostedRecap[]): Promise<{ notified: Set<string>; sent: number; skipped: number }> {
+export type RecapNotifyOptions = {
+  /**
+   * Send the recap EMAIL too (lib/league-chat/recapEmail.ts): one per person per week, through the
+   * dispatcher's own results-email preference, unsubscribe and undeliverable checks. Off unless the
+   * worker sets WEEKLY_RECAP_EMAIL_ENABLED=1 — it emails real people every Tuesday, so turning it on
+   * is a deliberate act, not a side effect of a deploy.
+   */
+  email?: boolean
+  /** Absolute origin for the email's links. No origin, no email. */
+  baseUrl?: string | null
+}
+
+export async function notifyWeeklyRecaps(
+  posted: readonly PostedRecap[],
+  options: RecapNotifyOptions = {},
+): Promise<{ notified: Set<string>; sent: number; skipped: number; emailed: number }> {
   const notified = new Set<string>()
-  if (posted.length === 0) return { notified, sent: 0, skipped: 0 }
+  if (posted.length === 0) return { notified, sent: 0, skipped: 0, emailed: 0 }
   try {
     const leagueIds = [...new Set(posted.map((p) => p.leagueId))]
     /*
@@ -62,15 +86,19 @@ export async function notifyWeeklyRecaps(posted: readonly PostedRecap[]): Promis
     const existing = await prisma.platformNotification
       .findMany({ where: { sourceKey: { in: keys } }, select: { sourceKey: true } })
       .catch(() => null)
-    if (existing == null) return { notified, sent: 0, skipped: byUser.size }
+    if (existing == null) return { notified, sent: 0, skipped: byUser.size, emailed: 0 }
     const done = new Set(existing.map((e) => e.sourceKey))
 
+    const baseUrl = options.baseUrl?.replace(/\/+$/, '') || null
+    const emailOn = options.email === true && Boolean(baseUrl)
     let sent = 0
+    let emailed = 0
     for (const [userId, recaps] of byUser) {
       if (done.has(keyOf(userId, recaps))) continue
       const copy = recapNotificationCopy(recaps)
       if (!copy) continue
       const prefix = `${PREFIX}:${recaps[0]!.season}-w${recaps[0]!.week}`
+      const email = emailOn ? renderRecapEmail(recaps, baseUrl!) : null
       await dispatchNotification({
         userIds: [userId],
         category: 'matchup_results',
@@ -82,16 +110,19 @@ export async function notifyWeeklyRecaps(posted: readonly PostedRecap[]): Promis
         leagueId: recaps[0]!.leagueId,
         severity: 'low',
         dedupePrefix: prefix,
-        skipChannels: { email: true, sms: true },
+        // The email rides the same once-a-week dispatch (and its dedupe), so it can never be sent twice.
+        skipChannels: { email: !email, sms: true },
+        ...(email ? { emailOverride: email } : {}),
         // Its own device tag, so it neither replaces nor is replaced by another results push.
         meta: { weeklyRecap: { season: recaps[0]!.season, week: recaps[0]!.week, leagues: recaps.length }, pushTag: prefix },
       })
       notified.add(userId)
       sent += 1
+      if (email) emailed += 1
     }
-    return { notified, sent, skipped: byUser.size - sent }
+    return { notified, sent, skipped: byUser.size - sent, emailed }
   } catch (err) {
     console.error('[weekly-recap] notify failed', err instanceof Error ? err.name : 'unknown')
-    return { notified, sent: 0, skipped: 0 }
+    return { notified, sent: 0, skipped: 0, emailed: 0 }
   }
 }
