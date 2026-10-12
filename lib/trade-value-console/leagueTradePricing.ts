@@ -34,10 +34,13 @@ import {
   describeOdds,
   gamesPerWeekFrom,
   projectedPickPrice,
+  projectionFromOrder,
   projectPickSlots,
+  RULE_UNCERTAINTY,
   type PickSlotProjection,
 } from '@/lib/trade-value/pickSlotProjection'
 import { playoffSpots, regularSeasonWeeks } from '@/lib/core-app/seasonTimeline'
+import { finishedSeasonOrder, loadSetDraftOrder, previousSeasonRecords } from './knownDraftOrder'
 
 /**
  * How a trade is PRICED for one league — the chart it is priced on and the pricer that reads it.
@@ -423,6 +426,24 @@ function projectedLivePick(
   if (!slots || !owner || pick.year !== slots.draftYear) return null
   const odds = slots.oddsByTeam.get(owner)
   if (!odds) return null
+  const ord = `${pick.year} ${ordinalRound(pick.round)}`
+  const slot = slots.slotByTeam?.get(owner) ?? null
+  const known = slot != null
+    ? `pick ${pick.round}.${String(slot).padStart(2, '0')}${slots.orderSource === 'draft_order_set' ? ', the draft order the league set' : ', by last season’s finish and playoffs'}`
+    : null
+  /*
+   * A KNOWN slot on a board that prices slots ("2027 Pick 1.04", which FantasyCalc carries for the next
+   * draft once its order can be known) is that slot's row. One read off last season's finish keeps
+   * `RULE_UNCERTAINTY` of its weight on the round's own price: the rule fits about seven drafts in eight.
+   */
+  if (slot != null) {
+    const exact = chartSlotValue(fcPlayers, pick.year, pick.round, slot)
+    const round = chartRoundValue(fcPlayers, pick.year, pick.round, null)
+    if (exact != null && round != null) {
+      const e = slots.orderSource === 'draft_order_set' ? 0 : RULE_UNCERTAINTY
+      return { value: Math.round((1 - e) * exact + e * round), projection: `${ord} ${known}` }
+    }
+  }
   const early = chartRoundValue(fcPlayers, pick.year, pick.round, 'early')
   const mid = chartRoundValue(fcPlayers, pick.year, pick.round, 'mid')
   const late = chartRoundValue(fcPlayers, pick.year, pick.round, 'late')
@@ -433,13 +454,36 @@ function projectedLivePick(
   if (!(early > mid && mid > late)) return null
   return {
     value: projectedPickPrice(odds, { early, mid, late, generic }),
-    projection: `${pick.year} ${ordinalRound(pick.round)} ${describeOdds(odds)}`,
+    projection: known ? `${ord} ${known} (${describeOdds(odds).replace('projected ', '')})` : `${ord} ${describeOdds(odds)}`,
   }
 }
 
+/** The chart's row for exactly this slot ("2027 Pick 1.04"), or null. */
+function chartSlotValue(
+  fcPlayers: ReadonlyArray<Pick<FantasyCalcPlayer, 'player' | 'value'>>,
+  year: number,
+  round: number,
+  slot: number,
+): number | null {
+  for (const r of fcPlayers) {
+    if (r.player?.position?.toUpperCase() !== 'PICK' || typeof r.value !== 'number') continue
+    const parsed = parseChartPickName(r.player.name ?? '')
+    if (parsed && parsed.season === year && parsed.round === round && parsed.slot === slot) return r.value
+  }
+  return null
+}
+
 /**
- * Where each team's next-draft picks are projected to land, from the league's standings today. Null
- * outside a dynasty or keeper chart, without a regular-season length, or with fewer than three teams.
+ * Where each team's next-draft picks land: KNOWN when the order is (`./knownDraftOrder.ts`), else
+ * projected from the league's standings today. Null outside a dynasty or keeper chart, without a
+ * regular-season length, or with fewer than three teams.
+ *
+ *   - A league BETWEEN seasons (Sleeper `pre_draft` / `drafting`): its coming rookie draft is THIS
+ *     season's. Its order is the one the commissioner set, else last season's finish; with neither, null —
+ *     0-0 standings say nothing about a draft that is ordered by last season.
+ *   - A league whose regular season is OVER: the finished season and its decided bracket, once the
+ *     playoffs are decided; until then the bracket is simulated as before.
+ *   - Otherwise the season and its playoffs are simulated.
  *
  * Teams are the league's CURRENT franchises (`lifecycleState` not ARCHIVED), keyed by `externalId` — the
  * provider roster id that a ledger pick's `originalRosterId` and a pending offer's
@@ -449,9 +493,23 @@ export async function loadPickSlotProjection(args: {
   leagueId: string
   settings: unknown
   season: number | null | undefined
+  /** The provider's own league status (`pre_draft`, `drafting`, `in_season`, `complete`). */
+  status?: string | null
 }): Promise<PickSlotProjection | null> {
+  if (!args.season) return null
+  const status = String(args.status ?? '').toLowerCase()
+  if (status === 'pre_draft' || status === 'drafting') {
+    // A failed read is "not known", never a lost projection: the caller drops the whole chart's slots on a throw.
+    const lastSeason = args.season - 1
+    const known =
+      (await loadSetDraftOrder(args.leagueId).catch(() => null)) ??
+      (await previousSeasonRecords(args.leagueId, lastSeason)
+        .then((records) => finishedSeasonOrder(args.leagueId, lastSeason, records))
+        .catch(() => null))
+    return known ? projectionFromOrder({ ...known, draftYear: args.season }) : null
+  }
   const seasonWeeks = regularSeasonWeeks(args.settings)
-  if (!seasonWeeks || !args.season) return null
+  if (!seasonWeeks) return null
   const [rows, week] = await Promise.all([
     prisma.leagueTeam.findMany({
       where: { leagueId: args.leagueId, lifecycleState: { not: 'ARCHIVED' } },
@@ -464,6 +522,11 @@ export async function loadPickSlotProjection(args: {
   const weeksDone = week?.ok
     ? week.seasonType === 'post' ? seasonWeeks : week.state === 'played' ? week.sportWeek : week.sportWeek - 1
     : null
+  // The regular season is over: once its playoffs are decided, the order is no longer a projection.
+  if (status === 'complete' || (weeksDone != null && weeksDone >= seasonWeeks)) {
+    const known = await finishedSeasonOrder(args.leagueId, args.season, teams).catch(() => null)
+    if (known) return projectionFromOrder({ ...known, draftYear: args.season + 1 })
+  }
   return projectPickSlots({
     teams,
     seasonWeeks,
@@ -942,7 +1005,7 @@ export async function resolveLeagueTradeChart(args: {
   }
 
   const pickSlots = leagueRow && chartIsDynasty && !args.marketless
-    ? await loadPickSlotProjection({ leagueId: leagueRow.id, settings: leagueRow.settings, season: leagueRow.season }).catch(() => null)
+    ? await loadPickSlotProjection({ leagueId: leagueRow.id, settings: leagueRow.settings, season: leagueRow.season, status: leagueRow.status }).catch(() => null)
     : null
 
   return {

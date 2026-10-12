@@ -38,10 +38,20 @@ export type StandingsTeam = {
   pointsFor: number
 }
 
+/**
+ * Where a KNOWN order came from:
+ *   - `draft_order_set` — the league's own draft, its order set by the commissioner (every slot named);
+ *   - `final_standings` — the finished season and its decided playoffs, by the rule most leagues use.
+ */
+export type DraftOrderSource = 'draft_order_set' | 'final_standings'
+
 export type PickSlotProjection = {
-  /** The draft these odds are for: the one after the season being played. */
+  /** The draft these odds are for. */
   draftYear: number
   oddsByTeam: ReadonlyMap<string, TierOdds>
+  /** Each team's slot (1 = first pick) when the order is KNOWN rather than projected. */
+  slotByTeam?: ReadonlyMap<string, number>
+  orderSource?: DraftOrderSource
   /** Regular-season weeks left when projected. */
   weeksLeft: number
 }
@@ -280,6 +290,54 @@ export function projectPickSlots(args: {
 }
 
 /**
+ * The draft order once the season AND its playoffs are over, by the rule `projectPickSlots` simulates:
+ * teams outside the bracket in reverse standings, then the bracket's teams from worst place to champion.
+ * Null while any bracket team has no decided place — the playoffs are still being played, or the league's
+ * bracket has no game for that place — and the caller keeps simulating.
+ */
+export function draftOrderFromFinish(
+  records: readonly StandingsTeam[],
+  playoffs: { teams: ReadonlySet<string>; placeByTeam: ReadonlyMap<string, number> },
+): string[] | null {
+  const ids = new Set(records.map((r) => r.id))
+  if (playoffs.teams.size < 2 || [...playoffs.teams].some((t) => !ids.has(t) || !playoffs.placeByTeam.has(t))) return null
+  const out = records
+    .filter((r) => !playoffs.teams.has(r.id))
+    .sort((a, b) => a.wins + a.ties / 2 - (b.wins + b.ties / 2) || a.pointsFor - b.pointsFor)
+    .map((r) => r.id)
+  const po = [...playoffs.teams].sort((a, b) => playoffs.placeByTeam.get(b)! - playoffs.placeByTeam.get(a)!)
+  return [...out, ...po]
+}
+
+/**
+ * A projection from an order that is KNOWN. A set draft order is taken as it stands. One read off the
+ * finished season keeps `RULE_UNCERTAINTY`: on 275 real drafts the rule fit about seven in eight, so a team
+ * the rule puts in a third lands there 85% of the time, not always.
+ */
+export function projectionFromOrder(args: {
+  order: readonly string[]
+  source: DraftOrderSource
+  draftYear: number
+  ruleUncertainty?: number
+}): PickSlotProjection | null {
+  const n = args.order.length
+  if (n < 3) return null
+  const e = args.source === 'draft_order_set' ? 0 : args.ruleUncertainty ?? RULE_UNCERTAINTY
+  const oddsByTeam = new Map<string, TierOdds>()
+  const slotByTeam = new Map<string, number>()
+  args.order.forEach((id, i) => {
+    const t = tierOf(i, n)
+    oddsByTeam.set(id, {
+      early: (t === 'early' ? 1 - e : 0) + e / 3,
+      mid: (t === 'mid' ? 1 - e : 0) + e / 3,
+      late: (t === 'late' ? 1 - e : 0) + e / 3,
+    })
+    slotByTeam.set(id, i + 1)
+  })
+  return { draftYear: args.draftYear, oddsByTeam, weeksLeft: 0, slotByTeam, orderSource: args.source }
+}
+
+/**
  * How much the odds say about the pick: 0 for an even three-way split, 1 for a certain third — the
  * odds' distance from an even split (total variation), over the largest distance there is (4/3).
  */
@@ -309,13 +367,13 @@ export function projectedPickPrice(
 
 /**
  * The grade's note for its projected picks — said beside the letter, because the price is an estimate:
- * "Picks priced by where they are projected to land, from this season's standings (reverse order of
- * record): 2027 1st projected early (62%)."
+ * "Picks priced by where they land in the draft — the order the league set, else this season's standings
+ * and playoffs: 2027 1st projected early (62%)."
  */
 export function projectedPicksNote(projections: readonly string[]): string | null {
   const list = [...new Set(projections.map((p) => p.trim()).filter(Boolean))]
   if (list.length === 0) return null
-  return `Picks priced by where they are projected to land, from this season's standings (reverse order of record): ${list.join('; ')}.`
+  return `Picks priced by where they land in the draft — the order the league set, else this season's standings and playoffs: ${list.join('; ')}.`
 }
 
 /** "projected early (62%)" — the likeliest third and its odds. */

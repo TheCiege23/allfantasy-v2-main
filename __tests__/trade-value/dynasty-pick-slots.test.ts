@@ -277,7 +277,7 @@ describe('priceLeagueTradePick with projected slots', () => {
     expect(out.lines[0]!.marketValue).toBe(4565)
     expect(out.pickProjections).toEqual(['2027 1st projected early (100%)'])
     expect(projectedPicksNote(out.pickProjections)).toBe(
-      "Picks priced by where they are projected to land, from this season's standings (reverse order of record): 2027 1st projected early (100%).",
+      "Picks priced by where they land in the draft — the order the league set, else this season's standings and playoffs: 2027 1st projected early (100%).",
     )
     expect(projectedPicksNote([])).toBeNull()
   })
