@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { getLiveADP, type ADPEntry } from '@/lib/adp-data'
 import { applyRealtimeAdpAdjustments } from '@/lib/mock-draft/adp-realtime-adjuster'
 import { buildManagerDNAFromLeague, type ManagerDNA } from '@/lib/mock-draft/manager-dna'
-import { resolveSleeperIds } from '@/lib/sleeper/players-cache'
+import { resolveSleeperIdsBatch } from '@/lib/sleeper/players-cache'
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n))
@@ -312,20 +312,26 @@ export async function POST(req: NextRequest) {
       }
     })
 
-    let sleeperIdMap: Record<string, string> = {}
-    try {
-      const allAlertNames = Array.from(new Set(snipeRadar.flatMap(e => e.alerts.map(a => a.player))))
-      sleeperIdMap = await resolveSleeperIds(allAlertNames)
-    } catch {}
-
     const playerTeamMap = new Map<string, string>()
     for (const p of pool) {
       playerTeamMap.set(p.name, p.team || '')
     }
 
+    // Keyed `player|position` and position-verified: a name-only bind gave QB Josh Allen a
+    // free-agent guard's Sleeper id, and `MiniPlayerImg` rendered the guard's face.
+    const sleeperIdByKey = new Map<string, string | null>()
+    try {
+      const keys = Array.from(new Set(snipeRadar.flatMap(e => e.alerts.map(a => `${a.player}|${a.position}`))))
+      const ids = await resolveSleeperIdsBatch(keys.map((key) => {
+        const [name, position] = key.split('|')
+        return { name, position, team: playerTeamMap.get(name) || null }
+      }))
+      keys.forEach((key, i) => sleeperIdByKey.set(key, ids[i] ?? null))
+    } catch {}
+
     for (const entry of snipeRadar) {
       for (const alert of entry.alerts) {
-        (alert as any).sleeperId = sleeperIdMap[alert.player] || null;
+        (alert as any).sleeperId = sleeperIdByKey.get(`${alert.player}|${alert.position}`) ?? null;
         (alert as any).team = playerTeamMap.get(alert.player) || null
       }
     }
