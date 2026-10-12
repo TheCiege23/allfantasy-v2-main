@@ -1,15 +1,27 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import { useSession } from 'next-auth/react'
+import { joinCallbackUrl, joinLandingHref } from '@/lib/league-join/joinLanding'
 import { ClassGateNotice, isClassGateBlocked, type ClassGateBlocked } from '@/components/league-join/ClassGateNotice'
 
 type Preview = { leagueId: string; name: string | null; sport: string; requiresPassword: boolean }
 
+
 export default function JoinByCodePage() {
   const searchParams = useSearchParams()
   const codeFromUrl = searchParams?.get('code')?.trim()
+  const joinOnArrival = searchParams?.get('go') === '1'
+  const { status: authStatus } = useSession()
+  /*
+   * Set when the join itself answers 401. Most people opening a link someone shared from a Sleeper
+   * chat are signed out, and the page used to send that 401 on to the creator-invite join, which
+   * answered with its own error — so the first thing a new leaguemate saw was a failure.
+   */
+  const [needsSignIn, setNeedsSignIn] = useState(false)
+  const autoJoined = useRef(false)
 
   const [code, setCode] = useState(codeFromUrl ?? '')
   const [password, setPassword] = useState('')
@@ -69,18 +81,31 @@ export default function JoinByCodePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
-        .then((res) => res.json())
-        .then((data) => {
+        .then(async (res) => ({ httpStatus: res.status, data: await res.json().catch(() => ({})) }))
+        .then(({ httpStatus, data }) => {
+          if (httpStatus === 401) {
+            setNeedsSignIn(true)
+            setStatus('idle')
+            return null
+          }
           if (data.success) {
             setStatus('success')
             setJoinedLeagueId(data.leagueId)
-            setMessage(data.alreadyMember ? 'You are already in this league.' : 'You joined the league.')
+            setMessage(
+              data.memberOnly
+                ? data.alreadyMember
+                  ? 'You are already in this league. Opening the league chat…'
+                  : 'You’re in. Opening the league chat…'
+                : data.alreadyMember
+                  ? 'You are already in this league.'
+                  : 'You joined the league.',
+            )
             if (data.leagueId && !data.creatorLeagueId) {
               setTimeout(() => {
-                window.location.href = `/league/${data.leagueId}`
+                window.location.href = joinLandingHref(data)
               }, 1500)
             }
-            return
+            return null
           }
           // Outside the league's division band (ADR F2.10a): say so and offer the request, rather
           // than falling through to the creator-invite lookup, which reports a misleading error.
@@ -116,6 +141,46 @@ export default function JoinByCodePage() {
     },
     [effectiveCode, password]
   )
+
+  /* Back from signing in with `go=1`: join at once, once. A password-protected league still asks. */
+  useEffect(() => {
+    if (autoJoined.current || !joinOnArrival || !codeFromUrl) return
+    if (authStatus !== 'authenticated' || !preview || preview.requiresPassword || previewError) return
+    if (status !== 'idle') return
+    autoJoined.current = true
+    join(codeFromUrl, '')
+  }, [authStatus, codeFromUrl, join, joinOnArrival, preview, previewError, status])
+
+  if (codeFromUrl && preview && !previewError && status === 'idle' && (authStatus === 'unauthenticated' || needsSignIn)) {
+    const callbackUrl = joinCallbackUrl(codeFromUrl)
+    return (
+      <div className="min-h-screen flex items-center justify-center mode-surface mode-readable">
+        <div className="max-w-md mx-auto px-4 w-full" data-testid="league-join-signin">
+          <h1 className="text-xl font-bold mb-2" style={{ color: 'var(--text)' }}>
+            {preview.name ? `Join ${preview.name}` : 'Join this league'}
+          </h1>
+          <p className="text-sm mb-4" style={{ color: 'var(--muted)' }}>
+            Sign in or create a free account to join the league chat and get each week’s recap.
+          </p>
+          <div className="grid gap-2">
+            <Link
+              href={`/signup?callbackUrl=${encodeURIComponent(callbackUrl)}`}
+              className="w-full rounded-lg bg-cyan-600 px-4 py-2 text-center text-sm font-medium text-white hover:bg-cyan-500"
+            >
+              Create account &amp; join
+            </Link>
+            <Link
+              href={`/login?callbackUrl=${encodeURIComponent(callbackUrl)}`}
+              className="w-full rounded-lg border px-4 py-2 text-center text-sm font-medium"
+              style={{ borderColor: 'var(--border)', color: 'var(--text)' }}
+            >
+              I have an account — sign in
+            </Link>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
 
   if (codeFromUrl && preview && !preview.requiresPassword && status === 'idle' && !previewError) {

@@ -6,7 +6,7 @@
  * imported it. Their leaguemates talk in Sleeper, a group text or Discord, so a recap that stays in our
  * chat is read by one person. The recap is good content; it was in the wrong room. This turns it into
  * text that person can paste into the right one, ending with the league's invite link so the people
- * who read it there can come and claim their team.
+ * who read it there can join the league's chat here.
  *
  * PURE and client-safe: no prisma, no fetch. The invite link is fetched by the button from the
  * existing `GET /api/leagues/join?leagueId=` (any member may read it).
@@ -25,12 +25,16 @@ export function isWeeklyRecap(metadata: Record<string, unknown> | null | undefin
 
 /**
  * What gets pasted into the league's group chat: the recap as Chimmy wrote it, minus the in-app footer,
- * then one line that says where it came from and how to claim a team. No link → the recap alone, still
- * worth sharing, with no dangling "claim your team" that goes nowhere.
+ * then one line that says where it came from and how to join. No link → the recap alone, still worth
+ * sharing, with no dangling invitation that goes nowhere.
+ *
+ * "Join our league chat", not "claim your team": a link newcomer joins an imported league as a MEMBER
+ * and lands in its chat (POST /api/leagues/join). Claiming a provider team needs proof of the Sleeper
+ * account, which a shared link cannot give, so the line promises only what the link does.
  */
 export function buildRecapShareText(recap: string, inviteLink: string | null | undefined): string {
   const body = recap.replace(IN_APP_FOOTER, '').trimEnd()
   const link = typeof inviteLink === 'string' && /^https?:\/\//i.test(inviteLink.trim()) ? inviteLink.trim() : null
   if (!link) return `${body}\n\n— Chimmy, on AllFantasy`
-  return `${body}\n\n— Chimmy, on AllFantasy. Claim your team for next week's recap: ${link}`
+  return `${body}\n\n— Chimmy, on AllFantasy. Join our league chat and get next week's recap: ${link}`
 }

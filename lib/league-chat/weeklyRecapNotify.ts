@@ -29,10 +29,22 @@ export async function notifyWeeklyRecaps(posted: readonly PostedRecap[]): Promis
   if (posted.length === 0) return { notified, sent: 0, skipped: 0 }
   try {
     const leagueIds = [...new Set(posted.map((p) => p.leagueId))]
-    const claimed = await prisma.leagueTeam.findMany({
-      where: { leagueId: { in: leagueIds }, claimedByUserId: { not: null } },
-      select: { leagueId: true, claimedByUserId: true },
-    })
+    /*
+     * Everyone in the league on AllFantasy: the owner, every claimed team, and every MEMBER — a
+     * leaguemate who joined an imported league from a shared recap joins without a team
+     * (POST /api/leagues/join), and next week's recap is what they joined for.
+     */
+    const [teams, members] = await Promise.all([
+      prisma.leagueTeam.findMany({
+        where: { leagueId: { in: leagueIds }, claimedByUserId: { not: null } },
+        select: { leagueId: true, claimedByUserId: true },
+      }),
+      prisma.redraftLeagueMember.findMany({
+        where: { leagueId: { in: leagueIds } },
+        select: { leagueId: true, userId: true },
+      }),
+    ])
+    const claimed = [...teams, ...members.map((m) => ({ leagueId: m.leagueId, claimedByUserId: m.userId }))]
     const byUser = new Map<string, PostedRecap[]>()
     const add = (userId: string | null | undefined, recap: PostedRecap) => {
       if (!userId) return
