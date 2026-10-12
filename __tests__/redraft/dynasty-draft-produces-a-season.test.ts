@@ -57,13 +57,15 @@ describe('syncCompletedDraftToRedraftSeason — which formats it serves', () => 
    * worth pinning is that the columns are no longer fetched, because fetching them is the first
    * step back toward a gate that singles a format out.
    */
-  it('no longer asks the database what format the league is', async () => {
+  it('does not fetch dynasty fields that could exclude it from season creation', async () => {
     prismaMock.league.findUnique.mockResolvedValue({ id: 'league-1' })
 
     await run()
 
     const select = prismaMock.league.findUnique.mock.calls[0]?.[0]?.select ?? {}
-    expect(select).toEqual({ id: true })
+    expect(select.id).toBe(true)
+    expect(select).not.toHaveProperty('leagueType')
+    expect(select).not.toHaveProperty('isDynasty')
   })
 
   it('still refuses a league that does not exist', async () => {
