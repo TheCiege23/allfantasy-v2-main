@@ -1,18 +1,10 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { SettingsSection, SettingsRow, Toggle } from '../../../tabs/settings/components'
+import { SettingsSection, SettingsRow } from '../../../tabs/settings/components'
 import type { SurvivorSettingsPanelProps } from './types'
 
 export function SurvivorChatPanel({ leagueId, canEdit }: SurvivorSettingsPanelProps) {
-  const [tribeChat, setTribeChat] = useState(true)
-  const [mergeChat, setMergeChat] = useState(true)
-  const [exileChat, setExileChat] = useState(true)
-  const [juryChat, setJuryChat] = useState(true)
-  const [alliances, setAlliances] = useState(false)
-  const [elimNoTribe, setElimNoTribe] = useState(true)
-  const [exileReadMain, setExileReadMain] = useState(false)
-  const [reunion, setReunion] = useState(true)
   const d = !canEdit
 
   const [faqSeededAt, setFaqSeededAt] = useState<string | null>(null)
@@ -92,24 +84,7 @@ export function SurvivorChatPanel({ leagueId, canEdit }: SurvivorSettingsPanelPr
         {faqMessage && <p className="text-xs text-[#ffb8d1]/90">{faqMessage}</p>}
       </SettingsSection>
 
-      <SettingsSection id="sv-chat-create" title="Chat permissions">
-        <SettingsRow label="Tribe chats auto-created" control={<Toggle checked={tribeChat} onChange={setTribeChat} disabled={d} />} />
-        <SettingsRow label="Merge chat auto-created" control={<Toggle checked={mergeChat} onChange={setMergeChat} disabled={d} />} />
-        <SettingsRow label="Exile chat auto-created" control={<Toggle checked={exileChat} onChange={setExileChat} disabled={d} />} />
-        <SettingsRow label="Jury chat auto-created" control={<Toggle checked={juryChat} onChange={setJuryChat} disabled={d} />} />
-        <SettingsRow label="Alliance chats allowed" control={<Toggle checked={alliances} onChange={setAlliances} disabled={d} />} />
-      </SettingsSection>
-      <SettingsSection id="sv-chat-rules" title="Chat access rules">
-        <SettingsRow
-          label="Eliminated lose tribe chat input"
-          control={<Toggle checked={elimNoTribe} onChange={setElimNoTribe} disabled={d} />}
-        />
-        <SettingsRow
-          label="Exile can read main island history"
-          control={<Toggle checked={exileReadMain} onChange={setExileReadMain} disabled={d} />}
-        />
-        <SettingsRow label="Post-season full chat access" control={<Toggle checked={reunion} onChange={setReunion} disabled={d} />} />
-      </SettingsSection>
+      <p className="text-xs text-white/50">Island, tribe, Exile and jury channel access follows each manager’s current game state. Custom chat-permission overrides are not available in the NBA pilot.</p>
     </div>
   )
 }

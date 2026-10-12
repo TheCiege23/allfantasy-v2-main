@@ -28,6 +28,7 @@ type FoundationState = {
     privacyWarnings: string[]
     decisions?: {
       canPerformAdminAction?: boolean
+      canPerformSensitiveHostAction?: boolean
       canSeeHiddenIdolAssignments?: boolean
       canSeeVoteTallyBeforeReveal?: boolean
       canOverrideVoteDeadline?: boolean
@@ -297,14 +298,14 @@ export function SurvivorFormatTab({ leagueId }: SurvivorFormatTabProps) {
             >
               {init?.phase2Complete ? 'Re-run initialization' : 'Initialize Survivor'}
             </button>
-            <button
+            {state?.access?.decisions?.canPerformSensitiveHostAction ? <button
               type="button"
               disabled={saving || loading}
               onClick={() => runPhase2Action('assign-tribes')}
               className="rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-200 disabled:opacity-60"
             >
               Assign tribes
-            </button>
+            </button> : null}
             <button
               type="button"
               disabled={saving || loading}
@@ -313,14 +314,14 @@ export function SurvivorFormatTab({ leagueId }: SurvivorFormatTabProps) {
             >
               Create chats
             </button>
-            <button
+            {state?.access?.decisions?.canPerformSensitiveHostAction ? <button
               type="button"
               disabled={saving || loading}
               onClick={() => runPhase2Action('seed-idols')}
               className="rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-200 disabled:opacity-60"
             >
               Seed idols
-            </button>
+            </button> : null}
             <button
               type="button"
               disabled={saving || loading}

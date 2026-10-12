@@ -1,61 +1,37 @@
 'use client'
 
-import { useState } from 'react'
-import { SettingsSection, SettingsRow, Toggle, Select, Input } from '../../../tabs/settings/components'
+import { useCallback, useEffect, useState } from 'react'
+import { SettingsSection, SettingsRow } from '../../../tabs/settings/components'
 import type { SurvivorSettingsPanelProps } from './types'
 
-export function SurvivorIdolsPanel({ canEdit }: SurvivorSettingsPanelProps) {
-  const [enabled, setEnabled] = useState(true)
-  const [count, setCount] = useState('6')
-  const [trade, setTrade] = useState(false)
-  const [expireMerge, setExpireMerge] = useState(true)
-  const [assign, setAssign] = useState('random')
-  const [conversion, setConversion] = useState('faab')
-  const [advancedPowers, setAdvancedPowers] = useState(false)
-  const d = !canEdit
+type IdolConfig = { idolCount: number; idolPowerPool: string[] | null }
+
+export function SurvivorIdolsPanel({ leagueId }: SurvivorSettingsPanelProps) {
+  const [config, setConfig] = useState<IdolConfig | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/survivor/config`, { credentials: 'include' })
+      const payload = await response.json()
+      if (!response.ok || !payload.config) throw new Error(payload.error ?? 'Could not load idol rules')
+      setConfig(payload.config as IdolConfig)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not load idol rules')
+    }
+  }, [leagueId])
+
+  useEffect(() => { void load() }, [load])
 
   return (
     <div className="space-y-5 px-6 py-6 text-[13px] text-white/85">
-      <p className="text-[11px] text-amber-200/80">Power pool checklist mirrors templates in DB when wired.</p>
-      <SettingsSection id="sv-idol-sys" title="Idol system">
-        <SettingsRow label="Idols enabled" control={<Toggle checked={enabled} onChange={setEnabled} disabled={d} />} />
-        <SettingsRow
-          label="Idol count"
-          control={<Input type="number" value={count} onChange={(e) => setCount(e.target.value)} disabled={d} className="w-20" />}
-        />
-      </SettingsSection>
-      <SettingsSection id="sv-power-pool" title="Power pool">
-        <SettingsRow
-          label="Core powers"
-          description="Hidden immunity, vote steal, etc."
-          control={<span className="text-white/45">12 selected (preview)</span>}
-        />
-        <SettingsRow label="Advanced powers" control={<Toggle checked={advancedPowers} onChange={setAdvancedPowers} disabled={d} />} />
-      </SettingsSection>
-      <SettingsSection id="sv-idol-rules" title="Idol rules">
-        <SettingsRow label="Tradable" control={<Toggle checked={trade} onChange={setTrade} disabled={d} />} />
-        <SettingsRow label="Expire at merge" control={<Toggle checked={expireMerge} onChange={setExpireMerge} disabled={d} />} />
-        <SettingsRow
-          label="Conversion rule"
-          control={
-            <Select value={conversion} onChange={setConversion} disabled={d}>
-              <option value="faab">FAAB</option>
-              <option value="points">Points</option>
-              <option value="none">None</option>
-            </Select>
-          }
-        />
-        <SettingsRow
-          label="Assignment mode"
-          control={
-            <Select value={assign} onChange={setAssign} disabled={d}>
-              <option value="random">Random</option>
-              <option value="weighted">Weighted</option>
-              <option value="manual">Manual</option>
-            </Select>
-          }
-        />
-      </SettingsSection>
+      <p className="text-[11px] text-amber-200/80">Idols are assigned by the system and hidden from a commissioner who plays. Editing the idol pool is not available in the NBA pilot yet.</p>
+      {error && <p role="alert" className="text-sm text-rose-300">{error}</p>}
+      {!config && !error && <p role="status" className="text-sm text-white/50">Loading idol rules…</p>}
+      {config && <SettingsSection id="sv-idol-current" title="Current idol configuration">
+        <SettingsRow label="Configured idol count" control={<span>{config.idolCount}</span>} />
+        <SettingsRow label="Power pool" control={<span>{config.idolPowerPool?.length ? config.idolPowerPool.join(', ') : 'System default'}</span>} />
+      </SettingsSection>}
     </div>
   )
 }
