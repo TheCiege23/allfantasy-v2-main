@@ -6,7 +6,7 @@ import { prisma } from '../lib/prisma'
 import { assertSafeSeedTarget } from './_assert-safe-seed-target'
 import { buildSurvivorSettingsSnapshotPatch, normalizeSurvivorFoundationSettings } from '../lib/survivor/normalizeSurvivorSettings'
 import { runSurvivorPostDraftBootstrap } from '../lib/survivor/SurvivorDraftBootstrapService'
-import { initializeSurvivorPhase2 } from '../lib/survivor/survivorPhase2Init'
+import { getSurvivorPhase2Status, initializeSurvivorPhase2 } from '../lib/survivor/survivorPhase2Init'
 import { withSurvivorSetupTransaction } from '../lib/survivor/survivorSetupTransaction'
 import { prepareSurvivorDraftParticipants } from '../lib/survivor/survivorDraftParticipants'
 import { assignSurvivorTribes } from '../lib/survivor/survivorTribeProvisioning'
@@ -103,6 +103,16 @@ async function main() {
   assertSafeSeedTarget('verify-survivor-draft-setup')
   await prisma.appUser.createMany({ data: users.map((id, i) => ({ id, email: `${id}@example.invalid`, username: id, displayName: `Test manager ${i}` })) })
   try {
+    if (process.argv.includes('--optional-status-only')) {
+      const optional = await fixture('optional-status', { idolsEnabled: false, tribeChatsEnabled: false })
+      assert.equal((await runSurvivorPostDraftBootstrap(optional.id)).setupComplete, true)
+      const status = await getSurvivorPhase2Status(optional.id)
+      assert.equal(status.chatsProvisioned, true)
+      assert.equal(status.introPosted, true)
+      assert.equal((await counts(optional)).channels, 1)
+      console.log('PASS main-chat setup status when optional tribe chats are disabled')
+      return
+    }
     const concurrent = await fixture('concurrent')
     const results = await Promise.all([runSurvivorPostDraftBootstrap(concurrent.id), runSurvivorPostDraftBootstrap(concurrent.id)])
     assert.ok(results.every((r) => r.setupComplete))
@@ -136,6 +146,7 @@ async function main() {
     const optional = await fixture('optional', { idolsEnabled: false, tribeChatsEnabled: false, exileEnabled: false })
     assert.equal((await runSurvivorPostDraftBootstrap(optional.id)).setupComplete, true)
     assert.deepEqual(await counts(optional), { ...expected, idols: 0, channels: 1 })
+    assert.equal((await getSurvivorPhase2Status(optional.id)).chatsProvisioned, true)
     assert.equal(await prisma.survivorLeagueConfig.count({ where: { leagueId: { in: leagues }, exileLeague: { isNot: null } } }), 0)
     console.log('PASS optional idols/chats and no automatic Exile side league')
 
