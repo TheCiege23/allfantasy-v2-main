@@ -3261,3 +3261,20 @@ html:not([data-ios-app]) [data-ios-purchase-alt],
 html[data-ios-iap] [data-ios-purchase-alt] {
   display: none !important;
 }
+
+/*
+ * The league page's chat (LeagueChatInPanel, inside LeftChatPanel) sends with the same filled accent
+ * circle as the chat drawer once there is something to send — it was a 14px grey ghost icon. Scoped by
+ * the panel's own `af-lcp` hook; the drawer has its own rule in af-comms.css.
+ */
+.af-lcp .af-chat-send:not(:disabled) {
+  display: inline-grid;
+  place-items: center;
+  min-width: 36px;
+  min-height: 36px;
+  border-radius: 999px;
+  background: #22d3ee;
+  color: #04050c;
+}
+.af-lcp .af-chat-send:not(:disabled):hover { background: #22d3ee; color: #04050c; filter: brightness(1.08); }
+.af-lcp .af-chat-send svg { width: 16px; height: 16px; }
