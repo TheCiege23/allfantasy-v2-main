@@ -192,6 +192,7 @@ export async function buildSurvivorStateForUser(
     auditCount,
     voteShieldCount,
     introMessageCount,
+    draftSetupStatus,
   ] = await Promise.all([
     prisma.league.findUnique({
       where: { id: leagueId },
@@ -284,6 +285,12 @@ export async function buildSurvivorStateForUser(
     }),
     prisma.survivorIdol.count({ where: { leagueId, powerType: 'vote_shield' } }),
     prisma.survivorChatMessage.count({ where: { leagueId, contentType: 'survivor_intro' } }),
+    access.decisions.canPerformAdminAction
+      ? prisma.survivorAuditEntry.findFirst({
+          where: { leagueId, action: { in: ['draft_setup_pending', 'draft_setup_ready'] } },
+          orderBy: { createdAt: 'desc' }, select: { action: true, data: true },
+        })
+      : Promise.resolve(null),
   ])
 
   if (!league || (league.leagueVariant !== 'survivor' && !league.survivorMode)) {
@@ -426,7 +433,7 @@ export async function buildSurvivorStateForUser(
         idolsSeeded,
         voteShieldCount: voteShieldCount as number,
         introPosted,
-        phase2Complete: tribesAssigned && chatsProvisioned && idolsSeeded && introPosted,
+        phase2Complete: tribesAssigned && chatsProvisioned && (!access.settings.idolsEnabled || idolsSeeded) && introPosted,
       }
     })(),
     audit: {
@@ -434,7 +441,10 @@ export async function buildSurvivorStateForUser(
     },
     noFakeGameplayState: true,
     pendingFoundationWarnings: [
-      'Phase 1 exposes DB-backed setup and privacy state only; challenge, idol, exile, jury, and reveal engines remain deferred.',
+      'Full-season Survivor gameplay is still in development; setup completion does not certify challenges, Exile, jury, or finale.',
+      ...(draftSetupStatus?.action === 'draft_setup_pending' && draftSetupStatus.data && typeof draftSetupStatus.data === 'object' && !Array.isArray(draftSetupStatus.data)
+        ? (Array.isArray((draftSetupStatus.data as Record<string, unknown>).blockers) ? (draftSetupStatus.data as { blockers: unknown[] }).blockers : []).filter((value): value is string => typeof value === 'string')
+        : []),
       ...access.privacyWarnings,
     ],
   }
