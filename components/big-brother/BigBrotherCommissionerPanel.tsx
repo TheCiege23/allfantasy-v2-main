@@ -9,6 +9,7 @@ import { useState } from 'react'
 export interface BigBrotherCommissionerPanelProps {
   leagueId: string
   onAction?: () => void
+  nominees?: { id: string; name: string }[]
 }
 
 const AUTOMATION_ACTIONS = [
@@ -26,6 +27,7 @@ const ADMIN_ACTIONS = [
   { value: 'reopen_nominations', label: 'Reopen nominations' },
   { value: 'reopen_veto', label: 'Reopen veto decision' },
   { value: 'extend_vote_window', label: 'Extend vote window' },
+  { value: 'resolve_eviction_tie', label: 'Resolve commissioner eviction tie' },
   { value: 'rerun_vote_tally', label: 'Rerun vote tally (no eviction)' },
   { value: 'force_waiver_release', label: 'Force waiver release (evicted roster)' },
   { value: 'resolve_veto_state', label: 'Resolve veto state (keep noms)' },
@@ -36,7 +38,7 @@ const ADMIN_ACTIONS = [
   { value: 'resume_week', label: 'Resume week progression' },
 ] as const
 
-export function BigBrotherCommissionerPanel({ leagueId, onAction }: BigBrotherCommissionerPanelProps) {
+export function BigBrotherCommissionerPanel({ leagueId, onAction, nominees = [] }: BigBrotherCommissionerPanelProps) {
   const [action, setAction] = useState<string>(AUTOMATION_ACTIONS[0].value)
   const [adminAction, setAdminAction] = useState<string>(ADMIN_ACTIONS[0].value)
   const [adminParams, setAdminParams] = useState<{ minutes?: string; rosterId?: string }>({})
@@ -74,7 +76,7 @@ export function BigBrotherCommissionerPanel({ leagueId, onAction }: BigBrotherCo
     try {
       const params: Record<string, unknown> = {}
       if (adminAction === 'extend_vote_window' && adminParams.minutes) params.minutes = parseInt(adminParams.minutes, 10) || 60
-      if (adminAction === 'force_waiver_release' && adminParams.rosterId) params.rosterId = adminParams.rosterId.trim()
+      if (['force_waiver_release','resolve_eviction_tie'].includes(adminAction) && adminParams.rosterId) params.rosterId = adminParams.rosterId.trim()
       const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/big-brother/admin`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -160,6 +162,11 @@ export function BigBrotherCommissionerPanel({ leagueId, onAction }: BigBrotherCo
               className="ml-2 w-24 rounded-lg border border-white/20 bg-white/5 px-2 py-2 text-sm text-white"
             />
           )}
+          {adminAction === 'resolve_eviction_tie' && <label className="ml-2 text-sm text-white/80">Evict tied nominee
+            <select aria-label="Evict tied nominee" value={adminParams.rosterId ?? ''} onChange={e => setAdminParams(p => ({...p, rosterId: e.target.value}))} className="ml-2 min-h-11 rounded-lg border border-white/20 bg-white/5 px-3 py-2">
+              <option value="">Choose nominee</option>{nominees.map(n => <option key={n.id} value={n.id}>{n.name}</option>)}
+            </select>
+          </label>}
           {adminAction === 'force_waiver_release' && (
             <input
               type="text"

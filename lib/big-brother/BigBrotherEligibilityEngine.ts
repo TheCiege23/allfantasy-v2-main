@@ -85,7 +85,7 @@ export async function getEligibility(
 
   const finalNoms = await getFinalNomineeRosterIds(options.cycleId)
   const nomSet = new Set(finalNoms)
-  base.canVote = await getEligibleVoterRosterIds(leagueId, options.cycleId, config.hohVotesOnlyInTie)
+  base.canVote = await getEligibleVoterRosterIds(leagueId, options.cycleId, config.hohVotesOnlyInTie, config.evictionTieBreakMode === 'hoh_vote')
 
   const vetoFixed = cycle.hohRosterId ? [cycle.hohRosterId, ...finalNoms].filter(Boolean) : finalNoms
   base.eligibleForVetoDraw = activeRosterIds.filter((id) => !vetoFixed.includes(id))

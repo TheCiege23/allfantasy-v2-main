@@ -1,0 +1,30 @@
+name: Big Brother deadlines
+on:
+  schedule:
+    - cron: '11,26,41,56 * * * *'
+  workflow_dispatch:
+    inputs:
+      dryRun:
+        description: 'Inspect pending actions without changing leagues'
+        type: boolean
+        default: true
+permissions:
+  contents: read
+concurrency:
+  group: big-brother-deadlines
+  cancel-in-progress: false
+jobs:
+  deadlines:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      APP_URL: ${{ vars.APP_URL }}
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+      DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dryRun && '1' || '0' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+      - name: Process deployed deadlines and reminders
+        run: node scripts/big-brother-deadlines.mjs
