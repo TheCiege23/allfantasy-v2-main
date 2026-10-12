@@ -85,6 +85,22 @@ describe('resolveSleeperPlayerIdentities', () => {
   })
 
   /*
+   * 🛑 One row per source shares the Sleeper id, and TheSportsDB's got it by NAME: its 11304 is
+   * G Elgton Jenkins (CLE), not TE E.J. Jenkins (PHI). The last row used to win.
+   */
+  it('names the id from its Sleeper row, not a later TheSportsDB namesake', async () => {
+    mocks.sportsPlayerFindMany.mockResolvedValue([
+      { externalId: 'sleeper:11304', sleeperId: '11304', source: 'sleeper', name: 'E.J. Jenkins', position: 'TE', team: 'Philadelphia Eagles', imageUrl: null, fetchedAt: new Date('2026-10-01') },
+      { externalId: '34163931', sleeperId: '11304', source: 'thesportsdb', name: 'Elgton Jenkins', position: 'G', team: 'Cleveland Browns', imageUrl: 'https://www.thesportsdb.com/images/media/player/cutout/elgton.png', fetchedAt: new Date('2026-10-11') },
+    ])
+
+    const { byId } = await resolveSleeperPlayerIdentities(['11304'], 'nfl')
+
+    expect(byId.get('11304')).toMatchObject({ name: 'E.J. Jenkins', position: 'TE', team: 'Philadelphia Eagles', source: 'sports_player' })
+    expect(byId.get('11304')?.imageUrl).not.toContain('elgton')
+  })
+
+  /*
    * `externalId` is unique only within a sport — `340` is five different athletes
    * across five sports. An unfiltered query returns an arbitrary one.
    */
