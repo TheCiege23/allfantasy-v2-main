@@ -10,7 +10,7 @@ import { consumeRateLimit, getClientIp } from '@/lib/rate-limit'
 import { aiCostGate } from '@/lib/ai-protection/costGate'
 import { buildLeagueDecisionContext, summarizeLeagueDecisionContext } from '@/lib/league-decision-context'
 import { getLeagueInfo, getLeagueRosters, getTradedDraftPicks, getAllPlayers } from '@/lib/sleeper-client'
-import { findPlayerByName, FantasyCalcPlayer } from '@/lib/fantasycalc'
+import { findPlayerByName, findPlayerBySleeperId, FantasyCalcPlayer } from '@/lib/fantasycalc'
 import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import { parseSleeperRosterPositions } from '@/lib/trade-engine/sleeper-converter'
 import {
@@ -171,7 +171,7 @@ function valueToTier(value: number): string {
 
 const SKILL_POSITIONS = ['QB', 'RB', 'WR', 'TE']
 
-async function buildPricedAssetsByRoster(
+export async function buildPricedAssetsByRoster(
   rosters: any[],
   allPlayers: Record<string, any>,
   fcPlayers: FantasyCalcPlayer[],
@@ -193,7 +193,15 @@ async function buildPricedAssetsByRoster(
       if (!SKILL_POSITIONS.includes(pos)) continue
 
       const fullName = sleeperInfo.full_name || `${sleeperInfo.first_name} ${sleeperInfo.last_name}`
-      const fcMatch = findPlayerByName(fcPlayers, fullName)
+      /*
+       * The Sleeper id is in hand and FantasyCalc rows carry one, so bind on it first. A bare name
+       * lookup hands a rostered namesake the star's value — WR Kenneth Walker (Sleeper 4634) keys
+       * the same as RB Kenneth Walker III. The fallback passes position and team, which
+       * `findPlayerByName` uses to refuse a namesake rather than guess.
+       */
+      const fcMatch =
+        findPlayerBySleeperId(fcPlayers, String(pid)) ??
+        findPlayerByName(fcPlayers, fullName, { position: pos, team: sleeperInfo.team ?? null })
       const value = fcMatch?.value ?? 0
 
       if (value < 200) continue
