@@ -1,5 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { buildSurvivorFullSeasonPlan, readSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
+import { validateCreatePayload } from '@/lib/league-creation/canonical/validateCreateLeague'
+import { LEAGUE_CREATE_OPTIONS_CATALOG_V1 } from '@/lib/league-creation/options-catalog-seed-data'
+import { getAllowedSportsForType, getTeamCountOptions } from '@/lib/create-league-v2/rules-engine'
 import { getSurvivorDefaultContract } from '@/lib/league-concepts/survivorDefaults'
 import { getLeagueDefaults } from '@/lib/league-defaults/getLeagueDefaults'
 import { resolveCreatedSeasonWeeks } from '@/lib/redraft/createdSeasonLength'
@@ -8,6 +11,15 @@ import { buildNativeLeagueNavigation, nativeLeaguePhase } from '@/lib/league/nat
 
 describe('NBA/NHL Survivor creation and full-season pacing', () => {
   const now = new Date('2026-09-01T12:00:00Z')
+  it.each(['NBA', 'NHL'] as const)('%s is offered consistently by the wizard, catalog, and API validator', sport => {
+    expect(getAllowedSportsForType('survivor')).toContain(sport)
+    expect(getTeamCountOptions(sport, 'survivor')).toEqual([16, 17, 18, 19, 20])
+    expect(LEAGUE_CREATE_OPTIONS_CATALOG_V1.allowedScoringPresetsByConceptSport.survivor[sport]).toEqual([sport.toLowerCase() + '_points'])
+    vi.useFakeTimers(); vi.setSystemTime(now)
+    try {
+      expect(validateCreatePayload({ concept: 'survivor', sport, scoringPreset: sport.toLowerCase() + '_points', teamCount: 16, draftType: 'snake', leagueName: 'Season test' }).ok).toBe(true)
+    } finally { vi.useRealTimers() }
+  })
   it.each(['NBA', 'NHL'])('%s uses its real positions and points scoring through both preset layers', sport => {
     const c = getSurvivorDefaultContract({ sport, teamCount: 20 })!
     const f = getLeagueDefaults({ sport, format: 'survivor', draftType: 'snake', managerCount: 20, scoringPreset: sport.toLowerCase() + '_points' })

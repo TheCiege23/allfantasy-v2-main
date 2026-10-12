@@ -26,7 +26,7 @@ export interface LeagueCreateOptionsCatalog {
 
 const ALL_SPORTS: SupportedSport[] = ['NFL', 'NBA', 'MLB', 'NHL', 'NCAAF', 'NCAAB', 'SOCCER']
 
-const SURVIVOR_ALLOWED_SPORTS: SupportedSport[] = ['NFL', 'NCAAF']
+const SURVIVOR_ALLOWED_SPORTS: SupportedSport[] = ['NFL', 'NCAAF', 'NBA', 'NHL']
 
 const UNIVERSAL_CREATE_TEAM_COUNTS = Array.from({ length: 31 }, (_, index) => index + 2)
 
@@ -242,6 +242,8 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
     survivor: {
       NFL: ['fb_half_ppr', 'fb_ppr'],
       NCAAF: ['ncaaf_half_ppr'],
+      NBA: ['nba_points'],
+      NHL: ['nhl_points'],
     },
     tournament: {
       NFL: ['fb_half_ppr', 'fb_ppr', 'fb_standard'],
@@ -342,6 +344,8 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
     survivor: {
       NFL: [...SURVIVOR_CAST_SIZE_OPTIONS],
       NCAAF: [...SURVIVOR_CAST_SIZE_OPTIONS],
+      NBA: [...SURVIVOR_CAST_SIZE_OPTIONS],
+      NHL: [...SURVIVOR_CAST_SIZE_OPTIONS],
     },
     tournament: {
       NFL: [32, 64, 96, 128, 160, 192, 224],
