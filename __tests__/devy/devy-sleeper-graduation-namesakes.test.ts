@@ -152,6 +152,57 @@ describe('resolveSleeperGraduation — the identity rule', () => {
   })
 })
 
+/*
+ * The draft-pick branch had the same flaw: the only same-name pick graduated the
+ * prospect regardless of school and position. Production 2026-10-12, all three
+ * statusSource='cfbd_draft' rows (each on CFBD's 2026 college roster):
+ *   Kaleb Johnson TE Notre Dame -> 2025 #83 Pittsburgh (an Iowa RB)
+ *   Marcus Harris WR UCLA       -> 2025 #183 Tennessee (a California DB)
+ */
+function pick(over: Partial<Record<string, unknown>>) {
+  return {
+    collegeId: null, collegeName: '', collegeTeam: '', collegeConference: null, nflTeam: 'Pittsburgh',
+    year: 2025, round: 3, pick: 19, overallPick: 83, position: '', playerName: 'Kaleb Johnson',
+    height: null, weight: null, ...over,
+  } as any
+}
+const KALEB = { position: 'TE', school: 'Notre Dame' }
+
+describe('resolveDraftPickGraduation — a pick must be the prospect', () => {
+  it('refuses the only same-name pick when its school differs (the production rows)', async () => {
+    const { resolveDraftPickGraduation } = await load()
+    expect(resolveDraftPickGraduation([pick({ collegeTeam: 'Iowa', position: 'RB' })], KALEB)).toBeNull()
+    expect(resolveDraftPickGraduation([pick({ collegeTeam: 'Iowa', position: 'TE' })], KALEB)).toBeNull()
+    expect(
+      resolveDraftPickGraduation(
+        [pick({ playerName: 'Marcus Harris', collegeTeam: 'California', position: 'DB', nflTeam: 'Tennessee' })],
+        { position: 'WR', school: 'UCLA' },
+      ),
+    ).toBeNull()
+  })
+
+  it('takes a same-school pick, case aside, and picks it out from a namesake', async () => {
+    const { resolveDraftPickGraduation } = await load()
+    const mine = pick({ collegeTeam: 'notre dame', position: 'TE', overallPick: 12 })
+    expect(resolveDraftPickGraduation([pick({ collegeTeam: 'Iowa', position: 'RB' }), mine], KALEB)).toBe(mine)
+  })
+
+  it('a school-less pick keeps the old fallback only when it is the sole, position-compatible candidate', async () => {
+    const { resolveDraftPickGraduation } = await load()
+    const bare = pick({ collegeTeam: '', position: 'TE' })
+    expect(resolveDraftPickGraduation([bare], KALEB)).toBe(bare)
+    expect(resolveDraftPickGraduation([pick({ collegeTeam: '', position: 'RB' })], KALEB)).toBeNull()
+    expect(resolveDraftPickGraduation([bare, pick({ collegeTeam: '', position: 'TE', overallPick: 200 })], KALEB)).toBeNull()
+  })
+
+  it('refuses two same-school picks rather than taking the first', async () => {
+    const { resolveDraftPickGraduation } = await load()
+    const a = pick({ collegeTeam: 'Notre Dame', position: 'TE' })
+    const b = pick({ collegeTeam: 'Notre Dame', position: 'TE', year: 2026, overallPick: 5 })
+    expect(resolveDraftPickGraduation([a, b], KALEB)).toBeNull()
+  })
+})
+
 describe('classifyDraftStatus — what the writer actually persists', () => {
   const realFetch = globalThis.fetch
 
@@ -227,6 +278,43 @@ describe('classifyDraftStatus — what the writer actually persists', () => {
       })
     } finally {
       vi.mocked(cfb.getCFBTeamRosterResult).mockImplementation(async () => ({ ok: true, data: [] }) as any)
+    }
+  })
+
+  it('un-graduates a draft stamp from a different school and clears the stranger’s pick', async () => {
+    const cfb = await import('@/lib/cfb-player-data')
+    vi.mocked(cfb.getCFBDraftPicksResult).mockImplementation(async (year: number) =>
+      ({ ok: true, data: year === 2025 ? [pick({ collegeTeam: 'Iowa', position: 'RB' })] : [] }) as any,
+    )
+    const kaleb = { name: 'Kaleb Johnson', position: 'TE', school: 'Notre Dame', classYear: 1, draftYear: 2025, draftEligibleYear: 2029 }
+    const stamped = row(kaleb, {
+      draftStatus: 'drafted', statusSource: 'cfbd_draft', nflTeam: 'Pittsburgh', nflDraftRound: 3, nflDraftPick: 83,
+      graduatedToNFL: true, devyEligible: false, league: 'NFL',
+    })
+    try {
+      const writes = await run([stamped], {})
+      expect(writes.get('id-Kaleb Johnson')).toMatchObject({
+        graduatedToNFL: false, devyEligible: true, league: 'NCAA',
+        draftYear: null, nflDraftRound: null, nflDraftPick: null, nflTeam: null,
+      })
+    } finally {
+      vi.mocked(cfb.getCFBDraftPicksResult).mockImplementation(async () => ({ ok: true, data: [] }) as any)
+    }
+  })
+
+  it('still graduates a same-school draft pick', async () => {
+    const cfb = await import('@/lib/cfb-player-data')
+    vi.mocked(cfb.getCFBDraftPicksResult).mockImplementation(async (year: number) =>
+      ({ ok: true, data: year === 2026 ? [pick({ collegeTeam: 'Notre Dame', position: 'TE', year: 2026, overallPick: 40 })] : [] }) as any,
+    )
+    const kaleb = { name: 'Kaleb Johnson', position: 'TE', school: 'Notre Dame', classYear: 4, draftYear: null, draftEligibleYear: 2026 }
+    try {
+      const writes = await run([row(kaleb)], {})
+      expect(writes.get('id-Kaleb Johnson')).toMatchObject({
+        draftStatus: 'drafted', statusSource: 'cfbd_draft', graduatedToNFL: true, draftYear: 2026, nflDraftPick: 40,
+      })
+    } finally {
+      vi.mocked(cfb.getCFBDraftPicksResult).mockImplementation(async () => ({ ok: true, data: [] }) as any)
     }
   })
 

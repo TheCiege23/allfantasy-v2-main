@@ -491,6 +491,40 @@ export function resolveSleeperGraduation(
   }
 }
 
+/**
+ * Which same-name CFBD draft pick, if any, is this prospect?
+ *
+ * 🛑 A SAME-NAME PICK FROM ANOTHER SCHOOL IS SOMEBODY ELSE. The old fallback took
+ * the only same-name pick whatever its school AND position. All three
+ * statusSource='cfbd_draft' rows on production 2026-10-12 came through it, and
+ * all three are on CFBD's 2026 college roster:
+ *
+ *   Kaleb Johnson      TE Notre Dame, class 1  -> 2025 R3 #83 Pittsburgh (Iowa RB)
+ *   Marcus Harris      WR UCLA, class 1        -> 2025 R6 #183 Tennessee (California DB)
+ *   Chris Johnson Jr.  RB Clemson              -> 2026 R1 #27 Miami (San Diego State DB)
+ *
+ * (the picks' schools and positions are Sleeper's record of the drafted player).
+ * A pick that names a school must match it (`cfbdScheduleTeamKeys`). Only a pick
+ * with NO school may fall back to "the only same-name pick", and only when it
+ * is the only candidate and the position agrees. Two matches are refused.
+ */
+export function resolveDraftPickGraduation(
+  candidates: readonly CFBDraftPick[],
+  prospect: { position: string; school: string | null },
+): CFBDraftPick | null {
+  const posOk = (dp: CFBDraftPick) => !dp.position || positionsMatch(dp.position, prospect.position)
+  const school = cfbdScheduleTeamKeys(prospect.school).exact
+  const sameSchool = candidates.filter(
+    dp => posOk(dp) && school !== '' && cfbdScheduleTeamKeys(dp.collegeTeam).exact === school,
+  )
+  if (sameSchool.length > 0) return sameSchool.length === 1 ? sameSchool[0]! : null
+  if (candidates.length === 1) {
+    const only = candidates[0]!
+    if (!cfbdScheduleTeamKeys(only.collegeTeam).exact && posOk(only)) return only
+  }
+  return null
+}
+
 export async function classifyDraftStatus(rosterYear: number): Promise<ClassificationResult> {
   const currentYear = new Date().getFullYear()
   const now = new Date()
@@ -520,6 +554,7 @@ export async function classifyDraftStatus(rosterYear: number): Promise<Classific
   const draftPicksByName = new Map<string, CFBDraftPick[]>()
   const draftYearsToCheck = [currentYear, currentYear - 1]
   let draftYearsLoaded = 0
+  const loadedDraftYears = new Set<number>()
   for (const draftYear of draftYearsToCheck) {
     const res = await getCFBDraftPicksResult(draftYear)
     if (!res.ok) {
@@ -527,6 +562,7 @@ export async function classifyDraftStatus(rosterYear: number): Promise<Classific
       continue
     }
     draftYearsLoaded++
+    loadedDraftYears.add(draftYear)
     for (const pick of res.data) {
       if (!pick.playerName) continue
       const normalizedPickName = normalizeName(pick.playerName)
@@ -637,12 +673,15 @@ export async function classifyDraftStatus(rosterYear: number): Promise<Classific
       league = 'NFL'
       result.nflActive++
     } else {
-      const draftPickCandidates = draftPicksByName.get(normalizedName) || []
-      const draftPick = draftPickCandidates.find(dp => {
-        const schoolMatch = normalizeName(dp.collegeTeam) === normalizeName(player.school)
-        const posMatch = !dp.position || positionsMatch(dp.position, player.position)
-        return schoolMatch && posMatch
-      }) || (draftPickCandidates.length === 1 ? draftPickCandidates[0] : null)
+      const draftPick = resolveDraftPickGraduation(draftPicksByName.get(normalizedName) || [], player)
+
+      /* Same self-repair as the Sleeper stamp above, for a draft stamp whose year was re-read and refused. */
+      if (!draftPick && player.statusSource === 'cfbd_draft' && player.draftYear != null && loadedDraftYears.has(player.draftYear)) {
+        draftYear = null
+        nflDraftRound = null
+        nflDraftPick = null
+        nflTeam = null
+      }
 
       if (draftPick) {
         newStatus = 'drafted'
