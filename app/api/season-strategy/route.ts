@@ -536,7 +536,7 @@ export async function POST(request: NextRequest) {
         playerId
       const position = sleeperPlayer.position || 'FLEX'
       const fantasyCalcPlayer = findPlayerByName(fantasyCalcValues, name, { position: sleeperPlayer.position, team: sleeperPlayer.team })
-      const tieredPlayer = findPlayerTier(name)
+      const tieredPlayer = findPlayerTier(name, sleeperPlayer.position)
       const value = fantasyCalcPlayer?.value ?? 0
       const age = sleeperPlayer.age ?? tieredPlayer?.age ?? fantasyCalcPlayer?.player.maybeAge ?? null
       const tier = tieredPlayer?.tier ?? null

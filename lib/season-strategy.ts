@@ -15,6 +15,7 @@ import {
 import { pricePlayer, pricePick, ValuationContext, PickInput } from './hybrid-valuation';
 import { resolveLeagueValuePatch } from '@/lib/values/leagueValuePatch';
 import { openaiChatText } from './openai-client';
+import { latestNflDraftYear } from '@/lib/legacy/promptSeason';
 
 const STRATEGY_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -723,7 +724,8 @@ function buildDraftStrategy(
       if (picks.length < 4) {
         roundPlan.push({
           round: 'Pre-Draft',
-          focus: 'ACQUIRE MORE PICKS — trade veterans for 2025-2026 draft capital',
+          // The next two drafts from the clock — this read '2025-2026' through the 2026 season (fixed 2026-10-12).
+          focus: `ACQUIRE MORE PICKS — trade veterans for ${latestNflDraftYear() + 1}-${latestNflDraftYear() + 2} draft capital`,
           rationale: `You only have ${picks.length} pick(s) — rebuilders need 5+ picks per draft`,
         });
       }
@@ -1025,7 +1027,7 @@ function buildDeterministicPlan(
         priority: 'Sell aging assets for future capital',
         actions: [
           'Trade aging starters to playoff-bound teams',
-          'Accumulate 2025/2026 draft picks',
+          `Accumulate ${latestNflDraftYear() + 1}/${latestNflDraftYear() + 2} draft picks`,
           'Target young breakout players from losing teams',
         ],
         targets: strongPositions,

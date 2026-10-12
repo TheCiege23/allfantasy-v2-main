@@ -266,7 +266,7 @@ export async function fetchRealWorldTeamContext(
 For each team:
 1. Current situation (rebuilding/contending/middle)
 2. Coach style (offense-first/defense-first/balanced)
-3. 2025 outlook
+3. Outlook for the current ${sport.toUpperCase()} season and the next
 
 Return JSON array:
 [{
@@ -587,7 +587,7 @@ export async function buildComprehensiveTradeContext(
 
   const enrichPlayer = (player: { id?: string; name: string; position: string }) => {
     const fcPlayer = findPlayerByName(fcValues, player.name, { position: player.position });
-    const tiered = findPlayerTier(player.name);
+    const tiered = findPlayerTier(player.name, player.position);
     /*
      * 🛑 THE TIER LIST'S `age` IS A 2024 SNAPSHOT — 0 of 64 correct, median +2 years. It feeds
      * the whole dynasty adjustment, so it is preferred FROM THE DATABASE and only falls back to
