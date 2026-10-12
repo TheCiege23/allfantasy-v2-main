@@ -3,6 +3,7 @@
 import '@/components/core-app/af-core.css'
 import '@/components/league/league-overview.css'
 
+import { normalizeBigBrotherShellLeague } from '@/lib/big-brother/shellLeague'
 import type { UserLeague } from '@/app/dashboard/types'
 import { BigBrotherStandings } from '@/components/big-brother/BigBrotherStandings'
 import { LeagueTabPlaceholder } from './LeagueTabPlaceholder'
@@ -25,7 +26,7 @@ export function StandingsTab({
   tabLabel?: string
   idpLeagueUi?: boolean
 }) {
-  if (league.leagueVariant === 'big_brother') return <BigBrotherStandings key={league.id} leagueId={league.id} />
+  if (normalizeBigBrotherShellLeague(league).leagueVariant === 'big_brother') return <BigBrotherStandings key={league.id} leagueId={league.id} />
 
   if (!idpLeagueUi) {
     return <div className="af-core af-league-overview"><LeagueTabPlaceholder league={league} tabLabel={tabLabel} /></div>

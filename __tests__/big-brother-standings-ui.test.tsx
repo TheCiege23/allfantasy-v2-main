@@ -30,6 +30,14 @@ describe('Big Brother standings manager experience', () => {
     expect(screen.getByRole('link', { name: 'Jury center' }).getAttribute('href')).toBe('/league/l?tab=bb_jury')
     expect(screen.getByRole('region', { name: 'Weekly Big Brother results' })).toBeTruthy()
   })
+  it('routes canonical native concepts without a legacy variant to the real standings', async () => {
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ ...data(), leagueId: 'native' }) })
+    render(<StandingsTab league={{ id: 'native', name: 'Blah', sport: 'NFL', platform: 'manual', format: 'redraft', teamCount: 12, leagueType: 'big_brother', leagueVariant: null }} />)
+    await screen.findByRole('heading', { name: 'House standings' })
+    expect(screen.queryByText(/coming soon/i)).toBeNull()
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/leagues/native/big-brother/standings')
+    expect(screen.getByRole('link', { name: 'Open house' }).getAttribute('href')).toBe('/league/native?tab=big_brother')
+  })
   it('filters by jury and team name without altering recorded finishes', async () => {
     render(<BigBrotherStandings leagueId="l" />)
     await screen.findByRole('heading', { name: 'House standings' })

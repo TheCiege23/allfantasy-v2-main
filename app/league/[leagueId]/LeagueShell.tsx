@@ -105,6 +105,7 @@ import { AICoachingTab } from './tabs/AICoachingTab'
 // Deferred: tab content behind the "history" switch case below, pulls in recharts.
 const HistoryTab = dynamic(() => import('./tabs/HistoryTab').then((m) => m.HistoryTab), { ssr: false })
 import { StandingsTab } from './tabs/StandingsTab'
+import { normalizeBigBrotherShellLeague } from '@/lib/big-brother/shellLeague'
 import { FixturesTab } from './tabs/FixturesTab'
 import { TransfersTab } from './tabs/TransfersTab'
 import { TableTab } from './tabs/TableTab'
@@ -275,7 +276,7 @@ export type LeagueShellProps = {
 }
 
 export function LeagueShell({
-  league,
+  league: storedLeague,
   userTeam,
   isOwner,
   isCommissioner,
@@ -299,6 +300,7 @@ export function LeagueShell({
   shouldPlayIntro = false,
   embedMode = false,
 }: LeagueShellProps) {
+  const league = useMemo(() => normalizeBigBrotherShellLeague(storedLeague), [storedLeague])
   const router = useRouter()
   const pathname = usePathname()
   // Use a league-specific storage key so league and dashboard have independent collapse states.
