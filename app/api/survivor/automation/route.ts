@@ -15,6 +15,7 @@ import { lockChallengeSubmissions, tallyChallengeResults } from '@/lib/survivor/
 import { processNotificationQueue } from '@/lib/survivor/notificationEngine'
 import { scoreExileWeek, processReturnFromExile } from '@/lib/survivor/exileEngine'
 import { expireStaleIdols } from '@/lib/survivor/SurvivorIdolRegistry'
+import { readSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
 import {
   processExileTeamClaims,
   awardWeeklyExileTeamToken,
@@ -43,10 +44,12 @@ async function runAutomation(req: NextRequest) {
       survivorMode: true,
       survivorPhase: { notIn: ['pre_draft', 'drafting', 'complete'] },
     },
-    select: { id: true, survivorPhase: true },
+    select: { id: true, survivorPhase: true, settings: true },
   })
 
   for (const L of leagues) {
+    // Planned NBA/NHL seasons have their own bounded runner and score gates.
+    if (readSurvivorFullSeasonPlan(L.settings)) continue
     const leagueId = L.id
     try {
       const gs = await getOrCreateSurvivorGameState(leagueId)
@@ -64,13 +67,19 @@ async function runAutomation(req: NextRequest) {
         const lockAt = ch?.locksAt ?? ch?.lockAt
         if (ch && lockAt && new Date(lockAt) <= new Date()) {
           await lockChallengeSubmissions(ch.id)
-          await tallyChallengeResults(ch.id)
+          let resultReady = false
+          try {
+            await tallyChallengeResults(ch.id)
+            resultReady = true
+          } catch (error) {
+            console.warn('[Survivor] challenge result pending verified scoring', error)
+          }
           await prisma.survivorGameState.update({
             where: { leagueId },
             data: {
               needsChallengeLock: false,
               challengeLockedAt: new Date(),
-              challengeResultAt: new Date(),
+              challengeResultAt: resultReady ? new Date() : null,
             },
           })
         }

@@ -85,6 +85,7 @@ export async function POST(req: NextRequest) {
     if (!challengeId) return NextResponse.json({ error: 'challengeId required' }, { status: 400 })
     const ch = await prisma.survivorChallenge.findUnique({ where: { id: challengeId } })
     if (!ch) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    if (ch.submissionMode === 'automatic') return NextResponse.json({ error: 'This challenge settles from finalized league scores; no submission is needed.' }, { status: 409 })
     const gate = await assertLeagueMember(ch.leagueId, userId)
     if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
 
@@ -137,8 +138,12 @@ export async function POST(req: NextRequest) {
     if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     const denied = await survivorHostGuard(ch.leagueId, userId)
     if (denied) return denied
-    const out = await tallyChallengeResults(challengeId)
-    return NextResponse.json(out)
+    try {
+      const out = await tallyChallengeResults(challengeId)
+      return NextResponse.json(out)
+    } catch {
+      return NextResponse.json({ error: 'Challenge result is pending a verified scoring source.' }, { status: 409 })
+    }
   }
 
   return NextResponse.json({ error: 'Use GET for listing or set intent' }, { status: 400 })

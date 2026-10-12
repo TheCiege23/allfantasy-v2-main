@@ -4,6 +4,7 @@ import type { SurvivorChallengeType } from './types'
 import { postHostMessage } from './hostEngine'
 import { logSurvivorAuditEntry } from './auditEntry'
 import { shouldBlockTwist } from './twistEngine'
+import { readSurvivorFullSeasonPlan } from './survivorFullSeasonPlan'
 
 export type ChallengeResult = { challengeId: string; winners: string[] }
 
@@ -287,6 +288,8 @@ export async function lockChallengeSubmissions(challengeId: string): Promise<voi
  * Avoids commissioner-authored props (reduces collusion when the commissioner plays).
  */
 export async function ensureSystemWeeklyChallenge(leagueId: string, week: number): Promise<void> {
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+  if (readSurvivorFullSeasonPlan(league?.settings)) return // Planned seasons use verified slate contests.
   const cfg = await prisma.survivorLeagueConfig.findUnique({
     where: { leagueId },
     select: { challengesSystemRun: true },
@@ -304,24 +307,10 @@ export async function ensureSystemWeeklyChallenge(leagueId: string, week: number
 export async function tallyChallengeResults(challengeId: string): Promise<ChallengeResult> {
   const ch = await prisma.survivorChallenge.findUnique({ where: { id: challengeId } })
   if (!ch) throw new Error('Not found')
-  await prisma.survivorChallenge.update({
-    where: { id: challengeId },
-    data: {
-      status: 'complete',
-      resultJson: { talliedAt: new Date().toISOString(), note: 'Wire scoring hooks per challenge type.' } as object,
-    },
-  })
-  await logSurvivorAuditEntry({
-    leagueId: ch.leagueId,
-    week: ch.week,
-    category: 'challenge',
-    action: 'CHALLENGE_RESULT',
-    relatedEntityId: challengeId,
-    relatedEntityType: 'challenge',
-    data: { challengeId, winnerId: null, rewardApplied: false },
-    isVisibleToPublic: true,
-  })
-  return { challengeId, winners: [] }
+  if (ch.status === 'complete' && ch.resultJson) return { challengeId, winners: ch.winnerUserIds }
+  // A template does not carry an answer key or a verified game result. Keep it
+  // locked until a scoring adapter can prove an outcome; never publish a fake winner.
+  throw new Error(`Challenge ${challengeId} has no verified scoring adapter`)
 }
 
 export { submitChallengeAnswer }

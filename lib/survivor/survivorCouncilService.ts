@@ -115,9 +115,10 @@ export function buildCouncilContextParts(
   scopePlayers: CouncilScopePlayer[],
   idolsPlayed: IdolPlayRecord[],
   settings: SurvivorFoundationSettings,
+  immuneUserId?: string | null,
 ): { eligibility: CouncilEligibility; rosterToUser: Record<string, string>; userToRoster: Record<string, string> } {
   const skipTribal = idolsPlayed.filter((p) => p.powerType === 'skip_tribal')
-  const safeUserIds = skipTribal.map((p) => p.playerUserId)
+  const safeUserIds = [...skipTribal.map((p) => p.playerUserId), ...(immuneUserId ? [immuneUserId] : [])]
   const voteForfeitUserIds = skipTribal.filter((p) => p.forfeitsVote).map((p) => p.playerUserId)
   const eligibility = computeCouncilEligibility({
     scopePlayers,
@@ -159,7 +160,8 @@ export async function loadCouncilContext(leagueId: string, councilId?: string): 
   const settings = await loadSettings(leagueId)
   const idolsPlayed = parseIdolPlays(council.idolsPlayed)
   const scopePlayers = await loadScopePlayers(leagueId, council.phase, council.attendingTribeId)
-  const { eligibility, rosterToUser, userToRoster } = buildCouncilContextParts(scopePlayers, idolsPlayed, settings)
+  const game = await prisma.survivorGameState.findUnique({ where: { leagueId }, select: { immunePlayerId: true } })
+  const { eligibility, rosterToUser, userToRoster } = buildCouncilContextParts(scopePlayers, idolsPlayed, settings, game?.immunePlayerId)
   return {
     council: {
       id: council.id,
@@ -248,7 +250,7 @@ export async function openTribalCouncil(leagueId: string, opts: OpenTribalOption
   const councilNumber =
     (await prisma.survivorTribalCouncil.count({ where: { leagueId, week } })) + 1
 
-  const { eligibility } = buildCouncilContextParts(scopePlayers, [], settings)
+  const { eligibility } = buildCouncilContextParts(scopePlayers, [], settings, gameState?.immunePlayerId)
 
   const council = await prisma.survivorTribalCouncil.create({
     data: {

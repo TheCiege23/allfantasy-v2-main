@@ -81,9 +81,17 @@ export interface SurvivorSummaryChallenge {
   id: string
   week: number
   challengeType: string
+  title?: string
+  scope?: string
+  submissionMode?: string
+  status?: string
   lockAt: string | null
   configJson?: unknown
   resultJson: unknown
+  winnerTribeId?: string | null
+  winnerUserIds?: string[]
+  winnerUserNames?: string[]
+  resultSummary?: string | null
   submissionCount: number
 }
 

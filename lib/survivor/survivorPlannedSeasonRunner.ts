@@ -15,6 +15,7 @@ import { processReturnFromExile, scoreExileWeek } from './exileEngine'
 import { getFinaleState } from './SurvivorFinaleEngine'
 import { withSurvivorSetupTransaction } from './survivorSetupTransaction'
 import { closeExpiredExileRosters, finalizeExileRosterResults } from './exileRosterService'
+import { ensureVerifiedSlateChallenges, settleVerifiedSlateChallenges } from './survivorVerifiedSlateChallenges'
 
 export type PlannedWeekKind = 'opening' | 'elimination' | 'rest' | 'finale' | 'outside'
 
@@ -44,6 +45,7 @@ export async function runPlannedSurvivorLeague(leagueId: string, now = new Date(
   if (week > plan.endWeek || week > calendarWeek) return 'awaiting_calendar'
   const kind = plannedWeekKind(plan, week)
   if (kind === 'outside') return 'outside_plan'
+  await ensureVerifiedSlateChallenges(leagueId, week, plan.sport, ['pre_merge', 'post_swap'].includes(game.phase))
 
   // Finalized player rows only exist after the common NBA/NHL slate, window,
   // grace and coverage checks. A missing or late feed simply keeps this pending.
@@ -53,6 +55,7 @@ export async function runPlannedSurvivorLeague(leagueId: string, now = new Date(
     await finalizeWeeklyScores(leagueId, week)
     return 'scores_finalized'
   }
+  await settleVerifiedSlateChallenges(leagueId, week)
 
   if (kind === 'elimination') {
     if (game.activeCouncilId) {
