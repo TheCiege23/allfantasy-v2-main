@@ -19,6 +19,9 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     playerNewsRecord: { findMany: async () => h.news, updateMany: async () => ({ count: 1 }) },
     redraftRosterPlayer: { findMany: async () => h.roster },
+    playerIdentityMap: {
+      findMany: async () => [{ id: 'pim-nacua', canonicalName: 'Puka Nacua', position: 'WR', currentTeam: 'LAR', sleeperId: '9493' }],
+    },
     sportsDataCache: {
       findMany: async ({ where }: { where: { cacheKey: { in: string[] }; expiresAt: { gt: Date } } }) => {
         if (h.cacheDown) throw new Error('db down')
@@ -39,7 +42,7 @@ vi.mock('@/lib/prisma', () => ({
   },
 }))
 vi.mock('@/lib/notifications/NotificationDispatcher', () => ({ dispatchNotification: h.dispatch }))
-vi.mock('@/lib/follows/playerFollows', () => ({ listFollowerIdsForPlayer: async () => h.followers }))
+vi.mock('@/lib/follows/playerFollows', () => ({ listFollowerIdsForPlayerIdentity: async () => h.followers }))
 
 import { dispatchPendingPlayerNewsNotifications } from '@/lib/notifications/PlayerNewsNotificationService'
 import { injuryStatusTag, storyKey, topicKey } from '@/lib/notifications/playerNewsRepeatGuard'
