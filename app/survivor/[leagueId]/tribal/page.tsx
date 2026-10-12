@@ -2,10 +2,10 @@
 
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import clsx from 'clsx'
 import { useSurvivorUi } from '@/lib/survivor/SurvivorUiContext'
-import { ScrollReveal, type ScrollRevealStep } from '@/app/survivor/components/ScrollReveal'
+import { SurvivorVoteRevealScrolls, type RevealScroll } from '@/components/league/survivor/SurvivorVoteRevealScrolls'
 
 export default function SurvivorTribalPage() {
   const params = useParams()
@@ -17,15 +17,6 @@ export default function SurvivorTribalPage() {
   const tribe = ctx.season?.tribes?.find((t) => t.id === council?.attendingTribeId)
 
   const [revealOpen, setRevealOpen] = useState(false)
-  const [reducedMotion, setReducedMotion] = useState(false)
-  useEffect(() => {
-    const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
-    setReducedMotion(mq.matches)
-    const fn = () => setReducedMotion(mq.matches)
-    mq.addEventListener('change', fn)
-    return () => mq.removeEventListener('change', fn)
-  }, [])
-
   const attendingPlayers = useMemo(() => {
     const tid = council?.attendingTribeId
     const all = ctx.season?.players ?? []
@@ -33,13 +24,9 @@ export default function SurvivorTribalPage() {
     return all.filter((p) => p.tribeId === tid && p.playerState !== 'eliminated')
   }, [council?.attendingTribeId, ctx.season?.players])
 
-  const revealSteps: ScrollRevealStep[] = useMemo(() => {
+  const revealSteps: RevealScroll[] = useMemo(() => {
     if (!council?.isRevealed || !Array.isArray(council.revealSequence)) return []
-    return council.revealSequence.flatMap((step): ScrollRevealStep[] => {
-      if (step.status === 'counts' && step.targetName) return [{ type: 'vote', targetName: step.targetName }]
-      if (step.status && step.status !== 'counts') return [{ type: 'does_not_count' }]
-      return []
-    })
+    return council.revealSequence.map((step, index) => ({ order: index + 1, targetUserId: null, targetName: step.targetName ?? null, status: (step.status ?? 'counts') as RevealScroll['status'], isExtraVote: step.isExtraVote === true }))
   }, [council?.isRevealed, council?.revealSequence])
 
   const status = council?.status
@@ -98,9 +85,11 @@ export default function SurvivorTribalPage() {
             </>
           ) : quiet ? (
             <div className="space-y-2">
-              <p className="text-lg font-bold uppercase tracking-[0.2em] text-white/90">The votes are in.</p>
-              <p className="text-[13px] text-white/50">Waiting for the host to read the parchment…</p>
+              <img src="/survivor/exile/scroll-sealed.svg" alt="Council results sealed" width={200} height={140} className="mx-auto" /><p className="text-lg font-bold uppercase tracking-[0.2em] text-white/90">The votes are in.</p>
+              <p className="text-[13px] text-white/50">Results remain sealed until the Torch Ceremony is published.</p>
             </div>
+          ) : council?.isRevealed ? (
+            <p className="text-[13px] text-white/65">The Torch Ceremony has been published. Replay the sealed scrolls below.</p>
           ) : (
             <p className="text-[13px] text-white/45">No open council. Chimmy will announce the next voting window in league chat.</p>
           )}
@@ -118,12 +107,7 @@ export default function SurvivorTribalPage() {
       </div>
 
       {revealOpen ? (
-        <ScrollReveal
-          steps={revealSteps}
-          reducedMotion={reducedMotion}
-          onComplete={() => setRevealOpen(false)}
-          hostLines={revealSteps.map((_, i) => `Vote ${i + 1} of ${revealSteps.length}`)}
-        />
+        <div className="relative mx-auto mt-6 max-w-2xl"><SurvivorVoteRevealScrolls scrolls={revealSteps} eliminatedName={council?.eliminatedName ?? null} isTie={council?.isTie === true} tiePhase={null} /></div>
       ) : null}
     </div>
   )

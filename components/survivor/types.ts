@@ -57,6 +57,7 @@ export interface SurvivorSeasonCalendar {
 }
 
 export interface SurvivorSummaryTribe {
+  logoUrl?: string | null
   id: string
   name: string
   emoji?: string | null

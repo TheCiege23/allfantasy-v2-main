@@ -1,0 +1,18 @@
+.scroll { max-width: 42rem; margin: 0 auto; color: #3a2810; }
+.roller { width:100%; height:36px; position:relative; z-index:2; object-fit:fill; }
+.paper { margin:-8px 16px; padding:32px 20px; background: url('/survivor/exile/parchment-texture.svg'), radial-gradient(ellipse at 50% 35%,#f8edd0,#efdcae 55%,#dcc08a); box-shadow:inset 0 0 50px #78461455; animation:unroll 600ms ease-out; }
+.title { font:700 20px Georgia,serif; letter-spacing:.12em; text-align:center; }
+.slip { position:relative; display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-top:12px; padding:12px; background:linear-gradient(#fbf3dc,#f1e2bb); box-shadow:0 3px 10px #50320f40; border:1px solid #78501e40; }
+.name { font:italic 600 26px Georgia,serif; overflow-wrap:anywhere; }
+.ordinal { font:700 10px Georgia,serif; letter-spacing:.1em; text-transform:uppercase; color:#78501e; }
+.invalid .name { text-decoration:line-through; text-decoration-color:#a3241f; opacity:.7; }
+.stamp { border:3px double #a3241f; border-radius:3px; padding:3px 8px; color:#a3241f; font:700 11px Georgia,serif; text-transform:uppercase; transform:rotate(-4deg); }
+.verdict { margin-top:24px; text-align:center; }
+.tally { margin-top:20px; border-top:1px solid #78501e55; padding-top:12px; }
+.controls { display:flex; justify-content:center; flex-wrap:wrap; gap:8px; margin-top:20px; }
+.controls button { min-height:44px; padding:8px 16px; border:1px solid #ffffff30; border-radius:8px; color:#e8eaf2; background:#151926; }
+.controls button:disabled { opacity:.4; }
+.sealed { width:200px; height:140px; object-fit:contain; margin:auto; }
+@keyframes unroll { from { opacity:0; transform:scaleY(.85); transform-origin:top; } to { opacity:1; transform:scaleY(1); } }
+@media(prefers-reduced-motion:reduce) { .paper { animation:none; } }
+@media(min-width:640px) { .paper { padding:36px 40px; } }

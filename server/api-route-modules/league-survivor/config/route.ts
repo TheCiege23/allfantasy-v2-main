@@ -1,3 +1,4 @@
+import { prisma } from '@/lib/prisma'
 /**
  * GET/PUT: Survivor league config. PROMPT 349 QA — commissioner or league member can read; only commissioner can write.
  */
@@ -80,6 +81,10 @@ export async function PUT(
   if (!isSurvivor) return NextResponse.json({ error: 'Not a survivor league' }, { status: 404 })
 
   const body = await req.json().catch(() => ({}))
+  if (body.tribeCount != null || body.tribeSize != null) {
+    const current = await prisma.survivorLeagueConfig.findUnique({ where: { leagueId }, select: { tribeCount: true, tribeSize: true } })
+    if ((body.tribeCount != null && Number(body.tribeCount) !== current?.tribeCount) || (body.tribeSize != null && Number(body.tribeSize) !== current?.tribeSize)) return NextResponse.json({ error: 'Use Tribe identities and capacities to save tribe structure together.' }, { status: 409 })
+  }
   const updated = await upsertSurvivorConfig(leagueId, {
     ...(body.mode != null && { mode: String(body.mode) }),
     ...(body.tribeCount != null && { tribeCount: Number(body.tribeCount) }),

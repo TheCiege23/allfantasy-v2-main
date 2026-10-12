@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Exile token">
+<defs><radialGradient id="i-icon" cx="38%" cy="30%" r="80%"><stop offset="0" stop-color="#fff1b8"/><stop offset=".4" stop-color="#f2c94c"/><stop offset="1" stop-color="#b9821f"/></radialGradient></defs>
+<circle cx="32" cy="32" r="30" fill="url(#i-icon)" stroke="#5a3a0c" stroke-width="2.5"/>
+<circle cx="32" cy="32" r="23.5" fill="none" stroke="#8a5a14" stroke-width="2"/>
+<path transform="translate(32,32) scale(.36) translate(-100,-100)" d="M66,54 L134,54 L138,58 L134,62 L131,76 L124,72 L120,70 L92,70 L92,92 L114,92 L118,86 L124,98 L118,110 L114,104 L92,104 L92,128 L122,128 L126,124 L132,120 L136,134 L138,142 L134,146 L66,146 L62,142 L68,136 L68,64 L62,58 Z" fill="#5a3a0c"/>
+<path d="M14,22 A20,20 0 0 1 26,12" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" opacity=".6"/>
+</svg>

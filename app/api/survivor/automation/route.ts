@@ -1,3 +1,4 @@
+import { closeExpiredExileRosters, finalizeExileRosterResults } from '@/lib/survivor/exileRosterService'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireCronAuth } from '@/app/api/cron/_auth'
 import { prisma } from '@/lib/prisma'
@@ -106,6 +107,11 @@ async function runAutomation(req: NextRequest) {
         await processTribalDeadline(leagueId)
       }
 
+      await closeExpiredExileRosters(leagueId)
+      const closedWeeks = await prisma.exileWeeklyEntry.findMany({ where: { leagueId }, select: { week: true }, distinct: ['week'] })
+      for (const closed of closedWeeks) {
+        if (await finalizeExileRosterResults(leagueId, closed.week)) await scoreExileWeek(leagueId, closed.week)
+      }
       const gsExile = await prisma.survivorGameState.findUnique({ where: { leagueId } })
       if (gsExile?.needsExileScore && gsExile.weekScoringFinalAt) {
         const scored = await scoreExileWeek(leagueId, week)

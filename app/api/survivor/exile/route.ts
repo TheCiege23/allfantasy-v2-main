@@ -1,3 +1,5 @@
+import { isNativePlatform } from '@/lib/dashboard/platform-label'
+import { getExileWaivers, mutateExileRoster } from '@/lib/survivor/exileRosterService'
 import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/survivorSettings'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
@@ -64,10 +66,24 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ returnedUserId: uid })
   }
 
+  if (['waivers', 'drop_player', 'move_player'].includes(body.intent ?? '')) {
+    if (!body.leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
+    const gate = await assertLeagueMember(body.leagueId, userId)
+    if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
+    const input = body as Record<string, unknown>
+    try {
+      if (body.intent === 'waivers') return NextResponse.json(await getExileWaivers(body.leagueId, userId, typeof input.search === 'string' ? input.search : ''))
+      if (!Number.isInteger(body.week) || typeof input.playerId !== 'string') return NextResponse.json({ error: 'week and playerId required' }, { status: 400 })
+      return NextResponse.json(await mutateExileRoster({ leagueId: body.leagueId, userId, week: body.week!, playerId: input.playerId, action: body.intent === 'drop_player' ? 'drop' : 'move', slot: typeof input.slot === 'string' ? input.slot : undefined }))
+    } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : 'Exile waivers unavailable.' }, { status: 409 }) }
+  }
+
   if (body.intent === 'lineup') {
     if (!body.leagueId || body.week == null) return NextResponse.json({ error: 'leagueId and week required' }, { status: 400 })
     const gate = await assertLeagueMember(body.leagueId, userId)
     if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
+    const native = await prisma.league.findUnique({ where: { id: body.leagueId }, select: { platform: true } })
+    if (native && isNativePlatform(native.platform)) return NextResponse.json({ error: 'Build your separate Exile roster through Exile waivers.' }, { status: 409 })
     const island = await prisma.exileIsland.findUnique({ where: { leagueId: body.leagueId } })
     if (!island) return NextResponse.json({ error: 'Exile not initialized' }, { status: 400 })
     const player = await prisma.survivorPlayer.findUnique({ where: { leagueId_userId: { leagueId: body.leagueId, userId } } })
@@ -118,7 +134,7 @@ export async function POST(req: NextRequest) {
       week: body.week,
       priority,
     })
-    return NextResponse.json(result)
+    return NextResponse.json(result, { status: result.ok ? 200 : 409 })
   }
 
   if (body.intent === 'available_teams') {
@@ -128,7 +144,11 @@ export async function POST(req: NextRequest) {
     }
     const gate = await assertLeagueMember(body.leagueId, userId)
     if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
-    const league = await prisma.league.findUnique({ where: { id: body.leagueId }, select: { sport: true } })
+    const league = await prisma.league.findUnique({ where: { id: body.leagueId }, select: { sport: true, platform: true } })
+    if (league && isNativePlatform(league.platform)) {
+      try { const board = await getExileWaivers(body.leagueId, userId); return NextResponse.json({ takenTeamIds: board.takenTeamIds }) }
+      catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : 'Exile waivers unavailable.' }, { status: 409 }) }
+    }
     // Returns { takenTeamIds } — the client diffs against its own
     // sport catalog to render the available list. Renamed from
     // `teams` to avoid the prior misleading shape.

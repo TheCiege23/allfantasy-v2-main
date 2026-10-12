@@ -1,3 +1,4 @@
+import { validateTribeSlots } from '@/lib/survivor/survivorTribeIdentity'
 import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/survivorSettings'
 import { buildSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
 import { resolveLeagueCreationSeason } from '@/lib/season-week/leagueCreationSeason'
@@ -351,6 +352,11 @@ export function validateCreatePayload(input: unknown): ValidateCreateLeagueResul
     }
   }
 
+  if (formatId === 'survivor' && schedule.survivorTribeSlots !== undefined) {
+    const count = Number(schedule.survivorTribeCount ?? 4)
+    const message = validateTribeSlots(schedule.survivorTribeSlots, data.teamCount, count)
+    if (message) return { ok: false, status: 400, error: message, errors: [{ path: 'conceptSetup.survivorTribeSlots', message }] }
+  }
   if (formatId === 'survivor' && (sport === 'NBA' || sport === 'NHL')) {
     try {
       if (schedule.survivorSeasonEndWeek !== undefined && typeof schedule.survivorSeasonEndWeek !== 'number') throw new Error('Survivor end week must be a number.')

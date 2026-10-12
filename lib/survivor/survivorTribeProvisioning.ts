@@ -1,4 +1,6 @@
 import 'server-only'
+import { normalizeSurvivorFoundationSettings } from './survivorSettings'
+import { readTribeSlots, tribeCrestUrl, SURVIVOR_TRIBE_CATALOG } from './survivorTribeIdentity'
 
 import { withSurvivorSetupTransaction } from './survivorSetupTransaction'
 
@@ -37,11 +39,11 @@ export type SurvivorTribeAssignmentOutcome =
   | { ok: false; status: 400 | 409 | 422; code: string; error: string }
 
 /** Ensure a SurvivorLeagueConfig row exists (tribes require configId). */
-async function ensureConfig(leagueId: string, tribeCount: number, db: Prisma.TransactionClient): Promise<{ id: string }> {
+async function ensureConfig(leagueId: string, tribeCount: number, tribeSize: number, db: Prisma.TransactionClient): Promise<{ id: string }> {
   const existing = await db.survivorLeagueConfig.findUnique({ where: { leagueId }, select: { id: true } })
   if (existing) return existing
   return db.survivorLeagueConfig.create({
-    data: { leagueId, tribeCount, tribeSize: 5, tribeFormation: 'random' },
+    data: { leagueId, tribeCount, tribeSize, tribeFormation: 'random' },
     select: { id: true },
   })
 }
@@ -99,11 +101,18 @@ export async function assignSurvivorTribes(
     }
   }
 
-  const tribeCount = Math.max(2, Math.floor(opts.tribeCount ?? 4))
+  const league = await db.league.findUnique({ where: { id: leagueId }, select: { settings: true, sport: true } })
+  const snapshot = (league?.settings ?? {}) as Record<string, unknown>
+  const settings = normalizeSurvivorFoundationSettings(snapshot)
+  const tribeCount = Math.max(2, Math.floor(opts.tribeCount ?? settings.tribeCount))
+  const slots = readTribeSlots(snapshot, settings.defaultTeamCount, tribeCount)
+  // Legacy leagues without explicit slot choices retain balanced assignments.
+  const configured = snapshot.survivorTribeSlots != null || (snapshot.survivorFoundationSettings as Record<string, unknown> | undefined)?.survivorTribeSlots != null
   const participants = await loadActiveParticipants(leagueId, db)
   const assignment = computeTribeAssignment({
     participants,
     tribeCount,
+    capacities: configured ? slots.map(slot => slot.managerCount) : null,
     mode: opts.mode ?? 'random',
     seed: opts.seed ?? null,
     manualMapping: opts.manualMapping ?? null,
@@ -114,7 +123,7 @@ export async function assignSurvivorTribes(
     return { ok: false, status: httpStatus, code: assignment.code, error: assignment.error }
   }
 
-  const config = await ensureConfig(leagueId, tribeCount, db)
+  const config = await ensureConfig(leagueId, tribeCount, Math.max(...slots.map(slot => slot.managerCount)), db)
   const rosterByUser = new Map(participants.map((p) => [p.userId, p.rosterId]))
   type ExistingTribeMeta = { slotIndex: number; name: string; colorHex: string | null; logoUrl: string | null }
   const existingBySlot = new Map<number, ExistingTribeMeta>(
@@ -138,9 +147,10 @@ export async function assignSurvivorTribes(
       const slot = tribe.slotIndex
       const meta = opts.tribeMeta?.[slot]
       const preserved = existingBySlot.get(slot)
-      const name = meta?.name ?? preserved?.name ?? defaultTribeName(slot)
-      const colorHex = meta?.colorHex ?? preserved?.colorHex ?? defaultTribeColor(slot)
-      const logoUrl = meta?.logoUrl ?? preserved?.logoUrl ?? null
+      const identity = SURVIVOR_TRIBE_CATALOG.find(tribe => tribe.id === slots[slot]?.catalogId)
+      const name = meta?.name ?? preserved?.name ?? identity?.name ?? defaultTribeName(slot)
+      const colorHex = meta?.colorHex ?? preserved?.colorHex ?? identity?.primary ?? defaultTribeColor(slot)
+      const logoUrl = meta?.logoUrl ?? preserved?.logoUrl ?? tribeCrestUrl(identity?.id ?? '', String(league?.sport ?? 'NFL'))
 
       const row = await tx.survivorTribe.create({
         data: { leagueId, configId: config.id, name, slotIndex: slot, colorHex, logoUrl, isActive: true, phase: 'pre_merge' },

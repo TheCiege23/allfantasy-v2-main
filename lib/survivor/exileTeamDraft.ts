@@ -1,3 +1,4 @@
+import { mutateExileRoster } from './exileRosterService'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { scoreExileWeek } from './exileEngine'
 /**
@@ -56,6 +57,13 @@ export async function submitExileTeamClaim(params: {
   priority?: number
 }): Promise<{ ok: boolean; claimId?: string; error?: string }> {
   const { leagueId, userId, realPlayerId } = params
+  const native = await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true } })
+  if (native && isNativePlatform(native.platform)) {
+    try {
+      await mutateExileRoster({ leagueId, userId, playerId: realPlayerId, week: params.week, action: 'claim' })
+      return { ok: true }
+    } catch (error) { return { ok: false, error: error instanceof Error ? error.message : 'Claim failed.' } }
+  }
   const priority =
     typeof params.priority === 'number' && Number.isFinite(params.priority)
       ? Math.trunc(params.priority)
@@ -91,6 +99,8 @@ export async function processExileTeamClaims(
   leagueId: string,
   week?: number,
 ): Promise<{ ok: boolean; processed: number; error?: string }> {
+  const native = await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true } })
+  if (native && isNativePlatform(native.platform)) return { ok: true, processed: 0 }
   const normalizedWeek =
     typeof week === 'number' && Number.isFinite(week) ? Math.trunc(week) : null
   try {
