@@ -322,6 +322,8 @@ export async function loadGameDayTriage(userId: string | null | undefined, leagu
             sleeperId: p.sleeperId,
             sport: identity.sport ?? p.sport,
             externalId: p.externalId,
+            // The ref names THIS row, so it carries this row's source (playerRef.ts).
+            source: p.source,
             name: identity.name,
             position: displayPosition(identity.position),
             team: identity.team,

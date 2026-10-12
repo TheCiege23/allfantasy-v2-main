@@ -44,6 +44,12 @@ describe('PlayerSharesBoard', () => {
     expect(within(items[0]).getByRole('link')).toHaveAttribute('href', '/core/players?q=Malik%20Nabers&player=NFL%3Ax-100')
   })
 
+  it('names the row\'s feed in the card link when the loader knows it (an externalId is unique only per source)', () => {
+    const r = row('100', 'Malik Nabers', 9, 8)
+    render(<PlayerSharesBoard state={{ available: true, data: { ...SHARES, rows: [{ ...r, player: { ...r.player, source: 'rolling_insights' } }] } }} />)
+    expect(screen.getByRole('link', { name: /Malik Nabers/ })).toHaveAttribute('href', '/core/players?q=Malik%20Nabers&player=NFL~rolling_insights%3Ax-100')
+  })
+
   it('in league mode says who has each one there, his value there and his points under its scoring', () => {
     const league: LeagueShareView = {
       leagueId: 'S1',

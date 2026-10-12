@@ -35,7 +35,8 @@ const MAX_LEAGUES = 250
 export const SHARES_LIMIT = 20
 
 export type ShareRow = {
-  player: { sport: string; externalId: string; sleeperId: string; name: string; position: string | null; team: string | null; imageUrl: string | null }
+  /** `source` is the feed that minted `externalId`; the finder ref carries it (playerRef.ts). */
+  player: { sport: string; externalId: string; source?: string | null; sleeperId: string; name: string; position: string | null; team: string | null; imageUrl: string | null }
   leagues: number
   starts: number
   ir: number
@@ -124,9 +125,9 @@ export async function loadPlayerShares(
   const players = await prisma.sportsPlayer
     .findMany({
       where: { sleeperId: { in: top.map((c) => c.sleeperId) } },
-      select: { sleeperId: true, sport: true, externalId: true, name: true, position: true, team: true, imageUrl: true },
+      select: { sleeperId: true, sport: true, externalId: true, source: true, name: true, position: true, team: true, imageUrl: true },
     })
-    .catch(() => [] as Array<{ sleeperId: string | null; sport: string; externalId: string; name: string; position: string | null; team: string | null; imageUrl: string | null }>)
+    .catch(() => [] as Array<{ sleeperId: string | null; sport: string; externalId: string; source: string; name: string; position: string | null; team: string | null; imageUrl: string | null }>)
   const bySleeper = new Map<string, (typeof players)[number]>()
   for (const p of players) {
     if (!p.sleeperId) continue
@@ -142,7 +143,7 @@ export async function loadPlayerShares(
     const inj = injuries.get(p.name.trim().toLowerCase()) ?? null
     const ready = readiness(inj?.status ?? null, Boolean(inj))
     return {
-      player: { sport: p.sport, externalId: p.externalId, sleeperId: c.sleeperId, name: p.name, position: p.position, team: p.team, imageUrl: asHeadshotUrl(p.imageUrl) },
+      player: { sport: p.sport, externalId: p.externalId, source: p.source, sleeperId: c.sleeperId, name: p.name, position: p.position, team: p.team, imageUrl: asHeadshotUrl(p.imageUrl) },
       leagues: c.leagues,
       starts: c.starts,
       ir: c.ir,
