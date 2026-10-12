@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import type { HighlightAction } from '@/lib/analytics/highlights'
 import type { XPost } from '@/lib/highlights/x-types'
 
 type Widgets = { createTweet(id: string, target: HTMLElement, options: Record<string, unknown>): Promise<HTMLElement | undefined> }
@@ -27,12 +28,17 @@ function loadWidgets(): Promise<Widgets> {
   return loader
 }
 
-export default function XPostEmbed({ post, es = false }: { post: XPost; es?: boolean }) {
+export default function XPostEmbed({ post, es = false, onEvent }: { post: XPost; es?: boolean; onEvent?: (action: HighlightAction, post: XPost) => void }) {
   const [requested, setRequested] = useState(false)
   const [state, setState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const target = useRef<HTMLDivElement>(null)
+  const eventHandler = useRef(onEvent)
+  eventHandler.current = onEvent
+  const postRef = useRef(post)
+  postRef.current = post
   useEffect(() => {
-    if (!requested || !target.current || !/^\d{10,25}$/.test(post.id)) return
+    const currentPost = postRef.current
+    if (!requested || !target.current || !/^\d{10,25}$/.test(currentPost.id)) return
     let active = true
     const element = target.current
     // Use a detached mount per request so late embed completion cannot affect another clip.
@@ -41,20 +47,21 @@ export default function XPostEmbed({ post, es = false }: { post: XPost; es?: boo
     setState('loading')
     loadWidgets().then(widgets => {
       if (!active) return
-      return widgets.createTweet(post.id, mount, { theme: 'dark', dnt: true, conversation: 'none', align: 'center' })
-    }).then(result => { if (active) setState(result ? 'ready' : 'error') })
-      .catch(() => { if (active) setState('error') })
+      return widgets.createTweet(currentPost.id, mount, { theme: 'dark', dnt: true, conversation: 'none', align: 'center' })
+    }).then(result => {
+      if (active) { setState(result ? 'ready' : 'error'); eventHandler.current?.(result ? 'embed_ready' : 'embed_error', currentPost) }
+    }).catch(() => { if (active) { setState('error'); eventHandler.current?.('embed_error', currentPost) } })
     return () => { active = false; mount.remove() }
   }, [requested, post.id])
   const url = 'https://x.com/' + encodeURIComponent(post.account) + '/status/' + post.id
   return <div className="af-x-embed">
-    {!requested ? <button type="button" onClick={() => setRequested(true)}>{es ? 'Cargar publicación de X' : 'Load X post'}</button> : null}
+    {!requested ? <button type="button" onClick={() => { onEvent?.('load_requested', post); setRequested(true) }}>{es ? 'Cargar publicación de X' : 'Load X post'}</button> : null}
     <div ref={target} />
     <div role="status" aria-live="polite">
       {state === 'loading' ? <p>{es ? 'Cargando publicación…' : 'Loading post…'}</p> : null}
       {state === 'error' ? <p>{es ? 'Esta publicación no se puede mostrar aquí.' : 'This post could not be displayed here.'}</p> : null}
     </div>
-    <a href={url} target="_blank" rel="noopener noreferrer">{es ? 'Ver en X' : 'Watch on X'} ↗</a>
+    <a href={url} onClick={() => onEvent?.('source_open', post)} target="_blank" rel="noopener noreferrer">{es ? 'Ver en X' : 'Watch on X'} ↗</a>
   </div>
 }
 
