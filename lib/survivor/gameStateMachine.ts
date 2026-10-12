@@ -24,6 +24,7 @@ import { dailySportWeekForInstant } from '@/lib/season-week/dailySportSeasonStar
 import { easternCalendarDay } from '@/lib/sports-data/easternGameDay'
 import { openTribalCouncil as openVerifiedCouncil, closeVoteWindow } from '@/lib/survivor/survivorCouncilService'
 import { tallyCouncil, revealCouncil } from '@/lib/survivor/survivorVoteTallyService'
+import { resolveAutonomousCouncil } from '@/lib/survivor/survivorAutonomousCouncil'
 import { resolveElimination } from '@/lib/survivor/survivorEliminationService'
 import { nextTorchCeremonyDeadline } from '@/lib/survivor/survivorCeremonySchedule'
 
@@ -258,6 +259,7 @@ export async function syncWeeklyScores(leagueId: string, week: number): Promise<
       update: {
         fantasyScore: pts,
         finalScore: final,
+        tribeId: sp.tribeId,
         isFinalized: allFinalized,
         finalizedAt: allFinalized ? new Date() : null,
       },
@@ -277,7 +279,7 @@ export async function syncWeeklyScores(leagueId: string, week: number): Promise<
   }
   let bestTribe: string | null = null
   let best = -Infinity
-  for (const [tid, tot] of byTribe.entries()) {
+  for (const [tid, tot] of [...byTribe.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
     if (tot > best) {
       best = tot
       bestTribe = tid
@@ -286,7 +288,7 @@ export async function syncWeeklyScores(leagueId: string, week: number): Promise<
 
   let bestPlayer: string | null = null
   let bestP = -Infinity
-  for (const s of scores) {
+  for (const s of [...scores].sort((a, b) => a.userId.localeCompare(b.userId))) {
     if (s.finalScore > bestP) {
       bestP = s.finalScore
       bestPlayer = s.userId
@@ -298,7 +300,7 @@ export async function syncWeeklyScores(leagueId: string, week: number): Promise<
     select: { survivorPhase: true },
   })
   const phase = leagueRow?.survivorPhase
-  const postMerge = phase === 'merge' || phase === 'jury' || phase === 'finale'
+  const postMerge = phase === 'merge' || phase === 'post_merge' || phase === 'jury' || phase === 'finale'
 
   await prisma.survivorGameState.update({
     where: { leagueId },
@@ -425,10 +427,11 @@ export async function processTribalDeadline(leagueId: string): Promise<void> {
     }
     const latest = await prisma.survivorTribalCouncil.findUnique({ where: { id: council.id } })
     if (!latest) return
-    if (!latest.isRevealed && (!Array.isArray(latest.revealSequence) || latest.revealSequence.length === 0)) {
+    if (!latest.isRevealed && !latest.eliminatedUserId && (!Array.isArray(latest.revealSequence) || latest.revealSequence.length === 0)) {
       const tallied = await tallyCouncil(leagueId, council.id)
       if (!tallied.ok) throw new Error(tallied.error)
     }
+    await resolveAutonomousCouncil(leagueId, council.id)
     const revealed = await revealCouncil(leagueId, council.id)
     if (!revealed.ok) throw new Error(revealed.error)
     if (revealed.isTie || !revealed.eliminatedUserId) return

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
 import { finalizeExileRosterResults } from '@/lib/survivor/exileRosterService'
+import { processReturnFromExile } from '@/lib/survivor/exileEngine'
 import { getFinaleState } from '@/lib/survivor/SurvivorFinaleEngine'
 
 const state = vi.hoisted(() => ({ game: {} as Record<string, unknown>, resolved: false, active: 20 }))
@@ -23,6 +24,7 @@ vi.mock('@/lib/survivor/exileEngine', () => ({ processReturnFromExile: vi.fn(), 
 vi.mock('@/lib/survivor/exileRosterService', () => ({ closeExpiredExileRosters: vi.fn(), finalizeExileRosterResults: vi.fn() }))
 vi.mock('@/lib/survivor/SurvivorFinaleEngine', () => ({ getFinaleState: vi.fn() }))
 vi.mock('@/lib/survivor/survivorSetupTransaction', () => ({ withSurvivorSetupTransaction: (_id: string, fn: (tx: typeof db) => unknown) => fn(db) }))
+vi.mock('@/lib/survivor/survivorVerifiedSlateChallenges', () => ({ ensureVerifiedSlateChallenges: vi.fn(), settleVerifiedSlateChallenges: vi.fn() }))
 
 const start = new Date('2026-09-01T12:00:00Z')
 const later = new Date('2027-03-01T12:00:00Z')
@@ -46,6 +48,38 @@ beforeEach(() => {
 })
 
 describe.each(['NBA', 'NHL'] as const)('%s Survivor planned season tick', sport => {
+  it.each([true, false])('replays saved weekly state through a crowned Final 3 (Exile qualifies: %s)', async qualifies => {
+    const { runPlannedSurvivorLeague } = await import('@/lib/survivor/survivorPlannedSeasonRunner')
+    const plan = await setup(sport, 1, { exile: true })
+    const resolvedWeeks = new Set<number>()
+    let returnResolved = false
+    let skipped = 0
+    state.game.currentWeek = plan.startWeek
+    engine.allScoresFinalizedForWeek.mockResolvedValue(true)
+    engine.finalizeWeeklyScores.mockImplementation(async () => { state.game.weekScoringFinalAt = new Date('2027-04-01T00:00:00Z') })
+    engine.advanceWeek.mockImplementation(async () => { state.game.currentWeek = Number(state.game.currentWeek) + 1; state.game.weekScoringFinalAt = null })
+    engine.triggerTribalOpen.mockImplementation(async () => { state.game.activeCouncilId = `council-${state.game.currentWeek}`; state.game.tribalDeadline = new Date('2027-04-01T00:00:00Z') })
+    engine.processTribalDeadline.mockImplementation(async () => { resolvedWeeks.add(Number(state.game.currentWeek)); state.active--; state.game.activeCouncilId = null })
+    db.survivorAuditEntry.findFirst.mockImplementation(async ({ where }) => where.action === 'scheduled_exile_return_resolved'
+      ? returnResolved ? { id: 'return' } : null
+      : resolvedWeeks.has(where.week) ? { id: `week-${where.week}` } : null)
+    db.survivorAuditEntry.create.mockImplementation(async ({ data }) => { if (data.action === 'planned_elimination_skipped_final_three') { resolvedWeeks.add(data.week); skipped++ }; return { id: 'audit' } })
+    vi.mocked(processReturnFromExile).mockImplementation(async () => { returnResolved = true; if (qualifies) state.active++; return true as never })
+    vi.mocked(getFinaleState).mockResolvedValue({ closed: true, winnerRosterId: 'winner' } as never)
+    const now = new Date('2027-04-15T12:00:00Z')
+    let outcome = ''
+    for (let step = 0; step < (plan.endWeek - plan.startWeek + 1) * 6; step++) {
+      outcome = await runPlannedSurvivorLeague('league-1', now)
+      if (outcome === 'season_complete') break
+      expect(['awaiting_verified_scores', 'awaiting_calendar', 'awaiting_exile_results', 'cast_below_final_three']).not.toContain(outcome)
+    }
+    expect(outcome).toBe('season_complete')
+    expect(Number(state.game.currentWeek)).toBe(plan.finaleWeek)
+    expect(state.active).toBe(3)
+    expect(skipped).toBe(qualifies ? 0 : 1)
+    expect(resolvedWeeks.size).toBe(plan.eliminationWeeks.length)
+  })
+
   it.each([true, false])('replays every regular-season period to three finalists (Exile return: %s)', async qualifiesToReturn => {
     const { plannedWeekKind } = await import('@/lib/survivor/survivorPlannedSeasonRunner')
     const plan = await setup(sport, 1, { exile: true })

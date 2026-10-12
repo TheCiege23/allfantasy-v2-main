@@ -69,7 +69,7 @@ export async function tallyCouncil(leagueId: string, councilId: string): Promise
   const protectedRosters = new Set(
     council.idolsPlayed.filter((p) => p.powerType === 'vote_shield').map((p) => p.protectedRosterId ?? p.playerRosterId),
   )
-  const safeRosters = new Set(council.idolsPlayed.filter((p) => p.powerType === 'skip_tribal').map((p) => p.playerRosterId))
+  const safeRosters = new Set(ctx.scopePlayers.filter(player => !ctx.eligibility.targetUserIds.includes(player.userId)).map(player => player.rosterId))
   const extraBallots = council.idolsPlayed.filter((p) => p.powerType === 'extra_vote')
 
   const counts: Record<string, number> = {}
@@ -212,13 +212,13 @@ export async function revealCouncil(leagueId: string, councilId: string, actorUs
     const seq = Array.isArray(council.revealSequence) ? (council.revealSequence as unknown as RevealScroll[]) : []
     const result = { councilId, revealSequence: seq, eliminatedUserId: council.eliminatedUserId, eliminatedName: council.eliminatedName, isTie: council.isTie }
     if (council.isRevealed) return { ok: true, alreadyRevealed: true, ...result }
-    if (!['closed', 'tie_pending', 'voting_closed'].includes(council.status) || seq.length === 0) {
+    if (!['closed', 'tie_pending', 'voting_closed'].includes(council.status) || (seq.length === 0 && !(council.tiePhase === 'system_score_fallback' && council.eliminatedUserId))) {
       return { ok: false, status: 409, code: 'not_tallied', error: 'Close and tally the council before revealing.' }
     }
     const channel = await tx.survivorChatChannel.findFirst({ where: { leagueId, channelType: 'league', isArchived: false }, select: { id: true } })
     if (!channel) return { ok: false, status: 409, code: 'chat_missing', error: 'Restore league chat before publishing the Torch Ceremony.' }
-    const ballots = seq.map((scroll, index) => `Ballot ${index + 1}: ${scroll.targetName ?? 'No eligible target'}${scroll.status === 'counts' ? '' : ' (does not count)'}.`).join('\n')
-    const outcome = council.isTie ? 'The vote is tied. A tiebreak round is required; nobody is eliminated yet.' : `${council.eliminatedName ?? 'The selected manager'} has been voted off the main island.`
+    const ballots = seq.length ? seq.map((scroll, index) => `Ballot ${index + 1}: ${scroll.targetName ?? 'No eligible target'}${scroll.status === 'counts' ? '' : ' (does not count)'}.`).join('\n') : 'No ballots were cast.'
+    const outcome = council.isTie ? 'The vote is tied. A tiebreak round is required; nobody is eliminated yet.' : `${council.eliminatedName ?? 'The selected manager'} has been voted off the main island.${council.tiePhase === 'system_score_fallback' ? ' The published fallback used the lowest finalized weekly score, with a seeded draw for an exact score tie.' : ''}`
     await tx.survivorChatMessage.create({ data: { leagueId, channelId: channel.id, channelType: 'league', senderUserId: 'survivor-host-chimmy', senderName: 'Chimmy', senderIsHost: true, isSystemMessage: true,
       contentType: 'host_announcement', content: `Torch Ceremony · Week ${council.week}\n${ballots}\n${outcome}` } })
     const now = new Date()
