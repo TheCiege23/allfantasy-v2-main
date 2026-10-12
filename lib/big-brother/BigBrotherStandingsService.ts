@@ -31,7 +31,10 @@ export async function getBigBrotherStandings(leagueId: string, userId: string) {
   })
   const ownedRoster = rosters.find(r => r.platformUserId === userId)
   const claimed = teams.filter(t => t.claimedByUserId === userId)
-  const claimedRoster = claimed.length === 1 ? rosters.find(r => r.id === claimed[0].legacyRosterId || r.platformUserId === claimed[0].platformUserId) : undefined
+  const claimedTeam = claimed.length === 1 ? claimed[0] : undefined
+  const explicitlyClaimedRoster = claimedTeam ? rosters.find(r => r.id === claimedTeam.legacyRosterId) : undefined
+  const identityMatches = claimedTeam ? rosters.filter(r => r.platformUserId === claimedTeam.platformUserId) : []
+  const claimedRoster = explicitlyClaimedRoster ?? (identityMatches.length === 1 ? identityMatches[0] : undefined)
   return buildBigBrotherStandings({
     leagueId, season: league.season, rosters: namedRosters,
     cycles: cycles.map(c => ({ ...c, vetoParticipantRosterIds: Array.isArray(c.vetoParticipantRosterIds)
