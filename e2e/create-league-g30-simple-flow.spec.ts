@@ -95,7 +95,7 @@ async function fillRequiredCreateFields(page: Page, teamCount: number, name: str
   await page.getByTestId('g30-privacy-private').click()
 
   await page.getByTestId('g30-step-draft').click()
-  await page.getByTestId('g30-draft-type').selectOption('snake')
+  await page.getByTestId('g31-draft-type-snake').click()
   await page.getByTestId('g30-draft-date').fill('2026-08-30')
   await page.getByTestId('g30-draft-time').fill('20:00')
   await page.getByTestId('g30-timezone').selectOption('America/New_York')
