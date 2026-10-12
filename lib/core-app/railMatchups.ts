@@ -880,7 +880,7 @@ export async function loadRailProjections(args: {
    * so it priced a stranger into the side's total and rank. Its starters are emptied: the side still
    * renders, as `PROJ —`, which is the true statement (isForeignIdSpace, rosterIdSpace.ts).
    */
-  const foreignLeagues = new Set(leagueMeta.filter((m) => isForeignIdSpace(m.platform)).map((m) => m.id))
+  const foreignLeagues = new Set(leagueMeta.filter((m) => isForeignIdSpace(m.platform, m.sport)).map((m) => m.id))
   for (const r of starterRows) {
     if (!r.platformUserId) continue
     startersByKey.set(`${r.leagueId}:${r.platformUserId}`, foreignLeagues.has(r.leagueId) ? [] : startersOf(r.starters))

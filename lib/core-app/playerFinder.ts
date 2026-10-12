@@ -23,7 +23,7 @@ import { designationOnset } from './designationOnset'
 import { injuryTimelineFromRows, type InjuryTimeline } from './injuryTimeline'
 import { createSwrCache } from './staleWhileRevalidate'
 import { rosterIdCoverage, sampleRosterIds } from './rosterIdCoverage'
-import { isForeignIdSpace, translateRostersByLeague } from './rosterIdSpace'
+import { isForeignIdSpace, isKnownNonNflSport, translateRostersByLeague } from './rosterIdSpace'
 import { applyBridge, bridgeIdsForSleeperId, loadBridgedLeagues } from './bridgedRosterIds'
 import { getPlayerImpact, type LeagueImpact } from './playerImpact'
 export type { LeagueImpact, ReplacementOption } from './playerImpact'
@@ -585,7 +585,7 @@ export async function resolveLeagueSlots(
   // leagues where someone else has him, and those need a name and a platform too.
   const leagues = await prisma.league.findMany({
     where: { id: { in: leagueIds } },
-    select: { id: true, name: true, platform: true, leagueType: true, platformLeagueId: true, season: true, bestBallMode: true, leagueVariant: true, settings: true },
+    select: { id: true, name: true, platform: true, sport: true, leagueType: true, platformLeagueId: true, season: true, bestBallMode: true, leagueVariant: true, settings: true },
   })
   const byId = new Map(leagues.map((l) => [l.id, l]))
   const bestBallIds = new Set(leagues.filter((l) => isBestBallLeagueRow(l)).map((l) => l.id))
@@ -613,7 +613,8 @@ export async function resolveLeagueSlots(
   const hisBridgeIds = bridgedLeagues.size > 0 ? await bridgeIdsForSleeperId(sleeperId) : {}
   const foreignLeagueIds = new Set(
     leagues
-      .filter((l) => isForeignIdSpace(l.platform) && !bridgedLeagues.get(l.id)?.readable)
+      // A native league of another sport too: its Rolling Insights ids collide with Sleeper's (rosterIdSpace.ts).
+      .filter((l) => isForeignIdSpace(l.platform, l.sport) && !bridgedLeagues.get(l.id)?.readable)
       .map((l) => l.id),
   )
   /*
@@ -632,6 +633,7 @@ export async function resolveLeagueSlots(
   const idSpaceByLeague = new Map(
     leagues.map((l) => [l.id, bridgedLeagues.get(l.id)?.readable ? 'sleeper' : l.platform]),
   )
+  const sportByLeague = new Map(leagues.map((l) => [l.id, l.sport]))
 
   const rosters = await translateRostersByLeague(
     (claimedLeagueIds.length > 0 && allCandidates.length > 0
@@ -642,6 +644,7 @@ export async function resolveLeagueSlots(
       : []
     ).map(throughBridge),
     idSpaceByLeague,
+    sportByLeague,
   )
 
   const out: LeagueSlot[] = []
@@ -713,6 +716,7 @@ export async function resolveLeagueSlots(
           .catch(() => [] as Array<{ leagueId: string; platformUserId: string; playerData: unknown }>)
       ).map(throughBridge),
       idSpaceByLeague,
+      sportByLeague,
     )
 
     const held = new Map<string, { platformUserId: string; slot: string }>()
@@ -757,6 +761,9 @@ export async function resolveLeagueSlots(
           : []
       const known = new Set(knownRows.map((r) => r.sleeperId).filter((x): x is string => Boolean(x)))
       for (const id of missed) {
+        // He is a Sleeper id, so an NFL player: a league of another sport cannot hold him, and naming
+        // it "unchecked" would invent a gap. It is never scanned either (foreignLeagueIds).
+        if (isKnownNonNflSport(byId.get(id)?.sport)) continue
         // Another platform's ids: unchecked by definition, no sample needed — but only when
         // something was imported (no rosters at all is a different gap, as below).
         /*

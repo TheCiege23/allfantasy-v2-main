@@ -486,8 +486,9 @@ async function loadRosteredPlayers(
       if (!roster) continue
       seatsWithRoster.add(seatOf(team))
       // A Fleaflicker/MFL/Fantrax/Yahoo id collides with a real Sleeper id: that roster ties in nobody.
-      // An ESPN one is translated (raw, ESPN 12483 Stafford is Sleeper's 12483 Jack Bech).
-      const readable = await sleeperReadablePlayerDataOf(league.platform, roster.playerData)
+      // An ESPN one is translated (raw, ESPN 12483 Stafford is Sleeper's 12483 Jack Bech). A native NHL
+      // one holds Rolling Insights ids, which `sleeperId` reads as NFL strangers: the sport strips it.
+      const readable = await sleeperReadablePlayerDataOf(league.platform, roster.playerData, String(league.sport))
       for (const id of rosterPlayerIds(readable)) owned.add(id)
       const data = readable as { starters?: unknown } | null
       for (const id of rosterPlayerIds({ starters: data?.starters })) started.add(id)

@@ -422,8 +422,10 @@ async function resolvePlayerIndex(
    * SportsPlayer (whose `externalId` IS the Sleeper id on Sleeper-seeded rows), not the media batch
    * (keyed on `sleeperId`). Nor is a provider-column hit indexed under its row's `sleeperId`, where
    * it could overwrite another roster id's entry. The provider-column matches (`mflId`, ...) stay.
+   * A native league of another sport is skipped the same way: its bare numbers are Rolling Insights
+   * ids (asked of `rollingInsightsId` below), and the media batch would hand them a Sleeper portrait.
    */
-  const foreign = isForeignIdSpace(platform)
+  const foreign = isForeignIdSpace(platform, sport)
 
   /*
    * 🛑 EACH ID IS ASKED OF ITS OWN IDENTITY COLUMN, AND AN ESPN ID IS TRANSLATED BEFORE ANY

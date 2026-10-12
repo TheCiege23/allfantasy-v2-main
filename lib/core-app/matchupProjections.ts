@@ -209,7 +209,7 @@ export async function loadSideProjections(args: {
   ).catch(() => new Map<string, string>())
 
   const leaguePlatform = String(league?.platform ?? '')
-  const lookupOf = (id: string) => sleeperLookupId(leaguePlatform, id, sleeperIdByRosterId)
+  const lookupOf = (id: string) => sleeperLookupId(leaguePlatform, id, sleeperIdByRosterId, league?.sport)
   const lookupIds = [...new Set(rosterIds.map(lookupOf).filter((x): x is string => x != null))]
   const projections = await prisma.fantasyProjection.findMany({
     // AF mirror rows (source 'allfantasy') carry no component stat line to rescore.

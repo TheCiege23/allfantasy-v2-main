@@ -200,7 +200,7 @@ export async function getPlayerImpact(
       platformUserId: true,
       externalId: true,
       league: {
-        select: { id: true, name: true, platform: true, settings: true, platformLeagueId: true, season: true },
+        select: { id: true, name: true, platform: true, sport: true, settings: true, platformLeagueId: true, season: true },
       },
     },
   })
@@ -220,8 +220,10 @@ export async function getPlayerImpact(
      * chain as the rest of the finder; the other platforms are skipped, as the triage skips them.
      */
     const platform = t.league?.platform
+    // A native league of another sport holds Rolling Insights ids, never Sleeper ids (rosterIdSpace.ts).
+    const sport = t.league?.sport
     const bridged = bridgedLeagues.get(t.leagueId)
-    if (isForeignIdSpace(platform) && !bridged?.readable) continue
+    if (isForeignIdSpace(platform, sport) && !bridged?.readable) continue
     const candidates = [t.platformUserId, t.externalId, userId].filter(Boolean) as string[]
     const found = await prisma.roster.findFirst({
       where: { leagueId: t.leagueId, platformUserId: { in: candidates } },
@@ -231,7 +233,7 @@ export async function getPlayerImpact(
     // A bridged roster drops its unbridged ids; ESPN keeps its own translator's rules.
     const [roster] = bridged?.readable
       ? [{ playerData: applyBridge(found.playerData, bridged.map) }]
-      : (await translateRostersToSleeperIds(platform, [found])).rosters
+      : (await translateRostersToSleeperIds(platform, [found], sport)).rosters
 
     const pd = (roster?.playerData ?? {}) as Record<string, unknown>
     const placed = slotOf(pd, playerSleeperId)

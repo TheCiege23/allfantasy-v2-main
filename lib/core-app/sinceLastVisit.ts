@@ -583,10 +583,11 @@ async function snapshotInjuries(
               where: {
                 OR: teams.map((t) => ({ leagueId: t.leagueId, platformUserId: { in: rosterCandidates(t, userId) } })),
               },
-              select: { leagueId: true, playerData: true, league: { select: { platform: true } } },
+              select: { leagueId: true, playerData: true, league: { select: { platform: true, sport: true } } },
             })
             .catch(() => []),
           (r) => r.league?.platform,
+          (r) => r.league?.sport,
         )
       : []
 

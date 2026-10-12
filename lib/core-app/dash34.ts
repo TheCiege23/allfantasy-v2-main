@@ -717,6 +717,8 @@ async function loadDash34Data(
   const teamByLeague = new Map(teams.map((t) => [t.leagueId, t]))
   const formatByLeague = new Map(formatRows.map(l => [l.id, l]))
   const platformByLeague = new Map(active.map((l) => [l.id, formatByLeague.get(l.id)?.platform ?? l.platform]))
+  // A native league of another sport holds Rolling Insights ids, never Sleeper ids (rosterIdSpace.ts).
+  const sportByLeague = new Map(active.map((l) => [l.id, l.sport]))
   const choppedTeams = new Set(chopped.map(r => `${r.leagueId}:${r.rosterId}`))
   /*
    * ⚠ ROSTERS ARE MATCHED PER LEAGUE, NOT AGAINST ONE GLOBAL CANDIDATE LIST.
@@ -770,6 +772,7 @@ async function loadDash34Data(
   const rosters = await timing.read('identities', () => sleeperReadableRosters(
     [...storedRosters.filter((r) => !sleeperIds.has(r.leagueId)), ...liveRosters],
     (r) => platformByLeague.get(r.leagueId),
+    (r) => sportByLeague.get(r.leagueId),
   ))
 
   /**
@@ -1295,7 +1298,7 @@ async function loadDash34Data(
     const eliminated = roster?.eliminated || [team?.externalId, team?.id, storedRosterId].some(id => id && choppedTeams.has(`${row.id}:${id}`))
       || eliminatedRows.some(r => r.leagueId === row.id && r.season.season === Number(row.season))
     const eliminationRosterEmpty = (format?.guillotineMode === true || String(row.leagueType).toLowerCase() === 'guillotine' || format?.leagueVariant === 'guillotine') && roster != null && roster.all.length === 0
-      && !isForeignIdSpace(platformByLeague.get(row.id)) // a foreign roster reads empty because it was stripped, not chopped
+      && !isForeignIdSpace(platformByLeague.get(row.id), sportByLeague.get(row.id)) // a foreign roster reads empty because it was stripped, not chopped
     const eligibility = lineupActionability({
       stage: stage ?? 'unknown', eliminated: eliminated || eliminationRosterEmpty, bestBall,
       waiversEnabled: roster?.waiversEnabled, slots: roster?.verification?.slots,

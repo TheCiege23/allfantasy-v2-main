@@ -82,8 +82,8 @@ export async function loadPlayerShares(
 
   const [leagues, rawRosters] = await Promise.all([
     prisma.league
-      .findMany({ where: { id: { in: claimed } }, select: { id: true, platform: true, season: true, settings: true } })
-      .catch(() => [] as Array<{ id: string; platform: string | null; season: number | null; settings: unknown }>),
+      .findMany({ where: { id: { in: claimed } }, select: { id: true, platform: true, sport: true, season: true, settings: true } })
+      .catch(() => [] as Array<{ id: string; platform: string | null; sport: string | null; season: number | null; settings: unknown }>),
     prisma.roster
       .findMany({ where: { leagueId: { in: claimed }, platformUserId: { in: candidates } }, select: { leagueId: true, platformUserId: true, playerData: true } })
       .catch(() => [] as Array<{ leagueId: string; platformUserId: string | null; playerData: unknown }>),
@@ -93,7 +93,8 @@ export async function loadPlayerShares(
   // an unbridged id is dropped, never read raw. Everything else in another id space stays unsupported.
   const bridged = await loadBridgedLeagues(leagues.filter((l) => rosterIdSpaceOf(l.platform) === 'other'))
   const bridgeMap = (leagueId: string) => (bridged.get(leagueId)?.readable ? bridged.get(leagueId)!.map : null)
-  const unsupported = new Set(leagues.filter((l) => rosterIdSpaceOf(l.platform) === 'other' && !bridgeMap(l.id)).map((l) => l.id))
+  // A native league of another sport is unsupported too: its Rolling Insights ids are NFL strangers by Sleeper id.
+  const unsupported = new Set(leagues.filter((l) => rosterIdSpaceOf(l.platform, l.sport) === 'other' && !bridgeMap(l.id)).map((l) => l.id))
 
   // Yours only: the roster whose platformUserId is one of THIS league's candidate ids, one per league.
   const mine = new Map<string, Record<string, unknown>>()

@@ -143,18 +143,20 @@ export async function loadGameDayTriage(userId: string | null | undefined, leagu
    *     same collision applies, so those leagues are counted, not read.
    */
   const platformOf = new Map(leagues.map((l) => [l.id, l.platform]))
+  // A native league of another sport holds Rolling Insights ids, never Sleeper ids: counted, not read.
+  const sportOfLeague = new Map(leagues.map((l) => [l.id, l.sport]))
   const bridged = await loadBridgedLeagues(
     leagues.filter((l) => !bestBall.has(l.id) && rosterIdSpaceOf(l.platform) === 'other'),
   )
   const bridgeReadable = (leagueId: string) => bridged.get(leagueId)?.readable === true
   const readable = rawRosters
-    .filter((r) => !bestBall.has(r.leagueId) && (rosterIdSpaceOf(platformOf.get(r.leagueId)) !== 'other' || bridgeReadable(r.leagueId)))
+    .filter((r) => !bestBall.has(r.leagueId) && (rosterIdSpaceOf(platformOf.get(r.leagueId), sportOfLeague.get(r.leagueId)) !== 'other' || bridgeReadable(r.leagueId)))
     .map((r) => (bridgeReadable(r.leagueId) ? { ...r, playerData: applyBridge(r.playerData, bridged.get(r.leagueId)!.map) } : r))
   const espnMap = await loadEspnToSleeperMap(
     collectRosterIds(readable.filter((r) => rosterIdSpaceOf(platformOf.get(r.leagueId)) === 'espn').map((r) => r.playerData)),
   )
   const otherLeagues = new Set(
-    leagues.filter((l) => !bestBall.has(l.id) && rosterIdSpaceOf(l.platform) === 'other' && !bridgeReadable(l.id)).map((l) => l.id),
+    leagues.filter((l) => !bestBall.has(l.id) && rosterIdSpaceOf(l.platform, l.sport) === 'other' && !bridgeReadable(l.id)).map((l) => l.id),
   )
   const teamByLeague = new Map(teams.map((t) => [t.leagueId, t]))
 

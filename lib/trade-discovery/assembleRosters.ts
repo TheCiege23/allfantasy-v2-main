@@ -61,7 +61,7 @@ export async function assembleDiscoveryLeague(leagueId: string): Promise<Assembl
   const sleeperIdByRosterId = await crosswalkToSleeperIds(String(platform ?? ''), season.sport, allPlayerIds).catch(
     () => new Map<string, string>(),
   )
-  const lookupOf = (id: string) => sleeperLookupId(platform, id, sleeperIdByRosterId)
+  const lookupOf = (id: string) => sleeperLookupId(platform, id, sleeperIdByRosterId, season.sport)
   const lookupIds = [...new Set(allPlayerIds.map(lookupOf).filter((x): x is string => x != null))]
 
   /*

@@ -293,6 +293,7 @@ export async function buildPortfolioInsights(userId: string, now: Date = new Dat
 
   const leagueIds = [...new Set(claimed.map((t) => t.leagueId))]
   const platformByLeague = new Map(claimed.map((t) => [t.leagueId, t.league!.platform ?? null]))
+  const sportByLeague = new Map(claimed.map((t) => [t.leagueId, t.league!.sport ?? null]))
 
   const [counts, rawRosters, memories] = await Promise.all([
     prisma.leagueTeam.groupBy({ by: ['leagueId'], where: { leagueId: { in: leagueIds } }, _count: { _all: true } }),
@@ -340,7 +341,7 @@ export async function buildPortfolioInsights(userId: string, now: Date = new Dat
     if (pick !== undefined) rosterIndexByTeam.set(t, pick)
   }
 
-  const rosters = await translateRostersByLeague(rawRosters, platformByLeague)
+  const rosters = await translateRostersByLeague(rawRosters, platformByLeague, sportByLeague)
 
   /* One row per REAL league — the same collapse and preference as the inventory list. */
   const kept = keepBestPerRealLeague(

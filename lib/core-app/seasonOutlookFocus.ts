@@ -174,6 +174,7 @@ export async function loadScenarioModel(args: {
   const rosters = await translateRostersByLeague(
     rawRosters,
     new Map([[args.leagueId, args.platform]]),
+    new Map([[args.leagueId, args.sport]]),
   ).catch(() => [...rawRosters])
 
   /*
@@ -213,7 +214,7 @@ export async function loadScenarioModel(args: {
          * its rosters ARE synced, we just cannot read them as players we know. Saying "no rosters are
          * synced" would send a manager to re-import something that already imported fine.
          */
-        refusal: isForeignIdSpace(args.platform)
+        refusal: isForeignIdSpace(args.platform, args.sport)
           ? "Roster changes cannot be priced here: this league's rosters use player ids we cannot match to our player table yet."
           : 'Roster changes cannot be priced here: no rosters are synced for this league.',
       },

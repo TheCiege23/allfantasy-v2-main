@@ -490,14 +490,14 @@ async function loadMyTeamPulse(
   }
 
   // Translate only the selected, eligible owned rosters in one identity-map read.
-  const readable = await timing.read('identities', () => sleeperReadableRosters(selected, r => r.claim.league.platform))
+  const readable = await timing.read('identities', () => sleeperReadableRosters(selected, r => r.claim.league.platform, r => r.claim.league.sport))
   for (const { claim: c, playerData: readablePd } of readable) {
     const l = c.league
     const bestBall = l.bestBallMode === true || l.leagueVariant === 'best_ball' || isBestBallSettings(l.settings)
     const { ids, empty } = startersOf(readablePd)
     if (ids.length === 0 && empty === 0) {
       /* Stripped, not absent: "no starting lineup on file" would be false for a foreign league. */
-      if (rosterIdSpaceOf(l.platform) !== 'sleeper') notChecked.idsUnreadable++
+      if (rosterIdSpaceOf(l.platform, l.sport) !== 'sleeper') notChecked.idsUnreadable++
       else notChecked.noLineup++
       continue
     }
