@@ -1,6 +1,8 @@
 'use client'
 
 import Link from 'next/link'
+import { ExileRosterWaivers } from '@/components/league/survivor/ExileRosterWaivers'
+import { ExileTokenWallet } from '@/components/league/survivor/ExileTokenWallet'
 import { useParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { useSurvivorUi } from '@/lib/survivor/SurvivorUiContext'
@@ -64,24 +66,8 @@ export default function SurvivorExilePage() {
 
       {isExile ? (
         <>
-          <section className="relative mt-6 rounded-2xl border border-violet-500/30 bg-violet-950/30 p-5">
-            <p className="text-[11px] font-bold uppercase text-violet-200">Your exile status</p>
-            <div className="mt-3 flex items-center gap-3">
-              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-violet-600/30 text-lg font-bold ring-2 ring-violet-400/40">
-                {(ctx.season?.userState?.displayName ?? 'You').slice(0, 1)}
-              </div>
-              <div>
-                <p className="font-semibold text-white">{ctx.season?.userState?.displayName}</p>
-                <p className="font-mono text-2xl text-violet-100">{data?.user?.tokenBalance ?? ctx.tokenBalance ?? 0} 🪙</p>
-              </div>
-            </div>
-            <p className="mt-3 text-[12px] text-white/55">
-              {data?.returnRules ? data.returnRules.resolved ? 'The return deadline has passed.' : `Earn at least ${data.returnRules.tokensRequired} tokens by the end of Week ${data.returnRules.week}. The system selects ${data.returnRules.slots} return spot after results are final.` : 'Loading return rules…'}
-            </p>
-            <Link href={`${base}/exile/tokens`} className="mt-3 inline-block text-[13px] font-semibold text-violet-200">
-              Token pool →
-            </Link>
-          </section>
+          <div className="relative mt-6"><ExileTokenWallet leagueId={leagueId} /></div>
+          <ExileRosterWaivers leagueId={leagueId} />
 
           <section className="relative mt-6 rounded-2xl border border-violet-500/25 bg-black/30 p-4">
             <p className="text-[11px] font-bold uppercase text-violet-200">Exile challenges</p>
@@ -89,7 +75,7 @@ export default function SurvivorExilePage() {
           </section>
 
           <section className="relative mt-6 survivor-panel p-4">
-            <p className="text-[11px] font-bold uppercase text-white/45">Exile roster</p>
+            <p className="text-[11px] font-bold uppercase text-white/45">Exile managers</p>
             <div className="mt-3 flex flex-wrap gap-2">
               {(ctx.season?.players ?? [])
                 .filter((p) => p.playerState === 'exile')

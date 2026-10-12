@@ -22,8 +22,6 @@ export function SurvivorSetupPanel({ leagueId, canEdit }: SurvivorSettingsPanelP
   const [error, setError] = useState<string | null>(null)
   const [savedAt, setSavedAt] = useState<string | null>(null)
 
-  const [tribeCount, setTribeCount] = useState('3')
-  const [tribeSize, setTribeSize] = useState('4')
   const [tribeFormation, setTribeFormation] = useState('random')
   const [mergeTrigger, setMergeTrigger] = useState('week')
   const [mergeWeek, setMergeWeek] = useState('10')
@@ -43,8 +41,6 @@ export function SurvivorSetupPanel({ leagueId, canEdit }: SurvivorSettingsPanelP
       const data = (await res.json()) as { config?: SurvivorConfigApi | null }
       const c = data.config
       if (!c) return
-      setTribeCount(String(Math.min(4, Math.max(2, c.tribeCount))))
-      setTribeSize(String(c.tribeSize))
       setTribeFormation(c.tribeFormation || 'random')
       setMergeTrigger(c.mergeTrigger || 'week')
       setMergeWeek(String(c.mergeWeek ?? 10))
@@ -68,7 +64,6 @@ export function SurvivorSetupPanel({ leagueId, canEdit }: SurvivorSettingsPanelP
     setError(null)
     setSavedAt(null)
     try {
-      const tc = Math.min(4, Math.max(2, Number(tribeCount) || 3))
       const mw = Number(mergeWeek)
       const rsw = regularSeasonEndWeek.trim() === '' ? null : Math.min(52, Math.max(1, Number(regularSeasonEndWeek)))
       const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/survivor/config`, {
@@ -76,8 +71,6 @@ export function SurvivorSetupPanel({ leagueId, canEdit }: SurvivorSettingsPanelP
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          tribeCount: tc,
-          tribeSize: Math.max(1, Number(tribeSize) || 4),
           tribeFormation,
           mergeTrigger,
           mergeWeek: Number.isFinite(mw) ? mw : 10,
@@ -108,7 +101,7 @@ export function SurvivorSetupPanel({ leagueId, canEdit }: SurvivorSettingsPanelP
       {error && <p className="text-sm text-rose-300">{error}</p>}
       {savedAt && <p className="text-xs text-emerald-300/90">Saved.</p>}
 
-      <SettingsSection id="sv-structure" title="League structure" description="2–4 tribes; headline is yours.">
+      <SettingsSection id="sv-structure" title="League structure" description="Tribe identities and capacities are saved in the Tribes panel.">
         <SettingsRow
           label="Season headline / theme"
           description="Shown on the Survivor home tab (e.g. Heroes vs Villains)."
@@ -123,31 +116,7 @@ export function SurvivorSetupPanel({ leagueId, canEdit }: SurvivorSettingsPanelP
             />
           }
         />
-        <SettingsRow
-          label="Tribe count"
-          control={
-            <Select value={tribeCount} onChange={setTribeCount} disabled={d}>
-              {['2', '3', '4'].map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </Select>
-          }
-        />
-        <SettingsRow
-          label="Tribe size"
-          control={
-            <Input
-              type="number"
-              min={1}
-              value={tribeSize}
-              onChange={(e) => setTribeSize(e.target.value)}
-              disabled={d}
-              className="w-24"
-            />
-          }
-        />
+        <p className="text-sm text-white/60">Choose tribe identities and individual capacities in the Tribes settings panel.</p>
         <SettingsRow
           label="Tribe formation"
           control={

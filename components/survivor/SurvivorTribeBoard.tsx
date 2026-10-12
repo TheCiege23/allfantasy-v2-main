@@ -79,7 +79,7 @@ export function SurvivorTribeBoard({ summary, names }: SurvivorTribeBoardProps) 
                 }`}
               >
                 <div className="mb-2 flex items-center justify-between">
-                  <h3 className="font-semibold text-white">{tribe.name}</h3>
+                  <h3 className="flex items-center gap-2 font-semibold text-white">{tribe.logoUrl && <img src={tribe.logoUrl} alt="" width={64} height={64} className="h-16 w-16 object-contain" />}{tribe.name}</h3>
                   {hasImmunity && (
                     <span className="flex items-center gap-1 rounded bg-emerald-500/20 px-1.5 py-0.5 text-xs text-emerald-300">
                       <Shield className="h-3 w-3" /> Immunity

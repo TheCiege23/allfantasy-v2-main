@@ -78,6 +78,15 @@ describe("injuryAlert", () => {
     expect(e.body).toBe("A B has been listed as IR.")
     expect(e.meta).not.toHaveProperty("imageUrl")
   })
+
+  // A bare name slug let the player page bind any namesake in any sport (NHL Cam Ward for an NFL alert).
+  it("links to the player page scoped by sport and team", () => {
+    const e = injuryAlert({ playerName: "Cam Ward", team: "Tennessee Titans", status: "Out", sport: "NFL" })
+    const url = new URL(e.actionHref!, "https://allfantasy.ai")
+    expect(url.pathname).toBe("/player/cam-ward")
+    expect(url.searchParams.get("sport")).toBe("NFL")
+    expect(url.searchParams.get("team")).toBe("Tennessee Titans")
+  })
 })
 
 describe("headshotsByRiId", () => {

@@ -138,6 +138,12 @@ export interface CreateLeagueV2State {
   creationMode: CreateMode
   /** Null until the user explicitly picks a league concept (concept-first). */
   leagueType: LeagueTypeId | null
+  /**
+   * The manager picked a format themselves. Until they do, changing sport moves the format to that
+   * sport's default (Survivor, else Guillotine, else Big Brother); after they do, a sport change
+   * keeps their pick whenever the new sport allows it.
+   */
+  leagueTypeTouched: boolean
   /** IDP is a modifier, not a format. When true, leagueType stays 'redraft' and we pass leagueVariant: 'IDP'. */
   idpSelected: boolean
   sport: SupportedSport
@@ -162,6 +168,12 @@ export interface CreateLeagueV2State {
   medianGame: boolean
   draftDate: string
   draftTime: string
+  /**
+   * The manager chose to set the draft date after creating the league. The date and time are
+   * then optional here and are NOT sent: the league is created with `draftDateUtc` null and the
+   * commissioner sets it in League → Commissioner settings → Draft (DraftSettingsPanel).
+   */
+  draftScheduleLater: boolean
   timezone: string
   language: string
   scoringSource: ScoringSource
@@ -322,6 +334,7 @@ export function resolveBestBallSetupForWizard(state: CreateLeagueV2State): BestB
 export const DEFAULT_V2_STATE: CreateLeagueV2State = {
   creationMode: 'quick',
   leagueType: null,
+  leagueTypeTouched: false,
   idpSelected: false,
   sport: 'NFL',
   soccerPipeline: null,
@@ -338,6 +351,7 @@ export const DEFAULT_V2_STATE: CreateLeagueV2State = {
   medianGame: false,
   draftDate: '',
   draftTime: '',
+  draftScheduleLater: false,
   timezone: 'America/New_York',
   language: 'en',
   scoringSource: 'af',

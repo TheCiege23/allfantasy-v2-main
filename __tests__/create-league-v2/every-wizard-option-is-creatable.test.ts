@@ -179,6 +179,36 @@ describe('every option the create wizard offers is creatable', () => {
     expect(refused).toEqual([])
   })
 
+  it('"Schedule later" creates every sport and format without a draft date', async () => {
+    // One combination per sport × format is enough here: the draft date is independent of draft
+    // type and preset, and the full matrix above already covers those with a date.
+    const seen = new Set<string>()
+    const refused: string[] = []
+    for (const choice of choices) {
+      const [sport, format] = choice.label.split('/')
+      if (seen.has(`${sport}/${format}`)) continue
+      seen.add(`${sport}/${format}`)
+      const state = apply(choice.state, { draftScheduleLater: true, draftDate: '', draftTime: '' })
+      const issues = analyzeCreateLeagueCompletion(state)
+      if (issues.length) { refused.push(`${sport}/${format} wizard: ${issues.map((i) => i.code)}`); continue }
+      await submitCreateLeagueV2(state)
+      const body = bodies.at(-1)!
+      const setup = body.conceptSetup as Record<string, unknown>
+      // 🛑 Absent, never ''. The NBA/NHL Survivor calendar reads any *string* as a draft time.
+      if ('draftDate' in setup || 'draftTime' in setup) refused.push(`${sport}/${format}: sent draftDate/draftTime keys`)
+      const validated = validateCreatePayload(body)
+      if (!validated.ok) refused.push(`${sport}/${format} server: ${JSON.stringify(validated).slice(0, 200)}`)
+    }
+    expect(seen.has('NBA/survivor')).toBe(true)
+    expect(refused).toEqual([])
+  })
+
+  it('without "Schedule later" a missing date still blocks creation', () => {
+    const base = choices.find((c) => c.label === 'NFL/redraft/snake/fb_half_ppr/12')!.state
+    const codes = analyzeCreateLeagueCompletion(apply(base, { draftDate: '', draftTime: '' })).map((i) => i.code)
+    expect(codes).toEqual(expect.arrayContaining(['draft_date_required', 'draft_time_required']))
+  })
+
   it('privacy and the median game reach the request body', async () => {
     const base = choices.find((c) => c.label === 'NFL/redraft/snake/fb_half_ppr/12')!.state
     await submitCreateLeagueV2(apply(base, { privacy: 'public', medianGame: true }))

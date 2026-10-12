@@ -17,7 +17,7 @@ vi.mock('@/lib/prisma', () => ({
 }))
 vi.mock('@/lib/notification-engine', () => ({ ingestBatch: h.ingestBatch }))
 
-import { notifyBigPlays, notificationTitleFor, ownersByPlayerId } from '@/lib/live/bigPlayNotifier'
+import { notifyBigPlays, notificationTitleFor, ownersByPlayerId, starterImpactsByPlayerId } from '@/lib/live/bigPlayNotifier'
 import type { LiveEvent } from '@/lib/live/eventDetector'
 
 const ev = (over: Partial<LiveEvent> = {}): LiveEvent =>
@@ -314,20 +314,21 @@ describe('one sport per play — no cross-sport recipients', () => {
     { sport: 'NCAAF', rollingInsightsId: '101', sleeperId: null, espnId: null, fantraxId: '06k5m', mflId: null, fleaflickerId: null },
     { sport: 'NCAAB', rollingInsightsId: '101', sleeperId: null, espnId: '4433', fantraxId: null, mflId: null, fleaflickerId: null },
   ]
-  const leagueRoster = (sport: string, leagueName: string, userId: string, starter: string) => ({
+  const leagueRoster = (sport: string, leagueName: string, userId: string, starter: string, platform = 'fantrax') => ({
     sport,
     platformUserId: userId,
     playerData: { starters: [starter], players: [starter] },
     redraftRoster: null,
     league: {
-      id: `league-${sport}`, name: leagueName, platform: 'fantrax', guillotineMode: false,
+      id: `league-${sport}`, name: leagueName, platform, guillotineMode: false,
       teams: [{ platformUserId: userId, claimedByUserId: userId, currentRank: null }],
     },
   })
   const ROSTERS = [
-    leagueRoster('NFL', 'Dynasty Bros', 'af-nfl', '11560'),
+    // A Sleeper league: '11560' is a Sleeper id only where the league speaks Sleeper's ids.
+    leagueRoster('NFL', 'Dynasty Bros', 'af-nfl', '11560', 'sleeper'),
     leagueRoster('NCAAF', 'Saturday CFB', 'af-cfb', '06k5m'),
-    leagueRoster('NCAAB', 'March Pool', 'af-cbb', '4433'),
+    leagueRoster('NCAAB', 'March Pool', 'af-cbb', '4433', 'espn'),
     // An NHL lineup holding the number 11560, which is NOT Bijan Robinson in hockey.
     leagueRoster('NHL', 'Puck League', 'af-nhl', '11560'),
   ]
@@ -390,6 +391,85 @@ describe('one sport per play — no cross-sport recipients', () => {
     const owners = await (ownersByPlayerId as (ids: string[], opts?: unknown) => Promise<Map<string, string[]>>)(['101'])
     expect(owners.size).toBe(0)
     expect(h.identityFind).not.toHaveBeenCalled()
+  })
+})
+
+/*
+ * 2026-10-12: ids are per PROVIDER within a sport too. One NFL player (RI 101) whose Sleeper,
+ * ESPN and Fleaflicker ids differ, and leagues on each platform whose lineups hold those numbers —
+ * some as their own platform's id for him, some as a number that on that platform is a stranger.
+ * Production: 23 Fleaflicker and 6 ESPN NFL starter slots hold an NFL Sleeper id that is not theirs.
+ */
+describe('one id column per league platform — no cross-provider recipients', () => {
+  const IDENTITY = {
+    sport: 'NFL', rollingInsightsId: '101', sleeperId: '11560',
+    espnId: '4241', fantraxId: null, mflId: null, fleaflickerId: '9001',
+  }
+  const roster = (leagueId: string, platform: string, userId: string, starter: string) => ({
+    platformUserId: userId,
+    playerData: { starters: [starter], players: [starter] },
+    redraftRoster: null,
+    league: {
+      id: leagueId, name: leagueId, platform, guillotineMode: false,
+      teams: [{ platformUserId: userId, claimedByUserId: userId, currentRank: null }],
+    },
+  })
+  const ROSTERS = [
+    roster('sleeper-own', 'sleeper', 'u-sleeper-own', '11560'),
+    roster('native-own', 'manual', 'u-native-own', '11560'),
+    roster('espn-own', 'espn', 'u-espn-own', '4241'),
+    roster('flea-own', 'fleaflicker', 'u-flea-own', '9001'),
+    // His Sleeper number on Fleaflicker / ESPN, and his ESPN number on Sleeper: three strangers.
+    roster('flea-stranger', 'fleaflicker', 'u-flea-stranger', '11560'),
+    roster('espn-stranger', 'espn', 'u-espn-stranger', '11560'),
+    roster('sleeper-stranger', 'sleeper', 'u-sleeper-stranger', '4241'),
+  ]
+
+  beforeEach(() => {
+    h.identityFind.mockResolvedValue([IDENTITY])
+    h.rosterFind.mockImplementation(async ({ where }: { where: Record<string, any> }) => {
+      const wanted = new Set<string>(where.OR.map((clause: any) => clause.playerData.array_contains[0]))
+      return ROSTERS.filter((r) => r.playerData.starters.some((id) => wanted.has(id)))
+    })
+    h.appUserFind.mockResolvedValue(ROSTERS.map((r) => ({ id: r.platformUserId })))
+    h.findMany.mockResolvedValue([])
+  })
+
+  it('REGRESSION: a roster matches only on its own platform\'s id column', async () => {
+    const impacts = await starterImpactsByPlayerId(['101'], 'NFL')
+    const leagues = (impacts.get('101') ?? []).flatMap((u) => u.leagues.map((l) => l.leagueId)).sort()
+    expect(leagues).toEqual(['espn-own', 'flea-own', 'native-own', 'sleeper-own'])
+  })
+
+  it('REGRESSION: a stranger sharing the number on another platform is not told "your starter scored"', async () => {
+    await notifyBigPlays([ev({ type: 'TOUCHDOWN', delta: 20 })])
+    const recipients = h.ingestBatch.mock.calls.flatMap((call) => call[0].flatMap((n: any) => n.userIds))
+    for (const wrong of ['u-flea-stranger', 'u-espn-stranger', 'u-sleeper-stranger']) {
+      expect(recipients).not.toContain(wrong)
+    }
+    for (const right of ['u-sleeper-own', 'u-native-own', 'u-espn-own', 'u-flea-own']) {
+      expect(recipients).toContain(right)
+    }
+  })
+
+  it('REGRESSION: the imported-owner SQL only reads Sleeper leagues for a Sleeper id', async () => {
+    // A double that honours the platform predicate the SQL carries, and a profile for BOTH owners,
+    // so the owner-id translation is not what keeps the Fleaflicker manager out.
+    h.rawQuery.mockImplementation(async (sql: string) =>
+      [
+        { platform: 'sleeper', platformUserId: 'sl-owner' },
+        { platform: 'fleaflicker', platformUserId: 'ff-owner' },
+      ].filter((row) => !/lower\(l\.platform\) = 'sleeper'/.test(sql) || row.platform === 'sleeper'))
+    h.profileFind.mockImplementation(async ({ where }: { where: Record<string, any> }) =>
+      [
+        { userId: 'af-sl-owner', sleeperUserId: 'sl-owner' },
+        { userId: 'af-ff-owner', sleeperUserId: 'ff-owner' },
+      ].filter((p) => where.sleeperUserId.in.includes(p.sleeperUserId)))
+
+    for (const startersOnly of [true, false]) {
+      const owners = await ownersByPlayerId(['101'], { startersOnly, sport: 'NFL' })
+      expect(owners.get('101')).toEqual(['af-sl-owner'])
+    }
   })
 })
 

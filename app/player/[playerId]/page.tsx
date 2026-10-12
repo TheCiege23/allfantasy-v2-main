@@ -1,31 +1,24 @@
-import { redirect } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
 import { resolveCurrentInjuryDesignations } from '@/lib/injuries/currentInjuryDesignations'
 import { PlayerProfileClient } from './PlayerProfileClient'
+import { readPlayerPageLookup, resolvePlayerPageIdentity } from './resolvePlayerIdentity'
 import type { Metadata } from 'next'
 
 export const dynamic = 'force-dynamic'
 
+type PageSearchParams = Promise<Record<string, string | string[] | undefined>>
+
 export async function generateMetadata({
   params,
+  searchParams,
 }: {
   params: Promise<{ playerId: string }>
+  searchParams?: PageSearchParams
 }): Promise<Metadata> {
   const { playerId } = await params
-  const identity = await prisma.playerIdentityMap
-    .findFirst({
-      where: {
-        OR: [
-          { id: playerId },
-          { sleeperId: playerId },
-          { normalizedName: playerId.toLowerCase().replace(/-/g, ' ') },
-        ],
-      },
-      select: { canonicalName: true, position: true, currentTeam: true },
-    })
-    .catch(() => null)
+  const { identity } = await resolvePlayerPageIdentity(playerId, readPlayerPageLookup(await searchParams))
 
   const name = identity?.canonicalName ?? 'Player'
   return {
@@ -36,8 +29,10 @@ export async function generateMetadata({
 
 export default async function PlayerProfilePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ playerId: string }>
+  searchParams?: PageSearchParams
 }) {
   const session = (await getServerSession(authOptions as never)) as {
     user?: { id?: string }
@@ -49,18 +44,11 @@ export default async function PlayerProfilePage({
   }
 
   const { playerId } = await params
-
-  const identity = await prisma.playerIdentityMap
-    .findFirst({
-      where: {
-        OR: [
-          { id: playerId },
-          { sleeperId: playerId },
-          { normalizedName: playerId.toLowerCase().replace(/-/g, ' ') },
-        ],
-      },
-    })
-    .catch(() => null)
+  const lookup = readPlayerPageLookup(await searchParams)
+  const { identity, reason } = await resolvePlayerPageIdentity(playerId, lookup)
+  // Several players answer to this name in this sport and nothing narrowed them. A placeholder would
+  // let the tabs re-guess by name, so the page refuses outright.
+  if (reason === 'ambiguous') notFound()
 
   /*
    * The header's injury badge comes from the LIVE injury feed, never from `identity.status` — that
@@ -93,7 +81,7 @@ export default async function PlayerProfilePage({
         name: playerId.replace(/-/g, ' '),
         position: '',
         team: 'FA',
-        sport: 'NFL',
+        sport: lookup.sport,
         sleeperId: null,
         status: 'unknown',
         injuryStatus: null,

@@ -18,6 +18,9 @@ import { createTtlMemo } from '@/lib/ttl-memo'
 import { isDailyStatSport } from '@/lib/scoring-runtime/dailySportStatNormalization'
 import { resolveCurrentInjuryDesignations } from '@/lib/injuries/currentInjuryDesignations'
 import { buildPlayerKey, normalizeStoredPlayerKey } from '@/lib/adp/computeAllFantasyAdp'
+import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
+import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
+import { rowsDescribeSamePlayer, selectAuthoritativePlayerRow } from '@/lib/player-match/authoritativePlayerRow'
 
 /**
  * In-process memos in front of the DB-backed cache. That cache saved CPU but not egress: the NFL
@@ -173,6 +176,125 @@ export function scorableSoccerRowsOnly<T extends { sleeperId?: string | null; ex
   if (String(sport).trim().toUpperCase() !== 'SOCCER') return rows
   const scorable = rows.filter((row) => isScorablePoolId(sport, row))
   return scorable.length > 0 ? scorable : rows
+}
+
+type PoolSourceRow = {
+  name: string
+  position: string | null
+  team: string | null
+  status: string | null
+  sleeperId: string | null
+  externalId: string | null
+  imageUrl: string | null
+  source: string | null
+}
+
+/**
+ * 🛑 NFL: ONE ROW PER SLEEPER PLAYER, AND IT IS THE SLEEPER ROW (2026-10-12).
+ *
+ * The (name, position, team) de-dup below cannot merge a vendor row whose club is stale or spelled
+ * differently, so on production the same man was listed two or three times: A.J. Brown as a backfill
+ * "Philadelphia Eagles" row beside the Sleeper "New England Patriots" one; Kaytron Allen as Sleeper
+ * MIA, Rolling Insights MIN and TheSportsDB WAS. Of 12,188 non-Sleeper NFL rows, 9,202 carry no
+ * Sleeper id but share a name with exactly one Sleeper player; 5,614 of those sit beside a Sleeper
+ * row with NO team (sampled: retired men — Janikowski, Alex Mack — the vendor holding the last club).
+ *
+ * So a vendor row collapses onto the Sleeper row it describes, and the Sleeper row speaks for the
+ * group (`selectAuthoritativePlayerRow`: team never filled from a vendor). A vendor row describes a
+ * Sleeper player when
+ *   1. its own Sleeper stamp names a Sleeper row that agrees on name and position group; or
+ *   2. it has no stamp, and the one Sleeper player of that name agrees on position group; or
+ *   3. among same-name Sleeper players agreeing on position group, exactly one is on its club.
+ * A stamp the named Sleeper row CONTRADICTS is void: TheSportsDB "Byron Murphy DT Seattle" carries
+ * 5864, the Vikings CB, and lands by rule 3 on 11668, the Seattle DL. A stamp whose Sleeper row is
+ * not in this query (a position filter can exclude it) cannot be judged and is left as it was.
+ * Rule 2 does not ask for an agreeing club the way `vendorRowMayCarrySleeperId` does: that rule
+ * decides whether to WRITE a stamp; here a stale vendor club is exactly the duplicate being removed,
+ * and the club shown comes from Sleeper either way.
+ *
+ * The best photo in the group is still carried to the Sleeper row when it has none.
+ */
+function collapseNflRowsOntoSleeper<T extends PoolSourceRow>(rows: readonly T[]): T[] {
+  const sleeperById = new Map<string, T>()
+  const sleeperByName = new Map<string, T[]>()
+  for (const row of rows) {
+    const sid = String(row.sleeperId ?? '').trim().toLowerCase()
+    if (row.source !== 'sleeper' || !sid) continue
+    sleeperById.set(sid, row)
+    const name = normalizeMatchName(row.name)
+    if (!name) continue
+    const bucket = sleeperByName.get(name)
+    if (bucket) bucket.push(row)
+    else sleeperByName.set(name, [row])
+  }
+  if (sleeperById.size === 0) return [...rows]
+
+  const isSleeperRow = (row: T) =>
+    row.source === 'sleeper' && sleeperById.get(String(row.sleeperId ?? '').trim().toLowerCase()) === row
+
+  const sleeperRowFor = (row: T): T | null => {
+    const stamp = String(row.sleeperId ?? '').trim().toLowerCase()
+    if (stamp) {
+      const stamped = sleeperById.get(stamp)
+      if (!stamped) return null
+      if (rowsDescribeSamePlayer(stamped, row)) return stamped
+    }
+    const namesakes = sleeperByName.get(normalizeMatchName(row.name)) ?? []
+    const candidates = namesakes.filter((s) => rowsDescribeSamePlayer(s, row))
+    if (candidates.length === 1 && namesakes.length === 1) return candidates[0]!
+    const club = normalizeTeamAbbrev(row.team)
+    if (!club || club === 'FA') return null
+    const sameClub = candidates.filter((s) => normalizeTeamAbbrev(s.team) === club)
+    return sameClub.length === 1 ? sameClub[0]! : null
+  }
+
+  const groups = new Map<T, T[]>()
+  const collapsed = new Set<T>()
+  const voidStamp = new Set<T>()
+  for (const row of rows) {
+    if (isSleeperRow(row)) {
+      if (!groups.has(row)) groups.set(row, [row])
+      continue
+    }
+    const target = sleeperRowFor(row)
+    if (target) {
+      const group = groups.get(target)
+      if (group) group.push(row)
+      else groups.set(target, [target, row])
+      collapsed.add(row)
+    } else if (row.sleeperId && sleeperById.has(String(row.sleeperId).trim().toLowerCase())) {
+      voidStamp.add(row)
+    }
+  }
+
+  const out: T[] = []
+  for (const row of rows) {
+    if (collapsed.has(row)) continue
+    if (voidStamp.has(row)) {
+      out.push({ ...row, sleeperId: null } as T)
+      continue
+    }
+    const group = isSleeperRow(row) ? groups.get(row) : undefined
+    if (!group || group.length === 1) {
+      out.push(row)
+      continue
+    }
+    const picked = selectAuthoritativePlayerRow(group)!
+    let imageUrl = row.imageUrl
+    if (!isHttpImage(imageUrl)) {
+      let bestQuality = -1
+      for (const member of group) {
+        const quality = sportsPlayerQuality(member)
+        if (isHttpImage(member.imageUrl) && quality > bestQuality) {
+          bestQuality = quality
+          imageUrl = member.imageUrl
+        }
+      }
+    }
+    // `status` stays Sleeper's: a vendor's "INACT" or a stale aggregator 'out' is not a roster status.
+    out.push({ ...picked.row, status: row.status, imageUrl } as T)
+  }
+  return out
 }
 
 function sportsPlayerQuality(row: {
@@ -427,11 +549,18 @@ async function buildPlayerPoolRecords(
   // lost with the row it came on: the best image among a player's duplicates is carried to the
   // row that won.
   // Filtered here, after the cache, so the cached row set stays the whole table for every caller.
-  const poolRows = scorableSoccerRowsOnly(sport, rows)
+  const isNfl = sport === 'NFL'
+  const poolRows = isNfl ? collapseNflRowsOntoSleeper(rows) : scorableSoccerRowsOnly(sport, rows)
+  // NFL keys on the club CODE, so the vendor rows left over after the collapse still merge across
+  // "PHI" / "Philadelphia Eagles"; other sports' team strings are not NFL clubs and stay as they are.
+  const teamKeyOf = (team: string | null) =>
+    (isNfl ? normalizeTeamAbbrev(team) : String(team ?? '').trim().toUpperCase()) ?? ''
+  // NFL: the Sleeper row speaks for its key; no photo or source rank outranks it.
+  const isAuthoritative = (row: { source?: string | null }) => isNfl && row.source === 'sleeper'
   const bestByKey = new Map<string, (typeof rows)[number]>()
   const bestImageByKey = new Map<string, { url: string; quality: number }>()
   for (const row of poolRows) {
-    const key = `${String(row.name ?? '').trim().toLowerCase()}|${String(row.position ?? '').trim().toUpperCase()}|${String(row.team ?? '').trim().toUpperCase()}`
+    const key = `${String(row.name ?? '').trim().toLowerCase()}|${String(row.position ?? '').trim().toUpperCase()}|${teamKeyOf(row.team)}`
     const quality = sportsPlayerQuality(row)
     if (isHttpImage(row.imageUrl) && quality > (bestImageByKey.get(key)?.quality ?? -1)) {
       bestImageByKey.set(key, { url: String(row.imageUrl), quality })
@@ -439,10 +568,14 @@ async function buildPlayerPoolRecords(
     const current = bestByKey.get(key)
     const rowScorable = isScorablePoolId(sport, row)
     const currentScorable = current ? isScorablePoolId(sport, current) : false
+    const rowAuthoritative = isAuthoritative(row)
+    const currentAuthoritative = current ? isAuthoritative(current) : false
     if (
       !current ||
-      (rowScorable && !currentScorable) ||
-      (rowScorable === currentScorable && quality > sportsPlayerQuality(current))
+      (rowAuthoritative && !currentAuthoritative) ||
+      (rowAuthoritative === currentAuthoritative &&
+        ((rowScorable && !currentScorable) ||
+          (rowScorable === currentScorable && quality > sportsPlayerQuality(current))))
     ) {
       bestByKey.set(key, row)
     }
@@ -484,21 +617,52 @@ async function buildPlayerPoolRecords(
 
   for (const r of dedupedRows) rosterStatusById.set(r.id, r.source === 'sleeper' ? r.status ?? null : null)
 
+  /*
+   * 🛑 NFL `SportsPlayer.team` IS A DISPLAY NAME ("Arizona Cardinals") SINCE THE SLEEPER WRITER
+   * MOVED TO IT (refreshSleeperPlayerRows, 2026-09-06); the club map is keyed on codes. Measured
+   * 2026-10-12: 0 of 24,148 NFL rows carry a code-shaped team outside 9 backfill rows. So every
+   * `team_id` lookup missed, and `team_abbreviation` carried the display name to consumers that
+   * key on a code (the waiver pool's bye-week map, the draft room's ADP team match). NFL gets the
+   * code; `team` keeps the stored value. A team that is no NFL club (none, "FA") passes through.
+   */
+  const clubCodeOf = (team: string | null): string | null => {
+    if (!isNfl) return team ? team.toUpperCase() : null
+    const code = normalizeTeamAbbrev(team)
+    return code && teamIdByAbbrev.has(code) ? code : null
+  }
+  /*
+   * 🛑 NFL `external_source_id` IS THE SLEEPER ID OR A PREFIXED PROVIDER ID, NEVER A BARE VENDOR
+   * NUMBER. It used to be `sleeperId ?? externalId`, and a Rolling Insights row with no Sleeper id
+   * put its RI number there — in Sleeper's range: A.J. Brown's backfill row carried 4876, which is
+   * Sleeper's id for Bradley Northnagel (LS). Measured 2026-10-12: 7,340 unstamped vendor NFL rows had a numeric
+   * externalId equal to SOME Sleeper id, so the waiver route's rostered filter hid (or showed) the
+   * wrong player and every `external_source_id ?? player_id` draft consumer stored a Sleeper-looking
+   * number for him. The numeric id is dropped and consumers fall back to `player_id`, the rule the
+   * draft room already applies (`nflPoolRowIdResolver`). `tsdb_…` / `name:…` ids cannot collide and
+   * are kept, so ids already stored from them still match.
+   */
+  const externalSourceIdOf = (r: { sleeperId: string | null; externalId: string | null }): string | null => {
+    if (r.sleeperId) return r.sleeperId
+    if (!isNfl) return r.externalId ?? null
+    const ext = String(r.externalId ?? '').trim()
+    return ext === '' || /^\d+$/.test(ext) ? null : ext
+  }
+
   const primary = dedupedRows.map((r) => ({
-    team_abbreviation: r.team ?? null,
+    team_abbreviation: isNfl ? clubCodeOf(r.team) ?? r.team ?? null : r.team ?? null,
     player_id: r.id,
     sport_type: sport as SportType,
     league_variant: null,
     team_id:
       r.teamId ??
-      (r.team ? teamIdByAbbrev.get(r.team.toUpperCase()) ?? null : null),
+      (r.team ? teamIdByAbbrev.get(clubCodeOf(r.team) ?? '') ?? null : null),
     team: r.team ?? null,
     full_name: r.name,
     position: normalizePoolPosition(sport, r.position),
     status: r.status ?? null,
     injury_status: null as string | null, // filled from the injury feed by buildPlayerPoolForSport
-    external_source_id: r.sleeperId ?? r.externalId ?? null,
-    // Kept SEPARATE from `external_source_id`, which is the coalesce above and so
+    external_source_id: externalSourceIdOf(r),
+    // Kept SEPARATE from `external_source_id`: outside NFL that is still the coalesce above and so
     // cannot tell a Sleeper id from a provider id that merely looks like one.
     sleeper_id: r.sleeperId ?? null,
     age: r.age ?? null,
@@ -514,10 +678,13 @@ async function buildPlayerPoolRecords(
     normalizedPositions.every((p) => IDP_INDIVIDUAL_POSITIONS.has(p) || p === 'IDP_FLEX')
 
   if (sport === 'NFL' && !isIdpOnlyFilter) {
+    // Normalized, because the Sleeper DEF row's team is "Arizona Cardinals": compared raw it never
+    // matched "ARI", and every club got a synthetic `nfl:def:ARI` beside the real one — two of each
+    // defense, and one still "available" in a league that rostered Sleeper's ARI.
     const existingDefTeams = new Set(
       primary
         .filter((p) => ['DEF', 'DST'].includes(String(p.position ?? '').trim().toUpperCase()))
-        .map((p) => String(p.team_abbreviation ?? '').trim().toUpperCase())
+        .map((p) => normalizeTeamAbbrev(p.team_abbreviation ?? p.team) ?? '')
         .filter(Boolean),
     )
     for (const [abbr, teamId] of teamIdByAbbrev.entries()) {

@@ -12,7 +12,7 @@ const m = vi.hoisted(() => ({
   recapped: [] as string[],
   findManyArgs: [] as unknown[],
   posted: [] as string[],
-  notifyRecaps: vi.fn(async (_posted: unknown[]) => ({ notified: new Set(['owner-a']), sent: 1, skipped: 0 })),
+  notifyRecaps: vi.fn(async (_posted: unknown[], _options?: unknown) => ({ notified: new Set(['owner-a']), sent: 1, skipped: 0, emailed: 0 })),
   notifyStories: vi.fn(async (_now?: Date, _pushed?: ReadonlySet<string>) => ({ targeted: 0, sent: 0, skipped: 0 })),
 }))
 
@@ -73,6 +73,7 @@ function cronRequest() {
 
 beforeEach(() => {
   process.env.CRON_SECRET = 'test-secret'
+  delete process.env.WEEKLY_RECAP_EMAIL_ENABLED
   m.leagues = [
     { id: 'a', name: 'A League', platformLeagueId: 'sa', userId: 'owner-a', settings: null },
     { id: 'b', name: 'B League', platformLeagueId: 'sb', userId: 'owner-b', settings: null },
@@ -106,8 +107,21 @@ describe('the weekly recap sweep', () => {
     await GET(cronRequest())
     const posted = (m.notifyRecaps.mock.calls[0] as unknown as [Array<{ leagueId: string; season: string; week: number; ownerUserId: string }>])[0]
     expect(posted.map((p) => p.leagueId).sort()).toEqual(['a', 'b', 'c'])
-    expect(posted[0]).toMatchObject({ season: '2026', week: 5 })
+    expect(posted[0]).toMatchObject({ season: '2026', week: 5, text: 'recap' })
     const pushed = (m.notifyStories.mock.calls[0] as unknown as [Date, ReadonlySet<string>])[1]
     expect([...pushed]).toEqual(['owner-a'])
+  })
+
+  it('sends the recap email only when the worker switches it on, and never per league from here', async () => {
+    await GET(cronRequest())
+    expect((m.notifyRecaps.mock.calls[0] as unknown as [unknown, { email: boolean; baseUrl: string }])[1]).toEqual({
+      email: false,
+      baseUrl: 'https://allfantasy.ai',
+    })
+    m.notifyRecaps.mockClear()
+    process.env.WEEKLY_RECAP_EMAIL_ENABLED = '1'
+    m.posted = []
+    await GET(cronRequest())
+    expect((m.notifyRecaps.mock.calls[0] as unknown as [unknown, { email: boolean }])[1].email).toBe(true)
   })
 })

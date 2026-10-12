@@ -34,13 +34,13 @@ export const DEFAULT_IDOL_EXPIRY_PLAYERS_REMAINING = 5
 
 /**
  * Key position per sport for Exile Island team draft.
- * Claiming this position's player wins you the entire real-world team.
+ * Claiming this position reserves exclusive team rights; teammates are claimed individually.
  */
 export const EXILE_KEY_POSITION_BY_SPORT: Record<string, string> = {
   NFL: 'QB',
   MLB: 'SP',
   NHL: 'G',
-  NBA: 'C',
+  NBA: 'PG',
   NCAAF: 'QB',
   NCAAB: 'C',
   SOCCER: 'GK',
@@ -150,13 +150,13 @@ export function parseTribeIdFromSource(source: string | null): string | null {
 
 /**
  * Key-position map used to pick the "anchor" player for exile team drafts.
- * Claiming the anchor position grants that player's full real-world team.
+ * Claiming the anchor position reserves that player's real-world team.
  */
 export const KEY_POSITION_BY_SPORT: Record<string, { code: string; label: string }> = {
   NFL: { code: 'QB', label: 'Quarterback' },
   MLB: { code: 'SP', label: 'Starting Pitcher' },
   NHL: { code: 'G', label: 'Goaltender' },
-  NBA: { code: 'C', label: 'Center' },
+  NBA: { code: 'PG', label: 'Point Guard' },
   NCAAF: { code: 'QB', label: 'Quarterback' },
   NCAAB: { code: 'C', label: 'Center' },
   SOCCER: { code: 'GK', label: 'Goalkeeper' },

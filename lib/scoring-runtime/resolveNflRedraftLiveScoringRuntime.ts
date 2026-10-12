@@ -4,6 +4,7 @@ import { resolveCanonicalLeagueRules } from '@/lib/league-runtime'
 import type { CanonicalLeagueRuntimeEvent } from '@/lib/league-runtime'
 import { resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
 import { hydrateRedraftLineupLocksForRosters } from '@/lib/redraft/lineupLock'
+import { resolveCurrentLockTeams } from '@/lib/redraft/lineupLockCurrentTeam'
 import { validateRedraftLineup } from '@/lib/redraft/lineupValidation'
 import { updateStandings } from '@/lib/redraft/standingsEngine'
 import { getNormalizedPlayerData } from '@/lib/player-data/getNormalizedPlayerData'
@@ -249,6 +250,12 @@ export async function resolveNflRedraftLiveScoringRuntime(input: {
     leagueSettings: league?.settings ?? null,
     players: storedRosterPlayers,
     now: input.now,
+    // Lock on each player's current club, not the team stored when he was added (lineupLockCurrentTeam.ts).
+    currentTeamByPlayerId: await resolveCurrentLockTeams(prisma, {
+      sport: season.sport,
+      platform: league?.platform ?? null,
+      playerIds: storedRosterPlayers.map((p) => p.playerId),
+    }),
   })
   const playersByRosterId = new Map<string, typeof rosterPlayers>()
   for (const player of rosterPlayers) {

@@ -65,7 +65,7 @@ export function PlayerHeaderCard({
   const [outlook, setOutlook] = useState<OutlookSnippet | null>(null)
 
   useEffect(() => {
-    fetch(`/api/player-outlook?playerName=${encodeURIComponent(player.name)}&sport=${encodeURIComponent(player.sport)}&narrative=false`, { cache: 'no-store' })
+    fetch(`/api/player-outlook?playerName=${encodeURIComponent(player.name)}&sport=${encodeURIComponent(player.sport)}&position=${encodeURIComponent(player.position)}&team=${encodeURIComponent(player.team)}&narrative=false`, { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (d) {
@@ -80,7 +80,7 @@ export function PlayerHeaderCard({
         }
       })
       .catch(() => {})
-  }, [player.name, player.sport])
+  }, [player.name, player.sport, player.position, player.team])
 
   const teamLogoUrl = getTeamLogoUrl(player.team, player.sport) ?? ''
   /*

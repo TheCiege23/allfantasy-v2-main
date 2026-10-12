@@ -17,6 +17,7 @@ export type SurvivorSeasonTribeMember = {
 }
 
 export type SurvivorSeasonTribe = {
+  logoUrl?: string | null
   id: string
   name?: string
   emoji?: string | null
@@ -46,7 +47,9 @@ export type SurvivorSeasonPlayer = {
 
 export type SurvivorSeasonCouncil = {
   isRevealed?: boolean
-  revealSequence?: { targetName?: string | null; status?: string }[] | null
+  eliminatedName?: string | null
+  isTie?: boolean
+  revealSequence?: { targetName?: string | null; status?: string; isExtraVote?: boolean }[] | null
   id: string
   week: number
   status?: string

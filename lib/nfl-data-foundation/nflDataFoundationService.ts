@@ -1408,8 +1408,19 @@ export async function getCanonicalNflRosterContext(
   const season = Number(options?.season ?? roster.season.season)
   const week = Number(options?.week ?? roster.season.currentWeek ?? 1)
   const league = (await (db as any).league
-    .findUnique({ where: { id: roster.leagueId }, select: { settings: true } })
-    .catch(() => null)) as { settings: unknown } | null
+    .findUnique({ where: { id: roster.leagueId }, select: { settings: true, platform: true } })
+    .catch(() => null)) as { settings: unknown; platform?: string | null } | null
+  // Lock on each player's current club, not the team stored when he was added. Imported lazily:
+  // the resolver is server-only, and this module is also loaded by tsx sync scripts.
+  const currentTeamByPlayerId = await import('@/lib/redraft/lineupLockCurrentTeam')
+    .then(({ resolveCurrentLockTeams }) =>
+      resolveCurrentLockTeams(db as any, {
+        sport: roster.season.sport || 'NFL',
+        platform: league?.platform ?? null,
+        playerIds: roster.players.map((p) => p.playerId),
+      }),
+    )
+    .catch(() => undefined)
   // `RedraftRosterPlayer.isLocked` is never stored as true: the lineup lock is derived from the
   // game schedule at read time (lib/redraft/lineupLock.ts). Fail open like the rest of this module,
   // so a schedule read error cannot take the roster context down with it.
@@ -1421,6 +1432,7 @@ export async function getCanonicalNflRosterContext(
     leagueSettings: league?.settings ?? null,
     players: roster.players,
     now: options?.now,
+    currentTeamByPlayerId,
   })
     .then((result) => result.players)
     .catch(() => roster.players)

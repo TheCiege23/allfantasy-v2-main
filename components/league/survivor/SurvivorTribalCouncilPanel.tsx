@@ -175,6 +175,7 @@ export function SurvivorTribalCouncilPanel({
             </div>
           ) : null}
 
+          {!council.isRevealed && council.status !== 'voting_open' && <div className="text-center"><img src="/survivor/exile/scroll-sealed.svg" alt="Results sealed until the Torch Ceremony" width={180} height={120} className="mx-auto" /><p className="text-xs text-neutral-400">Results remain sealed until the Torch Ceremony is published.</p></div>}
           {/* Reveal */}
           {council.reveal ? (
             <div className="space-y-2">
@@ -185,6 +186,7 @@ export function SurvivorTribalCouncilPanel({
                 isTie={council.reveal.isTie}
                 tiePhase={council.reveal.tiePhase}
                 autoPlay={council.isRevealed}
+                isPublished={council.isRevealed}
               />
             </div>
           ) : null}

@@ -22,6 +22,8 @@ type StatePlayerRow = {
 }
 
 type StateTribeRow = {
+  logoUrl: string | null
+  colorHex: string | null
   id: string
   name: string
   slotIndex: number
@@ -96,6 +98,8 @@ export interface SurvivorFoundationState {
     mergeTriggered: boolean
   }
   tribes: Array<{
+    logoUrl: string | null
+    colorHex: string | null
     id: string
     name: string
     slotIndex: number
@@ -224,6 +228,8 @@ export async function buildSurvivorStateForUser(
         id: true,
         name: true,
         slotIndex: true,
+        logoUrl: true,
+        colorHex: true,
         isActive: true,
         isMerged: true,
         members: { select: { rosterId: true } },
@@ -381,6 +387,8 @@ export async function buildSurvivorStateForUser(
       return {
         id: tribe.id,
         name: tribe.name,
+        logoUrl: tribe.logoUrl,
+        colorHex: tribe.colorHex,
         slotIndex: tribe.slotIndex,
         isActive: tribe.isActive,
         isMerged: tribe.isMerged,

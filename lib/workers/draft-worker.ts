@@ -42,6 +42,7 @@ import {
   closeDraftAuction,
   nominateDraftPlayer,
   placeDraftBid,
+  resolveSportsPlayerRow,
 } from './auction-engine'
 import {
   type LotteryResult,
@@ -268,12 +269,8 @@ async function resolvePlayerById(
     }
   }
 
-  const sportsPlayer = await prisma.sportsPlayer.findFirst({
-    where: {
-      OR: [{ id: playerId }, { externalId: playerId }],
-    },
-    select: { id: true, name: true, position: true, team: true },
-  })
+  // Scoped to the league's sport, and refusing an `externalId` two sources disagree about.
+  const sportsPlayer = await resolveSportsPlayerRow(sport, playerId)
   if (sportsPlayer?.id) {
     return {
       playerId: sportsPlayer.id,

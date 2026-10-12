@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
+import { SurvivorTribesPanel } from '@/app/league/[leagueId]/components/settings/survivor/SurvivorTribesPanel'
 import { SurvivorTribalCouncilPanel, type TribalCouncilView } from './survivor/SurvivorTribalCouncilPanel'
 
 type FoundationState = {
@@ -82,8 +83,6 @@ export function SurvivorFormatTab({ leagueId }: SurvivorFormatTabProps) {
   const [exileEnabled, setExileEnabled] = useState(true)
   const [returnWeek, setReturnWeek] = useState('10')
   const [returnTokens, setReturnTokens] = useState('4')
-  const [castSize, setCastSize] = useState('20')
-  const [tribeCount, setTribeCount] = useState('4')
   const [hostMode, setHostMode] = useState<'non_participating_host' | 'participating_player'>('non_participating_host')
 
   useEffect(() => {
@@ -97,21 +96,12 @@ export function SurvivorFormatTab({ leagueId }: SurvivorFormatTabProps) {
           setExileEnabled(json.settings.exileIslandEnabled)
           setReturnWeek(String(json.settings.exileReturnWeek))
           setReturnTokens(String(json.settings.exileReturnTokens))
-          setCastSize(String(json.settings.defaultTeamCount))
-          setTribeCount(String(json.settings.tribeCount))
           setHostMode(json.settings.commissionerParticipationMode)
         }
       })
       .catch((err) => setStatus(err instanceof Error ? err.message : String(err)))
       .finally(() => setLoading(false))
   }, [leagueId])
-
-  const tribeSize = useMemo(() => {
-    const teams = Number(castSize)
-    const tribes = Number(tribeCount)
-    if (!Number.isFinite(teams) || !Number.isFinite(tribes) || tribes <= 0) return 0
-    return Math.ceil(teams / tribes)
-  }, [castSize, tribeCount])
 
   async function saveFoundation() {
     setSaving(true)
@@ -123,8 +113,6 @@ export function SurvivorFormatTab({ leagueId }: SurvivorFormatTabProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           settings: {
-            defaultTeamCount: Number(castSize),
-            tribeCount: Number(tribeCount),
             commissionerParticipationMode: hostMode,
             exileIslandEnabled: exileEnabled,
             exileReturnWeek: Number(returnWeek),
@@ -204,40 +192,11 @@ export function SurvivorFormatTab({ leagueId }: SurvivorFormatTabProps) {
         <div>
           <h3 className="text-sm font-semibold text-white">Survivor Foundation</h3>
           <p className="mt-1 text-xs text-neutral-400">
-            Phase 1 stores setup and privacy state only. Gameplay engines stay off until their DB flows are ready.
+            Set league rules and commissioner privacy. Tribe choices lock when drafting starts.
           </p>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div>
-            <FieldLabel>Cast size</FieldLabel>
-            <input
-              type="number"
-              min={16}
-              max={20}
-              value={castSize}
-              onChange={(e) => setCastSize(e.target.value)}
-              className="mt-1 w-full rounded border border-neutral-700 bg-neutral-900 px-2 py-2 text-sm"
-            />
-          </div>
-          <div>
-            <FieldLabel>Tribes</FieldLabel>
-            <input
-              type="number"
-              min={2}
-              max={5}
-              value={tribeCount}
-              onChange={(e) => setTribeCount(e.target.value)}
-              className="mt-1 w-full rounded border border-neutral-700 bg-neutral-900 px-2 py-2 text-sm"
-            />
-          </div>
-          <div>
-            <FieldLabel>Tribe size</FieldLabel>
-            <div className="mt-1 rounded border border-neutral-800 bg-neutral-950 px-2 py-2 text-sm text-neutral-300">
-              {tribeSize || '-'}
-            </div>
-          </div>
-        </div>
+        <SurvivorTribesPanel leagueId={leagueId} canEdit={canAdmin} hasAfCommissionerSub={false} />
 
         <div>
           <FieldLabel>Commissioner privacy</FieldLabel>

@@ -73,9 +73,19 @@ function buildCanonicalPayload(state: CreateLeagueV2State): Record<string, unkno
     // A guillotine week has no opponent, so there is no head-to-head game for a median game to
     // double. The wizard hides the box for guillotine; this drops a choice made before switching.
     medianGame: state.medianGame === true && lt !== 'guillotine',
-    draftDate: state.draftDate,
-    draftTime: state.draftTime,
     draftTimezone: state.timezone,
+  }
+  /*
+   * 🛑 OMIT, NEVER SEND EMPTY STRINGS. The NBA/NHL Survivor branch of
+   * createCanonicalLeagueInTransaction builds its season calendar from the draft time whenever
+   * both fields are *strings* — `''` included — and `toUtc('', '', zone)` is an Invalid Date.
+   * Absent fields are the server's "no date yet" (draftDateUtc stays null).
+   */
+  const draftDate = state.draftDate.trim()
+  const draftTime = state.draftTime.trim()
+  if (state.draftScheduleLater !== true && draftDate && draftTime) {
+    conceptSetup.draftDate = draftDate
+    conceptSetup.draftTime = draftTime
   }
 
   const enabledPremiumAdvancedSettings = getEnabledPremiumAdvancedSettings(state.advancedSetup)

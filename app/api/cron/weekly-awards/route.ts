@@ -11,9 +11,6 @@ import {
   type WireRoster,
   type WireUser,
 } from '@/lib/league-chat/weeklyRecapMoment'
-import { sendTemplatedEmail } from '@/lib/resend-client'
-import { renderDigestEmail } from '@/lib/notifications/designedEmail'
-import { escapeHtml } from '@/lib/trade-intel/tradeGradeEmail'
 import { getBaseUrl } from '@/lib/get-base-url'
 import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 import { weeklyRecapAllowed } from '@/lib/core-app/commissioner/recipes'
@@ -39,16 +36,16 @@ export const maxDuration = 300
  * Sleeper week feed, awards/records from the same H2H aggregation the Legacy
  * tab renders. Nothing is synthesized.
  *
- * Email: when WEEKLY_RECAP_EMAIL_ENABLED=1, the recap is also emailed to the
- * league's AllFantasy members (owner + claimed teams). We cannot email
- * leaguemates who aren't on AllFantasy — the chat post covers the league.
+ * Email: when WEEKLY_RECAP_EMAIL_ENABLED=1, the recap is also emailed — ONE email per person per
+ * week covering all their recapped leagues, sent with the "share it" notification through the
+ * dispatcher (weeklyRecapNotify.ts / recapEmail.ts), so the results-email preference, unsubscribe and
+ * undeliverable checks apply. It used to be one email per league per member, sent straight to Resend
+ * past all three. We cannot email leaguemates who aren't on AllFantasy — that is what sharing is for.
  *
  * Cron: Tuesdays 14:00, 15:00 and 16:00 UTC (cron-schedule.json) — three fires so the whole sweep
  * fits; a league already recapped that week costs nothing on a later fire. Manual: a signed-in league member may pass
  * ?leagueId= to post their league's recap now (still deduped).
  */
-
-const MAX_RECAP_EMAILS = 25
 
 /**
  * Never-synced leagues one fire may take (see planRecapSweep): a first head-to-head sync is one Sleeper
@@ -68,28 +65,10 @@ async function j<T>(path: string): Promise<T | null> {
   }
 }
 
-async function memberEmails(afLeagueId: string, ownerUserId: string): Promise<string[]> {
-  const teams = await prisma.leagueTeam
-    .findMany({
-      where: { leagueId: afLeagueId, claimedByUserId: { not: null } },
-      select: { claimedByUserId: true },
-    })
-    .catch(() => [] as { claimedByUserId: string | null }[])
-  const userIds = Array.from(
-    new Set([ownerUserId, ...teams.map((t) => t.claimedByUserId).filter((v): v is string => Boolean(v))]),
-  )
-  const users = await prisma.appUser
-    .findMany({ where: { id: { in: userIds } }, select: { email: true } })
-    .catch(() => [] as { email: string | null }[])
-  return Array.from(
-    new Set(users.map((u) => u.email).filter((e): e is string => Boolean(e && e.includes('@')))),
-  ).slice(0, MAX_RECAP_EMAILS)
-}
-
 async function postRecapForLeague(
   afLeagueId: string,
   sleeperLeagueId: string,
-  ownerUserId: string,
+  _ownerUserId: string,
   leagueName: string,
 ) {
   const h2h = await getLeagueH2H(sleeperLeagueId)
@@ -137,35 +116,8 @@ async function postRecapForLeague(
           : 'chat post failed'
     return { posted: false, reason, emailsSent: 0 }
   }
-  const lines = text.split('\n')
-
-  // ── Email the AF members (env-gated so beta rollout is deliberate) ──
-  let emailsSent = 0
-  if (process.env.WEEKLY_RECAP_EMAIL_ENABLED === '1') {
-    const recipients = await memberEmails(afLeagueId, ownerUserId)
-    const baseUrl = getBaseUrl()
-    // sendTemplatedEmail sends this HTML as-is, so the per-line breaks survive.
-    // The old sendNotificationEmail path stripped every tag and RE-escaped the
-    // pre-escaped source, so the recap arrived as one flat paragraph with
-    // visible "&amp;" entities. escapeHtml at the leaf; the shell owns the chrome.
-    const html = renderDigestEmail({
-      eyebrow: `Week ${awards.week} recap · ${awards.season}`,
-      title: leagueName,
-      bodyHtml: lines.map((l) => escapeHtml(l)).join('<br/>'),
-      cta: { href: `${baseUrl}/league/${afLeagueId}`, label: 'Open your league' },
-      baseUrl,
-    })
-    for (const to of recipients) {
-      const sent = await sendTemplatedEmail({
-        to,
-        subject: `Week ${awards.week} recap — ${leagueName}`,
-        html,
-      }).catch(() => ({ ok: false as const }))
-      if (sent.ok) emailsSent += 1
-    }
-  }
-
-  return { posted: true, emailsSent, season: awards.season, week: awards.week }
+  // The email is no longer sent from here — see the header: one per person per week, after the sweep.
+  return { posted: true, emailsSent: 0, season: awards.season, week: awards.week, text }
 }
 
 export async function GET(req: NextRequest) {
@@ -260,7 +212,14 @@ export async function GET(req: NextRequest) {
               posted += 1
               emailsSent += r.emailsSent
               if ('week' in r && r.season && typeof r.week === 'number') {
-                postedRecaps.push({ leagueId: l.id, leagueName: l.name ?? 'League', ownerUserId: l.userId, season: r.season, week: r.week })
+                postedRecaps.push({
+                  leagueId: l.id,
+                  leagueName: l.name ?? 'League',
+                  ownerUserId: l.userId,
+                  season: r.season,
+                  week: r.week,
+                  text: 'text' in r && typeof r.text === 'string' ? r.text : '',
+                })
               }
             }
           } catch {
@@ -302,7 +261,10 @@ export async function GET(req: NextRequest) {
          * "Your recap is ready — share it", one per person per week. Sent before the story push so the
          * story can skip a second push for the same people (weeklyStoryNotify.ts).
          */
-        const recapPush = await notifyWeeklyRecaps(postedRecaps)
+        const recapPush = await notifyWeeklyRecaps(postedRecaps, {
+          email: process.env.WEEKLY_RECAP_EMAIL_ENABLED === '1',
+          baseUrl: getBaseUrl(),
+        })
         const stories =
           Date.now() - startedAt < TIME_BUDGET_MS - 30_000
             ? await notifyWeeklyStories(new Date(), recapPush.notified)
@@ -310,13 +272,13 @@ export async function GET(req: NextRequest) {
         return {
           leagues: leagues.length + nativeLeagues.length,
           posted: posted + nativePosted,
-          emailsSent,
+          emailsSent: emailsSent + recapPush.emailed,
           skippedForTime,
           optedOut,
           errors,
           stories,
           sweep: { sleeperLeagues: allLeagues.length, alreadyDone: plan.alreadyDone, coldDeferred: plan.coldDeferred },
-          recapPush: { sent: recapPush.sent, skipped: recapPush.skipped },
+          recapPush: { sent: recapPush.sent, skipped: recapPush.skipped, emailed: recapPush.emailed },
         }
       },
       (r) => ({

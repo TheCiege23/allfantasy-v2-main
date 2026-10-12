@@ -31,6 +31,9 @@ export interface GetPlayerOutlookParams {
   playerName?: string
   playerId?: string
   sport?: string
+  /** The caller's own position/team for this player, used to tell namesakes apart (FantasyCalc). */
+  position?: string | null
+  team?: string | null
   includeNarrative?: boolean
 }
 
@@ -65,15 +68,26 @@ function pLimit(concurrency: number) {
 async function gatherDataBundle(
   playerName: string,
   sport: string,
+  hints: { position?: string | null; team?: string | null } = {},
 ): Promise<OutlookDataBundle> {
   const normalized = normalizeName(playerName)
 
+  /*
+   * 🛑 FANTASYCALC IS AN NFL VALUE LIST, AND NEWS IS PER SPORT. Both used to be matched by name alone
+   * whatever `sport` said. Measured on production 2026-10-12: 154 distinct NBA/NHL/MLB/SOCCER names in
+   * `PlayerIdentityMap` equal the normalizedName of a Sleeper-keyed NFL row (NHL Cam Ward among them),
+   * and each would wear that NFL player's dynasty value and headlines. Another sport gets no FantasyCalc
+   * value at all — a gap, not someone else's number.
+   */
+  const isNfl = sport === 'NFL'
+
   // Parallel data fetch — all sources are optional
   const [fcValuesResult, analyticsResult, newsResult] = await Promise.allSettled([
-    getFantasyCalcValuesDbFirst({ isDynasty: true, numQbs: 1, numTeams: 12, ppr: 1 }),
+    isNfl ? getFantasyCalcValuesDbFirst({ isDynasty: true, numQbs: 1, numTeams: 12, ppr: 1 }) : Promise.resolve([]),
     getPlayerAnalytics(playerName).catch(() => null),
     prisma.sportsNews.findMany({
       where: {
+        sport,
         OR: [
           { title: { contains: playerName, mode: 'insensitive' } },
           { playerNames: { has: normalized } },
@@ -86,7 +100,7 @@ async function gatherDataBundle(
 
   // Extract FantasyCalc player
   const fcPlayers = fcValuesResult.status === 'fulfilled' ? fcValuesResult.value : []
-  const fc = findPlayerByName(fcPlayers, playerName)
+  const fc = isNfl ? findPlayerByName(fcPlayers, playerName, hints) : null
 
   // Extract analytics
   const analytics = analyticsResult.status === 'fulfilled' ? analyticsResult.value : null
@@ -190,7 +204,14 @@ export async function getPlayerOutlook(
   }
 
   // Step 1: Cache check
-  const cacheParams = { sport, name: normalizeName(playerName) }
+  const hints = { position: params.position?.trim() || null, team: params.team?.trim() || null }
+  // Hints change which namesake is valued, so they are part of the key when given.
+  const cacheParams = {
+    sport,
+    name: normalizeName(playerName),
+    ...(hints.position ? { position: hints.position.toUpperCase() } : {}),
+    ...(hints.team ? { team: hints.team.toUpperCase() } : {}),
+  }
   const cached = await readCache<PlayerOutlook>(prisma, 'player_outlook', cacheParams).catch(() => null)
   if (cached) {
     const age = Math.round((Date.now() - new Date(cached.fetchedAt).getTime()) / 1000)
@@ -198,7 +219,7 @@ export async function getPlayerOutlook(
   }
 
   // Step 2: Gather data
-  const bundle = await gatherDataBundle(playerName, sport)
+  const bundle = await gatherDataBundle(playerName, sport, hints)
 
   // Step 3: Deterministic scoring
   const scoring = computePlayerOutlookScores(bundle)

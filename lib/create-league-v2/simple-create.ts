@@ -85,8 +85,8 @@ export function validateSimpleCreateState(state: CreateLeagueV2State): string[] 
   if (!isUniversalTeamCount(state.teamCount)) issues.push('Team count must be from 2 through 32.')
   if (state.privacy !== 'public' && state.privacy !== 'private') issues.push('Choose public or private.')
   if (!state.draftType) issues.push('Choose a draft type.')
-  if (!state.draftDate.trim()) issues.push('Choose a draft date.')
-  if (!state.draftTime.trim()) issues.push('Choose a draft time.')
+  if (state.draftScheduleLater !== true && !state.draftDate.trim()) issues.push('Choose a draft date.')
+  if (state.draftScheduleLater !== true && !state.draftTime.trim()) issues.push('Choose a draft time.')
   if (!state.timezone.trim()) issues.push('Choose a timezone.')
   if (!state.scoringPresetId.trim()) issues.push('Choose a scoring preset.')
   return issues

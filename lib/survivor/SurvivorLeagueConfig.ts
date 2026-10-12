@@ -161,7 +161,7 @@ export async function upsertSurvivorConfig(
     create: {
       leagueId,
       mode: input.mode ?? 'redraft',
-      tribeCount: Math.min(4, Math.max(2, input.tribeCount ?? 3)),
+      tribeCount: Math.min(5, Math.max(2, input.tribeCount ?? 3)),
       tribeSize: input.tribeSize ?? 4,
       tribeFormation: input.tribeFormation ?? 'random',
       mergeTrigger: input.mergeTrigger ?? 'week',
@@ -192,7 +192,7 @@ export async function upsertSurvivorConfig(
     update: {
       ...(input.mode !== undefined && { mode: input.mode }),
       ...(input.tribeCount !== undefined && {
-        tribeCount: Math.min(4, Math.max(2, input.tribeCount)),
+        tribeCount: Math.min(5, Math.max(2, input.tribeCount)),
       }),
       ...(input.tribeSize !== undefined && { tribeSize: input.tribeSize }),
       ...(input.tribeFormation !== undefined && { tribeFormation: input.tribeFormation }),

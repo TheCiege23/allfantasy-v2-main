@@ -26,8 +26,27 @@ vi.mock('@/lib/notifications/NotificationDispatcher', () => ({ dispatchNotificat
 import { notifyWeeklyRecaps } from '@/lib/league-chat/weeklyRecapNotify'
 import { pushTagFor } from '@/lib/notifications/pushTag'
 
-const R = (leagueId: string, leagueName: string, ownerUserId: string) => ({ leagueId, leagueName, ownerUserId, season: '2026', week: 5 })
-type Call = { userIds: string[]; title: string; actionHref: string; category: string; skipChannels: Record<string, boolean>; dedupePrefix: string; meta: Record<string, unknown> }
+const R = (leagueId: string, leagueName: string, ownerUserId: string) => ({
+  leagueId,
+  leagueName,
+  ownerUserId,
+  season: '2026',
+  week: 5,
+  text: `📺 Week 5 recap — ${leagueName} (2026)
+
+🏆 Weekly awards
+  🚀 Boom of the week: MisterG201, 255.0`,
+})
+type Call = {
+  userIds: string[]
+  title: string
+  actionHref: string
+  category: string
+  skipChannels: Record<string, boolean>
+  dedupePrefix: string
+  meta: Record<string, unknown>
+  emailOverride?: { subject: string; html: string }
+}
 const calls = () => m.dispatch.mock.calls.map((c) => (c as unknown as [Call])[0])
 
 beforeEach(() => {
@@ -92,5 +111,42 @@ describe('notifyWeeklyRecaps', () => {
   it('does nothing for no recaps', async () => {
     expect((await notifyWeeklyRecaps([])).sent).toBe(0)
     expect(m.dispatch).not.toHaveBeenCalled()
+  })
+})
+
+describe('the recap email', () => {
+  it('is off unless asked for — no email channel, no designed email', async () => {
+    const out = await notifyWeeklyRecaps([R('L1', 'Death Squad', 'owner')])
+    expect(calls()[0]!.skipChannels).toEqual({ email: true, sms: true })
+    expect(calls()[0]!.emailOverride).toBeUndefined()
+    expect(out.emailed).toBe(0)
+  })
+
+  it('rides the same once-a-week dispatch when switched on', async () => {
+    const out = await notifyWeeklyRecaps([R('L1', 'Death Squad', 'owner')], { email: true, baseUrl: 'https://allfantasy.ai/' })
+    const c = calls()[0]!
+    expect(c.skipChannels).toEqual({ email: false, sms: true })
+    expect(c.emailOverride!.subject).toBe('Week 5 recap — Death Squad')
+    expect(c.emailOverride!.html).toContain('Boom of the week: MisterG201, 255.0')
+    expect(c.emailOverride!.html).toContain('https://allfantasy.ai/league/L1?openChat=league')
+    expect(out.emailed).toBe(1)
+  })
+
+  it('one email covering every recapped league of that person', async () => {
+    await notifyWeeklyRecaps([R('L1', 'Death Squad', 'owner'), R('L2', 'Iron Horse', 'owner')], { email: true, baseUrl: 'https://allfantasy.ai' })
+    expect(m.dispatch).toHaveBeenCalledTimes(1)
+    expect(calls()[0]!.emailOverride!.subject).toBe('Week 5 recaps — Death Squad + 1 more')
+  })
+
+  it('no origin, no email — a link-less email is worse than none', async () => {
+    await notifyWeeklyRecaps([R('L1', 'Death Squad', 'owner')], { email: true, baseUrl: null })
+    expect(calls()[0]!.skipChannels.email).toBe(true)
+  })
+
+  it('a person already notified this week is not emailed again', async () => {
+    m.existing = ['weekly-recap:2026-w5:owner']
+    const out = await notifyWeeklyRecaps([R('L1', 'Death Squad', 'owner')], { email: true, baseUrl: 'https://allfantasy.ai' })
+    expect(m.dispatch).not.toHaveBeenCalled()
+    expect(out.emailed).toBe(0)
   })
 })

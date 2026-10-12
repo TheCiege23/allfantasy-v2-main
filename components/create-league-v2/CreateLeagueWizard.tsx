@@ -66,6 +66,16 @@ type WizardProps = {
 
 const STEP_ORDER: readonly WizardStep[] = ['sport', 'basics', 'draft', 'summary', 'review']
 
+/** The four familiar formats, shown as a compact row beneath the specialties. */
+const CLASSIC_FORMATS: readonly string[] = ['redraft', 'dynasty', 'keeper', 'best_ball']
+/** Specialty order on the Basics step: the elimination and social formats lead. */
+const SPECIALTY_ORDER: readonly string[] = ['survivor', 'guillotine', 'big_brother', 'zombie', 'salary_cap', 'devy', 'c2c', 'idp']
+
+function specialtyRank(id: string): number {
+  const index = SPECIALTY_ORDER.indexOf(id)
+  return index === -1 ? SPECIALTY_ORDER.length : index
+}
+
 function cx(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(' ')
 }
@@ -91,6 +101,13 @@ function getLeagueTypeLabel(t: (key: string) => string, leagueType: LeagueTypeId
   return translated === key ? fallback : translated
 }
 
+/** When the draft is, as the summary and preview show it. */
+function draftWhenLabel(t: (key: string) => string, state: CreateLeagueV2State): string {
+  if (state.draftScheduleLater === true) return tx(t, 'createLeague.g30.draftWhen.later', 'Schedule later')
+  if (state.draftDate && state.draftTime) return `${state.draftDate} ${state.draftTime}`
+  return state.draftDate || t('createLeague.g30.empty')
+}
+
 /** The format as a manager reads it — "Best Ball", not `best_ball`. */
 function conceptLabel(t: (key: string) => string, state: CreateLeagueV2State): string {
   if (state.idpSelected) return 'IDP'
@@ -112,10 +129,13 @@ function getPremiumLabel(t: (key: string) => string, key: PremiumAdvancedCreateK
 }
 
 export function nextStateForSport(state: CreateLeagueV2State, sport: SupportedSport): Partial<CreateLeagueV2State> {
-  // A concept the new sport does not support (guillotine is not offered for NCAAB or soccer)
-  // falls back to redraft, or the wizard would submit a pairing the server refuses.
+  // A format the manager has not picked follows the sport's default. A picked format is kept when
+  // the new sport allows it; one it does not (guillotine is not offered for NCAAB or soccer) falls
+  // back to the sport's default too, or the wizard would submit a pairing the server refuses.
   const chosen = getEffectiveLeagueType(state) ?? 'redraft'
-  const leagueType = isSportAllowedForType(sport, chosen) ? chosen : 'redraft'
+  const leagueType = state.leagueTypeTouched === true && isSportAllowedForType(sport, chosen)
+    ? chosen
+    : defaultLeagueTypeForSport(sport)
   const idpSelected = state.idpSelected && (sport === 'NFL' || sport === 'NCAAF')
   const scoringPresetId = resolveValidScoringPresetIdForSelection('', {
     leagueType,
@@ -178,6 +198,28 @@ export function nextStateForLeagueType(state: CreateLeagueV2State, leagueType: L
     keeper: getDefaultKeeperSetup(),
     bestBall: bestBallSetupForTeamCount(state.sport, draftType, getTeamCountOptions(state.sport, leagueType, state.soccerPipeline).includes(state.teamCount) ? state.teamCount : getDefaultTeamCount(state.sport, leagueType, state.soccerPipeline)),
   }
+}
+
+/** The format a brand-new create starts on. */
+/**
+ * Each sport's starting format, first one the sport allows (user's call, 2026-10-12: AllFantasy
+ * leads with its specialty formats). NFL, NCAAF, NBA and NHL start on Survivor; MLB, which has no
+ * Survivor, on Guillotine; NCAAB and Soccer, which have neither, on Big Brother.
+ */
+export const SPORT_DEFAULT_FORMATS: readonly LeagueTypeId[] = ['survivor', 'guillotine', 'big_brother']
+
+export function defaultLeagueTypeForSport(sport: SupportedSport): LeagueTypeId {
+  return SPORT_DEFAULT_FORMATS.find((leagueType) => isSportAllowedForType(sport, leagueType)) ?? 'redraft'
+}
+
+/**
+ * The starting state for a fresh create (no import, nothing restored from this tab): the sport's
+ * default format, built with the same transition a tap on that tile runs, so the draft type, team
+ * size and scoring preset are ones the format accepts — not Redraft's left in place.
+ */
+export function freshCreateLeagueState(base: CreateLeagueV2State): CreateLeagueV2State {
+  const start = { ...base, leagueType: base.leagueType ?? 'redraft', leagueTypeTouched: false }
+  return { ...start, ...nextStateForLeagueType(start, defaultLeagueTypeForSport(start.sport)) }
 }
 
 /** IDP is a redraft shell with defensive players; it carries its own draft and scoring lists. */
@@ -427,6 +469,7 @@ export function CreateLeagueWizard(props: WizardProps) {
                 completionIssues={props.completionIssues}
                 submitError={props.submitError}
                 onFixIssue={(code) => setActiveStep(stepForIssue(code))}
+                onScheduleLater={() => props.onChange({ draftScheduleLater: true })}
               />
             ) : null}
           </div>
@@ -641,43 +684,80 @@ export function LeagueBasicsStep({
   }
   const nameTooShort = state.nameTouched === true && state.name.trim().length > 0 && state.name.trim().length < 3
 
+  type FormatTile = { id: string; title: string; hint: string; selected: boolean; onSelect: () => void; media: (typeof LEAGUE_TYPE_MEDIA)[keyof typeof LEAGUE_TYPE_MEDIA] }
+  const tiles: FormatTile[] = typeOptions.map((concept) => {
+    const leagueType = concept.id as LeagueTypeId
+    return {
+      id: leagueType,
+      title: getLeagueTypeLabel(t, leagueType, concept.title),
+      hint: tx(t, `createLeague.g30.leagueType.${leagueType}.hint`, concept.subtitle),
+      selected: !state.idpSelected && getEffectiveLeagueType(state) === leagueType,
+      onSelect: () => onChange({ ...nextStateForLeagueType(state, leagueType), leagueTypeTouched: true }),
+      media: LEAGUE_TYPE_MEDIA[leagueType],
+    }
+  })
+  if (showIdp) {
+    tiles.push({
+      id: 'idp',
+      title: 'IDP',
+      hint: tx(t, 'createLeague.g30.leagueType.idp.hint', 'Draft individual defensive players'),
+      selected: state.idpSelected,
+      onSelect: () => onChange({ ...nextStateForIdp(state), leagueTypeTouched: true }),
+      media: LEAGUE_TYPE_MEDIA.idp,
+    })
+  }
+  // Any format not named as a classic is a specialty, so a new catalog concept lands up front.
+  const specialtyTiles = tiles
+    .filter((tile) => !CLASSIC_FORMATS.includes(tile.id))
+    .sort((x, y) => specialtyRank(x.id) - specialtyRank(y.id))
+  const classicTiles = tiles
+    .filter((tile) => CLASSIC_FORMATS.includes(tile.id))
+    .sort((x, y) => CLASSIC_FORMATS.indexOf(x.id) - CLASSIC_FORMATS.indexOf(y.id))
+  const renderFormatTile = (sizeClass: string) => (tile: FormatTile) => (
+    <CreateLeagueVideoTile
+      key={tile.id}
+      title={tile.title}
+      hint={tile.hint}
+      selected={tile.selected}
+      media={tile.media}
+      onSelect={tile.onSelect}
+      className={sizeClass}
+      testId={`g30-league-type-${tile.id}`}
+    />
+  )
+
   return (
     <section className="space-y-5" data-testid="g30-basics-step">
       <StepHeader title={t('createLeague.g30.basics.title')} body={t('createLeague.g30.basics.body')} />
-      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 xl:grid-cols-4">
-        {typeOptions.map((concept) => {
-          const leagueType = concept.id as LeagueTypeId
-          const selected = !state.idpSelected && getEffectiveLeagueType(state) === leagueType
-          const media = LEAGUE_TYPE_MEDIA[leagueType]
-          return (
-            <CreateLeagueVideoTile
-              key={leagueType}
-              title={getLeagueTypeLabel(t, leagueType, concept.title)}
-              hint={(() => {
-                const key = `createLeague.g30.leagueType.${leagueType}.hint`
-                const translated = t(key)
-                return translated === key ? concept.subtitle : translated
-              })()}
-              selected={selected}
-              media={media}
-              onSelect={() => onChange(nextStateForLeagueType(state, leagueType))}
-              className="min-h-20"
-              testId={`g30-league-type-${leagueType}`}
-            />
-          )
-        })}
-        {showIdp ? (
-          <CreateLeagueVideoTile
-            title="IDP"
-            hint="Draft individual defensive players"
-            selected={state.idpSelected}
-            media={LEAGUE_TYPE_MEDIA.idp}
-            onSelect={() => onChange(nextStateForIdp(state))}
-            className="min-h-20"
-            testId="g30-league-type-idp"
-          />
-        ) : null}
-      </div>
+      {/*
+        Specialty formats lead — they are what AllFantasy is built around — and the classics follow
+        as a compact row. Both groups are always visible: nothing is hidden behind a "more" toggle.
+      */}
+      {specialtyTiles.length > 0 ? (
+        <div className="space-y-2.5" data-testid="g30-specialty-formats">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.16em] text-violet-600 dark:text-violet-300">
+              {tx(t, 'createLeague.g30.formats.specialty', 'Specialty formats')}
+            </p>
+            <p className="mt-0.5 text-xs leading-5 text-[color:var(--text-secondary)]">
+              {tx(t, 'createLeague.g30.formats.specialtyBody', 'Eliminations, alliances, college stars and more.')}
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-2.5 sm:gap-3 xl:grid-cols-4">
+            {specialtyTiles.map(renderFormatTile('min-h-[7.25rem] sm:min-h-36'))}
+          </div>
+        </div>
+      ) : null}
+      {classicTiles.length > 0 ? (
+        <div className="space-y-2.5" data-testid="g30-classic-formats">
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-[color:var(--text-tertiary)]">
+            {tx(t, 'createLeague.g30.formats.classic', 'Classic formats')}
+          </p>
+          <div className="grid grid-cols-2 gap-2.5 sm:gap-3 xl:grid-cols-4">
+            {classicTiles.map(renderFormatTile('min-h-[4.75rem] sm:min-h-20'))}
+          </div>
+        </div>
+      ) : null}
 
       {(getEffectiveLeagueType(state) === 'devy' || getEffectiveLeagueType(state) === 'c2c') ? (
         <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm leading-6">
@@ -1008,8 +1088,53 @@ export function DraftStep({
         </div>
       ) : null}
 
+      {/*
+        Most managers creating a league do not know the draft night yet — they want to invite
+        friends first. Requiring a date blocked them at the last step, so "Schedule later" is an
+        answer of equal weight: the league is created without a draft date and the commissioner
+        sets it in League → Commissioner settings → Draft.
+      */}
+      <div className="space-y-2">
+        <p className="text-xs font-black uppercase tracking-wide text-[color:var(--text-tertiary)]">
+          {tx(t, 'createLeague.g30.draftWhen.label', 'Draft date')}
+        </p>
+        <div className="grid grid-cols-2 gap-2" role="group" aria-label={tx(t, 'createLeague.g30.draftWhen.label', 'Draft date')}>
+          {([
+            { later: false, testId: 'g30-draft-schedule-now', label: tx(t, 'createLeague.g30.draftWhen.now', 'Pick a date') },
+            { later: true, testId: 'g30-draft-schedule-later', label: tx(t, 'createLeague.g30.draftWhen.later', 'Schedule later') },
+          ] as const).map((option) => {
+            const selected = (state.draftScheduleLater === true) === option.later
+            return (
+              <button
+                key={option.testId}
+                type="button"
+                onClick={() => onChange({ draftScheduleLater: option.later })}
+                aria-pressed={selected}
+                className={cx(
+                  'flex min-h-12 touch-manipulation items-center justify-between gap-2 rounded-xl border px-4 py-3 text-left text-sm font-bold transition',
+                  selected
+                    ? 'border-violet-500 bg-violet-600/12 text-violet-700 dark:text-violet-200'
+                    : 'border-[color:var(--border-subtle)] bg-[color:var(--surface-card-soft)] text-[color:var(--text-secondary)] [@media(hover:hover)]:hover:border-violet-400',
+                )}
+                data-testid={option.testId}
+              >
+                {option.label}
+                {selected ? <Check aria-hidden="true" className="h-4 w-4 shrink-0" strokeWidth={3} /> : null}
+              </button>
+            )
+          })}
+        </div>
+        {state.draftScheduleLater === true ? (
+          <p className="rounded-xl border border-[color:var(--border-subtle)] bg-[color:var(--surface-card-soft)] p-3 text-sm leading-6 text-[color:var(--text-secondary)]" data-testid="g30-draft-schedule-later-note">
+            {tx(t, 'createLeague.g30.draftWhen.laterNote', 'Invite managers now and set the draft date once everyone agrees. You will find it in your league under Commissioner settings → Draft.')}
+          </p>
+        ) : null}
+      </div>
+
       {/* Date and time share a row on a phone; the native pickers need about half the width each. */}
       <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3">
+        {state.draftScheduleLater === true ? null : (
+        <>
         <label className="min-w-0 space-y-2">
           <span className="text-xs font-black uppercase tracking-wide text-[color:var(--text-tertiary)]">
             {t('createLeague.g30.draftDate.label')}
@@ -1034,6 +1159,8 @@ export function DraftStep({
             data-testid="g30-draft-time"
           />
         </label>
+        </>
+        )}
         <label className="col-span-2 min-w-0 space-y-2 md:col-span-1">
           <span className="text-xs font-black uppercase tracking-wide text-[color:var(--text-tertiary)]">
             {t('createLeague.g30.timezone.label')}
@@ -1074,7 +1201,7 @@ export function SettingsSummaryStep({
         <SummaryTile label={t('createLeague.summary.sport')} value={state.sport} />
         <SummaryTile label={t('createLeague.summary.concept')} value={conceptLabel(t, state)} />
         <SummaryTile label={t('createLeague.summary.teams')} value={String(state.teamCount)} />
-        <SummaryTile label={t('createLeague.summary.draft')} value={`${state.draftDate || t('createLeague.g30.empty')} ${state.draftTime || ''}`.trim()} />
+        <SummaryTile label={t('createLeague.summary.draft')} value={draftWhenLabel(t, state)} />
       </div>
 
       <LockedAdvancedSetupPanel
@@ -1092,12 +1219,15 @@ export function ReviewCreateStep({
   completionIssues,
   submitError,
   onFixIssue,
+  onScheduleLater,
 }: {
   state: CreateLeagueV2State
   completionIssues: WizardProps['completionIssues']
   submitError: string | null
   /** Jumps to the step that owns an issue. Without it the issues are listed as plain text. */
   onFixIssue?: (code: string) => void
+  /** Resolves a missing draft date by choosing "Schedule later". */
+  onScheduleLater?: () => void
 }) {
   const { t } = useLanguage()
 
@@ -1122,6 +1252,17 @@ export function ReviewCreateStep({
             {completionIssues.map((issue) => (
               <li key={`${issue.code}-${issue.message}`} className="flex items-start justify-between gap-3">
                 <span className="min-w-0 leading-6">{issue.message}</span>
+                <span className="flex shrink-0 flex-wrap justify-end gap-2">
+                {onScheduleLater && (issue.code === 'draft_date_required' || issue.code === 'draft_time_required') ? (
+                  <button
+                    type="button"
+                    onClick={onScheduleLater}
+                    className="inline-flex min-h-9 shrink-0 touch-manipulation items-center rounded-lg border border-amber-500/40 px-3 text-xs font-black text-amber-800 transition hover:bg-amber-500/15 dark:text-amber-100"
+                    data-testid={`g30-review-later-${issue.code}`}
+                  >
+                    {tx(t, 'createLeague.g30.draftWhen.later', 'Schedule later')}
+                  </button>
+                ) : null}
                 {onFixIssue ? (
                   <button
                     type="button"
@@ -1133,6 +1274,7 @@ export function ReviewCreateStep({
                     <ChevronRight aria-hidden="true" className="-mr-1 h-3.5 w-3.5" />
                   </button>
                 ) : null}
+                </span>
               </li>
             ))}
           </ul>
@@ -1200,7 +1342,7 @@ export function LeaguePreviewCard({
           <PreviewRow label={t('createLeague.summary.concept')} value={conceptLabel(t, state)} />
           <PreviewRow label={t('createLeague.summary.teams')} value={String(state.teamCount)} />
           <PreviewRow label={t('createLeague.g30.privacy.label')} value={t(`createLeague.g30.privacy.${state.privacy}`)} />
-          <PreviewRow label={t('createLeague.summary.draft')} value={state.draftDate && state.draftTime ? `${state.draftDate} ${state.draftTime}` : t('createLeague.g30.empty')} />
+          <PreviewRow label={t('createLeague.summary.draft')} value={draftWhenLabel(t, state)} />
           <PreviewRow label={t('createLeague.g30.timezone.label')} value={state.timezone} />
           <PreviewRow label={t('createLeague.summary.scoring')} value={scoring?.label ?? t('createLeague.g30.empty')} />
           <PreviewRow label={t('createLeague.g30.preview.language')} value={language.toUpperCase()} />
