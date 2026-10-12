@@ -1,3 +1,5 @@
+import { resolveWriteAuthority } from '@/lib/league/write-authority'
+import { initializeSurvivorPhase2 } from './survivorPhase2Init'
 import { prisma } from '@/lib/prisma'
 import { bootstrapTribeChatMembers } from './SurvivorChatMembershipService'
 import { getOrCreateExileLeague } from './SurvivorExileEngine'
@@ -21,10 +23,13 @@ export interface SurvivorDraftBootstrapResult {
   tribesCreated: boolean
   idolsAssigned: number
   warnings: string[]
+  /** Defined for canonical native setup; older/imported leagues retain their existing path. */
+  setupComplete?: boolean
 }
 
 export async function runSurvivorPostDraftBootstrap(
-  leagueId: string
+  leagueId: string,
+  opts: { canonicalOnly?: boolean } = {},
 ): Promise<SurvivorDraftBootstrapResult> {
   const survivor = await isSurvivorLeague(leagueId)
   if (!survivor) {
@@ -35,6 +40,28 @@ export async function runSurvivorPostDraftBootstrap(
       warnings: [],
     }
   }
+
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true, settings: true } })
+  const snapshot = league?.settings as Record<string, unknown> | null
+  if (league && resolveWriteAuthority(league.platform) === 'NATIVE' && snapshot?.survivorFoundationSettingsVersion === 1) {
+    const session = await prisma.draftSession.findFirst({
+      where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER,
+      select: { id: true, status: true, sessionKind: true, sleeperDraftId: true },
+    })
+    if (!session || session.status !== 'completed' || session.sessionKind === 'mock' || session.sleeperDraftId) {
+      return { isSurvivor: true, tribesCreated: false, idolsAssigned: 0, setupComplete: false, warnings: ['Complete the current native league draft before starting Survivor.'] }
+    }
+    const result = await initializeSurvivorPhase2(leagueId, { completedDraftSessionId: session.id, seed: hashSeed(session.id) })
+    return {
+      isSurvivor: true, setupComplete: result.complete,
+      tribesCreated: result.steps.tribes.created,
+      idolsAssigned: result.steps.idols.seeded ? result.steps.idols.voteShieldCount : 0,
+      warnings: result.complete ? [] : [result.steps.tribes.detail, ...result.blockers],
+    }
+  }
+
+  // Repair polls must not introduce legacy/provider-side bootstrap work.
+  if (opts.canonicalOnly) return { isSurvivor: true, tribesCreated: false, idolsAssigned: 0, warnings: [] }
 
   const warnings: string[] = []
   const config = await getSurvivorConfig(leagueId)

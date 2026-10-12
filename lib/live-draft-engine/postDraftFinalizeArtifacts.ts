@@ -133,6 +133,14 @@ export async function runPostDraftFinalizationArtifacts(leagueId: string): Promi
     })
   }
 
+  // Await Survivor setup here so the completion repair/poll path can retry it too.
+  // Transaction failures propagate to the throttle; rule/ownership blockers are persisted for the commissioner.
+  const { runSurvivorPostDraftBootstrap } = await import('@/lib/survivor/SurvivorDraftBootstrapService')
+  const survivor = await runSurvivorPostDraftBootstrap(leagueId, { canonicalOnly: true })
+  if (survivor.setupComplete === false) {
+    console.warn('[postDraftFinalizeArtifacts] Survivor setup needs attention', { leagueId, warnings: survivor.warnings })
+  }
+
   const { computeAndPersistDraftRankings } = await import('@/lib/post-draft-manager-ranking')
   await computeAndPersistDraftRankings(leagueId)
 }

@@ -1179,10 +1179,14 @@ export async function completeDraftSession(leagueId: string): Promise<boolean> {
       payload: { draftId },
     }).catch(() => {})
 
-    // G12-3 FINDING: survivor bootstrap is hardcoded here. Self-gates via isSurvivorLeague()
-    // so non-survivor leagues pay only a fast DB read. Future work: subscribe to DRAFT_COMPLETED
-    // on the event bus instead (remove this direct call once subscriber wiring is in place).
-    import('@/lib/survivor/SurvivorDraftBootstrapService').then((m) => m.runSurvivorPostDraftBootstrap(leagueId)).catch(() => {})
+    // Keep legacy bootstrap on the original completion transition only. Canonical
+    // native setup is also awaited/retried by the artifact path above.
+    try {
+      const { runSurvivorPostDraftBootstrap } = await import('@/lib/survivor/SurvivorDraftBootstrapService')
+      await runSurvivorPostDraftBootstrap(leagueId)
+    } catch (error) {
+      console.error('[completeDraftSession] Survivor bootstrap failed', { leagueId, error: error instanceof Error ? error.message : String(error) })
+    }
     prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true } }).then((league) => {
       if (league?.userId) {
         import('@/lib/achievement-system').then((m) => m.awardAchievement(league.userId, 'draft_completed', { leagueId })).catch(() => {})

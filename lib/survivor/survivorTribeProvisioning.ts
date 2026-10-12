@@ -1,5 +1,7 @@
 import 'server-only'
 
+import { withSurvivorSetupTransaction } from './survivorSetupTransaction'
+
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import {
@@ -21,6 +23,7 @@ export interface SurvivorTribeProvisioningOptions {
   /** Allow re-assignment over an already-locked set (reset path). */
   allowReassign?: boolean
   actorUserId?: string
+  db?: Prisma.TransactionClient
 }
 
 export type SurvivorTribeAssignmentOutcome =
@@ -34,18 +37,18 @@ export type SurvivorTribeAssignmentOutcome =
   | { ok: false; status: 400 | 409 | 422; code: string; error: string }
 
 /** Ensure a SurvivorLeagueConfig row exists (tribes require configId). */
-async function ensureConfig(leagueId: string, tribeCount: number): Promise<{ id: string }> {
-  const existing = await prisma.survivorLeagueConfig.findUnique({ where: { leagueId }, select: { id: true } })
+async function ensureConfig(leagueId: string, tribeCount: number, db: Prisma.TransactionClient): Promise<{ id: string }> {
+  const existing = await db.survivorLeagueConfig.findUnique({ where: { leagueId }, select: { id: true } })
   if (existing) return existing
-  return prisma.survivorLeagueConfig.create({
+  return db.survivorLeagueConfig.create({
     data: { leagueId, tribeCount, tribeSize: 5, tribeFormation: 'random' },
     select: { id: true },
   })
 }
 
 /** Active participants eligible for tribe assignment (excludes eliminated/exile/jury/host). */
-async function loadActiveParticipants(leagueId: string): Promise<AssignmentParticipant[]> {
-  const players = await prisma.survivorPlayer.findMany({
+async function loadActiveParticipants(leagueId: string, db: Prisma.TransactionClient): Promise<AssignmentParticipant[]> {
+  const players = await db.survivorPlayer.findMany({
     where: { leagueId, playerState: 'active' },
     select: { userId: true, displayName: true, redraftRosterId: true },
     orderBy: { displayName: 'asc' },
@@ -59,8 +62,9 @@ async function loadActiveParticipants(leagueId: string): Promise<AssignmentParti
 
 export async function getTribeAssignmentStatus(
   leagueId: string,
+  db: Prisma.TransactionClient = prisma,
 ): Promise<{ assigned: boolean; tribeCount: number; memberCount: number }> {
-  const tribes = await prisma.survivorTribe.findMany({
+  const tribes = await db.survivorTribe.findMany({
     where: { leagueId },
     select: { id: true, members: { select: { id: true } } },
   })
@@ -72,9 +76,11 @@ export async function assignSurvivorTribes(
   leagueId: string,
   opts: SurvivorTribeProvisioningOptions,
 ): Promise<SurvivorTribeAssignmentOutcome> {
-  const status = await getTribeAssignmentStatus(leagueId)
+  if (!opts.db) return withSurvivorSetupTransaction(leagueId, (db) => assignSurvivorTribes(leagueId, { ...opts, db }))
+  const db = opts.db
+  const status = await getTribeAssignmentStatus(leagueId, db)
   if (status.assigned && !opts.allowReassign) {
-    const tribes = await prisma.survivorTribe.findMany({
+    const tribes = await db.survivorTribe.findMany({
       where: { leagueId },
       select: { id: true, slotIndex: true, name: true, members: { select: { id: true } } },
       orderBy: { slotIndex: 'asc' },
@@ -94,7 +100,7 @@ export async function assignSurvivorTribes(
   }
 
   const tribeCount = Math.max(2, Math.floor(opts.tribeCount ?? 4))
-  const participants = await loadActiveParticipants(leagueId)
+  const participants = await loadActiveParticipants(leagueId, db)
   const assignment = computeTribeAssignment({
     participants,
     tribeCount,
@@ -108,11 +114,11 @@ export async function assignSurvivorTribes(
     return { ok: false, status: httpStatus, code: assignment.code, error: assignment.error }
   }
 
-  const config = await ensureConfig(leagueId, tribeCount)
+  const config = await ensureConfig(leagueId, tribeCount, db)
   const rosterByUser = new Map(participants.map((p) => [p.userId, p.rosterId]))
   type ExistingTribeMeta = { slotIndex: number; name: string; colorHex: string | null; logoUrl: string | null }
   const existingBySlot = new Map<number, ExistingTribeMeta>(
-    ((await prisma.survivorTribe.findMany({
+    ((await db.survivorTribe.findMany({
       where: { leagueId },
       select: { slotIndex: true, name: true, colorHex: true, logoUrl: true },
     })) as ExistingTribeMeta[]).map((t) => [t.slotIndex, t] as [number, ExistingTribeMeta]),
@@ -120,7 +126,7 @@ export async function assignSurvivorTribes(
 
   const createdTribes: Array<{ id: string; slotIndex: number; name: string; memberCount: number }> = []
 
-  await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+  const write = async (tx: Prisma.TransactionClient) => {
     if (opts.allowReassign && status.assigned) {
       const oldTribeIds = ((await tx.survivorTribe.findMany({ where: { leagueId }, select: { id: true } })) as Array<{ id: string }>).map((t) => t.id)
       if (oldTribeIds.length) await tx.survivorTribeMember.deleteMany({ where: { tribeId: { in: oldTribeIds } } })
@@ -181,7 +187,8 @@ export async function assignSurvivorTribes(
       },
       update: { activeTribeCount: tribeCount, activePlayerCount: participants.length },
     })
-  })
+  }
+  await write(db)
 
   return { ok: true, created: true, alreadyAssigned: false, tribes: createdTribes, seed: assignment.seed }
 }
