@@ -488,8 +488,8 @@ export function PlayerFinder({
    * Clear drops back to the single card. Every match row offers itself as the
    * second name while a player is open.
    */
-  const detailRef = detail ? playerRef(detail.player.sport, detail.player.externalId) : null
-  const compareRef = compare ? playerRef(compare.player.sport, compare.player.externalId) : null
+  const detailRef = detail ? playerRef(detail.player.sport, detail.player.externalId, detail.player.source) : null
+  const compareRef = compare ? playerRef(compare.player.sport, compare.player.externalId, compare.player.source) : null
   const vsHref = (ref: string) =>
     detailRef ? `/core/players?q=${encodeURIComponent(query)}&player=${encodeURIComponent(detailRef)}&vs=${encodeURIComponent(ref)}${leagueParam}` : null
   const swapHref =
@@ -504,7 +504,7 @@ export function PlayerFinder({
       ? { give: tradeVisual.data.recommended.give.map((a) => a.name), fairness: tradeVisual.data.recommended.fairness }
       : null
   const allLeaguesHref = detail
-    ? `/core/players?q=${encodeURIComponent(query)}&player=${encodeURIComponent(playerRef(detail.player.sport, detail.player.externalId))}`
+    ? `/core/players?q=${encodeURIComponent(query)}&player=${encodeURIComponent(playerRef(detail.player.sport, detail.player.externalId, detail.player.source))}`
     : '/core/players'
 
   const impactRows: LeagueImpact[] = (detail?.impact.available ? detail.impact.data : []).filter((i) =>
@@ -609,7 +609,7 @@ export function PlayerFinder({
       : []
   const stripLeagueHref = (leagueId: string) =>
     detail
-      ? `/core/players?q=${encodeURIComponent(query)}&player=${encodeURIComponent(playerRef(detail.player.sport, detail.player.externalId))}&league=${encodeURIComponent(leagueId)}`
+      ? `/core/players?q=${encodeURIComponent(query)}&player=${encodeURIComponent(playerRef(detail.player.sport, detail.player.externalId, detail.player.source))}&league=${encodeURIComponent(leagueId)}`
       : '/core/players'
 
   /*
@@ -718,7 +718,7 @@ export function PlayerFinder({
                     <Link
                       // Sport-qualified: `externalId` alone is ambiguous across
                       // sports and opened whichever athlete came back first.
-                      href={`/core/players?q=${encodeURIComponent(query)}&player=${encodeURIComponent(playerRef(m.sport, m.externalId))}${leagueParam}`}
+                      href={`/core/players?q=${encodeURIComponent(query)}&player=${encodeURIComponent(playerRef(m.sport, m.externalId, m.source))}${leagueParam}`}
                       className="af-pf-match"
                       data-active={
                         detail?.player.externalId === m.externalId && detail?.player.sport === m.sport
@@ -746,8 +746,8 @@ export function PlayerFinder({
                       </span>
                     </Link>
                     {/* The row as the second name — only while another player is open. */}
-                    {detail && !(detail.player.externalId === m.externalId && detail.player.sport === m.sport) && vsHref(playerRef(m.sport, m.externalId)) ? (
-                      <Link href={vsHref(playerRef(m.sport, m.externalId)) as string} className="af-pf-match-vs" aria-label={t.compareWithName(m.name)}>
+                    {detail && !(detail.player.externalId === m.externalId && detail.player.sport === m.sport) && vsHref(playerRef(m.sport, m.externalId, m.source)) ? (
+                      <Link href={vsHref(playerRef(m.sport, m.externalId, m.source)) as string} className="af-pf-match-vs" aria-label={t.compareWithName(m.name)}>
                         vs
                       </Link>
                     ) : null}
@@ -814,15 +814,15 @@ export function PlayerFinder({
             {otherMatches.slice(0, 4).map((m) => (
               <span key={`${m.sport}-${m.externalId}`} className="af-pf-other-pair">
                 <Link
-                  href={`/core/players?q=${encodeURIComponent(query)}&player=${encodeURIComponent(playerRef(m.sport, m.externalId))}${leagueParam}`}
+                  href={`/core/players?q=${encodeURIComponent(query)}&player=${encodeURIComponent(playerRef(m.sport, m.externalId, m.source))}${leagueParam}`}
                   className="af-chip af-pf-other"
                 >
                   {m.name}
                   {m.position ? <span className="af-pf-other-pos af-num">{m.position}</span> : null}
                 </Link>
                 {/* The same "vs" the desktop rows carry, joined to the chip so it reads as one pill. */}
-                {vsHref(playerRef(m.sport, m.externalId)) ? (
-                  <Link href={vsHref(playerRef(m.sport, m.externalId)) as string} className="af-chip af-pf-other-vs" aria-label={t.compareWithName(m.name)}>
+                {vsHref(playerRef(m.sport, m.externalId, m.source)) ? (
+                  <Link href={vsHref(playerRef(m.sport, m.externalId, m.source)) as string} className="af-chip af-pf-other-vs" aria-label={t.compareWithName(m.name)}>
                     vs
                   </Link>
                 ) : null}

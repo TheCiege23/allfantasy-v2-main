@@ -7,6 +7,8 @@ import {
   authoritativeRowsBySleeperId,
   positionGroupsAgree,
   selectAuthoritativePlayerRow,
+  selectRowForExternalRef,
+  vendorRowMayCarrySleeperId,
 } from '@/lib/player-match/authoritativePlayerRow'
 
 type Row = {
@@ -105,5 +107,42 @@ describe('positionGroupsAgree', () => {
     expect(positionGroupsAgree('TE', 'G')).toBe(false)
     expect(positionGroupsAgree('QB', 'G')).toBe(false)
     expect(positionGroupsAgree(null, 'QB')).toBe(false)
+  })
+})
+
+describe('selectRowForExternalRef', () => {
+  // SOCCER `1100`, production 2026-10-12: two feeds, two different men.
+  const ID_1100 = [
+    { source: 'rolling_insights', sleeperId: null, name: 'James Daly', position: 'Forward', team: '7', fetchedAt: at('2026-10-09T09:10:02Z') },
+    { source: 'api_football', sleeperId: null, name: 'E. Haaland', position: 'FWD', team: 'MCI', fetchedAt: at('2026-04-25T15:33:16Z') },
+  ]
+  it("takes the named source's row even when another feed's row is newer", () => {
+    expect(selectRowForExternalRef(ID_1100, 'api_football')?.name).toBe('E. Haaland')
+  })
+  it('refuses a source-less ref over different men, and prefers the identified row when they agree', () => {
+    expect(selectRowForExternalRef(ID_1100)).toBeNull()
+    const smith = selectRowForExternalRef([
+      { source: 'backfill', sleeperId: null, name: 'DeVonta Smith', position: 'WR', fetchedAt: at('2026-10-11T00:00:00Z') },
+      { source: 'rolling_insights', sleeperId: '7525', name: 'DeVonta Smith', position: 'WR', fetchedAt: at('2026-10-01T00:00:00Z') },
+    ])
+    expect(smith?.source).toBe('rolling_insights')
+  })
+})
+
+describe('vendorRowMayCarrySleeperId', () => {
+  const CB = { name: 'Byron Murphy', position: 'CB', team: 'MIN' }
+  it('refuses the Seahawks DT for the Vikings CB, and refuses any Sleeper namesake outright', () => {
+    expect(vendorRowMayCarrySleeperId(CB, { name: 'Byron Murphy', position: 'DT', team: 'Seattle Seahawks' }, 2)).toBe(false)
+    // Even the right man is refused when Sleeper has two of that name: the name cannot tell them apart.
+    expect(vendorRowMayCarrySleeperId(CB, { name: 'Byron Murphy Jr.', position: 'CB', team: 'Minnesota Vikings' }, 2)).toBe(false)
+  })
+  it('accepts a unique name with an agreeing position group and the same team, spelled either way', () => {
+    expect(vendorRowMayCarrySleeperId({ name: 'Trevor Siemian', position: 'QB', team: 'ATL' }, { name: 'Trevor Siemian', position: 'QB', team: 'Atlanta Falcons' }, 1)).toBe(true)
+    expect(vendorRowMayCarrySleeperId(CB, { name: 'Byron Murphy Jr.', position: 'DB', team: 'Minnesota Vikings' }, 1)).toBe(true)
+  })
+  it('refuses a different team, a missing team, or a contradicting position', () => {
+    expect(vendorRowMayCarrySleeperId(CB, { name: 'Byron Murphy', position: 'CB', team: 'Seattle Seahawks' }, 1)).toBe(false)
+    expect(vendorRowMayCarrySleeperId({ ...CB, team: null }, { name: 'Byron Murphy', position: 'CB', team: null }, 1)).toBe(false)
+    expect(vendorRowMayCarrySleeperId(CB, { name: 'Byron Murphy', position: 'DT', team: 'Minnesota Vikings' }, 1)).toBe(false)
   })
 })

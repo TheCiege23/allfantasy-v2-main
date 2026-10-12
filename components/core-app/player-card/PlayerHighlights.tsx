@@ -28,8 +28,11 @@ function NflPlayerHighlights({ player }: { player: PlayerCardIdentity }) {
     setLoading(true)
     setError(false)
     const params = new URLSearchParams({ sport: player.sport })
-    if (player.externalId) params.set('externalId', player.externalId)
-    else if (player.sleeperId) params.set('sleeperId', player.sleeperId)
+    if (player.externalId) {
+      params.set('externalId', player.externalId)
+      // An externalId is only unique per feed; without the source the route refuses an ambiguous id.
+      if (player.source) params.set('source', player.source)
+    } else if (player.sleeperId) params.set('sleeperId', player.sleeperId)
     try {
       const response = await fetch(`/api/core/player-card/highlights?${params}`, { signal: request.signal })
       if (!response.ok) throw new Error('Highlights unavailable')

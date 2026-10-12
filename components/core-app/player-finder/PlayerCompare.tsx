@@ -253,7 +253,7 @@ export function PlayerCompare({
 
       <div className="af-pf-cmp-again">
         <span className="af-label">{t.compareAgain(aLast)}</span>
-        <PlayerSearchBox query={query} selectedLeagueId={selectedLeagueId} signedIn={signedIn} variant="compare" compareWith={playerRef(a.player.sport, a.player.externalId)} />
+        <PlayerSearchBox query={query} selectedLeagueId={selectedLeagueId} signedIn={signedIn} variant="compare" compareWith={playerRef(a.player.sport, a.player.externalId, a.player.source)} />
       </div>
     </section>
   )

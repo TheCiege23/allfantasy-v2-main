@@ -64,6 +64,12 @@ import {
 
 export type PlayerCardIdentity = {
   externalId: string
+  /**
+   * The feed that minted `externalId`. An id names a player only together with its source
+   * (SOCCER `1100` is api_football's Haaland AND rolling_insights' James Daly), so anything
+   * that looks the player up again by `externalId` — the highlights button — must send it.
+   */
+  source?: string | null
   sleeperId: string | null
   sport: string
   name: string
@@ -1680,6 +1686,7 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
 
   const identity: PlayerCardIdentity = {
     externalId: player.externalId,
+    source: player.source,
     sleeperId: player.sleeperId,
     sport: player.sport,
     name: player.name,
