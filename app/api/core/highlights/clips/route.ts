@@ -10,6 +10,7 @@ import { readXCatalog } from '@/lib/highlights/x-catalog'
 import { xHighlightsEnabled } from '@/lib/highlights/x-provider'
 import { matchXClips } from '@/lib/highlights/x-match'
 import type { ClipPlayer } from '@/lib/highlights/x-types'
+import { authoritativeRowsBySleeperId, selectAuthoritativePlayerRow } from '@/lib/player-match/authoritativePlayerRow'
 
 export const dynamic = 'force-dynamic'
 const headers = { 'Cache-Control': 'private, no-store' }
@@ -19,15 +20,16 @@ const schema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('roster'), playerIds: z.array(id).min(1).max(60) }).strict(),
   z.object({ kind: z.literal('leagues'), leagueIds: z.array(id).min(1).max(5) }).strict(),
 ])
+const playerRowSelect = { sleeperId: true, name: true, position: true, source: true, fetchedAt: true } as const
+// One player per Sleeper id, named by its Sleeper row — not the newest row, which is often a
+// TheSportsDB namesake (lib/player-match/authoritativePlayerRow.ts).
 async function playersFor(ids: string[]): Promise<ClipPlayer[]> {
   if (!ids.length) return []
   const rows = await prisma.sportsPlayer.findMany({
     where: { sport: { equals: 'NFL', mode: 'insensitive' }, sleeperId: { in: [...new Set(ids)] } },
-    orderBy: { fetchedAt: 'desc' }, select: { sleeperId: true, name: true },
+    orderBy: { fetchedAt: 'desc' }, select: playerRowSelect,
   })
-  const players = new Map<string, ClipPlayer>()
-  for (const row of rows) if (row.sleeperId && !players.has(row.sleeperId)) players.set(row.sleeperId, { id: row.sleeperId, name: row.name })
-  return [...players.values()]
+  return [...authoritativeRowsBySleeperId(rows).values()].map(row => ({ id: row.sleeperId!, name: row.name }))
 }
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions)
@@ -46,10 +48,15 @@ export async function POST(req: Request) {
     const request = parsed.data
     const groups: Array<{ players: ClipPlayer[]; league?: { id: string; name: string } }> = []
     if (request.kind === 'player') {
-      const row = await prisma.sportsPlayer.findFirst({
-        where: { sport: { equals: 'NFL', mode: 'insensitive' }, ...(request.externalId ? { externalId: request.externalId } : { sleeperId: request.sleeperId }) },
-        orderBy: { fetchedAt: 'desc' }, select: { sleeperId: true, externalId: true, name: true },
-      })
+      const row = request.externalId
+        ? await prisma.sportsPlayer.findFirst({
+            where: { sport: { equals: 'NFL', mode: 'insensitive' }, externalId: request.externalId },
+            orderBy: { fetchedAt: 'desc' }, select: { sleeperId: true, externalId: true, name: true },
+          })
+        : await prisma.sportsPlayer.findMany({
+            where: { sport: { equals: 'NFL', mode: 'insensitive' }, sleeperId: request.sleeperId },
+            orderBy: { fetchedAt: 'desc' }, select: { ...playerRowSelect, externalId: true },
+          }).then(rows => selectAuthoritativePlayerRow(rows)?.base ?? null)
       if (!row) return NextResponse.json({ error: 'Player not found.' }, { status: 404, headers })
       groups.push({ players: [{ id: row.sleeperId ?? row.externalId, name: row.name }] })
     } else if (request.kind === 'roster') {

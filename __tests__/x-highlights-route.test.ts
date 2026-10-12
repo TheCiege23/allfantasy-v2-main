@@ -27,7 +27,21 @@ describe('X clips API',()=>{
   const response=await POST(request({kind:'player',sport:'NFL',sleeperId:'1'}))
   expect(response.status).toBe(200);expect(response.headers.get('Cache-Control')).toBe('private, no-store')
   expect((await response.json()).clips[0].players).toEqual([{id:'1',name:'Josh Allen'}])
-  expect(mocks.one.mock.calls[0][0].where).toEqual({sport:{equals:'NFL',mode:'insensitive'},sleeperId:'1'})
+  expect(mocks.many.mock.calls[0][0].where).toEqual({sport:{equals:'NFL',mode:'insensitive'},sleeperId:'1'})
+ })
+ it('names a Sleeper id by its Sleeper row, not a newer TheSportsDB namesake row',async()=>{
+  // Production 2026-10-11: TheSportsDB's Elgton Jenkins (G, CLE) carries TE E.J. Jenkins's Sleeper id 11304.
+  const rows=[
+   {sleeperId:'11304',name:'Elgton Jenkins',position:'G',source:'thesportsdb',externalId:'tsdb_1',fetchedAt:new Date('2026-10-11T08:42:36Z')},
+   {sleeperId:'11304',name:'E.J. Jenkins',position:'TE',source:'sleeper',externalId:'sleeper_11304',fetchedAt:new Date('2026-10-10T00:00:00Z')},
+  ]
+  mocks.many.mockResolvedValue(rows)
+  mocks.catalog.mockResolvedValue({posts:[{id:'2109403783620857926',account:'NFL',text:'E.J. Jenkins touchdown',kind:'play',publishedAt:new Date(Date.now()-1000).toISOString()},{id:'2109403783620857927',account:'NFL',text:'Elgton Jenkins pancake block',kind:'play',publishedAt:new Date(Date.now()-1000).toISOString()}],checkedAt:new Date().toISOString()})
+  for(const body of [{kind:'player',sport:'NFL',sleeperId:'11304'},{kind:'roster',playerIds:['11304']}]){
+   const clips=(await (await POST(request(body))).json()).clips
+   expect(clips.map((c:{id:string})=>c.id)).toEqual(['2109403783620857926'])
+   expect(clips[0].players).toEqual([{id:'11304',name:'E.J. Jenkins'}])
+  }
  })
  it('authorizes league IDs by the caller claimed team before reading rosters',async()=>{
   await POST(request({kind:'leagues',leagueIds:['someone-else']}))
