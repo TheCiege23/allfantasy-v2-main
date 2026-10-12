@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Search } from 'lucide-react'
+import { TypingNote } from './TypingNote'
 import { ChatMessageList, type ChatListMessage } from './ChatMessageList'
 import { ChatSearch } from './ChatSearch'
 import { chatFailure } from './chatFailure'
@@ -921,11 +922,7 @@ export function LeagueConversation({
         ⚠ HONEST ABOUT BEING LATE, as in DMs: this rides the 4–8s poll, so it can
         appear just after the message it was announcing.
       */}
-      {typing.length > 0 ? (
-        <p className="af-cm-typing-note">
-          {typing.length === 1 ? `${typing[0]!.name} is typing…` : `${typing.length} people are typing…`}
-        </p>
-      ) : null}
+      <TypingNote typing={typing} />
 
       {/*
         What this message will be answering, right above the composer — a reply target you

@@ -450,14 +450,6 @@ export function ChatMessageList({
                 ) : null}
                 {tag ? <span className="af-cm-msg-tag">{tag}</span> : null}
 
-                {m.parentMessageId && !deleted ? (
-                  <QuotedMessage
-                    author={parent?.authorName ?? null}
-                    text={parent ? censorProfanity(parent.body) : null}
-                    onJump={parent ? () => void jumpTo(parent.id) : undefined}
-                  />
-                ) : null}
-
                 <div
                   className="af-cm-bubble"
                   data-deleted={deleted || undefined}
@@ -587,6 +579,18 @@ export function ChatMessageList({
                         message (`metadata.decision.verdict`); the chip reads that, never the text,
                         and only on a Chimmy-marked row.
                       */}
+                      {/*
+                        The message this one answers sits INSIDE the bubble, as in every messenger
+                        people already know — above it, it read as a separate line belonging to
+                        nobody. A tap on it is the quote's (jump to the original), not "show the time".
+                      */}
+                      {m.parentMessageId ? (
+                        <QuotedMessage
+                          author={parent?.authorName ?? null}
+                          text={parent ? censorProfanity(parent.body) : null}
+                          onJump={parent ? () => void jumpTo(parent.id) : undefined}
+                        />
+                      ) : null}
                       {chimmyVerdict ? <ChimmyVerdictChip verdict={chimmyVerdict} /> : null}
                       {shown ? <p className="af-cm-bubble-text">{renderMessageText(censorProfanity(shown))}</p> : null}
                       {rich ? renderRich(m) : null}
