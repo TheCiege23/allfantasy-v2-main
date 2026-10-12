@@ -126,7 +126,7 @@ export function selectAuthoritativePlayerRow<T extends PlayerSourceRow>(
     return { row: best, base: best, ignored: [] }
   }
 
-  const merged: Record<string, unknown> = { ...sleeperRow }
+  const merged: Record<string, unknown> = { ...(sleeperRow as object) }
   const ignored: T[] = []
   for (const other of ordered) {
     if (other === sleeperRow || other.source === 'sleeper') continue
