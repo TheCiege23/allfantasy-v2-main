@@ -15,7 +15,7 @@ The first Survivor milestone connects a completed native draft to the existing f
 
 ## Verification
 
-Focused Survivor/draft regression suite: 86 tests passed. Changed-file ESLint and whitespace checks pass.
+Focused Survivor/draft/Zombie regression suite: 93 tests passed. This includes behavioral checks for awaiting setup, retry after failure, and successful-poll throttling. Changed-file ESLint and whitespace checks pass.
 
 The opt-in database proof creates unique, passwordless fixtures on an explicitly recognized non-production database and cleans up only its own IDs. It verifies concurrent setup, real roster links, private chat memberships, hidden inventory, repeated initialization, disabled features, host participation, draft-pattern/manual assignment, ownership recovery, draft guards, transaction rollback and retry, and preservation of progressed gameplay.
 
@@ -27,7 +27,7 @@ The script refuses production even if `ALLOW_PROD_SEED` is set. No schema migrat
 
 ## Release and remaining work
 
-The repository's CI TypeScript ratchet is the release gate. The local shared generated Prisma client is stale for unrelated models; local compiler output contains no errors in changed files. Do not update the error baseline to accommodate it.
+The repository's CI TypeScript ratchet is the release gate and passed with a freshly generated client. The local shared generated Prisma client is stale for unrelated models; local compiler output contains no errors in changed files. Do not update the error baseline to accommodate it.
 
 Rollback is a code revert. It does not delete committed game setup. If setup fails, retries use the same persisted draft and avoid duplicating existing canonical state. Never use the development reset endpoint as a production rollback.
 
