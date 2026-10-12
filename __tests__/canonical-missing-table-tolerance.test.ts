@@ -45,6 +45,7 @@ vi.mock('@/lib/player-assets/playerImageStore', async (importOriginal) => ({
   // Pure: decide which image URL a batch read serves. Kept real so the mock tracks the contract.
   servedPlayerImageUrl: (await importOriginal<typeof import('@/lib/player-assets/playerImageStore')>()).servedPlayerImageUrl,
   isTrustedPlayerImageRow: (await importOriginal<typeof import('@/lib/player-assets/playerImageStore')>()).isTrustedPlayerImageRow,
+  playerImageEntriesToJudge: (await importOriginal<typeof import('@/lib/player-assets/playerImageStore')>()).playerImageEntriesToJudge,
   findDetectablyWrongPlayerImages: vi.fn(async () => new Set<string>()),
 }))
 vi.mock('@/lib/sport-teams/teamImageStore', () => ({ readPrimaryTeamImage: vi.fn(async () => null) }))

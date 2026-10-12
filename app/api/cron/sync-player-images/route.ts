@@ -35,6 +35,7 @@ import { createBatchPlayerHeadshotResolver } from "@/lib/player-assets/resolvePl
 import {
   PLAYER_IMAGE_TYPE_HEADSHOT,
   UNSTAMPED_RESOLVER_IMAGE_WHERE,
+  isTrustedPlayerImageRow,
   listDetectablyWrongPlayerImageIds,
 } from "@/lib/player-assets/playerImageStore";
 import {
@@ -172,6 +173,31 @@ async function mirrorToLegacy(
 }
 
 /**
+ * Whether a resolution may be copied into `Player.imageUrl` and `SportsPlayer.imageUrl`.
+ *
+ * A fresh resolution the fixed resolver persisted (and stamped) may. A cache hit or stale fallback
+ * may only when the `PlayerImage` row it came from is trusted: an unstamped pre-fix row can be
+ * another person's photo, and copying those is how OT Trent Brown's `Player.imageUrl` came to hold
+ * CB Tre' Brown III's photo and NFL DL Cam Jackson's Rolling Insights row NCAAB Cameron Jackson's —
+ * copies the PlayerImage suppression could not reach. (Unstamped rows are re-resolved by the
+ * refresh pass, after which the hit is trusted.) Not "fresh writes only": live requests write
+ * stamped rows without touching `Player.imageUrl`, and refusing those hits would keep such players
+ * at the front of the fill pass (`imageUrl: null`, oldest first) on every run.
+ */
+async function isVerifiedResolution(
+  playerId: string,
+  result: { imageUrl: string | null; cacheHit?: boolean; persisted?: boolean },
+): Promise<boolean> {
+  if (!result.imageUrl) return false;
+  if (!result.cacheHit) return Boolean(result.persisted);
+  const row = await prisma.playerImage.findFirst({
+    where: { playerId, imageType: PLAYER_IMAGE_TYPE_HEADSHOT, isPrimary: true, url: result.imageUrl },
+    select: { provider: true, rawPayload: true },
+  });
+  return Boolean(row && isTrustedPlayerImageRow(row));
+}
+
+/**
  * Resolve headshots for a batch of canonical players. `resolve()` performs the canonical
  * `PlayerImage` write-through internally, now keyed by `Player.id`.
  */
@@ -208,15 +234,12 @@ async function resolveBatch(
       });
 
       if (result.imageUrl) {
-        await prisma.player.update({
-          where: { id: player.id },
-          data: { imageUrl: result.imageUrl, lastSeenAt: new Date() },
-        });
-        // Only a fresh resolution the fixed resolver persisted (and stamped) is mirrored. A cache
-        // hit or a stale fallback can be a pre-fix row, and copying those is how NFL DL Cam
-        // Jackson's Rolling Insights row came to carry NCAAB Cameron Jackson's photo — a copy the
-        // PlayerImage suppression could not reach.
-        if (result.persisted && !result.cacheHit) {
+        // Copied into the denormalised columns only when verified — see `isVerifiedResolution`.
+        if (await isVerifiedResolution(player.id, result)) {
+          await prisma.player.update({
+            where: { id: player.id },
+            data: { imageUrl: result.imageUrl, lastSeenAt: new Date() },
+          });
           await mirrorToLegacy(player, result.imageUrl);
         }
         summary.resolved++;

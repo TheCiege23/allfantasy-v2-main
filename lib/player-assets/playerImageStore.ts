@@ -409,6 +409,11 @@ export async function listDetectablyWrongPlayerImageIds(sportKey: string): Promi
  * resolution into `Player.imageUrl` too — measured 2026-10-11, all 5,293 unstamped primaries had
  * an identical `Player.imageUrl` — and the batch readers fall back to that column. So a
  * suppressed row also suppresses `Player.imageUrl` when it is the same URL.
+ *
+ * With NO primary row, `detectablyWrong` is about `Player.imageUrl` itself — callers judge that
+ * column with `findDetectablyWrongPlayerImages` too. Measured 2026-10-12: 196 of the 566 `Player`
+ * rows whose URL another player shares have no primary `PlayerImage` row, so before this they were
+ * served raw by every batch reader.
  */
 export function servedPlayerImageUrl(
   primary: { url: string; provider?: string | null; rawPayload?: unknown } | null | undefined,
@@ -419,7 +424,28 @@ export function servedPlayerImageUrl(
     if (!detectablyWrong || isTrustedPlayerImageRow(primary)) return primary.url
     return playerImageUrl && playerImageUrl !== primary.url ? playerImageUrl : null
   }
-  return playerImageUrl ?? null
+  return detectablyWrong ? null : (playerImageUrl ?? null)
+}
+
+/**
+ * The (player, URL) pairs a batch reader should judge: the untrusted primary rows, and the bare
+ * `Player.imageUrl` of every player who has no primary row. A trusted primary is never judged;
+ * `Player.imageUrl` beside a primary row is handled by `servedPlayerImageUrl`.
+ */
+export function playerImageEntriesToJudge(
+  players: ReadonlyArray<{ id: string; imageUrl?: string | null }>,
+  primaryById: ReadonlyMap<string, { url: string; provider?: string | null; rawPayload?: unknown }>,
+): Array<{ playerId: string; url: string }> {
+  const out: Array<{ playerId: string; url: string }> = []
+  for (const p of players) {
+    const primary = primaryById.get(p.id)
+    if (primary) {
+      if (!isTrustedPlayerImageRow(primary)) out.push({ playerId: p.id, url: primary.url })
+    } else if (p.imageUrl) {
+      out.push({ playerId: p.id, url: p.imageUrl })
+    }
+  }
+  return out
 }
 
 export interface StoredPlayerImage {

@@ -22,7 +22,8 @@ const prismaMock = vi.hoisted(() => ({
     updateMany: vi.fn(async () => ({ count: 1 })),
   },
   redraftRosterPlayer: { findMany: vi.fn(async () => [] as unknown[]) },
-  playerImage: { findMany: vi.fn(async () => [] as unknown[]) },
+  playerImage: { findMany: vi.fn(async () => [] as unknown[]), findFirst: vi.fn(async () => null as unknown) },
+  playerProviderIdentity: { findMany: vi.fn(async () => [] as unknown[]) },
   playerIdentityMap: { findMany: vi.fn(async () => [] as unknown[]) },
   sportsPlayerRecord: { findMany: vi.fn(async () => [] as unknown[]) },
   teamAsset: { findMany: vi.fn(async () => [] as unknown[]) },
@@ -45,6 +46,7 @@ import { resolveImagesByPlayerName, resolveSleeperPlayerIdentities, playerImageK
 import { searchPlayers } from '@/lib/core-app/playerFinder'
 import { attachPlayerMediaBatch, clearMediaCache } from '@/lib/player-media'
 import { GET as syncPlayerImages } from '@/app/api/cron/sync-player-images/route'
+import { getCanonicalPlayerMapForSport, getCanonicalPlayersBySleeperIds } from '@/lib/canonical/getCanonicalPlayer'
 
 const TRE_BROWN_PHOTO = 'https://r2.thesportsdb.com/images/media/player/cutout/tre-brown-iii.png'
 const CAMERON_JACKSON_PHOTO = 'https://r2.thesportsdb.com/images/media/player/cutout/cm9h7v1648234807.png'
@@ -73,6 +75,7 @@ beforeEach(() => {
   }
   prismaMock.$queryRaw.mockReset().mockResolvedValue(SNAPSHOT)
   prismaMock.sportsPlayer.findFirst.mockResolvedValue(null)
+  prismaMock.playerImage.findFirst.mockResolvedValue(null)
   prismaMock.sportsPlayer.updateMany.mockResolvedValue({ count: 1 })
   prismaMock.player.update.mockResolvedValue({})
   resetPlayerImageSuspicionCache()
@@ -183,20 +186,61 @@ describe('image cron — mirrorToLegacy', () => {
     await syncPlayerImages(req as never)
   }
 
-  it('does not copy a cache hit (possibly a pre-fix row) into SportsPlayer.imageUrl', async () => {
+  it('does not copy a cache hit from an unstamped pre-fix row into Player.imageUrl or SportsPlayer.imageUrl', async () => {
     resolverResult.value = { imageUrl: CAMERON_JACKSON_PHOTO, source: 'sportsdb', confidence: 'exact', cacheHit: true }
+    prismaMock.playerImage.findFirst.mockResolvedValue({ provider: 'sportsdb', rawPayload: null })
     await runOnce()
-    expect(prismaMock.player.update).toHaveBeenCalled()
+    expect(prismaMock.player.update).not.toHaveBeenCalled()
     expect(prismaMock.sportsPlayer.updateMany).not.toHaveBeenCalled()
+  })
+
+  it('does copy a cache hit whose row the fixed resolver stamped (a live request wrote it)', async () => {
+    const own = 'https://r2.thesportsdb.com/images/media/player/cutout/nfl-cam-jackson.png'
+    resolverResult.value = { imageUrl: own, source: 'sportsdb', confidence: 'exact', cacheHit: true }
+    prismaMock.playerImage.findFirst.mockResolvedValue({ provider: 'sportsdb', rawPayload: { headshotResolver: 'v2' } })
+    await runOnce()
+    expect(prismaMock.player.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ imageUrl: own }) }))
+    expect(prismaMock.sportsPlayer.updateMany).toHaveBeenCalled()
   })
 
   it('does copy a fresh resolution the fixed resolver persisted', async () => {
     const own = 'https://r2.thesportsdb.com/images/media/player/cutout/nfl-cam-jackson.png'
     resolverResult.value = { imageUrl: own, source: 'sportsdb', confidence: 'name_team_position', cacheHit: false, persisted: true }
     await runOnce()
+    expect(prismaMock.player.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ imageUrl: own }) }))
     expect(prismaMock.sportsPlayer.updateMany).toHaveBeenCalledWith({
       where: { sport: 'NFL', source: 'rolling_insights', externalId: '8966' },
       data: { imageUrl: own },
     })
+  })
+})
+
+describe('Player.imageUrl with no primary PlayerImage row — the canonical batch readers', () => {
+  const players = [
+    { id: 'nfl-trent-brown', name: 'Trent Brown', sport: 'NFL', position: 'OT', team: 'HOU', active: true, imageUrl: TRE_BROWN_PHOTO, injuryStatus: null, fetchedAt: null, expiresAt: null },
+    { id: 'nfl-kevin-winston', name: 'Kevin Winston', sport: 'NFL', position: 'DB', team: 'TEN', active: true, imageUrl: WINSTON_PHOTO, injuryStatus: null, fetchedAt: null, expiresAt: null },
+  ]
+  beforeEach(() => {
+    prismaMock.playerProviderIdentity.findMany.mockResolvedValue([
+      { playerId: 'nfl-trent-brown', providerPlayerId: '6011' },
+      { playerId: 'nfl-kevin-winston', providerPlayerId: '7012' },
+    ])
+    prismaMock.player.findMany.mockResolvedValue(players)
+    prismaMock.playerImage.findMany.mockResolvedValue([]) // neither has a primary row
+  })
+
+  it('getCanonicalPlayersBySleeperIds drops Trent Brown\'s copy and keeps the Jr. spelling variant', async () => {
+    const map = await getCanonicalPlayersBySleeperIds(['6011', '7012'])
+    expect(map.get('6011')?.imageUrl).toBeNull()
+    expect(map.get('7012')?.imageUrl).toBe(WINSTON_PHOTO)
+  })
+
+  it('getCanonicalPlayerMapForSport judges Player.imageUrl with and without includeImages', async () => {
+    for (const includeImages of [true, false]) {
+      resetPlayerImageSuspicionCache()
+      const map = await getCanonicalPlayerMapForSport('NFL', { includeImages })
+      expect(map.get('6011')?.imageUrl).toBeNull()
+      expect(map.get('7012')?.imageUrl).toBe(WINSTON_PHOTO)
+    }
   })
 })
