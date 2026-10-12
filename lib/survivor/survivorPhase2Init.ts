@@ -239,7 +239,7 @@ export async function getSurvivorPhase2Status(leagueId: string): Promise<{
   const [tribeStatus, idolStatus, leagueChannel, introMessage] = await Promise.all([
     getTribeAssignmentStatus(leagueId),
     getIdolSeedStatus(leagueId),
-    prisma.survivorChatChannel.count({ where: { leagueId, channelType: 'tribe' } }),
+    prisma.survivorChatChannel.count({ where: { leagueId, channelType: 'league', isArchived: false } }),
     prisma.survivorChatMessage.count({ where: { leagueId, contentType: 'survivor_intro' } }),
   ])
   return {
