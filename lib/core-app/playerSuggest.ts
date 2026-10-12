@@ -67,7 +67,7 @@ async function buildGlobalRosterCounts(): Promise<Map<string, number>> {
   // ⚠ A failed read REJECTS. It used to resolve to `[]`, which made a refresh that failed
   // replace a good ten-minute count with an empty map — the suggestion ranking then lost its
   // "rostered globally" signal until the next refresh. The caller decides what a failure means.
-  const rosters: Array<{ playerData: unknown; league: { platform: string | null } | null }> = await prisma.roster.findMany({
+  const rosters: Array<{ playerData: unknown; league: { platform: string | null; sport: string | null } | null }> = await prisma.roster.findMany({
     select: { playerData: true, league: { select: { platform: true, sport: true } } },
   })
   const counts = new Map<string, number>()
