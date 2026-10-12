@@ -336,7 +336,8 @@ export function injuryAlert(opts: {
     body,
     userIds: opts.userIds,
     leagueId: opts.leagueId,
-    actionHref: `/player/${encodeURIComponent(opts.playerName.toLowerCase().replace(/\s+/g, '-'))}`,
+    // A bare name slug used to bind to any namesake in any sport; the page now scopes by these.
+    actionHref: `/player/${encodeURIComponent(opts.playerName.toLowerCase().replace(/\s+/g, '-'))}?${new URLSearchParams({ sport: opts.sport ?? 'NFL', team: opts.team ?? '' })}`,
     actionLabel: 'View Player',
     meta: {
       playerName: opts.playerName,
