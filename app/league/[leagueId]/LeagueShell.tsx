@@ -2268,6 +2268,7 @@ function LeagueTabRouter({
         />
       )
     case 'standings':
+      if (selectedLeague.leagueVariant === 'big_brother') return <StandingsTab league={selectedLeague} />
       if (isNflRedraftCoreDashboardFromUserLeague(selectedLeague)) {
         return <RedraftStandingsPlayoffsView leagueId={leagueId} isCommissioner={isCommissioner} />
       }
