@@ -1,0 +1,48 @@
+'use client'
+
+import Link from 'next/link'
+import { ArrowRight, CalendarDays, MessageSquare, Shield } from 'lucide-react'
+import type { UserLeague, UserLeagueTeam } from '@/app/dashboard/types'
+import { CommissionerSetupChecklist } from '@/components/league/CommissionerSetupChecklist'
+import { readSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
+import { nativeLeaguePhase } from '@/lib/league/nativeLeagueNavigation'
+import { sortTeamsForManagerListing, type LeagueSeasonSnapshot } from '@/lib/league/sort-teams-standings'
+
+export function NativeLeagueHome({ league, teams, userTeamId, isCommissioner, draftDateIso, snapshot, settingsOpen, onOpenSettings, onSelectTab }: {
+  league: UserLeague
+  teams: UserLeagueTeam[]
+  userTeamId: string | null
+  isCommissioner: boolean
+  draftDateIso: string | null
+  snapshot: LeagueSeasonSnapshot | null
+  settingsOpen: boolean
+  onOpenSettings: (panel?: string | null) => void
+  onSelectTab: (id: string) => void
+}) {
+  const phase = nativeLeaguePhase(league)
+  const predraft = phase === 'Setup' || phase === 'Draft'
+  const survivor = league.leagueVariant === 'survivor' || league.format.toLowerCase() === 'survivor'
+  const plan = readSurvivorFullSeasonPlan(league.settings)
+  const hostOnly = isCommissioner && (league.settings as Record<string, unknown> | null)?.commissionerParticipationMode === 'non_participating_host'
+  const team = teams.find(row => row.id === userTeamId)
+  const standings = sortTeamsForManagerListing(teams, league, snapshot).slice(0, 6)
+  const date = draftDateIso ? new Date(draftDateIso) : null
+  const draftLabel = date && Number.isFinite(date.getTime()) ? date.toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'Set your draft date'
+  return <div className="nl-home" data-testid="native-league-home">
+    <div className="nl-home-primary">
+      <section className="nl-card nl-next"><div className="nl-card-label"><span>Next up</span><span>{predraft ? 'Draft HQ' : survivor ? 'Survivor' : phase}</span></div>
+        <h2>{predraft ? `Draft · ${draftLabel}` : survivor ? 'Your island this week' : phase === 'Offseason' ? 'Your season archive' : `Week ${league.currentWeek ?? '—'}`}</h2>
+        <p>{predraft ? `${league.teamCount}-team ${league.format}. Review your settings and queue before the draft.` : survivor ? 'Check the challenge, immunity, Tribal Council, and your private powers.' : phase === 'Offseason' ? 'Review final standings and prepare for the next season.' : 'Set your lineup and follow the latest matchup scores.'}</p>
+        <div className="nl-actions">{predraft ? <><button type="button" className="nl-button nl-primary" onClick={() => onSelectTab('draft')}>Enter Draft HQ <ArrowRight size={16} aria-hidden /></button><Link className="nl-button" href={`/league/${encodeURIComponent(league.id)}/draft`}>Draft board</Link></> : <button type="button" className="nl-button nl-primary" onClick={() => onSelectTab(survivor ? 'survivor' : phase === 'Offseason' ? 'standings' : 'matchups')}>{survivor ? 'Open Survivor' : phase === 'Offseason' ? 'Final standings' : 'Open matchup'}<ArrowRight size={16} aria-hidden /></button>}</div>
+        {predraft && <div className="nl-quick-grid"><Link href={`/mock-draft?leagueId=${encodeURIComponent(league.id)}&sport=${encodeURIComponent(league.sport)}&teams=${league.teamCount}`}><h3>Mock draft</h3><p>Practice with this league’s settings.</p></Link><Link href={`/league/${encodeURIComponent(league.id)}/draft`}><h3>Queue & rankings</h3><p>Prepare your picks in the draft room.</p></Link>{isCommissioner && <button type="button" onClick={() => onOpenSettings('draft')}><h3>Draft settings</h3><p>Order, clock, and manager readiness.</p></button>}</div>}
+      </section>
+      {isCommissioner && predraft && <CommissionerSetupChecklist leagueId={league.id} settingsOpen={settingsOpen} onOpenSettings={onOpenSettings} />}
+      {survivor && <section className="nl-card"><div className="nl-card-label"><span>Survivor season</span><Shield size={16} aria-hidden /></div><h2>Outwit. Outplay. Outlast.</h2>{plan && <p>Full season · Weeks {plan.startWeek}–{plan.endWeek} · {plan.eliminationWeeks.length} elimination periods · Final 3 in week {plan.finaleWeek}. Opening and non-elimination periods keep your season paced through the final week.</p>}<p>Your league’s saved rules govern tribes, challenges, private votes, elimination, and the finale.</p><div className="nl-actions"><button type="button" className="nl-button" onClick={() => onSelectTab('survivor_challenges')}>Challenges</button><button type="button" className="nl-button" onClick={() => onSelectTab('survivor_tribal')}>Tribal Council</button><button type="button" className="nl-button" onClick={() => onSelectTab('survivor_jury')}>Jury & finale</button></div></section>}
+      <section className="nl-card"><div className="nl-card-label"><span>League activity</span><CalendarDays size={16} aria-hidden /></div><h2>{predraft ? 'Get ready together' : 'Keep up with your league'}</h2><p>{teams.filter(row => row.claimedByUserId).length} of {league.teamCount} manager seats claimed. League announcements and transaction updates are in chat.</p><button type="button" className="nl-text-link" onClick={() => onSelectTab('league_chat')}>Open league activity <ArrowRight size={15} aria-hidden /></button></section>
+    </div>
+    <aside className="nl-home-secondary" aria-label="League overview"><section className="nl-card"><div className="nl-card-label">Your team</div><h2>{team?.teamName || (hostOnly ? 'Commissioner host' : 'Join a team')}</h2>{team ? <><dl className="nl-team-stats"><div><dt>Record</dt><dd>{team.wins}–{team.losses}{team.ties ? `–${team.ties}` : ''}</dd></div><div><dt>PF</dt><dd>{team.pointsFor.toFixed(1)}</dd></div><div><dt>FAAB</dt><dd>{team.faabRemaining ?? '—'}</dd></div></dl><div className="nl-actions"><button type="button" className="nl-button" onClick={() => onSelectTab('roster')}>My team</button><button type="button" className="nl-button" onClick={() => onSelectTab('players')}>Players</button></div></> : <p>{hostOnly ? 'You are hosting this season without a playing team. Manage invitations, rules, and league readiness from Commissioner.' : 'Ask your commissioner for a team invitation.'}</p>}</section>
+      <section className="nl-card nl-chat-preview"><div className="nl-card-label"><span>League chat</span><MessageSquare size={16} aria-hidden /></div><h2>Your league, together</h2><p>Announcements, draft discussion, and league conversation.</p><button type="button" className="nl-button" onClick={() => onSelectTab('league_chat')}>Open league chat</button></section>
+      <section className="nl-card"><div className="nl-card-label"><span>Standings</span><button type="button" className="nl-text-link" onClick={() => onSelectTab('standings')}>Full table</button></div><ol className="nl-standings-preview">{standings.map((row, index) => <li key={row.id} data-own-team={row.id === userTeamId}><span>{index + 1}</span><strong>{row.teamName}</strong><span>{row.wins}–{row.losses}{row.ties ? `–${row.ties}` : ''}</span></li>)}</ol>{!standings.length && <p>Standings appear when teams are ready.</p>}</section>
+    </aside>
+  </div>
+}
