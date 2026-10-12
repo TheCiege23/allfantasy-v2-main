@@ -53,21 +53,12 @@ export default async function CreateLeaguePage(
       select: { id: true, name: true, platform: true, sport: true },
       orderBy: { updatedAt: 'desc' },
     })
-    const imports = candidates.filter(league => !isNativePlatform(league.platform))
-    return <>
-      <section className="mx-auto max-w-5xl px-6 pt-6" aria-label="League import options">
-        <h2 className="text-lg font-bold">Bring your league to AllFantasy</h2>
-        <p className="mt-2 text-sm">Import from a supported platform, then review the rules and make the league native.</p>
-        <a className="mt-3 inline-block font-bold underline" href="/import">Import a league</a>
-        {imports.length > 0 && <details id="imported-leagues" className="mt-4 rounded-xl border p-4">
-          <summary className="cursor-pointer font-bold">Make an already imported league native</summary>
-          <ul className="mt-3 space-y-3">{imports.map(league => <li key={league.id}>
-            <a className="underline" href={`/create-league?fromLeague=${encodeURIComponent(league.id)}`}>{league.name || 'Imported league'} · {String(league.sport)}</a>
-          </li>)}</ul>
-        </details>}
-      </section>
-      <CreateLeaguePageClient userId={userId} />
-    </>
+    // Import entry points live inside the wizard (its Import button and this list), so a phone
+    // opens on the create form rather than on a second, unstyled import block above it.
+    const imports = candidates
+      .filter(league => !isNativePlatform(league.platform))
+      .map(league => ({ id: league.id, name: league.name ?? '', sport: String(league.sport) }))
+    return <CreateLeaguePageClient userId={userId} importedLeagues={imports} />
   }
 
   const source = await prisma.league.findUnique({
@@ -101,10 +92,12 @@ export default async function CreateLeaguePage(
   })
   if (importTemplate.teamCount !== currentTeamCount) {
     return (
-      <main className="mx-auto max-w-2xl p-8 text-center">
-        <h1 className="text-2xl font-bold">This import cannot be copied yet</h1>
-        <p className="mt-4">The imported league has {currentTeamCount} current teams, and AllFantasy does not support that team count for this sport and league type. Every team must carry over, so choose a supported source league or create a new league.</p>
-        <a className="mt-6 inline-block font-bold underline" href="/create-league">Create a new league</a>
+      <main className="flex min-h-[70vh] items-center justify-center bg-[color:var(--surface-app)] px-4 py-10 text-[color:var(--text-primary)]">
+        <div className="w-full max-w-xl rounded-2xl border border-[color:var(--border-subtle)] bg-[color:var(--surface-card)] p-6 text-center shadow-xl shadow-black/5 sm:p-8">
+          <h1 className="text-2xl font-black tracking-tight">This import cannot be copied yet</h1>
+          <p className="mt-4 text-sm leading-6 text-[color:var(--text-secondary)]">The imported league has {currentTeamCount} current teams, and AllFantasy does not support that team count for this sport and league type. Every team must carry over, so choose a supported source league or create a new league.</p>
+          <a className="mt-6 inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-violet-600 px-5 text-sm font-black text-[#ffffff] shadow-lg shadow-violet-600/25 transition hover:bg-violet-500 sm:w-auto" href="/create-league">Create a new league</a>
+        </div>
       </main>
     )
   }
@@ -117,12 +110,17 @@ export default async function CreateLeaguePage(
   }
   return (
     <>
-    <section className="mx-auto max-w-5xl px-6 pt-6" aria-label="Native import review">
-      <h2 className="text-lg font-bold">Review native carryover</h2>
-      <p className="mt-2 text-sm">Source season: {source.season ?? 'Unknown'}. Native season: {resolveLeagueCreationSeason(String(source.sport))}. All {currentTeamCount} teams and their current rosters carry over. Available history is archived; past results are not rescored.</p>
-      {baseballReview && <p className="mt-2 text-sm">Imported points rules: {Object.entries(baseballReview.categoryPoints).filter(([, value]) => value !== 0).map(([key, value]) => `${key}: ${value}`).join(' · ') || 'All categories score zero'}.</p>}
-      {reviewError && <p role="alert" className="mt-3 rounded-xl border border-amber-500 p-4">{reviewError} Native creation will stop until these settings can be preserved.</p>}
-    </section>
+    <div className="bg-[color:var(--surface-app)] text-[color:var(--text-primary)]">
+      <section className="mx-auto max-w-7xl px-4 pt-4 sm:px-6 sm:pt-6" aria-label="Native import review">
+        {/* pr-16: the theme toggle is fixed to the top-right corner on this route. */}
+        <div className="rounded-2xl border border-[color:var(--border-subtle)] bg-[color:var(--surface-card)] p-4 pr-16 sm:p-5 sm:pr-20 lg:pr-5">
+          <h2 className="text-lg font-black tracking-tight">Review native carryover</h2>
+          <p className="mt-2 text-sm leading-6 text-[color:var(--text-secondary)]">Source season: {source.season ?? 'Unknown'}. Native season: {resolveLeagueCreationSeason(String(source.sport))}. All {currentTeamCount} teams and their current rosters carry over. Available history is archived; past results are not rescored.</p>
+          {baseballReview && <p className="mt-2 break-words text-sm leading-6 text-[color:var(--text-secondary)]">Imported points rules: {Object.entries(baseballReview.categoryPoints).filter(([, value]) => value !== 0).map(([key, value]) => `${key}: ${value}`).join(' · ') || 'All categories score zero'}.</p>}
+          {reviewError && <p role="alert" className="mt-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm leading-6">{reviewError} Native creation will stop until these settings can be preserved.</p>}
+        </div>
+      </section>
+    </div>
     <CreateLeaguePageClient
       userId={userId}
       importSourceLeagueId={source.id}
