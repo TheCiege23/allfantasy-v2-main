@@ -8,6 +8,7 @@ import { validateRedraftLineup } from '@/lib/redraft/lineupValidation'
 import { updateStandings } from '@/lib/redraft/standingsEngine'
 import { getNormalizedPlayerData } from '@/lib/player-data/getNormalizedPlayerData'
 import { serializeUnifiedPlayerForApi } from '@/lib/player-data/serializeUnifiedPlayerForApi'
+import { crosswalkToSleeperIds, sleeperLookupId } from '@/lib/core-app/rosterIdCrosswalk'
 import {
   applyNflRedraftStatCorrection,
   buildNflRedraftLiveScoringRuntimeState,
@@ -203,7 +204,7 @@ export async function resolveNflRedraftLiveScoringRuntime(input: {
   if (rules.general.sport !== 'NFL' || rules.general.format !== 'redraft') return { ok: false, reason: 'not_nfl_redraft' }
 
   const week = positiveWeek(input.week, season.currentWeek || 1)
-  const league = await prisma.league.findUnique({ where: { id: season.leagueId }, select: { settings: true } })
+  const league = await prisma.league.findUnique({ where: { id: season.leagueId }, select: { settings: true, platform: true } })
   const rosterConfig = resolveRedraftRosterConfig(season.sport, league?.settings ?? null)
   const rosters = await prisma.redraftRoster.findMany({
     where: { seasonId: season.id, leagueId: season.leagueId },
@@ -231,35 +232,58 @@ export async function resolveNflRedraftLiveScoringRuntime(input: {
   }
   const playerIds = Array.from(new Set(rosterPlayers.map((player) => player.playerId)))
   const sports = Array.from(new Set(rosterPlayers.map((player) => player.sport)))
-  const scores = playerIds.length
+  /*
+   * 🛑 `player_weekly_scores` IS IN SLEEPER'S ID SPACE AND AN IMPORTED ROSTER IS NOT. The score sync
+   * translates an ESPN / Fleaflicker roster id through the crosswalk and writes under the Sleeper id
+   * (playerWeeklyScoreService.ts); read by the raw roster id, this found nothing for a foreign league —
+   * or, where the digits collide, a stranger's week (Fleaflicker 13761 Josh Allen is a Sleeper DL; ESPN
+   * 12483 Matthew Stafford is Jack Bech). Translated the same way here (`sleeperLookupId`), with every
+   * row mapped back to the roster id the lineup speaks; an id that does not translate reads nothing.
+   * This runtime is NFL-only (gated above), so the translation always applies.
+   */
+  const leaguePlatform = league?.platform ?? null
+  const sleeperIdByRosterId = await crosswalkToSleeperIds(String(leaguePlatform ?? ''), 'NFL', playerIds).catch(
+    () => new Map<string, string>(),
+  )
+  const lookupOf = (id: string) => sleeperLookupId(leaguePlatform, id, sleeperIdByRosterId)
+  const rosterIdsBySleeperId = new Map<string, string[]>()
+  for (const id of playerIds) {
+    const sleeperId = lookupOf(id)
+    if (sleeperId) rosterIdsBySleeperId.set(sleeperId, [...(rosterIdsBySleeperId.get(sleeperId) ?? []), id])
+  }
+  const lookupIds = [...rosterIdsBySleeperId.keys()]
+  const scores = lookupIds.length
     ? await prisma.playerWeeklyScore.findMany({
-        where: { playerId: { in: playerIds }, week, season: season.season, sport: { in: sports } },
+        where: { playerId: { in: lookupIds }, week, season: season.season, sport: { in: sports } },
       })
     : []
-  const unifiedRows = playerIds.length
+  const unifiedRows = lookupIds.length
     ? await getNormalizedPlayerData({
         surface: 'matchup',
         leagueId: season.leagueId,
-        playerIds,
-        limit: Math.max(playerIds.length, 1),
+        playerIds: lookupIds,
+        limit: Math.max(lookupIds.length, 1),
       }).catch(() => [])
     : []
   const unifiedById = new Map(unifiedRows.map((row) => {
     const wire = serializeUnifiedPlayerForApi(row)
     return [wire.id, wire] as const
   }))
-  const scoreRows: NflRedraftRuntimeScoreInput[] = scores.map((score) => ({
-    playerId: score.playerId,
-    sport: score.sport,
-    stats: asRecord(score.stats),
-    isFinalized: score.isFinalized,
-    source: 'player_weekly_scores',
-    updatedAtIso: score.updatedAt.toISOString(),
-  }))
+  const scoreRows: NflRedraftRuntimeScoreInput[] = scores.flatMap((score) =>
+    (rosterIdsBySleeperId.get(score.playerId) ?? []).map((rosterPlayerId) => ({
+      playerId: rosterPlayerId,
+      sport: score.sport,
+      stats: asRecord(score.stats),
+      isFinalized: score.isFinalized,
+      source: 'player_weekly_scores',
+      updatedAtIso: score.updatedAt.toISOString(),
+    })),
+  )
 
   const teamInputs: NflRedraftRuntimeTeamInput[] = rosters.map((roster) => {
     const players = (playersByRosterId.get(roster.id) ?? []).map((player) => {
-      const unified = unifiedById.get(player.playerId)
+      const lookupId = lookupOf(player.playerId)
+      const unified = lookupId ? unifiedById.get(lookupId) : undefined
       const canonical = unified?.nflRedraft ?? null
       return {
         rosterId: roster.id,
