@@ -24,6 +24,7 @@ import {
   type AdminPipelineFreshness,
 } from "@/lib/admin-dashboard/AdminPipelineFreshnessService"
 import { AiAuditLogsPanel } from "@/components/admin/AiAuditLogsPanel"
+import { HighlightAnalyticsPanel } from "@/components/admin/HighlightAnalyticsPanel"
 import { CampaignAttributionPanel } from "@/components/admin/CampaignAttributionPanel"
 import { BetaInvitePanel } from "@/components/admin/BetaInvitePanel"
 import { AiProviderHealthPanel } from "@/components/admin/AiProviderHealthPanel"
@@ -1887,6 +1888,11 @@ export default async function AdminPage(
           <ProductionReadinessPanel data={data.productionReadiness} />
         </div>
         <TrafficGeoPanel data={data.productionReadiness} metrics={data.traffic} />
+        <div id="highlight-analytics">
+          <AccordionSection title="Highlight Engagement" eyebrow="availability & returns">
+            <HighlightAnalyticsPanel />
+          </AccordionSection>
+        </div>
         <div id="social-campaigns">
           <AccordionSection title="Social & Campaigns" eyebrow="attribution">
             <CampaignAttributionPanel />
