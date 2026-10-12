@@ -3,6 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { listPlayerFollows } from '@/lib/follows/playerFollows'
 import { resolveInjuryFacts } from '@/lib/injuries/injuryReadPort'
+import { authoritativeRowsBySleeperId } from '@/lib/player-match/authoritativePlayerRow'
 import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { leagueDisplayName } from './leagueHome'
@@ -181,6 +182,40 @@ export async function scanFreeAgentLeagues(
   return done()
 }
 
+/**
+ * The club each followed NFL player is on NOW, keyed by lowercased Sleeper id.
+ *
+ * 🛑 `player_follows.team` IS A SNAPSHOT TAKEN AT FOLLOW TIME and only refreshed by a re-follow, yet
+ * it drove the team shown, the "vs X" next game and the injury name+team match. A player traded or
+ * cut after you starred him kept his old club on all three. The Sleeper row is the authority for a
+ * Sleeper id (`authoritativePlayerRow.ts`), and its `team` is never supplemented — so a null there
+ * means free agent, and the entry is `null` rather than absent: the caller must NOT fall back to
+ * the stale snapshot for him.
+ *
+ * ⚠ ONLY A `source='sleeper'` ROW SPEAKS. Without one, `selectAuthoritativePlayerRow` picks the
+ * best vendor row, whose Sleeper id came from a NAME match (Byron Murphy DT Seattle on the Vikings
+ * CB's id) — overlaying that team could swap one wrong club for another's. Those ids are left out
+ * and keep the snapshot. Any failed read leaves the whole map empty: the snapshot, as before.
+ */
+async function currentTeamsBySleeperId(sleeperIds: readonly string[]): Promise<Map<string, string | null>> {
+  const out = new Map<string, string | null>()
+  const ids = [...new Set(sleeperIds.filter(Boolean))]
+  if (ids.length === 0) return out
+  let rows: Array<{ sleeperId: string | null; name: string; position: string | null; team: string | null; source: string; fetchedAt: Date | null }>
+  try {
+    rows = await prisma.sportsPlayer.findMany({
+      where: { sport: 'NFL', sleeperId: { in: ids } },
+      select: { sleeperId: true, name: true, position: true, team: true, source: true, fetchedAt: true },
+    })
+  } catch {
+    return out
+  }
+  for (const [id, row] of authoritativeRowsBySleeperId(rows ?? [])) {
+    if (row.source === 'sleeper') out.set(id, row.team?.trim() || null)
+  }
+  return out
+}
+
 export async function getFollowingCard(
   userId: string,
   now: Date,
@@ -189,7 +224,15 @@ export async function getFollowingCard(
   const follows = await listPlayerFollows(userId)
   if (follows === null) return null
 
-  const shown = follows.slice(0, FOLLOWING_SHOWN)
+  const snapshot = follows.slice(0, FOLLOWING_SHOWN)
+  const currentTeams = await currentTeamsBySleeperId(
+    snapshot.filter((f) => f.sport === 'NFL').map((f) => f.sleeperId ?? ''),
+  )
+  // Every read below — team shown, next game, injury match — takes the CURRENT club.
+  const shown = snapshot.map((f) => {
+    const key = f.sport === 'NFL' ? f.sleeperId?.trim().toLowerCase() : undefined
+    return key && currentTeams.has(key) ? { ...f, team: currentTeams.get(key) ?? null } : f
+  })
   const nfl = shown.filter((f) => f.sport === 'NFL')
   const followedSleeperIds = nfl.map((f) => f.sleeperId).filter((id): id is string => Boolean(id))
 
