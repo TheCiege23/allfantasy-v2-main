@@ -39,9 +39,18 @@ describe('real standings sources',()=>{
     expect((await (await request()).json()).standings).toEqual([])
   })
   it.each([0, 200])('preserves a reported imported points-against value of %s', async (pointsAgainst) => {
-    m.league.mockResolvedValue({ id: 'l', platform: 'sleeper', season: 2026, settings: {} })
+    m.league.mockResolvedValue({ id: 'l', platform: 'espn', season: 2026, settings: {} })
     m.teams.mockResolvedValue([{ id: 't', wins: 2, losses: 1, ties: 0, pointsFor: 205.75, pointsAgainst }])
     expect((await (await request()).json()).standings[0].pointsAgainst).toBe(pointsAgainst)
+  })
+  it('uses season-scoped source evidence for Sleeper totals including a reported zero', async () => {
+    m.league.mockResolvedValue({ id: 'l', platform: 'sleeper', season: 2026, settings: {} })
+    expect((await (await request()).json()).standings[0].pointsAgainst).toBeNull()
+    m.teams.mockResolvedValue([{ id: 't', externalId: '2', wins: 2, losses: 1, ties: 0, pointsFor: 205.75, pointsAgainst: 0 }])
+    m.league.mockResolvedValue({ id: 'l', platform: 'sleeper', season: 2026, settings: { imported_points_against: { season: 2026, byTeamId: { '2': 1670.32 } } } })
+    expect((await (await request()).json()).standings[0].pointsAgainst).toBe(1670.32)
+    m.league.mockResolvedValue({ id: 'l', platform: 'sleeper', season: 2026, settings: { imported_points_against: { season: 2026, byTeamId: { '2': 0 } } } })
+    expect((await (await request()).json()).standings[0].pointsAgainst).toBe(0)
   })
   it('does not reuse current imported records for an unimported historical season',async()=>{
     expect((await (await request('2025')).json()).standings).toEqual([])
