@@ -3,8 +3,7 @@ import { Prisma } from '@prisma/client';
 import { findPlayerByName, FantasyCalcPlayer } from './fantasycalc';
 import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db';
 import { 
-  findPlayerTier, 
-  ALL_TIERED_PLAYERS 
+  findPlayerTier
 } from './dynasty-tiers';
 import { getComprehensiveLearningContext } from './comprehensive-trade-learning';
 import { fetchPlayerNewsFromGrok } from './ai-gm-intelligence';
@@ -577,7 +576,7 @@ async function analyzeUserTradingProfile(sleeperUsername: string): Promise<UserT
     const picksGiven = (trade.picksGiven as Array<{ round: number }>) || [];
     
     for (const p of received) {
-      const tiered = ALL_TIERED_PLAYERS.find(tp => tp.name.toLowerCase() === p.name.toLowerCase());
+      const tiered = findPlayerTier(p.name, p.position);
       const pAge = ageOf(historyAges, { name: p.name, position: p.position }) ?? tiered?.age;
       if (pAge && pAge < 26) youthScore++;
       positionCounts[p.position] = (positionCounts[p.position] || 0) + 1;

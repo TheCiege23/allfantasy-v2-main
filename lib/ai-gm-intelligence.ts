@@ -7,7 +7,6 @@ import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db';
 import {
   calculateDynastyScore,
   findPlayerTier,
-  ALL_TIERED_PLAYERS,
   AssetTier,
 } from './dynasty-tiers';
 import { resolveNflAges, ageOf } from './player-age';
@@ -344,7 +343,7 @@ export async function getUserSimilarPastTrades(
     const givenPositions = (trade.playersGiven as Array<{ position: string }>)?.map(p => p.position) || [];
     const receivedPositions = (trade.playersReceived as Array<{ position: string }>)?.map(p => p.position) || [];
     const currentPositions = playersInTrade.map(p => {
-      const tiered = ALL_TIERED_PLAYERS.find(tp => tp.name.toLowerCase() === p.toLowerCase());
+      const tiered = findPlayerTier(p);
       return tiered?.position || '';
     });
     const hasMatchingPosition = currentPositions.some(pos => 
@@ -491,7 +490,7 @@ export async function getManagerProfiles(
           const given = (trade.playersGiven as Array<{ name: string; position: string }>) || [];
 
           for (const p of received) {
-            const tiered = ALL_TIERED_PLAYERS.find(tp => tp.name.toLowerCase() === p.name.toLowerCase());
+            const tiered = findPlayerTier(p.name, p.position);
             const pAge = ageOf(historyAges, { name: p.name, position: p.position }) ?? tiered?.age;
             if (pAge && pAge < 26) youthScore++;
             positionCounts.set(p.position, (positionCounts.get(p.position) || 0) + 1);
@@ -670,7 +669,7 @@ export async function buildComprehensiveTradeContext(
         const picksGiven = (trade.picksGiven as Array<unknown>) || [];
 
         for (const p of received) {
-          const tiered = ALL_TIERED_PLAYERS.find(tp => tp.name.toLowerCase() === p.name.toLowerCase());
+          const tiered = findPlayerTier(p.name, p.position);
           const pAge = ageOf(tradeAges, { name: p.name, position: p.position }) ?? tiered?.age;
           if (pAge && pAge < 26) youthScore++;
           positionStats.set(p.position, (positionStats.get(p.position) || 0) + 1);
