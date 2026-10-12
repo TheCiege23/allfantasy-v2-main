@@ -28,7 +28,6 @@ import {
   resolveValidScoringPresetIdForSelection,
 } from '@/lib/create-league-v2/rules-engine'
 import {
-  CREATE_LEAGUE_TIMEZONES,
   IMPORT_LEAGUE_PROVIDERS,
   PREMIUM_ADVANCED_CREATE_KEYS,
   PREMIUM_ADVANCED_CREATE_LABELS,
@@ -38,6 +37,7 @@ import {
 } from '@/lib/create-league-v2/simple-create'
 import { LEAGUE_TYPE_MEDIA, SPORT_MEDIA } from '@/lib/create-league-v2/theme'
 import { getClientLeagueCreateOptionsCatalog } from '@/lib/create-league-v2/options-catalog-client'
+import { timezoneOptions } from '@/lib/create-league-v2/device-timezone'
 import { getDraftTypeMedia } from '@/lib/league-media/draftTypeMedia'
 import type { DraftTypeId, LeagueTypeId } from '@/lib/league-creation-wizard/types'
 
@@ -1165,7 +1165,7 @@ export function DraftStep({
             className={fieldClass(Boolean(fieldErrors?.timezone))}
             data-testid="g30-timezone"
           >
-            {CREATE_LEAGUE_TIMEZONES.map((timezone) => (
+            {timezoneOptions(state.timezone).map((timezone) => (
               <option key={timezone} value={timezone}>
                 {timezone}
               </option>

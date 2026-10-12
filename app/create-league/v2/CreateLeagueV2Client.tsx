@@ -13,6 +13,7 @@ import {
   type CreateLeagueV2State,
 } from '@/lib/create-league-v2/state'
 import { analyzeCreateLeagueCompletion } from '@/lib/create-league-v2/form-completion'
+import { readDeviceTimezone } from '@/lib/create-league-v2/device-timezone'
 import { submitCreateLeagueV2, type CreateLeagueFieldErrors } from '@/lib/create-league-v2/submit'
 import { CreateLeagueWizard, freshCreateLeagueState, type ImportedLeagueSummary } from '@/components/create-league-v2/CreateLeagueWizard'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
@@ -82,6 +83,15 @@ export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSo
     const persisted = loadPersistedV2State()
     if (persisted) {
       setState((current) => normalizeInitialState({ ...current, ...persisted }))
+    } else {
+      // A fresh create starts on the device's timezone rather than New York. Read here, after
+      // hydration, because the server cannot know it: setting it in the initial state would render
+      // a different select on the server and the client. The form is still disabled at this point
+      // (it enables after mount), so this cannot overwrite a choice the manager made.
+      const deviceTimezone = readDeviceTimezone()
+      if (deviceTimezone) {
+        setState((current) => (current.timezone === deviceTimezone ? current : { ...current, timezone: deviceTimezone }))
+      }
     }
     setHydrated(true)
   }, [importTemplate])
