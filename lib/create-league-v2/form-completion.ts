@@ -102,12 +102,15 @@ export function analyzeCreateLeagueCompletion(state: CreateLeagueV2State): Creat
     }
   }
 
-  if (!state.draftDate.trim()) {
-    issues.push({ code: 'draft_date_required', message: 'Choose a draft date.' })
-  }
+  // "Schedule later" is a real answer, not a missing one: the date is set after creation.
+  if (state.draftScheduleLater !== true) {
+    if (!state.draftDate.trim()) {
+      issues.push({ code: 'draft_date_required', message: 'Choose a draft date, or pick "Schedule later".' })
+    }
 
-  if (!state.draftTime.trim()) {
-    issues.push({ code: 'draft_time_required', message: 'Choose a draft time.' })
+    if (!state.draftTime.trim()) {
+      issues.push({ code: 'draft_time_required', message: 'Choose a draft time, or pick "Schedule later".' })
+    }
   }
 
   if (!state.timezone.trim()) {

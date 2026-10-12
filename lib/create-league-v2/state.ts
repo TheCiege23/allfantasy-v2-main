@@ -162,6 +162,12 @@ export interface CreateLeagueV2State {
   medianGame: boolean
   draftDate: string
   draftTime: string
+  /**
+   * The manager chose to set the draft date after creating the league. The date and time are
+   * then optional here and are NOT sent: the league is created with `draftDateUtc` null and the
+   * commissioner sets it in League → Commissioner settings → Draft (DraftSettingsPanel).
+   */
+  draftScheduleLater: boolean
   timezone: string
   language: string
   scoringSource: ScoringSource
@@ -338,6 +344,7 @@ export const DEFAULT_V2_STATE: CreateLeagueV2State = {
   medianGame: false,
   draftDate: '',
   draftTime: '',
+  draftScheduleLater: false,
   timezone: 'America/New_York',
   language: 'en',
   scoringSource: 'af',
