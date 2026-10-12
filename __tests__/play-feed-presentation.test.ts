@@ -372,3 +372,30 @@ describe('getPlayFeed — plays with no vendor id (GAPS N-18, 2026-10-11)', () =
     expect(h.identityFindMany).not.toHaveBeenCalled()
   })
 })
+
+describe('getPlayFeed — punctuated names resolve (2026-10-12)', () => {
+  // The column is written by normalizePlayerName, which keeps hyphens and apostrophes. Our own key
+  // strips them, so on prod 367 of 9,567 NFL identities — Jaxon Smith-Njigba among them — could not
+  // be found at all.
+  const stored = (canonicalName: string, normalizedName: string, sleeperId: string) =>
+    ({ rollingInsightsId: null, canonicalName, normalizedName, position: 'WR', sport: 'NFL', currentTeam: 'SEA', sleeperId })
+
+  it('finds a hyphenated name stored the way the writer stores it', async () => {
+    h.readPlayByPlayFeed.mockResolvedValue([pbp({ playerId: 'name:Jaxon Smith-njigba', playerName: 'Jaxon Smith-njigba', role: 'receiver', stat: 'pass', team: null })])
+    // A faithful column: it answers only for the exact keys it holds.
+    const column = [stored('Jaxon Smith-njigba', 'jaxon smith-njigba', '9488')]
+    h.identityFindMany.mockImplementation(async (args: { where: { normalizedName?: { in: string[] } } }) =>
+      args.where.normalizedName ? column.filter((r) => args.where.normalizedName!.in.includes(r.normalizedName)) : [])
+    const [item] = await getPlayFeed()
+    expect(item).toMatchObject({ sleeperId: '9488', position: 'WR', playerName: 'Jaxon Smith-Njigba' })
+  })
+
+  it("and an apostrophe — Tre'Davious White", async () => {
+    h.readPlayByPlayFeed.mockResolvedValue([pbp({ playerId: "name:Tre'Davious White", playerName: "Tre'Davious White", team: null })])
+    const column = [stored("Tre'Davious White", "tre'davious white", '4078')]
+    h.identityFindMany.mockImplementation(async (args: { where: { normalizedName?: { in: string[] } } }) =>
+      args.where.normalizedName ? column.filter((r) => args.where.normalizedName!.in.includes(r.normalizedName)) : [])
+    const [item] = await getPlayFeed()
+    expect(item!.sleeperId).toBe('4078')
+  })
+})
