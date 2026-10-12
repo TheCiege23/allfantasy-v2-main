@@ -912,47 +912,41 @@ export function DraftStep({
   return (
     <section className="space-y-5" data-testid="g30-draft-step">
       <StepHeader title={t('createLeague.g30.draft.title')} body={t('createLeague.g30.draft.body')} />
-      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 xl:grid-cols-3" aria-label={t('createLeague.g30.draftType.label')}>
-        {draftTypes.map((option) => {
-          const media = getDraftTypeMedia(option.id as DraftTypeId)
-          const selected = state.draftType === option.id
-          const video = media.selectionVideo || undefined
-          return (
-            <CreateLeagueVideoTile
-              key={option.id}
-              title={option.label}
-              hint={option.hint}
-              eyebrow={t('createLeague.g30.draftType.label')}
-              selected={selected}
-              media={{
-                video,
-                poster: media.thumbnail,
-              }}
-              onSelect={() => onChange({ draftType: option.id as WizardDraftType })}
-              className="sm:min-h-28"
-              testId={`g31-draft-type-${option.id}`}
-            />
-          )
-        })}
+      {/*
+        The tiles are the one draft-type control. A dropdown below them used to offer the same
+        list a second time; it is gone, and so is the "Draft type" eyebrow every tile repeated.
+      */}
+      <div className="space-y-2.5">
+        <p id="g30-draft-type-label" className="text-xs font-black uppercase tracking-wide text-[color:var(--text-tertiary)]">
+          {t('createLeague.g30.draftType.label')}
+        </p>
+        <div className="grid grid-cols-2 gap-2.5 sm:gap-3 xl:grid-cols-3" role="group" aria-labelledby="g30-draft-type-label" data-testid="g30-draft-type-tiles">
+          {draftTypes.map((option) => {
+            const media = getDraftTypeMedia(option.id as DraftTypeId)
+            const selected = state.draftType === option.id
+            const video = media.selectionVideo || undefined
+            return (
+              <CreateLeagueVideoTile
+                key={option.id}
+                title={option.label}
+                hint={option.hint}
+                selected={selected}
+                media={{
+                  video,
+                  poster: media.thumbnail,
+                }}
+                onSelect={() => onChange({ draftType: option.id as WizardDraftType })}
+                className="sm:min-h-28"
+                testId={`g31-draft-type-${option.id}`}
+              />
+            )
+          })}
+        </div>
+        {fieldErrors?.draftType ? (
+          <p role="alert" className="text-xs font-semibold text-rose-600 dark:text-rose-300">{fieldErrors.draftType}</p>
+        ) : null}
       </div>
-      <div className="grid gap-4 md:grid-cols-2">
-        <label className="space-y-2">
-          <span className="text-xs font-black uppercase tracking-wide text-[color:var(--text-tertiary)]">
-            {t('createLeague.g30.draftType.label')}
-          </span>
-          <select
-            value={state.draftType}
-            onChange={(event) => onChange({ draftType: event.target.value as WizardDraftType })}
-            className={fieldClass(Boolean(fieldErrors?.draftType))}
-            data-testid="g30-draft-type"
-          >
-            {draftTypes.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
+      <div className="grid gap-4 md:max-w-sm">
         <label className="space-y-2">
           <span className="text-xs font-black uppercase tracking-wide text-[color:var(--text-tertiary)]">
             {t('createLeague.g30.scoring.label')}
