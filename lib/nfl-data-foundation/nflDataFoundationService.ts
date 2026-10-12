@@ -171,7 +171,15 @@ function scoreSportsPlayer(row: SportsPlayerRow): number {
  * join asks `gameSchedule.homeTeam = <team>`, and an unfolded name finds no game in a week that
  * has games, which reads as a BYE for the whole club.
  */
-function chooseBestSportsPlayer(rows: SportsPlayerRow[]): SportsPlayerRow | null {
+function chooseBestSportsPlayer(
+  rows: SportsPlayerRow[],
+  /**
+   * Which rows may supply the provider ids. Default: any. The snapshot generator passes "was in
+   * the fetched window", so a Sleeper row fetched only to JUDGE the others never becomes the
+   * written `playerId` — see `generateAndPersistCanonicalNflProjections`.
+   */
+  mayCarryIds: (row: SportsPlayerRow) => boolean = () => true,
+): SportsPlayerRow | null {
   const ranked = [...rows].sort((a, b) => scoreSportsPlayer(b) - scoreSportsPlayer(a))
   const best = ranked[0] ?? null
   const sleeperKey = best?.sleeperId?.trim().toLowerCase()
@@ -179,7 +187,9 @@ function chooseBestSportsPlayer(rows: SportsPlayerRow[]): SportsPlayerRow | null
   const sameId = ranked.filter((r) => r.sleeperId?.trim().toLowerCase() === sleeperKey)
   const picked = selectAuthoritativePlayerRow(sameId)
   if (!picked || picked.base.source !== 'sleeper') return best
-  const ids = ranked.find((r) => sameId.includes(r) && !picked.ignored.includes(r)) ?? picked.base
+  const agreeing = ranked.filter((r) => sameId.includes(r) && !picked.ignored.includes(r))
+  const ids = agreeing.find(mayCarryIds) ?? (mayCarryIds(picked.base) ? picked.base : null)
+  if (!ids) return null
   return {
     ...ids,
     sleeperId: picked.row.sleeperId,
@@ -201,7 +211,10 @@ function chooseBestSportsPlayer(rows: SportsPlayerRow[]): SportsPlayerRow | null
  * the club separates them before the authority rule can see both, and the vendor row then stands
  * alone and wins: Tyreek Hill as a Dolphin again.
  */
-function chooseAuthoritativePerSleeperId(rows: readonly SportsPlayerRow[]): SportsPlayerRow[] {
+function chooseAuthoritativePerSleeperId(
+  rows: readonly SportsPlayerRow[],
+  mayCarryIds?: (row: SportsPlayerRow) => boolean,
+): SportsPlayerRow[] {
   const bySleeperId = new Map<string, SportsPlayerRow[]>()
   const out: SportsPlayerRow[] = []
   for (const row of rows) {
@@ -215,7 +228,7 @@ function chooseAuthoritativePerSleeperId(rows: readonly SportsPlayerRow[]): Spor
     else bySleeperId.set(key, [row])
   }
   for (const bucket of bySleeperId.values()) {
-    const chosen = chooseBestSportsPlayer(bucket)
+    const chosen = chooseBestSportsPlayer(bucket, mayCarryIds)
     if (chosen) out.push(chosen)
   }
   return out
@@ -1292,8 +1305,18 @@ export async function generateAndPersistCanonicalNflProjections(options?: {
    * Per Sleeper id FIRST, then by name/position/club. Grouped by club straight away, a free
    * agent's Sleeper row (club null) and his vendor row (last club) landed in different groups,
    * and the vendor's group wrote a snapshot on his old team.
+   *
+   * ⚠ THE WRITTEN `playerId` IS STILL THE ROW MAIN WOULD HAVE PICKED — the top-scored row of the
+   * fetched window — never a Sleeper row fetched only to judge it. The snapshot's own reader in
+   * this file (`playerId IN candidateIds(row)`) keys on the chosen row's `id`, so moving the id
+   * would orphan every snapshot written before. Only the identity fields change. Two ids are no
+   * longer written: a row that CONTRADICTS the Sleeper row (a namesake under his id), and the
+   * Sleeper row's own id when an agreeing vendor row outscores it — main wrote that one only
+   * because Sleeper spells the club out and so landed in a group of its own, and the reader,
+   * which picks by the same score, never asked for it.
    */
-  const perPlayer = chooseAuthoritativePerSleeperId(await withSleeperRows(db, rowsRaw))
+  const windowIds = new Set(rowsRaw.map((row) => row.id))
+  const perPlayer = chooseAuthoritativePerSleeperId(await withSleeperRows(db, rowsRaw), (row) => windowIds.has(row.id))
   const grouped = new Map<string, SportsPlayerRow[]>()
   for (const row of perPlayer) {
     const key = `${canonicalName(row.name)}|${canonicalPosition(row.position)}|${canonicalTeam(row.team)}`

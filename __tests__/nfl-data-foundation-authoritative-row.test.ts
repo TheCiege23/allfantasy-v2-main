@@ -67,6 +67,8 @@ function matches(row: Row, where: Row | undefined): boolean {
 /** Every other delegate answers empty; `gameSchedule.findFirst` records which club was asked. */
 function fakeDb(rows: Row[], identity: Row | null = null) {
   const scheduleClubs: string[] = []
+  /** `playerId` of every weekly snapshot the generator writes. */
+  const writtenPlayerIds: string[] = []
   const empty = new Proxy(
     {},
     {
@@ -91,10 +93,20 @@ function fakeDb(rows: Row[], identity: Row | null = null) {
           return null
         },
       },
+      // A provider projection for anyone, so the generator has something to persist.
+      fantasyProjection: { findFirst: async () => ({ projectedPoints: 12, fetchedAt: T0 }), findMany: async () => [] },
+      aFProjectionSnapshot: {
+        findFirst: async () => null,
+        findMany: async () => [],
+        upsert: async (args: { create: { playerId: string; week: number | null } }) => {
+          if (args.create.week != null) writtenPlayerIds.push(args.create.playerId)
+          return {}
+        },
+      },
     } as Row,
     { get: (t, key: string) => (key in t ? t[key] : empty) },
   ) as never
-  return { db, scheduleClubs }
+  return { db, scheduleClubs, writtenPlayerIds }
 }
 
 const opts = (rows: Row[], identity: Row | null = null) => ({ season: 2026, week: 6, prismaClient: fakeDb(rows, identity).db })
@@ -178,5 +190,35 @@ describe('generateAndPersistCanonicalNflProjections — per Sleeper id before gr
       await generateAndPersistCanonicalNflProjections({ season: 2026, week: 6, write: false, limit, prismaClient: db })
       expect(scheduleClubs, `limit ${limit}`).not.toContain('MIA')
     }
+  })
+
+  /*
+   * 🛑 THE WRITTEN `playerId` MUST NOT MOVE. The snapshot is read back by `playerId IN
+   * candidateIds(row)`, keyed on the chosen row's id; a different id orphans what was written
+   * before. Main picks the top-scored row of the window — Rolling Insights for a normal player.
+   * (Run against main, this writes that id AND the Sleeper row's: Sleeper spells the club out, so
+   * its row formed a club group of its own. The reader picks by the same score and never asks for
+   * the second, so it is the one id deliberately dropped.)
+   */
+  it('writes the same playerId main picked for a normal player (Rolling Insights + Sleeper rows)', async () => {
+    const ri = sportsRow({ source: 'rolling_insights', sleeperId: '4046', externalId: '5150', name: 'Patrick Mahomes', position: 'QB', team: 'KC', teamId: '16', imageUrl: 'https://ri.example/pm.png', fetchedAt: T1 })
+    const sleeper = sportsRow({ source: 'sleeper', sleeperId: '4046', externalId: 'sleeper:4046', name: 'Patrick Mahomes', position: 'QB', team: 'Kansas City Chiefs', imageUrl: 'https://sleepercdn.com/content/nfl/players/thumb/4046.jpg' })
+    const { db, writtenPlayerIds } = fakeDb([ri, sleeper])
+    await generateAndPersistCanonicalNflProjections({ season: 2026, week: 6, write: true, prismaClient: db })
+    expect(writtenPlayerIds).toEqual(['sp-rolling_insights-4046'])
+  })
+
+  /*
+   * The case that separates "the window's best row" from "the best row overall": a window holding
+   * only an agreeing TheSportsDB row. Main writes that row's id. The Sleeper row, fetched only to
+   * judge it, outscores it (115 to 110) — and must still not become the written id.
+   */
+  it('never writes the id of a Sleeper row it fetched only to judge the window', async () => {
+    const tsdb = sportsRow({ source: 'thesportsdb', sleeperId: '6794', externalId: 'tsdb_9', name: 'Justin Jefferson', position: 'WR', team: 'Minnesota Vikings', imageUrl: 'https://img.example/tsdb/jj.png' })
+    const sleeper = sportsRow({ source: 'sleeper', sleeperId: '6794', externalId: 'sleeper:6794', name: 'Justin Jefferson', position: 'WR', team: 'Minnesota Vikings', imageUrl: 'https://sleepercdn.com/content/nfl/players/thumb/6794.jpg' })
+    const { db, writtenPlayerIds, scheduleClubs } = fakeDb([tsdb, sleeper])
+    await generateAndPersistCanonicalNflProjections({ season: 2026, week: 6, write: true, limit: 1, prismaClient: db })
+    expect(writtenPlayerIds).toEqual(['sp-thesportsdb-6794'])
+    expect(scheduleClubs).toEqual(['MIN'])
   })
 })
