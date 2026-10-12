@@ -23,12 +23,12 @@ export function OutlookTab({ player }: { player: PlayerIdentity }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch(`/api/player-outlook?playerName=${encodeURIComponent(player.name)}&sport=${encodeURIComponent(player.sport)}&narrative=true`, { cache: 'no-store' })
+    fetch(`/api/player-outlook?playerName=${encodeURIComponent(player.name)}&sport=${encodeURIComponent(player.sport)}&position=${encodeURIComponent(player.position)}&team=${encodeURIComponent(player.team)}&narrative=true`, { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => setData(d))
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [player.name, player.sport])
+  }, [player.name, player.sport, player.position, player.team])
 
   if (loading) {
     return <div className="space-y-3">{[1, 2, 3].map((i) => <div key={i} className="h-24 animate-pulse rounded-xl bg-white/[0.04]" />)}</div>
