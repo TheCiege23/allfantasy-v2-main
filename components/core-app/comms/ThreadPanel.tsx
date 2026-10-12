@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Lock, MoreHorizontal, Search, Users } from 'lucide-react'
 import type { ReportReason } from '@/lib/moderation/shared'
+import { TypingNote } from './TypingNote'
 import { ThreadListRow, formatLastActive, type ThreadRowContext } from './ThreadListRow'
 import { HuddleMembersSheet, HuddleOptionsSheet, type HuddleMember } from './HuddleSheets'
 import RichMessage from './RichMessage'
@@ -936,13 +937,7 @@ export function ThreadPanel({
           across servers at all — but genuinely live typing needs a transport
           this app does not have.
         */}
-        {typing.length > 0 ? (
-          <p className="af-cm-typing-note">
-            {typing.length === 1
-              ? `${typing[0].name} is typing…`
-              : `${typing.length} people are typing…`}
-          </p>
-        ) : null}
+        <TypingNote typing={typing} />
 
         {replyTo ? (
           <div className="af-cm-replybar">
