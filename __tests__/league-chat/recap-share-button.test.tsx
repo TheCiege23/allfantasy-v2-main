@@ -70,7 +70,7 @@ describe('RecapShareButton', () => {
     fireEvent.click(screen.getByRole('button'))
     await waitFor(() => expect(share).toHaveBeenCalledTimes(1))
     const arg = (share.mock.calls[0] as unknown as [ShareData])[0]
-    expect(arg.text).not.toMatch(/Claim your team/)
+    expect(arg.text).not.toMatch(/Join our league chat/)
   })
 
   it('fetches the invite link once, however many times it is shared', async () => {

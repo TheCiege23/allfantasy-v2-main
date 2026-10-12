@@ -24,6 +24,7 @@ import { assertPaidJoinAllowed, linkDuesToRoster } from '@/lib/league-finance/jo
 import { claimPlaceholderRoster } from '@/lib/league-import/placeholderClaim'
 import { findExistingLeagueClaim } from '@/lib/identity/linkedAccounts'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { isImportedPlatform } from '@/lib/league/isNativeLeague'
 
 export const dynamic = 'force-dynamic'
 
@@ -181,6 +182,41 @@ export async function POST(req: NextRequest) {
 
     if (!league) {
       return { success: false as const, status: 404, error: 'League not found' }
+    }
+
+    /*
+     * 🛑 AN IMPORTED LEAGUE IS JOINED AS A MEMBER — NEVER BY TAKING, OR MAKING, A TEAM.
+     *
+     * Its teams are the provider's managers. This route used to hand one over by DISPLAY-NAME match
+     * (`claimPlaceholderRoster`): pick a display name equal to another manager's and their roster was
+     * yours, with no proof. Owning a Sleeper account cannot be proven here yet (a Sleeper link is a
+     * typed username — see `sleeper-identity-has-no-ownership-proof`), so no join by link may claim
+     * an imported team. And when nothing matched it created a fresh EMPTY roster: a thirteenth team
+     * in a twelve-team Sleeper league. Even a correct name match could not mark the team as yours,
+     * because an import's `LeagueTeam.externalId` is the provider's roster number, never `Roster.id`
+     * (production 2026-10-12: 0 of 6,967 imported teams line up).
+     *
+     * What a leaguemate arriving from a shared recap wants is the league's chat and recaps, and a
+     * `RedraftLeagueMember` row is what `resolveLeagueMembership` admits for that. Their team is
+     * claimed through the identity-checked invite flow (`/join/<token>`), which refuses a team linked
+     * to another manager's account.
+     */
+    if (isImportedPlatform(league.platform)) {
+      const alreadyMember = await tx.redraftLeagueMember.findUnique({
+        where: { leagueId_userId: { leagueId: result.leagueId, userId } },
+        select: { id: true },
+      })
+      if (!alreadyMember) {
+        await tx.redraftLeagueMember.create({
+          data: { leagueId: result.leagueId, userId, role: 'MEMBER', teamNumber: null },
+        })
+      }
+      return {
+        success: true as const,
+        leagueId: result.leagueId,
+        alreadyMember: Boolean(alreadyMember),
+        memberOnly: true as const,
+      }
     }
 
     const realRosterUsers = await tx.appUser.findMany({

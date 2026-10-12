@@ -34,12 +34,12 @@ describe('buildRecapShareText', () => {
     expect(text).not.toContain('Legacy tab')
     expect(text.startsWith('📺 Week 5 recap — Death Squad (2026)')).toBe(true)
     expect(text).toContain('Boom of the week: MisterG201, 255.0')
-    expect(text.endsWith("Claim your team for next week's recap: https://allfantasy.ai/join?code=ABC123")).toBe(true)
+    expect(text.endsWith("Join our league chat and get next week's recap: https://allfantasy.ai/join?code=ABC123")).toBe(true)
   })
   it('without a usable link, shares the recap with no dangling claim line', () => {
     for (const link of [null, undefined, '', 'javascript:alert(1)', '/join?code=X']) {
       const text = buildRecapShareText(RECAP, link as never)
-      expect(text).not.toMatch(/Claim your team/)
+      expect(text).not.toMatch(/Join our league chat/)
       expect(text.endsWith('— Chimmy, on AllFantasy')).toBe(true)
     }
   })

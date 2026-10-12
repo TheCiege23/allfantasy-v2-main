@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const m = vi.hoisted(() => ({
   claimed: [] as Array<{ leagueId: string; claimedByUserId: string }>,
+  members: [] as Array<{ leagueId: string; userId: string }>,
   existing: [] as string[] | null,
   dispatch: vi.fn(async () => undefined),
 }))
@@ -11,6 +12,7 @@ vi.mock('server-only', () => ({}))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     leagueTeam: { findMany: vi.fn(async () => m.claimed) },
+    redraftLeagueMember: { findMany: vi.fn(async () => m.members) },
     platformNotification: {
       findMany: vi.fn(async () => {
         if (m.existing == null) throw new Error('db down')
@@ -30,6 +32,7 @@ const calls = () => m.dispatch.mock.calls.map((c) => (c as unknown as [Call])[0]
 
 beforeEach(() => {
   m.claimed = []
+  m.members = []
   m.existing = []
   m.dispatch.mockClear()
 })
@@ -51,6 +54,12 @@ describe('notifyWeeklyRecaps', () => {
       skipChannels: { email: true, sms: true },
       dedupePrefix: 'weekly-recap:2026-w5',
     })
+  })
+
+  it('reaches a leaguemate who joined as a member, with no team', async () => {
+    m.members = [{ leagueId: 'L1', userId: 'joined-from-link' }]
+    const out = await notifyWeeklyRecaps([R('L1', 'Death Squad', 'owner')])
+    expect([...out.notified].sort()).toEqual(['joined-from-link', 'owner'])
   })
 
   it('is ONE notification for someone in several recapped leagues', async () => {
