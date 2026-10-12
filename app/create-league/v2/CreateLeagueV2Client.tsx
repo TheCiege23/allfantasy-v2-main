@@ -14,7 +14,7 @@ import {
 } from '@/lib/create-league-v2/state'
 import { analyzeCreateLeagueCompletion } from '@/lib/create-league-v2/form-completion'
 import { submitCreateLeagueV2, type CreateLeagueFieldErrors } from '@/lib/create-league-v2/submit'
-import { CreateLeagueWizard } from '@/components/create-league-v2/CreateLeagueWizard'
+import { CreateLeagueWizard, type ImportedLeagueSummary } from '@/components/create-league-v2/CreateLeagueWizard'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { setClientLeagueCreateOptionsCatalog } from '@/lib/create-league-v2/options-catalog-client'
 import type { LeagueCreateOptionsCatalog } from '@/lib/league-creation/options-catalog-seed-data'
@@ -25,6 +25,7 @@ export interface CreateLeagueV2ClientProps {
   importTemplate?: CreateLeagueV2State
   importSourceName?: string
   importSourceLeagueId?: string
+  importedLeagues?: ImportedLeagueSummary[]
 }
 
 function normalizeInitialState(state: CreateLeagueV2State): CreateLeagueV2State {
@@ -54,7 +55,7 @@ function normalizeInitialState(state: CreateLeagueV2State): CreateLeagueV2State 
   }
 }
 
-export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSourceName, importSourceLeagueId }: CreateLeagueV2ClientProps) {
+export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSourceName, importSourceLeagueId, importedLeagues }: CreateLeagueV2ClientProps) {
   const { t } = useLanguage()
   const router = useRouter()
   const [state, setState] = useState<CreateLeagueV2State>(() => normalizeInitialState(importTemplate ?? DEFAULT_V2_STATE))
@@ -200,6 +201,7 @@ export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSo
       onRetryFinalization={createdLeagueId ? retryFinalization : undefined}
       onSubmit={handleSubmit}
       onCancel={() => router.push('/core')}
+      importedLeagues={importedLeagues}
     />
   )
 }
