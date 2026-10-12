@@ -42,6 +42,15 @@ describe('standings across formats',()=>{
     expect(screen.queryByRole('rowheader',{name:/Team Alpha/})).toBeNull()
     expect(screen.getByRole('rowheader',{name:'Team Beta'})).toBeTruthy()
   })
+  it('renders an unavailable imported points-against total as a dash', async () => {
+    fetchMock.mockResolvedValue(response({ ...standings, source: 'imported', sourcePlatform: 'fantrax', standings: [{ ...standings.standings[0], pointsAgainst: null }] }))
+    render(<LeagueStandings leagueId="l" />)
+    const table = await screen.findByRole('table')
+    const row = within(table).getByRole('row', { name: /Team Alpha/ })
+    const cells = within(row).getAllByRole('cell')
+    expect(cells.at(-1)?.textContent).toBe('\u2014')
+    expect(within(row).getByText('0.00')).toBeTruthy()
+  })
   it.each(['roto','cumulative','category'])('renders %s without invented fields',async mode=>{
     fetchMock.mockResolvedValue(response({...standings,source:'imported',sourcePlatform:'fantrax',cumulative:mode==='cumulative',scoringMode:mode==='category'?'h2h_category':mode==='roto'?'roto':'points'}))
     render(<LeagueStandings leagueId="l" />);await screen.findByRole('table')

@@ -5,9 +5,9 @@ import '@/components/core-app/af-core.css'
 import '@/components/league/league-overview.css'
 import './league-standings.css'
 
-type Row = { rosterId: string; teamName: string; wins: number; losses: number; ties: number; pointsFor: number; pointsAgainst: number; rank: number | null; categoryWinsFor?: number | null; categoryLossesFor?: number | null; categoryTiesFor?: number | null; streak?: string | null; allPlay?: string | null }
+type Row = { rosterId: string; teamName: string; wins: number; losses: number; ties: number; pointsFor: number; pointsAgainst: number | null; rank: number | null; categoryWinsFor?: number | null; categoryLossesFor?: number | null; categoryTiesFor?: number | null; streak?: string | null; allPlay?: string | null }
 type Data = { season: number; standings: Row[]; scoringMode: 'points' | 'h2h_category' | 'roto'; viewerRosterId: string | null; source: 'native' | 'imported'; sourcePlatform: string; scoredWeeks: number | null; cumulative?: boolean }
-const points = (value: number) => Number.isFinite(value) ? value.toLocaleString(undefined, { maximumFractionDigits: 2, minimumFractionDigits: 2 }) : '\u2014'
+const points = (value: number | null) => typeof value === 'number' && Number.isFinite(value) ? value.toLocaleString(undefined, { maximumFractionDigits: 2, minimumFractionDigits: 2 }) : '\u2014'
 
 export function LeagueStandings({ leagueId, initialSeason, title = 'Standings' }: { leagueId: string; initialSeason?: number; title?: string }) {
   const [data, setData] = useState<Data | null>(null)

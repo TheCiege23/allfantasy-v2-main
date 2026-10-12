@@ -30,3 +30,9 @@
 - Sleeper, [Stat Corrections](https://support.sleeper.com/en/articles/2441282-stat-corrections): published weekly reports can receive later provider corrections.
 - Sleeper, [Recalculate Matchup Records](https://support.sleeper.com/en/articles/12076832-recalculate-matchup-records): recalculation is needed after relevant scoring/lineup changes.
 - CBS, [Big Brother official episodes](https://www.cbs.com/shows/big_brother/episodes/26/): challenge, nomination, veto, eviction, jury and finale stages inform the timeline; league configuration controls application rules.
+
+## Live release verification
+
+- PR #2277 passed all 18 CI checks and deployed to the web service at `e01f6dcb10b694803e6ace72b5cca3d1903e3ac6`.
+- Blah's Schedule and House Standings were verified on production at desktop and 390px mobile widths, without changing league configuration or game state. Missing dates remain visibly unset.
+- A read-only production check confirmed Cream Bowl has 12 current franchises and one archived legacy duplicate. The imported standings read now uses the canonical `CURRENT_TEAMS` predicate, preserving unclassified and managerless teams. Fantrax's unreported points-against displays as unknown instead of the database default zero.
