@@ -6,7 +6,7 @@ The league shell routes Big Brother leagues to a dedicated standings page before
 
 The read-only member API is `/api/leagues/:leagueId/big-brother/standings`. It uses canonical league membership, selects public cycle fields, and sends private/no-store responses. It never reads eviction or finale ballots, writes results, starts cycles, or runs scoring.
 
-- Identity: `Roster.id`, explicit `LeagueTeam.legacyRosterId`, then a unique platform/claimed-user match. Ambiguous matches use a roster label; no name/order matching or email exposure.
+- Identity: `Roster.id`, explicit `LeagueTeam.legacyRosterId` or canonical native `externalId`, then a unique platform/claimed-user match. Ambiguous matches use a roster label; no name/order matching or email exposure.
 - Competition records: recorded HOH, veto and nomination fields, counted once per cycle.
 - House status: current unsolved cycle, with veto-saved nominees removed from the block. Resolved cycles no longer confer current power badges.
 - Finish: eviction order, latest eviction first. Active teams have no numbered finish. A winner is shown only from the published FinaleService audit result, and only if still an eligible finalist. Remaining finalists have unknown positions until the engine records them.

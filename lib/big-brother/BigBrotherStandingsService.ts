@@ -9,7 +9,7 @@ export async function getBigBrotherStandings(leagueId: string, userId: string) {
   if (!league) return null
   const [rosters, teams, cycles, jury, publishedFinale, scores] = await Promise.all([
     prisma.roster.findMany({ where: { leagueId }, select: { id: true, platformUserId: true } }),
-    prisma.leagueTeam.findMany({ where: { leagueId }, select: { legacyRosterId: true, platformUserId: true, claimedByUserId: true, teamName: true, ownerName: true } }),
+    prisma.leagueTeam.findMany({ where: { leagueId }, select: { legacyRosterId: true, externalId: true, platformUserId: true, claimedByUserId: true, teamName: true, ownerName: true } }),
     prisma.bigBrotherCycle.findMany({ where: { leagueId, configId: config.configId }, orderBy: { week: 'asc' },
       select: { week: true, phase: true, hohRosterId: true, vetoWinnerRosterId: true, vetoParticipantRosterIds: true, nominee1RosterId: true, nominee2RosterId: true,
         vetoUsed: true, vetoSavedRosterId: true, replacementNomineeRosterId: true, evictedRosterId: true, closedAt: true } }),
@@ -24,7 +24,7 @@ export async function getBigBrotherStandings(leagueId: string, userId: string) {
     && typeof metadata.winnerRosterId === 'string' ? metadata.winnerRosterId : null
   const namedRosters = rosters.map(r => {
     // Explicit link first; unique identity fallback only. Never match a team by name or row order.
-    const linked = teams.find(t => t.legacyRosterId === r.id)
+    const linked = teams.find(t => t.legacyRosterId === r.id) ?? teams.find(t => t.externalId === r.id)
     const matches = teams.filter(t => t.platformUserId === r.platformUserId || t.claimedByUserId === r.platformUserId)
     const team = linked ?? (matches.length === 1 ? matches[0] : undefined)
     return { id: r.id, teamName: team?.teamName?.trim() || team?.ownerName?.trim() || `Houseguest ${r.id.slice(0, 8)}` }
@@ -32,7 +32,8 @@ export async function getBigBrotherStandings(leagueId: string, userId: string) {
   const ownedRoster = rosters.find(r => r.platformUserId === userId)
   const claimed = teams.filter(t => t.claimedByUserId === userId)
   const claimedTeam = claimed.length === 1 ? claimed[0] : undefined
-  const explicitlyClaimedRoster = claimedTeam ? rosters.find(r => r.id === claimedTeam.legacyRosterId) : undefined
+  const explicitlyClaimedRoster = claimedTeam
+    ? rosters.find(r => r.id === claimedTeam.legacyRosterId) ?? rosters.find(r => r.id === claimedTeam.externalId) : undefined
   const identityMatches = claimedTeam ? rosters.filter(r => r.platformUserId === claimedTeam.platformUserId) : []
   const claimedRoster = explicitlyClaimedRoster ?? (identityMatches.length === 1 ? identityMatches[0] : undefined)
   return buildBigBrotherStandings({

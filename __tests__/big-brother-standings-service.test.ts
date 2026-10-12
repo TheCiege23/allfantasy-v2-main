@@ -39,7 +39,7 @@ describe('Big Brother standings source contract', () => {
       { legacyRosterId: null, platformUserId: 'user', teamName: 'Wrong team' }])
     expect((await getBigBrotherStandings('l', 'user'))?.rows.find(r => r.rosterId === 'r1')?.teamName).toBe('Linked team')
   })
-  it('highlights a claim-only viewer without choosing another managerâ€™s roster', async () => {
+  it('highlights a claim-only viewer without choosing another managerÃ¢â‚¬â„¢s roster', async () => {
     mocks.team.mockResolvedValue([{ legacyRosterId: 'r2', claimedByUserId: 'claim-user', platformUserId: 'orphan-2', teamName: 'Claimed team' }])
     expect((await getBigBrotherStandings('l', 'claim-user'))?.viewerRosterId).toBe('r2')
     expect((await getBigBrotherStandings('l', 'spectator'))?.viewerRosterId).toBeNull()
@@ -47,6 +47,13 @@ describe('Big Brother standings source contract', () => {
   it('prefers the claimed roster link over a stale platform identity for viewer highlighting', async () => {
     mocks.team.mockResolvedValue([{ legacyRosterId: 'r2', claimedByUserId: 'claim-user', platformUserId: 'user', teamName: 'Claimed team' }])
     expect((await getBigBrotherStandings('l', 'claim-user'))?.viewerRosterId).toBe('r2')
+  })
+  it('resolves canonical native team external IDs before stale platform identities', async () => {
+    mocks.team.mockResolvedValue([{ legacyRosterId: null, externalId: 'r2', claimedByUserId: 'claim-user', platformUserId: 'user', teamName: 'Canonical native team' },
+      { legacyRosterId: null, externalId: 'other', platformUserId: 'orphan-2', teamName: 'Stale platform match' }])
+    const result = await getBigBrotherStandings('l', 'claim-user')
+    expect(result?.viewerRosterId).toBe('r2')
+    expect(result?.rows.find(r => r.rosterId === 'r2')?.teamName).toBe('Canonical native team')
   })
   it('does not read game data for non-Big-Brother leagues', async () => {
     mocks.config.mockResolvedValue(null)
