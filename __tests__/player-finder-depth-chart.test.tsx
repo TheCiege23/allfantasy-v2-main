@@ -138,7 +138,7 @@ describe('loadDepthChartView', () => {
   it('links a backup only through a ref that resolves back to him, preferring the vendor row', async () => {
     h.sharing.push({ externalId: 'E12', sleeperId: '9999' }) // another player also claims E12
     const v = await load()
-    expect(v!.entries.find((e) => e.name === 'Ray Davis')!.ref).toBe('NFL:E11')
+    expect(v!.entries.find((e) => e.name === 'Ray Davis')!.ref).toBe('NFL~rolling_insights:E11')
     expect(v!.entries.find((e) => e.name === 'Ty Johnson')!.ref).toBeNull()
   })
 
@@ -204,7 +204,7 @@ describe('DepthChartBackups', () => {
     const v = await load()
     render(<DepthChartBackups data={v} playerName="James Cook" hrefFor={(ref, name) => `/core/players?q=${name}&player=${ref}`} />)
     expect(screen.getByRole('heading', { name: 'Next man up · BUF RB' })).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Ray Davis' }).getAttribute('href')).toBe('/core/players?q=Ray Davis&player=NFL:E11')
+    expect(screen.getByRole('link', { name: 'Ray Davis' }).getAttribute('href')).toBe('/core/players?q=Ray Davis&player=NFL~rolling_insights:E11')
     expect(screen.queryByRole('link', { name: 'James Cook' })).toBeNull()
     expect(screen.getByText('this player')).toBeTruthy()
     expect(screen.getByText(/Taken/).parentElement!.textContent).toContain('Office Pool (Gridiron Gang)')
