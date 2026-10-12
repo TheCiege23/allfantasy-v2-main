@@ -386,4 +386,24 @@ describe('resolveDraftPickPresentation — Sleeper namespace only, contradiction
     const r = await resolve({ playerName: 'Josh Allen', position: 'DL', team: 'JAX' })
     expect(r.playerId).toBe('5840')
   })
+
+  /*
+   * A native NHL draft passes Rolling Insights ids: 1114 is A.J. Greer, and in Sleeper's NFL space 1114
+   * is Justin Blackmon (production, 2026-10-12). The Sleeper CDN URL is built only from an id VERIFIED
+   * in Sleeper's namespace FOR THE LEAGUE'S SPORT — which is what keeps this null — so every
+   * Sleeper-namespace read must carry that sport. Asserted on the reads, because an unscoped read
+   * here happens to be refused by the name check and the image alone could not show the leak.
+   */
+  it('a native NHL pick with a Rolling Insights id gets no Sleeper URL, and every Sleeper read is scoped to NHL', async () => {
+    const { prisma } = await import('@/lib/prisma')
+    const r = await resolve({ leagueSport: 'NHL', playerName: 'A.J. Greer', position: 'LW', team: 'BOS', playerId: '1114' })
+    expect(r.playerImageUrl ?? '').not.toMatch(/sleepercdn/)
+    const reads = [
+      ...(prisma.sportsPlayer.findMany as unknown as { mock: { calls: Array<[{ where?: Record<string, unknown> }]> } }).mock.calls,
+      ...(prisma.playerIdentityMap.findFirst as unknown as { mock: { calls: Array<[{ where?: Record<string, unknown> }]> } }).mock.calls,
+      ...(prisma.playerIdentityMap.findMany as unknown as { mock: { calls: Array<[{ where?: Record<string, unknown> }]> } }).mock.calls,
+    ].map(([args]) => args?.where ?? {})
+    expect(reads.length).toBeGreaterThan(0)
+    for (const where of reads) expect(where.sport).toBe('NHL')
+  })
 })

@@ -40,11 +40,15 @@ describe('headshots are built from an id only where the id is a Sleeper id', () 
     expect(getPlayerImage({ id: '4984', name: 'X', imageUrl: null }, 'NFL')).toContain('/nfl/players/thumb/')
   })
 
-  /* It built NBA/MLB/NHL URLs from Rolling Insights ids — a native NHL roster's 1114 is A.J. Greer, not Sleeper's 1114. */
-  it('sleeperHeadshotUrl is NFL-only too', () => {
+  /*
+   * `sleeperHeadshotUrl` is for an id the CALLER knows is Sleeper's, in any sport Sleeper serves — the
+   * legacy trade analyzer's NBA mode passes real Sleeper NBA ids straight from Sleeper's API. Callers
+   * holding another namespace (a native NHL roster's Rolling Insights ids) must not reach it; see
+   * chimmy-player-cards.test.ts.
+   */
+  it('sleeperHeadshotUrl still builds the Sleeper NBA URL for a Sleeper NBA id', () => {
     expect(sleeperHeadshotUrl('4984', 'nfl')).toBe('https://sleepercdn.com/content/nfl/players/thumb/4984.jpg')
-    expect(sleeperHeadshotUrl('4984', 'NFL')).toBe('https://sleepercdn.com/content/nfl/players/thumb/4984.jpg')
-    for (const sport of ['nba', 'mlb', 'nhl', 'NHL', 'ncaaf', 'soccer']) expect(sleeperHeadshotUrl('1114', sport)).toBeNull()
+    expect(sleeperHeadshotUrl('1308', 'nba')).toBe('https://sleepercdn.com/content/nba/players/1308.jpg')
   })
 
   it('an NBA pool row with a numeric id and no photo shows the placeholder, not a Sleeper face', () => {

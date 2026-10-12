@@ -80,6 +80,12 @@ export type LeagueGroundingRosterPlayer = {
 export type LeagueGroundingRoster = {
   userId: string
   teamName: string | null
+  /**
+   * Whether `playerId`s are Sleeper ids (`rosterIdSpaceOf`; an ESPN roster arrives translated). A
+   * native NHL roster's are Rolling Insights ids and a Fleaflicker roster's its own — `'other'`, so
+   * nothing derives a Sleeper CDN face from them (chimmyPlayerCards.ts).
+   */
+  idSpace: "sleeper" | "other"
   starters: LeagueGroundingRosterPlayer[]
   bench: LeagueGroundingRosterPlayer[]
 }
@@ -730,6 +736,7 @@ async function loadViewerRoster(
     return {
       userId,
       teamName: team?.teamName ? String(team.teamName) : null,
+      idSpace: rosterIdSpaceOf(platform, sport) === "other" ? "other" : "sleeper",
       starters: allPlayers.filter((p) => starterIds.has(p.playerId) || p.isStarter),
       bench: allPlayers.filter((p) => !starterIds.has(p.playerId) && !p.isStarter),
     }

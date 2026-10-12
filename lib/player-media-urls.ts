@@ -16,6 +16,9 @@ function toSportType(s: string): SportType {
 }
 
 const SLEEPER_NFL_HEADSHOT_BASE = 'https://sleepercdn.com/content/nfl/players/thumb'
+const SLEEPER_NBA_HEADSHOT_BASE = 'https://sleepercdn.com/content/nba/players'
+const SLEEPER_MLB_HEADSHOT_BASE = 'https://sleepercdn.com/content/mlb/players'
+const SLEEPER_NHL_HEADSHOT_BASE = 'https://sleepercdn.com/content/nhl/players'
 const ESPN_PLAYER_HEADSHOT_BASE = 'https://a.espncdn.com/i/headshots'
 
 export type SportKey = 'nfl' | 'nba' | 'mlb' | 'nhl' | 'ncaaf' | 'ncaab' | string
@@ -45,21 +48,17 @@ export function buildHeadshotUrl(playerId: string | null, sport: string = 'nfl')
   return `${SLEEPER_NFL_HEADSHOT_BASE}/${playerId}.jpg`
 }
 
-/**
- * Sleeper CDN headshot URL for an NFL player id. Every other sport returns `null`, as
- * `buildHeadshotUrl` above does.
- *
- * 🛑 IT BUILT NBA/MLB/NHL URLS TOO (2026-10-12), and the ids reaching it outside NFL are Rolling
- * Insights ids, not Sleeper's: a native NHL roster's 1114 is A.J. Greer, and Sleeper's NHL 1114 is
- * whoever Sleeper numbered that — a stranger's face on Chimmy's player cards and the draft board.
- * We hold Sleeper ids for NFL rows only (`mayBeSleeperId`), so there is no non-NFL id this could be
- * trusted with. The one caller reading genuine Sleeper NBA ids — the legacy trade analyzer, straight
- * from Sleeper's API through `lib/normalize-player.ts` — now shows no portrait in NBA mode.
- */
+/** Returns the best-known CDN headshot URL for a player ID by sport, or null if unsupported. */
 export function sleeperHeadshotUrl(playerId: string, sport: SportKey = 'nfl'): string | null {
   if (!playerId) return null
-  if (String(sport).trim().toLowerCase() !== 'nfl') return null
-  return `${SLEEPER_NFL_HEADSHOT_BASE}/${playerId}.jpg`
+  const s = String(sport).toLowerCase()
+  if (s === 'nfl') return `${SLEEPER_NFL_HEADSHOT_BASE}/${playerId}.jpg`
+  if (s === 'nba') return `${SLEEPER_NBA_HEADSHOT_BASE}/${playerId}.jpg`
+  if (s === 'mlb') return `${SLEEPER_MLB_HEADSHOT_BASE}/${playerId}.jpg`
+  if (s === 'nhl') return `${SLEEPER_NHL_HEADSHOT_BASE}/${playerId}.jpg`
+  // NCAAF / NCAAB: ESPN player headshot (requires espn_id in future; skip for now)
+  // Soccer: no reliable free CDN without sport-specific ID mapping
+  return null
 }
 
 /** ESPN player headshot URL. Requires ESPN player ID (not Sleeper ID). */

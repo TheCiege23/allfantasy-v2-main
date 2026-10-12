@@ -280,11 +280,14 @@ describe('league grounding packet — a native league of another sport', () => {
     expect(names).toContain('Unidentified player (4034)')
     expect([...roster.starters, ...roster.bench]).toHaveLength(4)
     expect(JSON.stringify(sportsPlayerCalls)).not.toContain('4034')
+    // So Chimmy's player cards derive no Sleeper face from these ids either.
+    expect(roster.idSpace).toBe('other')
   })
 
   it('CONTROL: a native NFL league still names them', async () => {
     const { prisma } = basePrisma(nativeRoster('NFL'))
     const packet = await buildPacket(prisma)
     expect(packet.rosters![0].starters.map((p) => p.playerName)).toContain('Patrick Mahomes')
+    expect(packet.rosters![0].idSpace).toBe('sleeper')
   })
 })
