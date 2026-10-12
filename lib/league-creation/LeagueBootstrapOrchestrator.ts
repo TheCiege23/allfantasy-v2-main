@@ -1,3 +1,4 @@
+import { readSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
 /**
  * Runs all sport-specific bootstrap steps after league creation so the league
  * has correct roster, scoring, waiver, settings, and context for its sport.
@@ -245,8 +246,9 @@ export async function runLeagueBootstrap(
             ? String(sw.survivor_season_theme_label).trim()
             : null,
         challengesSystemRun: sw.survivor_challenges_system_run !== false,
+        regularSeasonEndWeek: readSurvivorFullSeasonPlan(sw)?.endWeek ?? null,
       })
-      await getOrCreateExileLeague(leagueId).catch(() => {})
+      if (sw.exileIslandEnabled === true || sw.exile_enabled === true) await getOrCreateExileLeague(leagueId).catch(() => {})
       await runSurvivorLeagueBootstrap(leagueId).catch(() => {})
     } catch {
       // non-fatal; legacy wizard path will fill in if used

@@ -1,3 +1,5 @@
+import { buildSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
+import { resolveLeagueCreationSeason } from '@/lib/season-week/leagueCreationSeason'
 import { tournamentRoundEnds } from '@/lib/bestball/tournamentCalendar'
 /**
  * Create League (canonical) — request validation before preset engine + transaction.
@@ -348,5 +350,16 @@ export function validateCreatePayload(input: unknown): ValidateCreateLeagueResul
     }
   }
 
+  if (formatId === 'survivor' && (sport === 'NBA' || sport === 'NHL')) {
+    try {
+      if (schedule.survivorSeasonEndWeek !== undefined && typeof schedule.survivorSeasonEndWeek !== 'number') throw new Error('Survivor end week must be a number.')
+      const draftAt = typeof date === 'string' && typeof time === 'string' ? toUtc(date, time, String(zone)) : undefined
+      buildSurvivorFullSeasonPlan({ sport, season: resolveLeagueCreationSeason(sport), castSize: data.teamCount, draftAt,
+        endWeek: typeof schedule.survivorSeasonEndWeek === 'number' ? schedule.survivorSeasonEndWeek : undefined })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Invalid Survivor season calendar'
+      return { ok: false, status: 400, error: message, errors: [{ path: 'conceptSetup.survivorSeasonEndWeek', message }] }
+    }
+  }
   return { ok: true, data: { ...data, sport } }
 }

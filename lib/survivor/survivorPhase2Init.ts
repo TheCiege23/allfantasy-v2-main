@@ -1,3 +1,5 @@
+import { reconcileSurvivorDraftPlan } from './reconcileSurvivorDraftPlan'
+import { readSurvivorFullSeasonPlan } from './survivorFullSeasonPlan'
 import 'server-only'
 
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
@@ -89,6 +91,7 @@ export function initializeSurvivorPhase2(
     }
     let draftOrder = opts.draftOrder
     if (sessionId) {
+      await reconcileSurvivorDraftPlan(db, leagueId, sessionId)
       const preparation = await prepareSurvivorDraftParticipants(leagueId, sessionId, db)
       if (!preparation.ok) {
         await recordDraftSetupStatus(db, leagueId, sessionId, false, [preparation.error], opts.actorUserId)
@@ -193,7 +196,7 @@ async function initializeSurvivorPhase2Locked(
     const game = await db.survivorGameState.findUnique({ where: { leagueId }, select: { draftCompletedAt: true, preMergeStartedAt: true } })
     await db.survivorGameState.updateMany({
       where: { leagueId, phase: { in: ['pre_draft', 'draft', 'pre_merge'] }, currentWeek: { lte: 0 } },
-      data: { phase: 'pre_merge', draftCompletedAt: game?.draftCompletedAt ?? new Date(), preMergeStartedAt: game?.preMergeStartedAt ?? new Date() },
+      data: { phase: 'pre_merge', currentWeek: readSurvivorFullSeasonPlan(league?.settings)?.startWeek ?? 0, draftCompletedAt: game?.draftCompletedAt ?? new Date(), preMergeStartedAt: game?.preMergeStartedAt ?? new Date() },
     })
     await db.league.updateMany({ where: { id: leagueId, survivorPhase: { in: ['pre_draft', 'draft', 'pre_merge'] } }, data: { survivorPhase: 'pre_merge' } })
   }

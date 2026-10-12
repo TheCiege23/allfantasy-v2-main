@@ -67,7 +67,7 @@ export const SPORT_SCHEDULES: Record<string, SportScheduleConfig> = {
     primaryGameDays: [0, 1, 2, 3, 4, 5, 6], // Daily
     lineupLockDay: 1, // Monday (start of scoring week)
     lineupLockHourUtc: 23, // 7pm ET
-    scoringFinalizeDay: 0, // Sunday (end of scoring week)
+    scoringFinalizeDay: 1, // Sunday (end of scoring week)
     scoringFinalizeHourUtc: 6, // After late West Coast games
     tribalCouncilDay: 1, // Monday
     tribalCouncilHourUtc: 23,
@@ -75,10 +75,10 @@ export const SPORT_SCHEDULES: Record<string, SportScheduleConfig> = {
     voteDeadlineDay: 1, // Monday
     voteDeadlineHourUtc: 22,
     weekStructure: 'daily',
-    regularSeasonWeeks: 24,
+    regularSeasonWeeks: 25,
     minigamesPerWeek: 3,
     exileClaimFrequency: 'daily',
-    scheduleNote: 'NBA: Daily games Mon-Sun. Weekly scoring window. Tribal Monday.',
+    scheduleNote: 'NBA: Daily games. Scoring periods follow the saved season calendar; council opens only after verified final scores.',
   },
   MLB: {
     sport: 'MLB',
@@ -103,7 +103,7 @@ export const SPORT_SCHEDULES: Record<string, SportScheduleConfig> = {
     primaryGameDays: [1, 2, 3, 4, 5, 6], // Mon-Sat mainly
     lineupLockDay: 1, // Monday
     lineupLockHourUtc: 23,
-    scoringFinalizeDay: 0, // Sunday
+    scoringFinalizeDay: 1, // Sunday
     scoringFinalizeHourUtc: 6,
     tribalCouncilDay: 1,
     tribalCouncilHourUtc: 23,
@@ -111,10 +111,10 @@ export const SPORT_SCHEDULES: Record<string, SportScheduleConfig> = {
     voteDeadlineDay: 1,
     voteDeadlineHourUtc: 22,
     weekStructure: 'daily',
-    regularSeasonWeeks: 24,
+    regularSeasonWeeks: 28,
     minigamesPerWeek: 2,
     exileClaimFrequency: 'daily',
-    scheduleNote: 'NHL: Games most nights. Weekly scoring Mon-Sun. Tribal Monday.',
+    scheduleNote: 'NHL: Daily games. Scoring periods follow the saved season calendar; council opens only after verified final scores.',
   },
   NCAAF: {
     sport: 'NCAAF',
@@ -241,9 +241,8 @@ export function getTribalCouncilTime(sport: string, fromDate?: Date): Date {
  * Get the recommended survivor season length (in weeks) for a sport.
  */
 export function getRecommendedSeasonLength(sport: string, playerCount: number): number {
-  const config = getSportSchedule(sport)
   // Need playerCount - 3 eliminations (Final 3) + 1 finale week
   const eliminationWeeks = playerCount - 3
   const seasonWeeks = eliminationWeeks + 2 // +1 for week 1 (no elim) + 1 for finale
-  return Math.min(seasonWeeks, config.regularSeasonWeeks)
+  return seasonWeeks
 }

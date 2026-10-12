@@ -1,0 +1,164 @@
+/* Native league handoff, 2026-10-11. Scoped tokens; source mockups are not shipped. */
+.af-core.nl-workspace {
+  --bg:#07080d;--surface2:#0b0d14;--surface:#10131c;--raised:#151926;
+  --line:rgba(255,255,255,.06);--line2:rgba(255,255,255,.10);
+  --text:#e8eaf2;--text2:#a3a9c2;--muted:#a3a9c2;--faint:#6f7590;
+  --accent:#22d3ee;--accent-ink:#04050c;--gold:#d9b45a;
+  --good:#3fbf95;--warn:#e0a84a;--bad:#e5728a;
+  display:grid;grid-template-columns:72px 232px minmax(0,1fr);height:100dvh;overflow:hidden;background:var(--bg);color:var(--text);font-family:var(--font-archivo,'Archivo',system-ui,sans-serif);font-size:14px;
+}
+.nl-workspace *{box-sizing:border-box}
+.nl-workspace :is(h1,h2,h3,strong){font-weight:600;font-style:normal}
+.nl-workspace :is(a,button,input):focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.nl-workspace button{cursor:pointer;font:inherit}
+.nl-workspace :is(a,button){touch-action:manipulation}
+.nl-workspace a{text-decoration:none;color:inherit}
+.nl-workspace p{color:var(--text2);line-height:1.6}
+.nl-rail{display:flex;align-items:center;flex-direction:column;gap:18px;padding:12px 5px;border-right:1px solid var(--line);overflow-y:auto}
+.nl-workspace .nl-brand{display:grid;place-items:center;min-height:44px;width:44px;border-radius:6px;background:var(--accent);color:var(--accent-ink);font-weight:700}
+.nl-rail-leagues{display:flex;flex-direction:column;gap:16px;width:100%}
+.nl-league-tile{display:flex;align-items:center;flex-direction:column;gap:7px;min-height:62px;position:relative}
+.nl-league-tile[aria-current=page]::before{content:'';position:absolute;left:-5px;top:8px;width:3px;height:32px;background:var(--accent);border-radius:2px}
+.nl-avatar{position:relative;display:grid;place-items:center;width:44px;height:44px;flex:none;border:1px solid var(--line2);border-radius:14px;background:var(--surface);color:var(--accent);font-size:16px;font-weight:600}
+.nl-avatar[data-needs-setup=true]{border-color:var(--warn)}
+.nl-platform{position:absolute;bottom:-4px;right:-5px;padding:1px 3px;border:2px solid var(--bg);border-radius:3px;background:var(--raised);font-size:11px;color:var(--text2)}
+.nl-league-meta{font:11px var(--font-jetbrains-mono,'JetBrains Mono',monospace);text-transform:uppercase;color:var(--faint);text-align:center}
+.nl-add{display:grid;place-items:center;min-height:44px;width:44px;border:1px dashed var(--line2);border-radius:10px;color:var(--muted)}
+.nl-sidebar{padding:12px;overflow-y:auto;border-right:1px solid var(--line)}
+.nl-back{display:flex;align-items:center;gap:8px;min-height:44px;color:var(--muted)!important;font-size:12px}
+.nl-nav-league{display:flex;align-items:center;gap:14px;padding:18px 14px;margin:8px 0;background:var(--surface);border:1px solid var(--line);border-radius:10px}
+.nl-nav-league strong{display:block;overflow-wrap:anywhere}
+.nl-initial{color:var(--accent);font-weight:700}
+.nl-eyebrow,.nl-nav-group h2,.nl-card-label{color:var(--faint);font-size:11px;font-weight:600;letter-spacing:.09em;text-transform:uppercase}
+.nl-nav-league .nl-eyebrow{display:block;margin-top:4px;color:var(--warn)}
+.nl-nav-group{margin-top:20px}
+.nl-nav-group h2{padding:0 12px;margin-bottom:9px}
+.nl-nav-group button{display:flex;align-items:center;gap:10px;text-align:left;width:100%;min-height:38px;padding:9px 12px;border-radius:5px;color:var(--text2)}
+.nl-nav-group button:hover{background:var(--surface)}
+.nl-nav-group button[aria-current=page]{background:var(--raised);box-shadow:inset 2px 0 var(--accent);color:var(--text)}
+.nl-main{display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden}
+.nl-topbar{display:flex;align-items:center;gap:12px;min-height:60px;padding:10px 24px;border-bottom:1px solid var(--line);flex:none}
+.nl-viewing,.nl-search{display:flex;align-items:center;gap:10px;min-height:40px;border:1px solid var(--line2);border-radius:5px;padding:0 12px;background:var(--surface);min-width:0}
+.nl-viewing>span{font-size:11px;text-transform:uppercase;color:var(--faint)}
+.nl-viewing strong{max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nl-search{flex:1;max-width:520px;background:var(--surface2);color:var(--faint);font-size:12px!important;text-align:left}
+.nl-search kbd{margin-left:auto;border:1px solid var(--line2);border-radius:3px;font-size:11px;padding:2px 4px}
+.nl-chip{display:inline-flex;align-items:center;min-height:23px;padding:2px 8px;border:1px solid var(--line2);border-radius:4px;font-size:11px;white-space:nowrap}
+.nl-accent{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 30%,transparent)}
+.nl-gold{color:var(--gold);border-color:color-mix(in srgb,var(--gold) 30%,transparent)}
+.nl-sport-week{font:11px var(--font-jetbrains-mono,'JetBrains Mono',monospace);color:var(--faint);white-space:nowrap}
+.nl-content{overflow:auto;min-height:0;padding:24px;scrollbar-gutter:stable;flex:1}
+.nl-league-heading{display:flex;gap:16px;align-items:center;flex-wrap:wrap;padding:24px;background:var(--surface);border:1px solid var(--line);border-radius:10px;margin-bottom:24px}
+.nl-heading-avatar{display:grid;place-items:center;flex:none;width:64px;height:64px;border:1px solid var(--line2);border-radius:10px;background:var(--surface2);color:var(--accent);font-size:26px;font-weight:600}
+.nl-heading-name{min-width:0;flex:1}
+.nl-heading-name h1{font-size:30px;line-height:1.2;letter-spacing:-.025em;margin:6px 0}
+.nl-heading-name p{font-size:11px;margin:0}
+.nl-badges{display:flex;flex-wrap:wrap;gap:8px}
+.nl-button{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:40px;padding:9px 15px;border:1px solid var(--line2);border-radius:5px;font-size:12px!important;font-weight:600!important;color:var(--text2)!important;background:transparent}
+.nl-button:hover{background:var(--raised)}
+.nl-workspace .nl-primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)!important}
+.nl-phase{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));width:100%;gap:6px;list-style:none;padding:0;margin:4px 0 0}
+.nl-phase li{position:relative;padding-top:13px;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--faint)}
+.nl-phase li::before{content:'';position:absolute;top:0;width:100%;height:4px;background:var(--line2);border-radius:2px}
+.nl-phase li[aria-current=step]{color:var(--accent)}
+.nl-phase li[aria-current=step]::before{background:var(--accent)}
+.nl-home{display:grid;grid-template-columns:minmax(0,2.2fr) minmax(240px,1fr);gap:24px}
+.nl-home-primary,.nl-home-secondary{display:flex;flex-direction:column;gap:24px;min-width:0}
+.nl-card{padding:24px;border:1px solid var(--line);background:var(--surface);border-radius:10px;min-width:0}
+.nl-card-label{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:14px}
+.nl-next .nl-card-label>span:first-child{color:var(--accent)}
+.nl-card h2{font-size:18px;letter-spacing:-.02em;margin:0 0 10px}
+.nl-card p{font-size:13px;margin:0 0 16px}
+.nl-next h2{font-size:28px}
+.nl-actions{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-top:20px}
+.nl-quick-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:20px}
+.nl-quick-grid>:is(a,button){padding:16px 12px;border:1px solid var(--line);border-radius:8px;background:var(--raised);text-align:left}
+.nl-quick-grid h3{font-size:13px;margin:0 0 8px}
+.nl-quick-grid p{font-size:12px;margin:0}
+.nl-team-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:20px}
+.nl-team-stats>div{padding:12px;background:var(--surface2);border-radius:6px}
+.nl-team-stats dt{font-size:11px;text-transform:uppercase;color:var(--faint)}
+.nl-team-stats dd{margin:6px 0 0;font:16px var(--font-jetbrains-mono,'JetBrains Mono',monospace);font-variant-numeric:tabular-nums}
+.nl-home-secondary .nl-actions>*{flex:1}
+.nl-text-link{display:inline-flex;align-items:center;gap:6px;color:var(--accent)!important;font-size:12px!important;min-height:32px}
+.nl-standings-preview{list-style:none;margin:0;padding:0}
+.nl-standings-preview li{display:flex;align-items:center;gap:12px;min-height:38px;border-bottom:1px solid var(--line);font-size:12px}
+.nl-standings-preview li:last-child{border:0}
+.nl-standings-preview strong{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nl-standings-preview li>span{font:11px var(--font-jetbrains-mono,'JetBrains Mono',monospace);color:var(--faint)}
+.nl-standings-preview [data-own-team=true] strong{color:var(--accent)}
+.nl-workspace .af-setup-checklist{margin:0;border-radius:10px;padding:24px}
+.nl-workspace .af-setup-steps li{padding:16px 0}
+.nl-workspace [data-testid=league-command-center-surface]{background:var(--bg);border:0;overflow:visible}
+.nl-workspace [data-testid=league-command-center-surface]>div:first-child{overflow:visible}
+.nl-workspace .nl-tab-content{min-height:0;display:flex;flex-direction:column}
+.nl-workspace .nl-tab-content :is(input,select,textarea){color-scheme:dark}
+.nl-mobile-top,.nl-mobile-rail,.nl-bottom-nav,.nl-mobile-tabs,.nl-mobile-chimmy{display:none}
+.nl-switcher{background:var(--bg);color:var(--text);width:min(560px,calc(100vw - 32px));max-height:85dvh;padding:24px;border:1px solid var(--line2);border-radius:10px;overflow:auto;font-family:inherit}
+.nl-switcher::backdrop{background:rgba(0,0,0,.7)}
+.nl-switcher-title{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
+.nl-switcher-title h2{font-size:22px;margin:0}
+.nl-switcher-title button{display:grid;place-items:center;min-width:44px;min-height:44px}
+.nl-switcher-search{display:flex;align-items:center;gap:10px;padding:12px;border:1px solid var(--line2);border-radius:6px;background:var(--surface2)}
+.nl-switcher-search input{background:transparent;border:0;width:100%;min-height:24px;color:var(--text)}
+.nl-switcher-filters{display:flex;gap:8px;margin:16px 0}
+.nl-switcher-filters button{min-height:44px;padding:8px 14px;border:1px solid var(--line2);border-radius:5px;font-size:12px}
+.nl-switcher-filters [aria-pressed=true]{color:var(--accent);border-color:var(--accent)}
+.nl-switcher-list>a{display:flex;align-items:center;gap:14px;min-height:88px;border-top:1px solid var(--line);padding:12px 0}
+.nl-switcher-list>a>div{flex:1;min-width:0}
+.nl-switcher-list strong{overflow-wrap:anywhere}
+.nl-switcher-list p{margin:4px 0;font-size:12px}
+.nl-switcher-list div>span{font-size:11px;color:var(--faint);text-transform:uppercase}
+.nl-switcher footer{display:flex;gap:10px;margin-top:20px}
+.nl-switcher footer>*{flex:1}
+.nl-workspace.nl-embedded{grid-template-columns:minmax(0,1fr)}
+@media(min-width:768px) and (max-width:1199px){.af-core.nl-workspace{grid-template-columns:64px 200px minmax(0,1fr)}.nl-content{padding:20px}.nl-home{grid-template-columns:minmax(0,1fr)}.nl-home-secondary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.nl-search{display:none}.nl-topbar{padding:10px 20px}.nl-home-secondary>:last-child{grid-column:1/-1}}
+@media(max-width:767px){
+  .af-core.nl-workspace{display:flex;flex-direction:column;height:100dvh;font-size:14px}
+  .nl-rail,.nl-sidebar,.nl-topbar{display:none}
+  .nl-mobile-top{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 16px;flex:none;min-height:64px}
+  .nl-mobile-top>button{min-width:44px;min-height:44px;border:1px solid var(--line2);border-radius:6px;display:flex;align-items:center;justify-content:center}
+  .nl-mobile-top .nl-mobile-league{flex:1;min-width:0;gap:10px;color:var(--accent)}
+  .nl-mobile-league>span{overflow:hidden;white-space:nowrap;text-overflow:ellipsis;color:var(--text)}
+  .nl-mobile-rail{display:flex;gap:18px;padding:10px 20px;overflow-x:auto;flex:none}
+  .nl-mobile-rail .nl-league-tile{min-width:44px}
+  .nl-mobile-rail .nl-league-tile::before{display:none}
+  .nl-content{padding:14px 16px 24px;scrollbar-gutter:auto}
+  .nl-league-heading{padding:10px 0 0;background:transparent;border:0;margin-bottom:20px;gap:12px}
+  .nl-heading-avatar{width:48px;height:48px;font-size:22px;border-radius:10px}
+  .nl-heading-name h1{font-size:26px;margin:0 0 7px;overflow-wrap:anywhere}
+  .nl-heading-name{display:flex;flex-direction:column}
+  .nl-badges{order:3;margin-top:12px}
+  .nl-heading-name p{font-size:11px}
+  .nl-league-heading>.nl-button{width:44px;min-height:44px;padding:0}
+  .nl-league-heading>.nl-button>span{display:none}
+  .nl-phase{display:none}
+  .nl-mobile-tabs{display:flex;gap:20px;overflow:auto;border-bottom:1px solid var(--line);margin-bottom:16px}
+  .nl-mobile-tabs button{white-space:nowrap;min-height:44px;font-size:13px;color:var(--text2);border-bottom:2px solid transparent}
+  .nl-mobile-tabs [aria-current=page]{color:var(--text);border-color:var(--accent)}
+  .nl-workspace .nl-mobile-chimmy{display:flex;justify-content:flex-start;margin-bottom:12px;color:var(--gold)!important}
+  .nl-home{display:flex;flex-direction:column;gap:14px}
+  .nl-home-primary,.nl-home-secondary{gap:14px}
+  .nl-card{padding:18px 16px;border-radius:10px}
+  .nl-card h2{font-size:18px}
+  .nl-next h2{font-size:21px}
+  .nl-card p{font-size:13px}
+  .nl-button{min-height:44px}
+  .nl-actions{gap:8px;margin-top:16px}
+  .nl-actions>.nl-button{flex:1}
+  .nl-quick-grid{grid-template-columns:minmax(0,1fr);gap:8px}
+  .nl-quick-grid>:is(a,button){padding:12px}
+  .nl-workspace .af-setup-checklist{padding:16px}
+  .nl-home-secondary{display:flex}
+  .nl-bottom-nav{display:flex;justify-content:space-around;min-height:72px;padding:8px 8px calc(8px + env(safe-area-inset-bottom));border-top:1px solid var(--line);background:var(--surface2);flex:none}
+  .nl-bottom-nav button{display:flex;align-items:center;justify-content:center;flex-direction:column;gap:5px;min-height:48px;min-width:52px;color:var(--faint);font-size:11px}
+  .nl-bottom-nav [aria-current=page]{color:var(--accent)}
+  .nl-sidebar.nl-menu-open{display:block;position:fixed;top:64px;bottom:72px;left:0;width:min(300px,calc(100vw - 40px));background:var(--bg);z-index:60;border-right:1px solid var(--line2)}
+  .nl-nav-group button{min-height:44px}
+  .nl-switcher{width:100vw;max-width:100vw;height:100dvh;max-height:100dvh;border:0;border-radius:0;margin:0;padding:20px}
+  .nl-workspace.nl-embedded .nl-mobile-rail{display:none}
+}
+@media(prefers-reduced-motion:reduce){.nl-workspace *{scroll-behavior:auto;transition:none;animation:none}}
+.nl-rail,.nl-sidebar,.nl-content,.nl-switcher{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.16) transparent}
+.nl-mobile-tabs,.nl-mobile-rail{scrollbar-width:none}
+.nl-mobile-tabs::-webkit-scrollbar,.nl-mobile-rail::-webkit-scrollbar{display:none}

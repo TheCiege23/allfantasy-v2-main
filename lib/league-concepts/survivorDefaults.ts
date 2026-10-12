@@ -1,6 +1,5 @@
 /**
- * Canonical Survivor league defaults — Phase 1 single source of truth for NFL
- * and NCAAF Survivor creation. Follows the redraft/dynasty/tournament pattern.
+ * Canonical Survivor league defaults for NFL, NCAAF, NBA, and NHL creation. Follows the redraft/dynasty/tournament pattern.
  *
  * Survivor is a progressive-elimination format layered on top of redraft fantasy.
  * Each "week" is a scoring period. Tribes compete in weekly challenges. The losing
@@ -36,6 +35,7 @@
  *   NCAAF: 14 cast (2 tribes × 7), merge at 7, ~14 college weeks → mirrors season length
  */
 import type { LeagueSport } from '@prisma/client'
+import { getRosterDefaults, getScoringDefaults } from '@/lib/sport-defaults/SportDefaultsRegistry'
 import {
   SURVIVOR_CANONICAL_DRAFT_TYPE_IDS,
   SURVIVOR_DEFAULT_FOUNDATION_SETTINGS,
@@ -44,7 +44,7 @@ import {
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export type SurvivorEligibleSport = 'NFL' | 'NCAAF'
+export type SurvivorEligibleSport = 'NFL' | 'NCAAF' | 'NBA' | 'NHL'
 
 export const SURVIVOR_DRAFT_TYPE_IDS = SURVIVOR_CANONICAL_DRAFT_TYPE_IDS
 export type SurvivorDraftType = (typeof SURVIVOR_DRAFT_TYPE_IDS)[number]
@@ -163,7 +163,7 @@ export interface SurvivorRosterTemplate {
   totalRosterSlots: number
   draftRounds: number
   draftablePlayerPositions: string[]
-  defensePosition: 'DST' | 'DEF'
+  defensePosition: 'DST' | 'DEF' | null
 }
 
 export interface SurvivorDraftSettings {
@@ -247,7 +247,7 @@ const NCAAF_SURVIVOR_ROSTER_CONFIG = {
 
 export function isSurvivorEligibleSport(sport: unknown): sport is SurvivorEligibleSport {
   const normalized = String(sport ?? '').trim().toUpperCase()
-  return normalized === 'NFL' || normalized === 'NCAAF'
+  return normalized === 'NFL' || normalized === 'NCAAF' || normalized === 'NBA' || normalized === 'NHL'
 }
 
 function normalizeEngineDraftType(draftType: unknown): EngineDraftType {
@@ -268,6 +268,13 @@ function starterCount(slots: Record<string, number>): number {
 }
 
 function rosterConfig(sport: SurvivorEligibleSport) {
+  if (sport === 'NBA' || sport === 'NHL') {
+    const defaults = getRosterDefaults(sport)
+    const starterSlots = defaults.starter_slots
+    return { starterSlots, benchSlots: defaults.bench_slots, rosterSize: starterCount(starterSlots) + defaults.bench_slots,
+      defensePosition: null, draftablePlayerPositions: sport === 'NBA' ? ['PG', 'SG', 'SF', 'PF', 'C'] : ['C', 'LW', 'RW', 'D', 'G'],
+      queueSizeLimit: 70, scoringPreset: sport === 'NBA' ? 'nba_points' : 'nhl_points', castSize: 20, tribeCount: 4, mergeAtCount: 10 }
+  }
   return sport === 'NCAAF' ? NCAAF_SURVIVOR_ROSTER_CONFIG : NFL_SURVIVOR_ROSTER_CONFIG
 }
 
@@ -315,7 +322,7 @@ function buildVotingSettings(): SurvivorVotingSettings {
 
 function buildExileSettings(): SurvivorExileSettings {
   return {
-    exileEnabled: true,
+    exileEnabled: SURVIVOR_DEFAULT_FOUNDATION_SETTINGS.exileIslandEnabled,
     // Phase 2: exile selection/effects engine not yet built
     exileAutomationStatus: 'pending',
     // Challenge loser's tribe chooses who to send; safe default avoids ambiguity
@@ -384,7 +391,7 @@ function buildRosterTemplate(sport: SurvivorEligibleSport): SurvivorRosterTempla
   return {
     rosterMode: 'survivor',
     starterSlots: cfg.starterSlots,
-    flexDefinitions: [{ slotName: 'FLEX', allowedPositions: ['RB', 'WR', 'TE'] }],
+    flexDefinitions: sport === 'NBA' || sport === 'NHL' ? getRosterDefaults(sport).flex_definitions : [{ slotName: 'FLEX', allowedPositions: ['RB', 'WR', 'TE'] }],
     benchSlots: cfg.benchSlots,
     irSlots: 0,
     taxiSlots: 0,
@@ -400,6 +407,11 @@ function buildScoringSettings(
   sport: SurvivorEligibleSport,
   scoringPresetId: string,
 ): Record<string, unknown> {
+  if (sport === 'NBA' || sport === 'NHL') {
+    const defaults = getScoringDefaults(sport)
+    return { source: 'af', sport, preset: scoringPresetId, scoringPresetId, scoringTemplateId: defaults.scoring_template_id,
+      scoringMode: 'points', scoringFormat: defaults.scoring_format, format: defaults.scoring_format, survivor: true }
+  }
   const id = scoringPresetId.toLowerCase()
   const ppr = id.includes('standard') || id.endsWith('_std') ? 0 : id.includes('half') ? 0.5 : 1
   const format = ppr === 0 ? 'standard' : ppr === 1 ? 'ppr' : 'half_ppr'
@@ -462,6 +474,8 @@ function buildPlayerPoolRules(
   rosterTemplate: SurvivorRosterTemplate,
 ): Record<string, unknown> {
   const positions = rosterTemplate.draftablePlayerPositions
+  if (sport === 'NBA' || sport === 'NHL') return { sport, poolKey: sport.toLowerCase() + '_active_fantasy_players', source: 'sports_player',
+    includeActiveOnly: true, includeCollegePlayers: false, includeNflPlayers: false, collegeOnly: false, rookieOnly: false, positions, rankingSource: 'adp' }
   if (sport === 'NCAAF') {
     return {
       sport: 'NCAAF',
@@ -512,7 +526,7 @@ function buildSeasonSettings(sport: SurvivorEligibleSport): Record<string, unkno
     scoringPeriod: 'weekly',
     hasPlayoffs: false,
     playoffTeams: 0,
-    matchupFormat: 'h2h',
+    matchupFormat: 'survivor',
     tradesEnabled: false,
     tradeDeadlineWeek: null,
     tradeReviewMode: 'none',
@@ -554,7 +568,7 @@ function buildEnabledFeatures(): Record<string, boolean> {
     tribal_council_enabled: true,
     vote_elimination_enabled: true,
     rocks_enabled: true,
-    exile_enabled: true,
+    exile_enabled: SURVIVOR_DEFAULT_FOUNDATION_SETTINGS.exileIslandEnabled,
     idols_enabled: true,
     tokens_enabled: true,
     // Phase 2 automation flags — all pending, never fake-true

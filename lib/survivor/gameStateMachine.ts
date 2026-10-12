@@ -17,34 +17,25 @@ import { getSurvivorConfig } from '@/lib/survivor/SurvivorLeagueConfig'
 import { scheduleTribalReminders } from '@/lib/survivor/notificationEngine'
 import { publishSurvivorRedraftEvent } from '@/lib/survivor/survivorRedraftStreamHub'
 import { SURVIVOR_SETTINGS_TRIBAL_VOTE_WINDOW_HOURS } from '@/lib/survivor/survivorCommissionerSettings'
+import { scoreRosterForWeek } from '@/lib/redraft/scoringEngine'
 import { applySurvivorSitOutToScoring } from '@/lib/survivor/SurvivorSitOutEngine'
 
-async function sumRedraftStartersFantasy(
+/** SurvivorPlayer.redraftRosterId is the legacy Roster id; resolve its actual season roster. */
+export async function sumRedraftStartersFantasy(
   rosterId: string,
   week: number,
-  season: { season: number },
+  season: { id: string; leagueId: string; season: number },
 ): Promise<{ pts: number; allFinalized: boolean }> {
-  const starters = await prisma.redraftRosterPlayer.findMany({
-    where: { rosterId, droppedAt: null, slotType: { notIn: ['bench', 'taxi'] } },
+  const bridge = await prisma.roster.findFirst({
+    where: { id: rosterId, leagueId: season.leagueId }, select: { redraftRosterId: true },
   })
-  if (starters.length === 0) return { pts: 0, allFinalized: true }
-  let pts = 0
-  let allFinalized = true
-  for (const p of starters) {
-    const row = await prisma.playerWeeklyScore.findUnique({
-      where: {
-        playerId_week_season_sport: {
-          playerId: p.playerId,
-          week,
-          season: season.season,
-          sport: p.sport,
-        },
-      },
-    })
-    pts += row?.fantasyPts ?? 0
-    if (!row?.isFinalized) allFinalized = false
-  }
-  return { pts, allFinalized }
+  if (!bridge?.redraftRosterId) return { pts: 0, allFinalized: false }
+  const actual = await prisma.redraftRoster.findFirst({
+    where: { id: bridge.redraftRosterId, seasonId: season.id, leagueId: season.leagueId }, select: { id: true },
+  })
+  if (!actual) return { pts: 0, allFinalized: false }
+  const score = await scoreRosterForWeek({ leagueId: season.leagueId, rosterId: actual.id, week, seasonYear: season.season })
+  return { pts: score.points, allFinalized: score.starterCount > 0 && score.scoredStarterCount === score.starterCount && score.missingPlayerIds.length === 0 && score.allFinal }
 }
 
 export async function getOrCreateSurvivorGameState(leagueId: string): Promise<SurvivorGameState> {
@@ -216,8 +207,9 @@ export async function syncWeeklyScores(leagueId: string, week: number): Promise<
   for (const sp of players) {
     if (!sp.redraftRosterId) continue
     const { pts, allFinalized } = await sumRedraftStartersFantasy(sp.redraftRosterId, week, season)
-    const boost = 0
-    const pen = 0
+    const previous = await prisma.survivorWeeklyScore.findUnique({ where: { leagueId_userId_week: { leagueId, userId: sp.userId, week } }, select: { pointBoostApplied: true, pointPenaltyApplied: true } })
+    const boost = previous?.pointBoostApplied ?? 0
+    const pen = previous?.pointPenaltyApplied ?? 0
     const final = pts + boost - pen
     await prisma.survivorWeeklyScore.upsert({
       where: {
@@ -289,7 +281,7 @@ export async function syncWeeklyScores(leagueId: string, week: number): Promise<
 }
 
 export async function allScoresFinalizedForWeek(leagueId: string, week: number): Promise<boolean> {
-  const season = await prisma.redraftSeason.findFirst({ where: { leagueId } })
+  const season = await prisma.redraftSeason.findFirst({ where: { leagueId }, orderBy: { createdAt: 'desc' } })
   if (!season) return false
   const players = await prisma.survivorPlayer.findMany({
     where: { leagueId, playerState: 'active' },
@@ -436,7 +428,7 @@ export async function computeAutomaticNextPhase(leagueId: string): Promise<Phase
     const mergeAt = league.survivorMergeAtCount ?? 10
     const trig = league.survivorMergeTrigger ?? 'week'
     const hitWeek = trig === 'week' && week >= mergeWeek
-    const hitCount = trig === 'player_count' && active > 0 && active <= mergeAt
+    const hitCount = (trig === 'player_count' || trig === 'players_remaining') && active > 0 && active <= mergeAt
     if (hitWeek || hitCount) {
       return { toPhase: 'merge', reason: hitWeek ? 'merge_week' : 'merge_player_count' }
     }

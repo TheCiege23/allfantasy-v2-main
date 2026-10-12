@@ -1,5 +1,6 @@
 'use client'
 
+import { SurvivorSeasonPreview } from './SurvivorSeasonPreview'
 import { useEffect, useMemo, useState } from 'react'
 import Image from 'next/image'
 import { CreateLeagueVideoTile } from '@/components/create-league-v2/CreateLeagueVideoTile'
@@ -861,6 +862,7 @@ export function ReviewCreateStep({
         </p>
       </div>
 
+      <SurvivorSeasonPreview state={state} />
       {completionIssues.length > 0 ? (
         <div className="rounded-2xl border border-amber-400/35 bg-amber-500/10 p-4" data-testid="g30-review-issues">
           <p className="text-sm font-black text-amber-700 dark:text-amber-200">{t('createLeague.g30.review.needsAttention')}</p>

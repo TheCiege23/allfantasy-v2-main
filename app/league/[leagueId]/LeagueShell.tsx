@@ -74,7 +74,8 @@ import { mapLeagueTeamsToSlots } from '@/lib/league/map-league-teams-to-slots'
 import { countAssignedManagers, leagueLifecycleLabel } from '@/lib/league/setup-readiness'
 import type { LeagueSeasonSnapshot } from '@/lib/league/sort-teams-standings'
 import type { LeagueDashboardView } from '@/app/league/[leagueId]/league-dashboard-types'
-import AppShell from '@/app/components/AppShell'
+import { NativeLeagueWorkspace } from '@/components/league/native/NativeLeagueWorkspace'
+import { NativeLeagueHome } from '@/components/league/native/NativeLeagueHome'
 import { LeftChatPanel } from '@/app/dashboard/components/LeftChatPanel'
 import LeagueChatSurface, { isAfHostedPlatform } from '@/components/chat/LeagueChatSurface'
 import { RightControlPanel } from '@/app/dashboard/components/RightControlPanel'
@@ -380,6 +381,8 @@ export function LeagueShell({
   const redraftCurrentWeek = redraftSeason?.currentWeek ?? null
   const hasActiveRedraftSeason = redraftSeason != null
 
+  const nativeWorkspace = isNativePlatform(league.platform)
+  const [nativeChimmyOpen, setNativeChimmyOpen] = useState(false)
   const tabDefs = useMemo(() => {
     if (nflRedraftCore) {
       const core: TabDef[] = [
@@ -406,6 +409,7 @@ export function LeagueShell({
       ]
       if (isCommissioner) core.push({ id: 'commissioner', label: 'Commissioner' })
       if (isCommissioner) core.push({ id: 'settings', label: '⚙ Settings' })
+      if (nativeWorkspace) core.unshift({ id: 'native_home', label: 'League home' })
       return localizeLeagueTabs(core, t).filter((tab) => tab.id !== 'settings').map((tab) => {
         if (tab.id === 'roster') return { ...tab, label: 'My Team' }
         if (tab.id === 'players') return { ...tab, label: 'Players' }
@@ -416,6 +420,7 @@ export function LeagueShell({
     }
 
     let base = getLeagueTabsForViewer(String(league.sport), isCommissioner)
+    if (nativeWorkspace && !base.some(tab => tab.id === 'draft')) base.push({ id: 'draft', label: 'Draft HQ' })
     if (league.bestBallMode) {
       const idx = base.findIndex((t) => t.id === 'redraft')
       const bb = { id: 'bestball', label: 'Best Ball' }
@@ -494,6 +499,7 @@ export function LeagueShell({
     // first tab (and therefore the default landing) for general/imported leagues.
     // Deep links (?view=…) still land on their requested tab via leagueTabSync.
     return [
+      ...(nativeWorkspace ? [{ id: 'native_home', label: 'League home' }] : []),
       { id: 'decide', label: 'Decide' },
       // Slice 4: live Sleeper draft cockpit. Grouped under Draft by the group
       // bar; renders honest unlinked/no-draft states when there's nothing live.
@@ -504,6 +510,7 @@ export function LeagueShell({
       { id: 'legacy', label: 'Legacy' },
     ]
   }, [
+    nativeWorkspace,
     nflRedraftCore,
     league.sport,
     league.leagueType,
@@ -585,6 +592,7 @@ export function LeagueShell({
     const deepLink = searchParams?.get('view') ?? searchParams?.get('tab')
     if (userPickedTabRef.current) return
     if (deepLink?.trim() || nflMatchupLandingDeepLinkSeen.current) return
+    if (tabDefs[0]?.id === 'native_home') return
     if (!nflRedraftCore || !shouldUseMatchupPrimary || nflMatchupLandingApplied.current) return
     const ids = new Set(tabDefs.map((t) => t.id))
     if (!ids.has('matchups')) return
@@ -598,6 +606,7 @@ export function LeagueShell({
     if (userPickedTabRef.current) return
     if (deepLink?.trim()) return
     if (nflRedraftCore) return
+    if (tabDefs[0]?.id === 'native_home') return
     if (!isPredraftLifecycle || predraftLandingApplied.current) return
     const ids = new Set(tabDefs.map((t) => t.id))
     if (ids.has('draft')) setActiveTab('draft')
@@ -609,6 +618,7 @@ export function LeagueShell({
   useEffect(() => {
     const deepLink = searchParams?.get('view') ?? searchParams?.get('tab')
     if (deepLink?.trim()) return
+    if (tabDefs[0]?.id === 'native_home') return
     if (shouldUseMatchupPrimary) return
     if (!league.guillotineMode || guillotineLandingApplied.current) return
     const ids = new Set(tabDefs.map((t) => t.id))
@@ -621,6 +631,7 @@ export function LeagueShell({
   useEffect(() => {
     const deepLink = searchParams?.get('view') ?? searchParams?.get('tab')
     if (deepLink?.trim()) return
+    if (tabDefs[0]?.id === 'native_home') return
     if (shouldUseMatchupPrimary) return
     if (league.guillotineMode) return
     if (league.leagueVariant !== 'survivor' || survivorLandingApplied.current) return
@@ -634,6 +645,7 @@ export function LeagueShell({
   useEffect(() => {
     const deepLink = searchParams?.get('view') ?? searchParams?.get('tab')
     if (deepLink?.trim()) return
+    if (tabDefs[0]?.id === 'native_home') return
     if (shouldUseMatchupPrimary) return
     if (league.guillotineMode) return
     if (league.leagueVariant !== 'zombie' || zombieLandingApplied.current) return
@@ -647,6 +659,7 @@ export function LeagueShell({
   useEffect(() => {
     const deepLink = searchParams?.get('view') ?? searchParams?.get('tab')
     if (deepLink?.trim()) return
+    if (tabDefs[0]?.id === 'native_home') return
     if (shouldUseMatchupPrimary) return
     if (league.leagueVariant !== 'big_brother' || bigBrotherLandingApplied.current) return
     const ids = new Set(tabDefs.map((t) => t.id))
@@ -660,6 +673,7 @@ export function LeagueShell({
   useEffect(() => {
     const deepLink = searchParams?.get('view') ?? searchParams?.get('tab')
     if (deepLink?.trim()) return
+    if (tabDefs[0]?.id === 'native_home') return
     if (shouldUseMatchupPrimary) return
     if (league.leagueVariant !== 'idp' && league.leagueVariant !== 'dynasty_idp') return
     if (idpLandingApplied.current) return
@@ -682,6 +696,7 @@ export function LeagueShell({
     const sportU = String(league.sport ?? '').toUpperCase()
     const intelligenceFallback = sportU === 'NFL' || sportU === 'NCAAF' ? 'trend' : 'players'
     const map: Record<string, string> = {
+      native_home: 'native_home',
       // Broadcast Deck tabs — without these aliases, a remount or external
       // ?view=decide/legacy/… deep link silently fell through to nothing and
       // the shell snapped back to its default tab.
@@ -1219,10 +1234,11 @@ export function LeagueShell({
   // `specialtyImmersive` controls the global immersive atmosphere layer (full-viewport
   // background + AppShell padding tweaks). Tournament leagues opt in once their
   // tournament context resolves so the bracket-themed background reaches every tab.
-  const specialtyImmersive =
+  const specialtyImmersive = !nativeWorkspace && (
     league.leagueVariant === 'survivor' ||
     league.leagueVariant === 'big_brother' ||
     Boolean(tournamentHeroContext)
+  )
 
   // Only the /api/devy config fetch (fail-closed in prod, where the /devy tree
   // is build-excluded) may enable the hero — `leagueType === 'devy'` alone let
@@ -1299,7 +1315,16 @@ export function LeagueShell({
             initialOpenChat={initialOpenChat}
           />
         ) : null}
-        <AppShell
+        <NativeLeagueWorkspace
+          native={nativeWorkspace}
+          league={selectedLeague}
+          leagues={leagueList}
+          tabs={tabDefs}
+          activeTab={activeTab}
+          isCommissioner={isCommissioner}
+          onSelectTab={handleUserTabChange}
+          onOpenSettings={() => openLeagueSettingsModal(null)}
+          onOpenChimmy={() => { setNativeChimmyOpen(true); setMobileLeftOpen(true) }}
           layoutMode="balanced-three-panel"
           embedCenterOnly={embedMode}
           immersive={specialtyImmersive}
@@ -1369,7 +1394,7 @@ export function LeagueShell({
           }
         >
           <div className="flex min-h-0 flex-1 flex-col overflow-y-auto [scrollbar-gutter:stable]">
-            {!embedMode ? (
+            {!embedMode && !nativeWorkspace ? (
               <LeagueWorkspaceNavigation
                 leagueId={league.id}
                 leagueName={selectedLeague.name ?? 'League'}
@@ -1378,7 +1403,7 @@ export function LeagueShell({
                 season={league.season}
               />
             ) : null}
-            <div className="shrink-0 border-b border-white/[0.08] bg-[#050814] px-3 py-2 md:hidden">
+            <div className={`shrink-0 border-b border-white/[0.08] bg-[#050814] px-3 py-2 md:hidden ${nativeWorkspace ? 'hidden' : ''}`}>
               <div className="flex items-center justify-between gap-2">
                 <button
                   type="button"
@@ -1401,7 +1426,7 @@ export function LeagueShell({
                 </button>
               </div>
             </div>
-            {showSpecialtyHero && specialtyHeroVariant ? (
+            {!nativeWorkspace && showSpecialtyHero && specialtyHeroVariant ? (
               <SpecialtyLeagueHomeHero
                 leagueId={league.id}
                 leagueName={selectedLeague.name ?? 'League'}
@@ -1422,7 +1447,7 @@ export function LeagueShell({
                 onOpenCommissionerSettings={() => setCommissionerSettingsOpen(true)}
               />
             ) : null}
-            {showDevyHero ? (
+            {!nativeWorkspace && showDevyHero ? (
               <DevyLeagueHomeHero
                 leagueName={selectedLeague.name ?? 'League'}
                 sport={String(selectedLeague.sport)}
@@ -1436,7 +1461,7 @@ export function LeagueShell({
                 }
               />
             ) : null}
-            <LeagueHeader
+            {!nativeWorkspace && <LeagueHeader
               league={selectedLeague}
               leagueId={league.id}
               tabs={tabDefs}
@@ -1474,7 +1499,7 @@ export function LeagueShell({
               idpCapEnabled={idpCapEnabled}
               capSummary={capSummary}
               capRosterId={capRosterId}
-            />
+            />}
 
             {dispersalDraftInProgress ? (
               <div className="shrink-0 border-b border-[#ff3d81]/20 bg-[#081226] px-4 py-2.5">
@@ -1494,16 +1519,16 @@ export function LeagueShell({
               </div>
             ) : null}
 
-            {isCommissioner && isPredraftLifecycle && isNativePlatform(league.platform) ? (
+            {!nativeWorkspace && isCommissioner && isPredraftLifecycle && isNativePlatform(league.platform) ? (
               <CommissionerSetupChecklist key={league.id} leagueId={league.id} settingsOpen={settingsOpen} onOpenSettings={openLeagueSettingsModal} />
-            ) : isCommissioner && createdFromLeagueCreate ? (
+            ) : !nativeWorkspace && isCommissioner && createdFromLeagueCreate ? (
               <Suspense fallback={null}>
                 <PostCreateSetupGuideBanner leagueId={league.id} isCommissioner={isCommissioner} />
               </Suspense>
             ) : null}
 
             {/* Live scores strip */}
-            <LeagueLiveStrip sport={String(league.sport)} />
+            {!nativeWorkspace && <LeagueLiveStrip sport={String(league.sport)} />}
 
             {/* League story card - shown on league tab */}
             {activeTab === 'league' && (
@@ -1552,6 +1577,7 @@ export function LeagueShell({
               seasonSnapshot={seasonSnapshot}
               leagueDashboard={leagueDashboard}
               onOpenLeagueSettingsModal={openLeagueSettingsModal}
+              settingsOpen={settingsOpen}
               onSelectTab={setActiveTab}
               isPredraftLifecycle={isPredraftLifecycle}
               draftDateIso={draftDateIso}
@@ -1559,7 +1585,7 @@ export function LeagueShell({
             />
           </div>
         </main>
-        </AppShell>
+        </NativeLeagueWorkspace>
       </div>
 
       {mobileLeftOpen ? (
@@ -1601,7 +1627,7 @@ export function LeagueShell({
                 discordConnected={discordConnected}
                 commissionerLeagues={commissionerLeagues}
                 zombieChimmyPrefill={zombieChimmyPrefill}
-                initialOpenChat={initialOpenChat}
+                initialOpenChat={nativeChimmyOpen ? 'chimmy' : initialOpenChat}
               />
             </div>
           </div>
@@ -1837,6 +1863,7 @@ function LeagueTabRouter({
   seasonSnapshot,
   leagueDashboard,
   onOpenLeagueSettingsModal,
+  settingsOpen,
   onSelectTab,
   isPredraftLifecycle,
   draftDateIso,
@@ -1860,6 +1887,7 @@ function LeagueTabRouter({
   seasonSnapshot: LeagueSeasonSnapshot | null
   leagueDashboard: LeagueDashboardView
   onOpenLeagueSettingsModal: (initialPanel?: string | null) => void
+  settingsOpen: boolean
   onSelectTab: (tabId: string) => void
   isPredraftLifecycle: boolean
   draftDateIso: string | null
@@ -2021,6 +2049,8 @@ function LeagueTabRouter({
   }
 
   switch (activeTab) {
+    case 'native_home':
+      return <NativeLeagueHome settingsOpen={settingsOpen} league={selectedLeague} teams={teamSlots} userTeamId={userTeam?.id ?? null} isCommissioner={isCommissioner} draftDateIso={draftDateIso} snapshot={seasonSnapshot} onOpenSettings={onOpenLeagueSettingsModal} onSelectTab={onSelectTab} />
     case 'home':
       return (
         <NflRedraftLeagueHomeDashboard

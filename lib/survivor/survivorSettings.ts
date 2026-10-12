@@ -227,7 +227,7 @@ export function normalizeSurvivorFoundationSettings(
     mergeTriggerType: normalizeMergeTrigger(
       readString(s, ['mergeTriggerType', 'merge_trigger_type', 'survivorMergeTrigger'], base.mergeTriggerType),
     ),
-    mergeWeek: clampInt(readNumber(s, ['mergeWeek', 'survivorMergeWeek'], base.mergeWeek), 1, 18),
+    mergeWeek: clampInt(readNumber(s, ['mergeWeek', 'survivorMergeWeek'], base.mergeWeek), 1, 52),
     mergeActivePlayerCount,
     juryThresholdPercent: clampInt(readNumber(s, ['juryThresholdPercent'], base.juryThresholdPercent), 1, 100),
     tribalCouncilDay: readString(s, ['tribalCouncilDay'], base.tribalCouncilDay),

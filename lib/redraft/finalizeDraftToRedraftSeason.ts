@@ -1,5 +1,8 @@
+import { reconcileSurvivorDraftPlan } from '@/lib/survivor/reconcileSurvivorDraftPlan'
+import { withSurvivorSetupTransaction } from '@/lib/survivor/survivorSetupTransaction'
+import { readSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
 import { isNativeTournamentLeague } from '@/lib/bestball/tournamentCalendar'
-﻿import { resolveCreatedSeasonWeeks } from './createdSeasonLength'
+import { resolveCreatedSeasonWeeks } from './createdSeasonLength'
 import { prisma } from '@/lib/prisma'
 import { isDraftPickRowEmpty, isDraftPickSkipped } from '@/lib/live-draft-engine/draftPickEmpty'
 import { buildRedraftOwnerIdCandidates } from '@/lib/redraft/redraftRosterIdentity'
@@ -182,7 +185,7 @@ async function ensureRedraftSeason(leagueId: string) {
   // It used to be the sport default always, while the bracket read the league setting — so the
   // regular season and the playoffs could overlap or leave a gap.
   const leaguePlayoffStart = Number(league.playoffStartWeek)
-  const playoffStartWeek = isNativeTournamentLeague(league) || (league.settings as Record<string,unknown> | null)?.scoring_mode === 'roto' ? totalWeeks + 1 :
+  const playoffStartWeek = readSurvivorFullSeasonPlan(league.settings) || isNativeTournamentLeague(league) || (league.settings as Record<string,unknown> | null)?.scoring_mode === 'roto' ? totalWeeks + 1 :
     Number.isInteger(leaguePlayoffStart) && leaguePlayoffStart >= 2 && leaguePlayoffStart <= totalWeeks
       ? leaguePlayoffStart
       : cfg?.defaultPlayoffStartWeek ?? 15
@@ -195,7 +198,7 @@ async function ensureRedraftSeason(leagueId: string) {
       status: 'active',
       totalWeeks,
       playoffStartWeek,
-      currentWeek: 1,
+      currentWeek: readSurvivorFullSeasonPlan(league.settings)?.startWeek ?? 1,
       medianGame: Boolean(league.medianGame ?? false),
     },
   })
@@ -327,6 +330,8 @@ async function resolveStartWeekForFreshSeason(
     where: { id: leagueId },
     select: { leagueType: true, bbContestId: true, bestBallMode: true, settings: true },
   })
+  const survivorPlan = readSurvivorFullSeasonPlan(league?.settings)
+  if (survivorPlan) return survivorPlan.startWeek
   const format = String(league?.leagueType ?? 'redraft').trim().toLowerCase() || 'redraft'
   if (!STANDARD_WEEKLY_SEASON_FORMATS.has(format) || isNativeTournamentLeague(league)) return 1
   const regularSeasonEnd = Math.min(season.totalWeeks, Math.max(1, season.playoffStartWeek - 1))
@@ -358,6 +363,8 @@ export async function ensureScheduleForNewSeason(params: {
    * been chopped and emptied, and those matchups could never go final.
    */
   if (await isGuillotineLeague(params.leagueId).catch(() => false)) return
+  const format = await prisma.league.findUnique({ where: { id: params.leagueId }, select: { survivorMode: true } })
+  if (format?.survivorMode) return
 
   // RedraftRoster has no createdAt column; order by id (cuid, roughly
   // creation-ordered) for a deterministic, schema-valid roster sequence so the
@@ -417,7 +424,7 @@ export async function syncCompletedDraftToRedraftSeason(
 ): Promise<RedraftDraftFinalizationSummary> {
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { id: true },
+    select: { id: true, survivorMode: true },
   })
 
   if (!league) return { ...EMPTY_SUMMARY, reason: 'league_not_found' }
@@ -464,6 +471,7 @@ export async function syncCompletedDraftToRedraftSeason(
   if (!session) return { ...EMPTY_SUMMARY, reason: 'draft_session_not_found' }
   if (session.status !== 'completed') return { ...EMPTY_SUMMARY, reason: 'draft_not_completed' }
 
+  if (league.survivorMode) await withSurvivorSetupTransaction(leagueId, db => reconcileSurvivorDraftPlan(db, leagueId, session.id))
   const { season } = await ensureRedraftSeason(leagueId)
 
   /*
