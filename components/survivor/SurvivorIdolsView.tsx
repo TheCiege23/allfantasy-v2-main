@@ -13,6 +13,12 @@ function formatPowerLabel(value: string): string {
   return value.replace(/_/g, ' ')
 }
 
+const IDOL_ART: Record<string, string> = {
+  protect_self: 'immunity', vote_shield: 'immunity', extra_vote: 'extra-vote',
+  vote_nullifier: 'idol-nullifier', skip_tribal: 'safety-net',
+  triple_steal: 'steal-three',
+}
+
 /**
  * Idols / Advantages View: private owned idols, status (hidden, active, used, expired), player-bound mapping, transfer history where authorized, usage eligibility.
  */
@@ -38,7 +44,7 @@ export function SurvivorIdolsView({ summary }: SurvivorIdolsViewProps) {
                 className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-500/30 bg-amber-950/20 p-3"
               >
                 <div className="flex items-center gap-2">
-                  <Eye className="h-4 w-4 text-amber-400" />
+                  {IDOL_ART[idol.powerType] ? <img src={`/survivor/idols/${IDOL_ART[idol.powerType]}-icon.svg`} alt="" className="h-10 w-10 object-contain" /> : <Eye className="h-4 w-4 text-amber-400" />}
                   <span className="font-medium text-white">{formatPowerLabel(idol.powerType)}</span>
                 </div>
                 <span className="text-xs text-white/60">

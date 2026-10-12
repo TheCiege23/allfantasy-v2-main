@@ -4,6 +4,7 @@ import { Clock, ScrollText, Shield, Skull, Vote } from 'lucide-react'
 import type { SurvivorSummary } from './types'
 import { SurvivorCommandHelp } from './SurvivorCommandHelp'
 import { SurvivorScrollReveal } from './SurvivorScrollReveal'
+import { SurvivorShareCard } from './SurvivorShareCard'
 
 export interface SurvivorTribalCouncilViewProps {
   leagueId: string
@@ -23,7 +24,8 @@ export function SurvivorTribalCouncilView({ summary, names }: SurvivorTribalCoun
   return (
     <div className="space-y-6">
       {/* Countdown */}
-      <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-6">
+      <section className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-6">
+        <img src="/survivor/weekly/torch-lit.svg" alt="" className="pointer-events-none absolute -right-5 -top-8 h-48 w-36 opacity-25" />
         <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-white">
           <Clock className="h-5 w-5 text-amber-400" />
           Elimination Council · Week {currentWeek}
@@ -38,7 +40,7 @@ export function SurvivorTribalCouncilView({ summary, names }: SurvivorTribalCoun
             </p>
             {isClosed ? (
               <p className="rounded-lg border border-rose-500/30 bg-rose-950/20 px-3 py-2 text-sm text-rose-200">
-                Council closed. {eliminated ? `Eliminated: ${names[eliminated] ?? eliminated}` : 'Votes read.'}
+                {council.isRevealed ? (eliminated ? `Torch Ceremony complete. Eliminated: ${names[eliminated] ?? eliminated}` : 'Torch Ceremony complete.') : 'Voting has closed. Chimmy will reveal the result at the Torch Ceremony.'}
               </p>
             ) : deadline ? (
               <p className="rounded-lg border border-amber-500/30 bg-amber-950/20 px-3 py-2 text-sm text-amber-200">
@@ -62,13 +64,13 @@ export function SurvivorTribalCouncilView({ summary, names }: SurvivorTribalCoun
       </section>
 
       {/* Vote scroll (sequence from server when council closes / votes tallied) */}
-      {council &&
+      {council?.isRevealed &&
         Array.isArray(council.revealSequence) &&
         (council.revealSequence as unknown[]).length > 0 && (
           <section className="rounded-2xl border border-amber-500/20 bg-[#0a1228]/80 p-4 sm:p-6">
             <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-amber-100">
               <ScrollText className="h-5 w-5 text-amber-400" />
-              Tribal scroll
+              Torch Ceremony · vote scroll
             </h2>
             <p className="mb-4 text-sm text-white/55">
               Votes are read in scroll order — same sequence the host uses when the council closes.
@@ -80,6 +82,8 @@ export function SurvivorTribalCouncilView({ summary, names }: SurvivorTribalCoun
             />
           </section>
         )}
+
+      {council?.isRevealed && eliminated && <SurvivorShareCard moment="voted_out" sport={summary.seasonCalendar?.sport ?? 'NFL'} leagueName={summary.config.seasonThemeLabel ?? 'Survivor League'} week={council.week} headline={`${names[eliminated] ?? 'A manager'} has left the island`} caption="The Torch Ceremony result is final." />}
 
       {/* Immunity markers (placeholder – backend can expose who has immunity) */}
       <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-6">

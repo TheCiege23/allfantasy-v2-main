@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { Users, Scale, Calendar } from 'lucide-react'
 import type { SurvivorSummary } from './types'
+import { SurvivorShareCard } from './SurvivorShareCard'
 
 export interface SurvivorMergeJuryViewProps {
   leagueId: string
@@ -70,6 +71,7 @@ export function SurvivorMergeJuryView({ leagueId, summary, names, onRefresh }: S
         </h2>
         {merged ? (
           <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 p-3">
+            <img src="/survivor/late/merge-banner.svg" alt="" className="mb-3 h-28 w-full object-contain" />
             <p className="font-medium text-amber-200">The merge has happened.</p>
             <p className="mt-1 text-sm text-white/60">All remaining players are one tribe. Elimination Council now includes everyone.</p>
           </div>
@@ -85,6 +87,7 @@ export function SurvivorMergeJuryView({ leagueId, summary, names, onRefresh }: S
           <Scale className="h-5 w-5 text-cyan-400" />
           Jury
         </h2>
+        {jury.length > 0 && <img src="/survivor/late/jury-bench.svg" alt="" className="mb-3 h-32 w-full object-contain" />}
         {config.juryStartAfterMerge && (
           <p className="mb-3 text-sm text-white/50">Jury starts after merge. Voted-out players join the jury.</p>
         )}
@@ -114,6 +117,7 @@ export function SurvivorMergeJuryView({ leagueId, summary, names, onRefresh }: S
           <p className="text-sm text-white/50">The finale opens once the merged tribe is down to the last finalists and the jury is set.</p>
         ) : finale.closed ? (
           <div className="space-y-3">
+            <img src="/survivor/late/champion-trophy.svg" alt="" className="mx-auto h-36 w-36 object-contain" />
             <p className="text-sm text-emerald-200">
               Winner crowned: <strong className="text-white">{finale.winnerRosterId ? (names[finale.winnerRosterId] ?? finale.winnerRosterId) : 'TBD'}</strong>
             </p>
@@ -186,6 +190,8 @@ export function SurvivorMergeJuryView({ leagueId, summary, names, onRefresh }: S
           </div>
         )}
       </section>
+
+      {finale?.closed && finale.winnerRosterId && <SurvivorShareCard moment="champion" sport={summary.seasonCalendar?.sport ?? 'NFL'} leagueName={summary.config.seasonThemeLabel ?? 'Survivor League'} week={summary.currentWeek} headline={`${names[finale.winnerRosterId] ?? 'A manager'} is the champion`} caption="The jury has crowned this season’s winner." />}
     </div>
   )
 }

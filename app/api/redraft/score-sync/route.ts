@@ -22,6 +22,7 @@ import { rotatingBatch, SCORE_SYNC_BATCH } from '@/lib/redraft/scoreSyncBatch'
 import { runNativeGuillotineWeek } from '@/lib/guillotine/nativeGuillotineWeek'
 import { GUILLOTINE_ARCHIVE_RETRY_MS, GUILLOTINE_UNARCHIVED_LIFECYCLE_STATES } from '@/lib/guillotine/finishGuillotineSeason'
 import { scoreActivePlayoffRound } from '@/lib/playoff-runtime/playoffRoundScoring'
+import { runPlannedSurvivorSeasonBatch } from '@/lib/survivor/survivorPlannedSeasonRunner'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -483,8 +484,16 @@ export async function GET(request: Request) {
       // never ran. Legacy first so a redraft failure cannot cost the
       // survivor/zombie/C2C sweep that has been working all along.
       const legacy = await runLegacyAutomationBridge()
+      // Plan progression uses only scores already sealed by a prior reconciliation.
+      // Run its bounded batch before the large redraft sweep so a long provider
+      // pass cannot starve Survivor for the entire season.
+      const survivorSeason = await runPlannedSurvivorSeasonBatch().catch(error => ({
+        considered: 0, failed: 1,
+        outcomes: { batch_error: 1 },
+        error: error instanceof Error ? error.message : String(error),
+      }))
       const redraft = await runRedraftReconciliation()
-      return { ...legacy, redraft, updated: redraft.reconciled }
+      return { ...legacy, redraft, survivorSeason, updated: redraft.reconciled }
     },
     (r) => ({
       rowsWritten: r.matchupsRecalculated + r.redraft.matchupsRecalculated,
@@ -493,6 +502,7 @@ export async function GET(request: Request) {
       // sweep is a degraded run, not a dead one.
       status:
         r.survivorBridge.failed > 0 ||
+        r.survivorSeason.failed > 0 ||
         r.zombieResolutionFailed > 0 ||
         r.zombieHousekeepingErrors.length > 0 ||
         r.redraft.failed > 0 ||
@@ -506,6 +516,7 @@ export async function GET(request: Request) {
         matchupsRecalculated: r.matchupsRecalculated,
         survivorSynced: r.survivorBridge.synced,
         survivorFailed: r.survivorBridge.failed,
+        survivorSeason: r.survivorSeason,
         zombieResolutionAttempts: r.zombieResolutionAttempts,
         zombieResolutionFailed: r.zombieResolutionFailed,
         zombieHousekeepingLeagues: r.zombieHousekeepingLeagues,

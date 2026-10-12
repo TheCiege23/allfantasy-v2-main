@@ -6,14 +6,14 @@
 
 /** Short hero line for headers and first-entry */
 export const SURVIVOR_ISLAND_TAGLINE =
-  'Outwit, Outplay, Outlast — with fantasy lineups, tribes, Elimination Council, and a jury that decides who wins.'
+  'Build your roster, win weekly challenges, survive the vote, and earn the jury’s support.'
 
 /** Opening pitch: fantasy + Survivor hybrid */
 export const SURVIVOR_WELCOME_BLURB = [
   'Yes, this is Survivor — but the beach is your fantasy league.',
   'Tribes compete each week on fantasy scoring. Challenges, rewards, Elimination Council, idols, and exile twists land all season.',
-  'A jury of eliminated players helps crown Sole Survivor. How you treat people matters.',
-  'Twists, advantages, and disadvantages can appear anytime. The host runs elimination formats at Tribal — stay sharp.',
+  'A jury of eliminated players helps crown the league champion. How you treat people matters.',
+  'Twists and advantages can appear during the season. Chimmy runs the Elimination Council and publishes the Torch Ceremony.',
 ].join(' ')
 
 /**
@@ -31,7 +31,7 @@ export const SURVIVOR_TIPS = [
   'Early votes often target the least active; don’t go quiet.',
   'The game is always on — guard your information.',
   'Jury remembers how you played; social skills can beat raw fantasy knowledge.',
-  'You can DM the host with questions — they won’t leak secrets, but they’ll answer.',
+  'Ask Chimmy about rules and deadlines. Private ballots and hidden idols remain sealed until their scheduled reveal.',
   'Information is currency. Spend it carefully.',
 ] as const
 
@@ -52,8 +52,8 @@ export const SURVIVOR_POOL_RULES = [
 
 /** Token Pool (parallel path for eliminated players) */
 export const SURVIVOR_TOKEN_POOL_BLURB = [
-  'Token Pool (pick’em): choose winners to earn tokens.',
-  'A wrong pick can wipe your token stack — high risk, high reward. You can opt in or out when the format allows.',
+  'Exiled managers earn tokens from verified results for their separate weekly roster.',
+  'At the configured return deadline, one manager with the highest qualifying token balance returns to the main island.',
 ].join(' ')
 
 /** Exile Island — full rules summary from host docs */
@@ -62,13 +62,13 @@ export const EXILE_ISLAND_RULES = {
   intro:
     'Voted out isn’t always the end. On Exile, you can fight to return while the main island keeps playing.',
   lineup:
-    'Set a lineup aligned with your league’s sport and roster rules (positions follow your scoring settings). Each week may start from an empty roster — use FAAB or waivers to build that week’s lineup.',
+    'Each week starts with an empty Exile roster. Claim an NFL quarterback, NBA point guard, or NHL goalie to reserve that real-world team, then claim only that team’s players. All players return to waivers after the week.',
   tokens:
-    'Top scorer in the exile competition earns tokens. At the end of the exile arc, the token leader may return or convert tokens (e.g. into FAAB on the main island) — exact conversion is set by your commissioner.',
+    'Verified weekly Exile scoring awards tokens. At the configured deadline, the highest balance meeting the minimum takes the single return spot.',
   bossReset:
-    'If the commissioner (“Boss”) wins the exile scoring week, token totals can reset — everyone starts climbing again.',
+    'Chimmy tracks the contest and awards the return spot automatically. The commissioner can adjust public league rules without seeing private ballots or hidden idols when playing.',
   conduct:
-    'Same conduct rules as the main island: no harassment. Secrecy matters in some formats: if the main island discovers you’re on Exile when you’re supposed to be hidden, the host may remove you — follow your league’s secrecy rule.',
+    'Same conduct rules as the main island: no harassment. Exile rosters and token results follow the published league rules.',
 } as const
 
 /** Example prize copy — commissioner may change */
