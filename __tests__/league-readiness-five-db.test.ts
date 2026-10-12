@@ -54,6 +54,18 @@ describe.runIf(enabled)('five readiness areas against real isolated PostgreSQL',
   afterEach(clean)
   afterAll(async () => { await prisma.$disconnect() })
 
+  it('waits for all current-season final challenge scores, including legitimate zero scores', async () => {
+    const f = await fixture(4)
+    const run = () => runAutomation({ leagueId: f.league.id, action: 'auto_hoh' })
+    expect((await run()).actionTaken).toBe('skipped_awaiting_final_scores')
+    for (let i = 0; i < f.rosters.length; i++) await prisma.teamWeekResult.create({ data: { leagueId: f.league.id, season: 2026, week: 1, rosterId: f.rosters[i].id, totalPoints: i * 10, status: i === 3 ? 'active' : 'final' } })
+    expect((await run()).actionTaken).toBe('skipped_awaiting_final_scores')
+    expect((await prisma.bigBrotherCycle.findUniqueOrThrow({ where: { id: f.cycle.id } })).hohRosterId).toBeNull()
+    await prisma.teamWeekResult.updateMany({ where: { leagueId: f.league.id, season: 2026, week: 1 }, data: { status: 'final' } })
+    expect((await run()).actionTaken).toBe('auto_hoh')
+    expect((await prisma.bigBrotherCycle.findUniqueOrThrow({ where: { id: f.cycle.id } })).hohRosterId).toBe(f.rosters[3].id)
+  })
+
   it.each(['NFL', 'NCAAF'] as const)('runs a complete %s season: scored HOH, nominations, veto/save/replacement, eviction, jury, final ballot and publication', async sport => {
     const f = await fixture(6, { sport })
     expect((await submitFinaleVote(f.league.id, f.rosters[0].id, f.rosters[1].id)).ok).toBe(false)

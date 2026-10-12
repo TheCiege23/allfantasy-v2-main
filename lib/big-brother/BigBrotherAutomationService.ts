@@ -6,6 +6,8 @@ import { selectVetoCompetitors, setVetoWinner } from './BigBrotherVetoEngine'
 import { getEligibleHOHRosterIds, assignHOH } from './BigBrotherHOHEngine'
 import { resolveHOHWinner, resolveVetoWinner } from './BigBrotherChallengeEngine'
 import { getBigBrotherWeeklyScores } from './BigBrotherScores'
+import { applyHaveNotChallengeScorePenalty, applyHaveNotWaiverPenalties } from './BigBrotherHaveNotPenaltyService'
+import { resolveHaveNotRosterIdsForCycle } from './BigBrotherChatChannels'
 import { announceHOHWinner, announceVetoDraw } from './BigBrotherChatAnnouncements'
 import { closeEviction } from './BigBrotherEvictionService'
 import { isFinaleReached } from './BigBrotherFinaleService'
@@ -68,14 +70,14 @@ export async function runAutomation(input: AutomationRunInput): Promise<Automati
     const complete = participants.every(id => Number.isFinite(scores[id]))
     const hasSome = participants.some(id => Number.isFinite(scores[id]))
     if (config.challengeMode !== 'ai_theme' && !complete && (config.challengeMode === 'deterministic_score' || hasSome)) return skipped('awaiting_final_scores')
-    const winner = await (isHoh ? resolveHOHWinner : resolveVetoWinner)({ leagueId, configId: config.configId, week: current.week, participantRosterIds: participants, challengeType: isHoh ? 'hoh' : 'veto' }, { scores: complete ? scores : undefined })
+    const adjustedScores = complete ? applyHaveNotChallengeScorePenalty(scores, await resolveHaveNotRosterIdsForCycle(leagueId, current.id)) : undefined
+    const winner = await (isHoh ? resolveHOHWinner : resolveVetoWinner)({ leagueId, configId: config.configId, week: current.week, participantRosterIds: participants, challengeType: isHoh ? 'hoh' : 'veto' }, { scores: adjustedScores })
     if (!winner) return skipped('awaiting_final_scores')
     const result = isHoh ? await assignHOH(leagueId, config.configId, current.id, winner) : await setVetoWinner(current.id, winner)
     if (!result.ok) return { ok: false, error: result.error }
     if (isHoh) {
       await changed('HOH_LOCKED')
       await announceHOHWinner({ leagueId, week: current.week, hohRosterId: winner, systemUserId })
-      const { applyHaveNotWaiverPenalties } = await import('./BigBrotherHaveNotPenaltyService')
       await applyHaveNotWaiverPenalties(leagueId, current.id)
       return { ok: true, cycleId: current.id, phase: 'HOH_LOCKED', actionTaken: action }
     }
