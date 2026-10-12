@@ -352,7 +352,7 @@ export function BigBrotherHome({ leagueId, isCommissioner, initialView = 'house'
       )}
 
       {view === 'commissioner' && isCommissioner && (
-        <BigBrotherCommissionerPanel leagueId={leagueId} onAction={load} />
+        <BigBrotherCommissionerPanel leagueId={leagueId} onAction={load} nominees={summary.finalNomineeRosterIds.map(id => ({id, name: summary.rosterDisplayNames[id] ?? `Houseguest ${id.slice(0,8)}`}))} />
       )}
 
       {view === 'commissioner' && !isCommissioner && (

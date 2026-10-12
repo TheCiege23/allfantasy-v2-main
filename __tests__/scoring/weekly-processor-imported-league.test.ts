@@ -38,14 +38,17 @@ const mockBuildRoundRobinPairs = vi.hoisted(() => vi.fn(() => new Map<string, st
 const tx = {
   weeklyScore: { deleteMany: mockWeeklyScoreDeleteMany, createMany: mockWeeklyScoreCreateMany },
   teamWeekResult: { create: mockTwrCreate, deleteMany: mockTwrDeleteMany },
-  playerWeeklyScore: { findUnique: vi.fn().mockResolvedValue({ stats: { pts: 10 } }) },
+  playerWeeklyScore: { findUnique: vi.fn().mockResolvedValue({ stats: { pts: 10 }, isFinalized: true }) },
   sportsPlayer: { findUnique: vi.fn().mockResolvedValue({ name: 'A', position: 'RB', team: 'KC' }) },
 }
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     league: { findUnique: mockLeagueFindUnique, findMany: vi.fn().mockResolvedValue([]) },
-    weeklyScore: { count: vi.fn().mockResolvedValue(1) },
+    weeklyScore: { count: vi.fn().mockResolvedValue(1), findMany: vi.fn().mockResolvedValue([]) },
+    teamWeekResult: { findMany: vi.fn().mockResolvedValue([]) },
+    roster: { findMany: vi.fn().mockResolvedValue([]) },
+    redraftMatchup: { findMany: vi.fn().mockResolvedValue([]) },
     $transaction: vi.fn(async (fn: (t: typeof tx) => Promise<void>) => fn(tx)),
   },
 }))

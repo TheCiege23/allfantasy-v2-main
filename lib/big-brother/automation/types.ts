@@ -36,6 +36,8 @@ export type BbReminderSweepResult = {
 }
 
 export type BbStatCorrectionInput = {
+  /** Previously published finalized totals, supplied by a correction rerun. */
+  previousScores?: Record<string, number>
   leagueId?: string
   redraftSeasonId?: string
   week?: number

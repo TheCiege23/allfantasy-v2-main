@@ -6,7 +6,7 @@
 
 import { prisma } from '@/lib/prisma'
 import { getBigBrotherConfig } from './BigBrotherLeagueConfig'
-import { getSeasonPointsFromRosterPerformance } from '@/lib/survivor/SurvivorVoteEngine'
+import { getBigBrotherSeasonPoints as getSeasonPointsFromRosterPerformance } from './BigBrotherScores'
 import type { ChallengeMode } from './types'
 
 /** Seeded RNG for deterministic random winner. */
@@ -50,14 +50,14 @@ export async function resolveChallengeByScore(input: ScoreBasedInput): Promise<s
   const { participantRosterIds, scores, lowestWins } = input
   if (participantRosterIds.length === 0) return null
   const withScores = participantRosterIds
-    .filter((id) => typeof scores[id] === 'number')
+    .filter((id) => Number.isFinite(scores[id]))
     .map((id) => ({ rosterId: id, score: scores[id] as number }))
-  if (withScores.length === 0) return participantRosterIds[0]
+  if (withScores.length !== participantRosterIds.length) return null
 
   const best = lowestWins
     ? Math.min(...withScores.map((s) => s.score))
     : Math.max(...withScores.map((s) => s.score))
-  const tied = withScores.filter((s) => s.score === best).map((s) => s.rosterId)
+  const tied = withScores.filter((s) => s.score === best).map((s) => s.rosterId).sort()
   if (tied.length === 1) return tied[0]
 
   const seasonPoints: Record<string, number> = {}
@@ -77,7 +77,8 @@ export async function resolveChallengeByScore(input: ScoreBasedInput): Promise<s
  * Resolve winner by seeded random (auditable). Same seed always yields same winner.
  */
 export function resolveChallengeBySeededRandom(input: ChallengeInput, seedOverride?: number): string | null {
-  const { participantRosterIds, leagueId, configId, week, challengeType } = input
+  const { leagueId, configId, week, challengeType } = input
+  const participantRosterIds = [...input.participantRosterIds].sort()
   if (participantRosterIds.length === 0) return null
   const seed =
     seedOverride ??
@@ -116,8 +117,8 @@ export async function resolveHOHWinner(
   if (!config) return null
 
   const mode = config.challengeMode as ChallengeMode
-  if (mode === 'deterministic_score' && options?.scores) {
-    return resolveChallengeByScore({ ...input, scores: options.scores, lowestWins: options.lowestWins })
+  if (mode === 'deterministic_score') {
+    return resolveChallengeByScore({ ...input, scores: options?.scores ?? {}, lowestWins: options?.lowestWins })
   }
   if (mode === 'ai_theme') {
     return resolveChallengeBySeededRandom(input, options?.seedOverride)

@@ -232,6 +232,8 @@ export async function createLeagueChatMessage(
   userId: string,
   message: string,
   options: {
+    /** Server-owned deterministic row id; duplicate sends return null. */
+    idempotencyKey?: string
     type?: string
     imageUrl?: string | null
     metadata?: Record<string, unknown>
@@ -254,6 +256,7 @@ export async function createLeagueChatMessage(
         : null
   const created = await prisma.leagueChatMessage.create({
     data: {
+      ...(options.idempotencyKey ? { id: options.idempotencyKey } : {}),
       leagueId,
       userId,
       message,
@@ -271,7 +274,11 @@ export async function createLeagueChatMessage(
       parentMessageId: options.parentMessageId ?? null,
     },
     include: includeUser,
+  }).catch((error: unknown) => {
+    if (options.idempotencyKey && (error as { code?: string })?.code === 'P2002') return null
+    throw error
   })
+  if (!created) return null
   const withUser = created as typeof created & {
     user?: {
       id: string
