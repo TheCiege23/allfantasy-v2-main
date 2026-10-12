@@ -172,6 +172,7 @@ export default async function LeaguePage(
                     where: { id: leagueId },
                     include: {
                                 teams: { orderBy: { externalId: 'asc' } },
+                                leagueSettings: { select: { draftDateUtc: true } },
                                 rosters: {
                                               select: { platformUserId: true, faabRemaining: true, waiverPriority: true },
                                 },
@@ -257,6 +258,7 @@ export default async function LeaguePage(
 
       let draftDateIso: string | null = null
         const draftDateCandidate =
+                league.leagueSettings?.draftDateUtc?.toISOString() ??
                 leagueSettings.draftDate ??
                 leagueSettings.draft_date ??
                 leagueSettings.draft_at ??
