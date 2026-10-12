@@ -122,6 +122,17 @@ async function main() {
     await verifyMembership(host, true)
     console.log('PASS non-participating host excluded from cast and included in oversight chats')
 
+    const transferred = await fixture('transferred-host', { commissionerParticipationMode: 'non_participating_host' })
+    // Reproduce the creator's retained cast row after their original team is claimed by someone else.
+    await prisma.survivorPlayer.update({ where: { leagueId_userId: { leagueId: transferred.id, userId: transferred.participants[0] } },
+      data: { userId: users[0], displayName: 'Non-playing host', redraftRosterId: transferred.rosters[0].id }, select: { id: true } })
+    assert.equal((await runSurvivorPostDraftBootstrap(transferred.id)).setupComplete, true)
+    await verifyMembership(transferred, true)
+    assert.equal(await prisma.survivorPlayer.count({ where: { leagueId: transferred.id, userId: users[0] } }), 0)
+    assert.equal(await prisma.appUser.count({ where: { id: users[0] } }), 1)
+    assert.equal((await prisma.league.findUnique({ where: { id: transferred.id }, select: { userId: true } }))?.userId, users[0])
+    console.log('PASS transferred creator team: unused host cast entry removed, account and commissioner ownership retained')
+
     const optional = await fixture('optional', { idolsEnabled: false, tribeChatsEnabled: false, exileEnabled: false })
     assert.equal((await runSurvivorPostDraftBootstrap(optional.id)).setupComplete, true)
     assert.deepEqual(await counts(optional), { ...expected, idols: 0, channels: 1 })

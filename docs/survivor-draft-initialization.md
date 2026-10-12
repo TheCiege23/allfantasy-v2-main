@@ -6,7 +6,7 @@ The first Survivor milestone connects a completed native draft to the existing f
 
 - New native Survivor leagues with `survivorFoundationSettingsVersion: 1` reconcile participants against the current completed native draft and real `Roster` owners. The historical `SurvivorPlayer.redraftRosterId` field stores the legacy `Roster.id`, as required by tribe membership and inventory.
 - Unused creation-time open-seat placeholders are replaced by actual owners. Real players, progressed gameplay, assigned placeholders, and legacy hidden inventory are preserved rather than silently deleted or reassigned.
-- Every roster needs a different real owner. A non-participating commissioner cannot also own a drafted team; the commissioner must resolve that mismatch before setup proceeds.
+- Every roster needs a different real owner. A non-participating commissioner cannot also own a drafted team; the commissioner must resolve that mismatch before setup proceeds. After a team transfer, an unused creator cast entry is removed while the account and commissioner ownership remain intact. Entries with tribes, powers, earned tokens, or other gameplay state remain preserved for review; concurrent changes also stop cleanup safely.
 - Random assignment uses a repeatable seed for the draft. Draft-pattern assignment uses ordered draft slots, independent of traded pick ownership. Manual assignment stays pending until a complete balanced mapping is provided.
 - Participant reconciliation, tribes, chat membership, enabled Vote Shields, the welcome message, and the phase transition share one transaction. A per-league transaction advisory lock serializes automatic and manual foundation setup. Database failure rolls everything back.
 - A playing commissioner only joins their own tribe chat. A non-participating host joins tribe chats for oversight. Disabled tribe chats and idols are respected. Hidden inventory remains private.
@@ -15,7 +15,7 @@ The first Survivor milestone connects a completed native draft to the existing f
 
 ## Verification
 
-Focused Survivor/draft/Zombie regression suite: 93 tests passed. This includes behavioral checks for awaiting setup, retry after failure, and successful-poll throttling. Changed-file ESLint and whitespace checks pass.
+Focused Survivor/draft/Zombie regression suite: 99 tests passed. This includes behavioral checks for awaiting setup, retry after failure, and successful-poll throttling. Changed-file ESLint and whitespace checks pass.
 
 The opt-in database proof creates unique, passwordless fixtures on an explicitly recognized non-production database and cleans up only its own IDs. It verifies concurrent setup, real roster links, private chat memberships, hidden inventory, repeated initialization, disabled features, host participation, draft-pattern/manual assignment, ownership recovery, draft guards, transaction rollback and retry, and preservation of progressed gameplay.
 
