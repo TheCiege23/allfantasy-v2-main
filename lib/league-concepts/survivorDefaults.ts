@@ -67,7 +67,7 @@ export type ChallengeSource = 'fantasy_points_for' | 'commissioner_assigned'
 export type VotingMode = 'tribe_vote' | 'individual_vote'
 export type VoteVisibility = 'hidden_until_reveal' | 'public'
 export type TieResolution = 'revote' | 'rocks' | 'rocks_after_revote' | 'commissioner'
-export type ExileSelectionMode = 'challenge_loser_chooses' | 'random_non_immune' | 'commissioner'
+export type ExileSelectionMode = 'voted_out' | 'challenge_loser_chooses' | 'random_non_immune' | 'commissioner'
 export type IdolPlayWindow = 'before_vote_reveal' | 'after_votes_cast'
 export type LedgerStatus = 'not_started' | 'pending' | 'active'
 
@@ -326,7 +326,7 @@ function buildExileSettings(): SurvivorExileSettings {
     // Phase 2: exile selection/effects engine not yet built
     exileAutomationStatus: 'pending',
     // Challenge loser's tribe chooses who to send; safe default avoids ambiguity
-    exileSelectionMode: 'challenge_loser_chooses',
+    exileSelectionMode: 'voted_out',
     exileDurationPeriods: 1,
     exileEffects: {
       cannotVote: true,

@@ -171,7 +171,7 @@ async function initializeSurvivorPhase2Locked(
   // 3. Idols (count = rosterSpots + tribeCount).
   const idolsOutcome = settings.idolsEnabled ? await seedSurvivorIdols(leagueId, {
     tribeCount: opts.tribeCount ?? settings.tribeCount,
-    seed: opts.seed ?? null,
+    seed: null,
     actorUserId: opts.actorUserId,
     allowReseed: opts.allowReassign ?? false,
     db,

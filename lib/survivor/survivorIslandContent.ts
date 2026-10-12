@@ -6,12 +6,12 @@
 
 /** Short hero line for headers and first-entry */
 export const SURVIVOR_ISLAND_TAGLINE =
-  'Outwit, Outplay, Outlast — with fantasy lineups, tribes, Tribal Council, and a jury that decides who wins.'
+  'Outwit, Outplay, Outlast — with fantasy lineups, tribes, Elimination Council, and a jury that decides who wins.'
 
 /** Opening pitch: fantasy + Survivor hybrid */
 export const SURVIVOR_WELCOME_BLURB = [
   'Yes, this is Survivor — but the beach is your fantasy league.',
-  'Tribes compete each week on fantasy scoring. Challenges, rewards, Tribal Council, idols, and exile twists land all season.',
+  'Tribes compete each week on fantasy scoring. Challenges, rewards, Elimination Council, idols, and exile twists land all season.',
   'A jury of eliminated players helps crown Sole Survivor. How you treat people matters.',
   'Twists, advantages, and disadvantages can appear anytime. The host runs elimination formats at Tribal — stay sharp.',
 ].join(' ')

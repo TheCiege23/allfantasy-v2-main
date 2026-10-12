@@ -17,7 +17,7 @@ export async function generateAndPostWeeklyRecap(
     select: { title: true, winnerTribeId: true, winnerUserIds: true },
   })
 
-  // Get tribal council result
+  // Get elimination council result
   const council = await (prisma as any).survivorTribalCouncil.findFirst({
     where: { leagueId, week, status: 'completed' },
     select: { eliminatedName: true, attendingTribeId: true, idolsPlayed: true, isTie: true },

@@ -1,3 +1,4 @@
+import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/survivorSettings'
 import { buildSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
 import { resolveLeagueCreationSeason } from '@/lib/season-week/leagueCreationSeason'
 import { tournamentRoundEnds } from '@/lib/bestball/tournamentCalendar'
@@ -354,7 +355,8 @@ export function validateCreatePayload(input: unknown): ValidateCreateLeagueResul
     try {
       if (schedule.survivorSeasonEndWeek !== undefined && typeof schedule.survivorSeasonEndWeek !== 'number') throw new Error('Survivor end week must be a number.')
       const draftAt = typeof date === 'string' && typeof time === 'string' ? toUtc(date, time, String(zone)) : undefined
-      buildSurvivorFullSeasonPlan({ sport, season: resolveLeagueCreationSeason(sport), castSize: data.teamCount, draftAt,
+      const exileSettings = normalizeSurvivorFoundationSettings(schedule)
+      buildSurvivorFullSeasonPlan({ exileEnabled: exileSettings.exileIslandEnabled, exileReturnWeek: exileSettings.exileReturnWeek, sport, season: resolveLeagueCreationSeason(sport), castSize: data.teamCount, draftAt,
         endWeek: typeof schedule.survivorSeasonEndWeek === 'number' ? schedule.survivorSeasonEndWeek : undefined })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Invalid Survivor season calendar'

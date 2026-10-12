@@ -5,6 +5,8 @@ import { prisma } from '@/lib/prisma'
 import { assertLeagueCommissioner } from '@/lib/league/league-access'
 import { transferIdol } from '@/lib/survivor/idolEngine'
 
+import { survivorHostGuard } from '@/lib/survivor/survivorHostGuard'
+
 export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
@@ -48,6 +50,8 @@ export async function POST(req: NextRequest) {
   if (body.intent === 'assign' && body.leagueId && body.targetUserId && body.powerType) {
     const gate = await assertLeagueCommissioner(body.leagueId, userId)
     if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    const denied = await survivorHostGuard(body.leagueId, userId)
+    if (denied) return denied
     const cfg = await prisma.survivorLeagueConfig.findUnique({ where: { leagueId: body.leagueId } })
     if (!cfg) return NextResponse.json({ error: 'No survivor config' }, { status: 400 })
     const roster = await prisma.roster.findFirst({

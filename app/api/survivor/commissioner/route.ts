@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { Prisma } from '@prisma/client'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { survivorHostGuard } from '@/lib/survivor/survivorHostGuard'
 import { requireCommissionerRole } from '@/lib/league/permissions'
 import { advancePhase } from '@/lib/survivor/gameStateMachine'
 import { processReturnFromExile } from '@/lib/survivor/exileEngine'
@@ -23,7 +24,7 @@ const PAUSE_ERROR_PREFIX = 'PAUSED:'
 async function commissionerGuard(leagueId: string, userId: string): Promise<NextResponse | null> {
   try {
     await requireCommissionerRole(leagueId, userId)
-    return null
+    return survivorHostGuard(leagueId, userId)
   } catch (err) {
     if (err instanceof Response) {
       const body = await err.text().catch(() => '')

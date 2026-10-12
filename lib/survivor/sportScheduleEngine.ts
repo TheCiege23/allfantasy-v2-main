@@ -4,7 +4,7 @@
  * Each sport has different game schedules, which affect:
  * - When lineups lock
  * - When weekly scoring finalizes
- * - When tribal council should open/close
+ * - When elimination council should open/close
  * - When challenges are posted
  * - When host messages are sent
  */
@@ -21,9 +21,9 @@ export interface SportScheduleConfig {
   scoringFinalizeDay: number
   /** Hour (UTC) scoring finalizes */
   scoringFinalizeHourUtc: number
-  /** Recommended tribal council day */
+  /** Recommended elimination council day */
   tribalCouncilDay: number
-  /** Recommended tribal council hour (UTC) */
+  /** Recommended elimination council hour (UTC) */
   tribalCouncilHourUtc: number
   /** Day challenge should be posted */
   challengePostDay: number
@@ -219,7 +219,7 @@ export function getNextScoringFinalize(sport: string, fromDate?: Date): Date {
 }
 
 /**
- * Calculate recommended tribal council time for a sport/week.
+ * Calculate recommended elimination council time for a sport/week.
  */
 export function getTribalCouncilTime(sport: string, fromDate?: Date): Date {
   const config = getSportSchedule(sport)

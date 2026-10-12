@@ -45,6 +45,8 @@ export type SurvivorSeasonPlayer = {
 }
 
 export type SurvivorSeasonCouncil = {
+  isRevealed?: boolean
+  revealSequence?: { targetName?: string | null; status?: string }[] | null
   id: string
   week: number
   status?: string

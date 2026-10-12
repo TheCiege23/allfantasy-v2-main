@@ -25,7 +25,7 @@ export function buildSurvivorIntroAnnouncement(ctx: SurvivorIntroContext): strin
   lines.push('')
   lines.push('**Outwit. Outplay. Outlast.** This is fantasy football as a social-strategy game.')
   lines.push(
-    `${ctx.castSize} managers begin split across **${ctx.tribeCount} tribes**. Each scoring period a tribe goes to Tribal Council and votes someone out. The game **merges at ${ctx.mergeAtActivePlayers} remaining players** — then it is every survivor for themselves.`,
+    `${ctx.castSize} managers begin split across **${ctx.tribeCount} tribes**. Each scoring period a tribe goes to Elimination Council and votes someone out. The game **merges at ${ctx.mergeAtActivePlayers} remaining players** — then it is every survivor for themselves.`,
   )
   lines.push('')
   lines.push('**How to last:**')

@@ -36,6 +36,8 @@ export interface SurvivorFoundationSettings {
   tribeChatsEnabled: boolean
   privateDMVotesEnabled: boolean
   exileIslandEnabled: boolean
+  exileReturnWeek: number
+  exileReturnTokens: number
   juryEnabled: boolean
   finaleVotingEnabled: boolean
   survivorIntroVideoEnabled: boolean
@@ -87,7 +89,9 @@ export const SURVIVOR_DEFAULT_FOUNDATION_SETTINGS: SurvivorFoundationSettings = 
   powerupsEnabled: true,
   tribeChatsEnabled: true,
   privateDMVotesEnabled: true,
-  exileIslandEnabled: false,
+  exileIslandEnabled: true,
+  exileReturnWeek: 10,
+  exileReturnTokens: 4,
   juryEnabled: true,
   finaleVotingEnabled: true,
   survivorIntroVideoEnabled: true,
@@ -237,7 +241,7 @@ export function normalizeSurvivorFoundationSettings(
     lateVotesAllowed: readBoolean(s, ['lateVotesAllowed'], base.lateVotesAllowed),
     selfVotesAllowed: readBoolean(s, ['selfVotesAllowed', 'survivorSelfVoteAllowed'], base.selfVotesAllowed),
     voteChangePolicy: normalizeVoteChangePolicy(readString(s, ['voteChangePolicy'], base.voteChangePolicy)),
-    eliminationOutcome: normalizeEliminationOutcome(readString(s, ['eliminationOutcome'], base.eliminationOutcome)),
+    eliminationOutcome: normalizeEliminationOutcome(readString(s, ['eliminationOutcome'], readBoolean(s, ['exileIslandEnabled', 'exile_enabled', 'survivorExileEnabled'], base.exileIslandEnabled) ? 'exile_island' : 'removed_to_waivers')),
     sitOutsEnabled: readBoolean(s, ['sitOutsEnabled'], base.sitOutsEnabled),
     noConsecutiveSitOuts: readBoolean(s, ['noConsecutiveSitOuts'], base.noConsecutiveSitOuts),
     idolExpiryRemainingPlayers: clampInt(
@@ -254,7 +258,9 @@ export function normalizeSurvivorFoundationSettings(
     powerupsEnabled: readBoolean(s, ['powerupsEnabled'], base.powerupsEnabled),
     tribeChatsEnabled: readBoolean(s, ['tribeChatsEnabled'], base.tribeChatsEnabled),
     privateDMVotesEnabled: readBoolean(s, ['privateDMVotesEnabled'], base.privateDMVotesEnabled),
-    exileIslandEnabled: readBoolean(s, ['exileIslandEnabled', 'survivorExileEnabled'], base.exileIslandEnabled),
+    exileIslandEnabled: readBoolean(s, ['exileIslandEnabled', 'exile_enabled', 'survivorExileEnabled'], base.exileIslandEnabled),
+    exileReturnWeek: clampInt(readNumber(s, ['exileReturnWeek', 'survivorExileReturnWeek'], base.exileReturnWeek), 2, 51),
+    exileReturnTokens: clampInt(readNumber(s, ['exileReturnTokens'], base.exileReturnTokens), 1, 1000),
     juryEnabled: readBoolean(s, ['juryEnabled'], base.juryEnabled),
     finaleVotingEnabled: readBoolean(s, ['finaleVotingEnabled'], base.finaleVotingEnabled),
     survivorIntroVideoEnabled: readBoolean(s, ['survivorIntroVideoEnabled'], base.survivorIntroVideoEnabled),
@@ -307,5 +313,7 @@ export function buildSurvivorLeagueColumnPatch(settings: SurvivorFoundationSetti
     survivorIdolCount: settings.defaultTeamCount + settings.tribeCount,
     survivorIdolsEnabled: settings.idolsEnabled,
     survivorExileEnabled: settings.exileIslandEnabled,
+    survivorExileReturnWeek: settings.exileReturnWeek,
+    survivorExileReturnTrigger: settings.exileIslandEnabled ? 'token_leader' : 'manual',
   }
 }

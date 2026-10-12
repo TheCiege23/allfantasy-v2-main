@@ -71,11 +71,11 @@ export function SurvivorMergeJuryView({ leagueId, summary, names, onRefresh }: S
         {merged ? (
           <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 p-3">
             <p className="font-medium text-amber-200">The merge has happened.</p>
-            <p className="mt-1 text-sm text-white/60">All remaining players are one tribe. Tribal Council now includes everyone.</p>
+            <p className="mt-1 text-sm text-white/60">All remaining players are one tribe. Elimination Council now includes everyone.</p>
           </div>
         ) : (
           <p className="text-sm text-white/70">
-            Merge triggers at week <strong className="text-white">{mergeWeek}</strong> (or by player count if configured). Pre-merge: one tribe attends Tribal Council each week.
+            Merge triggers at week <strong className="text-white">{mergeWeek}</strong> (or by player count if configured). Pre-merge: one tribe attends Elimination Council each week.
           </p>
         )}
       </section>

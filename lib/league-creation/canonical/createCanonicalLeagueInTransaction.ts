@@ -434,7 +434,8 @@ export async function createCanonicalLeagueInTransaction(
     const setup = body.conceptSetup ?? {}
     const draftAt = typeof setup.draftDate === 'string' && typeof setup.draftTime === 'string'
       ? toUtc(setup.draftDate, setup.draftTime, String(setup.draftTimezone ?? body.timezone ?? 'America/New_York')) : undefined
-    const plan = buildSurvivorFullSeasonPlan({ sport, season: seasonYear, castSize: managerCount, draftAt,
+    const exileSettings = normalizeSurvivorFoundationSettings({ ...mergedSettings, ...setup })
+    const plan = buildSurvivorFullSeasonPlan({ exileEnabled: exileSettings.exileIslandEnabled, exileReturnWeek: exileSettings.exileReturnWeek, sport, season: seasonYear, castSize: managerCount, draftAt,
       endWeek: typeof setup.survivorSeasonEndWeek === 'number' ? setup.survivorSeasonEndWeek : undefined })
     // Persist the same slots consumed by the draft, lineup, waivers, and readiness resolver.
     mergedSettings[sport.toLowerCase() + '_roster_config'] = { slots: {
@@ -442,6 +443,8 @@ export async function createCanonicalLeagueInTransaction(
       BN: readNumber(foundationDefaults.rosterSettings, 'benchSlots', 0),
       [sport === 'NBA' ? 'IL' : 'IR']: readNumber(foundationDefaults.rosterSettings, 'irSlots', 0),
     } }
+    // Keep creation-time Exile choices consistent with the saved season calendar.
+    Object.assign(mergedSettings, { exileIslandEnabled: exileSettings.exileIslandEnabled, exileReturnWeek: plan.exileReturnWeek ?? exileSettings.exileReturnWeek, exileReturnTokens: exileSettings.exileReturnTokens })
     mergedSettings.survivor_full_season_plan = plan
     mergedSettings.regular_season_weeks = plan.endWeek
     mergedSettings.playoff_team_count = 0

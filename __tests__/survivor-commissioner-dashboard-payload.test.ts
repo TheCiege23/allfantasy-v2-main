@@ -216,4 +216,16 @@ describe('survivor commissioner dashboard payload', () => {
       status: 404,
     })
   })
+  it('does not fetch unclassified audit metadata or expose a tallied ballot', async () => {
+    getLeagueRole.mockResolvedValue('commissioner')
+    isSurvivorLeague.mockResolvedValue(true)
+    resolveSurvivorAccessContext.mockResolvedValue({ isLeagueMember: true, isParticipatingCommissioner: true, settings: { commissionerParticipationMode: 'participating_player' }, decisions: { canSeeHiddenIdolAssignments: false, canSeePrivateVotes: false, canSeeVoteTallyBeforeReveal: false }, privacyWarnings: [] })
+    getCouncil.mockResolvedValue({ id: 'secret-council', status: 'closed', isRevealed: false, eliminatedRosterId: 'SECRET_MANAGER', votes: [{ targetRosterId: 'SECRET_MANAGER' }], revealSequence: [{ targetName: 'SECRET_MANAGER' }], auditLog: { seed: 77 } })
+    getSurvivorAuditLog.mockClear()
+    const result = await buildSurvivorCommissionerDashboard('league-1', 'playing-commish', null)
+    expect(result.ok).toBe(true)
+    expect(JSON.stringify(result)).not.toContain('SECRET_MANAGER')
+    expect(getSurvivorAuditLog).not.toHaveBeenCalled()
+    if (result.ok) expect(result.privacy.blindModeActive).toBe(true)
+  })
 })

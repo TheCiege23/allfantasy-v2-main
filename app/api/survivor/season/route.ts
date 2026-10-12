@@ -9,6 +9,8 @@ import {
 import { seedIdolsAfterDraft } from '@/lib/survivor/idolEngine'
 import { assignPlayersToTribes } from '@/lib/survivor/tribeEngine'
 import { readSurvivorVisualThemeId, extractLeadingTribeIcon } from '@/lib/survivor/survivorVisuals'
+import { survivorPublicCouncil } from '@/lib/survivor/survivorPublicCouncil'
+import { survivorHostGuard } from '@/lib/survivor/survivorHostGuard'
 import { resolveSurvivorAccessContext } from '@/lib/survivor/survivorAccessControl'
 
 export const dynamic = 'force-dynamic'
@@ -29,6 +31,9 @@ export async function POST(req: NextRequest) {
 
   const gate = await assertLeagueCommissioner(leagueId, userId)
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+  const hostDenied = await survivorHostGuard(leagueId, userId)
+  if (hostDenied) return hostDenied
 
   await prisma.league.update({
     where: { id: leagueId },
@@ -99,7 +104,7 @@ export async function GET(req: NextRequest) {
   const tribes = await prisma.survivorTribe.findMany({ where: { leagueId }, include: { members: true } })
   const players = await prisma.survivorPlayer.findMany({ where: { leagueId } })
   const council = await prisma.survivorTribalCouncil.findFirst({
-    where: { leagueId, status: { in: ['voting_open', 'voting_closed', 'revealing'] } },
+    where: { leagueId, status: { in: ['scheduled', 'voting_open', 'voting_closed', 'closed', 'revealing', 'revealed', 'tie_pending'] } },
     orderBy: { week: 'desc' },
   })
   const challenge = await prisma.survivorChallenge.findFirst({
@@ -126,11 +131,27 @@ export async function GET(req: NextRequest) {
       ...tribe,
       emoji: extractLeadingTribeIcon(tribe.name),
     })),
-    players,
-    activeCouncil: council,
-    currentChallenge: challenge,
+    players: access.decisions.canSeeHiddenIdolAssignments ? players : players.map(p => ({
+      id: p.id, userId: p.userId, displayName: p.displayName, avatarUrl: p.avatarUrl,
+      tribeId: p.tribeId, playerState: p.playerState, eliminatedWeek: p.eliminatedWeek,
+      isJuryMember: p.isJuryMember, isFinalist: p.isFinalist,
+      hasImmunityThisWeek: p.hasImmunityThisWeek,
+    })),
+    activeCouncil: survivorPublicCouncil(council, access.decisions.canSeePrivateVotes),
+    currentChallenge: access.decisions.canSeeHiddenIdolAssignments ? challenge : challenge && {
+      id: challenge.id, week: challenge.week, title: challenge.title, description: challenge.description,
+      instructions: challenge.instructions, scope: challenge.scope, status: challenge.status,
+      locksAt: challenge.locksAt, lockAt: challenge.lockAt, closesAt: challenge.closesAt,
+      rewardType: challenge.rewardType, rewardAmount: challenge.rewardAmount,
+      resultSummary: challenge.status === 'resolved' ? challenge.resultSummary : null,
+    },
     exileStatus: exile,
-    juryStatus: jury,
+    juryStatus: access.decisions.canSeePrivateVotes ? jury : jury && {
+      id: jury.id, status: jury.status, finalistUserIds: jury.finalistUserIds,
+      jurorUserIds: jury.jurorUserIds, questionsDeadline: jury.questionsDeadline, votingDeadline: jury.votingDeadline,
+      winnerId: jury.revealedAt ? jury.winnerId : null, winnerName: jury.revealedAt ? jury.winnerName : null,
+      revealedAt: jury.revealedAt,
+    },
     userState: me,
   }
 

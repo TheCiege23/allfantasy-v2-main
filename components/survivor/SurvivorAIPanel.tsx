@@ -26,7 +26,7 @@ const TYPE_LABELS: Record<SurvivorAIPanelType, string> = {
   host_intro: 'Host: Intro post',
   host_challenge: 'Host: Challenge announcement',
   host_merge: 'Host: Merge announcement',
-  host_council: 'Host: Tribal Council narration',
+  host_council: 'Host: Elimination Council narration',
   host_scroll: 'Host: Scroll reveal wording',
   host_jury: 'Host: Jury / finale moderation',
   tribe_help: 'Helper: Tribe strategy & challenge coaching',
@@ -229,7 +229,7 @@ export function SurvivorAIPanel({ leagueId, summary }: SurvivorAIPanelProps) {
         <ul className="mb-4 space-y-1 text-sm text-white/70">
           <li>· Tribe strategy and who might be at risk</li>
           <li>· Challenge coaching and submission tips</li>
-          <li>· Tribal Council risk explanation</li>
+          <li>· Elimination Council risk explanation</li>
           <li>· Exile Island strategy and token advice</li>
           <li>· Recap and storyline summary</li>
         </ul>

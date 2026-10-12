@@ -1,7 +1,7 @@
 /**
  * SURVIVOR BALLOT ELIGIBILITY — pure, deterministic. No DB, no AI.
  *
- * Computes who may vote and who may be voted for at a Tribal Council from an already-loaded
+ * Computes who may vote and who may be voted for at a Elimination Council from an already-loaded
  * scope of active players plus the safety sets produced by idol plays / settings. The caller
  * (survivorCouncilService) loads players and idol plays; this module only applies the rules so
  * the logic is unit-testable without a database. Distinct filename from the legacy PascalCase
@@ -20,9 +20,9 @@ export interface ComputeEligibilityInput {
   scopePlayers: CouncilScopePlayer[]
   /** Self-votes allowed? (default false) */
   selfVotesAllowed: boolean
-  /** Users made safe (ineligible target) by Skip Tribal / immunity. */
+  /** Users made safe (ineligible target) by Council Pass / immunity. */
   safeUserIds?: ReadonlyArray<string>
-  /** Users who forfeit their own vote this council (e.g. Skip Tribal when settings forfeit vote). */
+  /** Users who forfeit their own vote this council (e.g. Council Pass when settings forfeit vote). */
   voteForfeitUserIds?: ReadonlyArray<string>
 }
 

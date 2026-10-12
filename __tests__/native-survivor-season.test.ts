@@ -33,7 +33,7 @@ describe('NBA/NHL Survivor creation and full-season pacing', () => {
     expect(f.rosterSettings.totalRosterSlots).toBe(c.rosterTemplate.totalRosterSlots)
     expect(f.draftSettings.rounds).toBe(c.rosterTemplate.totalRosterSlots)
     expect(f.playoffSettings.playoffTeams).toBe(0)
-    expect(c.survivorStructure.exileSettings.exileEnabled).toBe(false)
+    expect(c.survivorStructure.exileSettings.exileEnabled).toBe(true)
   })
   it.each(['NBA', 'NHL'])('%s reaches Final 3 in the last regular-season period for every allowed cast', sport => {
     for (let castSize = 16; castSize <= 20; castSize++) {
@@ -48,6 +48,13 @@ describe('NBA/NHL Survivor creation and full-season pacing', () => {
       expect(readSurvivorFullSeasonPlan({ survivor_full_season_plan: p })).toEqual(p)
       expect(resolveCreatedSeasonWeeks({ settings: { survivor_full_season_plan: p } }, 17)).toBe(p.endWeek)
     }
+  })
+  it.each(['NBA', 'NHL'])('%s reserves an additional elimination for one Exile return', sport => {
+    const p = buildSurvivorFullSeasonPlan({ sport, season: 2026, castSize: 20, now, exileEnabled: true, exileReturnWeek: 10 })
+    expect(p.exileReturnSlots).toBe(1)
+    expect(p.eliminationWeeks).toHaveLength(18)
+    expect(readSurvivorFullSeasonPlan({ survivor_full_season_plan: p })).toEqual(p)
+    expect(20 - p.eliminationWeeks.length + p.exileReturnSlots!).toBe(3)
   })
   it('NHL created after opening night starts at the next unplayed period', () => {
     const p = buildSurvivorFullSeasonPlan({ sport: 'NHL', season: 2026, castSize: 20, now: new Date('2026-10-11T12:00:00Z') })

@@ -177,7 +177,6 @@ export async function buildSurvivorStateForUser(
           { currentOwnerUserId: userId },
           { rosterId: access.rosterId ?? '__none__' },
           { isPubliclyKnown: true },
-          { status: { in: ['played', 'expired', 'revealed', 'used'] } },
         ],
       }
 
@@ -308,7 +307,7 @@ export async function buildSurvivorStateForUser(
   const ownVoteSubmitted = Boolean(
     councilRow?.votes.some((v) => v.voterUserId === userId || (rosterId && v.voterRosterId === rosterId)),
   )
-  const revealed = Boolean(councilRow?.isRevealed || councilRow?.status === 'complete' || councilRow?.status === 'reveal_in_progress')
+  const revealed = councilRow?.isRevealed === true
   const visibleVotes = revealed || access.decisions.canSeePrivateVotes ? (councilRow?.votes.length ?? 0) : null
   const ownVoteCount = ownVoteSubmitted ? 1 : 0
   const activePlayers = playerRows.filter((p) => p.playerState === 'active').length
@@ -328,7 +327,7 @@ export async function buildSurvivorStateForUser(
       isPubliclyKnown: idol.isPubliclyKnown,
     }))
   const publicIdols = idolRows
-    .filter((idol) => idol.isPubliclyKnown || ['played', 'expired', 'revealed', 'used'].includes(idol.status))
+    .filter((idol) => idol.isPubliclyKnown)
     .map((idol) => ({
       id: idol.id,
       powerType: idol.powerType,

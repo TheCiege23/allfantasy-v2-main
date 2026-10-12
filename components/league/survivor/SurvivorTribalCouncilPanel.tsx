@@ -37,7 +37,7 @@ type Access = {
 }
 
 /**
- * Survivor Tribal Council — vote window, private ballot, idol plays, TV-style reveal, and
+ * Survivor Elimination Council — vote window, private ballot, idol plays, TV-style reveal, and
  * commissioner open/close/tally/reveal/resolve controls. Every active button calls a real route;
  * unsupported powers are disabled with truthful copy. Mobile-safe (single column).
  */
@@ -97,7 +97,7 @@ export function SurvivorTribalCouncilPanel({
 
   return (
     <section className="space-y-3 border-t border-neutral-800 pt-4">
-      <h3 className="text-sm font-semibold text-white">Tribal Council</h3>
+      <h3 className="text-sm font-semibold text-white">Elimination Council</h3>
 
       {access.isCommissionerParticipating ? (
         <div className="rounded border border-amber-500/30 bg-amber-950/30 p-2 text-[11px] text-amber-100">
@@ -106,7 +106,7 @@ export function SurvivorTribalCouncilPanel({
       ) : null}
 
       {!council.active || !council.councilId ? (
-        <p className="text-xs text-neutral-400">No Tribal Council is currently open.</p>
+        <p className="text-xs text-neutral-400">No Elimination Council is currently open.</p>
       ) : (
         <>
           <SurvivorVoteWindowCard
@@ -119,7 +119,7 @@ export function SurvivorTribalCouncilPanel({
 
           {council.you.isSafeFromVote ? (
             <div className="rounded border border-emerald-600/40 bg-emerald-950/30 p-2 text-[11px] text-emerald-200">
-              You played Skip Tribal — you are safe from being voted out at this council.
+              You played Council Pass — you are safe from being voted out at this council.
             </div>
           ) : null}
 
@@ -150,10 +150,10 @@ export function SurvivorTribalCouncilPanel({
                   <button
                     type="button"
                     disabled={busy || !voteTarget}
-                    onClick={() => post('submit-vote', { targetUserId: voteTarget })}
+                    onClick={() => post('submit-vote', { message: `@Chimmy vote <@${voteTarget}>` })}
                     className="rounded bg-orange-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
                   >
-                    {council.you.hasVoted ? 'Change vote' : 'Submit vote'}
+                    {council.you.hasVoted ? 'Send changed vote to @Chimmy' : 'Send vote to @Chimmy'}
                   </button>
                 </div>
               ) : (
@@ -192,7 +192,7 @@ export function SurvivorTribalCouncilPanel({
       )}
 
       {/* Commissioner / host controls */}
-      {access.canPerformAdminAction ? (
+      {access.canPerformAdminAction && !access.isCommissionerParticipating ? (
         <div className="space-y-2 rounded border border-neutral-800 bg-neutral-950 p-3">
           <div className="text-xs font-medium uppercase tracking-wide text-neutral-400">Commissioner controls</div>
           {!council.active || !council.councilId ? (
@@ -206,7 +206,7 @@ export function SurvivorTribalCouncilPanel({
                 ))}
               </select>
               <button type="button" disabled={busy} onClick={() => post('open-tribal', attendingTribeId ? { attendingTribeId } : {})} className="rounded bg-orange-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-50">
-                Open Tribal Council
+                Open Elimination Council
               </button>
             </div>
           ) : (

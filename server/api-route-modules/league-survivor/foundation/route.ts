@@ -1,3 +1,4 @@
+import { readSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -22,7 +23,7 @@ import { seedSurvivorIdols } from '@/lib/survivor/survivorIdolProvisioning'
 import { postSurvivorIntroAnnouncement } from '@/lib/survivor/survivorAnnouncementService'
 import type { SurvivorTribeAssignmentMode } from '@/lib/survivor/normalizeSurvivorSettings'
 import { openTribalCouncil, closeVoteWindow, cancelCouncil, loadCouncilContext, getLatestCouncil } from '@/lib/survivor/survivorCouncilService'
-import { submitVote } from '@/lib/survivor/survivorVoteService'
+import { submitPrivateVoteCommand } from '@/lib/survivor/survivorPrivateVoteCommand'
 import { playVoteShield, playExtraVote, playSkipTribal } from '@/lib/survivor/survivorIdolResolutionService'
 import { tallyCouncil, revealCouncil } from '@/lib/survivor/survivorVoteTallyService'
 import { resolveElimination } from '@/lib/survivor/survivorEliminationService'
@@ -82,7 +83,7 @@ async function readLeagueSettings(leagueId: string): Promise<JsonRecord | null> 
   return asRecord(league.settings)
 }
 
-async function updateFoundationSettings(leagueId: string, body: JsonRecord) {
+async function updateFoundationSettings(leagueId: string, body: JsonRecord, userId: string) {
   const current = await readLeagueSettings(leagueId)
   if (!current) {
     return NextResponse.json({ error: 'League not found' }, { status: 404 })
@@ -90,8 +91,29 @@ async function updateFoundationSettings(leagueId: string, body: JsonRecord) {
   const incoming = asRecord(body.settings)
   const mergedInput = { ...current, ...incoming, ...body }
   const settings = normalizeSurvivorFoundationSettings(mergedInput)
+  const access = await resolveSurvivorAccessContext(leagueId, userId)
+  if (access?.isParticipant && access.isLeagueCommissioner && settings.commissionerParticipationMode !== 'participating_player') {
+    return NextResponse.json({ error: 'A manager cannot switch into host visibility while participating in this season.' }, { status: 409 })
+  }
+  const previousSettings = normalizeSurvivorFoundationSettings(current)
+  const exileChanged = settings.exileIslandEnabled !== previousSettings.exileIslandEnabled || settings.exileReturnWeek !== previousSettings.exileReturnWeek || settings.exileReturnTokens !== previousSettings.exileReturnTokens
+  if (exileChanged && await prisma.draftSession.findFirst({ where: { leagueId, status: { in: ['in_progress', 'paused', 'completed'] } }, select: { id: true } })) {
+    return NextResponse.json({ error: 'Exile rules are locked once the draft starts. Configure the return week and token minimum before drafting.' }, { status: 409 })
+  }
   const settingsPatch = buildSurvivorSettingsSnapshotPatch(settings as unknown as JsonRecord)
   const columnPatch = buildSurvivorLeagueColumnPatch(settings)
+  const savedPlan = readSurvivorFullSeasonPlan(current)
+  let planPatch: JsonRecord = {}
+  if (exileChanged && savedPlan) {
+    if (settings.exileIslandEnabled && (settings.exileReturnWeek <= savedPlan.startWeek || settings.exileReturnWeek >= savedPlan.endWeek - 1)) return NextResponse.json({ error: 'Return week must follow the opening week and leave an elimination before the finale.' }, { status: 422 })
+    const count = savedPlan.castSize - 3 + (settings.exileIslandEnabled ? 1 : 0)
+    const available = savedPlan.endWeek - savedPlan.startWeek - 1
+    if (count > available) return NextResponse.json({ error: 'This season has no room for an Exile return. Choose a later finale or smaller cast before drafting.' }, { status: 422 })
+    const eliminationWeeks = Array.from({ length: count }, (_, i) => savedPlan.startWeek + Math.ceil((i + 1) * available / count))
+    const { exileReturnWeek: _oldWeek, exileReturnSlots: _oldSlots, ...basePlan } = savedPlan
+    planPatch = { survivor_full_season_plan: { ...basePlan, ...(settings.exileIslandEnabled ? { exileReturnWeek: settings.exileReturnWeek, exileReturnSlots: 1 } : {}), eliminationWeeks,
+      noEliminationWeeks: Array.from({ length: savedPlan.endWeek - savedPlan.startWeek }, (_, i) => savedPlan.startWeek + i).filter(week => !eliminationWeeks.includes(week)) } }
+  }
 
   await prisma.league.update({
     where: { id: leagueId },
@@ -105,7 +127,7 @@ async function updateFoundationSettings(leagueId: string, body: JsonRecord) {
        * Plain cast, not the JSON round-trip used in writeAfProjectionSnapshots.ts — that one
        * exists for a nested bare `null`, which this object does not carry.
        */
-      settings: { ...current, ...settingsPatch } as Prisma.InputJsonValue,
+      settings: { ...current, ...settingsPatch, ...planPatch } as Prisma.InputJsonValue,
       ...columnPatch,
     },
   })
@@ -119,10 +141,10 @@ async function updateFoundationSettings(leagueId: string, body: JsonRecord) {
     mergePlayerCount: settings.mergeActivePlayerCount,
     selfVoteDisallowed: !settings.selfVotesAllowed,
     exileReturnEnabled: settings.exileIslandEnabled,
+    exileReturnTokens: settings.exileReturnTokens,
     idolCount: settings.defaultTeamCount + settings.tribeCount,
     tribalCouncilTimeUtc: settings.tribalCouncilTime,
-    minigameFrequency: 'none',
-    challengesSystemRun: false,
+
   })
 
   return NextResponse.json({ ok: true, settings, noFakeGameplayState: true })
@@ -196,9 +218,9 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
           : 'non_participating_host'
       return updateFoundationSettings(leagueId, {
         settings: { ...access.settings, commissionerParticipationMode: mode },
-      })
+      }, userId)
     }
-    return updateFoundationSettings(leagueId, body)
+    return updateFoundationSettings(leagueId, body, userId)
   }
 
   if (action === 'audit-log') {
@@ -263,6 +285,13 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
   }
   const seedInput = typeof body.seed === 'number' && Number.isFinite(body.seed) ? Math.floor(body.seed) : null
   const allowReassign = body.allowReassign === true
+
+  if (['seed-idols', 'assign-tribes', 'reset-phase-2-test-state'].includes(action) && !access.decisions.canPerformSensitiveHostAction) {
+    return NextResponse.json({ error: 'The system manages secret assignments for participating commissioners.' }, { status: 403 })
+  }
+  if (action === 'initialize-survivor' && !access.decisions.canPerformSensitiveHostAction && (seedInput !== null || allowReassign || body.mode != null || body.manualMapping != null || body.draftOrder != null)) {
+    return NextResponse.json({ error: 'Playing commissioners may retry system setup without overriding assignments.' }, { status: 403 })
+  }
 
   if (action === 'initialize-survivor') {
     const result = await initializeSurvivorPhase2(leagueId, {
@@ -329,7 +358,7 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
   ])
   const PHASE3_PARTICIPANT_ACTIONS = new Set(['submit-vote', 'play-idol', 'play-extra-vote', 'play-skip-tribal'])
 
-  if (PHASE3_ADMIN_ACTIONS.has(action) && !access.decisions.canPerformAdminAction) {
+  if (PHASE3_ADMIN_ACTIONS.has(action) && !access.decisions.canPerformSensitiveHostAction) {
     return NextResponse.json({ error: 'Commissioner access required' }, { status: 403 })
   }
   if (PHASE3_PARTICIPANT_ACTIONS.has(action) && !access.isParticipant) {
@@ -358,10 +387,7 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
   }
 
   if (action === 'submit-vote') {
-    if (!targetUserId) return NextResponse.json({ error: 'targetUserId required', action }, { status: 422 })
-    const result = await submitVote(leagueId, userId, targetUserId, {
-      allowLateOverride: body.allowLateOverride === true && access.decisions.canOverrideVoteDeadline,
-    })
+    const result = await submitPrivateVoteCommand(leagueId, userId, typeof body.message === 'string' ? body.message : '')
     if (!result.ok) return NextResponse.json({ ...result, action }, { status: result.status })
     return NextResponse.json({ ...result, action, noFakeGameplayState: true })
   }

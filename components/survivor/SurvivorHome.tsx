@@ -28,7 +28,7 @@ import { getSurvivorThemeById } from '@/lib/survivor/survivorVisuals'
 const VIEW_LABELS: Record<SurvivorView, string> = {
   'tribe-board': 'Tribe Board',
   challenge: 'Challenge Center',
-  council: 'Tribal Council',
+  council: 'Elimination Council',
   idols: 'Idols & Advantages',
   exile: 'Exile Island',
   'merge-jury': 'Merge & Jury',
@@ -131,7 +131,7 @@ export function SurvivorHome({ leagueId }: SurvivorHomeProps) {
             </p>
           )}
           <p className="mt-2 text-sm text-white/60">
-            Tribes · Challenges · Tribal Council · Idols · Exile · Merge & Jury
+            Tribes · Challenges · Elimination Council · Idols · Exile · Merge & Jury
           </p>
         </div>
       </header>

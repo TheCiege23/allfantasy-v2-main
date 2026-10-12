@@ -24,7 +24,7 @@ export async function resolveElimination(leagueId: string, councilId: string, ac
     const league = await tx.league.findUnique({ where: { id: leagueId }, select: { settings: true, platform: true } })
     if (!league || !isNativePlatform(league.platform)) return { ok: false, status: 409, code: 'not_native', error: 'Roster elimination is available only for leagues hosted on AllFantasy.' }
     const settings = normalizeSurvivorFoundationSettings(league.settings && typeof league.settings === 'object' ? league.settings as Record<string, unknown> : {})
-    let outcome = settings.eliminationOutcome
+    let outcome = settings.exileIslandEnabled ? 'exile_island' as const : 'removed_to_waivers' as const
     const previous = await tx.survivorAuditEntry.findFirst({ where: { leagueId, action: 'player_eliminated', relatedEntityId: councilId }, select: { id: true, data: true } })
     const previousData = previous?.data as Record<string, unknown> | null
     const resumeRelease = previousData?.pendingRelease === true && previousData?.outcome === 'removed_to_waivers'
@@ -42,7 +42,7 @@ export async function resolveElimination(leagueId: string, councilId: string, ac
     if (resumeRelease) outcome = 'removed_to_waivers'
     const now = new Date()
     let releasedPlayerCount = 0
-    if (outcome === 'removed_to_waivers') {
+    { // Every voted-out roster is released; Exile is a separate competition.
       const released = new Set(getRosterPlayerIds(roster.playerData))
       if (roster.redraftRosterId) {
         const actual = await tx.redraftRoster.findFirst({ where: { id: roster.redraftRosterId, leagueId }, select: { id: true, seasonId: true, season: { select: { season: true } } } })
@@ -52,7 +52,7 @@ export async function resolveElimination(leagueId: string, councilId: string, ac
         await tx.redraftRosterPlayer.updateMany({ where: { rosterId: actual.id, droppedAt: null }, data: { droppedAt: now, isLocked: false } })
         await tx.redraftRoster.update({ where: { id: actual.id }, data: { isEliminated: true } })
         await tx.redraftRosterMoveHistory.create({ data: { leagueId, rosterId: actual.id, seasonId: actual.seasonId, season: actual.season.season, week: council.week,
-          actorUserId: actorUserId ?? null, source: 'survivor:elimination', moveSummary: 'Roster released after Tribal Council', metadata: { councilId, releasedPlayerIds: [...released] } } })
+          actorUserId: actorUserId ?? null, source: 'survivor:elimination', moveSummary: 'Roster released after Elimination Council', metadata: { councilId, releasedPlayerIds: [...released] } } })
       }
       await tx.roster.update({ where: { id: roster.id }, data: { playerData: (Array.isArray(roster.playerData) ? [] : clearReleasedRosterData(roster.playerData)) as Prisma.InputJsonValue } })
       await tx.waiverClaim.updateMany({ where: { leagueId, rosterId: roster.id, status: 'pending' }, data: { status: 'cancelled' } })
@@ -61,9 +61,9 @@ export async function resolveElimination(leagueId: string, councilId: string, ac
         relatedEntityId: roster.id, relatedEntityType: 'roster', data: { councilId, releasedPlayerIds: [...released], reason: 'voted_out' }, isVisibleToCommissioner: true, isVisibleToPublic: true } })
     }
     const newState = outcome === 'exile_island' ? 'exile' : 'eliminated'
-    await tx.survivorPlayer.update({ where: { id: player.id }, data: { playerState: newState, eliminatedWeek: council.week, canAccessTribeChat: false, canAccessMergeChat: false } })
+    await tx.survivorPlayer.update({ where: { id: player.id }, data: { playerState: newState, eliminatedWeek: council.week, canAccessTribeChat: false, canAccessMergeChat: false, canAccessExileChat: outcome === 'exile_island', exileReturnEligible: outcome === 'exile_island' && council.week < settings.exileReturnWeek } })
     let removedFromChats = 0
-    const channels = await tx.survivorChatChannel.findMany({ where: { leagueId, channelType: { in: ['tribe', 'merge'] } }, select: { id: true, memberUserIds: true } })
+    const channels = await tx.survivorChatChannel.findMany({ where: { leagueId, channelType: { in: ['tribe', 'merge', 'alliance'] } }, select: { id: true, memberUserIds: true } })
     for (const ch of channels) if (ch.memberUserIds.includes(userId)) {
       await tx.survivorChatChannel.update({ where: { id: ch.id }, data: { memberUserIds: ch.memberUserIds.filter(u => u !== userId) } }); removedFromChats++
     }
@@ -74,9 +74,20 @@ export async function resolveElimination(leagueId: string, councilId: string, ac
       update: { activePlayerCount: active, exilePlayerCount: exiled, activeCouncilId: null, needsTribalLock: false, tribalCompleteAt: now } })
     if (resumeRelease && previous) await tx.survivorAuditEntry.update({ where: { id: previous.id }, data: { data: { ...previousData, pendingRelease: false, releasedPlayerCount } as Prisma.InputJsonValue } })
     await tx.survivorAuditEntry.create({ data: { leagueId, week: council.week, category: 'elimination', action: resumeRelease ? 'elimination_release_recovered' : 'player_eliminated', actorUserId: actorUserId ?? null, targetUserId: userId,
-      relatedEntityId: councilId, relatedEntityType: 'council', data: { outcome, newState, removedFromChats, releasedPlayerCount, pendingRelease: false, pendingExile: outcome === 'exile_island' }, isVisibleToCommissioner: true, isVisibleToPublic: true } })
-    if (outcome === 'exile_island') await tx.survivorAuditEntry.create({ data: { leagueId, week: council.week, category: 'exile', action: 'exile_pending', targetUserId: userId,
-      relatedEntityId: roster.id, relatedEntityType: 'roster', data: { note: 'Exile gameplay remains pending; roster retained.' }, isVisibleToCommissioner: true, isVisibleToPublic: true } })
-    return { ok: true, alreadyResolved: false, outcome, eliminatedUserId: userId, removedFromChats, pendingRelease: false, pendingExile: outcome === 'exile_island', releasedPlayerCount }
+      relatedEntityId: councilId, relatedEntityType: 'council', data: { outcome, newState, removedFromChats, releasedPlayerCount, pendingRelease: false, pendingExile: false }, isVisibleToCommissioner: true, isVisibleToPublic: true } })
+    if (outcome === 'exile_island') {
+      let channel = await tx.survivorChatChannel.findFirst({ where: { leagueId, channelType: 'exile', isArchived: false }, select: { id: true, memberUserIds: true } })
+      if (!channel) channel = await tx.survivorChatChannel.create({ data: { leagueId, channelType: 'exile', name: 'Exile Island', memberUserIds: [userId] }, select: { id: true, memberUserIds: true } })
+      else if (!channel.memberUserIds.includes(userId)) await tx.survivorChatChannel.update({ where: { id: channel.id }, data: { memberUserIds: { push: userId } } })
+      await tx.exileIsland.upsert({ where: { leagueId }, create: { leagueId, isActive: true, currentWeek: council.week, chatChannelId: channel.id }, update: { isActive: true, chatChannelId: channel.id } })
+      // The linked competition's roster starts empty; no main-island players are duplicated.
+      const link = await tx.survivorExileLeague.findUnique({ where: { mainLeagueId: leagueId } })
+      if (link && !await tx.roster.findFirst({ where: { leagueId: link.exileLeagueId, platformUserId: userId }, select: { id: true } })) {
+        await tx.roster.create({ data: { leagueId: link.exileLeagueId, platformUserId: userId, playerData: {} } })
+      }
+      await tx.survivorAuditEntry.create({ data: { leagueId, week: council.week, category: 'exile', action: 'exile_enrolled', targetUserId: userId,
+        relatedEntityId: roster.id, relatedEntityType: 'roster', data: { returnWeek: settings.exileReturnWeek, tokensRequired: settings.exileReturnTokens }, isVisibleToCommissioner: true, isVisibleToPublic: true } })
+    }
+    return { ok: true, alreadyResolved: false, outcome, eliminatedUserId: userId, removedFromChats, pendingRelease: false, pendingExile: false, releasedPlayerCount }
   }, { timeout: 30_000, maxWait: 10_000 })
 }

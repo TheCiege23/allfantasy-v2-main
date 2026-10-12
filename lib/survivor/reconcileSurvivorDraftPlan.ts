@@ -14,7 +14,7 @@ export async function reconcileSurvivorDraftPlan(db: Prisma.TransactionClient, l
   if (settings.survivor_calendar_draft_id === sessionId) return
   const draft = await db.draftSession.findFirst({ where: { id: sessionId, leagueId, status: 'completed', sessionKind: { not: 'mock' }, sleeperDraftId: null }, select: { completedAt: true } })
   if (!draft?.completedAt) throw new Error('Record the native draft completion time before starting this Survivor season.')
-  const plan = buildSurvivorFullSeasonPlan({ sport: saved.sport, season: saved.season, castSize: saved.castSize, endWeek: saved.endWeek, now: draft.completedAt })
+  const plan = buildSurvivorFullSeasonPlan({ sport: saved.sport, season: saved.season, castSize: saved.castSize, endWeek: saved.endWeek, now: draft.completedAt, exileEnabled: saved.exileReturnSlots === 1, exileReturnWeek: saved.exileReturnWeek })
   await db.league.update({ where: { id: leagueId }, data: { settings: { ...settings, survivor_full_season_plan: plan, survivor_calendar_draft_id: sessionId } as unknown as Prisma.InputJsonValue } })
   await db.survivorLeagueConfig.updateMany({ where: { leagueId }, data: { regularSeasonEndWeek: plan.endWeek } })
   // A season may have been created by a pre-draft read. Never shift a played week.

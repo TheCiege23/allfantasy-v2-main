@@ -12,7 +12,7 @@ export interface SurvivorTribalCouncilViewProps {
 }
 
 /**
- * Tribal Council View: countdown, voting instructions, @Chimmy usage examples, immunity markers, scroll reveal history, vote result recap.
+ * Elimination Council View: countdown, voting instructions, @Chimmy usage examples, immunity markers, scroll reveal history, vote result recap.
  */
 export function SurvivorTribalCouncilView({ summary, names }: SurvivorTribalCouncilViewProps) {
   const { council, votedOutHistory, currentWeek } = summary
@@ -26,7 +26,7 @@ export function SurvivorTribalCouncilView({ summary, names }: SurvivorTribalCoun
       <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-6">
         <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-white">
           <Clock className="h-5 w-5 text-amber-400" />
-          Tribal Council · Week {currentWeek}
+          Elimination Council · Week {currentWeek}
         </h2>
         {!council ? (
           <p className="text-sm text-white/50">No council scheduled for this week.</p>
