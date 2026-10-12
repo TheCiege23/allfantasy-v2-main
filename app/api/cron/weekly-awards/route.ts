@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { getLeagueH2H } from '@/lib/league-history/sleeperH2HService'
+import { AGG_PREFIX as H2H_AGG_PREFIX, getLeagueH2H } from '@/lib/league-history/sleeperH2HService'
 import {
   buildWeeklyRecap,
   postWeeklyRecapAsChimmy,
@@ -19,6 +19,8 @@ import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 import { weeklyRecapAllowed } from '@/lib/core-app/commissioner/recipes'
 import { notifyWeeklyStories } from '@/lib/core-app/weeklyStoryNotify'
 import { postNativeWeeklyRecap } from '@/lib/league-chat/nativeWeeklyRecap'
+import { planRecapSweep } from '@/lib/league-chat/weeklyRecapSweep'
+import { notifyWeeklyRecaps, type PostedRecap } from '@/lib/league-chat/weeklyRecapNotify'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -41,11 +43,18 @@ export const maxDuration = 300
  * league's AllFantasy members (owner + claimed teams). We cannot email
  * leaguemates who aren't on AllFantasy — the chat post covers the league.
  *
- * Cron: Tuesdays (see vercel.json). Manual: a signed-in league member may pass
+ * Cron: Tuesdays 14:00, 15:00 and 16:00 UTC (cron-schedule.json) — three fires so the whole sweep
+ * fits; a league already recapped that week costs nothing on a later fire. Manual: a signed-in league member may pass
  * ?leagueId= to post their league's recap now (still deduped).
  */
 
 const MAX_RECAP_EMAILS = 25
+
+/**
+ * Never-synced leagues one fire may take (see planRecapSweep): a first head-to-head sync is one Sleeper
+ * call per week of every past season, and a rate-limited one is cached with seasons missing.
+ */
+const COLD_LEAGUES_PER_FIRE = 40
 
 const SLEEPER_BASE = 'https://api.sleeper.app/v1' // db-first-exception: platform feed for the week's results
 
@@ -156,7 +165,7 @@ async function postRecapForLeague(
     }
   }
 
-  return { posted: true, emailsSent }
+  return { posted: true, emailsSent, season: awards.season, week: awards.week }
 }
 
 export async function GET(req: NextRequest) {
@@ -174,16 +183,60 @@ export async function GET(req: NextRequest) {
       async () => {
         const startedAt = Date.now()
         const TIME_BUDGET_MS = 240_000
-        const leagues = await prisma.league.findMany({
+        /*
+         * EVERY Sleeper league, not the first hundred. The old `take: 100` had no order, so Postgres
+         * returned about the same hundred each week: on 2026-10-12, 421 of 528 current-season Sleeper
+         * leagues had never had a recap. planRecapSweep drops the ones already recapped this week (so a
+         * later fire costs nothing for them), caps never-synced leagues per fire, and puts leagues with
+         * more AllFantasy members first. The schedule fires three times on Tuesday to finish the walk.
+         */
+        const allLeagues = await prisma.league.findMany({
           where: { platform: 'sleeper', platformLeagueId: { not: '' } },
           select: { id: true, name: true, platformLeagueId: true, userId: true, settings: true },
-          take: 100,
         })
+        const leagueIds = allLeagues.map((l) => l.id)
+        const [recappedRows, warmRows, claimedRows] = await Promise.all([
+          prisma.leagueChatMessage
+            .findMany({
+              where: {
+                leagueId: { in: leagueIds },
+                createdAt: { gte: new Date(startedAt - 6 * 24 * 60 * 60 * 1000) },
+                metadata: { path: ['chimmyMoment', 'kind'], equals: 'weekly_awards' },
+              },
+              select: { leagueId: true },
+              distinct: ['leagueId'],
+            })
+            .catch(() => [] as Array<{ leagueId: string }>),
+          prisma.sportsDataCache
+            .findMany({
+              where: { cacheKey: { in: allLeagues.map((l) => `${H2H_AGG_PREFIX}${l.platformLeagueId}`) } },
+              select: { cacheKey: true },
+            })
+            .catch(() => [] as Array<{ cacheKey: string }>),
+          prisma.leagueTeam
+            .groupBy({
+              by: ['leagueId'],
+              where: { leagueId: { in: leagueIds }, claimedByUserId: { not: null } },
+              _count: { _all: true },
+            })
+            .catch(() => [] as Array<{ leagueId: string; _count: { _all: number } }>),
+        ])
+        const plan = planRecapSweep({
+          leagues: allLeagues,
+          recappedThisWeek: new Set(recappedRows.map((r) => r.leagueId)),
+          warmSleeperIds: new Set(warmRows.map((r) => r.cacheKey.slice(H2H_AGG_PREFIX.length))),
+          // The owner plus claimed teams; an owner who also claimed a team is counted twice, which only
+          // nudges the order.
+          memberCounts: new Map(claimedRows.map((r) => [r.leagueId, 1 + r._count._all])),
+          coldLimit: COLD_LEAGUES_PER_FIRE,
+        })
+        const leagues = plan.order
         let posted = 0
         let emailsSent = 0
         let skippedForTime = 0
         let optedOut = 0
         const errors: string[] = []
+        const postedRecaps: PostedRecap[] = []
         for (const l of leagues) {
           if (!l.platformLeagueId || !l.userId) continue
           /*
@@ -206,6 +259,9 @@ export async function GET(req: NextRequest) {
             if (r.posted) {
               posted += 1
               emailsSent += r.emailsSent
+              if ('week' in r && r.season && typeof r.week === 'number') {
+                postedRecaps.push({ leagueId: l.id, leagueName: l.name ?? 'League', ownerUserId: l.userId, season: r.season, week: r.week })
+              }
             }
           } catch {
             errors.push(l.id)
@@ -242,11 +298,26 @@ export async function GET(req: NextRequest) {
          * with 30s of budget left, AFTER every league's recap, so it can never cost a recap its
          * slot; a skipped week is caught by a manual re-run, which its per-user dedupe makes safe.
          */
+        /*
+         * "Your recap is ready — share it", one per person per week. Sent before the story push so the
+         * story can skip a second push for the same people (weeklyStoryNotify.ts).
+         */
+        const recapPush = await notifyWeeklyRecaps(postedRecaps)
         const stories =
           Date.now() - startedAt < TIME_BUDGET_MS - 30_000
-            ? await notifyWeeklyStories()
+            ? await notifyWeeklyStories(new Date(), recapPush.notified)
             : { targeted: 0, sent: 0, skipped: 0, deferred: true as const }
-        return { leagues: leagues.length + nativeLeagues.length, posted: posted + nativePosted, emailsSent, skippedForTime, optedOut, errors, stories }
+        return {
+          leagues: leagues.length + nativeLeagues.length,
+          posted: posted + nativePosted,
+          emailsSent,
+          skippedForTime,
+          optedOut,
+          errors,
+          stories,
+          sweep: { sleeperLeagues: allLeagues.length, alreadyDone: plan.alreadyDone, coldDeferred: plan.coldDeferred },
+          recapPush: { sent: recapPush.sent, skipped: recapPush.skipped },
+        }
       },
       (r) => ({
         rowsRead: r.leagues,
@@ -254,7 +325,7 @@ export async function GET(req: NextRequest) {
         rowsSkipped: r.skippedForTime,
         errors: r.errors.map((id) => `league ${id}`),
         warnings: r.skippedForTime > 0 ? [`time budget hit — ${r.skippedForTime} league(s) deferred to the next fire`] : [],
-        metadata: { emailsSent: r.emailsSent, optedOut: r.optedOut, weeklyStoryPush: r.stories },
+        metadata: { emailsSent: r.emailsSent, optedOut: r.optedOut, weeklyStoryPush: r.stories, sweep: r.sweep, recapPush: r.recapPush },
       }),
     )
     return NextResponse.json({

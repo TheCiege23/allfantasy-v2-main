@@ -10,6 +10,8 @@ import { parseAtMentions } from '@/lib/chat-core/mentionPrivacyFilter'
 import { notifyMentions, leagueMentionRoomId } from '@/lib/chat-core/notifyMentions'
 import { CHIMMY_DISPLAY_NAME, chimmyMomentLabelOf, isChimmyAuthored } from '@/lib/league-chat/chimmyIdentity'
 import { MessageModerationMenu } from '@/components/moderation/MessageModerationMenu'
+import { RecapShareButton } from '@/components/core-app/comms/RecapShareButton'
+import { isWeeklyRecap } from '@/lib/league-chat/recapShare'
 
 export type LeagueChatMessage = {
   id: string
@@ -671,6 +673,14 @@ export function LeagueChatInPanel({
                       <div className="mt-1 max-w-[92%] whitespace-pre-wrap rounded-[18px] rounded-tl-md bg-[#0f1a2e] px-3 py-2 text-[15px] leading-[1.42] text-white ring-1 ring-inset ring-cyan-400/25">
                         {message.text}
                       </div>
+                      {isWeeklyRecap(meta) ? (
+                        <RecapShareButton
+                          leagueId={selectedLeague.id}
+                          leagueName={selectedLeague.name}
+                          recap={message.text}
+                          className="mt-1.5 inline-flex min-h-[36px] items-center gap-1.5 rounded-full bg-[#22d3ee] px-3.5 text-[13px] font-semibold text-[#04050c] transition hover:brightness-110 disabled:opacity-60"
+                        />
+                      ) : null}
                     </div>
                   </div>
                 )

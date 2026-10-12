@@ -9,6 +9,8 @@ import { chatFailure } from './chatFailure'
 import type { ReportReason } from '@/lib/moderation/shared'
 import { useTypingSignal } from './useTypingSignal'
 import RichMessage, { hasRichContent } from './RichMessage'
+import { RecapShareButton } from './RecapShareButton'
+import { isWeeklyRecap } from '@/lib/league-chat/recapShare'
 import { PresenceStrip, type PresentViewer } from './PresenceStrip'
 import { PinnedBoard } from './PinnedBoard'
 import { DraftPollView, draftPollVoteUrl, readDraftPoll } from './draftPoll'
@@ -878,9 +880,25 @@ export function LeagueConversation({
             m.messageType === 'broadcast' ? 'Commissioner' : isDraftRoomSource(sourceById.get(m.id)) ? 'Draft room' : null
           }
           hasRichFor={(m) =>
-            hasRichContent(m.metadata, m.messageType, m.body) || readDraftPoll(m.metadata, m.messageType, viewer) != null
+            hasRichContent(m.metadata, m.messageType, m.body) ||
+            readDraftPoll(m.metadata, m.messageType, viewer) != null ||
+            isWeeklyRecap(m.metadata)
           }
           renderRich={(m) => {
+            /*
+             * Chimmy's weekly recap carries a way OUT: most leagues have one AllFantasy member, so the
+             * recap is shared into the league's own group chat with the invite link (recapShare.ts).
+             */
+            if (isWeeklyRecap(m.metadata)) {
+              return (
+                <>
+                  {hasRichContent(m.metadata, m.messageType, m.body) ? (
+                    <RichMessage metadata={m.metadata} messageType={m.messageType} body={m.body} viewerUserId={viewer} />
+                  ) : null}
+                  <RecapShareButton leagueId={leagueId} leagueName={leagueName} recap={m.body} />
+                </>
+              )
+            }
             const older = readDraftPoll(m.metadata, m.messageType, viewer)
             if (older) {
               return (

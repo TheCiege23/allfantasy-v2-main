@@ -3863,3 +3863,31 @@ html[data-mode='light'] .af-cm .af-chat-composer [class*='border-white']:not([cl
   30% { transform: translateY(-3px); opacity: 1; }
 }
 html[data-mode='light'] .af-cm-typing-dots { background: var(--surface); box-shadow: inset 0 0 0 1px var(--line2); }
+
+/*
+ * ══ 2026-10-12 weekly recap: share with your league ══
+ * Under Chimmy's weekly recap. Most leagues have one AllFantasy member, so the recap's real audience is
+ * in the league's own group chat — this pill sends it there (RecapShareButton.tsx).
+ */
+.af-cm-recap-share {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  margin-top: 8px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.af-cm-recap-share:hover:not(:disabled) { filter: brightness(1.08); }
+.af-cm-recap-share:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.af-cm-recap-share:disabled { opacity: 0.6; cursor: default; }
+.af-cm-recap-share[data-state='copied'],
+.af-cm-recap-share[data-state='shared'] { background: var(--accent-soft); color: var(--text); box-shadow: inset 0 0 0 1px var(--accent-line); }
+.af-cm-recap-share[data-state='failed'] { background: transparent; color: var(--text); box-shadow: inset 0 0 0 1px var(--line2); }
