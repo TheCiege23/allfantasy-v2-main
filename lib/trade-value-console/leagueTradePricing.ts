@@ -37,7 +37,7 @@ import {
   projectPickSlots,
   type PickSlotProjection,
 } from '@/lib/trade-value/pickSlotProjection'
-import { regularSeasonWeeks } from '@/lib/core-app/seasonTimeline'
+import { playoffSpots, regularSeasonWeeks } from '@/lib/core-app/seasonTimeline'
 
 /**
  * How a trade is PRICED for one league — the chart it is priced on and the pricer that reads it.
@@ -468,6 +468,7 @@ export async function loadPickSlotProjection(args: {
     teams,
     seasonWeeks,
     gamesPerWeek: gamesPerWeekFrom(Math.max(0, ...teams.map((t) => t.wins + t.losses + t.ties)), weeksDone, seasonWeeks),
+    playoffTeams: playoffSpots(args.settings),
     season: args.season,
   })
 }

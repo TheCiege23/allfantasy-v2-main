@@ -13,9 +13,13 @@
  *     Each team then wins each remaining game at its ALL-PLAY RATE among those drawn levels — the share
  *     of the league it outscores — pulled halfway to .500 for weekly luck: a team's head-to-head record
  *     follows its scoring, but loosely. Ties count half a win.
- *   - The draft order is REVERSE STANDINGS: fewest wins picks first, points scored breaking ties (the team
- *     that scored less picks earlier). Leagues that seed playoff teams by playoff finish, run a lottery or
- *     order by max points are not modelled; the basis says so.
+ *   - The draft order is the one most dynasty leagues use, MEASURED on 275 real Sleeper rookie drafts
+ *     (2026-10-11): teams that MISS the playoffs pick in reverse standings — fewest wins first, less
+ *     scoring first on a tie — and PLAYOFF teams pick by their playoff finish, the champion last. The
+ *     playoffs are played out too: seeds by record, byes to the top seeds, every game decided by the two
+ *     teams' rates (log5), and teams out in the same round placed by their own games (the 3rd- and
+ *     5th-place games). That rule puts 86.9% of teams in their real third; reverse standings alone, 79.4%.
+ *     Lotteries and manual orders are not modelled; the basis says so.
  *   - Early / Mid / Late are the draft's thirds, as FantasyCalc's tiers are.
  *
  * The answer is the probability the pick lands in each third — never one guessed slot — so a pick in week 2
@@ -70,6 +74,23 @@ export const PICK_SLOT_SIMULATIONS = 4000
  */
 export const WEEKLY_SCORE_CV = 0.4
 
+/*
+ * ── WHICH RULE THE LEAGUE USES IS ITSELF UNKNOWN ───────────────────────────────────────────────────
+ * Scored against 275 REAL Sleeper rookie drafts (2026-10-11), the model said "certain" too often: with the
+ * season over, picks it called 100% landed in that third 85% of the time. About one draft in eight follows
+ * neither rule — plain reverse standings, a manual or random order. So the odds are blended with an even
+ * split by `RULE_UNCERTAINTY × (share of the regular season played)³`:
+ *
+ *   end of season (275 drafts)   playoffs alone: log loss 0.917   + this blend: 0.591  (reverse standings 1.440)
+ *   mid-season (40 leagues)      no blend 0.696 · linear 0.715 · squared 0.707 · CUBED 0.702
+ *
+ * Cubed, because early in the season the games still to play already carry the uncertainty — every blend
+ * cost a little there — and the blend matters where the model would otherwise be sure: from the end of the
+ * regular season to the rookie draft, which is when most picks change hands. The mid-season sample is the 40
+ * leagues whose weekly data and draft agree on team ids, which leans toward stable, rule-following leagues.
+ */
+export const RULE_UNCERTAINTY = 0.2
+
 /** mulberry32: a small seeded generator, so a grade is the same every time it is computed. */
 function seeded(seed: number): () => number {
   let a = seed >>> 0
@@ -122,6 +143,58 @@ export function gamesPerWeekFrom(maxPlayed: number, weeksDone: number | null, se
   return maxPlayed > seasonWeeks ? 2 : 1
 }
 
+/** One game between two teams, from each one's rate against the field (log5). */
+function beats(a: number, b: number): number {
+  const x = a * (1 - b)
+  const y = b * (1 - a)
+  return x + y > 0 ? x / (x + y) : 0.5
+}
+
+/** Seed order of a standard bracket of `size` (a power of 2): 1 v size, then 4 v 5 … — byes are the seeds past the field. */
+function bracketSlots(size: number): number[] {
+  let order = [1]
+  while (order.length < size) {
+    const m = order.length * 2
+    order = order.flatMap((s) => [s, m + 1 - s])
+  }
+  return order
+}
+
+/**
+ * Every team's finishing place, best first, for teams listed best seed first: a knockout with byes to the
+ * top seeds, then the same played again among the teams out in each round — the 3rd-place game, the
+ * 5th-place game — so every place is decided by games, as Sleeper's winners bracket does. Not modelled:
+ * re-seeding after a round (`playoff_seed_type`), division winners' seeds.
+ */
+export function playBracket(seeds: readonly string[], rates: ReadonlyMap<string, number>, rand: () => number): string[] {
+  if (seeds.length <= 1) return [...seeds]
+  let size = 1
+  while (size < seeds.length) size *= 2
+  let round: Array<string | null> = bracketSlots(size).map((s) => seeds[s - 1] ?? null)
+  const outByRound: string[][] = []
+  while (round.length > 1) {
+    const next: Array<string | null> = []
+    const out: string[] = []
+    for (let i = 0; i < round.length; i += 2) {
+      const a = round[i] ?? null
+      const b = round[i + 1] ?? null
+      if (!a || !b) { next.push(a ?? b); continue }
+      const aWins = rand() < beats(rates.get(a) ?? 0.5, rates.get(b) ?? 0.5)
+      next.push(aWins ? a : b)
+      out.push(aWins ? b : a)
+    }
+    outByRound.push(out)
+    round = next
+  }
+  const seedOf = new Map(seeds.map((id, i) => [id, i]))
+  const places = [round[0]!]
+  for (let r = outByRound.length - 1; r >= 0; r--) {
+    const group = [...outByRound[r]!].sort((x, y) => seedOf.get(x)! - seedOf.get(y)!)
+    places.push(...playBracket(group, rates, rand))
+  }
+  return places
+}
+
 function tierOf(slotIndex: number, teams: number): PickTier {
   const third = teams / 3
   return slotIndex < third ? 'early' : slotIndex < 2 * third ? 'mid' : 'late'
@@ -145,9 +218,15 @@ export function projectPickSlots(args: {
   season: number
   simulations?: number
   seed?: number
+  /**
+   * Teams that make the playoffs (the league's `playoff_teams`). Playoff teams draft by playoff finish;
+   * without it, or with every team in, the order is reverse standings for all.
+   */
+  playoffTeams?: number | null
   /** Overrides for calibration; production uses the defaults. */
   strengthCv?: number
   shrink?: number
+  ruleUncertainty?: number
 }): PickSlotProjection | null {
   const teams = args.teams.filter((t) => t.id)
   const n = teams.length
@@ -162,7 +241,10 @@ export function projectPickSlots(args: {
   const scored = ppw.filter((x) => x.n > 0)
   const leagueAvg = scored.length > 0 ? scored.reduce((s, x) => s + x.v, 0) / scored.length : 0
   const counts = new Map<string, TierOdds>(teams.map((t) => [t.id, { early: 0, mid: 0, late: 0 }]))
-  const sims = weeksLeft === 0 ? 1 : Math.max(1, Math.floor(args.simulations ?? PICK_SLOT_SIMULATIONS))
+  const P = Math.floor(args.playoffTeams ?? 0)
+  const playoffs = P >= 2 && P < n
+  // A finished regular season is certain only when no playoffs decide the order.
+  const sims = weeksLeft === 0 && !playoffs ? 1 : Math.max(1, Math.floor(args.simulations ?? PICK_SLOT_SIMULATIONS))
   const rand = seeded(args.seed ?? 20261011)
   for (let s = 0; s < sims; s++) {
     // This season's draw of every team's true level: its average, give or take what so few weeks can tell.
@@ -181,10 +263,19 @@ export function projectPickSlots(args: {
     })
     // Fewest wins picks first; less scoring picks earlier on a tie.
     final.sort((a, b) => a.w - b.w || a.pf - b.pf)
-    final.forEach((f, i) => { counts.get(f.id)![tierOf(i, n)] += 1 })
+    let order = final.map((f) => f.id)
+    if (playoffs) {
+      // The best P by record are seeded 1..P; they pick after every other team, champion last.
+      const seeds = order.slice(n - P).reverse()
+      order = [...order.slice(0, n - P), ...playBracket(seeds, odds, rand).reverse()]
+    }
+    order.forEach((id, i) => { counts.get(id)![tierOf(i, n)] += 1 })
   }
+  const seasonDone = args.seasonWeeks > 0 ? Math.min(1, Math.max(0, (args.seasonWeeks - weeksLeft) / args.seasonWeeks)) : 0
+  const e = (args.ruleUncertainty ?? RULE_UNCERTAINTY) * seasonDone ** 3
+  const blend = (x: number) => (1 - e) * (x / sims) + e / 3
   const oddsByTeam = new Map<string, TierOdds>()
-  for (const [id, c] of counts) oddsByTeam.set(id, { early: c.early / sims, mid: c.mid / sims, late: c.late / sims })
+  for (const [id, c] of counts) oddsByTeam.set(id, { early: blend(c.early), mid: blend(c.mid), late: blend(c.late) })
   return { draftYear: args.season + 1, oddsByTeam, weeksLeft }
 }
 
