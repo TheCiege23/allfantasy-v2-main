@@ -19,6 +19,9 @@ vi.mock('@/lib/bestball/nativeTournament', () => ({ ensureNativeTournamentEntrie
 vi.mock('@/lib/guillotine/ensureGuillotineSeason', () => ({ ensureGuillotineSeason: m.ensureGuillotineSeason }))
 vi.mock('@/lib/zombie/activateNativeZombieLeague', () => ({ ensureZombieSeasonActivated: m.activate }))
 vi.mock('@/lib/post-draft-manager-ranking', () => ({ computeAndPersistDraftRankings: m.rankings }))
+vi.mock('@/lib/survivor/SurvivorDraftBootstrapService', () => ({
+  runSurvivorPostDraftBootstrap: vi.fn().mockResolvedValue({ isSurvivor: false, warnings: [] }),
+}))
 
 import { runPostDraftFinalizationArtifacts } from '@/lib/live-draft-engine/postDraftFinalizeArtifacts'
 
