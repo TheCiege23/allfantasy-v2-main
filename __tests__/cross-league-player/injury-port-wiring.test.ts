@@ -226,4 +226,28 @@ describe('injury read port wiring (Slice 18)', () => {
       expect(result.items[0].injury?.status, designation).toBe(expected)
     }
   })
+
+  it('feed absence words outside the RI vocabulary (ESPN IL lists, PUP, NFI, suspensions) are not "unknown"', async () => {
+    for (const [designation, expected] of [
+      ['60-day IL', 'ir'],
+      ['15-day IL', 'ir'],
+      ['10-day IL', 'ir'],
+      ['7-day IL', 'ir'],
+      ['I.L.', 'ir'],
+      ['PUP', 'ir'],
+      ['NFI', 'ir'],
+      ['Injured Reserve', 'ir'],
+      ['injury reserve', 'ir'],
+      ['Reserve-Ret', 'ir'],
+      ['Susp', 'suspended'],
+      ['Suspended (4 games)', 'suspended'],
+      // Not a designation the shared rule reads as absence — still no claim.
+      ['Elbow', 'unknown'],
+      ['Paternity', 'unknown'],
+    ] as const) {
+      resolveInjuryFactsMock.mockResolvedValue(riResolution([{ name: 'Player p1', status: designation }]))
+      const result = await assemble()
+      expect(result.items[0].injury?.status, designation).toBe(expected)
+    }
+  })
 })
