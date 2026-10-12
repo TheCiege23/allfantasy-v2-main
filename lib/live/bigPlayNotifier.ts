@@ -6,6 +6,7 @@ import { headlineFor, PLAY_FEED_SPORT } from '@/lib/live/playFeedPresentation'
 import { headshotUrl } from '@/lib/media-url'
 import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidation'
 import { SCORING_SEASON_STATUSES } from '@/lib/redraft/seasonStatus'
+import { leagueIdentityColumns, type LeagueIdentityColumn } from '@/lib/player-identity/externalIdNamespace'
 
 /**
  * Turn live play events into notifications — but only for the managers who
@@ -102,10 +103,22 @@ function scopeSport(sport: string | null | undefined): string | null {
   return value || null
 }
 
+/** Every `PlayerIdentityMap` column a league's roster ids can be written in (`leagueIdentityColumns`). */
+const LEAGUE_IDENTITY_COLUMNS: readonly LeagueIdentityColumn[] = [
+  'sleeperId', 'espnId', 'fantraxId', 'mflId', 'fleaflickerId', 'rollingInsightsId',
+]
+
 /**
- * Resolve the exact imported leagues in which each player is starting. The
- * identity crosswalk covers every supported provider; Yahoo imports use the
- * normalized Sleeper id until the schema gains a Yahoo-specific identity.
+ * Resolve the exact imported leagues in which each player is starting.
+ *
+ * 🛑 EACH ROSTER IS MATCHED ONLY ON ITS OWN LEAGUE'S ID COLUMN (`leagueIdentityColumns`). This used
+ * to pool sleeperId, espnId, fantraxId, mflId and fleaflickerId into one map and match it against
+ * every roster in the sport, so a Fleaflicker or ESPN starter whose number happened to be the
+ * play's player's SLEEPER id was told "your starter scored" about a stranger. Measured on
+ * production 2026-10-12: 23 of 120 Fleaflicker and 6 of 907 ESPN NFL starter slots hold an NFL
+ * Sleeper id that is not their own player, and 20 distinct Sleeper/native starter ids are some other
+ * NFL player's ESPN/Fleaflicker/MFL/Fantrax id. Yahoo (and any platform with no column) resolves
+ * nobody — `rosterIdSpace` treats its ids as foreign; production holds no Yahoo rosters today.
  */
 export async function starterImpactsByPlayerId(
   playerIds: string[],
@@ -129,24 +142,26 @@ export async function starterImpactsByPlayerId(
     },
   }).catch(() => [])
 
-  const riByCandidate = new Map<string, string>()
+  // One map PER COLUMN: the same number in two columns is two different people.
+  const riByColumn = new Map<LeagueIdentityColumn, Map<string, string>>()
+  const allCandidates = new Set<string>()
   for (const identity of identities) {
     if (!identity.rollingInsightsId) continue
     // Belt and braces for the `where`: another sport's row never contributes an id.
     if ((identity.sport ?? '').toUpperCase() !== sport) continue
-    for (const candidate of [
-      identity.sleeperId,
-      identity.espnId,
-      identity.fantraxId,
-      identity.mflId,
-      identity.fleaflickerId,
-    ]) {
-      if (candidate) riByCandidate.set(String(candidate), identity.rollingInsightsId)
+    for (const column of LEAGUE_IDENTITY_COLUMNS) {
+      const value = identity[column]
+      if (!value) continue
+      const byId = riByColumn.get(column) ?? new Map<string, string>()
+      byId.set(String(value), identity.rollingInsightsId)
+      riByColumn.set(column, byId)
+      allCandidates.add(String(value))
     }
   }
-  if (riByCandidate.size === 0) return out
+  if (allCandidates.size === 0) return out
 
-  const candidates = [...riByCandidate.keys()]
+  // The query may over-fetch (any column's id); the per-platform match below is what decides.
+  const candidates = [...allCandidates]
   const rosters = await prisma.roster.findMany({
     where: {
       // The same numeric id names a different player in another sport's league.
@@ -201,9 +216,16 @@ export async function starterImpactsByPlayerId(
         : null)
     if (!userId) continue
 
-    for (const candidate of starters) {
-      const riId = riByCandidate.get(candidate)
-      if (!riId) continue
+    const matches: string[] = []
+    for (const { column, ids } of leagueIdentityColumns([...starters], sport, roster.league.platform)) {
+      const byId = riByColumn.get(column)
+      if (!byId) continue
+      for (const id of ids) {
+        const riId = byId.get(id)
+        if (riId) matches.push(riId)
+      }
+    }
+    for (const riId of matches) {
       const users = out.get(riId) ?? []
       let user = users.find((row) => row.userId === userId)
       if (!user) {
@@ -324,16 +346,25 @@ export async function ownersByPlayerId(
  * Two fixed statements rather than one with an interpolated key: the JSON key is
  * never built from a string at runtime, so there is nothing to inject into.
  * The sport is a bound parameter ($2) for the same reason.
+ *
+ * ⚠ SLEEPER LEAGUES ONLY. $1 is a SLEEPER player id and the owner is resolved as a SLEEPER user id,
+ * so only a league whose roster ids are Sleeper's may answer — the same per-platform rule as
+ * `starterImpactsByPlayerId`. Unscoped, a Fleaflicker/ESPN roster holding that number (29 NFL starter
+ * slots on production, 2026-10-12) matched; only the owner-id translation failing kept it from
+ * reaching anyone. Native leagues hold Sleeper ids too, but their owners are AF users and are
+ * resolved by `starterImpactsByPlayerId`, not here.
  */
 const ROSTERED_SQL = `SELECT DISTINCT r."platformUserId"
          FROM rosters r
          JOIN leagues l ON l.id = r."leagueId"
          WHERE l.sport::text = $2
+           AND lower(l.platform) = 'sleeper'
            AND r."playerData"->'players' @> $1::jsonb`
 const STARTING_SQL = `SELECT DISTINCT r."platformUserId"
          FROM rosters r
          JOIN leagues l ON l.id = r."leagueId"
          WHERE l.sport::text = $2
+           AND lower(l.platform) = 'sleeper'
            AND r."playerData"->'starters' @> $1::jsonb`
 
 /**
