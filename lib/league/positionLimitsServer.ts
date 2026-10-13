@@ -8,12 +8,13 @@
  *   1. `RedraftRosterPlayer` rows on the league's own rosters (what scoring uses);
  *   2. the position stored on the league's lineup rows (`playerData.lineup_sections`);
  *   3. a self-describing id (`name:Josh Allen:QB:BUF`);
- *   4. `SportsPlayer` by id, external id or Sleeper id, then `PlayerIdentityMap` by Sleeper id.
+ *   4. `SportsPlayer` by our row id or Sleeper id (never a bare provider id), then `PlayerIdentityMap`.
  * An id none of them knows is left out of the count (see the note in positionLimits.ts).
  */
 import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { getNormalizedLineupSections, type RosterSectionKey } from '@/lib/roster/LineupTemplateValidation'
+import { ourIdOrSleeperIdWhere, playerRowKeys } from '@/lib/player-identity/externalIdNamespace'
 import {
   normalizeLimitPosition,
   positionLimitBreaches,
@@ -72,14 +73,17 @@ export async function resolvePlayerPositions(input: {
   let left = missing()
   if (left.length > 0) {
     const sport = String(input.sport || 'NFL').toUpperCase()
+    // Our row id or a Sleeper id — never a bare id against `externalId`, where another provider's
+    // number for a DIFFERENT player can collide with it (lib/player-identity/externalIdNamespace.ts).
     const rows = await prisma.sportsPlayer.findMany({
-      where: { sport, OR: [{ id: { in: left } }, { externalId: { in: left } }, { sleeperId: { in: left } }] },
+      where: ourIdOrSleeperIdWhere(left, sport),
       select: { id: true, externalId: true, sleeperId: true, position: true },
     })
     for (const r of rows) {
       const p = usable(r.position)
       if (!p) continue
-      for (const key of [r.id, r.externalId, r.sleeperId]) if (key && left.includes(key) && !out.has(key)) out.set(key, p)
+      const sleeperFromExternal = r.externalId?.startsWith('sleeper:') ? r.externalId.slice('sleeper:'.length) : null
+      for (const key of [...playerRowKeys(r), sleeperFromExternal]) if (key && left.includes(key) && !out.has(key)) out.set(key, p)
     }
     left = missing()
     if (left.length > 0) {

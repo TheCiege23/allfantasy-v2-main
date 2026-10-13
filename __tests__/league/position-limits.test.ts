@@ -36,10 +36,12 @@ vi.mock('@/lib/prisma', () => ({
     },
     redraftRoster: { findMany: vi.fn(async () => [{ id: 'rA', teamName: 'Aces', ownerName: 'a' }, { id: 'rB', teamName: null, ownerName: 'Bee' }]) },
     sportsPlayer: {
+      // Evaluates the OR the way Postgres would: each clause is `<column> IN (...)`.
       findMany: vi.fn(async ({ where }: { where: { OR: Array<Record<string, { in: string[] }>> } }) => {
         h.calls.sportsPlayer += 1
-        const ids = where.OR[0]!.id!.in
-        return h.sportsPlayers.filter((p) => ids.includes(p.id) || ids.includes(p.externalId) || (p.sleeperId != null && ids.includes(p.sleeperId)))
+        return h.sportsPlayers.filter((p) =>
+          where.OR.some((clause) => Object.entries(clause).every(([col, cond]) => cond.in.includes((p as Record<string, any>)[col]))),
+        )
       }),
     },
     playerIdentityMap: {
@@ -70,7 +72,11 @@ beforeEach(() => {
     { rosterId: 'rB', playerId: 'qb3', position: 'QB', droppedAt: null },
     { rosterId: 'rB', playerId: 'k1', position: 'PK', droppedAt: null },
   ]
-  h.sportsPlayers = [{ id: 'sp-qb9', externalId: 'ext-qb9', sleeperId: '9999', position: 'QB' }]
+  h.sportsPlayers = [
+    { id: 'sp-qb9', externalId: 'sleeper:9999', sleeperId: null, position: 'QB' },
+    // A Rolling Insights row whose OWN number collides with Sleeper id 4046 — a different person.
+    { id: 'ri-ot', externalId: '4046', sleeperId: null, position: 'OT' },
+  ]
   h.identity = [{ sleeperId: '4046', position: 'QB' }]
 })
 
@@ -114,15 +120,16 @@ describe('position lookup', () => {
     const m = await resolvePlayerPositions({
       leagueId: 'L1',
       sport: 'NFL',
-      playerIds: ['qb1', 'qb2', 'k1', 'name:Josh Allen:QB:BUF', 'ext-qb9', '4046', 'ghost'],
+      playerIds: ['qb1', 'qb2', 'k1', 'name:Josh Allen:QB:BUF', '9999', 'sp-qb9', '4046', 'ghost'],
     })
     expect(Object.fromEntries(m)).toEqual({
       qb2: 'QB', // RedraftRosterPlayer
       k1: 'K', // PK normalized
       qb1: 'QB', // lineup row
       'name:Josh Allen:QB:BUF': 'QB',
-      'ext-qb9': 'QB', // SportsPlayer by external id
-      '4046': 'QB', // identity map by Sleeper id
+      '9999': 'QB', // SportsPlayer by `sleeper:9999`
+      'sp-qb9': 'QB', // SportsPlayer by our row id
+      '4046': 'QB', // identity map — NOT the colliding RI tackle
     })
   })
 })
@@ -130,16 +137,16 @@ describe('position lookup', () => {
 describe('positionLimitRefusal', () => {
   it('with no limits set, refuses nothing and looks nothing up', async () => {
     h.settings = {}
-    expect(await positionLimitRefusal('L1', [{ rosterId: 'A', before: ['qb1'], after: ['qb1', 'ext-qb9'] }])).toBeNull()
+    expect(await positionLimitRefusal('L1', [{ rosterId: 'A', before: ['qb1'], after: ['qb1', '9999'] }])).toBeNull()
     expect(h.calls).toEqual({ sportsPlayer: 0, redraftRosterPlayer: 0 })
   })
 
   it('refuses a third QB, allows an RB', async () => {
     const before = ['qb1', 'qb2', 'rb1']
-    expect(await positionLimitRefusal('L1', [{ rosterId: 'A', before, after: [...before, 'ext-qb9'], teamLabel: 'Your team' }])).toBe(
+    expect(await positionLimitRefusal('L1', [{ rosterId: 'A', before, after: [...before, '9999'], teamLabel: 'Your team' }])).toBe(
       'Your team can roster at most 2 QBs; this move would make it 3.',
     )
-    h.sportsPlayers.push({ id: 'rb9', externalId: 'rb9', sleeperId: null, position: 'RB' })
+    h.sportsPlayers.push({ id: 'rb9', externalId: 'sleeper:rb9', sleeperId: null, position: 'RB' })
     expect(await positionLimitRefusal('L1', [{ rosterId: 'A', before, after: [...before, 'rb9'] }])).toBeNull()
   })
 
