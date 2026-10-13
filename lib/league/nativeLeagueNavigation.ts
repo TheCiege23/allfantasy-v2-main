@@ -13,7 +13,7 @@ export function nativeLeaguePhase(league: Pick<UserLeague, 'lifecycleState' | 's
   return 'Setup'
 }
 
-export function buildNativeLeagueNavigation(tabs: WorkspaceTab[], commissioner: boolean) {
+export function buildNativeLeagueNavigation(tabs: WorkspaceTab[], commissioner: boolean, isSurvivor = false) {
   const used = new Set<string>()
   const item = (label: string, icon: string, ...ids: string[]): WorkspaceNavItem[] => {
     const id = ids.find(value => tabs.some(tab => tab.id === value))
@@ -28,7 +28,7 @@ export function buildNativeLeagueNavigation(tabs: WorkspaceTab[], commissioner: 
     ...item('Players & waivers', 'players', 'waivers', 'players'),
     ...item('Trades', 'trades', 'trades', 'transfers'),
     ...item('Draft HQ', 'draft', 'draft'),
-    ...item('Standings & playoffs', 'standings', 'standings', 'table'),
+    ...item(isSurvivor ? 'Standings' : 'Standings & playoffs', 'standings', 'standings', 'table'),
     ...item('League chat', 'chat', 'league_chat'),
     ...(commissioner ? item('Commissioner', 'settings', 'commissioner', 'league') : []),
   ]

@@ -5054,6 +5054,7 @@ export function DraftRoomPageClient({
             <div className="w-full shrink-0">
               <RedraftPlanningRibbon
                 preDraft={session.status === 'pre_draft'}
+                survivor={formatType === 'SURVIVOR'}
                 picksUntilUser={ribbonPicksUntilUser}
                 userOnClock={isCurrentUserOnClock}
                 onDeck={redraftRibbonOnDeck}

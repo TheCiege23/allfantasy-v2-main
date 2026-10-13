@@ -32,7 +32,8 @@ export function NativeLeagueWorkspace({ native, league, leagues, tabs, activeTab
   const [filter, setFilter] = useState('All')
   const searchRef = useRef<HTMLInputElement>(null)
   const switcherRef = useRef<HTMLDialogElement>(null)
-  const groups = buildNativeLeagueNavigation(tabs, isCommissioner)
+  const survivor = league.leagueVariant === 'survivor' || league.format.toLowerCase() === 'survivor'
+  const groups = buildNativeLeagueNavigation(tabs, isCommissioner, survivor)
   const primary = groups[0]?.items ?? []
   const restoredLeague = useRef<string | null>(null)
   const phase = nativeLeaguePhase(league)
@@ -95,7 +96,7 @@ export function NativeLeagueWorkspace({ native, league, leagues, tabs, activeTab
       {!shell.embedCenterOnly && <header className="nl-topbar"><button type="button" className="nl-viewing" onClick={openSwitcher}><span>Viewing</span><strong>{league.name}</strong><ChevronDown size={14} aria-hidden /></button><button type="button" className="nl-search" onClick={openSwitcher}><Search size={16} aria-hidden /><span>Jump to a league</span><kbd>⌘K</kbd></button><span className="nl-chip nl-accent">Hosted on AF · Beta</span><span className="nl-sport-week">{league.sport}{league.currentWeek ? ` · Wk ${league.currentWeek}` : ` · ${league.season ?? ''}`}</span></header>}
       <div className="nl-mobile-rail">{leagues.map(leagueTile)}</div>
       <div className="nl-content">
-        <header className="nl-league-heading"><span className="nl-heading-avatar">{initials(league.name)}</span><div className="nl-heading-name"><div className="nl-badges"><span className="nl-chip nl-accent">Native on AllFantasy</span>{isCommissioner && <span className="nl-chip nl-gold">Commissioner</span>}</div><h1>{league.name}</h1><p>{league.sport} · {league.season} · {league.teamCount} teams · {league.scoring || league.format}</p></div><button type="button" className="nl-button" aria-label="League settings" onClick={onOpenSettings}><Settings size={16} aria-hidden /><span>League settings</span></button><ol className="nl-phase" aria-label="League progress">{['Setup', 'Draft', 'Regular season', 'Playoffs', 'Offseason'].map(label => <li key={label} aria-current={phase === label ? 'step' : undefined}>{label}</li>)}</ol></header>
+        <header className="nl-league-heading"><span className="nl-heading-avatar">{initials(league.name)}</span><div className="nl-heading-name"><div className="nl-badges"><span className="nl-chip nl-accent">Native on AllFantasy</span>{isCommissioner && <span className="nl-chip nl-gold">Commissioner</span>}</div><h1>{league.name}</h1><p>{league.sport} · {league.season} · {league.teamCount} teams · {league.scoring || league.format}</p></div><button type="button" className="nl-button" aria-label="League settings" onClick={onOpenSettings}><Settings size={16} aria-hidden /><span>League settings</span></button><ol className="nl-phase" aria-label="League progress">{(survivor ? ['Setup', 'Draft', 'Island', 'Finale', 'Complete'] : ['Setup', 'Draft', 'Regular season', 'Playoffs', 'Offseason']).map(label => <li key={label} aria-current={(survivor ? ({ 'Regular season': 'Island', Playoffs: 'Finale', Offseason: 'Complete' } as Record<string, string>)[phase] ?? phase : phase) === label ? 'step' : undefined}>{label}</li>)}</ol></header>
         <nav className="nl-mobile-tabs" aria-label="League sections">{primary.map(item => <button key={item.id} type="button" aria-current={activeTab === item.id ? 'page' : undefined} onClick={() => choose(item.id)}>{item.label}</button>)}</nav>
         {activeTab === 'league_chat' && <button type="button" className="nl-mobile-chimmy nl-button nl-gold" onClick={onOpenChimmy}><Bot size={16} aria-hidden /> #chimmy</button>}
         <div className="nl-tab-content">{children}</div>
