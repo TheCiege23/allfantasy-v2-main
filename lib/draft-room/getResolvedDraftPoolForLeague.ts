@@ -758,7 +758,7 @@ function suffixlessPersonNameKey(row: DraftPoolRawRow): string {
   return `${suffixlessCanonicalName(name)}|${canonicalPosition(pos)}`
 }
 
-function dedupeEnrichedRawRows(rows: DraftPoolRawRow[]): DraftPoolRawRow[] {
+export function dedupeEnrichedRawRows(rows: DraftPoolRawRow[], sport?: LeagueSport): DraftPoolRawRow[] {
   const bestByKey = new Map<string, DraftPoolRawRow>()
   for (const row of rows) {
     const name = row.name ?? row.playerName ?? row.full_name ?? ''
@@ -770,7 +770,13 @@ function dedupeEnrichedRawRows(rows: DraftPoolRawRow[]): DraftPoolRawRow[] {
      * key is unchanged, suffix and all, so no father is merged into his son.
      */
     const sleeperId = rawRowSleeperId(row)
-    const key = sleeperId ? `sleeper:${sleeperId}` : strictIdentityKey(name, pos)
+    // NBA feeds disagree on a player's primary position (C versus PF, for example).
+    // A name on the same club is one draftable athlete, even when those labels differ.
+    // Keep the club in the key so namesakes on different teams remain separate.
+    const nbaTeam = canonicalTeam(row.team ?? row.teamAbbr ?? null)
+    const key = sport === 'NBA' && nbaTeam && !isFreeAgentTeam(nbaTeam)
+      ? `nba:${canonicalName(name)}|${nbaTeam}`
+      : sleeperId ? `sleeper:${sleeperId}` : strictIdentityKey(name, pos)
     if (!key || key === '|') continue
 
     const current = bestByKey.get(key)
@@ -779,8 +785,22 @@ function dedupeEnrichedRawRows(rows: DraftPoolRawRow[]): DraftPoolRawRow[] {
       continue
     }
 
-    if (scoreDraftPoolRow(row) > scoreDraftPoolRow(current)) {
-      bestByKey.set(key, row)
+    const preferred = scoreDraftPoolRow(row) > scoreDraftPoolRow(current) ? row : current
+    if (sport === 'NBA' && key.startsWith('nba:')) {
+      const other = preferred === row ? current : row
+      bestByKey.set(key, {
+        ...preferred,
+        adp: preferred.adp ?? other.adp,
+        nbaDraftStats: preferred.nbaDraftStats ?? other.nbaDraftStats,
+        imageUrl: preferred.imageUrl ?? other.imageUrl,
+        secondaryPositions: [...new Set([
+          ...(preferred.secondaryPositions ?? []),
+          ...(other.secondaryPositions ?? []),
+          other.position ?? other.pos ?? '',
+        ].filter(Boolean))],
+      })
+    } else {
+      bestByKey.set(key, preferred)
     }
   }
 
@@ -798,6 +818,7 @@ function scoreDraftPoolRow(row: DraftPoolRawRow): number {
   if (!isFreeAgentTeam(team)) score += 120
   if (sleeperId && String(sleeperId).trim().length >= 3) score += 120
   if (adp != null) score += 60
+  if (row.nbaDraftStats && Object.values(row.nbaDraftStats).some((value) => value != null)) score += 45
   if (adp != null && adp <= 400) score += 20
   score += Math.min(String(name).length, 40) // small bias toward fuller display names
   return score
@@ -2434,7 +2455,7 @@ export async function getResolvedDraftPoolForLeague(
     }
   }
 
-  const dedupedEnrichedList = dedupeEnrichedRawRows(enrichedList as DraftPoolRawRow[])
+  const dedupedEnrichedList = dedupeEnrichedRawRows(enrichedList as DraftPoolRawRow[], sport)
   let entries = normalizePlayerList(dedupedEnrichedList, sport)
   // Stored crests over the static registry's guesses (see draftPoolTeamLogos.ts).
   entries = applyStoredTeamLogos(entries, await loadDraftPoolTeamLogoResolver(sport))
