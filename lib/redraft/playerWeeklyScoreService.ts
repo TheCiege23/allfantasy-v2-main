@@ -553,6 +553,25 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
       if (away) gameByTeam.set(away, g)
     }
   }
+  /*
+   * 🛑 THE STORED LINE OUTRANKS A WEAKER REBUILD. A defence's full box score can reach
+   * `player_weekly_scores` without ever being cached — the live tick writes the provider's line
+   * straight there — and this branch rebuilt the row from the cache alone, so a week the cache
+   * did not hold became points-allowed only and REPLACED the box score. Measured on production
+   * 2026-10-13: week 2 of 2026 kept full lines for 24 clubs (live tick, 09-24 01:21Z) and points
+   * allowed alone for the 8 a native league rostered (this sync, 23:41Z; 6 already finalized).
+   * So with no cached week, the stored line is kept and only its points allowed is refreshed.
+   */
+  const storedDefenceStatsByPlayer = new Map<string, Record<string, number>>()
+  if (teamDefensePlayerIds.length > 0) {
+    const storedRows = await prisma.playerWeeklyScore.findMany({
+      where: { playerId: { in: teamDefensePlayerIds }, week, season: seasonYear, sport: { in: candidateSportKeys(sport) } },
+      select: { playerId: true, stats: true },
+    })
+    for (const row of storedRows as Array<{ playerId: string; stats: unknown }>) {
+      storedDefenceStatsByPlayer.set(row.playerId, normalizeNflTeamDefenseWeeklyStats(row.stats))
+    }
+  }
 
   /**
    * The stats `playerGameLogCache` can answer with for THIS week — `{}` when it cannot.
@@ -674,11 +693,18 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
       // The canonical key first; the roster's own id only for a defence with no canonical form.
       const cached = (defenceCacheId ? cacheByPlayer.get(defenceCacheId) : undefined) ?? cacheByPlayer.get(playerId)
       const weekPayload = cached ? findCachedWeekPayload(cached.payload, week) : null
-      const stats: Record<string, number> = weekPayload ? normalizeNflTeamDefenseWeeklyStats(weekPayload) : {}
+      const stored = storedDefenceStatsByPlayer.get(playerId)
+      // A stored line with more than points allowed is a box score, and nothing below may shrink it.
+      const keepStored = !weekPayload && !!stored && Object.keys(stored).some((key) => key !== 'def_points_allowed')
+      const stats: Record<string, number> = weekPayload
+        ? normalizeNflTeamDefenseWeeklyStats(weekPayload)
+        : keepStored
+          ? { ...stored }
+          : {}
 
-      // Derive points allowed from the game result when the box-score feed did
-      // not already provide it.
-      if (stats.def_points_allowed === undefined) {
+      // Derive points allowed from the game result when the box-score feed did not provide it —
+      // and, on a kept stored line, refresh it: that is the one number this branch can improve.
+      if (stats.def_points_allowed === undefined || keepStored) {
         // From the canonical id: a Sleeper DEF row's team can read "Arizona Cardinals", which matches no game.
         const team = teamAbbrevFromDefPlayerId(defenceCacheId ?? playerId) ?? String(teamByPlayer.get(playerId) ?? '').trim().toUpperCase()
         const game = team ? gameByTeam.get(team) : undefined
