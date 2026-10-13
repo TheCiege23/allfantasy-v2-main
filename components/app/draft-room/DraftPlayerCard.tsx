@@ -269,11 +269,11 @@ function DraftPlayerCardInner({
         .map(([label, value]) => `${label} ${value.toFixed(1)}`)
         .join(' · ')
     : ''
-  const fallbackStatLine = normalized.stats?.summary ??
+  const statLine = normalized.stats?.summary ??
     (projectedPoints != null
       ? `Proj ${projectedPoints.toFixed(1)} pts`
       : 'No stats available')
-  const statLine = nbaRates || fallbackStatLine
+  const displayStatLine = nbaRates || statLine
   const headshotTestBase = testId ? `${testId}-headshot` : 'draft-player-headshot'
   const teamLogoTestBase = testId ? `${testId}-team-logo` : 'draft-player-team-logo'
 
@@ -363,7 +363,7 @@ function DraftPlayerCardInner({
                 {injuryStatus}
               </span>
             ) : null}
-            <p className="mt-1 text-[11px] text-white/78 line-clamp-2">{statLine}</p>
+            <p className="mt-1 text-[11px] text-white/78 line-clamp-2">{displayStatLine}</p>
           </div>
           {(compareAction || primaryAction || secondaryAction) && (
             <div
@@ -511,9 +511,9 @@ function DraftPlayerCardInner({
         <p
           data-testid={testId ? `${testId}-stats-summary` : 'draft-player-stats-summary'}
           className={`truncate ${rs ? 'mt-1 text-[11px] text-emerald-100/80' : 'text-[11px] text-cyan-100/55'}`}
-          title={statLine}
+          title={displayStatLine}
         >
-          {statLine}
+          {displayStatLine}
         </p>
         {rs &&
         display?.stats?.secondaryStatLabel != null &&
