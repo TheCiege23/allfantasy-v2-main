@@ -340,6 +340,14 @@ export function playActionText(parts: PlayActionParts | null | undefined): strin
       return 'TD por devolución de despeje'
     case 'special-teams-td':
       return 'TD de equipos especiales'
+    case 'two-point-run':
+      return 'conversión de 2 puntos por tierra'
+    case 'two-point-catch':
+      return `conversión de 2 puntos por recepción${from}`
+    case 'two-point-pass':
+      return `pase de conversión de 2 puntos${to}`
+    case 'two-point':
+      return 'conversión de 2 puntos'
     default:
       return null
   }

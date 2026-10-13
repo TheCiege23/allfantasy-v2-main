@@ -106,6 +106,7 @@ const PLAY_TYPE_LABEL: Record<string, string> = {
   FIELD_GOAL: 'FG',
   DEFENSIVE_SCORE: 'DEF TD',
   SPECIAL_TEAMS_SCORE: 'ST TD',
+  TWO_POINT_CONVERSION: '2PT',
 }
 
 /** A score is good, a turnover costs someone, a big gain is merely notable. */
