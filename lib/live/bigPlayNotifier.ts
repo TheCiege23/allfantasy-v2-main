@@ -43,6 +43,8 @@ const ALERTABLE: ReadonlySet<LiveEvent['type']> = new Set([
   'DEFENSIVE_SCORE',
   'SPECIAL_TEAMS_SCORE',
   'TURNOVER',
+  // A score, worth 2 to the passer and the scorer — and never announced as the touchdown before it.
+  'TWO_POINT_CONVERSION',
 ])
 
 /**
@@ -454,6 +456,8 @@ export function notificationTitleFor(event: LiveEvent): string {
       return yards >= 20 ? `${yards}-yard return touchdown` : 'Special teams touchdown'
     case 'TURNOVER':
       return 'Turnover'
+    case 'TWO_POINT_CONVERSION':
+      return '2-pt conversion'
     default:
       return 'Live update'
   }
@@ -466,7 +470,7 @@ function severityFor(event: LiveEvent): NotificationEvent['severity'] {
   if (event.type === 'TOUCHDOWN' || event.type === 'DEFENSIVE_SCORE' || event.type === 'SPECIAL_TEAMS_SCORE') {
     return 'high'
   }
-  if (event.type === 'TURNOVER' || event.type === 'FIELD_GOAL') return 'medium'
+  if (event.type === 'TURNOVER' || event.type === 'FIELD_GOAL' || event.type === 'TWO_POINT_CONVERSION') return 'medium'
   return 'low'
 }
 
@@ -477,7 +481,7 @@ function severityFor(event: LiveEvent): NotificationEvent['severity'] {
  */
 function passerSide(event: LiveEvent): LiveEvent | null {
   if (!event.passerId || !event.passerName) return null
-  if (event.type !== 'TOUCHDOWN' && event.type !== 'BIG_PLAY') return null
+  if (event.type !== 'TOUCHDOWN' && event.type !== 'BIG_PLAY' && event.type !== 'TWO_POINT_CONVERSION') return null
   return {
     ...event,
     playerId: event.passerId,
@@ -552,7 +556,8 @@ function notificationFor(
       team: event.team,
       eventType: event.type,
       stat: event.stat,
-      yards: Number.isFinite(event.delta) ? Math.round(event.delta) : null,
+      // A try's delta is its two points, not yards.
+      yards: event.type !== 'TWO_POINT_CONVERSION' && Number.isFinite(event.delta) ? Math.round(event.delta) : null,
       affectedLeagues: leagues,
       starterLeagueIds: leagues.map((league) => league.leagueId),
       /*

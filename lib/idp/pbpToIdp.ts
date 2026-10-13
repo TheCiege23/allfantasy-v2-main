@@ -1,4 +1,5 @@
 import type { PbpGame, PbpPlay, PbpPlayer } from '@/lib/live/rollingInsightsPlayByPlay'
+import { namedIn, twoPointTryOf } from '@/lib/live/rollingInsightsPlayByPlay'
 import type { IdpWeeklyStatLine } from '@/lib/idp/statIngestionEngine'
 
 /**
@@ -68,6 +69,36 @@ function creditTackles(play: PbpPlay, lineFor: (p: PbpPlayer) => IdpWeeklyStatLi
 }
 
 /**
+ * The scrimmage play alone, without the two-point try that rode on its row — or null when the row is
+ * the try alone.
+ *
+ * 🛑 THE TRY'S DEFENDERS SHARE `players[]` WITH THE TOUCHDOWN (prod 2026-10-12, BUF @ LA seq 123: one
+ * row carries "… TOUCHDOWN. TWO-POINT CONVERSION ATTEMPT. J.Allen pass to D.Kincaid is complete.
+ * ATTEMPT SUCCEEDS."). Read whole, a try intercepted and returned would pay its interceptor an
+ * `idp_interception` AND an `idp_defensive_touchdown` (the row `isTouchdown`), and a tackle or pass
+ * defended on the try would count as a scrimmage stat. A try is not a play from scrimmage, and no
+ * `idp_*` key scores a defensive two-point return — `dst_2pt_return` is a TEAM-defence key, and this
+ * module writes player lines — so the try credits nobody here.
+ *
+ * Only players the touchdown's own sentence names keep their credit, and on that sentence an
+ * interceptor / recoverer entry counts only when the scrimmage play itself was the interception /
+ * fumble: a defender named for a tackle on the touchdown can carry a second, try-only entry. A try the
+ * details declare but the prose does not mark cannot be separated and is read whole, as before.
+ */
+export function scrimmagePartOf(play: PbpPlay): PbpPlay | null {
+  const attempt = twoPointTryOf(play)
+  if (!attempt || !attempt.tryText) return play
+  if (!attempt.touchdownText) return null
+  const players = play.players.filter((p) => {
+    if (!namedIn(attempt.touchdownText, p.name)) return false
+    if (p.role === 'interceptor') return play.event === 'interception'
+    if (p.role === 'recoverer') return play.event === 'fumble'
+    return true
+  })
+  return { ...play, description: attempt.touchdownText, players }
+}
+
+/**
  * Fold one game's plays into per-defender stat lines.
  *
  * ⚠ REVERSED PLAYS ARE DROPPED. A play the officials overturned did not happen;
@@ -98,8 +129,10 @@ export function idpLinesFromGame(game: PbpGame): IdpGameLine[] {
     return entry.stats
   }
 
-  for (const play of game.plays) {
-    if (play.isReversed) continue
+  for (const row of game.plays) {
+    if (row.isReversed) continue
+    const play = scrimmagePartOf(row)
+    if (!play) continue
 
     creditTackles(play, lineFor)
 
