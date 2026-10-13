@@ -2,7 +2,10 @@ import { notFound, redirect } from 'next/navigation'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { resolveCurrentInjuryDesignations } from '@/lib/injuries/currentInjuryDesignations'
+import { withoutDetectablyWrongHeadshots } from '@/lib/player-assets/playerImageStore'
+import { buildHeadshotUrl } from '@/lib/player-media-urls'
 import { PlayerProfileClient } from './PlayerProfileClient'
+import { PlayerNamesakeChooser, type NamesakeOption } from './components/PlayerNamesakeChooser'
 import { readPlayerPageLookup, resolvePlayerPageIdentity } from './resolvePlayerIdentity'
 import type { Metadata } from 'next'
 
@@ -18,7 +21,15 @@ export async function generateMetadata({
   searchParams?: PageSearchParams
 }): Promise<Metadata> {
   const { playerId } = await params
-  const { identity } = await resolvePlayerPageIdentity(playerId, readPlayerPageLookup(await searchParams))
+  const { identity, reason } = await resolvePlayerPageIdentity(playerId, readPlayerPageLookup(await searchParams))
+  // The chooser names nobody in particular, so neither may the title: a share preview of the old
+  // `justin-jefferson` link must not claim the LB is the WR, or the reverse.
+  if (reason === 'ambiguous') {
+    return {
+      title: 'Which player did you mean? – AllFantasy',
+      description: 'Several players share this name. Choose one to open their fantasy profile.',
+    }
+  }
 
   const name = identity?.canonicalName ?? 'Player'
   return {
@@ -45,10 +56,42 @@ export default async function PlayerProfilePage({
 
   const { playerId } = await params
   const lookup = readPlayerPageLookup(await searchParams)
-  const { identity, reason } = await resolvePlayerPageIdentity(playerId, lookup)
-  // Several players answer to this name in this sport and nothing narrowed them. A placeholder would
-  // let the tabs re-guess by name, so the page refuses outright.
-  if (reason === 'ambiguous') notFound()
+  const { identity, reason, candidates, candidateTotal } = await resolvePlayerPageIdentity(playerId, lookup)
+  /*
+   * Several players answer to this name in this sport and nothing narrowed them. A placeholder would
+   * let the tabs re-guess by name, so no profile renders; the chooser links each namesake by `id`.
+   * It replaced a bare 404 (PR #2297), which broke every old `/player/justin-jefferson` link and alert.
+   */
+  if (reason === 'ambiguous') {
+    if (!candidates?.length) notFound()
+    // The profile header's headshot rule (Sleeper thumbnail, NFL only), then the same suppression the
+    // search readers apply: a namesake's sleeperId pointing at the OTHER man's photo is this exact page.
+    const judged = await withoutDetectablyWrongHeadshots(
+      candidates.map((c) => ({
+        id: c.id,
+        name: c.canonicalName,
+        sport: c.sport ?? lookup.sport,
+        team: c.currentTeam,
+        position: c.position,
+        imageUrl: buildHeadshotUrl(c.sleeperId ?? null, c.sport ?? lookup.sport),
+      })),
+    )
+    const options: NamesakeOption[] = judged.map((c) => ({
+      id: c.id,
+      name: c.name,
+      position: c.position ?? null,
+      team: c.team ?? null,
+      sport: c.sport,
+      headshotUrl: c.imageUrl ?? null,
+    }))
+    return (
+      <PlayerNamesakeChooser
+        name={candidates[0]!.canonicalName}
+        options={options}
+        total={candidateTotal ?? options.length}
+      />
+    )
+  }
 
   /*
    * The header's injury badge comes from the LIVE injury feed, never from `identity.status` — that

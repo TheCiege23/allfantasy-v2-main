@@ -19,6 +19,10 @@ import { normalizeToSupportedSport } from '@/lib/sport-scope'
  *  3. Rows that agree on name, position and team are one athlete ingested twice (NBA Jon Elmore has 11),
  *     so they collapse; anything still plural must be narrowed by `?position=` / `?team=` through
  *     `resolveVerifiedMatch`, or the lookup is REFUSED (`ambiguous`) rather than guessed.
+ *
+ * A refusal carries its `candidates`, so the page can ask "which one?" instead of 404ing old links and
+ * already-sent alerts. Each candidate is a row with its own `id`, and `/player/<id>` resolves by step 1,
+ * so a chooser link can never land back on the ambiguity.
  */
 
 export interface PlayerPageLookup {
@@ -30,6 +34,40 @@ export interface PlayerPageLookup {
 export type PlayerPageResolution = {
   identity: PlayerIdentityMap | null
   reason: 'id' | 'sleeper_id' | NameMatchReason
+  /** Only on `ambiguous`: the namesakes to choose between, best first, at most `MAX_CHOOSER_CANDIDATES`. */
+  candidates?: PlayerIdentityMap[]
+  /** Only on `ambiguous`: how many distinct namesakes there were before the cap. */
+  candidateTotal?: number
+}
+
+/*
+ * Measured on production 2026-10-13: the largest distinct name/position/team group in one sport is 7
+ * (NCAAF; NFL's is 4), so 8 truncates nobody today and only bounds a pathological name.
+ */
+export const MAX_CHOOSER_CANDIDATES = 8
+
+/*
+ * "No team" is a NULL `currentTeam` on production (14 NCAAF rows, 1 NFL, measured 2026-10-13), and
+ * `status` is the Rolling Insights roster code, so "INACT" is the off-roster signal — the two NCAAF
+ * Justin Jeffersons both carry it.
+ */
+function hasActiveTeam(row: PlayerIdentityMap): boolean {
+  const team = (row.currentTeam ?? '').trim().toUpperCase()
+  if (!team || team === 'FA') return false
+  return (row.status ?? '').trim().toUpperCase() !== 'INACT'
+}
+
+/** Sleeper-keyed first, then on an active team, then by position; `id` keeps the order stable. */
+export function orderChooserCandidates(rows: readonly PlayerIdentityMap[]): PlayerIdentityMap[] {
+  const rank = (r: PlayerIdentityMap) => [r.sleeperId ? 0 : 1, hasActiveTeam(r) ? 0 : 1] as const
+  return [...rows].sort((a, b) => {
+    const [ak, at] = rank(a)
+    const [bk, bt] = rank(b)
+    if (ak !== bk) return ak - bk
+    if (at !== bt) return at - bt
+    const byPosition = (a.position ?? '').localeCompare(b.position ?? '')
+    return byPosition !== 0 ? byPosition : a.id.localeCompare(b.id)
+  })
 }
 
 type SearchParams = Record<string, string | string[] | undefined> | undefined
@@ -86,5 +124,13 @@ export async function resolvePlayerPageIdentity(
     position: lookup.position,
     team: foldInjuryTeam(lookup.team, lookup.sport),
   })
+  if (result.reason === 'ambiguous') {
+    return {
+      identity: null,
+      reason: 'ambiguous',
+      candidates: orderChooserCandidates(distinct).slice(0, MAX_CHOOSER_CANDIDATES),
+      candidateTotal: distinct.length,
+    }
+  }
   return { identity: result.match?.row ?? null, reason: result.reason }
 }
