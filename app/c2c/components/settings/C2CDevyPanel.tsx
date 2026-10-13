@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { C2CConfigClient } from '@/lib/c2c/c2cUiLabels'
 
 export function C2CDevyPanel({
@@ -15,6 +15,9 @@ export function C2CDevyPanel({
   const [enabled, setEnabled] = useState<boolean>(Boolean(config?.devyScoringEnabled))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // The config arrives after first render; follow it, or the panel shows "stash only" for a league
+  // that has campus scoring on, and the first click "changes" it to what it already was.
+  useEffect(() => setEnabled(Boolean(config?.devyScoringEnabled)), [config?.devyScoringEnabled])
 
   if (!config) return <p className="px-6 py-8 text-[13px] text-white/45">Loading…</p>
 

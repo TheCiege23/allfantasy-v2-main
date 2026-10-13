@@ -35,6 +35,8 @@ import { C2CTaxiPanel } from '@/app/c2c/components/settings/C2CTaxiPanel'
 import { C2CDevyPanel } from '@/app/c2c/components/settings/C2CDevyPanel'
 import { C2CDraftsPanel } from '@/app/c2c/components/settings/C2CDraftsPanel'
 import type { C2CConfigClient } from '@/lib/c2c/c2cUiLabels'
+// Type-only: taxiLockResolver imports prisma and must stay out of the client bundle.
+import type { TaxiLockMode } from '@/lib/c2c/taxiLockResolver'
 
 export type FormatSectionProps = {
   ctx: SubPanelContext
@@ -100,6 +102,12 @@ export function DevySection({ ctx }: FormatSectionProps) {
   return <DevyLeagueSettingsHub ctx={ctx} />
 }
 
+/** The taxi lock mode this league saved (`League.settings.c2cTaxiLockMode`), if valid. */
+function savedTaxiLockMode(settings: unknown): TaxiLockMode | undefined {
+  const raw = ((settings ?? {}) as Record<string, unknown>).c2cTaxiLockMode
+  return raw === 'preseason' || raw === 'start_of_season' || raw === 'no_limit' ? raw : undefined
+}
+
 export function C2CSection({ ctx, canEdit }: FormatSectionProps) {
   const { t } = useLanguage()
   const [config, setConfig] = useState<C2CConfigClient | null>(null)
@@ -122,8 +130,11 @@ export function C2CSection({ ctx, canEdit }: FormatSectionProps) {
       <Sub title={t('lsHub.sp.c.format')} defaultOpen><C2CFormatPanel config={config} canEdit={canEdit} /></Sub>
       <Sub title={t('lsHub.sp.c.rosters')}><C2CRostersPanel config={config} canEdit={canEdit} /></Sub>
       <Sub title={t('lsHub.sp.c.scoring')}><C2CScoringPanel config={config} /></Sub>
-      <Sub title={t('lsHub.sp.c.taxi')}><C2CTaxiPanel /></Sub>
-      <Sub title={t('lsHub.sp.c.devy')}><C2CDevyPanel config={config} /></Sub>
+      {/* Both panels save only when given the league and edit rights; without them every click was a no-op. */}
+      <Sub title={t('lsHub.sp.c.taxi')}>
+        <C2CTaxiPanel leagueId={ctx.league.id} canEdit={canEdit} initialMode={savedTaxiLockMode(ctx.league.settings)} />
+      </Sub>
+      <Sub title={t('lsHub.sp.c.devy')}><C2CDevyPanel config={config} leagueId={ctx.league.id} canEdit={canEdit} /></Sub>
       <Sub title={t('lsHub.sp.c.drafts')}><C2CDraftsPanel config={config} /></Sub>
     </div>
   )
