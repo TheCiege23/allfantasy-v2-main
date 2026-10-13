@@ -16,9 +16,6 @@ import {
   EXILE_ISLAND_RULES,
   SURVIVOR_CONDUCT_BULLETS,
   SURVIVOR_ISLAND_TAGLINE,
-  SURVIVOR_POOL_RULES,
-  SURVIVOR_PRIZE_EXAMPLES,
-  SURVIVOR_TRIBE_THEME_CONTEXT,
   SURVIVOR_TOKEN_POOL_BLURB,
   SURVIVOR_TIPS,
   SURVIVOR_WELCOME_BLURB,
@@ -100,7 +97,7 @@ export function SurvivorHome({ leagueId }: SurvivorHomeProps) {
   const cal = summary?.seasonCalendar
   const themeHeadline =
     summary?.config?.seasonThemeLabel?.trim() ||
-    `${summary?.config?.tribeCount ?? 3}-tribe season — set a headline in Survivor settings`
+    summary?.leagueName || 'Survivor League'
   const tribeChatHref = summary?.myTribeSource
     ? `/league/${leagueId}?tab=Chat&source=${encodeURIComponent(summary.myTribeSource)}`
     : `/league/${leagueId}?tab=Chat`
@@ -133,6 +130,11 @@ export function SurvivorHome({ leagueId }: SurvivorHomeProps) {
               Regular-season weeks (no playoffs): {cal.firstWeek}–{cal.lastWeek} · {cal.sport}
             </p>
           )}
+          <p className="mt-2 text-xs text-amber-100/80">
+            {summary?.tribes?.some((tribe) => tribe.members.length > 0)
+              ? `${summary.tribes.length} tribes · ${summary.merged ? 'Merged island' : 'Tribes formed'}`
+              : `${summary?.config?.tribeCount ?? 4} tribes planned · Members are assigned after the draft`}
+          </p>
           <p className="mt-2 text-sm text-white/60">
             Tribes · Challenges · Elimination Council · Idols · Exile · Merge & Jury
           </p>
@@ -141,20 +143,17 @@ export function SurvivorHome({ leagueId }: SurvivorHomeProps) {
       </header>
 
       <section className="rounded-2xl border border-white/10 bg-white/[0.02] p-4 sm:p-5">
-        <h2 className="text-sm font-semibold text-white">Island guide</h2>
+        <h2 className="text-sm font-semibold text-white">How this league works</h2>
         <p className="mt-2 text-sm leading-relaxed text-white/70">{SURVIVOR_WELCOME_BLURB}</p>
-        <p className="mt-3 text-sm leading-relaxed text-white/65">{SURVIVOR_TRIBE_THEME_CONTEXT}</p>
-        <p className="mt-3 text-xs text-white/50">{SURVIVOR_PRIZE_EXAMPLES}</p>
         <details className="mt-4 rounded-xl border border-white/[0.08] bg-black/20 p-3">
           <summary className="cursor-pointer text-sm font-medium text-cyan-200/95">
-            Tips, conduct & pool rules
+            Tips & conduct
           </summary>
           <ul className="mt-3 list-inside list-disc space-y-1.5 text-sm text-white/65">
             {SURVIVOR_TIPS.map((t) => (
               <li key={t}>{t}</li>
             ))}
           </ul>
-          <p className="mt-3 text-sm text-white/60">{SURVIVOR_POOL_RULES}</p>
           <ul className="mt-3 list-inside list-disc space-y-1.5 text-sm text-white/65">
             {SURVIVOR_CONDUCT_BULLETS.map((t) => (
               <li key={t}>{t}</li>
@@ -168,7 +167,9 @@ export function SurvivorHome({ leagueId }: SurvivorHomeProps) {
           <p className="mt-3 text-sm text-white/70">{SURVIVOR_TOKEN_POOL_BLURB}</p>
           <p className="mt-2 text-sm font-medium text-white/85">{EXILE_ISLAND_RULES.headline}</p>
           <p className="mt-1 text-sm text-white/65">{EXILE_ISLAND_RULES.intro}</p>
-          <p className="mt-2 text-sm text-white/65">{EXILE_ISLAND_RULES.lineup}</p>
+          <p className="mt-2 text-sm text-white/65">{cal?.sport === 'NBA'
+            ? 'Each week starts with an empty Exile roster. Claim an NBA point guard to reserve that real-world team, then claim only that team’s players. All players return to waivers after the week.'
+            : EXILE_ISLAND_RULES.lineup}</p>
           <p className="mt-2 text-sm text-white/65">{EXILE_ISLAND_RULES.tokens}</p>
           <p className="mt-2 text-sm text-white/65">{EXILE_ISLAND_RULES.bossReset}</p>
           <p className="mt-2 text-sm text-amber-100/80">{EXILE_ISLAND_RULES.conduct}</p>

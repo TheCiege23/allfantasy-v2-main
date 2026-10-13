@@ -35,6 +35,9 @@ import { readLeagueDraftLink } from '@/lib/league-chat/readLeagueDraftLink'
 import { DRAFT_ROOM_ONLY_TYPES, resolveIncludeDraft } from '@/lib/league-chat/draftChatLink'
 import { getBlockedUserIdsForRead } from '@/lib/moderation/BlockUserService'
 import { filterMessagesByBlocked } from '@/lib/moderation/SafetyVisibilityResolver'
+import { isSurvivorLeague } from '@/lib/survivor/SurvivorLeagueConfig'
+import { parseSurvivorCommand } from '@/lib/survivor/SurvivorCommandParser'
+import { processSurvivorOfficialCommand } from '@/lib/survivor/SurvivorOfficialCommandService'
 
 function toStringValue(value: unknown, fallback = '') {
   return typeof value === 'string' ? value : fallback
@@ -387,19 +390,25 @@ export async function POST(req: NextRequest) {
     !(idpProcessed?.outcome === 'post_user_and_chimmy' && (idpProcessed.chimmyMessages?.length ?? 0) > 0)
 
   if (wantsChimmyPrivateDm) {
-    const mentionParsed = parseAtMentions(message)
     const privateUserMsg = await createLeagueChatMessage(leagueId, userId, message, {
       metadata: finalMetadata,
       isPrivate: true,
       visibleToUserId: userId,
       messageSubtype: 'chimmy_private',
-      mentionedUserIds: await resolveLeagueMentionIds(leagueId, userId, mentionParsed.userMentions),
     })
     if (!privateUserMsg) {
       return NextResponse.json({ error: 'Failed to send message' }, { status: 500 })
     }
     let decision: ReturnType<typeof decisionAnswerMeta> | undefined
-    const replyText = await generateChimmyPrivateReply(message, { leagueId, userId, onDecision: result => { decision = decisionAnswerMeta(result) } })
+    const survivorVote = (parseSurvivorCommand(message).intent === 'vote' || /^@chimmy\s+vote(?:\s|$)/i.test(message)) && await isSurvivorLeague(leagueId)
+    const voteResult = survivorVote
+      ? await processSurvivorOfficialCommand({ leagueId, userId, command: message, source: 'private_chimmy' })
+      : null
+    const replyText = voteResult?.handled
+      ? voteResult.ok
+        ? voteResult.message ?? 'Your vote was recorded privately.'
+        : `${voteResult.error ?? 'Vote was not recorded.'} To vote, send @Chimmy @manager or @Chimmy vote @manager.`
+      : await generateChimmyPrivateReply(message, { leagueId, userId, onDecision: result => { decision = decisionAnswerMeta(result) } })
     const leagueRow = await prisma.league.findUnique({
       where: { id: leagueId },
       select: { userId: true },

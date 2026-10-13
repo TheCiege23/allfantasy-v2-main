@@ -21,7 +21,7 @@ export function SurvivorExilePanel({ leagueId, canEdit }: SurvivorSettingsPanelP
     setLoading(true)
     setMessage(null)
     try {
-      const response = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/survivor`, { credentials: 'include' })
+      const response = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/survivor/state`, { credentials: 'include' })
       const payload = await response.json()
       if (!response.ok || !payload.settings) throw new Error(payload.error ?? 'Could not load Exile rules')
       const current = payload.settings as ExileSettings

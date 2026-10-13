@@ -124,7 +124,9 @@ export function buildSurvivorAccessContextFromSnapshot(
     (isLeagueCommissioner && !isCommissionerParticipating) ||
     (isCoCommissioner && !isParticipant && settings.coCommissionerMode === 'non_participating_host')
   const isAiHostActor = Boolean(snapshot.isAiHostActor)
-  const hostCanSeeHidden = isAiHostActor || isNonParticipatingCommissionerHost
+  // Human hosts operate the season without receiving unpublished ballots or idol holders.
+  const hostCanSeeHidden = isAiHostActor
+  const hostCanControl = isAiHostActor || isNonParticipatingCommissionerHost
 
   const canAccessTribeChat = Boolean(snapshot.player?.canAccessTribeChat ?? isParticipant)
   const canAccessMergeChat = Boolean(snapshot.player?.canAccessMergeChat)
@@ -173,14 +175,14 @@ export function buildSurvivorAccessContextFromSnapshot(
       canSeePrivateVotes: hostCanSeeHidden,
       canSeeVoteTallyBeforeReveal: hostCanSeeHidden,
       canSeePrivateUserDm: false,
-      canSeeTribeChat: hostCanSeeHidden || canAccessTribeChat,
-      canSeeExileChat: hostCanSeeHidden || canAccessExileChat,
-      canSeeJuryChat: hostCanSeeHidden || canAccessJuryChat,
+      canSeeTribeChat: hostCanControl || canAccessTribeChat,
+      canSeeExileChat: hostCanControl || canAccessExileChat,
+      canSeeJuryChat: hostCanControl || canAccessJuryChat,
       canPerformAdminAction: isAdmin,
-      canPerformSensitiveHostAction: hostCanSeeHidden,
-      canOverrideVoteDeadline: hostCanSeeHidden,
-      canRevealVotes: hostCanSeeHidden,
-      canRunChallengeResolution: hostCanSeeHidden,
+      canPerformSensitiveHostAction: hostCanControl,
+      canOverrideVoteDeadline: hostCanControl,
+      canRevealVotes: hostCanControl,
+      canRunChallengeResolution: hostCanControl,
       canUpdateSettings: isAdmin,
     },
     privacyWarnings,

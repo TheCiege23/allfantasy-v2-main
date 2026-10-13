@@ -25,7 +25,7 @@ export function SurvivorSetupPanel({ leagueId, canEdit }: SurvivorSettingsPanelP
     setMessage(null)
     try {
       const [foundationResponse, configResponse] = await Promise.all([
-        fetch(`/api/leagues/${encodeURIComponent(leagueId)}/survivor`, { credentials: 'include' }),
+        fetch(`/api/leagues/${encodeURIComponent(leagueId)}/survivor/state`, { credentials: 'include' }),
         fetch(`/api/leagues/${encodeURIComponent(leagueId)}/survivor/config`, { credentials: 'include' }),
       ])
       const [foundationPayload, configPayload] = await Promise.all([foundationResponse.json(), configResponse.json()])

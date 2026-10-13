@@ -12,7 +12,7 @@ import {
   defaultTribeName,
   type AssignmentParticipant,
 } from '../lib/survivor/survivorTribeAssignmentEngine'
-import { computeIdolSeedPlan, SURVIVOR_IDOL_CATALOG } from '../lib/survivor/survivorIdolSeedingEngine'
+import { computeIdolSeedPlan, computePlayerBoundIdolSeedPlan, SURVIVOR_IDOL_CATALOG } from '../lib/survivor/survivorIdolSeedingEngine'
 import { buildSurvivorIntroAnnouncement, buildSurvivorIntroSummary } from '../lib/survivor/survivorPromptTemplates'
 
 function makeParticipants(n: number): AssignmentParticipant[] {
@@ -139,6 +139,37 @@ describe('computeIdolSeedPlan', () => {
 
   it('rejects when there are no participants', () => {
     expect(computeIdolSeedPlan({ participants: [], rosterSpots: 15, tribeCount: 4, seed: 1 })).toMatchObject({ ok: false, code: 'no_participants' })
+  })
+})
+
+describe('player-bound NBA idol plan', () => {
+  const candidates = Array.from({ length: 18 }, (_, owner) =>
+    Array.from({ length: 3 }, (_, player) => ({ ownerUserId: `owner-${owner}`, rosterId: `roster-${owner}`, playerId: `nba-${owner}-${player}` })),
+  ).flat()
+
+  it('gives six distinct managers a player-bound idol by default', () => {
+    const plan = computePlayerBoundIdolSeedPlan({ candidates, idolCount: 6, seed: 9 })
+    expect(plan.ok).toBe(true)
+    if (!plan.ok) return
+    expect(plan.assignments).toHaveLength(6)
+    expect(new Set(plan.assignments.map(assignment => assignment.ownerUserId)).size).toBe(6)
+    expect(new Set(plan.assignments.map(assignment => assignment.playerId)).size).toBe(6)
+    expect(plan.assignments.every(assignment => candidates.some(candidate => candidate.playerId === assignment.playerId && candidate.rosterId === assignment.rosterId))).toBe(true)
+  })
+
+  it('allows extra idols to land on the same manager without duplicating a player', () => {
+    const plan = computePlayerBoundIdolSeedPlan({ candidates, idolCount: 21, seed: 9 })
+    expect(plan.ok).toBe(true)
+    if (!plan.ok) return
+    expect(new Set(plan.assignments.map(assignment => assignment.playerId)).size).toBe(21)
+    expect(new Set(plan.assignments.map(assignment => assignment.ownerUserId)).size).toBeLessThan(21)
+    expect(computePlayerBoundIdolSeedPlan({ candidates, idolCount: 21, seed: 9 })).toEqual(plan)
+  })
+
+  it('refuses unavailable powers and missing stable player identities', () => {
+    expect(computePlayerBoundIdolSeedPlan({ candidates, idolCount: 1, powerPool: ['triple_steal'], seed: 1 })).toMatchObject({ ok: true })
+    expect(computePlayerBoundIdolSeedPlan({ candidates, idolCount: 1, powerPool: ['auto_waiver_pickup'], seed: 1 })).toMatchObject({ ok: false, code: 'unavailable_power' })
+    expect(computePlayerBoundIdolSeedPlan({ candidates: [...candidates, candidates[0]], idolCount: 6, seed: 1 })).toMatchObject({ ok: false, code: 'invalid_draft_players' })
   })
 })
 

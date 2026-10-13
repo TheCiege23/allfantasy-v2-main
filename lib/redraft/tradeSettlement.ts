@@ -21,6 +21,7 @@
 
 import type { Prisma } from '@prisma/client'
 import { applyRedraftFaabDeltasInTransaction } from './faabTransfer'
+import { movePlayerBoundIdolsInTransaction } from '@/lib/survivor/playerBoundIdolTransfer'
 
 export type TradeSettlementTx = Prisma.TransactionClient
 
@@ -52,6 +53,7 @@ function readFaabAmount(metadata: unknown): number {
 export async function settleRedraftTradeAssets(
   tx: TradeSettlementTx,
   input: {
+    leagueId?: string
     proposerRosterId: string
     receiverRosterId: string
     assets: SettlementAssetRow[]
@@ -85,6 +87,13 @@ export async function settleRedraftTradeAssets(
       if (moved.count === 0) {
         throw new Error(`Traded player ${asset.playerId} is no longer on the sending roster`)
       }
+      if (input.leagueId) await movePlayerBoundIdolsInTransaction(tx, {
+        leagueId: input.leagueId,
+        playerId: asset.playerId,
+        fromRedraftRosterId: fromRosterId,
+        toRedraftRosterId: toRosterId,
+        reason: 'trade',
+      })
       playersMoved += moved.count
       continue
     }

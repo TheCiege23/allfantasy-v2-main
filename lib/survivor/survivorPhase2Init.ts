@@ -168,7 +168,7 @@ async function initializeSurvivorPhase2Locked(
   // 2. Chats (depends on tribe membership being persisted).
   const chatsOutcome = await provisionSurvivorChats(leagueId, { actorUserId: opts.actorUserId, db })
 
-  // 3. Idols (count = rosterSpots + tribeCount).
+  // 3. Player-bound idols (commissioner-configured count; defaults to one third of cast).
   const idolsOutcome = settings.idolsEnabled ? await seedSurvivorIdols(leagueId, {
     tribeCount: opts.tribeCount ?? settings.tribeCount,
     seed: null,

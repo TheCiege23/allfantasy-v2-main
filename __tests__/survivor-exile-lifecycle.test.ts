@@ -7,6 +7,7 @@ const m = vi.hoisted(() => {
     survivorPlayer: { findMany: vi.fn(), findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn(), count: vi.fn() },
     roster: { findFirst: vi.fn(), update: vi.fn(), create: vi.fn() },
     redraftRoster: { findFirst: vi.fn(), update: vi.fn() }, redraftRosterPlayer: { findMany: vi.fn(), updateMany: vi.fn() },
+    survivorIdol: { findMany: vi.fn() },
     redraftRosterMoveHistory: { create: vi.fn() }, waiverClaim: { updateMany: vi.fn() },
     survivorTribe: { findFirst: vi.fn() }, survivorTribeMember: { upsert: vi.fn(), deleteMany: vi.fn() },
     survivorJuryMember: { deleteMany: vi.fn() }, survivorChatChannel: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
@@ -34,6 +35,7 @@ beforeEach(() => {
   m.db.roster.findFirst.mockResolvedValue({ id: 'legacy-b', redraftRosterId: 'actual-b', playerData: ['athlete'] })
   m.db.redraftRoster.findFirst.mockResolvedValue({ id: 'actual-b', seasonId: 'season', season: { season: 2026 } })
   m.db.redraftRosterPlayer.findMany.mockResolvedValue([{ playerId: 'athlete' }])
+  m.db.survivorIdol.findMany.mockResolvedValue([])
   m.db.survivorChatChannel.findMany.mockResolvedValue([])
   m.db.survivorChatChannel.findFirst.mockResolvedValue({ id: 'channel', memberUserIds: [] })
   m.db.survivorExileLeague.findUnique.mockResolvedValue(null)

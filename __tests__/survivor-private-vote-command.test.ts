@@ -16,6 +16,10 @@ describe('private @Chimmy votes', () => {
     await submitPrivateVoteCommand('league', 'alice', '@Chimmy vote out @bOB')
     expect(m.vote).toHaveBeenCalledWith('league', 'alice', 'bob')
   })
+  it('accepts the private @Chimmy @manager shorthand', async () => {
+    await submitPrivateVoteCommand('league', 'alice', '@Chimmy @Bob')
+    expect(m.vote).toHaveBeenCalledWith('league', 'alice', 'bob')
+  })
   it('refuses ambiguous names without recording a ballot', async () => {
     m.context.mockResolvedValue({ scopePlayers: [{ userId: 'bob1', displayName: 'Bob' }, { userId: 'bob2', displayName: 'Bob' }] })
     expect(await submitPrivateVoteCommand('league', 'alice', '@Chimmy vote @Bob')).toMatchObject({ ok: false, status: 422 })
@@ -35,5 +39,9 @@ describe('unrevealed council allowlist', () => {
     expect(result?.votes).toEqual([])
     expect(result).not.toHaveProperty('auditLog')
   })
-  it('preserves oversight for a non-playing host', () => { expect(survivorPublicCouncil(secret, true)).toBe(secret) })
+  it('keeps ballots and hidden plays sealed even for a non-playing host', () => {
+    const result = survivorPublicCouncil(secret, true)
+    expect(result).toMatchObject({ votes: [], revealSequence: null, eliminatedUserId: null, isTie: false })
+    expect(JSON.stringify(result)).not.toMatch(/secret|123/)
+  })
 })

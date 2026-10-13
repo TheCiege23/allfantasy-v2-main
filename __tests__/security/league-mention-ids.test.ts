@@ -52,10 +52,10 @@ describe('resolveLeagueMentionIds', () => {
     expect(await resolveLeagueMentionIds('L1', 'sender', ['mike'])).toEqual([])
   })
 
-  it('the league chat route stores the resolved ids, not the typed names, on both of its writes', () => {
+  it('the league chat route stores resolved ids on its public write, not typed names', () => {
     const src = readFileSync(path.join(process.cwd(), 'app/api/league/chat/route.ts'), 'utf8')
     const writes = src.match(/^\s*mentionedUserIds: await resolveLeagueMentionIds\(leagueId, userId, \w+\.userMentions\),$/gm) ?? []
-    expect(writes).toHaveLength(2)
+    expect(writes).toHaveLength(1)
     expect(src).not.toMatch(/^\s*mentionedUserIds: \w+\.userMentions,$/m)
   })
 })

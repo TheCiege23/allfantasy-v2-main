@@ -2,7 +2,7 @@
  * GET /api/leagues/[leagueId]/survivor/idols
  * Returns idol inventory for the requesting user.
  * - Own idols: always visible (status, power, play window).
- * - Other players' idols: hidden unless commissioner or revealed (played/used).
+ * - Other players' idols: only public after the read; roster raids are public when played.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
@@ -28,6 +28,7 @@ type IdolRow = {
   isSecret: boolean
   isUsed: boolean
   powerLabel: string | null
+  usedAtCouncilId: string | null
 }
 
 function isPublicIdol(row: Pick<IdolRow, 'status' | 'isPubliclyKnown'>): boolean {
@@ -69,17 +70,12 @@ export async function GET(
   if (!access.isLeagueMember) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const canSeeHidden = access.decisions.canSeeHiddenIdolAssignments
-  const rosterId = access.rosterId
   const idols = await prisma.survivorIdol.findMany({
     where: canSeeHidden
       ? { leagueId }
       : {
           leagueId,
-          OR: [
-            { currentOwnerUserId: userId },
-            { rosterId: rosterId ?? '__none__' },
-            { isPubliclyKnown: true },
-            ],
+          OR: [{ currentOwnerUserId: userId }, { isPubliclyKnown: true }, { isUsed: true, powerType: { in: ['triple_steal', 'island_raid'] } }],
         },
     select: {
       id: true,
@@ -97,10 +93,16 @@ export async function GET(
       isSecret: true,
       isUsed: true,
       powerLabel: true,
+      usedAtCouncilId: true,
     },
   })
-  const visible = idols.map((idol: IdolRow) => {
-    const owned = idol.currentOwnerUserId === userId || (rosterId != null && idol.rosterId === rosterId)
+  const councilIds = [...new Set(idols.map(idol => idol.usedAtCouncilId).filter((id): id is string => Boolean(id)))]
+  const reads = councilIds.length ? await prisma.survivorTribalCouncil.findMany({ where: { leagueId, id: { in: councilIds }, isRevealed: true }, select: { id: true } }) : []
+  const revealedCouncilIds = new Set(reads.map(read => read.id))
+  const visible = idols.filter((idol: IdolRow) => canSeeHidden || idol.currentOwnerUserId === userId ||
+    (idol.isUsed && ['triple_steal', 'island_raid'].includes(idol.powerType)) ||
+    (idol.isPubliclyKnown && Boolean(idol.usedAtCouncilId && revealedCouncilIds.has(idol.usedAtCouncilId)))).map((idol: IdolRow) => {
+    const owned = idol.currentOwnerUserId === userId
     return redactIdol(idol, owned, canSeeHidden)
   })
 

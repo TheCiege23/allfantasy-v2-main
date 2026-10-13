@@ -24,9 +24,11 @@ import { postSurvivorIntroAnnouncement } from '@/lib/survivor/survivorAnnounceme
 import type { SurvivorTribeAssignmentMode } from '@/lib/survivor/normalizeSurvivorSettings'
 import { openTribalCouncil, closeVoteWindow, cancelCouncil, loadCouncilContext, getLatestCouncil } from '@/lib/survivor/survivorCouncilService'
 import { submitPrivateVoteCommand } from '@/lib/survivor/survivorPrivateVoteCommand'
-import { playVoteShield, playExtraVote, playSkipTribal } from '@/lib/survivor/survivorIdolResolutionService'
+import { playVoteShield, playExtraVote, playSkipTribal, playVoteSteal } from '@/lib/survivor/survivorIdolResolutionService'
 import { tallyCouncil, revealCouncil } from '@/lib/survivor/survivorVoteTallyService'
 import { resolveElimination } from '@/lib/survivor/survivorEliminationService'
+import { sendPushToUser } from '@/lib/push-notifications'
+import { getStealThreePreview, playStealThree } from '@/lib/survivor/survivorStealThree'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -102,13 +104,12 @@ async function updateFoundationSettings(leagueId: string, body: JsonRecord, user
   if (settings.defaultTeamCount !== previousSettings.defaultTeamCount) return NextResponse.json({ error: 'Choose league size during creation. Changing it here would leave draft seats and rosters inconsistent.' }, { status: 409 })
   if (settings.tribeCount !== previousSettings.tribeCount || JSON.stringify(settings.survivorTribeSlots) !== JSON.stringify(previousSettings.survivorTribeSlots)) return NextResponse.json({ error: 'Use Tribe identities and capacities to save tribe structure together.' }, { status: 409 })
   const exileChanged = settings.exileIslandEnabled !== previousSettings.exileIslandEnabled || settings.exileReturnWeek !== previousSettings.exileReturnWeek || settings.exileReturnTokens !== previousSettings.exileReturnTokens
-  if (exileChanged && await prisma.draftSession.findFirst({ where: { leagueId, status: { in: ['in_progress', 'paused', 'completed'] } }, select: { id: true } })) {
-    return NextResponse.json({ error: 'Exile rules are locked once the draft starts. Configure the return week and token minimum before drafting.' }, { status: 409 })
+  const idolCountChanged = settings.idolCount !== previousSettings.idolCount
+  if ((exileChanged || idolCountChanged) && await prisma.draftSession.findFirst({ where: { leagueId, status: { in: ['in_progress', 'paused', 'completed'] } }, select: { id: true } })) {
+    return NextResponse.json({ error: 'Exile and idol inventory rules are locked once the draft starts. Configure them before drafting.' }, { status: 409 })
   }
   const settingsPatch = buildSurvivorSettingsSnapshotPatch(settings as unknown as JsonRecord)
   const columnPatch = buildSurvivorLeagueColumnPatch(settings)
-  // Council, merge, privacy, and Exile edits must not silently reset a configured idol pool.
-  delete columnPatch.survivorIdolCount
   const savedPlan = readSurvivorFullSeasonPlan(current)
   let planPatch: JsonRecord = {}
   if (exileChanged && savedPlan) {
@@ -149,6 +150,7 @@ async function updateFoundationSettings(leagueId: string, body: JsonRecord, user
     selfVoteDisallowed: !settings.selfVotesAllowed,
     exileReturnEnabled: settings.exileIslandEnabled,
     exileReturnTokens: settings.exileReturnTokens,
+    idolCount: settings.idolCount,
     tribalCouncilTimeUtc: settings.tribalCouncilTime,
 
   })
@@ -361,10 +363,16 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
     'reveal-votes',
     'resolve-elimination',
     'cancel-tribal',
+    'council-control',
+    'nudge-voter',
+    'extend-votes-hour',
+    'set-auto-reveal',
+    'resolve-exact-tie',
   ])
-  const PHASE3_PARTICIPANT_ACTIONS = new Set(['submit-vote', 'play-idol', 'play-extra-vote', 'play-skip-tribal'])
+  const PHASE3_PARTICIPANT_ACTIONS = new Set(['submit-vote', 'play-idol', 'play-extra-vote', 'play-skip-tribal', 'play-vote-steal', 'steal-three-preview', 'play-steal-three'])
 
-  if (PHASE3_ADMIN_ACTIONS.has(action) && !access.decisions.canPerformSensitiveHostAction) {
+  const BLIND_SAFE_ADMIN_ACTIONS = new Set(['council-control', 'nudge-voter', 'extend-votes-hour', 'set-auto-reveal', 'close-vote-window', 'tally-votes', 'reveal-votes'])
+  if (PHASE3_ADMIN_ACTIONS.has(action) && !(BLIND_SAFE_ADMIN_ACTIONS.has(action) ? access.decisions.canPerformAdminAction : access.decisions.canPerformSensitiveHostAction)) {
     return NextResponse.json({ error: 'Commissioner access required' }, { status: 403 })
   }
   if (PHASE3_PARTICIPANT_ACTIONS.has(action) && !access.isParticipant) {
@@ -372,6 +380,91 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
   }
 
   const targetUserId = typeof body.targetUserId === 'string' ? body.targetUserId : null
+
+  if (action === 'set-auto-reveal') {
+    if (typeof body.enabled !== 'boolean') return NextResponse.json({ error: 'enabled must be a boolean' }, { status: 422 })
+    const response = await updateFoundationSettings(leagueId, { settings: { ...access.settings, autoReveal: body.enabled } }, userId)
+    if (response.ok) await prisma.survivorCommissionerAction.create({ data: { leagueId, commissionerId: userId, actionType: 'council_reveal_mode', description: body.enabled ? 'Automatic reveal enabled' : 'Manual reveal enabled' } })
+    return response
+  }
+
+  if (action === 'council-control' || action === 'nudge-voter' || action === 'extend-votes-hour') {
+    const activeContext = await loadCouncilContext(leagueId)
+    const ctx = activeContext ?? (action === 'council-control' ? await loadCouncilContext(leagueId, (await getLatestCouncil(leagueId))?.id) : null)
+    if (!ctx) return NextResponse.json({ error: 'No active council' }, { status: 404 })
+    const councilId = ctx.council.id
+    if (action === 'council-control') {
+      const votes = await prisma.survivorVote.findMany({ where: { councilId }, select: { voterUserId: true, voterRosterId: true, doesNotCount: true } })
+      const voted = new Set(votes.filter(v => !v.doesNotCount).map(v => v.voterUserId ?? ctx.rosterToUser[v.voterRosterId]))
+      const names = new Map(ctx.scopePlayers.map(player => [player.userId, player.displayName]))
+      const nudges = await prisma.survivorCommissionerAction.findMany({ where: { leagueId, actionType: 'council_vote_nudge', week: ctx.council.week, description: councilId }, select: { targetUserId: true } })
+      const nudged = new Set(nudges.map(n => n.targetUserId))
+      const game = await prisma.survivorGameState.findUnique({ where: { leagueId }, select: { weekScoringFinalAt: true, immunePlayerId: true, pausedSnapshot: true } })
+      const sealedCouncil = await prisma.survivorTribalCouncil.findUnique({ where: { id: councilId }, select: { isRevealed: true, revealSequence: true, phase: true, tiePhase: true, tiePlayerIds: true, eliminatedUserId: true } })
+      const [commissionerActions, councilActions] = await Promise.all([
+        prisma.survivorCommissionerAction.findMany({ where: { leagueId, week: ctx.council.week }, orderBy: { executedAt: 'desc' }, take: 20, select: { id: true, actionType: true, description: true, executedAt: true } }),
+        prisma.survivorAuditEntry.findMany({ where: { leagueId, week: ctx.council.week, action: { in: ['council_closed', 'votes_revealed', 'revote_opened', 'exact_tie_commissioner_decision'] } }, orderBy: { createdAt: 'desc' }, take: 20, select: { id: true, action: true, createdAt: true } }),
+      ])
+      const audit = [...commissionerActions, ...councilActions.map(entry => ({ id: entry.id, actionType: entry.action, description: '', executedAt: entry.createdAt }))].sort((a, b) => b.executedAt.getTime() - a.executedAt.getTime()).slice(0, 20)
+      const revoteWithNoBallots = sealedCouncil?.phase === 'revote' && (Boolean(sealedCouncil.eliminatedUserId) || sealedCouncil.tiePhase === 'commissioner_tiebreak_required')
+      return NextResponse.json({ ok: true, councilId, week: ctx.council.week, status: ctx.council.status === 'tie_pending' && !ctx.council.isRevealed ? 'sealed' : ctx.council.status, canReveal: !sealedCouncil?.isRevealed && ((Array.isArray(sealedCouncil?.revealSequence) && sealedCouncil.revealSequence.length > 0) || revoteWithNoBallots), isRevealed: Boolean(sealedCouncil?.isRevealed), exactTieCandidates: sealedCouncil?.isRevealed && sealedCouncil.tiePhase === 'commissioner_tiebreak_required' ? sealedCouncil.tiePlayerIds.map(candidateId => ({ userId: candidateId, name: names.get(candidateId) ?? 'Manager' })) : [], canResolveExactTie: access.decisions.canPerformSensitiveHostAction, deadline: ctx.council.voteDeadlineAt.toISOString(), autoReveal: access.settings.autoReveal, scoringFinal: Boolean(game?.weekScoringFinalAt), immunitySet: Boolean(game?.immunePlayerId), paused: game?.pausedSnapshot != null,
+        voters: ctx.eligibility.voterUserIds.map(voterUserId => ({ userId: voterUserId, name: names.get(voterUserId) ?? 'Manager', status: voted.has(voterUserId) ? 'voted' : ctx.council.status === 'voting_open' ? 'not_yet' : 'missed', nudged: nudged.has(voterUserId) })),
+        submittedCount: voted.size, eligibleVoterCount: ctx.eligibility.voterUserIds.length, audit, sealed: true })
+    }
+    if (ctx.council.status !== 'voting_open') return NextResponse.json({ error: 'Voting is not open' }, { status: 409 })
+    if (action === 'nudge-voter') {
+      if (!targetUserId || !ctx.eligibility.voterUserIds.includes(targetUserId)) return NextResponse.json({ error: 'Choose an eligible voter' }, { status: 422 })
+      const outcome = await prisma.$transaction(async tx => {
+        await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`survivor-nudge:${councilId}:${targetUserId}`}, 0))::text`
+        const already = await tx.survivorCommissionerAction.findFirst({ where: { leagueId, actionType: 'council_vote_nudge', targetUserId, week: ctx.council.week, description: councilId } })
+        if (already) return false
+        const voted = await tx.survivorVote.findFirst({ where: { councilId, voterUserId: targetUserId, doesNotCount: false }, select: { id: true } })
+        if (voted) return false
+        await tx.survivorCommissionerAction.create({ data: { leagueId, commissionerId: userId, week: ctx.council.week, actionType: 'council_vote_nudge', targetUserId, description: councilId } })
+        await tx.platformNotification.create({ data: { userId: targetUserId, type: 'survivor:vote_nudge', title: 'Your vote is still due', body: 'Message @Chimmy before the Council deadline.', severity: 'medium', productType: 'sports', meta: { leagueId, councilId, deepLinkPath: `/survivor/${leagueId}/tribal` } } })
+        return true
+      })
+      if (outcome) await sendPushToUser(targetUserId, { title: 'Your vote is still due', body: 'Message @Chimmy before the Council deadline.', href: `/survivor/${leagueId}/tribal` }).catch(() => [])
+      return NextResponse.json({ ok: true, sent: outcome })
+    }
+    const deadline = await prisma.$transaction(async tx => {
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`survivor-control:${councilId}`}, 0))::text`
+      const latest = await tx.survivorTribalCouncil.findFirst({ where: { id: councilId, leagueId, status: 'voting_open' }, select: { voteDeadlineAt: true } })
+      if (!latest) return null
+      const next = new Date(latest.voteDeadlineAt.getTime() + 60 * 60 * 1000)
+      await tx.survivorTribalCouncil.update({ where: { id: councilId }, data: { voteDeadlineAt: next, votingDeadline: next } })
+      await tx.survivorGameState.updateMany({ where: { leagueId, activeCouncilId: councilId }, data: { tribalDeadline: next } })
+      await tx.survivorCommissionerAction.create({ data: { leagueId, commissionerId: userId, week: ctx.council.week, actionType: 'council_vote_extended', description: `Council deadline extended by one hour.` } })
+      return next
+    })
+    if (!deadline) return NextResponse.json({ error: 'Voting already closed' }, { status: 409 })
+    await Promise.allSettled(ctx.eligibility.voterUserIds.map(voter => sendPushToUser(voter, { title: 'Council voting extended', body: 'You have one more hour to message @Chimmy.', href: `/survivor/${leagueId}/tribal` })))
+    return NextResponse.json({ ok: true, deadline: deadline.toISOString() })
+  }
+
+  if (action === 'resolve-exact-tie') {
+    const councilId = typeof body.councilId === 'string' ? body.councilId : ''
+    const eliminatedUserId = typeof body.eliminatedUserId === 'string' ? body.eliminatedUserId : ''
+    if (!councilId || !eliminatedUserId) return NextResponse.json({ error: 'Council and tied manager required' }, { status: 422 })
+    const council = await prisma.survivorTribalCouncil.findFirst({ where: { id: councilId, leagueId, phase: 'revote', isRevealed: true, isTie: true, tiePhase: 'commissioner_tiebreak_required' } })
+    if (!council || !council.tiePlayerIds.includes(eliminatedUserId)) return NextResponse.json({ error: 'No unresolved exact tie for that manager' }, { status: 409 })
+    const player = await prisma.survivorPlayer.findUnique({ where: { leagueId_userId: { leagueId, userId: eliminatedUserId } }, select: { displayName: true, redraftRosterId: true } })
+    if (!player?.redraftRosterId) return NextResponse.json({ error: 'Manager roster unavailable' }, { status: 409 })
+    const channel = await prisma.survivorChatChannel.findFirst({ where: { leagueId, channelType: 'league', isArchived: false }, select: { id: true } })
+    if (!channel) return NextResponse.json({ error: 'Restore league chat before resolving this tie' }, { status: 409 })
+    const decided = await prisma.$transaction(async tx => {
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`survivor-setup:${leagueId}`}, 0))::text`
+      const current = await tx.survivorTribalCouncil.findFirst({ where: { id: councilId, leagueId, phase: 'revote', isRevealed: true, isTie: true, tiePhase: 'commissioner_tiebreak_required' }, select: { id: true } })
+      if (!current) return false
+      await tx.survivorTribalCouncil.update({ where: { id: councilId }, data: { eliminatedUserId, eliminatedRosterId: player.redraftRosterId, eliminatedName: player.displayName, isTie: false, tiePhase: 'commissioner_resolved', status: 'revealed' } })
+      await tx.survivorChatMessage.create({ data: { leagueId, channelId: channel.id, channelType: 'league', senderUserId: 'survivor-host-chimmy', senderName: 'Chimmy', senderIsHost: true, isSystemMessage: true, contentType: 'host_announcement', content: `Torch Ceremony · Week ${council.week}\nThe revote and finalized season points were tied. The independent commissioner selected ${player.displayName}. The choice is in the public audit.` } })
+      await tx.survivorAuditEntry.create({ data: { leagueId, week: council.week, category: 'tribal', action: 'exact_tie_commissioner_decision', actorUserId: userId, targetUserId: eliminatedUserId, relatedEntityId: councilId, relatedEntityType: 'council', data: { candidates: council.tiePlayerIds }, isVisibleToCommissioner: true, isVisibleToPublic: true } })
+      return true
+    })
+    if (!decided) return NextResponse.json({ error: 'Tie was already resolved' }, { status: 409 })
+    const eliminated = await resolveElimination(leagueId, councilId, userId)
+    return NextResponse.json({ ok: eliminated.ok, councilId, eliminatedUserId, elimination: eliminated }, { status: eliminated.ok ? 200 : eliminated.status })
+  }
 
   if (action === 'tribal-status') {
     // Sanitized council view comes from the state sanitizer (privacy-aware).
@@ -417,6 +510,30 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
     return NextResponse.json({ ...result, action, noFakeGameplayState: true })
   }
 
+  if (action === 'play-vote-steal') {
+    if (!targetUserId || typeof body.stolenVoterUserId !== 'string') return NextResponse.json({ error: 'Choose an eligible vote target and a manager whose vote to take.', action }, { status: 422 })
+    const result = await playVoteSteal(leagueId, userId, body.stolenVoterUserId, targetUserId)
+    if (!result.ok) return NextResponse.json({ ...result, action }, { status: result.status })
+    return NextResponse.json({ ...result, action, noFakeGameplayState: true })
+  }
+
+  if (action === 'steal-three-preview') {
+    if (typeof body.idolId !== 'string') return NextResponse.json({ error: 'idolId required' }, { status: 422 })
+    const result = await getStealThreePreview(leagueId, userId, body.idolId)
+    return result.ok ? NextResponse.json({ ok: true, ...result.value }) : NextResponse.json(result, { status: result.status })
+  }
+
+  if (action === 'play-steal-three') {
+    if (typeof body.idolId !== 'string' || !Array.isArray(body.playerRowIds) || !Array.isArray(body.dropRowIds) ||
+        !body.playerRowIds.every((id: unknown) => typeof id === 'string') || !body.dropRowIds.every((id: unknown) => typeof id === 'string')) {
+      return NextResponse.json({ error: 'Choose an idol, three players, and any needed bench drops.' }, { status: 422 })
+    }
+    const result = await playStealThree(leagueId, userId, { idolId: body.idolId, playerRowIds: body.playerRowIds, dropRowIds: body.dropRowIds })
+    if (!result.ok) return NextResponse.json(result, { status: result.status })
+    await Promise.allSettled(result.value.raidedUserIds.map(raidedUserId => sendPushToUser(raidedUserId, { title: 'Your Survivor roster was raided', body: 'Open your league to see the move. You have top waiver priority this week.', href: `/league/${leagueId}` })))
+    return NextResponse.json({ ok: true, playerNames: result.value.playerNames, week: result.value.week })
+  }
+
   // Resolve a council id for lifecycle actions: explicit body id, else the active council,
   // else the latest council (so post-reveal actions like resolve-elimination still find it).
   const resolveCouncilId = async (lid: string): Promise<string | null> => {
@@ -439,14 +556,7 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
     if (!councilId) return NextResponse.json({ error: 'No council', action }, { status: 404 })
     const result = await tallyCouncil(leagueId, councilId)
     if (!result.ok) return NextResponse.json({ ...result, action }, { status: result.status })
-    // Participating commissioner must NOT see the pre-reveal tally; return only operational status.
-    if (!access.decisions.canSeeVoteTallyBeforeReveal) {
-      return NextResponse.json(
-        { ok: true, action, status: result.status, isTie: result.tally.isTie, tallied: true, noFakeGameplayState: true },
-        { status: 200 },
-      )
-    }
-    return NextResponse.json({ ...result, action, noFakeGameplayState: true })
+    return NextResponse.json({ ok: true, action, status: 'sealed', tallied: true, noFakeGameplayState: true })
   }
 
   if (action === 'reveal-votes') {

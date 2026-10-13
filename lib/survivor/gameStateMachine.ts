@@ -27,6 +27,7 @@ import { tallyCouncil, revealCouncil } from '@/lib/survivor/survivorVoteTallySer
 import { resolveAutonomousCouncil } from '@/lib/survivor/survivorAutonomousCouncil'
 import { resolveElimination } from '@/lib/survivor/survivorEliminationService'
 import { nextTorchCeremonyDeadline } from '@/lib/survivor/survivorCeremonySchedule'
+import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/normalizeSurvivorSettings'
 
 /** SurvivorPlayer.redraftRosterId is the legacy Roster id; resolve its actual season roster. */
 export async function sumRedraftStartersFantasy(
@@ -195,18 +196,43 @@ export async function advanceWeek(leagueId: string): Promise<void> {
     }
   }
   await clearWeeklyImmunity(leagueId)
-  const changed = await prisma.survivorGameState.updateMany({
-    where: { leagueId, currentWeek: gs.currentWeek },
-    data: {
-      currentWeek: next,
-      weekStartedAt: new Date(),
-      needsChallengeLock: true,
-      needsTribalLock: plan ? plan.eliminationWeeks.includes(next) : true,
-      weekScoringFinalAt: null,
-      activeCouncilId: null,
-      tribalRevealAt: null,
-      tribalCompleteAt: null,
-    },
+  const changed = await prisma.$transaction(async tx => {
+    const result = await tx.survivorGameState.updateMany({
+      where: { leagueId, currentWeek: gs.currentWeek },
+      data: {
+        currentWeek: next,
+        weekStartedAt: new Date(),
+        needsChallengeLock: true,
+        needsTribalLock: plan ? plan.eliminationWeeks.includes(next) : true,
+        weekScoringFinalAt: null,
+        activeCouncilId: null,
+        tribalRevealAt: null,
+        tribalCompleteAt: null,
+      },
+    })
+    if (!result.count) return result
+    // A raided team's boost ends with the week. A team that used a claim has
+    // already moved to the back of the waiver order, so its priority stays put.
+    const boosts = await tx.survivorAuditEntry.findMany({
+      where: { leagueId, week: gs.currentWeek, action: 'steal_three_waiver_boost' },
+      orderBy: { createdAt: 'asc' },
+      select: { relatedEntityId: true, data: true },
+    })
+    const restoreByRoster = new Map<string, { previous: number; boosted: number }>()
+    for (const boost of boosts) {
+      const rosterId = boost.relatedEntityId
+      if (!rosterId) continue
+      const data = boost.data && typeof boost.data === 'object' && !Array.isArray(boost.data) ? boost.data : {}
+      const previous = Number(data.previousPriority)
+      const boosted = Number(data.boostedPriority)
+      if (!Number.isInteger(previous) || !Number.isInteger(boosted)) continue
+      const original = restoreByRoster.get(rosterId)?.previous ?? previous
+      restoreByRoster.set(rosterId, { previous: original, boosted })
+    }
+    for (const [rosterId, priorities] of restoreByRoster) {
+      await tx.redraftRoster.updateMany({ where: { id: rosterId, leagueId, waiverPriority: priorities.boosted }, data: { waiverPriority: priorities.previous } })
+    }
+    return result
   })
   if (!changed.count) return
   await logSurvivorAuditEntry({
@@ -432,6 +458,7 @@ export async function processTribalDeadline(leagueId: string): Promise<void> {
       if (!tallied.ok) throw new Error(tallied.error)
     }
     await resolveAutonomousCouncil(leagueId, council.id)
+    if (normalizeSurvivorFoundationSettings(league?.settings as Record<string, unknown> | null).autoReveal === false) return
     const revealed = await revealCouncil(leagueId, council.id)
     if (!revealed.ok) throw new Error(revealed.error)
     if (revealed.isTie || !revealed.eliminatedUserId) return

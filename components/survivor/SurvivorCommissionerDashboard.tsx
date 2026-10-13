@@ -30,6 +30,7 @@ import {
 } from '@/components/tournament/TournamentWarRoomPrimitives'
 import { TournamentSubscriptionTokensPanel } from '@/components/tournament/TournamentSubscriptionTokensPanel'
 import { SurvivorPremiumCommandCenterPanel } from '@/components/survivor/SurvivorPremiumCommandCenterPanel'
+import { SurvivorCouncilControl } from '@/components/survivor/SurvivorCouncilControl'
 import type { AfPlanId } from '@/lib/tournament/af-premium-plans'
 import {
   SURVIVOR_TRIBE_ICON_CHOICES,
@@ -410,14 +411,7 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
           )}
 
           {tab === 'tribal' && (
-            <WarRoomPanel title="Elimination Council" subtitle="Private votes, immunity, idols — processed by the Survivor engine and @Chimmy.">
-              <Link
-                href={`${base}/tribal`}
-                className="inline-flex rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm font-medium text-amber-100 hover:bg-amber-500/15"
-              >
-                Open Elimination Council hub
-              </Link>
-            </WarRoomPanel>
+            <SurvivorCouncilControl leagueId={leagueId} />
           )}
 
           {tab === 'minigames' && (

@@ -41,6 +41,7 @@ import type { Prisma } from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
 import { EVENT, getPlatformEvents } from '@/lib/events'
+import { movePlayerBoundIdolsInTransaction } from '@/lib/survivor/playerBoundIdolTransfer'
 import {
   captureRedraftRosterState,
   type RedraftRosterStateSnapshot,
@@ -261,6 +262,13 @@ export async function reverseNativeTrade(input: ReverseNativeTradeInput): Promis
             // inside our own transaction. Refuse loudly rather than half-reverse.
             throw new Error(`Reversal could not find ${p.playerId} on roster ${r.rosterId}`)
           }
+          await movePlayerBoundIdolsInTransaction(tx, {
+            leagueId: proposal.leagueId,
+            playerId: p.playerId,
+            fromRedraftRosterId: r.rosterId,
+            toRedraftRosterId: orig.rosterId,
+            reason: 'trade_reversal',
+          })
           playersRestored += 1
         }
       }

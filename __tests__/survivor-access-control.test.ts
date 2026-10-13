@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { buildSurvivorAccessContextFromSnapshot, canSeeSurvivorChannel } from '@/lib/survivor/survivorAccessControl'
 
 describe('Survivor access control', () => {
-  it('allows a non-playing commissioner host to see operational hidden state', () => {
+  it('allows a non-playing commissioner to operate the council while sealed information stays private', () => {
     const access = buildSurvivorAccessContextFromSnapshot({
       leagueId: 'league-1',
       userId: 'commish',
@@ -14,8 +14,8 @@ describe('Survivor access control', () => {
 
     expect(access.isNonParticipatingCommissionerHost).toBe(true)
     expect(access.isParticipatingCommissioner).toBe(false)
-    expect(access.decisions.canSeeHiddenIdolAssignments).toBe(true)
-    expect(access.decisions.canSeePrivateVotes).toBe(true)
+    expect(access.decisions.canSeeHiddenIdolAssignments).toBe(false)
+    expect(access.decisions.canSeePrivateVotes).toBe(false)
     expect(access.decisions.canPerformSensitiveHostAction).toBe(true)
   })
 

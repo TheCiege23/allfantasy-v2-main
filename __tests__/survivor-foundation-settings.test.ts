@@ -65,7 +65,7 @@ describe('Survivor foundation settings', () => {
         survivorPlayerCount: 18,
         survivorTribeCount: 4,
         survivorTribeSize: 5,
-        survivorIdolCount: 22,
+        survivorIdolCount: 6,
       }),
     )
   })

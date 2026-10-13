@@ -1,31 +1,35 @@
 'use client'
 
+import { useState } from 'react'
+
 export type PlayableIdol = { idolId: string; powerType: string; label: string; alreadyPlayed: boolean }
 
 const POWER_COPY: Record<string, { title: string; action: string; needsTarget: boolean; supported: boolean }> = {
   vote_shield: { title: 'Vote Shield', action: 'play-idol', needsTarget: false, supported: true },
   extra_vote: { title: 'Extra Vote', action: 'play-extra-vote', needsTarget: true, supported: true },
   skip_tribal: { title: 'Council Pass', action: 'play-skip-tribal', needsTarget: false, supported: true },
+  vote_steal: { title: 'Vote Steal', action: 'play-vote-steal', needsTarget: true, supported: true },
   triple_steal: { title: 'Triple Steal', action: '', needsTarget: false, supported: false },
   auto_waiver_pickup: { title: 'Auto Waiver Pickup', action: '', needsTarget: false, supported: false },
 }
 
 /**
- * Owner-only idol play panel. Shows the acting user's playable powers; vote_shield/extra_vote/
- * skip_tribal call real route actions, Triple Steal / Auto Waiver Pickup are truthfully disabled
- * (resolution deferred). No dead buttons.
+ * Owner-only council idol play panel. Roster raid powers have their own vault flow.
  */
 export function SurvivorIdolPlayPanel({
   idols,
   windowOpen,
   busy,
   onPlay,
+  voteDeadline,
 }: {
   idols: PlayableIdol[]
   windowOpen: boolean
   busy: boolean
   onPlay: (action: string, needsTarget: boolean, label: string) => void
+  voteDeadline?: string | null
 }) {
+  const [pending, setPending] = useState<{ action: string; needsTarget: boolean; title: string } | null>(null)
   if (idols.length === 0) {
     return <p className="text-xs text-neutral-500">You hold no playable powers at this council.</p>
   }
@@ -49,7 +53,7 @@ export function SurvivorIdolPlayPanel({
               <button
                 type="button"
                 disabled={disabled}
-                onClick={() => onPlay(copy.action, copy.needsTarget, copy.title)}
+                onClick={() => setPending({ action: copy.action, needsTarget: copy.needsTarget, title: copy.title })}
                 className="rounded bg-sky-700 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
               >
                 {idol.alreadyPlayed ? 'Done' : copy.supported ? 'Play' : 'Disabled'}
@@ -58,6 +62,12 @@ export function SurvivorIdolPlayPanel({
           )
         })}
       </div>
+      {pending && <div role="group" aria-label={`Confirm ${pending.title}`} className="rounded-xl border border-amber-500/40 bg-amber-950/20 p-4 text-sm text-amber-100">
+        <p className="font-bold">Play {pending.title}?</p>
+        <p className="mt-1 text-xs text-amber-100/80">{pending.action === 'play-idol' ? 'Your immunity takes effect at this Council. No target is needed.' : pending.needsTarget ? 'Check the selected manager and ballot target above before confirming.' : 'This power will take effect at this Council.'}</p>
+        {voteDeadline && <p className="mt-1 text-xs">Vote deadline: {new Date(voteDeadline).toLocaleString()}</p>}
+        <div className="mt-3 flex gap-2"><button type="button" disabled={busy} onClick={() => setPending(null)} className="rounded border border-white/20 px-3 py-2">Cancel</button><button type="button" disabled={busy} onClick={() => { onPlay(pending.action, pending.needsTarget, pending.title); setPending(null) }} className="rounded bg-amber-400 px-3 py-2 font-bold text-black disabled:opacity-50">Confirm idol play</button></div>
+      </div>}
     </div>
   )
 }

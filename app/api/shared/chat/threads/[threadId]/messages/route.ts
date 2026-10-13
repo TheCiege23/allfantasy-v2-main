@@ -333,11 +333,18 @@ export async function POST(req: NextRequest, props: { params: Promise<{ threadId
         'confirm_minigame',
       ])
       const chimmyCommandText = isChimmyPrompt ? message.replace(/^@chimmy\b\s*/i, '').trim() : ''
+      const survivorIntent = chimmyCommandText ? parseSurvivorCommand(chimmyCommandText).intent : null
+      const voteAttempt = /^vote(?:\s|$)/i.test(chimmyCommandText)
+      // Votes entered in a league or tribe composer are submitted through the private
+      // ballot authority. The original text and Chimmy's answer are visible only to the voter.
+      const privateVote = voteAttempt || (survivorIntent === 'vote' && (
+        looksLikeOfficialCommand(chimmyCommandText) || /^@(?:[A-Za-z0-9_.-]+|<@[A-Za-z0-9_-]+>)/.test(chimmyCommandText)
+      ))
       const survivorChimmyCommand =
         chimmyCommandText &&
-        looksLikeOfficialCommand(chimmyCommandText) &&
-        SURVIVOR_CHIMMY_COMMAND_INTENTS.has(parseSurvivorCommand(chimmyCommandText).intent)
-          ? await processSurvivorOfficialCommand({ leagueId, userId: user.appUserId, command: message, source })
+        (privateVote || looksLikeOfficialCommand(chimmyCommandText)) &&
+        ((survivorIntent && SURVIVOR_CHIMMY_COMMAND_INTENTS.has(survivorIntent)) || voteAttempt)
+          ? await processSurvivorOfficialCommand({ leagueId, userId: user.appUserId, command: message, source: privateVote ? 'private_chimmy' : source })
           : null
       if (isChimmyPrompt && !survivorChimmyCommand?.handled) {
         const chimmyBody = message.replace(/^@chimmy\b\s*/i, '').trim()
@@ -394,6 +401,21 @@ export async function POST(req: NextRequest, props: { params: Promise<{ threadId
           source,
         }))
       if (commandResult.handled && !commandResult.ok) {
+        if (privateVote) {
+          const prompt = await createLeagueChatMessage(leagueId, user.appUserId, message, {
+            type: 'text', source, isPrivate: true, visibleToUserId: user.appUserId,
+            messageSubtype: 'survivor_private_ballot',
+          })
+          const reply = await createLeagueChatMessage(leagueId, user.appUserId,
+            `${commandResult.error ?? 'Vote was not recorded.'} To vote, send @Chimmy @manager or @Chimmy vote @manager.`, {
+              type: 'text', source, isPrivate: true, visibleToUserId: user.appUserId,
+              parentMessageId: prompt?.id ?? undefined,
+              messageSubtype: 'chimmy_private_response',
+              metadata: { chimmyResponse: true, discordAuthorName: 'Chimmy' },
+            })
+          return NextResponse.json({ status: 'ok', message: prompt, aiReply: reply, messages: [prompt, reply].filter(Boolean),
+            commandResult: { ok: false, intent: 'vote', message: commandResult.error ?? 'Vote was not recorded.' } })
+        }
         return NextResponse.json({ error: commandResult.error ?? 'Survivor command failed' }, { status: commandResult.status ?? 400 })
       }
       // A recorded ballot is private. Posting the raw "vote Team Alpha" to the tribe or league chat
@@ -413,6 +435,17 @@ export async function POST(req: NextRequest, props: { params: Promise<{ threadId
           ? { isPrivate: true, visibleToUserId: user.appUserId, messageSubtype: 'survivor_private_ballot' }
           : {}),
       })
+      if (isRecordedBallot) {
+        const reply = await createLeagueChatMessage(leagueId, user.appUserId,
+          commandResult.message ?? 'Your vote was recorded privately.', {
+            type: 'text', source, isPrivate: true, visibleToUserId: user.appUserId,
+            parentMessageId: created?.id ?? undefined,
+            messageSubtype: 'chimmy_private_response',
+            metadata: { chimmyResponse: true, discordAuthorName: 'Chimmy' },
+          })
+        return NextResponse.json({ status: 'ok', message: created, aiReply: reply, messages: [created, reply].filter(Boolean),
+          commandResult: { ok: true, intent: 'vote', message: commandResult.message } })
+      }
       // The communications drawer writes league chat through this route. Keep the
       // Discord relay inside the request: an unawaited task can be stopped when a
       // serverless response ends, leaving a message visible here but absent there.

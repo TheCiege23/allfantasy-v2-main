@@ -6,6 +6,7 @@ import { useMemo, useState } from 'react'
 import clsx from 'clsx'
 import { useSurvivorUi } from '@/lib/survivor/SurvivorUiContext'
 import { SurvivorVoteRevealScrolls, type RevealScroll } from '@/components/league/survivor/SurvivorVoteRevealScrolls'
+import { SurvivorRevote } from '@/components/survivor/SurvivorRevote'
 
 export default function SurvivorTribalPage() {
   const params = useParams()
@@ -31,6 +32,8 @@ export default function SurvivorTribalPage() {
 
   const status = council?.status
   const quiet = status === 'revealing' || status === 'voting_closed' || status === 'closed'
+
+  if (council?.phase === 'revote') return <SurvivorRevote leagueId={leagueId} />
 
   return (
     <div className="relative min-h-[75vh] px-3 pb-32 pt-4 md:px-6">

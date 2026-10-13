@@ -1,9 +1,7 @@
 /**
  * GET /api/leagues/[leagueId]/survivor/votes
  * Returns current council vote state.
- * - Commissioner: sees all votes with voter/target details.
- * - Member: sees only own vote + whether council is open/locked/revealed.
- * Votes are hidden until reveal by default.
+ * No client receives other managers' ballots before the public read.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
@@ -34,16 +32,7 @@ export async function GET(
 
   if (!council) return NextResponse.json({ council: null, votes: [] })
 
-  const revealed = council.isRevealed || council.status === 'complete' || council.status === 'reveal_in_progress'
-
-  if (access.decisions.canSeePrivateVotes) {
-    return NextResponse.json({
-      council: { id: council.id, status: council.status, week: council.week },
-      votes: council.votes,
-      hiddenUntilReveal: false,
-      privacyMode: access.isParticipatingCommissioner ? 'participating_commissioner_redacted' : 'host_visible',
-    })
-  }
+  const revealed = council.isRevealed
 
   const ownRoster = access.rosterId
     ? { id: access.rosterId }
@@ -53,7 +42,7 @@ export async function GET(
   })
   return NextResponse.json({
     council: { id: council.id, status: council.status, week: council.week },
-    votes: ownVote ? [ownVote] : [],
+    votes: revealed ? council.votes : ownVote ? [ownVote] : [],
     hiddenUntilReveal: !revealed,
     privacyMode: access.isParticipatingCommissioner ? 'participating_commissioner_redacted' : 'player_redacted',
   })

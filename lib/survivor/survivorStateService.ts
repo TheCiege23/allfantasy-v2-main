@@ -177,11 +177,7 @@ export async function buildSurvivorStateForUser(
     ? { leagueId }
     : {
         leagueId,
-        OR: [
-          { currentOwnerUserId: userId },
-          { rosterId: access.rosterId ?? '__none__' },
-          { isPubliclyKnown: true },
-        ],
+        OR: [{ currentOwnerUserId: userId }, { isPubliclyKnown: true }],
       }
 
   const [
@@ -323,7 +319,7 @@ export async function buildSurvivorStateForUser(
   const finalistPlayers = playerRows.filter((p) => p.isFinalist || p.playerState === 'finalist').length
 
   const ownIdols = idolRows
-    .filter((idol) => idol.currentOwnerUserId === userId || (rosterId && idol.rosterId === rosterId))
+    .filter((idol) => idol.currentOwnerUserId === userId)
     .map((idol) => ({
       id: idol.id,
       powerType: idol.powerType,
