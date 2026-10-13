@@ -37,7 +37,9 @@ import {
   UNSTAMPED_RESOLVER_IMAGE_WHERE,
   isTrustedPlayerImageRow,
   listDetectablyWrongPlayerImageIds,
+  sleeperIdFromThumbUrl,
 } from "@/lib/player-assets/playerImageStore";
+import { pickSleeperHeadshotPlayer } from "@/lib/player-assets/headshotCandidateMatch";
 import {
   TEAM_IMAGE_TYPE_LOGO,
   writePrimaryTeamImage,
@@ -185,16 +187,64 @@ async function mirrorToLegacy(
  * at the front of the fill pass (`imageUrl: null`, oldest first) on every run.
  */
 async function isVerifiedResolution(
-  playerId: string,
+  player: CanonicalPlayerRow,
   result: { imageUrl: string | null; cacheHit?: boolean; persisted?: boolean },
 ): Promise<boolean> {
   if (!result.imageUrl) return false;
+  if (!(await sleeperThumbBelongsTo(player, result.imageUrl))) return false;
   if (!result.cacheHit) return Boolean(result.persisted);
   const row = await prisma.playerImage.findFirst({
-    where: { playerId, imageType: PLAYER_IMAGE_TYPE_HEADSHOT, isPrimary: true, url: result.imageUrl },
+    where: { playerId: player.id, imageType: PLAYER_IMAGE_TYPE_HEADSHOT, isPrimary: true, url: result.imageUrl },
     select: { provider: true, rawPayload: true },
   });
   return Boolean(row && isTrustedPlayerImageRow(row));
+}
+
+/** The player's own Sleeper id from `providerIds.sleeper` (`"sleeper:1321"`, `"sleeper_8532"`, `"1321"`). */
+function ownSleeperId(player: CanonicalPlayerRow): string | null {
+  const raw = ((player.providerIds ?? {}) as Record<string, unknown>).sleeper;
+  const id = typeof raw === "string" ? raw.trim().replace(/^sleeper[:_]/i, "") : "";
+  return /^\d+$/.test(id) ? id : null;
+}
+
+/**
+ * Whether a Sleeper thumbnail is this player's, by the same rule the Sleeper tier now binds with
+ * (`pickSleeperHeadshotPlayer`). Any other URL passes — this checks only what a thumbnail claims.
+ *
+ * 🛑 A TRUSTED (v2-STAMPED) ROW IS NOT EVIDENCE BY ITSELF. Rows the Sleeper tier wrote before it was
+ * hardened carry the stamp too: measured 2026-10-13, S Mike Brown (TEN) held a stamped primary of
+ * `thumb/1321` — a free-agent WR — and every cache hit copied it into `Player.imageUrl` and, through
+ * `providerIds.rolling_insights`, onto the DB Mike Brown's Rolling Insights row. Read from the local
+ * `source = 'sleeper'` rows: the thumbnail's owner plus every Sleeper player with this name.
+ */
+async function sleeperThumbBelongsTo(player: CanonicalPlayerRow, url: string): Promise<boolean> {
+  const thumbId = sleeperIdFromThumbUrl(url);
+  if (!thumbId) return true;
+  const own = ownSleeperId(player);
+  if (own) return own === thumbId;
+  try {
+    const rows = await prisma.sportsPlayer.findMany({
+      where: {
+        sport: "NFL",
+        source: "sleeper",
+        OR: [
+          { sleeperId: thumbId },
+          { externalId: `sleeper:${thumbId}` },
+          { name: { equals: player.name, mode: "insensitive" } },
+        ],
+      },
+      select: { sleeperId: true, externalId: true, name: true, position: true, team: true },
+      take: 50,
+    });
+    // 64 Sleeper rows store `sleeper_<id>` in `externalId` (2026-10-13); `sleeperId` is the id itself.
+    const candidates = rows.map((r) => ({
+      ...r,
+      id: (r.sleeperId ?? String(r.externalId).replace(/^sleeper[:_]/, "")).trim(),
+    }));
+    return pickSleeperHeadshotPlayer(candidates, player)?.id === thumbId;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -230,12 +280,14 @@ async function resolveBatch(
         team: player.team,
         position: player.position,
         playerId: player.id, // canonical Player.id
+        // Lets the Sleeper tier bind his own thumbnail instead of matching a name.
+        externalIds: { sleeperId: ownSleeperId(player) },
         skipCache: opts.skipCache,
       });
 
       if (result.imageUrl) {
         // Copied into the denormalised columns only when verified — see `isVerifiedResolution`.
-        if (await isVerifiedResolution(player.id, result)) {
+        if (await isVerifiedResolution(player, result)) {
           await prisma.player.update({
             where: { id: player.id },
             data: { imageUrl: result.imageUrl, lastSeenAt: new Date() },

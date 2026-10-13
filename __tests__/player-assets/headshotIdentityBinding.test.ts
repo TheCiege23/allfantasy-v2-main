@@ -260,3 +260,14 @@ describe('d. pre-fix PlayerImage rows: served, unless detectably another person\
     expect(created.rawPayload).toEqual({ headshotResolver: 'v2' })
   })
 })
+
+describe('e. Sleeper tier', () => {
+  it('hands the provider the position and the player\'s own Sleeper id it now binds on', async () => {
+    const { sleeperChainProvider } = await import('@/lib/workers/providers/sleeper-chain')
+    const fetchMock = vi.mocked(sleeperChainProvider.fetch)
+    fetchMock.mockClear()
+    await resolvePlayerHeadshot({ name: 'Mike Brown', sport: 'NFL', team: 'TEN', position: 'S', externalIds: { sleeperId: '8532' } })
+    const query = (fetchMock.mock.calls[0]?.[0] as { query: Record<string, unknown> }).query
+    expect(query).toMatchObject({ search: 'Mike Brown', teamCode: 'TEN', position: 'S', sleeperId: '8532' })
+  })
+})

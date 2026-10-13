@@ -20,6 +20,8 @@
  */
 
 import { getTeamInfo, normalizeTeamAbbrev } from '@/lib/team-abbrev'
+import { buildNameIndex, resolveVerifiedMatch } from '@/lib/player-match/verifiedNameMatch'
+import { positionGroupsAgree } from '@/lib/player-match/authoritativePlayerRow'
 
 /**
  * Strip punctuation, lowercase, remove suffixes (Jr/Sr/II/III/IV/V),
@@ -197,6 +199,44 @@ export function headshotContradicts(
  *   4. Bind only when exactly one distinct image remains. Two images means two candidates we
  *      cannot tell apart, and no image beats a stranger's.
  */
+/** One Sleeper player as the Sleeper headshot tier sees him. `id` is the Sleeper player id. */
+export interface SleeperHeadshotCandidate {
+  id: string
+  name: string
+  position?: string | null
+  team?: string | null
+}
+
+/**
+ * Which Sleeper player's thumbnail (`sleepercdn.com/…/thumb/<id>.jpg`) is this player's — or none.
+ *
+ * 🛑 A SLEEPER THUMBNAIL NAMES ITS OWNER, SO A NAME SEARCH THAT PICKS THE WRONG ID PUBLISHES A
+ * STRANGER'S FACE UNDER A STAMP THE REST OF THE APP TRUSTS. The Sleeper tier used to take any
+ * blob row whose name CONTAINED the search, skip the team check whenever the row had no team,
+ * and never look at position. Measured in production 2026-10-13: S Mike Brown (TEN) was stamped
+ * with Sleeper 1321 — a free-agent WR Mike Brown — because a free agent passes a team filter by
+ * having no team; Sleeper also lists an OL and a DB of that name.
+ *
+ *   1. The subject's own Sleeper id, when known, is the answer and the only answer.
+ *   2. Otherwise bind by name only through `resolveVerifiedMatch` (exact normalized name;
+ *      ambiguity refuses), and then require BOTH an agreeing position group and the same stated
+ *      NFL club. A free agent, a missing position or an unplaceable team cannot verify anyone.
+ */
+export function pickSleeperHeadshotPlayer<T extends SleeperHeadshotCandidate>(
+  candidates: readonly T[],
+  subject: { sleeperId?: string | null; name: string; position?: string | null; team?: string | null },
+): T | null {
+  const own = String(subject.sleeperId ?? '').trim()
+  if (own) return candidates.find((c) => String(c.id).trim() === own) ?? null
+
+  const wantTeam = normalizeTeamAbbrev(subject.team)
+  if (!wantTeam || !getTeamInfo(wantTeam) || !String(subject.position ?? '').trim()) return null
+  const index = buildNameIndex(candidates.map((c) => ({ ...c, team: normalizeTeamAbbrev(c.team) })))
+  const { match } = resolveVerifiedMatch(index, { name: subject.name, position: subject.position, team: wantTeam })
+  if (!match || match.team !== wantTeam || !positionGroupsAgree(match.position, subject.position)) return null
+  return candidates.find((c) => c.id === match.id) ?? null
+}
+
 export function pickHeadshotFromRosterRows<T extends { imageUrl: string | null; team: string | null; position: string | null }>(
   rows: readonly T[],
   lookup: HeadshotIdentityLookup,
