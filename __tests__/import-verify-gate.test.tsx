@@ -184,7 +184,9 @@ describe('carrying on', () => {
   it('a lookup resumes on its own when the tab comes back', async () => {
     render(<ImportV4 defaultProvider="sleeper" viewerEmail="manager@gmail.com" />)
     fireEvent.click(await screen.findByRole('button', { name: 'Email me the link' }))
-    await screen.findByRole('status')
+    // The page has other status elements; wait for the email-send transition
+    // before simulating focus, or a loaded CI shard can fire focus too early.
+    await screen.findByText(/Sent to/)
     discoverProviderLeagues.mockResolvedValue({ ok: true, data: { leagues: LEAGUES } })
     act(() => {
       window.dispatchEvent(new Event('focus'))
