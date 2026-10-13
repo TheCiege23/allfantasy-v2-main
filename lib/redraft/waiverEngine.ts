@@ -146,6 +146,18 @@ export function compareWaiverClaims(a: WaiverClaimOrderFields, b: WaiverClaimOrd
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
 }
 
+/** Re-rank pending claims after a Survivor raid changes a roster's priority. */
+export function compareClaimsWithCurrentRosterPriority(
+  a: WaiverClaimOrderFields & { rosterId: string },
+  b: WaiverClaimOrderFields & { rosterId: string },
+  priorityByRoster: ReadonlyMap<string, number>,
+): number {
+  return compareWaiverClaims(
+    { ...a, priority: priorityByRoster.get(a.rosterId) ?? a.priority },
+    { ...b, priority: priorityByRoster.get(b.rosterId) ?? b.priority },
+  )
+}
+
 export async function processWaiverWindow(
   leagueId: string,
   seasonId: string,
@@ -164,6 +176,19 @@ export async function processWaiverWindow(
       { id: 'asc' },
     ],
   })
+
+  // A Survivor Steal 3 raid grants the raided roster top priority for this week.
+  // Claims can have been submitted before the raid, so their stored priority is
+  // stale. Re-rank only a raid week using current roster priority at settlement.
+  const survivorWeek = await prisma.survivorGameState.findUnique({ where: { leagueId }, select: { currentWeek: true } })
+  const raidBoostExists = survivorWeek && await prisma.survivorAuditEntry.findFirst({
+    where: { leagueId, week: survivorWeek.currentWeek, action: 'steal_three_waiver_boost' }, select: { id: true },
+  })
+  if (raidBoostExists && claims.length > 1) {
+    const currentRosters = await prisma.redraftRoster.findMany({ where: { seasonId, id: { in: [...new Set(claims.map(claim => claim.rosterId))] } }, select: { id: true, waiverPriority: true } })
+    const priorityByRoster = new Map(currentRosters.map(roster => [roster.id, roster.waiverPriority]))
+    claims.sort((a, b) => compareClaimsWithCurrentRosterPriority(a, b, priorityByRoster))
+  }
 
   const results: ProcessedClaim[] = []
   const acquiredPlayerIds = new Set<string>()
