@@ -269,11 +269,11 @@ function DraftPlayerCardInner({
         .map(([label, value]) => `${label} ${value.toFixed(1)}`)
         .join(' · ')
     : ''
-  const statLine =
-    nbaRates || normalized.stats?.summary ||
+  const fallbackStatLine = normalized.stats?.summary ??
     (projectedPoints != null
       ? `Proj ${projectedPoints.toFixed(1)} pts`
       : 'No stats available')
+  const statLine = nbaRates || fallbackStatLine
   const headshotTestBase = testId ? `${testId}-headshot` : 'draft-player-headshot'
   const teamLogoTestBase = testId ? `${testId}-team-logo` : 'draft-player-team-logo'
 
