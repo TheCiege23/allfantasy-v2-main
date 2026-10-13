@@ -91,7 +91,7 @@ function getDraftPoolCacheModel(): DraftPoolCacheModel | null {
   return (prisma as unknown as { draftPoolCache?: DraftPoolCacheModel }).draftPoolCache ?? null
 }
 
-export const DRAFT_POOL_CACHE_VERSION = 'dbmerge_v4:nflproj_v2:nflfoundation_v1'
+export const DRAFT_POOL_CACHE_VERSION = 'dbmerge_v4:nflproj_v2:nflfoundation_v1:nba_roster_v1'
 
 export function buildDraftPoolCacheKey(leagueId: string, rosterFp: string, apiCacheKey: string): string {
   return `draft_pool:${leagueId}:${rosterFp}:${DRAFT_POOL_CACHE_VERSION}:${apiCacheKey}`

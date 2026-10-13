@@ -67,6 +67,7 @@ import { isFreeAgentTeam as isNormalizedFreeAgentTeam } from '@/lib/player-ident
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { foldInjuryTeam } from '@/lib/injuries/matchInjuryRows'
 import { buildPlayerKey } from '@/lib/adp/computeAllFantasyAdp'
+import { loadNbaSurvivorRosterEligibility, nbaSurvivorPlayerIdMatches, nbaSurvivorPlayerIsEligible, type NbaRosterEligibility } from '@/lib/draft-room/nbaSurvivorRosterEligibility'
 
 const DEFAULT_LIMIT = 300
 const DEVY_POOL_LIMIT = 200
@@ -1030,6 +1031,7 @@ export async function getResolvedDraftPoolForLeague(
         keeperSelections: true,
         draftType: true,
         teamCount: true,
+        rounds: true,
         draftModeLabel: true,
         playerPool: true,
       },
@@ -1404,7 +1406,11 @@ export async function getResolvedDraftPoolForLeague(
         seenAfterAdpSeed,
       )
     } else {
-      rawList = poolRows.slice(0, limit).map<DraftPoolRawRow>((p) => ({
+      // An NBA Survivor cast can make hundreds of picks. Without an ADP feed,
+      // the display limit is too small to supply a complete verified draft.
+      const initialPoolRows = sport === 'NBA' && league?.leagueVariant === 'survivor'
+        ? poolRows : poolRows.slice(0, limit)
+      rawList = initialPoolRows.map<DraftPoolRawRow>((p) => ({
         name: p.full_name,
         position: p.position,
         team: p.team_abbreviation,
@@ -1501,6 +1507,19 @@ export async function getResolvedDraftPoolForLeague(
   if (eligiblePositions?.size) {
     rawListFiltered = rawListFiltered.filter((r: RawRow) =>
       draftPoolRowMatchesEligiblePositions(r.position ?? r.pos ?? '', eligiblePositions),
+    )
+  }
+
+  let nbaSurvivorRoster: NbaRosterEligibility | null = null
+  if (sport === 'NBA' && league?.leagueVariant === 'survivor') {
+    const requiredPlayers = (draftSession?.teamCount ?? league?.leagueSize ?? 20) * (draftSession?.rounds ?? 12)
+    nbaSurvivorRoster = await loadNbaSurvivorRosterEligibility(requiredPlayers)
+    if (!nbaSurvivorRoster.ready) throw new Error(nbaSurvivorRoster.reason ?? 'Current NBA roster unavailable')
+    // ADP seed rows have no provider id until the later player-pool enrichment.
+    // Keep verified names here, then require a verified provider id on the final entries.
+    const activeRoster = nbaSurvivorRoster
+    rawListFiltered = rawListFiltered.filter((row) =>
+      nbaSurvivorPlayerIsEligible(activeRoster, row.name ?? row.playerName ?? row.full_name ?? ''),
     )
   }
 
@@ -2457,6 +2476,16 @@ export async function getResolvedDraftPoolForLeague(
 
   const dedupedEnrichedList = dedupeEnrichedRawRows(enrichedList as DraftPoolRawRow[], sport)
   let entries = normalizePlayerList(dedupedEnrichedList, sport)
+  if (nbaSurvivorRoster) {
+    const activeRoster = nbaSurvivorRoster
+    entries = entries.filter((entry) =>
+      nbaSurvivorPlayerIdMatches(activeRoster, entry.name, entry.display?.playerId ?? entry.playerId),
+    )
+    const requiredPlayers = (draftSession?.teamCount ?? league?.leagueSize ?? 20) * (draftSession?.rounds ?? 12)
+    if (entries.length < requiredPlayers) {
+      throw new Error('The verified NBA draft pool has fewer players than the scheduled picks. Refresh player data before drafting.')
+    }
+  }
   // Stored crests over the static registry's guesses (see draftPoolTeamLogos.ts).
   entries = applyStoredTeamLogos(entries, await loadDraftPoolTeamLogoResolver(sport))
   entries = filterExcludedDraftEntries(

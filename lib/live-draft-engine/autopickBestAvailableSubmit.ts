@@ -11,6 +11,7 @@ import { getRosterSlotLabelsForLeagueDraft } from '@/lib/draft-room'
 import { getLiveADP } from '@/lib/adp-data'
 import { getPlayerPoolForLeague } from '@/lib/sport-teams/SportPlayerPoolResolver'
 import { getResolvedDraftPoolForLeague } from '@/lib/draft-room/getResolvedDraftPoolForLeague'
+import { loadNbaSurvivorRosterEligibility, nbaSurvivorPlayerIdMatches } from '@/lib/draft-room/nbaSurvivorRosterEligibility'
 import { ensureDraftPoolReady, getWarmDraftPoolSnapshotFast } from '@/lib/draft-room/ensureDraftPoolReady'
 import { getAiAdpForLeague } from '@/lib/ai-adp-engine'
 import { resolveAiAdpFormatKeyFromSettings } from '@/lib/ai-adp-engine/segment-resolver'
@@ -264,14 +265,20 @@ export async function loadAutopickDraftContextForOnClock(
 
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { sport: true, isDynasty: true, settings: true },
+    select: { sport: true, leagueVariant: true, isDynasty: true, settings: true },
   })
   const sport = String(league?.sport ?? draftSession.sportType ?? 'NFL').toUpperCase()
   const isDynasty = Boolean(league?.isDynasty)
   const settings = (league?.settings as Record<string, unknown>) ?? {}
   const isSuperflex = getIsSuperflexFromSettings(settings)
 
-  const fallbackPoolRaw = await loadFallbackCandidates(leagueId, sport, draftedNames)
+  let fallbackPoolRaw = await loadFallbackCandidates(leagueId, sport, draftedNames)
+  if (sport === 'NBA' && league?.leagueVariant === 'survivor') {
+    const roster = await loadNbaSurvivorRosterEligibility(totalPicks)
+    fallbackPoolRaw = fallbackPoolRaw.filter((candidate) =>
+      nbaSurvivorPlayerIdMatches(roster, candidate.playerName, candidate.playerId),
+    )
+  }
   const fallbackPool = fallbackPoolRaw.filter((entry) => {
     if (!entry.playerName || !entry.position) return false
     if (draftedNames.has(normalizeName(entry.playerName))) return false

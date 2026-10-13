@@ -183,13 +183,20 @@ describe('carrying on', () => {
 
   it('a lookup resumes on its own when the tab comes back', async () => {
     render(<ImportV4 defaultProvider="sleeper" viewerEmail="manager@gmail.com" />)
+    const focusListener = vi.spyOn(window, 'addEventListener')
     fireEvent.click(await screen.findByRole('button', { name: 'Email me the link' }))
-    await screen.findByRole('status')
+    // Wait for both the sent state and its passive focus listener. Under a
+    // loaded CI shard the DOM can commit before React installs the listener.
+    await screen.findByText(/Sent to/)
+    await waitFor(() => expect(focusListener).toHaveBeenCalledWith('focus', expect.any(Function)))
+    const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible')
     discoverProviderLeagues.mockResolvedValue({ ok: true, data: { leagues: LEAGUES } })
     act(() => {
       window.dispatchEvent(new Event('focus'))
     })
-    expect(await screen.findByText('League One')).toBeTruthy()
+    expect(await screen.findByText('League One', {}, { timeout: 10_000 })).toBeTruthy()
+    visibility.mockRestore()
+    focusListener.mockRestore()
   })
 
   it('🛑 an IMPORT (a write) never re-runs on focus — only on a tap, with the same arguments', async () => {
