@@ -4,6 +4,7 @@ import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { assignIdpCapSalaryForWaiverClaim } from '@/lib/idp/capEngine'
 import { getPlatformEvents, EVENT } from '@/lib/events'
+import { movePlayerBoundIdolsInTransaction } from '@/lib/survivor/playerBoundIdolTransfer'
 
 export type ProcessedClaim = { claimId: string; status: string; reason?: string }
 
@@ -225,6 +226,10 @@ export async function processWaiverWindow(
             data: { droppedAt: new Date() },
           })
           if (dropResult.count === 0) throw new WaiverDropInactiveError()
+          await movePlayerBoundIdolsInTransaction(tx, {
+            leagueId, playerId: claim.dropPlayerId,
+            fromRedraftRosterId: claim.rosterId, toRedraftRosterId: null, reason: 'waiver_drop',
+          })
         }
 
         await tx.redraftRosterPlayer.create({
@@ -238,6 +243,10 @@ export async function processWaiverWindow(
             slotType: 'bench',
             acquisitionType: 'waiver',
           },
+        })
+        await movePlayerBoundIdolsInTransaction(tx, {
+          leagueId, playerId: claim.addPlayerId,
+          fromRedraftRosterId: null, toRedraftRosterId: claim.rosterId, reason: 'waiver_claim',
         })
 
         await tx.redraftWaiverClaim.update({

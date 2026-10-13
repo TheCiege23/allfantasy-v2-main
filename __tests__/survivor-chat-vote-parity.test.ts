@@ -94,6 +94,11 @@ describe('Survivor chat vote uses the Elimination Council ballot service', () =>
     expect(result.message).toContain('Alpha')
     expect(result.message).toContain('Vote received and locked.')
   })
+  it('accepts the private shorthand while retaining the public-source guard', async () => {
+    const result = await run('@Chimmy @Team Alpha')
+    expect(result).toMatchObject({ handled: true, ok: true, intent: 'vote' })
+    expect(hm.councilVoteSubmit).toHaveBeenCalledWith('league-1', 'user-me', 'user-alpha')
+  })
 
   it('passes a locked-vote refusal through with its own status instead of changing the ballot', async () => {
     hm.councilVoteSubmit.mockResolvedValue({

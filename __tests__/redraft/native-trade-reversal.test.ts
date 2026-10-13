@@ -19,6 +19,7 @@ const db = {
   tradeReversal: { findUnique: vi.fn(), create: vi.fn() },
   redraftRoster: { findUnique: vi.fn(), update: vi.fn() },
   redraftRosterPlayer: { findMany: vi.fn(), updateMany: vi.fn() },
+  survivorIdol: { findMany: vi.fn(async () => []) },
   iDPCapTransaction: { findMany: vi.fn(), create: vi.fn() },
   iDPSalaryRecord: { findFirst: vi.fn(), findFirstOrThrow: vi.fn(), update: vi.fn() },
   iDPCapConfig: { findUnique: vi.fn() },

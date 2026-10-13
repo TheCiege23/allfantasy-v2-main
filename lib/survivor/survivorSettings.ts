@@ -33,6 +33,7 @@ export interface SurvivorFoundationSettings {
   noConsecutiveSitOuts: boolean
   idolExpiryRemainingPlayers: number
   idolInvalidRemainingPlayers: number
+  idolCount: number
   idolsEnabled: boolean
   powerupsEnabled: boolean
   tribeChatsEnabled: boolean
@@ -88,6 +89,7 @@ export const SURVIVOR_DEFAULT_FOUNDATION_SETTINGS: SurvivorFoundationSettings = 
   noConsecutiveSitOuts: true,
   idolExpiryRemainingPlayers: 5,
   idolInvalidRemainingPlayers: 4,
+  idolCount: 7,
   idolsEnabled: true,
   powerupsEnabled: true,
   tribeChatsEnabled: true,
@@ -258,6 +260,7 @@ export function normalizeSurvivorFoundationSettings(
       1,
       defaultTeamCount,
     ),
+    idolCount: clampInt(readNumber(s, ['idolCount', 'survivorIdolCount'], Math.ceil(defaultTeamCount / 3)), 1, 40),
     idolsEnabled: readBoolean(s, ['idolsEnabled', 'survivorIdolsEnabled'], base.idolsEnabled),
     powerupsEnabled: readBoolean(s, ['powerupsEnabled'], base.powerupsEnabled),
     tribeChatsEnabled: readBoolean(s, ['tribeChatsEnabled'], base.tribeChatsEnabled),
@@ -292,6 +295,7 @@ export function buildSurvivorSettingsSnapshotPatch(
     cast_size: normalized.defaultTeamCount,
     tribe_count: normalized.tribeCount,
     survivorTribeSlots: normalized.survivorTribeSlots,
+    survivorIdolCount: normalized.idolCount,
     tribe_assignment_mode: normalized.tribeAssignmentMode,
     merge_at_count: normalized.mergeActivePlayerCount,
     jury_threshold_percent: normalized.juryThresholdPercent,
@@ -317,7 +321,7 @@ export function buildSurvivorLeagueColumnPatch(settings: SurvivorFoundationSetti
     survivorMergeWeek: settings.mergeWeek,
     survivorMergeAtCount: settings.mergeActivePlayerCount,
     survivorSelfVoteAllowed: settings.selfVotesAllowed,
-    survivorIdolCount: settings.defaultTeamCount + settings.tribeCount,
+    survivorIdolCount: settings.idolCount,
     survivorIdolsEnabled: settings.idolsEnabled,
     survivorExileEnabled: settings.exileIslandEnabled,
     survivorExileReturnWeek: settings.exileReturnWeek,

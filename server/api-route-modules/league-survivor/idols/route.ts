@@ -69,17 +69,12 @@ export async function GET(
   if (!access.isLeagueMember) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const canSeeHidden = access.decisions.canSeeHiddenIdolAssignments
-  const rosterId = access.rosterId
   const idols = await prisma.survivorIdol.findMany({
     where: canSeeHidden
       ? { leagueId }
       : {
           leagueId,
-          OR: [
-            { currentOwnerUserId: userId },
-            { rosterId: rosterId ?? '__none__' },
-            { isPubliclyKnown: true },
-            ],
+          OR: [{ currentOwnerUserId: userId }, { isPubliclyKnown: true }],
         },
     select: {
       id: true,
@@ -100,7 +95,7 @@ export async function GET(
     },
   })
   const visible = idols.map((idol: IdolRow) => {
-    const owned = idol.currentOwnerUserId === userId || (rosterId != null && idol.rosterId === rosterId)
+    const owned = idol.currentOwnerUserId === userId
     return redactIdol(idol, owned, canSeeHidden)
   })
 

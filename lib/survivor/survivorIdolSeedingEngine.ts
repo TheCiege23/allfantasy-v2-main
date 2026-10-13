@@ -1,11 +1,9 @@
 /**
  * SURVIVOR IDOL SEEDING ENGINE — pure, deterministic. No DB, no AI, no fabrication.
  *
- * Phase 2 canonical idol power catalog + the seed plan. Only the Vote Shield idol is
- * auto-seeded at start, at COUNT = rosterSpots + tribeCount (e.g. 15 + 4 = 19). Idols are
- * hidden and randomly distributed across active participants; MULTIPLE idols per user are
- * allowed (the same user may receive more than one). A deterministic `seed` makes the
- * distribution reproducible for tests/audit. The engine never invents participants.
+ * Pure seed plans. The native NBA draft uses computePlayerBoundIdolSeedPlan to assign
+ * configured idols to distinct drafted players. computeIdolSeedPlan remains for older
+ * league paths. A deterministic seed makes either plan reproducible for audit.
  */
 
 export type SurvivorIdolPowerType = 'vote_shield' | 'extra_vote' | 'skip_tribal' | 'auto_waiver_pickup' | 'triple_steal' | 'island_raid'
@@ -153,4 +151,63 @@ export function computeIdolSeedPlan(input: ComputeIdolSeedInput): IdolSeedPlanRe
   }))
 
   return { ok: true, assignments, voteShieldCount, seed }
+}
+
+export interface PlayerBoundIdolCandidate {
+  ownerUserId: string
+  rosterId: string
+  playerId: string
+  playerName?: string
+}
+
+export interface PlayerBoundIdolAssignment extends IdolSeedAssignment {
+  playerId: string
+  playerName?: string
+}
+
+/**
+ * NBA pilot inventory: choose actual drafted players. The first third of the cast
+ * gets one random holder each; commissioner-added idols may land on those holders
+ * again. No owner, power or player assignment is exposed to a playing commissioner.
+ */
+export function computePlayerBoundIdolSeedPlan(input: {
+  candidates: PlayerBoundIdolCandidate[]
+  idolCount: number
+  powerPool?: SurvivorIdolPowerType[]
+  seed: number
+}): { ok: true; assignments: PlayerBoundIdolAssignment[]; seed: number } | { ok: false; code: string; error: string } {
+  const { candidates, idolCount, seed } = input
+  if (!Number.isInteger(idolCount) || idolCount < 1 || idolCount > candidates.length) {
+    return { ok: false, code: 'invalid_count', error: 'Idol count must be positive and cannot exceed drafted player count.' }
+  }
+  if (new Set(candidates.map(candidate => candidate.playerId)).size !== candidates.length ||
+      candidates.some(candidate => !candidate.playerId || !candidate.rosterId || !candidate.ownerUserId)) {
+    return { ok: false, code: 'invalid_draft_players', error: 'Draft picks need distinct stable player IDs and roster owners before idols can be seeded.' }
+  }
+  const powerPool = input.powerPool?.length ? input.powerPool : ['vote_shield', 'extra_vote', 'skip_tribal'] as SurvivorIdolPowerType[]
+  if (powerPool.some(power => SURVIVOR_IDOL_CATALOG[power]?.resolution !== 'phase2')) {
+    return { ok: false, code: 'unavailable_power', error: 'The selected idol pool contains a power whose roster or vote effect is not implemented.' }
+  }
+  const rand = mulberry32(seed)
+  const shuffled = <T>(values: T[]) => {
+    const result = [...values]
+    for (let i = result.length - 1; i > 0; i--) {
+      const j = Math.floor(rand() * (i + 1))
+      ;[result[i], result[j]] = [result[j], result[i]]
+    }
+    return result
+  }
+  const byOwner = new Map<string, PlayerBoundIdolCandidate[]>()
+  for (const candidate of candidates) byOwner.set(candidate.ownerUserId, [...(byOwner.get(candidate.ownerUserId) ?? []), candidate])
+  const owners = shuffled([...byOwner.keys()])
+  const firstWave = owners.slice(0, Math.min(idolCount, Math.ceil(owners.length / 3)))
+  const selected: PlayerBoundIdolCandidate[] = firstWave.map(owner => shuffled(byOwner.get(owner)!)[0])
+  const used = new Set(selected.map(candidate => candidate.playerId))
+  selected.push(...shuffled(candidates.filter(candidate => !used.has(candidate.playerId))).slice(0, idolCount - selected.length))
+  const powerOrder = shuffled(Array.from({ length: idolCount }, (_, index) => powerPool[index % powerPool.length]))
+  return { ok: true, seed, assignments: selected.map((candidate, index) => ({
+    ...candidate,
+    powerType: powerOrder[index],
+    expiresAtRemainingPlayers: SURVIVOR_IDOL_CATALOG[powerOrder[index]].expiresAtRemainingPlayers,
+  })) }
 }

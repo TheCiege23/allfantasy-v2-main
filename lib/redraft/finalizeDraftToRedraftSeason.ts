@@ -215,6 +215,7 @@ async function ensureRedraftRosterForGenericRoster(params: {
     where: { id: params.genericRosterId, leagueId: params.leagueId },
     select: {
       id: true,
+      redraftRosterId: true,
       platformUserId: true,
       playerData: true,
       faabRemaining: true,
@@ -532,6 +533,28 @@ export async function syncCompletedDraftToRedraftSeason(
     if (!mapping.redraftRoster) {
       skippedPicks += 1
       continue
+    }
+
+    // Survivor idols are bound to DraftPick.rosterId (the generic roster). Trades and
+    // waivers move RedraftRosterPlayer rows, so retain an unambiguous bridge.
+    if (league.survivorMode && mapping.genericRoster) {
+      const linkedId = mapping.genericRoster.redraftRosterId
+      if (linkedId && linkedId !== mapping.redraftRoster.id) {
+        throw new Error(`Survivor draft roster ${pick.rosterId} is linked to a different season roster`)
+      }
+      if (!linkedId) {
+        const linked = await prisma.roster.updateMany({
+          where: { id: pick.rosterId, leagueId, redraftRosterId: null },
+          data: { redraftRosterId: mapping.redraftRoster.id },
+        })
+        if (linked.count !== 1) {
+          const current = await prisma.roster.findUnique({ where: { id: pick.rosterId }, select: { redraftRosterId: true } })
+          if (current?.redraftRosterId !== mapping.redraftRoster.id) {
+            throw new Error(`Survivor draft roster ${pick.rosterId} changed its season link during finalization`)
+          }
+        }
+        mapping.genericRoster.redraftRosterId = mapping.redraftRoster.id
+      }
     }
 
     const playerId = stablePlayerId(session.id, pick)

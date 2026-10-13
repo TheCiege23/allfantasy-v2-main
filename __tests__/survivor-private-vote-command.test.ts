@@ -16,6 +16,10 @@ describe('private @Chimmy votes', () => {
     await submitPrivateVoteCommand('league', 'alice', '@Chimmy vote out @bOB')
     expect(m.vote).toHaveBeenCalledWith('league', 'alice', 'bob')
   })
+  it('accepts the private @Chimmy @manager shorthand', async () => {
+    await submitPrivateVoteCommand('league', 'alice', '@Chimmy @Bob')
+    expect(m.vote).toHaveBeenCalledWith('league', 'alice', 'bob')
+  })
   it('refuses ambiguous names without recording a ballot', async () => {
     m.context.mockResolvedValue({ scopePlayers: [{ userId: 'bob1', displayName: 'Bob' }, { userId: 'bob2', displayName: 'Bob' }] })
     expect(await submitPrivateVoteCommand('league', 'alice', '@Chimmy vote @Bob')).toMatchObject({ ok: false, status: 422 })

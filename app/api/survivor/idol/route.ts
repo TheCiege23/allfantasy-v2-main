@@ -52,6 +52,11 @@ export async function POST(req: NextRequest) {
     if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     const denied = await survivorHostGuard(body.leagueId, userId)
     if (denied) return denied
+    const league = await prisma.league.findUnique({ where: { id: body.leagueId }, select: { sport: true, settings: true } })
+    const leagueSettings = league?.settings as Record<string, unknown> | null
+    if (String(league?.sport ?? '').toUpperCase() === 'NBA' && leagueSettings?.survivorFoundationSettingsVersion === 1) {
+      return NextResponse.json({ error: 'NBA Survivor idols must be seeded onto drafted players by the system.' }, { status: 409 })
+    }
     const cfg = await prisma.survivorLeagueConfig.findUnique({ where: { leagueId: body.leagueId } })
     if (!cfg) return NextResponse.json({ error: 'No survivor config' }, { status: 400 })
     const roster = await prisma.roster.findFirst({

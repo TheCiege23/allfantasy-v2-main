@@ -6,6 +6,7 @@ import { normalizeSurvivorFoundationSettings } from './normalizeSurvivorSettings
 import { clearReleasedRosterData } from '@/lib/guillotine/GuillotineRosterReleaseEngine'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
+import { movePlayerBoundIdolsInTransaction } from './playerBoundIdolTransfer'
 
 export type EliminationOutcome =
   | { ok: true; alreadyResolved: boolean; outcome: 'removed_to_waivers' | 'exile_island'; eliminatedUserId: string; removedFromChats: number; pendingRelease: boolean; pendingExile: boolean; releasedPlayerCount?: number }
@@ -50,6 +51,10 @@ export async function resolveElimination(leagueId: string, councilId: string, ac
         const players = await tx.redraftRosterPlayer.findMany({ where: { rosterId: actual.id, droppedAt: null }, select: { playerId: true } })
         for (const p of players) released.add(p.playerId)
         await tx.redraftRosterPlayer.updateMany({ where: { rosterId: actual.id, droppedAt: null }, data: { droppedAt: now, isLocked: false } })
+        for (const p of players) await movePlayerBoundIdolsInTransaction(tx, {
+          leagueId, playerId: p.playerId, fromRedraftRosterId: actual.id,
+          toRedraftRosterId: null, reason: 'waiver_drop',
+        })
         await tx.redraftRoster.update({ where: { id: actual.id }, data: { isEliminated: true } })
         await tx.redraftRosterMoveHistory.create({ data: { leagueId, rosterId: actual.id, seasonId: actual.seasonId, season: actual.season.season, week: council.week,
           actorUserId: actorUserId ?? null, source: 'survivor:elimination', moveSummary: 'Roster released after Elimination Council', metadata: { councilId, releasedPlayerIds: [...released] } } })
