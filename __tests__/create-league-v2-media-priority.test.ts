@@ -142,7 +142,7 @@ describe('draft intro resolver (fail closed)', () => {
   })
 })
 
-describe('Survivor catalog vs soccer', () => {
+describe('Survivor NBA creation pilot and underlying sport catalog', () => {
   beforeEach(() => {
     setClientLeagueCreateOptionsCatalog(LEAGUE_CREATE_OPTIONS_CATALOG_V1)
   })
@@ -156,8 +156,9 @@ describe('Survivor catalog vs soccer', () => {
     expect(isSportAllowedForType('SOCCER', 'survivor')).toBe(false)
   })
 
-  it('Survivor + NFL + snake remains valid and complete', () => {
-    expect(isSportAllowedForType('NFL', 'survivor')).toBe(true)
+  it('hides new NFL Survivor creation while preserving its existing draft and cast rules', () => {
+    expect(isSportAllowedForType('NFL', 'survivor')).toBe(false)
+    expect(isSportAllowedForType('NBA', 'survivor')).toBe(true)
     const opts = getDraftTypeOptions('survivor', 'NFL').map((o) => o.id)
     expect(opts).toContain('snake')
     // 29566580a (feat(survivor): add phase 1 foundation) deliberately widened the cast from

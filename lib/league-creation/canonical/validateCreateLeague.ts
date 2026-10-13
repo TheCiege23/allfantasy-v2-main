@@ -24,6 +24,12 @@ import {
 import { isAllowedIdpDraftType, normalizeToSupportedSport, supportsIdpLeagueSport } from '@/lib/sport-scope'
 import { normalizeConceptToFormat } from '@/lib/league-creation/canonical/normalizeConcept'
 import { checkRetiredConcept } from '@/lib/league-creation/retiredConcepts'
+import {
+  isSurvivorCreationSportAvailable,
+  SURVIVOR_CREATION_UNAVAILABLE_MESSAGE,
+  SURVIVOR_PAID_CREATION_ENABLED,
+  SURVIVOR_PAID_CREATION_UNAVAILABLE_MESSAGE,
+} from '@/lib/survivor/survivorCreationAvailability'
 import type { SupportedSport } from '@/lib/create-league-v2/state'
 import type { ValidationIssue } from '@/lib/league-creation/canonical/types'
 import {
@@ -189,6 +195,15 @@ export function validateCreatePayload(input: unknown): ValidateCreateLeagueResul
   }
 
   const formatId = normalized.formatId
+  if (formatId === 'survivor' && !isSurvivorCreationSportAvailable(sport)) {
+    return { ok: false, error: SURVIVOR_CREATION_UNAVAILABLE_MESSAGE, status: 400,
+      errors: [{ path: 'sport', message: SURVIVOR_CREATION_UNAVAILABLE_MESSAGE }] }
+  }
+  if (formatId === 'survivor' && !SURVIVOR_PAID_CREATION_ENABLED &&
+      (data.conceptSetup?.survivor_entry_fee_mode === 'paid' || data.conceptSetup?.survivorEntryFeeMode === 'paid')) {
+    return { ok: false, error: SURVIVOR_PAID_CREATION_UNAVAILABLE_MESSAGE, status: 400,
+      errors: [{ path: 'conceptSetup.survivor_entry_fee_mode', message: SURVIVOR_PAID_CREATION_UNAVAILABLE_MESSAGE }] }
+  }
   if (formatId === 'dynasty') {
     const choices = dynastyCreationChoicesSchema.safeParse(data.conceptSetup ?? {})
     if (!choices.success) {

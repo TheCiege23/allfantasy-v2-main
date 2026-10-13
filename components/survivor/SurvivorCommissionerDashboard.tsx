@@ -15,7 +15,6 @@ import {
   MessageSquare,
   Sparkles,
   CreditCard,
-  ClipboardList,
   History,
   ExternalLink,
   Flame,
@@ -51,7 +50,6 @@ type TabId =
   | 'ai'
   | 'premium'
   | 'subscription'
-  | 'approvals'
   | 'history'
 
 const TABS: { id: TabId; label: string; icon: ReactNode }[] = [
@@ -66,7 +64,6 @@ const TABS: { id: TabId; label: string; icon: ReactNode }[] = [
   { id: 'ai', label: 'AI & Automation', icon: <Sparkles className="h-4 w-4" /> },
   { id: 'premium', label: 'Premium intel', icon: <ScanEye className="h-4 w-4" /> },
   { id: 'subscription', label: 'Access · Tokens', icon: <CreditCard className="h-4 w-4" /> },
-  { id: 'approvals', label: 'Approvals', icon: <ClipboardList className="h-4 w-4" /> },
   { id: 'history', label: 'History', icon: <History className="h-4 w-4" /> },
 ]
 
@@ -503,11 +500,6 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
             />
           )}
 
-          {tab === 'approvals' && (
-            <WarRoomPanel title="Approvals" subtitle="Co-host setting changes can route through league approval flows when enabled.">
-              <p className="text-sm text-white/55">Wire to your league&apos;s co-commissioner approval policy (same pattern as tournaments).</p>
-            </WarRoomPanel>
-          )}
 
           {tab === 'history' && (
             <WarRoomPanel title="History / archive" subtitle="Recent Survivor audit events.">

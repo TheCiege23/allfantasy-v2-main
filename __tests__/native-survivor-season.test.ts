@@ -8,17 +8,33 @@ import { getLeagueDefaults } from '@/lib/league-defaults/getLeagueDefaults'
 import { resolveCreatedSeasonWeeks } from '@/lib/redraft/createdSeasonLength'
 import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/survivorSettings'
 import { buildNativeLeagueNavigation, nativeLeaguePhase } from '@/lib/league/nativeLeagueNavigation'
+import { getAllowedLeagueTypesForSport, getAllowedSportsForLeagueType } from '@/lib/league-creation-wizard/league-type-registry'
 
-describe('NBA/NHL Survivor creation and full-season pacing', () => {
+describe('NBA Survivor creation pilot and multi-sport season capabilities', () => {
   const now = new Date('2026-09-01T12:00:00Z')
-  it.each(['NBA', 'NHL'] as const)('%s is offered consistently by the wizard, catalog, and API validator', sport => {
-    expect(getAllowedSportsForType('survivor')).toContain(sport)
+  it.each(['NBA', 'NHL'] as const)('%s keeps season capabilities while only NBA accepts new creation', sport => {
+    expect(getAllowedSportsForType('survivor').includes(sport)).toBe(sport === 'NBA')
     expect(getTeamCountOptions(sport, 'survivor')).toEqual([16, 17, 18, 19, 20])
     expect(LEAGUE_CREATE_OPTIONS_CATALOG_V1.allowedScoringPresetsByConceptSport.survivor[sport]).toEqual([sport.toLowerCase() + '_points'])
     vi.useFakeTimers(); vi.setSystemTime(now)
     try {
-      expect(validateCreatePayload({ concept: 'survivor', sport, scoringPreset: sport.toLowerCase() + '_points', teamCount: 16, draftType: 'snake', leagueName: 'Season test' }).ok).toBe(true)
+      const result = validateCreatePayload({ concept: 'survivor', sport, scoringPreset: sport.toLowerCase() + '_points', teamCount: 16, draftType: 'snake', leagueName: 'Season test' })
+      expect(result.ok).toBe(sport === 'NBA')
+      if (sport !== 'NBA' && !result.ok) expect(result.error).toContain('NBA')
     } finally { vi.useRealTimers() }
+  })
+  it('hides new Survivor creation outside NBA across both wizard paths and refuses paid NBA pilot requests', () => {
+    expect(getAllowedSportsForLeagueType('survivor')).toEqual(['NBA'])
+    expect(LEAGUE_CREATE_OPTIONS_CATALOG_V1.allowedSportsByConcept.survivor).toEqual(['NBA'])
+    expect(getAllowedLeagueTypesForSport('NBA')).toContain('survivor')
+    for (const sport of ['NFL', 'NHL', 'NCAAF'] as const) {
+      expect(getAllowedLeagueTypesForSport(sport)).not.toContain('survivor')
+      expect(getAllowedSportsForType('survivor')).not.toContain(sport)
+    }
+    const paid = validateCreatePayload({ concept: 'survivor', sport: 'NBA', scoringPreset: 'nba_points', teamCount: 16,
+      draftType: 'snake', leagueName: 'Paid pilot', conceptSetup: { survivor_entry_fee_mode: 'paid' } })
+    expect(paid.ok).toBe(false)
+    if (!paid.ok) expect(paid.error).toContain('free')
   })
   it.each(['NBA', 'NHL'])('%s uses its real positions and points scoring through both preset layers', sport => {
     const c = getSurvivorDefaultContract({ sport, teamCount: 20 })!

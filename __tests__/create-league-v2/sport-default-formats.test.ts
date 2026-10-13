@@ -1,5 +1,5 @@
 /**
- * Each sport starts on a specialty format (user's call, 2026-10-12): Survivor where it is offered,
+ * Each sport starts on a specialty format: Survivor during the NBA-only creation pilot,
  * else Guillotine (MLB), else Big Brother (NCAAB, Soccer). Changing sport follows that default
  * until the manager picks a format themselves; after that their pick is kept whenever the new
  * sport allows it.
@@ -20,7 +20,7 @@ import { submitCreateLeagueV2 } from '@/lib/create-league-v2/submit'
 import { validateCreatePayload } from '@/lib/league-creation/canonical/validateCreateLeague'
 
 const EXPECTED: Record<string, string> = {
-  NFL: 'survivor', NCAAF: 'survivor', NBA: 'survivor', NHL: 'survivor',
+  NFL: 'guillotine', NCAAF: 'big_brother', NBA: 'survivor', NHL: 'guillotine',
   MLB: 'guillotine', NCAAB: 'big_brother', SOCCER: 'big_brother',
 }
 

@@ -47,6 +47,12 @@ import {
   buildSurvivorSettingsSnapshotPatch,
   normalizeSurvivorFoundationSettings,
 } from '@/lib/survivor/normalizeSurvivorSettings';
+import {
+  isSurvivorCreationSportAvailable,
+  SURVIVOR_CREATION_UNAVAILABLE_MESSAGE,
+  SURVIVOR_PAID_CREATION_ENABLED,
+  SURVIVOR_PAID_CREATION_UNAVAILABLE_MESSAGE,
+} from '@/lib/survivor/survivorCreationAvailability';
 
 const createSchema = z.object({
   name: z.string().min(1).max(100).optional(),
@@ -390,9 +396,9 @@ export async function POST(req: Request) {
       { status: 400 }
     );
   }
-  if (String(requestedLeagueType ?? '').toLowerCase() === 'survivor' && String(sport).toUpperCase() === 'SOCCER') {
+  if (requestedLeagueType === 'survivor' && !isSurvivorCreationSportAvailable(sport)) {
     return NextResponse.json(
-      { error: 'Survivor leagues are not available for Soccer. Choose another sport.' },
+      { error: SURVIVOR_CREATION_UNAVAILABLE_MESSAGE },
       { status: 400 }
     );
   }
@@ -571,6 +577,9 @@ export async function POST(req: Request) {
           .toLowerCase()
           .trim();
         if (feeMode === 'paid') {
+          if (!SURVIVOR_PAID_CREATION_ENABLED) {
+            return NextResponse.json({ success: false, error: SURVIVOR_PAID_CREATION_UNAVAILABLE_MESSAGE }, { status: 400 });
+          }
           const centsRaw = sw.survivor_entry_fee_amount_cents;
           const cents = typeof centsRaw === 'number' ? centsRaw : Number(centsRaw);
           if (!Number.isFinite(cents) || cents < 1) {
@@ -1047,6 +1056,9 @@ export async function POST(req: Request) {
         .toLowerCase()
         .trim();
       if (feeMode === 'paid') {
+        if (!SURVIVOR_PAID_CREATION_ENABLED) {
+          return NextResponse.json({ error: SURVIVOR_PAID_CREATION_UNAVAILABLE_MESSAGE }, { status: 400 });
+        }
         const centsRaw = (initialSettings as Record<string, unknown>).survivor_entry_fee_amount_cents;
         const cents = typeof centsRaw === 'number' ? centsRaw : Number(centsRaw);
         if (!Number.isFinite(cents) || cents < 1) {

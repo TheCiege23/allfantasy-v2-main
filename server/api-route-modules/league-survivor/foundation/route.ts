@@ -95,6 +95,9 @@ async function updateFoundationSettings(leagueId: string, body: JsonRecord, user
   if (access?.isParticipant && access.isLeagueCommissioner && settings.commissionerParticipationMode !== 'participating_player') {
     return NextResponse.json({ error: 'A manager cannot switch into host visibility while participating in this season.' }, { status: 409 })
   }
+  if (settings.commissionerParticipationMode === 'participating_player' && settings.tribeAssignmentMode === 'commissioner_manual') {
+    return NextResponse.json({ error: 'A playing commissioner must use system-run tribe formation.' }, { status: 409 })
+  }
   const previousSettings = normalizeSurvivorFoundationSettings(current)
   if (settings.defaultTeamCount !== previousSettings.defaultTeamCount) return NextResponse.json({ error: 'Choose league size during creation. Changing it here would leave draft seats and rosters inconsistent.' }, { status: 409 })
   if (settings.tribeCount !== previousSettings.tribeCount || JSON.stringify(settings.survivorTribeSlots) !== JSON.stringify(previousSettings.survivorTribeSlots)) return NextResponse.json({ error: 'Use Tribe identities and capacities to save tribe structure together.' }, { status: 409 })
@@ -104,6 +107,8 @@ async function updateFoundationSettings(leagueId: string, body: JsonRecord, user
   }
   const settingsPatch = buildSurvivorSettingsSnapshotPatch(settings as unknown as JsonRecord)
   const columnPatch = buildSurvivorLeagueColumnPatch(settings)
+  // Council, merge, privacy, and Exile edits must not silently reset a configured idol pool.
+  delete columnPatch.survivorIdolCount
   const savedPlan = readSurvivorFullSeasonPlan(current)
   let planPatch: JsonRecord = {}
   if (exileChanged && savedPlan) {
@@ -137,14 +142,13 @@ async function updateFoundationSettings(leagueId: string, body: JsonRecord, user
   await upsertSurvivorConfig(leagueId, {
     tribeCount: settings.tribeCount,
     tribeSize: Math.max(1, Math.ceil(settings.defaultTeamCount / settings.tribeCount)),
-    tribeFormation: settings.tribeAssignmentMode,
+    tribeFormation: settings.tribeAssignmentMode === 'commissioner_manual' ? 'commissioner' : 'random',
     mergeTrigger: settings.mergeTriggerType === 'active_player_count' ? 'player_count' : 'week',
     mergeWeek: settings.mergeWeek,
     mergePlayerCount: settings.mergeActivePlayerCount,
     selfVoteDisallowed: !settings.selfVotesAllowed,
     exileReturnEnabled: settings.exileIslandEnabled,
     exileReturnTokens: settings.exileReturnTokens,
-    idolCount: settings.defaultTeamCount + settings.tribeCount,
     tribalCouncilTimeUtc: settings.tribalCouncilTime,
 
   })

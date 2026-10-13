@@ -476,7 +476,7 @@ describe('POST /api/league/create sport defaults integration', () => {
         },
       },
       {
-        sport: 'NFL',
+        sport: 'NBA',
         leagueType: 'survivor',
         draftType: 'snake',
         isDynasty: false,
@@ -1202,7 +1202,7 @@ describe('POST /api/league/create sport defaults integration', () => {
         },
       },
       {
-        sport: 'NFL',
+        sport: 'NBA',
         leagueType: 'survivor',
         draftType: 'auction',
         isDynasty: false,
@@ -1273,7 +1273,7 @@ describe('POST /api/league/create sport defaults integration', () => {
         },
       },
       {
-        sport: 'NFL',
+        sport: 'NBA',
         leagueType: 'survivor',
         draftType: 'auction',
         isDynasty: false,
@@ -1653,7 +1653,7 @@ describe('POST /api/league/create sport defaults integration', () => {
         },
       },
       {
-        sport: 'NFL',
+        sport: 'NBA',
         leagueType: 'survivor',
         draftType: 'snake',
         isDynasty: false,
