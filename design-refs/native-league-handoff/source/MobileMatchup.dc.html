@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Blah — Matchup (phone)</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./af-shell.css">
+<link rel="stylesheet" href="./draft-sleek.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500;700;800&amp;display=swap" rel="stylesheet">
+<style>body{margin:0;background:#07080d}</style>
+</helmet>
+<div class="af ph" style="min-height: 0">
+  <div class="ph-scroll">
+    <div style="display: flex; align-items: center; gap: 8px; padding: 10px 12px">
+      <a href="MobileSwitcher.dc.html" class="viewing" style="flex: 1; height: 44px; color: #eef0fa">
+        <span class="av" style="width: 28px; height: 28px; font-size: 12px; border-radius: 999px; background: #10131c; color: #22d3ee; box-shadow: 0 0 0 2px #10131c, 0 0 0 3px #34d399">B</span>
+        <span style="flex: 1">Blah</span><span class="chip chip-af" style="height: 20px">AF</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+      </a>
+      <button class="iconbtn" aria-label="Previous week">‹</button><button class="iconbtn" aria-label="Next week">›</button>
+    </div>
+
+    <section style="margin: 0 12px; padding: 16px; border-radius: 16px; border: 1px solid rgba(255,255,255,.07); background: #10131c; display: flex; flex-direction: column; gap: 12px">
+      <span class="lbl" style="text-align: center">Week 5</span>
+      <div style="display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px">
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center">
+          <span class="av" style="width: 44px; height: 44px; border-radius: 999px; background: #1f2a4d; color: #9fd4ff; font-size: 14px; box-shadow: 0 0 0 2px #10131c, 0 0 0 4px #34d399">TC</span>
+          <span style="font-size: 12px; font-weight: 600">TheCiege26</span><span class="num" style="font-size: 10px; color: #989fc2">3–1</span>
+        </div>
+        <div style="display: flex; align-items: baseline; gap: 10px">
+          <span class="num" style="font-size: 32px; font-weight: 600; color: #34d399">112.4</span>
+          <span class="num" style="font-size: 32px; font-weight: 600; color: #c3c9e6">98.7</span>
+        </div>
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center">
+          <span class="av" style="width: 44px; height: 44px; border-radius: 999px; background: #3a1d55; color: #dcb4ff; font-size: 14px">SS</span>
+          <span style="font-size: 12px; font-weight: 600">Sunday Scaries</span><span class="num" style="font-size: 10px; color: #989fc2">2–2</span>
+        </div>
+      </div>
+      <div class="bar" style="height: 8px" role="img" aria-label="Win probability 71 percent"><div style="width: 71%; background: #34d399"></div><div style="width: 29%; background: #fb5b78"></div></div>
+      <span class="num" style="font-size: 11px; color: #c3c9e6; text-align: center">AF win prob <strong style="color: #34d399">71%</strong> · proj 131.2 – 119.5</span>
+    </section>
+
+    <div style="margin: 12px; padding: 12px 14px; border-radius: 12px; border: 1px solid rgba(34,211,238,.28); background: rgba(34,211,238,.06); font-size: 13px; line-height: 1.45; color: #c3c9e6">
+      <span class="lbl" style="color: #22d3ee">Chimmy</span><br>Nacua is questionable for SNF. Shaheed is the swap if he sits.
+    </div>
+
+    <section style="margin: 0 12px 16px; border-radius: 14px; border: 1px solid rgba(255,255,255,.07); background: #10131c">
+      <sc-for list="{{rows}}" as="r" hint-placeholder-count="9">
+        <div style="display: grid; grid-template-columns: 1fr 40px 42px 40px 1fr; align-items: center; gap: 4px; padding: 9px 10px; border-top: 1px solid rgba(255,255,255,.05)">
+          <span style="display: flex; flex-direction: column; gap: 3px; min-width: 0"><span style="font-size: 12px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{r.a}}</span><span class="num" style="font-size: 9px; color: {{r.asC}}">{{r.as}}</span></span>
+          <span class="num" style="font-size: 13px; font-weight: 600; text-align: right; color: {{r.apC}}">{{r.ap}}</span>
+          <span class="pos p-{{r.pos}}" style="width: 42px; height: 22px; font-size: 9px">{{r.slot}}</span>
+          <span class="num" style="font-size: 13px; font-weight: 600; color: {{r.bpC}}">{{r.bp}}</span>
+          <span style="display: flex; flex-direction: column; gap: 3px; min-width: 0; align-items: flex-end; text-align: right"><span style="font-size: 12px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%">{{r.b}}</span><span class="num" style="font-size: 9px; color: {{r.bsC}}">{{r.bs}}</span></span>
+        </div>
+      </sc-for>
+    </section>
+  </div>
+  <nav class="bnav" aria-label="Primary">
+    <a class="bb" href="Mobile.dc.html"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>League</a>
+    <a class="bb bb-on" href="MobileMatchup.dc.html"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 4h6v16H4zM14 4h6v16h-6z"/></svg>Matchup</a>
+    <a class="bb" href="MobileLineup.dc.html"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>Team</a>
+    <a class="bb" href="MobileWaivers.dc.html"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>Players</a>
+    <a class="bb" href="MobileChat.dc.html"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Chat</a>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const sc = s => s.startsWith('Q') ? '#22d3ee' : s === 'Final' ? '#7d84a8' : '#c3c9e6';
+    const R = (slot, pos, a, as, ap, b, bs, bp) => ({ slot, pos, a, as, ap, b, bs, bp, asC: sc(as), bsC: sc(bs),
+      apC: Number(ap) > Number(bp) ? '#34d399' : '#eef0fa', bpC: Number(bp) > Number(ap) ? '#fb5b78' : '#eef0fa' });
+    const rows = [
+      R('QB','QB','J. Hurts','Final','24.6','J. Allen','Final','21.3'),
+      R('RB','RB','B. Robinson','Final','19.2','S. Barkley','Final','14.8'),
+      R('RB','RB','K. Williams','Sun 8:20','0.0','D. Henry','Q3 9:14','11.6'),
+      R('WR','WR',"J. Chase",'Final','22.1','J. Jefferson','Final','17.4'),
+      R('WR','WR','P. Nacua','Sun 8:20','0.0','C. Lamb','Q3 9:14','9.9'),
+      R('TE','TE','S. LaPorta','Final','12.7','T. McBride','Sun 4:05','0.0'),
+      R('FLX','FLEX','J. Gibbs','Final','23.8','A. St. Brown','Final','16.2'),
+      R('K','K','B. Aubrey','Q3 9:14','6.0','J. Elliott','Final','4.5'),
+      R('DEF','DEF','Ravens','Q3 9:14','4.0','Steelers','Sun 4:05','0.0')
+    ];
+    return { rows };
+  }
+}
+</script>
+</body>
+</html>

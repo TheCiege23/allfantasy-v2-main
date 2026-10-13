@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Guillotine league home</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./specialty/sp.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Cinzel:wght@600;700&amp;family=Caveat:wght@600;700&amp;family=Bebas+Neue&amp;family=Pirata+One&amp;family=Creepster&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080d}
+.gl-rank{width:22px;text-align:right;font:700 12px 'JetBrains Mono';color:#7d84a3}
+.gl-cut{position:relative;height:0;border-top:2px dashed #e0402e;margin:6px 0}
+.gl-cut span{position:absolute;right:0;top:-11px;white-space:nowrap;padding:1px 8px;border-radius:4px;background:#e0402e;color:#fff;font:700 10px 'Archivo';letter-spacing:.08em}
+.gl-big{font-family:'Bebas Neue',sans-serif;letter-spacing:.02em}
+</style>
+</helmet>
+<div class="sp" style="--acc: #e0402e; --acc2: #ff9a8a; --accInk: #fff; --disp: Bebas Neue; min-height: 100vh; display: flex; flex-direction: column">
+<section class="sp-hero" style="margin: 20px 28px 0">
+  <img class="sp-bg" src="specialty/guillotine/banner.svg" alt="">
+  <div class="sp-veil"></div>
+  <div class="sp-in">
+    <img src="specialty/guillotine/emblem.svg" alt="" style="width: 150px; flex: none; filter: drop-shadow(0 14px 22px rgba(0,0,0,.6))">
+    <div style="flex: 1 1 460px; display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; flex-wrap: wrap; gap: 6px"><span class="sp-chip">NFL</span><span class="sp-chip">2026</span><span class="sp-chip">Guillotine</span><span class="sp-chip">14 teams · 9 alive</span></div>
+      <span class=""><span class="gl-big" style="font-size: 54px; line-height: .95">Guillotine League 26</span></span>
+      <span style="font-size: 16px; font-weight: 600; color: var(--acc2)">Week 5 · You’re 35.9 points over the cut</span>
+      <span class="sp-t2" style="font-size: 14px; max-width: 620px">One league-wide points race. The lowest score each week is chopped and that roster drops to waivers. Last team standing wins.</span>
+      <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 4px"><a class="sp-btn sp-btn-p" href="#" style="min-height: 46px; padding: 0 20px">Set lineup</a><a class="sp-btn" href="#" style="min-height: 46px; padding: 0 20px">Waivers</a><a class="sp-btn" href="GuillotineChop.dc.html" style="min-height: 46px; padding: 0 20px">See the chop</a></div>
+    </div>
+    <div class="sp-clock"><span class="sp-lbl" style="color: var(--acc2)">Chop locks in</span><span class="sp-num" style="font-size: 36px; font-weight: 700; color: #fff">1d 06:40</span><span class="sp-t3" style="font-size: 12px">After stat corrections · Tue 11:00 AM ET</span></div>
+  </div>
+</section>
+<div style="display: flex; flex-wrap: wrap; gap: 20px; padding: 20px 28px 32px; align-items: flex-start">
+  <section class="sp-card" style="flex: 1 1 640px; padding: 18px 20px; display: flex; flex-direction: column; gap: 10px; min-width: 0">
+    <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap">
+      <img src="specialty/guillotine/icon-chop.svg" alt="" style="width: 30px">
+      <span class="sp-lbl" style="flex: 1">The chop line · week 5</span>
+      <div class="sp-seg"><sc-for list="{{modes}}" as="m" hint-placeholder-count="2"><button aria-pressed="{{m.on}}" onClick="{{m.pick}}">{{m.label}}</button></sc-for></div>
+    </div>
+    <sc-for list="{{rows}}" as="r" hint-placeholder-count="9">
+      <sc-if value="{{r.cutAbove}}" hint-placeholder-val="{{ false }}"><div class="gl-cut"><span>CUT LINE · {{cutScore}}</span></div></sc-if>
+      <div class="sp-row" style="background: {{r.bg}}; border-color: {{r.line}}">
+        <span class="gl-rank">{{r.rank}}</span>
+        <span class="sp-av" style="background: {{r.c}}">{{r.ini}}</span>
+        <span style="flex: 0 0 170px; font-weight: 600">{{r.name}}</span>
+        <div class="sp-bar" style="flex: 1"><span style="width: {{r.w}}; background: {{r.barC}}"></span></div>
+        <span class="sp-num" style="width: 64px; text-align: right; font-weight: 700">{{r.pts}}</span>
+        <span class="sp-num" style="width: 64px; text-align: right; font-size: 12px; color: {{r.dC}}">{{r.d}}</span>
+        <span class="sp-tag" style="width: 96px; justify-content: center; background: {{r.tagBg}}; color: {{r.tagC}}">{{r.tag}}</span>
+      </div>
+    </sc-for>
+    <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 6px">
+      <span class="sp-lbl" style="margin-right: 6px">Chopped</span>
+      <sc-for list="{{chopped}}" as="c" hint-placeholder-count="5"><span class="sp-chip" style="color: #8d93ad"><s>{{c.name}}</s><span class="sp-num" style="color: #ff9a8a">Wk {{c.wk}} · {{c.pts}}</span></span></sc-for>
+    </div>
+  </section>
+  <aside style="flex: 0 1 380px; display: flex; flex-direction: column; gap: 16px">
+    <div class="sp-card2" style="padding: 18px; display: flex; flex-direction: column; gap: 12px; border-color: rgba(58,190,120,.35)">
+      <div style="display: flex; align-items: center; gap: 12px"><img src="specialty/guillotine/icon-safe.svg" alt="" style="width: 44px"><div style="flex: 1; display: flex; flex-direction: column"><span class="sp-lbl" style="color: #7fe0a6">Your survival · week 5</span><span class="gl-big" style="font-size: 40px; line-height: 1; color: #bff3d0">91% safe</span></div></div>
+      <span class="sp-t2" style="font-size: 12.5px">You’re 3rd of 9 with 2 players still to play. The cut is projected at 96.4.</span>
+      <div style="display: flex; align-items: flex-end; gap: 6px; height: 70px"><sc-for list="{{odds}}" as="o" hint-placeholder-count="9"><div style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px"><span style="width: 100%; height: {{o.h}}; border-radius: 4px 4px 0 0; background: {{o.c}}"></span><span class="sp-num" style="font-size: 9.5px; color: #7d84a3">{{o.wk}}</span></div></sc-for></div>
+      <span class="sp-t3" style="font-size: 11.5px">Chance to survive each remaining week, from AF projections.</span>
+    </div>
+    <div class="sp-card" style="padding: 16px; display: flex; flex-direction: column; gap: 10px">
+      <span class="sp-lbl">Ties are broken by</span><div class="sp-rule"><b>1</b><span>Total season points</span></div><div class="sp-rule"><b>2</b><span>Last week’s points</span></div><div class="sp-rule"><b>3</b><span>Draft slot in week 1 (the better slot loses)</span></div><div class="sp-rule"><b>4</b><span>Commissioner decision</span></div>
+    </div>
+    <div class="sp-card" style="padding: 14px 16px; display: flex; flex-direction: column"><span class="sp-lbl" style="margin-bottom: 4px">Latest</span><div class="sp-feed"><img src="specialty/guillotine/icon-chop.svg" alt=""><div style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 600; font-size: 13px">Open Team 10 was chopped</span><span class="sp-t3" style="font-size: 11.5px">Week 4 · 88.6 points · roster released</span></div></div><div class="sp-feed"><img src="specialty/guillotine/icon-zone.svg" alt=""><div style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 600; font-size: 13px">FAAB frenzy: 14 bids placed</span><span class="sp-t3" style="font-size: 11.5px">Top claim: $41 for Tank Dell</span></div></div><div class="sp-feed"><img src="specialty/guillotine/icon-safe.svg" alt=""><div style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 600; font-size: 13px">You survived week 4</span><span class="sp-t3" style="font-size: 11.5px">+22.1 over the cut</span></div></div></div>
+  </aside>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1150}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { mode: 'Live' }; }
+  renderVals() {
+    const st = this.state; const live = st.mode === 'Live';
+    const R = [['Open Team 7','O7','#1d3a3a',142.2,150.1],['Open Team 2','O2','#4a1f2c',131.4,138.0],['You · TheCiege26','TC','#22314f',128.6,134.4],['Open Team 6','O6','#2c2a4a',121.3,127.0],
+               ['Open Team 9','O9','#3a3418',117.0,122.6],['Open Team 5','O5','#12352a',109.8,118.9],['Open Team 12','O12','#3a1f30',101.5,108.2],['Open Team 4','O4','#1f2a4d',97.7,104.9],['Open Team 11','O11','#2a3a1a',92.7,96.4]];
+    const rows0 = R.map(([name, ini, c, l, p]) => ({ name, ini, c, pts: live ? l : p })).sort((a, b) => b.pts - a.pts);
+    const cut = rows0[rows0.length - 1].pts, danger = rows0[rows0.length - 2].pts;
+    const rows = rows0.map((r, i) => { const last = i === rows0.length - 1, dz = !last && r.pts - cut < 12, me = r.name.startsWith('You');
+      return { ...r, rank: i + 1, pts: r.pts.toFixed(1), w: (r.pts / 160 * 100).toFixed(0) + '%', d: last ? 'CUT' : '+' + (r.pts - cut).toFixed(1), dC: last ? '#ff6a5a' : dz ? '#ffc46b' : '#7fe0a6',
+        tag: last ? 'Chop zone' : dz ? 'Danger' : 'Safe', tagBg: last ? 'rgba(224,64,46,.2)' : dz ? 'rgba(255,196,107,.14)' : 'rgba(58,190,120,.12)', tagC: last ? '#ff9a8a' : dz ? '#ffc46b' : '#7fe0a6',
+        barC: last ? 'linear-gradient(90deg,#7a1a12,#e0402e)' : dz ? 'linear-gradient(90deg,#7a5a1a,#ffc46b)' : 'linear-gradient(90deg,#1e5a3a,#3abe78)',
+        bg: me ? 'rgba(127,183,232,.08)' : last ? 'rgba(224,64,46,.08)' : '#10131c', line: me ? 'rgba(127,183,232,.4)' : last ? 'rgba(224,64,46,.4)' : 'rgba(255,255,255,.05)', cutAbove: last }; });
+    return { rows, cutScore: cut.toFixed(1), modes: ['Live', 'Projected'].map(l => ({ label: l, on: st.mode === l ? 'true' : 'false', pick: () => this.setState({ mode: l }) })),
+      chopped: [['Open Team 3', 1, '71.2'], ['Open Team 8', 2, '80.4'], ['Open Team 13', 3, '79.9'], ['Open Team 10', 4, '88.6'], ['Open Team 14', 4, '90.1']].map(([name, wk, pts]) => ({ name, wk, pts })),
+      odds: [91, 86, 80, 74, 66, 58, 49, 41, 33].map((v, i) => ({ wk: 'W' + (5 + i), h: (v * .62).toFixed(0) + 'px', c: v > 70 ? '#3abe78' : v > 50 ? '#ffc46b' : '#e0402e' })) };
+  }
+}
+</script>
+</body>
+</html>

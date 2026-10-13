@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Division bracket</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./specialty/sp.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Cinzel:wght@600;700&amp;family=Caveat:wght@600;700&amp;family=Bebas+Neue&amp;family=Pirata+One&amp;family=Creepster&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080d}
+.dv-cr{position:relative;container-type:inline-size;aspect-ratio:300/340;flex:none}
+.dv-cr>img{position:absolute;display:block}
+.dv-cr>img.f{inset:0;width:100%;height:100%}
+.dv-cr>img.m{left:19.3%;top:18.2%;width:61.3%;filter:drop-shadow(0 4px 6px rgba(0,0,0,.5))}
+.dv-cr>.tab{position:absolute;left:28%;right:28%;top:5.6%;height:7.4%;display:grid;place-items:center;font:900 3.6cqw/1 'Archivo';letter-spacing:.12em;text-transform:uppercase;white-space:nowrap;overflow:hidden}
+.dv-cr>.rib{position:absolute;left:14%;right:14%;top:79%;height:10.4%;display:grid;place-items:center;font:900 6.2cqw/1 'Archivo';letter-spacing:.1em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dv-pair{display:flex;flex-direction:column;gap:8px;padding:14px 12px;border-radius:14px;border:1px solid rgba(255,255,255,.07);background:#0b0d14;cursor:pointer;color:inherit;font:inherit;text-align:center}
+.dv-pair[aria-pressed="true"]{border-color:#e8b84a;background:rgba(232,184,74,.07);box-shadow:0 0 0 3px rgba(232,184,74,.12)}
+.dv-pair>div{display:flex;align-items:center;justify-content:center;gap:6px}
+.dv-pair>div>img{width:64px}
+.dv-pair>div>i{font:900 11px 'Archivo';font-style:normal;color:#5a6078}
+.dv-pair>b{font:800 13px 'Archivo';color:#e8eaf2}
+.dv-in{width:100%;min-height:42px;padding:0 12px;border-radius:9px;border:1px solid rgba(255,255,255,.12);background:#07080d;color:#fff;font:700 15px 'Archivo'}
+.dv-in:focus{outline:2px solid #e8b84a;outline-offset:1px}
+.dv-sw{width:26px;height:26px;border-radius:99px;border:2px solid rgba(255,255,255,.15);cursor:pointer;padding:0}
+.dv-sw[aria-pressed="true"]{outline:2px solid #fff;outline-offset:2px}
+.dv-th{width:44px;height:44px;flex:none;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:#10131c;display:grid;place-items:center;cursor:pointer;padding:0}
+.dv-th>img{width:36px}
+.dv-th[aria-pressed="true"]{border-color:#e8b84a;box-shadow:0 0 0 2px rgba(232,184,74,.4)}
+.dv-lib{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:6px}
+.dv-lib>button{aspect-ratio:1;border-radius:10px;border:1px solid rgba(255,255,255,.08);background:#0b0d14;cursor:pointer;padding:6px}
+.dv-lib>button>img{width:100%;display:block}
+.dv-lib>button[aria-pressed="true"]{border-color:#e8b84a;background:rgba(232,184,74,.1)}
+.dv-md{position:relative;flex:none;aspect-ratio:1}
+.dv-md>img{position:absolute;display:block}
+.dv-md>img.r{inset:0;width:100%}
+.dv-md>img.e{left:19.3%;top:19.3%;width:61.3%}
+.dv-row{display:flex;align-items:center;gap:10px}
+.dv-row>b{width:22px;font:700 12px 'JetBrains Mono';color:#7d84a3;text-align:right}
+.dv-cr{position:relative;container-type:inline-size;aspect-ratio:300/340;flex:none}
+.dv-cr>img{position:absolute;display:block}
+.dv-cr>img.f{inset:0;width:100%;height:100%}
+.dv-cr>img.m{left:19.3%;top:18.2%;width:61.3%;filter:drop-shadow(0 4px 6px rgba(0,0,0,.5))}
+.dv-cr>.tab{position:absolute;left:28%;right:28%;top:5.6%;height:7.4%;display:grid;place-items:center;font:900 3.6cqw/1 'Archivo';letter-spacing:.12em;text-transform:uppercase;white-space:nowrap;overflow:hidden}
+.dv-cr>.rib{position:absolute;left:14%;right:14%;top:79%;height:10.4%;display:grid;place-items:center;font:900 6.2cqw/1 'Archivo';letter-spacing:.1em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dv-pair{display:flex;flex-direction:column;gap:8px;padding:14px 12px;border-radius:14px;border:1px solid rgba(255,255,255,.07);background:#0b0d14;cursor:pointer;color:inherit;font:inherit;text-align:center}
+.dv-pair[aria-pressed="true"]{border-color:#e8b84a;background:rgba(232,184,74,.07);box-shadow:0 0 0 3px rgba(232,184,74,.12)}
+.dv-pair>div{display:flex;align-items:center;justify-content:center;gap:6px}
+.dv-pair>div>img{width:64px}
+.dv-pair>div>i{font:900 11px 'Archivo';font-style:normal;color:#5a6078}
+.dv-pair>b{font:800 13px 'Archivo';color:#e8eaf2}
+.dv-in{width:100%;min-height:42px;padding:0 12px;border-radius:9px;border:1px solid rgba(255,255,255,.12);background:#07080d;color:#fff;font:700 15px 'Archivo'}
+.dv-in:focus{outline:2px solid #e8b84a;outline-offset:1px}
+.dv-sw{width:26px;height:26px;border-radius:99px;border:2px solid rgba(255,255,255,.15);cursor:pointer;padding:0}
+.dv-sw[aria-pressed="true"]{outline:2px solid #fff;outline-offset:2px}
+.dv-th{width:44px;height:44px;flex:none;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:#10131c;display:grid;place-items:center;cursor:pointer;padding:0}
+.dv-th>img{width:36px}
+.dv-th[aria-pressed="true"]{border-color:#e8b84a;box-shadow:0 0 0 2px rgba(232,184,74,.4)}
+.dv-lib{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:6px}
+.dv-lib>button{aspect-ratio:1;border-radius:10px;border:1px solid rgba(255,255,255,.08);background:#0b0d14;cursor:pointer;padding:6px}
+.dv-lib>button>img{width:100%;display:block}
+.dv-lib>button[aria-pressed="true"]{border-color:#e8b84a;background:rgba(232,184,74,.1)}
+.dv-md{position:relative;flex:none;aspect-ratio:1}
+.dv-md>img{position:absolute;display:block}
+.dv-md>img.r{inset:0;width:100%}
+.dv-md>img.e{left:19.3%;top:19.3%;width:61.3%}
+.dv-row{display:flex;align-items:center;gap:10px}
+.dv-row>b{width:22px;font:700 12px 'JetBrains Mono';color:#7d84a3;text-align:right}
+.rl-pill{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 9px 0 3px;border-radius:99px;font:900 10.5px 'Archivo';letter-spacing:.06em;color:#fff;border:1px solid rgba(0,0,0,.4);vertical-align:middle}
+.rl-pill>i{width:15px;height:15px;border-radius:99px;background:rgba(0,0,0,.28)}
+.rl-pos{display:inline-grid;place-items:center;height:30px;min-width:30px;padding:0 6px;border-radius:8px;font:900 11px 'Archivo';letter-spacing:.02em;box-shadow:inset 0 -2px 0 rgba(0,0,0,.25)}
+.rl-pos.sm{height:22px;min-width:22px;padding:0 4px;border-radius:6px;font-size:9px}
+.tt-lg{display:inline-flex;align-items:center;gap:6px;font:600 12px 'Archivo';color:#a3a9c2;white-space:nowrap}
+.tt-lg>img{width:20px}
+.tt-cut{position:relative;height:0;border-top:2px dashed #e8b84a;margin:8px 0}
+.tt-cut>span{position:absolute;left:50%;top:-12px;transform:translateX(-50%);white-space:nowrap;padding:2px 10px;border-radius:5px;background:#e8b84a;color:#1a1204;font:800 10px 'Archivo';letter-spacing:.1em}
+.tt-rank{width:30px;text-align:right;font:700 12px 'JetBrains Mono';color:#7d84a3}
+.tt-pool{font:700 10.5px 'JetBrains Mono';color:#a3a9c2;padding:2px 6px;border-radius:4px;background:#151926}
+.tt-path{display:flex;align-items:stretch;gap:0}
+.tt-step{flex:1;display:flex;flex-direction:column;gap:4px;padding:12px 14px;border-radius:10px;background:#10131c;border:1px solid rgba(255,255,255,.06);min-width:0}
+.tt-step>b{font:700 13px 'Archivo';color:#e8eaf2}
+.tt-step>span{font-size:11.5px;color:#7d84a3}
+.tt-step.on{background:linear-gradient(180deg,rgba(232,184,74,.16),rgba(232,184,74,.04));border-color:rgba(232,184,74,.55)}
+.tt-step.on>b{color:#ffd98a}
+.tt-step.done{opacity:.6}
+.tt-arrow{flex:none;width:30px;display:grid;place-items:center;color:#5a6078}
+.tt-arrow svg{width:16px;height:16px}
+.tt-cutmark{flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;width:74px;padding:0 4px;text-align:center}
+.tt-cutmark>b{font:800 11px 'Archivo';color:#ffd98a;letter-spacing:.06em}
+.tt-cutmark>span{font:600 10px 'Archivo';color:#7d84a3}
+.fm-row{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:10px;background:#10131c;border:1px solid rgba(255,255,255,.05)}
+.fm-row>b{width:30px;text-align:right;font:700 12px 'JetBrains Mono';color:#7d84a3}
+.fm-row>i{flex:1;font-style:normal;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fm-row>em{font-style:normal;font:600 12px 'JetBrains Mono';color:#a3a9c2}
+.fm-line{position:relative;height:0;border-top:2px dashed var(--lc);margin:9px 0}
+.fm-line>span{position:absolute;left:50%;top:-12px;transform:translateX(-50%);white-space:nowrap;padding:2px 10px;border-radius:5px;background:var(--lc);color:#1a1204;font:800 10px 'Archivo';letter-spacing:.1em}
+.fm-badge{position:relative;flex:none;aspect-ratio:1}
+.fm-badge>img{position:absolute;display:block}
+.fm-badge>img.r{inset:0;width:100%}
+.fm-badge>img.e{left:19.3%;top:19.3%;width:61.3%}
+.fm-conf{display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 8px;border-radius:12px;background:#0b0d14;border:1px solid rgba(255,255,255,.07);cursor:pointer;color:inherit;font:inherit}
+.fm-conf[aria-pressed="true"]{border-color:#e8b84a;background:rgba(232,184,74,.07)}
+.fm-m{position:absolute;width:190px;display:flex;flex-direction:column;border-radius:10px;background:#10131c;border:1px solid rgba(255,255,255,.08);overflow:hidden}
+.fm-m.me{border-color:#e8b84a;box-shadow:0 0 0 3px rgba(232,184,74,.15)}
+.fm-m.live{border-color:rgba(127,224,166,.45)}
+.fm-t{display:flex;align-items:center;gap:6px;height:28px;padding:0 8px;font-size:12px}
+.fm-t+.fm-t{border-top:1px solid rgba(255,255,255,.05)}
+.fm-t>b{flex:none;width:20px;font:700 10.5px 'JetBrains Mono';color:#7d84a3}
+.fm-t>i{flex:1;font-style:normal;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fm-t>em{font-style:normal;font:700 11.5px 'JetBrains Mono'}
+.fm-mh{display:flex;justify-content:space-between;padding:3px 8px;font:700 9.5px 'Archivo';letter-spacing:.08em;text-transform:uppercase;color:#5a6078;background:#0b0d14}
+.fm-ln{position:absolute;border:2px solid rgba(232,184,74,.35)}
+.fm-colh{position:absolute;top:-30px;width:190px;text-align:center;font:700 10.5px 'Archivo';letter-spacing:.09em;text-transform:uppercase;color:#7d84a3}
+.fm-opt{display:flex;flex-direction:column;gap:14px;padding:22px;border-radius:16px;border:1px solid rgba(255,255,255,.08);background:#0b0d14;cursor:pointer;color:inherit;font:inherit;text-align:left}
+.fm-opt[aria-pressed="true"]{border-color:#e8b84a;background:linear-gradient(180deg,rgba(232,184,74,.1),#0b0d14 40%);box-shadow:0 0 0 3px rgba(232,184,74,.14)}
+.fm-flow{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.fm-flow>span{display:inline-flex;align-items:center;height:30px;padding:0 10px;border-radius:8px;background:#151926;font:700 12px 'Archivo';color:#e8eaf2;white-space:nowrap}
+.fm-flow>i{font-style:normal;color:#5a6078;font-weight:900}
+.fm-li{display:flex;gap:8px;font-size:13px;color:#a3a9c2}
+.fm-li>b{color:#ffd98a}
+</style>
+</helmet>
+<div class="sp" style="--acc: #e8b84a; --acc2: #ffd98a; --accInk: #1a1204; --disp: Archivo; min-height: 100vh; display: flex; flex-direction: column">
+<header style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 18px 28px; border-bottom: 1px solid rgba(255,255,255,.06)">
+  <a class="sp-btn" href="DivisionStandings.dc.html" aria-label="Back" style="padding: 0 12px">‹</a>
+  <div class="fm-badge" style="width: 52px"><img class="r" src="{{ring}}" alt=""><img class="e" src="{{img}}" alt=""></div>
+  <div style="flex: 1 1 360px; display: flex; flex-direction: column; gap: 3px"><h1 class="sp-h1">{{divName}} bracket · {{regName}} region</h1><span class="sp-t2">64 teams · 16 per region · sample view at week 12 (round of 64 final, round of 32 live)</span></div>
+  <div class="sp-seg"><sc-for list="{{divs}}" as="d" hint-placeholder-count="2"><button aria-pressed="{{d.on}}" onClick="{{d.pick}}">{{d.label}}</button></sc-for></div>
+  <div class="sp-seg"><sc-for list="{{regs}}" as="r" hint-placeholder-count="4"><button aria-pressed="{{r.on}}" onClick="{{r.pick}}">{{r.label}}</button></sc-for></div>
+</header>
+<div style="display: flex; gap: 22px; padding: 46px 28px 28px; align-items: flex-start">
+  <div style="position: relative; width: 900px; height: 640px; flex: none">
+    <sc-for list="{{heads}}" as="h" hint-placeholder-count="4"><span class="fm-colh" style="left: {{h.x}}">{{h.t}}</span></sc-for>
+    <sc-for list="{{lines}}" as="l" hint-placeholder-count="14"><div class="fm-ln" style="left: {{l.x}}; top: {{l.y}}; width: {{l.w}}; height: {{l.h}}; border-width: {{l.bw}}"></div></sc-for>
+    <sc-for list="{{ms}}" as="m" hint-placeholder-count="15"><div class="fm-m {{m.cls}}" style="left: {{m.x}}; top: {{m.y}}">
+      <div class="fm-mh"><span>{{m.wk}}</span><span style="color: {{m.stc}}">{{m.st}}</span></div>
+      <sc-for list="{{m.t}}" as="t" hint-placeholder-count="2"><div class="fm-t" style="background: {{t.bg}}"><b>{{t.seed}}</b><img src="{{t.ci}}" alt="" style="width: 16px; opacity: {{t.ciop}}"><i style="color: {{t.c}}">{{t.n}}</i><em style="color: {{t.sc}}">{{t.p}}</em></div></sc-for>
+    </div></sc-for>
+  </div>
+  <aside style="flex: 1 1 340px; display: flex; flex-direction: column; gap: 14px">
+    <div class="sp-card2" style="padding: 16px; display: flex; flex-direction: column; gap: 10px"><span class="sp-lbl">Road to the title</span>
+      <sc-for list="{{road}}" as="r" hint-placeholder-count="7"><div style="display: flex; align-items: center; gap: 10px; font-size: 12.5px"><span class="sp-num" style="width: 70px; white-space: nowrap; color: {{r.c}}">{{r.wk}}</span><span style="flex: 1; color: {{r.tc}}">{{r.t}}</span></div></sc-for>
+    </div>
+    <div class="sp-card" style="padding: 14px 16px; display: flex; flex-direction: column; gap: 8px"><span class="sp-lbl">Region winners</span>
+      <span class="sp-t2" style="font-size: 12.5px">The four region champions play the {{divName}} final four in week 15 and the division final in week 16. The two division champions meet in week 17.</span>
+      <a class="sp-btn sp-btn-p" href="DivisionChampionship.dc.html" style="min-height: 42px">See the championship</a></div>
+  </aside>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":860}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { d: 0, r: null }; }
+  renderVals() {
+    const MAN = {"pairs": [{"a": "rookie", "b": "vet"}, {"a": "blue", "b": "red"}, {"a": "angelic", "b": "demonic"}, {"a": "surf", "b": "turf"}, {"a": "black", "b": "gold"}, {"a": "fire", "b": "ice"}, {"a": "heroes", "b": "villains"}, {"a": "day", "b": "night"}, {"a": "earth", "b": "sky"}, {"a": "oldschool", "b": "newschool"}, {"a": "knights", "b": "dragons"}, {"a": "hunters", "b": "hunted"}, {"a": "order", "b": "chaos"}, {"a": "robots", "b": "aliens"}, {"a": "pirates", "b": "ninjas"}, {"a": "vikings", "b": "spartans"}, {"a": "jungle", "b": "desert"}, {"a": "gridiron", "b": "hardwood"}, {"a": "eastcoast", "b": "westcoast"}, {"a": "underdogs", "b": "topdogs"}], "sides": {"rookie": {"name": "Rookie", "light": "#e9ffd6", "mid": "#7fd44a", "dark": "#2e5a14", "accent": "#c6ff7a", "ink": "#1a1204", "medallion": "medallions/rookie.svg", "ring": "rings/rookie.svg", "frame": "frames/rookie.svg", "icon": "library/sprout.svg"}, "vet": {"name": "Vet", "light": "#fff1d0", "mid": "#c9a24a", "dark": "#5a4210", "accent": "#ffd36b", "ink": "#1a1204", "medallion": "medallions/vet.svg", "ring": "rings/vet.svg", "frame": "frames/vet.svg", "icon": "library/vet.svg"}, "blue": {"name": "Blue", "light": "#dcecff", "mid": "#3d7dff", "dark": "#12306e", "accent": "#9fd0ff", "ink": "#1a1204", "medallion": "medallions/blue.svg", "ring": "rings/blue.svg", "frame": "frames/blue.svg", "icon": "library/shieldstar.svg"}, "red": {"name": "Red", "light": "#ffe0dc", "mid": "#e0334f", "dark": "#5e0f1c", "accent": "#ffd0d6", "ink": "#ffffff", "medallion": "medallions/red.svg", "ring": "rings/red.svg", "frame": "frames/red.svg", "icon": "library/shieldstar.svg"}, "angelic": {"name": "Angelic", "light": "#ffffff", "mid": "#e6e1c6", "dark": "#8e8452", "accent": "#fff1a0", "ink": "#1a1204", "medallion": "medallions/angelic.svg", "ring": "rings/angelic.svg", "frame": "frames/angelic.svg", "icon": "library/angel.svg"}, "demonic": {"name": "Demonic", "light": "#ffd0c8", "mid": "#c81e1e", "dark": "#3a0606", "accent": "#ff7a3a", "ink": "#ffffff", "medallion": "medallions/demonic.svg", "ring": "rings/demonic.svg", "frame": "frames/demonic.svg", "icon": "library/demon.svg"}, "surf": {"name": "Surf", "light": "#dffbff", "mid": "#2fc4e0", "dark": "#0b4a5e", "accent": "#9ff4ff", "ink": "#1a1204", "medallion": "medallions/surf.svg", "ring": "rings/surf.svg", "frame": "frames/surf.svg", "icon": "library/wave.svg"}, "turf": {"name": "Turf", "light": "#e6ffd8", "mid": "#3aa84a", "dark": "#0f3a14", "accent": "#a8ff7a", "ink": "#1a1204", "medallion": "medallions/turf.svg", "ring": "rings/turf.svg", "frame": "frames/turf.svg", "icon": "library/turf.svg"}, "black": {"name": "Black", "light": "#ffffff", "mid": "#b9c0cc", "dark": "#4a515e", "accent": "#ff5a3a", "ink": "#1a1204", "medallion": "medallions/black.svg", "ring": "rings/black.svg", "frame": "frames/black.svg", "icon": "library/buffalo.svg"}, "gold": {"name": "Gold", "light": "#fff3c4", "mid": "#e8b84a", "dark": "#7a5214", "accent": "#ff5a3a", "ink": "#1a1204", "medallion": "medallions/gold.svg", "ring": "rings/gold.svg", "frame": "frames/gold.svg", "icon": "library/buffalo.svg"}, "fire": {"name": "Fire", "light": "#fff0c8", "mid": "#ff7a2f", "dark": "#6e1a06", "accent": "#ffd23f", "ink": "#1a1204", "medallion": "medallions/fire.svg", "ring": "rings/fire.svg", "frame": "frames/fire.svg", "icon": "library/flame.svg"}, "ice": {"name": "Ice", "light": "#f2fbff", "mid": "#8fd8ff", "dark": "#1e4a6e", "accent": "#ffffff", "ink": "#1a1204", "medallion": "medallions/ice.svg", "ring": "rings/ice.svg", "frame": "frames/ice.svg", "icon": "library/snow.svg"}, "heroes": {"name": "Heroes", "light": "#e0ecff", "mid": "#2f6bff", "dark": "#0e2466", "accent": "#ffd23f", "ink": "#ffffff", "medallion": "medallions/heroes.svg", "ring": "rings/heroes.svg", "frame": "frames/heroes.svg", "icon": "library/hero.svg"}, "villains": {"name": "Villains", "light": "#efe0ff", "mid": "#7a2ad8", "dark": "#24063e", "accent": "#7fff6a", "ink": "#ffffff", "medallion": "medallions/villains.svg", "ring": "rings/villains.svg", "frame": "frames/villains.svg", "icon": "library/villain.svg"}, "day": {"name": "Day", "light": "#fff8d6", "mid": "#ffc23a", "dark": "#8a5a06", "accent": "#ffffff", "ink": "#1a1204", "medallion": "medallions/day.svg", "ring": "rings/day.svg", "frame": "frames/day.svg", "icon": "library/sun.svg"}, "night": {"name": "Night", "light": "#e8ecff", "mid": "#5a6ad8", "dark": "#141a4a", "accent": "#fff3a0", "ink": "#ffffff", "medallion": "medallions/night.svg", "ring": "rings/night.svg", "frame": "frames/night.svg", "icon": "library/moon.svg"}, "earth": {"name": "Earth", "light": "#f2e6d6", "mid": "#a8743a", "dark": "#3e2410", "accent": "#7fd44a", "ink": "#1a1204", "medallion": "medallions/earth.svg", "ring": "rings/earth.svg", "frame": "frames/earth.svg", "icon": "library/mountain.svg"}, "sky": {"name": "Sky", "light": "#eef8ff", "mid": "#7fbfff", "dark": "#1e3e6e", "accent": "#ffffff", "ink": "#1a1204", "medallion": "medallions/sky.svg", "ring": "rings/sky.svg", "frame": "frames/sky.svg", "icon": "library/sky.svg"}, "oldschool": {"name": "Old School", "light": "#fbe8cf", "mid": "#c8823a", "dark": "#4a2a10", "accent": "#ff6a3a", "ink": "#1a1204", "medallion": "medallions/oldschool.svg", "ring": "rings/oldschool.svg", "frame": "frames/oldschool.svg", "icon": "library/cassette.svg"}, "newschool": {"name": "New School", "light": "#e0fff8", "mid": "#2ae0c0", "dark": "#06463e", "accent": "#a0fff0", "ink": "#1a1204", "medallion": "medallions/newschool.svg", "ring": "rings/newschool.svg", "frame": "frames/newschool.svg", "icon": "library/chip.svg"}, "knights": {"name": "Knights", "light": "#eef1f6", "mid": "#9aa6b8", "dark": "#2e3644", "accent": "#e0334f", "ink": "#1a1204", "medallion": "medallions/knights.svg", "ring": "rings/knights.svg", "frame": "frames/knights.svg", "icon": "library/knight.svg"}, "dragons": {"name": "Dragons", "light": "#ffe6c8", "mid": "#d84a1e", "dark": "#3e0e04", "accent": "#ffd23f", "ink": "#ffffff", "medallion": "medallions/dragons.svg", "ring": "rings/dragons.svg", "frame": "frames/dragons.svg", "icon": "library/dragon.svg"}, "hunters": {"name": "Hunters", "light": "#f0f0e0", "mid": "#8a9a5a", "dark": "#2e3418", "accent": "#ff6a3a", "ink": "#1a1204", "medallion": "medallions/hunters.svg", "ring": "rings/hunters.svg", "frame": "frames/hunters.svg", "icon": "library/crosshair.svg"}, "hunted": {"name": "Hunted", "light": "#f6e8d8", "mid": "#b8804a", "dark": "#4a2a14", "accent": "#ffd8a0", "ink": "#1a1204", "medallion": "medallions/hunted.svg", "ring": "rings/hunted.svg", "frame": "frames/hunted.svg", "icon": "library/antler.svg"}, "order": {"name": "Order", "light": "#eef4ff", "mid": "#8aa8d8", "dark": "#1e2e4e", "accent": "#ffffff", "ink": "#1a1204", "medallion": "medallions/order.svg", "ring": "rings/order.svg", "frame": "frames/order.svg", "icon": "library/scales.svg"}, "chaos": {"name": "Chaos", "light": "#ffe0f4", "mid": "#e02a8a", "dark": "#46062a", "accent": "#ff9ad6", "ink": "#ffffff", "medallion": "medallions/chaos.svg", "ring": "rings/chaos.svg", "frame": "frames/chaos.svg", "icon": "library/spiral.svg"}, "robots": {"name": "Robots", "light": "#eef1f6", "mid": "#8a94a6", "dark": "#262b36", "accent": "#ffb02e", "ink": "#1a1204", "medallion": "medallions/robots.svg", "ring": "rings/robots.svg", "frame": "frames/robots.svg", "icon": "library/robot.svg"}, "aliens": {"name": "Aliens", "light": "#e8ffe0", "mid": "#6ae04a", "dark": "#14460a", "accent": "#c8ff3a", "ink": "#1a1204", "medallion": "medallions/aliens.svg", "ring": "rings/aliens.svg", "frame": "frames/aliens.svg", "icon": "library/alien.svg"}, "pirates": {"name": "Pirates", "light": "#f6ecd8", "mid": "#c8a46a", "dark": "#3a2a14", "accent": "#e0334f", "ink": "#1a1204", "medallion": "medallions/pirates.svg", "ring": "rings/pirates.svg", "frame": "frames/pirates.svg", "icon": "library/skull.svg"}, "ninjas": {"name": "Ninjas", "light": "#e8e8f0", "mid": "#6a6a8a", "dark": "#14141e", "accent": "#e0334f", "ink": "#ffffff", "medallion": "medallions/ninjas.svg", "ring": "rings/ninjas.svg", "frame": "frames/ninjas.svg", "icon": "library/shuriken.svg"}, "vikings": {"name": "Vikings", "light": "#eef1f6", "mid": "#8a9aa8", "dark": "#2a323c", "accent": "#c8823a", "ink": "#1a1204", "medallion": "medallions/vikings.svg", "ring": "rings/vikings.svg", "frame": "frames/vikings.svg", "icon": "library/viking.svg"}, "spartans": {"name": "Spartans", "light": "#ffe6d0", "mid": "#c84a1e", "dark": "#3e1004", "accent": "#ffd23f", "ink": "#ffffff", "medallion": "medallions/spartans.svg", "ring": "rings/spartans.svg", "frame": "frames/spartans.svg", "icon": "library/spartan.svg"}, "jungle": {"name": "Jungle", "light": "#e6ffd8", "mid": "#2fa84a", "dark": "#0a3a14", "accent": "#ffd23f", "ink": "#1a1204", "medallion": "medallions/jungle.svg", "ring": "rings/jungle.svg", "frame": "frames/jungle.svg", "icon": "library/leaf.svg"}, "desert": {"name": "Desert", "light": "#fff0d6", "mid": "#e0a24a", "dark": "#5a3410", "accent": "#ff7a2f", "ink": "#1a1204", "medallion": "medallions/desert.svg", "ring": "rings/desert.svg", "frame": "frames/desert.svg", "icon": "library/cactus.svg"}, "gridiron": {"name": "Gridiron", "light": "#ffe6d0", "mid": "#a8582a", "dark": "#3a1a08", "accent": "#ffffff", "ink": "#ffffff", "medallion": "medallions/gridiron.svg", "ring": "rings/gridiron.svg", "frame": "frames/gridiron.svg", "icon": "library/football.svg"}, "hardwood": {"name": "Hardwood", "light": "#ffe6c8", "mid": "#ff8a2a", "dark": "#5a2408", "accent": "#ffffff", "ink": "#1a1204", "medallion": "medallions/hardwood.svg", "ring": "rings/hardwood.svg", "frame": "frames/hardwood.svg", "icon": "library/basketball.svg"}, "eastcoast": {"name": "East Coast", "light": "#e0f0ff", "mid": "#3a7ad8", "dark": "#0e2a4e", "accent": "#ffd23f", "ink": "#1a1204", "medallion": "medallions/eastcoast.svg", "ring": "rings/eastcoast.svg", "frame": "frames/eastcoast.svg", "icon": "library/lighthouse.svg"}, "westcoast": {"name": "West Coast", "light": "#fff0e0", "mid": "#ff7a5a", "dark": "#5a1e2a", "accent": "#ffd23f", "ink": "#1a1204", "medallion": "medallions/westcoast.svg", "ring": "rings/westcoast.svg", "frame": "frames/westcoast.svg", "icon": "library/palm.svg"}, "underdogs": {"name": "Underdogs", "light": "#f0e8e0", "mid": "#a08a7a", "dark": "#3a2e26", "accent": "#ffb08a", "ink": "#1a1204", "medallion": "medallions/underdogs.svg", "ring": "rings/underdogs.svg", "frame": "frames/underdogs.svg", "icon": "library/paw.svg"}, "topdogs": {"name": "Top Dogs", "light": "#fff3c4", "mid": "#e8b84a", "dark": "#7a5214", "accent": "#ffffff", "ink": "#1a1204", "medallion": "medallions/topdogs.svg", "ring": "rings/topdogs.svg", "frame": "frames/topdogs.svg", "icon": "library/topdog.svg"}}, "library": ["library/alien.svg", "library/anchor.svg", "library/angel.svg", "library/antler.svg", "library/basketball.svg", "library/beast.svg", "library/buffalo.svg", "library/cactus.svg", "library/cassette.svg", "library/chip.svg", "library/crosshair.svg", "library/demon.svg", "library/dragon.svg", "library/flame.svg", "library/football.svg", "library/goat.svg", "library/grizz.svg", "library/hero.svg", "library/kings.svg", "library/knight.svg", "library/leaf.svg", "library/lighthouse.svg", "library/moon.svg", "library/mountain.svg", "library/palm.svg", "library/paw.svg", "library/rebels.svg", "library/robot.svg", "library/rocket.svg", "library/scales.svg", "library/shieldstar.svg", "library/shuriken.svg", "library/skull.svg", "library/sky.svg", "library/smoke.svg", "library/snow.svg", "library/spartan.svg", "library/spiral.svg", "library/sprout.svg", "library/stealth.svg", "library/sun.svg", "library/swamp.svg", "library/thunder.svg", "library/topdog.svg", "library/turf.svg", "library/vet.svg", "library/viking.svg", "library/villain.svg", "library/warrior.svg", "library/wave.svg"]};
+const D = "specialty/div/";
+const ID = { A: { name: 'Angelic', side: 'angelic', img: 'library/angel.svg' }, B: { name: 'Demonic', side: 'demonic', img: 'library/demon.svg' } };
+const CN = ['Beast','Goat','Grizz','Kings','Rebels','Smoke','Stealth','Swamp','Thunder','Warrior'];
+const CIMG = CN.map(c => 'library/' + c.toLowerCase() + '.svg');
+const REG = ['North','East','South','West'];
+const crest = (side, img, conf, divName, w) => { const s = MAN.sides[side]; return { f: D + s.frame, m: D + img, tab: divName, rib: conf, tabC: s.ink, ribC: s.ink, w }; };
+const rng = (seed) => { let s = seed; return () => { s = (s * 9301 + 49297) % 233280; return s / 233280; }; };
+const PRE = ['Blitz','Gridiron','Fourth','RedZone','Spiral','Coffee','TwoTight','Fumble','QB','LateRound','Mossed','Wildcat','Triple','Bootleg','RPO','Zone','Punt','Redshirt','Chain','GoalLine','Flex','BigPlay','Sack','GoFor','StiffArm','Hash','Pocket','Slant','DeepPost','Nickel','Screen','Audible','HailMary','PlayAction','Coffin','Touchback','PickSix','Onside','Pylon','Dime'];
+const SUF = ['Kings','Capital','Ghost','Raiders','Theory','Crew','Mafia','Squad','Bandits','Legends','Dynasty','Empire','Wolves','Hustle','Gang','Nation','Club','Society'];
+const division = (di) => { const r = rng(di ? 7177 : 1313), seen = {}; const T = [];
+  for (let c = 0; c < 10; c++) for (let k = 0; k < 12; k++) {
+    let n = PRE[Math.floor(r() * PRE.length)] + SUF[Math.floor(r() * SUF.length)]; while (seen[n]) n = n + (seen[n]++ + 1); seen[n] = 1;
+    let w = 0; for (let g = 0; g < 9; g++) if (r() < .5) w++;
+    T.push({ n, c, w, l: 9 - w, pf: Math.round((820 + w * 24 + r() * 170) * 10) / 10 }); }
+  T.sort((a, b) => b.w - a.w || b.pf - a.pf); T.forEach((t, i) => t.rank = i + 1);
+  if (di === 0) { T[57].n = 'You · TheCiege26'; T[57].c = 5; T[57].me = true; }
+  const pool = T.filter(t => t.rank > 64).slice().sort((a, b) => b.pf - a.pf).slice(0, 12);
+  pool.forEach(t => t.pool = true);
+  const wc = T.filter(t => (t.rank >= 53 && t.rank <= 64) || t.pool).sort((a, b) => b.pf - a.pf);
+  wc.forEach((t, i) => { t.wcRank = i + 1; t.wcIn = i < 12; });
+  T.forEach(t => { t.status = t.rank <= 52 ? 'auto' : t.wcIn ? 'wild' : (t.rank <= 64 || t.pool) ? 'bubbleOut' : 'out'; });
+  const field = T.filter(t => t.status === 'auto').concat(wc.filter(t => t.wcIn));
+  field.forEach((t, i) => { t.seed = Math.floor(i / 4) + 1; const j = i % 4; t.region = (t.seed % 2 ? j : 3 - j); });
+  const confPts = CN.map((_, c) => Math.round(T.filter(t => t.c === c).reduce((a, t) => a + t.pf, 0) * 10) / 10);
+  const confIn = CN.map((_, c) => T.filter(t => t.c === c && (t.status === 'auto' || t.status === 'wild')).length);
+  return { T, wc, field, confPts, confIn }; };
+const AV = ['#22314f','#4a1f2c','#1d3a3a','#2c2a4a','#3a3418','#12352a','#3a1f30','#1f2a4d','#2a3a1a','#3a2a14'];
+const ini = (n) => (n.replace('You · ', '').match(/[A-Z0-9]/g) || ['?']).slice(0, 2).join('');
+const STAT = { auto: ['Auto bid', 'rgba(58,190,120,.14)', '#7fe0a6'], wild: ['Wildcard', 'rgba(232,184,74,.16)', '#ffd98a'], bubbleOut: ['Bubble · out', 'rgba(255,154,138,.12)', '#ff9a8a'], out: ['Out', 'rgba(125,132,163,.12)', '#7d84a3'] };
+    const st = this.state, dv = division(st.d), side = st.d ? ID.B : ID.A, S = MAN.sides[side.side];
+    const myT = dv.field.find(t => t.me); const rr = st.r == null ? (myT ? myT.region : 0) : st.r;
+    const reg = dv.field.filter(t => t.region === rr), bySeed = {}; reg.forEach(t => bySeed[t.seed] = t);
+    const W = 190, GAP = 46, STEP = W + GAP, H = 64, SL = 80;
+    const R = rng(st.d * 10 + rr + 3);
+    const ms = [], lines = [];
+    const score = (t, live) => live ? (60 + R() * 60) : (92 + R() * 60 + (17 - t.seed) * 1.2);
+    const P = [[1,16],[8,9],[5,12],[4,13],[6,11],[3,14],[7,10],[2,15]];
+    let round = P.map(([a, b]) => [bySeed[a], bySeed[b]]);
+    const labels = ['Round of 64 · Wk 11', 'Round of 32 · Wk 12', 'Sweet 16 · Wk 13', 'Region final · Wk 14'];
+    for (let col = 0; col < 4; col++) {
+      const n = round.length, live = col === 1, fin = col === 0, next = [];
+      round.forEach(([a, b], k) => {
+        const yc = (k + .5) * (SL * 8 / n), x = col * STEP, y = yc - H / 2;
+        const known = a && b && (fin || live);
+        let sa = known ? score(a, live) : 0, sb = known ? score(b, live) : 0;
+        const win = fin ? ((a && a.me) ? a : (b && b.me) ? b : (sa >= sb ? a : b)) : null;
+        if (fin && win && win.me && (win === a ? sa < sb : sb < sa)) { const tmp = sa; sa = sb; sb = tmp; }
+        const team = (t, s, other) => { if (!t) return { seed: '', n: 'TBD', ci: '', ciop: 0, p: '', c: '#5a6078', sc: '#5a6078', bg: 'transparent' };
+          const w = fin && win === t, l = fin && win !== t;
+          return { seed: t.seed, n: t.n, ci: D + CIMG[t.c], ciop: 1, p: known ? s.toFixed(1) : '', c: t.me ? '#ffd98a' : l ? '#5a6078' : '#e8eaf2', sc: w ? '#ffd98a' : l ? '#5a6078' : live ? '#7fe0a6' : '#a3a9c2', bg: w ? 'rgba(232,184,74,.08)' : 'transparent' }; };
+        const me = (a && a.me) || (b && b.me);
+        ms.push({ x: x + 'px', y: y + 'px', wk: labels[col], st: fin ? 'Final' : live && known ? 'Live' : '', stc: live ? '#7fe0a6' : '#5a6078', cls: (me ? 'me ' : '') + (live && known ? 'live' : ''), t: [team(a, sa), team(b, sb)] });
+        if (k % 2 === 1 && col < 3) { const y1 = (k - .5) * (SL * 8 / n), y2 = yc;
+          lines.push({ x: (x + W) + 'px', y: y1 + 'px', w: GAP / 2 + 'px', h: (y2 - y1) + 'px', bw: '2px 2px 2px 0' });
+          lines.push({ x: (x + W + GAP / 2) + 'px', y: ((y1 + y2) / 2) + 'px', w: GAP / 2 + 'px', h: '0px', bw: '2px 0 0 0' }); }
+        next.push(fin ? win : live ? (sa >= sb ? a : b) : null);
+      });
+      const nr = []; for (let i = 0; i < next.length; i += 2) nr.push([col === 0 ? next[i] : null, col === 0 ? next[i + 1] : null]);
+      round = nr;
+      if (col === 0) { round = nr; } else { round = nr.map(() => [null, null]); }
+    }
+    return { divName: side.name, regName: REG[rr], ring: D + S.ring, img: D + side.img,
+      divs: [0, 1].map(i => ({ label: (i ? ID.B : ID.A).name, on: st.d === i ? 'true' : 'false', pick: () => this.setState({ d: i, r: null }) })),
+      regs: REG.map((n, i) => ({ label: n, on: rr === i ? 'true' : 'false', pick: () => this.setState({ r: i }) })),
+      heads: labels.map((t, i) => ({ t, x: (i * STEP) + 'px' })), ms, lines,
+      road: [['Wk 1–10', 'Regular season · conference leagues', 0], ['Wk 11', 'Round of 64', 1], ['Wk 12', 'Round of 32', 2], ['Wk 13', 'Sweet 16', 0], ['Wk 14', 'Region finals', 0], ['Wk 15', side.name + ' final four', 0], ['Wk 16', side.name + ' final', 0], ['Wk 17', 'Championship · ' + ID.A.name + ' vs ' + ID.B.name, 0]]
+        .map(([wk, t, s]) => ({ wk, t, c: s === 2 ? '#7fe0a6' : s === 1 ? '#7d84a3' : '#ffd98a', tc: s === 1 ? '#7d84a3' : '#e8eaf2' })) };
+  }
+}
+</script>
+</body>
+</html>
