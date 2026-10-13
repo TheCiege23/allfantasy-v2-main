@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Cast your vote (phone)</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./exile/exile.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Caveat:wght@500;600;700&amp;family=Cinzel:wght@600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080d}
+.mv-pick{display:flex;flex-direction:column;align-items:center;gap:6px;flex:1;padding:10px 4px;border-radius:10px;border:1px solid rgba(255,255,255,.07);background:#0b0d14;color:#e8eaf2;font:600 12px 'Archivo',sans-serif;cursor:pointer;min-height:96px}
+.mv-pick:disabled{opacity:.5;cursor:default}
+.mv-av{position:relative;width:40px;height:40px;border-radius:999px;display:grid;place-items:center;font:700 12px 'Archivo',sans-serif;color:#fff}
+.mv-slip{width:100%;padding:18px 20px;border-radius:4px;background:url(exile/parchment-texture.svg),linear-gradient(#fbf3dc,#efdcae);box-shadow:0 14px 30px rgba(0,0,0,.45),inset 0 0 30px rgba(120,70,20,.35);color:#2a1a08;transform:rotate(-2deg);display:flex;flex-direction:column;gap:10px}
+@keyframes mvDrop{0%{transform:rotate(-2deg) translateY(0) scale(1);opacity:1}35%{transform:translateY(-6px) scale(.6,.5)}100%{transform:rotate(4deg) translateY(200px) scale(.15,.1);opacity:0}}
+.mv-drop{animation:mvDrop 1s cubic-bezier(.5,0,.7,1) both}
+</style>
+</helmet>
+<div class="ex" style="height: 844px; display: flex; flex-direction: column">
+  <header style="display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid rgba(255,255,255,.06)">
+    <a class="ex-btn" href="MobileSurvivorHome.dc.html" aria-label="Back" style="padding: 0 14px; min-height: 44px">‹</a>
+    <div style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 700; font-size: 17px">Cast your vote</span><span class="ex-t3" style="font-size: 12px">Tribe Vela · closes in <span class="ex-gold ex-num">1d 04:12</span></span></div>
+  </header>
+  <div style="flex: 1; overflow-y: auto; padding: 16px 14px; display: flex; flex-direction: column; gap: 16px">
+    <div style="display: flex; gap: 8px">
+      <sc-for list="{{people}}" as="p" hint-placeholder-count="4">
+        <button class="mv-pick" onClick="{{p.pick}}" disabled="{{p.off}}" style="border-color: {{p.line}}; background: {{p.bg}}">
+          <span class="mv-av" style="background: {{p.c}}; box-shadow: 0 0 0 2px #07080d, 0 0 0 3.5px {{p.ring}}">{{p.ini}}<sc-if value="{{p.immune}}" hint-placeholder-val="{{ false }}"><img src="weekly/immunity-necklace-icon.svg" alt="" style="position: absolute; right: -8px; bottom: -8px; width: 22px; height: 22px"></sc-if></span>
+          <span style="text-align: center; line-height: 1.2">{{p.short}}</span>
+          <span style="font-size: 10.5px; color: {{p.subC}}">{{p.sub}}</span>
+        </button>
+      </sc-for>
+    </div>
+    <div style="min-height: 170px; position: relative; padding: 6px 8px">
+      <div class="mv-slip {{slipCls}}">
+        <div style="display: flex; justify-content: space-between; font: 700 10px 'Cinzel', serif; letter-spacing: .16em; color: #7a5528"><span>Tribal Council</span><span>Week 6</span></div>
+        <span style="font: 700 44px/1.05 'Caveat', cursive; color: #1d1206; min-height: 48px">{{choice}}</span>
+        <div style="height: 1px; background: #8a6330; opacity: .5"></div>
+        <span style="font: 600 10px 'Cinzel', serif; letter-spacing: .12em; color: #8a6330; text-align: right">Your vote is secret</span>
+      </div>
+      <sc-if value="{{cast}}" hint-placeholder-val="{{ false }}"><div style="position: absolute; inset: 30px 0 0; text-align: center; display: flex; flex-direction: column; gap: 6px; animation: exPop .5s ease-out 1s both"><span style="font: 700 18px 'Cinzel', serif; color: #f1d58a">Your vote is in the urn</span><span class="ex-t2" style="font-size: 12.5px">You can change it until votes close.</span></div></sc-if>
+    </div>
+    <img src="weekly/urn.svg" alt="Voting urn" style="width: 150px; align-self: center; margin-top: -20px">
+    <div class="ex-card2" style="padding: 12px; display: flex; gap: 10px; align-items: center; border-color: rgba(242,201,76,.3)">
+      <img src="survivor/idols/immunity-icon.svg" alt="" style="width: 36px; height: 36px">
+      <span style="flex: 1; font-size: 12.5px">You hold an <b class="ex-gold">Immunity idol</b>. Play it before votes close.</span>
+      <a href="IdolVault.dc.html" style="color: #d9b45a; font-weight: 600; font-size: 12.5px; text-decoration: none">Play ›</a>
+    </div>
+  </div>
+  <div style="display: flex; gap: 8px; padding: 12px 14px 26px; border-top: 1px solid rgba(255,255,255,.06); background: #0b0d14">
+    <sc-if value="{{canCast}}" hint-placeholder-val="{{ true }}"><button class="ex-btn ex-btn-gold" onClick="{{castVote}}" style="flex: 1; min-height: 48px">Drop it in the urn</button></sc-if>
+    <sc-if value="{{cast}}" hint-placeholder-val="{{ false }}"><button class="ex-btn" onClick="{{change}}" style="flex: 1; min-height: 48px">Change my vote</button></sc-if>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { choice: 'Open Team 8', cast: false }; }
+  renderVals() {
+    const st = this.state;
+    const P = [['Open Team 8', 'Team 8', 'O8', '#3a2410', '96.2', false, false], ['Open Team 4', 'Team 4', 'O4', '#1f2a4d', '104.8', false, false], ['Open Team 5', 'Team 5', 'O5', '#12352a', 'Immune', true, false], ['TheCiege26', 'You', 'TC', '#22314f', 'Can\'t self-vote', false, true]];
+    const people = P.map(([name, short, ini, c, sub, immune, me]) => { const on = st.choice === name; return { short, ini, c, sub, immune, off: immune || me || st.cast,
+      ring: immune ? '#f2c94c' : '#9b8ae0', line: on ? '#d9b45a' : 'rgba(255,255,255,.07)', bg: on ? '#151926' : '#0b0d14', subC: immune ? '#d9b45a' : '#6f7590', pick: () => this.setState({ choice: name }) }; });
+    return { people, choice: st.choice, cast: st.cast, canCast: !st.cast, slipCls: st.cast ? 'mv-drop' : '',
+      castVote: () => this.setState({ cast: true }), change: () => this.setState({ cast: false }) };
+  }
+}
+</script>
+</body>
+</html>

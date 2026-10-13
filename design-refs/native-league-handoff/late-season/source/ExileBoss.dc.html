@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Exile boss</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./exile/exile.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Cinzel:wght@600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080d}
+@keyframes ebHover{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+@keyframes ebEyes{0%,100%{filter:drop-shadow(0 0 18px rgba(255,74,47,.35))}50%{filter:drop-shadow(0 0 34px rgba(255,74,47,.7))}}
+.eb-boss{animation:ebHover 5s ease-in-out infinite,ebEyes 2.6s ease-in-out infinite}
+.eb-row{display:grid;grid-template-columns:200px 1fr 150px;gap:16px;align-items:center;padding:12px 14px;border-radius:10px;background:#0b0d14;border:1px solid rgba(255,255,255,.06)}
+.eb-track{position:relative;height:16px;border-radius:99px;background:#151926;overflow:visible}
+.eb-fill{position:absolute;left:0;top:0;bottom:0;border-radius:99px;transition:width .8s cubic-bezier(.2,.8,.2,1)}
+.eb-line{position:absolute;top:-8px;bottom:-8px;width:3px;margin-left:-1.5px;background:#ff4a2f;border-radius:2px;box-shadow:0 0 10px rgba(255,74,47,.7)}
+.eb-av{width:36px;height:36px;flex:none;border-radius:999px;display:grid;place-items:center;font:700 12px 'Archivo',sans-serif;color:#fff}
+.eb-stamp{display:inline-block;white-space:nowrap;padding:4px 10px;border:3px double;font:700 12px 'Cinzel',serif;letter-spacing:.14em;transform:rotate(-4deg);border-radius:4px;animation:exPop .45s ease-out both}
+@media (max-width:760px){.eb-row{grid-template-columns:1fr}}
+@media (prefers-reduced-motion:reduce){.eb-boss,.eb-stamp{animation:none}}
+</style>
+</helmet>
+<div class="ex" style="min-height: 100vh; display: flex; flex-direction: column">
+  <header style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 18px 28px; border-bottom: 1px solid rgba(255,255,255,.06)">
+    <a class="ex-btn" href="ExileTokens.dc.html" aria-label="Back" style="padding: 0 12px">‹</a>
+    <div style="flex: 1 1 320px; display: flex; flex-direction: column; gap: 3px">
+      <h1 class="ex-h1">The Exile boss</h1>
+      <span class="ex-t2">Exile Island · Week 6 · Beat the boss to keep your tokens</span>
+    </div>
+    <div class="ex-seg" role="tablist" style="width: 240px">
+      <button class="ex-sg {{liveTab}}" role="tab" onClick="{{toLive}}">Live</button>
+      <button class="ex-sg {{finalTab}}" role="tab" onClick="{{toFinal}}">Final</button>
+    </div>
+  </header>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 20px; padding: 24px 28px 32px; align-items: flex-start">
+    <section class="ex-card" style="flex: 1 1 440px; max-width: 520px; padding: 26px; display: flex; flex-direction: column; align-items: center; gap: 14px; background: radial-gradient(ellipse at 50% 35%, rgba(255,74,47,.16), transparent 60%), #0b0d14">
+      <img class="eb-boss" src="late/exile-boss.svg" alt="The Exile boss" style="width: 230px">
+      <span class="ex-lbl" style="color: #ff8a6a">{{bossLbl}}</span>
+      <span class="ex-num" style="font-size: 52px; font-weight: 700; color: #ffd0c0; line-height: 1">{{bossScore}}</span>
+      <span class="ex-t2" style="text-align: center; max-width: 360px">Anyone on Exile Island who finishes below the boss loses every token they hold. Finish above it and your tokens are safe.</span>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: center">
+        <span class="ex-chip">Boss score: league median</span>
+        <span class="ex-chip">Set in Survivor settings</span>
+      </div>
+    </section>
+
+    <div style="flex: 1 1 640px; display: flex; flex-direction: column; gap: 12px">
+      <div style="display: flex; align-items: center; gap: 10px"><span class="ex-lbl" style="flex: 1">Exile Island vs the boss</span><span class="ex-t3" style="font-size: 12px">{{status}}</span></div>
+      <sc-for list="{{rows}}" as="r" hint-placeholder-count="3">
+        <div class="eb-row" style="border-color: {{r.line}}">
+          <div style="display: flex; align-items: center; gap: 10px; min-width: 0">
+            <span class="eb-av" style="background: {{r.c}}">{{r.ini}}</span>
+            <div style="display: flex; flex-direction: column; gap: 2px; min-width: 0"><span style="font-weight: 600">{{r.name}}</span><span style="display: flex; gap: 3px; align-items: center"><sc-for list="{{r.coins}}" as="t" hint-placeholder-count="2"><img src="{{t.src}}" alt="" style="width: 16px; height: 16px"></sc-for><span class="ex-t3" style="font-size: 11.5px; margin-left: 4px">{{r.tok}}</span></span></div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 6px">
+            <div class="eb-track"><div class="eb-fill" style="width: {{r.w}}; background: {{r.fillC}}"></div><div class="eb-line" style="left: {{line}}" title="Boss"></div></div>
+            <div style="display: flex; justify-content: space-between; font-size: 11.5px"><span class="ex-num" style="color: #e8eaf2">{{r.pts}}</span><span style="color: {{r.diffC}}" class="ex-num">{{r.diff}}</span></div>
+          </div>
+          <div style="text-align: right"><span class="eb-stamp" style="color: {{r.stC}}; border-color: {{r.stC}}">{{r.stamp}}</span></div>
+        </div>
+      </sc-for>
+      <div style="display: flex; gap: 10px; align-items: center; padding: 6px 2px"><span style="width: 18px; height: 3px; background: #ff4a2f; box-shadow: 0 0 8px rgba(255,74,47,.7)"></span><span class="ex-t3" style="font-size: 12px">The red line is the boss score. Bars fill as games finish.</span></div>
+
+      <div style="display: flex; flex-wrap: wrap; gap: 14px; margin-top: 6px">
+        <div class="ex-card2" style="flex: 1 1 260px; padding: 16px; display: flex; gap: 12px; align-items: center; border-color: rgba(122,214,140,.3)">
+          <img src="exile/token-coin.svg" alt="" style="width: 54px">
+          <div style="display: flex; flex-direction: column; gap: 3px"><span style="font-weight: 700; color: #9be3a8">You beat the boss</span><span class="ex-t2" style="font-size: 12.5px">131.2 to 118.4. Your tokens are safe, and you won the week: +1 token.</span></div>
+        </div>
+        <div class="ex-card2" style="flex: 1 1 260px; padding: 16px; display: flex; gap: 12px; align-items: center; border-color: rgba(255,74,47,.3)">
+          <img src="late/exile-boss-icon.svg" alt="" style="width: 54px">
+          <div style="display: flex; flex-direction: column; gap: 3px"><span style="font-weight: 700; color: #ff8a6a">The boss wins</span><span class="ex-t2" style="font-size: 12.5px">97.0 to 118.4. Your 2 tokens are wiped. Start again next week.</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { tab: 'final' }; }
+  renderVals() {
+    const st = this.state; const fin = st.tab === 'final';
+    const boss = fin ? 118.4 : 96.3, max = 150;
+    // [name, ini, colour, live pts, final pts, tokens before]
+    const R = [['TheCiege26', 'TC', '#22314f', 104.6, 131.2, 2], ['Open Team 11', 'O11', '#2a3a1a', 88.1, 122.9, 1], ['Open Team 3', 'O3', '#3a1f30', 71.4, 97.0, 2]];
+    const rows = R.map(([name, ini, c, lv, fv, tk]) => {
+      const pts = fin ? fv : lv; const above = pts >= boss; const d = (pts - boss).toFixed(1);
+      const wiped = fin && !above; const won = fin && name === 'TheCiege26';
+      const n = wiped ? 0 : tk + (won ? 1 : 0);
+      const coins = wiped ? Array.from({ length: tk }, () => ({ src: 'exile/token-coin-wiped.svg' })) : Array.from({ length: n }, () => ({ src: 'exile/token-icon.svg' }));
+      return { name, ini, c, coins, tok: wiped ? tk + ' wiped' : n + ' token' + (n === 1 ? '' : 's'),
+        w: Math.min(100, pts / max * 100).toFixed(1) + '%', pts: pts.toFixed(1) + (fin ? '' : ' · proj ' + fv.toFixed(0)),
+        fillC: fin ? (above ? 'linear-gradient(90deg,#2f8f5a,#7ad68c)' : 'linear-gradient(90deg,#6b2a22,#a3463a)') : 'linear-gradient(90deg,#5a4a20,#d9b45a)',
+        diff: (d > 0 ? '+' : '') + d + ' vs boss', diffC: above ? '#9be3a8' : '#ff8a6a',
+        stamp: fin ? (above ? (won ? 'Won the week' : 'Safe') : 'Wiped') : (above ? 'Ahead' : 'Behind'),
+        stC: fin ? (above ? '#7ad68c' : '#ff4a2f') : '#6f7590', line: wiped ? 'rgba(255,74,47,.35)' : won ? 'rgba(122,214,140,.35)' : 'rgba(255,255,255,.06)' };
+    });
+    return { rows, line: (boss / max * 100).toFixed(1) + '%', bossScore: boss.toFixed(1),
+      bossLbl: fin ? 'Final boss score · week 6' : 'Boss score so far · week 6', status: fin ? 'All games final' : 'Sunday games in progress',
+      liveTab: fin ? '' : 'ex-sg-on', finalTab: fin ? 'ex-sg-on' : '', toLive: () => this.setState({ tab: 'live' }), toFinal: () => this.setState({ tab: 'final' }) };
+  }
+}
+</script>
+</body>
+</html>
