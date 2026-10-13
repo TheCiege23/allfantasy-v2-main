@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Share sheet (phone)</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./exile/exile.css">
+<link rel="stylesheet" href="./share/share.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Cinzel:wght@600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080d}
+@keyframes msUp{from{transform:translateY(100%)}to{transform:none}}
+.ms-sheet{animation:msUp .35s cubic-bezier(.2,.8,.2,1) both}
+.ms-frame{position:relative;overflow:hidden;border-radius:12px;box-shadow:0 18px 40px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.1);flex:none}
+
+.ms-chip{min-height:34px;padding:0 12px;border-radius:999px;border:1px solid rgba(255,255,255,.12);background:#10131c;color:#a3a9c2;font:600 12px 'Archivo',sans-serif;cursor:pointer}
+.ms-act{display:flex;flex-direction:column;align-items:center;gap:6px;flex:1;color:#a3a9c2;font:600 11px 'Archivo',sans-serif;background:none;border:0;cursor:pointer;min-height:44px}
+.ms-act span:first-child{width:50px;height:50px;border-radius:14px;display:grid;place-items:center;background:#151926;border:1px solid rgba(255,255,255,.08);color:#e8eaf2}
+.ms-act svg{width:22px;height:22px}
+@media (prefers-reduced-motion:reduce){.ms-sheet{animation:none}}
+</style>
+</helmet>
+<div class="ex" style="height: 844px; position: relative; overflow: hidden; background: url(survivor/bg/dusk-football.svg) center/cover">
+  <div style="position: absolute; inset: 0; background: rgba(7,8,13,.72)"></div>
+  <div style="position: relative; padding: 18px 16px; display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center">
+    <img src="weekly/immunity-necklace.svg" alt="" style="width: 92px">
+    <span style="font: 700 20px 'Cinzel', serif; color: #f1d58a">You won immunity</span>
+    <span class="ex-t2" style="font-size: 12.5px">142.6 points · Safe at Tribal Council</span>
+  </div>
+  <div class="ms-sheet" style="position: absolute; left: 0; right: 0; bottom: 0; top: 196px; background: #0b0d14; border-radius: 20px 20px 0 0; border-top: 1px solid rgba(255,255,255,.1); padding: 10px 16px 24px; display: flex; flex-direction: column; align-items: center; gap: 12px">
+    <span style="width: 40px; height: 4px; border-radius: 9px; background: #2a2f40"></span>
+    <span style="font-weight: 700; font-size: 16px">Share your immunity win</span>
+    <div style="display: flex; gap: 8px">
+      <sc-for list="{{formats}}" as="f" hint-placeholder-count="3"><button class="ms-chip" onClick="{{f.pick}}" style="border-color: {{f.line}}; color: {{f.col}}">{{f.label}}</button></sc-for>
+    </div>
+    <div style="flex: 1; display: flex; align-items: center; justify-content: center; min-height: 0">
+      <div class="ms-frame" style="width: {{fw}}; height: {{fh}}">
+        <div class="shc shc-{{fmt}} {{cd.mood}}" style="transform: scale({{sc}}); transform-origin: 0 0; position: absolute; left: 0; top: 0">
+          <img class="shc-bg" src="{{cd.bg}}" alt="">
+          <div class="shc-veil"></div>
+          <sc-if value="{{notLink}}" hint-placeholder-val="{{ true }}">
+            <div class="shc-top"><div class="shc-brand"><i>AF</i>AllFantasy</div><div class="shc-league"><img src="tribes/nfl/manta.svg" alt="">Blah Survivor</div></div>
+            <div class="shc-mid"><img class="shc-hero" src="{{cd.hero}}" alt=""></div>
+            <div class="shc-text"><span class="shc-kick">{{cd.kick}}</span><h2 class="shc-head">{{cd.head}}</h2><span class="shc-sub">{{cd.sub}}</span><div class="shc-stats"><sc-for list="{{stats}}" as="s" hint-placeholder-count="3"><div class="shc-stat"><b style="font: 700 {{statFs}} 'JetBrains Mono', monospace; color: #fff">{{s.b}}</b><span style="font: 600 {{statLs}} 'Archivo', sans-serif; letter-spacing: .1em; text-transform: uppercase; color: #8d93ad">{{s.l}}</span></div></sc-for></div><div class="shc-foot"><span>allfantasy.ai</span><span><b>Survivor</b> · NFL 2026</span></div></div>
+          </sc-if>
+          <sc-if value="{{isLink}}" hint-placeholder-val="{{ false }}">
+            <div class="shc-mid"><img class="shc-hero" src="{{cd.hero}}" alt=""></div>
+            <div style="flex: 1; display: flex; flex-direction: column; gap: 18px; position: relative; z-index: 2">
+              <div class="shc-top"><div class="shc-brand"><i>AF</i>AllFantasy</div><div class="shc-league"><img src="tribes/nfl/manta.svg" alt="">Blah Survivor</div></div>
+              <div class="shc-text"><span class="shc-kick">{{cd.kick}}</span><h2 class="shc-head">{{cd.head}}</h2><span class="shc-sub">{{cd.sub}}</span><div class="shc-stats"><sc-for list="{{stats}}" as="s" hint-placeholder-count="2"><div class="shc-stat"><b style="font: 700 {{statFs}} 'JetBrains Mono', monospace; color: #fff">{{s.b}}</b><span style="font: 600 {{statLs}} 'Archivo', sans-serif; letter-spacing: .1em; text-transform: uppercase; color: #8d93ad">{{s.l}}</span></div></sc-for></div><div class="shc-foot"><span>allfantasy.ai</span><span><b>Survivor</b> · NFL 2026</span></div></div>
+            </div>
+          </sc-if>
+        </div>
+      </div>
+    </div>
+    <div style="display: flex; width: 100%; gap: 4px">
+      <button class="ms-act"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 8l5-5 5 5M5 14v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/></svg></span><span>Share</span></button>
+      <button class="ms-act"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12M7 11l5 5 5-5M5 20h14"/></svg></span><span>Save image</span></button>
+      <button class="ms-act"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1M14 10a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg></span><span>Copy link</span></button>
+      <button class="ms-act"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16v10H8l-4 4z"/></svg></span><span>League chat</span></button>
+    </div>
+    <button class="ex-btn" style="width: 100%; min-height: 46px">Not now</button>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { f: 'story' }; }
+  renderVals() {
+    const st = this.state;
+    const CARDS = {
+      immunity: { mood: '', bg: 'survivor/bg/dusk-football.svg', hero: 'weekly/immunity-necklace.svg', kick: 'Immunity · Week 6', head: 'Open Team 5 is safe', sub: 'Top score in Tribe Vela. Can\u2019t receive votes this week.', stats: [['142.6', 'Points'], ['1st', 'In tribe'], ['2', 'Wins']] },
+      out: { mood: 'shc-m-out', bg: 'survivor/bg/night-football.svg', hero: 'weekly/torch-out.svg', kick: 'Voted out · Week 6', head: 'Open Team 8\u2019s torch is out', sub: 'Voted out 2\u20131 at Tribal Council. Heading to Exile Island.', stats: [['2\u20131', 'Vote'], ['6', 'Weeks'], ['96.2', 'Points']] },
+      idol: { mood: 'shc-m-idol', bg: 'survivor/bg/night-football.svg', hero: 'survivor/idols/immunity.svg', kick: 'Idol played · Week 6', head: 'Open Team 4 played an idol', sub: 'Every vote against them was cancelled. The tribe never saw it coming.', stats: [['3', 'Votes cancelled'], ['0', 'Counted']] },
+      exile: { mood: 'shc-m-exile', bg: 'survivor/bg/exile-football.svg', hero: 'exile/token-coin-earned.svg', kick: 'Back in the game', head: 'Open Team 11 returns from Exile', sub: 'Three tokens earned on Exile Island. Rejoins Tribe Vela in week 7.', stats: [['3', 'Tokens'], ['2', 'Weeks on Exile']] },
+      champ: { mood: 'shc-m-champ', bg: 'survivor/bg/day-football.svg', hero: 'late/champion-trophy.svg', kick: 'Season champion', head: 'TheCiege26 is the last one standing', sub: 'Won the jury vote 3\u20131\u20131 after 13 weeks.', stats: [['3\u20131\u20131', 'Jury'], ['3', 'Immunity'], ['1,412.6', 'Points']] } };
+    const F = [['story', 'Story', 1080, 1920], ['post', 'Post', 1080, 1350], ['link', 'Link', 1200, 630]];
+    const f = F.find(x => x[0] === st.f); const sc = Math.min(380 / f[3], 340 / f[2]);
+    return { formats: F.map(([id, label]) => ({ label, line: st.f === id ? '#d9b45a' : 'rgba(255,255,255,.12)', col: st.f === id ? '#f1d58a' : '#a3a9c2', pick: () => this.setState({ f: id }) })),
+      statFs: st.f === 'link' ? '28px' : '40px', statLs: st.f === 'link' ? '13px' : '18px', fmt: st.f, cd: CARDS.immunity, notLink: st.f !== 'link', isLink: st.f === 'link', stats: (st.f === 'link' ? CARDS.immunity.stats.slice(0, 2) : CARDS.immunity.stats).map(([b, l]) => ({ b, l })), sc: sc.toFixed(4), nw: f[2] + 'px', nh: f[3] + 'px', fw: Math.round(f[2] * sc) + 'px', fh: Math.round(f[3] * sc) + 'px' };
+  }
+}
+</script>
+</body>
+</html>

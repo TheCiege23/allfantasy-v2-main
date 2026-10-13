@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Final Tribal Council (phone)</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./exile/exile.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Caveat:wght@500;600;700&amp;family=Cinzel:wght@600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080d}
+.mf-av{position:relative;flex:none;border-radius:999px;display:grid;place-items:center;font:700 12px 'Archivo',sans-serif;color:#fff}
+.mf-fin{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;background:#0b0d14;border:1px solid rgba(255,255,255,.07)}
+@keyframes mfWin{0%{transform:scale(.7);opacity:0}60%{transform:scale(1.04);opacity:1}100%{transform:scale(1)}}
+.mf-win{animation:mfWin .8s cubic-bezier(.2,.8,.2,1) both}
+@media (prefers-reduced-motion:reduce){.mf-win{animation:none}}
+</style>
+</helmet>
+<div class="ex" style="height: 844px; display: flex; flex-direction: column">
+  <header style="display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid rgba(255,255,255,.06)">
+    <a class="ex-btn" href="MobileSurvivorHome.dc.html" aria-label="Back" style="padding: 0 14px; min-height: 44px">‹</a>
+    <div style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 700; font-size: 17px">Final Tribal Council</span><span class="ex-t3" style="font-size: 12px">Week 13 · {{readCount}} of 5 votes read</span></div>
+    <img src="late/jury-icon.svg" alt="" style="width: 30px">
+  </header>
+  <div style="flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 12px">
+    <sc-if value="{{done}}" hint-placeholder-val="{{ false }}">
+      <section class="ex-card mf-win" style="padding: 18px; display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; border-color: rgba(242,201,76,.4); background: radial-gradient(ellipse at 50% 30%, rgba(242,201,76,.2), transparent 65%), #0b0d14">
+        <img src="late/champion-trophy.svg" alt="Champion trophy" style="width: 120px">
+        <span class="ex-lbl ex-gold">Season champion</span>
+        <span style="font: 700 24px/1.15 'Cinzel', serif; color: #f1d58a">TheCiege26 is the last one standing</span>
+        <span class="ex-t2" style="font-size: 12.5px">Won the jury vote 3–1–1</span>
+      </section>
+    </sc-if>
+    <sc-for list="{{fins}}" as="f" hint-placeholder-count="3">
+      <div class="mf-fin" style="border-color: {{f.line}}">
+        <span class="mf-av" style="width: 40px; height: 40px; background: {{f.c}}; box-shadow: 0 0 0 2px #0b0d14, 0 0 0 3.5px {{f.ring}}">{{f.ini}}</span>
+        <div style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 600">{{f.name}}</span><span class="ex-t3" style="font-size: 11.5px">{{f.sub}}</span></div>
+        <span style="font: 700 26px 'Caveat', cursive; color: #f1d58a; letter-spacing: .1em">{{f.marks}}</span>
+        <span class="ex-num" style="font-size: 18px; min-width: 16px; text-align: right">{{f.votes}}</span>
+      </div>
+    </sc-for>
+    <div class="sc-paper" style="padding: 16px 16px 20px; display: flex; flex-direction: column; gap: 8px; border-radius: 4px; min-height: 120px">
+      <span class="sc-sub">Jury votes</span>
+      <sc-for list="{{slips}}" as="s" hint-placeholder-count="0"><div class="sc-slip" key="{{s.k}}" style="padding: 6px 12px"><span class="sc-ord" style="min-width: 54px">{{s.ord}}</span><span class="sc-hand" style="font-size: 26px">{{s.name}}</span></div></sc-for>
+      <sc-if value="{{none}}" hint-placeholder-val="{{ true }}"><span style="font: 600 20px 'Caveat', cursive; color: #8a6330; text-align: center; margin-top: 20px">Sealed until every juror has voted.</span></sc-if>
+    </div>
+  </div>
+  <div style="display: flex; gap: 8px; padding: 12px 14px 26px; border-top: 1px solid rgba(255,255,255,.06); background: #0b0d14">
+    <sc-if value="{{canRead}}" hint-placeholder-val="{{ true }}"><button class="ex-btn ex-btn-gold" onClick="{{read}}" style="flex: 1; min-height: 48px">Read the next vote</button></sc-if>
+    <sc-if value="{{done}}" hint-placeholder-val="{{ false }}"><button class="ex-btn" onClick="{{reset}}" style="flex: 1; min-height: 48px">Replay</button></sc-if>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { n: 0, k: 0 }; }
+  renderVals() {
+    const st = this.state;
+    const order = ['Open Team 4', 'TheCiege26', 'Open Team 5', 'TheCiege26', 'TheCiege26'];
+    const read = order.slice(0, st.n); const done = st.n >= 5;
+    const fins = [['TheCiege26', 'TC', '#22314f', '3 immunity wins · 2 idols'], ['Open Team 4', 'O4', '#1f2a4d', '1 immunity win · 1 idol'], ['Open Team 5', 'O5', '#12352a', '4 immunity wins']].map(([name, ini, c, sub]) => {
+      const v = read.filter(x => x === name).length; const win = done && name === 'TheCiege26';
+      return { name, ini, c, sub, votes: String(v), marks: 'I'.repeat(v), ring: win ? '#f2c94c' : '#4a4f5c', line: win ? 'rgba(242,201,76,.55)' : 'rgba(255,255,255,.07)' };
+    });
+    const ords = ['Vote 1', 'Vote 2', 'Vote 3', 'Vote 4', 'Vote 5'];
+    return { fins, done, none: st.n === 0, canRead: !done, readCount: read.length,
+      slips: read.map((name, i) => ({ k: 'm' + i + st.k, ord: ords[i], name })),
+      read: () => this.setState({ n: Math.min(5, st.n + 1) }), reset: () => this.setState({ n: 0, k: st.k + 1 }) };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Zombie (phone)</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./specialty/sp.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Cinzel:wght@600;700&amp;family=Caveat:wght@600;700&amp;family=Bebas+Neue&amp;family=Pirata+One&amp;family=Creepster&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080d}
+.zb-t{font-family:'Creepster',cursive;letter-spacing:.04em;color:#c8f08a}
+.zb-lg{display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:12px;background:#10131c;border:1px solid rgba(255,255,255,.07)}
+.zb-dot{width:10px;height:10px;border-radius:99px;flex:none}
+.zb-st{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:99px;font:700 10.5px 'Archivo';letter-spacing:.04em;text-transform:uppercase}
+</style>
+</helmet>
+<div class="sp" style="--acc: #8be03a; --acc2: #c8f08a; --accInk: #0a1a04; --disp: Creepster; height: 844px; position: relative; overflow: hidden; display: flex; flex-direction: column">
+<div style="position: relative; height: 220px; flex: none; overflow: hidden"><img src="specialty/zombie/banner.svg" alt="" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover"><div style="position: absolute; inset: 0; background: linear-gradient(180deg, rgba(7,8,13,.1), #07080d)"></div>
+ <div style="position: absolute; left: 16px; bottom: 12px; display: flex; align-items: center; gap: 12px"><img src="specialty/zombie/emblem.svg" alt="" style="width: 56px"><div style="display: flex; flex-direction: column"><span class="zb-t" style="font-size: 28px; line-height: 1">The Outbreak</span><span class="sp-t3" style="font-size: 11.5px">Gamma 2 · week 6 · 7 of 20 turned</span></div></div></div>
+<div style="flex: 1; overflow-y: auto; padding: 10px 16px 16px; display: flex; flex-direction: column; gap: 12px">
+  <div class="sp-card" style="padding: 16px; display: flex; align-items: center; gap: 14px; border-color: rgba(127,183,232,.45)"><span class="sp-av" style="width: 56px; height: 56px; background: #22314f; box-shadow: 0 0 0 3px #07080d, 0 0 0 5px #3b6aa8">TC</span><div style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span class="zb-st" style="align-self: flex-start; background: rgba(127,183,232,.14); color: #9fd0ff">Survivor</span><span style="font-weight: 800; font-size: 16px">Still human after 6 weeks</span><span class="sp-t3" style="font-size: 11.5px">4th in Gamma 2 universe points</span></div></div>
+  <div class="sp-card" style="padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; border-color: rgba(139,224,58,.4)"><span class="sp-lbl" style="color: #c8f08a">Danger matchup</span><div style="display: flex; align-items: center; gap: 10px"><span style="flex: 1; font-weight: 700">You 108.4</span><span style="font: 400 20px 'Creepster'; color: #8be03a">vs</span><span style="flex: 1; text-align: right; font-weight: 700; color: #c8f08a">112.9 Open Team 9</span></div><div class="sp-bar"><span style="width: 56%; background: linear-gradient(90deg,#1e3a6a,#3b6aa8)"></span></div><span class="sp-t3" style="font-size: 11.5px">56% to stay human · 2 players left</span></div>
+  <span class="sp-lbl">Supplies</span>
+  <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px"><div class="sp-card2" style="padding: 12px; display: flex; flex-direction: column; align-items: center; gap: 4px"><img src="specialty/zombie/icon-serum.svg" alt="" style="width: 42px"><span style="font-weight: 700; font-size: 12.5px">Serum</span><span class="sp-num" style="color: #c8f08a">×1</span></div><div class="sp-card2" style="padding: 12px; display: flex; flex-direction: column; align-items: center; gap: 4px"><img src="specialty/zombie/icon-weapon.svg" alt="" style="width: 42px"><span style="font-weight: 700; font-size: 12.5px">Weapon</span><span class="sp-num" style="color: #c8f08a">×2</span></div><div class="sp-card2" style="padding: 12px; display: flex; flex-direction: column; align-items: center; gap: 4px"><img src="specialty/zombie/icon-whisperer.svg" alt="" style="width: 42px"><span style="font-weight: 700; font-size: 12.5px">Ambush</span><span class="sp-num" style="color: #c8f08a">×0</span></div></div>
+</div>
+<div style="padding: 12px 16px 24px; border-top: 1px solid rgba(255,255,255,.06); background: #0b0d14"><button class="sp-btn sp-btn-p" style="width: 100%; min-height: 50px"><img src="specialty/zombie/icon-weapon.svg" alt="" style="width: 22px">Use a weapon (+6)</button></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic { renderVals() { return {}; } }
+</script>
+</body>
+</html>

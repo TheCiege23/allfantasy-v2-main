@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Blah — Players (phone)</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./af-shell.css">
+<link rel="stylesheet" href="./draft-sleek.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500;700;800&amp;display=swap" rel="stylesheet">
+<style>body{margin:0;background:#07080d}</style>
+</helmet>
+<div class="af ph" style="min-height: 0">
+  <div class="ph-scroll">
+    <div style="display: flex; align-items: center; gap: 8px; padding: 10px 12px">
+      <a href="MobileSwitcher.dc.html" class="viewing" style="flex: 1; height: 44px; color: #eef0fa">
+        <span class="av" style="width: 28px; height: 28px; font-size: 12px; border-radius: 999px; background: #10131c; color: #22d3ee; box-shadow: 0 0 0 2px #10131c, 0 0 0 3px #34d399">B</span>
+        <span style="flex: 1">Blah</span><span class="chip chip-af" style="height: 20px">AF</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+      </a>
+    </div>
+    <div style="padding: 0 16px 12px; display: flex; flex-direction: column; gap: 10px">
+      <h1 style="margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.03em">Players &amp; waivers</h1>
+      <div style="display: flex; gap: 6px; overflow-x: auto"><span class="chip chip-af">FAAB $86</span><span class="chip">Runs Wed 3 AM</span><span class="chip">Priority 7</span></div>
+      <label class="search" style="max-width: none; flex: none; border-color: rgba(255,255,255,.13)"><input type="text" placeholder="Search players" aria-label="Search players"></label>
+      <div style="display: flex; gap: 6px; overflow-x: auto"><span class="chip chip-af">All</span><span class="chip">QB</span><span class="chip">RB</span><span class="chip">WR</span><span class="chip">TE</span><span class="chip">K</span><span class="chip">DEF</span><span class="chip">Watchlist</span></div>
+    </div>
+
+    <a href="#" style="margin: 0 12px 12px; padding: 12px 14px; border-radius: 12px; background: #10131c; border: 1px solid rgba(34,211,238,.28); display: flex; align-items: center; gap: 10px; color: #eef0fa">
+      <span class="num" style="font-size: 18px; font-weight: 600; color: #22d3ee">2</span>
+      <span style="flex: 1; display: flex; flex-direction: column; gap: 3px"><span style="font-weight: 600; font-size: 14px">Pending claims · $16 bid</span><span style="font-size: 12px; color: #989fc2">Tank Bigsby $12 · Tucker Kraft $4</span></span>
+      <span style="color: #989fc2">›</span>
+    </a>
+
+    <section style="margin: 0 12px 16px; border-radius: 14px; border: 1px solid rgba(255,255,255,.07); background: #10131c">
+      <sc-for list="{{players}}" as="p" hint-placeholder-count="8">
+        <div style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-top: 1px solid rgba(255,255,255,.05); min-height: 60px">
+          <span class="pos p-{{p.pos}}">{{p.pos}}</span>
+          <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px">
+            <span style="font-weight: 700; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{p.name}}</span>
+            <span class="num" style="font-size: 10px; color: #989fc2">{{p.team}} · {{p.rost}} rost · <span style="color: {{p.tc}}">AF {{p.trend}}</span></span>
+          </span>
+          <span class="num" style="font-size: 14px; font-weight: 600">{{p.proj}}</span>
+          <button class="btn btn-sm {{p.cls}}" aria-label="{{p.btn}} {{p.name}}" style="min-width: 64px">{{p.btn}}</button>
+        </div>
+      </sc-for>
+    </section>
+  </div>
+  <nav class="bnav" aria-label="Primary">
+    <a class="bb" href="Mobile.dc.html"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>League</a>
+    <a class="bb" href="MobileMatchup.dc.html"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 4h6v16H4zM14 4h6v16h-6z"/></svg>Matchup</a>
+    <a class="bb" href="MobileLineup.dc.html"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>Team</a>
+    <a class="bb bb-on" href="MobileWaivers.dc.html"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>Players</a>
+    <a class="bb" href="MobileChat.dc.html"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Chat</a>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const P = [
+      ['Tank Bigsby','RB','JAX','38%','11.2','+14','Claimed','btn-g'],
+      ["Wan'Dale Robinson",'WR','NYG','41%','10.6','+9','Add','btn-p'],
+      ['Tucker Kraft','TE','GB','46%','9.4','+11','Claimed','btn-g'],
+      ['Bo Nix','QB','DEN','35%','17.2','+4','Add','btn-p'],
+      ['Jaylen Wright','RB','MIA','19%','7.9','+8','Claim','btn-p'],
+      ['Jalen McMillan','WR','TB','22%','8.1','+6','Add','btn-p'],
+      ['Xavier Legette','WR','CAR','27%','8.4','−3','Add','btn-p'],
+      ['Commanders D/ST','DEF','WAS','33%','7.6','+5','Add','btn-p']
+    ];
+    const players = P.map(([name,pos,team,rost,proj,trend,btn,cls]) => ({ name,pos,team,rost,proj,trend,btn,cls,
+      tc: trend.startsWith('+') ? '#34d399' : '#fb5b78' }));
+    return { players };
+  }
+}
+</script>
+</body>
+</html>

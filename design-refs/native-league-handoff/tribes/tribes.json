@@ -1,0 +1,402 @@
+[
+ {
+  "id": "crab",
+  "name": "Kaniva",
+  "mascot": "Crab",
+  "primary": "#e2563b",
+  "secondary": "#f2b33d",
+  "frame": "shield"
+ },
+ {
+  "id": "shark",
+  "name": "Koa",
+  "mascot": "Shark",
+  "primary": "#3fa7b5",
+  "secondary": "#e8eef2",
+  "frame": "roundel"
+ },
+ {
+  "id": "turtle",
+  "name": "Honoa",
+  "mascot": "Sea turtle",
+  "primary": "#3f9e5f",
+  "secondary": "#d9b45a",
+  "frame": "hex"
+ },
+ {
+  "id": "moray",
+  "name": "Vakaru",
+  "mascot": "Moray eel",
+  "primary": "#7cae3a",
+  "secondary": "#2d3a8c",
+  "frame": "pennant"
+ },
+ {
+  "id": "manta",
+  "name": "Vela",
+  "mascot": "Manta ray",
+  "primary": "#8b7be0",
+  "secondary": "#5ad1e6",
+  "frame": "shield"
+ },
+ {
+  "id": "octopus",
+  "name": "Okoru",
+  "mascot": "Octopus",
+  "primary": "#c2437a",
+  "secondary": "#f29a4a",
+  "frame": "roundel"
+ },
+ {
+  "id": "barracuda",
+  "name": "Barako",
+  "mascot": "Barracuda",
+  "primary": "#9aa8bf",
+  "secondary": "#2f6fd6",
+  "frame": "hex"
+ },
+ {
+  "id": "hammerhead",
+  "name": "Mahura",
+  "mascot": "Hammerhead",
+  "primary": "#3b6fd1",
+  "secondary": "#f0c33c",
+  "frame": "pennant"
+ },
+ {
+  "id": "boar",
+  "name": "Rumo",
+  "mascot": "Wild boar",
+  "primary": "#d98a55",
+  "secondary": "#5a3a2a",
+  "frame": "shield"
+ },
+ {
+  "id": "croc",
+  "name": "Kroma",
+  "mascot": "Crocodile",
+  "primary": "#5f8f3a",
+  "secondary": "#e6c35c",
+  "frame": "roundel"
+ },
+ {
+  "id": "komodo",
+  "name": "Varuna",
+  "mascot": "Komodo dragon",
+  "primary": "#8a6a3c",
+  "secondary": "#d94a3a",
+  "frame": "hex"
+ },
+ {
+  "id": "macaw",
+  "name": "Akala",
+  "mascot": "Macaw",
+  "primary": "#e04848",
+  "secondary": "#3c8fe0",
+  "frame": "pennant"
+ },
+ {
+  "id": "toucan",
+  "name": "Tukano",
+  "mascot": "Toucan",
+  "primary": "#f08a24",
+  "secondary": "#1f2a44",
+  "frame": "shield"
+ },
+ {
+  "id": "flyingfox",
+  "name": "Pekala",
+  "mascot": "Flying fox",
+  "primary": "#7a4b9e",
+  "secondary": "#e0a24a",
+  "frame": "roundel"
+ },
+ {
+  "id": "tiki",
+  "name": "Tiki",
+  "mascot": "Tiki mask",
+  "primary": "#d46f86",
+  "secondary": "#e9c27a",
+  "frame": "hex"
+ },
+ {
+  "id": "cobra",
+  "name": "Nagara",
+  "mascot": "Cobra",
+  "primary": "#c9a227",
+  "secondary": "#1d6b4f",
+  "frame": "pennant"
+ },
+ {
+  "id": "scorpion",
+  "name": "Ekaro",
+  "mascot": "Scorpion",
+  "primary": "#b8452c",
+  "secondary": "#d9b45a",
+  "frame": "shield"
+ },
+ {
+  "id": "lobster",
+  "name": "Ulora",
+  "mascot": "Spiny lobster",
+  "primary": "#d8432f",
+  "secondary": "#2b4fa3",
+  "frame": "roundel"
+ },
+ {
+  "id": "gorilla",
+  "name": "Kongu",
+  "mascot": "Gorilla",
+  "primary": "#4a5266",
+  "secondary": "#d63c3c",
+  "frame": "hex"
+ },
+ {
+  "id": "jaguar",
+  "name": "Jaguara",
+  "mascot": "Jaguar",
+  "primary": "#e0a23a",
+  "secondary": "#1b4f7a",
+  "frame": "pennant"
+ },
+ {
+  "id": "tiger",
+  "name": "Rimau",
+  "mascot": "Tiger",
+  "primary": "#ef7b25",
+  "secondary": "#f2efe6",
+  "frame": "shield"
+ },
+ {
+  "id": "panther",
+  "name": "Morena",
+  "mascot": "Black panther",
+  "primary": "#3a3f55",
+  "secondary": "#21c8d8",
+  "frame": "roundel"
+ },
+ {
+  "id": "gecko",
+  "name": "Moko",
+  "mascot": "Gecko",
+  "primary": "#7bc043",
+  "secondary": "#f26b3a",
+  "frame": "hex"
+ },
+ {
+  "id": "iguana",
+  "name": "Iwana",
+  "mascot": "Iguana",
+  "primary": "#4f9a6e",
+  "secondary": "#e7b84a",
+  "frame": "pennant"
+ },
+ {
+  "id": "frog",
+  "name": "Ranoa",
+  "mascot": "Poison dart frog",
+  "primary": "#2f8fe0",
+  "secondary": "#f5d23a",
+  "frame": "shield"
+ },
+ {
+  "id": "hornbill",
+  "name": "Kenyala",
+  "mascot": "Hornbill",
+  "primary": "#e8b43a",
+  "secondary": "#2a2a33",
+  "frame": "roundel"
+ },
+ {
+  "id": "seaeagle",
+  "name": "Kalaru",
+  "mascot": "Sea eagle",
+  "primary": "#7a5230",
+  "secondary": "#f2f2ea",
+  "frame": "hex"
+ },
+ {
+  "id": "frigatebird",
+  "name": "Iwaka",
+  "mascot": "Frigatebird",
+  "primary": "#2c3446",
+  "secondary": "#e23b4a",
+  "frame": "pennant"
+ },
+ {
+  "id": "puffer",
+  "name": "Fuguna",
+  "mascot": "Pufferfish",
+  "primary": "#e7c14a",
+  "secondary": "#2f7fc4",
+  "frame": "shield"
+ },
+ {
+  "id": "marlin",
+  "name": "Marau",
+  "mascot": "Marlin",
+  "primary": "#2459b8",
+  "secondary": "#7fd3ea",
+  "frame": "roundel"
+ },
+ {
+  "id": "mantis",
+  "name": "Mantoa",
+  "mascot": "Mantis shrimp",
+  "primary": "#1fb59a",
+  "secondary": "#ee4b8a",
+  "frame": "hex"
+ },
+ {
+  "id": "lionfish",
+  "name": "Leoka",
+  "mascot": "Lionfish",
+  "primary": "#e85a3c",
+  "secondary": "#f4e2c0",
+  "frame": "pennant"
+ },
+ {
+  "id": "orca",
+  "name": "Orakai",
+  "mascot": "Orca",
+  "primary": "#1e2433",
+  "secondary": "#4fb3e8",
+  "frame": "shield"
+ },
+ {
+  "id": "buffalo",
+  "name": "Karaba",
+  "mascot": "Water buffalo",
+  "primary": "#6b5446",
+  "secondary": "#c7b08a",
+  "frame": "roundel"
+ },
+ {
+  "id": "macaque",
+  "name": "Makaki",
+  "mascot": "Macaque",
+  "primary": "#c08a5a",
+  "secondary": "#b8323a",
+  "frame": "hex"
+ },
+ {
+  "id": "orangutan",
+  "name": "Maiasa",
+  "mascot": "Orangutan",
+  "primary": "#d0652c",
+  "secondary": "#3c6e3a",
+  "frame": "pennant"
+ },
+ {
+  "id": "salamander",
+  "name": "Salakoa",
+  "mascot": "Fire salamander",
+  "primary": "#f0b52a",
+  "secondary": "#2b2b33",
+  "frame": "shield"
+ },
+ {
+  "id": "mongoose",
+  "name": "Mangusa",
+  "mascot": "Mongoose",
+  "primary": "#a8875c",
+  "secondary": "#2f5fa8",
+  "frame": "roundel"
+ },
+ {
+  "id": "tarantula",
+  "name": "Taranu",
+  "mascot": "Tarantula",
+  "primary": "#5a3d2e",
+  "secondary": "#e86a2a",
+  "frame": "hex"
+ },
+ {
+  "id": "jellyfish",
+  "name": "Jelura",
+  "mascot": "Box jellyfish",
+  "primary": "#5fd0e0",
+  "secondary": "#c35be0",
+  "frame": "pennant"
+ },
+ {
+  "id": "sealion",
+  "name": "Leona",
+  "mascot": "Sea lion",
+  "primary": "#8c6a4a",
+  "secondary": "#2f8fcf",
+  "frame": "shield"
+ },
+ {
+  "id": "piranha",
+  "name": "Piraya",
+  "mascot": "Piranha",
+  "primary": "#d84a3a",
+  "secondary": "#9aa6b8",
+  "frame": "roundel"
+ },
+ {
+  "id": "anaconda",
+  "name": "Anakai",
+  "mascot": "Anaconda",
+  "primary": "#4c7a3a",
+  "secondary": "#d9b23f",
+  "frame": "hex"
+ },
+ {
+  "id": "dingo",
+  "name": "Dingaro",
+  "mascot": "Dingo",
+  "primary": "#d39a52",
+  "secondary": "#22406b",
+  "frame": "pennant"
+ },
+ {
+  "id": "osprey",
+  "name": "Osaku",
+  "mascot": "Osprey",
+  "primary": "#5a4636",
+  "secondary": "#f3f1ea",
+  "frame": "shield"
+ },
+ {
+  "id": "owl",
+  "name": "Rurua",
+  "mascot": "Owl",
+  "primary": "#8a6d4a",
+  "secondary": "#f2c230",
+  "frame": "roundel"
+ },
+ {
+  "id": "sunbear",
+  "name": "Beruna",
+  "mascot": "Sun bear",
+  "primary": "#2e2a2a",
+  "secondary": "#f0b73a",
+  "frame": "hex"
+ },
+ {
+  "id": "beetle",
+  "name": "Kumbara",
+  "mascot": "Rhino beetle",
+  "primary": "#3a6b5e",
+  "secondary": "#c9d63a",
+  "frame": "pennant"
+ },
+ {
+  "id": "devil",
+  "name": "Devaka",
+  "mascot": "Tasmanian devil",
+  "primary": "#3a2e33",
+  "secondary": "#d9333f",
+  "frame": "shield"
+ },
+ {
+  "id": "hyena",
+  "name": "Hiyaro",
+  "mascot": "Hyena",
+  "primary": "#b49660",
+  "secondary": "#5c2f6e",
+  "frame": "roundel"
+ }
+]
