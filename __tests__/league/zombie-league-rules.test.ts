@@ -118,6 +118,13 @@ describe('zombie rule overrides', () => {
     expect(parseZombieRulesPatch({ bashDecisionHours: 30.5 }, effective).ok).toBe(false)
   })
 
+  it('takes an NBA-sized line (its own bow is 1,050 and its maul 211) and still stops a typo', () => {
+    const nba = { ...effective, bashingThreshold: 128, maulingThreshold: 211, weaponShieldThreshold: 900, weaponAmbushThreshold: 1050 }
+    expect(parseZombieRulesPatch({ weaponAmbushThreshold: 1200, maulingThreshold: 260 }, nba)).toEqual({ ok: true, patch: { weaponAmbushThreshold: 1200, maulingThreshold: 260 } })
+    expect(readZombieRuleOverrides({ zombie_rules: { weaponAmbushThreshold: 1200 } })).toEqual({ weaponAmbushThreshold: 1200 })
+    expect(parseZombieRulesPatch({ weaponAmbushThreshold: 50000 }, nba).ok).toBe(false)
+  })
+
   it('getZombieRulesForLeague lays the league override over the sport rule', async () => {
     h.state.settings = { zombie_rules: { bashingThreshold: 40, bombEnabled: false } }
     const r = await getZombieRulesForLeague('L1', 'NFL')

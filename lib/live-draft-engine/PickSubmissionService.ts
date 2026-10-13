@@ -36,6 +36,7 @@ import { recordEngineTelemetrySample } from '@/lib/analytics/recordAnalyticsEven
 import { ENGINE } from '@/lib/analytics/eventNames'
 import { withPickLock } from '@/lib/draft/draftLock'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { loadNbaSurvivorRosterEligibility, nbaSurvivorPlayerIdMatches } from '@/lib/draft-room/nbaSurvivorRosterEligibility'
 
 export interface SubmitPickInput {
   leagueId: string
@@ -167,6 +168,21 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
       success: false,
       error: validation.error,
       ...(validation.code ? { code: validation.code } : {}),
+    }
+  }
+
+  if (input.source !== 'keeper') {
+    const league = await prisma.league.findUnique({
+      where: { id: input.leagueId },
+      select: { sport: true, leagueVariant: true },
+    })
+    if (league?.sport === 'NBA' && league.leagueVariant === 'survivor') {
+      const roster = await loadNbaSurvivorRosterEligibility(totalPicks)
+      if (!roster.ready || !nbaSurvivorPlayerIdMatches(roster, input.playerName, input.playerId)) {
+        return { success: false, error: roster.ready
+          ? 'This player is not on the verified current NBA roster. Refresh the draft pool and choose another player.'
+          : roster.reason ?? 'Current NBA roster unavailable' }
+      }
     }
   }
 

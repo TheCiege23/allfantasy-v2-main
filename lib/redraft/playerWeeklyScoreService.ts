@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { calculateScoreFromSportConfig } from './scoringEngine'
 import { pickFreshestSourceRows } from '@/lib/sports-live-scores-service'
 import {
+  canonicalTeamDefenseId,
   findCachedWeekPayload,
   isTeamDefenseRow,
   normalizeNflTeamDefenseWeeklyStats,
@@ -324,11 +325,25 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
     return summary
   }
 
+  /*
+   * A team defence's box score is cached under `nfl:def:<ABBR>` whichever id the roster holds — Sleeper's
+   * bare `KC` included (see `canonicalTeamDefenseId`). Read by the roster id alone, a Sleeper-format
+   * defence found no cache row and scored points-allowed only: its sacks, interceptions, fumbles and TDs
+   * were silently dropped. Both keys are asked for; the DEF branch below reads ONE of them, so a defence
+   * cached under both can never be counted twice.
+   */
+  const defenceCacheIdByPlayer = new Map<string, string>()
+  if (!isDailySport && !isNcaaf) {
+    for (const p of rosterPlayers as Array<{ playerId: string; position: string | null }>) {
+      const canonical = canonicalTeamDefenseId(p.playerId, p.position)
+      if (canonical) defenceCacheIdByPlayer.set(p.playerId, canonical)
+    }
+  }
   const cachedRows = isDailySport || isNcaaf
     ? []
     : await prisma.playerGameLogCache.findMany({
         where: {
-          playerId: { in: playerIds },
+          playerId: { in: Array.from(new Set([...playerIds, ...defenceCacheIdByPlayer.values()])) },
           season: String(seasonYear),
           seasonType: 'regular',
           sport: { in: candidateSportKeys(sport) },
@@ -522,7 +537,13 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
   const gameByTeam = new Map<string, { homeTeam: string; awayTeam: string; homeScore: number | null; awayScore: number | null }>()
   if (teamDefensePlayerIds.length > 0) {
     const rawGames = await prisma.sportsGame.findMany({
-      where: { sport: { in: candidateSportKeys(sport) }, season: seasonYear, week },
+      /*
+       * ⚠ REGULAR SEASON ONLY. `week` alone is ambiguous: production holds 2026 NFL preseason weeks
+       * 1-4 with final scores beside regular weeks 1-4, so an August exhibition's score could become a
+       * September defence's points allowed. The schedule resolver treats NFL season type as required
+       * for the same reason (`requiresExplicitSeasonType`).
+       */
+      where: { sport: { in: candidateSportKeys(sport) }, season: seasonYear, week, seasonType: 'regular' },
       select: { homeTeam: true, awayTeam: true, homeScore: true, awayScore: true, source: true, fetchedAt: true },
     })
     // A fixture can carry 3-4 rows here, one per provider feed. Without
@@ -536,6 +557,25 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
       const away = String(g.awayTeam ?? '').trim().toUpperCase()
       if (home) gameByTeam.set(home, g)
       if (away) gameByTeam.set(away, g)
+    }
+  }
+  /*
+   * 🛑 THE STORED LINE OUTRANKS A WEAKER REBUILD. A defence's full box score can reach
+   * `player_weekly_scores` without ever being cached — the live tick writes the provider's line
+   * straight there — and this branch rebuilt the row from the cache alone, so a week the cache
+   * did not hold became points-allowed only and REPLACED the box score. Measured on production
+   * 2026-10-13: week 2 of 2026 kept full lines for 24 clubs (live tick, 09-24 01:21Z) and points
+   * allowed alone for the 8 a native league rostered (this sync, 23:41Z; 6 already finalized).
+   * So with no cached week, the stored line is kept and only its points allowed is refreshed.
+   */
+  const storedDefenceStatsByPlayer = new Map<string, Record<string, number>>()
+  if (teamDefensePlayerIds.length > 0) {
+    const storedRows = await prisma.playerWeeklyScore.findMany({
+      where: { playerId: { in: teamDefensePlayerIds }, week, season: seasonYear, sport: { in: candidateSportKeys(sport) } },
+      select: { playerId: true, stats: true },
+    })
+    for (const row of storedRows as Array<{ playerId: string; stats: unknown }>) {
+      storedDefenceStatsByPlayer.set(row.playerId, normalizeNflTeamDefenseWeeklyStats(row.stats))
     }
   }
 
@@ -655,14 +695,24 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
     }
 
     if (isTeamDefense(playerId)) {
-      const cached = cacheByPlayer.get(playerId)
+      const defenceCacheId = defenceCacheIdByPlayer.get(playerId)
+      // The canonical key first; the roster's own id only for a defence with no canonical form.
+      const cached = (defenceCacheId ? cacheByPlayer.get(defenceCacheId) : undefined) ?? cacheByPlayer.get(playerId)
       const weekPayload = cached ? findCachedWeekPayload(cached.payload, week) : null
-      const stats: Record<string, number> = weekPayload ? normalizeNflTeamDefenseWeeklyStats(weekPayload) : {}
+      const stored = storedDefenceStatsByPlayer.get(playerId)
+      // A stored line with more than points allowed is a box score, and nothing below may shrink it.
+      const keepStored = !weekPayload && !!stored && Object.keys(stored).some((key) => key !== 'def_points_allowed')
+      const stats: Record<string, number> = weekPayload
+        ? normalizeNflTeamDefenseWeeklyStats(weekPayload)
+        : keepStored
+          ? { ...stored }
+          : {}
 
-      // Derive points allowed from the game result when the box-score feed did
-      // not already provide it.
-      if (stats.def_points_allowed === undefined) {
-        const team = teamAbbrevFromDefPlayerId(playerId) ?? String(teamByPlayer.get(playerId) ?? '').trim().toUpperCase()
+      // Derive points allowed from the game result when the box-score feed did not provide it —
+      // and, on a kept stored line, refresh it: that is the one number this branch can improve.
+      if (stats.def_points_allowed === undefined || keepStored) {
+        // From the canonical id: a Sleeper DEF row's team can read "Arizona Cardinals", which matches no game.
+        const team = teamAbbrevFromDefPlayerId(defenceCacheId ?? playerId) ?? String(teamByPlayer.get(playerId) ?? '').trim().toUpperCase()
         const game = team ? gameByTeam.get(team) : undefined
         if (game) {
           const pa = pointsAllowedFromGame(game, team)

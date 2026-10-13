@@ -37,12 +37,17 @@ export type ZombieRuleOverrides = {
   whispererDefeatRule?: WhispererDefeatRule
 }
 
+/*
+ * Margins and weapon scores are in the SPORT's points: NBA weeks run in the hundreds and its own lines
+ * are 128/211 to bash/maul and 900/1,050 for the knife/bow (sportRulesConfig.ts). The caps leave room
+ * above every sport's line; they only stop a typo, never a sport.
+ */
 export const ZOMBIE_RULE_LIMITS = {
-  bashingThreshold: [1, 500],
-  maulingThreshold: [1, 500],
+  bashingThreshold: [1, 2000],
+  maulingThreshold: [1, 2000],
   bashDecisionHours: [12, 96],
-  weaponShieldThreshold: [1, 1000],
-  weaponAmbushThreshold: [1, 1000],
+  weaponShieldThreshold: [1, 5000],
+  weaponAmbushThreshold: [1, 5000],
   reviveThreshold: [1, 10],
   serumMaxHold: [1, 20],
 } as const

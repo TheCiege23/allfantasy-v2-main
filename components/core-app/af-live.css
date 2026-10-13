@@ -2870,7 +2870,9 @@
 }
 
 /* Live workspace: readable metadata and compact phone impact. */
-.af-core .af-live .af-btn,.af-core .af-live button { min-height:48px; }
+/* 48px tap targets for real buttons — but NOT the "?" help dot: it is a 14px circle with its own enlarged
+   ::after tap area (af-core.css), and min-height turned it into a 14x48 oval (reported 2026-10-13). */
+.af-core .af-live .af-btn,.af-core .af-live button:not(.af-info-tip) { min-height:48px; }
 .af-live-refresh-icon { display:none; }
 @media(max-width:720px) { .af-live-refresh-label { display:none; } .af-live-refresh-icon { display:inline; font-size:24px; } .af-core .af-live-refresh { width:48px; padding:8px; } }
 .af-live-contributions summary { min-height:48px; cursor:pointer; font-weight:700; align-content:center; }

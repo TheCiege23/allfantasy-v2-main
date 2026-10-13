@@ -228,9 +228,11 @@ function ItemsTab({ cfg }: { cfg: ReturnType<typeof getZombieSportConfig> }) {
                   <p className="text-[11px] text-[var(--zombie-text-mid)]">{w.description}</p>
                 </div>
               </div>
-              <span className="rounded-lg bg-white/[0.06] px-3 py-1 text-[13px] font-bold text-white/80">
-                {w.minPoints}+ pts
-              </span>
+              {w.minPoints != null && (
+                <span className="rounded-lg bg-white/[0.06] px-3 py-1 text-[13px] font-bold text-white/80">
+                  {w.minPoints.toLocaleString()}+ pts
+                </span>
+              )}
             </div>
           ))}
         </div>

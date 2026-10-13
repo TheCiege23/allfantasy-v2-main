@@ -205,3 +205,14 @@
 .nl-yw-tile strong{font-size:16px;font-variant-numeric:tabular-nums;color:var(--text)}
 .nl-yw-tile small{font-size:12px;color:var(--text2)}
 @media(max-width:767px){.nl-yourweek-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+/* League health (2026-10-13): what needs the commissioner after the draft. */
+.nl-health-list{list-style:none;margin:0 0 12px;padding:0;display:flex;flex-direction:column;gap:8px}
+.nl-health-list li{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;border:1px solid var(--line);border-left-width:3px;border-radius:8px;background:var(--surface2)}
+.nl-health-list li[data-tone=danger]{border-left-color:var(--bad)}
+.nl-health-list li[data-tone=warn]{border-left-color:var(--warn)}
+.nl-health-list li>div{display:flex;flex-direction:column;gap:2px;min-width:0}
+.nl-health-list strong{font-size:13px;color:var(--text)}
+.nl-health-list small{font-size:12px;color:var(--text2);overflow-wrap:anywhere}
+.nl-health-list .nl-button{flex:none}
+.nl-health-clear{display:flex;align-items:center;gap:8px;color:var(--good)!important;font-weight:600}
+@media(max-width:767px){.nl-health-list li{flex-direction:column;align-items:stretch}.nl-health-list .nl-button{width:100%}}

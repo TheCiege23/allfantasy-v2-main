@@ -4,6 +4,8 @@ import { prisma } from '@/lib/prisma'
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { normalizeSurvivorFoundationSettings } from './survivorSettings'
 import { buildSurvivorFullSeasonPlan, readSurvivorFullSeasonPlan } from './survivorFullSeasonPlan'
+import { getEffectiveLeagueRosterTemplate } from '@/lib/league/getEffectiveLeagueRosterTemplate'
+import { loadNbaSurvivorRosterEligibility } from '@/lib/draft-room/nbaSurvivorRosterEligibility'
 
 type DraftSeat = { id: string; platformUserId: string }
 
@@ -51,11 +53,11 @@ export function evaluateSurvivorDraftCast(input: {
 
 export async function getSurvivorDraftStartReadiness(
   leagueId: string,
-  session: { teamCount: number; slotOrder: unknown },
+  session: { teamCount: number; rounds: number; slotOrder: unknown },
 ): Promise<SurvivorDraftStartReadiness> {
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { platform: true, survivorMode: true, leagueVariant: true, userId: true, settings: true },
+    select: { platform: true, sport: true, survivorMode: true, leagueVariant: true, userId: true, settings: true },
   })
   if (!league || resolveWriteAuthority(league.platform) !== 'NATIVE' ||
       (!league.survivorMode && league.leagueVariant !== 'survivor')) return { ready: true }
@@ -78,6 +80,17 @@ export async function getSurvivorDraftStartReadiness(
       .commissionerParticipationMode === 'participating_player',
   })
   if (!cast.ready) return cast
+
+  if (league.sport === 'NBA') {
+    const template = await getEffectiveLeagueRosterTemplate(leagueId)
+    const rosterSpots = template.template.slots.reduce((sum, slot) =>
+      sum + (slot.starterCount ?? 0) + (slot.benchCount ?? 0), 0)
+    if (rosterSpots !== session.rounds) {
+      return { ready: false, error: `The NBA roster has ${rosterSpots} draftable spots per team but the draft has ${session.rounds} rounds. Match these in commissioner settings before starting.` }
+    }
+    const roster = await loadNbaSurvivorRosterEligibility(session.teamCount * session.rounds)
+    if (!roster.ready) return { ready: false, error: roster.reason ?? 'Current NBA roster unavailable.' }
+  }
 
   const savedPlan = readSurvivorFullSeasonPlan(league.settings)
   if (savedPlan) {

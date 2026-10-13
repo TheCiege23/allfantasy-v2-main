@@ -1,14 +1,18 @@
 import { prisma } from '@/lib/prisma'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
-import { getZombieSportConfig } from '@/lib/zombie/sportRulesConfig'
+import { DEFAULT_ENGINE_WEAPONS, getZombieSportConfig } from '@/lib/zombie/sportRulesConfig'
 import { readZombieRuleOverrides, type WhispererDefeatRule } from '@/lib/zombie/zombieLeagueRules'
 
 export type ZombieRulesResolved = {
   sport: string
   bashingThreshold: number
   maulingThreshold: number
+  /** Weekly score that earns a Knife. */
   weaponShieldThreshold: number
+  /** Weekly score that earns a Bow. */
   weaponAmbushThreshold: number
+  /** Winning margin that earns an Axe. No template column — sport config only. */
+  weaponAxeMargin: number
   reviveThreshold: number
   serumMaxHold: number
   lineupLockDesc: string | null
@@ -26,12 +30,16 @@ export async function getZombieRulesForSport(sportRaw: string): Promise<ZombieRu
    * own line from `sportRulesConfig`, the same numbers the generated rules page shows the league.
    */
   const sportCfg = getZombieSportConfig(sport)
+  // Same story for weapons: 100/120 and a 20-point Axe were NFL lines applied to every sport. See
+  // `EngineWeaponThresholds` in sportRulesConfig for the NBA calibration.
+  const weapons = sportCfg.engineWeapons ?? DEFAULT_ENGINE_WEAPONS
   return {
     sport,
     bashingThreshold: row?.bashingThreshold ?? sportCfg.bashingThreshold,
     maulingThreshold: row?.maulingThreshold ?? sportCfg.maulingThreshold,
-    weaponShieldThreshold: row?.weaponShieldThreshold ?? 100,
-    weaponAmbushThreshold: row?.weaponAmbushThreshold ?? 120,
+    weaponShieldThreshold: row?.weaponShieldThreshold ?? weapons.knifeScore,
+    weaponAmbushThreshold: row?.weaponAmbushThreshold ?? weapons.bowScore,
+    weaponAxeMargin: weapons.axeWinMargin,
     reviveThreshold: row?.reviveThreshold ?? 3,
     serumMaxHold: row?.serumMaxHold ?? 5,
     lineupLockDesc: row?.lineupLockDesc ?? (sport === 'NFL' ? NFL_LOCK : 'First game of the scoring period.'),
