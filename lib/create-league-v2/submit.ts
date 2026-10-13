@@ -96,6 +96,7 @@ function buildCanonicalPayload(state: CreateLeagueV2State): Record<string, unkno
   }
   if (lt === 'survivor') {
     conceptSetup.survivorTribeCount = state.survivorTribeCount
+    conceptSetup.commissionerParticipationMode = state.survivorCommissionerParticipationMode ?? 'non_participating_host'
   }
   if (isFootballLike(state.sport) && state.thirdRoundReversal && isThirdRoundReversalAvailable(state.draftType)) {
     conceptSetup.thirdRoundReversal = true

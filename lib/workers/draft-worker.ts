@@ -468,6 +468,9 @@ export class DraftWorker {
       if (started.reason === 'ROSTER_CONFIGURATION_INCOMPLETE') {
         throw new Error('ROSTER_CONFIGURATION_INCOMPLETE')
       }
+      if (started.reason === 'SURVIVOR_CAST_INCOMPLETE') {
+        throw new Error(`SURVIVOR_CAST_INCOMPLETE:${started.error}`)
+      }
       throw new Error('Unable to start draft')
     }
     await this.broadcastDraftState(draftId)

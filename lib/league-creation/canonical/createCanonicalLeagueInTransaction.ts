@@ -841,6 +841,7 @@ export async function createCanonicalLeagueInTransaction(
       aiAutoPick: isAuto,
       draftOrderMethod: bestBallSettings?.orderMethod === 'randomize' ? 'random' : 'manual',
       draftDateUtc,
+      ...(formatId === 'survivor' ? { autostart: true } : {}),
     },
   })
 

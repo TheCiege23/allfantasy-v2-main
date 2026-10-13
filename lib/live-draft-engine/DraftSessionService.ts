@@ -636,7 +636,7 @@ export async function buildSessionSnapshot(
 
 export type StartDraftSessionResult =
   | { ok: true }
-  | { ok: false; reason: 'session_not_ready' | 'ROSTER_CONFIGURATION_INCOMPLETE' }
+  | { ok: false; reason: 'session_not_ready' | 'ROSTER_CONFIGURATION_INCOMPLETE' | 'SURVIVOR_CAST_INCOMPLETE'; error?: string }
 
 export async function startDraftSession(leagueId: string): Promise<StartDraftSessionResult> {
   await repairDraftSessionSlotOrderIfNeeded(leagueId)
@@ -647,6 +647,10 @@ export async function startDraftSession(leagueId: string): Promise<StartDraftSes
 
   const session = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER })
   if (!session || session.status !== 'pre_draft') return { ok: false, reason: 'session_not_ready' }
+
+  const { getSurvivorDraftStartReadiness } = await import('@/lib/survivor/survivorDraftStartReadiness')
+  const cast = await getSurvivorDraftStartReadiness(leagueId, session)
+  if (!cast.ready) return { ok: false, reason: 'SURVIVOR_CAST_INCOMPLETE', error: cast.error }
 
   const startedAtNow = new Date()
 

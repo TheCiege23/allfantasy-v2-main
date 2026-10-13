@@ -16,6 +16,7 @@ import {
   getIdpDraftTypeOptions,
   getScoringPresetOptionsForSelection,
   getTeamCountOptions,
+  getSurvivorTribeOptions,
 } from './rules-engine'
 import { isUniversalTeamCount } from '@/lib/create-league-v2/simple-create'
 
@@ -41,6 +42,10 @@ export function analyzeCreateLeagueCompletion(state: CreateLeagueV2State): Creat
   if (!lt) {
     issues.push({ code: 'concept_required', message: 'Choose a league concept to continue.' })
     return issues
+  }
+
+  if (lt === 'survivor' && !getSurvivorTribeOptions(state.teamCount).includes(state.survivorTribeCount)) {
+    issues.push({ code: 'survivor_tribes_invalid', message: 'Choose a valid starting tribe count for this cast size.' })
   }
 
   if (!state.sport) {

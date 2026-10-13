@@ -20,6 +20,7 @@ import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { setClientLeagueCreateOptionsCatalog } from '@/lib/create-league-v2/options-catalog-client'
 import type { LeagueCreateOptionsCatalog } from '@/lib/league-creation/options-catalog-seed-data'
 import { getDefaultScoringPresetId, resolveScoringPresetId } from '@/lib/league-creation-preset/scoring-presets'
+import { getSurvivorTribeOptions } from '@/lib/create-league-v2/rules-engine'
 
 export interface CreateLeagueV2ClientProps {
   userId: string
@@ -54,6 +55,10 @@ function normalizeInitialState(state: CreateLeagueV2State): CreateLeagueV2State 
     draftDate: state.draftDate ?? '',
     draftTime: state.draftTime ?? '',
     draftScheduleLater: state.draftScheduleLater === true,
+    survivorTribeCount: leagueType === 'survivor' && !getSurvivorTribeOptions(state.teamCount).includes(state.survivorTribeCount)
+      ? (getSurvivorTribeOptions(state.teamCount)[0] ?? 2) : state.survivorTribeCount,
+    survivorCommissionerParticipationMode: state.survivorCommissionerParticipationMode === 'participating_player'
+      ? 'participating_player' : 'non_participating_host',
   }
 }
 
