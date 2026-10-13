@@ -24,6 +24,50 @@ function usePrefersReducedMotion(): boolean {
   return prefersReducedMotion
 }
 
+type NetworkInformationLike = {
+  saveData?: boolean
+  effectiveType?: string
+  type?: string
+  addEventListener?: (type: 'change', listener: () => void) => void
+  removeEventListener?: (type: 'change', listener: () => void) => void
+}
+
+/**
+ * Whether tile videos should stay as still images until the manager presses Play.
+ *
+ * A create flow on a phone holds ~20 of these tiles, and each one used to fetch its video's
+ * metadata on load and stream the clip on every tap. So: always on a touch-only device (iOS does
+ * not expose whether it is on cellular, so "phone" is the honest proxy), and on any device that
+ * reports Save-Data, a cellular link, or a 2G/3G-class connection. Desktop hover previews are
+ * unchanged.
+ */
+export function isDataSaver(connection: NetworkInformationLike | undefined, touchOnly: boolean): boolean {
+  if (touchOnly) return true
+  if (!connection) return false
+  if (connection.saveData === true || connection.type === 'cellular') return true
+  return ['slow-2g', '2g', '3g'].includes(connection.effectiveType ?? '')
+}
+
+function useDataSaver(): boolean {
+  const [saver, setSaver] = useState(false)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const connection = (navigator as Navigator & { connection?: NetworkInformationLike }).connection
+    const touchQuery = typeof window.matchMedia === 'function' ? window.matchMedia('(hover: none)') : null
+    const evaluate = () => setSaver(isDataSaver(connection, touchQuery?.matches === true))
+    evaluate()
+    connection?.addEventListener?.('change', evaluate)
+    touchQuery?.addEventListener?.('change', evaluate)
+    return () => {
+      connection?.removeEventListener?.('change', evaluate)
+      touchQuery?.removeEventListener?.('change', evaluate)
+    }
+  }, [])
+
+  return saver
+}
+
 export type CreateLeagueVideoTileMedia = {
   video?: string | null
   poster?: string | null
@@ -59,11 +103,13 @@ export function CreateLeagueVideoTile({
 }: CreateLeagueVideoTileProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const prefersReducedMotion = usePrefersReducedMotion()
+  const dataSaver = useDataSaver()
   const [previewing, setPreviewing] = useState(false)
   const [playingByChoice, setPlayingByChoice] = useState(false)
   const [activeSrc, setActiveSrc] = useState(media?.video?.trim() || '')
   const [videoFailed, setVideoFailed] = useState(false)
-  const videoDisabled = disabled || locked || videoFailed || !activeSrc || (prefersReducedMotion && !playingByChoice)
+  // Reduced motion and data saver both mean: no automatic preview; the Play button still works.
+  const videoDisabled = disabled || locked || videoFailed || !activeSrc || ((prefersReducedMotion || dataSaver) && !playingByChoice)
 
   useEffect(() => {
     setActiveSrc(media?.video?.trim() || '')
@@ -84,7 +130,7 @@ export function CreateLeagueVideoTile({
   }
 
   const startPreview = (withSound = false) => {
-    if (disabled || locked || videoFailed || !activeSrc || (prefersReducedMotion && !withSound)) return
+    if (disabled || locked || videoFailed || !activeSrc || ((prefersReducedMotion || dataSaver) && !withSound)) return
     if (playingByChoice && !withSound) return
     const video = videoRef.current
     if (!video) return
@@ -184,7 +230,7 @@ export function CreateLeagueVideoTile({
           muted
           loop
           playsInline
-          preload="metadata"
+          preload={dataSaver ? 'none' : 'metadata'}
           aria-hidden="true"
           data-testid={testId ? `${testId}-video` : undefined}
           onError={handleVideoError}

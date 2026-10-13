@@ -172,7 +172,7 @@ test('shows import provider states without broken unsupported actions', async ({
   }
 
   await expect(
-    page.getByTestId('g30-import-provider-yahoo').getByText(/cannot be launched from this flow yet/i)
+    page.getByTestId('g30-import-provider-yahoo').getByText(/not available yet/i)
   ).toBeVisible()
 })
 

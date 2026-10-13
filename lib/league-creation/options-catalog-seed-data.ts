@@ -1,5 +1,5 @@
 import type { SupportedSport } from '@/lib/create-league-v2/state'
-import { SURVIVOR_CAST_SIZE_OPTIONS } from '@/lib/league-creation-wizard/sport-team-limits'
+import { SURVIVOR_CREATE_CAST_SIZES } from '@/lib/league-creation-wizard/sport-team-limits'
 import { getGuillotineSportConfig } from '@/lib/guillotine/sportConfig'
 import { SURVIVOR_CREATION_SPORTS } from '@/lib/survivor/survivorCreationAvailability'
 
@@ -341,12 +341,12 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
     },
     // `SURVIVOR_CAST_SIZE_OPTIONS` is what `POST /api/league/create` clamps a submitted cast
     // size to, so anything this catalog offers that is not in that list gets silently rewritten
-    // on save. Read it rather than restating it.
+    // on save. New leagues are offered the 16 / 20 subset of it; read it rather than restating it.
     survivor: {
-      NFL: [...SURVIVOR_CAST_SIZE_OPTIONS],
-      NCAAF: [...SURVIVOR_CAST_SIZE_OPTIONS],
-      NBA: [...SURVIVOR_CAST_SIZE_OPTIONS],
-      NHL: [...SURVIVOR_CAST_SIZE_OPTIONS],
+      NFL: [...SURVIVOR_CREATE_CAST_SIZES],
+      NCAAF: [...SURVIVOR_CREATE_CAST_SIZES],
+      NBA: [...SURVIVOR_CREATE_CAST_SIZES],
+      NHL: [...SURVIVOR_CREATE_CAST_SIZES],
     },
     tournament: {
       NFL: [32, 64, 96, 128, 160, 192, 224],

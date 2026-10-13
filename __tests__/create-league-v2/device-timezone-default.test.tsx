@@ -77,7 +77,9 @@ describe('device timezone helpers', () => {
   })
 
   it('timezoneOptions puts an unlisted current zone first and leaves listed ones alone', () => {
-    expect(timezoneOptions('Europe/London')[0]).toBe('Europe/London')
+    // Europe/London is on the labelled list now; Madrid is not, so it is offered first.
+    expect(timezoneOptions('Europe/Madrid')[0]).toBe('Europe/Madrid')
+    expect(timezoneOptions('Europe/London')[0]).toBe('America/New_York')
     expect(timezoneOptions('America/Chicago').filter((z) => z === 'America/Chicago')).toHaveLength(1)
     expect(timezoneOptions('America/Chicago')[0]).toBe('America/New_York')
   })
