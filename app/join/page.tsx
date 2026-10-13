@@ -7,6 +7,7 @@ import { useSession } from 'next-auth/react'
 import { joinCallbackUrl, joinLandingHref } from '@/lib/league-join/joinLanding'
 import { ClassGateNotice, isClassGateBlocked, type ClassGateBlocked } from '@/components/league-join/ClassGateNotice'
 import { SurvivorJoin, type SurvivorJoinPreview } from '@/components/survivor/SurvivorJoin'
+import { SleeperTeamClaim } from '@/components/league-join/SleeperTeamClaim'
 
 type Preview = { leagueId: string; name: string | null; sport: string; requiresPassword: boolean; survivor?: SurvivorJoinPreview | null }
 
@@ -32,6 +33,8 @@ export default function JoinByCodePage() {
   const [status, setStatus] = useState<'idle' | 'joining' | 'success' | 'error'>(codeFromUrl ? 'idle' : 'idle')
   const [message, setMessage] = useState<string>('')
   const [joinedLeagueId, setJoinedLeagueId] = useState<string | null>(null)
+  /** A Sleeper league's member can claim their team here by proving the account, so we stay put. */
+  const [sleeperClaim, setSleeperClaim] = useState(false)
   const [classBlocked, setClassBlocked] = useState<ClassGateBlocked | null>(null)
 
   const effectiveCode = codeFromUrl || code
@@ -93,6 +96,11 @@ export default function JoinByCodePage() {
           if (data.success) {
             setStatus('success')
             setJoinedLeagueId(data.leagueId)
+            if (data.memberOnly && data.sleeperClaim) {
+              setSleeperClaim(true)
+              setMessage(data.alreadyMember ? 'You are already in this league.' : 'You’re in.')
+              return null
+            }
             setMessage(
               data.memberOnly
                 ? data.alreadyMember
@@ -392,6 +400,28 @@ export default function JoinByCodePage() {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ color: 'var(--muted)' }}>
         Joining…
+      </div>
+    )
+  }
+
+  if (status === 'success' && sleeperClaim && joinedLeagueId) {
+    return (
+      <div className="min-h-screen flex items-center justify-center mode-surface mode-readable">
+        <div className="max-w-md mx-auto px-4 w-full py-8" data-testid="league-join-member">
+          <h1 className="text-xl font-bold mb-1" style={{ color: 'var(--text)' }}>
+            {message}
+          </h1>
+          <p className="text-sm mb-4" style={{ color: 'var(--muted)' }}>
+            {preview?.name ? `${preview.name}'s` : 'The league'} chat and weekly recaps are yours now.
+          </p>
+          <Link
+            href={joinLandingHref({ leagueId: joinedLeagueId, memberOnly: true })}
+            className="block w-full rounded-lg bg-cyan-600 px-4 py-2 text-center text-sm font-medium text-white hover:bg-cyan-500 mb-4"
+          >
+            Open the league chat
+          </Link>
+          <SleeperTeamClaim leagueId={joinedLeagueId} />
+        </div>
       </div>
     )
   }

@@ -25,6 +25,12 @@ import { claimPlaceholderRoster } from '@/lib/league-import/placeholderClaim'
 import { findExistingLeagueClaim } from '@/lib/identity/linkedAccounts'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { isImportedPlatform } from '@/lib/league/isNativeLeague'
+import {
+  CLAIM_REFUSAL_MESSAGE,
+  listClaimableSleeperTeams,
+  startSleeperTeamClaim,
+  verifySleeperTeamClaim,
+} from '@/lib/league-join/sleeperOwnershipClaim'
 
 export const dynamic = 'force-dynamic'
 
@@ -66,6 +72,48 @@ export async function POST(req: NextRequest) {
     const requested = await requestClassException({ leagueId, userId })
     if (!requested.ok) return NextResponse.json({ error: requested.error }, { status: requested.status })
     return NextResponse.json({ success: true, leagueId, requestStatus: requested.status })
+  }
+
+  /*
+   * Claim YOUR Sleeper team by proving the account (lib/league-join/sleeperOwnershipClaim.ts): list the
+   * unclaimed teams, get a code to put in your Sleeper team name, verify it. On this path rather than
+   * its own route because of the route ceiling noted on GET below. Members only — the helper checks.
+   */
+  if (body.action === 'sleeper_claim_teams' || body.action === 'sleeper_claim_start' || body.action === 'sleeper_claim_verify') {
+    const leagueId = typeof body.leagueId === 'string' ? body.leagueId.trim() : ''
+    const teamExternalId = typeof body.teamExternalId === 'string' ? body.teamExternalId.trim() : ''
+    if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
+    if (body.action === 'sleeper_claim_teams') {
+      const member =
+        (await prisma.redraftLeagueMember.findUnique({ where: { leagueId_userId: { leagueId, userId } }, select: { id: true } })) ??
+        (await prisma.league.findFirst({ where: { id: leagueId, userId }, select: { id: true } }))
+      if (!member) return NextResponse.json({ error: CLAIM_REFUSAL_MESSAGE.not_member }, { status: 403 })
+      return NextResponse.json({ teams: await listClaimableSleeperTeams(leagueId) })
+    }
+    if (!teamExternalId) return NextResponse.json({ error: 'Missing teamExternalId' }, { status: 400 })
+    const result =
+      body.action === 'sleeper_claim_start'
+        ? await startSleeperTeamClaim({ userId, leagueId, teamExternalId })
+        : await verifySleeperTeamClaim({ userId, leagueId, teamExternalId })
+    if (result.ok) return NextResponse.json(result)
+    const status =
+      result.reason === 'not_member' || result.reason === 'linked_elsewhere' || result.reason === 'other_account'
+        ? 403
+        : result.reason === 'payment_required'
+          ? 402
+          : result.reason === 'sleeper_unavailable'
+            ? 503
+            : result.reason === 'team_not_found'
+              ? 404
+              : 409
+    return NextResponse.json(
+      {
+        error: CLAIM_REFUSAL_MESSAGE[result.reason],
+        code: result.reason,
+        ...('seenTeamName' in result && result.seenTeamName !== undefined ? { seenTeamName: result.seenTeamName } : {}),
+      },
+      { status },
+    )
   }
 
   if (!code) return NextResponse.json({ error: 'Missing invite code' }, { status: 400 })
@@ -216,6 +264,8 @@ export async function POST(req: NextRequest) {
         leagueId: result.leagueId,
         alreadyMember: Boolean(alreadyMember),
         memberOnly: true as const,
+        // A Sleeper league's team can be claimed by proving the account — the page offers it.
+        sleeperClaim: String(league.platform).toLowerCase() === 'sleeper',
       }
     }
 

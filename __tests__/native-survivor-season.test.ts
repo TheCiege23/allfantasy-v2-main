@@ -14,7 +14,8 @@ describe('NBA Survivor creation pilot and multi-sport season capabilities', () =
   const now = new Date('2026-09-01T12:00:00Z')
   it.each(['NBA', 'NHL'] as const)('%s keeps season capabilities while only NBA accepts new creation', sport => {
     expect(getAllowedSportsForType('survivor').includes(sport)).toBe(sport === 'NBA')
-    expect(getTeamCountOptions(sport, 'survivor')).toEqual([16, 17, 18, 19, 20])
+    // New leagues are offered 16 or 20 (2026-10-12); both sit inside the engine's 16-20 range.
+    expect(getTeamCountOptions(sport, 'survivor')).toEqual([16, 20])
     expect(LEAGUE_CREATE_OPTIONS_CATALOG_V1.allowedScoringPresetsByConceptSport.survivor[sport]).toEqual([sport.toLowerCase() + '_points'])
     vi.useFakeTimers(); vi.setSystemTime(now)
     try {

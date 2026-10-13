@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Blah — Mock draft recap</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./af-shell.css">
+<link rel="stylesheet" href="./draft-sleek.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500;700;800&amp;display=swap" rel="stylesheet">
+<style>body{margin:0;background:#07080d}a{color:#22d3ee}a:hover{color:#67e8f9}</style>
+</helmet>
+<div class="af" style="flex-direction: column">
+  <header class="topb" style="background: #0b0d14">
+    <a class="btn btn-g btn-sm" href="MockSetup.dc.html">‹ Draft HQ</a>
+    <span style="display: flex; flex-direction: column; gap: 4px"><span style="font-weight: 700; font-size: 17px; letter-spacing: -0.03em">Mock recap</span><span class="lbl">Blah settings · slot 9 · 15 rounds · today</span></span>
+    <div style="flex: 1"></div>
+    <button class="btn btn-g btn-sm">Share to league chat</button>
+    <button class="btn btn-g btn-sm">Save as draft plan</button>
+    <a class="btn btn-p btn-sm" href="DraftRoom.dc.html">Run it back</a>
+  </header>
+
+  <div class="wrap" style="display: flex; flex-direction: column; gap: 24px">
+    <!-- Hero -->
+    <section class="card" style="padding: 28px; display: flex; gap: 28px; flex-wrap: wrap; align-items: center; background: #10131c">
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 0 12px">
+        <span class="lbl">AF draft grade</span>
+        <span style="font-size: 96px; line-height: 1; font-weight: 700; letter-spacing: -0.04em; color: #34d399">A−</span>
+      </div>
+      <div style="flex: 1 1 360px; display: flex; flex-direction: column; gap: 12px; min-width: 0">
+        <h1 class="h1" style="font-size: 34px">Projected 2nd of 12 · 10.4 wins</h1>
+        <p style="margin: 0; font-size: 15px; line-height: 1.55; color: #c3c9e6; max-width: 60ch">Strong WR core and two early RBs. TE is the soft spot — if Bowers or McBride is there at 2.04 in the real draft, AF would take him over Kyren Williams.</p>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap">
+          <span class="chip chip-good">Best value · Mike Evans 3.09 (+11 vs ADP)</span>
+          <span class="chip chip-warn">Reach · Jordan Love 7.09 (−9)</span>
+        </div>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(5, minmax(64px, 1fr)); gap: 8px">
+        <sc-for list="{{posGrades}}" as="g" hint-placeholder-count="5">
+          <div style="padding: 12px 8px; border-radius: 12px; background: #0b0d14; display: flex; flex-direction: column; align-items: center; gap: 8px"><span class="pos p-{{g.pos}}">{{g.pos}}</span><span style="font-size: 22px; font-weight: 700; color: {{g.c}}">{{g.grade}}</span></div>
+        </sc-for>
+      </div>
+    </section>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start">
+      <!-- Picks -->
+      <section class="card" style="flex: 999 1 560px; min-width: 0; padding: 8px 0; overflow-x: auto">
+        <table style="width: 100%; min-width: 560px; border-collapse: collapse; font-size: 14px">
+          <caption class="lbl" style="text-align: left; padding: 14px 20px">Your 15 picks</caption>
+          <thead><tr class="lbl"><th scope="col" style="padding: 8px 20px; text-align: left; font-weight: 700">Pick</th><th scope="col" style="padding: 8px; text-align: left; font-weight: 700">Player</th><th scope="col" style="padding: 8px; text-align: right; font-weight: 700">ADP</th><th scope="col" style="padding: 8px 20px; text-align: right; font-weight: 700">Value</th></tr></thead>
+          <tbody>
+            <sc-for list="{{picks}}" as="p" hint-placeholder-count="15">
+              <tr style="border-top: 1px solid rgba(255,255,255,.05)">
+                <td class="num" style="padding: 9px 20px; color: #7d84a8; font-weight: 700">{{p.pick}}</td>
+                <td style="padding: 9px 8px"><span style="display: flex; align-items: center; gap: 10px"><span class="pos p-{{p.pos}}">{{p.pos}}</span><span style="font-weight: 700">{{p.name}}</span><span class="num" style="font-size: 10px; color: #989fc2">{{p.team}}</span></span></td>
+                <td class="num" style="padding: 9px 8px; text-align: right; color: #c3c9e6">{{p.adp}}</td>
+                <td class="num" style="padding: 9px 20px; text-align: right; font-weight: 600; color: {{p.c}}">{{p.val}}</td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- Field -->
+      <aside style="flex: 1 1 360px; min-width: 0; display: flex; flex-direction: column; gap: 24px">
+        <section class="card" style="padding: 20px; display: flex; flex-direction: column; gap: 10px">
+          <span class="lbl" style="margin-bottom: 4px">Projected season points · whole room</span>
+          <sc-for list="{{field}}" as="f" hint-placeholder-count="12">
+            <div style="display: grid; grid-template-columns: 112px 1fr 48px; gap: 10px; align-items: center">
+              <span style="font-size: 12px; font-weight: {{f.w}}; color: {{f.tc}}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{f.name}}</span>
+              <span class="bar" style="height: 10px"><span style="width: {{f.pct}}; background: {{f.c}}"></span></span>
+              <span class="num" style="font-size: 11px; text-align: right; color: #c3c9e6">{{f.pts}}</span>
+            </div>
+          </sc-for>
+        </section>
+        <section class="card" style="padding: 20px; display: flex; flex-direction: column; gap: 10px; border-color: rgba(34,211,238,.28)">
+          <span class="lbl" style="color: #22d3ee">Chimmy · plan for the real draft</span>
+          <ol style="margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 8px; font-size: 13px; line-height: 1.5; color: #c3c9e6">
+            <li>Nabers was there at 1.09 in 4 of your 4 mocks — keep him atop your queue.</li>
+            <li>Queue a TE for 2.04; the tier ends around pick 26.</li>
+            <li>Wait on QB — Love, Nix and Hurts all lasted past round 6.</li>
+          </ol>
+        </section>
+      </aside>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1400}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const G = { 'A': '#34d399', 'A−': '#34d399', 'B+': '#22d3ee', 'B': '#22d3ee', 'C+': '#fbbf24' };
+    const posGrades = [['QB','B'],['RB','A−'],['WR','A'],['TE','C+'],['FLEX','B+']].map(([pos, grade]) => ({ pos, grade, c: G[grade] }));
+    const P = [
+      ['1.09','Malik Nabers','WR','NYG',9],['2.04','Kyren Williams','RB','LAR',17],['3.09','Mike Evans','WR','TB',44],['4.04','DK Metcalf','WR','PIT',41],
+      ['5.09','Jaylen Warren','RB','PIT',62],['6.04','Dallas Goedert','TE','PHI',70],['7.09','Jordan Love','QB','GB',96],['8.04','Rashid Shaheed','WR','NO',101],
+      ['9.09','Tyjae Spears','RB','TEN',110],['10.04','Rome Odunze','WR','CHI',121],['11.09','Jaylen Wright','RB','MIA',140],['12.04','Bo Nix','QB','DEN',128],
+      ['13.09','Tucker Kraft','TE','GB',171],['14.04','Brandon Aubrey','K','DAL',160],['15.09','Ravens D/ST','DEF','BAL',175]
+    ];
+    const picks = P.map(([pick, name, pos, team, adp]) => {
+      const [r, s] = pick.split('.').map(Number); const overall = (r - 1) * 12 + s; const d = adp - overall;
+      return { pick, name, pos, team, adp, val: (d > 0 ? '+' : d < 0 ? '−' : '') + Math.abs(d), c: d >= 5 ? '#34d399' : d <= -5 ? '#fb5b78' : '#c3c9e6' };
+    });
+    const F = [['AF · Hero RB',2412],['You',2388],['AF · Balanced',2350],['AF · Robust RB',2331],['AF · Stacker',2297],['AF · Upside',2288],['AF · Value',2264],['AF · Zero RB',2240],['AF · Elite TE',2219],['AF · Late QB',2201],['AF · Safe floor',2187],['AF · Contrarian',2122]];
+    const max = 2412, min = 2000;
+    const field = F.map(([name, pts]) => ({ name, pts, pct: Math.round((pts - min) / (max - min) * 100) + '%',
+      c: name === 'You' ? '#22d3ee' : 'rgba(195,201,230,.35)', w: name === 'You' ? 800 : 600, tc: name === 'You' ? '#eef0fa' : '#c3c9e6' }));
+    return { posGrades, picks, field };
+  }
+}
+</script>
+</body>
+</html>

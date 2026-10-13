@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Exile Island tokens</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./exile/exile.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Cinzel:wght@600;700&amp;display=swap" rel="stylesheet">
+<style>body{margin:0;background:#07080d}</style>
+</helmet>
+<div class="ex" style="min-height: 100vh; display: flex; flex-direction: column">
+  <header style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 18px 28px; border-bottom: 1px solid rgba(255,255,255,.06)">
+    <a class="ex-btn" href="SurvivorDraft.dc.html" aria-label="Back" style="padding: 0 12px">‹</a>
+    <div style="flex: 1 1 320px; display: flex; flex-direction: column; gap: 3px">
+      <h1 class="ex-h1">Exile Island</h1>
+      <span class="ex-t2">Blah Survivor · Week 6 · 3 managers on Exile</span>
+    </div>
+    <span class="ex-chip"><img src="exile/token-icon.svg" alt="" style="height: 14px">Return at 3 tokens</span>
+    <span class="ex-chip">Cap 5</span>
+  </header>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 20px; padding: 24px 28px">
+    <!-- hero -->
+    <section class="ex-card" style="flex: 999 1 640px; min-width: 0; padding: 28px; display: flex; flex-wrap: wrap; gap: 32px; align-items: center; background: radial-gradient(ellipse at 22% 50%, rgba(217,180,90,.12), transparent 55%), #0b0d14">
+      <div class="ex-coinwrap" style="width: 240px; height: 240px; flex: none">
+        <img src="exile/token-coin.svg" alt="Exile Island token: a gold coin with a carved E" style="width: 100%; height: 100%; display: block">
+      </div>
+      <div style="flex: 1 1 300px; display: flex; flex-direction: column; gap: 14px">
+        <span class="ex-lbl ex-gold">The Exile token</span>
+        <h2 style="margin: 0; font: 700 30px/1.1 'Cinzel', serif; letter-spacing: .04em; color: #f1d58a">Earn your way back</h2>
+        <div style="display: flex; flex-direction: column; gap: 10px; font-size: 14px">
+          <div style="display: flex; gap: 10px"><img src="exile/token-icon.svg" alt="" style="height: 20px"><span>Win your week on Exile Island and you earn a token.</span></div>
+          <div style="display: flex; gap: 10px"><img src="exile/token-icon.svg" alt="" style="height: 20px"><span>Collect <b class="ex-gold">3 tokens</b> to return to the game. You can hold up to 5.</span></div>
+          <div style="display: flex; gap: 10px"><img src="exile/token-coin-wiped.svg" alt="" style="height: 20px"><span>If the Exile boss outscores you, your tokens are wiped.</span></div>
+        </div>
+        <span class="ex-t3" style="font-size: 12px">Return count, cap and boss wipe come from the league's Survivor settings.</span>
+      </div>
+    </section>
+
+    <!-- your exile -->
+    <section class="ex-card2" style="flex: 1 1 360px; padding: 20px; display: flex; flex-direction: column; gap: 16px">
+      <div style="display: flex; align-items: center; justify-content: space-between"><span class="ex-lbl">Your tokens</span><span class="ex-num ex-gold" style="font-size: 13px">{{have}} / 3</span></div>
+      <div style="display: flex; gap: 12px; align-items: center">
+        <sc-for list="{{slots}}" as="s" hint-placeholder-count="3"><img src="{{s.src}}" alt="{{s.alt}}" style="width: 72px; height: 72px; display: block; animation: {{s.anim}}"></sc-for>
+      </div>
+      <div style="height: 6px; border-radius: 999px; background: #151926; overflow: hidden"><div style="height: 100%; width: {{pct}}; background: linear-gradient(90deg,#b8862b,#f2c94c); border-radius: 999px; transition: width .6s"></div></div>
+      <span style="font-size: 13px">{{note}}</span>
+      <div style="display: flex; gap: 8px">
+        <button class="ex-btn ex-btn-gold" onClick="{{earn}}" style="flex: 1">Preview: token earned</button>
+        <button class="ex-btn" onClick="{{wipe}}" style="flex: 1">Preview: wiped</button>
+      </div>
+    </section>
+  </div>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 20px; padding: 0 28px 28px">
+    <!-- states -->
+    <section class="ex-card" style="flex: 999 1 640px; min-width: 0; padding: 20px; display: flex; flex-direction: column; gap: 16px">
+      <span class="ex-lbl">Token states</span>
+      <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px">
+        <sc-for list="{{states}}" as="s" hint-placeholder-count="5">
+          <div class="ex-card2" style="padding: 14px; display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center">
+            <div style="height: 120px; display: grid; place-items: center"><img src="{{s.src}}" alt="" style="height: {{s.h}}; display: block"></div>
+            <span style="font-weight: 600">{{s.label}}</span>
+            <span class="ex-t3" style="font-size: 11.5px">{{s.use}}</span>
+          </div>
+        </sc-for>
+      </div>
+      <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 18px; padding-top: 4px">
+        <span class="ex-lbl">Small sizes</span>
+        <span style="display: flex; align-items: center; gap: 6px"><img src="exile/token-icon.svg" alt="" style="height: 32px">32</span>
+        <span style="display: flex; align-items: center; gap: 6px"><img src="exile/token-icon.svg" alt="" style="height: 20px">20</span>
+        <span style="display: flex; align-items: center; gap: 6px"><img src="exile/token-icon.svg" alt="" style="height: 16px">16</span>
+        <span class="ex-chip" style="height: 26px"><img src="exile/token-icon.svg" alt="" style="height: 16px"><span class="ex-num" style="color: #e8eaf2">×3</span></span>
+        <span class="ex-t3" style="font-size: 12px">Use the simplified icon below 40px. The full coin has lettering that won't read that small.</span>
+      </div>
+    </section>
+
+    <!-- exile board -->
+    <section class="ex-card2" style="flex: 1 1 360px; padding: 20px; display: flex; flex-direction: column; gap: 12px">
+      <span class="ex-lbl">Exile Island · week 6</span>
+      <sc-for list="{{board}}" as="r" hint-placeholder-count="4">
+        <div style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; background: {{r.bg}}; border: 1px solid rgba(255,255,255,.06)">
+          <span class="ex-num ex-t3" style="width: 16px">{{r.rank}}</span>
+          <span style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 600">{{r.name}}</span><span class="ex-t3" style="font-size: 11.5px">{{r.sub}}</span></span>
+          <span class="ex-num" style="font-size: 13px; color: #a3a9c2">{{r.pts}}</span>
+          <span style="display: flex; gap: 2px; min-width: 64px; justify-content: flex-end"><sc-for list="{{r.coins}}" as="c" hint-placeholder-count="2"><img src="{{c.src}}" alt="" style="height: 18px"></sc-for></span>
+        </div>
+      </sc-for>
+      <span class="ex-t3" style="font-size: 12px">Boss score this week: 118.4. Anyone below it is wiped.</span>
+    </section>
+  </div>
+
+  <!-- toasts -->
+  <div style="display: flex; flex-wrap: wrap; gap: 20px; padding: 0 28px 32px">
+    <div class="ex-card2" style="flex: 1 1 420px; padding: 16px; display: flex; gap: 14px; align-items: center; border-color: rgba(217,180,90,.35)">
+      <img src="exile/token-coin-earned.svg" alt="" style="height: 84px; margin: -14px">
+      <div style="display: flex; flex-direction: column; gap: 3px"><span class="ex-lbl ex-gold">Token earned · week 6</span><span style="font-weight: 600; font-size: 15px">You won Exile Island with 131.2</span><span class="ex-t2" style="font-size: 12px">2 of 3 tokens. One more week and you're back in the game.</span></div>
+    </div>
+    <div class="ex-card2" style="flex: 1 1 420px; padding: 16px; display: flex; gap: 14px; align-items: center; border-color: rgba(229,114,138,.35)">
+      <img src="exile/token-coin-wiped.svg" alt="" style="height: 56px">
+      <div style="display: flex; flex-direction: column; gap: 3px"><span class="ex-lbl" style="color: #e5728a">Tokens wiped · week 6</span><span style="font-weight: 600; font-size: 15px">The Exile boss beat you 118.4 to 97.0</span><span class="ex-t2" style="font-size: 12px">Your 2 tokens are gone. Start again next week.</span></div>
+    </div>
+    <div class="ex-card2" style="flex: 1 1 420px; padding: 16px; display: flex; gap: 14px; align-items: center; border-color: rgba(63,191,149,.35)">
+      <img src="exile/token-coin.svg" alt="" style="height: 56px">
+      <div style="display: flex; flex-direction: column; gap: 3px"><span class="ex-lbl" style="color: #3fbf95">Back in the game</span><span style="font-weight: 600; font-size: 15px">3 tokens spent · Open Team 11 returns</span><span class="ex-t2" style="font-size: 12px">Rejoins Tribe Vela in week 7.</span></div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1240}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { have: 2, fx: '' }; }
+  renderVals() {
+    const st = this.state; const have = st.have;
+    const slots = [0, 1, 2].map(i => ({
+      src: i < have ? (st.fx === 'earn' && i === have - 1 ? 'exile/token-coin-earned.svg' : 'exile/token-coin.svg') : (st.fx === 'wipe' && i < 2 ? 'exile/token-coin-wiped.svg' : 'exile/token-empty.svg'),
+      alt: i < have ? 'Token' : 'Empty slot', anim: st.fx === 'earn' && i === have - 1 ? 'exPop .6s ease-out both' : 'none' }));
+    const coins = n => Array.from({ length: n }, () => ({ src: 'exile/token-icon.svg' }));
+    const board = [
+      { rank: 1, name: 'TheCiege26', sub: 'Exiled week 4', pts: '131.2', n: 2 },
+      { rank: 2, name: 'Open Team 11', sub: 'Exiled week 5', pts: '122.9', n: 1 },
+      { rank: 3, name: 'Open Team 3', sub: 'Exiled week 3', pts: '97.0', n: 0, wiped: true }
+    ].map(r => ({ ...r, coins: r.wiped ? [{ src: 'exile/token-coin-wiped.svg' }] : coins(r.n), bg: r.rank === 1 ? 'rgba(217,180,90,.08)' : '#0b0d14' }));
+    const states = [
+      { src: 'exile/token-coin-earned.svg', h: '120px', label: 'Earned', use: 'Toast and weekly recap. Glow plus pop-in.' },
+      { src: 'exile/token-coin.svg', h: '92px', label: 'Banked', use: 'Wallet, profile and the Exile board.' },
+      { src: 'exile/token-coin-wiped.svg', h: '92px', label: 'Wiped', use: 'Lost to the boss. Cracked and drained of colour.' },
+      { src: 'exile/token-empty.svg', h: '72px', label: 'Empty slot', use: 'Progress toward the return.' },
+      { src: 'exile/token-icon.svg', h: '56px', label: 'Icon', use: 'Chips, rows and counts at 16 to 32px.' }
+    ];
+    return { slots, have, pct: Math.min(100, have / 3 * 100) + '%', board, states,
+      note: have >= 3 ? 'You have 3 tokens. You can return to the game.' : have === 0 ? 'No tokens. Win your week to earn one.' : (3 - have) + ' more token' + (3 - have === 1 ? '' : 's') + ' to return to the game.',
+      earn: () => this.setState({ have: Math.min(3, (st.fx === 'wipe' ? 0 : have) + 1), fx: 'earn' }),
+      wipe: () => this.setState({ have: 0, fx: 'wipe' }) };
+  }
+}
+</script>
+</body>
+</html>
