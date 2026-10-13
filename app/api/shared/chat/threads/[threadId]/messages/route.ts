@@ -337,7 +337,9 @@ export async function POST(req: NextRequest, props: { params: Promise<{ threadId
       const voteAttempt = /^vote(?:\s|$)/i.test(chimmyCommandText)
       // Votes entered in a league or tribe composer are submitted through the private
       // ballot authority. The original text and Chimmy's answer are visible only to the voter.
-      const privateVote = survivorIntent === 'vote' || voteAttempt
+      const privateVote = voteAttempt || (survivorIntent === 'vote' && (
+        looksLikeOfficialCommand(chimmyCommandText) || /^@(?:[A-Za-z0-9_.-]+|<@[A-Za-z0-9_-]+>)/.test(chimmyCommandText)
+      ))
       const survivorChimmyCommand =
         chimmyCommandText &&
         (privateVote || looksLikeOfficialCommand(chimmyCommandText)) &&

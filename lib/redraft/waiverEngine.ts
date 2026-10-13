@@ -251,10 +251,12 @@ export async function processWaiverWindow(
             data: { droppedAt: new Date() },
           })
           if (dropResult.count === 0) throw new WaiverDropInactiveError()
-          await movePlayerBoundIdolsInTransaction(tx, {
-            leagueId, playerId: claim.dropPlayerId,
-            fromRedraftRosterId: claim.rosterId, toRedraftRosterId: null, reason: 'waiver_drop',
-          })
+          if (survivorWeek) {
+            await movePlayerBoundIdolsInTransaction(tx, {
+              leagueId, playerId: claim.dropPlayerId,
+              fromRedraftRosterId: claim.rosterId, toRedraftRosterId: null, reason: 'waiver_drop',
+            })
+          }
         }
 
         await tx.redraftRosterPlayer.create({
@@ -269,10 +271,12 @@ export async function processWaiverWindow(
             acquisitionType: 'waiver',
           },
         })
-        await movePlayerBoundIdolsInTransaction(tx, {
-          leagueId, playerId: claim.addPlayerId,
-          fromRedraftRosterId: null, toRedraftRosterId: claim.rosterId, reason: 'waiver_claim',
-        })
+        if (survivorWeek) {
+          await movePlayerBoundIdolsInTransaction(tx, {
+            leagueId, playerId: claim.addPlayerId,
+            fromRedraftRosterId: null, toRedraftRosterId: claim.rosterId, reason: 'waiver_claim',
+          })
+        }
 
         await tx.redraftWaiverClaim.update({
           where: { id: claim.id },

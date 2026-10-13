@@ -10,6 +10,7 @@ const db = vi.hoisted(() => ({
   redraftWaiverClaim: { findMany: vi.fn(), update: vi.fn() },
   redraftRoster: { findFirst: vi.fn() },
   redraftRosterPlayer: { findFirst: vi.fn() },
+  survivorGameState: { findUnique: vi.fn() },
 }))
 vi.mock('@/lib/prisma', () => ({ prisma: db }))
 
@@ -23,6 +24,7 @@ beforeEach(() => {
   ])
   db.redraftRoster.findFirst.mockResolvedValue({ id: 'rr-chopped', isEliminated: true, faabBalance: 100 })
   db.redraftWaiverClaim.update.mockResolvedValue({})
+  db.survivorGameState.findUnique.mockResolvedValue(null)
 })
 
 describe('processWaiverWindow — eliminated teams', () => {

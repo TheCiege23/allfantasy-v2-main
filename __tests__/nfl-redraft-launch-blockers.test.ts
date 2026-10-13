@@ -14,6 +14,7 @@ const prismaMock = vi.hoisted(() => ({
   redraftSeason: { findFirst: vi.fn(), findUnique: vi.fn() },
   redraftWaiverClaim: { findMany: vi.fn(), update: vi.fn() },
   sportsPlayer: { findFirst: vi.fn() },
+  survivorGameState: { findUnique: vi.fn() },
 }))
 
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
@@ -46,6 +47,7 @@ describe('NFL redraft launch blockers', () => {
     prismaMock.redraftRosterPlayer.updateMany.mockResolvedValue({ count: 1 })
     prismaMock.redraftWaiverClaim.update.mockResolvedValue({})
     prismaMock.sportsPlayer.findFirst.mockResolvedValue(null)
+    prismaMock.survivorGameState.findUnique.mockResolvedValue(null)
   })
 
   it('syncs cached Sleeper NFL week rows into PlayerWeeklyScore', async () => {
