@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Revote (phone)</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./exile/exile.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Caveat:wght@500;600;700&amp;family=Cinzel:wght@600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080d}
+.mr-pick{display:flex;align-items:center;gap:12px;width:100%;padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.07);background:#0b0d14;color:#e8eaf2;font:inherit;text-align:left;cursor:pointer;min-height:58px}
+.mr-pick:disabled{cursor:default;opacity:.6}
+.mr-av{width:38px;height:38px;flex:none;border-radius:999px;display:grid;place-items:center;font:700 12px 'Archivo',sans-serif;color:#fff}
+.mr-slip{width:100%;aspect-ratio:2.3;padding:16px 20px;border-radius:4px;background:url(exile/parchment-texture.svg),linear-gradient(#fbf3dc,#efdcae);box-shadow:0 12px 30px rgba(0,0,0,.45),inset 0 0 30px rgba(120,70,20,.35);color:#2a1a08;transform:rotate(-1.5deg);display:flex;flex-direction:column;justify-content:space-between}
+@keyframes mrWrite{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
+.mr-ink{font:700 40px/1 'Caveat',cursive;animation:mrWrite 1s steps(16,end) both}
+@keyframes mrDrop{to{transform:translateY(120px) scale(.2);opacity:0}}
+.mr-drop{animation:mrDrop .9s cubic-bezier(.5,0,.7,1) both}
+@media (prefers-reduced-motion: reduce){.mr-ink,.mr-drop{animation:none}}
+</style>
+</helmet>
+<div class="ex" style="height: 100vh; box-sizing: border-box; overflow: hidden; display: flex; flex-direction: column; gap: 12px; padding: 16px 16px 20px">
+  <div style="display: flex; align-items: center; gap: 10px">
+    <a class="ex-btn" href="MobileTribal.dc.html" aria-label="Back" style="padding: 0 12px; min-height: 36px">‹</a>
+    <div style="flex: 1; display: flex; flex-direction: column"><b style="font-size: 17px">Revote</b><span class="ex-t3" style="font-size: 12px">Week 6 · Tribe Vela</span></div>
+    <span class="ex-num" style="font-size: 15px; color: #d9b45a">{{clock}}</span>
+  </div>
+  <div class="ex-card2" style="padding: 12px 14px; display: flex; align-items: center; gap: 12px; border-color: rgba(217,180,90,.35); background: radial-gradient(circle at 0% 50%, rgba(217,180,90,.12), transparent 60%), #10131c">
+    <img src="exile/wax-seal.svg" alt="" style="height: 40px">
+    <div style="display: flex; flex-direction: column; gap: 2px"><b style="font: 700 13px 'Cinzel', serif; letter-spacing: .08em; color: #f1d58a">Tied 2 to 2</b><span class="ex-t2" style="font-size: 12.5px">Pick between the tied managers. If it ties again, fewer season points goes home.</span></div>
+  </div>
+  <sc-for list="{{people}}" as="p" hint-placeholder-count="2">
+    <button class="mr-pick" onClick="{{p.pick}}" disabled="{{p.off}}" aria-pressed="{{p.on}}" style="border-color: {{p.line}}; background: {{p.bg}}">
+      <span class="mr-av" style="background: {{p.c}}; box-shadow: 0 0 0 2px #07080d, 0 0 0 4px #e5484d">{{p.ini}}</span>
+      <span style="flex: 1; font-weight: 600">{{p.name}}</span>
+      <span class="ex-num ex-t3" style="font-size: 11.5px">{{p.pts}} season</span>
+    </button>
+  </sc-for>
+  <div style="position: relative; min-height: 150px; display: flex; justify-content: center; align-items: flex-start; padding-top: 6px">
+    <div class="mr-slip {{slipCls}}">
+      <span style="font: 700 10px 'Cinzel', serif; letter-spacing: .16em; color: #7a5528">Revote · Week 6</span>
+      <span class="mr-ink" key="{{inkKey}}">{{choice}}</span>
+      <span style="font: 600 10px 'Cinzel', serif; letter-spacing: .12em; color: #8a6330; text-align: right">Your revote is secret</span>
+    </div>
+    <sc-if value="{{cast}}" hint-placeholder-val="{{ false }}">
+      <div style="position: absolute; top: 46px; left: 0; right: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; animation: exPop .5s ease-out .9s both">
+        <span style="font: 700 17px 'Cinzel', serif; letter-spacing: .05em; color: #f1d58a">Your revote is in</span>
+        <span class="ex-t2" style="font-size: 12.5px">1 of 2 revotes in. The read starts when votes close.</span>
+      </div>
+    </sc-if>
+  </div>
+  <img src="weekly/urn.svg" alt="Voting urn" style="width: 92px; align-self: center; margin-top: -14px">
+  <div style="flex: 1"></div>
+  <sc-if value="{{canCast}}" hint-placeholder-val="{{ true }}"><button class="ex-btn ex-btn-gold" onClick="{{castVote}}" style="min-height: 50px; width: 100%">Drop it in the urn</button></sc-if>
+  <sc-if value="{{cast}}" hint-placeholder-val="{{ false }}"><button class="ex-btn" onClick="{{change}}" style="min-height: 50px; width: 100%">Change my revote</button></sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { choice: 'Open Team 8', cast: false, k: 0, t: 1 * 3600 + 47 * 60 }; }
+  componentDidMount() { this.iv = setInterval(() => this.setState({ t: Math.max(0, this.state.t - 1) }), 1000); }
+  componentWillUnmount() { clearInterval(this.iv); }
+  renderVals() {
+    const st = this.state, p2 = n => String(n).padStart(2, '0');
+    const people = [['Open Team 8', 'O8', '#3a2410', '512.4'], ['Open Team 4', 'O4', '#1f2a4d', '538.9']].map(([name, ini, c, pts]) => { const on = st.choice === name;
+      return { name, ini, c, pts, off: st.cast, on: on ? 'true' : 'false', line: on ? '#d9b45a' : 'rgba(255,255,255,.07)', bg: on ? '#151926' : '#0b0d14', pick: () => this.setState({ choice: name, k: st.k + 1 }) }; });
+    return { people, choice: st.choice, inkKey: String(st.k), cast: st.cast, canCast: !st.cast, slipCls: st.cast ? 'mr-drop' : '',
+      clock: p2(Math.floor(st.t / 3600)) + ':' + p2(Math.floor(st.t % 3600 / 60)) + ':' + p2(st.t % 60),
+      castVote: () => this.setState({ cast: true }), change: () => this.setState({ cast: false, k: st.k + 1 }) };
+  }
+}
+</script>
+</body>
+</html>
