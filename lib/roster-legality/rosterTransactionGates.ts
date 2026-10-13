@@ -61,18 +61,25 @@ async function isZombieTradeBlocked(leagueId: string, rosterIds: string[]): Prom
 export async function assertRosterTransactionsAllowed(params: {
   leagueId: string
   /** When already loaded (e.g. trade create), avoids an extra query. */
-  league?: Pick<League, 'id' | 'settings'> | null
+  league?: (Pick<League, 'id' | 'settings'> & Partial<Pick<League, 'leagueVariant'>>) | null
   rosterIds: string[]
   userId: string
   kind: 'trade' | 'waiver_claim'
 }): Promise<
   | { ok: true }
-  | { ok: false; error: string; code: 'ILLEGAL_ROSTER_BLOCKED' | 'COMMISSIONER_ROSTER_LOCKED' | 'ZOMBIE_TRADE_BLOCKED' }
+  | { ok: false; error: string; code: 'ILLEGAL_ROSTER_BLOCKED' | 'COMMISSIONER_ROSTER_LOCKED' | 'ZOMBIE_TRADE_BLOCKED' | 'ELIMINATED_ROSTER' }
 > {
   const league =
     params.league ??
-    (await prisma.league.findUnique({ where: { id: params.leagueId }, select: { id: true, settings: true } }))
+    (await prisma.league.findUnique({ where: { id: params.leagueId }, select: { id: true, settings: true, leagueVariant: true } }))
   if (!league) return { ok: false, error: 'League not found', code: 'ILLEGAL_ROSTER_BLOCKED' }
+
+  const sg = league.leagueVariant === 'survivor_guillotine' || (league.leagueVariant === undefined &&
+    !!(await prisma.survivorGuillotineLeague.findUnique({ where: { leagueId: params.leagueId }, select: { id: true } })))
+  if (sg && await prisma.survivorGuillotineChop.count({ where: { leagueId: params.leagueId,
+    rosterId: { in: params.rosterIds }, reversedAt: null } })) {
+    return { ok: false, error: 'An eliminated roster cannot make transactions.', code: 'ELIMINATED_ROSTER' }
+  }
 
   const uniq = [...new Set(params.rosterIds.filter(Boolean))]
   for (const rosterId of uniq) {

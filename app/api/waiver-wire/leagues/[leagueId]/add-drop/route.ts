@@ -32,7 +32,14 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
   if (!userId) return errorResponse("UNAUTHORIZED")
 
   const leagueId = params.leagueId
-  const roster = await prisma.roster.findFirst({ where: { leagueId, platformUserId: userId }, select: { id: true } })
+  let roster = await prisma.roster.findFirst({ where: { leagueId, platformUserId: userId }, select: { id: true } })
+  if (!roster) {
+    const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { leagueVariant: true } })
+    if (league?.leagueVariant === 'survivor_guillotine') {
+      const team = await prisma.leagueTeam.findFirst({ where: { leagueId, claimedByUserId: userId }, select: { legacyRosterId: true } })
+      if (team?.legacyRosterId) roster = await prisma.roster.findFirst({ where: { leagueId, id: team.legacyRosterId }, select: { id: true } })
+    }
+  }
   if (!roster) return errorResponse("UNAUTHORIZED", "You do not have a roster in this league.")
 
   const body = await req.json().catch(() => ({}))

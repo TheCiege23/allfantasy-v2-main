@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { parsePrivateVoteMention, submitPrivateVoteCommand } from '@/lib/survivor/survivorPrivateVoteCommand'
 import { handleChimmyPrivateMessage } from '@/lib/survivor/chimmyHandler'
 import { resolveLeagueAccess } from '@/lib/league-access'
+import { activateSGLivePower } from '@/lib/survivor-guillotine/live'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 15
@@ -28,6 +29,15 @@ export async function POST(req: NextRequest) {
   // leagueId it is given. One 403 for not-found and not-member, so league existence is not leaked.
   const access = await resolveLeagueAccess(body.leagueId, userId)
   if (!access) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+  if (/^@chimmy\s+(?:use|play)\s+(?:idol|token)\b/i.test(body.message)) {
+    try {
+      const action = await activateSGLivePower(body.leagueId, userId, body.message)
+      if (action) return NextResponse.json({ reply: action.reply })
+    } catch (error) {
+      return NextResponse.json({ reply: error instanceof Error ? error.message : 'Power activation failed.' })
+    }
+  }
 
   if (parsePrivateVoteMention(body.message) || /^@chimmy\s+(?:i\s+)?vote\b/i.test(body.message.trim())) {
     const vote = await submitPrivateVoteCommand(body.leagueId, userId, body.message)
