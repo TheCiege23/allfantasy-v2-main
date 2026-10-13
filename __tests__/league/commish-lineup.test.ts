@@ -16,6 +16,13 @@ const h = vi.hoisted(() => ({
   playerData: {} as Record<string, unknown>,
   forced: [] as Array<Record<string, any>>,
   forceResult: { ok: true } as { ok: true } | { ok: false; error: string; status?: number },
+  variant: null as string | null,
+  currentWeek: 7,
+  assignments: [] as Array<{ section: string; slotIndex: number; playerId: string }>,
+  matchupSnapshot: {} as Record<string, unknown>,
+  weekWrites: [] as Array<Record<string, any>>,
+  rescored: [] as string[],
+  standings: [] as Array<[string, number]>,
 }))
 
 const template = {
@@ -34,7 +41,12 @@ const template = {
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
-    league: { findUnique: vi.fn(async () => ({ platform: h.platform, sport: 'NFL', leagueVariant: null, settings: { currentWeek: 7 }, season: 2026 })) },
+    league: { findUnique: vi.fn(async () => ({ platform: h.platform, sport: 'NFL', leagueVariant: h.variant, settings: { currentWeek: 7 }, season: 2026 })) },
+    redraftSeason: { findFirst: vi.fn(async () => ({ id: 'S1', season: 2026, currentWeek: h.currentWeek, playoffStartWeek: 15 })) },
+    redraftMatchup: {
+      findMany: vi.fn(async () => [{ id: 'm5', homeRosterId: 'rA', awayRosterId: 'rB', homeScore: 90, awayScore: 95, lineupSnapshots: h.matchupSnapshot }]),
+    },
+    afRosterLineupAssignment: { findMany: vi.fn(async () => h.assignments) },
     roster: {
       findFirst: vi.fn(async ({ where }: { where: { id: string } }) =>
         where.id === 'A' ? { id: 'A', playerData: JSON.parse(JSON.stringify(h.playerData)), redraftRosterId: 'rA' } : null,
@@ -61,6 +73,25 @@ vi.mock('@/lib/scoring-engine/resolveTeamLabels', () => ({ buildRosterLabelMap: 
 vi.mock('@/lib/multi-sport/MultiSportRosterService', () => ({ getRosterTemplateForLeague: vi.fn(async () => template) }))
 vi.mock('@/lib/sport-defaults/LeagueVariantRegistry', () => ({ getFormatTypeForVariant: () => 'standard' }))
 vi.mock('@/lib/guillotine/guillotineGuard', () => ({ isRosterChopped: vi.fn(async () => h.chopped) }))
+vi.mock('@/lib/roster-lineup-engine/lineupAssignmentSync', () => ({
+  syncAfRosterLineupAssignments: vi.fn(async (input: Record<string, any>) => {
+    h.weekWrites.push(input)
+  }),
+}))
+vi.mock('@/lib/redraft/scoringEngine', () => ({
+  updateMatchupScores: vi.fn(async (id: string) => {
+    h.rescored.push(id)
+    return { matchupId: id, homeScore: 101.5, awayScore: 95 }
+  }),
+}))
+vi.mock('@/lib/redraft/standingsEngine', () => ({
+  updateStandings: vi.fn(async (seasonId: string, week: number) => {
+    h.standings.push([seasonId, week])
+  }),
+}))
+vi.mock('@/server/services/auditService', () => ({ logAction: vi.fn(async () => ({ id: 'a' })) }))
+vi.mock('@/lib/league-events/publisher', () => ({ publishLeagueFanoutEvent: vi.fn(async () => undefined) }))
+vi.mock('@/lib/specialty-league/registry', () => ({ getSpecialtySpecByVariant: (v: string) => (v === 'guillotine' ? { id: 'guillotine' } : null) }))
 vi.mock('@/lib/roster-lineup-engine/commissionerRosterOverride', () => ({
   commissionerForceRosterLineup: vi.fn(async (input: Record<string, unknown>) => {
     h.forced.push(input)
@@ -79,6 +110,13 @@ const put = (body: unknown) =>
 const get = (qs = '') => GET(new Request(`http://localhost/x${qs}`) as never, ctx)
 
 beforeEach(() => {
+  h.variant = null
+  h.currentWeek = 7
+  h.assignments = []
+  h.matchupSnapshot = {}
+  h.weekWrites = []
+  h.rescored = []
+  h.standings = []
   h.role = 'co_commissioner'
   h.platform = 'allfantasy'
   h.chopped = false
@@ -207,5 +245,64 @@ describe('PUT', () => {
     })
     expect(parseCommishLineup({ rosterId: 'A', lineup: { bench: [] } })).toBeNull()
     expect(parseCommishLineup({ lineup: { starters: [] } })).toBeNull()
+  })
+})
+
+describe('past weeks', () => {
+  const getWeek = (week: number) => get(`?rosterId=A&week=${week}`)
+  const putWeek = (week: number, lineup: Record<string, unknown>) => put({ rosterId: 'A', week, lineup })
+
+  it('this-week view lists the completed weeks that can still change', async () => {
+    const body = await (await get('?rosterId=A')).json()
+    expect(body.pastWeeks).toEqual([6, 5, 4, 3, 2, 1])
+  })
+
+  it('loads the lineup saved for that week, ordered by slot', async () => {
+    h.assignments = [
+      { section: 'starters', slotIndex: 1, playerId: 'rb2' },
+      { section: 'starters', slotIndex: 0, playerId: 'qb1' },
+      { section: 'starters', slotIndex: 2, playerId: 'wr1' },
+      { section: 'bench', slotIndex: 0, playerId: 'rb1' },
+    ]
+    const body = await (await getWeek(5)).json()
+    expect(body).toMatchObject({ week: 5, savedForWeek: true, scoreEdited: false, matchup: { myScore: 90, theirScore: 95 } })
+    expect(body.lineup).toEqual({ starters: ['qb1', 'rb2', 'wr1'], bench: ['rb1'], ir: [], taxi: [], devy: [] })
+  })
+
+  it('a week with no saved lineup starts from the current one, and says so', async () => {
+    const body = await (await getWeek(5)).json()
+    expect(body.savedForWeek).toBe(false)
+    expect(body.lineup.starters).toEqual(['qb1', 'rb1', 'wr1'])
+  })
+
+  it('saving writes that week only, re-scores its matchup and rebuilds standings through the latest week', async () => {
+    const res = await putWeek(5, { starters: ['qb1', 'rb2', 'wr1'], bench: ['rb1'] })
+    expect(res.status).toBe(200)
+    expect(h.forced).toEqual([]) // the CURRENT lineup is untouched
+    expect(h.weekWrites).toHaveLength(1)
+    expect(h.weekWrites[0]).toMatchObject({ leagueId: 'L1', rosterId: 'A', season: 2026, week: 5 })
+    expect(h.weekWrites[0]!.playerData.starters).toEqual(['qb1', 'rb2', 'wr1'])
+    expect(h.rescored).toEqual(['m5'])
+    expect(h.standings).toEqual([['S1', 6]]) // cumulative: NOT 5
+  })
+
+  it.each([
+    [7, 'the current week'],
+    [15, 'a playoff week'],
+  ])('refuses week %i (%s)', async (week) => {
+    expect((await putWeek(week, { starters: ['qb1', 'rb1', 'wr1'], bench: ['rb2'] })).status).toBe(400)
+    expect(h.weekWrites).toEqual([])
+  })
+
+  it('refuses a matchup whose score was set by hand, a specialty format, and an illegal lineup', async () => {
+    h.matchupSnapshot = { commissionerEdit: { by: 'u' } }
+    expect((await putWeek(5, { starters: ['qb1', 'rb1', 'wr1'], bench: ['rb2'] })).status).toBe(409)
+    h.matchupSnapshot = {}
+    h.variant = 'guillotine'
+    expect((await putWeek(5, { starters: ['qb1', 'rb1', 'wr1'], bench: ['rb2'] })).status).toBe(409)
+    h.variant = null
+    expect((await putWeek(5, { starters: ['rb1', 'qb1', 'wr1'], bench: ['rb2'] })).status).toBe(400)
+    expect(h.weekWrites).toEqual([])
+    expect(h.rescored).toEqual([])
   })
 })

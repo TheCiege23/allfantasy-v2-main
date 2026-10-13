@@ -24,6 +24,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getLeagueRole, isCommissionerRole } from '@/lib/league/permissions'
 import { updateStandings } from '@/lib/redraft/standingsEngine'
+import { editableWeeks } from '@/lib/redraft/completedWeeks'
 import { logAction } from '@/server/services/auditService'
 
 export const dynamic = 'force-dynamic'
@@ -54,11 +55,8 @@ async function loadSeason(leagueId: string) {
   )
 }
 
-/** Completed regular-season weeks, newest first. Exported for tests. */
-export function editableWeeks(currentWeek: number, playoffStartWeek: number | null): number[] {
-  const last = Math.min(currentWeek - 1, (playoffStartWeek ?? Number.POSITIVE_INFINITY) - 1)
-  return Array.from({ length: Math.max(0, last) }, (_, i) => last - i)
-}
+/** Completed regular-season weeks, newest first (lib/redraft/completedWeeks.ts). Re-exported for tests. */
+export { editableWeeks }
 
 function round2(n: number) {
   return Math.round(n * 100) / 100

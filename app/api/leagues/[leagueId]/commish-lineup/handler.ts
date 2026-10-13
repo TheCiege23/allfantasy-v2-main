@@ -3,7 +3,9 @@
  *
  * GET              → every team (to choose one).
  * GET ?rosterId=…  → that team's starting slots, players and current lineup for this week.
+ * GET ?rosterId=…&week=N → that team's saved lineup for completed week N.
  * PUT { rosterId, lineup: { starters: [id|'' per slot], bench, ir, taxi, devy } } → saves it.
+ * PUT { rosterId, week: N, lineup } → rewrites week N's lineup, re-scores its matchup and the standings.
  *
  * Commish or co-commish. The rules are in lib/league/commishLineupEdits.ts; the write is the lineup
  * engine's commish override, which keeps scoring in step, audits, and announces the change.
@@ -19,7 +21,9 @@ import {
   CommishLineupError,
   RESERVE_SECTIONS,
   loadCommishLineup,
+  loadCommishPastLineup,
   saveCommishLineup,
+  saveCommishPastLineup,
   type CommishLineupInput,
 } from '@/lib/league/commishLineupEdits'
 
@@ -52,6 +56,13 @@ export function parseCommishLineup(body: unknown): { rosterId: string; lineup: C
   return { rosterId: b.rosterId.trim(), lineup }
 }
 
+/** A past week from a query or body value: a positive whole number, or null for "this week". */
+export function parseWeek(raw: unknown): number | null {
+  if (raw === null || raw === undefined || raw === '') return null
+  const n = Number(raw)
+  return Number.isInteger(n) && n >= 1 ? n : null
+}
+
 function errorResponse(e: unknown) {
   if (e instanceof CommishLineupError) return NextResponse.json({ error: e.message }, { status: e.status })
   throw e
@@ -71,8 +82,11 @@ export async function GET(req: NextRequest, ctx: Ctx) {
       .sort((a, b) => a.name.localeCompare(b.name))
     return NextResponse.json({ teams })
   }
+  const week = parseWeek(new URL(req.url).searchParams.get('week'))
   try {
-    return NextResponse.json(await loadCommishLineup(auth.leagueId, rosterId))
+    return NextResponse.json(
+      week != null ? await loadCommishPastLineup(auth.leagueId, rosterId, week) : await loadCommishLineup(auth.leagueId, rosterId),
+    )
   } catch (e) {
     return errorResponse(e)
   }
@@ -81,10 +95,15 @@ export async function GET(req: NextRequest, ctx: Ctx) {
 export async function PUT(req: NextRequest, ctx: Ctx) {
   const auth = await authorize(ctx)
   if (auth instanceof NextResponse) return auth
-  const parsed = parseCommishLineup(await req.json().catch(() => null))
+  const body = await req.json().catch(() => null)
+  const parsed = parseCommishLineup(body)
   if (!parsed) return NextResponse.json({ error: 'Unknown lineup.' }, { status: 400 })
+  const week = parseWeek((body as Record<string, unknown> | null)?.week)
   try {
-    const saved = await saveCommishLineup({ leagueId: auth.leagueId, ...parsed, actorUserId: auth.userId })
+    const saved =
+      week != null
+        ? await saveCommishPastLineup({ leagueId: auth.leagueId, ...parsed, week, actorUserId: auth.userId })
+        : await saveCommishLineup({ leagueId: auth.leagueId, ...parsed, actorUserId: auth.userId })
     return NextResponse.json({ ok: true, ...saved })
   } catch (e) {
     return errorResponse(e)

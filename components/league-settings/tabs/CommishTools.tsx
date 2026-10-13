@@ -985,6 +985,13 @@ type LineupSection = 'bench' | 'ir' | 'taxi' | 'devy'
 type LineupData = {
   rosterId: string
   week: number
+  /** This-week view: completed weeks the commish may still change. */
+  pastWeeks?: number[]
+  /** Past-week view only. */
+  weeks?: number[]
+  savedForWeek?: boolean
+  scoreEdited?: boolean
+  matchup?: { myScore: number; theirScore: number | null } | null
   slots: Array<{ label: string; allowedPositions: string[] }>
   limits: Record<'starters' | LineupSection, number>
   players: Array<{ id: string; name: string; position: string | null; team: string | null }>
@@ -993,8 +1000,9 @@ type LineupData = {
 const LINEUP_SECTIONS: LineupSection[] = ['bench', 'ir', 'taxi', 'devy']
 
 /**
- * Edit Lineup: set any team's starters slot by slot, and bench / IR / taxi / devy, for the current week.
- * Commish edits skip kickoff locks; the server checks slot eligibility and section limits again.
+ * Edit Lineup: set any team's starters slot by slot, and bench / IR / taxi / devy — for the current week,
+ * or for a completed week, which re-scores that matchup and the standings. Commish edits skip kickoff
+ * locks; the server checks slot eligibility and section limits again.
  */
 export function EditLineupCard({ leagueId }: { leagueId: string }) {
   const { t } = useLanguage()
@@ -1004,6 +1012,9 @@ export function EditLineupCard({ leagueId }: { leagueId: string }) {
   const [draft, setDraft] = useState<LineupData['lineup'] | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  /** null = this week; a number = that completed week. */
+  const [viewWeek, setViewWeek] = useState<number | null>(null)
+  const [pastWeeks, setPastWeeks] = useState<number[]>([])
   const base = `/api/leagues/${encodeURIComponent(leagueId)}/commish-lineup`
 
   useEffect(() => {
@@ -1020,15 +1031,19 @@ export function EditLineupCard({ leagueId }: { leagueId: string }) {
   const apply = (d: LineupData) => {
     setData(d)
     setDraft({ ...d.lineup, starters: [...d.lineup.starters] })
+    if (d.pastWeeks) setPastWeeks(d.pastWeeks)
+    else if (d.weeks) setPastWeeks(d.weeks)
   }
 
-  const open = async (rosterId: string) => {
+  const open = async (rosterId: string, week: number | null = null) => {
     setTeamId(rosterId)
+    setViewWeek(week)
     setData(null)
     setDraft(null)
     setError(null)
     try {
-      const res = await fetch(`${base}?rosterId=${encodeURIComponent(rosterId)}`, { credentials: 'include' })
+      const qs = `rosterId=${encodeURIComponent(rosterId)}${week != null ? `&week=${week}` : ''}`
+      const res = await fetch(`${base}?${qs}`, { credentials: 'include' })
       const body = await res.json().catch(() => ({}))
       if (!res.ok) {
         setError(typeof body.error === 'string' ? body.error : t('lsHub.ct.loadFailed'))
@@ -1080,7 +1095,7 @@ export function EditLineupCard({ leagueId }: { leagueId: string }) {
         method: 'PUT',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rosterId: teamId, lineup: draft }),
+        body: JSON.stringify({ rosterId: teamId, lineup: draft, ...(viewWeek != null ? { week: viewWeek } : {}) }),
       })
       const body = await res.json().catch(() => ({}))
       if (!res.ok) {
@@ -1088,7 +1103,7 @@ export function EditLineupCard({ leagueId }: { leagueId: string }) {
         return
       }
       apply(body as LineupData)
-      toast.success(t('lsHub.el.saved'))
+      toast.success(viewWeek != null ? t('lsHub.el.pastSaved').replace('{{week}}', String(viewWeek)) : t('lsHub.el.saved'))
     } catch {
       setError(t('lsHub.sp.saveFailed'))
     } finally {
@@ -1121,6 +1136,39 @@ export function EditLineupCard({ leagueId }: { leagueId: string }) {
             ← {team.name}
             {data ? ` · ${t('lsHub.el.week').replace('{{week}}', String(data.week))}` : ''}
           </button>
+          {pastWeeks.length > 0 ? (
+            <div className="scrollbar-none flex gap-1.5 overflow-x-auto pb-1" role="radiogroup" aria-label={t('lsHub.el.chooseWeek')}>
+              {[null, ...pastWeeks].map((w) => (
+                <button
+                  key={w ?? 'now'}
+                  type="button"
+                  role="radio"
+                  aria-checked={viewWeek === w}
+                  disabled={busy}
+                  onClick={() => void open(team.rosterId, w)}
+                  className={`shrink-0 rounded-full border px-3 py-1.5 text-[12px] font-semibold ${
+                    viewWeek === w ? 'border-cyan-300 bg-cyan-400 text-[#04131a]' : 'border-white/[0.12] bg-white/[0.04] text-white/70'
+                  }`}
+                >
+                  {w == null ? t('lsHub.el.thisWeek') : t('lsHub.el.week').replace('{{week}}', String(w))}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          {data && viewWeek != null ? (
+            <div className="space-y-1">
+              <p className="text-[12px] text-amber-200/80">{t('lsHub.el.pastHint')}</p>
+              {data.matchup ? (
+                <p className="text-[12px] text-white/60">
+                  {t('lsHub.el.pastScore')
+                    .replace('{{mine}}', data.matchup.myScore.toFixed(2))
+                    .replace('{{theirs}}', data.matchup.theirScore != null ? data.matchup.theirScore.toFixed(2) : '—')}
+                </p>
+              ) : null}
+              {data.savedForWeek === false ? <p className="text-[12px] text-white/45">{t('lsHub.el.pastUnsaved')}</p> : null}
+              {data.scoreEdited ? <p className="text-[12px] text-amber-200/85" role="alert">{t('lsHub.el.pastScoreEdited')}</p> : null}
+            </div>
+          ) : null}
           {!data || !draft ? (
             error ? <p className="text-[12px] text-amber-200/85">{error}</p> : <div className="h-24 animate-pulse rounded-xl bg-white/[0.05]" />
           ) : (
@@ -1165,12 +1213,12 @@ export function EditLineupCard({ leagueId }: { leagueId: string }) {
               {error ? <p className="text-[12px] text-amber-200/85" role="alert">{error}</p> : null}
               <button
                 type="button"
-                disabled={busy || !changed}
+                disabled={busy || !changed || Boolean(viewWeek != null && data.scoreEdited)}
                 onClick={() => void save()}
                 className="w-full rounded-full bg-cyan-400 px-4 py-3 text-[13px] font-extrabold text-[#04131a] disabled:opacity-40"
                 data-testid="commish-lineup-save"
               >
-                {busy ? t('lsHub.saving') : t('lsHub.el.save')}
+                {busy ? t('lsHub.saving') : viewWeek != null ? t('lsHub.el.pastSave').replace('{{week}}', String(viewWeek)) : t('lsHub.el.save')}
               </button>
             </>
           )}
