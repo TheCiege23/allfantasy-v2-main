@@ -12,6 +12,10 @@ describe('fast-tier operational overlays', () => {
       path: '/api/cron/fantasy-os-active-sync',
       schedule: '*/5 * * * *',
     })
+    expect(FAST_TIER_OPERATIONAL_OVERLAYS).toContainEqual({
+      path: '/api/cron/draft-tick',
+      schedule: '* * * * *',
+    })
     expect(withFastTierOperationalOverlays([])).toEqual(FAST_TIER_OPERATIONAL_OVERLAYS)
   })
 
@@ -20,7 +24,7 @@ describe('fast-tier operational overlays', () => {
       path: '/api/cron/fantasy-os-active-sync',
       schedule: '*/10 * * * *',
     }
-    expect(withFastTierOperationalOverlays([native])).toEqual([native])
+    expect(withFastTierOperationalOverlays([native])).toEqual([native, FAST_TIER_OPERATIONAL_OVERLAYS[1]])
   })
 
   it('monitors both the active-sync heartbeat and certified per-league game-day coverage', () => {

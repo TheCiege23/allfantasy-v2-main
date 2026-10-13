@@ -82,6 +82,16 @@ describe('NBA Survivor creation pilot and multi-sport season capabilities', () =
     expect(() => buildSurvivorFullSeasonPlan({ sport: 'NBA', season: 2027, castSize: 16, now })).toThrow('has not been verified')
     expect(() => buildSurvivorFullSeasonPlan({ sport: 'NBA', season: 2026, castSize: 20, now, endWeek: 18 })).toThrow('Not enough season remains')
   })
+  it('rejects a past scheduled draft so autostart cannot begin before managers join', () => {
+    vi.useFakeTimers(); vi.setSystemTime(now)
+    try {
+      const result = validateCreatePayload({ concept: 'survivor', sport: 'NBA', scoringPreset: 'nba_points',
+        teamCount: 16, draftType: 'snake', leagueName: 'Past draft',
+        conceptSetup: { draftDate: '2026-08-31', draftTime: '20:00', draftTimezone: 'America/New_York' } })
+      expect(result.ok).toBe(false)
+      if (!result.ok) expect(result.error).toContain('future Survivor draft')
+    } finally { vi.useRealTimers() }
+  })
   it('corrupt and duplicate elimination schedules are rejected', () => {
     const p = buildSurvivorFullSeasonPlan({ sport: 'NBA', season: 2026, castSize: 20, now })
     expect(readSurvivorFullSeasonPlan({ survivor_full_season_plan: { ...p, eliminationWeeks: Array(17).fill(2) } })).toBeNull()

@@ -59,6 +59,17 @@ describe('specialty formats lead the Basics step', () => {
 })
 
 describe('a fresh NBA create starts on Survivor', () => {
+  it('offers the cast, tribe, and commissioner participation choices in the active wizard', () => {
+    const onChange = vi.fn()
+    const state = freshCreateLeagueState({ ...DEFAULT_V2_STATE, sport: 'NBA' })
+    render(<LeagueBasicsStep state={state} onChange={onChange} fieldErrors={null} />)
+    expect(screen.getByTestId('g30-survivor-setup')).toBeTruthy()
+    fireEvent.click(screen.getByTestId('g30-survivor-role-participating_player'))
+    expect(onChange).toHaveBeenCalledWith({ survivorCommissionerParticipationMode: 'participating_player' })
+    fireEvent.click(screen.getByTestId('g30-survivor-tribes-2'))
+    expect(onChange).toHaveBeenCalledWith({ survivorTribeCount: 2 })
+  })
+
   it('starts on Survivor with a draft type, team size and preset Survivor accepts', async () => {
     const fresh = freshCreateLeagueState({ ...DEFAULT_V2_STATE, sport: 'NBA' })
     expect(fresh.leagueType).toBe('survivor')
@@ -72,7 +83,24 @@ describe('a fresh NBA create starts on Survivor', () => {
       await submitCreateLeagueV2({ ...fresh, name: 'Island League', nameTouched: true, draftScheduleLater: true })
       const body = JSON.parse(String((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body)) as Record<string, unknown>
       expect(body.concept).toBe('survivor')
+      expect(body.conceptSetup).toMatchObject({ commissionerParticipationMode: 'non_participating_host', survivorTribeCount: fresh.survivorTribeCount })
       expect(validateCreatePayload(body).ok).toBe(true)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('persists playing-commissioner choice and rejects an invalid tribe split', async () => {
+    const fresh = freshCreateLeagueState({ ...DEFAULT_V2_STATE, sport: 'NBA' })
+    const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ success: true, league: { id: 'l1' } }) }) as Response)
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      await submitCreateLeagueV2({ ...fresh, name: 'Playing League', draftScheduleLater: true,
+        survivorCommissionerParticipationMode: 'participating_player', survivorTribeCount: 2 })
+      const body = JSON.parse(String((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body)) as Record<string, unknown>
+      expect(body.conceptSetup).toMatchObject({ commissionerParticipationMode: 'participating_player', survivorTribeCount: 2 })
+      expect(validateCreatePayload(body).ok).toBe(true)
+      expect(validateCreatePayload({ ...body, conceptSetup: { ...body.conceptSetup as object, survivorTribeCount: 99 } }).ok).toBe(false)
     } finally {
       vi.unstubAllGlobals()
     }

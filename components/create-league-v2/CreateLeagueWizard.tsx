@@ -23,6 +23,7 @@ import {
   getIdpDraftTypeOptions,
   getDefaultTeamCount,
   getTeamCountOptions,
+  getSurvivorTribeOptions,
   getScoringPresetOptionsForSelection,
   isSportAllowedForType,
   resolveValidScoringPresetIdForSelection,
@@ -164,6 +165,10 @@ export function nextStateForSport(state: CreateLeagueV2State, sport: SupportedSp
     scoringPresetId,
     teamCount: getTeamCountOptions(sport, leagueType, state.soccerPipeline).includes(state.teamCount)
       ? state.teamCount : getDefaultTeamCount(sport, leagueType, state.soccerPipeline),
+    ...(leagueType === 'survivor' ? { survivorTribeCount: getSurvivorTribeOptions(
+      getTeamCountOptions(sport, leagueType, state.soccerPipeline).includes(state.teamCount)
+        ? state.teamCount : getDefaultTeamCount(sport, leagueType, state.soccerPipeline),
+    ).includes(state.survivorTribeCount) ? state.survivorTribeCount : 2 } : {}),
     dynasty: fitDynastySetupToTeamCount(getDefaultDynastySetup(sport, state.draftType), getTeamCountOptions(sport, leagueType, state.soccerPipeline).includes(state.teamCount) ? state.teamCount : getDefaultTeamCount(sport, leagueType, state.soccerPipeline)),
     keeper: getDefaultKeeperSetup(),
     bestBall: bestBallSetupForTeamCount(sport, state.draftType, getTeamCountOptions(sport, leagueType, state.soccerPipeline).includes(state.teamCount) ? state.teamCount : getDefaultTeamCount(sport, leagueType, state.soccerPipeline)),
@@ -198,6 +203,10 @@ export function nextStateForLeagueType(state: CreateLeagueV2State, leagueType: L
     draftType,
     teamCount: getTeamCountOptions(state.sport, leagueType, state.soccerPipeline).includes(state.teamCount)
       ? state.teamCount : getDefaultTeamCount(state.sport, leagueType, state.soccerPipeline),
+    ...(leagueType === 'survivor' ? { survivorTribeCount: getSurvivorTribeOptions(
+      getTeamCountOptions(state.sport, leagueType, state.soccerPipeline).includes(state.teamCount)
+        ? state.teamCount : getDefaultTeamCount(state.sport, leagueType, state.soccerPipeline),
+    ).includes(state.survivorTribeCount) ? state.survivorTribeCount : 2 } : {}),
     dynasty: fitDynastySetupToTeamCount(getDefaultDynastySetup(state.sport, draftType), getTeamCountOptions(state.sport, leagueType, state.soccerPipeline).includes(state.teamCount) ? state.teamCount : getDefaultTeamCount(state.sport, leagueType, state.soccerPipeline)),
     keeper: getDefaultKeeperSetup(),
     bestBall: bestBallSetupForTeamCount(state.sport, draftType, getTeamCountOptions(state.sport, leagueType, state.soccerPipeline).includes(state.teamCount) ? state.teamCount : getDefaultTeamCount(state.sport, leagueType, state.soccerPipeline)),
@@ -262,6 +271,7 @@ const ISSUE_STEP: Record<string, WizardStep> = {
   concept_required: 'basics',
   team_count_required: 'basics',
   team_count_invalid: 'basics',
+  survivor_tribes_invalid: 'basics',
   league_name_invalid: 'basics',
   tournament_pool_invalid: 'basics',
   tournament_pool_mismatch: 'basics',
@@ -670,7 +680,11 @@ export function LeagueBasicsStep({
     (state.sport === 'NFL' || state.sport === 'NCAAF') &&
     (!importCarryover || getTeamCountOptions(state.sport, 'redraft', state.soccerPipeline).includes(state.teamCount))
   const setTeamCount = (teamCount: number) => {
-    onChange({ teamCount, ...(state.leagueType === 'dynasty' ? { dynasty: fitDynastySetupToTeamCount(state.dynasty, teamCount) } : {}), ...(state.leagueType === 'best_ball' ? { bestBall: { ...state.bestBall, playoffTeams: Math.min(state.bestBall.playoffTeams, Math.max(0, teamCount)) } } : {}) })
+    const tribeOptions = getSurvivorTribeOptions(teamCount)
+    onChange({ teamCount, ...(getEffectiveLeagueType(state) === 'survivor' && !tribeOptions.includes(state.survivorTribeCount)
+      ? { survivorTribeCount: tribeOptions[0] ?? 2 } : {}),
+      ...(state.leagueType === 'dynasty' ? { dynasty: fitDynastySetupToTeamCount(state.dynasty, teamCount) } : {}),
+      ...(state.leagueType === 'best_ball' ? { bestBall: { ...state.bestBall, playoffTeams: Math.min(state.bestBall.playoffTeams, Math.max(0, teamCount)) } } : {}) })
   }
   const canFewer = teamCountOptions.some((count) => count < state.teamCount)
   const canMore = teamCountOptions.some((count) => count > state.teamCount)
@@ -712,7 +726,7 @@ export function LeagueBasicsStep({
   const classicTiles = tiles
     .filter((tile) => CLASSIC_FORMATS.includes(tile.id))
     .sort((x, y) => CLASSIC_FORMATS.indexOf(x.id) - CLASSIC_FORMATS.indexOf(y.id))
-  const renderFormatTile = (sizeClass: string) => (tile: FormatTile) => (
+  const renderFormatTile = (sizeClass: string) => function FormatTileRender(tile: FormatTile) { return (
     <CreateLeagueVideoTile
       key={tile.id}
       title={tile.title}
@@ -723,7 +737,7 @@ export function LeagueBasicsStep({
       className={sizeClass}
       testId={`g30-league-type-${tile.id}`}
     />
-  )
+  ) }
 
   return (
     <section className="space-y-5" data-testid="g30-basics-step">
@@ -839,6 +853,46 @@ export function LeagueBasicsStep({
           </span>
         </div>
       </div>
+
+      {getEffectiveLeagueType(state) === 'survivor' ? (
+        <div className="space-y-4 rounded-2xl border border-violet-500/25 bg-violet-600/5 p-4" data-testid="g30-survivor-setup">
+          <div>
+            <p className="text-xs font-black uppercase tracking-wide text-[color:var(--text-tertiary)]">Commissioner role</p>
+            <p className="mt-1 text-xs leading-5 text-[color:var(--text-secondary)]">A playing commissioner takes one cast seat. Chimmy runs private votes and idols without revealing them to that commissioner.</p>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              {([
+                { value: 'non_participating_host', label: 'Host only', hint: 'All cast seats are available for invited managers.' },
+                { value: 'participating_player', label: 'Play as a manager', hint: 'Your team takes one of the cast seats.' },
+              ] as const).map((option) => (
+                <button key={option.value} type="button"
+                  aria-pressed={state.survivorCommissionerParticipationMode === option.value}
+                  onClick={() => onChange({ survivorCommissionerParticipationMode: option.value })}
+                  className={cx('min-h-12 rounded-xl border p-3 text-left transition',
+                    state.survivorCommissionerParticipationMode === option.value
+                      ? 'border-violet-500 bg-violet-600/12' : 'border-[color:var(--border-subtle)] bg-[color:var(--surface-card-soft)]')}
+                  data-testid={`g30-survivor-role-${option.value}`}>
+                  <span className="block text-sm font-bold">{option.label}</span>
+                  <span className="block text-xs text-[color:var(--text-secondary)]">{option.hint}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="text-xs font-black uppercase tracking-wide text-[color:var(--text-tertiary)]">Starting tribes</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {getSurvivorTribeOptions(state.teamCount).map((count) => (
+                <button key={count} type="button" aria-pressed={state.survivorTribeCount === count}
+                  onClick={() => onChange({ survivorTribeCount: count })}
+                  className={cx('min-h-11 min-w-12 rounded-xl border px-4 text-sm font-bold',
+                    state.survivorTribeCount === count
+                      ? 'border-violet-500 bg-violet-600/12' : 'border-[color:var(--border-subtle)] bg-[color:var(--surface-card-soft)]')}
+                  data-testid={`g30-survivor-tribes-${count}`}>{count}</button>
+              ))}
+            </div>
+          </div>
+          <p className="text-xs leading-5 text-[color:var(--text-secondary)]">Exile Island is on by default. Fill every cast seat with a unique manager before starting the draft.</p>
+        </div>
+      ) : null}
 
       <div className="space-y-2">
         <p className="text-xs font-black uppercase tracking-wide text-[color:var(--text-tertiary)]">
@@ -1213,6 +1267,12 @@ export function ReviewCreateStep({
           <SummaryTile label={t('createLeague.summary.sport')} value={state.sport} onEdit={edit('sport')} testId="g30-review-edit-sport" />
           <SummaryTile label={t('createLeague.summary.concept')} value={conceptLabel(t, state)} onEdit={edit('basics')} testId="g30-review-edit-format" />
           <SummaryTile label={t('createLeague.summary.teams')} value={String(state.teamCount)} onEdit={edit('basics')} testId="g30-review-edit-teams" />
+          {getEffectiveLeagueType(state) === 'survivor' ? (
+            <SummaryTile label="Commissioner" value={state.survivorCommissionerParticipationMode === 'participating_player' ? 'Playing manager' : 'Host only'} onEdit={edit('basics')} testId="g30-review-edit-survivor-role" />
+          ) : null}
+          {getEffectiveLeagueType(state) === 'survivor' ? (
+            <SummaryTile label="Starting tribes" value={String(state.survivorTribeCount)} onEdit={edit('basics')} testId="g30-review-edit-survivor-tribes" />
+          ) : null}
           <SummaryTile label={t('createLeague.summary.draft')} value={draftWhenLabel(t, state)} onEdit={edit('draft')} testId="g30-review-edit-draft" />
         </div>
       </div>

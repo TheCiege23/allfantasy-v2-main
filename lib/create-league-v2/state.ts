@@ -156,6 +156,8 @@ export interface CreateLeagueV2State {
   tournamentPoolSize: number
   /** Survivor-only: number of tribes. Ignored for other league types. */
   survivorTribeCount: number
+  /** Whether the creator occupies one of the Survivor cast seats. */
+  survivorCommissionerParticipationMode: 'participating_player' | 'non_participating_host'
   draftType: WizardDraftType
   /** Third-round reversal — snake drafts only. */
   thirdRoundReversal: boolean
@@ -342,6 +344,7 @@ export const DEFAULT_V2_STATE: CreateLeagueV2State = {
   teamCount: 12,
   tournamentPoolSize: 32,
   survivorTribeCount: 4,
+  survivorCommissionerParticipationMode: 'non_participating_host',
   draftType: 'snake',
   thirdRoundReversal: false,
   name: '',

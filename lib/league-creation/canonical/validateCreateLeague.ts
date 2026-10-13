@@ -11,7 +11,7 @@ import { z } from 'zod'
 import { resolveDynastyCreationRoster } from './dynastyCreationRoster'
 import { isValidIanaTimeZone, toUtc } from '@/lib/timezone'
 import type { LeagueSport } from '@prisma/client'
-import { getTeamCountOptions } from '@/lib/create-league-v2/rules-engine'
+import { getSurvivorTribeOptions, getTeamCountOptions } from '@/lib/create-league-v2/rules-engine'
 import type { LeagueTypeId } from '@/lib/league-creation-wizard/types'
 import {
   isDraftTypeAllowedForFormat,
@@ -313,6 +313,19 @@ export function validateCreatePayload(input: unknown): ValidateCreateLeagueResul
     }
   }
 
+  if (formatId === 'survivor') {
+    const tribeCount = data.conceptSetup?.survivorTribeCount
+    if (tribeCount !== undefined && (typeof tribeCount !== 'number' || !getSurvivorTribeOptions(data.teamCount).includes(tribeCount))) {
+      return { ok: false, status: 400, error: 'Choose a valid number of Survivor tribes for this cast size',
+        errors: [{ path: 'conceptSetup.survivorTribeCount', message: 'Choose a valid number of Survivor tribes for this cast size' }] }
+    }
+    const role = data.conceptSetup?.commissionerParticipationMode
+    if (role !== undefined && role !== 'participating_player' && role !== 'non_participating_host') {
+      return { ok: false, status: 400, error: 'Choose whether the commissioner plays or hosts',
+        errors: [{ path: 'conceptSetup.commissionerParticipationMode', message: 'Choose whether the commissioner plays or hosts' }] }
+    }
+  }
+
   if (stripped.strippedKeys.length > 0) {
     // non-fatal — caller may log
   }
@@ -376,6 +389,7 @@ export function validateCreatePayload(input: unknown): ValidateCreateLeagueResul
     try {
       if (schedule.survivorSeasonEndWeek !== undefined && typeof schedule.survivorSeasonEndWeek !== 'number') throw new Error('Survivor end week must be a number.')
       const draftAt = typeof date === 'string' && typeof time === 'string' ? toUtc(date, time, String(zone)) : undefined
+      if (draftAt && draftAt.getTime() <= Date.now()) throw new Error('Choose a future Survivor draft date and time.')
       const exileSettings = normalizeSurvivorFoundationSettings(schedule)
       buildSurvivorFullSeasonPlan({ exileEnabled: exileSettings.exileIslandEnabled, exileReturnWeek: exileSettings.exileReturnWeek, sport, season: resolveLeagueCreationSeason(sport), castSize: data.teamCount, draftAt,
         endWeek: typeof schedule.survivorSeasonEndWeek === 'number' ? schedule.survivorSeasonEndWeek : undefined })

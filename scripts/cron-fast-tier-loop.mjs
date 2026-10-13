@@ -204,6 +204,9 @@ const SYSTEMIC_FAILURE_MIN_ATTEMPTS = 3
  */
 export const FAST_TIER_OPERATIONAL_OVERLAYS = Object.freeze([
   Object.freeze({ path: '/api/cron/fantasy-os-active-sync', schedule: '*/5 * * * *' }),
+  // The production manifest currently has no draft-tick entry. Survivor's
+  // scheduled start and server draft advancement need the minute heartbeat.
+  Object.freeze({ path: '/api/cron/draft-tick', schedule: '* * * * *' }),
 ])
 
 export function withFastTierOperationalOverlays(crons) {
