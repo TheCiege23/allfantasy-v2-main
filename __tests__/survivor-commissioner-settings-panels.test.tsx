@@ -47,10 +47,11 @@ describe('Survivor commissioner settings panels', () => {
     expect(JSON.parse(String(call?.[1]?.body)).settings).toEqual({ exileIslandEnabled: true, exileReturnWeek: 10, exileReturnTokens: 4 })
   })
 
-  it('shows the idol configuration without fake editable switches', async () => {
+  it('loads idol count and implemented power choices from the existing state route', async () => {
     render(<SurvivorIdolsPanel leagueId="nba-1" canEdit hasAfCommissionerSub={false} />)
-    await screen.findByText('Configured idol count')
-    expect(screen.getByText('8')).toBeInTheDocument()
-    expect(screen.queryByRole('switch')).not.toBeInTheDocument()
+    await screen.findByText('Idols assigned after draft')
+    expect(screen.getByRole('spinbutton')).toHaveValue(8)
+    expect(screen.getByText('Vote Steal')).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledWith('/api/leagues/nba-1/survivor/state', expect.any(Object))
   })
 })

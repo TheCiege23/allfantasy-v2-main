@@ -20,12 +20,12 @@ export function SurvivorIdolsPanel({ leagueId, canEdit }: SurvivorSettingsPanelP
   const load = useCallback(async () => {
     try {
       const [rulesResponse, configResponse] = await Promise.all([
-        fetch(`/api/leagues/${encodeURIComponent(leagueId)}/survivor`, { credentials: 'include' }),
+        fetch(`/api/leagues/${encodeURIComponent(leagueId)}/survivor/state`, { credentials: 'include' }),
         fetch(`/api/leagues/${encodeURIComponent(leagueId)}/survivor/config`, { credentials: 'include' }),
       ])
       const [rules, details] = await Promise.all([rulesResponse.json(), configResponse.json()])
       if (!rulesResponse.ok || !rules.settings || !configResponse.ok) throw new Error(rules.error ?? details.error ?? 'Could not load idol rules')
-      setConfig({ idolCount: Number(rules.settings.idolCount), idolPowerPool: details.config?.idolPowerPool ?? null })
+      setConfig({ idolCount: Number(rules.settings.idolCount ?? details.config?.idolCount), idolPowerPool: details.config?.idolPowerPool ?? null })
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not load idol rules')
     }

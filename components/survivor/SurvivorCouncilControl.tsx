@@ -31,7 +31,7 @@ export function SurvivorCouncilControl({ leagueId }: { leagueId: string }) {
 
   const call = useCallback(async (action: string, extra: Record<string, unknown> = {}) => {
     const legacyPause = action === 'pause_season' || action === 'resume_season'
-    const response = await fetch(legacyPause ? '/api/survivor/commissioner' : endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, ...(legacyPause ? { leagueId } : {}), ...extra }) })
+    const response = await fetch(legacyPause ? '/api/survivor/commissioner' : `${endpoint}/${encodeURIComponent(action)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, ...(legacyPause ? { leagueId } : {}), ...extra }) })
     const json = await response.json().catch(() => ({}))
     if (!response.ok) throw new Error(typeof json.error === 'string' ? json.error : 'Council action failed')
     return json

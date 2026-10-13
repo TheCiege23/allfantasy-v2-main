@@ -17,7 +17,7 @@ export function SurvivorRevote({ leagueId }: { leagueId: string }) {
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const refresh = useCallback(async () => {
-    const response = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/survivor`, { cache: 'no-store' })
+    const response = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/survivor/state`, { cache: 'no-store' })
     const payload = await response.json().catch(() => ({}))
     if (!response.ok) throw new Error(typeof payload.error === 'string' ? payload.error : 'Revote unavailable')
     setView(payload.tribalCouncil as TribalCouncilView)
@@ -32,7 +32,7 @@ export function SurvivorRevote({ leagueId }: { leagueId: string }) {
     if (!eligible || !selected) return
     setBusy(true); setError(null); setNotice(null)
     try {
-      const response = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/survivor`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'submit-vote', message: `@Chimmy <@${selected}>` }) })
+      const response = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/survivor/submit-vote`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'submit-vote', message: `@Chimmy <@${selected}>` }) })
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(typeof payload.error === 'string' ? payload.error : 'Could not cast your revote')
       setNotice('Your revote is sealed. The scroll will be read after the two-hour window closes.')

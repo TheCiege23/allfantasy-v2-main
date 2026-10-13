@@ -89,7 +89,7 @@ export function SurvivorFormatTab({ leagueId }: SurvivorFormatTabProps) {
   useEffect(() => {
     if (!leagueId) return
     setLoading(true)
-    fetch(`/api/leagues/${leagueId}/survivor`, { credentials: 'include' })
+    fetch(`/api/leagues/${leagueId}/survivor/state`, { credentials: 'include' })
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error('Could not load Survivor foundation'))))
       .then((json: FoundationState) => {
         setState(json)
@@ -124,7 +124,7 @@ export function SurvivorFormatTab({ leagueId }: SurvivorFormatTabProps) {
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json.error ?? 'Save failed')
       setStatus('Saved.')
-      const fresh = await fetch(`/api/leagues/${leagueId}/survivor`, { credentials: 'include' })
+      const fresh = await fetch(`/api/leagues/${leagueId}/survivor/state`, { credentials: 'include' })
       if (fresh.ok) setState((await fresh.json()) as FoundationState)
     } catch (err) {
       setStatus(err instanceof Error ? err.message : String(err))
@@ -142,7 +142,7 @@ export function SurvivorFormatTab({ leagueId }: SurvivorFormatTabProps) {
   const init = state?.initialization
 
   async function refresh() {
-    const fresh = await fetch(`/api/leagues/${leagueId}/survivor`, { credentials: 'include' })
+    const fresh = await fetch(`/api/leagues/${leagueId}/survivor/state`, { credentials: 'include' })
     if (fresh.ok) setState((await fresh.json()) as FoundationState)
   }
 
@@ -159,7 +159,7 @@ export function SurvivorFormatTab({ leagueId }: SurvivorFormatTabProps) {
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json.error ?? json.code ?? `${action} failed`)
       setStatus(`${action}: ok`)
-      const fresh = await fetch(`/api/leagues/${leagueId}/survivor`, { credentials: 'include' })
+      const fresh = await fetch(`/api/leagues/${leagueId}/survivor/state`, { credentials: 'include' })
       if (fresh.ok) setState((await fresh.json()) as FoundationState)
     } catch (err) {
       setStatus(err instanceof Error ? err.message : String(err))

@@ -25,7 +25,7 @@ export function SurvivorTribalPanel({ leagueId, canEdit }: SurvivorSettingsPanel
     setLoading(true)
     setMessage(null)
     try {
-      const response = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/survivor`, { credentials: 'include' })
+      const response = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/survivor/state`, { credentials: 'include' })
       const payload = await response.json()
       if (!response.ok || !payload.settings) throw new Error(payload.error ?? 'Could not load council rules')
       const current = payload.settings as CouncilSettings
