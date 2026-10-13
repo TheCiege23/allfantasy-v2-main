@@ -472,3 +472,296 @@ export function EditMatchupScoresCard({ leagueId }: { leagueId: string }) {
     </HubCard>
   )
 }
+
+type RosterPlayer = { id: string; name: string; position: string | null; team: string | null }
+type RosterPick = { ref: string; season: number; round: number; originalTeam: string | null }
+type RosterTeam = { rosterId: string; name: string; players: RosterPlayer[]; picks: RosterPick[] }
+type RosterAction = 'add' | 'drop' | 'send' | 'receive' | 'switch' | 'sendPicks' | 'receivePicks'
+
+const ROSTER_ACTIONS: Array<{ id: RosterAction; picks?: boolean }> = [
+  { id: 'add' },
+  { id: 'drop' },
+  { id: 'send' },
+  { id: 'receive' },
+  { id: 'switch' },
+  { id: 'sendPicks', picks: true },
+  { id: 'receivePicks', picks: true },
+]
+
+function playerLabel(p: RosterPlayer) {
+  return [p.name, [p.position, p.team].filter(Boolean).join(' - ')].filter(Boolean).join('  ')
+}
+
+function CheckList<T>({
+  items,
+  selected,
+  onToggle,
+  keyOf,
+  labelOf,
+  empty,
+}: {
+  items: T[]
+  selected: Set<string>
+  onToggle: (key: string) => void
+  keyOf: (item: T) => string
+  labelOf: (item: T) => string
+  empty: string
+}) {
+  if (items.length === 0) return <p className="text-[12px] text-white/45">{empty}</p>
+  return (
+    <ul className="max-h-64 divide-y divide-white/[0.06] overflow-y-auto rounded-xl border border-white/[0.08] bg-black/20">
+      {items.map((item) => {
+        const k = keyOf(item)
+        return (
+          <li key={k}>
+            <label className="flex cursor-pointer items-center gap-3 px-3 py-2 text-[13px] text-white/85">
+              <input type="checkbox" className="h-4 w-4 accent-cyan-400" checked={selected.has(k)} onChange={() => onToggle(k)} />
+              <span className="truncate">{labelOf(item)}</span>
+            </label>
+          </li>
+        )
+      })}
+    </ul>
+  )
+}
+
+/**
+ * Edit Rosters: pick a team, then add free agents, drop players, or move players / future picks to
+ * and from another team. Writes both roster stores server-side and is announced to the league.
+ */
+export function EditRostersCard({ leagueId }: { leagueId: string }) {
+  const { t } = useLanguage()
+  const [teams, setTeams] = useState<RosterTeam[] | null>(null)
+  const [picksSupported, setPicksSupported] = useState(false)
+  const [teamId, setTeamId] = useState<string | null>(null)
+  const [action, setAction] = useState<RosterAction | null>(null)
+  const [otherId, setOtherId] = useState('')
+  const [mine, setMine] = useState<Set<string>>(new Set())
+  const [theirs, setTheirs] = useState<Set<string>>(new Set())
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState<RosterPlayer[]>([])
+  const [picked, setPicked] = useState<Map<string, RosterPlayer>>(new Map())
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const base = `/api/leagues/${encodeURIComponent(leagueId)}/commish-rosters`
+
+  useEffect(() => {
+    let cancelled = false
+    fetch(base, { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((d: { teams: RosterTeam[]; picksSupported: boolean }) => {
+        if (cancelled) return
+        setTeams(d.teams)
+        setPicksSupported(d.picksSupported)
+      })
+      .catch(() => !cancelled && setError(t('lsHub.ct.loadFailed')))
+    return () => {
+      cancelled = true
+    }
+  }, [base, t])
+
+  useEffect(() => {
+    if (action !== 'add' || query.trim().length < 2) {
+      setResults([])
+      return
+    }
+    const handle = window.setTimeout(() => {
+      fetch(`/api/waiver-wire/leagues/${encodeURIComponent(leagueId)}/players?q=${encodeURIComponent(query.trim())}&limit=25`, {
+        credentials: 'include',
+      })
+        .then((r) => (r.ok ? r.json() : { players: [] }))
+        .then((d: { players?: RosterPlayer[] }) => setResults((d.players ?? []).slice(0, 25)))
+        .catch(() => setResults([]))
+    }, 300)
+    return () => window.clearTimeout(handle)
+  }, [action, query, leagueId])
+
+  const team = teams?.find((x) => x.rosterId === teamId) ?? null
+  const other = teams?.find((x) => x.rosterId === otherId) ?? null
+  const reset = (next: RosterAction | null) => {
+    setAction(next)
+    setOtherId('')
+    setMine(new Set())
+    setTheirs(new Set())
+    setQuery('')
+    setResults([])
+    setPicked(new Map())
+    setError(null)
+  }
+  const toggle = (set: Set<string>, setter: (s: Set<string>) => void) => (k: string) => {
+    const next = new Set(set)
+    if (next.has(k)) next.delete(k)
+    else next.add(k)
+    setter(next)
+  }
+
+  const body = (): Record<string, unknown> | null => {
+    if (!team || !action) return null
+    if (action === 'add') return picked.size ? { action: 'add', rosterId: team.rosterId, players: [...picked.values()] } : null
+    if (action === 'drop') return mine.size ? { action: 'drop', rosterId: team.rosterId, playerIds: [...mine] } : null
+    if (!other) return null
+    const moves: Array<Record<string, unknown>> = []
+    if (action === 'send' && mine.size) moves.push({ fromRosterId: team.rosterId, toRosterId: other.rosterId, playerIds: [...mine] })
+    if (action === 'receive' && theirs.size) moves.push({ fromRosterId: other.rosterId, toRosterId: team.rosterId, playerIds: [...theirs] })
+    if (action === 'switch' && mine.size && theirs.size) {
+      moves.push({ fromRosterId: team.rosterId, toRosterId: other.rosterId, playerIds: [...mine] })
+      moves.push({ fromRosterId: other.rosterId, toRosterId: team.rosterId, playerIds: [...theirs] })
+    }
+    if (action === 'sendPicks' && mine.size) moves.push({ fromRosterId: team.rosterId, toRosterId: other.rosterId, pickRefs: [...mine] })
+    if (action === 'receivePicks' && theirs.size) moves.push({ fromRosterId: other.rosterId, toRosterId: team.rosterId, pickRefs: [...theirs] })
+    return moves.length ? { action: 'move', moves } : null
+  }
+
+  const submit = async () => {
+    const payload = body()
+    if (!payload) return
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await fetch(base, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setError(typeof data.error === 'string' ? data.error : t('lsHub.sp.saveFailed'))
+        return
+      }
+      setTeams(data.teams as RosterTeam[])
+      toast.success(t('lsHub.er.done'))
+      reset(null)
+    } catch {
+      setError(t('lsHub.sp.saveFailed'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const pickLabel = (p: RosterPick) =>
+    t('lsHub.er.pick').replace('{{season}}', String(p.season)).replace('{{round}}', String(p.round)) +
+    (p.originalTeam ? ` (${p.originalTeam})` : '')
+  const otherTeams = (teams ?? []).filter((x) => x.rosterId !== teamId)
+  const needsOther = action != null && action !== 'add' && action !== 'drop'
+
+  return (
+    <HubCard title={t('lsHub.er.title')} testId="commish-edit-rosters">
+      <p className="text-[12px] text-white/50">{t('lsHub.er.hint')}</p>
+      {teams == null ? (
+        error ? <p className="text-[12px] text-red-300/85">{error}</p> : <div className="h-24 animate-pulse rounded-xl bg-white/[0.05]" />
+      ) : !team ? (
+        <ul className="divide-y divide-white/[0.06] rounded-2xl border border-white/[0.08] bg-black/20" data-testid="commish-edit-rosters-teams">
+          {teams.map((x) => (
+            <li key={x.rosterId}>
+              <button type="button" onClick={() => setTeamId(x.rosterId)} className="flex w-full items-center justify-between px-4 py-3 text-left text-[14px] font-semibold text-white hover:bg-white/[0.04]">
+                <span className="truncate">{x.name}</span>
+                <span className="text-[11px] font-normal text-white/40">{t('lsHub.er.count').replace('{{n}}', String(x.players.length))}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : !action ? (
+        <div className="space-y-2">
+          <button type="button" onClick={() => setTeamId(null)} className="text-[12px] font-semibold text-cyan-200/80">
+            ← {team.name}
+          </button>
+          <ul className="divide-y divide-white/[0.06] rounded-2xl border border-white/[0.08] bg-black/20">
+            {ROSTER_ACTIONS.filter((a) => !a.picks || picksSupported).map((a) => (
+              <li key={a.id}>
+                <button type="button" onClick={() => reset(a.id)} className="w-full px-4 py-3 text-left hover:bg-white/[0.04]" data-testid={`commish-roster-action-${a.id}`}>
+                  <span className="block text-[14px] font-bold text-white">{t(`lsHub.er.a.${a.id}`)}</span>
+                  <span className="block text-[12px] text-white/50">{t(`lsHub.er.a.${a.id}Hint`)}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <button type="button" onClick={() => reset(null)} className="text-[12px] font-semibold text-cyan-200/80">
+            ← {team.name} · {t(`lsHub.er.a.${action}`)}
+          </button>
+
+          {needsOther ? (
+            <select
+              value={otherId}
+              onChange={(e) => {
+                setOtherId(e.target.value)
+                setTheirs(new Set())
+              }}
+              className="w-full rounded-xl border border-white/[0.10] bg-black/25 px-3 py-2.5 text-sm text-white"
+              data-testid="commish-roster-other-team"
+            >
+              <option value="" className="bg-[#0d1117]">{t('lsHub.er.chooseTeam')}</option>
+              {otherTeams.map((x) => (
+                <option key={x.rosterId} value={x.rosterId} className="bg-[#0d1117]">
+                  {x.name}
+                </option>
+              ))}
+            </select>
+          ) : null}
+
+          {action === 'add' ? (
+            <>
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={t('lsHub.er.search')}
+                className="w-full rounded-xl border border-white/[0.10] bg-black/25 px-3 py-2.5 text-sm text-white placeholder:text-white/30"
+                data-testid="commish-roster-search"
+              />
+              <CheckList
+                items={results}
+                selected={new Set(picked.keys())}
+                onToggle={(k) => {
+                  const next = new Map(picked)
+                  const hit = results.find((r) => r.id === k)
+                  if (next.has(k)) next.delete(k)
+                  else if (hit) next.set(k, hit)
+                  setPicked(next)
+                }}
+                keyOf={(p) => p.id}
+                labelOf={playerLabel}
+                empty={query.trim().length < 2 ? t('lsHub.er.typeToSearch') : t('lsHub.er.noResults')}
+              />
+              {picked.size ? <p className="text-[12px] text-white/60">{t('lsHub.er.selected').replace('{{list}}', [...picked.values()].map((p) => p.name).join(', '))}</p> : null}
+            </>
+          ) : null}
+
+          {action === 'drop' || action === 'send' || action === 'switch' ? (
+            <div className="space-y-1">
+              {action === 'switch' ? <p className="text-[11px] font-bold uppercase tracking-wide text-white/40">{team.name}</p> : null}
+              <CheckList items={team.players} selected={mine} onToggle={toggle(mine, setMine)} keyOf={(p) => p.id} labelOf={playerLabel} empty={t('lsHub.er.noPlayers')} />
+            </div>
+          ) : null}
+
+          {(action === 'receive' || action === 'switch') && other ? (
+            <div className="space-y-1">
+              {action === 'switch' ? <p className="text-[11px] font-bold uppercase tracking-wide text-white/40">{other.name}</p> : null}
+              <CheckList items={other.players} selected={theirs} onToggle={toggle(theirs, setTheirs)} keyOf={(p) => p.id} labelOf={playerLabel} empty={t('lsHub.er.noPlayers')} />
+            </div>
+          ) : null}
+
+          {action === 'sendPicks' ? (
+            <CheckList items={team.picks} selected={mine} onToggle={toggle(mine, setMine)} keyOf={(p) => p.ref} labelOf={pickLabel} empty={t('lsHub.er.noPicks')} />
+          ) : null}
+          {action === 'receivePicks' && other ? (
+            <CheckList items={other.picks} selected={theirs} onToggle={toggle(theirs, setTheirs)} keyOf={(p) => p.ref} labelOf={pickLabel} empty={t('lsHub.er.noPicks')} />
+          ) : null}
+
+          {error ? <p className="text-[12px] text-amber-200/85" role="alert">{error}</p> : null}
+          <button
+            type="button"
+            disabled={busy || !body()}
+            onClick={() => void submit()}
+            className="w-full rounded-full bg-cyan-400 px-4 py-3 text-[13px] font-extrabold text-[#04131a] disabled:opacity-40"
+            data-testid="commish-roster-submit"
+          >
+            {busy ? t('lsHub.saving') : t('lsHub.er.confirm')}
+          </button>
+        </div>
+      )}
+    </HubCard>
+  )
+}
