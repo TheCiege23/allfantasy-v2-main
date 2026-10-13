@@ -77,6 +77,35 @@ describe('tribal competition and deterministic chopping', () => {
     expect(result.immuneTribeId).toBe('A')
     expect(result.choppedTeamIds).toEqual(['d2'])
   })
+  it('fields four per tribe in a 6/6/6/4 week and rotates six sit-outs the next Match Play week', () => {
+    const teams = ['A', 'B', 'C', 'D'].flatMap(tribeId =>
+      Array.from({ length: tribeId === 'D' ? 4 : 6 }, (_, index) =>
+        team(`${tribeId}${index + 1}`, tribeId, tribeId === 'A' ? 200 + index :
+          tribeId === 'B' ? 100 + index : tribeId === 'C' ? 80 + index : 70 + index)))
+    const firstSitOuts = new Set(['A5', 'A6', 'B5', 'B6', 'C5', 'C6'])
+    const firstWeek = teams.map(member => ({ ...member,
+      points: member.id === 'B5' ? 1 : member.points,
+      sitOut: firstSitOuts.has(member.id) }))
+    const matchups = Array.from({ length: 4 }, (_, index) => [
+      { team1: `A${index + 1}`, team2: `B${index + 1}` },
+      { team1: `C${index + 1}`, team2: `D${index + 1}` },
+    ]).flat()
+    expect(validateSGMatchups(firstWeek, matchups)).toEqual([])
+    const result = resolveSGPeriod({ config, period: period('match_play', 22), teams: firstWeek, matchups })
+    expect(result.immuneTribeId).toBe('A')
+    expect(result.choppedTeamIds).toEqual(['B5'])
+
+    const repeated = firstWeek.map(member => ({ ...member, satOutLastPeriod: firstSitOuts.has(member.id) }))
+    expect(validateSGMatchups(repeated, matchups).join(' ')).toContain('cannot sit out consecutive periods')
+    const nextSitOuts = new Set(['A1', 'A2', 'B1', 'B2', 'C1', 'C2'])
+    const nextWeek = teams.map(member => ({ ...member,
+      sitOut: nextSitOuts.has(member.id), satOutLastPeriod: firstSitOuts.has(member.id) }))
+    const nextMatchups = Array.from({ length: 4 }, (_, index) => [
+      { team1: `A${index + 3}`, team2: `B${index + 3}` },
+      { team1: `C${index + 3}`, team2: `D${index + 1}` },
+    ]).flat()
+    expect(validateSGMatchups(nextWeek, nextMatchups)).toEqual([])
+  })
   it('passes the chop through consecutive immunity holders', () => {
     const teams = [team('a', 'A', 10), team('b', 'A', 20), team('c', 'A', 30, { champion: true }), team('d', 'B', 100, { champion: true })]
     const result = resolveSGPeriod({ config, period: period('tribe_champion', 4), teams, protectedTeamIds: ['a', 'b'] })

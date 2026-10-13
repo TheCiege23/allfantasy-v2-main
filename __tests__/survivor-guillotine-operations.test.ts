@@ -75,6 +75,32 @@ describe('Survivor Guillotine calendar and concealed rewards', () => {
     expect(pairs.every(p => ['a', 'b'].includes(p.team1) !== ['a', 'b'].includes(p.team2))).toBe(true)
   })
 
+  it('randomly seats two from each six-manager tribe without repeating last week\'s sit-outs', async () => {
+    const config = { ...defaultSGConfig(), tribeCount: 4, missingSubmission: 'random' as const }
+    const tribes = ['A', 'B', 'C', 'D'].flatMap(tribeId =>
+      Array.from({ length: tribeId === 'D' ? 4 : 6 }, (_, index) =>
+        ({ rosterId: `${tribeId}${index + 1}`, tribeId })))
+    const priorSitOuts = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2']
+    db.findMany.mockResolvedValue([{ leagueId: 'league', currentPeriod: 3, config, revision: 2,
+      tribes, periodState: { period: 3, matchups: [], champions: [], sitOuts: [], priorSitOuts,
+        ceremonyAt: '2026-09-10T00:00:00Z', selectionDeadlineAt: '2026-09-09T00:00:00Z',
+        ceremonyStarted: false } }])
+    const result = await runSGSelectionDeadlines(new Date('2026-09-09T01:00:00Z'))
+    expect(result.results).toEqual([{ leagueId: 'league', status: 'resolved' }])
+    const state = db.updateMany.mock.calls[0][0].data.periodState as {
+      sitOuts: string[]; matchups: { team1: string; team2: string }[]
+    }
+    expect(state.sitOuts).toHaveLength(6)
+    expect(state.sitOuts.filter(id => id.startsWith('A'))).toHaveLength(2)
+    expect(state.sitOuts.filter(id => id.startsWith('B'))).toHaveLength(2)
+    expect(state.sitOuts.filter(id => id.startsWith('C'))).toHaveLength(2)
+    expect(state.sitOuts.some(id => priorSitOuts.includes(id))).toBe(false)
+    expect(state.matchups).toHaveLength(8)
+    const matched = state.matchups.flatMap(pair => [pair.team1, pair.team2])
+    expect(new Set([...matched, ...state.sitOuts]).size).toBe(22)
+    expect(state.matchups.every(pair => pair.team1[0] !== pair.team2[0])).toBe(true)
+  })
+
   it('rejects a manager choice that would overfill a starting tribe', async () => {
     db.findUniqueOrThrow.mockResolvedValue({ config: { ...defaultSGConfig(), teamCount: 4,
       tribeCount: 2, tribeFormation: 'manager_choice' }, currentPeriod: 0, tribes: [], revision: 1 })

@@ -16,6 +16,7 @@ const db = vi.hoisted(() => ({
   zombieLeagueTeam: { findMany: vi.fn() },
   zombieRulesTemplate: { findUnique: vi.fn() },
   league: { findUnique: vi.fn() },
+  survivorGuillotineLeague: { findUnique: vi.fn() },
   roster: { findFirst: vi.fn() },
 }))
 vi.mock('@/lib/prisma', () => ({ prisma: db }))
@@ -36,6 +37,7 @@ beforeEach(() => {
   db.zombieLeagueConfig.findUnique.mockResolvedValue({ zombieTradeBlocked: true })
   db.zombieLeagueTeam.findMany.mockResolvedValue([])
   db.zombieRulesTemplate.findUnique.mockResolvedValue(null)
+  db.survivorGuillotineLeague.findUnique.mockResolvedValue(null)
 })
 
 describe('zombie trade block', () => {
