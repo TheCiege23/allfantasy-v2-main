@@ -417,7 +417,7 @@ export function EditMatchupScoresCard({ leagueId }: { leagueId: string }) {
                 role="radio"
                 aria-checked={w === data.week}
                 onClick={() => void load(w)}
-                className={`flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-full border text-[10px] leading-tight transition ${
+                className={`flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-full border text-[11px] leading-tight transition ${
                   w === data.week ? 'border-cyan-300 bg-cyan-400 text-[#04131a]' : 'border-white/[0.12] bg-white/[0.06] text-white/70'
                 }`}
               >
@@ -453,7 +453,7 @@ export function EditMatchupScoresCard({ leagueId }: { leagueId: string }) {
                     <p key={side} className="text-[11px] text-white/40">{t('lsHub.ms.bye')}</p>
                   ),
                 )}
-                {m.editedByCommish ? <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-200/70">{t('lsHub.ms.edited')}</p> : null}
+                {m.editedByCommish ? <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-200/70">{t('lsHub.ms.edited')}</p> : null}
               </li>
             ))}
           </ul>
