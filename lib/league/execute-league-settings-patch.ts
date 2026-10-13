@@ -7,6 +7,8 @@
 import { NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { resolveWriteAuthority } from '@/lib/league/write-authority'
+import { MAX_POSITION_LIMIT, POSITION_LIMITS_SETTINGS_KEY, parsePositionLimits } from '@/lib/league/positionLimits'
 import {
   buildLeagueUpdateFromBody,
 } from '@/lib/league/commissioner-league-patch'
@@ -282,6 +284,15 @@ export async function executeLeagueSettingsPatch(
     }
   }
 
+  // Position limits are validated here, before any write: a bad map is refused whole.
+  const positionLimits = body.positionLimits !== undefined ? parsePositionLimits(body.positionLimits) : undefined
+  if (positionLimits === null) {
+    return jsonError(`positionLimits must map positions to whole numbers from 1 to ${MAX_POSITION_LIMIT}`, 400)
+  }
+  if (positionLimits !== undefined && resolveWriteAuthority(league.platform) !== 'NATIVE') {
+    return jsonError('Position limits for an imported league are set on its host platform.', 409)
+  }
+
   // `settingsMerge` spreads any key into `League.settings`, the chat link included, so it is checked
   // here — before the first write below — against the one rule (lib/league/leagueChatThreadLink.ts).
   const chatLinkRefusal = leagueChatThreadLinkRefusalInPatch(leagueId, body.settingsMerge)
@@ -407,6 +418,17 @@ export async function executeLeagueSettingsPatch(
       },
     })
     updatedFieldNames.push('settingsMerge')
+  }
+
+  /** `League.settings.position_limits`, replaced whole. Read fresh: a settingsMerge above may have just written. */
+  if (positionLimits !== undefined) {
+    const fresh = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+    const prev = (fresh?.settings as Record<string, unknown> | null) ?? {}
+    await prisma.league.update({
+      where: { id: leagueId },
+      data: { settings: { ...prev, [POSITION_LIMITS_SETTINGS_KEY]: positionLimits } as Prisma.InputJsonValue },
+    })
+    updatedFieldNames.push('positionLimits')
   }
 
   const derivedSyncKeys = new Set([

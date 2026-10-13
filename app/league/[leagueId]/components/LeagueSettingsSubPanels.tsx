@@ -22,6 +22,7 @@ import {
 import { toast } from 'sonner'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useAfSubGate } from '@/hooks/useAfSubGate'
+import { normalizeLimitPosition, readPositionLimits } from '@/lib/league/positionLimits'
 import { LEAGUE_SETTINGS_AI_PANEL_FEATURE } from '@/lib/monetization/entitlements'
 import { QRCodeSVG } from 'qrcode.react'
 import type { League, LeagueInvite, LeagueTeam } from '@prisma/client'
@@ -202,6 +203,7 @@ function RosterSettingsReadonlyPanel({ ctx }: { ctx: SubPanelContext }) {
   const settings = useMemo(() => getSettingsRecord(ctx.league.settings), [ctx.league.settings])
   const rosterPositions = (bundle.roster_positions as string[] | undefined) ?? []
   const groups = useMemo(() => groupRosterSlotCounts(rosterPositions), [rosterPositions])
+  const positionLimits = useMemo(() => readPositionLimits(ctx.league.settings), [ctx.league.settings])
   const [tab, setTab] = useState<'spots' | 'limits'>('spots')
   const reserveSlots = bundle.reserve_slots ?? settings.reserve_slots
   const taxiSlots = bundle.taxi_slots ?? settings.taxi_slots
@@ -303,7 +305,11 @@ function RosterSettingsReadonlyPanel({ ctx }: { ctx: SubPanelContext }) {
                     <span className="truncate text-[13px] font-medium text-white/90">{formatSlotLabel(slot, t)}</span>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
-                    <span className="text-[11px] font-semibold uppercase tracking-wide text-white/38">{t('lsPanel.roster.noLimit')}</span>
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-white/38">
+                      {positionLimits[normalizeLimitPosition(slot)]
+                        ? t('lsHub.pl.max').replace('{{n}}', String(positionLimits[normalizeLimitPosition(slot)]))
+                        : t('lsPanel.roster.noLimit')}
+                    </span>
                     {sleeperSettingsHref ? (
                       <a
                         href={sleeperSettingsHref}

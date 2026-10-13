@@ -20,6 +20,7 @@ import { logEngineInvariantOptional } from '@/lib/engine-testing/runtime/invaria
 import { ENGAGEMENT } from '@/lib/analytics/eventNames'
 import { recordProductEvent } from '@/lib/analytics/recordAnalyticsEvent'
 import { isCommissionerRosterLocked } from '@/lib/league/commissioner-roster-lock'
+import { positionLimitRefusal } from '@/lib/league/positionLimitsServer'
 import { claimSnapshotWhere, isClaimSnapshotConflict } from './claim-snapshot'
 
 type ClaimRow = {
@@ -49,6 +50,7 @@ function outcomeFromFailureMessage(msg: string): WaiverClaimOutcomeCode {
   if (m.includes('no longer available')) return 'player_no_longer_available'
   if (m.includes('frozen')) return 'blocked_by_lineup_lock'
   if (m.includes('roster full') || m.includes('drop player not on roster')) return 'invalid_due_to_roster'
+  if (m.includes('can roster at most')) return 'invalid_due_to_roster'
   return 'failed'
 }
 
@@ -290,6 +292,14 @@ export async function processWaiverClaimsForLeague(
 
     let newPlayerData = addPlayerToRosterData(roster.playerData, addId)
     if (dropId) newPlayerData = removePlayerFromRosterData(newPlayerData, dropId)
+    // Position limits are re-checked at award time: the roster may have changed since the claim was made.
+    const positionRefusal = await positionLimitRefusal(leagueId, [
+      { rosterId: claim.rosterId, before: currentPlayerIds, after: getRosterPlayerIds(newPlayerData), teamLabel: 'Your team' },
+    ])
+    if (positionRefusal) {
+      await pushFail(positionRefusal)
+      continue
+    }
     const priorityBefore = roster.waiverPriority ?? null
     /** Rolling: winner moves to the back of the line (max priority + 1). Standard: order is fixed for the period. */
     const isRolling = waiverType === 'rolling'
