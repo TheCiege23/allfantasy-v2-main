@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Tie at Tribal Council</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./exile/exile.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Caveat:wght@500;600;700&amp;family=Cinzel:wght@600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080d}
+.ex-sg{white-space:nowrap}
+.rv-pick{display:flex;align-items:center;gap:12px;width:100%;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.07);background:#0b0d14;color:#e8eaf2;font:inherit;text-align:left;cursor:pointer;min-height:60px}
+.rv-pick:disabled{cursor:default;opacity:.55}
+.rv-av{width:40px;height:40px;flex:none;border-radius:999px;display:grid;place-items:center;font:700 13px 'Archivo',sans-serif;color:#fff;position:relative}
+.rv-step{display:flex;align-items:flex-start;gap:12px;padding:12px 14px;border-radius:10px;background:#0b0d14;border:1px solid rgba(255,255,255,.06)}
+.rv-step i{flex:none;width:26px;height:26px;border-radius:999px;display:grid;place-items:center;font:700 12px 'JetBrains Mono',monospace;font-style:normal}
+.rv-slip{position:relative;width:min(420px,100%);aspect-ratio:1.6;padding:24px 28px;border-radius:4px;background:url(exile/parchment-texture.svg),linear-gradient(#fbf3dc,#efdcae);box-shadow:0 18px 40px rgba(0,0,0,.45),inset 0 0 40px rgba(120,70,20,.35),inset 0 0 0 1px rgba(120,80,30,.35);color:#2a1a08;transform:rotate(-2deg);display:flex;flex-direction:column;justify-content:space-between}
+@keyframes rvWrite{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
+.rv-ink{font:700 50px/1.05 'Caveat',cursive;color:#1d1206;animation:rvWrite 1.1s steps(18,end) both}
+.rv-scale{display:flex;align-items:flex-end;justify-content:center;gap:26px}
+.rv-pan{display:flex;flex-direction:column;align-items:center;gap:6px;min-width:150px}
+.rv-pan b{font:700 40px/1 'Cinzel',serif}
+@media (prefers-reduced-motion: reduce){.rv-ink{animation:none}}
+</style>
+</helmet>
+<div class="ex" style="min-height: 100vh; display: flex; flex-direction: column">
+  <header style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 18px 28px; border-bottom: 1px solid rgba(255,255,255,.06)">
+    <a class="ex-btn" href="TribalScroll.dc.html" aria-label="Back" style="padding: 0 12px">‹</a>
+    <div style="flex: 1 1 320px; display: flex; flex-direction: column; gap: 3px">
+      <h1 class="ex-h1">{{title}}</h1>
+      <span class="ex-t2">Tribal Council · Week 6 · Tribe Vela · tie rule: revote, then season points</span>
+    </div>
+    <div class="ex-seg" role="tablist" style="flex: 0 0 auto">
+      <sc-for list="{{tabs}}" as="t" hint-placeholder-count="3"><button class="ex-sg {{t.cls}}" onClick="{{t.pick}}" aria-pressed="{{t.on}}">{{t.label}}</button></sc-for>
+    </div>
+  </header>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 28px; padding: 28px; align-items: flex-start; justify-content: center">
+
+    <!-- left: what happens on a tie -->
+    <aside style="flex: 1 1 280px; max-width: 330px; display: flex; flex-direction: column; gap: 10px">
+      <span class="ex-lbl">When the vote ties</span>
+      <sc-for list="{{steps}}" as="s" hint-placeholder-count="3">
+        <div class="rv-step" style="border-color: {{s.line}}"><i style="background: {{s.ib}}; color: {{s.ic}}">{{s.n}}</i><div style="display: flex; flex-direction: column; gap: 2px"><b style="font-size: 13.5px">{{s.t}}</b><span class="ex-t2" style="font-size: 12.5px">{{s.d}}</span></div></div>
+      </sc-for>
+      <span class="ex-t3" style="font-size: 12px">The commissioner can switch the tie rule to “season points only” in Survivor settings. It locks when the draft starts.</span>
+    </aside>
+
+    <!-- center -->
+    <section style="flex: 0 1 560px; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 20px">
+
+      <sc-if value="{{isTie}}" hint-placeholder-val="{{ true }}">
+        <div class="ex-card" style="width: 100%; padding: 26px 24px; display: flex; flex-direction: column; align-items: center; gap: 18px; background: radial-gradient(circle at 50% 0%, rgba(217,180,90,.14), transparent 60%), #0b0d14">
+          <span style="font: 700 12px 'Cinzel', serif; letter-spacing: .18em; color: #d9b45a">The tally is tied</span>
+          <div class="rv-scale">
+            <div class="rv-pan"><span class="rv-av" style="width: 64px; height: 64px; font-size: 18px; background: #3a2410; box-shadow: 0 0 0 2px #07080d, 0 0 0 4px #e5484d">O8</span><span style="font-weight: 600">Open Team 8</span><b style="color: #f1d58a">2</b></div>
+            <img src="exile/wax-seal.svg" alt="" style="height: 64px; margin-bottom: 18px">
+            <div class="rv-pan"><span class="rv-av" style="width: 64px; height: 64px; font-size: 18px; background: #1f2a4d; box-shadow: 0 0 0 2px #07080d, 0 0 0 4px #e5484d">O4</span><span style="font-weight: 600">Open Team 4</span><b style="color: #f1d58a">2</b></div>
+          </div>
+          <span class="ex-t2" style="text-align: center; max-width: 420px">Nobody goes home yet. The two of them can’t vote in the revote. TheCiege26 and Open Team 5 decide, and they can only vote for Open Team 8 or Open Team 4.</span>
+          <span class="ex-t3" style="font-size: 12px">No new idols can be played. Idols already played stay played.</span>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{isBallot}}" hint-placeholder-val="{{ false }}">
+        <div style="width: 100%; display: flex; flex-direction: column; gap: 10px">
+          <span class="ex-lbl">Revote · choose one</span>
+          <sc-for list="{{people}}" as="p" hint-placeholder-count="2">
+            <button class="rv-pick" onClick="{{p.pick}}" disabled="{{p.off}}" aria-pressed="{{p.on}}" style="border-color: {{p.line}}; background: {{p.bg}}">
+              <span class="rv-av" style="background: {{p.c}}; box-shadow: 0 0 0 2px #07080d, 0 0 0 4px {{p.ring}}">{{p.ini}}</span>
+              <span style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 600">{{p.name}}</span><span class="ex-t3" style="font-size: 12px">{{p.sub}}</span></span>
+              <span class="ex-num ex-t2" style="font-size: 12px">{{p.pts}} season</span>
+            </button>
+          </sc-for>
+        </div>
+        <div class="rv-slip">
+          <div style="display: flex; justify-content: space-between; font: 700 11px 'Cinzel', serif; letter-spacing: .16em; color: #7a5528"><span>Revote</span><span>Week 6</span></div>
+          <div style="min-height: 60px; display: flex; align-items: center">
+            <sc-if value="{{hasName}}" hint-placeholder-val="{{ true }}"><span class="rv-ink" key="{{inkKey}}">{{choice}}</span></sc-if>
+          </div>
+          <div style="height: 1px; background: #8a6330; opacity: .5"></div>
+          <span style="font: 600 11px 'Cinzel', serif; letter-spacing: .12em; color: #8a6330; text-align: right">{{slipNote}}</span>
+        </div>
+        <div style="display: flex; gap: 10px; align-items: center">
+          <sc-if value="{{canCast}}" hint-placeholder-val="{{ true }}"><button class="ex-btn ex-btn-gold" onClick="{{castVote}}" style="min-height: 46px; padding: 0 24px">Drop it in the urn</button></sc-if>
+          <sc-if value="{{cast}}" hint-placeholder-val="{{ false }}"><span style="font: 700 15px 'Cinzel', serif; letter-spacing: .06em; color: #f1d58a">Your revote is in · 1 of 2</span></sc-if>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{isDead}}" hint-placeholder-val="{{ false }}">
+        <div class="ex-card" style="width: 100%; padding: 24px; display: flex; flex-direction: column; gap: 16px">
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center">
+            <span style="font: 700 12px 'Cinzel', serif; letter-spacing: .18em; color: #e5484d">Still tied · 1 to 1</span>
+            <span class="ex-t2" style="max-width: 440px">The revote deadlocked, so season points decide. The manager with fewer season points goes home.</span>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
+            <sc-for list="{{finals}}" as="f" hint-placeholder-count="2">
+              <div class="ex-card2" style="padding: 16px; display: flex; flex-direction: column; align-items: center; gap: 8px; border-color: {{f.line}}; filter: {{f.filter}}">
+                <img src="{{f.torch}}" alt="" style="height: 64px">
+                <span class="rv-av" style="background: {{f.c}}">{{f.ini}}</span>
+                <span style="font-weight: 600">{{f.name}}</span>
+                <span class="ex-num" style="font-size: 22px; font-weight: 700; color: {{f.nc}}">{{f.pts}}</span>
+                <span class="ex-lbl" style="color: {{f.nc}}">{{f.verdict}}</span>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 10px; background: rgba(229,72,77,.08); border: 1px solid rgba(229,72,77,.35)">
+            <img src="exile/token-icon.svg" alt="" style="height: 22px"><span style="font-size: 13px">Open Team 8 heads to Exile Island with 0 tokens. Margin: 26.5 season points.</span>
+          </div>
+          <span class="ex-t3" style="font-size: 12px; text-align: center">If season points also tie, the commissioner decides. That’s logged in the audit log.</span>
+        </div>
+      </sc-if>
+    </section>
+
+    <!-- right -->
+    <aside style="flex: 1 1 260px; max-width: 300px; display: flex; flex-direction: column; gap: 12px">
+      <div class="ex-card" style="padding: 16px; display: flex; flex-direction: column; gap: 10px">
+        <span class="ex-lbl">Revote clock</span>
+        <span class="ex-num" style="font-size: 28px; color: #d9b45a">{{clock}}</span>
+        <span class="ex-t2" style="font-size: 12.5px">Revotes close 2 hours after the tie is read. A revote that isn’t cast doesn’t count.</span>
+      </div>
+      <div class="ex-card" style="padding: 16px; display: flex; flex-direction: column; gap: 10px">
+        <span class="ex-lbl">Who votes</span>
+        <sc-for list="{{voters}}" as="v" hint-placeholder-count="4">
+          <div style="display: flex; align-items: center; gap: 10px"><span class="rv-av" style="width: 30px; height: 30px; font-size: 11px; background: {{v.c}}">{{v.ini}}</span><span style="flex: 1; font-size: 13px">{{v.name}}</span><span style="font-size: 11.5px; font-weight: 600; color: {{v.sc}}">{{v.s}}</span></div>
+        </sc-for>
+      </div>
+      <div class="ex-card2" style="padding: 14px 16px; display: flex; gap: 10px; align-items: center">
+        <img src="weekly/urn.svg" alt="" style="height: 56px"><span class="ex-t2" style="font-size: 12px">The revote is read the same way, one slip at a time, on a new scroll.</span>
+      </div>
+    </aside>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { s: 'tie', choice: 'Open Team 8', cast: false, k: 0, t: 1 * 3600 + 47 * 60 + 12 }; }
+  componentDidMount() { this.iv = setInterval(() => this.setState({ t: Math.max(0, this.state.t - 1) }), 1000); }
+  componentWillUnmount() { clearInterval(this.iv); }
+  renderVals() {
+    const st = this.state, s = st.s;
+    const t = st.t, p2 = n => String(n).padStart(2, '0');
+    const tabs = [['tie', 'The tie'], ['ballot', 'Revote'], ['dead', 'Still tied']].map(([id, label]) => ({ label, on: s === id ? 'true' : 'false', cls: s === id ? 'ex-sg-on' : '', pick: () => this.setState({ s: id }) }));
+    const ok = (n) => s === 'dead' ? true : s === 'ballot' ? n < 2 : n < 1;
+    const steps = [
+      ['Revote', 'Only managers who aren’t in the tie vote, and only for the tied managers.'],
+      ['Still tied?', 'Season points decide: fewer season points goes home.'],
+      ['Still tied?', 'The commissioner decides. Rare, and always logged.']].map(([tt, d], i) => ({ n: String(i + 1), t: tt, d,
+        ib: ok(i) ? 'rgba(217,180,90,.18)' : '#151926', ic: ok(i) ? '#f1d58a' : '#6f7590', line: (s === 'tie' && i === 0) || (s === 'ballot' && i === 0) || (s === 'dead' && i === 1) ? 'rgba(217,180,90,.45)' : 'rgba(255,255,255,.06)' }));
+    const P = [['Open Team 8', 'O8', '#3a2410', '512.4', '2 votes in the first read'], ['Open Team 4', 'O4', '#1f2a4d', '538.9', '2 votes in the first read']];
+    const people = P.map(([name, ini, c, pts, sub]) => { const on = st.choice === name;
+      return { name, ini, c, pts, sub, off: st.cast, on: on ? 'true' : 'false', ring: '#e5484d', line: on ? '#d9b45a' : 'rgba(255,255,255,.07)', bg: on ? '#151926' : '#0b0d14', pick: () => this.setState({ choice: name, k: st.k + 1 }) }; });
+    const finals = [['Open Team 8', 'O8', '#3a2410', '512.4', true], ['Open Team 4', 'O4', '#1f2a4d', '538.9', false]].map(([name, ini, c, pts, out]) => ({ name, ini, c, pts,
+      torch: out ? 'weekly/torch-out.svg' : 'weekly/torch-lit.svg', verdict: out ? 'Voted out' : 'Stays', nc: out ? '#ff8a8a' : '#7fe0a6', line: out ? 'rgba(229,72,77,.4)' : 'rgba(58,190,120,.35)', filter: out ? 'grayscale(.4)' : 'none' }));
+    const voters = [['TheCiege26', 'TC', '#22314f', s === 'dead' ? 'Voted' : st.cast ? 'Voted' : 'Not yet', s === 'dead' || st.cast], ['Open Team 5', 'O5', '#12352a', s === 'tie' ? 'Not yet' : 'Voted', s !== 'tie'],
+      ['Open Team 8', 'O8', '#3a2410', 'In the tie', null], ['Open Team 4', 'O4', '#1f2a4d', 'In the tie', null]].map(([name, ini, c, ss, d]) => ({ name, ini, c, s: ss, sc: d === null ? '#ff9a8a' : d ? '#7fe0a6' : '#6f7590' }));
+    return { tabs, steps, people, finals, voters,
+      title: s === 'dead' ? 'Season points decide' : s === 'ballot' ? 'Cast your revote' : 'It’s a tie',
+      isTie: s === 'tie', isBallot: s === 'ballot', isDead: s === 'dead',
+      clock: s === 'dead' ? 'Closed' : p2(Math.floor(t / 3600)) + ':' + p2(Math.floor(t % 3600 / 60)) + ':' + p2(t % 60),
+      choice: st.choice, hasName: !!st.choice, inkKey: String(st.k), cast: st.cast, canCast: !st.cast,
+      slipNote: st.cast ? 'In the urn' : 'Your revote is secret',
+      castVote: () => this.setState({ cast: true }) };
+  }
+}
+</script>
+</body>
+</html>
