@@ -16,7 +16,7 @@
  */
 
 import { readFileSync, readdirSync, statSync, existsSync } from 'fs'
-import { join, relative, extname } from 'path'
+import { join, relative, extname, sep } from 'path'
 import { fileURLToPath } from 'url'
 import { execFileSync } from 'child_process'
 
@@ -35,31 +35,85 @@ function finding(severity, file, line, message) {
 }
 
 // ── File walker ───────────────────────────────────────────────────────────────
+//
+// The candidate set comes from GIT, not from the disk: tracked files plus
+// untracked files that are not ignored — i.e. everything a commit could carry.
+//
+// ⚠ THE DISK WALK THIS REPLACES TOOK OVER AN HOUR IN THE SHARED F: CHECKOUT.
+// Measured 2026-10-12: a branch push sat in this script for 63 minutes at ~1%
+// CPU, I/O-bound on exFAT, crawling un-ignored scratch trees (.codex,
+// .task-*-build-cache, .agents, .npm-cache, …) that a skip-list never keeps up
+// with. `git ls-files` lists the same ~14k source files in about a second, and
+// it is also the more correct set: an ignored file cannot be pushed, so
+// scanning it only ever produced latency. Nested checkouts (.worktrees/*) are
+// reported by git as a single directory entry and never descended into.
+//
+// The skip rules below still apply on top, so nothing previously excluded is
+// newly scanned. If git cannot list files, fall back to the disk walk — a slow
+// scan beats an unverified one in a public repo.
 
-function* walkFiles(dir, extensions = ['.ts', '.tsx', '.js', '.mjs']) {
+function isSkippedDirName(name) {
+  return (
+    name === 'node_modules' ||
+    name === '.next' ||
+    name.startsWith('.next') ||  // any .next-dev-*, .next-build-*, etc.
+    name === '.git' ||
+    name === '.worktrees' ||  // sibling checkouts are scanned on their own pushes
+    name === '.claude' ||
+    name === 'coverage' ||
+    name === '__pycache__' ||
+    name === 'out' ||
+    name === 'dist' ||
+    name === '.turbo'
+  )
+}
+
+let gitFileList // undefined = not yet read, null = git unavailable
+
+function listGitFiles() {
+  if (gitFileList !== undefined) return gitFileList
+  try {
+    gitFileList = execFileSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], {
+      cwd: ROOT,
+      encoding: 'utf8',
+      maxBuffer: 256 * 1024 * 1024,
+    })
+      .split('\0')
+      .filter(Boolean)
+  } catch {
+    console.log('[secret-scan] ⚠ git ls-files failed; falling back to a full disk walk (slow).')
+    gitFileList = null
+  }
+  return gitFileList
+}
+
+function* walkDisk(dir, extensions) {
   const entries = readdirSync(dir, { withFileTypes: true })
   for (const entry of entries) {
     const fullPath = join(dir, entry.name)
     if (entry.isDirectory()) {
-      const name = entry.name
-      // Skip directories that are never source
-      if (
-        name === 'node_modules' ||
-        name === '.next' ||
-        name.startsWith('.next') ||  // any .next-dev-*, .next-build-*, etc.
-        name === '.git' ||
-        name === '.worktrees' ||  // sibling checkouts are scanned on their own pushes
-        name === '.claude' ||
-        name === 'coverage' ||
-        name === '__pycache__' ||
-        name === 'out' ||
-        name === 'dist' ||
-        name === '.turbo'
-      ) continue
-      yield* walkFiles(fullPath, extensions)
+      if (isSkippedDirName(entry.name)) continue
+      yield* walkDisk(fullPath, extensions)
     } else if (entry.isFile() && extensions.includes(extname(entry.name))) {
       yield fullPath
     }
+  }
+}
+
+function* walkFiles(dir, extensions = ['.ts', '.tsx', '.js', '.mjs']) {
+  const files = listGitFiles()
+  if (files === null) {
+    yield* walkDisk(dir, extensions)
+    return
+  }
+  const relDir = relative(ROOT, dir).split(sep).join('/')
+  const prefix = relDir ? `${relDir}/` : ''
+  for (const rel of files) {
+    if (prefix && !rel.startsWith(prefix)) continue
+    if (!extensions.includes(extname(rel))) continue
+    const segments = rel.split('/')
+    if (segments.slice(0, -1).some(isSkippedDirName)) continue
+    yield join(ROOT, rel)
   }
 }
 
