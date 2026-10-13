@@ -28,6 +28,7 @@ const TYPE_LABEL: Record<PlayFeedItem['type'], string> = {
   FIELD_GOAL: 'FG',
   DEFENSIVE_SCORE: 'DEF TD',
   SPECIAL_TEAMS_SCORE: 'ST TD',
+  TWO_POINT_CONVERSION: '2PT',
 }
 
 /** TD, FG and their DEF / ST forms are what a Spanish-language broadcast prints too; the two words are not. */

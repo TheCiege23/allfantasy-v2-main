@@ -7,6 +7,7 @@ import { hydrateRedraftLineupLocksForRosters } from '@/lib/redraft/lineupLock'
 import { resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
 import { movePlayerBoundIdolsInTransaction } from './playerBoundIdolTransfer'
 import { normalizeSurvivorFoundationSettings } from './survivorSettings'
+import { transferNbaSurvivorRosterPlayer } from './transferNbaSurvivorRosterPlayer'
 
 type Power = 'triple_steal' | 'island_raid'
 type Result<T> = { ok: true; value: T } | { ok: false; status: 403 | 404 | 409 | 422; code: string; error: string }
@@ -114,8 +115,8 @@ export async function playStealThree(leagueId: string, userId: string, input: { 
         await movePlayerBoundIdolsInTransaction(tx, { leagueId, playerId: row.playerId, fromRedraftRosterId: initial.myRosterId, reason: 'waiver_drop' })
       }
       for (const row of chosen) {
-        const updated = await tx.redraftRosterPlayer.updateMany({ where: { id: row.id, rosterId: row.rosterId, droppedAt: null }, data: { rosterId: initial.myRosterId, slotType: 'BN', acquisitionType: 'survivor_steal_three' } })
-        if (updated.count !== 1) throw new Error('Steal 3 target changed during settlement')
+        const moved = await transferNbaSurvivorRosterPlayer(tx, { rowId: row.id, playerId: row.playerId, fromRosterId: row.rosterId, toRosterId: initial.myRosterId, slotType: 'BN', acquisitionType: 'survivor_steal_three' })
+        if (moved !== 1) throw new Error('Steal 3 target changed during settlement')
         await movePlayerBoundIdolsInTransaction(tx, { leagueId, playerId: row.playerId, fromRedraftRosterId: row.rosterId, toRedraftRosterId: initial.myRosterId, reason: 'stolen_player' })
       }
       const sourceIds = [...new Set(chosen.map(row => row.rosterId))]

@@ -41,6 +41,14 @@ beforeEach(() => {
   Object.assign(mocks.tx, readDb(), { $queryRaw: vi.fn(async () => []) })
   mocks.tx.survivorIdol.updateMany.mockImplementation(async (value: any) => { idol = { ...idol, ...value.data }; effects.push(value); return { count: 1 } })
   mocks.tx.redraftRosterPlayer.updateMany.mockImplementation(async (value: any) => { const player = players.find(player => player.id === value.where.id && player.rosterId === value.where.rosterId && !player.droppedAt); if (!player) return { count: 0 }; Object.assign(player, value.data); effects.push(value); return { count: 1 } })
+  // transferNbaSurvivorRosterPlayer closes the source row and creates a new one; the new row
+  // takes the source id so assertions can still name players by row id, and sits beside it.
+  mocks.tx.redraftRosterPlayer.findFirst = vi.fn(async (value: any) => players.find(player => player.id === value.where.id && player.rosterId === value.where.rosterId && player.playerId === value.where.playerId && !player.droppedAt) ?? null)
+  mocks.tx.redraftRosterPlayer.create.mockImplementation(async (value: any) => {
+    const source = players.findIndex(player => player.playerId === value.data.playerId && player.droppedAt)
+    const created = { ...value.data, id: source >= 0 ? players[source].id : value.data.playerId, droppedAt: null }
+    players.splice(source >= 0 ? source + 1 : players.length, 0, created); effects.push(value.data); return created
+  })
   mocks.tx.survivorPlayer.update.mockImplementation(async (value: any) => { Object.assign(owner, value.data); effects.push(value); return owner })
   mocks.db.$transaction = vi.fn(async (fn: any) => {
     const snapshot = structuredClone({ players, owner, idol })
@@ -107,7 +115,9 @@ describe('Steal 3 validation and settlement', () => {
     expect(await playStealThree('league', 'me', input)).toMatchObject({ ok: false, code: 'incorrect_drops' })
     expect(effects).toEqual([])
     expect((await playStealThree('league', 'me', { ...input, dropRowIds: ['d', 'e', 'f'] })).ok).toBe(true)
-    expect(players.filter(player => player.droppedAt).map(player => player.id)).toEqual(['d', 'e', 'f'])
+    expect(players.filter(player => player.rosterId === 'mine' && player.droppedAt).map(player => player.id)).toEqual(['d', 'e', 'f'])
+    // The stolen players' source rows are closed (not moved) so NBA scoring keeps the old owner's interval.
+    expect(players.filter(player => player.rosterId === 'victim' && player.droppedAt).map(player => player.id)).toEqual(['a', 'b', 'c'])
     expect(players.filter(player => player.rosterId === 'mine' && !player.droppedAt).map(player => player.id)).toEqual(['a', 'b', 'c', 'starter'])
     expect(mocks.tx.survivorAuditEntry.create.mock.calls.find((call: any) => call[0].data.action === 'steal_three_played')?.[0].data.data.waiversClearAt).toMatch(/^\d{4}-\d{2}-\d{2}T/)
     expect(mocks.transfer.mock.calls.filter((call: any) => call[1].reason === 'waiver_drop')).toHaveLength(3)
@@ -116,7 +126,7 @@ describe('Steal 3 validation and settlement', () => {
     const result = await getStealThreePreview('league', 'me', 'idol')
     expect(result.ok && result.value.requiredDrops).toBe(0)
     expect((await playStealThree('league', 'me', input)).ok).toBe(true)
-    expect(players.some(player => player.droppedAt)).toBe(false)
+    expect(players.some(player => player.rosterId === 'mine' && player.droppedAt)).toBe(false)
   })
   it('returns tribe, weekly average and ranked top 3 without other idols or owners', async () => {
     const result = await getStealThreePreview('league', 'me', 'idol')
