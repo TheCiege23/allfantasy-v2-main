@@ -9,7 +9,13 @@ import { validateRedraftLineup } from '@/lib/redraft/lineupValidation'
 import { updateStandings } from '@/lib/redraft/standingsEngine'
 import { getNormalizedPlayerData } from '@/lib/player-data/getNormalizedPlayerData'
 import { serializeUnifiedPlayerForApi } from '@/lib/player-data/serializeUnifiedPlayerForApi'
-import { crosswalkToSleeperIds, sleeperLookupId } from '@/lib/core-app/rosterIdCrosswalk'
+import {
+  crosswalkToSleeperIds,
+  sleeperLookupId,
+  withTeamDefenseIds,
+  type TeamDefenseRosterRow,
+} from '@/lib/core-app/rosterIdCrosswalk'
+import { teamDefenseSleeperId } from '@/lib/core-app/teamDefenseCrosswalk'
 import { resolveEffectiveRedraftWeek } from '@/lib/season-week'
 import {
   applyNflRedraftStatCorrection,
@@ -72,12 +78,32 @@ function asNumberMap(value: unknown): Record<string, number> {
  */
 async function sleeperIdLookup(
   platform: string | null | undefined,
-  rosterIds: readonly string[],
-): Promise<(rosterId: string) => string | null> {
-  const crosswalk = await crosswalkToSleeperIds(String(platform ?? ''), 'NFL', [...rosterIds]).catch(
-    () => new Map<string, string>(),
+  rows: readonly TeamDefenseRosterRow[],
+): Promise<{ idOf: (rosterId: string) => string | null; positionOf: (row: { playerId: string; position: string }) => string }> {
+  const crosswalk = withTeamDefenseIds(
+    platform,
+    await crosswalkToSleeperIds(String(platform ?? ''), 'NFL', rows.map((row) => row.playerId)).catch(
+      () => new Map<string, string>(),
+    ),
+    rows,
   )
-  return (rosterId) => sleeperLookupId(platform, rosterId, crosswalk)
+  /*
+   * A translated team defence (teamDefenseCrosswalk.ts) is scored as `DEF` whatever its row says: the stat
+   * normalizer picks the DEFENCE key set only for `DEF`/`DST` (`isTeamDefenseRow`), and an imported one reads
+   * `D/ST` — or `UNK` on 10 ESPN rows — so its sacks and interceptions would be read as a QB's sacks taken.
+   */
+  const defences = new Set(
+    rows
+      .filter((row) => {
+        const code = teamDefenseSleeperId(platform, row)
+        return code != null && crosswalk.get(row.playerId) === code
+      })
+      .map((row) => row.playerId),
+  )
+  return {
+    idOf: (rosterId) => sleeperLookupId(platform, rosterId, crosswalk),
+    positionOf: (row) => (defences.has(row.playerId) ? 'DEF' : row.position),
+  }
 }
 
 function categoryPointsFromLeagueSettings(settings: unknown): Record<string, number> {
@@ -274,7 +300,7 @@ export async function resolveNflRedraftLiveScoringRuntime(input: {
    * row mapped back to the roster id the lineup speaks; an id that does not translate reads nothing.
    * This runtime is NFL-only (gated above), so the translation always applies.
    */
-  const lookupOf = await sleeperIdLookup(league?.platform, playerIds)
+  const lookupOf = (await sleeperIdLookup(league?.platform, storedRosterPlayers)).idOf
   const rosterIdsBySleeperId = new Map<string, string[]>()
   for (const id of playerIds) {
     const sleeperId = lookupOf(id)
@@ -481,11 +507,11 @@ export async function ingestNflRedraftStatPayload(input: {
   })
   const rosterPlayers = await prisma.redraftRosterPlayer.findMany({
     where: { roster: { seasonId: season.id, leagueId: season.leagueId }, droppedAt: null },
-    select: { playerId: true, playerName: true, position: true, sport: true },
+    select: { playerId: true, playerName: true, position: true, team: true, sport: true },
   })
   const playerById = new Map(rosterPlayers.map((player) => [player.playerId, player]))
   // Rows arrive keyed on roster ids; the score is written under the Sleeper id (see `sleeperIdLookup`).
-  const sleeperIdOf = await sleeperIdLookup(league?.platform, [...playerById.keys()])
+  const { idOf: sleeperIdOf, positionOf } = await sleeperIdLookup(league?.platform, [...playerById.values()])
   const skipped: string[] = []
   const untranslatedForeignPlayerIds: string[] = []
   let synced = 0
@@ -502,16 +528,17 @@ export async function ingestNflRedraftStatPayload(input: {
       skipped.push(row.playerId)
       continue
     }
+    const position = positionOf(player)
     const stats = normalizeNflRedraftPlayerStats({
       playerId: player.playerId,
-      position: player.position,
+      position,
       rawStats: row.stats,
     })
     if (!Object.keys(stats).length) {
       skipped.push(row.playerId)
       continue
     }
-    const calculation = calculateNflRedraftFantasyPoints({ settings, stats, position: player.position })
+    const calculation = calculateNflRedraftFantasyPoints({ settings, stats, position })
     await prisma.playerWeeklyScore.upsert({
       where: {
         playerId_week_season_sport: {
@@ -571,7 +598,7 @@ export async function applyNflRedraftStatCorrectionToSeason(input: {
   const week = positiveWeek(input.week, season.currentWeek || 1)
   const rosterPlayer = await prisma.redraftRosterPlayer.findFirst({
     where: { playerId: input.playerId, roster: { seasonId: season.id, leagueId: season.leagueId }, droppedAt: null },
-    select: { playerId: true, position: true, sport: true },
+    select: { playerId: true, playerName: true, position: true, team: true, sport: true },
   })
   if (!rosterPlayer) throw new Error('player_not_rostered')
 
@@ -581,7 +608,9 @@ export async function applyNflRedraftStatCorrectionToSeason(input: {
    * foreign roster id with none is refused before either — audited, so the refusal is counted — rather
    * than correcting, and overwriting, whoever holds those digits in Sleeper's space.
    */
-  const scoreId = (await sleeperIdLookup(league?.platform, [rosterPlayer.playerId]))(rosterPlayer.playerId)
+  const { idOf, positionOf } = await sleeperIdLookup(league?.platform, [rosterPlayer])
+  const scoreId = idOf(rosterPlayer.playerId)
+  const position = positionOf(rosterPlayer)
   if (!scoreId) {
     await recordScoringAudit({
       actorUserId: input.actorUserId ?? 'system',
@@ -604,7 +633,7 @@ export async function applyNflRedraftStatCorrectionToSeason(input: {
   })
   const correction = applyNflRedraftStatCorrection({
     playerId: rosterPlayer.playerId,
-    position: rosterPlayer.position,
+    position,
     previousStats: asRecord(existing?.stats),
     correctedStats: input.correctedStats,
   })
@@ -615,7 +644,7 @@ export async function applyNflRedraftStatCorrectionToSeason(input: {
   const calculation = calculateNflRedraftFantasyPoints({
     settings,
     stats: correction.normalizedStats,
-    position: rosterPlayer.position,
+    position,
   })
 
   await prisma.playerWeeklyScore.upsert({
