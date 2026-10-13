@@ -9,6 +9,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { MAX_POSITION_LIMIT, POSITION_LIMITS_SETTINGS_KEY, parsePositionLimits } from '@/lib/league/positionLimits'
+import { MAX_STAT_CORRECTION_DAYS, STAT_CORRECTION_DAYS_KEY, parseStatCorrectionDays } from '@/lib/redraft/statCorrections'
 import {
   buildLeagueUpdateFromBody,
 } from '@/lib/league/commissioner-league-patch'
@@ -292,6 +293,13 @@ export async function executeLeagueSettingsPatch(
   if (positionLimits !== undefined && resolveWriteAuthority(league.platform) !== 'NATIVE') {
     return jsonError('Position limits for an imported league are set on its host platform.', 409)
   }
+  const statCorrectionDays = body.statCorrectionDays !== undefined ? parseStatCorrectionDays(body.statCorrectionDays) : undefined
+  if (statCorrectionDays === null) {
+    return jsonError(`statCorrectionDays must be a whole number from 0 to ${MAX_STAT_CORRECTION_DAYS}`, 400)
+  }
+  if (statCorrectionDays !== undefined && resolveWriteAuthority(league.platform) !== 'NATIVE') {
+    return jsonError('Stat corrections for an imported league follow its host platform.', 409)
+  }
 
   // `settingsMerge` spreads any key into `League.settings`, the chat link included, so it is checked
   // here — before the first write below — against the one rule (lib/league/leagueChatThreadLink.ts).
@@ -429,6 +437,17 @@ export async function executeLeagueSettingsPatch(
       data: { settings: { ...prev, [POSITION_LIMITS_SETTINGS_KEY]: positionLimits } as Prisma.InputJsonValue },
     })
     updatedFieldNames.push('positionLimits')
+  }
+
+  /** `League.settings.stat_correction_days` — 0 turns official stat corrections off for this league. */
+  if (statCorrectionDays !== undefined) {
+    const fresh = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+    const prev = (fresh?.settings as Record<string, unknown> | null) ?? {}
+    await prisma.league.update({
+      where: { id: leagueId },
+      data: { settings: { ...prev, [STAT_CORRECTION_DAYS_KEY]: statCorrectionDays } as Prisma.InputJsonValue },
+    })
+    updatedFieldNames.push('statCorrectionDays')
   }
 
   const derivedSyncKeys = new Set([

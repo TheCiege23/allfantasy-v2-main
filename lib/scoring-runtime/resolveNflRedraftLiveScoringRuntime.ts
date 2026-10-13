@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { readStatOverrides, withStatOverride } from '@/lib/redraft/leagueStatOverrides'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { resolveCanonicalLeagueRules } from '@/lib/league-runtime'
 import type { CanonicalLeagueRuntimeEvent } from '@/lib/league-runtime'
@@ -298,7 +299,7 @@ export async function resolveNflRedraftLiveScoringRuntime(input: {
     const wire = serializeUnifiedPlayerForApi(row)
     return [wire.id, wire] as const
   }))
-  const scoreRows: NflRedraftRuntimeScoreInput[] = scores.flatMap((score) =>
+  const providerRows: NflRedraftRuntimeScoreInput[] = scores.flatMap((score) =>
     (rosterIdsBySleeperId.get(score.playerId) ?? []).map((rosterPlayerId) => ({
       playerId: rosterPlayerId,
       sport: score.sport,
@@ -308,6 +309,22 @@ export async function resolveNflRedraftLiveScoringRuntime(input: {
       updatedAtIso: score.updatedAt.toISOString(),
     })),
   )
+  // This league's commish-corrected lines replace the shared provider row (lib/redraft/leagueStatOverrides.ts).
+  const overrides = readStatOverrides(league?.settings ?? null, season.season, week)
+  const sportOf = new Map(rosterPlayers.map((player) => [player.playerId, player.sport]))
+  const scoreRows: NflRedraftRuntimeScoreInput[] = [
+    ...providerRows.filter((row) => !overrides.has(row.playerId)),
+    ...[...overrides.entries()]
+      .filter(([playerId]) => sportOf.has(playerId))
+      .map(([playerId, entry]) => ({
+        playerId,
+        sport: sportOf.get(playerId)!,
+        stats: entry.stats,
+        isFinalized: entry.final,
+        source: 'commish_stat_correction',
+        updatedAtIso: entry.at || new Date().toISOString(),
+      })),
+  ]
 
   const teamInputs: NflRedraftRuntimeTeamInput[] = rosters.map((roster) => {
     const players = (playersByRosterId.get(roster.id) ?? []).map((player) => {
@@ -577,35 +594,30 @@ export async function applyNflRedraftStatCorrectionToSeason(input: {
 
   const league = await prisma.league.findUnique({ where: { id: season.leagueId }, select: { settings: true, platform: true } })
   /*
-   * The previous line is READ and the correction WRITTEN under the Sleeper id (see `sleeperIdLookup`). A
-   * foreign roster id with none is refused before either — audited, so the refusal is counted — rather
-   * than correcting, and overwriting, whoever holds those digits in Sleeper's space.
+   * 🛑 THE CORRECTION IS THIS LEAGUE'S, NOT EVERYONE'S. It used to be written to `PlayerWeeklyScore`,
+   * which every league scores from — one commish's fix changed the player in every league, and the
+   * next stat sync could quietly undo it. It is stored on the league now (leagueStatOverrides.ts) and
+   * both scoring engines read through it. The shared row is only READ, as the "before" line.
    */
+  const overrides = readStatOverrides(league?.settings ?? null, season.season, week)
   const scoreId = (await sleeperIdLookup(league?.platform, [rosterPlayer.playerId]))(rosterPlayer.playerId)
-  if (!scoreId) {
-    await recordScoringAudit({
-      actorUserId: input.actorUserId ?? 'system',
-      action: 'redraft_stat_correction_refused',
-      seasonId: season.id,
-      details: { week, playerId: rosterPlayer.playerId, reason: 'player_id_not_translatable', platform: league?.platform ?? null },
-    })
-    throw new Error('player_id_not_translatable')
-  }
-
-  const existing = await prisma.playerWeeklyScore.findUnique({
-    where: {
-      playerId_week_season_sport: {
-        playerId: scoreId,
-        week,
-        season: season.season,
-        sport: rosterPlayer.sport,
-      },
-    },
-  })
+  const existing = scoreId
+    ? await prisma.playerWeeklyScore.findUnique({
+        where: {
+          playerId_week_season_sport: {
+            playerId: scoreId,
+            week,
+            season: season.season,
+            sport: rosterPlayer.sport,
+          },
+        },
+      })
+    : null
+  const previousStats = overrides.get(rosterPlayer.playerId)?.stats ?? asRecord(existing?.stats)
   const correction = applyNflRedraftStatCorrection({
     playerId: rosterPlayer.playerId,
     position: rosterPlayer.position,
-    previousStats: asRecord(existing?.stats),
+    previousStats,
     correctedStats: input.correctedStats,
   })
   const settings = resolveNflRedraftScoringSettings({
@@ -617,29 +629,31 @@ export async function applyNflRedraftStatCorrectionToSeason(input: {
     stats: correction.normalizedStats,
     position: rosterPlayer.position,
   })
+  const previousPoints = calculateNflRedraftFantasyPoints({
+    settings,
+    stats: previousStats as Record<string, number>,
+    position: rosterPlayer.position,
+  }).points
 
-  await prisma.playerWeeklyScore.upsert({
-    where: {
-      playerId_week_season_sport: {
-        playerId: scoreId,
-        week,
-        season: season.season,
-        sport: rosterPlayer.sport,
-      },
-    },
-    update: {
-      stats: correction.normalizedStats,
-      fantasyPts: calculation.points,
-      isFinalized: input.isFinalized === true || existing?.isFinalized === true,
-    },
-    create: {
-      playerId: scoreId,
-      week,
-      season: season.season,
-      sport: rosterPlayer.sport,
-      stats: correction.normalizedStats,
-      fantasyPts: calculation.points,
-      isFinalized: input.isFinalized === true,
+  // Read fresh and write once: settings may have changed since the read above.
+  const freshLeague = await prisma.league.findUnique({ where: { id: season.leagueId }, select: { settings: true } })
+  await prisma.league.update({
+    where: { id: season.leagueId },
+    data: {
+      settings: toPrismaJsonInput(
+        withStatOverride(freshLeague?.settings ?? null, {
+          season: season.season,
+          week,
+          playerId: rosterPlayer.playerId,
+          entry: {
+            stats: correction.normalizedStats as Record<string, number>,
+            final: input.isFinalized !== false,
+            by: input.actorUserId ?? null,
+            at: new Date().toISOString(),
+            reason: input.reason ?? null,
+          },
+        }),
+      ),
     },
   })
 
@@ -654,6 +668,14 @@ export async function applyNflRedraftStatCorrectionToSeason(input: {
         playerId: rosterPlayer.playerId,
         correctionVersion: correction.correctionVersion,
         reason: input.reason ?? null,
+        source: 'commish',
+        corrections: [
+          {
+            playerId: rosterPlayer.playerId,
+            pointsBefore: Math.round(previousPoints * 100) / 100,
+            pointsAfter: Math.round(calculation.points * 100) / 100,
+          },
+        ],
       },
     }),
     buildScoringRuntimeEvent({

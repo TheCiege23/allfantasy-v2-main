@@ -18,6 +18,7 @@ const h = vi.hoisted(() => {
     scores: [] as Row[],
     rosterPlayers: [] as Row[],
     unifiedAskedWith: [] as string[][],
+    settings: {} as Row,
   }
   const inFilter = (rows: () => Row[]) => async (args: { where?: Row } = {}) =>
     rows().filter((r) =>
@@ -27,7 +28,13 @@ const h = vi.hoisted(() => {
     )
   const prisma = {
     redraftSeason: { findFirst: async () => ({ id: 'season-1', leagueId: 'league-1', sport: 'NFL', season: 2026, currentWeek: 2, status: 'in_season' }) },
-    league: { findUnique: async () => ({ settings: {}, platform: state.platform }) },
+    league: {
+      findUnique: async () => ({ settings: state.settings, platform: state.platform }),
+      update: vi.fn(async (args: { data: { settings: Row } }) => {
+        state.settings = args.data.settings
+        return {}
+      }),
+    },
     redraftRoster: { findMany: async () => [{ id: 'alpha', leagueId: 'league-1', seasonId: 'season-1', teamName: 'Alpha', ownerName: 'A' }] },
     redraftRosterPlayer: {
       findMany: async () => state.rosterPlayers.map((p) => ({ ...p })),
@@ -111,6 +118,7 @@ beforeEach(() => {
   h.state.scores = []
   h.state.rosterPlayers = [qb('13761')]
   h.state.unifiedAskedWith = []
+  h.state.settings = {}
 })
 
 describe('NFL live-scoring runtime — foreign roster ids read through the crosswalk', () => {
@@ -179,20 +187,22 @@ describe('NFL stat-payload ingest — writes under the Sleeper id, never a raw f
   })
 })
 
-describe('NFL stat correction — reads and writes under the Sleeper id, never a raw foreign id', () => {
-  it('🛑 Fleaflicker 13761 unmapped: refused and audited, nothing read or written under 13761', async () => {
+describe('NFL stat correction — this league only, and never a raw foreign id in Sleeper\'s space', () => {
+  // The correction used to be WRITTEN to the shared PlayerWeeklyScore row (under the Sleeper id), which
+  // changed the player in every league. It is now stored on this league, keyed by the roster's own id —
+  // the id the runtime maps rows back to — and the shared table is only READ, for the "before" line.
+  const stored = () => (h.state.settings.stat_overrides as Record<string, Record<string, { stats: Row }>>)['2026:2']
+
+  it('🛑 Fleaflicker 13761 unmapped: nothing read or written under 13761 in the shared table; the line is stored on this league', async () => {
     h.state.scores = [weekRow('13761', { def_tkl: 7 })]
 
-    await expect(
-      applyNflRedraftStatCorrectionToSeason({ seasonId: 'season-1', week: 2, playerId: '13761', correctedStats: { pass_yds: 280 } }),
-    ).rejects.toThrow('player_id_not_translatable')
+    await applyNflRedraftStatCorrectionToSeason({ seasonId: 'season-1', week: 2, playerId: '13761', correctedStats: { pass_yds: 280 } })
     expect(h.prisma.playerWeeklyScore.upsert).not.toHaveBeenCalled()
     expect(h.prisma.playerWeeklyScore.findUnique).not.toHaveBeenCalled()
-    const audit = h.prisma.adminAuditLog.create.mock.calls.map(([a]) => (a as { data: { action: string } }).data.action)
-    expect(audit).toContain('redraft_stat_correction_refused')
+    expect(stored()['13761']!.stats).toMatchObject({ pass_yds: 280 })
   })
 
-  it('Fleaflicker 13761 mapped to 4984: corrects ALLEN\'s row, under 4984', async () => {
+  it('Fleaflicker 13761 mapped to 4984: the before line is ALLEN\'s row under 4984; nothing shared is written', async () => {
     h.state.identity = [{ sport: 'NFL', fleaflickerId: '13761', espnId: null, mflId: null, sleeperId: '4984' }]
     h.state.scores = [weekRow('13761', { def_tkl: 7 }), weekRow('4984', { pass_yds: 250 })]
 
@@ -200,6 +210,14 @@ describe('NFL stat correction — reads and writes under the Sleeper id, never a
 
     const read = h.prisma.playerWeeklyScore.findUnique.mock.calls[0]![0] as { where: { playerId_week_season_sport: { playerId: string } } }
     expect(read.where.playerId_week_season_sport.playerId).toBe('4984')
-    expect(upsertedIds()).toEqual(['4984'])
+    expect(h.prisma.playerWeeklyScore.upsert).not.toHaveBeenCalled()
+    expect(stored()['13761']!.stats).toMatchObject({ pass_yds: 280 })
+  })
+
+  it('the stored line is what this league\'s runtime scores, on the roster id', async () => {
+    h.state.scores = [weekRow('13761', { def_tkl: 7 })]
+    await applyNflRedraftStatCorrectionToSeason({ seasonId: 'season-1', week: 2, playerId: '13761', correctedStats: { pass_yds: 280 } })
+    const p = await starter('13761')
+    expect(p.stats).toMatchObject({ pass_yds: 280 })
   })
 })
