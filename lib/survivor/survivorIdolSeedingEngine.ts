@@ -6,7 +6,7 @@
  * league paths. A deterministic seed makes either plan reproducible for audit.
  */
 
-export type SurvivorIdolPowerType = 'vote_shield' | 'extra_vote' | 'skip_tribal' | 'auto_waiver_pickup' | 'triple_steal' | 'island_raid'
+export type SurvivorIdolPowerType = 'vote_shield' | 'extra_vote' | 'skip_tribal' | 'vote_steal' | 'auto_waiver_pickup' | 'triple_steal' | 'island_raid'
 
 export interface SurvivorIdolPowerSpec {
   powerType: SurvivorIdolPowerType
@@ -49,6 +49,12 @@ export const SURVIVOR_IDOL_CATALOG: Record<SurvivorIdolPowerType, SurvivorIdolPo
     resolution: 'phase2',
     expiresAtRemainingPlayers: 5,
   },
+  vote_steal: {
+    powerType: 'vote_steal',
+    label: 'Vote Steal',
+    description: 'Secretly take one eligible non-immune tribemate\'s ballot and cast a second vote. The taken ballot is revealed at the read.',
+    category: 'voting', oneTimeUse: true, resolution: 'phase2', expiresAtRemainingPlayers: 5,
+  },
   auto_waiver_pickup: {
     powerType: 'auto_waiver_pickup',
     label: 'Auto Waiver Pickup',
@@ -61,16 +67,16 @@ export const SURVIVOR_IDOL_CATALOG: Record<SurvivorIdolPowerType, SurvivorIdolPo
   triple_steal: {
     powerType: 'triple_steal',
     label: 'Triple Raid',
-    description: 'Choose exactly three players from one opposing team. Unavailable until roster transfers, capacity and player locks are enforced.',
+    description: 'Choose exactly three unlocked non-IR players from one opposing team. Make room on your bench before confirming.',
     category: 'roster',
     oneTimeUse: true,
-    resolution: 'scaffold_only',
+    resolution: 'phase2',
     expiresAtRemainingPlayers: 5,
   },
   island_raid: {
     powerType: 'island_raid', label: 'Island Raid',
-    description: 'Choose exactly three players across opposing teams. Unavailable until roster transfers, capacity and player locks are enforced.',
-    category: 'roster', oneTimeUse: true, resolution: 'scaffold_only', expiresAtRemainingPlayers: 5,
+    description: 'Choose exactly three unlocked non-IR players across opposing teams. Make room on your bench before confirming.',
+    category: 'roster', oneTimeUse: true, resolution: 'phase2', expiresAtRemainingPlayers: 5,
   },
 }
 
@@ -184,7 +190,7 @@ export function computePlayerBoundIdolSeedPlan(input: {
       candidates.some(candidate => !candidate.playerId || !candidate.rosterId || !candidate.ownerUserId)) {
     return { ok: false, code: 'invalid_draft_players', error: 'Draft picks need distinct stable player IDs and roster owners before idols can be seeded.' }
   }
-  const powerPool = input.powerPool?.length ? input.powerPool : ['vote_shield', 'extra_vote', 'skip_tribal'] as SurvivorIdolPowerType[]
+  const powerPool = input.powerPool?.length ? input.powerPool : ['vote_shield', 'extra_vote', 'skip_tribal', 'vote_steal', 'triple_steal', 'island_raid'] as SurvivorIdolPowerType[]
   if (powerPool.some(power => SURVIVOR_IDOL_CATALOG[power]?.resolution !== 'phase2')) {
     return { ok: false, code: 'unavailable_power', error: 'The selected idol pool contains a power whose roster or vote effect is not implemented.' }
   }

@@ -1,6 +1,6 @@
 import type { Prisma } from '@prisma/client'
 
-type MoveReason = 'trade' | 'trade_reversal' | 'waiver_drop' | 'waiver_claim'
+type MoveReason = 'trade' | 'trade_reversal' | 'waiver_drop' | 'waiver_claim' | 'stolen_player'
 const WAIVER_IDOL_ROSTER_ID = '__survivor_waivers__'
 
 /** Move a hidden idol with its NBA player inside the same transaction as the roster move. */

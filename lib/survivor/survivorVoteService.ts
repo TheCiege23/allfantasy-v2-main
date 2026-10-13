@@ -65,6 +65,9 @@ export async function submitVote(
 
   const now = new Date()
   const past = now.getTime() > council.voteDeadlineAt.getTime() || council.status === 'closed'
+  if (council.phase === 'revote' && past) {
+    return { ok: false, status: 409, code: 'revote_closed', error: 'The two-hour revote window has closed. Uncast ballots do not count.' }
+  }
   const late = past
   if (late && !settings.lateVotesAllowed && !opts.allowLateOverride) {
     // Still record the ballot but flag it does-not-count — truthful, not silently dropped.

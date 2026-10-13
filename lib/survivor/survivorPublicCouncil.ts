@@ -1,6 +1,6 @@
 /** Council output is an allowlist: closed/tallied never means publicly revealed. */
-export function survivorPublicCouncil<T extends object>(council: T | null, canSeePrivate: boolean): T | null {
-  if (!council || canSeePrivate) return council
+export function survivorPublicCouncil<T extends object>(council: T | null, _canSeePrivate: boolean): T | null {
+  if (!council) return council
   const row = council as Record<string, unknown>
   const publicRow: Record<string, unknown> = {}
   for (const key of ['id', 'leagueId', 'week', 'phase', 'attendingTribeId', 'voteDeadlineAt', 'votingDeadline', 'votingOpensAt', 'closedAt', 'isRevealed']) {

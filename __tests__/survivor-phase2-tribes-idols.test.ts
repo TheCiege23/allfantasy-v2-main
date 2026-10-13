@@ -167,7 +167,8 @@ describe('player-bound NBA idol plan', () => {
   })
 
   it('refuses unavailable powers and missing stable player identities', () => {
-    expect(computePlayerBoundIdolSeedPlan({ candidates, idolCount: 1, powerPool: ['triple_steal'], seed: 1 })).toMatchObject({ ok: false, code: 'unavailable_power' })
+    expect(computePlayerBoundIdolSeedPlan({ candidates, idolCount: 1, powerPool: ['triple_steal'], seed: 1 })).toMatchObject({ ok: true })
+    expect(computePlayerBoundIdolSeedPlan({ candidates, idolCount: 1, powerPool: ['auto_waiver_pickup'], seed: 1 })).toMatchObject({ ok: false, code: 'unavailable_power' })
     expect(computePlayerBoundIdolSeedPlan({ candidates: [...candidates, candidates[0]], idolCount: 6, seed: 1 })).toMatchObject({ ok: false, code: 'invalid_draft_players' })
   })
 })

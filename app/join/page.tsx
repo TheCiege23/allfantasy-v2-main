@@ -6,8 +6,9 @@ import Link from 'next/link'
 import { useSession } from 'next-auth/react'
 import { joinCallbackUrl, joinLandingHref } from '@/lib/league-join/joinLanding'
 import { ClassGateNotice, isClassGateBlocked, type ClassGateBlocked } from '@/components/league-join/ClassGateNotice'
+import { SurvivorJoin, type SurvivorJoinPreview } from '@/components/survivor/SurvivorJoin'
 
-type Preview = { leagueId: string; name: string | null; sport: string; requiresPassword: boolean }
+type Preview = { leagueId: string; name: string | null; sport: string; requiresPassword: boolean; survivor?: SurvivorJoinPreview | null }
 
 
 export default function JoinByCodePage() {
@@ -48,6 +49,7 @@ export default function JoinByCodePage() {
             name: data.name ?? null,
             sport: data.sport,
             requiresPassword: !!data.requiresPassword,
+            survivor: data.survivor ?? null,
           })
           setPreviewError(typeof data.error === 'string' ? data.error : null)
           setPreviewErrorCode(typeof data.errorCode === 'string' ? data.errorCode : null)
@@ -150,6 +152,24 @@ export default function JoinByCodePage() {
     autoJoined.current = true
     join(codeFromUrl, '')
   }, [authStatus, codeFromUrl, join, joinOnArrival, preview, previewError, status])
+
+  if (codeFromUrl && preview?.survivor && !previewError) {
+    return <SurvivorJoin
+      leagueName={preview.name ?? 'Survivor League'}
+      sport={preview.sport}
+      survivor={preview.survivor}
+      authStatus={authStatus}
+      needsSignIn={needsSignIn}
+      callbackUrl={joinCallbackUrl(codeFromUrl)}
+      requiresPassword={preview.requiresPassword}
+      password={password}
+      onPasswordChange={setPassword}
+      onJoin={() => join(codeFromUrl, password)}
+      status={status}
+      message={message}
+      joinedLeagueId={joinedLeagueId}
+    />
+  }
 
   if (codeFromUrl && preview && !previewError && status === 'idle' && (authStatus === 'unauthenticated' || needsSignIn)) {
     const callbackUrl = joinCallbackUrl(codeFromUrl)

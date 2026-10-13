@@ -105,7 +105,7 @@ export async function GET(req: NextRequest) {
   const players = await prisma.survivorPlayer.findMany({ where: { leagueId } })
   const council = await prisma.survivorTribalCouncil.findFirst({
     where: { leagueId, status: { in: ['scheduled', 'voting_open', 'voting_closed', 'closed', 'revealing', 'revealed', 'tie_pending'] } },
-    orderBy: { week: 'desc' },
+    orderBy: [{ week: 'desc' }, { councilNumber: 'desc' }],
   })
   const challenge = await prisma.survivorChallenge.findFirst({
     where: { leagueId, status: { in: ['open', 'locked'] } },

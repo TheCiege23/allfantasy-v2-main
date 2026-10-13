@@ -23,7 +23,7 @@ export type CouncilStatus = 'scheduled' | 'voting_open' | 'closed' | 'revealed' 
 
 export interface IdolPlayRecord {
   idolId: string
-  powerType: 'vote_shield' | 'extra_vote' | 'skip_tribal'
+  powerType: 'vote_shield' | 'extra_vote' | 'skip_tribal' | 'vote_steal'
   playerUserId: string
   playerRosterId: string
   /** vote_shield: protected roster (self). */
@@ -31,6 +31,9 @@ export interface IdolPlayRecord {
   /** extra_vote: the extra ballot target. */
   extraTargetUserId?: string
   extraTargetRosterId?: string
+  /** vote_steal: this eligible manager's ballot is stamped Taken at the read. */
+  stolenVoterUserId?: string
+  stolenVoterRosterId?: string
   /** skip_tribal: whether the holder also forfeits their own vote. */
   forfeitsVote?: boolean
   playedAt: string
@@ -51,6 +54,7 @@ export interface CouncilContext {
     isRevealed: boolean
     doesNotCountVoteIds: string[]
     idolsPlayed: IdolPlayRecord[]
+    tiePlayerIds: string[]
   }
   settings: SurvivorFoundationSettings
   scopePlayers: CouncilScopePlayer[]
@@ -95,7 +99,7 @@ async function loadSettings(leagueId: string): Promise<SurvivorFoundationSetting
 /** Active players in a council's scope: attending tribe (pre-merge) or all active (merge). */
 async function loadScopePlayers(leagueId: string, phase: string, attendingTribeId: string | null): Promise<CouncilScopePlayer[]> {
   const where: Prisma.SurvivorPlayerWhereInput =
-    phase === 'pre_merge' && attendingTribeId
+    (phase === 'pre_merge' || phase === 'revote') && attendingTribeId
       ? { leagueId, playerState: 'active', tribeId: attendingTribeId }
       : { leagueId, playerState: 'active' }
   const players = await prisma.survivorPlayer.findMany({
@@ -135,10 +139,18 @@ export function buildCouncilContextParts(
   return { eligibility, rosterToUser, userToRoster }
 }
 
+/** A revote is limited to non-tied voters and the tied targets, regardless of self-vote settings. */
+export function restrictCouncilToRevote(eligibility: CouncilEligibility, tiedUserIds: readonly string[]): CouncilEligibility {
+  const tied = new Set(tiedUserIds)
+  const voterUserIds = eligibility.voterUserIds.filter(userId => !tied.has(userId))
+  const targetUserIds = eligibility.targetUserIds.filter(userId => tied.has(userId))
+  return { voterUserIds, targetUserIds, targetsByVoter: Object.fromEntries(voterUserIds.map(userId => [userId, targetUserIds])) }
+}
+
 /** The current council that is not yet finalized (revealed/cancelled). */
 export async function getActiveCouncil(leagueId: string) {
   return prisma.survivorTribalCouncil.findFirst({
-    where: { leagueId, status: { in: ['scheduled', 'voting_open', 'closed', 'tie_pending'] } },
+    where: { leagueId, isRevealed: false, status: { in: ['scheduled', 'voting_open', 'closed', 'tie_pending'] } },
     orderBy: [{ week: 'desc' }, { councilNumber: 'desc' }, { createdAt: 'desc' }],
   })
 }
@@ -161,7 +173,9 @@ export async function loadCouncilContext(leagueId: string, councilId?: string): 
   const idolsPlayed = parseIdolPlays(council.idolsPlayed)
   const scopePlayers = await loadScopePlayers(leagueId, council.phase, council.attendingTribeId)
   const game = await prisma.survivorGameState.findUnique({ where: { leagueId }, select: { immunePlayerId: true } })
-  const { eligibility, rosterToUser, userToRoster } = buildCouncilContextParts(scopePlayers, idolsPlayed, settings, game?.immunePlayerId)
+  const parts = buildCouncilContextParts(scopePlayers, idolsPlayed, settings, game?.immunePlayerId)
+  const { rosterToUser, userToRoster } = parts
+  const eligibility = council.phase === 'revote' ? restrictCouncilToRevote(parts.eligibility, council.tiePlayerIds) : parts.eligibility
   return {
     council: {
       id: council.id,
@@ -177,6 +191,7 @@ export async function loadCouncilContext(leagueId: string, councilId?: string): 
       isRevealed: council.isRevealed,
       doesNotCountVoteIds: council.doesNotCountVoteIds ?? [],
       idolsPlayed,
+      tiePlayerIds: council.tiePlayerIds,
     },
     settings,
     scopePlayers,

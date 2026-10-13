@@ -21,9 +21,10 @@ const PAUSE_ERROR_PREFIX = 'PAUSED:'
  * NextResponse-friendly async guard. Returns null on success or a
  * NextResponse to return directly on failure.
  */
-async function commissionerGuard(leagueId: string, userId: string): Promise<NextResponse | null> {
+async function commissionerGuard(leagueId: string, userId: string, allowBlindOperations = false): Promise<NextResponse | null> {
   try {
     await requireCommissionerRole(leagueId, userId)
+    if (allowBlindOperations) return null
     return survivorHostGuard(leagueId, userId)
   } catch (err) {
     if (err instanceof Response) {
@@ -143,7 +144,7 @@ export async function POST(req: NextRequest) {
   if (!leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
   if (!action) return NextResponse.json({ error: 'action required' }, { status: 400 })
 
-  const guard2 = await commissionerGuard(leagueId, userId)
+  const guard2 = await commissionerGuard(leagueId, userId, action === 'pause_season' || action === 'resume_season')
   if (guard2) return guard2
 
   const log = async (

@@ -3,9 +3,9 @@ import { useEffect, useState } from 'react'
 import styles from './SurvivorVoteRevealScrolls.module.css'
 export type RevealScroll = {
   order: number; targetUserId: string | null; targetName: string | null;
-  status: 'counts' | 'late_does_not_count' | 'blocked_by_idol' | 'target_safe'; isExtraVote: boolean
+  status: 'counts' | 'late_does_not_count' | 'blocked_by_idol' | 'target_safe' | 'taken_by_vote_steal'; isExtraVote: boolean
 }
-/** Callers pass only the published sequence (or an explicitly authorized host preview). */
+/** Callers pass only the published sequence. */
 export function SurvivorVoteRevealScrolls({ scrolls, eliminatedName, isTie, tiePhase, autoPlay = true, isPublished = true, exileEnabled = false }: {
   scrolls: RevealScroll[]; eliminatedName: string | null; isTie: boolean; tiePhase: string | null;
   autoPlay?: boolean; isPublished?: boolean; exileEnabled?: boolean
@@ -27,19 +27,19 @@ export function SurvivorVoteRevealScrolls({ scrolls, eliminatedName, isTie, tieP
   const finished = shown >= scrolls.length
   if (!open) return <div className="text-center">
     <img src="/survivor/exile/scroll-sealed.svg" alt="Sealed Torch Ceremony scroll" width={200} height={140} className={styles.sealed} />
-    <p className="text-sm text-amber-100">{isPublished ? 'The Torch Ceremony results are published.' : 'Private host preview'}</p>
+    <p className="text-sm text-amber-100">The Torch Ceremony results are published.</p>
     <button type="button" onClick={() => { setOpen(true); if (reduced) setShown(scrolls.length) }} className="mt-3 min-h-11 rounded border border-amber-300/40 px-4 text-sm text-amber-100">Break the seal</button>
   </div>
   return <div className={styles.scroll}>
     <img src="/survivor/exile/scroll-roller.svg" alt="" width={640} height={36} className={styles.roller} />
     <div className={styles.paper}>
       <h4 className={styles.title}>Torch Ceremony</h4>
-      <p className="mt-2 text-center text-xs">Elimination Council · {isPublished ? 'Published results' : 'Private host preview'}</p>
+      <p className="mt-2 text-center text-xs">Elimination Council · Published results</p>
       <div aria-live="polite" aria-atomic="false">
         {scrolls.slice(0, shown).map((vote, i) => <div key={`${vote.order}-${i}`} className={`${styles.slip} ${vote.status !== 'counts' ? styles.invalid : ''}`}>
           <span className={styles.ordinal}>Vote {i + 1}{vote.isExtraVote ? ' · Extra vote' : ''}</span>
           <span className={styles.name}>{vote.targetName ?? 'Unnamed target'}</span>
-          {vote.status !== 'counts' && <span className={styles.stamp}>{vote.status === 'blocked_by_idol' ? 'Idol · Does not count' : vote.status === 'late_does_not_count' ? 'Late · Does not count' : 'Safe · Does not count'}</span>}
+          {vote.status !== 'counts' && <span className={styles.stamp}>{vote.status === 'taken_by_vote_steal' ? 'Taken · Does not count' : vote.status === 'blocked_by_idol' ? 'Idol · Does not count' : vote.status === 'late_does_not_count' ? 'Late · Does not count' : 'Safe · Does not count'}</span>}
         </div>)}
       </div>
       {counts.size > 0 && <div className={styles.tally}><p className={styles.ordinal}>Tally</p>{[...counts].sort((a,b) => b[1]-a[1]).map(([name,n]) => <p key={name} className="mt-2 flex justify-between gap-3 text-sm"><span>{name}</span><strong>{n}</strong></p>)}</div>}

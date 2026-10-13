@@ -39,5 +39,9 @@ describe('unrevealed council allowlist', () => {
     expect(result?.votes).toEqual([])
     expect(result).not.toHaveProperty('auditLog')
   })
-  it('preserves oversight for a non-playing host', () => { expect(survivorPublicCouncil(secret, true)).toBe(secret) })
+  it('keeps ballots and hidden plays sealed even for a non-playing host', () => {
+    const result = survivorPublicCouncil(secret, true)
+    expect(result).toMatchObject({ votes: [], revealSequence: null, eliminatedUserId: null, isTie: false })
+    expect(JSON.stringify(result)).not.toMatch(/secret|123/)
+  })
 })
