@@ -6,6 +6,7 @@ import type { UserLeague, UserLeagueTeam } from '@/app/dashboard/types'
 import { CommissionerSetupChecklist } from '@/components/league/CommissionerSetupChecklist'
 import { LeagueSeatTracker } from '@/components/league/native/LeagueSeatTracker'
 import { LeagueStakesCard, stakesFormatFor } from '@/components/league/native/LeagueStakesCard'
+import { LeagueYourWeekStrip } from '@/components/league/native/LeagueYourWeekStrip'
 import { readSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
 import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/survivorSettings'
 import { nativeLeaguePhase } from '@/lib/league/nativeLeagueNavigation'
@@ -26,6 +27,7 @@ export function NativeLeagueHome({ league, teams, userTeamId, isCommissioner, dr
 }) {
   const phase = nativeLeaguePhase(league)
   const predraft = phase === 'Setup' || phase === 'Draft'
+  const inSeason = phase === 'Regular season' || phase === 'Playoffs'
   const survivor = league.leagueVariant === 'survivor' || league.format.toLowerCase() === 'survivor'
   const plan = readSurvivorFullSeasonPlan(league.settings)
   const survivorRules = survivor ? normalizeSurvivorFoundationSettings(league.settings as Record<string, unknown> | null) : null
@@ -40,6 +42,7 @@ export function NativeLeagueHome({ league, teams, userTeamId, isCommissioner, dr
   const draftLabel = date && Number.isFinite(date.getTime()) ? date.toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'Schedule or start manually'
   return <div className="nl-home" data-testid="native-league-home">
     <div className="nl-home-primary">
+      {inSeason && <LeagueYourWeekStrip leagueId={league.id} week={typeof league.currentWeek === 'number' ? league.currentWeek : null} onSelectTab={onSelectTab} />}
       <section className="nl-card nl-next"><div className="nl-card-label"><span>Next up</span><span>{predraft ? 'Draft HQ' : survivor ? 'Survivor' : phase}</span></div>
         <h2>{predraft ? `Draft · ${draftLabel}` : survivor ? 'Your island this week' : phase === 'Offseason' ? 'Your season archive' : `Week ${league.currentWeek ?? '—'}`}</h2>
         <p>{predraft ? `${league.teamCount}-team ${league.format}. Review your settings and queue before the draft.` : survivor ? 'Check the challenge, immunity, Elimination Council, and your private powers.' : phase === 'Offseason' ? 'Review final standings and prepare for the next season.' : 'Set your lineup and follow the latest matchup scores.'}</p>

@@ -372,6 +372,7 @@ export type PlayActionParts = {
     | 'intercepted' | 'recovered' | 'threw-int' | 'lost-fumble' | 'turnover'
     | 'pick-six' | 'fumble-return-td' | 'safety' | 'defensive-td'
     | 'kickoff-return-td' | 'punt-return-td' | 'special-teams-td'
+    | 'two-point-run' | 'two-point-catch' | 'two-point-pass' | 'two-point'
   yards: number | null
   /** The passer, on a play told from the receiver's side. */
   from: string | null
@@ -404,6 +405,9 @@ export function playActionParts(event: LiveEvent): PlayActionParts | null {
         if (event.stat === 'kickoff' || event.stat === 'kick_return_touchdowns') return 'kickoff-return-td'
         if (event.stat === 'punt' || event.stat === 'punt_return_touchdowns') return 'punt-return-td'
         return 'special-teams-td'
+      // Never a "TD": the try is worth two, and the touchdown before it is its own event.
+      case 'TWO_POINT_CONVERSION':
+        return unit === 'rushing' ? 'two-point-run' : unit === 'receiving' ? 'two-point-catch' : unit === 'passing' ? 'two-point-pass' : 'two-point'
       default:
         return null
     }
@@ -470,6 +474,14 @@ export function playActionFor(event: LiveEvent): string {
       return 'punt return TD'
     case 'special-teams-td':
       return 'special teams TD'
+    case 'two-point-run':
+      return '2-pt conversion run'
+    case 'two-point-catch':
+      return `2-pt conversion catch${from}`
+    case 'two-point-pass':
+      return `2-pt conversion pass${to}`
+    case 'two-point':
+      return '2-pt conversion'
   }
 }
 

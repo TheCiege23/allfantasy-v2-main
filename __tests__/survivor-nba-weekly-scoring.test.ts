@@ -15,7 +15,7 @@ vi.mock('@/lib/redraft/weekLineupSlots', () => ({ loadWeekLineups: vi.fn().mockR
 vi.mock('@/lib/redraft/scoringEngine', () => scoring)
 vi.mock('@/lib/survivor/survivorSetupTransaction', () => ({ withSurvivorSetupTransaction: (_id: string, fn: (tx: typeof db) => unknown) => fn(db) }))
 
-import { getNbaSurvivorGameOptions, saveNbaSurvivorGamePick, scoreNbaSurvivorOneGameRoster } from '@/lib/survivor/survivorNbaWeeklyScoring'
+import { getNbaSurvivorGameOptions, saveNbaSurvivorGamePick, scoreNbaSurvivorAllGamesRoster, scoreNbaSurvivorOneGameRoster } from '@/lib/survivor/survivorNbaWeeklyScoring'
 
 const first = new Date('2026-10-20T23:00:00Z')
 const second = new Date('2026-10-23T23:00:00Z')
@@ -63,5 +63,34 @@ describe('NBA Survivor one-game scoring', () => {
     const options = await getNbaSurvivorGameOptions({ leagueId: 'league-1', rosterId: 'legacy-1', week: 1, now: new Date('2026-10-22T13:00:00Z') })
     expect(options.ok).toBe(true)
     if (options.ok) expect(options.players[0].games.map(game => game.startAt)).toEqual([second.toISOString()])
+  })
+
+  it('keeps the first game with the former roster after a trade and credits only later games to the new roster', async () => {
+    const transferredAt = new Date('2026-10-22T12:00:00Z')
+    db.roster.findFirst.mockImplementation(async ({ where }: { where: { id: string } }) => ({
+      id: where.id, redraftRosterId: where.id === 'legacy-1' ? 'redraft-1' : 'redraft-2',
+      platformUserId: where.id === 'legacy-1' ? 'user-1' : 'user-2',
+    }))
+    db.redraftRosterPlayer.findMany.mockImplementation(async ({ where }: { where: { rosterId: string } }) => [{
+      playerId: 'player-1', playerName: 'Sample PG', position: 'PG', team: 'BOS', sport: 'NBA',
+      slotType: 'PG', addedAt: where.rosterId === 'redraft-1' ? new Date('2026-10-01T12:00:00Z') : transferredAt,
+      droppedAt: where.rosterId === 'redraft-1' ? transferredAt : null,
+    }])
+    db.playerGameStat.findMany.mockImplementation(async ({ where }: { where: { gameDate: Date } }) => {
+      const isFirst = where.gameDate.toISOString().startsWith('2026-10-20')
+      return [{ normalizedStatMap: { pts: isFirst ? 24 : 18 }, team: 'BOS', opponent: isFirst ? 'NYK' : 'MIA', gameId: isFirst ? 'game-1' : 'game-2' }]
+    })
+    const score = (legacyRosterId: string) => ({ leagueId: 'league-1', legacyRosterId, week: 1, season: 2026 })
+    expect(await scoreNbaSurvivorOneGameRoster(score('legacy-1'))).toEqual({ pts: 24, allFinalized: true })
+    expect(await scoreNbaSurvivorOneGameRoster(score('legacy-2'))).toEqual({ pts: 18, allFinalized: true })
+    expect(await scoreNbaSurvivorAllGamesRoster(score('legacy-1'))).toEqual({ pts: 24, allFinalized: true })
+    expect(await scoreNbaSurvivorAllGamesRoster(score('legacy-2'))).toEqual({ pts: 18, allFinalized: true })
+    expect(db.redraftRosterPlayer.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ OR: [{ droppedAt: null }, { droppedAt: expect.any(Object) }] }) }))
+  })
+
+  it('does not award a selected game after a player has left the roster', async () => {
+    db.redraftRosterPlayer.findMany.mockResolvedValue([{ playerId: 'player-1', playerName: 'Sample PG', position: 'PG', team: 'BOS', sport: 'NBA', slotType: 'PG', addedAt: new Date('2026-10-01T12:00:00Z'), droppedAt: new Date('2026-10-22T12:00:00Z') }])
+    db.survivorCommissionerAction.findMany.mockResolvedValue([{ newState: { playerId: 'player-1', gameKey: `${second.toISOString()}:BOS:MIA`, startAt: second.toISOString() } }])
+    expect(await scoreNbaSurvivorOneGameRoster({ leagueId: 'league-1', legacyRosterId: 'legacy-1', week: 1, season: 2026 })).toEqual({ pts: 0, allFinalized: true })
   })
 })

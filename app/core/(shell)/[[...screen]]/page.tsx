@@ -11,6 +11,7 @@ import { prisma } from '@/lib/prisma'
 import { recordDashboardActivation } from '@/lib/analytics/recordDashboardActivation'
 import { getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-league-list'
 import { toPlayedLeagues } from '@/lib/core-app/playedLeagues'
+import { withArchivedHidden } from '@/lib/core-app/archivedLeagues'
 import { tradeDeadlineWeek } from '@/lib/core-app/seasonTimeline'
 import { findPlayedAlias } from '@/lib/core-app/leagueRowAlias'
 import { selectResyncCandidates } from '@/lib/core-app/resyncableLeagues'
@@ -790,6 +791,11 @@ export default async function AfCorePage({
    * Copying the two lines would have put two implementations of one rule in the tree.
    */
   const playedLeagues = toPlayedLeagues(leagues)
+  /*
+   * Archived leagues leave the rail and the scope switcher but stay in `playedLeagues`, which is the
+   * `?league=` authorization boundary below — so a link to one still opens (lib/core-app/archivedLeagues.ts).
+   */
+  const shellHiddenIds = withArchivedHidden(leaguePrefs.hidden, playedLeagues)
   const selectedLeagueRow = selectedLeagueId
     ? (playedLeagues.find((league) => league.id === selectedLeagueId) ?? null)
     : null
@@ -1484,7 +1490,7 @@ export default async function AfCorePage({
     label: scopeLabel(homeScope, selectedScopeLabel),
     favoriteIds: [...favoriteIds],
     leagues: scopeLeagues,
-    hiddenIds: leaguePrefs.hidden,
+    hiddenIds: shellHiddenIds,
   }
 
   recordRootDuration('af.shell_ms', shellStartedAt)
@@ -1628,7 +1634,7 @@ export default async function AfCorePage({
       leagueFirst={leagueFirst}
       leagueChatPreview={leagueChatPreview}
       leagues={rail}
-      hiddenLeagueIds={leaguePrefs.hidden}
+      hiddenLeagueIds={shellHiddenIds}
       syncAge={{ label: syncAge.label, stale: syncAge.stale }}
       syncEligibleCount={syncEligibleCount}
       leagueHasScoredWeek={leagueHasScoredWeek}

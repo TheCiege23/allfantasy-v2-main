@@ -18,10 +18,10 @@ function gameKey(game: WeekGameRow): string {
   return `${game.startTime?.toISOString() ?? ''}:${nbaTeamKey(game.homeTeam)}:${nbaTeamKey(game.awayTeam)}`
 }
 
-function gamesForTeam(games: WeekGameRow[], team: string | null, acquiredAt?: Date): WeekGameRow[] {
+function gamesForTeam(games: WeekGameRow[], team: string | null, acquiredAt?: Date, releasedAt?: Date | null): WeekGameRow[] {
   const key = nbaTeamKey(team)
   if (!key) return []
-  return games.filter(game => game.startTime && (!acquiredAt || game.startTime > acquiredAt) && (nbaTeamKey(game.homeTeam) === key || nbaTeamKey(game.awayTeam) === key))
+  return games.filter(game => game.startTime && (!acquiredAt || game.startTime > acquiredAt) && (!releasedAt || game.startTime < releasedAt) && (nbaTeamKey(game.homeTeam) === key || nbaTeamKey(game.awayTeam) === key))
     .sort((a, b) => a.startTime!.getTime() - b.startTime!.getTime())
 }
 
@@ -33,7 +33,7 @@ function readPickState(value: unknown): { playerId: string; gameKey: string; sta
     : null
 }
 
-async function loadRosterWeek(leagueId: string, legacyRosterId: string, week: number, now: Date) {
+async function loadRosterWeek(leagueId: string, legacyRosterId: string, week: number, now: Date, includeHistory = false) {
   const [league, roster] = await Promise.all([
     prisma.league.findUnique({ where: { id: leagueId }, select: { sport: true, season: true, survivorMode: true, settings: true } }),
     prisma.roster.findFirst({ where: { id: legacyRosterId, leagueId }, select: { redraftRosterId: true, platformUserId: true } }),
@@ -43,8 +43,11 @@ async function loadRosterWeek(leagueId: string, legacyRosterId: string, week: nu
   if (!window) return null
   const [games, players, picks] = await Promise.all([
     readWeekGames(prisma, { sport: 'NBA', season: league.season, week, seasonType: 'regular', dateWindow: window, now }),
-    prisma.redraftRosterPlayer.findMany({ where: { rosterId: roster.redraftRosterId, droppedAt: null }, select: { playerId: true, playerName: true, position: true, team: true, sport: true, slotType: true, addedAt: true } }),
-    prisma.survivorCommissionerAction.findMany({ where: { leagueId, week, actionType: 'nba_game_pick', targetUserId: roster.platformUserId }, select: { newState: true } }),
+    prisma.redraftRosterPlayer.findMany({ where: includeHistory
+      ? { rosterId: roster.redraftRosterId, addedAt: { lt: window.end }, OR: [{ droppedAt: null }, { droppedAt: { gt: window.start } }] }
+      : { rosterId: roster.redraftRosterId, droppedAt: null },
+      select: { playerId: true, playerName: true, position: true, team: true, sport: true, slotType: true, addedAt: true, droppedAt: true } }),
+    prisma.survivorCommissionerAction.findMany({ where: { leagueId, week, actionType: 'nba_game_pick', targetUserId: roster.platformUserId }, select: { newState: true }, orderBy: { executedAt: 'asc' } }),
   ])
   const pickByPlayer = new Map(picks.map(pick => readPickState(pick.newState)).filter((pick): pick is NonNullable<typeof pick> => Boolean(pick)).map(pick => [pick.playerId, pick]))
   return { league, roster, games, players, pickByPlayer }
@@ -86,7 +89,7 @@ export async function saveNbaSurvivorGamePick(input: { leagueId: string; rosterI
   const existing = week.pickByPlayer.get(player.playerId)
   const currentStart = existing ? fixtures.find(game => gameKey(game) === existing.gameKey)?.startTime ?? fixtures[0]?.startTime : fixtures[0]?.startTime
   if (!currentStart || currentStart <= now || chosenStart <= now) return { ok: false, error: 'This player’s counting game has started; the weekly choice is locked.' }
-  const id = `nba-game-pick:${input.leagueId}:${week.league.season}:${input.week}:${player.playerId}`
+  const id = `nba-game-pick:${input.leagueId}:${week.league.season}:${input.week}:${input.rosterId}:${player.playerId}`
   return withSurvivorSetupTransaction(input.leagueId, async tx => {
     const previous = await tx.survivorCommissionerAction.findUnique({ where: { id }, select: { newState: true } })
     const selected = readPickState(previous?.newState)
@@ -101,8 +104,8 @@ export async function saveNbaSurvivorGamePick(input: { leagueId: string; rosterI
   })
 }
 
-export async function scoreNbaSurvivorOneGameRoster(input: { leagueId: string; legacyRosterId: string; week: number; season: number }): Promise<{ pts: number; allFinalized: boolean }> {
-  const week = await loadRosterWeek(input.leagueId, input.legacyRosterId, input.week, new Date())
+async function scoreNbaSurvivorRoster(input: { leagueId: string; legacyRosterId: string; week: number; season: number }, oneGamePerPlayer: boolean): Promise<{ pts: number; allFinalized: boolean }> {
+  const week = await loadRosterWeek(input.leagueId, input.legacyRosterId, input.week, new Date(), true)
   if (!week || week.league.season !== input.season || week.games.length === 0) return { pts: 0, allFinalized: false }
   const lineups = await loadWeekLineups(prisma, { redraftRosterIds: [week.roster.redraftRosterId!], season: input.season, week: input.week })
   const starters = week.players.filter(player => isScoringStarterSlot(weekSlotType({ ...player, rosterId: week.roster.redraftRosterId! }, lineups)))
@@ -110,24 +113,33 @@ export async function scoreNbaSurvivorOneGameRoster(input: { leagueId: string; l
   let points = 0
   let allFinalized = true
   for (const player of starters) {
-    const fixtures = gamesForTeam(week.games, player.team, player.addedAt)
+    const fixtures = gamesForTeam(week.games, player.team, player.addedAt, player.droppedAt)
     const pick = week.pickByPlayer.get(player.playerId)
-    const fixture = pick ? fixtures.find(game => gameKey(game) === pick.gameKey) : fixtures[0]
-    if (!fixture?.startTime) { allFinalized = false; continue }
+    const countingGames = oneGamePerPlayer ? [pick ? fixtures.find(game => gameKey(game) === pick.gameKey) : fixtures[0]].filter((game): game is WeekGameRow => Boolean(game)) : fixtures
+    if (!countingGames.length) continue
     const weekly = await prisma.playerWeeklyScore.findUnique({ where: { playerId_week_season_sport: { playerId: player.playerId, week: input.week, season: input.season, sport: 'NBA' } }, select: { isFinalized: true } })
     if (!weekly?.isFinalized) { allFinalized = false; continue }
-    const gameDate = easternCalendarDay(fixture.startTime)
-    if (!gameDate) { allFinalized = false; continue }
-    const stats = await prisma.playerGameStat.findMany({ where: { playerId: player.playerId, sportType: 'NBA', season: input.season, gameDate }, select: { normalizedStatMap: true, team: true, opponent: true, gameId: true } })
-    const team = nbaTeamKey(player.team)
-    const opponent = nbaTeamKey(fixture.homeTeam) === team ? nbaTeamKey(fixture.awayTeam) : nbaTeamKey(fixture.homeTeam)
-    const matched = stats.filter(row => nbaTeamKey(row.team) === team && nbaTeamKey(row.opponent) === opponent)
-    if (matched.length > 1) { allFinalized = false; continue }
-    // A player with a finalized weekly row but no line in the chosen game did
-    // not play that game; the choice scores zero rather than a later game.
-    if (matched.length === 1) points += await calculateScoreFromSportConfig(input.leagueId, player.playerId, input.week, matched[0].normalizedStatMap as Record<string, number>, player.position)
+    for (const fixture of countingGames) {
+      const gameDate = fixture.startTime && easternCalendarDay(fixture.startTime)
+      if (!gameDate) { allFinalized = false; continue }
+      const stats = await prisma.playerGameStat.findMany({ where: { playerId: player.playerId, sportType: 'NBA', season: input.season, gameDate }, select: { normalizedStatMap: true, team: true, opponent: true, gameId: true } })
+      const team = nbaTeamKey(player.team)
+      const opponent = nbaTeamKey(fixture.homeTeam) === team ? nbaTeamKey(fixture.awayTeam) : nbaTeamKey(fixture.homeTeam)
+      const matched = stats.filter(row => nbaTeamKey(row.team) === team && nbaTeamKey(row.opponent) === opponent)
+      if (matched.length > 1) { allFinalized = false; continue }
+      // A finalized week with no line for this game means a DNP, worth zero.
+      if (matched.length === 1) points += await calculateScoreFromSportConfig(input.leagueId, player.playerId, input.week, matched[0].normalizedStatMap as Record<string, number>, player.position)
+    }
   }
   return { pts: Math.round(points * 100) / 100, allFinalized }
+}
+
+export async function scoreNbaSurvivorOneGameRoster(input: { leagueId: string; legacyRosterId: string; week: number; season: number }) {
+  return scoreNbaSurvivorRoster(input, true)
+}
+
+export async function scoreNbaSurvivorAllGamesRoster(input: { leagueId: string; legacyRosterId: string; week: number; season: number }) {
+  return scoreNbaSurvivorRoster(input, false)
 }
 
 /** Keep the native redraft roster GET and PUT aligned with the selected game. */

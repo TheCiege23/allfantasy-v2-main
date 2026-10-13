@@ -396,7 +396,17 @@ export async function loadLatestAveragedAdpRowsFromDb(
     : ['halfppr', 'fbhalfppr', 'ncaafhalfppr'].includes(token ?? '') ? ['halfPPR', 'half-ppr', 'half_ppr', 'halfppr']
     : ['standard', 'nonppr', 'fbstandard', 'ncaafstandard'].includes(token ?? '') ? ['standard', 'non-ppr', 'nonppr']
     : context?.scoring ? [context.scoring] : null
-  return loadLatestAveragedAdpRowsForScorings(sport, format, aliases ? { in: aliases } : { notIn: QB_HEAVY_ADP_SCORINGS }, context?.season)
+  const scoped = await loadLatestAveragedAdpRowsForScorings(sport, format, aliases ? { in: aliases } : { notIn: QB_HEAVY_ADP_SCORINGS }, context?.season)
+  /*
+   * Outside football the board is one market, not one per scoring system: Fantrax publishes a single
+   * NBA board (stored as `standard`), while a league's `scoring` is its own preset id. Requiring the
+   * two to be equal would leave every NBA league that did not happen to be named `standard` on
+   * alphabetical order. Football keeps the strict match — its PPR and standard boards genuinely differ.
+   */
+  if (scoped.length === 0 && aliases && sport !== 'NFL' && sport !== 'NCAAF') {
+    return loadLatestAveragedAdpRowsForScorings(sport, format, { notIn: QB_HEAVY_ADP_SCORINGS }, context?.season)
+  }
+  return scoped
 }
 
 async function loadLatestAveragedAdpRowsForScorings(

@@ -233,3 +233,65 @@ describe('NFL stat correction — this league only, and never a raw foreign id i
     expect(p.stats).toMatchObject({ pass_yds: 280 })
   })
 })
+
+/*
+ * Owner decision 2026-10-13: score foreign team defences. The player crosswalk holds no row for one, so an
+ * ESPN D/ST (`-16000 - proTeamId`) maps to Sleeper's id for that defence — the club code — from its row.
+ */
+const storedLine = (rosterId: string) =>
+  ((h.state.settings.stat_overrides as Record<string, Record<string, { stats: Row }>> | undefined)?.['2026:2']?.[rosterId]?.stats ?? null) as
+    Record<string, number> | null
+
+const espnDst = (playerId: string, name: string, team: string | null, position = 'D/ST') => ({
+  ...qb(playerId), playerName: name, team, position,
+})
+
+describe('NFL runtime — an imported team defence is scored as Sleeper\'s defence for that club', () => {
+  it('reads the KC defence\'s week for ESPN -16012 (Chiefs D/ST), on the roster id', async () => {
+    h.state.platform = 'espn'
+    h.state.rosterPlayers = [espnDst('-16012', 'Chiefs D/ST', 'KC')]
+    h.state.scores = [weekRow('KC', { def_sack: 4, def_points_allowed: 10 })]
+
+    const p = await starter('-16012')
+    expect(p.hasStats).toBe(true)
+    expect(p.stats.def_sack).toBe(4)
+    expect(h.state.unifiedAskedWith).toEqual([['KC']])
+  })
+
+  it('🛑 ingest writes the defence under KC with DEFENCE keys — its sacks are not a QB\'s sacks taken', async () => {
+    h.state.platform = 'espn'
+    h.state.rosterPlayers = [espnDst('-16012', '-16012', null, 'UNK')]
+    const result = await ingestNflRedraftStatPayload({
+      seasonId: 'season-1', week: 2, rows: [{ playerId: '-16012', stats: { sack: 3, pts_allow: 17 } }],
+    })
+
+    // League-only: the line is stored on this league under the roster id, normalized as a DEFENCE.
+    expect(h.prisma.playerWeeklyScore.upsert).not.toHaveBeenCalled()
+    expect(storedLine('-16012')).toEqual({ def_sack: 3, def_points_allowed: 17 })
+    expect(result.untranslatedForeignPlayerIds).toEqual([])
+  })
+
+  it('a correction to ESPN -16033 (Ravens D/ST) reads BAL\'s row and stores the line, normalized as a defence', async () => {
+    h.state.platform = 'espn'
+    h.state.rosterPlayers = [espnDst('-16033', 'Ravens D/ST', 'BAL')]
+    h.state.scores = [weekRow('BAL', { def_sack: 1 })]
+
+    await applyNflRedraftStatCorrectionToSeason({ seasonId: 'season-1', week: 2, playerId: '-16033', correctedStats: { sack: 5 } })
+
+    const read = h.prisma.playerWeeklyScore.findUnique.mock.calls[0]![0] as { where: { playerId_week_season_sport: { playerId: string } } }
+    expect(read.where.playerId_week_season_sport.playerId).toBe('BAL')
+    expect(h.prisma.playerWeeklyScore.upsert).not.toHaveBeenCalled()
+    expect(storedLine('-16033')!.def_sack).toBe(5)
+    expect(storedLine('-16033')!.idp_sack).toBeUndefined()
+  })
+
+  it('🛑 ESPN -16012 whose row names another club (BUF) is a contradiction: refused, nothing written', async () => {
+    h.state.platform = 'espn'
+    h.state.rosterPlayers = [espnDst('-16012', 'Bills D/ST', 'BUF')]
+    const result = await ingestNflRedraftStatPayload({ seasonId: 'season-1', week: 2, rows: [{ playerId: '-16012', stats: { sack: 3 } }] })
+
+    expect(h.prisma.playerWeeklyScore.upsert).not.toHaveBeenCalled()
+    expect(h.prisma.league.update).not.toHaveBeenCalled()
+    expect(result.untranslatedForeignPlayerIds).toEqual(['-16012'])
+  })
+})

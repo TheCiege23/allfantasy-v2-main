@@ -105,7 +105,7 @@ describe('score sync — a foreign roster id is never read or written as a Sleep
     expect(summary.untranslatedForeignPlayerIds).toEqual([])
   })
 
-  it('🛑 an ESPN team defense (-16001) with no Sleeper id is not written under its ESPN id', async () => {
+  it('🛑 an ESPN team defense whose row contradicts its id (-16001 is ATL, the row says ARI) is not written at all', async () => {
     h.platform = 'espn'
     prismaMock.redraftRosterPlayer.findMany.mockResolvedValue([rosterPlayer('-16001', 'DEF', 'ARI')])
     const fetcher = vi.fn(async () => new Map())
@@ -114,6 +114,66 @@ describe('score sync — a foreign roster id is never read or written as a Sleep
 
     expect(prismaMock.playerWeeklyScore.upsert).not.toHaveBeenCalled()
     expect(summary.untranslatedForeignPlayerIds).toEqual(['-16001'])
+  })
+
+  /*
+   * Owner decision 2026-10-13: score foreign team defences. Sleeper's id for one is the club code, and the
+   * sync scores it through the team-defence branch — points allowed from the finished game (ARI 20, SEA 27).
+   */
+  it('ESPN -16022 (ARI D/ST) is scored as Sleeper\'s ARI defence, from the game it played, under ARI', async () => {
+    h.platform = 'espn'
+    prismaMock.redraftRosterPlayer.findMany.mockResolvedValue([
+      { ...rosterPlayer('-16022', 'D/ST', 'ARI'), playerName: 'Cardinals D/ST' },
+    ])
+    const fetcher = vi.fn(async () => new Map())
+
+    const summary = await runSync(fetcher)
+
+    expect(writtenIds()).toEqual(['ARI'])
+    const written = prismaMock.playerWeeklyScore.upsert.mock.calls[0]![0] as { create: { stats: unknown } }
+    expect(written.create.stats).toEqual({ def_points_allowed: 27 })
+    // A defence is never asked of the offensive week feed, where its sacks would read as a QB's.
+    expect(fetcher).not.toHaveBeenCalled()
+    expect(summary.foreignIdsTranslated).toBe(1)
+    expect(summary.untranslatedForeignPlayerIds).toEqual([])
+  })
+
+  it('an ESPN D/ST the importer could not label (position UNK, name = its id) is still named by its id', async () => {
+    h.platform = 'espn'
+    prismaMock.redraftRosterPlayer.findMany.mockResolvedValue([
+      { playerId: '-16026', playerName: '-16026', position: 'UNK', sport: 'NFL', team: null },
+    ])
+
+    const summary = await runSync(vi.fn(async () => new Map()))
+
+    expect(writtenIds()).toEqual(['SEA'])
+    const written = prismaMock.playerWeeklyScore.upsert.mock.calls[0]![0] as { create: { stats: unknown } }
+    expect(written.create.stats).toEqual({ def_points_allowed: 20 })
+    expect(summary.untranslatedForeignPlayerIds).toEqual([])
+  })
+
+  it('Fleaflicker 2357 ("Seattle Seahawks", team "Seahawks"; the id says nothing) is scored under SEA, matched to its game by club code', async () => {
+    prismaMock.redraftRosterPlayer.findMany.mockResolvedValue([
+      { ...rosterPlayer('2357', 'D/ST', 'Seahawks'), playerName: 'Seattle Seahawks' },
+    ])
+
+    const summary = await runSync(vi.fn(async () => new Map()))
+
+    expect(writtenIds()).toEqual(['SEA'])
+    const written = prismaMock.playerWeeklyScore.upsert.mock.calls[0]![0] as { create: { stats: unknown } }
+    expect(written.create.stats).toEqual({ def_points_allowed: 20 })
+    expect(summary.untranslatedForeignPlayerIds).toEqual([])
+  })
+
+  it('🛑 a Fleaflicker "D/ST" row whose name is a person is not a defence — skipped, never written', async () => {
+    prismaMock.redraftRosterPlayer.findMany.mockResolvedValue([
+      { ...rosterPlayer('2357', 'D/ST', 'Seahawks'), playerName: 'Josh Allen' },
+    ])
+
+    const summary = await runSync(vi.fn(async () => new Map()))
+
+    expect(prismaMock.playerWeeklyScore.upsert).not.toHaveBeenCalled()
+    expect(summary.untranslatedForeignPlayerIds).toEqual(['2357'])
   })
 
   it('a native league reads no crosswalk and scores its own ids as before', async () => {
