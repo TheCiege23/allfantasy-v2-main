@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from 'vitest'
 vi.mock('@/lib/draft-room', () => ({ getManagerColorBySeed: () => '#ffffff' }))
 const db = vi.hoisted(() => ({ session: vi.fn(), update: vi.fn(), event: vi.fn(), picks: vi.fn(), remove: vi.fn(), start: vi.fn() }))
-vi.mock('@/lib/prisma', () => ({ prisma: { draftSession: { findFirst: db.session }, leagueSettings: { findUnique: vi.fn(async () => null) }, $transaction: async (fn: (tx: unknown) => unknown) => fn({ draftSession: { update: db.update }, draftPick: { findMany: db.picks, deleteMany: db.remove } }) } }))
+vi.mock('@/lib/prisma', () => ({ prisma: { draftSession: { findFirst: db.session }, league: { findUnique: vi.fn(async () => null) }, leagueSettings: { findUnique: vi.fn(async () => null) }, $transaction: async (fn: (tx: unknown) => unknown) => fn({ draftSession: { update: db.update }, draftPick: { findMany: db.picks, deleteMany: db.remove } }) } }))
 vi.mock('@/lib/draft-archive/events', () => ({ recordArchiveEvent: db.event, updateSessionWithArchive: db.start }))
 vi.mock('@/lib/league/league-roster-draft-gate', () => ({ isLeagueRosterDraftReady: vi.fn(async () => true) }))
 vi.mock('@/lib/draft-defaults/DraftRoomConfigResolver', () => ({ getDraftConfigForLeague: vi.fn(async () => ({ timer_seconds: 90 })) }))
