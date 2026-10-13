@@ -288,6 +288,69 @@ describe('imported leagues', () => {
     expect(h.ingestBatch.mock.calls[0][0][0].userIds).toEqual(['user-1'])
   })
 
+  /*
+   * 2026-10-13: the importer claims a linked manager's LeagueTeam AND rekeys the roster to the AF
+   * user id, so a linked Sleeper manager's row never holds a Sleeper id to translate. Production:
+   * 0 of 6,973 NFL Sleeper rosters translated through UserProfile.sleeperUserId; 582 carry a claim.
+   */
+  it('REGRESSION: a claimed Sleeper team resolves to its claimer, with no sleeperUserId to translate', async () => {
+    h.findMany.mockResolvedValue([])
+    h.rawQuery.mockResolvedValue([{ platformUserId: 'af-claimer', claimedByUserId: 'af-claimer' }])
+    // A profile double that honours its `where`: nobody's sleeperUserId is an AF user id.
+    h.profileFind.mockImplementation(async ({ where }: { where: Record<string, any> }) =>
+      [{ userId: 'af-other', sleeperUserId: 'sleeper-other' }]
+        .filter((p) => where.sleeperUserId.in.includes(p.sleeperUserId)))
+
+    // Starters (big plays, TD clips) and the whole roster (injury alerts) alike.
+    for (const startersOnly of [true, false]) {
+      const owners = await ownersByPlayerId(['101'], { startersOnly, sport: 'NFL' })
+      expect(owners.get('101')).toEqual(['af-claimer'])
+    }
+
+    const res = await notifyBigPlays([ev({ type: 'TOUCHDOWN', delta: 20 })])
+    expect(res.notificationsSent).toBe(1)
+    expect(h.ingestBatch.mock.calls[0][0][0].userIds).toEqual(['af-claimer'])
+  })
+
+  it('the claim is read off the team this roster belongs to, by the import\'s team id', async () => {
+    await ownersByPlayerId(['101'], { startersOnly: true, sport: 'NFL' })
+    const sql = h.rawQuery.mock.calls[0][0] as string
+    expect(sql).toMatch(/LEFT JOIN league_teams t ON t\."leagueId" = r\."leagueId"/)
+    expect(sql).toContain(`t."externalId" = coalesce(r."playerData"->>'source_team_id'`)
+    expect(sql).toContain(`t."claimedByUserId"`)
+  })
+
+  it('an unclaimed Sleeper manager with no linked account is skipped, not guessed at', async () => {
+    h.findMany.mockResolvedValue([])
+    // No claim. The platformUserId is a raw Sleeper id nobody linked — and even one that LOOKS
+    // like an AF id is not taken on its own say-so; only a claim or a linked profile names a user.
+    h.rawQuery.mockResolvedValue([
+      { platformUserId: '468164924573478912', claimedByUserId: null },
+      { platformUserId: 'af-lookalike' },
+    ])
+    h.profileFind.mockImplementation(async ({ where }: { where: Record<string, any> }) =>
+      [{ userId: 'af-other', sleeperUserId: 'sleeper-other' }]
+        .filter((p) => where.sleeperUserId.in.includes(p.sleeperUserId)))
+
+    const owners = await ownersByPlayerId(['101'], { startersOnly: true, sport: 'NFL' })
+    expect(owners.get('101')).toBeUndefined()
+    const res = await notifyBigPlays([ev()])
+    expect(res.skipped).toBe('no-rosters')
+  })
+
+  it('merges a claimed owner and a profile-linked owner of the same player once each', async () => {
+    h.findMany.mockResolvedValue([])
+    h.rawQuery.mockResolvedValue([
+      { platformUserId: 'af-claimer', claimedByUserId: 'af-claimer' },
+      { platformUserId: 'sleeper-user-9', claimedByUserId: null },
+      // The claimer in a second league.
+      { platformUserId: 'af-claimer', claimedByUserId: 'af-claimer' },
+    ])
+    h.profileFind.mockResolvedValue([{ userId: 'af-claimer', sleeperUserId: 'sleeper-user-9' }])
+    const owners = await ownersByPlayerId(['101'], { startersOnly: true, sport: 'NFL' })
+    expect(owners.get('101')).toEqual(['af-claimer'])
+  })
+
   it('merges both league types for the same player without duplicates', async () => {
     h.findMany.mockResolvedValue(rostered('11560', 'redraft-user'))
     h.rawQuery.mockResolvedValue([{ platformUserId: 'sleeper-user-9' }, { platformUserId: 'sleeper-user-9' }])
