@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { Flame, MessageSquare, Settings, Sparkles, Zap, ChevronDown, Users } from 'lucide-react'
 import type { SurvivorSummary, SurvivorView } from './types'
 import { SurvivorTribeBoard } from './SurvivorTribeBoard'
+import { SurvivorNbaGamePicker } from './SurvivorNbaGamePicker'
 import { SurvivorChallengeCenter } from './SurvivorChallengeCenter'
 import { SurvivorTribalCouncilView } from './SurvivorTribalCouncilView'
 import { SurvivorIdolsView } from './SurvivorIdolsView'
@@ -42,6 +43,7 @@ export function SurvivorHome({ leagueId }: SurvivorHomeProps) {
   const [error, setError] = useState<string | null>(null)
   const [view, setView] = useState<SurvivorView>('tribe-board')
   const [showIntro, setShowIntro] = useState(false)
+  const introSeen = useRef(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -69,7 +71,8 @@ export function SurvivorHome({ leagueId }: SurvivorHomeProps) {
   }, [load])
 
   useEffect(() => {
-    if (summary) {
+    if (summary && !introSeen.current) {
+      introSeen.current = true
       setShowIntro(true)
     }
   }, [summary])
@@ -176,6 +179,10 @@ export function SurvivorHome({ leagueId }: SurvivorHomeProps) {
         </details>
       </section>
 
+      {summary?.nbaWeeklyScoringMode === 'one_game_per_player' && summary.myRosterId && summary.currentWeek > 0 && (
+        <SurvivorNbaGamePicker leagueId={leagueId} week={summary.currentWeek} />
+      )}
+
       {/* Quick links: Chat, Tribe chat entry, Settings, AI, Waivers */}
       <div className="flex flex-wrap gap-2">
         <Link
@@ -245,7 +252,7 @@ export function SurvivorHome({ leagueId }: SurvivorHomeProps) {
 
       {/* Panel content */}
       {view === 'tribe-board' && summary && (
-        <SurvivorTribeBoard leagueId={leagueId} summary={summary} names={names} />
+        <SurvivorTribeBoard leagueId={leagueId} summary={summary} names={names} onRefresh={load} />
       )}
       {view === 'challenge' && summary && (
         <SurvivorChallengeCenter leagueId={leagueId} summary={summary} names={names} />

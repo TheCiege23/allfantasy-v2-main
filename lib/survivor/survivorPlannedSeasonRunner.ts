@@ -17,6 +17,7 @@ import { withSurvivorSetupTransaction } from './survivorSetupTransaction'
 import { closeExpiredExileRosters, finalizeExileRosterResults } from './exileRosterService'
 import { ensureVerifiedSlateChallenges, settleVerifiedSlateChallenges } from './survivorVerifiedSlateChallenges'
 import { generateAndPostWeeklyRecap } from './weeklyRecapGenerator'
+import { settleNbaTribeSitOutDeadline } from './SurvivorSitOutEngine'
 
 export type PlannedWeekKind = 'opening' | 'elimination' | 'rest' | 'finale' | 'outside'
 
@@ -46,6 +47,9 @@ export async function runPlannedSurvivorLeague(leagueId: string, now = new Date(
   if (week > plan.endWeek || week > calendarWeek) return 'awaiting_calendar'
   const kind = plannedWeekKind(plan, week)
   if (kind === 'outside') return 'outside_plan'
+  const participation = await settleNbaTribeSitOutDeadline(leagueId, week, now)
+  if (participation === 'blocked') return 'awaiting_tribe_rebalance'
+  if (participation === 'awaiting_schedule' || participation === 'before_deadline') return 'awaiting_tribe_sit_out_lock'
   await ensureVerifiedSlateChallenges(leagueId, week, plan.sport, ['pre_merge', 'post_swap'].includes(game.phase))
 
   // Finalized player rows only exist after the common NBA/NHL slate, window,

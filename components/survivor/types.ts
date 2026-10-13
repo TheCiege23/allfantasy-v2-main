@@ -101,6 +101,7 @@ export interface SurvivorSummary {
   /** Regular-season week window for main island + exile (no playoffs). */
   seasonCalendar?: SurvivorSeasonCalendar
   currentWeek: number
+  nbaWeeklyScoringMode?: 'all_games' | 'one_game_per_player'
   tribes: SurvivorSummaryTribe[]
   council: SurvivorSummaryCouncil | null
   challenges: SurvivorSummaryChallenge[]
@@ -129,6 +130,16 @@ export interface SurvivorSummary {
     eligibleToReturn: boolean
     reason: string | null
   } | null
+  tribeBalance?: {
+    requiredSitOuts: Record<string, number>
+    activeCounts: Record<string, number>
+  }
+  sitOuts?: {
+    pending: { id: string; targetTribeId: string | null; targetUserId: string | null }[]
+    accepted: { id: string; targetTribeId: string | null; targetUserId: string | null }[]
+    declined: { id: string; targetTribeId: string | null; targetUserId: string | null }[]
+    myPendingResponse?: { sitOutId: string | null; week: number } | null
+  }
   finale?: {
     open: boolean
     closed: boolean
