@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { calculateScoreFromSportConfig } from './scoringEngine'
 import { pickFreshestSourceRows } from '@/lib/sports-live-scores-service'
 import {
+  canonicalTeamDefenseId,
   findCachedWeekPayload,
   isTeamDefenseRow,
   normalizeNflTeamDefenseWeeklyStats,
@@ -324,11 +325,25 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
     return summary
   }
 
+  /*
+   * A team defence's box score is cached under `nfl:def:<ABBR>` whichever id the roster holds — Sleeper's
+   * bare `KC` included (see `canonicalTeamDefenseId`). Read by the roster id alone, a Sleeper-format
+   * defence found no cache row and scored points-allowed only: its sacks, interceptions, fumbles and TDs
+   * were silently dropped. Both keys are asked for; the DEF branch below reads ONE of them, so a defence
+   * cached under both can never be counted twice.
+   */
+  const defenceCacheIdByPlayer = new Map<string, string>()
+  if (!isDailySport && !isNcaaf) {
+    for (const p of rosterPlayers as Array<{ playerId: string; position: string | null }>) {
+      const canonical = canonicalTeamDefenseId(p.playerId, p.position)
+      if (canonical) defenceCacheIdByPlayer.set(p.playerId, canonical)
+    }
+  }
   const cachedRows = isDailySport || isNcaaf
     ? []
     : await prisma.playerGameLogCache.findMany({
         where: {
-          playerId: { in: playerIds },
+          playerId: { in: Array.from(new Set([...playerIds, ...defenceCacheIdByPlayer.values()])) },
           season: String(seasonYear),
           seasonType: 'regular',
           sport: { in: candidateSportKeys(sport) },
@@ -655,14 +670,17 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
     }
 
     if (isTeamDefense(playerId)) {
-      const cached = cacheByPlayer.get(playerId)
+      const defenceCacheId = defenceCacheIdByPlayer.get(playerId)
+      // The canonical key first; the roster's own id only for a defence with no canonical form.
+      const cached = (defenceCacheId ? cacheByPlayer.get(defenceCacheId) : undefined) ?? cacheByPlayer.get(playerId)
       const weekPayload = cached ? findCachedWeekPayload(cached.payload, week) : null
       const stats: Record<string, number> = weekPayload ? normalizeNflTeamDefenseWeeklyStats(weekPayload) : {}
 
       // Derive points allowed from the game result when the box-score feed did
       // not already provide it.
       if (stats.def_points_allowed === undefined) {
-        const team = teamAbbrevFromDefPlayerId(playerId) ?? String(teamByPlayer.get(playerId) ?? '').trim().toUpperCase()
+        // From the canonical id: a Sleeper DEF row's team can read "Arizona Cardinals", which matches no game.
+        const team = teamAbbrevFromDefPlayerId(defenceCacheId ?? playerId) ?? String(teamByPlayer.get(playerId) ?? '').trim().toUpperCase()
         const game = team ? gameByTeam.get(team) : undefined
         if (game) {
           const pa = pointsAllowedFromGame(game, team)

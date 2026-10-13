@@ -18,6 +18,8 @@
 import type { PrismaClient } from '@prisma/client'
 import { createTtlMemo } from '@/lib/ttl-memo'
 import { normalizeNflTeam } from './lineupLock'
+import { canonicalTeamDefenseId } from '@/lib/scoring-runtime/nflStatNormalization'
+import { nflTeamCodeOf } from '@/lib/core-app/teamDefenseCrosswalk'
 import { ingestNflTeamDefenseBoxScores, type IngestTeamDefenseResult } from './teamDefenseStatsIngest'
 
 /** Returns Sleeper's `grouping=week` payload for one team's season, or null on failure. */
@@ -216,13 +218,20 @@ export async function resolveRosteredDefenseTeams(
     const rosterIds = rosters.map((r) => r.id)
     if (rosterIds.length) {
       const defPlayers = await prisma.redraftRosterPlayer.findMany({
-        where: { rosterId: { in: rosterIds }, droppedAt: null, position: { in: ['DEF', 'DST', 'def', 'dst'] } },
-        select: { playerId: true, team: true },
+        // `D/ST` is how ESPN and Fleaflicker rosters spell it (136 production slots, 2026-10-13).
+        where: { rosterId: { in: rosterIds }, droppedAt: null, position: { in: ['DEF', 'DST', 'D/ST', 'def', 'dst', 'd/st'] } },
+        select: { playerId: true, position: true, team: true },
       })
       for (const p of defPlayers) {
-        const fromId = /^nfl:def:(.+)$/i.exec(p.playerId)?.[1]
-        const abbr = normalizeNflTeam(fromId ?? p.team ?? '')
-        if (abbr) bucket.teams.add(abbr)
+        /*
+         * The club from the id when the id names one (`nfl:def:KC`, Sleeper's bare `KC`), else from the
+         * team label — through `nflTeamCodeOf`, because a Sleeper DEF row's team can read "Arizona
+         * Cardinals" and a Fleaflicker one "Chiefs": upper-cased raw, each was a "team" the box-score fetch
+         * asked the provider for and could never match. A label that names no club adds nothing.
+         */
+        const fromId = canonicalTeamDefenseId(p.playerId, p.position)?.slice('nfl:def:'.length)
+        const abbr = fromId ?? nflTeamCodeOf(p.team)
+        if (abbr) bucket.teams.add(normalizeNflTeam(abbr))
       }
     }
     buckets.set(key, bucket)

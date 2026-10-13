@@ -188,3 +188,60 @@ describe('score sync — a foreign roster id is never read or written as a Sleep
     expect(summary.untranslatedForeignPlayerIds).toBeUndefined()
   })
 })
+
+/*
+ * 🛑 Every box-score writer caches a defence under `nfl:def:<ABBR>` (all 8 production cache rows,
+ * 2026-10-13); Sleeper's id for the same defence is the bare `ARI`. Read by the roster id alone, the
+ * sync found no cache row and scored points-allowed only. The production cache payload is an array of
+ * `{ week, ...def_* }` entries.
+ */
+describe('score sync — a team defence reads ONE box score, whichever id form the roster holds', () => {
+  const ari = { playerId: 'ARI', position: 'DEF', sport: 'NFL', team: 'Arizona Cardinals', playerName: 'Arizona Cardinals' }
+  const defCache = (playerId: string, entry: Record<string, number>) => ({ playerId, sport: 'NFL', payload: [{ week: 2, ...entry }] })
+  const writtenStats = () =>
+    (prismaMock.playerWeeklyScore.upsert.mock.calls[0]![0] as { create: { stats: Record<string, number> } }).create.stats
+
+  it('🛑 Sleeper ARI reads the nfl:def:ARI box score — sacks and INTs, not points-allowed alone', async () => {
+    h.platform = 'sleeper'
+    prismaMock.redraftRosterPlayer.findMany.mockResolvedValue([ari])
+    h.cache = [defCache('nfl:def:ARI', { def_sack: 3, def_int: 1, def_points_allowed: 27 })]
+
+    await runSync(vi.fn(async () => new Map()))
+
+    expect(writtenIds()).toEqual(['ARI'])
+    expect(writtenStats()).toEqual({ def_sack: 3, def_int: 1, def_points_allowed: 27 })
+  })
+
+  it('🛑 cached under BOTH forms, the canonical one is read and nothing is added twice', async () => {
+    h.platform = 'sleeper'
+    prismaMock.redraftRosterPlayer.findMany.mockResolvedValue([ari])
+    h.cache = [
+      defCache('ARI', { def_sack: 9 }),
+      defCache('nfl:def:ARI', { def_sack: 3, def_points_allowed: 27 }),
+    ]
+
+    await runSync(vi.fn(async () => new Map()))
+
+    expect(writtenStats()).toEqual({ def_sack: 3, def_points_allowed: 27 })
+  })
+
+  it('with no box score, points allowed is matched on the club code even when the team label reads "Arizona Cardinals"', async () => {
+    h.platform = 'sleeper'
+    prismaMock.redraftRosterPlayer.findMany.mockResolvedValue([ari])
+
+    await runSync(vi.fn(async () => new Map()))
+
+    expect(writtenStats()).toEqual({ def_points_allowed: 27 })
+  })
+
+  it('an `nfl:def:ARI` roster reads the same cache row as before', async () => {
+    h.platform = 'sleeper'
+    prismaMock.redraftRosterPlayer.findMany.mockResolvedValue([{ ...ari, playerId: 'nfl:def:ARI' }])
+    h.cache = [defCache('nfl:def:ARI', { def_sack: 3, def_points_allowed: 27 })]
+
+    await runSync(vi.fn(async () => new Map()))
+
+    expect(writtenIds()).toEqual(['nfl:def:ARI'])
+    expect(writtenStats()).toEqual({ def_sack: 3, def_points_allowed: 27 })
+  })
+})
