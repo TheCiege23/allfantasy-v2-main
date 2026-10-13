@@ -1675,6 +1675,7 @@ export function LeagueShell({
               onSelectTab={setActiveTab}
               isPredraftLifecycle={isPredraftLifecycle}
               draftDateIso={draftDateIso}
+              draftSetupSession={draftSetupSession}
               hasActiveRedraftSeason={hasActiveRedraftSeason}
             />
           </div>
@@ -1976,6 +1977,7 @@ function LeagueTabRouter({
   onSelectTab,
   isPredraftLifecycle,
   draftDateIso,
+  draftSetupSession,
   hasActiveRedraftSeason,
   importedLeagueCount,
 }: {
@@ -2000,6 +2002,7 @@ function LeagueTabRouter({
   onSelectTab: (tabId: string) => void
   isPredraftLifecycle: boolean
   draftDateIso: string | null
+  draftSetupSession: { rounds: number; timerSeconds: number | null } | null
   hasActiveRedraftSeason: boolean
   /** Imported (non AF-hosted) leagues this user has — 10a's "chat is AF-only" note. */
   importedLeagueCount: number
