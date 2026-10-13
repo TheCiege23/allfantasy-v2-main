@@ -583,13 +583,21 @@ async function resolveFromProviders(
   }
 
   // ── 6. Sleeper (NFL tertiary) ──
+  // Position and the player's own Sleeper id are passed because the provider now binds only on
+  // those (`pickSleeperHeadshotPlayer`): a Sleeper thumbnail names its owner, and the name-only
+  // match it replaced stamped WR Mike Brown's photo onto S Mike Brown (TEN).
   if (isNfl) {
     for (const candidate of nameCandidates) {
       try {
         const result = await sleeperChainProvider.fetch({
           sport,
           dataType: 'player_headshots',
-          query: { search: candidate, teamCode: input.team ?? undefined },
+          query: {
+            search: candidate,
+            teamCode: input.team ?? undefined,
+            position: input.position ?? undefined,
+            sleeperId: input.externalIds?.sleeperId ?? undefined,
+          },
         })
         const sleeperUrl =
           result && typeof result === 'object' && 'headshotUrl' in (result as Record<string, unknown>)
