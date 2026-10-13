@@ -12,6 +12,7 @@ export interface SurvivorIdolsViewProps {
 }
 
 function formatPowerLabel(value: string): string {
+  if (value === 'triple_steal') return 'Steal 3'
   return value.replace(/_/g, ' ')
 }
 
@@ -30,6 +31,9 @@ export function SurvivorIdolsView({ leagueId, summary }: SurvivorIdolsViewProps)
   const [selectedIdolId, setSelectedIdolId] = useState<string | null>(null)
   const [usedIds, setUsedIds] = useState<string[]>([])
 
+  const selectedIdol = myIdols.find(idol => idol.id === selectedIdolId)
+  const heldIdols = myIdols.filter(idol => !usedIds.includes(idol.id))
+
   return (
     <div className="space-y-6">
       <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-6">
@@ -39,11 +43,11 @@ export function SurvivorIdolsView({ leagueId, summary }: SurvivorIdolsViewProps)
         </h2>
         {!myRosterId ? (
           <p className="text-sm text-white/50">You are not in this league as a manager.</p>
-        ) : myIdols.length === 0 ? (
+        ) : heldIdols.length === 0 ? (
           <p className="text-sm text-white/50">You have no active idols. Idols are hidden until used; transfer history is visible only where authorized.</p>
         ) : (
           <ul className="space-y-3">
-            {myIdols.filter(idol => !usedIds.includes(idol.id)).map((idol) => (
+            {heldIdols.map((idol) => (
               <li
                 key={idol.id}
                 className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-500/30 bg-amber-950/20 p-3"
@@ -53,15 +57,19 @@ export function SurvivorIdolsView({ leagueId, summary }: SurvivorIdolsViewProps)
                   <span className="font-medium text-white">{formatPowerLabel(idol.powerType)}</span>
                 </div>
                 <span className="text-xs text-white/60">
-                  Player: {idol.playerId} · ID: {idol.id.slice(0, 8)}… · Eligible at Elimination Council
+                  Player: {idol.playerId} · ID: {idol.id.slice(0, 8)}… · {idol.powerType === 'triple_steal' ? 'Play before the playoffs' : 'Eligible at Elimination Council'}
                 </span>
-                {['triple_steal', 'island_raid'].includes(idol.powerType) && <button type="button" onClick={() => setSelectedIdolId(selectedIdolId === idol.id ? null : idol.id)} aria-expanded={selectedIdolId === idol.id} className="rounded-lg border border-amber-400/50 px-3 py-2 text-xs font-bold text-amber-100">{selectedIdolId === idol.id ? 'Close' : 'Play idol'}</button>}
-                {selectedIdolId === idol.id && <div className="w-full"><SurvivorIdolPlay leagueId={leagueId} idolId={idol.id} powerType={idol.powerType} onFinished={() => { setUsedIds(ids => [...ids, idol.id]); setSelectedIdolId(null) }} /></div>}
+                {['triple_steal', 'island_raid'].includes(idol.powerType) && <button type="button" onClick={() => setSelectedIdolId(selectedIdolId === idol.id ? null : idol.id)} aria-expanded={selectedIdolId === idol.id} className="rounded-lg border border-amber-400/50 px-3 py-2 text-xs font-bold text-amber-100">{selectedIdolId === idol.id ? 'Close' : idol.powerType === 'triple_steal' ? 'Play Steal 3' : 'Play idol'}</button>}
               </li>
             ))}
           </ul>
         )}
       </section>
+
+      {selectedIdol && <div>
+        <nav aria-label="Your held idols" className="mb-3 flex flex-wrap gap-2">{heldIdols.map(idol => <button key={idol.id} type="button" aria-pressed={idol.id === selectedIdolId} onClick={() => setSelectedIdolId(idol.id)} className="rounded-lg border border-amber-400/50 px-3 py-2 text-sm text-amber-100">{formatPowerLabel(idol.powerType)}</button>)}</nav>
+        {['triple_steal', 'island_raid'].includes(selectedIdol.powerType) ? <SurvivorIdolPlay key={selectedIdol.id} leagueId={leagueId} idolId={selectedIdol.id} powerType={selectedIdol.powerType} onFinished={() => setUsedIds(ids => [...ids, selectedIdol.id])} /> : <p className="text-sm text-white/60">{formatPowerLabel(selectedIdol.powerType)} is played through its existing council action.</p>}
+      </div>}
 
       <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-6">
         <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-white">

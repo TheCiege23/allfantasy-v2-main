@@ -1,0 +1,246 @@
+.survivor-idol-play {
+  background:#07080d;
+  color:#e8eaf2;
+  border:1px solid #ffffff18;
+  border-radius:16px;
+  padding:20px
+}
+.survivor-idol-play header {
+  display:flex;
+  align-items:center;
+  gap:12px;
+  margin-bottom:20px
+}
+.survivor-idol-play h3 {
+  font-size:20px;
+  font-weight:700
+}
+.survivor-idol-play p,.survivor-idol-play small,.survivor-idol-play dd {
+  color:#a3a9c2;
+  font-size:13px
+}
+.idol-layout {
+  display:grid;
+  grid-template-columns:minmax(220px,280px) minmax(0,1fr);
+  gap:24px
+}
+.idol-card {
+  border:1px solid #e5484d60;
+  border-radius:12px;
+  padding:18px;
+  text-align:center;
+  background:radial-gradient(circle at 50% 25%,#e5484d30,transparent 65%)
+}
+.idol-card>img {
+  height:190px;
+  margin:auto
+}
+.idol-card h3 {
+  color:#ff7a7f;
+  margin:12px
+}
+.idol-card dl {
+  text-align:left;
+  margin-top:20px;
+  display:grid;
+  grid-template-columns:90px 1fr;
+  gap:12px;
+  font-size:12px
+}
+.idol-card dt {
+  text-transform:uppercase;
+  color:#a3a9c2
+}
+.idol-flow {
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  gap:14px
+}
+.idol-steps {
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:6px
+}
+.idol-steps li {
+  padding:10px;
+  border:1px solid #ffffff18;
+  border-radius:8px;
+  font-size:12px
+}
+.idol-steps li>span:first-child {
+  margin-right:8px
+}
+.idol-steps [aria-current] {
+  border-color:#d9b45a;
+  color:#f1d58a
+}
+.idol-panel,.idol-summary>div {
+  background:#0b0d14;
+  border:1px solid #ffffff18;
+  border-radius:12px;
+  padding:16px
+}
+.idol-panel h4,.idol-played h4 {
+  font-weight:700;
+  margin-bottom:12px
+}
+.idol-row {
+  display:flex;
+  align-items:center;
+  gap:12px;
+  width:100%;
+  padding:12px;
+  margin-top:8px;
+  border:1px solid #ffffff18;
+  background:#0b0d14;
+  border-radius:10px;
+  text-align:left;
+  min-height:52px
+}
+.idol-row>span:first-of-type {
+  flex:1
+}
+.idol-row small {
+  display:block
+}
+.idol-row[aria-pressed=true],.idol-row:has(input:checked) {
+  border-color:#d9b45a;
+  background:#d9b45a10
+}
+.idol-row:disabled,.idol-row:has(input:disabled:not(:checked)) {
+  opacity:.5
+}
+.idol-position {
+  flex:none!important;
+  border-radius:5px;
+  background:#283348;
+  padding:4px;
+  font-size:11px
+}
+.idol-summary {
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:12px
+}
+.idol-summary h4 {
+  font-size:13px;
+  font-weight:700;
+  margin-bottom:8px
+}
+.idol-warning {
+  border:1px solid #e5484d60;
+  background:#e5484d12;
+  border-radius:10px;
+  padding:12px
+}
+.survivor-idol-play footer {
+  display:flex;
+  justify-content:flex-end;
+  gap:10px
+}
+.survivor-idol-play footer button,.idol-primary {
+  padding:12px 22px;
+  border:1px solid #ffffff30;
+  border-radius:8px;
+  font-weight:700;
+  display:inline-block
+}
+.idol-primary {
+  background:#d9b45a;
+  color:#1a1204
+}
+.survivor-idol-play button:disabled {
+  opacity:.5
+}
+.survivor-idol-play :focus-visible {
+  outline:2px solid #f1d58a;
+  outline-offset:3px
+}
+.idol-played {
+  text-align:center;
+  padding:24px;
+  border:1px solid #e5484d60;
+  border-radius:12px;
+  background:radial-gradient(circle at 50% 30%,#e5484d35,transparent 75%)
+}
+.idol-played h4 {
+  font-size:28px
+}
+.idol-played p {
+  margin:12px 0
+}
+.idol-arrivals {
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:center;
+  gap:10px
+}
+.idol-arrival {
+  background:#10131c;
+  border:1px solid #ffffff18;
+  padding:14px;
+  border-radius:12px;
+  animation:survivorRaidArrival .5s ease-out both
+}
+@keyframes survivorRaidArrival {
+  from {
+    transform:translateX(-30px);
+    opacity:0
+  }
+  to {
+    transform:none;
+    opacity:1
+  }
+}
+@media(max-width:700px) {
+  .survivor-idol-play {
+    padding:14px
+  }
+  .idol-layout {
+    display:block
+  }
+  .idol-card {
+    display:none
+  }
+  .idol-summary {
+    grid-template-columns:1fr
+  }
+  .idol-steps li {
+    font-size:10px;
+    padding:6px
+  }
+  .survivor-idol-play footer {
+    position:sticky;
+    bottom:0;
+    background:#07080d;
+    padding-top:10px
+  }
+  .survivor-idol-play footer button {
+    flex:1
+  }
+  .idol-arrivals {
+    flex-direction:column
+  }
+  .idol-played {
+    padding:16px
+  }
+  .idol-played h4 {
+    font-size:24px
+  }
+}
+@media(prefers-reduced-motion:reduce) {
+  .idol-arrival {
+    animation:none
+  }
+}
+.idol-played-art {
+  display:none
+}
+@media(max-width:700px) {
+  .idol-played-art {
+    display:block;
+    height:170px;
+    margin:0 auto 16px
+  }
+}

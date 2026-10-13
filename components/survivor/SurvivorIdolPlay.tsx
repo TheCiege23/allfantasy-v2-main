@@ -1,24 +1,25 @@
-'use client'
+"use client"
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import type { getStealThreePreview } from '@/lib/survivor/survivorStealThree'
+import './survivorIdolPlay.css'
 
-type Preview = {
-  powerType: 'triple_steal' | 'island_raid'
-  teams: Array<{ rosterId: string; teamName: string; players: Array<{ id: string; playerName: string; position: string; team: string | null; disabled: boolean }> }>
-  myBench: Array<{ id: string; playerName: string; position: string }>
-  requiredDrops: number
-  lockWarnings: string[]
-}
+type PreviewResult = Awaited<ReturnType<typeof getStealThreePreview>>
+type Preview = Extract<PreviewResult, { ok: true }>['value']
+type Played = { playerNames: string[]; dropNames: string[]; week: number }
+const STEPS = ['Pick a team', 'Pick 3 players', 'Make room', 'Confirm']
 
 export function SurvivorIdolPlay({ leagueId, idolId, powerType, onFinished }: { leagueId: string; idolId: string; powerType: string; onFinished: () => void }) {
   const [preview, setPreview] = useState<Preview | null>(null)
-  const [step, setStep] = useState(0)
+  const [step, setStep] = useState(1)
   const [teamId, setTeamId] = useState('')
   const [playerIds, setPlayerIds] = useState<string[]>([])
   const [dropIds, setDropIds] = useState<string[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [done, setDone] = useState(false)
+  const [played, setPlayed] = useState<Played | null>(null)
+  const heading = useRef<HTMLHeadingElement>(null)
+  const submitting = useRef(false)
 
   async function request(action: string, body: Record<string, unknown>) {
     const response = await fetch(`/api/leagues/${leagueId}/survivor/${action}`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
@@ -27,46 +28,68 @@ export function SurvivorIdolPlay({ leagueId, idolId, powerType, onFinished }: { 
     return result
   }
 
-  async function open() {
-    setBusy(true); setError(null)
-    try { const result = await request('steal-three-preview', { idolId }); setPreview(result as Preview); setStep(1) }
-    catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not load available players.') }
-    finally { setBusy(false) }
-  }
+  useEffect(() => {
+    let active = true
+    setBusy(true)
+    request('steal-three-preview', { idolId }).then(result => { if (active) setPreview(result) })
+      .catch(cause => { if (active) setError(cause instanceof Error ? cause.message : 'Could not load players.') })
+      .finally(() => { if (active) setBusy(false) })
+    return () => { active = false }
+  }, [leagueId, idolId])
+  useEffect(() => { heading.current?.focus() }, [step, played, preview])
 
   async function confirm() {
+    if (submitting.current) return
+    submitting.current = true
     setBusy(true); setError(null)
-    try { await request('play-steal-three', { idolId, playerRowIds: playerIds, dropRowIds: dropIds }); setDone(true); onFinished() }
-    catch (cause) {
+    try {
+      const result = await request('play-steal-three', { idolId, playerRowIds: playerIds, dropRowIds: dropIds })
+      setPlayed(result); onFinished()
+    } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'The raid could not be completed.')
       const code = cause && typeof cause === 'object' && 'code' in cause ? cause.code : null
-      if (code === 'player_locked' || code === 'roster_changed' || code === 'player_changed') {
+      if (['player_locked', 'player_ir', 'player_changed', 'roster_changed', 'drop_unavailable', 'incorrect_drops'].includes(String(code))) {
         setStep(2); setPlayerIds([]); setDropIds([])
-        try { setPreview(await request('steal-three-preview', { idolId }) as Preview) } catch { /* keep the server error visible */ }
+        try { setPreview(await request('steal-three-preview', { idolId })) } catch { setPreview(null) }
       }
-    } finally { setBusy(false) }
+    } finally { setBusy(false); submitting.current = false }
   }
 
-  function toggle(value: string, current: string[], setter: (next: string[]) => void, max: number) {
-    if (current.includes(value)) setter(current.filter(id => id !== value))
-    else if (current.length < max) setter([...current, value])
+  function toggle(id: string, values: string[], set: (next: string[]) => void, max: number) {
+    if (values.includes(id)) set(values.filter(value => value !== id))
+    else if (values.length < max) set([...values, id])
   }
 
-  const title = powerType === 'island_raid' ? 'Island Raid · three players across teams' : 'Triple Raid · three players from one team'
-  if (done) return <p role="status" className="rounded-xl border border-emerald-500/30 bg-emerald-950/30 p-4 text-sm text-emerald-100">The raid is complete. AF Host has announced it in league chat.</p>
-  if (!preview) return <div className="space-y-2"><button type="button" onClick={open} disabled={busy} className="rounded-lg bg-gradient-to-r from-rose-500 to-orange-500 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">{busy ? 'Checking…' : `Play ${title}`}</button>{error && <p role="alert" className="text-sm text-rose-300">{error}</p>}</div>
+  const title = powerType === 'island_raid' ? 'Island Raid' : 'Steal 3'
+  const team = preview?.teams.find(team => team.rosterId === teamId)
+  const visibleTeams = preview?.powerType === 'island_raid' ? preview.teams : team ? [team] : []
+  const incoming = preview?.teams.flatMap(team => team.players).filter(player => playerIds.includes(player.id)) ?? []
+  const outgoing = preview?.myBench.filter(player => dropIds.includes(player.id)) ?? []
+  const ready = preview && !preview.lockWarnings.length && (step === 1 ? preview.powerType === 'island_raid' || Boolean(team) : step === 2 ? incoming.length === 3 && incoming.every(player => !player.disabled) : step === 3 ? dropIds.length === preview.requiredDrops : true)
 
-  const visibleTeams = preview.powerType === 'island_raid' ? preview.teams : preview.teams.filter(team => team.rosterId === teamId)
-  const selectedNames = preview.teams.flatMap(team => team.players).filter(player => playerIds.includes(player.id)).map(player => player.playerName)
-  const canContinue = preview.lockWarnings.length === 0 && (step === 1 ? preview.powerType === 'island_raid' || Boolean(teamId) : step === 2 ? playerIds.length === 3 : step === 3 ? dropIds.length === preview.requiredDrops : true)
-  return <section aria-label="Play Steal 3 idol" className="space-y-4 rounded-2xl border border-amber-400/30 bg-[#10162a] p-4 text-white sm:p-6">
-    <div className="flex items-center gap-3"><img src="/survivor/idols/steal-three-icon.svg" alt="" width={44} height={44} /><div><h3 className="text-lg font-bold">{title}</h3><p className="text-xs text-amber-200">Step {step} of 4 · This move becomes public when confirmed.</p></div></div>
-    {preview.lockWarnings.length > 0 && <p role="alert" className="rounded bg-rose-950/50 p-3 text-sm">Player locks cannot be verified right now. Try again when NBA schedule data is available.</p>}
-    {step === 1 && <div className="space-y-3"><h4 className="font-semibold">Pick a team</h4>{preview.powerType === 'island_raid' ? <p className="text-sm text-white/70">Island Raid lets you select three players across any opposing teams.</p> : <div className="grid gap-2 sm:grid-cols-2">{preview.teams.map(team => <button key={team.rosterId} type="button" onClick={() => { setTeamId(team.rosterId); setPlayerIds([]) }} aria-pressed={teamId === team.rosterId} className={`rounded-lg border p-3 text-left text-sm ${teamId === team.rosterId ? 'border-amber-300 bg-amber-500/20' : 'border-white/15'}`}>{team.teamName}<span className="ml-2 text-white/60">{team.players.filter(player => !player.disabled).length} available</span></button>)}</div>}</div>}
-    {step === 2 && <div className="space-y-3"><h4 className="font-semibold">Pick exactly 3 players <span className="text-amber-300">({playerIds.length}/3)</span></h4><div className="max-h-80 space-y-2 overflow-y-auto">{visibleTeams.map(team => <div key={team.rosterId}><p className="mb-1 text-xs font-bold uppercase text-amber-300">{team.teamName}</p>{team.players.map(player => <label key={player.id} className={`flex items-center gap-3 rounded-lg border p-2 text-sm ${player.disabled ? 'border-white/5 text-white/40' : 'border-white/15'}`}><input type="checkbox" checked={playerIds.includes(player.id)} disabled={player.disabled || (!playerIds.includes(player.id) && playerIds.length >= 3)} onChange={() => toggle(player.id, playerIds, setPlayerIds, 3)} /><span>{player.playerName} · {player.position} · {player.team ?? 'NBA'}</span>{player.disabled && <span className="ml-auto text-xs">Locked or IR</span>}</label>)}</div>)}</div></div>}
-    {step === 3 && <div className="space-y-3"><h4 className="font-semibold">Make room on your bench</h4><p className="text-sm text-white/70">Choose {preview.requiredDrops} unlocked bench player{preview.requiredDrops === 1 ? '' : 's'} to drop. {preview.requiredDrops === 0 ? 'You have room, so this step is skipped.' : ''}</p>{preview.myBench.map(player => <label key={player.id} className="flex items-center gap-3 rounded-lg border border-white/15 p-2 text-sm"><input type="checkbox" checked={dropIds.includes(player.id)} disabled={!dropIds.includes(player.id) && dropIds.length >= preview.requiredDrops} onChange={() => toggle(player.id, dropIds, setDropIds, preview.requiredDrops)} />{player.playerName} · {player.position}</label>)}</div>}
-    {step === 4 && <div className="space-y-3"><h4 className="font-semibold">Confirm the raid</h4><p className="text-sm text-white/75">Taking {selectedNames.join(', ')}. Dropping {dropIds.length} bench player{dropIds.length === 1 ? '' : 's'}. The raided team gets top waiver priority for this week.</p><p className="text-xs text-amber-200">The server checks locks and roster capacity again before moving anyone.</p></div>}
-    {error && <p role="alert" className="rounded bg-rose-950/40 p-2 text-sm text-rose-200">{error}</p>}
-    <div className="flex flex-wrap gap-2"><button type="button" onClick={() => step === 1 ? setPreview(null) : setStep(step - 1)} disabled={busy} className="rounded-lg border border-white/25 px-4 py-2 text-sm">Back</button><button type="button" disabled={busy || !canContinue} onClick={() => step === 4 ? void confirm() : setStep(step === 2 && preview.requiredDrops === 0 ? 4 : step + 1)} className="rounded-lg bg-gradient-to-r from-rose-500 to-orange-500 px-4 py-2 text-sm font-bold disabled:opacity-50">{step === 4 ? busy ? 'Confirming…' : 'Confirm and play idol' : 'Continue'}</button></div>
+  return <section className="survivor-idol-play" aria-label={`Play ${title}`} aria-busy={busy}>
+    <header><img src="/survivor/idols/steal-three-icon.svg" alt="" width={36} height={36} /><div><h3>{title}</h3><p>Your idols - only you can see this page{preview ? ` - week ${preview.week}` : ''}</p></div></header>
+    <div className="idol-layout">
+      <aside className="idol-card"><img src="/survivor/idols/steal-three.svg" alt="" /><h3>{title}</h3><p>{powerType === 'island_raid' ? 'Take 3 players across opposing teams.' : "Take any 3 players from one team's roster and add them to yours."}</p><dl><dt>When</dt><dd>Before the playoffs</dd><dt>Cannot take</dt><dd>Players whose game has started, or players on IR</dd><dt>Make room</dt><dd>Drop bench players to waivers</dd><dt>Who sees it</dt><dd>The whole league, as soon as it is played</dd></dl></aside>
+      <div className="idol-flow">
+        <ol className="idol-steps" aria-label="Raid progress">{STEPS.map((label, index) => <li key={label} aria-current={!played && step === index + 1 ? 'step' : undefined}><span>{index + 1}</span>{label}{(played || step > index + 1) && <span className="sr-only"> completed</span>}</li>)}</ol>
+        {error && <p role="alert" className="idol-warning">{error}</p>}
+        {!preview && !played && <p role="status">{busy ? 'Checking available players...' : 'Available players could not be loaded. Close this flow and reopen it to try again.'}</p>}
+        {played ? <>
+          <div className="idol-played" role="status"><img className="idol-played-art" src="/survivor/idols/steal-three.svg" alt="" /><h4 ref={heading} tabIndex={-1}>The hand has struck</h4><p>{title} played - week {played.week}</p><div className="idol-arrivals">{played.playerNames.map((name, index) => <div key={name} className="idol-arrival" style={{ animationDelay: `${index * 150}ms` }}><strong>{name}</strong><p>from {team?.teamName ?? 'the raided teams'}</p></div>)}</div><p>They're on your bench now. The idol is gone from your vault.</p><a className="idol-primary" href={`/league/${leagueId}?tab=team`}>Set lineup</a></div>
+          <div className="idol-summary"><div><h4>What the league sees - league chat</h4><strong>AF Host</strong><p>The raid names the manager, raided team and all 3 players.</p></div><div><h4>What the raided team gets - DM and push</h4><strong>You've been raided</strong><p>Top waiver priority this week. {played.dropNames.length ? `${played.dropNames.join(', ')} went to waivers.` : 'No players needed to be dropped.'}</p></div></div>
+        </> : preview && <>
+          {preview.lockWarnings.length > 0 && <p role="alert" className="idol-warning">Player locks cannot be verified. Try again when schedule data is available.</p>}
+          <div className="idol-panel">
+            <h4 ref={heading} tabIndex={-1}>{step === 1 ? 'Whose roster do you raid?' : step === 2 ? `Pick 3 from ${team?.teamName ?? 'opposing teams'}` : step === 3 ? `Make room: drop ${preview.requiredDrops} from your roster` : 'Check the raid'}</h4>
+            {step === 1 && <><p>Any team still in the game, either tribe</p>{preview.teams.map(team => <button className="idol-row" key={team.rosterId} type="button" disabled={busy} aria-pressed={teamId === team.rosterId} onClick={() => { setTeamId(team.rosterId); setPlayerIds([]); setDropIds([]) }}><span><strong>{team.teamName}</strong><small>{team.topPlayers.join(' / ') || 'Roster unavailable'}</small></span><span>{team.tribe?.logoUrl && <img src={team.tribe.logoUrl} alt="" width={24} height={24} />}{team.tribe?.name ?? 'Merged'}<small>{team.weeklyAverage == null ? 'No scored weeks' : `${team.weeklyAverage.toFixed(1)}/wk`}</small></span></button>)}{preview.teams.length === 0 && <p>No opposing active teams are available.</p>}</>}
+            {step === 2 && <><p aria-live="polite">{playerIds.length} of 3 selected</p>{visibleTeams.flatMap(team => team.players).map(player => <label className="idol-row" key={player.id}><input type="checkbox" checked={playerIds.includes(player.id)} disabled={busy || player.disabled || (!playerIds.includes(player.id) && playerIds.length === 3)} onChange={() => toggle(player.id, playerIds, setPlayerIds, 3)} /><span className="idol-position">{player.position}</span><span><strong>{player.playerName}</strong><small>{player.unavailableReason ?? player.team ?? 'Team unavailable'}</small></span></label>)}</>}
+            {step === 3 && <><p>Your roster: {preview.rosterSize} of {preview.maxRosterSize}. Dropped players go to waivers.</p><p aria-live="polite">{dropIds.length} of {preview.requiredDrops} selected</p>{preview.myBench.map(player => <label className="idol-row" key={player.id}><input type="checkbox" checked={dropIds.includes(player.id)} disabled={busy || (!dropIds.includes(player.id) && dropIds.length === preview.requiredDrops)} onChange={() => toggle(player.id, dropIds, setDropIds, preview.requiredDrops)} /><span className="idol-position">{player.position}</span><span><strong>{player.playerName}</strong><small>Bench</small></span></label>)}{preview.myBench.length < preview.requiredDrops && <p role="alert">Not enough unlocked bench players. Make room in your roster before playing.</p>}</>}
+            {step === 4 && <><div className="idol-summary"><div><h4>Coming to you</h4>{incoming.map(player => <p key={player.id}>{player.position} - {player.playerName}</p>)}</div><div><h4>To waivers</h4>{outgoing.map(player => <p key={player.id}>{player.position} - {player.playerName}</p>)}{!outgoing.length && <p>No drops needed. You have room.</p>}</div></div><p className="idol-warning">Steal 3 is not secret. The whole league sees the raid, and {team?.teamName ?? 'the raided teams'} gets top waiver priority this week. You can't undo it.</p></>}
+          </div>
+          <footer><button type="button" disabled={busy || step === 1} onClick={() => setStep(step === 4 && preview.requiredDrops === 0 ? 2 : step - 1)}>Back</button><button className="idol-primary" type="button" disabled={busy || !ready} onClick={() => step === 4 ? void confirm() : setStep(step === 2 && preview.requiredDrops === 0 ? 4 : step + 1)}>{step === 4 ? busy ? 'Playing...' : `Play ${title}` : 'Next'}</button></footer>
+        </>}
+      </div>
+    </div>
   </section>
 }
