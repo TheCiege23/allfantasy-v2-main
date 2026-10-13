@@ -51,6 +51,7 @@ export type RawDraftPlayerLike = {
   /** Pre-resolved image URL from TheSportsDB/DB ingestion (used for NCAAF, Soccer, etc.) */
   imageUrl?: string | null
   fantasyPointsPerGame?: number | null
+  nbaDraftStats?: { pointsPerGame: number | null; reboundsPerGame: number | null; minutesPerGame: number | null } | null
   lifetimeValue?: number | null
   rollingInsightsSupplemental?: {
     fantasyPointsPerGame?: number | null
@@ -193,6 +194,7 @@ export function normalizeDraftPlayer(
     adp: adp ?? null,
     byeWeek: bye ?? null,
     fantasyPointsPerGame: fppg,
+    ...(sportNorm === 'NBA' && raw.nbaDraftStats ? raw.nbaDraftStats : {}),
     lifetimeValue: ltv,
   }
 

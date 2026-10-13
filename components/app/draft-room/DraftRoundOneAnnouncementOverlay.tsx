@@ -96,7 +96,7 @@ export function DraftRoundOneAnnouncementOverlay({
     <div
       className={`fixed inset-0 z-[95] flex items-center justify-center bg-black/55 px-3 backdrop-blur-[2px] ${
         entered ? 'opacity-100' : 'opacity-0'
-      } transition-opacity duration-300 ease-out`}
+      } transition-opacity duration-300 ease-out motion-reduce:opacity-100 motion-reduce:transition-none`}
       role="dialog"
       aria-modal="true"
       aria-label="Round one pick announcement"

@@ -5,26 +5,25 @@
 
 import { prisma } from '@/lib/prisma'
 import { postWeeklyRecap } from './leagueChatPoster'
-import { logAuditEntry } from './auditFramework'
 
 export async function generateAndPostWeeklyRecap(
   leagueId: string,
   week: number,
 ): Promise<void> {
   // Get week's challenge
-  const challenge = await (prisma as any).survivorChallenge.findFirst({
-    where: { leagueId, week },
+  const challenge = await prisma.survivorChallenge.findFirst({
+    where: { leagueId, week, scope: 'tribe', status: 'complete' },
     select: { title: true, winnerTribeId: true, winnerUserIds: true },
   })
 
   // Get elimination council result
-  const council = await (prisma as any).survivorTribalCouncil.findFirst({
-    where: { leagueId, week, status: 'completed' },
+  const council = await prisma.survivorTribalCouncil.findFirst({
+    where: { leagueId, week, isRevealed: true, eliminatedRosterId: { not: null } },
     select: { eliminatedName: true, attendingTribeId: true, idolsPlayed: true, isTie: true },
   })
 
   // Get top scorer
-  const topScore = await (prisma as any).survivorWeeklyScore.findFirst({
+  const topScore = await prisma.survivorWeeklyScore.findFirst({
     where: { leagueId, week, isFinalized: true },
     orderBy: { finalScore: 'desc' },
     select: { userId: true, finalScore: true },
@@ -32,7 +31,7 @@ export async function generateAndPostWeeklyRecap(
 
   let topScorerName: string | undefined
   if (topScore) {
-    const p = await (prisma as any).survivorPlayer.findFirst({
+    const p = await prisma.survivorPlayer.findFirst({
       where: { leagueId, userId: topScore.userId },
       select: { displayName: true },
     })
@@ -40,7 +39,7 @@ export async function generateAndPostWeeklyRecap(
   }
 
   // Get immunity holder
-  const immunePlayer = await (prisma as any).survivorPlayer.findFirst({
+  const immunePlayer = await prisma.survivorPlayer.findFirst({
     where: { leagueId, hasImmunityThisWeek: true },
     select: { displayName: true },
   })
@@ -48,7 +47,7 @@ export async function generateAndPostWeeklyRecap(
   // Get winning tribe name
   let challengeWinner: string | undefined
   if (challenge?.winnerTribeId) {
-    const tribe = await (prisma as any).survivorTribe.findUnique({
+    const tribe = await prisma.survivorTribe.findUnique({
       where: { id: challenge.winnerTribeId },
       select: { name: true },
     })
@@ -58,7 +57,7 @@ export async function generateAndPostWeeklyRecap(
   // Get attending tribe name
   let tribalLoser: string | undefined
   if (council?.attendingTribeId) {
-    const tribe = await (prisma as any).survivorTribe.findUnique({
+    const tribe = await prisma.survivorTribe.findUnique({
       where: { id: council.attendingTribeId },
       select: { name: true },
     })
@@ -66,7 +65,7 @@ export async function generateAndPostWeeklyRecap(
   }
 
   // Get twist
-  const twist = await (prisma as any).survivorTwistEvent.findFirst({
+  const twist = await prisma.survivorTwistEvent.findFirst({
     where: { leagueId, week },
     select: { description: true },
   })
@@ -79,7 +78,7 @@ export async function generateAndPostWeeklyRecap(
   const recap = {
     challengeWinner,
     tribalLoser,
-    eliminatedPlayer: council?.eliminatedName,
+    eliminatedPlayer: council?.eliminatedName ?? undefined,
     immunityHolder: immunePlayer?.displayName,
     idolsPlayed: idolsPlayed.length > 0 ? idolsPlayed : undefined,
     twistSummary: twist?.description,
@@ -89,37 +88,18 @@ export async function generateAndPostWeeklyRecap(
 
   await postWeeklyRecap(leagueId, week, recap)
 
-  // Also save to episode summaries table
-  await (prisma as any).survivorEpisodeSummary?.upsert?.({
-    where: { uniq_league_week: { leagueId, week } },
+  await prisma.survivorAuditEntry.upsert({
+    where: { id: `survivor-weekly-recap-audit:${leagueId}:${week}` },
     create: {
+      id: `survivor-weekly-recap-audit:${leagueId}:${week}`,
       leagueId,
       week,
-      title: `Week ${week}`,
-      challengeTitle: challenge?.title,
-      winningTribeOrPlayer: challengeWinner,
-      losingTribeOrPlayer: tribalLoser,
-      votedOutPlayer: council?.eliminatedName,
-      idolsPlayed: idolsPlayed,
-      twistDescription: twist?.description,
-      isFinalized: true,
+      category: 'automation',
+      action: 'weekly_recap_posted',
+      data: { posted: true },
+      isVisibleToCommissioner: true,
+      isVisibleToPublic: true,
     },
-    update: {
-      challengeTitle: challenge?.title,
-      winningTribeOrPlayer: challengeWinner,
-      losingTribeOrPlayer: tribalLoser,
-      votedOutPlayer: council?.eliminatedName,
-      idolsPlayed: idolsPlayed,
-      twistDescription: twist?.description,
-      isFinalized: true,
-    },
-  }).catch(() => {})
-
-  await logAuditEntry({
-    leagueId,
-    week,
-    category: 'automation',
-    action: 'week_finalized',
-    data: { recap },
+    update: {},
   })
 }

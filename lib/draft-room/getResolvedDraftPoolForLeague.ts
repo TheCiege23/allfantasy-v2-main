@@ -113,6 +113,7 @@ export type DraftPoolRawRow = {
   imageUrl?: string | null
   age?: number | null
   fantasyPointsPerGame?: number | null
+  nbaDraftStats?: { pointsPerGame: number | null; reboundsPerGame: number | null; minutesPerGame: number | null } | null
   lifetimeValue?: number | null
   nflDraftProjectionSplits?: NflDraftProjectionSplits
   /** D.7 â Sleeper years_exp; 0 = rookie. Only attached for NFL pools. */
@@ -2293,6 +2294,7 @@ export async function getResolvedDraftPoolForLeague(
         sprSupplementFppg ??
         (row as RawRow).fantasyPointsPerGame ??
         undefined,
+      nbaDraftStats: sport === 'NBA' ? (sprAug?.nbaDraftStats ?? null) : null,
       lifetimeValue:
         resolvedAnalytics?.lifetimeValue ??
         analytics?.lifetimeValue ??
