@@ -1,9 +1,9 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { firstEntryIntroStorageKey } from '@/lib/league/post-create-welcome'
 
 const BIG_BROTHER_INTRO_VIDEO = '/league-type-big-brother-intro.mp4'
-const STORAGE_KEY_PREFIX = 'bb_intro_seen_'
 
 const BIG_BROTHER_TAGLINE = 'Welcome to the Big Brother house. Expect the unexpected.'
 
@@ -45,7 +45,7 @@ export function BigBrotherFirstEntryModal({
   const [videoKey, setVideoKey] = useState(0)
   const [videoFailed, setVideoFailed] = useState(false)
 
-  const storageKey = `${STORAGE_KEY_PREFIX}${leagueId}_${userId}`
+  const storageKey = firstEntryIntroStorageKey('big_brother', leagueId, userId)
 
   const markSeen = useCallback(() => {
     if (typeof window !== 'undefined' && leagueId && userId) {
