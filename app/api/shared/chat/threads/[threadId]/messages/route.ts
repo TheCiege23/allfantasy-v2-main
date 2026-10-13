@@ -26,6 +26,8 @@ import type { SurvivorCommandIntent } from '@/lib/survivor/types'
 import { resolveSurvivorCurrentWeek } from '@/lib/survivor/SurvivorTimelineResolver'
 import { isMergeTriggered } from '@/lib/survivor/SurvivorMergeEngine'
 import { prisma } from '@/lib/prisma'
+import { activateSGLivePower } from '@/lib/survivor-guillotine/live'
+import { resolveLeagueAccess } from '@/lib/league-access'
 import { getBlockedUserIdsForRead } from '@/lib/moderation'
 import { filterMessagesByBlocked } from '@/lib/moderation'
 import { filterBbReadableMessages, resolveBbWriteChannel } from '@/lib/big-brother/bbChatChannelAccess'
@@ -333,6 +335,12 @@ export async function POST(req: NextRequest, props: { params: Promise<{ threadId
         'confirm_minigame',
       ])
       const chimmyCommandText = isChimmyPrompt ? message.replace(/^@chimmy\b\s*/i, '').trim() : ''
+      const sgPowerCommand = isChimmyPrompt && /^@chimmy\s+(?:use|play)\s+(?:idol|token)\b/i.test(message)
+      let sgPowerReply: string | null = null
+      if (sgPowerCommand) {
+        try { sgPowerReply = (await activateSGLivePower(leagueId, user.appUserId, message))?.reply ?? null }
+        catch (error) { sgPowerReply = error instanceof Error ? error.message : 'Power activation failed.' }
+      }
       const survivorIntent = chimmyCommandText ? parseSurvivorCommand(chimmyCommandText).intent : null
       const voteAttempt = /^vote(?:\s|$)/i.test(chimmyCommandText)
       // Votes entered in a league or tribe composer are submitted through the private
@@ -341,6 +349,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ threadId
         looksLikeOfficialCommand(chimmyCommandText) || /^@(?:[A-Za-z0-9_.-]+|<@[A-Za-z0-9_-]+>)/.test(chimmyCommandText)
       ))
       const survivorChimmyCommand =
+        !sgPowerCommand &&
         chimmyCommandText &&
         (privateVote || looksLikeOfficialCommand(chimmyCommandText)) &&
         ((survivorIntent && SURVIVOR_CHIMMY_COMMAND_INTENTS.has(survivorIntent)) || voteAttempt)
@@ -362,7 +371,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ threadId
           visibleToUserId: user.appUserId,
           messageSubtype: 'chimmy_prompt',
         })
-        const replyText =
+        const replyText = sgPowerReply ??
           (await tryDeterministicAnswer(chimmyBody || 'help', req.cookies?.get?.('af_lang')?.value)
             .catch(() => null)) ??
           "I don't have reliable data for that yet. I can answer cached scores, schedules, news, weather, FantasyCalc values, and league context when those data sources are available."
@@ -603,7 +612,17 @@ export async function POST(req: NextRequest, props: { params: Promise<{ threadId
      * is missing the data is the one that fills the gap in confidently.
      */
     let decision: ReturnType<typeof decisionAnswerMeta> | undefined
-    const replyText = await generateChimmyPrivateReply(message, {
+    let sgReply: string | null = null
+    if (/^@chimmy\s+(?:use|play)\s+(?:idol|token)\b/i.test(message)) {
+      const leagueId = typeof metadata?.leagueId === 'string' ? metadata.leagueId : null
+      if (!leagueId || !(await resolveLeagueAccess(leagueId, user.appUserId))) {
+        sgReply = 'Open this power from your league so Chimmy can verify league access.'
+      } else {
+        try { sgReply = (await activateSGLivePower(leagueId, user.appUserId, message))?.reply ?? 'This power is unavailable in that league.' }
+        catch (error) { sgReply = error instanceof Error ? error.message : 'Power activation failed.' }
+      }
+    }
+    const replyText = sgReply ?? await generateChimmyPrivateReply(message, {
       leagueId: draftIntelThread.leagueId ?? null,
       userId: user.appUserId,
       onDecision: result => { decision = decisionAnswerMeta(result) },

@@ -1170,6 +1170,16 @@ export async function completeDraftSession(leagueId: string): Promise<boolean> {
     })
   }
 
+  // Idempotent specialty bootstrap runs after drafted players are mirrored into live rosters.
+  try {
+    const { bootstrapSGAfterDraft } = await import('@/lib/survivor-guillotine/operations')
+    await bootstrapSGAfterDraft(leagueId)
+  } catch (err) {
+    console.error('[completeDraftSession] Survivor Guillotine bootstrap failed', {
+      leagueId, error: err instanceof Error ? err.message : String(err),
+    })
+  }
+
   if (outcome.transitioned) {
     // G12: emit DRAFT_COMPLETED for ALL league types. Previously only Redraft leagues
     // emitted this event (from syncCompletedDraftToRedraftSeason). SEASON_ACTIVATED is
