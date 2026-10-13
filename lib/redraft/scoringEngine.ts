@@ -24,6 +24,7 @@ import { allowedPositionsForSlot, normalizeToken } from '@/lib/redraft/lineupVal
 import { importedNcaafScoring } from './importedNcaafScoring'
 import { storeSavedByPerson, bridgeSportUiScoringStore } from '@/lib/redraft/uiScoringStoreBridge'
 import { loadWeekLineups, weekSlotType } from './weekLineupSlots'
+import { recordWeekRoster, rosterPlayersForWeek } from './rosterWeekHistory'
 
 export function calculateFantasyPoints(
   rawStats: Record<string, number>,
@@ -355,12 +356,8 @@ async function scoreRosterStarters(args: {
     }
   }
 
-  const starters = await prisma.redraftRosterPlayer.findMany({
-    where: {
-      rosterId: args.rosterId,
-      droppedAt: null,
-    },
-  })
+  // A sealed week scores the roster it was played with, not today's — see `rosterWeekHistory.ts`.
+  const { players: starters } = await rosterPlayersForWeek(args.rosterId, args.week)
   // The lineup saved for THIS week, not the current one — see `weekLineupSlots.ts`.
   const weekLineups = await loadWeekLineups(prisma, {
     redraftRosterIds: [args.rosterId],
@@ -433,9 +430,7 @@ async function scoreRosterBestBall(args: {
   bestBall: BestBallScoringContext
   statOverrides: Map<string, StatOverrideEntry>
 }): Promise<RosterScoreSummary> {
-  const players = await prisma.redraftRosterPlayer.findMany({
-    where: { rosterId: args.rosterId, droppedAt: null },
-  })
+  const { players } = await rosterPlayersForWeek(args.rosterId, args.week)
   // Best ball still excludes whoever was on IR / taxi / devy in THIS week's saved lineup.
   const weekLineups = await loadWeekLineups(prisma, {
     redraftRosterIds: [args.rosterId],
@@ -513,6 +508,13 @@ export async function scoreRosterForWeek(args: {
   const useDevyEngine = await leagueUsesDevyEngine(args.leagueId)
   const bestBall = useDevyEngine ? null : await loadBestBallContext(args.leagueId)
   return scoreRosterStarters({ ...args, useDevyEngine, bestBall })
+}
+
+/** Snapshot the roster a scoring pass just used for (roster, week), unless that week is already frozen. */
+export async function recordScoredWeekRoster(input: { rosterId: string; seasonId: string; week: number; freeze: boolean }) {
+  const { players, frozen } = await rosterPlayersForWeek(input.rosterId, input.week)
+  if (frozen) return
+  await recordWeekRoster({ ...input, players })
 }
 
 export async function updateMatchupScores(matchupId: string): Promise<MatchupScoreUpdateSummary | null> {
@@ -602,6 +604,13 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
     } catch {
       isFinal = existingFinal // fail open — existing authority final
     }
+  }
+
+  // Record who each side was scored with; the pass that makes the matchup final freezes it. The devy
+  // engine scores from its own tables, so its rosters are not recorded here.
+  if (!useDevyEngine) {
+    await recordScoredWeekRoster({ rosterId: homeRosterId, seasonId: seasonRowId, week, freeze: isFinal })
+    await recordScoredWeekRoster({ rosterId: awayRosterId, seasonId: seasonRowId, week, freeze: isFinal })
   }
 
   await prisma.redraftMatchup.update({

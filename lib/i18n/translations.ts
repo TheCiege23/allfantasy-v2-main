@@ -1084,6 +1084,7 @@ export const translations: Record<string, Record<string, string>> = {
     "lsHub.el.pastHint": "Changing a past week's lineup re-scores that matchup and the standings, and can change the result. Only players on the team now can be placed.",
     "lsHub.el.pastScore": "Score that week: {{mine}} – {{theirs}}",
     "lsHub.el.pastUnsaved": "No lineup was saved for this week, so it was scored from the team's current lineup. That is shown here as a starting point.",
+    "lsHub.el.pastRosterToday": "This week was played before rosters were recorded week by week, so this is the team's current roster. Saving records it as the week's roster.",
     "lsHub.el.pastScoreEdited": "This matchup's score was set by hand in Edit Matchup Scores. Change the score there instead.",
     "lsHub.el.pastSave": "Save week {{week}} and re-score",
     "lsHub.el.pastSaved": "Week {{week}} lineup saved; the matchup and standings were re-scored.",

@@ -14391,6 +14391,7 @@ model RedraftRoster {
   playoffWinningMatchups   RedraftPlayoffMatchup[]    @relation("RedraftPlayoffWinnerRoster")
   playoffSeeds             RedraftPlayoffSeed[]
   players                  RedraftRosterPlayer[]
+  weekRosters              RedraftRosterWeek[]
   /// Back-relation for `Roster.redraftRosterId`. See that field for why the link exists and why it
   /// is incomplete; nothing here should assume every redraft roster has a `Roster` counterpart —
   /// 60 of them do not.
@@ -14430,6 +14431,27 @@ model RedraftRosterPlayer {
   @@index([rosterId])
   @@index([playerId])
   @@map("redraft_roster_players")
+}
+
+/// Who was on a redraft roster for ONE week, captured each time that week is scored and frozen once
+/// its matchup goes final. A sealed week is re-scored from this row, never from the current roster:
+/// a trade MOVES the RedraftRosterPlayer row (`rosterId` changes), so the current roster cannot say
+/// who a team had in week 3. See lib/redraft/rosterWeekHistory.ts.
+model RedraftRosterWeek {
+  id         String        @id @default(cuid())
+  rosterId   String
+  seasonId   String
+  week       Int
+  /// [{ playerId, playerName, position, team, sport, slotType }] as scored that week.
+  players    Json
+  frozen     Boolean       @default(false)
+  capturedAt DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+  roster     RedraftRoster @relation(fields: [rosterId], references: [id], onDelete: Cascade)
+
+  @@unique([rosterId, week])
+  @@index([seasonId, week])
+  @@map("redraft_roster_weeks")
 }
 
 /// Phase 2H — lineup-save history for redraft rosters, giving Phase 6 Decision

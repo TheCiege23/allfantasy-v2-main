@@ -486,6 +486,15 @@ export async function persistNflRedraftLiveScoringWeek(input: {
     })
   }
 
+  // Record who each side was scored with this week; a final matchup freezes it (rosterWeekHistory.ts).
+  const { recordScoredWeekRoster } = await import('@/lib/redraft/scoringEngine')
+  for (const matchup of resolved.state.matchups) {
+    const freeze = matchup.status === 'final'
+    for (const rosterId of [matchup.homeRosterId, matchup.awayRosterId]) {
+      if (rosterId) await recordScoredWeekRoster({ rosterId, seasonId: resolved.state.seasonId, week: resolved.state.week, freeze })
+    }
+  }
+
   const standings = await updateStandings(resolved.state.seasonId, resolved.state.week)
   const events = buildScoringRuntimeEvents({
     state: resolved.state,

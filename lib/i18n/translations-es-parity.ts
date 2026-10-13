@@ -2799,6 +2799,7 @@ export const translationsEsParity: Record<string, string> = {
   "lsHub.el.pastHint": "Cambiar la alineación de una semana pasada vuelve a puntuar ese enfrentamiento y la clasificación, y puede cambiar el resultado. Solo se pueden colocar los jugadores que están ahora en el equipo.",
   "lsHub.el.pastScore": "Puntuación esa semana: {{mine}} – {{theirs}}",
   "lsHub.el.pastUnsaved": "No se guardó una alineación para esta semana, así que se puntuó con la alineación actual del equipo. Se muestra aquí como punto de partida.",
+  "lsHub.el.pastRosterToday": "Esta semana se jugó antes de que las plantillas se registraran semana a semana, así que esta es la plantilla actual del equipo. Al guardar, queda registrada como la plantilla de esa semana.",
   "lsHub.el.pastScoreEdited": "La puntuación de este enfrentamiento se fijó a mano en Editar puntuaciones. Cámbiala allí.",
   "lsHub.el.pastSave": "Guardar semana {{week}} y volver a puntuar",
   "lsHub.el.pastSaved": "Alineación de la semana {{week}} guardada; se volvió a puntuar el enfrentamiento y la clasificación.",

@@ -990,6 +990,7 @@ type LineupData = {
   /** Past-week view only. */
   weeks?: number[]
   savedForWeek?: boolean
+  weekRosterRecorded?: boolean
   scoreEdited?: boolean
   matchup?: { myScore: number; theirScore: number | null } | null
   slots: Array<{ label: string; allowedPositions: string[] }>
@@ -1166,6 +1167,7 @@ export function EditLineupCard({ leagueId }: { leagueId: string }) {
                 </p>
               ) : null}
               {data.savedForWeek === false ? <p className="text-[12px] text-white/45">{t('lsHub.el.pastUnsaved')}</p> : null}
+              {data.weekRosterRecorded === false ? <p className="text-[12px] text-white/45">{t('lsHub.el.pastRosterToday')}</p> : null}
               {data.scoreEdited ? <p className="text-[12px] text-amber-200/85" role="alert">{t('lsHub.el.pastScoreEdited')}</p> : null}
             </div>
           ) : null}

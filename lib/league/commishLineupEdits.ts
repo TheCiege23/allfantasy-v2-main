@@ -34,6 +34,7 @@ import { weekFromLeagueSettingsForLineup } from '@/lib/roster/buildPersistedRost
 import { commissionerForceRosterLineup } from '@/lib/roster-lineup-engine/commissionerRosterOverride'
 import { syncAfRosterLineupAssignments } from '@/lib/roster-lineup-engine/lineupAssignmentSync'
 import { editableWeeks } from '@/lib/redraft/completedWeeks'
+import { loadFrozenWeekRoster, replaceFrozenWeekRoster } from '@/lib/redraft/rosterWeekHistory'
 
 export class CommishLineupError extends Error {
   constructor(message: string, readonly status = 400) {
@@ -237,6 +238,11 @@ export async function saveCommishLineup(input: {
  * ⚠ A WEEK WITH NO SAVED LINEUP was scored from each player's current slot. The editor starts from the
  * current lineup and says so; saving writes a full lineup for the week, so from then on it is exact.
  *
+ * WHO IS ON THE TEAM is the week's recorded roster (`redraft_roster_weeks`, rosterWeekHistory.ts), not
+ * today's: a player traded away in week 5 is still on the team for week 3 and can be started there, and
+ * one picked up in week 5 is not. A week sealed before that record existed has none, so the editor uses
+ * the current roster (and says so) — and saving records it, so later trades no longer move that week.
+ *
  * Refused: a matchup whose score was set by hand in Edit Matchup Scores (re-scoring would silently
  * replace the commish's number), and specialty formats, whose weekly outcomes (a guillotine chop, a
  * survivor elimination) are not undone by re-scoring.
@@ -271,7 +277,14 @@ async function loadPastWeekContext(leagueId: string, rosterId: string, week: num
     select: { id: true, homeRosterId: true, awayRosterId: true, homeScore: true, awayScore: true, lineupSnapshots: true },
   })
   const scoreEdited = matchups.some((m) => Boolean((m.lineupSnapshots as Record<string, unknown> | null)?.commissionerEdit))
-  return { ...ctx, season, weeks, matchups, scoreEdited }
+
+  // The roster this team had in that week, when the week was recorded; otherwise today's.
+  const weekRoster = await loadFrozenWeekRoster(ctx.roster.redraftRosterId, week)
+  const players: LineupPlayer[] = weekRoster
+    ? weekRoster.map((p) => ({ id: p.playerId, name: p.playerName, position: p.position || null, team: p.team }))
+    : ctx.players
+  const rosterIds = players.map((p) => p.id)
+  return { ...ctx, players, rosterIds, weekRosterRecorded: weekRoster != null, season, weeks, matchups, scoreEdited }
 }
 
 export async function loadCommishPastLineup(leagueId: string, rosterId: string, week: number) {
@@ -296,12 +309,19 @@ export async function loadCommishPastLineup(leagueId: string, rosterId: string, 
       devy: of('devy'),
     }
   } else {
+    // Today's lineup, keeping only players the team had that week; the rest of that week's roster sits on the bench.
+    const keep = (ids: string[]) => ids.filter((id) => onRoster.has(id))
+    const starters = Array.from({ length: ctx.slots.length }, (_, i) => {
+      const id = ctx.current.starters[i] ?? ''
+      return onRoster.has(id) ? id : ''
+    })
+    const placed = new Set([...starters, ...keep(ctx.current.ir), ...keep(ctx.current.taxi), ...keep(ctx.current.devy)])
     lineup = {
-      starters: Array.from({ length: ctx.slots.length }, (_, i) => ctx.current.starters[i] ?? ''),
-      bench: ctx.current.bench,
-      ir: ctx.current.ir,
-      taxi: ctx.current.taxi,
-      devy: ctx.current.devy,
+      starters,
+      bench: [...keep(ctx.current.bench), ...ctx.rosterIds.filter((id) => !placed.has(id) && !ctx.current.bench.includes(id))],
+      ir: keep(ctx.current.ir),
+      taxi: keep(ctx.current.taxi),
+      devy: keep(ctx.current.devy),
     }
   }
   return {
@@ -309,6 +329,8 @@ export async function loadCommishPastLineup(leagueId: string, rosterId: string, 
     week,
     weeks: ctx.weeks,
     savedForWeek: saved.length > 0,
+    /** False: the week predates the roster record, so this is today's roster (saving records it). */
+    weekRosterRecorded: ctx.weekRosterRecorded,
     scoreEdited: ctx.scoreEdited,
     matchup: ctx.matchups[0]
       ? {
@@ -358,6 +380,15 @@ export async function saveCommishPastLineup(input: {
     devy: input.lineup.devy.map(rowFor),
   }
   const before = ctx.matchups.map((m) => ({ matchupId: m.id, homeScore: m.homeScore, awayScore: m.awayScore }))
+
+  // Pin who was on the team that week before re-scoring, so a later trade cannot move it again.
+  if (!ctx.weekRosterRecorded) {
+    const current = await prisma.redraftRosterPlayer.findMany({
+      where: { rosterId: ctx.roster.redraftRosterId!, droppedAt: null },
+      select: { playerId: true, playerName: true, position: true, team: true, sport: true, slotType: true },
+    })
+    await replaceFrozenWeekRoster({ rosterId: ctx.roster.redraftRosterId!, seasonId: ctx.season.id, week: input.week, players: current })
+  }
 
   // The engine's own per-week writer; `playerData` here is only the week's sections, never saved to the roster.
   await syncAfRosterLineupAssignments({

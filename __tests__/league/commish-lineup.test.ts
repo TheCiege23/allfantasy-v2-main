@@ -23,6 +23,9 @@ const h = vi.hoisted(() => ({
   weekWrites: [] as Array<Record<string, any>>,
   rescored: [] as string[],
   standings: [] as Array<[string, number]>,
+  weekRoster: null as Array<Record<string, unknown>> | null,
+  pinned: [] as Array<Record<string, any>>,
+  order: [] as string[],
 }))
 
 const template = {
@@ -78,9 +81,18 @@ vi.mock('@/lib/roster-lineup-engine/lineupAssignmentSync', () => ({
     h.weekWrites.push(input)
   }),
 }))
+vi.mock('@/lib/redraft/rosterWeekHistory', () => ({
+  loadFrozenWeekRoster: vi.fn(async () => h.weekRoster),
+  replaceFrozenWeekRoster: vi.fn(async (input: Record<string, any>) => {
+    h.pinned.push(input)
+    h.order.push('pin')
+    return true
+  }),
+}))
 vi.mock('@/lib/redraft/scoringEngine', () => ({
   updateMatchupScores: vi.fn(async (id: string) => {
     h.rescored.push(id)
+    h.order.push('rescore')
     return { matchupId: id, homeScore: 101.5, awayScore: 95 }
   }),
 }))
@@ -117,6 +129,9 @@ beforeEach(() => {
   h.weekWrites = []
   h.rescored = []
   h.standings = []
+  h.weekRoster = null
+  h.pinned = []
+  h.order = []
   h.role = 'co_commissioner'
   h.platform = 'allfantasy'
   h.chopped = false
@@ -304,5 +319,50 @@ describe('past weeks', () => {
     expect((await putWeek(5, { starters: ['rb1', 'qb1', 'wr1'], bench: ['rb2'] })).status).toBe(400)
     expect(h.weekWrites).toEqual([])
     expect(h.rescored).toEqual([])
+  })
+})
+
+describe('past weeks — the roster the team had that week', () => {
+  const getWeek = (week: number) => get(`?rosterId=A&week=${week}`)
+  const putWeek = (week: number, lineup: Record<string, unknown>) => put({ rosterId: 'A', week, lineup })
+  // Week 5 as recorded: te9 has since been traded away; rb2 was picked up after week 5.
+  const WEEK5 = [
+    { playerId: 'qb1', playerName: 'Quinn QB', position: 'QB', team: 'KC', sport: 'NFL', slotType: 'QB' },
+    { playerId: 'rb1', playerName: 'Ray RB', position: 'RB', team: 'SF', sport: 'NFL', slotType: 'RB' },
+    { playerId: 'wr1', playerName: 'Wade WR', position: 'WR', team: 'DAL', sport: 'NFL', slotType: 'BENCH' },
+    { playerId: 'te9', playerName: 'Tad TE', position: 'TE', team: 'MIA', sport: 'NFL', slotType: 'FLEX' },
+  ]
+
+  it('offers the recorded week roster: a traded-away player is there, a later pickup is not', async () => {
+    h.weekRoster = WEEK5
+    const body = await (await getWeek(5)).json()
+    expect(body.weekRosterRecorded).toBe(true)
+    expect(body.players.map((p: { id: string }) => p.id).sort()).toEqual(['qb1', 'rb1', 'te9', 'wr1'])
+    // Today's lineup filtered to that roster; te9 (not in today's lineup) waits on the bench.
+    expect(body.lineup).toEqual({ starters: ['qb1', 'rb1', 'wr1'], bench: ['te9'], ir: [], taxi: [], devy: [] })
+  })
+
+  it('starts a traded-away player in that week, and refuses a player the team did not have yet', async () => {
+    h.weekRoster = WEEK5
+    expect((await putWeek(5, { starters: ['qb1', 'rb1', 'rb2'], bench: ['wr1', 'te9'] })).status).toBe(400)
+    expect(h.weekWrites).toEqual([])
+
+    const res = await putWeek(5, { starters: ['qb1', 'rb1', 'te9'], bench: ['wr1'] })
+    expect(res.status).toBe(200)
+    expect(h.weekWrites[0]!.playerData.starters).toEqual(['qb1', 'rb1', 'te9'])
+    expect(h.pinned).toEqual([]) // already recorded — nothing to pin
+    expect(h.rescored).toEqual(['m5'])
+  })
+
+  it('a week with no record uses the current roster, says so, and saving pins it before re-scoring', async () => {
+    const body = await (await getWeek(5)).json()
+    expect(body.weekRosterRecorded).toBe(false)
+    expect(body.players.map((p: { id: string }) => p.id).sort()).toEqual(['qb1', 'rb1', 'rb2', 'wr1'])
+
+    expect((await putWeek(5, { starters: ['qb1', 'rb2', 'wr1'], bench: ['rb1'] })).status).toBe(200)
+    expect(h.pinned).toHaveLength(1)
+    expect(h.pinned[0]).toMatchObject({ rosterId: 'rA', seasonId: 'S1', week: 5 })
+    expect(h.pinned[0]!.players.map((p: { playerId: string }) => p.playerId).sort()).toEqual(['qb1', 'rb1', 'rb2', 'wr1'])
+    expect(h.order).toEqual(['pin', 'rescore'])
   })
 })
