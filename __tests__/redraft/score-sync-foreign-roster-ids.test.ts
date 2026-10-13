@@ -292,3 +292,23 @@ describe('score sync — a stored defence box score is never replaced by a weake
     expect(writtenStats()).toEqual({ def_sack: 2, def_points_allowed: 24 })
   })
 })
+
+describe('score sync — points allowed comes from the REGULAR-season game of that week', () => {
+  it('🛑 a preseason week 2 with a final score never becomes a regular week 2 defence\'s points allowed', async () => {
+    h.platform = 'sleeper'
+    prismaMock.redraftRosterPlayer.findMany.mockResolvedValue([{ playerId: 'ARI', position: 'DEF', sport: 'NFL', team: 'ARI' }])
+    const fetchedAt = new Date()
+    const games = [
+      { homeTeam: 'ARI', awayTeam: 'SEA', homeScore: 20, awayScore: 27, seasonType: 'regular', source: 'x', fetchedAt },
+      // August's exhibition, same week number, read last — it would win the club's slot if admitted.
+      { homeTeam: 'ARI', awayTeam: 'DEN', homeScore: 10, awayScore: 3, seasonType: 'pre', source: 'x', fetchedAt },
+    ]
+    prismaMock.sportsGame.findMany.mockImplementationOnce((async (args: { where: { seasonType?: string } }) =>
+      games.filter((g) => !args.where.seasonType || g.seasonType === args.where.seasonType)) as never)
+
+    await runSync(vi.fn(async () => new Map()))
+
+    const written = prismaMock.playerWeeklyScore.upsert.mock.calls[0]![0] as { create: { stats: Record<string, number> } }
+    expect(written.create.stats).toEqual({ def_points_allowed: 27 })
+  })
+})

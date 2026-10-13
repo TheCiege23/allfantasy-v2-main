@@ -537,7 +537,13 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
   const gameByTeam = new Map<string, { homeTeam: string; awayTeam: string; homeScore: number | null; awayScore: number | null }>()
   if (teamDefensePlayerIds.length > 0) {
     const rawGames = await prisma.sportsGame.findMany({
-      where: { sport: { in: candidateSportKeys(sport) }, season: seasonYear, week },
+      /*
+       * ⚠ REGULAR SEASON ONLY. `week` alone is ambiguous: production holds 2026 NFL preseason weeks
+       * 1-4 with final scores beside regular weeks 1-4, so an August exhibition's score could become a
+       * September defence's points allowed. The schedule resolver treats NFL season type as required
+       * for the same reason (`requiresExplicitSeasonType`).
+       */
+      where: { sport: { in: candidateSportKeys(sport) }, season: seasonYear, week, seasonType: 'regular' },
       select: { homeTeam: true, awayTeam: true, homeScore: true, awayScore: true, source: true, fetchedAt: true },
     })
     // A fixture can carry 3-4 rows here, one per provider feed. Without
