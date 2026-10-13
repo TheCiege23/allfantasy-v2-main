@@ -23,6 +23,7 @@ import { runNativeGuillotineWeek } from '@/lib/guillotine/nativeGuillotineWeek'
 import { GUILLOTINE_ARCHIVE_RETRY_MS, GUILLOTINE_UNARCHIVED_LIFECYCLE_STATES } from '@/lib/guillotine/finishGuillotineSeason'
 import { scoreActivePlayoffRound } from '@/lib/playoff-runtime/playoffRoundScoring'
 import { runPlannedSurvivorSeasonBatch } from '@/lib/survivor/survivorPlannedSeasonRunner'
+import { runNbaTribeSitOutDeadlineBatch } from '@/lib/survivor/SurvivorSitOutEngine'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -521,8 +522,9 @@ export async function GET(request: Request) {
         outcomes: { batch_error: 1 },
         error: error instanceof Error ? error.message : String(error),
       }))
+      const survivorSitOuts = await runNbaTribeSitOutDeadlineBatch().catch(() => ({ considered: 0, failed: 1, outcomes: { batch_error: 1 } }))
       const redraft = await runRedraftReconciliation()
-      return { ...legacy, redraft, survivorSeason, updated: redraft.reconciled }
+      return { ...legacy, redraft, survivorSeason, survivorSitOuts, updated: redraft.reconciled }
     },
     (r) => ({
       rowsWritten: r.matchupsRecalculated + r.redraft.matchupsRecalculated,
@@ -532,6 +534,7 @@ export async function GET(request: Request) {
       status:
         r.survivorBridge.failed > 0 ||
         r.survivorSeason.failed > 0 ||
+        r.survivorSitOuts.failed > 0 ||
         r.zombieResolutionFailed > 0 ||
         r.zombieHousekeepingErrors.length > 0 ||
         r.redraft.failed > 0 ||
@@ -546,6 +549,7 @@ export async function GET(request: Request) {
         survivorSynced: r.survivorBridge.synced,
         survivorFailed: r.survivorBridge.failed,
         survivorSeason: r.survivorSeason,
+        survivorSitOuts: r.survivorSitOuts,
         zombieResolutionAttempts: r.zombieResolutionAttempts,
         zombieResolutionFailed: r.zombieResolutionFailed,
         zombieWeeksWaiting: r.zombieWeeksWaiting.length,

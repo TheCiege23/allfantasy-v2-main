@@ -28,6 +28,7 @@ import { resolveAutonomousCouncil } from '@/lib/survivor/survivorAutonomousCounc
 import { resolveElimination } from '@/lib/survivor/survivorEliminationService'
 import { nextTorchCeremonyDeadline } from '@/lib/survivor/survivorCeremonySchedule'
 import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/normalizeSurvivorSettings'
+import { scoreNbaSurvivorOneGameRoster } from './survivorNbaWeeklyScoring'
 
 /** SurvivorPlayer.redraftRosterId is the legacy Roster id; resolve its actual season roster. */
 export async function sumRedraftStartersFantasy(
@@ -35,6 +36,10 @@ export async function sumRedraftStartersFantasy(
   week: number,
   season: { id: string; leagueId: string; season: number },
 ): Promise<{ pts: number; allFinalized: boolean }> {
+  const league = await prisma.league.findUnique({ where: { id: season.leagueId }, select: { sport: true, survivorMode: true, settings: true } })
+  if (league?.survivorMode && league.sport === 'NBA' && normalizeSurvivorFoundationSettings(league.settings as Record<string, unknown>).nbaWeeklyScoringMode === 'one_game_per_player') {
+    return scoreNbaSurvivorOneGameRoster({ leagueId: season.leagueId, legacyRosterId: rosterId, week, season: season.season })
+  }
   const bridge = await prisma.roster.findFirst({
     where: { id: rosterId, leagueId: season.leagueId }, select: { redraftRosterId: true },
   })
@@ -408,7 +413,7 @@ export async function triggerTribalOpen(leagueId: string): Promise<void> {
     const prior = await prisma.survivorTribalCouncil.findFirst({ where: { leagueId, week: gs.currentWeek }, select: { id: true } })
     if (prior) return
     // With more than two tribes, the lowest scoring nonimmune tribe attends.
-    const scores = await prisma.survivorWeeklyScore.findMany({ where: { leagueId, week: gs.currentWeek, isFinalized: true, tribeId: { not: null } }, select: { tribeId: true, finalScore: true } })
+    const scores = await prisma.survivorWeeklyScore.findMany({ where: { leagueId, week: gs.currentWeek, isFinalized: true, countedTowardTribeTotal: true, tribeId: { not: null } }, select: { tribeId: true, finalScore: true } })
     const totals = new Map<string, number>()
     for (const score of scores) if (score.tribeId) totals.set(score.tribeId, (totals.get(score.tribeId) ?? 0) + score.finalScore)
     const losingTribe = [...totals.entries()].filter(([id]) => id !== immune).sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0]))[0]?.[0] ?? tribeId

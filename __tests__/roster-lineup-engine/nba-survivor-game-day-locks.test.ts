@@ -9,7 +9,7 @@ const before = {
   },
 }
 
-describe('NBA Survivor game-day lineup locks', () => {
+describe('NBA Survivor weekly lineup locks', () => {
   it('locks only teams whose games have tipped, across full names and abbreviations', () => {
     const now = new Date('2026-10-21T23:45:00Z')
     const locks = nbaSurvivorGameDayLocks(
@@ -21,6 +21,18 @@ describe('NBA Survivor game-day lineup locks', () => {
     )
     expect(locks.lockedPlayerIds).toEqual(['a', 'c'])
     expect(locks.reasons.a).toMatch(/started/)
+  })
+
+  it('keeps a player locked after an earlier game and honors a preselected later game', () => {
+    const games = [
+      { homeTeam: 'Boston Celtics', awayTeam: 'New York Knicks', startTime: new Date('2026-10-20T23:00:00Z') },
+      { homeTeam: 'Boston Celtics', awayTeam: 'Miami Heat', startTime: new Date('2026-10-23T23:00:00Z') },
+    ]
+    const now = new Date('2026-10-22T12:00:00Z')
+    expect(nbaSurvivorGameDayLocks([{ playerId: 'a', team: 'BOS' }], games, now).lockedPlayerIds).toEqual(['a'])
+    const selected = new Map([['a', new Date('2026-10-23T23:00:00Z')]])
+    expect(nbaSurvivorGameDayLocks([{ playerId: 'a', team: 'BOS' }], games, now, selected).lockedPlayerIds).toEqual([])
+    expect(nbaSurvivorGameDayLocks([{ playerId: 'a', team: 'BOS' }], games, games[1].startTime, selected).lockedPlayerIds).toEqual(['a'])
   })
 
   it('rejects moving a locked player but allows an unrelated bench swap', () => {
