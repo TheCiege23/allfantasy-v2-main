@@ -6,9 +6,23 @@
 export type WeaponThresholdConfig = {
   type: string
   label: string
-  minPoints: number
+  /** A points line, when the weapon has one. Earned another way (attacks survived, a win streak) → absent. */
+  minPoints?: number
   description: string
 }
+
+/**
+ * The numbers `lib/zombie/weaponEngine.ts` actually awards on (via `getZombieRulesForSport`): a Knife at
+ * `knifeScore`+ in a week, a Bow at `bowScore`+, an Axe for a win by `axeWinMargin`+.
+ *
+ * 🛑 THESE WERE NFL NUMBERS FOR EVERY SPORT. An NBA zombie team scores ~1,200 a week (simulated
+ * 2026-10-13 on AF projections, the real 2026-27 schedule and real basketball per-game spread), so a
+ * 100/120 line handed every NBA team a Knife and a Bow every week and a 20-point margin an Axe on 92%
+ * of wins. A sport without its own block keeps these NFL defaults.
+ */
+export type EngineWeaponThresholds = { knifeScore: number; bowScore: number; axeWinMargin: number }
+
+export const DEFAULT_ENGINE_WEAPONS: EngineWeaponThresholds = { knifeScore: 100, bowScore: 120, axeWinMargin: 20 }
 
 export type SerumAwardConfig = {
   trigger: string
@@ -29,6 +43,8 @@ export type ZombieSportConfig = {
   lockRule: string
   bashingThreshold: number
   maulingThreshold: number
+  /** What the engine awards on; see `EngineWeaponThresholds`. Absent → `DEFAULT_ENGINE_WEAPONS`. */
+  engineWeapons?: EngineWeaponThresholds
   weaponThresholds: WeaponThresholdConfig[]
   serumAwards: SerumAwardConfig[]
   serumAwardSummary: string
@@ -101,12 +117,21 @@ export const ZOMBIE_SPORT_CONFIGS: Record<string, ZombieSportConfig> = {
     lockRule: 'Tip-off locks per player per day',
     bashingThreshold: 45,
     maulingThreshold: 70,
+    /*
+     * Calibrated to award at the rate NFL's 100/120/20 do on real NFL weeks (29,174 Sleeper team-weeks,
+     * 2026-10-13): Knife 86.6% of team-weeks, Bow 75.2%, Axe 66.4% of wins. Simulated NBA weeks
+     * (12% missed games) put those rates at 931 / 1,050 / 87; the knife line moves 829-1,060 across a
+     * 0-20% missed-game rate, hence the round 900.
+     */
+    engineWeapons: { knifeScore: 900, bowScore: 1050, axeWinMargin: 90 },
+    // What the rules page shows. It used to list 350/420/480/550 lines and a "top 2 scorer" Bow that
+    // no code awarded on; it now describes the engine (`lib/zombie/weaponEngine.ts`).
     weaponThresholds: [
-      { type: 'weapon_knife', label: 'Knife', minPoints: 350, description: 'Score 350+ weekly aggregate' },
-      { type: 'weapon_axe', label: 'Axe', minPoints: 420, description: 'Score 420+ weekly aggregate' },
-      { type: 'weapon_bow', label: 'Bow', minPoints: 300, description: 'Top 2 scorer among survivors' },
-      { type: 'weapon_gun', label: 'Gun', minPoints: 480, description: 'Score 480+ weekly aggregate' },
-      { type: 'weapon_bomb', label: 'Bomb', minPoints: 550, description: 'Season-high weekly score (one-time)' },
+      { type: 'weapon_knife', label: 'Knife', minPoints: 900, description: 'Score 900+ in a week' },
+      { type: 'weapon_bow', label: 'Bow', minPoints: 1050, description: 'Score 1,050+ in a week' },
+      { type: 'weapon_axe', label: 'Axe', minPoints: 90, description: 'Win your matchup by 90+' },
+      { type: 'weapon_gun', label: 'Gun', description: 'Survive 3 zombie attacks' },
+      { type: 'weapon_bomb', label: 'Bomb', description: 'Win 5 straight as a Survivor' },
     ],
     serumAwards: [
       { trigger: 'weekly_top', label: 'Weekly Top', description: 'Top scorer among survivors each week' },
