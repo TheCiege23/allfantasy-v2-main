@@ -32,7 +32,7 @@ import {
   crosswalkToRollingInsightsIds,
   type RiCrosswalkDb,
 } from '@/lib/player-identity/rollingInsightsCrosswalk'
-import { crosswalkToSleeperIds, sleeperLookupId } from '@/lib/core-app/rosterIdCrosswalk'
+import { crosswalkToSleeperIds, sleeperLookupId, withTeamDefenseIds } from '@/lib/core-app/rosterIdCrosswalk'
 
 export const dynamic = 'force-dynamic'
 
@@ -294,8 +294,14 @@ export async function GET(req: NextRequest) {
    */
   const leaguePlatform = leagueForLock?.platform ?? null
   const translatesToSleeper = String(roster.season.sport ?? '').trim().toUpperCase() === 'NFL'
+  // A team defence (ESPN -16012, Fleaflicker 2343) maps to Sleeper's team code from its row — the player
+  // crosswalk has no row for one, so without this every imported D/ST read no score (teamDefenseCrosswalk.ts).
   const sleeperIdByRosterId = translatesToSleeper
-    ? await crosswalkToSleeperIds(String(leaguePlatform ?? ''), 'NFL', playerIds).catch(() => new Map<string, string>())
+    ? withTeamDefenseIds(
+        leaguePlatform,
+        await crosswalkToSleeperIds(String(leaguePlatform ?? ''), 'NFL', playerIds).catch(() => new Map<string, string>()),
+        roster.players,
+      )
     : new Map<string, string>()
   const lookupOf = (id: string): string | null =>
     translatesToSleeper ? sleeperLookupId(leaguePlatform, id, sleeperIdByRosterId) : id

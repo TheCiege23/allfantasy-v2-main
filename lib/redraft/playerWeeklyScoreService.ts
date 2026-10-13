@@ -33,7 +33,8 @@ import { bridgeNcaafRosterIdsToCfbdIds } from '@/lib/redraft/ncaafGameLogIdBridg
 import { loadNcaafWeekParticipation, NCAAF_ZERO_VERDICTS, type NcaafNoRowVerdict } from '@/lib/redraft/ncaafWeekParticipation'
 import { ncaafReserveAvailability, type NcaafReserveAvailability } from '@/lib/player-identity/verifiedNcaafReserves'
 import { aggregateNcaafWeek, isNcaafSport } from '@/lib/scoring-runtime/ncaafStatNormalization'
-import { crosswalkToSleeperIds, sleeperLookupId } from '@/lib/core-app/rosterIdCrosswalk'
+import { crosswalkToSleeperIds, sleeperLookupId, withTeamDefenseIds } from '@/lib/core-app/rosterIdCrosswalk'
+import { teamDefenseSleeperId } from '@/lib/core-app/teamDefenseCrosswalk'
 import { rosterIdSpaceOf } from '@/lib/core-app/rosterIdSpace'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { readExileRoster } from '@/lib/survivor/exileRosterRules'
@@ -223,7 +224,7 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
   const ordinaryRosterPlayers = rosterIds.length
     ? await prisma.redraftRosterPlayer.findMany({
         where: { rosterId: { in: rosterIds }, droppedAt: null },
-        select: { playerId: true, sport: true, position: true, team: true },
+        select: { playerId: true, playerName: true, sport: true, position: true, team: true },
       })
     : []
   // Exile lineups are separate from RedraftRosterPlayer. Score their saved weekly
@@ -268,12 +269,24 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
     const sourceLeague = await prisma.league.findUnique({ where: { id: season.leagueId }, select: { platform: true } })
     const platform = sourceLeague?.platform ?? null
     if (rosterIdSpaceOf(platform) !== 'sleeper') {
-      const crosswalk = await crosswalkToSleeperIds(String(platform ?? ''), sport, storedIds)
+      /*
+       * A team defence has no player-crosswalk row, so it maps to Sleeper's team code from its row
+       * (teamDefenseCrosswalk.ts) — and is scored as one: `DEF` routes it to the team-defence branch below
+       * (an imported row reads `D/ST`, or `UNK`), and the club code is what points-allowed is matched on
+       * (a Fleaflicker row's team is the nickname, "Chiefs").
+       */
+      const crosswalk = withTeamDefenseIds(
+        platform,
+        await crosswalkToSleeperIds(String(platform ?? ''), sport, storedIds),
+        storedRosterPlayers,
+      )
       untranslatedForeignPlayerIds = storedIds.filter((id) => sleeperLookupId(platform, id, crosswalk) == null)
       foreignIdsTranslated = storedIds.length - untranslatedForeignPlayerIds.length
       rosterPlayers = storedRosterPlayers.flatMap((p) => {
         const sleeperId = sleeperLookupId(platform, p.playerId, crosswalk)
-        return sleeperId ? [{ ...p, playerId: sleeperId }] : []
+        if (!sleeperId) return []
+        if (teamDefenseSleeperId(platform, p) === sleeperId) return [{ ...p, playerId: sleeperId, position: 'DEF', team: sleeperId }]
+        return [{ ...p, playerId: sleeperId }]
       })
     }
   }

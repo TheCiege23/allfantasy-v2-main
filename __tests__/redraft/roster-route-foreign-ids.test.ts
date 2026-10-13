@@ -248,3 +248,42 @@ describe('/api/redraft/roster — the unified row\'s stored injury column never 
     expect((out['6794'] as unknown as { providerInjuryLabel: unknown }).providerInjuryLabel).toBeNull()
   })
 })
+
+/*
+ * Owner decision 2026-10-13: score foreign team defences. Sleeper's id for a defence is its club code (`KC`),
+ * so an imported D/ST reads that defence's rows — including a projection, which production holds under the
+ * bare code (34 `fantasy_projections` rows) and never under the ESPN or Fleaflicker id.
+ */
+describe('/api/redraft/roster — an imported team defence reads Sleeper\'s defence for its club', () => {
+  it('ESPN -16012 (Chiefs D/ST) reads KC\'s week, keyed back on the roster id', async () => {
+    h.rosterPlayers = [rp('-16012', 'Chiefs D/ST', 'D/ST', 'KC')]
+    sleeperRowsFor('KC', 9, 'Kansas City Chiefs')
+
+    const { inputs, out } = await read()
+    expect(out['-16012']!.weeklyScore?.stats).toEqual({ name: 'Kansas City Chiefs' })
+    expect(out['-16012']!.weeklyScore?.playerId).toBe('-16012')
+    expect(inputs['-16012']!.providerWeeklyProjection).toBe(9)
+    expect(canonicalSpy).toHaveBeenCalledWith('KC')
+  })
+
+  it('Fleaflicker 2343 ("Kansas City Chiefs", team "Chiefs") reads KC\'s week — its id names nothing', async () => {
+    h.platform = 'fleaflicker'
+    h.rosterPlayers = [rp('2343', 'Kansas City Chiefs', 'D/ST', 'Chiefs')]
+    sleeperRowsFor('2343', 3.1, 'Whoever holds 2343 in Sleeper')
+    sleeperRowsFor('KC', 9, 'Kansas City Chiefs')
+
+    const { out } = await read()
+    expect(out['2343']!.weeklyScore?.stats).toEqual({ name: 'Kansas City Chiefs' })
+    expect(canonicalSpy).not.toHaveBeenCalledWith('2343')
+  })
+
+  it('🛑 a Fleaflicker "D/ST" row named for a person reads nothing — a position is not proof of a defence', async () => {
+    h.platform = 'fleaflicker'
+    h.rosterPlayers = [rp('2343', 'Travis Kelce', 'D/ST', 'Chiefs')]
+    sleeperRowsFor('KC', 9, 'Kansas City Chiefs')
+
+    const { out } = await read()
+    expect(out['2343']!.weeklyScore).toBeNull()
+    expect(canonicalSpy).not.toHaveBeenCalledWith('KC')
+  })
+})
