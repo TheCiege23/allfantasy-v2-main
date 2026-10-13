@@ -28,7 +28,7 @@ import { resolveAutonomousCouncil } from '@/lib/survivor/survivorAutonomousCounc
 import { resolveElimination } from '@/lib/survivor/survivorEliminationService'
 import { nextTorchCeremonyDeadline } from '@/lib/survivor/survivorCeremonySchedule'
 import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/normalizeSurvivorSettings'
-import { scoreNbaSurvivorOneGameRoster } from './survivorNbaWeeklyScoring'
+import { scoreNbaSurvivorAllGamesRoster, scoreNbaSurvivorOneGameRoster } from './survivorNbaWeeklyScoring'
 
 /** SurvivorPlayer.redraftRosterId is the legacy Roster id; resolve its actual season roster. */
 export async function sumRedraftStartersFantasy(
@@ -37,8 +37,11 @@ export async function sumRedraftStartersFantasy(
   season: { id: string; leagueId: string; season: number },
 ): Promise<{ pts: number; allFinalized: boolean }> {
   const league = await prisma.league.findUnique({ where: { id: season.leagueId }, select: { sport: true, survivorMode: true, settings: true } })
-  if (league?.survivorMode && league.sport === 'NBA' && normalizeSurvivorFoundationSettings(league.settings as Record<string, unknown>).nbaWeeklyScoringMode === 'one_game_per_player') {
-    return scoreNbaSurvivorOneGameRoster({ leagueId: season.leagueId, legacyRosterId: rosterId, week, season: season.season })
+  if (league?.survivorMode && league.sport === 'NBA') {
+    const score = { leagueId: season.leagueId, legacyRosterId: rosterId, week, season: season.season }
+    return normalizeSurvivorFoundationSettings(league.settings as Record<string, unknown>).nbaWeeklyScoringMode === 'one_game_per_player'
+      ? scoreNbaSurvivorOneGameRoster(score)
+      : scoreNbaSurvivorAllGamesRoster(score)
   }
   const bridge = await prisma.roster.findFirst({
     where: { id: rosterId, leagueId: season.leagueId }, select: { redraftRosterId: true },
