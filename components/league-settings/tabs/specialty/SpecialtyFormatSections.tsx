@@ -149,13 +149,3 @@ export function TournamentSection({ ctx }: FormatSectionProps) {
     </div>
   )
 }
-
-/** Salary Cap has no commish editor yet — its rules are set at creation and shown on the league. */
-export function SalaryCapSection(_props: FormatSectionProps) {
-  const { t } = useLanguage()
-  return (
-    <div className="rounded-2xl border border-white/[0.08] bg-[#0a1228]/70 p-4 text-[13px] leading-relaxed text-white/70">
-      <p>{t('lsHub.sp.sc.body')}</p>
-    </div>
-  )
-}

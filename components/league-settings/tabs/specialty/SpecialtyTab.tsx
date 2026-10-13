@@ -9,6 +9,7 @@ import { BestBallSettingsCommissionerPanel } from '@/components/league-settings/
 import type { LeagueSettingsTabProps } from '../../league-settings-tabs-types'
 import type { FormatSectionProps } from './SpecialtyFormatSections'
 import { GuillotineSettingsForm, type GuillotineSettingsValue } from './GuillotineSettingsForm'
+import { SalaryCapSettingsForm, type SalaryCapSettingsState } from './SalaryCapSettingsForm'
 
 type GatedFormat = 'guillotine' | 'survivor' | 'zombie' | 'big_brother' | 'salary_cap' | 'devy' | 'c2c' | 'tournament'
 
@@ -23,6 +24,7 @@ type SpecialtyState = {
   paywallStartsAt: string
   upgradePath: string
   guillotine: GuillotineSettingsValue | null
+  salaryCap: SalaryCapSettingsState | null
 }
 
 const TOKEN_RULE = 'commissioner_specialty_settings_league_unlock'
@@ -30,11 +32,10 @@ const TOKEN_RULE = 'commissioner_specialty_settings_league_unlock'
 /** Format editors load only when this tab is open, and only the module once. */
 const load = (pick: (m: typeof import('./SpecialtyFormatSections')) => ComponentType<FormatSectionProps>) =>
   dynamic(() => import('./SpecialtyFormatSections').then(pick), { ssr: false })
-const SECTIONS: Record<Exclude<GatedFormat, 'guillotine'>, ComponentType<FormatSectionProps>> = {
+const SECTIONS: Record<Exclude<GatedFormat, 'guillotine' | 'salary_cap'>, ComponentType<FormatSectionProps>> = {
   survivor: load((m) => m.SurvivorSection),
   zombie: load((m) => m.ZombieSection),
   big_brother: load((m) => m.BigBrotherSection),
-  salary_cap: load((m) => m.SalaryCapSection),
   devy: load((m) => m.DevySection),
   c2c: load((m) => m.C2CSection),
   tournament: load((m) => m.TournamentSection),
@@ -151,7 +152,7 @@ export function SpecialtyTab({ ctx, canEdit: isCommish }: LeagueSettingsTabProps
 
           {state.canEdit
             ? state.formats.map((format) => {
-                const Section = format === 'guillotine' ? null : SECTIONS[format]
+                const Section = format === 'guillotine' || format === 'salary_cap' ? null : SECTIONS[format]
                 return (
                   <section key={format} className="space-y-3" data-testid={`specialty-section-${format}`}>
                     <h4 className="text-[12px] font-bold uppercase tracking-wide text-white/55">{t(`lsHub.sp.fmt.${format}`)}</h4>
@@ -160,6 +161,12 @@ export function SpecialtyTab({ ctx, canEdit: isCommish }: LeagueSettingsTabProps
                         <GuillotineSettingsForm leagueId={leagueId} initial={state.guillotine} canEdit />
                       ) : (
                         <p className="text-[12px] text-white/50">{t('lsHub.sp.g.noConfig')}</p>
+                      )
+                    ) : format === 'salary_cap' ? (
+                      state.salaryCap ? (
+                        <SalaryCapSettingsForm leagueId={leagueId} initial={state.salaryCap} canEdit />
+                      ) : (
+                        <p className="text-[12px] text-white/50">{t('lsHub.sp.sc.noConfig')}</p>
                       )
                     ) : Section ? (
                       <Section ctx={ctx} canEdit coveredBySubscription={state.coveredBySubscription} />

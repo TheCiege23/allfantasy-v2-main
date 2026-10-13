@@ -2,10 +2,13 @@
  * /api/leagues/[leagueId]/specialty-settings — the Specialty tab of league settings.
  *
  * GET   → which gated formats this league runs, whether the caller may edit them and why, the token
- *         price of a one-season unlock, and the Guillotine config when the league is Guillotine.
+ *         price of a one-season unlock, the Guillotine config when the league is Guillotine, and the
+ *         Salary Cap settings (with every team's cap position) when it is Salary Cap.
  * POST  → `{ confirmTokenSpend }` — unlock THIS league for THIS season with AF Tokens. A commish
  *         whose plan already covers it gets `{ ok: true, alreadyCovered: true }` and pays nothing.
  * PATCH → `{ guillotine: {...} }` — Guillotine rules (GuillotineLeagueConfig + the endgame).
+ *         `{ salaryCap: {...} }` — Salary Cap rules (SalaryCapLeagueConfig); rules in
+ *         lib/salary-cap/salaryCapSettingsPatch.ts. Logged to the cap event log.
  *
  * Commish and co-commish only. Every other format's editor writes through its own route, and each
  * of those routes calls `specialtySettingsEditRefusal` itself.
@@ -19,6 +22,16 @@ import { prisma } from '@/lib/prisma'
 import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
 import { getGuillotineConfig, upsertGuillotineConfig } from '@/lib/guillotine/GuillotineLeagueConfig'
 import { resolveGuillotineEndgame } from '@/lib/guillotine/endgameRules'
+import { getSalaryCapConfig, upsertSalaryCapConfig } from '@/lib/salary-cap/SalaryCapLeagueConfig'
+import { getCurrentCapYear, getEffectiveCap, getTotalCapHitForRoster } from '@/lib/salary-cap/CapCalculationService'
+import {
+  capComplianceRow,
+  parseSalaryCapSettingsPatch,
+  salaryCapSettingsValue,
+  type CapComplianceRow,
+  type SalaryCapSettingsValue,
+} from '@/lib/salary-cap/salaryCapSettingsPatch'
+import { buildRosterLabelMap } from '@/lib/scoring-engine/resolveTeamLabels'
 import {
   GUILLOTINE_ENDGAME_THRESHOLD,
   SPECIALTY_SETTINGS_FEATURE_ID,
@@ -47,6 +60,47 @@ async function leagueIdFrom(ctx: Ctx): Promise<string> {
   return (p?.leagueId ?? '').trim()
 }
 
+type SalaryCapState = {
+  value: SalaryCapSettingsValue
+  /** True once any contract exists: the startup draft is over and its settings are frozen. */
+  startupLocked: boolean
+  capYear: number
+  teams: CapComplianceRow[]
+}
+
+/** The editor's view of a Salary Cap league: its settings, and where every team stands this cap year. */
+async function loadSalaryCapState(leagueId: string): Promise<SalaryCapState | null> {
+  const config = await getSalaryCapConfig(leagueId)
+  if (!config) return null
+  const capYear = getCurrentCapYear()
+  const [contracts, rosters, labels, ledgers] = await Promise.all([
+    prisma.playerContract.count({ where: { leagueId } }),
+    prisma.roster.findMany({ where: { leagueId }, select: { id: true } }),
+    buildRosterLabelMap(leagueId),
+    config.configId
+      ? prisma.salaryCapTeamLedger.findMany({ where: { configId: config.configId, capYear }, select: { rosterId: true, rolloverUsed: true } })
+      : Promise.resolve([] as { rosterId: string; rolloverUsed: number }[]),
+  ])
+  const rollover = new Map(ledgers.map((l) => [l.rosterId, l.rolloverUsed]))
+  const floor = config.capFloorEnabled ? config.capFloorAmount : null
+  const teams = config.configId
+    ? await Promise.all(
+        rosters.map(async (r) => {
+          const hit = await getTotalCapHitForRoster(config.configId, r.id, capYear)
+          return capComplianceRow({
+            rosterId: r.id,
+            name: labels.get(r.id) ?? `Team ${r.id.slice(0, 6)}`,
+            cap: getEffectiveCap(config, capYear, rollover.get(r.id) ?? 0),
+            floor,
+            ...hit,
+          })
+        }),
+      )
+    : []
+  teams.sort((a, b) => a.capSpace - b.capSpace || a.name.localeCompare(b.name))
+  return { value: salaryCapSettingsValue(config), startupLocked: contracts > 0, capYear, teams }
+}
+
 export async function GET(_req: NextRequest, ctx: Ctx) {
   const user = await sessionUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -70,6 +124,7 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
       ? { ...config, endgame: resolveGuillotineEndgame(league ?? {}).format }
       : null
   }
+  const salaryCap = formats.includes('salary_cap') ? await loadSalaryCapState(leagueId) : null
 
   return NextResponse.json({
     formats,
@@ -83,6 +138,7 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
     featureId: SPECIALTY_SETTINGS_FEATURE_ID,
     upgradePath: `/commissioner-upgrade?feature=${SPECIALTY_SETTINGS_FEATURE_ID}`,
     guillotine,
+    salaryCap,
   })
 }
 
@@ -144,7 +200,8 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   const refusal = await specialtySettingsEditRefusal(leagueId, user.id, user.email)
   if (refusal) return refusal
 
-  const body = (await req.json().catch(() => ({}))) as { guillotine?: unknown }
+  const body = (await req.json().catch(() => ({}))) as { guillotine?: unknown; salaryCap?: unknown }
+  if (body.salaryCap !== undefined) return patchSalaryCap(leagueId, user.id, body.salaryCap)
   if (!body.guillotine || typeof body.guillotine !== 'object' || Array.isArray(body.guillotine)) {
     return NextResponse.json({ error: 'guillotine settings object required' }, { status: 400 })
   }
@@ -180,4 +237,41 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     ok: true,
     guillotine: config ? { ...config, endgame: resolveGuillotineEndgame(league ?? {}).format } : null,
   })
+}
+
+async function patchSalaryCap(leagueId: string, actorUserId: string, raw: unknown) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return NextResponse.json({ error: 'salaryCap settings object required' }, { status: 400 })
+  }
+  const formats = await detectGatedSpecialtyFormats(leagueId)
+  if (!formats.includes('salary_cap')) {
+    return NextResponse.json({ error: 'This is not a Salary Cap league.' }, { status: 409 })
+  }
+  const before = await getSalaryCapConfig(leagueId)
+  if (!before) return NextResponse.json({ error: 'Salary Cap settings not found.' }, { status: 404 })
+  const current = salaryCapSettingsValue(before)
+  const startupLocked = (await prisma.playerContract.count({ where: { leagueId } })) > 0
+
+  const parsed = parseSalaryCapSettingsPatch(raw as Record<string, unknown>, current, { startupLocked })
+  if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 })
+
+  const changes: Record<string, { from: unknown; to: unknown }> = {}
+  for (const [k, v] of Object.entries(parsed.patch)) {
+    const from = (current as Record<string, unknown>)[k]
+    if (k !== 'weightedLotteryEnabled' && from !== v) changes[k] = { from, to: v }
+  }
+  if (Object.keys(changes).length > 0) {
+    const after = await upsertSalaryCapConfig(leagueId, parsed.patch)
+    if (after?.configId) {
+      await prisma.salaryCapEventLog.create({
+        data: {
+          leagueId,
+          configId: after.configId,
+          eventType: 'settings_changed',
+          metadata: { actorUserId, changes } as Prisma.InputJsonValue,
+        },
+      })
+    }
+  }
+  return NextResponse.json({ ok: true, salaryCap: await loadSalaryCapState(leagueId) })
 }
