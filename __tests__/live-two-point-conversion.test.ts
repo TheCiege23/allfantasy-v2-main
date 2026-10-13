@@ -21,6 +21,7 @@ import { namedIn, parsePlayByPlay, playsToLiveEvents } from '@/lib/live/rollingI
 import { headlineFor, playActionParts } from '@/lib/live/playFeedPresentation'
 import { notificationTitleFor, notifyBigPlays } from '@/lib/live/bigPlayNotifier'
 import { playActionText } from '@/lib/core-app/homeBandsCopy'
+import { idpLinesFromGame } from '@/lib/idp/pbpToIdp'
 import type { LiveEvent } from '@/lib/live/eventDetector'
 
 /**
@@ -223,5 +224,69 @@ describe('the pushes for the real play', () => {
       { to: 'user-kincaid', title: '2-pt conversion', body: 'Dalton Kincaid 2-pt conversion catch from Josh Allen', severity: 'medium', yards: null },
       { to: 'user-allen', title: '2-pt conversion', body: 'Josh Allen 2-pt conversion pass to Dalton Kincaid', severity: 'medium', yards: null },
     ])
+  })
+})
+
+/**
+ * IDP lines read the same row. A try is not a play from scrimmage, and no `idp_*` scoring key pays a
+ * defensive two-point return (`dst_2pt_return` is the TEAM-defence key) — so a try credits no defender.
+ */
+describe('IDP credit comes from the scrimmage play, never from the try', () => {
+  const stafford = { id: 1, name: 'Matthew Stafford', role: 'passer', action: 'pass', position: 'QB', teamAbbr: 'LA' }
+  const nacua = { id: 4, name: 'Puka Nacua', role: 'receiver', action: 'receive', position: 'WR', teamAbbr: 'LA' }
+  const adams = { id: 2, name: 'Davante Adams', role: 'receiver', action: 'receive', position: 'WR', teamAbbr: 'LA' }
+  const bernardInt = { id: 30, name: 'Terrel Bernard', role: 'interceptor', action: 'intercepted', position: 'LB', teamAbbr: 'BUF' }
+  const idpOf = (plays: unknown[]) => idpLinesFromGame(gameOf(plays))
+  const lineFor = (plays: unknown[], id: string) => idpOf(plays).find((l) => l.playerId === id)?.stats
+
+  it.each(SHAPES)('the real BUF @ LA row (%s) credits no defender', (_label, players) => {
+    expect(idpOf([realPlay(players)])).toEqual([])
+  })
+
+  // Synthetic prose in the gamebook's form; no defensive return has been captured on this feed yet.
+  it('a DEFENSIVE two-point return pays its interceptor neither an interception nor a defensive TD', () => {
+    const row = {
+      ...realPlay([stafford, nacua, adams, bernardInt]),
+      event: 'pass',
+      yardsGained: 2,
+      possession: 'Los Angeles Rams',
+      description: 'M.Stafford pass short left to P.Nacua for 2 yards, TOUCHDOWN. TWO-POINT CONVERSION ATTEMPT. M.Stafford pass to D.Adams is intercepted by T.Bernard. ATTEMPT FAILS. DEFENSIVE TWO-POINT ATTEMPT. T.Bernard returned the try attempt. ATTEMPT SUCCEEDS.',
+    }
+    expect(lineFor([row], '30')).toBeUndefined()
+  })
+
+  it('a pass defended on the try is not a scrimmage pass defended', () => {
+    const row = realPlay([
+      allenPasser, kincaid,
+      { id: 31, name: 'Cole Bishop', role: 'defender', action: 'defend', position: 'S', teamAbbr: 'BUF' },
+    ], { description: 'J.Allen up the middle for 1 yard, TOUCHDOWN. TWO-POINT CONVERSION ATTEMPT. J.Allen pass to D.Kincaid is incomplete (C.Bishop). ATTEMPT FAILS.' })
+    expect(lineFor([row], '31')).toBeUndefined()
+  })
+
+  it('a defender named on the touchdown keeps no try-only interceptor entry', () => {
+    const row = realPlay([
+      allenRusher, allenPasser, kincaid,
+      { ...bernardInt, role: 'defender', action: 'tackle' },
+      bernardInt,
+    ], { description: 'J.Allen up the middle for 1 yard, TOUCHDOWN (T.Bernard). TWO-POINT CONVERSION ATTEMPT. J.Allen pass to D.Kincaid is intercepted by T.Bernard. ATTEMPT FAILS.' })
+    expect(lineFor([row], '30')).toEqual({ idp_solo_tackle: 1 })
+  })
+
+  it('nor a try-only fumble-recovery entry', () => {
+    const row = realPlay([
+      allenRusher, allenPasser, kincaid,
+      { ...bernardInt, role: 'defender', action: 'tackle' },
+      { ...bernardInt, role: 'recoverer', action: 'fumble_recovery' },
+    ], { description: 'J.Allen up the middle for 1 yard, TOUCHDOWN (T.Bernard). TWO-POINT CONVERSION ATTEMPT. J.Allen pass to D.Kincaid is complete. D.Kincaid FUMBLES, RECOVERED by T.Bernard. ATTEMPT FAILS.' })
+    expect(lineFor([row], '30')).toEqual({ idp_solo_tackle: 1 })
+  })
+
+  it('control: the same interceptor on a pick-six with no try is still credited', () => {
+    const row = {
+      ...realPlay([stafford, bernardInt]),
+      event: 'interception',
+      description: 'M.Stafford pass short left intended for P.Nacua INTERCEPTED by T.Bernard at LA 20. T.Bernard for 20 yards, TOUCHDOWN.',
+    }
+    expect(lineFor([row], '30')).toEqual({ idp_interception: 1, idp_defensive_touchdown: 1 })
   })
 })
