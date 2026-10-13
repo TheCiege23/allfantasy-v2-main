@@ -191,7 +191,7 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
 
   if (action === 'nba-game-options' || action === 'nba-game-pick') {
     if (!access.isUserActivePlayer || !access.rosterId) return NextResponse.json({ error: 'Only an active manager may choose a counting game.' }, { status: 403 })
-    if (normalizeSurvivorFoundationSettings(access.settings).nbaWeeklyScoringMode !== 'one_game_per_player') return NextResponse.json({ error: 'This league counts every NBA game.' }, { status: 409 })
+    if (access.settings.nbaWeeklyScoringMode !== 'one_game_per_player') return NextResponse.json({ error: 'This league counts every NBA game.' }, { status: 409 })
     const game = await prisma.survivorGameState.findUnique({ where: { leagueId }, select: { currentWeek: true } })
     const plan = readSurvivorFullSeasonPlan(await readLeagueSettings(leagueId))
     const activeWeek = game?.currentWeek && game.currentWeek > 0 ? game.currentWeek : plan?.startWeek

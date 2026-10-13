@@ -81,17 +81,18 @@ export async function saveNbaSurvivorGamePick(input: { leagueId: string; rosterI
   if (!player) return { ok: false, error: 'This player is no longer on your roster.' }
   const fixtures = gamesForTeam(week.games, player.team, player.addedAt)
   const chosen = fixtures.find(game => gameKey(game) === input.gameKey)
-  if (!chosen?.startTime) return { ok: false, error: 'Choose a scheduled game for this player’s team this week.' }
+  const chosenStart = chosen?.startTime
+  if (!chosenStart) return { ok: false, error: 'Choose a scheduled game for this player’s team this week.' }
   const existing = week.pickByPlayer.get(player.playerId)
   const currentStart = existing ? fixtures.find(game => gameKey(game) === existing.gameKey)?.startTime ?? fixtures[0]?.startTime : fixtures[0]?.startTime
-  if (!currentStart || currentStart <= now || chosen.startTime <= now) return { ok: false, error: 'This player’s counting game has started; the weekly choice is locked.' }
+  if (!currentStart || currentStart <= now || chosenStart <= now) return { ok: false, error: 'This player’s counting game has started; the weekly choice is locked.' }
   const id = `nba-game-pick:${input.leagueId}:${week.league.season}:${input.week}:${player.playerId}`
   return withSurvivorSetupTransaction(input.leagueId, async tx => {
     const previous = await tx.survivorCommissionerAction.findUnique({ where: { id }, select: { newState: true } })
     const selected = readPickState(previous?.newState)
     const originalStart = selected ? fixtures.find(game => gameKey(game) === selected.gameKey)?.startTime ?? fixtures[0]?.startTime : fixtures[0]?.startTime
-    if (!originalStart || originalStart <= new Date() || chosen.startTime <= new Date()) return { ok: false as const, error: 'This player’s counting game has started; the weekly choice is locked.' }
-    const newState = { playerId: player.playerId, gameKey: input.gameKey, startAt: chosen.startTime.toISOString(), rosterId: input.rosterId, selectedBy: input.userId }
+    if (!originalStart || originalStart <= new Date() || chosenStart <= new Date()) return { ok: false as const, error: 'This player’s counting game has started; the weekly choice is locked.' }
+    const newState = { playerId: player.playerId, gameKey: input.gameKey, startAt: chosenStart.toISOString(), rosterId: input.rosterId, selectedBy: input.userId }
     await tx.survivorCommissionerAction.upsert({ where: { id },
       create: { id, leagueId: input.leagueId, commissionerId: input.userId, week: input.week, actionType: 'nba_game_pick', targetUserId: input.userId, description: 'Manager selected an NBA counting game.', newState, wasConfirmed: true },
       update: { previousState: previous?.newState ?? undefined, newState, executedAt: new Date() },
@@ -104,7 +105,7 @@ export async function scoreNbaSurvivorOneGameRoster(input: { leagueId: string; l
   const week = await loadRosterWeek(input.leagueId, input.legacyRosterId, input.week, new Date())
   if (!week || week.league.season !== input.season || week.games.length === 0) return { pts: 0, allFinalized: false }
   const lineups = await loadWeekLineups(prisma, { redraftRosterIds: [week.roster.redraftRosterId!], season: input.season, week: input.week })
-  const starters = week.players.filter(player => isScoringStarterSlot(weekSlotType(player, lineups)))
+  const starters = week.players.filter(player => isScoringStarterSlot(weekSlotType({ ...player, rosterId: week.roster.redraftRosterId! }, lineups)))
   if (!starters.length) return { pts: 0, allFinalized: false }
   let points = 0
   let allFinalized = true
@@ -137,7 +138,7 @@ export async function applyNbaSurvivorPickLineupLocks<T extends { playerId: stri
   if (readLineupLockSettings(input.settings).mode !== 'per_player_kickoff') return input.players
   const legacy = await prisma.roster.findFirst({ where: { leagueId: input.leagueId, redraftRosterId: input.redraftRosterId }, select: { id: true } })
   if (!legacy) throw new Error('NBA Survivor lineup lock requires its linked league roster.')
-  const options = await getNbaSurvivorGameOptions({ leagueId: input.leagueId, rosterId: legacy.id, week })
+  const options = await getNbaSurvivorGameOptions({ leagueId: input.leagueId, rosterId: legacy.id, week: input.week })
   if (!options.ok) throw new Error(options.error)
   const byPlayer = new Map(options.players.map(row => [row.playerId, row]))
   return input.players.map(player => {
