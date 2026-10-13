@@ -155,35 +155,47 @@ describe('NFL live-scoring runtime — foreign roster ids read through the cross
   })
 })
 
-const upsertedIds = () =>
-  h.prisma.playerWeeklyScore.upsert.mock.calls.map(
-    ([a]) => (a as { where: { playerId_week_season_sport: { playerId: string } } }).where.playerId_week_season_sport.playerId,
-  )
+describe('NFL stat-payload ingest — this league only, never written in Sleeper\'s id space', () => {
+  // The ingest used to upsert the shared PlayerWeeklyScore row, which every league scores from. Each
+  // line is now a league stat override under the roster's own id; the shared table is only READ (under
+  // the Sleeper id) for the "before" points.
+  const stored = () => (h.state.settings.stat_overrides as Record<string, Record<string, { stats: Row }>>)['2026:2']
 
-describe('NFL stat-payload ingest — writes under the Sleeper id, never a raw foreign id', () => {
-  it('🛑 Fleaflicker 13761 unmapped: skipped and counted, nothing written under 13761 (a Sleeper DL)', async () => {
+  it('🛑 Fleaflicker 13761 unmapped: stored on this league; nothing read or written under 13761 in the shared table', async () => {
+    h.state.scores = [weekRow('13761', { def_tkl: 7 })]
     const result = await ingestNflRedraftStatPayload({ seasonId: 'season-1', week: 2, rows: [{ playerId: '13761', stats: { pass_yds: 300 } }] })
 
     expect(h.prisma.playerWeeklyScore.upsert).not.toHaveBeenCalled()
-    expect(result.synced).toBe(0)
-    expect(result.untranslatedForeignPlayerIds).toEqual(['13761'])
-    expect(result.skipped).toEqual(['13761'])
-  })
-
-  it('Fleaflicker 13761 mapped to 4984: written under 4984', async () => {
-    h.state.identity = [{ sport: 'NFL', fleaflickerId: '13761', espnId: null, mflId: null, sleeperId: '4984' }]
-    const result = await ingestNflRedraftStatPayload({ seasonId: 'season-1', week: 2, rows: [{ playerId: '13761', stats: { pass_yds: 300 } }] })
-
-    expect(upsertedIds()).toEqual(['4984'])
+    expect(h.prisma.playerWeeklyScore.findUnique).not.toHaveBeenCalled()
     expect(result.synced).toBe(1)
     expect(result.untranslatedForeignPlayerIds).toEqual([])
+    expect(stored()['13761']!.stats).toMatchObject({ pass_yds: 300 })
   })
 
-  it('a native league writes under its own ids, as before', async () => {
+  it('Fleaflicker 13761 mapped to 4984: the before line is read under 4984; nothing shared is written', async () => {
+    h.state.identity = [{ sport: 'NFL', fleaflickerId: '13761', espnId: null, mflId: null, sleeperId: '4984' }]
+    h.state.scores = [weekRow('4984', { pass_yds: 250 })]
+    await ingestNflRedraftStatPayload({ seasonId: 'season-1', week: 2, rows: [{ playerId: '13761', stats: { pass_yds: 300 } }] })
+
+    const read = h.prisma.playerWeeklyScore.findUnique.mock.calls[0]![0] as { where: { playerId_week_season_sport: { playerId: string } } }
+    expect(read.where.playerId_week_season_sport.playerId).toBe('4984')
+    expect(h.prisma.playerWeeklyScore.upsert).not.toHaveBeenCalled()
+    expect(stored()['13761']!.stats).toMatchObject({ pass_yds: 300 })
+  })
+
+  it('a native league stores under its own ids and its runtime scores the stored line', async () => {
     h.state.platform = 'sleeper'
     h.state.rosterPlayers = [qb('4984')]
+    h.state.scores = [weekRow('4984', { pass_yds: 250 })]
     await ingestNflRedraftStatPayload({ seasonId: 'season-1', week: 2, rows: [{ playerId: '4984', stats: { pass_yds: 300 } }] })
-    expect(upsertedIds()).toEqual(['4984'])
+    expect(h.prisma.playerWeeklyScore.upsert).not.toHaveBeenCalled()
+    expect((await starter('4984')).stats).toMatchObject({ pass_yds: 300 })
+  })
+
+  it('a player not on this league is skipped and nothing is stored', async () => {
+    const result = await ingestNflRedraftStatPayload({ seasonId: 'season-1', week: 2, rows: [{ playerId: 'stranger', stats: { pass_yds: 300 } }] })
+    expect(result).toMatchObject({ synced: 0, skipped: ['stranger'] })
+    expect(h.prisma.league.update).not.toHaveBeenCalled()
   })
 })
 
