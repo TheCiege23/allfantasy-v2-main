@@ -407,6 +407,15 @@ const ALLOWED_PATH_PATTERNS = [
    * makes, including ones nobody has written yet.
    */
   /^scripts\/deploy-verify-wait\.mjs$/,
+  /*
+   * ONE file, by exact path: the Sleeper team-ownership PROOF (lib/league-join/sleeperOwnershipClaim.ts).
+   * It asks "has this person, right now, put the code we gave them into their Sleeper team name?" —
+   * a question only Sleeper can answer, the same footing as an auth exchange. A copy in Postgres would
+   * be precisely the stale answer that lets the wrong person claim a team. Public endpoint, no
+   * credential, read only on a member's explicit Verify tap, capped per code. The file holds that one
+   * read and nothing else, so the exemption covers nothing else.
+   */
+  /^lib\/league-join\/sleeperOwnershipFetch\.ts$/,
   /^lib\/.*(ingest|ingestion|sync)/i,
   // Explicit commissioner-triggered ingestion only: this builder supplies the
   // verified download contract to the browser connector; it is not a scoreboard

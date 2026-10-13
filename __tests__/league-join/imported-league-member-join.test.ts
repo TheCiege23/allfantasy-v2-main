@@ -38,6 +38,17 @@ vi.mock('@/lib/league-finance/joinGate', () => ({
 vi.mock('@/lib/league-import/placeholderClaim', () => ({ claimPlaceholderRoster: m.claimPlaceholder }))
 vi.mock('@/lib/identity/linkedAccounts', () => ({ findExistingLeagueClaim: vi.fn(async () => null) }))
 vi.mock('@/lib/draft-room/currentDraftSession', () => ({ CURRENT_DRAFT_SESSION_ORDER: [] }))
+const claim = vi.hoisted(() => ({
+  start: vi.fn(async (): Promise<Record<string, unknown>> => ({ ok: true, code: 'AF-7K2Q', expiresAt: 'x', teamName: 'Hammer Time', leagueName: 'Death Squad' })),
+  verify: vi.fn(async (): Promise<Record<string, unknown>> => ({ ok: false, reason: 'code_not_found', seenTeamName: 'Hammer Time' })),
+  list: vi.fn(async () => [{ externalId: '1', teamName: 'Hammer Time', ownerName: 'joe', avatarUrl: null }]),
+}))
+vi.mock('@/lib/league-join/sleeperOwnershipClaim', () => ({
+  CLAIM_REFUSAL_MESSAGE: { not_member: 'Join this league first.', code_not_found: 'We could not find the code in your Sleeper team name yet.', linked_elsewhere: 'linked' },
+  listClaimableSleeperTeams: claim.list,
+  startSleeperTeamClaim: claim.start,
+  verifySleeperTeamClaim: claim.verify,
+}))
 
 const tx = {
   $queryRaw: vi.fn(async () => []),
@@ -70,7 +81,11 @@ const tx = {
 }
 
 vi.mock('@/lib/prisma', () => ({
-  prisma: { $transaction: vi.fn(async (fn: (t: typeof tx) => unknown) => fn(tx)) },
+  prisma: {
+    $transaction: vi.fn(async (fn: (t: typeof tx) => unknown) => fn(tx)),
+    redraftLeagueMember: { findUnique: vi.fn(async () => m.existingMember) },
+    league: { findFirst: vi.fn(async () => null) },
+  },
 }))
 
 import { POST } from '@/app/api/leagues/join/route'
@@ -131,5 +146,46 @@ describe('joining an imported league by its code', () => {
     m.session = null
     const res = await POST(req({ code: 'ABC123' }))
     expect(res.status).toBe(401)
+  })
+})
+
+describe('claiming your Sleeper team (POST actions)', () => {
+  it('a Sleeper member join says the team can be claimed; another provider does not', async () => {
+    expect((await (await POST(req({ code: 'ABC123' }))).json()).sleeperClaim).toBe(true)
+    m.platform = 'espn'
+    expect((await (await POST(req({ code: 'ABC123' }))).json()).sleeperClaim).toBe(false)
+  })
+
+  it('lists claimable teams to a member only', async () => {
+    const refused = await POST(req({ action: 'sleeper_claim_teams', leagueId: 'L1' }))
+    expect(refused.status).toBe(403)
+    m.existingMember = { id: 'mem-1' }
+    const ok = await (await POST(req({ action: 'sleeper_claim_teams', leagueId: 'L1' }))).json()
+    expect(ok.teams).toHaveLength(1)
+  })
+
+  it('start hands back the code; verify says plainly what Sleeper shows', async () => {
+    const started = await (await POST(req({ action: 'sleeper_claim_start', leagueId: 'L1', teamExternalId: '1' }))).json()
+    expect(started).toMatchObject({ ok: true, code: 'AF-7K2Q' })
+    expect(claim.start).toHaveBeenCalledWith({ userId: 'u-new', leagueId: 'L1', teamExternalId: '1' })
+    const res = await POST(req({ action: 'sleeper_claim_verify', leagueId: 'L1', teamExternalId: '1' }))
+    expect(res.status).toBe(409)
+    expect(await res.json()).toEqual({
+      error: 'We could not find the code in your Sleeper team name yet.',
+      code: 'code_not_found',
+      seenTeamName: 'Hammer Time',
+    })
+  })
+
+  it('an account linked to someone else is a 403', async () => {
+    claim.verify.mockResolvedValueOnce({ ok: false, reason: 'linked_elsewhere' })
+    const res = await POST(req({ action: 'sleeper_claim_verify', leagueId: 'L1', teamExternalId: '1' }))
+    expect(res.status).toBe(403)
+  })
+
+  it('signed out cannot start a claim', async () => {
+    m.session = null
+    expect((await POST(req({ action: 'sleeper_claim_start', leagueId: 'L1', teamExternalId: '1' }))).status).toBe(401)
+    expect(claim.start).not.toHaveBeenCalledWith(expect.objectContaining({ userId: undefined }))
   })
 })

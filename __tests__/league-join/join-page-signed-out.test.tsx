@@ -15,6 +15,7 @@ const m = vi.hoisted(() => ({
 
 vi.mock('next-auth/react', () => ({ useSession: () => ({ status: m.auth, data: null }) }))
 vi.mock('next/navigation', () => ({ useSearchParams: () => m.params }))
+vi.mock('@/components/league-join/SleeperTeamClaim', () => ({ SleeperTeamClaim: ({ leagueId }: { leagueId: string }) => <div data-testid="claim-card">{leagueId}</div> }))
 vi.mock('@/components/league-join/ClassGateNotice', () => ({
   ClassGateNotice: () => null,
   isClassGateBlocked: () => false,
@@ -83,6 +84,18 @@ describe('back from signing in', () => {
     render(<JoinByCodePage />)
     await screen.findByTestId('league-join-button')
     expect(joinPosts()).toHaveLength(0)
+  })
+})
+
+describe('a Sleeper league member', () => {
+  it('stays to claim their team, with the chat one tap away', async () => {
+    m.auth = 'authenticated'
+    m.params = new URLSearchParams('code=ABC123&go=1')
+    joinResponse = { status: 200, body: { success: true, leagueId: 'L1', memberOnly: true, alreadyMember: false, sleeperClaim: true } }
+    render(<JoinByCodePage />)
+    await screen.findByTestId('league-join-member')
+    expect(screen.getByTestId('claim-card').textContent).toBe('L1')
+    expect(screen.getByText('Open the league chat').closest('a')!.getAttribute('href')).toBe('/league/L1?openChat=league')
   })
 })
 
