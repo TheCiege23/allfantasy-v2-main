@@ -5,15 +5,20 @@ import { CoOwnerSettingsPanel } from '@/components/league-settings/CoOwnerSettin
 import { DivisionSettingsCommissionerPanel } from '@/components/league-settings/DivisionSettingsCommissionerPanel'
 import type { LeagueSettingsTabProps } from '../league-settings-tabs-types'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
+import { SettingsSubPanelBody } from '@/app/league/[leagueId]/components/LeagueSettingsSubPanels'
+import { HubCard } from './hubFields'
 
 /**
- * Members tab: who is in the league and who helps run it — members, co-commishes and co-owners,
- * divisions. (Was three tabs — Members, Permissions and Commish — all rendering the same panels.)
+ * Members tab: who is in the league and who helps run it — invite, members, co-commishes and
+ * co-owners, divisions. (Was three tabs — Members, Permissions and Commish — all rendering the same panels.)
  */
 export function MembersTab({ ctx }: LeagueSettingsTabProps) {
   const { t } = useLanguage()
   return (
     <div className="space-y-10">
+      <HubCard title={t('lsModal.card.invite')} testId="league-settings-invite">
+        <SettingsSubPanelBody panelId="invite" ctx={ctx} />
+      </HubCard>
       <MemberSettingsCommissionerPanel leagueId={ctx.league.id} />
       <CoOwnerSettingsPanel leagueId={ctx.league.id} />
       <DivisionSettingsCommissionerPanel leagueId={ctx.league.id} />

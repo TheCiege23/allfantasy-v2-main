@@ -7,6 +7,7 @@ import { useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import type { SubPanelContext } from '@/app/league/[leagueId]/components/LeagueSettingsSubPanels'
+import { MyTeamTab } from './tabs/MyTeamTab'
 import { GeneralTab } from './tabs/GeneralTab'
 import { ScoringTab } from './tabs/ScoringTab'
 import { RostersTab } from './tabs/RostersTab'
@@ -18,12 +19,13 @@ import { SpecialtyTab } from './tabs/specialty/SpecialtyTab'
 import { AISettingsTab } from './tabs/AISettingsTab'
 
 /**
- * Nine tabs, consolidated 2026-10-13 from thirteen: Waivers and Trades are sections of League
+ * Ten tabs (My Team added for commishes, who never see the tile grid), consolidated 2026-10-13 from thirteen: Waivers and Trades are sections of League
  * (`general`); Members, Permissions and Notifications were three tabs rendering the same panels
  * and are now `members`; Advanced Rule Support became `specialty`, the gated specialty-format tab.
  * Old ids still resolve (resolveInitialTab) so deep links keep landing somewhere sensible.
  */
 export type LeagueSettingsHubTabId =
+  | 'myTeam'
   | 'general'
   | 'draft'
   | 'roster'
@@ -41,13 +43,20 @@ export type LeagueSettingsHubTabId =
  * __tests__/g32-league-home-contract pins them.
  */
 const TABS: { id: LeagueSettingsHubTabId; labelKey: string; shortKey: string }[] = (
-  ['general', 'draft', 'roster', 'scoring', 'playoffs', 'members', 'commissioner', 'specialty', 'ai'] as const
+  ['general', 'myTeam', 'draft', 'roster', 'scoring', 'playoffs', 'members', 'commissioner', 'specialty', 'ai'] as const
 ).map((id) => ({ id, labelKey: `lsHub.tab.${id}`, shortKey: `lsHub.tab.${id}Short` }))
 
 function resolveInitialTab(panel: string | null | undefined): LeagueSettingsHubTabId {
   if (!panel) return 'general'
   const m: Record<string, LeagueSettingsHubTabId> = {
     'general-info': 'general',
+    'my-team': 'myTeam',
+    myTeam: 'myTeam',
+    'league-legend': 'myTeam',
+    invite: 'members',
+    'draft-results': 'commissioner',
+    'draft-results-commish': 'commissioner',
+    'audit-log': 'commissioner',
     waivers: 'general',
     trades: 'general',
     'commish-general': 'commissioner',
@@ -97,6 +106,8 @@ export function LeagueSettingsControlCenter({
 
   const body = useMemo(() => {
     switch (tab) {
+      case 'myTeam':
+        return <MyTeamTab {...tabProps} />
       case 'general':
         return <GeneralTab {...tabProps} />
       case 'draft':

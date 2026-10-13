@@ -6,15 +6,23 @@ import { LeagueHistoryPanel } from '@/components/league-settings/LeagueHistoryPa
 import { DeleteLeagueFromAfPanel } from '@/app/league/[leagueId]/components/DeleteLeagueFromAfPanel'
 import type { LeagueSettingsTabProps } from '../league-settings-tabs-types'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
+import { SettingsSubPanelBody } from '@/app/league/[leagueId]/components/LeagueSettingsSubPanels'
+import { HubCard } from './hubFields'
 
-/** Commish Tools tab: league controls, dues, history, audit, and removing the league. Members live in MembersTab. */
+/** Commish Tools tab: league controls, commish note, dues, history, draft results, audit, and removing the league. Members live in MembersTab. */
 export function CommissionerTab({ ctx }: LeagueSettingsTabProps) {
   const { t } = useLanguage()
   return (
     <div className="space-y-10">
       <CommissionerControlPanel leagueId={ctx.league.id} />
+      <HubCard title={t('lsModal.card.commishNote')} testId="league-settings-commish-note">
+        <SettingsSubPanelBody panelId="commish-note" ctx={ctx} />
+      </HubCard>
       <LeagueDuesTrackerPanel leagueId={ctx.league.id} />
       <LeagueHistoryPanel leagueId={ctx.league.id} />
+      <HubCard title={t('lsModal.card.draftResults')} testId="league-settings-draft-results">
+        <SettingsSubPanelBody panelId="draft-results-commish" ctx={ctx} />
+      </HubCard>
 
       <section
         data-testid="settings-audit-log-panel"

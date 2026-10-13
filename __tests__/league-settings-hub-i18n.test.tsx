@@ -53,6 +53,7 @@ vi.mock('@/components/league-settings/CoOwnerSettingsPanel', () => stub('CoOwner
 vi.mock('@/components/league-settings/DivisionSettingsCommissionerPanel', () => stub('DivisionSettingsCommissionerPanel'))
 vi.mock('@/components/league-settings/LeagueDuesTrackerPanel', () => stub('LeagueDuesTrackerPanel'))
 vi.mock('@/components/league-settings/LeagueHistoryPanel', () => stub('LeagueHistoryPanel'))
+vi.mock('@/app/league/[leagueId]/components/LeagueSettingsSubPanels', () => stub('SettingsSubPanelBody'))
 
 import { LeagueSettingsControlCenter } from '@/components/league-settings/LeagueSettingsControlCenter'
 import { DuplicateManagerWarningsSection } from '@/components/league-settings/DuplicateManagerWarningsSection'
@@ -62,10 +63,10 @@ const ROOT = resolve(__dirname, '..')
 const FILES = [
   'components/league-settings/LeagueSettingsControlCenter.tsx', 'components/league-settings/DuplicateManagerWarningsSection.tsx',
   'app/league/[leagueId]/components/DeleteLeagueFromAfPanel.tsx',
-  ...['GeneralTab', 'WaiversTab', 'AISettingsTab', 'TradesTab', 'PlayoffsTab', 'ScoringTab', 'RostersTab', 'MembersTab', 'CommissionerTab',
+  ...['GeneralTab', 'WaiversTab', 'AISettingsTab', 'TradesTab', 'PlayoffsTab', 'ScoringTab', 'RostersTab', 'MembersTab', 'CommissionerTab', 'MyTeamTab', 'LeagueLegend',
     'specialty/SpecialtyTab', 'specialty/GuillotineSettingsForm', 'specialty/SpecialtyFormatSections'].map((f) => `components/league-settings/tabs/${f}.tsx`),
 ]
-const TAB_IDS = ['general', 'draft', 'roster', 'scoring', 'playoffs', 'members', 'commissioner', 'specialty', 'ai']
+const TAB_IDS = ['general', 'myTeam', 'draft', 'roster', 'scoring', 'playoffs', 'members', 'commissioner', 'specialty', 'ai']
 
 describe('every key the hub names exists in BOTH languages', () => {
   const keys = [...new Set(FILES.flatMap((f) => [...readFileSync(resolve(ROOT, f), 'utf8').matchAll(/['"`]((?:lsHub|lsModal)\.[A-Za-z0-9_.]+)['"`]/g)].map((m) => m[1]!)))]
@@ -134,6 +135,7 @@ describe('🛑 the hub reads Spanish in Spanish', () => {
       'Partido extra cada semana contra la mediana de la liga', 'Los cambios se aplican al registro oficial', 'Tipo de reclamos',
       'Prioridad de reclamo rotativa', 'Presupuesto FAAB', 'Puja mínima', 'Período de reclamos (h)', 'Permitir reclamos diarios personalizados',
       'Permitir trades de picks del draft', 'Ventana de revisión (horas)', 'Límite de trades (n.º de semana)']],
+    ['myTeam', ['Mi equipo', 'Notificaciones', 'Leyenda de la liga', 'Estado del jugador', 'Es muy probable que juegue', 'En alza', 'En baja']],
     ['playoffs', ['Calendario rápido', 'Equipos en playoffs', 'Inicio de playoffs (semana)', 'Rondas de playoffs por semana', 'Siembra de playoffs', 'Bracket inferior', 'Consolación', 'Fases y brackets']],
     ['scoring', []],
     ['roster', ['Los puestos y plantillas de roster se guardan', 'Reserva de lesionados', 'Puestos de IR']],
