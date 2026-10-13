@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Tournament stage control</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./specialty/sp.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Cinzel:wght@600;700&amp;family=Caveat:wght@600;700&amp;family=Bebas+Neue&amp;family=Pirata+One&amp;family=Creepster&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080d}
+.dv-cr{position:relative;container-type:inline-size;aspect-ratio:300/340;flex:none}
+.dv-cr>img{position:absolute;display:block}
+.dv-cr>img.f{inset:0;width:100%;height:100%}
+.dv-cr>img.m{left:19.3%;top:18.2%;width:61.3%;filter:drop-shadow(0 4px 6px rgba(0,0,0,.5))}
+.dv-cr>.tab{position:absolute;left:28%;right:28%;top:5.6%;height:7.4%;display:grid;place-items:center;font:900 3.6cqw/1 'Archivo';letter-spacing:.12em;text-transform:uppercase;white-space:nowrap;overflow:hidden}
+.dv-cr>.rib{position:absolute;left:14%;right:14%;top:79%;height:10.4%;display:grid;place-items:center;font:900 6.2cqw/1 'Archivo';letter-spacing:.1em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dv-pair{display:flex;flex-direction:column;gap:8px;padding:14px 12px;border-radius:14px;border:1px solid rgba(255,255,255,.07);background:#0b0d14;cursor:pointer;color:inherit;font:inherit;text-align:center}
+.dv-pair[aria-pressed="true"]{border-color:#e8b84a;background:rgba(232,184,74,.07);box-shadow:0 0 0 3px rgba(232,184,74,.12)}
+.dv-pair>div{display:flex;align-items:center;justify-content:center;gap:6px}
+.dv-pair>div>img{width:64px}
+.dv-pair>div>i{font:900 11px 'Archivo';font-style:normal;color:#5a6078}
+.dv-pair>b{font:800 13px 'Archivo';color:#e8eaf2}
+.dv-in{width:100%;min-height:42px;padding:0 12px;border-radius:9px;border:1px solid rgba(255,255,255,.12);background:#07080d;color:#fff;font:700 15px 'Archivo'}
+.dv-in:focus{outline:2px solid #e8b84a;outline-offset:1px}
+.dv-sw{width:26px;height:26px;border-radius:99px;border:2px solid rgba(255,255,255,.15);cursor:pointer;padding:0}
+.dv-sw[aria-pressed="true"]{outline:2px solid #fff;outline-offset:2px}
+.dv-th{width:44px;height:44px;flex:none;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:#10131c;display:grid;place-items:center;cursor:pointer;padding:0}
+.dv-th>img{width:36px}
+.dv-th[aria-pressed="true"]{border-color:#e8b84a;box-shadow:0 0 0 2px rgba(232,184,74,.4)}
+.dv-lib{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:6px}
+.dv-lib>button{aspect-ratio:1;border-radius:10px;border:1px solid rgba(255,255,255,.08);background:#0b0d14;cursor:pointer;padding:6px}
+.dv-lib>button>img{width:100%;display:block}
+.dv-lib>button[aria-pressed="true"]{border-color:#e8b84a;background:rgba(232,184,74,.1)}
+.dv-md{position:relative;flex:none;aspect-ratio:1}
+.dv-md>img{position:absolute;display:block}
+.dv-md>img.r{inset:0;width:100%}
+.dv-md>img.e{left:19.3%;top:19.3%;width:61.3%}
+.dv-row{display:flex;align-items:center;gap:10px}
+.dv-row>b{width:22px;font:700 12px 'JetBrains Mono';color:#7d84a3;text-align:right}
+.rl-pill{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 9px 0 3px;border-radius:99px;font:900 10.5px 'Archivo';letter-spacing:.06em;color:#fff;border:1px solid rgba(0,0,0,.4);vertical-align:middle}
+.rl-pill>i{width:15px;height:15px;border-radius:99px;background:rgba(0,0,0,.28)}
+.rl-pos{display:inline-grid;place-items:center;height:30px;min-width:30px;padding:0 6px;border-radius:8px;font:900 11px 'Archivo';letter-spacing:.02em;box-shadow:inset 0 -2px 0 rgba(0,0,0,.25)}
+.rl-pos.sm{height:22px;min-width:22px;padding:0 4px;border-radius:6px;font-size:9px}
+.tt-lg{display:inline-flex;align-items:center;gap:6px;font:600 12px 'Archivo';color:#a3a9c2;white-space:nowrap}
+.tt-lg>img{width:20px}
+.tt-cut{position:relative;height:0;border-top:2px dashed #e8b84a;margin:8px 0}
+.tt-cut>span{position:absolute;left:50%;top:-12px;transform:translateX(-50%);white-space:nowrap;padding:2px 10px;border-radius:5px;background:#e8b84a;color:#1a1204;font:800 10px 'Archivo';letter-spacing:.1em}
+.tt-rank{width:30px;text-align:right;font:700 12px 'JetBrains Mono';color:#7d84a3}
+.tt-pool{font:700 10.5px 'JetBrains Mono';color:#a3a9c2;padding:2px 6px;border-radius:4px;background:#151926}
+.tt-path{display:flex;align-items:stretch;gap:0}
+.tt-step{flex:1;display:flex;flex-direction:column;gap:4px;padding:12px 14px;border-radius:10px;background:#10131c;border:1px solid rgba(255,255,255,.06);min-width:0}
+.tt-step>b{font:700 13px 'Archivo';color:#e8eaf2}
+.tt-step>span{font-size:11.5px;color:#7d84a3}
+.tt-step.on{background:linear-gradient(180deg,rgba(232,184,74,.16),rgba(232,184,74,.04));border-color:rgba(232,184,74,.55)}
+.tt-step.on>b{color:#ffd98a}
+.tt-step.done{opacity:.6}
+.tt-arrow{flex:none;width:30px;display:grid;place-items:center;color:#5a6078}
+.tt-arrow svg{width:16px;height:16px}
+.tt-cutmark{flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;width:74px;padding:0 4px;text-align:center}
+.tt-cutmark>b{font:800 11px 'Archivo';color:#ffd98a;letter-spacing:.06em}
+.tt-cutmark>span{font:600 10px 'Archivo';color:#7d84a3}
+.tt-ck{display:flex;align-items:center;gap:14px;padding:14px 16px;border-radius:10px;background:#10131c;border:1px solid rgba(255,255,255,.06)}
+.tt-ck>i{flex:none;width:28px;height:28px;border-radius:99px;display:grid;place-items:center;font:800 13px 'Archivo';font-style:normal}
+.tt-ck>div{flex:1;display:flex;flex-direction:column;gap:2px}
+.tt-ck>div>b{font:600 14px 'Archivo'}
+.tt-ck>div>span{font-size:12px;color:#7d84a3}
+.tt-job{display:flex;align-items:center;gap:10px;font-size:12.5px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+.tt-job:last-child{border-bottom:0}
+</style>
+</helmet>
+<div class="sp" style="--acc: #e8b84a; --acc2: #ffd98a; --accInk: #1a1204; --disp: Archivo; min-height: 100vh; display: flex; flex-direction: column">
+<header style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 18px 28px; border-bottom: 1px solid rgba(255,255,255,.06)">
+  <a class="sp-btn" href="TournamentHub.dc.html" aria-label="Back" style="padding: 0 12px">‹</a>
+  <div style="flex: 1 1 320px; display: flex; flex-direction: column; gap: 3px"><h1 class="sp-h1">Stage control · Cut 1</h1><span class="sp-t2">The Gold Bracket 64 · commissioner only</span></div>
+  <span class="sp-chip" style="color: #ffd98a; border-color: rgba(232,184,74,.5)">Stage 1 · week 6 final</span>
+</header>
+<div style="display: flex; flex-wrap: wrap; gap: 22px; padding: 22px 28px 32px; align-items: flex-start">
+  <section class="sp-card" style="flex: 1 1 680px; padding: 18px 20px; display: flex; flex-direction: column; gap: 10px; min-width: 0">
+    <div style="display: flex; align-items: center; gap: 10px"><span class="sp-lbl" style="flex: 1">Checklist before the cut</span><span class="sp-t3 sp-num" style="font-size: 12px">{{doneCount}} of 5 done</span></div>
+    <sc-for list="{{steps}}" as="s" hint-placeholder-count="5">
+      <div class="tt-ck" style="border-color: {{s.line}}">
+        <i style="background: {{s.ib}}; color: {{s.ic}}">{{s.mark}}</i>
+        <div><b>{{s.t}}</b><span>{{s.sub}}</span></div>
+        <sc-if value="{{s.hasBtn}}" hint-placeholder-val="{{ false }}"><button class="sp-btn {{s.btnCls}}" onClick="{{s.act}}" disabled="{{s.dis}}" style="min-height: 40px">{{s.btn}}</button></sc-if>
+      </div>
+    </sc-for>
+    <sc-if value="{{showTie}}" hint-placeholder-val="{{ false }}">
+      <div class="sp-card2" style="padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; border-color: rgba(255,214,107,.4)">
+        <span class="sp-lbl" style="color: #ffd66b">Tie at #32 · 671.2 points each</span>
+        <table class="sp-tbl"><tr><th>Manager</th><th class="n">Stage pts</th><th class="n">Seed</th><th class="n">Record</th><th class="n">Best week</th><th>Result</th></tr>
+          <tr><td>DeepPost · Kings Rookie</td><td class="n">671.2</td><td class="n">—</td><td class="n" style="color: #7fe0a6">4–2</td><td class="n">142.6</td><td><span class="sp-tag" style="background: rgba(58,190,120,.14); color: #7fe0a6">Advances</span></td></tr>
+          <tr><td>NickelPackage · Stealth Vet</td><td class="n">671.2</td><td class="n">—</td><td class="n">3–3</td><td class="n">138.1</td><td><span class="sp-tag" style="background: rgba(224,64,46,.14); color: #ff9a8a">Out</span></td></tr></table>
+        <span class="sp-t3" style="font-size: 12px">Seeds don’t exist yet in stage 1, so tiebreaker 2 (better record) decided it. No commissioner call needed.</span>
+      </div>
+    </sc-if>
+  </section>
+  <aside style="flex: 1 1 380px; max-width: 440px; display: flex; flex-direction: column; gap: 16px">
+    <div class="sp-card2" style="padding: 16px; display: flex; flex-direction: column; gap: 6px">
+      <span class="sp-lbl" style="margin-bottom: 4px">Setup jobs</span>
+      <sc-for list="{{jobs}}" as="j" hint-placeholder-count="6"><div class="tt-job"><span style="width: 10px; height: 10px; border-radius: 99px; background: {{j.c}}"></span><span style="flex: 1">{{j.t}}</span><span class="sp-num" style="font-size: 11.5px; color: {{j.c}}">{{j.s}}</span></div></sc-for>
+      <span class="sp-t3" style="font-size: 11.5px; margin-top: 4px">Jobs retry on their own. You’ll get an alert if one still fails after 3 tries.</span>
+    </div>
+    <div class="sp-card" style="padding: 14px 16px; display: flex; flex-direction: column"><span class="sp-lbl" style="margin-bottom: 4px">Audit log</span><div class="sp-feed"><img src="specialty/tournament/icon-cut.svg" alt=""><div style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 600; font-size: 13px">Scores locked for week 6</span><span class="sp-t3" style="font-size: 11.5px">System · Tue 11:00 AM ET · 64 of 64 results final</span></div></div><div class="sp-feed"><img src="specialty/tournament/icon-seed.svg" alt=""><div style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 600; font-size: 13px">Tiebreaker applied at #32</span><span class="sp-t3" style="font-size: 11.5px">System · tiebreaker 2, record · DeepPost (4–2) over NickelPackage (3–3)</span></div></div><div class="sp-feed"><img src="specialty/tournament/icon-bracket.svg" alt=""><div style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 600; font-size: 13px">Qualifying list previewed</span><span class="sp-t3" style="font-size: 11.5px">TheCiege26 · Tue 11:06 AM ET</span></div></div></div>
+  </aside>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":820}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { tie: false, prev: false, commit: false }; }
+  renderVals() {
+    const st = this.state;
+    const S = [
+      ['All 64 week-6 scores final', 'Every result is stored once. Nothing missing or provisional.', true, null],
+      ['Stat corrections closed', 'Window closed Tue 11:00 AM ET.', true, null],
+      ['Resolve the tie at the line', '2 managers level on 671.2 at #32.', st.tie, st.tie ? null : ['Review tie', () => this.setState({ tie: true }), false, '']],
+      ['Preview the 32 who advance', 'Check names and seeds before anything changes.', st.prev, st.prev ? null : ['Preview list', () => this.setState({ prev: true }), !st.tie, '']],
+      ['Commit cut 1', 'Locks stage 1, eliminates 32, creates 4 leagues and 4 drafts. This can’t be undone.', st.commit, st.commit ? null : ['Commit cut', () => this.setState({ commit: true }), !(st.tie && st.prev), 'sp-btn-p']]];
+    const steps = S.map(([t, sub, ok, btn], i) => ({ t, sub, mark: ok ? '✓' : String(i + 1), ib: ok ? 'rgba(58,190,120,.18)' : '#151926', ic: ok ? '#7fe0a6' : '#7d84a3', line: ok ? 'rgba(58,190,120,.25)' : 'rgba(255,255,255,.06)',
+      hasBtn: !!btn, btn: btn ? btn[0] : '', act: btn ? btn[1] : null, dis: btn ? btn[2] : true, btnCls: btn ? btn[3] : '' }));
+    const c = st.commit;
+    const J = [['Archive stage 1 rosters', c ? 'Done' : 'Waiting', c ? '#7fe0a6' : '#5a6078'], ['Create stage 2 leagues · Thunder, Warrior, Inferno, Glacier', c ? '4 of 4' : 'Waiting', c ? '#7fe0a6' : '#5a6078'],
+               ['Assign 32 managers (snake by seed)', c ? 'Done' : 'Waiting', c ? '#7fe0a6' : '#5a6078'], ['Schedule 4 drafts in buffer week 7 · times set by you', c ? '3 of 4' : 'Waiting', c ? '#ffd66b' : '#5a6078'],
+               ['Glacier draft · retrying (1 of 3)', c ? 'Retrying' : '—', c ? '#ffd66b' : '#5a6078'], ['Send results to 64 managers', c ? 'Queued' : 'Waiting', c ? '#a3a9c2' : '#5a6078']];
+    return { steps, doneCount: S.filter(s => s[2]).length, showTie: st.tie, jobs: J.map(([t, s, c]) => ({ t, s, c })) };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Tournament hub</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./specialty/sp.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Cinzel:wght@600;700&amp;family=Caveat:wght@600;700&amp;family=Bebas+Neue&amp;family=Pirata+One&amp;family=Creepster&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080d}
+.dv-cr{position:relative;container-type:inline-size;aspect-ratio:300/340;flex:none}
+.dv-cr>img{position:absolute;display:block}
+.dv-cr>img.f{inset:0;width:100%;height:100%}
+.dv-cr>img.m{left:19.3%;top:18.2%;width:61.3%;filter:drop-shadow(0 4px 6px rgba(0,0,0,.5))}
+.dv-cr>.tab{position:absolute;left:28%;right:28%;top:5.6%;height:7.4%;display:grid;place-items:center;font:900 3.6cqw/1 'Archivo';letter-spacing:.12em;text-transform:uppercase;white-space:nowrap;overflow:hidden}
+.dv-cr>.rib{position:absolute;left:14%;right:14%;top:79%;height:10.4%;display:grid;place-items:center;font:900 6.2cqw/1 'Archivo';letter-spacing:.1em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dv-pair{display:flex;flex-direction:column;gap:8px;padding:14px 12px;border-radius:14px;border:1px solid rgba(255,255,255,.07);background:#0b0d14;cursor:pointer;color:inherit;font:inherit;text-align:center}
+.dv-pair[aria-pressed="true"]{border-color:#e8b84a;background:rgba(232,184,74,.07);box-shadow:0 0 0 3px rgba(232,184,74,.12)}
+.dv-pair>div{display:flex;align-items:center;justify-content:center;gap:6px}
+.dv-pair>div>img{width:64px}
+.dv-pair>div>i{font:900 11px 'Archivo';font-style:normal;color:#5a6078}
+.dv-pair>b{font:800 13px 'Archivo';color:#e8eaf2}
+.dv-in{width:100%;min-height:42px;padding:0 12px;border-radius:9px;border:1px solid rgba(255,255,255,.12);background:#07080d;color:#fff;font:700 15px 'Archivo'}
+.dv-in:focus{outline:2px solid #e8b84a;outline-offset:1px}
+.dv-sw{width:26px;height:26px;border-radius:99px;border:2px solid rgba(255,255,255,.15);cursor:pointer;padding:0}
+.dv-sw[aria-pressed="true"]{outline:2px solid #fff;outline-offset:2px}
+.dv-th{width:44px;height:44px;flex:none;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:#10131c;display:grid;place-items:center;cursor:pointer;padding:0}
+.dv-th>img{width:36px}
+.dv-th[aria-pressed="true"]{border-color:#e8b84a;box-shadow:0 0 0 2px rgba(232,184,74,.4)}
+.dv-lib{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:6px}
+.dv-lib>button{aspect-ratio:1;border-radius:10px;border:1px solid rgba(255,255,255,.08);background:#0b0d14;cursor:pointer;padding:6px}
+.dv-lib>button>img{width:100%;display:block}
+.dv-lib>button[aria-pressed="true"]{border-color:#e8b84a;background:rgba(232,184,74,.1)}
+.dv-md{position:relative;flex:none;aspect-ratio:1}
+.dv-md>img{position:absolute;display:block}
+.dv-md>img.r{inset:0;width:100%}
+.dv-md>img.e{left:19.3%;top:19.3%;width:61.3%}
+.dv-row{display:flex;align-items:center;gap:10px}
+.dv-row>b{width:22px;font:700 12px 'JetBrains Mono';color:#7d84a3;text-align:right}
+.rl-pill{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 9px 0 3px;border-radius:99px;font:900 10.5px 'Archivo';letter-spacing:.06em;color:#fff;border:1px solid rgba(0,0,0,.4);vertical-align:middle}
+.rl-pill>i{width:15px;height:15px;border-radius:99px;background:rgba(0,0,0,.28)}
+.rl-pos{display:inline-grid;place-items:center;height:30px;min-width:30px;padding:0 6px;border-radius:8px;font:900 11px 'Archivo';letter-spacing:.02em;box-shadow:inset 0 -2px 0 rgba(0,0,0,.25)}
+.rl-pos.sm{height:22px;min-width:22px;padding:0 4px;border-radius:6px;font-size:9px}
+.tt-lg{display:inline-flex;align-items:center;gap:6px;font:600 12px 'Archivo';color:#a3a9c2;white-space:nowrap}
+.tt-lg>img{width:20px}
+.tt-cut{position:relative;height:0;border-top:2px dashed #e8b84a;margin:8px 0}
+.tt-cut>span{position:absolute;left:50%;top:-12px;transform:translateX(-50%);white-space:nowrap;padding:2px 10px;border-radius:5px;background:#e8b84a;color:#1a1204;font:800 10px 'Archivo';letter-spacing:.1em}
+.tt-rank{width:30px;text-align:right;font:700 12px 'JetBrains Mono';color:#7d84a3}
+.tt-pool{font:700 10.5px 'JetBrains Mono';color:#a3a9c2;padding:2px 6px;border-radius:4px;background:#151926}
+.tt-path{display:flex;align-items:stretch;gap:0}
+.tt-step{flex:1;display:flex;flex-direction:column;gap:4px;padding:12px 14px;border-radius:10px;background:#10131c;border:1px solid rgba(255,255,255,.06);min-width:0}
+.tt-step>b{font:700 13px 'Archivo';color:#e8eaf2}
+.tt-step>span{font-size:11.5px;color:#7d84a3}
+.tt-step.on{background:linear-gradient(180deg,rgba(232,184,74,.16),rgba(232,184,74,.04));border-color:rgba(232,184,74,.55)}
+.tt-step.on>b{color:#ffd98a}
+.tt-step.done{opacity:.6}
+.tt-arrow{flex:none;width:30px;display:grid;place-items:center;color:#5a6078}
+.tt-arrow svg{width:16px;height:16px}
+.tt-cutmark{flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;width:74px;padding:0 4px;text-align:center}
+.tt-cutmark>b{font:800 11px 'Archivo';color:#ffd98a;letter-spacing:.06em}
+.tt-cutmark>span{font:600 10px 'Archivo';color:#7d84a3}
+</style>
+</helmet>
+<div class="sp" style="--acc: #e8b84a; --acc2: #ffd98a; --accInk: #1a1204; --disp: Archivo; min-height: 100vh; display: flex; flex-direction: column">
+<section class="sp-hero" style="margin: 20px 28px 0">
+  <img class="sp-bg" src="specialty/tournament/banner.svg" alt="">
+  <div class="sp-veil"></div>
+  <div class="sp-in">
+    <img src="specialty/tournament/emblem.svg" alt="" style="width: 150px; flex: none; filter: drop-shadow(0 14px 22px rgba(0,0,0,.6))">
+    <div style="flex: 1 1 460px; display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; flex-wrap: wrap; gap: 6px"><span class="sp-chip">NFL</span><span class="sp-chip">2026</span><span class="sp-chip">Tournament</span><span class="sp-chip">Rookie vs Vet</span><span class="sp-chip">64 entrants · 8 leagues</span><span class="sp-chip"><span class="rl-pill" style="background: linear-gradient(90deg, #e8b84a, #8a5d12)"><i></i>HALF</span> Standard · 9 start</span></div>
+      <span class="sp-title">The Gold Bracket 64</span>
+      <span style="font-size: 16px; font-weight: 600; color: var(--acc2)">Stage 1 · Week 5 · You’re #30 — 10.1 points above the cut</span>
+      <span class="sp-t2" style="font-size: 14px; max-width: 620px">Eight separate draft leagues, one points race. After week 6 the top 32 by total points advance and redraft into new leagues. Pools don’t reserve spots — only the global line counts.</span>
+      <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 4px"><a class="sp-btn sp-btn-p" href="#" style="min-height: 46px; padding: 0 20px">Set lineup</a><a class="sp-btn" href="#" style="min-height: 46px; padding: 0 20px">My league · Grizz Rookie</a><a class="sp-btn" href="#" style="min-height: 46px; padding: 0 20px">Rules</a></div>
+    </div>
+    <div class="sp-clock"><span class="sp-lbl" style="color: var(--acc2)">Cut 1 locks after</span><span class="sp-num" style="font-size: 36px; font-weight: 700; color: #fff">Week 6</span><span class="sp-t3" style="font-size: 12px">Scores final + corrections · Tue 11:00 AM ET</span></div>
+  </div>
+</section>
+<div style="padding: 18px 28px 0; display: flex; flex-direction: column; gap: 8px">
+  <div style="display: flex; align-items: center; gap: 10px"><span class="sp-lbl" style="flex: 1">Road to the title</span><span class="sp-prop">Pilot calendar · not final</span></div>
+  <div class="tt-path"><div class="tt-step on"><b>Stage 1 · 64</b><span>Weeks 1–6 · 8 leagues of 8</span></div><div class="tt-cutmark"><b>CUT 1</b><span>Top 32 on points</span></div><div class="tt-step "><b>Stage 2 · 32</b><span>Week 7 redraft · weeks 8–12</span></div><div class="tt-cutmark"><b>CUT 2</b><span>Top 16 on points</span></div><div class="tt-step "><b>Final · 16</b><span>Week 13 redraft · weeks 14–17 bracket</span></div><div class="tt-arrow"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 2l6 6-6 6"/></svg></div><div class="tt-step "><b>Champion</b><span>One winner after week 17</span></div></div>
+</div>
+<div style="display: flex; flex-wrap: wrap; gap: 20px; padding: 20px 28px 32px; align-items: flex-start">
+  <section class="sp-card" style="flex: 1 1 680px; padding: 18px 20px; display: flex; flex-direction: column; gap: 8px; min-width: 0">
+    <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap">
+      <img src="specialty/tournament/icon-cut.svg" alt="" style="width: 30px">
+      <span class="sp-lbl" style="flex: 1">Global standings · stage 1 points</span>
+      <div class="sp-seg"><sc-for list="{{views}}" as="v" hint-placeholder-count="3"><button aria-pressed="{{v.on}}" onClick="{{v.pick}}">{{v.label}}</button></sc-for></div>
+    </div>
+    <div style="display: flex; gap: 10px; padding: 0 12px; font: 600 10.5px 'Archivo'; letter-spacing: .08em; text-transform: uppercase; color: #5a6078"><span style="width: 30px; text-align: right">#</span><span style="width: 34px"></span><span style="flex: 1">Manager</span><span style="width: 130px">League</span><span style="width: 70px; text-align: right">Points</span><span style="width: 70px; text-align: right">Wk 5</span><span style="width: 92px; text-align: center">Status</span></div>
+    <sc-for list="{{rows}}" as="r" hint-placeholder-count="11">
+      <sc-if value="{{r.cutAbove}}" hint-placeholder-val="{{ false }}"><div class="tt-cut"><span>CUT LINE · TOP 32 ADVANCE</span></div></sc-if>
+      <sc-if value="{{r.gapAbove}}" hint-placeholder-val="{{ false }}"><div style="text-align: center; color: #5a6078; font: 700 12px 'JetBrains Mono'; letter-spacing: .3em">· · ·</div></sc-if>
+      <div class="sp-row" style="background: {{r.bg}}; border-color: {{r.line}}">
+        <span class="tt-rank">{{r.rank}}</span>
+        <span class="sp-av" style="background: {{r.c}}">{{r.ini}}</span>
+        <span style="flex: 1; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{{r.name}}</span>
+        <span style="width: 130px"><span class="tt-lg"><img src="{{r.pimg}}" alt="">{{r.pool}}</span></span>
+        <span class="sp-num" style="width: 70px; text-align: right; font-weight: 700">{{r.pts}}</span>
+        <span class="sp-num" style="width: 70px; text-align: right; font-size: 12px; color: #a3a9c2">{{r.wk}}</span>
+        <span style="width: 92px; display: flex; justify-content: center"><span class="sp-tag" style="background: {{r.tagBg}}; color: {{r.tagC}}">{{r.tag}}</span></span>
+      </div>
+    </sc-for>
+    <span class="sp-t3" style="font-size: 12px; margin-top: 4px">{{foot}}</span>
+  </section>
+  <aside style="flex: 0 1 380px; display: flex; flex-direction: column; gap: 16px">
+    <div class="sp-card" style="padding: 14px 16px; display: flex; align-items: center; gap: 14px"><div class="dv-cr" style="width: {{myCrest.w}}"><img class="f" src="{{myCrest.f}}" alt=""><img class="m" src="{{myCrest.m}}" alt=""><span class="tab" style="color: {{myCrest.tabC}}">{{myCrest.tab}}</span><span class="rib" style="color: {{myCrest.ribC}}">{{myCrest.rib}}</span></div><div style="flex: 1; display: flex; flex-direction: column; gap: 3px"><span class="sp-lbl">Your stage 1 league</span><span style="font: 800 18px 'Archivo'">Grizz Rookie</span><span class="sp-t3" style="font-size: 12px">Rookie division · 8 teams · 3 above the line</span></div></div>
+    <div class="sp-card2" style="padding: 18px; display: flex; flex-direction: column; gap: 10px; border-color: rgba(232,184,74,.4)">
+      <div style="display: flex; align-items: center; gap: 12px"><img src="specialty/tournament/icon-advance.svg" alt="" style="width: 44px"><div style="flex: 1; display: flex; flex-direction: column"><span class="sp-lbl" style="color: #ffd98a">Your cushion · 1 week left</span><span style="font: 800 40px/1 'Archivo'; letter-spacing: -.03em; color: #fff">+10.1</span></div><div style="display: flex; flex-direction: column; align-items: flex-end"><span class="sp-num" style="font-size: 22px; font-weight: 700">#30</span><span class="sp-t3" style="font-size: 11px">of 64</span></div></div>
+      <span class="sp-t2" style="font-size: 12.5px">You need to stay ahead of #33 (NickelPackage, 603.9) through week 6. AF projects you for 121.4 next week, the line for 118.0.</span>
+      <div style="display: flex; flex-direction: column; gap: 4px">
+        <div style="display: flex; justify-content: space-between; font-size: 11.5px"><span class="sp-t3">Chance to advance</span><span class="sp-num" style="color: #ffd98a; font-weight: 700">72%</span></div>
+        <div class="sp-bar"><span style="width: 72%; background: linear-gradient(90deg,#7a5214,#e8b84a)"></span></div>
+      </div>
+    </div>
+    <div class="sp-card" style="padding: 16px; display: flex; flex-direction: column; gap: 10px">
+      <span class="sp-lbl">How advancing works</span><div class="sp-rule"><b>1</b><span>Total stage points across all 8 leagues decide who advances — not wins, not your pool.</span></div><div class="sp-rule"><b>2</b><span>Top half advances at each cut: 64 → 32 → 16.</span></div><div class="sp-rule"><b>3</b><span>Everyone advancing redrafts. Scores reset to zero; your old seed only breaks ties.</span></div><div class="sp-rule"><b>4</b><span>Trading is off. Rosters aren’t released between stages.</span></div>
+    </div>
+    <div class="sp-card" style="padding: 14px 16px; display: flex; flex-direction: column"><span class="sp-lbl" style="margin-bottom: 4px">Tournament feed</span><div class="sp-feed"><img src="specialty/tournament/icon-seed.svg" alt=""><div style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 600; font-size: 13px">Gridiron Ghost holds the #1 seed</span><span class="sp-t3" style="font-size: 11.5px">702.4 points · Rebels Vet · 4th straight week on top</span></div></div><div class="sp-feed"><img src="specialty/tournament/icon-cut.svg" alt=""><div style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 600; font-size: 13px">The line moved up 4.2 points</span><span class="sp-t3" style="font-size: 11.5px">Week 5 · #32 now at 607.6</span></div></div><div class="sp-feed"><img src="specialty/tournament/icon-advance.svg" alt=""><div style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 600; font-size: 13px">You climbed 6 spots</span><span class="sp-t3" style="font-size: 11.5px">Week 5 · 128.4 points · #36 → #30</span></div></div><div class="sp-feed"><img src="specialty/tournament/icon-redraft.svg" alt=""><div style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 600; font-size: 13px">Week 7 is the buffer week</span><span class="sp-t3" style="font-size: 11.5px">New leagues load by seed, drafts run, week 8 matchups post</span></div></div></div>
+  </aside>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1240}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { v: 'cut' }; }
+  renderVals() {
+    const AVC = ['#22314f','#4a1f2c','#1d3a3a','#2c2a4a','#3a3418','#12352a','#3a1f30','#1f2a4d','#2a3a1a','#3a2a14'];
+const LG = { A: ['Beast','beast','Rookie'], B: ['Goat','goat','Rookie'], C: ['Grizz','grizz','Rookie'], D: ['Kings','kings','Rookie'], E: ['Rebels','rebels','Vet'], F: ['Smoke','smoke','Vet'], G: ['Stealth','stealth','Vet'], H: ['Swamp','swamp','Vet'] };
+const lgName = (p) => LG[p] ? LG[p][0] + ' ' + LG[p][2] : p; const lgImg = (p) => 'specialty/div/library/' + (LG[p] ? LG[p][1] : 'shieldstar') + '.svg';
+const av = (n) => { const s = n.replace('You · ', ''); let h = 0; for (const ch of s) h = (h * 31 + ch.charCodeAt(0)) % 997; return { ini: s.replace(/[^A-Z0-9]/g, '').slice(0, 2) || s.slice(0, 2).toUpperCase(), c: AVC[h % AVC.length] }; };
+    const v = this.state.v;
+    const TOP = [[1,'GridironGhost','E',702.4,131.0],[2,'BlitzCapital','B',688.1,140.2],[3,'FourthAndLong','A',679.6,118.7],[4,'RedZoneRaiders','G',671.0,122.9],[5,'SpiralTheory','D',668.3,109.4],[6,'CoffeeAndCleats','H',664.9,126.0],[7,'TwoTightEnds','F',661.2,117.5],[8,'Fumblerooski','C',659.0,133.1],[9,'QBSneak','A',655.7,101.8],[10,'LateRoundQB','E',652.4,119.6]];
+    const CUT = [[27,'Hashmarks','C',618.9,112.4],[28,'PocketPresence','F',617.2,99.0],[29,'SlantAndGo','A',615.8,124.1],[30,'You · TheCiege26','C',614.0,128.4],[31,'TwoMinuteDrill','H',611.3,96.6],[32,'DeepPost','D',607.6,118.0],[33,'NickelPackage','G',603.9,121.7],[34,'ScreenGame','B',601.2,104.3],[35,'Audible','E',598.7,110.0],[36,'HailMaryHal','F',596.0,92.8],[37,'PlayAction','C',590.4,117.1]];
+    const POOL = [[8,'Fumblerooski','C',659.0,133.1],[27,'Hashmarks','C',618.9,112.4],[30,'You · TheCiege26','C',614.0,128.4],[37,'PlayAction','C',590.4,117.1],[41,'CoffinCorner','C',583.5,98.2],[50,'TouchbackTom','C',561.0,104.9],[58,'PickSixPaula','C',530.7,88.0],[63,'OnsideKick','C',497.2,90.3]];
+    const src = v === 'top' ? TOP : v === 'pool' ? POOL : CUT;
+    let prev = 0;
+    const rows = src.map(([rank, name, pool, pts, wk]) => { const a = av(name), me = name.startsWith('You'), adv = rank <= 32, edge = rank >= 29 && rank <= 36;
+      const r = { rank, name, pool: lgName(pool), pimg: lgImg(pool), ...a, pts: pts.toFixed(1), wk: wk.toFixed(1),
+        tag: adv ? (edge ? 'Bubble · in' : 'Advancing') : (edge ? 'Bubble · out' : 'Out'),
+        tagBg: adv ? (edge ? 'rgba(232,184,74,.16)' : 'rgba(58,190,120,.12)') : (edge ? 'rgba(255,154,138,.12)' : 'rgba(125,132,163,.12)'),
+        tagC: adv ? (edge ? '#ffd98a' : '#7fe0a6') : (edge ? '#ff9a8a' : '#7d84a3'),
+        bg: me ? 'rgba(232,184,74,.09)' : '#10131c', line: me ? 'rgba(232,184,74,.5)' : 'rgba(255,255,255,.05)',
+        cutAbove: rank === 33 || (v === 'pool' && prev <= 32 && rank > 32), gapAbove: v === 'pool' && rank - prev > 1 && prev > 0 && !(prev <= 32 && rank > 32) };
+      prev = rank; return r; });
+    return { myCrest: { f: 'specialty/div/frames/rookie.svg', m: 'specialty/div/library/grizz.svg', tab: 'Rookie', rib: 'Grizz', tabC: '#1a1204', ribC: '#1a1204', w: '84px' }, rows, views: [['cut','Around the cut'],['top','Top 10'],['pool','My league']].map(([id, label]) => ({ label, on: v === id ? 'true' : 'false', pick: () => this.setState({ v: id }) })),
+      foot: v === 'pool' ? '3 of Grizz Rookie’s 8 managers are above the line right now. Leagues and divisions don’t get set spots — another league could send 6.' : v === 'top' ? 'Seeds for stage 2 come from this order. Scores reset at the redraft; seeds only break ties.' : 'Live after week 5. Ties at the line are broken by the tournament’s published tiebreakers.' };
+  }
+}
+</script>
+</body>
+</html>
