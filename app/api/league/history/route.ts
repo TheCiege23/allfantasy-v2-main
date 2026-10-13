@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getSleeperLeagueHistory } from '@/lib/league-history/sleeperLeagueHistoryService'
+import { loadAllTimeStandings } from '@/lib/league/allTimeStandingsServer'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,8 +37,18 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'League not found' }, { status: 404 })
   }
 
+  /*
+   * The History tab reads `seasons` and `allTimeStandings`, and this route sent neither — so the tab's
+   * season list and all-time table were empty on every league. Both come from Postgres for every
+   * platform; the Sleeper chain below is extra, not a precondition.
+   */
+  const [seasons, allTimeStandings] = await Promise.all([
+    prisma.leagueSeason.findMany({ where: { leagueId }, orderBy: { season: 'desc' } }),
+    loadAllTimeStandings(leagueId).catch(() => []),
+  ])
+
   if (league.platform !== 'sleeper' || !league.platformLeagueId) {
-    return NextResponse.json({ supported: false as const, platform: league.platform })
+    return NextResponse.json({ supported: false as const, platform: league.platform, seasons, allTimeStandings })
   }
 
   const profile = await prisma.userProfile
@@ -46,15 +57,15 @@ export async function GET(req: NextRequest) {
 
   const history = await getSleeperLeagueHistory(league.platformLeagueId)
   if (!history) {
-    return NextResponse.json(
-      { supported: true as const, history: null, error: 'History temporarily unavailable' },
-      { status: 502 },
-    )
+    // The stored seasons and standings still stand when the Sleeper chain is unavailable.
+    return NextResponse.json({ supported: true as const, history: null, error: 'History temporarily unavailable', seasons, allTimeStandings })
   }
 
   return NextResponse.json({
     supported: true as const,
     viewerSleeperUserId: profile?.sleeperUserId ?? null,
     history,
+    seasons,
+    allTimeStandings,
   })
 }

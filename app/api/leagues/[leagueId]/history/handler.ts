@@ -9,6 +9,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { resolveLeagueAccess } from '@/lib/league-access'
+import { loadAllTimeStandings } from '@/lib/league/allTimeStandingsServer'
 
 export const dynamic = 'force-dynamic'
 
@@ -117,11 +118,15 @@ export async function GET(
       select: { status: true, failureMessage: true, lastStartedAt: true, updatedAt: true },
     })
     .catch(() => null)
+  // Every manager across every season on file, the current one included (allTimeStandings.ts).
+  const allTimeStandings = await loadAllTimeStandings(leagueId).catch(() => [])
+
   return NextResponse.json({
     leagueId,
     leagueName: league.name,
     sport: league.sport,
     seasons: unique,
+    allTimeStandings,
     /*
      * ⚠ THE ONLY PLACE THE PRODUCT REPORTS THIS, so it has to report enough to
      * act on. `status` alone said `complete` for 52 production leagues that had
