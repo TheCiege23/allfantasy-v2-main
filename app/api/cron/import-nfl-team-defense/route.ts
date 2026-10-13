@@ -7,7 +7,7 @@ import { engineSeasonScope } from '@/lib/redraft/seasonStatus'
 import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 import {
   syncNflTeamDefenseBoxScores,
-  resolveRosteredDefenseTeams,
+  planTeamDefenseImport,
 } from '@/lib/redraft/teamDefenseProvider'
 
 export const dynamic = 'force-dynamic'
@@ -40,19 +40,22 @@ export async function GET(request: Request) {
           select: { id: true, season: true, currentWeek: true },
           take: 200,
         })
-        const buckets = await resolveRosteredDefenseTeams(prisma, seasons)
+        // The NFL's own week from the schedule, plus a bounded fill of earlier weeks with no cached
+        // line — see planTeamDefenseImport. The season's stored week is only the fallback.
+        const plan = await planTeamDefenseImport(prisma, seasons)
 
-        const results: Array<{ season: number; week: number; teamsRequested: number; teamsFetched: number; upserted: number; skippedNoStats: number }> = []
+        const results: Array<{ season: number; week: number; reason: string; teamsRequested: number; teamsFetched: number; upserted: number; skippedNoStats: number }> = []
         let totalUpserted = 0
-        const warnings: string[] = []
-        for (const { season, week, teams } of buckets.values()) {
-          if (teams.size === 0) continue
-          const r = await syncNflTeamDefenseBoxScores(prisma, { season, week, teams: [...teams] })
+        const warnings: string[] = [...plan.warnings]
+        for (const { season, week, teams, reason } of plan.buckets) {
+          if (teams.length === 0) continue
+          const r = await syncNflTeamDefenseBoxScores(prisma, { season, week, teams })
           totalUpserted += r.ingest.upserted
           warnings.push(...r.warnings.slice(0, 5))
           results.push({
             season,
             week,
+            reason,
             teamsRequested: r.teamsRequested,
             teamsFetched: r.teamsFetched,
             upserted: r.ingest.upserted,
