@@ -88,7 +88,7 @@ function buildCatalogPayload() {
       type: 'subscription',
       title: 'AF Supreme Monthly',
       description:
-        'Everything in All-Access plus the highest token allowances and platform-wide premium priority.',
+        'AF Pro and AF Commissioner in one tier, for less than buying both.',
       amountUsd: 19.99,
       currency: 'usd',
       interval: 'month',
@@ -102,7 +102,7 @@ function buildCatalogPayload() {
       type: 'subscription',
       title: 'AF Supreme Yearly',
       description:
-        'Everything in All-Access plus the highest token allowances and platform-wide premium priority.',
+        'AF Pro and AF Commissioner in one tier, for less than buying both.',
       amountUsd: 159.99,
       currency: 'usd',
       interval: 'year',
