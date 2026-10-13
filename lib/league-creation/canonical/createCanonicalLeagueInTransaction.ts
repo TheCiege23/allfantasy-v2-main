@@ -508,7 +508,19 @@ export async function createCanonicalLeagueInTransaction(
       leagueSize: managerCount,
       sport,
       leagueType: formatId,
-      leagueVariant: resolution.modifiers.includes('idp') && supportsIdpLeagueSport(sport) ? 'idp' : null,
+      /*
+       * 🛑 A ZOMBIE LEAGUE WAS CREATED WITH `leagueVariant: null`, AND EVERY ZOMBIE SURFACE KEYS ON THE
+       * VARIANT — the Zombie tab and its landing (`LeagueShell`), the trades tab, Chimmy's zombie context,
+       * the clip overlay. The legacy create route set it; this path never did, so a new zombie league
+       * looked like plain redraft. IDP keeps precedence because its scoring format reads the variant
+       * (an NFL IDP zombie league is a known gap). Survivor sets its own variant below.
+       */
+      leagueVariant:
+        resolution.modifiers.includes('idp') && supportsIdpLeagueSport(sport)
+          ? 'idp'
+          : formatId === 'zombie'
+            ? 'zombie'
+            : null,
       timezone: body.timezone ?? 'America/New_York',
       language: body.language ?? 'en',
       joinCode,

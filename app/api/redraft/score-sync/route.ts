@@ -6,7 +6,7 @@ import { requireCronAuth } from '@/app/api/cron/_auth'
 import { prisma } from '@/lib/prisma'
 import { updateC2CMatchupScores } from '@/lib/c2c/scoringEngine'
 import { syncWeeklyScores } from '@/lib/survivor/gameStateMachine'
-import { checkAllMatchupsComplete } from '@/lib/zombie/matchupCompletion'
+import { getZombieWeekReadiness, type ZombieWeekReadiness } from '@/lib/zombie/matchupCompletion'
 import { runWeeklyResolution } from '@/lib/zombie/weeklyResolutionEngine'
 import { getZombieLeagueConfig } from '@/lib/zombie/ZombieLeagueConfig'
 import { runZombieHousekeeping } from '@/lib/zombie/zombieAutomation'
@@ -83,11 +83,38 @@ async function runLegacyAutomationBridge() {
     select: { id: true, leagueId: true, currentWeek: true, season: true },
   })
 
+  /*
+   * 🛑 A NOT-READY WEEK USED TO `return` HERE WITH NO TRACE. A week the finalizer would not seal — NBA
+   * has never sealed a real slate — therefore looked exactly like a healthy mid-week league on every
+   * tick, forever, while the run reported `success`. Each skip now says why. Waiting is normal while
+   * games are in progress, so it does not mark the run partial; the reason is what makes a stall
+   * findable.
+   */
+  const zombieWeeksWaiting: Array<{ leagueId: string; week: number } & Exclude<ZombieWeekReadiness, { ready: true }>> = []
+  let zombieSeasonsClosed = 0
+
   const zombieRes = await Promise.allSettled(
     zombieLeagues.map(async ({ id, leagueId, currentWeek, season }) => {
       const week = Math.max(1, currentWeek || 1)
-      const allComplete = await checkAllMatchupsComplete(leagueId, week, season)
-      if (!allComplete) return
+      const readiness = await getZombieWeekReadiness(leagueId, week, season)
+      if (!readiness.ready) {
+        // Past the last scheduled week there is nothing left to resolve: the season is over. A league
+        // activated with `totalWeeks` reached the first playoff week and stalled here; this ends it.
+        if (
+          readiness.reason === 'NO_SCHEDULED_MATCHUPS' &&
+          readiness.lastScheduledWeek != null &&
+          week > readiness.lastScheduledWeek
+        ) {
+          const closed = await prisma.zombieLeague.updateMany({
+            where: { id, status: 'active' },
+            data: { status: 'complete', currentWeek: readiness.lastScheduledWeek, totalWeeks: readiness.lastScheduledWeek },
+          })
+          zombieSeasonsClosed += closed.count
+          return
+        }
+        zombieWeeksWaiting.push({ leagueId, week, ...readiness })
+        return
+      }
 
       const cfg = await getZombieLeagueConfig(leagueId)
       const replayOnStatCorrection = Boolean(cfg?.statCorrectionReversal)
@@ -135,6 +162,8 @@ async function runLegacyAutomationBridge() {
     survivorBridge,
     zombieResolutionAttempts: zombieRes.length,
     zombieResolutionFailed: zombieRes.filter((r) => r.status === 'rejected').length,
+    zombieWeeksWaiting,
+    zombieSeasonsClosed,
     zombieHousekeepingLeagues: zombieHousekeeping.leaguesChecked,
     zombieHousekeepingErrors: zombieHousekeeping.errors,
     c2cLeaguesSynced: c2cLeagues.length,
@@ -519,6 +548,9 @@ export async function GET(request: Request) {
         survivorSeason: r.survivorSeason,
         zombieResolutionAttempts: r.zombieResolutionAttempts,
         zombieResolutionFailed: r.zombieResolutionFailed,
+        zombieWeeksWaiting: r.zombieWeeksWaiting.length,
+        zombieWeeksWaitingSample: r.zombieWeeksWaiting.slice(0, 10),
+        zombieSeasonsClosed: r.zombieSeasonsClosed,
         zombieHousekeepingLeagues: r.zombieHousekeepingLeagues,
         zombieHousekeepingErrors: r.zombieHousekeepingErrors.slice(0, 10),
         c2cLeaguesSynced: r.c2cLeaguesSynced,

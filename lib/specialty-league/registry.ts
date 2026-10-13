@@ -29,7 +29,6 @@ import {
   getZombieLeagueConfig,
   upsertZombieLeagueConfig,
 } from '@/lib/zombie/ZombieLeagueConfig'
-import { getStatus } from '@/lib/zombie/ZombieOwnerStatusService'
 import {
   isDevyLeague,
   getDevyConfig,
@@ -198,13 +197,14 @@ function registerZombie(): void {
     summaryRoutePath: '/api/leagues/[leagueId]/zombie/summary',
     aiRoutePath: '/api/leagues/[leagueId]/zombie/ai',
 
-    rosterGuard: async (leagueId, rosterId) => {
-      const [config, status] = await Promise.all([
-        getZombieLeagueConfig(leagueId),
-        getStatus(leagueId, rosterId),
-      ])
-      return !(config?.zombieTradeBlocked && status === 'Zombie')
-    },
+    /*
+     * 🛑 NO `rosterGuard`, ON PURPOSE. A roster guard answers "may this roster act AT ALL" — it gates
+     * lineup saves, lineup locks and waiver claims, which is right for a chopped or voted-out team. A
+     * Zombie is not out: it keeps setting lineups and claiming players. The guard that sat here checked
+     * `zombieTradeBlocked`, so the moment a league carried `leagueVariant: 'zombie'` every Zombie would
+     * have been locked out of its own lineup, while trades — which never consult this guard — stayed
+     * open. The trade rule is enforced where trades are: `assertRosterTransactionsAllowed`.
+     */
 
     capabilities: {
       statusTransformation: true,
