@@ -1,3 +1,4 @@
+import { assertStealThreeWaiverHoldCleared } from '@/lib/survivor/survivorStealThreeWaivers'
 import { findSportsPlayerByLeagueId } from '@/lib/player-identity/findSportsPlayerByLeagueId'
 import { identityWhereForLeagueId } from '@/lib/player-identity/externalIdNamespace'
 import { prisma } from '@/lib/prisma'
@@ -867,6 +868,7 @@ export async function addNflRedraftFreeAgent(input: {
   }
   const move = result.result
   await prisma.$transaction(async (tx) => {
+    await assertStealThreeWaiverHoldCleared(tx, season.leagueId, move.addPlayerId)
     if (move.dropPlayerId) {
       const drop = await tx.redraftRosterPlayer.updateMany({
         where: { rosterId: move.rosterId, playerId: move.dropPlayerId, droppedAt: null },
