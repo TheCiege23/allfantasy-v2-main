@@ -20,8 +20,10 @@
  */
 import { prisma } from '@/lib/prisma'
 import { foldInjuryTeam } from '@/lib/injuries/matchInjuryRows'
+import { authoritativeRowsBySleeperId } from '@/lib/player-match/authoritativePlayerRow'
 import { buildNameIndex, normalizeMatchName, resolveVerifiedMatch } from '@/lib/player-match/verifiedNameMatch'
-import { getTeamInfo } from '@/lib/team-abbrev'
+import { sleeperIdWhere } from '@/lib/player-identity/externalIdNamespace'
+import { getAllCanonicalTeams, getTeamInfo, normalizeTeamAbbrev } from '@/lib/team-abbrev'
 
 export type NewsIdentityCandidate = {
   /** PlayerIdentityMap.id */
@@ -253,4 +255,131 @@ export function rosterRowIsBoundPlayer(
   // A shared name: only a row that positively carries the verified player's club is his.
   const theirs = newsClub(row.team, S)
   return theirs != null && theirs === binding.identity.team
+}
+
+/**
+ * The bound player's team NOW, for routing to that team's followers: his Sleeper row's team when he
+ * has one, the registry's `currentTeam` otherwise. NFL comes back as a canonical code.
+ *
+ * 🛑 THE REGISTRY'S `currentTeam` IS STALE FOR PLAYERS WHO LEFT A CLUB, AND IT WAS THE ROUTING TEAM.
+ * Measured 2026-10-13 over 30 days of high-impact NFL news: of 402 named players the registry binds
+ * by exact name, 43 have NO team on their Sleeper row (released or retired) while the registry still
+ * holds one — Tyreek Hill MIA (25 stories), Joe Mixon HOU (18), Tom Brady TB (16), Drew Brees NO,
+ * Tony Romo DAL — and every one of those stories went to the old club's followers: 159 of 2,281
+ * uniquely-named high-impact rows. 4 more players name a different club outright (Kaleb Johnson:
+ * registry PIT, Sleeper Green Bay).
+ *
+ * Only a `source = 'sleeper'` row speaks, and a null team there is a statement (no club), never a gap
+ * to fill — see `authoritativePlayerRow.ts`. No Sleeper id, no Sleeper row or an unreadable table
+ * keeps the registry's answer, which is what routed before this existed.
+ */
+export async function currentTeamForBinding(
+  binding: Extract<NewsPlayerBinding, { kind: 'resolved' }>,
+  sport: string | null | undefined,
+): Promise<string | null> {
+  const S = String(sport ?? '').trim().toUpperCase()
+  const fold = (team: string | null | undefined): string | null => {
+    const t = String(team ?? '').trim()
+    if (!t) return null
+    return S === 'NFL' ? normalizeTeamAbbrev(t) : t
+  }
+  const registry = fold(binding.identity.currentTeam)
+  const sid = binding.identity.sleeperId
+  if (!sid || !S) return registry
+  type Row = {
+    source: string; sleeperId: string | null; externalId: string; name: string
+    position: string | null; team: string | null; fetchedAt: Date | null
+  }
+  // Wrapped, not only `.catch`ed: a client without the model throws before a promise exists.
+  const rows: Row[] | null = await Promise.resolve()
+    .then(
+      () =>
+        prisma.sportsPlayer.findMany({
+          where: sleeperIdWhere([sid], S),
+          select: { source: true, sleeperId: true, externalId: true, name: true, position: true, team: true, fetchedAt: true },
+          take: 20,
+        }) as Promise<Row[]>,
+    )
+    .catch(() => null)
+  if (!rows) return registry
+  const authoritative = authoritativeRowsBySleeperId(
+    rows.map((r) => ({
+      ...r,
+      sleeperId: r.sleeperId ?? (r.externalId?.startsWith('sleeper:') ? r.externalId.slice('sleeper:'.length) : null),
+    })),
+  ).get(sid.toLowerCase())
+  if (!authoritative || authoritative.source !== 'sleeper') return registry
+  return fold(authoritative.team)
+}
+
+/** Shorthands headlines use that are neither a full name nor a mascot; matched like mascots. */
+const NFL_HEADLINE_NICKNAMES: Record<string, readonly string[]> = {
+  SF: ['Niners'], TB: ['Bucs'], NE: ['Pats'], JAX: ['Jags'],
+}
+
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+/**
+ * Every NFL club a headline names — full name, mascot, a common shorthand, or a city. Full names are
+ * consumed first so "New York Giants" is not ALSO read as a bare "New York" (a city two clubs share,
+ * which adds both). Over-counting only ever makes the caller refuse; under-counting is what mis-routes.
+ */
+export function nflTeamsNamedIn(text: string | null | undefined): Set<string> {
+  let rest = ` ${String(text ?? '')} `
+  const found = new Set<string>()
+  const teams = getAllCanonicalTeams()
+  const take = (phrase: string, codes: readonly string[]) => {
+    const re = new RegExp(`(^|[^A-Za-z0-9])${escapeRe(phrase)}(?=[^A-Za-z0-9]|$)`, 'gi')
+    if (!re.test(rest)) return
+    for (const c of codes) found.add(c)
+    rest = rest.replace(new RegExp(re.source, 'gi'), '$1 ')
+  }
+  for (const t of teams) take(t.fullName, [t.abbrev])
+  for (const t of teams) {
+    take(t.mascot, [t.abbrev])
+    for (const n of NFL_HEADLINE_NICKNAMES[t.abbrev] ?? []) take(n, [t.abbrev])
+  }
+  const byCity = new Map<string, string[]>()
+  for (const t of teams) byCity.set(t.city, [...(byCity.get(t.city) ?? []), t.abbrev])
+  for (const [city, codes] of byCity) take(city, codes)
+  return found
+}
+
+/**
+ * The ONE club a TEAM story is about — a `player_news` row whose "player" is a club ("Dallas Cowboys")
+ * — as a canonical code, or null.
+ *
+ * Owner's decision 2026-10-13: news about a team reaches that team's followers. But these rows are
+ * where the extractor is least trustworthy. Sampled on production the same day: "Indianapolis Colts"
+ * tagged WAS over "MCL sprain sidelines Mariota; Daniels preps" (a Commanders story), "Dallas Cowboys"
+ * tagged TB over a sportsbook promo, "Ravens vs. Falcons prediction", "Tennessee Titans" over "Week 5
+ * NFL picks… 5-leg parlay". So three things must agree before anyone is told:
+ *   - the slot IS a club's full name or mascot (normalizeTeamAbbrev) — not "Watch Lions", "How Bills";
+ *   - the row's tag, if it has one, is that same club — an unreadable tag counts as disagreement;
+ *   - the headline names that club and NO other — a matchup, a betting slate, a trade between two
+ *     clubs is about neither one alone.
+ * Measured over 30 days (SQL approximation): 299 high-impact NFL rows had a club in the slot, 48 pass
+ * all three (1.6/day, 36 distinct headlines, 16 clubs) — "Washington Commanders unveil first
+ * renderings inside new stadium", "Cowboys fall flat in Week 1 loss". The rest are matchups, slates
+ * and promos. NFL only: the club table behind normalizeTeamAbbrev is NFL's. Other sports' team rows
+ * (~70 a month) stay unrouted rather than guessed.
+ */
+export function teamNewsSubject(
+  sport: string | null | undefined,
+  slot: string | null | undefined,
+  rowTeam: string | null | undefined,
+  headline: string | null | undefined,
+): string | null {
+  if (String(sport ?? '').trim().toUpperCase() !== 'NFL') return null
+  const name = String(slot ?? '').trim()
+  const info = getTeamInfo(name)
+  if (!info) return null
+  const lower = name.toLowerCase()
+  if (lower !== info.fullName.toLowerCase() && lower !== info.mascot.toLowerCase()) return null
+  const code = info.canonical
+  const tag = String(rowTeam ?? '').trim()
+  if (tag && getTeamInfo(tag)?.canonical !== code) return null
+  const named = nflTeamsNamedIn(headline)
+  if (named.size !== 1 || !named.has(code)) return null
+  return code
 }
