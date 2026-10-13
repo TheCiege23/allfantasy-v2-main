@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Join a Survivor league</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./exile/exile.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Cinzel:wght@600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080d}
+.sj-hero{position:relative;height:420px;overflow:hidden}
+.sj-hero > img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:62% 60%}
+.sj-hero::before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(7,8,13,.92) 0%,rgba(7,8,13,.6) 45%,transparent 75%);z-index:1}
+.sj-hero::after{content:"";position:absolute;inset:0;background:linear-gradient(transparent 55%,#07080d);z-index:1}
+.sj-step{display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;padding:16px 12px 18px;border-radius:12px;background:rgba(16,19,28,.92);border:1px solid rgba(255,255,255,.06)}
+.sj-step img{height:86px}
+.sj-step b{font:700 14px 'Cinzel',serif;letter-spacing:.04em;color:#f1d58a}
+.sj-av{width:30px;height:30px;flex:none;border-radius:999px;display:grid;place-items:center;font:700 10.5px 'Archivo';color:#fff}
+.sj-kv{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.05);font-size:13px}
+.sj-kv:last-child{border-bottom:0}
+</style>
+</helmet>
+<div class="ex" style="min-height: 100vh">
+  <div class="sj-hero">
+    <img src="survivor/bg/dusk-football.svg" alt="">
+    <div style="position: relative; z-index: 2; height: 100%; display: flex; align-items: flex-start; gap: 28px; padding: 40px 40px 0">
+      <img src="weekly/torch-lit.svg" alt="" style="height: 170px; margin-top: -10px; filter: drop-shadow(0 10px 20px rgba(0,0,0,.5))">
+      <div style="flex: 1; display: flex; flex-direction: column; gap: 12px; padding-top: 6px">
+        <div style="display: flex; gap: 8px; flex-wrap: wrap"><span class="ex-chip" style="background: rgba(7,8,13,.6)">NFL 2026</span><span class="ex-chip" style="background: rgba(7,8,13,.6)">16 managers</span><span class="ex-chip" style="background: rgba(7,8,13,.6)">2 tribes</span><span class="ex-chip" style="background: rgba(7,8,13,.6)">7 hidden idols</span><span class="ex-chip" style="background: rgba(7,8,13,.6)">Snake draft</span></div>
+        <h1 style="margin: 0; font: 700 52px/1.05 'Cinzel', serif; letter-spacing: .03em; color: #fff">Blah Survivor</h1>
+        <span style="font-size: 15px; color: #c9cde0">You’re invited by <b style="color: #fff">TheCiege26</b>. Outscore, outvote, outlast.</span>
+      </div>
+      <div class="ex-card" style="width: 320px; padding: 20px; display: flex; flex-direction: column; gap: 12px; background: rgba(11,13,20,.92); border-color: rgba(217,180,90,.4)">
+        <div style="display: flex; align-items: baseline; gap: 8px"><span class="ex-num" style="font-size: 30px; font-weight: 700">{{filled}}</span><span class="ex-t2">of 16 spots filled</span></div>
+        <div style="height: 8px; border-radius: 99px; background: #151926; overflow: hidden"><div style="height: 100%; width: {{pct}}; background: linear-gradient(90deg, #d9b45a, #f1d58a)"></div></div>
+        <span class="ex-t2" style="font-size: 12.5px">Draft Sun, Aug 30 · 7:00 PM ET. Tribes are drawn when the league fills.</span>
+        <sc-if value="{{notJoined}}" hint-placeholder-val="{{ true }}"><button class="ex-btn ex-btn-gold" onClick="{{join}}" style="min-height: 48px; font-size: 14px">Join the island</button></sc-if>
+        <sc-if value="{{joined}}" hint-placeholder-val="{{ false }}"><div style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; background: rgba(58,190,120,.1); border: 1px solid rgba(58,190,120,.35)"><img src="weekly/torch-lit-icon.svg" alt="" style="height: 28px"><span style="font-size: 13px; font-weight: 600">You’re in. Your torch is lit.</span></div></sc-if>
+        <span class="ex-t3" style="font-size: 11.5px; text-align: center">Free. Leave any time before the draft.</span>
+      </div>
+    </div>
+  </div>
+
+  <div style="position: relative; z-index: 2; margin-top: -90px; padding: 0 40px 40px; display: flex; flex-direction: column; gap: 22px">
+    <div style="display: flex; align-items: baseline; gap: 14px"><h2 style="margin: 0; font: 700 26px 'Cinzel', serif; letter-spacing: .04em; color: #fff">How Survivor works</h2><span class="ex-t2">A season in six steps</span></div>
+    <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px">
+      <sc-for list="{{how}}" as="h" hint-placeholder-count="6">
+        <div class="sj-step"><span class="ex-lbl ex-gold">{{h.n}}</span><img src="{{h.art}}" alt=""><b>{{h.t}}</b><span class="ex-t2" style="font-size: 12.5px">{{h.d}}</span></div>
+      </sc-for>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; align-items: start">
+      <div class="ex-card" style="padding: 16px 18px">
+        <span class="ex-lbl">League settings</span>
+        <sc-for list="{{settings}}" as="s" hint-placeholder-count="8"><div class="sj-kv"><span class="ex-t2">{{s.k}}</span><b style="text-align: right">{{s.v}}</b></div></sc-for>
+      </div>
+      <div class="ex-card" style="padding: 16px 18px; display: flex; flex-direction: column; gap: 10px">
+        <span class="ex-lbl">Who’s on the island · {{filled}}</span>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px">
+          <sc-for list="{{members}}" as="m" hint-placeholder-count="12"><div style="display: flex; align-items: center; gap: 8px"><span class="sj-av" style="background: {{m.c}}">{{m.ini}}</span><span style="font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{m.name}}</span></div></sc-for>
+        </div>
+        <span class="ex-t3" style="font-size: 12px">{{openL}}</span>
+      </div>
+      <div class="ex-card" style="padding: 16px 18px; display: flex; flex-direction: column; gap: 12px">
+        <span class="ex-lbl">The tribes</span>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px">
+          <div class="ex-card2" style="padding: 12px; display: flex; flex-direction: column; align-items: center; gap: 6px"><img src="tribes/nfl/manta.svg" alt="" style="height: 70px"><b style="color: #b8a8ff">Vela</b><img src="late/buff-vela.svg" alt="" style="height: 30px"></div>
+          <div class="ex-card2" style="padding: 12px; display: flex; flex-direction: column; align-items: center; gap: 6px"><img src="tribes/nfl/shark.svg" alt="" style="height: 70px"><b style="color: #7fd3de">Koa</b><img src="late/buff-koa.svg" alt="" style="height: 30px"></div>
+        </div>
+        <span class="ex-t2" style="font-size: 12.5px">8 managers each, drawn at random when the last spot fills. You’ll see your tribe, and your tribemates, in the draft room.</span>
+        <div style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; background: rgba(217,180,90,.07); border: 1px solid rgba(217,180,90,.25)"><img src="survivor/idols/immunity-icon.svg" alt="" style="height: 28px"><span style="font-size: 12.5px">7 idols are hidden on players before the draft. Nobody knows where, not even the commissioner.</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1100}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { joined: false }; }
+  renderVals() {
+    const j = this.state.joined, filled = 12 + (j ? 1 : 0);
+    const how = [['tribes/nfl/manta.svg', 'Join a tribe', 'Managers split into tribes before the draft. Your tribe’s total score is what counts.'],
+      ['weekly/immunity-necklace.svg', 'Win immunity', 'The losing tribe goes to Tribal Council. Top scorer in that tribe is safe.'],
+      ['weekly/urn.svg', 'Vote someone out', 'The tribe votes in secret. Most votes and your torch goes out.'],
+      ['survivor/idols/immunity.svg', 'Find an idol', 'Draft the right player and an idol is yours. Play it to save yourself, or worse.'],
+      ['exile/token-coin.svg', 'Fight back from Exile', 'Voted out? Beat the Exile boss each week. Earn 3 tokens and you’re back in.'],
+      ['late/champion-trophy.svg', 'Win the jury', 'At the merge it’s every manager for themselves. The jury picks the champion.']]
+      .map(([art, t, d], i) => ({ n: 'Step ' + (i + 1), art, t, d }));
+    const settings = [['Scoring', 'Half PPR'], ['Roster', '9 starters · 7 bench · 1 IR'], ['Draft', 'Snake · Sun 7:00 PM ET'], ['Tribal Council', 'Votes close Tue 8:00 PM ET'], ['Ties', 'Revote, then season points'], ['Tribe swap', 'Week 5'], ['Merge', 'Week 8 · jury from then on'], ['Exile Island', 'On · 3 tokens to return']].map(([k, v]) => ({ k, v }));
+    const M = [['TheCiege26', 'TC', '#22314f'], ['Open Team 2', 'O2', '#4a1f2c'], ['Open Team 3', 'O3', '#2a3a1f'], ['Open Team 4', 'O4', '#1f2a4d'], ['Open Team 5', 'O5', '#12352a'], ['Open Team 6', 'O6', '#2c2a4a'], ['Open Team 7', 'O7', '#1d3a3a'], ['Open Team 8', 'O8', '#3a2410'], ['Open Team 9', 'O9', '#3a3418'], ['Open Team 10', 'O10', '#2a2a3a'], ['Open Team 11', 'O11', '#3a1f3a'], ['Open Team 12', 'O12', '#2a2a2a']];
+    if (j) M.push(['You', 'YO', '#5a4314']);
+    return { how, settings, filled, pct: (filled / 16 * 100).toFixed(1) + '%', members: M.map(([name, ini, c]) => ({ name, ini, c })),
+      openL: (16 - filled) + ' open spots. The draft can’t start until the island is full.', joined: j, notJoined: !j, join: () => this.setState({ joined: true }) };
+  }
+}
+</script>
+</body>
+</html>
