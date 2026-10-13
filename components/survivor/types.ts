@@ -96,6 +96,7 @@ export interface SurvivorSummaryChallenge {
 }
 
 export interface SurvivorSummary {
+  leagueName?: string
   config: SurvivorSummaryConfig
   /** Regular-season week window for main island + exile (no playoffs). */
   seasonCalendar?: SurvivorSeasonCalendar

@@ -229,6 +229,7 @@ export async function GET(
   const publicCouncil = survivorPublicCouncil(council, privacy.decisions.canSeePrivateVotes)
 
   const body = {
+    leagueName: leagueMeta?.name ?? 'Survivor League',
     config: {
       mode: config.mode,
       tribeCount: config.tribeCount,
