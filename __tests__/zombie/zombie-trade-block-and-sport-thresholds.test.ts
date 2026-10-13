@@ -108,3 +108,30 @@ describe('bash/maul thresholds fall back to the sport, not to NFL', () => {
     expect([r.bashingThreshold, r.maulingThreshold]).toEqual([80, 130])
   })
 })
+
+/*
+ * 🛑 Weapons were NFL lines for every sport: a Knife at 100, a Bow at 120, an Axe for a 20-point win.
+ * An NBA zombie team scores ~1,200 a week, so every NBA team held a Knife and a Bow every week.
+ */
+describe('weapon thresholds fall back to the sport, not to NFL', () => {
+  it('NBA: Knife 900, Bow 1,050, Axe for a win by 90', async () => {
+    const r = await getZombieRulesForSport('NBA')
+    expect([r.weaponShieldThreshold, r.weaponAmbushThreshold, r.weaponAxeMargin]).toEqual([900, 1050, 90])
+  })
+
+  it('[control] NFL keeps 100 / 120 / 20', async () => {
+    const r = await getZombieRulesForSport('NFL')
+    expect([r.weaponShieldThreshold, r.weaponAmbushThreshold, r.weaponAxeMargin]).toEqual([100, 120, 20])
+  })
+
+  it('[control] a sport with no calibration of its own keeps the defaults rather than borrowing NBA', async () => {
+    const r = await getZombieRulesForSport('NHL')
+    expect([r.weaponShieldThreshold, r.weaponAmbushThreshold, r.weaponAxeMargin]).toEqual([100, 120, 20])
+  })
+
+  it('a seeded rules-template row still wins for the score lines', async () => {
+    db.zombieRulesTemplate.findUnique.mockResolvedValue({ weaponShieldThreshold: 800, weaponAmbushThreshold: 1000 })
+    const r = await getZombieRulesForSport('NBA')
+    expect([r.weaponShieldThreshold, r.weaponAmbushThreshold, r.weaponAxeMargin]).toEqual([800, 1000, 90])
+  })
+})
