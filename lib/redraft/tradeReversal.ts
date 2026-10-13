@@ -42,6 +42,7 @@ import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { EVENT, getPlatformEvents } from '@/lib/events'
 import { movePlayerBoundIdolsInTransaction } from '@/lib/survivor/playerBoundIdolTransfer'
+import { transferNbaSurvivorRosterPlayer } from '@/lib/survivor/transferNbaSurvivorRosterPlayer'
 import {
   captureRedraftRosterState,
   type RedraftRosterStateSnapshot,
@@ -237,6 +238,8 @@ export async function reverseNativeTrade(input: ReverseNativeTradeInput): Promis
 
       const before = readRosters(snapshot.beforeState)
       const after = readRosters(snapshot.afterState)
+      const league = await tx.league.findUnique({ where: { id: proposal.leagueId }, select: { sport: true, survivorMode: true } })
+      const preserveNbaSurvivorOwnership = league?.sport === 'NBA' && league.survivorMode === true
 
       // Players: only those whose roster differs between before and after moved in this trade.
       const original = new Map<string, { rosterId: string; slotType: string; acquisitionType: string }>()
@@ -253,11 +256,13 @@ export async function reverseNativeTrade(input: ReverseNativeTradeInput): Promis
           if (!orig || orig.rosterId === r.rosterId) continue
           // The exact inverse of settlement's `updateMany` — same WHERE shape, moving every matching
           // undropped row back. `isLocked` is deliberately untouched: the lock is derived at read time; see the header.
-          const moved = await tx.redraftRosterPlayer.updateMany({
-            where: { rosterId: r.rosterId, playerId: p.playerId, droppedAt: null },
-            data: { rosterId: orig.rosterId, slotType: orig.slotType, acquisitionType: orig.acquisitionType },
-          })
-          if (moved.count === 0) {
+          const moved = preserveNbaSurvivorOwnership
+            ? await transferNbaSurvivorRosterPlayer(tx, { playerId: p.playerId, fromRosterId: r.rosterId, toRosterId: orig.rosterId, slotType: orig.slotType, acquisitionType: orig.acquisitionType })
+            : (await tx.redraftRosterPlayer.updateMany({
+              where: { rosterId: r.rosterId, playerId: p.playerId, droppedAt: null },
+              data: { rosterId: orig.rosterId, slotType: orig.slotType, acquisitionType: orig.acquisitionType },
+            })).count
+          if (moved === 0) {
             // Readiness just proved this player is on this roster; a zero here means the world moved
             // inside our own transaction. Refuse loudly rather than half-reverse.
             throw new Error(`Reversal could not find ${p.playerId} on roster ${r.rosterId}`)
@@ -269,7 +274,7 @@ export async function reverseNativeTrade(input: ReverseNativeTradeInput): Promis
             toRedraftRosterId: orig.rosterId,
             reason: 'trade_reversal',
           })
-          playersRestored += 1
+          playersRestored += moved
         }
       }
 
