@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { bigBrotherPhaseLabel, survivorPhase as survivorPhaseOf } from '@/lib/league/format-stakes'
 import Link from 'next/link'
 import { Crown, LayoutGrid, MessageSquare, Settings, Shield, Trophy, Wrench } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -202,17 +203,8 @@ export function SpecialtyLeagueHomeHero({
     return () => mq.removeEventListener('change', sync)
   }, [])
 
-  const survivorPhase = useMemo(() => {
-    if (!survivor) return { label: '…', mood: 'default' as const }
-    const w = survivor.currentWeek
-    if (survivor.finale?.open || survivor.finale?.closed) return { label: 'Finale', mood: 'jury' as const }
-    if (survivor.jury.length > 0 && survivor.merged) return { label: `Jury · Week ${w}`, mood: 'jury' as const }
-    if (survivor.council?.phase === 'voting_open' || survivor.council?.phase === 'votes_tallying')
-      return { label: 'Tribal Council', mood: 'tribal' as const }
-    if (survivor.merged) return { label: `Merge · Week ${w}`, mood: 'merge' as const }
-    if (survivor.exileLeagueId) return { label: `Island · Week ${w}`, mood: 'exile' as const }
-    return { label: `Tribe Phase · Week ${w}`, mood: 'default' as const }
-  }, [survivor])
+  // Shared with the native home's stakes card (lib/league/format-stakes.ts) so the two never disagree.
+  const survivorPhase = useMemo(() => survivorPhaseOf(survivor), [survivor])
 
   const tribalDeadline =
     survivor?.council?.voteDeadlineAt && !survivor.council?.closedAt ? survivor.council.voteDeadlineAt : null
@@ -231,16 +223,7 @@ export function SpecialtyLeagueHomeHero({
       ? survivor.tribes.map((t) => t.name).join(' · ')
       : 'Tribes forming'
 
-  const bbPhaseLabel = useMemo(() => {
-    if (!bb?.cycle) return 'House'
-    const ph = String(bb.cycle.phase ?? '').toLowerCase()
-    if (ph.includes('jury') || (bb.eligibility?.juryRosterIds?.length ?? 0) > 0) return 'Jury Phase'
-    if (ph.includes('veto')) return 'Veto'
-    if (ph.includes('nom')) return 'Nominations'
-    if (ph.includes('vote') || ph.includes('evict')) return 'Eviction'
-    if (ph.includes('hoh')) return 'Head of Household'
-    return `Week ${bb.cycle.week}`
-  }, [bb])
+  const bbPhaseLabel = useMemo(() => bigBrotherPhaseLabel(bb), [bb])
 
   const hohName =
     bb?.cycle?.hohRosterId && bb.rosterDisplayNames
