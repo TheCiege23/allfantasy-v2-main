@@ -54,6 +54,10 @@ export interface PlayerStatSnapshotModel {
   byeWeek?: number | null
   /** Prior-season or blended PPG from analytics when attached to pool rows */
   fantasyPointsPerGame?: number | null
+  /** NBA season box-score rates; absent when the cached season lacks a reliable games count. */
+  pointsPerGame?: number | null
+  reboundsPerGame?: number | null
+  minutesPerGame?: number | null
   lifetimeValue?: number | null
   /** Rolling Insights numbers when RI did not replace snapshot PPG (supplemental only). */
   rollingInsightsSupplemental?: {

@@ -8,6 +8,8 @@ import { resolveConceptRosterLineupRules } from './conceptRosterRules'
 import type { LineupLockContext } from './types'
 import { prisma } from '@/lib/prisma'
 import { toPrismaNullableJsonInput } from '@/lib/prisma-json'
+import { easternCalendarDay } from '@/lib/sports-data/easternGameDay'
+import { readWeekGames } from '@/lib/redraft/weekGames'
 
 export type LineupLockResolveArgs = {
   leagueId: string
@@ -62,6 +64,70 @@ export function computePerPlayerKickoffLocks(
     }
   }
   return { lockedPlayerIds, reasons }
+}
+
+/** A basketball player locks only for the Eastern calendar day on which his team tips off. */
+export function nbaSurvivorGameDayLocks(
+  players: Array<{ playerId: string; team: string | null }>,
+  games: Array<{ homeTeam: string | null; awayTeam: string | null; startTime: Date | null }>,
+  now: Date,
+): { lockedPlayerIds: string[]; reasons: Record<string, string> } {
+  const startedTeams = new Set<string>()
+  for (const game of games) {
+    if (!game.startTime || game.startTime > now) continue
+    for (const team of [game.homeTeam, game.awayTeam]) {
+      const key = nbaTeamKey(team)
+      if (key) startedTeams.add(key)
+    }
+  }
+  const lockedPlayerIds: string[] = []
+  const reasons: Record<string, string> = {}
+  for (const player of players) {
+    if (!startedTeams.has(nbaTeamKey(player.team))) continue
+    lockedPlayerIds.push(player.playerId)
+    reasons[player.playerId] = 'This player is locked because their NBA game has started.'
+  }
+  return { lockedPlayerIds, reasons }
+}
+
+const NBA_TEAM_NAMES: Record<string, string> = {
+  HAWKS: 'ATL', CELTICS: 'BOS', NETS: 'BKN', HORNETS: 'CHA', BULLS: 'CHI',
+  CAVALIERS: 'CLE', MAVERICKS: 'DAL', NUGGETS: 'DEN', PISTONS: 'DET',
+  WARRIORS: 'GSW', ROCKETS: 'HOU', PACERS: 'IND', CLIPPERS: 'LAC', LAKERS: 'LAL',
+  GRIZZLIES: 'MEM', HEAT: 'MIA', BUCKS: 'MIL', TIMBERWOLVES: 'MIN',
+  PELICANS: 'NOP', KNICKS: 'NYK', THUNDER: 'OKC', MAGIC: 'ORL',
+  '76ERS': 'PHI', SIXERS: 'PHI', SUNS: 'PHX', 'TRAIL BLAZERS': 'POR',
+  KINGS: 'SAC', SPURS: 'SAS', RAPTORS: 'TOR', JAZZ: 'UTA', WIZARDS: 'WAS',
+}
+
+function nbaTeamKey(value: string | null | undefined): string {
+  const key = String(value ?? '').trim().toUpperCase().replace(/[^A-Z0-9 ]/g, '').replace(/\s+/g, ' ')
+  if (!key) return ''
+  const aliases: Record<string, string> = { GS: 'GSW', NY: 'NYK', NO: 'NOP', SA: 'SAS', PHO: 'PHX', UTH: 'UTA', BKL: 'BKN', BRK: 'BKN' }
+  if (aliases[key]) return aliases[key]
+  if (key.length <= 3) return key
+  for (const [name, code] of Object.entries(NBA_TEAM_NAMES)) {
+    if (key === name || key.endsWith(` ${name}`)) return code
+  }
+  return key
+}
+
+async function resolveNbaSurvivorGameDayLocks(args: LineupLockResolveArgs, now: Date) {
+  const day = easternCalendarDay(now)
+  if (!day) return { lockedPlayerIds: [], reasons: {} }
+  const roster = await prisma.roster.findUnique({ where: { id: args.rosterId }, select: { redraftRosterId: true } })
+  if (!roster?.redraftRosterId) return { lockedPlayerIds: [], reasons: {} }
+  const [players, games] = await Promise.all([
+    prisma.redraftRosterPlayer.findMany({
+      where: { rosterId: roster.redraftRosterId, droppedAt: null },
+      select: { playerId: true, team: true },
+    }),
+    readWeekGames(prisma, {
+      sport: 'NBA', season: args.season, week: args.editingWeek, seasonType: 'regular',
+      dateWindow: { start: day, end: new Date(day.getTime() + 86_400_000) }, now,
+    }),
+  ])
+  return nbaSurvivorGameDayLocks(players, games, now)
 }
 
 export async function resolveSpecialtyLineupGuard(
@@ -129,6 +195,7 @@ export async function upsertAfLineupLockState(input: {
 
 export async function resolveFullLineupLockContext(args: LineupLockResolveArgs): Promise<LineupLockContext> {
   const now = args.now ?? new Date()
+  const nbaSurvivor = args.sport.toUpperCase() === 'NBA' && String(args.leagueVariant ?? '').toLowerCase() === 'survivor'
   const base: LineupLockResult = evaluateLineupLock({
     sport: args.sport,
     now,
@@ -137,9 +204,9 @@ export async function resolveFullLineupLockContext(args: LineupLockResolveArgs):
   })
 
   const concept = resolveConceptRosterLineupRules(args.settings)
-  let locked = base.locked
-  let reason = base.reason
-  let policy: string = base.policy
+  let locked = nbaSurvivor && args.editingWeek === args.leagueWeek ? false : base.locked
+  let reason = locked ? base.reason : undefined
+  let policy: string = nbaSurvivor && args.editingWeek === args.leagueWeek ? 'nba_per_game_day' : base.policy
 
   if (args.lifecycleState === 'archived' || args.lifecycleState === 'completed') {
     locked = true
@@ -168,7 +235,9 @@ export async function resolveFullLineupLockContext(args: LineupLockResolveArgs):
     policy = 'specialty_guard'
   }
 
-  const kick = computePerPlayerKickoffLocks(args.playerData, now)
+  const kick = nbaSurvivor && args.editingWeek === args.leagueWeek
+    ? await resolveNbaSurvivorGameDayLocks(args, now)
+    : computePerPlayerKickoffLocks(args.playerData, now)
 
   return {
     locked,

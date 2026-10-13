@@ -16,6 +16,7 @@ import { getFinaleState } from './SurvivorFinaleEngine'
 import { withSurvivorSetupTransaction } from './survivorSetupTransaction'
 import { closeExpiredExileRosters, finalizeExileRosterResults } from './exileRosterService'
 import { ensureVerifiedSlateChallenges, settleVerifiedSlateChallenges } from './survivorVerifiedSlateChallenges'
+import { generateAndPostWeeklyRecap } from './weeklyRecapGenerator'
 
 export type PlannedWeekKind = 'opening' | 'elimination' | 'rest' | 'finale' | 'outside'
 
@@ -85,6 +86,15 @@ export async function runPlannedSurvivorLeague(leagueId: string, now = new Date(
     }
   }
 
+  // A manual reveal must finish before any recap or next-week transition can
+  // publish the outcome. This also keeps a playing commissioner blind.
+  const councilForRead = await prisma.survivorTribalCouncil.findFirst({
+    where: { leagueId, week },
+    orderBy: { councilNumber: 'desc' },
+    select: { isRevealed: true },
+  })
+  if (councilForRead && !councilForRead.isRevealed) return 'awaiting_reveal'
+
   const exileEntry = await prisma.exileWeeklyEntry.findFirst({ where: { leagueId, week }, select: { id: true } })
   if (exileEntry) {
     await closeExpiredExileRosters(leagueId, now)
@@ -107,12 +117,14 @@ export async function runPlannedSurvivorLeague(leagueId: string, now = new Date(
   if (kind === 'finale') {
     const finale = await getFinaleState(leagueId, week)
     if (finale.closed && finale.winnerRosterId) {
+      await generateAndPostWeeklyRecap(leagueId, week)
       await advancePhase(leagueId, 'automatic', undefined, { toPhase: 'complete', notes: 'jury_winner_revealed' })
       return 'season_complete'
     }
     return 'awaiting_jury'
   }
   if (calendarWeek <= week) return 'awaiting_next_week'
+  await generateAndPostWeeklyRecap(leagueId, week)
   await advanceWeek(leagueId)
   return 'week_advanced'
 }
