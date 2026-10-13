@@ -115,8 +115,13 @@ export const ZOMBIE_SPORT_CONFIGS: Record<string, ZombieSportConfig> = {
     lineupFrequency: 'daily',
     scoringWindow: 'Daily slates; weekly aggregate determines matchup winner',
     lockRule: 'Tip-off locks per player per day',
-    bashingThreshold: 45,
-    maulingThreshold: 70,
+    /*
+     * 🛑 45/70 BASHED ON 82% AND MAULED ON 73% OF NBA WINS (simulated, 12% missed games) against NFL's
+     * 52% / 29% on real weeks with its 30/50. These are the margins that hit NFL's rates: 128 / 211 at 12%
+     * missed games (119-132 / 195-217 across 0-20%). Same calibration as `engineWeapons` below.
+     */
+    bashingThreshold: 128,
+    maulingThreshold: 211,
     /*
      * Calibrated to award at the rate NFL's 100/120/20 do on real NFL weeks (29,174 Sleeper team-weeks,
      * 2026-10-13): Knife 86.6% of team-weeks, Bow 75.2%, Axe 66.4% of wins. Simulated NBA weeks

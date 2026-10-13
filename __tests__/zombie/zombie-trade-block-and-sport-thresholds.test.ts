@@ -92,9 +92,10 @@ describe('zombie trade block', () => {
 })
 
 describe('bash/maul thresholds fall back to the sport, not to NFL', () => {
-  it('NBA uses its own 45/70 margins when no rules-template row exists', async () => {
+  it('NBA uses its own 128/211 margins when no rules-template row exists', async () => {
+    // Calibrated to NFL's bash/maul rates (52% / 29% of wins); 45/70 fired on 82% / 73% of NBA wins.
     const r = await getZombieRulesForSport('NBA')
-    expect([r.bashingThreshold, r.maulingThreshold]).toEqual([45, 70])
+    expect([r.bashingThreshold, r.maulingThreshold]).toEqual([128, 211])
   })
 
   it('[control] NFL keeps 30/50', async () => {
