@@ -10,8 +10,9 @@
  *   - `qualificationTiebreakers`        TournamentAdvancementService / TournamentStandingsService
  *   - `faabBudgetDefault`, `faabResetByRound`, `benchSpotsElimination`  TournamentAdvancementService
  *   - `draftType`                       TournamentRedraftService
- * ⚠ The older hub route (/api/tournament/[id]/settings/update) writes `bubbleEnabled` and
- * `advancementPerLeague`, which nothing in lib/tournament-mode reads. Those are NOT used here.
+ * ⚠ The hub route (/api/tournament/[id]/settings/update) used to write `bubbleEnabled` and
+ * `advancementPerLeague`, which nothing in lib/tournament-mode reads. It now writes these keys too;
+ * a tournament saved before that fix may still hold the old, unread keys.
  *
  * Structure (`participantPoolSize`, `qualificationWeeks`, `conferenceMode`) is not editable — the
  * same keys the hub's legacy-settings route refuses once a tournament is locked.

@@ -686,8 +686,8 @@ export function TournamentSettingsModalEditable({
               <Section title="Advancement defaults">
                 <SettingRow
                   label="Advancing per league (next round)"
-                  value={Number(tournamentEditValue('advancementPerLeague', (ctx as any).legacyTournament?.settings?.advancementPerLeague ?? 4))}
-                  onChange={(v) => setTournamentEdit('advancementPerLeague', Number(v))}
+                  value={Number(tournamentEditValue('eliminationAdvancementPerLeague', (ctx as any).legacyTournament?.settings?.eliminationAdvancementPerLeague ?? 6))}
+                  onChange={(v) => setTournamentEdit('eliminationAdvancementPerLeague', Number(v))}
                   type="number"
                 />
                 <SettingRow
@@ -712,16 +712,13 @@ export function TournamentSettingsModalEditable({
               <Section title="Bubble round (pre-elimination only)">
                 <SettingRow
                   label="Enable bubble round"
-                  value={Boolean(tournamentEditValue('bubbleEnabled', (ctx as any).legacyTournament?.settings?.bubbleEnabled ?? false))}
-                  onChange={(v) => setTournamentEdit('bubbleEnabled', Boolean(v))}
+                  value={Boolean(tournamentEditValue('bubbleWeekEnabled', (ctx as any).legacyTournament?.settings?.bubbleWeekEnabled ?? false))}
+                  onChange={(v) => setTournamentEdit('bubbleWeekEnabled', Boolean(v))}
                   type="checkbox"
                 />
-                <SettingRow
-                  label="Bubble size per conference"
-                  value={Number(tournamentEditValue('bubbleSize', (ctx as any).legacyTournament?.settings?.bubbleSize ?? 0))}
-                  onChange={(v) => setTournamentEdit('bubbleSize', Number(v))}
-                  type="number"
-                />
+                <p className="text-[11px] leading-relaxed text-white/45">
+                  The number of bubble spots follows the cut, up to 4 per conference.
+                </p>
               </Section>
               <button
                 onClick={() => void saveTournamentEdits()}
