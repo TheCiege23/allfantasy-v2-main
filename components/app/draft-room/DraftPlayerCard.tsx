@@ -260,8 +260,17 @@ function DraftPlayerCardInner({
     typeof normalized.projection === 'number' && Number.isFinite(normalized.projection)
       ? normalized.projection
       : null
+  const nbaRates = String(draftSport).toUpperCase() === 'NBA'
+    ? [
+        ['PPG', display?.stats?.pointsPerGame],
+        ['RPG', display?.stats?.reboundsPerGame],
+        ['MPG', display?.stats?.minutesPerGame],
+      ].filter((item): item is [string, number] => typeof item[1] === 'number' && Number.isFinite(item[1]))
+        .map(([label, value]) => `${label} ${value.toFixed(1)}`)
+        .join(' · ')
+    : ''
   const statLine =
-    normalized.stats?.summary ??
+    nbaRates || normalized.stats?.summary ||
     (projectedPoints != null
       ? `Proj ${projectedPoints.toFixed(1)} pts`
       : 'No stats available')

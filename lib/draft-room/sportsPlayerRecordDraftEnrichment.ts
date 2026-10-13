@@ -45,20 +45,21 @@ export type NbaDraftSeasonRates = {
 export function extractNbaDraftSeasonRates(blob: unknown): NbaDraftSeasonRates | null {
   if (!blob || typeof blob !== 'object' || Array.isArray(blob)) return null
   const root = blob as Record<string, unknown>
-  const nested = root.regular_season ?? root.currentSeason ?? root.season
+  const nested = root.regular_season ?? root.currentSeason ?? root.season_stats ?? root.season
   const stats = nested && typeof nested === 'object' && !Array.isArray(nested)
     ? nested as Record<string, unknown>
     : root
   const number = (keys: string[]): number | null => {
+    const normalized = new Map(Object.entries(stats).map(([key, value]) => [key.toLowerCase().replace(/[^a-z0-9]/g, ''), value]))
     for (const key of keys) {
-      const raw = stats[key]
+      const raw = stats[key] ?? normalized.get(key.toLowerCase().replace(/[^a-z0-9]/g, ''))
       if (raw == null || raw === '') continue
       const value = Number(raw)
       if (Number.isFinite(value) && value >= 0) return value
     }
     return null
   }
-  const games = number(['games_played', 'gamesPlayed', 'games', 'gp'])
+  const games = number(['games_played', 'gamesPlayed', 'games', 'gp', 'Games Played'])
   const rate = (direct: string[], total: string[], max: number): number | null => {
     const explicit = number(direct)
     const candidate = explicit ?? (games != null && games > 0 ? (number(total) ?? NaN) / games : null)
@@ -68,8 +69,8 @@ export function extractNbaDraftSeasonRates(blob: unknown): NbaDraftSeasonRates |
   }
   const result = {
     pointsPerGame: rate(['points_per_game', 'pointsPerGame', 'ppg'], ['points', 'pts'], 100),
-    reboundsPerGame: rate(['rebounds_per_game', 'reboundsPerGame', 'rpg'], ['total_rebounds', 'rebounds', 'reb'], 40),
-    minutesPerGame: rate(['minutes_per_game', 'minutesPerGame', 'mpg', 'average_minutes'], ['minutes', 'minutes_played'], 60),
+    reboundsPerGame: rate(['rebounds_per_game', 'reboundsPerGame', 'rpg'], ['total_rebounds', 'rebounds', 'reb', 'Total Rebounds'], 40),
+    minutesPerGame: rate(['minutes_per_game', 'minutesPerGame', 'mpg', 'average_minutes'], ['minutes', 'minutes_played', 'Minutes Played'], 60),
   }
   return Object.values(result).some((value) => value != null) ? result : null
 }

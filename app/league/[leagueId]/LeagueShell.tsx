@@ -264,6 +264,7 @@ export type LeagueShellProps = {
   userName: string
   userImage?: string | null
   draftDateIso: string | null
+  draftSetupSession?: { rounds: number; timerSeconds: number | null } | null
   sleeperCommissionerId: string | null
   sleeperUsersByPlatformId: SleeperMemberMap
   currentSleeperUserId: string | null
@@ -299,6 +300,7 @@ export function LeagueShell({
   userName,
   userImage = null,
   draftDateIso,
+  draftSetupSession = null,
   sleeperCommissionerId,
   sleeperUsersByPlatformId,
   currentSleeperUserId,
@@ -2047,8 +2049,12 @@ function LeagueTabRouter({
       nestedDraftSettings.draftType,
       nestedDraftSettings.engineCore,
     ) ?? 'snake'
-    const rounds = readNumber(settings.draft_rounds, nestedDraftSettings.rounds) ?? (sport === 'NCAAF' ? 20 : 15)
-    const timerSeconds = readNumber(settings.draft_timer_seconds, nestedDraftSettings.timerSeconds) ?? 90
+    const rounds = draftSetupSession?.rounds ?? readNumber(settings.draft_rounds, nestedDraftSettings.rounds) ?? (sport === 'NCAAF' ? 20 : 15)
+    const timerLabel = draftSetupSession
+      ? draftSetupSession.timerSeconds == null || draftSetupSession.timerSeconds <= 0
+        ? 'Untimed'
+        : `${draftSetupSession.timerSeconds}s`
+      : 'Set in draft room'
     const draftDateLabel = draftDateIso
       ? new Date(draftDateIso).toLocaleString(undefined, {
           weekday: 'short',
@@ -2113,7 +2119,7 @@ function LeagueTabRouter({
             <div className="rounded-2xl border border-white/[0.07] bg-white/[0.04] p-4">
               <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/45">Rounds / timer</p>
               <p className="mt-1 text-sm font-semibold text-white">
-                {rounds} rounds / {timerSeconds}s
+                {rounds} rounds / {timerLabel}
               </p>
             </div>
           </div>
