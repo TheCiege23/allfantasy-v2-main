@@ -46,7 +46,7 @@ vi.mock('@/lib/prisma', () => ({
     redraftRosterPlayer: { findMany: findManyRedraftRosterPlayer },
     playerGameLogCache: { findMany: findManyPlayerGameLogCache },
     sportsGame: { findMany: findManySportsGame },
-    playerWeeklyScore: { upsert: upsertPlayerWeeklyScore },
+    playerWeeklyScore: { upsert: upsertPlayerWeeklyScore, findMany: vi.fn(async () => []) },
   },
 }))
 

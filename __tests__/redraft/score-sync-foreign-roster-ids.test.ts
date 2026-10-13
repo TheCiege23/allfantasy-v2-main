@@ -16,6 +16,8 @@ const h = vi.hoisted(() => ({
   platform: 'fleaflicker' as string | null,
   identity: [] as Row[],
   cache: [] as Row[],
+  /** `player_weekly_scores` rows already stored for the week. */
+  stored: [] as Row[],
 }))
 
 const prismaMock = vi.hoisted(() => {
@@ -37,7 +39,7 @@ const prismaMock = vi.hoisted(() => {
     league: { findUnique: vi.fn(async () => ({ platform: h.platform })) },
     playerIdentityMap: { findMany: vi.fn(inFilter(() => h.identity, 'espnId')) },
     playerGameLogCache: { findMany: vi.fn(inFilter(() => h.cache, 'playerId')) },
-    playerWeeklyScore: { upsert: vi.fn(async () => ({})) },
+    playerWeeklyScore: { upsert: vi.fn(async () => ({})), findMany: vi.fn(inFilter(() => h.stored, 'playerId')) },
     redraftRoster: { findMany: vi.fn(async () => [{ id: 'roster-1' }]) },
     redraftRosterPlayer: { findMany: vi.fn() },
     redraftSeason: { findFirst: vi.fn(async () => ({ id: 'season-1', leagueId: 'league-1', sport: 'NFL', season: 2026, currentWeek: 2 })) },
@@ -64,6 +66,7 @@ beforeEach(() => {
   h.platform = 'fleaflicker'
   h.identity = []
   h.cache = []
+  h.stored = []
 })
 
 describe('score sync — a foreign roster id is never read or written as a Sleeper id', () => {
@@ -186,5 +189,126 @@ describe('score sync — a foreign roster id is never read or written as a Sleep
     expect(prismaMock.playerIdentityMap.findMany).not.toHaveBeenCalled()
     expect(writtenIds()).toEqual(['4984'])
     expect(summary.untranslatedForeignPlayerIds).toBeUndefined()
+  })
+})
+
+/*
+ * 🛑 Every box-score writer caches a defence under `nfl:def:<ABBR>` (all 8 production cache rows,
+ * 2026-10-13); Sleeper's id for the same defence is the bare `ARI`. Read by the roster id alone, the
+ * sync found no cache row and scored points-allowed only. The production cache payload is an array of
+ * `{ week, ...def_* }` entries.
+ */
+describe('score sync — a team defence reads ONE box score, whichever id form the roster holds', () => {
+  const ari = { playerId: 'ARI', position: 'DEF', sport: 'NFL', team: 'Arizona Cardinals', playerName: 'Arizona Cardinals' }
+  const defCache = (playerId: string, entry: Record<string, number>) => ({ playerId, sport: 'NFL', payload: [{ week: 2, ...entry }] })
+  const writtenStats = () =>
+    (prismaMock.playerWeeklyScore.upsert.mock.calls[0]![0] as { create: { stats: Record<string, number> } }).create.stats
+
+  it('🛑 Sleeper ARI reads the nfl:def:ARI box score — sacks and INTs, not points-allowed alone', async () => {
+    h.platform = 'sleeper'
+    prismaMock.redraftRosterPlayer.findMany.mockResolvedValue([ari])
+    h.cache = [defCache('nfl:def:ARI', { def_sack: 3, def_int: 1, def_points_allowed: 27 })]
+
+    await runSync(vi.fn(async () => new Map()))
+
+    expect(writtenIds()).toEqual(['ARI'])
+    expect(writtenStats()).toEqual({ def_sack: 3, def_int: 1, def_points_allowed: 27 })
+  })
+
+  it('🛑 cached under BOTH forms, the canonical one is read and nothing is added twice', async () => {
+    h.platform = 'sleeper'
+    prismaMock.redraftRosterPlayer.findMany.mockResolvedValue([ari])
+    h.cache = [
+      defCache('ARI', { def_sack: 9 }),
+      defCache('nfl:def:ARI', { def_sack: 3, def_points_allowed: 27 }),
+    ]
+
+    await runSync(vi.fn(async () => new Map()))
+
+    expect(writtenStats()).toEqual({ def_sack: 3, def_points_allowed: 27 })
+  })
+
+  it('with no box score, points allowed is matched on the club code even when the team label reads "Arizona Cardinals"', async () => {
+    h.platform = 'sleeper'
+    prismaMock.redraftRosterPlayer.findMany.mockResolvedValue([ari])
+
+    await runSync(vi.fn(async () => new Map()))
+
+    expect(writtenStats()).toEqual({ def_points_allowed: 27 })
+  })
+
+  it('an `nfl:def:ARI` roster reads the same cache row as before', async () => {
+    h.platform = 'sleeper'
+    prismaMock.redraftRosterPlayer.findMany.mockResolvedValue([{ ...ari, playerId: 'nfl:def:ARI' }])
+    h.cache = [defCache('nfl:def:ARI', { def_sack: 3, def_points_allowed: 27 })]
+
+    await runSync(vi.fn(async () => new Map()))
+
+    expect(writtenIds()).toEqual(['nfl:def:ARI'])
+    expect(writtenStats()).toEqual({ def_sack: 3, def_points_allowed: 27 })
+  })
+})
+
+/*
+ * 🛑 The sync rebuilt a defence's row from the cache alone, so a week the cache did not hold became
+ * points-allowed only and REPLACED the full line the live tick had stored. Production, 2026-10-13: 8
+ * week-2 rows (6 finalized) lost their box score that way while the other 24 clubs kept theirs.
+ */
+describe('score sync — a stored defence box score is never replaced by a weaker line', () => {
+  const ari = { playerId: 'ARI', position: 'DEF', sport: 'NFL', team: 'ARI', playerName: 'Arizona Cardinals' }
+  const storedRow = (stats: Record<string, number>) => ({ playerId: 'ARI', sport: 'NFL', week: 2, season: 2026, stats })
+  const writtenStats = () =>
+    (prismaMock.playerWeeklyScore.upsert.mock.calls[0]![0] as { update: { stats: Record<string, number> } }).update.stats
+
+  it('🛑 no cached week: the stored sacks and INT are kept and only points allowed is refreshed (27, from the game)', async () => {
+    h.platform = 'sleeper'
+    prismaMock.redraftRosterPlayer.findMany.mockResolvedValue([ari])
+    h.stored = [storedRow({ def_sack: 4, def_int: 1, def_points_allowed: 30 })]
+
+    await runSync(vi.fn(async () => new Map()))
+
+    expect(writtenStats()).toEqual({ def_sack: 4, def_int: 1, def_points_allowed: 27 })
+  })
+
+  it('a stored points-allowed-only line is no box score to keep: rebuilt from the game as before', async () => {
+    h.platform = 'sleeper'
+    prismaMock.redraftRosterPlayer.findMany.mockResolvedValue([ari])
+    h.stored = [storedRow({ def_points_allowed: 30 })]
+
+    await runSync(vi.fn(async () => new Map()))
+
+    expect(writtenStats()).toEqual({ def_points_allowed: 27 })
+  })
+
+  it('a cached week still wins over the stored line — that is how a stat correction lands', async () => {
+    h.platform = 'sleeper'
+    prismaMock.redraftRosterPlayer.findMany.mockResolvedValue([ari])
+    h.stored = [storedRow({ def_sack: 4, def_int: 1, def_points_allowed: 30 })]
+    // The box score's own points allowed (24) is kept; the game-derived 27 is only a fallback.
+    h.cache = [{ playerId: 'nfl:def:ARI', sport: 'NFL', payload: [{ week: 2, def_sack: 2, def_points_allowed: 24 }] }]
+
+    await runSync(vi.fn(async () => new Map()))
+
+    expect(writtenStats()).toEqual({ def_sack: 2, def_points_allowed: 24 })
+  })
+})
+
+describe('score sync — points allowed comes from the REGULAR-season game of that week', () => {
+  it('🛑 a preseason week 2 with a final score never becomes a regular week 2 defence\'s points allowed', async () => {
+    h.platform = 'sleeper'
+    prismaMock.redraftRosterPlayer.findMany.mockResolvedValue([{ playerId: 'ARI', position: 'DEF', sport: 'NFL', team: 'ARI' }])
+    const fetchedAt = new Date()
+    const games = [
+      { homeTeam: 'ARI', awayTeam: 'SEA', homeScore: 20, awayScore: 27, seasonType: 'regular', source: 'x', fetchedAt },
+      // August's exhibition, same week number, read last — it would win the club's slot if admitted.
+      { homeTeam: 'ARI', awayTeam: 'DEN', homeScore: 10, awayScore: 3, seasonType: 'pre', source: 'x', fetchedAt },
+    ]
+    prismaMock.sportsGame.findMany.mockImplementationOnce((async (args: { where: { seasonType?: string } }) =>
+      games.filter((g) => !args.where.seasonType || g.seasonType === args.where.seasonType)) as never)
+
+    await runSync(vi.fn(async () => new Map()))
+
+    const written = prismaMock.playerWeeklyScore.upsert.mock.calls[0]![0] as { create: { stats: Record<string, number> } }
+    expect(written.create.stats).toEqual({ def_points_allowed: 27 })
   })
 })
