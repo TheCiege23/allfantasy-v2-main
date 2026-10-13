@@ -4,8 +4,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { SURVIVOR_LEAGUE_INTRO_VIDEO } from '@/lib/survivor/constants'
 import { SURVIVOR_ISLAND_TAGLINE, SURVIVOR_TIPS, SURVIVOR_WELCOME_BLURB } from '@/lib/survivor/survivorIslandContent'
 import { getSurvivorThemeById } from '@/lib/survivor/survivorVisuals'
+import { firstEntryIntroStorageKey } from '@/lib/league/post-create-welcome'
 
-const STORAGE_KEY_PREFIX = 'survivor_intro_seen_'
 
 export interface SurvivorFirstEntryModalProps {
   leagueId: string
@@ -31,7 +31,7 @@ export function SurvivorFirstEntryModal({
   const [videoKey, setVideoKey] = useState(0)
   const [videoFailed, setVideoFailed] = useState(false)
 
-  const storageKey = `${STORAGE_KEY_PREFIX}${leagueId}_${userId}`
+  const storageKey = firstEntryIntroStorageKey('survivor', leagueId, userId)
   const theme = getSurvivorThemeById(visualThemeId, leagueId)
 
   const markSeen = useCallback(() => {

@@ -20,6 +20,11 @@ type LeagueConceptIntroGateProps = {
   guillotineMode?: boolean | null
   bestBallMode?: boolean | null
   settings?: unknown
+  /**
+   * Called once the requested intro is over — dismissed, finished, failed to load, already seen,
+   * or nothing to play. The post-create welcome flow waits on it before showing the welcome sheet.
+   */
+  onSettled?: () => void
 }
 
 const REDRAFT_INTRO_VIDEO_URL = '/media/league-intros/redraft-league-intro.mp4'
@@ -94,7 +99,11 @@ export function LeagueConceptIntroGate({
   guillotineMode,
   bestBallMode,
   settings,
+  onSettled,
 }: LeagueConceptIntroGateProps) {
+  const onSettledRef = useRef(onSettled)
+  onSettledRef.current = onSettled
+  const settle = useCallback(() => onSettledRef.current?.(), [])
   const forceRedraftIntro = useMemo(
     () => isRedraftLeagueType(leagueType, settings) && !guillotineMode && !bestBallMode && !isDynasty,
     [leagueType, settings, guillotineMode, bestBallMode, isDynasty],
@@ -191,6 +200,11 @@ export function LeagueConceptIntroGate({
 
   const shouldCheck = shouldPlayIntro && !blockedByModal && introEnabled && Boolean(videoSrc)
 
+  // Asked to play, but there is nothing to play (intros switched off, or no clip for this format).
+  useEffect(() => {
+    if (shouldPlayIntro && !blockedByModal && (!introEnabled || !videoSrc)) settle()
+  }, [shouldPlayIntro, blockedByModal, introEnabled, videoSrc, settle])
+
   useEffect(() => {
     seenMarkedRef.current = false
   }, [leagueId])
@@ -228,15 +242,17 @@ export function LeagueConceptIntroGate({
       .then((payload: { seen?: boolean } | null) => {
         if (cancelled) return
         if (payload?.seen === false) setOpen(true)
+        else settle()
       })
       .catch(() => {
         // Fail closed: if status call fails, do not block the dashboard.
+        if (!cancelled) settle()
       })
 
     return () => {
       cancelled = true
     }
-  }, [leagueId, shouldCheck])
+  }, [leagueId, shouldCheck, settle])
 
   const markSeen = useCallback(() => {
     if (seenMarkedRef.current) return
@@ -257,7 +273,17 @@ export function LeagueConceptIntroGate({
   const dismiss = useCallback(() => {
     setOpen(false)
     markSeen()
-  }, [markSeen])
+    settle()
+  }, [markSeen, settle])
+
+  /*
+   * A clip that fails to load is NOT a watched intro. This used to route through `dismiss`, so one
+   * network blip marked the intro seen on the server forever. Close it and move on, unmarked.
+   */
+  const failed = useCallback(() => {
+    setOpen(false)
+    settle()
+  }, [settle])
 
   if (!videoSrc) return null
 
@@ -268,6 +294,7 @@ export function LeagueConceptIntroGate({
       videoSrc={videoSrc}
       posterSrc={posterSrc}
       onDismiss={dismiss}
+      onError={failed}
     />
   )
 }

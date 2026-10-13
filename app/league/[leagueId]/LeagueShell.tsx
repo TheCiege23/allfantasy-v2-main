@@ -159,6 +159,18 @@ import { PostCreateSetupGuideBanner } from '@/components/league/PostCreateSetupG
 import { CommissionerSetupChecklist } from '@/components/league/CommissionerSetupChecklist'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { LeagueConceptIntroGate } from '@/components/league/LeagueConceptIntroGate'
+import { PostCreateWelcomeSheet, type PostCreateWelcomeLeague } from '@/components/league/post-create/PostCreateWelcomeSheet'
+import {
+  chooseWelcomeIntro,
+  firstEntryIntroKinds,
+  markFirstEntryIntrosSeen,
+  shouldStartPostCreateWelcome,
+  stripPostCreateHandoff,
+  type FirstEntryIntroKind,
+} from '@/lib/league/post-create-welcome'
+import { countClaimedSeats, leagueJoinUrl, nativeLeagueInviteCode } from '@/lib/league/league-invite-link'
+import { getLeagueTypeMedia, resolveLeagueConceptIntroKey } from '@/lib/league-media/leagueTypeMedia'
+import { findScoringPresetRule } from '@/lib/league-creation-preset/scoring-presets'
 import { useMyLeaguesRailCollapse } from '@/hooks/useMyLeaguesRailCollapse'
 import { SpecialtyLeagueAtmosphere } from '@/components/league-atmosphere/SpecialtyLeagueAtmosphere'
 import { TournamentIntroVideoOverlay } from '@/components/tournament/TournamentIntroVideoOverlay'
@@ -830,6 +842,50 @@ export function LeagueShell({
   const [settingsLoadFailed, setSettingsLoadFailed] = useState(false)
   const [leaveLeagueHintOpen, setLeaveLeagueHintOpen] = useState(false)
   const [portalMounted, setPortalMounted] = useState(false)
+
+  /*
+   * Post-create welcome: ONE owner for what a commissioner sees right after creating a league —
+   * one intro, then the "your league is ready" sheet (info, invite, next steps). See
+   * lib/league/post-create-welcome.ts for why the old overlays could not be left to sort it out.
+   * Latched on first render: the URL flags are cleared below, and that must not end the flow.
+   */
+  const [welcomeFlowUsed] = useState(() =>
+    shouldStartPostCreateWelcome({ createdFromLeagueCreate, isCommissioner, defaultShowInvite, shouldPlayIntro, embedMode }),
+  )
+  const [welcomeStage, setWelcomeStage] = useState<'intro' | 'ready' | 'done'>(() => (welcomeFlowUsed ? 'intro' : 'done'))
+  const firstEntryKinds = useMemo(
+    () => firstEntryIntroKinds({ leagueVariant: league.leagueVariant, leagueType: league.leagueType, guillotineMode: league.guillotineMode }),
+    [league.leagueVariant, league.leagueType, league.guillotineMode],
+  )
+  /** Which intro plays: a format intro (kind), the concept intro (null), or not decided yet. */
+  const [welcomeIntroKind, setWelcomeIntroKind] = useState<FirstEntryIntroKind | null | undefined>(undefined)
+  useEffect(() => {
+    if (!welcomeFlowUsed) return
+    setWelcomeIntroKind(chooseWelcomeIntro(firstEntryKinds, league.id, userId))
+    // Decided once, on arrival: a modal marking itself seen mid-flow must not re-route the flow.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [welcomeFlowUsed])
+  const advanceWelcomeFromIntro = useCallback(() => {
+    setWelcomeStage((stage) => (stage === 'intro' ? 'ready' : stage))
+  }, [])
+  const finishWelcome = useCallback(() => {
+    // Mark every format intro seen BEFORE they are re-enabled, so none pops up after the sheet.
+    markFirstEntryIntrosSeen(firstEntryKinds, league.id, userId)
+    setWelcomeStage('done')
+  }, [firstEntryKinds, league.id, userId])
+  const firstEntryIntroEnabled = (kind: FirstEntryIntroKind): boolean =>
+    !welcomeFlowUsed || welcomeStage === 'done' || (welcomeStage === 'intro' && welcomeIntroKind === kind)
+
+  /*
+   * Clear the post-create flags once read. They were never cleared, so every refresh — and every
+   * return from the draft board — reopened the invite and kept the tournament-redirect bypass on.
+   * Shallow, like the tab sync: a router.replace remounts this force-dynamic page.
+   */
+  useEffect(() => {
+    const next = stripPostCreateHandoff(window.location.search)
+    if (next === null) return
+    window.history.replaceState(null, '', next ? `${window.location.pathname}?${next}` : window.location.pathname)
+  }, [])
   const [idpUi, setIdpUi] = useState<{ active: boolean; positionMode: string } | null>(null)
 
   /*
@@ -1052,11 +1108,12 @@ export function LeagueShell({
 
   const inviteAutoOpenedForLeague = useRef<string | null>(null)
   useEffect(() => {
-    if (!defaultShowInvite) return
+    // The welcome sheet carries the invite now; opening Settings on top of the intro was the bug.
+    if (!defaultShowInvite || welcomeFlowUsed) return
     if (inviteAutoOpenedForLeague.current === league.id) return
     inviteAutoOpenedForLeague.current = league.id
     openLeagueSettingsModal('invite')
-  }, [defaultShowInvite, league.id, openLeagueSettingsModal])
+  }, [defaultShowInvite, welcomeFlowUsed, league.id, openLeagueSettingsModal])
 
   const closeLeagueSettingsModal = useCallback(() => {
     setSettingsOpen(false)
@@ -1117,6 +1174,35 @@ export function LeagueShell({
     closeLeagueSettingsModal()
     toast.error(settingsLoadFailedMessage)
   }, [settingsOpen, settingsLoadFailed, closeLeagueSettingsModal])
+
+  const welcomeLeague = useMemo<PostCreateWelcomeLeague>(() => {
+    const settings =
+      league.settings && typeof league.settings === 'object' && !Array.isArray(league.settings)
+        ? (league.settings as Record<string, unknown>)
+        : {}
+    const conceptKey = resolveLeagueConceptIntroKey({
+      leagueType: league.leagueType,
+      leagueVariant: league.leagueVariant,
+      settings: league.settings,
+      isDynasty: league.isDynasty,
+      guillotineMode: league.guillotineMode,
+      bestBallMode: league.bestBallMode,
+    })
+    const visibility = settings.league_privacy_visibility
+    return {
+      id: league.id,
+      name: league.name ?? 'Your league',
+      sport: String(league.sport ?? ''),
+      formatLabel: getLeagueTypeMedia(conceptKey).label,
+      teamCount: league.leagueSize ?? league.teams.length,
+      claimedSeats: countClaimedSeats(league.teams),
+      scoringLabel: (league.scoringPresetId ? findScoringPresetRule(league.scoringPresetId)?.label : null) ?? league.scoring ?? null,
+      tePremiumPoints: typeof settings.te_premium_points === 'number' ? settings.te_premium_points : null,
+      draftDateIso,
+      timezone: league.timezone ?? null,
+      privacy: visibility === 'public' ? 'public' : visibility === 'private' ? 'private' : null,
+    }
+  }, [league, draftDateIso])
 
   const blockConceptIntroForInvitePrefill =
     defaultShowInvite && inviteAutoOpenedForLeague.current !== league.id
@@ -1290,8 +1376,13 @@ export function LeagueShell({
       ) : null}
       <LeagueConceptIntroGate
         leagueId={league.id}
-        shouldPlayIntro={shouldPlayIntro && !blockConceptIntroForInvitePrefill}
+        shouldPlayIntro={
+          welcomeFlowUsed
+            ? welcomeStage === 'intro' && welcomeIntroKind === null
+            : shouldPlayIntro && !blockConceptIntroForInvitePrefill
+        }
         blockedByModal={settingsOpen}
+        onSettled={advanceWelcomeFromIntro}
         leagueType={league.leagueType}
         sport={String(league.sport ?? '')}
         leagueVariant={league.leagueVariant}
@@ -1713,21 +1804,21 @@ export function LeagueShell({
 
       {portalMounted && league.leagueVariant === 'survivor'
         ? createPortal(
-            <SurvivorFirstEntryModal leagueId={league.id} userId={userId} enabled onClose={() => {}} />,
+            <SurvivorFirstEntryModal leagueId={league.id} userId={userId} enabled={firstEntryIntroEnabled('survivor')} onClose={advanceWelcomeFromIntro} />,
             document.body,
           )
         : null}
 
       {portalMounted && league.leagueVariant === 'big_brother'
         ? createPortal(
-            <BigBrotherFirstEntryModal leagueId={league.id} userId={userId} enabled onClose={() => {}} />,
+            <BigBrotherFirstEntryModal leagueId={league.id} userId={userId} enabled={firstEntryIntroEnabled('big_brother')} onClose={advanceWelcomeFromIntro} />,
             document.body,
           )
         : null}
 
       {portalMounted && (league.leagueVariant === 'idp' || league.leagueVariant === 'dynasty_idp')
         ? createPortal(
-            <IDPFirstEntryModal leagueId={league.id} userId={userId} enabled onClose={() => {}} />,
+            <IDPFirstEntryModal leagueId={league.id} userId={userId} enabled={firstEntryIntroEnabled('idp')} onClose={advanceWelcomeFromIntro} />,
             document.body,
           )
         : null}
@@ -1737,10 +1828,10 @@ export function LeagueShell({
             <DevyFirstEntryModal
               leagueId={league.id}
               userId={userId}
-              enabled
+              enabled={firstEntryIntroEnabled('c2c')}
               mode="c2c"
               videoSrc='/league-type-c2c-intro.mp4'
-              onClose={() => {}}
+              onClose={advanceWelcomeFromIntro}
             />,
             document.body,
           )
@@ -1750,14 +1841,29 @@ export function LeagueShell({
       (league.leagueType === 'devy' ||
         league.leagueVariant === 'devy_dynasty')
         ? createPortal(
-            <DevyFirstEntryModal leagueId={league.id} userId={userId} enabled onClose={() => {}} />,
+            <DevyFirstEntryModal leagueId={league.id} userId={userId} enabled={firstEntryIntroEnabled('devy')} onClose={advanceWelcomeFromIntro} />,
             document.body,
           )
         : null}
 
       {portalMounted && league.guillotineMode
         ? createPortal(
-            <GuillotineFirstEntryModal leagueId={league.id} show onClose={() => {}} />,
+            <GuillotineFirstEntryModal leagueId={league.id} show={firstEntryIntroEnabled('guillotine')} onClose={advanceWelcomeFromIntro} />,
+            document.body,
+          )
+        : null}
+
+      {portalMounted && welcomeStage === 'ready'
+        ? createPortal(
+            <PostCreateWelcomeSheet
+              league={welcomeLeague}
+              inviteUrl={leagueJoinUrl(nativeLeagueInviteCode(league.settings, league.invites))}
+              onClose={finishWelcome}
+              onOpenSettings={(panel) => {
+                finishWelcome()
+                openLeagueSettingsModal(panel)
+              }}
+            />,
             document.body,
           )
         : null}

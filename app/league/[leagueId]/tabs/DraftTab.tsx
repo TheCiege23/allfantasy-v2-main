@@ -1,8 +1,10 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { LeagueInviteShare } from '@/components/league/invite/LeagueInviteShare'
+import { countClaimedSeats, leagueJoinUrl } from '@/lib/league/league-invite-link'
 import Link from 'next/link'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { LayoutGrid, Settings } from 'lucide-react'
 import { toast } from 'sonner'
 import type { UserLeague, UserLeagueTeam } from '@/app/dashboard/types'
@@ -235,7 +237,6 @@ export function DraftTab({
 }: DraftTabProps) {
   const isLeagueHome = mode === 'league'
   const router = useRouter()
-  const searchParams = useSearchParams()
   const [displayTeams, setDisplayTeams] = useState<UserLeagueTeam[]>(teams)
   const [draftSessionStatus, setDraftSessionStatus] = useState<DraftSessionDisplayStatus | null>(null)
 
@@ -267,11 +268,11 @@ export function DraftTab({
     }
   }, [league.id])
 
-  const filled = displayTeams.length
+  // Claimed seats only. `displayTeams` includes the placeholder slots create makes, so counting it
+  // reported every new league as full and hid this card once the post-create flags were gone.
+  const filled = countClaimedSeats(displayTeams)
   const cap = league.teamCount
   const isFull = filled >= cap
-  const justCreated = searchParams?.get('created') === '1'
-  const showInviteHighlight = searchParams?.get('showInvite') === '1'
   const settings = league.settings as Record<string, unknown> | undefined
   const allowInviteLink =
     typeof settings?.league_allow_invite_link === 'boolean'
@@ -283,17 +284,11 @@ export function DraftTab({
     (typeof settings?.inviteCode === 'string' && settings.inviteCode.trim()) ||
     (typeof inviteToken === 'string' && inviteToken.trim()) ||
     ''
-  const inviteDisplayPath =
-    inviteCode.length > 0
-      ? `allfantasy.ai/join?code=${encodeURIComponent(inviteCode)}&leagueId=${encodeURIComponent(league.id)}`
-      : ''
-  const inviteCopyUrl = inviteDisplayPath ? `https://${inviteDisplayPath}` : ''
+  // Same builder as the settings Invite panel and the welcome sheet: this host, `/join?code=` only.
+  // It used to hard-code `allfantasy.ai`, which pointed preview and local links at production.
+  const inviteCopyUrl = leagueJoinUrl(inviteCode)
   const canManageInvite = isOwner || isCommissioner
-  const showInvite =
-    canManageInvite &&
-    inviteCode.length > 0 &&
-    allowInviteLink &&
-    (!isFull || (justCreated && showInviteHighlight))
+  const showInvite = canManageInvite && inviteCode.length > 0 && allowInviteLink && !isFull
 
   const [finderListed, setFinderListed] = useState(false)
   const [finderLoading, setFinderLoading] = useState(false)
@@ -316,15 +311,6 @@ export function DraftTab({
       cancelled = true
     }
   }, [isCommissioner, league.id])
-
-  const handleCopyInvite = useCallback(async () => {
-    if (!inviteCopyUrl) return
-    try {
-      await navigator.clipboard.writeText(inviteCopyUrl)
-    } catch {
-      // ignore
-    }
-  }, [inviteCopyUrl])
 
   const handleLeagueFinder = useCallback(async () => {
     if (!isCommissioner || finderLoading) return
@@ -522,24 +508,10 @@ export function DraftTab({
               <span className="text-white/80">/{cap}</span>
             </div>
           </div>
-          {justCreated && showInviteHighlight ? (
-            <p className="mt-2 text-[11px] text-[#ffb8d1]/80">League ID: {league.id}</p>
-          ) : null}
-
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <div className="relative min-w-0 flex-1">
-              <code className="block truncate rounded-lg border border-white/[0.07] bg-black/25 py-2 pl-3 pr-10 text-[11px] text-[#ffb8d1]/90">
-                {inviteCopyUrl || inviteDisplayPath}
-              </code>
-            </div>
-            <button
-              type="button"
-              onClick={() => void handleCopyInvite()}
-              className="shrink-0 rounded-xl bg-[#ff3d81] px-4 py-2 text-[11px] font-black uppercase tracking-wide text-black transition hover:bg-[#ff3d81]"
-              data-testid="league-invite-copy"
-            >
-              COPY
-            </button>
+          <div className="mt-3">
+            <LeagueInviteShare url={inviteCopyUrl} leagueName={league.name} showQr={false} testIdPrefix="league-invite" />
+          </div>
+          <div className="mt-1 flex flex-wrap items-center gap-2">
             {isCommissioner ? (
               <button
                 type="button"
