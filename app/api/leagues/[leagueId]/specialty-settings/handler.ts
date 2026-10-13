@@ -2,13 +2,17 @@
  * /api/leagues/[leagueId]/specialty-settings — the Specialty tab of league settings.
  *
  * GET   → which gated formats this league runs, whether the caller may edit them and why, the token
- *         price of a one-season unlock, the Guillotine config when the league is Guillotine, and the
- *         Salary Cap settings (with every team's cap position) when it is Salary Cap.
+ *         price of a one-season unlock, the Guillotine config when the league is Guillotine, the
+ *         Salary Cap settings (with every team's cap position) when it is Salary Cap, and the
+ *         tournament's rules when it is a feeder league of a TournamentShell.
  * POST  → `{ confirmTokenSpend }` — unlock THIS league for THIS season with AF Tokens. A commish
  *         whose plan already covers it gets `{ ok: true, alreadyCovered: true }` and pays nothing.
  * PATCH → `{ guillotine: {...} }` — Guillotine rules (GuillotineLeagueConfig + the endgame).
  *         `{ salaryCap: {...} }` — Salary Cap rules (SalaryCapLeagueConfig); rules in
  *         lib/salary-cap/salaryCapSettingsPatch.ts. Logged to the cap event log.
+ *         `{ tournament: {...} }` — the tournament's cut, bubble, tiebreaker, name and conference
+ *         names, applied by lib/tournament/updateTournamentSettings.ts (which also audits). Only the
+ *         TOURNAMENT's commish may save; a league co-commish sees the rules read-only.
  *
  * Commish and co-commish only. Every other format's editor writes through its own route, and each
  * of those routes calls `specialtySettingsEditRefusal` itself.
@@ -32,6 +36,8 @@ import {
   type SalaryCapSettingsValue,
 } from '@/lib/salary-cap/salaryCapSettingsPatch'
 import { buildRosterLabelMap } from '@/lib/scoring-engine/resolveTeamLabels'
+import { updateTournamentSettings } from '@/lib/tournament/updateTournamentSettings'
+import { parseTournamentEditorPatch, type TournamentEditorValue } from '@/lib/tournament/tournamentEditorPatch'
 import {
   GUILLOTINE_ENDGAME_THRESHOLD,
   SPECIALTY_SETTINGS_FEATURE_ID,
@@ -101,6 +107,73 @@ async function loadSalaryCapState(leagueId: string): Promise<SalaryCapState | nu
   return { value: salaryCapSettingsValue(config), startupLocked: contracts > 0, capYear, teams }
 }
 
+type TournamentState = {
+  tournamentId: string
+  /** Only the tournament's commish can change tournament-wide rules (updateTournamentSettings enforces it). */
+  canEdit: boolean
+  value: TournamentEditorValue
+  conferences: Array<{ id: string; name: string; isActive: boolean }>
+  overview: {
+    sport: string
+    status: string
+    currentRoundNumber: number
+    totalRounds: number
+    conferenceCount: number
+    leaguesPerConference: number
+    teamsPerLeague: number
+    thisLeague: { roundLabel: string; conferenceName: string | null }
+  }
+  /** True once an advancement has run: a new cut changes the line from here, it moves nobody. */
+  alreadyAdvanced: boolean
+}
+
+/** The tournament this feeder league belongs to, as the editor shows it. Null for a legacy tournament. */
+async function loadTournamentState(leagueId: string, userId: string): Promise<TournamentState | null> {
+  const link = await prisma.tournamentLeague.findUnique({
+    where: { leagueId },
+    select: {
+      round: { select: { roundLabel: true } },
+      conference: { select: { name: true } },
+      tournament: {
+        select: {
+          id: true, name: true, sport: true, status: true, commissionerId: true,
+          currentRoundNumber: true, totalRounds: true, conferenceCount: true, leaguesPerConference: true,
+          teamsPerLeague: true, advancersPerLeague: true, wildcardCount: true, bubbleEnabled: true,
+          bubbleSize: true, tiebreakerMode: true,
+          conferences: { select: { id: true, name: true, isActive: true }, orderBy: { conferenceNumber: 'asc' } },
+        },
+      },
+    },
+  })
+  if (!link) return null
+  const t = link.tournament
+  const alreadyAdvanced = (await prisma.tournamentAdvancementGroup.count({ where: { tournamentId: t.id } })) > 0
+  return {
+    tournamentId: t.id,
+    canEdit: t.commissionerId === userId,
+    value: {
+      name: t.name,
+      advancersPerLeague: t.advancersPerLeague,
+      wildcardCount: t.wildcardCount,
+      bubbleEnabled: t.bubbleEnabled,
+      bubbleSize: t.bubbleSize,
+      tiebreakerMode: t.tiebreakerMode,
+    },
+    conferences: t.conferences,
+    overview: {
+      sport: t.sport,
+      status: t.status,
+      currentRoundNumber: t.currentRoundNumber,
+      totalRounds: t.totalRounds,
+      conferenceCount: t.conferenceCount,
+      leaguesPerConference: t.leaguesPerConference,
+      teamsPerLeague: t.teamsPerLeague,
+      thisLeague: { roundLabel: link.round.roundLabel, conferenceName: link.conference?.name ?? null },
+    },
+    alreadyAdvanced,
+  }
+}
+
 export async function GET(_req: NextRequest, ctx: Ctx) {
   const user = await sessionUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -125,6 +198,7 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
       : null
   }
   const salaryCap = formats.includes('salary_cap') ? await loadSalaryCapState(leagueId) : null
+  const tournament = formats.includes('tournament') ? await loadTournamentState(leagueId, user.id) : null
 
   return NextResponse.json({
     formats,
@@ -139,6 +213,7 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
     upgradePath: `/commissioner-upgrade?feature=${SPECIALTY_SETTINGS_FEATURE_ID}`,
     guillotine,
     salaryCap,
+    tournament,
   })
 }
 
@@ -200,8 +275,9 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   const refusal = await specialtySettingsEditRefusal(leagueId, user.id, user.email)
   if (refusal) return refusal
 
-  const body = (await req.json().catch(() => ({}))) as { guillotine?: unknown; salaryCap?: unknown }
+  const body = (await req.json().catch(() => ({}))) as { guillotine?: unknown; salaryCap?: unknown; tournament?: unknown }
   if (body.salaryCap !== undefined) return patchSalaryCap(leagueId, user.id, body.salaryCap)
+  if (body.tournament !== undefined) return patchTournament(leagueId, user.id, body.tournament)
   if (!body.guillotine || typeof body.guillotine !== 'object' || Array.isArray(body.guillotine)) {
     return NextResponse.json({ error: 'guillotine settings object required' }, { status: 400 })
   }
@@ -274,4 +350,27 @@ async function patchSalaryCap(leagueId: string, actorUserId: string, raw: unknow
     }
   }
   return NextResponse.json({ ok: true, salaryCap: await loadSalaryCapState(leagueId) })
+}
+
+async function patchTournament(leagueId: string, userId: string, raw: unknown) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return NextResponse.json({ error: 'tournament settings object required' }, { status: 400 })
+  }
+  const state = await loadTournamentState(leagueId, userId)
+  if (!state) {
+    return NextResponse.json({ error: 'This league is not part of a tournament that can be edited here.' }, { status: 409 })
+  }
+  if (!state.canEdit) {
+    return NextResponse.json({ error: "Only the tournament's commish can change tournament rules." }, { status: 403 })
+  }
+  const parsed = parseTournamentEditorPatch(raw as Record<string, unknown>, state.value)
+  if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 })
+
+  const result = await updateTournamentSettings({
+    tournamentId: state.tournamentId,
+    commissionerUserId: userId,
+    patch: parsed.patch,
+  })
+  if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status })
+  return NextResponse.json({ ok: true, tournament: await loadTournamentState(leagueId, userId) })
 }

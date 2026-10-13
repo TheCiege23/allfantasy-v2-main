@@ -129,7 +129,10 @@ export function C2CSection({ ctx, canEdit }: FormatSectionProps) {
   )
 }
 
-/** Tournament leagues are run from their shell hub, which owns the bracket and round settings. */
+/**
+ * A legacy tournament's leagues are run from its hub. A TournamentShell feeder league gets the
+ * in-place editor instead (TournamentSettingsForm), so this is the fallback.
+ */
 export function TournamentSection({ ctx }: FormatSectionProps) {
   const { t } = useLanguage()
   const settings = (ctx.league.settings ?? {}) as Record<string, unknown>
