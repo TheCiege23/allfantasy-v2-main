@@ -26,7 +26,11 @@ import { receptionPointsForScoringPresetId } from '@/lib/league-creation-preset/
  * `rec`, and nothing wrote it at create. College football has no store the scorer reads, so every
  * NCAAF league scored full PPR, including the half-PPR default.
  */
-async function seedFootballReceptionPreset(leagueId: string, receptionPoints: number | null): Promise<void> {
+async function seedFootballReceptionPreset(
+  leagueId: string,
+  receptionPoints: number | null,
+  options: { enableTEPremium?: boolean } = {},
+): Promise<void> {
   if (receptionPoints == null) return
   const scoringPreset = receptionPoints === 1 ? 'PPR' : receptionPoints === 0 ? 'STANDARD' : 'HALF_PPR'
   const row = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
@@ -37,7 +41,9 @@ async function seedFootballReceptionPreset(leagueId: string, receptionPoints: nu
       : {}
   await prisma.league.update({
     where: { id: leagueId },
-    data: { settings: { ...current, sportConfig: { ...sportConfig, scoringPreset } } as Prisma.InputJsonValue },
+    // TE premium is scored only when the engine's TE_PREMIUM toggle is on (`enableTEPremium`); the
+    // per-catch amount itself lives in `nfl_scoring_config.rules.te_premium`.
+    data: { settings: { ...current, sportConfig: { ...sportConfig, scoringPreset, ...(options.enableTEPremium ? { enableTEPremium: true } : {}) } } as Prisma.InputJsonValue },
   })
 }
 
@@ -153,10 +159,14 @@ export async function runLeagueBootstrap(
       await applyDefaultNhlScoringOnCreate(leagueId)
     } catch { /* non-fatal */ }
   }
+  let nflTePremium = false
   if (leagueSport === 'NFL') {
     try {
-      const { applyDefaultNflScoringOnCreate, nflScoringPresetKeyForReceptionPoints } = await import('@/lib/nfl-scoring')
-      await applyDefaultNflScoringOnCreate(leagueId, nflScoringPresetKeyForReceptionPoints(receptionPoints))
+      // ESPN / Sleeper presets seed that site's own rules; TE premium adds its per-catch amount.
+      const { applyDefaultNflScoringOnCreate, nflScoringSeedForCreate } = await import('@/lib/nfl-scoring')
+      const seed = nflScoringSeedForCreate({ scoringPresetId: leagueRow?.scoringPresetId, tePremiumPoints: settings.te_premium_points })
+      await applyDefaultNflScoringOnCreate(leagueId, seed.presetKey, seed.rules)
+      nflTePremium = seed.enableTEPremium
     } catch { /* non-fatal */ }
   }
   if (leagueSport === 'NCAAF') {
@@ -180,7 +190,7 @@ export async function runLeagueBootstrap(
 
   if (leagueSport === 'NFL' || leagueSport === 'NCAAF') {
     try {
-      await seedFootballReceptionPreset(leagueId, receptionPoints)
+      await seedFootballReceptionPreset(leagueId, receptionPoints, { enableTEPremium: nflTePremium })
     } catch { /* non-fatal */ }
   }
 

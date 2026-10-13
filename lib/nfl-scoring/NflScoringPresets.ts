@@ -34,6 +34,10 @@ export const NFL_RUSHING_KEYS = [
 export const NFL_RECEIVING_KEYS = [
   'reception', 'receiving_yards', 'receiving_td', 'receiving_first_down', 'receiving_2pt', 'target',
   'forty_yd_reception_bonus', 'forty_yd_rec_td_bonus', 'one_hundred_yd_rec_bonus', 'two_hundred_yd_rec_bonus',
+  // 🛑 `te_premium` is deliberately NOT listed. buildFullNflScoringConfig writes every listed key,
+  // so listing it would store `te_premium: 0` on every new league — and a commissioner who later
+  // turns TE_PREMIUM on in league settings would then score 0 instead of the engine's 0.5 default.
+  // The amount is written only when chosen (nflScoringSeedForCreate), as an engine key.
 ] as const
 
 export const NFL_MISC_OFFENSE_KEYS = [
@@ -73,7 +77,7 @@ export const NFL_STAT_LABELS: Record<string, string> = {
   rushing_2pt: 'Rushing 2PT', rush_attempt: 'Rush Attempt',
   forty_yd_rush_bonus: '40+ Yd Rush', forty_yd_rush_td_bonus: '40+ Yd Rush TD',
   one_hundred_yd_rush_bonus: '100+ Rush Yards', two_hundred_yd_rush_bonus: '200+ Rush Yards',
-  reception: 'Reception', receiving_yards: 'Receiving Yards', receiving_td: 'Receiving TD',
+  reception: 'Reception', receiving_yards: 'Receiving Yards', receiving_td: 'Receiving TD', te_premium: 'TE Premium (extra per TE catch)',
   receiving_first_down: 'Receiving 1st Down', receiving_2pt: 'Receiving 2PT', target: 'Target',
   forty_yd_reception_bonus: '40+ Yd Reception', forty_yd_rec_td_bonus: '40+ Yd Rec TD',
   one_hundred_yd_rec_bonus: '100+ Rec Yards', two_hundred_yd_rec_bonus: '200+ Rec Yards',
@@ -139,6 +143,17 @@ const AF_STANDARD: NflScoringPreset = {
   rules: { ...AF_DEFAULT.rules, reception: 0 },
 }
 
+/** Every field-goal miss band at one value (the engine scores one FG-missed bucket). */
+const FG_MISSED_MINUS_ONE = {
+  fg_missed_0_19: -1, fg_missed_20_29: -1, fg_missed_30_39: -1, fg_missed_40_49: -1, fg_missed_50_plus: -1,
+}
+
+/**
+ * Sleeper's default for a new redraft league (2026): full PPR, -1 per interception, PAT ±1, FG
+ * 3/4/5 by distance and -1 missed, DST points-allowed 10/7/4/1/0/-1/-4, no yards-allowed scoring.
+ * Sources: Sleeper's own Picks stats explainer ("Sleeper's default PPR scoring rules"), 4for4
+ * (Aug 2026) and PFN; two uncited sites say half-PPR, so full PPR is medium-high confidence.
+ */
 const SLEEPER_DEFAULT: NflScoringPreset = {
   key: 'sleeper_default', label: 'Sleeper Default', source: 'PLATFORM_PRESET',
   description: 'Sleeper standard PPR scoring: 1 PPR, 0.04/pass yd, 4 pass TD, 0.1/rush-rec yd, 6 rush/rec TD.',
@@ -149,8 +164,21 @@ const SLEEPER_DEFAULT: NflScoringPreset = {
     receiving_yards: 0.1, reception: 1, receiving_td: 6, receiving_2pt: 2,
     return_td: 6, fumble_lost: -2, off_fumble_recovery_td: 6,
     pat_made: 1, pat_missed: -1, fg_0_19: 3, fg_20_29: 3, fg_30_39: 3, fg_40_49: 4, fg_50_plus: 5,
+    ...FG_MISSED_MINUS_ONE,
     ...COMMON_DST,
   },
+}
+
+/**
+ * ESPN's DST points-allowed values (support.espn.com "Scoring Formats", 2026): 0 → 5, 1-6 → 4,
+ * 7-13 → 3, 14-17 → 1, 18-27 → 0, 28-34 → -1, 35-45 → -3, 46+ → -5.
+ * ⚠ APPROXIMATE: the engine's bands are 0 / 1-6 / 7-13 / 14-20 / 21-27 / 28-34 / 35+, so 18-20
+ * scores 1 here (ESPN 0) and 46+ scores -3 (ESPN -5). ESPN's yards-allowed tiers are not applied —
+ * only a secondary source lists their values, and NFL_STAT_KEYS has no yards-allowed keys.
+ */
+const ESPN_DST = {
+  ...COMMON_DST,
+  dst_pa_0: 5, dst_pa_1_6: 4, dst_pa_7_13: 3, dst_pa_14_20: 1, dst_pa_21_27: 0, dst_pa_28_34: -1, dst_pa_35_plus: -3,
 }
 
 const ESPN_STANDARD: NflScoringPreset = {
@@ -161,12 +189,14 @@ const ESPN_STANDARD: NflScoringPreset = {
     passing_yards: 0.04, passing_td: 4, interception_thrown: -2, passing_2pt: 2,
     rushing_yards: 0.1, rushing_td: 6, rushing_2pt: 2,
     receiving_yards: 0.1, reception: 0, receiving_td: 6, receiving_2pt: 2,
-    return_td: 6, fumble_lost: -2,
+    return_td: 6, fumble_lost: -2, off_fumble_recovery_td: 6,
     pat_made: 1, pat_missed: -1, fg_0_19: 3, fg_20_29: 3, fg_30_39: 3, fg_40_49: 4, fg_50_plus: 5,
-    ...COMMON_DST,
+    ...FG_MISSED_MINUS_ONE,
+    ...ESPN_DST,
   },
 }
 
+/** ESPN's default for a new league: "PPR Fractional: This is our default setting." (ESPN, 2022). */
 const ESPN_PPR: NflScoringPreset = {
   key: 'espn_ppr', label: 'ESPN PPR', source: 'PLATFORM_PRESET',
   description: 'ESPN PPR: 1 point per reception, standard yardage and TD scoring.',

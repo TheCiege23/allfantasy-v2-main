@@ -55,6 +55,7 @@ function normalizeInitialState(state: CreateLeagueV2State): CreateLeagueV2State 
     draftDate: state.draftDate ?? '',
     draftTime: state.draftTime ?? '',
     draftScheduleLater: state.draftScheduleLater === true,
+    tePremiumPoints: typeof state.tePremiumPoints === 'number' ? state.tePremiumPoints : null,
     survivorTribeCount: leagueType === 'survivor' && !getSurvivorTribeOptions(state.teamCount).includes(state.survivorTribeCount)
       ? (getSurvivorTribeOptions(state.teamCount)[0] ?? 2) : state.survivorTribeCount,
     survivorCommissionerParticipationMode: state.survivorCommissionerParticipationMode === 'participating_player'

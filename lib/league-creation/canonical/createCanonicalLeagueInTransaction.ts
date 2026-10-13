@@ -424,6 +424,11 @@ export async function createCanonicalLeagueInTransaction(
   const inviteToken = randomUUID()
   mergedSettings.league_privacy_visibility = leagueVisibility
   mergedSettings.inviteCode = inviteToken
+  // TE premium (NFL): extra points per tight-end catch. The bootstrap seeds it into the scoring
+  // store and turns the engine's TE_PREMIUM toggle on; validateCreatePayload already checked it.
+  if (sport === 'NFL' && typeof conceptSetupForPrivacy.tePremiumPoints === 'number') {
+    mergedSettings.te_premium_points = conceptSetupForPrivacy.tePremiumPoints
+  }
 
   const joinCode = await uniqueJoinCode(tx)
   const platformLeagueId = `manual-${randomUUID()}`

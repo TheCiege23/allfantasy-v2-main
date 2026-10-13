@@ -191,6 +191,8 @@ export interface CreateLeagueV2State {
   superflex: boolean
   tePremium: boolean
   tePremiumMultiplier: number
+  /** NFL TE premium: extra points per tight-end catch (TE_PREMIUM_POINT_OPTIONS), null until chosen. */
+  tePremiumPoints: number | null
   pprMode: PprMode
 }
 
@@ -369,6 +371,7 @@ export const DEFAULT_V2_STATE: CreateLeagueV2State = {
   superflex: false,
   tePremium: false,
   tePremiumMultiplier: 1.5,
+  tePremiumPoints: null,
   pprMode: 'half',
 }
 
