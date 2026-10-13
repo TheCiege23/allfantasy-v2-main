@@ -143,8 +143,12 @@ const RULES: PresetRule[] = [
   ncaafPreset('ncaaf_ppr_college', 'College Full PPR', '1.0 per reception for college football.', { ppr: 'full' }),
   fbPreset('fb_std', 'Standard', 'No PPR classic yardage + TD scoring.', { ppr: 'standard' }),
   fbPreset('fb_ppr', 'Full PPR', '1.0 per reception, WR/TE friendly.', { ppr: 'full' }),
-  fbPreset('fb_standard', 'Standard', 'No PPR — classic yardage + TD scoring.', { ppr: 'standard' }),
   fbPreset('fb_half_ppr', 'Half PPR', '0.5 per reception — balanced modern default.', { ppr: 'half' }),
+  // A site's own default league scoring (2026). The NFL rules each one seeds live in
+  // NflScoringPresets (espn_ppr / sleeper_default) via nflScoringSeedForCreate.
+  fbPreset('fb_espn_ppr', 'ESPN default (PPR)', "ESPN's default scoring: 1 per catch, -2 per interception.", { ppr: 'full' }),
+  fbPreset('fb_sleeper_ppr', 'Sleeper default (PPR)', "Sleeper's default scoring: 1 per catch, -1 per interception.", { ppr: 'full' }),
+  fbPreset('fb_standard', 'Classic (no PPR)', 'No points per catch — classic yardage + TD scoring.', { ppr: 'standard' }),
   fbPreset('fb_full_ppr', 'Full PPR', '1.0 per reception — WR/TE friendly.', { ppr: 'full' }),
   fbPreset('fb_te_premium', 'TE Premium', 'Half PPR + boosted TE scoring.', {
     ppr: 'half',

@@ -10,6 +10,7 @@ import { tournamentRoundEnds } from '@/lib/bestball/tournamentCalendar'
 import { z } from 'zod'
 import { resolveDynastyCreationRoster } from './dynastyCreationRoster'
 import { isValidIanaTimeZone, toUtc } from '@/lib/timezone'
+import { TE_PREMIUM_POINT_OPTIONS, isValidTePremiumPoints } from '@/lib/nfl-scoring/nflScoringSeedForCreate'
 import type { LeagueSport } from '@prisma/client'
 import { getSurvivorTribeOptions, getTeamCountOptions } from '@/lib/create-league-v2/rules-engine'
 import type { LeagueTypeId } from '@/lib/league-creation-wizard/types'
@@ -310,6 +311,16 @@ export function validateCreatePayload(input: unknown): ValidateCreateLeagueResul
           message: `Team count must be one of: ${teamOpts.join(', ')}`,
         },
       ],
+    }
+  }
+
+  const tePremiumPoints = data.conceptSetup?.tePremiumPoints
+  if (tePremiumPoints !== undefined && tePremiumPoints !== null) {
+    if (sport !== 'NFL' || !isValidTePremiumPoints(tePremiumPoints)) {
+      const message = sport !== 'NFL'
+        ? 'TE premium is available for NFL leagues'
+        : `Choose a TE premium of ${TE_PREMIUM_POINT_OPTIONS.join(', ')} points per catch`
+      return { ok: false, status: 400, error: message, errors: [{ path: 'conceptSetup.tePremiumPoints', message }] }
     }
   }
 

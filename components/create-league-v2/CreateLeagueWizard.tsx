@@ -40,6 +40,7 @@ import { LEAGUE_TYPE_MEDIA, SPORT_MEDIA } from '@/lib/create-league-v2/theme'
 import { getClientLeagueCreateOptionsCatalog } from '@/lib/create-league-v2/options-catalog-client'
 import { timezoneLabel, timezoneOptions } from '@/lib/create-league-v2/device-timezone'
 import { CheckBox, HelpTip } from '@/components/create-league-v2/WizardControls'
+import { TE_PREMIUM_POINT_OPTIONS } from '@/lib/nfl-scoring/nflScoringSeedForCreate'
 import { getDraftTypeMedia } from '@/lib/league-media/draftTypeMedia'
 import type { DraftTypeId, LeagueTypeId } from '@/lib/league-creation-wizard/types'
 
@@ -116,6 +117,7 @@ const HELP = {
   scoring: ['createLeague.g30.help.scoring', 'How players earn points. PPR means points per reception: Full PPR gives 1 point per catch, Half PPR gives 0.5, and Standard gives none. Category leagues (some NBA and MLB options) rank teams by stat categories instead of points.'],
   draftDate: ['createLeague.g30.help.draftDate', 'Pick a date and time now, or choose Schedule later to invite managers first. You can set or change the draft date any time in Commissioner settings → Draft.'],
   timezone: ['createLeague.g30.help.timezone', "The draft time is set in this timezone, and it is your league's home timezone. It starts on your device's timezone."],
+  tePremium: ['createLeague.g30.help.tePremium', 'TE premium gives tight ends extra points for every catch, on top of the league\'s normal points per catch. Turn it on, then choose how much each tight-end catch is worth.'],
   advanced: ['createLeague.g30.help.advanced', 'Optional extras that come with an AF Commissioner plan: Commissioner Intelligence tools, automatic trade approval and league health monitoring. Every format and setting above is free.'],
 } as const
 
@@ -1045,6 +1047,50 @@ export function DraftStep({
           </select>
         </label>
       </div>
+
+      {/* NFL scoring add-ons. TE premium has to say its amount — the commissioner picks it. */}
+      {state.sport === 'NFL' ? (
+        <div
+          className={cx(
+            'space-y-3 rounded-xl border p-4 transition',
+            state.tePremium === true ? 'border-violet-500 bg-violet-600/10' : 'border-[color:var(--border-subtle)] bg-[color:var(--surface-card-soft)]',
+          )}
+          data-testid="g30-te-premium"
+        >
+          <label className="flex min-h-11 cursor-pointer touch-manipulation items-center gap-3 text-sm font-bold">
+            <CheckBox
+              checked={state.tePremium === true}
+              onChange={(checked) => onChange({ tePremium: checked, ...(checked ? {} : { tePremiumPoints: null }) })}
+              testId="g30-te-premium-toggle"
+            />
+            <span>
+              {tx(t, 'createLeague.g30.tePremium.label', 'TE premium (TEP)')}
+              <HelpTip label={tx(t, 'createLeague.g30.tePremium.label', 'TE premium (TEP)')} testId="g30-help-te-premium">{help(t, 'tePremium')}</HelpTip>
+            </span>
+          </label>
+          {state.tePremium === true ? (
+            <label className="block max-w-xs space-y-2">
+              <span className="text-xs font-black uppercase tracking-wide text-[color:var(--text-tertiary)]">
+                {tx(t, 'createLeague.g30.tePremium.amount', 'Extra points per TE catch')}
+              </span>
+              <select
+                value={typeof state.tePremiumPoints === 'number' ? String(state.tePremiumPoints) : ''}
+                onChange={(event) => onChange({ tePremiumPoints: event.target.value === '' ? null : Number(event.target.value) })}
+                className={fieldClass(typeof state.tePremiumPoints !== 'number')}
+                aria-invalid={typeof state.tePremiumPoints !== 'number' || undefined}
+                data-testid="g30-te-premium-points"
+              >
+                <option value="">{tx(t, 'createLeague.g30.tePremium.choose', 'Choose an amount')}</option>
+                {TE_PREMIUM_POINT_OPTIONS.map((points) => (
+                  <option key={points} value={String(points)}>
+                    +{points} {tx(t, 'createLeague.g30.tePremium.perCatch', 'per TE catch')}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+        </div>
+      ) : null}
 
       {leagueType === 'dynasty' && state.sport === 'NFL' && state.draftType !== 'auction' ? (
         <div
