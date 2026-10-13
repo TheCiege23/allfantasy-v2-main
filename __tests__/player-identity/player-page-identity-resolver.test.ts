@@ -6,6 +6,8 @@
  * scope lets the college and hockey rows back in.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { ReactElement } from 'react'
+import { cleanup, render } from '@testing-library/react'
 
 type Row = {
   id: string
@@ -41,6 +43,10 @@ const TABLE: Row[] = [
   // One NBA athlete ingested twice with identical name/position/team.
   row({ id: 'je-1', canonicalName: 'Jon Elmore', sport: 'NBA', position: 'SG', currentTeam: 'SAN ANTONIO SPURS' }),
   row({ id: 'je-2', canonicalName: 'Jon Elmore', sport: 'NBA', position: 'SG', currentTeam: 'SAN ANTONIO SPURS' }),
+  // Ten distinct MLB namesakes — more than the chooser shows.
+  ...Array.from({ length: 10 }, (_, i) =>
+    row({ id: `js-${i}`, canonicalName: 'John Smith', sport: 'MLB', position: 'P', currentTeam: `T${i}` }),
+  ),
 ]
 
 const mocks = vi.hoisted(() => ({
@@ -49,6 +55,7 @@ const mocks = vi.hoisted(() => ({
   notFound: vi.fn(() => {
     throw new Error('NEXT_NOT_FOUND')
   }),
+  withoutDetectablyWrongHeadshots: vi.fn(async <T,>(rows: readonly T[]) => [...rows]),
 }))
 
 vi.mock('server-only', () => ({}))
@@ -60,8 +67,13 @@ vi.mock('@/lib/auth', () => ({ authOptions: {} }))
 vi.mock('next/navigation', () => ({ redirect: vi.fn(), notFound: mocks.notFound }))
 vi.mock('@/app/player/[playerId]/PlayerProfileClient', () => ({ PlayerProfileClient: () => null }))
 vi.mock('@/lib/injuries/currentInjuryDesignations', () => ({ resolveCurrentInjuryDesignations: vi.fn(async () => new Map()) }))
+vi.mock('@/lib/player-assets/playerImageStore', () => ({
+  withoutDetectablyWrongHeadshots: mocks.withoutDetectablyWrongHeadshots,
+}))
 
 import {
+  MAX_CHOOSER_CANDIDATES,
+  orderChooserCandidates,
   readPlayerPageLookup,
   resolvePlayerPageIdentity,
 } from '@/app/player/[playerId]/resolvePlayerIdentity'
@@ -73,6 +85,8 @@ function matches(r: Row, where: Record<string, unknown>): boolean {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  cleanup()
+  mocks.withoutDetectablyWrongHeadshots.mockImplementation(async (rows: readonly unknown[]) => [...rows])
   mocks.findFirst.mockImplementation(async ({ where }: { where: Record<string, unknown> }) =>
     TABLE.find((r) => matches(r, where)) ?? null,
   )
@@ -100,6 +114,24 @@ describe('player page identity — the name slug is scoped to one sport', () => 
     const r = await resolve('justin-jefferson')
     expect(r.identity).toBeNull()
     expect(r.reason).toBe('ambiguous')
+  })
+
+  it('the refusal carries both NFL namesakes, and only them, as candidates', async () => {
+    const r = await resolve('justin-jefferson')
+    expect(r.candidates?.map((c) => c.id)).toEqual(['jj-nfl-lb', 'jj-nfl-wr'])
+    expect(r.candidateTotal).toBe(2)
+  })
+
+  it('a bound player carries no candidates', async () => {
+    expect((await resolve('justin-jefferson', { position: 'WR' })).candidates).toBeUndefined()
+    expect((await resolve('6794')).candidates).toBeUndefined()
+  })
+
+  it('candidates are capped, and the total says how many there were', async () => {
+    const r = await resolve('john-smith', { sport: 'MLB' })
+    expect(r.reason).toBe('ambiguous')
+    expect(r.candidates).toHaveLength(MAX_CHOOSER_CANDIDATES)
+    expect(r.candidateTotal).toBe(10)
   })
 
   it('a position hint picks the WR', async () => {
@@ -138,12 +170,54 @@ describe('player page identity — exact ids win over a name', () => {
   })
 })
 
+describe('chooser order: Sleeper-keyed, then an active team, then position', () => {
+  it('orders keyless / teamless / inactive rows behind the rest', () => {
+    const rows = [
+      row({ id: 'a', canonicalName: 'X', sport: 'NCAAF', position: 'QB', currentTeam: null }),
+      row({ id: 'b', canonicalName: 'X', sport: 'NCAAF', position: 'DL', currentTeam: 'EMU', status: 'INACT' }),
+      row({ id: 'c', canonicalName: 'X', sport: 'NCAAF', position: 'WR', currentTeam: 'LSU', status: 'ACT' }),
+      row({ id: 'd', canonicalName: 'X', sport: 'NCAAF', position: 'WR', currentTeam: 'MIN', sleeperId: '1' }),
+      row({ id: 'e', canonicalName: 'X', sport: 'NCAAF', position: 'LB', currentTeam: 'CLE', sleeperId: '2' }),
+    ]
+    expect(orderChooserCandidates(rows as never).map((r) => r.id)).toEqual(['e', 'd', 'c', 'b', 'a'])
+  })
+})
+
 describe('the page and its metadata share the resolver', () => {
-  it('an ambiguous slug renders not-found', async () => {
-    await expect(
-      PlayerProfilePage({ params: Promise.resolve({ playerId: 'justin-jefferson' }), searchParams: Promise.resolve({}) }),
-    ).rejects.toThrow('NEXT_NOT_FOUND')
-    expect(mocks.notFound).toHaveBeenCalled()
+  const ambiguousPage = async () =>
+    (await PlayerProfilePage({
+      params: Promise.resolve({ playerId: 'justin-jefferson' }),
+      searchParams: Promise.resolve({}),
+    })) as ReactElement
+
+  it('an ambiguous slug renders a chooser, not a 404 and not a profile', async () => {
+    const el = await ambiguousPage()
+    expect(mocks.notFound).not.toHaveBeenCalled()
+    const { container } = render(el)
+    expect(container.textContent).toContain('Which player did you mean?')
+    const links = [...container.querySelectorAll('[data-testid="namesake-chooser"] a')]
+    expect(links.map((a) => a.getAttribute('href'))).toEqual(['/player/jj-nfl-lb', '/player/jj-nfl-wr'])
+    expect(links.map((a) => a.textContent)).toEqual([
+      expect.stringMatching(/Justin Jefferson.*LB.*CLE.*NFL/),
+      expect.stringMatching(/Justin Jefferson.*WR.*MIN.*NFL/),
+    ])
+  })
+
+  it('each chooser link resolves to exactly that player by id', async () => {
+    for (const id of ['jj-nfl-lb', 'jj-nfl-wr']) {
+      expect(await resolve(id)).toMatchObject({ reason: 'id', identity: { id } })
+    }
+  })
+
+  it('headshots are the NFL Sleeper thumbnails, after the wrong-headshot suppression', async () => {
+    mocks.withoutDetectablyWrongHeadshots.mockImplementation(async (rows: Array<{ id: string; imageUrl: string | null }>) =>
+      rows.map((r) => (r.id === 'jj-nfl-lb' ? { ...r, imageUrl: null } : r)),
+    )
+    const { container } = render(await ambiguousPage())
+    expect(mocks.withoutDetectablyWrongHeadshots).toHaveBeenCalledTimes(1)
+    expect([...container.querySelectorAll('img')].map((i) => i.getAttribute('src'))).toEqual([
+      'https://sleepercdn.com/content/nfl/players/thumb/6794.jpg',
+    ])
   })
 
   it('a scoped slug renders that player', async () => {
@@ -156,7 +230,8 @@ describe('the page and its metadata share the resolver', () => {
 
   it('metadata names nobody for an ambiguous slug and the right player for a scoped one', async () => {
     const vague = await generateMetadata({ params: Promise.resolve({ playerId: 'justin-jefferson' }) })
-    expect(vague.title).toMatch(/^Player /)
+    expect(vague.title).toBe('Which player did you mean? – AllFantasy')
+    expect(`${vague.title} ${vague.description}`).not.toMatch(/Jefferson|WR|LB|MIN|CLE/)
     const scoped = await generateMetadata({
       params: Promise.resolve({ playerId: 'justin-jefferson' }),
       searchParams: Promise.resolve({ position: 'WR' }),

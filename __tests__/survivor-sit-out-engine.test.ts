@@ -7,7 +7,11 @@ const hm = vi.hoisted(() => ({
   survivorCommissionerActionCreate: vi.fn(),
   survivorCommissionerActionFindFirst: vi.fn(),
   survivorCommissionerActionUpdate: vi.fn(),
+  survivorCommissionerActionCount: vi.fn(),
+  survivorCommissionerActionFindUnique: vi.fn(),
   survivorTribeMemberFindMany: vi.fn(),
+  survivorTribeFindMany: vi.fn(),
+  readWeekGames: vi.fn(),
   rosterFindMany: vi.fn(),
   rosterFindFirst: vi.fn(),
   survivorPlayerFindMany: vi.fn(),
@@ -32,6 +36,8 @@ vi.mock('@/lib/prisma', () => ({
       create: hm.survivorCommissionerActionCreate,
       findFirst: hm.survivorCommissionerActionFindFirst,
       update: hm.survivorCommissionerActionUpdate,
+      count: hm.survivorCommissionerActionCount,
+      findUnique: hm.survivorCommissionerActionFindUnique,
     },
     survivorTribeMember: {
       findMany: hm.survivorTribeMemberFindMany,
@@ -57,6 +63,24 @@ vi.mock('@/lib/prisma', () => ({
   },
 }))
 
+vi.mock('@/lib/survivor/survivorSetupTransaction', () => ({
+  withSurvivorSetupTransaction: (_leagueId: string, work: (tx: unknown) => unknown) => work({
+    survivorCommissionerAction: {
+      findUnique: hm.survivorCommissionerActionFindUnique,
+      findFirst: hm.survivorCommissionerActionFindFirst,
+      findMany: hm.survivorCommissionerActionFindMany,
+      count: hm.survivorCommissionerActionCount,
+      create: hm.survivorCommissionerActionCreate,
+      update: hm.survivorCommissionerActionUpdate,
+    },
+    survivorTribe: { findMany: hm.survivorTribeFindMany },
+    survivorPlayer: { findFirst: hm.survivorPlayerFindFirst, findMany: hm.survivorPlayerFindMany },
+    survivorTribe: { findMany: hm.survivorTribeFindMany },
+  }),
+}))
+
+vi.mock('@/lib/redraft/weekGames', () => ({ readWeekGames: hm.readWeekGames }))
+
 vi.mock('@/lib/survivor/notificationEngine', () => ({
   enqueueNotification: hm.enqueueNotification,
 }))
@@ -79,6 +103,8 @@ import {
   maybeTriggerSurvivorTribeShuffleRecommendation,
   nominateSurvivorSitOut,
   respondToSurvivorSitOut,
+  requiredTribeSitOuts,
+  settleNbaTribeSitOutDeadline,
 } from '@/lib/survivor/SurvivorSitOutEngine'
 
 describe('SurvivorSitOutEngine', () => {
@@ -88,11 +114,59 @@ describe('SurvivorSitOutEngine', () => {
     hm.logSurvivorAuditEntry.mockResolvedValue(undefined)
     hm.survivorChatMessageCreate.mockResolvedValue(undefined)
     hm.survivorChatChannelFindFirst.mockResolvedValue({ id: 'tribe-chat-1' })
+    hm.survivorCommissionerActionCount.mockResolvedValue(0)
+    hm.survivorCommissionerActionFindUnique.mockResolvedValue(null)
+    hm.survivorCommissionerActionFindFirst.mockResolvedValue(null)
+    hm.survivorCommissionerActionFindMany.mockResolvedValue([])
+  })
+
+  it('balances uneven tribes to the smallest active tribe', () => {
+    expect(requiredTribeSitOuts({ a: 5, b: 5, c: 4, d: 3 })).toEqual({ a: 2, b: 2, c: 1, d: 0 })
+    expect(requiredTribeSitOuts({ a: 4, b: 4 })).toEqual({ a: 0, b: 0 })
+  })
+
+  it('auto-selects only eligible managers at the first NBA tipoff', async () => {
+    const firstTipoff = new Date('2026-10-27T23:00:00Z')
+    hm.leagueFindUnique.mockResolvedValue({ survivorMode: true, sport: 'NBA', season: 2026, survivorPhase: 'pre_merge' })
+    hm.readWeekGames.mockResolvedValue([{ startTime: firstTipoff }])
+    hm.survivorTribeFindMany.mockResolvedValue([{ id: 'a' }, { id: 'b' }])
+    hm.survivorPlayerFindMany.mockResolvedValue([
+      { userId: 'a1', tribeId: 'a', displayName: 'A1' },
+      { userId: 'a2', tribeId: 'a', displayName: 'A2' },
+      { userId: 'a3', tribeId: 'a', displayName: 'A3' },
+      { userId: 'b1', tribeId: 'b', displayName: 'B1' },
+      { userId: 'b2', tribeId: 'b', displayName: 'B2' },
+    ])
+    hm.survivorCommissionerActionFindMany.mockImplementation(async ({ where }) => where.week === 1 ? [{ targetUserId: 'a1' }] : [])
+    hm.survivorCommissionerActionCreate.mockResolvedValue({ id: 'created' })
+
+    expect(await settleNbaTribeSitOutDeadline('league-1', 2, firstTipoff)).toBe('locked')
+    const autoCalls = hm.survivorCommissionerActionCreate.mock.calls.filter(([arg]) => arg.data.actionType === 'sit_out_accepted')
+    expect(autoCalls).toHaveLength(1)
+    expect(['a2', 'a3']).toContain(autoCalls[0][0].data.targetUserId)
+    expect(hm.survivorCommissionerActionCreate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ actionType: 'sit_out_week_locked' }) }))
+  })
+
+  it('blocks a tribe result when no fair rotation exists', async () => {
+    const tipoff = new Date('2026-10-27T23:00:00Z')
+    hm.leagueFindUnique.mockResolvedValue({ survivorMode: true, sport: 'NBA', season: 2026, survivorPhase: 'pre_merge' })
+    hm.readWeekGames.mockResolvedValue([{ startTime: tipoff }])
+    hm.survivorTribeFindMany.mockResolvedValue([{ id: 'a' }, { id: 'b' }])
+    hm.survivorPlayerFindMany.mockResolvedValue([
+      { userId: 'a1', tribeId: 'a', displayName: 'A1' }, { userId: 'a2', tribeId: 'a', displayName: 'A2' },
+      { userId: 'a3', tribeId: 'a', displayName: 'A3' }, { userId: 'b1', tribeId: 'b', displayName: 'B1' },
+    ])
+    hm.survivorCommissionerActionFindMany.mockImplementation(async ({ where }) => where.week === 1 ? [{ targetUserId: 'a1' }, { targetUserId: 'a2' }] : [])
+    hm.survivorCommissionerActionCreate.mockResolvedValue({ id: 'blocked' })
+    expect(await settleNbaTribeSitOutDeadline('league-1', 2, tipoff)).toBe('blocked')
+    expect(hm.survivorCommissionerActionCreate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ actionType: 'sit_out_week_blocked' }) }))
+    expect(hm.survivorCommissionerActionCreate).not.toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ actionType: 'sit_out_accepted' }) }))
   })
 
   it('persists a pending sit-out nomination for an eligible active tribe member', async () => {
     hm.leagueFindUnique.mockResolvedValue({ survivorPhase: 'tribe' })
     hm.rosterFindFirst.mockResolvedValue({ id: 'r-target', platformUserId: 'u-target' })
+    hm.survivorPlayerFindFirst.mockResolvedValue({ userId: 'u-target' })
     hm.survivorPlayerFindFirst
       .mockResolvedValueOnce({ userId: 'u-target', displayName: 'Target User', playerState: 'active' })
       .mockResolvedValueOnce({ userId: 'u-nominator', tribeId: 'tribe-a', playerState: 'active' })
@@ -101,13 +175,17 @@ describe('SurvivorSitOutEngine', () => {
       .mockResolvedValueOnce([])
     hm.survivorTribeMemberFindMany.mockResolvedValue([{ rosterId: 'r-target' }])
     hm.rosterFindMany.mockResolvedValue([{ id: 'r-target', platformUserId: 'u-target' }])
-    hm.survivorPlayerFindMany.mockResolvedValue([
+    hm.survivorPlayerFindMany.mockResolvedValueOnce([
       {
         redraftRosterId: 'r-target',
         userId: 'u-target',
         displayName: 'Target User',
         hasImmunityThisWeek: false,
       },
+    ]).mockResolvedValueOnce([{ redraftRosterId: 'r-target' }, { redraftRosterId: 'r-nominator' }, { redraftRosterId: 'r-other' }])
+    hm.getTribesWithMembers.mockResolvedValue([
+      { id: 'tribe-a', name: 'A', members: [{ rosterId: 'r-target' }, { rosterId: 'r-nominator' }] },
+      { id: 'tribe-b', name: 'B', members: [{ rosterId: 'r-other' }] },
     ])
     hm.survivorCommissionerActionCreate.mockResolvedValue({ id: 'sit-1' })
 
@@ -218,7 +296,7 @@ describe('SurvivorSitOutEngine', () => {
     )
   })
 
-  it('blocks mini-game participation for accepted sit-out managers', async () => {
+  it('keeps individual challenges available to accepted sit-out managers', async () => {
     hm.rosterFindFirst.mockResolvedValue({ platformUserId: 'u-target' })
     hm.survivorCommissionerActionFindMany.mockResolvedValueOnce([
       {
@@ -235,9 +313,8 @@ describe('SurvivorSitOutEngine', () => {
     })
 
     expect(result).toEqual({
-      blocked: true,
-      sitOutExcludedUserIds: ['u-target'],
-      reason: 'You are marked as sit-out this week and cannot participate in mini-games.',
+      blocked: false,
+      sitOutExcludedUserIds: [],
     })
   })
 

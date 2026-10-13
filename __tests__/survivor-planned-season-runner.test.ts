@@ -3,6 +3,7 @@ import { buildSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPl
 import { finalizeExileRosterResults } from '@/lib/survivor/exileRosterService'
 import { processReturnFromExile } from '@/lib/survivor/exileEngine'
 import { getFinaleState } from '@/lib/survivor/SurvivorFinaleEngine'
+import { generateAndPostWeeklyRecap } from '@/lib/survivor/weeklyRecapGenerator'
 
 const state = vi.hoisted(() => ({ game: {} as Record<string, unknown>, resolved: false, active: 20 }))
 const db = vi.hoisted(() => ({
@@ -10,6 +11,7 @@ const db = vi.hoisted(() => ({
   survivorAuditEntry: { findFirst: vi.fn(), create: vi.fn() },
   survivorPlayer: { count: vi.fn() },
   survivorGameState: { update: vi.fn(), updateMany: vi.fn() },
+  survivorTribalCouncil: { findFirst: vi.fn() },
   exileWeeklyEntry: { findFirst: vi.fn() },
 }))
 const engine = vi.hoisted(() => ({
@@ -25,6 +27,7 @@ vi.mock('@/lib/survivor/exileRosterService', () => ({ closeExpiredExileRosters: 
 vi.mock('@/lib/survivor/SurvivorFinaleEngine', () => ({ getFinaleState: vi.fn() }))
 vi.mock('@/lib/survivor/survivorSetupTransaction', () => ({ withSurvivorSetupTransaction: (_id: string, fn: (tx: typeof db) => unknown) => fn(db) }))
 vi.mock('@/lib/survivor/survivorVerifiedSlateChallenges', () => ({ ensureVerifiedSlateChallenges: vi.fn(), settleVerifiedSlateChallenges: vi.fn() }))
+vi.mock('@/lib/survivor/weeklyRecapGenerator', () => ({ generateAndPostWeeklyRecap: vi.fn() }))
 
 const start = new Date('2026-09-01T12:00:00Z')
 const later = new Date('2027-03-01T12:00:00Z')
@@ -37,6 +40,7 @@ async function setup(sport: 'NBA' | 'NHL', week: number, options: { exile?: bool
   db.survivorAuditEntry.findFirst.mockImplementation(async () => state.resolved ? { id: 'audit-1' } : null)
   db.survivorPlayer.count.mockImplementation(async () => state.active)
   db.exileWeeklyEntry.findFirst.mockResolvedValue(null)
+  db.survivorTribalCouncil.findFirst.mockResolvedValue(null)
   engine.allScoresFinalizedForWeek.mockResolvedValue(false)
   return plan
 }
@@ -119,7 +123,19 @@ describe.each(['NBA', 'NHL'] as const)('%s Survivor planned season tick', sport 
     state.game.currentWeek = plan.openingWeek
     expect(await runPlannedSurvivorLeague('league-1', later)).toBe('week_advanced')
     expect(engine.advanceWeek).toHaveBeenCalledWith('league-1')
+    expect(generateAndPostWeeklyRecap).toHaveBeenCalledWith('league-1', plan.openingWeek)
     expect(engine.triggerTribalOpen).not.toHaveBeenCalled()
+  })
+
+  it('holds the week and recap until a council is publicly revealed', async () => {
+    const { runPlannedSurvivorLeague } = await import('@/lib/survivor/survivorPlannedSeasonRunner')
+    const plan = await setup(sport, 5, { finalized: true })
+    state.game.currentWeek = plan.eliminationWeeks[2]
+    state.resolved = true
+    db.survivorTribalCouncil.findFirst.mockResolvedValue({ isRevealed: false })
+    expect(await runPlannedSurvivorLeague('league-1', later)).toBe('awaiting_reveal')
+    expect(generateAndPostWeeklyRecap).not.toHaveBeenCalled()
+    expect(engine.advanceWeek).not.toHaveBeenCalled()
   })
 
   it('keeps progression pending when an Exile roster has no finalized result', async () => {

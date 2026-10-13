@@ -25,13 +25,56 @@ import type { PlayerMismatchCollector } from '@/lib/player-identity/playerMismat
 
 export type SportsPlayerRecordDraftAugment = {
   fantasyPointsPerGame: number | null
+  nbaDraftStats: NbaDraftSeasonRates | null
   adp: number | null
   headshotUrl: string | null
   /** When true, treat as rookie class for badge (conservative — stats/experience heuristics). */
   rookieHint: boolean | null
 }
 
-function extractFppgFromJson(blob: unknown): number | null {
+export type NbaDraftSeasonRates = {
+  pointsPerGame: number | null
+  reboundsPerGame: number | null
+  minutesPerGame: number | null
+}
+
+/**
+ * The cached season row can contain totals or explicit per-game rates. Never
+ * label a total as a rate: divide only when games played is present.
+ */
+export function extractNbaDraftSeasonRates(blob: unknown): NbaDraftSeasonRates | null {
+  if (!blob || typeof blob !== 'object' || Array.isArray(blob)) return null
+  const root = blob as Record<string, unknown>
+  const nested = root.regular_season ?? root.currentSeason ?? root.season
+  const stats = nested && typeof nested === 'object' && !Array.isArray(nested)
+    ? nested as Record<string, unknown>
+    : root
+  const number = (keys: string[]): number | null => {
+    for (const key of keys) {
+      const raw = stats[key]
+      if (raw == null || raw === '') continue
+      const value = Number(raw)
+      if (Number.isFinite(value) && value >= 0) return value
+    }
+    return null
+  }
+  const games = number(['games_played', 'gamesPlayed', 'games', 'gp'])
+  const rate = (direct: string[], total: string[], max: number): number | null => {
+    const explicit = number(direct)
+    const candidate = explicit ?? (games != null && games > 0 ? (number(total) ?? NaN) / games : null)
+    return candidate != null && Number.isFinite(candidate) && candidate <= max
+      ? Math.round(candidate * 10) / 10
+      : null
+  }
+  const result = {
+    pointsPerGame: rate(['points_per_game', 'pointsPerGame', 'ppg'], ['points', 'pts'], 100),
+    reboundsPerGame: rate(['rebounds_per_game', 'reboundsPerGame', 'rpg'], ['total_rebounds', 'rebounds', 'reb'], 40),
+    minutesPerGame: rate(['minutes_per_game', 'minutesPerGame', 'mpg', 'average_minutes'], ['minutes', 'minutes_played'], 60),
+  }
+  return Object.values(result).some((value) => value != null) ? result : null
+}
+
+function extractFppgFromJson(blob: unknown, allowGenericPointsPerGame = true): number | null {
   if (blob == null) return null
   if (typeof blob === 'number' && Number.isFinite(blob) && blob > 0) return blob
   if (typeof blob !== 'object') return null
@@ -39,7 +82,7 @@ function extractFppgFromJson(blob: unknown): number | null {
   const candidates: unknown[] = [
     o.fantasyPointsPerGame,
     o.fppg,
-    o.pointsPerGame,
+    ...(allowGenericPointsPerGame ? [o.pointsPerGame] : []),
     o.projectedPpg,
     (o.season as Record<string, unknown> | undefined)?.fantasyPointsPerGame,
     (o.season as Record<string, unknown> | undefined)?.fppg,
@@ -87,8 +130,8 @@ function augmentFromRecord(
   sport: LeagueSport,
 ): SportsPlayerRecordDraftAugment {
   const fppg =
-    extractFppgFromJson(row.projections) ??
-    extractFppgFromJson(row.stats) ??
+    extractFppgFromJson(row.projections, String(sport).toUpperCase() !== 'NBA') ??
+    extractFppgFromJson(row.stats, String(sport).toUpperCase() !== 'NBA') ??
     null
   const adp = row.adp != null && Number.isFinite(Number(row.adp)) ? Number(row.adp) : null
   const rawHs = row.headshotUrlLg ?? row.headshotUrl ?? null
@@ -97,6 +140,7 @@ function augmentFromRecord(
   const rookieHint = extractRookieHint(row.stats, row.projections, sport)
   return {
     fantasyPointsPerGame: fppg,
+    nbaDraftStats: String(sport).toUpperCase() === 'NBA' ? extractNbaDraftSeasonRates(row.stats) : null,
     adp,
     headshotUrl,
     rookieHint,

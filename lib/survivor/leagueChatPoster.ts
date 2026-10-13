@@ -31,22 +31,27 @@ async function postToChannel(
   content: string,
   contentType: 'text' | 'card' | 'system' | 'announcement' = 'announcement',
   cardData?: Record<string, unknown>,
+  messageId?: string,
 ): Promise<void> {
-  await (prisma as any).survivorChatMessage.create({
-    data: {
-      leagueId,
-      channelId,
-      channelType,
-      senderUserId: AI_HOST_ID,
-      senderName: AI_HOST_NAME,
-      senderIsHost: true,
-      isSystemMessage: true,
-      content,
-      contentType,
-      cardData: cardData ?? undefined,
-      isPinned: contentType === 'announcement',
-    },
-  })
+  const data = {
+    ...(messageId ? { id: messageId } : {}),
+    leagueId,
+    channelId,
+    channelType,
+    senderUserId: AI_HOST_ID,
+    senderName: AI_HOST_NAME,
+    senderIsHost: true,
+    isSystemMessage: true,
+    content,
+    contentType,
+    cardData: cardData ?? undefined,
+    isPinned: contentType === 'announcement',
+  }
+  if (messageId) {
+    await (prisma as any).survivorChatMessage.upsert({ where: { id: messageId }, create: data, update: {} })
+  } else {
+    await (prisma as any).survivorChatMessage.create({ data })
+  }
 }
 
 async function postToLeagueChat(
@@ -54,11 +59,15 @@ async function postToLeagueChat(
   content: string,
   contentType: 'text' | 'card' | 'system' | 'announcement' = 'announcement',
   cardData?: Record<string, unknown>,
+  messageId?: string,
 ): Promise<void> {
   const channelId = await getLeagueChatChannelId(leagueId)
-  if (!channelId) return
+  if (!channelId) {
+    if (messageId) throw new Error('Survivor league chat is not ready for the weekly recap')
+    return
+  }
 
-  await postToChannel(leagueId, channelId, 'league', content, contentType, cardData)
+  await postToChannel(leagueId, channelId, 'league', content, contentType, cardData, messageId)
 }
 
 export async function postScrollRevealToTribeChat(
@@ -150,7 +159,7 @@ export async function postWeeklyRecap(
     type: 'weekly_recap',
     week,
     ...recap,
-  })
+  }, `survivor-weekly-recap:${leagueId}:${week}`)
 }
 
 /**

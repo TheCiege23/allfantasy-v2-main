@@ -122,6 +122,11 @@ export function analyzeCreateLeagueCompletion(state: CreateLeagueV2State): Creat
     issues.push({ code: 'timezone_required', message: 'Choose a timezone.' })
   }
 
+  // TE premium turned on must say how much: the commissioner picks the per-catch amount.
+  if (state.sport === 'NFL' && state.tePremium === true && typeof state.tePremiumPoints !== 'number') {
+    issues.push({ code: 'te_premium_points_required', message: 'Choose how many extra points a tight end gets per catch, or turn TE premium off.' })
+  }
+
   if (lt === 'tournament') {
     const poolOpts = getTeamCountOptions(state.sport, lt, state.soccerPipeline)
     if (!poolOpts.includes(state.teamCount)) {

@@ -73,6 +73,10 @@ function buildCanonicalPayload(state: CreateLeagueV2State): Record<string, unkno
     // A guillotine week has no opponent, so there is no head-to-head game for a median game to
     // double. The wizard hides the box for guillotine; this drops a choice made before switching.
     medianGame: state.medianGame === true && lt !== 'guillotine',
+    // TE premium: NFL only, and only once the commissioner has chosen the per-catch amount.
+    ...(state.sport === 'NFL' && state.tePremium === true && typeof state.tePremiumPoints === 'number'
+      ? { tePremiumPoints: state.tePremiumPoints }
+      : {}),
     draftTimezone: state.timezone,
   }
   /*

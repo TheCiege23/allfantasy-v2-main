@@ -10,6 +10,7 @@ type Foundation = {
   mergeTriggerType: 'week' | 'active_player_count'
   mergeWeek: number
   mergeActivePlayerCount: number
+  nbaWeeklyScoringMode: 'all_games' | 'one_game_per_player'
 }
 type Config = { seasonThemeLabel: string | null; regularSeasonEndWeek: number | null }
 
@@ -34,7 +35,7 @@ export function SurvivorSetupPanel({ leagueId, canEdit }: SurvivorSettingsPanelP
       }
       const rules = foundationPayload.settings as Foundation
       const details = configPayload.config as Config
-      setFoundation({ commissionerParticipationMode: rules.commissionerParticipationMode, tribeAssignmentMode: rules.tribeAssignmentMode, mergeTriggerType: rules.mergeTriggerType, mergeWeek: rules.mergeWeek, mergeActivePlayerCount: rules.mergeActivePlayerCount })
+      setFoundation({ commissionerParticipationMode: rules.commissionerParticipationMode, tribeAssignmentMode: rules.tribeAssignmentMode, mergeTriggerType: rules.mergeTriggerType, mergeWeek: rules.mergeWeek, mergeActivePlayerCount: rules.mergeActivePlayerCount, nbaWeeklyScoringMode: rules.nbaWeeklyScoringMode ?? 'all_games' })
       setConfig({ seasonThemeLabel: details.seasonThemeLabel, regularSeasonEndWeek: details.regularSeasonEndWeek })
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not load Survivor setup')
@@ -56,7 +57,7 @@ export function SurvivorSetupPanel({ leagueId, canEdit }: SurvivorSettingsPanelP
       const payload = await response.json()
       if (!response.ok) throw new Error(payload.error ?? 'Could not save season structure')
       const saved = payload.settings as Foundation
-      setFoundation({ commissionerParticipationMode: saved.commissionerParticipationMode, tribeAssignmentMode: saved.tribeAssignmentMode, mergeTriggerType: saved.mergeTriggerType, mergeWeek: saved.mergeWeek, mergeActivePlayerCount: saved.mergeActivePlayerCount })
+      setFoundation({ commissionerParticipationMode: saved.commissionerParticipationMode, tribeAssignmentMode: saved.tribeAssignmentMode, mergeTriggerType: saved.mergeTriggerType, mergeWeek: saved.mergeWeek, mergeActivePlayerCount: saved.mergeActivePlayerCount, nbaWeeklyScoringMode: saved.nbaWeeklyScoringMode })
       setMessage('Season structure saved.')
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not save season structure')
@@ -90,6 +91,7 @@ export function SurvivorSetupPanel({ leagueId, canEdit }: SurvivorSettingsPanelP
       {foundation.mergeTriggerType === 'week'
         ? <SettingsRow label="Merge week" control={<Input type="number" min={1} max={52} value={foundation.mergeWeek} onChange={(event) => setFoundation((current) => current ? { ...current, mergeWeek: Number(event.target.value) } : current)} disabled={!canEdit || saving} className="w-24" />} />
         : <SettingsRow label="Merge at active managers" control={<Input type="number" min={2} max={40} value={foundation.mergeActivePlayerCount} onChange={(event) => setFoundation((current) => current ? { ...current, mergeActivePlayerCount: Number(event.target.value) } : current)} disabled={!canEdit || saving} className="w-24" />} />}
+      <SettingsRow label="NBA weekly scoring" description="Tuesday–Monday. All games adds every game each starter plays. One game lets managers choose a game before that player’s first tipoff; without a choice, the first game counts automatically. This rule locks when the draft starts." control={<Select value={foundation.nbaWeeklyScoringMode} onChange={(value) => setFoundation((current) => current ? { ...current, nbaWeeklyScoringMode: value as Foundation['nbaWeeklyScoringMode'] } : current)} disabled={!canEdit || saving}><option value="all_games">All games count</option><option value="one_game_per_player">One game per player</option></Select>} />
       <div className="flex justify-end"><button type="button" onClick={() => void saveFoundation()} disabled={!canEdit || saving || !Number.isInteger(foundation.mergeWeek) || foundation.mergeWeek < 1 || foundation.mergeWeek > 52 || !Number.isInteger(foundation.mergeActivePlayerCount) || foundation.mergeActivePlayerCount < 2 || foundation.mergeActivePlayerCount > 40} className="rounded-xl border border-[#ff3d81]/40 bg-cyan-950/40 px-5 py-2 text-sm text-[#ffd7e5] disabled:opacity-40">{saving ? 'Saving…' : 'Save structure'}</button></div>
     </SettingsSection>}
     {config && <SettingsSection id="sv-season-details" title="Season details">

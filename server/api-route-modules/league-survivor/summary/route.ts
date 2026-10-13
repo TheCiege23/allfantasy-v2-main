@@ -33,7 +33,8 @@ import {
 } from '@/lib/survivor/survivorFairPlay'
 import { seasonWeekBoundsForSport } from '@/lib/survivor/survivorSeasonCalendar'
 import { extractLeadingTribeIcon } from '@/lib/survivor/survivorVisuals'
-import { getSurvivorSitOutStateForWeek } from '@/lib/survivor/SurvivorSitOutEngine'
+import { getSurvivorSitOutStateForWeek, getSurvivorTribeBalanceState } from '@/lib/survivor/SurvivorSitOutEngine'
+import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/normalizeSurvivorSettings'
 
 import { survivorPublicCouncil } from '@/lib/survivor/survivorPublicCouncil'
 import { resolveSurvivorAccessContext } from '@/lib/survivor/survivorAccessControl'
@@ -61,7 +62,7 @@ export async function GET(
   const requestedWeek = weekParam ? Math.max(1, parseInt(weekParam, 10)) || 1 : null
   const currentWeek = await resolveSurvivorCurrentWeek(leagueId, requestedWeek)
 
-  const [config, tribesRaw, council, challenges, jury, exileLeagueId, tokenStates, audit, merged, myRosterId, eliminatedRosterIds, mainLeagueRosters, finaleState, leagueSettingsRow, sitOutState] = await Promise.all([
+  const [config, tribesRaw, council, challenges, jury, exileLeagueId, tokenStates, audit, merged, myRosterId, eliminatedRosterIds, mainLeagueRosters, finaleState, leagueSettingsRow, sitOutState, tribeBalance] = await Promise.all([
     getSurvivorConfig(leagueId),
     getTribesWithMembers(leagueId),
     getCouncil(leagueId, currentWeek),
@@ -80,6 +81,7 @@ export async function GET(
     getFinaleState(leagueId, currentWeek),
     prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } }),
     getSurvivorSitOutStateForWeek(leagueId, currentWeek),
+    getSurvivorTribeBalanceState(leagueId, currentWeek),
   ])
 
   if (!config) return NextResponse.json({ error: 'Config not found' }, { status: 500 })
@@ -317,6 +319,11 @@ export async function GET(
     myIdols,
     myActiveEffects,
     myExileStatus,
+    nbaWeeklyScoringMode: normalizeSurvivorFoundationSettings(leagueSettingsRow?.settings as Record<string, unknown>).nbaWeeklyScoringMode,
+    tribeBalance: {
+      requiredSitOuts: tribeBalance.requiredSitOuts,
+      activeCounts: Object.fromEntries(tribeBalance.tribeSizes.map(tribe => [tribe.tribeId, tribe.activeCount])),
+    },
     sitOuts: {
       pending: sitOutState.pending.map((row) => ({
         id: row.id,

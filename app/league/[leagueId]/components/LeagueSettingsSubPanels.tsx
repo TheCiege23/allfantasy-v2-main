@@ -24,7 +24,8 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useAfSubGate } from '@/hooks/useAfSubGate'
 import { normalizeLimitPosition, readPositionLimits } from '@/lib/league/positionLimits'
 import { LEAGUE_SETTINGS_AI_PANEL_FEATURE } from '@/lib/monetization/entitlements'
-import { QRCodeSVG } from 'qrcode.react'
+import { LeagueInviteShare } from '@/components/league/invite/LeagueInviteShare'
+import { leagueJoinUrl } from '@/lib/league/league-invite-link'
 import type { League, LeagueInvite, LeagueTeam } from '@prisma/client'
 import type { UserLeague } from '@/app/dashboard/types'
 import { DiscordLeagueSyncPanel } from './DiscordLeagueSyncPanel'
@@ -737,9 +738,7 @@ export function SettingsSubPanelBody({
     ctx.league.invites?.find((invite) => invite.isActive)?.token ||
     ''
   const inviteUrl = isNativePlatform(ctx.league.platform)
-    ? nativeInviteCode
-      ? `${typeof window !== 'undefined' ? window.location.origin : 'https://allfantasy.ai'}/join?code=${encodeURIComponent(nativeInviteCode)}`
-      : ''
+    ? leagueJoinUrl(nativeInviteCode)
     : ctx.platformLeagueId.length > 0
       ? `https://sleeper.com/leagues/${ctx.platformLeagueId}`
       : 'https://sleeper.com/'
@@ -859,6 +858,7 @@ export function SettingsSubPanelBody({
       return (
         <InvitePanel
           inviteUrl={inviteUrl}
+          leagueName={ctx.displayLeague.name}
           // Count only slots a real manager has claimed — `teams.length` includes
           // auto-materialized placeholder slots and reported the league as "full"
           // before anyone but the commissioner had joined.
@@ -1178,15 +1178,9 @@ function NotificationsPanel({ leagueId }: { leagueId: string }) {
   )
 }
 
-function InvitePanel({ inviteUrl, filled, total }: { inviteUrl: string; filled: number; total: number }) {
+function InvitePanel({ inviteUrl, filled, total, leagueName }: { inviteUrl: string; filled: number; total: number; leagueName?: string | null }) {
   const { t } = useLanguage()
   const membersValue = t('lsPanel.invite.filled').replace('{{filled}}', String(filled)).replace('{{total}}', String(total))
-  const [copied, setCopied] = useState(false)
-  const copy = () => {
-    void navigator.clipboard.writeText(inviteUrl)
-    setCopied(true)
-    window.setTimeout(() => setCopied(false), 2000)
-  }
   if (!inviteUrl) {
     return (
       <div className="space-y-4">
@@ -1200,26 +1194,8 @@ function InvitePanel({ inviteUrl, filled, total }: { inviteUrl: string; filled: 
   return (
     <div className="space-y-4">
       <Row label={t('lsPanel.members')} value={membersValue} />
-      <div className="flex justify-center rounded-xl border border-white/10 bg-white p-3">
-        <QRCodeSVG value={inviteUrl} size={160} level="M" />
-      </div>
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={copy}
-          className="flex-1 rounded-xl border border-white/12 bg-white/[0.06] py-2 text-[12px] font-semibold text-white"
-        >
-          {copied ? t('lsPanel.invite.copied') : t('lsPanel.invite.copy')}
-        </button>
-        <a
-          href={`https://wa.me/?text=${encodeURIComponent(inviteUrl)}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex-1 rounded-xl border border-emerald-500/30 bg-emerald-500/10 py-2 text-center text-[12px] font-semibold text-emerald-200"
-        >
-          WhatsApp
-        </a>
-      </div>
+      {/* One invite component for every surface: QR, share sheet, text, WhatsApp, copy that can fail. */}
+      <LeagueInviteShare url={inviteUrl} leagueName={leagueName} testIdPrefix="settings-invite" />
       {inviteUrl.includes('sleeper.com') ? (
         <p className="text-[11px] text-white/35">{t('lsPanel.invite.sleeperNote')}</p>
       ) : null}

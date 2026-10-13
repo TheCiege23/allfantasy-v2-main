@@ -11,6 +11,7 @@ import { getRosterSlotLabelsForLeagueDraft } from '@/lib/draft-room'
 import { getLiveADP } from '@/lib/adp-data'
 import { getPlayerPoolForLeague } from '@/lib/sport-teams/SportPlayerPoolResolver'
 import { getResolvedDraftPoolForLeague } from '@/lib/draft-room/getResolvedDraftPoolForLeague'
+import { ensureDraftPoolReady, getWarmDraftPoolSnapshotFast } from '@/lib/draft-room/ensureDraftPoolReady'
 import { getAiAdpForLeague } from '@/lib/ai-adp-engine'
 import { resolveAiAdpFormatKeyFromSettings } from '@/lib/ai-adp-engine/segment-resolver'
 import { resolveCurrentOnTheClock } from '@/lib/live-draft-engine/CurrentOnTheClockResolver'
@@ -129,34 +130,79 @@ async function loadFallbackCandidatesLegacy(
   }))
 }
 
+type ResolvedPoolEntry = Awaited<ReturnType<typeof getResolvedDraftPoolForLeague>>['entries'][number]
+
+function toFallbackPoolEntry(e: ResolvedPoolEntry): AutopickFallbackPoolEntry {
+  return {
+    playerName: String(e.name ?? '').trim(),
+    position: String(e.position ?? '').trim(),
+    team: e.team ?? null,
+    playerId: String(e.display?.playerId ?? e.playerId ?? '').trim() || null,
+    byeWeek: e.byeWeek ?? e.display?.metadata?.byeWeek ?? null,
+    adp: e.adp ?? null,
+  }
+}
+
+/**
+ * Below this many undrafted rows a cached snapshot is too thin to choose from. The snapshot is built
+ * WITHOUT exclusions and capped at its own limit (300 from `ensureDraftPoolReady`), so late in a big
+ * draft most of it is gone; that is when a rebuild with exclusions earns its cost.
+ */
+export const AUTOPICK_WARM_POOL_MIN_UNDRAFTED = 75
+
+/**
+ * The draft room's cached pool snapshot, when one is warm and still deep enough. Building one first
+ * when none exists, so the cold build happens once per pool rather than once per pick.
+ *
+ * Drafted players are not removed here: the caller already filters on `draftedNames`, by the same
+ * normalization it always used.
+ */
+async function loadWarmPoolCandidates(
+  leagueId: string,
+  draftedNames: Set<string>,
+): Promise<AutopickFallbackPoolEntry[] | null> {
+  let snap = await getWarmDraftPoolSnapshotFast(leagueId)
+  if (!snap.warm) {
+    const ensured = await ensureDraftPoolReady(leagueId)
+    if (!ensured.ok) return null
+    snap = await getWarmDraftPoolSnapshotFast(leagueId)
+    if (!snap.warm) return null
+  }
+  const payload = snap.payload
+  if (payload.rosterConfigurationIncomplete || !Array.isArray(payload.entries) || payload.entries.length === 0) {
+    return null
+  }
+  const candidates = (payload.entries as ResolvedPoolEntry[]).map(toFallbackPoolEntry)
+  const undrafted = candidates.filter((c) => c.playerName && !draftedNames.has(normalizeName(c.playerName))).length
+  if (undrafted < AUTOPICK_WARM_POOL_MIN_UNDRAFTED) return null
+  return candidates
+}
+
+/*
+ * 🛑 EVERY AUTOPICK WAS A FULL COLD POOL BUILD. This called `getResolvedDraftPoolForLeague` with the
+ * pick's drafted names, which no cache can hold, so each expired timer rebuilt the whole pool —
+ * measured 10–22s per pick for a ~1,350-player NBA pool, ~2.5h for one 104-pick board of autopicks.
+ * The draft room had a warm snapshot of the same pool the whole time (`ensureDraftPoolReady`'s memory
+ * and DB cache). Read it first; rebuild with exclusions only when it is missing or exhausted.
+ */
 async function loadFallbackCandidates(
   leagueId: string,
   sport: string,
   draftedNames: Set<string>,
-): Promise<
-  Array<{
-    playerName: string
-    position: string
-    team: string | null
-    playerId: string | null
-    byeWeek: number | null
-    adp: number | null
-  }>
-> {
+): Promise<AutopickFallbackPoolEntry[]> {
+  try {
+    const warm = await loadWarmPoolCandidates(leagueId, draftedNames)
+    if (warm) return warm
+  } catch (err) {
+    console.warn('[autopick] warm pool snapshot unavailable; rebuilding', err)
+  }
   try {
     const resolved = await getResolvedDraftPoolForLeague(leagueId, {
       limit: 400,
       excludeDraftedNames: draftedNames,
     })
     if (!resolved.rosterConfigurationIncomplete && resolved.entries.length > 0) {
-      return resolved.entries.map((e) => ({
-        playerName: e.name.trim(),
-        position: e.position.trim(),
-        team: e.team,
-        playerId: String(e.display?.playerId ?? e.playerId ?? '').trim() || null,
-        byeWeek: e.byeWeek ?? e.display?.metadata?.byeWeek ?? null,
-        adp: e.adp ?? null,
-      }))
+      return resolved.entries.map(toFallbackPoolEntry)
     }
   } catch (err) {
     console.warn('[autopick] getResolvedDraftPoolForLeague failed; using legacy fallback pool', err)

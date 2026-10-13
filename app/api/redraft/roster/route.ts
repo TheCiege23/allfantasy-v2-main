@@ -15,6 +15,7 @@ import {
 } from '@/lib/redraft/lineupValidation'
 import { hydrateRedraftLineupLocks } from '@/lib/redraft/lineupLock'
 import { resolveCurrentLockTeams } from '@/lib/redraft/lineupLockCurrentTeam'
+import { applyNbaSurvivorPickLineupLocks } from '@/lib/survivor/survivorNbaWeeklyScoring'
 import { resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
 import {
   getCanonicalNflPlayerByNameTeam,
@@ -254,7 +255,7 @@ export async function GET(req: NextRequest) {
   // downstream rejects moving a locked player.
   const leagueForLock = await prisma.league.findUnique({
     where: { id: roster.leagueId },
-    select: { settings: true, platform: true },
+    select: { settings: true, platform: true, survivorMode: true },
   })
   // No `?week=`: an imported season's stored week is never advanced — see resolveEffectiveRedraftWeek.
   const week = parsedWeek.value ?? (await resolveEffectiveRedraftWeek({ id: lookup.season.id, currentWeek: roster.season.currentWeek }, leagueForLock?.platform))
@@ -272,7 +273,9 @@ export async function GET(req: NextRequest) {
       playerIds: roster.players.map((p) => p.playerId),
     }),
   })
-  roster.players = lockHydrated.players as RosterPlayerRow[]
+  roster.players = leagueForLock?.survivorMode && roster.season.sport === 'NBA'
+    ? await applyNbaSurvivorPickLineupLocks({ leagueId: roster.leagueId, redraftRosterId: roster.id, week, settings: leagueForLock.settings, players: lockHydrated.players as RosterPlayerRow[] })
+    : lockHydrated.players as RosterPlayerRow[]
   // G10: resolve the commissioner roster config so lineup validation honors the
   // league's configured slots (FLEX/SF/K/IDP/counts) + bench/IR/taxi limits.
   const rosterConfig = resolveRedraftRosterConfig(roster.season.sport, leagueForLock?.settings ?? null)
@@ -644,9 +647,9 @@ export async function PATCH(req: NextRequest) {
   // applying moves, so a player whose game has kicked off cannot be moved.
   const leagueForLock = await prisma.league.findUnique({
     where: { id: roster.leagueId },
-    select: { settings: true, platform: true },
+    select: { settings: true, platform: true, survivorMode: true },
   })
-  const { players: currentPlayers } = await hydrateRedraftLineupLocks(prisma, {
+  const { players: hydratedPlayers } = await hydrateRedraftLineupLocks(prisma, {
     sport: roster.season.sport,
     season: roster.season.season,
     week,
@@ -660,6 +663,9 @@ export async function PATCH(req: NextRequest) {
       playerIds: injuryHydrated.map((p) => p.playerId),
     }),
   })
+  const currentPlayers = leagueForLock?.survivorMode && roster.season.sport === 'NBA'
+    ? await applyNbaSurvivorPickLineupLocks({ leagueId: roster.leagueId, redraftRosterId: roster.id, week, settings: leagueForLock.settings, players: hydratedPlayers })
+    : hydratedPlayers
   const rosterConfig = resolveRedraftRosterConfig(roster.season.sport, leagueForLock?.settings ?? null)
   const applied = applyRedraftLineupMoves(currentPlayers, body.moves)
   const lineupValidation = buildLineupValidation({

@@ -4,6 +4,11 @@ import { enqueueNotification } from './notificationEngine'
 import { getSurvivorConfig } from './SurvivorLeagueConfig'
 import { getTribesWithMembers } from './SurvivorTribeService'
 import { logSurvivorAuditEntry } from './auditEntry'
+import { withSurvivorSetupTransaction } from './survivorSetupTransaction'
+import { resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
+import { readWeekGames } from '@/lib/redraft/weekGames'
+import { randomInt } from 'node:crypto'
+import { readSurvivorFullSeasonPlan } from './survivorFullSeasonPlan'
 
 const CHIMMY_HOST_USER_ID = 'survivor-ai-host'
 const CHIMMY_HOST_NAME = '@Chimmy'
@@ -30,6 +35,126 @@ export type SurvivorTribeBalanceState = {
   maxTribeSize: number
   shouldSuggestShuffle: boolean
   suggestionReason: string | null
+  requiredSitOuts: Record<string, number>
+}
+
+/** Every active tribe contributes the same number of managers to its weekly total. */
+export function requiredTribeSitOuts(sizes: Record<string, number>): Record<string, number> {
+  const active = Object.values(sizes).filter(size => size > 0)
+  const target = active.length ? Math.min(...active) : 0
+  return Object.fromEntries(Object.entries(sizes).map(([id, size]) => [id, size > 0 ? size - target : 0]))
+}
+
+async function nbaWeekTipoff(leagueId: string, week: number): Promise<Date | null> {
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { sport: true, season: true, survivorMode: true } })
+  if (!league?.survivorMode || league.sport !== 'NBA') return null
+  const window = resolveDailySportWeekWindow('NBA', league.season, week)
+  if (!window) return null
+  const games = await readWeekGames(prisma, { sport: 'NBA', season: league.season, week, seasonType: 'regular', dateWindow: window })
+  return games.reduce<Date | null>((earliest, game) => game.startTime && (!earliest || game.startTime < earliest) ? game.startTime : earliest, null)
+}
+
+export type TribeSitOutDeadlineResult = 'not_nba' | 'awaiting_schedule' | 'before_deadline' | 'locked' | 'blocked'
+
+/**
+ * Settles missing sit-outs at the first tipoff. The league advisory lock keeps
+ * the choice immutable when several score-sync workers reach the cutoff together.
+ */
+export async function settleNbaTribeSitOutDeadline(leagueId: string, week: number, now = new Date()): Promise<TribeSitOutDeadlineResult> {
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { sport: true, survivorMode: true, survivorPhase: true } })
+  if (!league?.survivorMode || league.sport !== 'NBA' || !['pre_merge', 'post_swap', 'tribe'].includes(league.survivorPhase ?? '')) return 'not_nba'
+  const firstTipoff = await nbaWeekTipoff(leagueId, week)
+  if (!firstTipoff) return 'awaiting_schedule'
+  if (now < firstTipoff) return 'before_deadline'
+
+  const result = await withSurvivorSetupTransaction(leagueId, async tx => {
+    const lockId = `sit-out-week:${leagueId}:${week}`
+    const locked = await tx.survivorCommissionerAction.findUnique({ where: { id: lockId } })
+    if (locked?.actionType === 'sit_out_week_locked') return { status: 'locked' as const, newlyBlocked: false }
+
+    const [players, tribes, actions, prior] = await Promise.all([
+      tx.survivorPlayer.findMany({ where: { leagueId, playerState: 'active' }, select: { userId: true, tribeId: true, displayName: true } }),
+      tx.survivorTribe.findMany({ where: { leagueId, isActive: true }, select: { id: true } }),
+      tx.survivorCommissionerAction.findMany({ where: { leagueId, week, actionType: 'sit_out_accepted', wasConfirmed: true }, select: { targetUserId: true, targetTribeId: true } }),
+      week > 1 ? tx.survivorCommissionerAction.findMany({ where: { leagueId, week: week - 1, actionType: 'sit_out_accepted', wasConfirmed: true }, select: { targetUserId: true } }) : Promise.resolve([]),
+    ])
+    const activeTribeIds = new Set(tribes.map(tribe => tribe.id))
+    const byTribe = new Map<string, typeof players>()
+    for (const player of players) {
+      if (!player.tribeId || !activeTribeIds.has(player.tribeId)) continue
+      byTribe.set(player.tribeId, [...(byTribe.get(player.tribeId) ?? []), player])
+    }
+    const required = requiredTribeSitOuts(Object.fromEntries([...byTribe].map(([tribeId, members]) => [tribeId, members.length])))
+    const previousUsers = new Set(prior.map(row => row.targetUserId).filter((value): value is string => Boolean(value)))
+    const acceptedUsers = new Set(actions.map(row => row.targetUserId).filter((value): value is string => Boolean(value)))
+    const autoSelected: Array<{ userId: string; tribeId: string; name: string }> = []
+    for (const [tribeId, members] of byTribe) {
+      const already = actions.filter(row => row.targetTribeId === tribeId).length
+      const missing = (required[tribeId] ?? 0) - already
+      if (missing < 0) return { status: 'blocked' as const, newlyBlocked: false }
+      const eligible = members.filter(row => !acceptedUsers.has(row.userId) && !previousUsers.has(row.userId))
+      if (eligible.length < missing) {
+        if (!locked) await tx.survivorCommissionerAction.create({ data: {
+          id: lockId, leagueId, commissionerId: CHIMMY_HOST_USER_ID, week,
+          actionType: 'sit_out_week_blocked', description: 'No fair tribe total is possible without a consecutive sit-out.',
+          newState: { tribeId, required: required[tribeId], accepted: already, eligible: eligible.length, reason: 'no_consecutive_sit_out' },
+          wasConfirmed: true,
+        } })
+        return { status: 'blocked' as const, newlyBlocked: !locked }
+      }
+      for (let i = 0; i < missing; i++) {
+        const index = randomInt(eligible.length)
+        const [chosen] = eligible.splice(index, 1)
+        autoSelected.push({ userId: chosen.userId, tribeId, name: chosen.displayName })
+      }
+    }
+    for (const row of autoSelected) {
+      await tx.survivorCommissionerAction.create({ data: {
+        id: `sit-out-auto:${leagueId}:${week}:${row.userId}`, leagueId,
+        commissionerId: CHIMMY_HOST_USER_ID, week, actionType: 'sit_out_accepted',
+        targetUserId: row.userId, targetTribeId: row.tribeId,
+        description: `${row.name} was selected by Chimmy to sit out of the tribe total.`,
+        newState: { status: 'accepted', automatic: true, selectedAt: now.toISOString() }, wasConfirmed: true,
+      } })
+    }
+    const lockData = {
+      actionType: 'sit_out_week_locked', description: 'Weekly tribe contributions locked at first NBA tipoff.',
+      newState: { required, autoSelected: autoSelected.map(row => ({ userId: row.userId, tribeId: row.tribeId })), firstTipoff: firstTipoff.toISOString() },
+      wasConfirmed: true,
+    }
+    if (locked) await tx.survivorCommissionerAction.update({ where: { id: lockId }, data: lockData })
+    else await tx.survivorCommissionerAction.create({ data: { id: lockId, leagueId, commissionerId: CHIMMY_HOST_USER_ID, week, ...lockData } })
+    return { status: 'locked' as const, newlyBlocked: false }
+  })
+  if (result.newlyBlocked) {
+    await enqueueNotification(leagueId, 'tribe_shuffle_recommendation', {
+      recipientRole: 'commissioner', title: 'Tribe balance needs a redraw',
+      body: 'No eligible sit-out rotation can balance tribe totals this week. Review the tribe switch.',
+      deepLinkPath: `/league/${leagueId}/survivor/commissioner`, urgency: 'high', isSpoilerSafe: true,
+    })
+  }
+  return result.status
+}
+
+/** Runs in the existing score-sync slot, independently of the season automation gate. */
+export async function runNbaTribeSitOutDeadlineBatch(now = new Date()) {
+  const states = await prisma.survivorGameState.findMany({
+    where: { weekScoringFinalAt: null, phase: { in: ['pre_merge', 'post_swap', 'tribe'] }, league: { survivorMode: true, sport: 'NBA' } },
+    select: { leagueId: true, currentWeek: true, league: { select: { settings: true } } }, orderBy: { updatedAt: 'asc' }, take: 20,
+  })
+  const outcomes: Record<string, number> = {}
+  let failed = 0
+  for (const state of states) {
+    try {
+      const week = state.currentWeek > 0 ? state.currentWeek : readSurvivorFullSeasonPlan(state.league.settings)?.startWeek
+      if (!week) continue
+      const result = await settleNbaTribeSitOutDeadline(state.leagueId, week, now)
+      outcomes[result] = (outcomes[result] ?? 0) + 1
+    } catch {
+      failed++
+    }
+  }
+  return { considered: states.length, failed, outcomes }
 }
 
 export type SurvivorSitOutCandidate = {
@@ -135,7 +260,7 @@ export async function getSurvivorTribeBalanceState(leagueId: string, week: numbe
     getTribesWithMembers(leagueId),
   ])
 
-  const merged = league?.survivorPhase === 'merge' || league?.survivorPhase === 'jury' || league?.survivorPhase === 'finale'
+  const merged = ['merge', 'post_merge', 'jury', 'finale'].includes(league?.survivorPhase ?? '')
   if (merged || tribes.length === 0) {
     return {
       leagueId,
@@ -146,6 +271,7 @@ export async function getSurvivorTribeBalanceState(leagueId: string, week: numbe
       maxTribeSize: 0,
       shouldSuggestShuffle: false,
       suggestionReason: null,
+      requiredSitOuts: {},
     }
   }
 
@@ -160,7 +286,8 @@ export async function getSurvivorTribeBalanceState(leagueId: string, week: numbe
     tribeName: tribe.name,
     activeCount: tribe.members.filter((m) => activeRosterIds.has(m.rosterId)).length,
   }))
-  const minTribeSize = Math.min(...tribeSizes.map((t) => t.activeCount))
+  const activeSizes = tribeSizes.map(t => t.activeCount).filter(size => size > 0)
+  const minTribeSize = activeSizes.length ? Math.min(...activeSizes) : 0
   const maxTribeSize = Math.max(...tribeSizes.map((t) => t.activeCount))
   const shouldSuggestShuffle = minTribeSize <= 2
 
@@ -175,6 +302,7 @@ export async function getSurvivorTribeBalanceState(leagueId: string, week: numbe
     suggestionReason: shouldSuggestShuffle
       ? 'At least one active tribe has dropped to 2 or fewer members.'
       : null,
+    requiredSitOuts: requiredTribeSitOuts(Object.fromEntries(tribeSizes.map(tribe => [tribe.tribeId, tribe.activeCount]))),
   }
 }
 
@@ -188,7 +316,7 @@ export async function getEligibleSitOutCandidates(
     prisma.survivorCommissionerAction.findMany({
       where: {
         leagueId,
-        week: Math.max(1, week - 1),
+        week: week > 1 ? week - 1 : 0,
         actionType: 'sit_out_accepted',
         wasConfirmed: true,
       },
@@ -223,7 +351,6 @@ export async function getEligibleSitOutCandidates(
 
   return players
     .filter((player) => {
-      if (player.hasImmunityThisWeek) return false
       const rosterId = player.redraftRosterId
       if (!rosterId) return false
       const rosterUserId = userByRosterId.get(rosterId)
@@ -268,6 +395,12 @@ export async function nominateSurvivorSitOut(input: {
     getNominatedAndAcceptedActions(leagueId, week),
     getEligibleSitOutCandidates(leagueId, tribeId, week),
   ])
+  const [balance, tipoff] = await Promise.all([getSurvivorTribeBalanceState(leagueId, week), nbaWeekTipoff(leagueId, week)])
+  if (tipoff && new Date() >= tipoff) return { ok: false, error: 'Sit-out nominations closed at the first NBA tipoff of the week.' }
+  const required = balance.requiredSitOuts[tribeId] ?? 0
+  const acceptedCount = existingForWeek.filter(row => row.actionType === 'sit_out_accepted' && row.targetTribeId === tribeId).length
+  if (required <= acceptedCount) return { ok: false, error: 'Your tribe has filled its sit-out spots for this week.' }
+  if (required === 0) return { ok: false, error: 'This tribe does not need a sit-out this week.' }
 
   if (league?.survivorPhase === 'merge' || league?.survivorPhase === 'jury' || league?.survivorPhase === 'finale') {
     return { ok: false, error: 'Sit-out nominations are pre-merge only.' }
@@ -300,8 +433,18 @@ export async function nominateSurvivorSitOut(input: {
     return { ok: false, error: 'This manager already accepted a sit-out for the current week.' }
   }
 
-  const created = await prisma.survivorCommissionerAction.create({
-    data: {
+  const nominationResult = await withSurvivorSetupTransaction(leagueId, async tx => {
+    const [locked, accepted, pending, active] = await Promise.all([
+      tx.survivorCommissionerAction.findUnique({ where: { id: `sit-out-week:${leagueId}:${week}` }, select: { id: true } }),
+      tx.survivorCommissionerAction.count({ where: { leagueId, week, targetTribeId: tribeId, actionType: 'sit_out_accepted', wasConfirmed: true } }),
+      tx.survivorCommissionerAction.findFirst({ where: { leagueId, week, targetUserId: nomineeRoster.platformUserId, actionType: 'sit_out_nominated' }, select: { id: true } }),
+      tx.survivorPlayer.findFirst({ where: { leagueId, userId: nomineeRoster.platformUserId, playerState: 'active', tribeId }, select: { userId: true } }),
+    ])
+    if (locked || (tipoff && new Date() >= tipoff)) return { ok: false as const, error: 'Sit-out nominations closed at the first NBA tipoff.' }
+    if (!active) return { ok: false as const, error: 'That manager is no longer active in your tribe.' }
+    if (accepted >= required) return { ok: false as const, error: 'Your tribe has filled its sit-out spots for this week.' }
+    if (pending) return { ok: false as const, error: 'A pending sit-out nomination already exists for that manager this week.' }
+    const created = await tx.survivorCommissionerAction.create({ data: {
       leagueId,
       commissionerId: nominatorUserId,
       week,
@@ -320,8 +463,11 @@ export async function nominateSurvivorSitOut(input: {
         command,
       } as object,
       wasConfirmed: false,
-    },
+    } })
+    return { ok: true as const, created }
   })
+  if (!nominationResult.ok) return nominationResult
+  const created = nominationResult.created
 
   await Promise.all([
     enqueueNotification(leagueId, 'sit_out_nomination', {
@@ -393,25 +539,42 @@ export async function respondToSurvivorSitOut(input: {
   }
 
   const status: 'accepted' | 'declined' = input.accept ? 'accepted' : 'declined'
-  const updated = await prisma.survivorCommissionerAction.update({
-    where: { id: nomination.id },
-    data: {
-      actionType: status === 'accepted' ? 'sit_out_accepted' : 'sit_out_declined',
-      description:
-        status === 'accepted'
-          ? 'Sit-out nomination accepted by nominated manager.'
-          : 'Sit-out nomination declined by nominated manager.',
-      previousState: toPrismaJson(nomination.newState),
-      newState: {
-        ...asObject(nomination.newState),
-        status,
-        respondedAt: new Date().toISOString(),
-        respondedByUserId: input.responderUserId,
-      } as object,
-      wasConfirmed: status === 'accepted',
-      executedAt: new Date(),
-    },
+  const tipoff = nomination.week == null ? null : await nbaWeekTipoff(input.leagueId, nomination.week)
+  if (tipoff && new Date() >= tipoff) return { ok: false, error: 'Sit-out decisions closed at the first NBA tipoff.' }
+  const changed = await withSurvivorSetupTransaction(input.leagueId, async tx => {
+    const current = await tx.survivorCommissionerAction.findUnique({ where: { id: nomination.id } })
+    if (!current || current.actionType !== 'sit_out_nominated') return { ok: false as const, error: 'This sit-out nomination is no longer pending.' }
+    if (tipoff && new Date() >= tipoff) return { ok: false as const, error: 'Sit-out decisions closed at the first NBA tipoff.' }
+    if (input.accept) {
+      if (current.week == null || !current.targetTribeId) return { ok: false as const, error: 'Sit-out nomination is missing its week or tribe.' }
+      const [active, accepted, prior, lock] = await Promise.all([
+        tx.survivorPlayer.findMany({ where: { leagueId: input.leagueId, playerState: 'active' }, select: { userId: true, tribeId: true } }),
+        tx.survivorCommissionerAction.findMany({ where: { leagueId: input.leagueId, week: current.week, actionType: 'sit_out_accepted', wasConfirmed: true }, select: { targetUserId: true, targetTribeId: true } }),
+        current.week > 1 ? tx.survivorCommissionerAction.findMany({ where: { leagueId: input.leagueId, week: current.week - 1, actionType: 'sit_out_accepted', wasConfirmed: true }, select: { targetUserId: true } }) : Promise.resolve([]),
+        tx.survivorCommissionerAction.findUnique({ where: { id: `sit-out-week:${input.leagueId}:${current.week}` }, select: { id: true } }),
+      ])
+      if (lock) return { ok: false as const, error: 'Weekly tribe sit-outs are already locked.' }
+      if (!active.some(row => row.userId === input.responderUserId && row.tribeId === current.targetTribeId)) return { ok: false as const, error: 'This manager is no longer an active member of the tribe.' }
+      if (prior.some(row => row.targetUserId === input.responderUserId)) return { ok: false as const, error: 'A manager cannot sit out in consecutive weeks.' }
+      const counts: Record<string, number> = {}
+      for (const row of active) if (row.tribeId) counts[row.tribeId] = (counts[row.tribeId] ?? 0) + 1
+      const required = requiredTribeSitOuts(counts)[current.targetTribeId] ?? 0
+      if (accepted.filter(row => row.targetTribeId === current.targetTribeId).length >= required) return { ok: false as const, error: 'Your tribe has already filled its sit-out spots.' }
+    }
+    const updated = await tx.survivorCommissionerAction.update({
+      where: { id: nomination.id },
+      data: {
+        actionType: status === 'accepted' ? 'sit_out_accepted' : 'sit_out_declined',
+        description: status === 'accepted' ? 'Sit-out nomination accepted by nominated manager.' : 'Sit-out nomination declined by nominated manager.',
+        previousState: toPrismaJson(current.newState),
+        newState: { ...asObject(current.newState), status, respondedAt: new Date().toISOString(), respondedByUserId: input.responderUserId } as object,
+        wasConfirmed: status === 'accepted', executedAt: new Date(),
+      },
+    })
+    return { ok: true as const, updated }
   })
+  if (!changed.ok) return changed
+  const updated = changed.updated
 
   await Promise.all([
     nomination.targetTribeId
@@ -419,7 +582,7 @@ export async function respondToSurvivorSitOut(input: {
           input.leagueId,
           nomination.targetTribeId,
           status === 'accepted'
-            ? 'Sit-out accepted. This manager is now excluded from tribe scoring and mini-game eligibility for the week.'
+            ? 'Sit-out accepted. Only this manager’s tribe score contribution is excluded; individual scoring, challenges, and voting still count.'
             : 'Sit-out declined. No sit-out is applied for this nomination.',
           {
             type: 'sit_out_response',
@@ -526,25 +689,10 @@ export async function applySurvivorSitOutToMiniGames(input: {
   week: number
   rosterId: string
 }): Promise<SitOutMiniGameGuard> {
-  const roster = await prisma.roster.findFirst({
-    where: { id: input.rosterId, leagueId: input.leagueId },
-    select: { platformUserId: true },
-  })
-  if (!roster?.platformUserId) {
-    return { blocked: false, sitOutExcludedUserIds: [] }
-  }
-
-  const accepted = await getAcceptedSitOutActions(input.leagueId, input.week)
-  const sitOutExcludedUserIds = [...new Set(accepted.map((row) => row.targetUserId).filter((id): id is string => Boolean(id)))]
-  if (!sitOutExcludedUserIds.includes(roster.platformUserId)) {
-    return { blocked: false, sitOutExcludedUserIds }
-  }
-
-  return {
-    blocked: true,
-    sitOutExcludedUserIds,
-    reason: 'You are marked as sit-out this week and cannot participate in mini-games.',
-  }
+  // Sit-outs change only the verified tribe fantasy total. A manager may still
+  // submit individual challenges, take part in tribe decisions, and vote.
+  void input
+  return { blocked: false, sitOutExcludedUserIds: [] }
 }
 
 export async function maybeTriggerSurvivorTribeShuffleRecommendation(

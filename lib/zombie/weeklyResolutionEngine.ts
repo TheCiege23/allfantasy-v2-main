@@ -9,7 +9,7 @@ import { checkAndAwardWeapons } from '@/lib/zombie/weaponEngine'
 import { tryPostWeeklyUpdateAfterResolution } from '@/lib/zombie/weeklyUpdateEngine'
 import { syncUniverseStats } from '@/lib/zombie/universeStatEngine'
 import { notifyCommissioner } from '@/lib/zombie/commissionerNotificationService'
-import { checkAllMatchupsComplete } from '@/lib/zombie/matchupCompletion'
+import { getLastScheduledWeek, getZombieWeekReadiness } from '@/lib/zombie/matchupCompletion'
 import { logAuditEntry } from '@/lib/zombie/auditService'
 import { getLeagueMode } from '@/lib/zombie/zombieLeagueMode'
 import { applyZombieHordeSitOutToScoring } from '@/lib/zombie/ZombieHordeSitOutEngine'
@@ -50,11 +50,16 @@ export async function runWeeklyResolution(
     }
   }
 
-  if (!opts?.force) {
-    const allComplete = await checkAllMatchupsComplete(z.leagueId, week, z.season)
-    if (!allComplete) {
-      return { resolution: null, skipped: true, reason: 'matchups_incomplete' }
-    }
+  /*
+   * 🛑 `force` REPLAYS A RESOLVED WEEK; IT DOES NOT RESOLVE AN UNFINISHED ONE. This gate used to sit
+   * under `!opts?.force`, so a forced run on a week whose matchups were not final skipped every one of
+   * them (the infection engine reads only final scores), wrote "complete, 0 infections", and moved the
+   * league on — a week of the game silently erased. A stat-correction replay is of a sealed week, so it
+   * still passes.
+   */
+  const readiness = await getZombieWeekReadiness(z.leagueId, week, z.season)
+  if (!readiness.ready) {
+    return { resolution: null, skipped: true, reason: 'matchups_incomplete' }
   }
 
   await prisma.zombieWeeklyResolution.upsert({
@@ -200,7 +205,13 @@ export async function runWeeklyResolution(
    * its last week.
    */
   const nextWeek = Math.max(z.currentWeek ?? 0, week + 1)
-  const lastWeek = z.totalWeeks ?? null
+  // The season ends at its last SCHEDULED week, which is before `totalWeeks` whenever the league has
+  // playoffs — see `getLastScheduledWeek`. This also releases a league activated with the old value.
+  const lastScheduledWeek = season ? await getLastScheduledWeek(season.id) : null
+  const lastWeek =
+    z.totalWeeks != null && lastScheduledWeek != null
+      ? Math.min(z.totalWeeks, lastScheduledWeek)
+      : (z.totalWeeks ?? lastScheduledWeek)
   const finished = lastWeek != null && week >= lastWeek
   await prisma.zombieLeague.update({
     where: { id: zombieLeagueId },

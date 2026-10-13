@@ -168,9 +168,10 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
     tournament: ['snake', 'linear', 'auction', 'offline', 'auto'],
     big_brother: ['snake', 'offline', 'auto'],
   },
+  // NFL: every concept offering Full PPR also offers ESPN default, Sleeper default and Classic.
   allowedScoringPresetsByConceptSport: {
     redraft: {
-      NFL: ['fb_half_ppr', 'fb_ppr', 'fb_standard'],
+      NFL: ['fb_half_ppr', 'fb_ppr', 'fb_standard', 'fb_espn_ppr', 'fb_sleeper_ppr'],
       NBA: ['nba_points', 'nba_8cat', 'nba_9cat'],
       MLB: ['mlb_points', 'mlb_5x5_each', 'mlb_5x5_most', 'mlb_5x5_roto', 'mlb_6x6_each', 'mlb_6x6_most', 'mlb_6x6_roto'],
       NHL: ['nhl_points'],
@@ -179,7 +180,7 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
       SOCCER: ['soc_points'],
     },
     dynasty: {
-      NFL: ['fb_half_ppr', 'fb_ppr', 'fb_superflex'],
+      NFL: ['fb_half_ppr', 'fb_ppr', 'fb_superflex', 'fb_espn_ppr', 'fb_sleeper_ppr', 'fb_standard'],
       NBA: ['nba_points', 'nba_8cat', 'nba_9cat'],
       MLB: ['mlb_points', 'mlb_5x5_each', 'mlb_5x5_most', 'mlb_5x5_roto', 'mlb_6x6_each', 'mlb_6x6_most', 'mlb_6x6_roto'],
       NHL: ['nhl_points'],
@@ -188,7 +189,7 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
       SOCCER: ['soc_points'],
     },
     keeper: {
-      NFL: ['fb_half_ppr', 'fb_ppr', 'fb_standard'],
+      NFL: ['fb_half_ppr', 'fb_ppr', 'fb_standard', 'fb_espn_ppr', 'fb_sleeper_ppr'],
       NBA: ['nba_points', 'nba_8cat', 'nba_9cat'],
       MLB: ['mlb_points', 'mlb_5x5_each', 'mlb_5x5_most', 'mlb_5x5_roto', 'mlb_6x6_each', 'mlb_6x6_most', 'mlb_6x6_roto'],
       NHL: ['nhl_points'],
@@ -197,7 +198,7 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
       SOCCER: ['soc_points'],
     },
     best_ball: {
-      NFL: ['fb_half_ppr', 'fb_ppr'],
+      NFL: ['fb_half_ppr', 'fb_ppr', 'fb_espn_ppr', 'fb_sleeper_ppr', 'fb_standard'],
       NBA: ['nba_points'],
       MLB: ['mlb_points'],
       NHL: ['nhl_points'],
@@ -210,7 +211,7 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
       NCAAF: ['idp_balanced'],
     },
     salary_cap: {
-      NFL: ['fb_half_ppr', 'fb_ppr'],
+      NFL: ['fb_half_ppr', 'fb_ppr', 'fb_espn_ppr', 'fb_sleeper_ppr', 'fb_standard'],
       NBA: ['nba_points'],
       MLB: ['mlb_points'],
       NHL: ['nhl_points'],
@@ -228,7 +229,7 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
       NCAAB: ['ncaab_points'],
     },
     guillotine: {
-      NFL: ['fb_half_ppr', 'fb_ppr'],
+      NFL: ['fb_half_ppr', 'fb_ppr', 'fb_espn_ppr', 'fb_sleeper_ppr', 'fb_standard'],
       NCAAF: ['ncaaf_half_ppr'],
       NBA: ['nba_points'],
       NHL: ['nhl_points'],
@@ -241,13 +242,13 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
       NHL: ['nhl_points'],
     },
     survivor: {
-      NFL: ['fb_half_ppr', 'fb_ppr'],
+      NFL: ['fb_half_ppr', 'fb_ppr', 'fb_espn_ppr', 'fb_sleeper_ppr', 'fb_standard'],
       NCAAF: ['ncaaf_half_ppr'],
       NBA: ['nba_points'],
       NHL: ['nhl_points'],
     },
     tournament: {
-      NFL: ['fb_half_ppr', 'fb_ppr', 'fb_standard'],
+      NFL: ['fb_half_ppr', 'fb_ppr', 'fb_standard', 'fb_espn_ppr', 'fb_sleeper_ppr'],
       NBA: ['nba_points'],
       MLB: ['mlb_points'],
       NHL: ['nhl_points'],

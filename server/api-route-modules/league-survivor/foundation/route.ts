@@ -30,6 +30,7 @@ import { resolveElimination } from '@/lib/survivor/survivorEliminationService'
 import { sendPushToUser } from '@/lib/push-notifications'
 import { getStealThreePreview, playStealThree } from '@/lib/survivor/survivorStealThree'
 import { specialtySettingsEditRefusal } from '@/lib/league/specialty-settings-access'
+import { getNbaSurvivorGameOptions, saveNbaSurvivorGamePick } from '@/lib/survivor/survivorNbaWeeklyScoring'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -94,6 +95,9 @@ async function updateFoundationSettings(leagueId: string, body: JsonRecord, user
   const incoming = asRecord(body.settings)
   const mergedInput = { ...current, ...incoming, ...body }
   const settings = normalizeSurvivorFoundationSettings(mergedInput)
+  if (!settings.sitOutsEnabled || !settings.noConsecutiveSitOuts) {
+    return NextResponse.json({ error: 'Survivor requires fair tribe sit-outs without consecutive weeks for the same manager.' }, { status: 409 })
+  }
   const access = await resolveSurvivorAccessContext(leagueId, userId)
   if (access?.isParticipant && access.isLeagueCommissioner && settings.commissionerParticipationMode !== 'participating_player') {
     return NextResponse.json({ error: 'A manager cannot switch into host visibility while participating in this season.' }, { status: 409 })
@@ -106,8 +110,9 @@ async function updateFoundationSettings(leagueId: string, body: JsonRecord, user
   if (settings.tribeCount !== previousSettings.tribeCount || JSON.stringify(settings.survivorTribeSlots) !== JSON.stringify(previousSettings.survivorTribeSlots)) return NextResponse.json({ error: 'Use Tribe identities and capacities to save tribe structure together.' }, { status: 409 })
   const exileChanged = settings.exileIslandEnabled !== previousSettings.exileIslandEnabled || settings.exileReturnWeek !== previousSettings.exileReturnWeek || settings.exileReturnTokens !== previousSettings.exileReturnTokens
   const idolCountChanged = settings.idolCount !== previousSettings.idolCount
-  if ((exileChanged || idolCountChanged) && await prisma.draftSession.findFirst({ where: { leagueId, status: { in: ['in_progress', 'paused', 'completed'] } }, select: { id: true } })) {
-    return NextResponse.json({ error: 'Exile and idol inventory rules are locked once the draft starts. Configure them before drafting.' }, { status: 409 })
+  const nbaScoringChanged = settings.nbaWeeklyScoringMode !== previousSettings.nbaWeeklyScoringMode
+  if ((exileChanged || idolCountChanged || nbaScoringChanged) && await prisma.draftSession.findFirst({ where: { leagueId, status: { in: ['in_progress', 'paused', 'completed'] } }, select: { id: true } })) {
+    return NextResponse.json({ error: 'Exile, idol inventory, and NBA weekly scoring rules are locked once the draft starts. Configure them before drafting.' }, { status: 409 })
   }
   const settingsPatch = buildSurvivorSettingsSnapshotPatch(settings as unknown as JsonRecord)
   const columnPatch = buildSurvivorLeagueColumnPatch(settings)
@@ -184,6 +189,25 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
   const access = await resolveSurvivorAccessContext(leagueId, userId)
   if (!access) return NextResponse.json({ error: 'League not found' }, { status: 404 })
   if (!access.isLeagueMember) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+  if (action === 'nba-game-options' || action === 'nba-game-pick') {
+    if (!access.isUserActivePlayer || !access.rosterId) return NextResponse.json({ error: 'Only an active manager may choose a counting game.' }, { status: 403 })
+    if (access.settings.nbaWeeklyScoringMode !== 'one_game_per_player') return NextResponse.json({ error: 'This league counts every NBA game.' }, { status: 409 })
+    const game = await prisma.survivorGameState.findUnique({ where: { leagueId }, select: { currentWeek: true } })
+    const plan = readSurvivorFullSeasonPlan(await readLeagueSettings(leagueId))
+    const activeWeek = game?.currentWeek && game.currentWeek > 0 ? game.currentWeek : plan?.startWeek
+    const week = Number(body.week ?? activeWeek)
+    if (!Number.isInteger(week) || week < 1 || week > 52 || (plan && (week < plan.startWeek || week > plan.endWeek)) || (activeWeek && week !== activeWeek && week !== activeWeek + 1)) return NextResponse.json({ error: 'Choose the current or upcoming NBA fantasy week.' }, { status: 422 })
+    if (action === 'nba-game-options') {
+      const result = await getNbaSurvivorGameOptions({ leagueId, rosterId: access.rosterId, week })
+      return NextResponse.json(result, { status: result.ok ? 200 : 422 })
+    }
+    const playerId = typeof body.playerId === 'string' ? body.playerId : ''
+    const gameKey = typeof body.gameKey === 'string' ? body.gameKey : ''
+    if (!playerId || !gameKey) return NextResponse.json({ error: 'Player and game are required.' }, { status: 422 })
+    const result = await saveNbaSurvivorGamePick({ leagueId, rosterId: access.rosterId, userId, week, playerId, gameKey })
+    return NextResponse.json(result, { status: result.ok ? 200 : 422 })
+  }
 
   if (action === 'get-state') {
     const result = await buildSurvivorStateForUser(leagueId, userId)

@@ -6,7 +6,7 @@ import { requireCronAuth } from '@/app/api/cron/_auth'
 import { prisma } from '@/lib/prisma'
 import { updateC2CMatchupScores } from '@/lib/c2c/scoringEngine'
 import { syncWeeklyScores } from '@/lib/survivor/gameStateMachine'
-import { checkAllMatchupsComplete } from '@/lib/zombie/matchupCompletion'
+import { getZombieWeekReadiness, type ZombieWeekReadiness } from '@/lib/zombie/matchupCompletion'
 import { runWeeklyResolution } from '@/lib/zombie/weeklyResolutionEngine'
 import { getZombieLeagueConfig } from '@/lib/zombie/ZombieLeagueConfig'
 import { runZombieHousekeeping } from '@/lib/zombie/zombieAutomation'
@@ -24,6 +24,7 @@ import { runNativeGuillotineWeek } from '@/lib/guillotine/nativeGuillotineWeek'
 import { GUILLOTINE_ARCHIVE_RETRY_MS, GUILLOTINE_UNARCHIVED_LIFECYCLE_STATES } from '@/lib/guillotine/finishGuillotineSeason'
 import { scoreActivePlayoffRound } from '@/lib/playoff-runtime/playoffRoundScoring'
 import { runPlannedSurvivorSeasonBatch } from '@/lib/survivor/survivorPlannedSeasonRunner'
+import { runNbaTribeSitOutDeadlineBatch } from '@/lib/survivor/SurvivorSitOutEngine'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -84,11 +85,38 @@ async function runLegacyAutomationBridge() {
     select: { id: true, leagueId: true, currentWeek: true, season: true },
   })
 
+  /*
+   * 🛑 A NOT-READY WEEK USED TO `return` HERE WITH NO TRACE. A week the finalizer would not seal — NBA
+   * has never sealed a real slate — therefore looked exactly like a healthy mid-week league on every
+   * tick, forever, while the run reported `success`. Each skip now says why. Waiting is normal while
+   * games are in progress, so it does not mark the run partial; the reason is what makes a stall
+   * findable.
+   */
+  const zombieWeeksWaiting: Array<{ leagueId: string; week: number } & Exclude<ZombieWeekReadiness, { ready: true }>> = []
+  let zombieSeasonsClosed = 0
+
   const zombieRes = await Promise.allSettled(
     zombieLeagues.map(async ({ id, leagueId, currentWeek, season }) => {
       const week = Math.max(1, currentWeek || 1)
-      const allComplete = await checkAllMatchupsComplete(leagueId, week, season)
-      if (!allComplete) return
+      const readiness = await getZombieWeekReadiness(leagueId, week, season)
+      if (!readiness.ready) {
+        // Past the last scheduled week there is nothing left to resolve: the season is over. A league
+        // activated with `totalWeeks` reached the first playoff week and stalled here; this ends it.
+        if (
+          readiness.reason === 'NO_SCHEDULED_MATCHUPS' &&
+          readiness.lastScheduledWeek != null &&
+          week > readiness.lastScheduledWeek
+        ) {
+          const closed = await prisma.zombieLeague.updateMany({
+            where: { id, status: 'active' },
+            data: { status: 'complete', currentWeek: readiness.lastScheduledWeek, totalWeeks: readiness.lastScheduledWeek },
+          })
+          zombieSeasonsClosed += closed.count
+          return
+        }
+        zombieWeeksWaiting.push({ leagueId, week, ...readiness })
+        return
+      }
 
       const cfg = await getZombieLeagueConfig(leagueId)
       const replayOnStatCorrection = Boolean(cfg?.statCorrectionReversal)
@@ -136,6 +164,8 @@ async function runLegacyAutomationBridge() {
     survivorBridge,
     zombieResolutionAttempts: zombieRes.length,
     zombieResolutionFailed: zombieRes.filter((r) => r.status === 'rejected').length,
+    zombieWeeksWaiting,
+    zombieSeasonsClosed,
     zombieHousekeepingLeagues: zombieHousekeeping.leaguesChecked,
     zombieHousekeepingErrors: zombieHousekeeping.errors,
     c2cLeaguesSynced: c2cLeagues.length,
@@ -520,8 +550,9 @@ export async function GET(request: Request) {
         outcomes: { batch_error: 1 },
         error: error instanceof Error ? error.message : String(error),
       }))
+      const survivorSitOuts = await runNbaTribeSitOutDeadlineBatch().catch(() => ({ considered: 0, failed: 1, outcomes: { batch_error: 1 } }))
       const redraft = await runRedraftReconciliation()
-      return { ...legacy, redraft, survivorSeason, updated: redraft.reconciled }
+      return { ...legacy, redraft, survivorSeason, survivorSitOuts, updated: redraft.reconciled }
     },
     (r) => ({
       rowsWritten: r.matchupsRecalculated + r.redraft.matchupsRecalculated,
@@ -531,6 +562,7 @@ export async function GET(request: Request) {
       status:
         r.survivorBridge.failed > 0 ||
         r.survivorSeason.failed > 0 ||
+        r.survivorSitOuts.failed > 0 ||
         r.zombieResolutionFailed > 0 ||
         r.zombieHousekeepingErrors.length > 0 ||
         r.redraft.failed > 0 ||
@@ -545,8 +577,12 @@ export async function GET(request: Request) {
         survivorSynced: r.survivorBridge.synced,
         survivorFailed: r.survivorBridge.failed,
         survivorSeason: r.survivorSeason,
+        survivorSitOuts: r.survivorSitOuts,
         zombieResolutionAttempts: r.zombieResolutionAttempts,
         zombieResolutionFailed: r.zombieResolutionFailed,
+        zombieWeeksWaiting: r.zombieWeeksWaiting.length,
+        zombieWeeksWaitingSample: r.zombieWeeksWaiting.slice(0, 10),
+        zombieSeasonsClosed: r.zombieSeasonsClosed,
         zombieHousekeepingLeagues: r.zombieHousekeepingLeagues,
         zombieHousekeepingErrors: r.zombieHousekeepingErrors.slice(0, 10),
         c2cLeaguesSynced: r.c2cLeaguesSynced,

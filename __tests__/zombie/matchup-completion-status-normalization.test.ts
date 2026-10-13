@@ -17,19 +17,20 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
  * `server/services/matchupSources/redraftMatchupSource.ts` already uses.
  */
 
-const { findFirstRedraftSeason, findManyRedraftMatchup } = vi.hoisted(() => ({
+const { findFirstRedraftSeason, findManyRedraftMatchup, findFirstRedraftMatchup } = vi.hoisted(() => ({
   findFirstRedraftSeason: vi.fn(),
   findManyRedraftMatchup: vi.fn(),
+  findFirstRedraftMatchup: vi.fn(),
 }))
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     redraftSeason: { findFirst: findFirstRedraftSeason },
-    redraftMatchup: { findMany: findManyRedraftMatchup },
+    redraftMatchup: { findMany: findManyRedraftMatchup, findFirst: findFirstRedraftMatchup },
   },
 }))
 
-import { checkAllMatchupsComplete } from '@/lib/zombie/matchupCompletion'
+import { checkAllMatchupsComplete, getZombieWeekReadiness } from '@/lib/zombie/matchupCompletion'
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -66,5 +67,53 @@ describe('checkAllMatchupsComplete', () => {
 
     await expect(checkAllMatchupsComplete('league-1', 1, 2026)).resolves.toBe(false)
     expect(findManyRedraftMatchup).not.toHaveBeenCalled()
+  })
+})
+
+/*
+ * 🛑 THE SCHEDULED RESOLVER SKIPPED A NOT-READY LEAGUE WITH A BARE `return`. A week the NBA finalizer
+ * refused to seal was indistinguishable from a healthy mid-week league. These pin the reasons it now
+ * records instead.
+ */
+describe('getZombieWeekReadiness', () => {
+  it('is ready when every real matchup is final', async () => {
+    findManyRedraftMatchup.mockResolvedValueOnce([
+      { awayRosterId: 'r2', status: 'final' },
+      { awayRosterId: null, status: 'scheduled' },
+    ])
+    await expect(getZombieWeekReadiness('league-1', 3, 2026)).resolves.toEqual({ ready: true })
+  })
+
+  it('counts the matchups still in progress', async () => {
+    findManyRedraftMatchup.mockResolvedValueOnce([
+      { awayRosterId: 'r2', status: 'final' },
+      { awayRosterId: 'r4', status: 'active' },
+      { awayRosterId: 'r6', status: 'scheduled' },
+    ])
+    await expect(getZombieWeekReadiness('league-1', 3, 2026)).resolves.toEqual({
+      ready: false,
+      reason: 'MATCHUPS_NOT_FINAL',
+      pending: 2,
+    })
+  })
+
+  it('names a week with no scheduled matchups and reports where the schedule ended', async () => {
+    findManyRedraftMatchup.mockResolvedValueOnce([])
+    findFirstRedraftMatchup.mockResolvedValueOnce({ week: 19 })
+    await expect(getZombieWeekReadiness('league-1', 20, 2026)).resolves.toEqual({
+      ready: false,
+      reason: 'NO_SCHEDULED_MATCHUPS',
+      lastScheduledWeek: 19,
+    })
+    expect(findFirstRedraftMatchup).toHaveBeenCalledWith({
+      where: { seasonId: 'season-1', awayRosterId: { not: null } },
+      orderBy: { week: 'desc' },
+      select: { week: true },
+    })
+  })
+
+  it('names a missing season', async () => {
+    findFirstRedraftSeason.mockResolvedValueOnce(null)
+    await expect(getZombieWeekReadiness('league-1', 1, 2027)).resolves.toEqual({ ready: false, reason: 'NO_SEASON' })
   })
 })

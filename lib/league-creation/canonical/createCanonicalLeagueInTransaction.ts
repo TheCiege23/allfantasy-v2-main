@@ -424,6 +424,11 @@ export async function createCanonicalLeagueInTransaction(
   const inviteToken = randomUUID()
   mergedSettings.league_privacy_visibility = leagueVisibility
   mergedSettings.inviteCode = inviteToken
+  // TE premium (NFL): extra points per tight-end catch. The bootstrap seeds it into the scoring
+  // store and turns the engine's TE_PREMIUM toggle on; validateCreatePayload already checked it.
+  if (sport === 'NFL' && typeof conceptSetupForPrivacy.tePremiumPoints === 'number') {
+    mergedSettings.te_premium_points = conceptSetupForPrivacy.tePremiumPoints
+  }
 
   const joinCode = await uniqueJoinCode(tx)
   const platformLeagueId = `manual-${randomUUID()}`
@@ -503,7 +508,19 @@ export async function createCanonicalLeagueInTransaction(
       leagueSize: managerCount,
       sport,
       leagueType: formatId,
-      leagueVariant: resolution.modifiers.includes('idp') && supportsIdpLeagueSport(sport) ? 'idp' : null,
+      /*
+       * 🛑 A ZOMBIE LEAGUE WAS CREATED WITH `leagueVariant: null`, AND EVERY ZOMBIE SURFACE KEYS ON THE
+       * VARIANT — the Zombie tab and its landing (`LeagueShell`), the trades tab, Chimmy's zombie context,
+       * the clip overlay. The legacy create route set it; this path never did, so a new zombie league
+       * looked like plain redraft. IDP keeps precedence because its scoring format reads the variant
+       * (an NFL IDP zombie league is a known gap). Survivor sets its own variant below.
+       */
+      leagueVariant:
+        resolution.modifiers.includes('idp') && supportsIdpLeagueSport(sport)
+          ? 'idp'
+          : formatId === 'zombie'
+            ? 'zombie'
+            : null,
       timezone: body.timezone ?? 'America/New_York',
       language: body.language ?? 'en',
       joinCode,
