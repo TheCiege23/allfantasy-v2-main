@@ -9,6 +9,9 @@ import styles from './setup.module.css'
 
 export function SurvivorGuillotineSetup() {
   const [config, setConfig] = useState<SGConfig>(() => defaultSGConfig())
+  const [leagueName, setLeagueName] = useState('')
+  const [draftType, setDraftType] = useState('snake')
+  const [inviteLink, setInviteLink] = useState('')
   const [notice, setNotice] = useState('')
   const [leagueId, setLeagueId] = useState('')
   const [saving, setSaving] = useState(false)
@@ -18,12 +21,22 @@ export function SurvivorGuillotineSetup() {
     if (!id) return
     fetch(`/api/leagues/${encodeURIComponent(id)}/survivor-guillotine`)
       .then(async response => response.ok ? response.json() : null)
-      .then(data => { if (data?.season?.config) setConfig(data.season.config as SGConfig) })
+      .then(data => { if (data?.season?.config) { setConfig(data.season.config as SGConfig); void loadInvite(id) } })
       .catch(() => setNotice('Could not load saved league rules.'))
   }, [])
   const schedule = useMemo(() => buildSGSchedule(config), [config])
   const merge = schedule.periods.find(period => period.mode === 'merged')
   const gauntlet = schedule.periods.find(period => period.mode === 'gauntlet')
+  async function loadInvite(id: string) {
+    try {
+      const response = await fetch(`/api/leagues/join?leagueId=${encodeURIComponent(id)}`)
+      if (!response.ok) return
+      const data = await response.json()
+      if (typeof data.inviteLink === 'string') setInviteLink(data.inviteLink)
+    } catch {
+      // Saving rules succeeds independently of invite-link retrieval.
+    }
+  }
   function update<K extends keyof SGConfig>(key: K, value: SGConfig[K]) {
     setConfig(current => ({ ...current, [key]: value }))
     setNotice('')
@@ -58,7 +71,37 @@ export function SurvivorGuillotineSetup() {
       const data = await response.json()
       if (!response.ok) throw new Error(data.error ?? 'Save failed')
       setNotice(`Saved to live league · revision ${data.result.revision}`)
+      await loadInvite(leagueId)
     } catch (error) { setNotice(error instanceof Error ? error.message : 'Save failed') }
+    finally { setSaving(false) }
+  }
+  async function createLeague() {
+    if (leagueId || schedule.errors.length || !leagueName.trim()) return
+    if (config.teamCount > 32) { setNotice('New league creation currently supports up to 32 managers.'); return }
+    setSaving(true)
+    setNotice('Creating your league…')
+    try {
+      const response = await fetch('/api/leagues', { method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+          concept: 'redraft', sport: config.sport, scoringPreset: config.sport === 'NFL' ? 'fb_half_ppr' : 'nba_points',
+          teamCount: config.teamCount, draftType, leagueName: leagueName.trim(),
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York',
+          conceptSetup: { visibility: 'private', isPublic: false },
+        }) })
+      const data = await response.json()
+      if (!response.ok || data.success === false) throw new Error(data.error ?? 'League creation failed')
+      const id = data.league?.id as string | undefined
+      if (!id) throw new Error('League creation returned no league ID')
+      setLeagueId(id)
+      window.history.replaceState(null, '', `/survivor-guillotine/setup?leagueId=${encodeURIComponent(id)}`)
+      const rules = await fetch(`/api/leagues/${encodeURIComponent(id)}/survivor-guillotine`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'rules', config }),
+      })
+      const saved = await rules.json()
+      if (!rules.ok) throw new Error(`League ${id} was created. Save its Survivor rules before inviting managers: ${saved.error ?? 'save failed'}`)
+      await loadInvite(id)
+      setNotice('Survivor Guillotine league created. Review your rules, then share the invite link.')
+    } catch (error) { setNotice(error instanceof Error ? error.message : 'League creation failed') }
     finally { setSaving(false) }
   }
   return <main className={styles.page}>
@@ -66,7 +109,7 @@ export function SurvivorGuillotineSetup() {
       <div><span className={styles.eyebrow}>ALLFANTASY · COMMISSIONER WORKSHOP</span><h1><Image src="/survivor-guillotine/emblem.svg" alt="" width={52} height={52} className={styles.emblem} />Survivor Guillotine</h1><p>Build your island. Set the rules. Leave three standing.</p></div>
       <span className={styles.badge}>{leagueId ? 'Live league setup' : 'Setup preview'}</span>
     </header>
-    <p className={styles.preview}>{leagueId ? 'Configure the league rules, then save them to this league. Tribes and each live scoring period are managed after rosters are ready.' : 'Configure and export your season rules here. Open with ?leagueId=YOUR_LEAGUE_ID to save to a live league.'}</p>
+    <p className={styles.preview}>{leagueId ? 'Configure the league rules, then save them to this league. Tribes and each live scoring period are managed after rosters are ready.' : 'Choose your rules and create a private NFL or NBA league. The invite link appears after Survivor Guillotine is configured.'}</p>
     <div className={styles.stats}>
       <article><strong>{Number.isFinite(config.teamCount) ? config.teamCount : '—'}</strong><span>Starting teams</span></article>
       <article><strong>{Number.isFinite(config.tribeCount) ? config.tribeCount : '—'}</strong><span>Starting tribes</span></article>
@@ -75,6 +118,10 @@ export function SurvivorGuillotineSetup() {
     </div>
     <div className={styles.columns}>
       <div>
+        {!leagueId && <section className={styles.card}><h2>Create your league</h2><div className={styles.fields}>
+          <label className={styles.field}>League name<input value={leagueName} maxLength={100} onChange={event => setLeagueName(event.currentTarget.value)} placeholder="Survivor All Stars" /></label>
+          <label className={styles.field}>Draft format<select value={draftType} onChange={event => setDraftType(event.currentTarget.value)}><option value="snake">Snake</option><option value="linear">Linear</option><option value="auction">Auction</option><option value="offline">Offline</option><option value="auto">Auto</option></select></label>
+        </div><p className={styles.hint}>Create the league first; share its invitation after the rules are saved. You can schedule the draft and choose tribes in league control.</p></section>}
         <section className={styles.card}><h2>Your season</h2><div className={styles.fields}>
           {selectField('sport', 'Sport', [['NFL', 'Football'], ['NBA', 'Basketball']])}
           {numberField('teamCount', 'Starting managers', 4, 64)}
@@ -123,8 +170,10 @@ export function SurvivorGuillotineSetup() {
         </tr>)}</tbody></table></div>
         <button className={styles.secondary} type="button" onClick={() => update('periodOverrides', {})}>Reset period overrides</button>
         <button className={styles.primary} type="button" disabled={schedule.errors.length > 0} onClick={exportRules}>Export season rules</button>
+        {!leagueId && <button className={styles.primary} type="button" disabled={schedule.errors.length > 0 || saving || !leagueName.trim()} onClick={createLeague}>{saving ? 'Creating…' : 'Create Survivor Guillotine league'}</button>}
         {leagueId && <button className={styles.primary} type="button" disabled={schedule.errors.length > 0 || saving} onClick={saveRules}>{saving ? 'Saving…' : 'Save to league'}</button>}
         {leagueId && <a className={styles.primary} href={`/survivor-guillotine/${encodeURIComponent(leagueId)}`}>Open league island</a>}
+        {inviteLink && <div className={styles.inset}><h3>Invite managers</h3><p>Share this link when your league is ready.</p><a href={inviteLink}>{inviteLink}</a><button className={styles.secondary} type="button" onClick={() => { void navigator.clipboard?.writeText(inviteLink).then(() => setNotice('Invite link copied.')) }}>Copy invite link</button></div>}
         <p role="status" className={styles.hint}>{notice}</p>
         <div className={styles.inset}><h3>Manager home</h3><ol><li>Your lineup</li><li>This week’s rules & actions</li><li>Tribe race & matchups</li><li>Elimination danger</li><li>Your private powers</li><li>League activity</li></ol><p>Chopped managers keep chat, spectating, recaps, and ceremony access.</p></div>
       </aside>

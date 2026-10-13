@@ -279,7 +279,8 @@ export async function POST(req: NextRequest) {
       return { success: false as const, status: 409, error: 'League is full' }
     }
 
-    if (league.leagueVariant === 'survivor' && draftSession?.status && draftSession.status !== 'pre_draft') {
+    if ((league.leagueVariant === 'survivor' || league.leagueVariant === 'survivor_guillotine') &&
+        draftSession?.status && draftSession.status !== 'pre_draft') {
       return {
         success: false as const,
         status: 409,
