@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Guilly champion</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./specialty/sp.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Cinzel:wght@600;700&amp;family=Caveat:wght@600;700&amp;family=Bebas+Neue&amp;family=Pirata+One&amp;family=Creepster&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080d}
+.gy-d{font-family:'Bebas Neue',sans-serif;letter-spacing:.03em;line-height:.95}
+.gy-cut{position:relative;height:0;border-top:2px dashed #ff3d2e;margin:9px 0}
+.gy-cut>span{position:absolute;left:50%;top:-12px;transform:translateX(-50%);white-space:nowrap;padding:2px 10px;border-radius:5px;background:#ff3d2e;color:#fff;font:800 10px 'Archivo';letter-spacing:.1em}
+.gy-head{width:34px;height:34px;flex:none}
+.gy-pos{display:inline-grid;place-items:center;height:20px;min-width:26px;padding:0 4px;border-radius:5px;font:900 9.5px 'Archivo';letter-spacing:.02em}
+.gy-gl{display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:22px;padding:0 6px;border-radius:6px;background:#151926;font:700 11px 'JetBrains Mono';color:#e8eaf2}
+.gy-meter{position:relative;height:14px;border-radius:99px;background:linear-gradient(90deg,#7a1410,#ff3d2e 30%,#ffc531 55%,#3abf7a 80%);overflow:visible}
+.gy-meter>i{position:absolute;top:-6px;width:4px;height:26px;border-radius:2px;background:#fff;box-shadow:0 0 0 2px #07080d}
+@keyframes gyBlade{0%{transform:translateY(-120%)}70%{transform:translateY(6%)}85%{transform:translateY(-3%)}100%{transform:translateY(0)}}
+@keyframes gyRoll{0%{transform:translate(-40px,-30px) rotate(-90deg);opacity:0}40%{opacity:1}100%{transform:translate(0,0) rotate(200deg);opacity:1}}
+@keyframes gyShake{0%,100%{transform:translate(0,0)}20%{transform:translate(-6px,3px)}40%{transform:translate(6px,-3px)}60%{transform:translate(-4px,2px)}80%{transform:translate(3px,-1px)}}
+.gy-blade{animation:gyBlade .55s cubic-bezier(.5,0,.75,0) both}
+.gy-roll{animation:gyRoll .9s .45s cubic-bezier(.2,.8,.2,1) both}
+.gy-shake{animation:gyShake .4s .5s both}
+.gy-tomb{position:relative;width:100%;aspect-ratio:200/240}
+.gy-tomb>img{position:absolute;inset:0;width:100%}
+.gy-tomb>div{position:absolute;left:18%;right:18%;top:49%;display:flex;flex-direction:column;align-items:center;gap:1px;text-align:center}
+.gy-tomb>div>b{font:800 12.5px 'Archivo';color:#1a1d24;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gy-tomb>div>span{font:700 10px 'JetBrains Mono';color:#2a2f3a}
+.gy-mode{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px 0 4px;border-radius:99px;background:#151926;border:1px solid rgba(255,255,255,.1);font:700 12px 'Archivo'}
+.gy-mode>img{width:22px}
+.tt-ck{display:flex;align-items:center;gap:14px;padding:14px 16px;border-radius:10px;background:#10131c;border:1px solid rgba(255,255,255,.06)}
+.tt-ck>i{flex:none;width:28px;height:28px;border-radius:99px;display:grid;place-items:center;font:800 13px 'Archivo';font-style:normal}
+.tt-ck>div{flex:1;display:flex;flex-direction:column;gap:2px}
+.tt-ck>div>b{font:600 14px 'Archivo'}
+.tt-ck>div>span{font-size:12px;color:#7d84a3}
+.tt-job{display:flex;align-items:center;gap:10px;font-size:12.5px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+.tt-job:last-child{border-bottom:0}
+.nt-ev{display:flex;align-items:center;gap:12px;width:100%;padding:9px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.07);background:#0b0d14;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.nt-ev>img{width:30px;flex:none}
+.nt-ev>div{flex:1;display:flex;flex-direction:column;gap:1px;min-width:0}
+.nt-ev>div>b{font:700 13px 'Archivo'}
+.nt-ev>div>span{font-size:11px;color:#7d84a3}
+.nt-ev[aria-pressed="true"]{border-color:#ffc531;background:rgba(255,197,49,.08)}
+.nt-phone{position:relative;width:340px;height:700px;flex:none;border-radius:46px;border:10px solid #1b1e29;overflow:hidden;background:radial-gradient(ellipse at 30% 20%,var(--wa),transparent 60%),radial-gradient(ellipse at 80% 90%,var(--wb),transparent 60%),#0a0b12;box-shadow:0 30px 60px rgba(0,0,0,.5)}
+.nt-push{display:flex;gap:10px;padding:11px 12px;border-radius:18px;background:rgba(40,44,60,.72);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);text-align:left}
+.nt-push>img{width:38px;height:38px;flex:none;border-radius:9px;background:#07080d;padding:2px}
+.nt-push>div{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.nt-push>div>small{display:flex;justify-content:space-between;font:600 10.5px 'Archivo';color:#a3a9c2;letter-spacing:.03em}
+.nt-push>div>b{font:700 13px 'Archivo';color:#fff}
+.nt-push>div>span{font-size:12px;color:#d6d9e6;line-height:1.35}
+.nt-push.dim{opacity:.55;transform:scale(.97)}
+.nt-on{display:inline-block;min-width:34px;padding:2px 6px;border-radius:5px;font:700 10px 'Archivo';letter-spacing:.06em;text-transform:uppercase}
+.lu-row{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:10px;background:#10131c;border:1px solid rgba(255,255,255,.05)}
+.lu-row>.s{width:44px;flex:none}
+.lu-row>.n{flex:1;min-width:0;display:flex;flex-direction:column}
+.lu-row>.n>b{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lu-row>.n>span{font-size:11px;color:#7d84a3}
+.lu-flag{display:inline-flex;align-items:center;height:20px;padding:0 7px;border-radius:5px;font:800 9.5px 'Archivo';letter-spacing:.06em;text-transform:uppercase}
+.gy-step{display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;padding:16px 12px;border-radius:14px;background:#10131c;border:1px solid rgba(255,255,255,.06)}
+.gy-step>img{height:84px}
+.gy-step>b{font:800 15px 'Archivo'}
+.gy-step>span{font-size:12.5px;color:#a3a9c2}
+.gy-step>i{font:900 11px 'Archivo';font-style:normal;color:#ffc531;letter-spacing:.12em}
+.gy-tl{display:flex;flex-direction:column;align-items:center;gap:3px;width:62px;flex:none}
+.gy-tl>img{width:40px}
+.gy-tl>b{font:800 9.5px 'Archivo';color:#ffc531;letter-spacing:.06em}
+.gy-tl>span{font:600 9.5px 'Archivo';color:#a3a9c2;max-width:62px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+</style>
+</helmet>
+<div class="sp" style="--acc: #ff3d2e; --acc2: #ffc531; --accInk: #fff; --disp: Bebas Neue; min-height: 100vh; display: flex; flex-direction: column">
+<div style="position: relative; overflow: hidden; padding: 30px 28px 24px; display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; background: radial-gradient(ellipse at 50% 30%, rgba(255,197,49,.3), transparent 60%), #07080d">
+  <img src="specialty/guilly/wordmark.svg" alt="Guilly" style="height: 64px">
+  <span class="sp-lbl" style="color: #ffc531">2025–26 champion · last one standing</span>
+  <img src="specialty/guilly/head-crown.svg" alt="" class="sp-pop" style="width: 190px">
+  <span class="gy-d sp-up" style="font-size: 72px; color: #fff; animation-delay: .3s">TheCiege26</span>
+  <span class="sp-t2 sp-up" style="font-size: 15px; animation-delay: .45s">Survived all 17 chops · closest call 4.1 in week 6 · $0 FAAB left at the end</span>
+  <div style="display: flex; gap: 10px; margin-top: 6px"><a class="sp-btn sp-btn-p" href="GuillyShare.dc.html" style="min-height: 46px">Share the crown</a><a class="sp-btn" href="GuillyGraveyard.dc.html" style="min-height: 46px">Visit the graveyard</a></div>
+</div>
+<div style="padding: 20px 28px 32px; display: flex; flex-direction: column; gap: 18px">
+  <div class="sp-card" style="padding: 16px 18px; display: flex; flex-direction: column; gap: 12px">
+    <span class="sp-lbl">The chop timeline · 17 heads</span>
+    <div style="display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px"><sc-for list="{{tl}}" as="t" hint-placeholder-count="18"><div class="gy-tl"><img src="{{t.h}}" alt=""><b>{{t.w}}</b><span>{{t.n}}</span></div></sc-for></div>
+  </div>
+  <div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px"><sc-for list="{{awards}}" as="a" hint-placeholder-count="5"><div class="sp-card2" style="padding: 16px; display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center"><img src="{{a.i}}" alt="" style="width: 54px"><span class="sp-lbl" style="color: #ffc531">{{a.t}}</span><b style="font-size: 15px">{{a.who}}</b><span class="sp-t3" style="font-size: 12px">{{a.s}}</span></div></sc-for></div>
+  <div class="sp-card" style="padding: 16px 18px; display: flex; flex-direction: column; gap: 6px"><span class="sp-lbl">Final order · last chopped finishes highest</span>
+    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px 18px"><sc-for list="{{final}}" as="f" hint-placeholder-count="18"><div style="display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,.05)"><b class="sp-num" style="width: 26px; color: {{f.c}}">{{f.r}}</b><span style="flex: 1; font-weight: 600">{{f.n}}</span><span class="sp-t3" style="font-size: 11.5px">{{f.w}}</span></div></sc-for></div>
+  </div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1040}}'>
+class Component extends DCLogic { renderVals() {
+  const PL = [["Nikola Jokic", "C"], ["Shai Gilgeous-Alexander", "PG/SG"], ["Victor Wembanyama", "C/PF"], ["Luka Doncic", "PG/SG"], ["Giannis Antetokounmpo", "PF/C"], ["Anthony Davis", "PF/C"], ["Anthony Edwards", "SG/SF"], ["Domantas Sabonis", "C/PF"], ["Karl-Anthony Towns", "C/PF"], ["Cade Cunningham", "PG"], ["Jalen Johnson", "PF/SF"], ["Trae Young", "PG"], ["Tyrese Maxey", "PG"], ["Jalen Williams", "SG/SF"], ["Chet Holmgren", "C/PF"], ["Alperen Sengun", "C"], ["LaMelo Ball", "PG"], ["Donovan Mitchell", "SG"], ["Devin Booker", "SG/PG"], ["Jalen Brunson", "PG"], ["Stephen Curry", "PG"], ["Kevin Durant", "SF/PF"], ["LeBron James", "SF/PF"], ["Bam Adebayo", "C"], ["Joel Embiid", "C"], ["Paolo Banchero", "PF"], ["Franz Wagner", "SF/PF"], ["Scottie Barnes", "SF/PF"], ["Evan Mobley", "PF/C"], ["Pascal Siakam", "PF"], ["Jaren Jackson Jr.", "PF/C"], ["Ja Morant", "PG"], ["Josh Giddey", "PG/SF"], ["De\u2019Aaron Fox", "PG"], ["Jamal Murray", "PG"], ["Zion Williamson", "PF"], ["James Harden", "PG"], ["Kawhi Leonard", "SF"], ["Ivica Zubac", "C"], ["Lauri Markkanen", "PF"], ["Dyson Daniels", "SG/PG"], ["Amen Thompson", "SG/SF"], ["Derrick White", "PG/SG"], ["Desmond Bane", "SG"], ["Austin Reaves", "SG"], ["Darius Garland", "PG"], ["Jarrett Allen", "C"], ["Rudy Gobert", "C"], ["Myles Turner", "C"], ["Nikola Vucevic", "C"], ["Deni Avdija", "SF/PF"], ["Cooper Flagg", "SF/PF"], ["Mikal Bridges", "SF"], ["OG Anunoby", "SF/PF"], ["Josh Hart", "SG/SF"], ["Brandon Miller", "SF"], ["Trey Murphy III", "SF"], ["Jimmy Butler", "SF"], ["Zach LaVine", "SG"], ["DeMar DeRozan", "SF"], ["Coby White", "PG/SG"], ["Jalen Duren", "C"], ["Walker Kessler", "C"], ["Onyeka Okongwu", "C"], ["Nic Claxton", "C"], ["Jakob Poeltl", "C"], ["Mark Williams", "C"], ["Isaiah Hartenstein", "C"], ["Stephon Castle", "PG/SG"], ["Alex Sarr", "C/PF"], ["Tyler Herro", "SG"], ["Norman Powell", "SG/SF"], ["Michael Porter Jr.", "SF"], ["Aaron Gordon", "PF"], ["Julius Randle", "PF"], ["Jalen Green", "SG"], ["Anfernee Simons", "SG"], ["Christian Braun", "SG"], ["Keegan Murray", "PF"], ["Herbert Jones", "SF"], ["Andrew Wiggins", "SF"], ["Miles Bridges", "SF/PF"], ["Kyle Kuzma", "PF"], ["Jerami Grant", "PF"], ["RJ Barrett", "SF"], ["Immanuel Quickley", "PG"], ["Jordan Poole", "SG/PG"], ["CJ McCollum", "SG"], ["Malik Monk", "SG"], ["Mike Conley", "PG"], ["Russell Westbrook", "PG"], ["Collin Sexton", "SG/PG"], ["Jordan Clarkson", "SG"], ["Bennedict Mathurin", "SG/SF"], ["Andrew Nembhard", "PG/SG"], ["Ausar Thompson", "SF"], ["Tobias Harris", "PF"], ["Paul George", "SF/PF"], ["Draymond Green", "PF/C"], ["Jonathan Kuminga", "PF"], ["Brandin Podziemski", "SG"], ["Klay Thompson", "SG"], ["P.J. Washington", "PF"], ["Dereck Lively II", "C"], ["Naz Reid", "C/PF"], ["Rui Hachimura", "PF"], ["Jaden McDaniels", "SF/PF"], ["Donte DiVincenzo", "SG"], ["Bilal Coulibaly", "SF"], ["Tari Eason", "PF"], ["Jabari Smith Jr.", "PF"], ["Kel\u2019el Ware", "C"], ["Shaedon Sharpe", "SG"], ["Scoot Henderson", "PG"], ["Toumani Camara", "SF/PF"], ["Cam Thomas", "SG"], ["Cameron Johnson", "SF"], ["Nickeil Alexander-Walker", "SG"], ["Keldon Johnson", "SF"], ["Devin Vassell", "SG"], ["Jeremy Sochan", "PF"], ["Matas Buzelis", "SF/PF"], ["Ayo Dosunmu", "SG"], ["Payton Pritchard", "PG"], ["Jrue Holiday", "PG/SG"], ["Jaylen Brown", "SG/SF"], ["Al Horford", "C"], ["Kevin Huerter", "SG"], ["Max Strus", "SF"], ["De\u2019Andre Hunter", "SF"], ["Caris LeVert", "SG"], ["Ty Jerome", "PG"], ["Luguentz Dort", "SG"], ["Cason Wallace", "PG/SG"], ["Aaron Nesmith", "SF"], ["Obi Toppin", "PF"], ["Jaime Jaquez Jr.", "SF"], ["Grayson Allen", "SG"], ["Royce O\u2019Neale", "SF"], ["Naji Marshall", "SF"], ["Quentin Grimes", "SG"], ["Jalen Suggs", "PG/SG"], ["Wendell Carter Jr.", "C/PF"], ["Goga Bitadze", "C"], ["Bobby Portis", "PF/C"], ["Gary Trent Jr.", "SG"], ["Nikola Jovic", "PF"], ["Duncan Robinson", "SF"], ["Harrison Barnes", "SF"], ["Keon Ellis", "SG"], ["Isaiah Stewart", "C"], ["Jaden Ivey", "SG/PG"], ["Dennis Schroder", "PG"], ["Terance Mann", "SG"], ["Kris Dunn", "PG/SG"], ["Derrick Jones Jr.", "SF"], ["Brandon Ingram", "SF/PF"], ["Mitchell Robinson", "C"], ["Yves Missi", "C"], ["Tre Jones", "PG"], ["Day\u2019Ron Sharpe", "C"], ["Nick Richards", "C"], ["Moussa Diabate", "C"], ["Guerschon Yabusele", "PF"], ["Daniel Gafford", "C"], ["Brook Lopez", "C"], ["Clint Capela", "C"], ["Jusuf Nurkic", "C"], ["Deandre Ayton", "C"], ["Kristaps Porzingis", "C"], ["Jonas Valanciunas", "C"], ["Zach Edey", "C"], ["Donovan Clingan", "C"], ["Kelly Oubre Jr.", "SF"], ["Chris Paul", "PG"], ["Bradley Beal", "SG"], ["Kevin Porter Jr.", "PG"], ["Spencer Dinwiddie", "PG"]];
+const TM = ["You \u00b7 TheCiege26", "BucketsOnly", "LoadManagement", "BoxOutBandits", "DunkCity", "SplashZone", "TripleDoubleTrouble", "AndOneAddicts", "PostUpPros", "FastBreakFam", "GlassCleaners", "ZoneDefense", "AlleyOops", "PaintBeasts", "BankShotBoys", "FlagrantFoul", "ShotClock", "HeatCheck"];
+const POS = {"QB": ["#e0553f", "#fff"], "RB": ["#3abf7a", "#06200f"], "WR": ["#3d8fe0", "#fff"], "TE": ["#e89a2c", "#1a1004"], "FLEX": ["#8a8fa8", "#0b0d14"], "SFLEX": ["#c04fd0", "#fff"], "K": ["#b48cf0", "#1a0d33"], "DST": ["#8a6a4a", "#fff"], "DL": ["#2fb5a5", "#04201d"], "LB": ["#1f8f86", "#fff"], "DB": ["#5fd0e0", "#05242a"], "IDP": ["#4a7f7a", "#fff"], "PG": ["#3d8fe0", "#fff"], "SG": ["#4fb3d9", "#05242a"], "SF": ["#3abf7a", "#06200f"], "PF": ["#e89a2c", "#1a1004"], "C": ["#e0553f", "#fff"], "G": ["#7aa6ec", "#0b1830"], "F": ["#7fd09c", "#06200f"], "UTIL": ["#8a8fa8", "#0b0d14"], "BN": ["#1d2130", "#a3a9c2"], "IR": ["#2a1418", "#ff9a8a"], "IL": ["#2a1418", "#ff9a8a"]};
+const G = "specialty/guilly/";
+const rng = (seed) => { let s = seed; return () => { s = (s * 9301 + 49297) % 233280; return s / 233280; }; };
+const AVC = ['#3a1418','#22314f','#1d3a3a','#2c2a4a','#3a3418','#12352a','#3a1f30','#1f2a4d','#2a3a1a','#3a2a14'];
+const av = (n) => { const s = n.replace('You · ', ''); let h = 0; for (const ch of s) h = (h * 31 + ch.charCodeAt(0)) % 997; return { ini: s.replace(/[^A-Z0-9]/g, '').slice(0, 2) || s.slice(0, 2).toUpperCase(), c: AVC[h % AVC.length] }; };
+const short = (n) => { const p = n.split(' '); return p.length > 1 ? p[0][0] + '. ' + p.slice(1).join(' ') : n; };
+const pos1 = (p) => p.split('/')[0];
+const chip = (p) => ({ p, bg: POS[pos1(p)][0], c: POS[pos1(p)][1] });
+const fpg = (i) => Math.round((58 - i * 0.215 - (i > 40 ? (i - 40) * 0.04 : 0)) * 10) / 10;
+const price = (i) => Math.max(1, Math.round(74 * Math.exp(-i / 26)));
+const HEAD = { calm: G + 'head-calm.svg', nervous: G + 'head-nervous.svg', ko: G + 'head-ko.svg', crown: G + 'head-crown.svg' };
+// season: 18 teams, chops weeks 1..7 done, week 8 live
+const CHOPPED = [[1,'FlagrantFoul',498.2,'Started three centers who all sat the Sunday back-to-back.'],[2,'ShotClock',611.4,'Two games played all week. The schedule did him in.'],
+  [3,'HeatCheck',640.9,'Load-managed. Twice.'],[4,'BankShotBoys',702.3,'Lost by 0.6 to a late free throw.'],[5,'PaintBeasts',688.0,'Bid $0 on waivers for five straight weeks.'],
+  [6,'AlleyOops',731.5,'Benched a 61-point night. Bestball would have saved him.'],[7,'ZoneDefense',744.8,'Three starters on the injury report by Wednesday.']];
+const ALIVE = TM.filter(t => !CHOPPED.find(c => c[1] === t));
+  const order = ['FlagrantFoul','ShotClock','HeatCheck','BankShotBoys','PaintBeasts','AlleyOops','ZoneDefense','BoxOutBandits','GlassCleaners','AndOneAddicts','PostUpPros','FastBreakFam','TripleDoubleTrouble','LoadManagement','SplashZone','BucketsOnly','DunkCity'];
+  return { tl: order.map((n, k) => ({ h: HEAD.ko, w: 'WK ' + (k + 1), n })).concat([{ h: HEAD.crown, w: 'CHAMP', n: 'TheCiege26' }]),
+    awards: [['icon-danger.svg', 'Closest shave', 'GlassCleaners', 'Survived week 4 by 0.6'], ['icon-faab.svg', 'Best frenzy buy', 'FastBreakFam', 'Jarrett Allen for $112 in week 7'],
+      ['icon-gavel.svg', 'Biggest bid', 'TheCiege26', 'Scottie Barnes for $186 FAAB'], ['icon-streak.svg', 'Iron neck', 'DunkCity', 'Sweated 6 weeks, survived to 2nd'],
+      ['icon-tomb.svg', 'Saddest exit', 'FlagrantFoul', '498.2 in week 1']].map(([i, t, who, s]) => ({ i: G + i, t, who, s })),
+    final: ['TheCiege26'].concat(order.slice().reverse()).map((n, k) => ({ r: k + 1, n, w: k === 0 ? 'Champion' : 'Chopped wk ' + (17 - k + 1), c: k === 0 ? '#ffc531' : k < 3 ? '#e8eaf2' : '#7d84a3' })) }; } }
+</script>
+</body>
+</html>

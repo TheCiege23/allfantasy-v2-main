@@ -54,6 +54,34 @@ The art uses cartoon basketball "heads" (calm, nervous, knocked out, crowned) to
 | `GuillyShare` | 1080×1920 story cards: Survived week N, Chopped (off with my head), Last one standing | — |
 | `MobileGuilly` | Phone hub: your neck, the meter, the chopping block | — |
 | `MobileGuillyChop` | Phone chop result | Chopped, survived |
+| `GuillyNotifications` | Every Guilly notification moment. Pick a moment on the left to see the lock-screen push stack, the in-app banner and the email. Includes the table of default channels | 12 moments (screens: chopping block, off with your head, on the clock) |
+| `GuillyLineup` | Managed daily lineup: a day strip with your game counts, a warning when starters have no game, and "Fix lineup" (auto-swaps playing bench players into eligible slots). Shows questionable and rest-risk flags, the IL slot, and games left compared with the team below you | Warning, after fix |
+| `MobileGuillyLineup` | Phone lineup with the same warning and fix | — |
+| `GuillyControl` | Commissioner chop control: auto-chop on or off, a five-step checklist (scores final, stat corrections closed, check the bottom two, preview the basket, drop the blade), the bottom-two table with the tiebreak, after-chop jobs and the audit log | Before, blade dropped |
+| `GuillyJoin` | Invite and join page: banner hero, spots filled, "How Guilly works" in 5 steps, league settings and members | — |
+| `GuillyLobby` | Pre-draft lobby: countdown, ready check, nomination or draft order (asleep managers get a KO head), targets with max prices (auction) or queue (snake) | Auction, snake |
+| `GuillyTrophy` | Season end: crowned champion, the 17-chop timeline, awards (closest shave, best frenzy buy, biggest bid, iron neck, saddest exit) and the final order | — |
+
+## Notifications
+
+| Moment | When | Push | In-app | Email | League chat |
+|---|---|---|---|---|---|
+| On the chopping block | Mid-week, when you drop below the blade line | On | On | Off | Off |
+| Danger alert | Sunday, within 25 points of the line | On | On | Off | Off |
+| Chop night is live | Monday, before the reveal | On | On | Off | On |
+| Off with your head | You were chopped | On | On | On | On |
+| You survived | Your head stays on | On | On | Off | Off |
+| Waiver frenzy is open | Tuesday, after the chop | On | On | On | Off |
+| Bid deadline | 1 hour before bids lock | On | On | Off | Off |
+| Bid results | Wednesday, after processing | On | On | On | On |
+| You're on the clock | Snake drafts | On | On | Off | Off |
+| Your nomination | Auction drafts | On | On | Off | Off |
+| You've been outbid | Auction drafts | On | On | Off | Off |
+| Last team standing | After the final chop | On | On | On | On |
+
+- Managers can turn off any channel.
+- A notification never includes secrets, tokens or full provider URLs.
+- Pushes link straight to the matching screen: the chopping block and danger alert open `GuillyLineup`, chop moments open `GuillyChop`, frenzy moments open `GuillyWaivers`, draft moments open the draft room, and the season end opens `GuillyTrophy`.
 
 ## Art (`svg/` plus 2× `png/`)
 
@@ -77,6 +105,8 @@ All text in the art is drawn as vector paths, so it looks the same without the f
 - **Chop reveal:**
   - A missing or provisional score blocks the chop.
   - "Drop the blade" is a single guarded commissioner action. It can also run automatically at the scheduled time, and it writes to the audit log.
+- **Fix lineup:** the backend picks the swaps. It fills idle starter slots with bench players who play today and are eligible for that slot (UTIL takes anyone, G takes PG/SG, F takes SF/PF). If no one is left, the screen says so and points to free agents.
+- **Auto-chop:** when it's on, the checklist runs at 11:00 AM ET and stops if any step fails (a missing score, an open stat correction or an unresolved tie). The commissioner gets an alert in that case.
 - **Animations:** respect reduced motion. The blade drop, head roll and screen shake are CSS keyframes (`gy-blade`, `gy-roll`, `gy-shake`).
 - **Data:** never call provider APIs to learn response shapes; use `contracts/`. No secrets in logs, notifications or share links.
 - **Sample data:** player names in the screens are real NBA players used as examples. Values, prices and projections are illustrative.
