@@ -2157,7 +2157,7 @@ function LeagueTabRouter({
 
   switch (activeTab) {
     case 'native_home':
-      return <NativeLeagueHome settingsOpen={settingsOpen} league={selectedLeague} teams={teamSlots} userTeamId={userTeam?.id ?? null} isCommissioner={isCommissioner} draftDateIso={draftDateIso} snapshot={seasonSnapshot} onOpenSettings={onOpenLeagueSettingsModal} onSelectTab={onSelectTab} />
+      return <NativeLeagueHome settingsOpen={settingsOpen} league={selectedLeague} teams={teamSlots} userTeamId={userTeam?.id ?? null} isCommissioner={isCommissioner} draftDateIso={draftDateIso} snapshot={seasonSnapshot} onOpenSettings={onOpenLeagueSettingsModal} onSelectTab={onSelectTab} inviteCode={inviteToken ?? ''} />
     case 'home':
       return (
         <NflRedraftLeagueHomeDashboard
