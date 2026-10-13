@@ -2919,6 +2919,54 @@
   margin: 0;
   color: var(--muted);
 }
+/* The header is the open/close control; the counts below it always show. */
+.af-live-glance-h {
+  margin: 0;
+  font: inherit;
+}
+.af-core .af-live .af-live-glance-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 40px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 6px;
+}
+.af-live-glance-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.af-live-glance-chev {
+  width: 7px;
+  height: 7px;
+  margin: 0 3px 3px 2px;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  transform: rotate(45deg);
+  transition: transform 0.15s ease;
+  flex: none;
+}
+.af-live-glance-toggle[aria-expanded='true'] .af-live-glance-chev {
+  margin: 3px 3px 0 2px;
+  transform: rotate(225deg);
+}
+/* An explicit choice wins at any width; with none, a phone starts closed (no flash of the open list). */
+.af-live-glance[data-open='false'] .af-live-glance-body {
+  display: none;
+}
+@media (max-width: 1080px) {
+  .af-live-glance[data-open='auto'] .af-live-glance-body {
+    display: none;
+  }
+}
 .af-live-glance-counts {
   display: flex;
   flex-wrap: wrap;

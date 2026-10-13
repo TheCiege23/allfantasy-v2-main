@@ -288,3 +288,35 @@ describe('phone order: one summary above the games, the rest of the panel after 
     expect(inline.textContent).toBe(side.textContent)
   })
 })
+
+describe('your matchups strip is collapsible (2026-10-12)', () => {
+  const leagues = [
+    { id: 'L1', name: 'Alpha League', sport: 'NFL' },
+    { id: 'L2', name: 'Bravo League', sport: 'NFL' },
+  ]
+  const byLeague = { L1: rail({ leagueId: 'L1', yourScore: 80, opponentScore: 90 }), L2: rail({ leagueId: 'L2', yourScore: 130, opponentScore: 60 }) }
+  const strip = (c: HTMLElement) => c.querySelector('.af-live-glance') as HTMLElement
+
+  it('with no choice yet, CSS decides (data-open=auto): closed on a phone, open on desktop — counts always shown', () => {
+    window.localStorage.removeItem('af-live-glance-open')
+    const { container } = render(<LiveScores data={page([game('1')])} leagueWeek={{ byLeague, leagues }} />)
+    expect(strip(container).getAttribute('data-open')).toBe('auto')
+    expect(strip(container).querySelector('.af-live-glance-counts')!.textContent).toContain('1 behind')
+    expect(screen.getByRole('heading', { name: /your matchups/ })).toBeInTheDocument()
+  })
+
+  it('the header toggles it, and the choice is remembered', () => {
+    window.localStorage.removeItem('af-live-glance-open')
+    const { container, unmount } = render(<LiveScores data={page([game('1')])} leagueWeek={{ byLeague, leagues }} />)
+    const toggle = screen.getByRole('button', { name: /your matchups/ })
+    expect(toggle.getAttribute('aria-expanded')).toBe('true') // jsdom has no matchMedia: desktop default
+    fireEvent.click(toggle)
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    expect(strip(container).getAttribute('data-open')).toBe('false')
+    expect(window.localStorage.getItem('af-live-glance-open')).toBe('0')
+    unmount()
+    const again = render(<LiveScores data={page([game('1')])} leagueWeek={{ byLeague, leagues }} />)
+    expect(strip(again.container).getAttribute('data-open')).toBe('false')
+    window.localStorage.removeItem('af-live-glance-open')
+  })
+})
