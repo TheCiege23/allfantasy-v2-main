@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Guilly draft board</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./specialty/sp.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Cinzel:wght@600;700&amp;family=Caveat:wght@600;700&amp;family=Bebas+Neue&amp;family=Pirata+One&amp;family=Creepster&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080d}
+.gy-d{font-family:'Bebas Neue',sans-serif;letter-spacing:.03em;line-height:.95}
+.gy-cut{position:relative;height:0;border-top:2px dashed #ff3d2e;margin:9px 0}
+.gy-cut>span{position:absolute;left:50%;top:-12px;transform:translateX(-50%);white-space:nowrap;padding:2px 10px;border-radius:5px;background:#ff3d2e;color:#fff;font:800 10px 'Archivo';letter-spacing:.1em}
+.gy-head{width:34px;height:34px;flex:none}
+.gy-pos{display:inline-grid;place-items:center;height:20px;min-width:26px;padding:0 4px;border-radius:5px;font:900 9.5px 'Archivo';letter-spacing:.02em}
+.gy-gl{display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:22px;padding:0 6px;border-radius:6px;background:#151926;font:700 11px 'JetBrains Mono';color:#e8eaf2}
+.gy-meter{position:relative;height:14px;border-radius:99px;background:linear-gradient(90deg,#7a1410,#ff3d2e 30%,#ffc531 55%,#3abf7a 80%);overflow:visible}
+.gy-meter>i{position:absolute;top:-6px;width:4px;height:26px;border-radius:2px;background:#fff;box-shadow:0 0 0 2px #07080d}
+@keyframes gyBlade{0%{transform:translateY(-120%)}70%{transform:translateY(6%)}85%{transform:translateY(-3%)}100%{transform:translateY(0)}}
+@keyframes gyRoll{0%{transform:translate(-40px,-30px) rotate(-90deg);opacity:0}40%{opacity:1}100%{transform:translate(0,0) rotate(200deg);opacity:1}}
+@keyframes gyShake{0%,100%{transform:translate(0,0)}20%{transform:translate(-6px,3px)}40%{transform:translate(6px,-3px)}60%{transform:translate(-4px,2px)}80%{transform:translate(3px,-1px)}}
+.gy-blade{animation:gyBlade .55s cubic-bezier(.5,0,.75,0) both}
+.gy-roll{animation:gyRoll .9s .45s cubic-bezier(.2,.8,.2,1) both}
+.gy-shake{animation:gyShake .4s .5s both}
+.gy-tomb{position:relative;width:100%;aspect-ratio:200/240}
+.gy-tomb>img{position:absolute;inset:0;width:100%}
+.gy-tomb>div{position:absolute;left:18%;right:18%;top:49%;display:flex;flex-direction:column;align-items:center;gap:1px;text-align:center}
+.gy-tomb>div>b{font:800 12.5px 'Archivo';color:#1a1d24;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gy-tomb>div>span{font:700 10px 'JetBrains Mono';color:#2a2f3a}
+.gy-mode{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px 0 4px;border-radius:99px;background:#151926;border:1px solid rgba(255,255,255,.1);font:700 12px 'Archivo'}
+.gy-mode>img{width:22px}
+</style>
+</helmet>
+<div class="sp" style="--acc: #ff3d2e; --acc2: #ffc531; --accInk: #fff; --disp: Bebas Neue; min-height: 100vh; display: flex; flex-direction: column">
+<header style="display: flex; align-items: center; gap: 16px; padding: 14px 24px; border-bottom: 1px solid rgba(255,255,255,.06)">
+  <img src="specialty/guilly/wordmark.svg" alt="Guilly" style="height: 52px">
+  <div style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font: 800 20px 'Archivo'">Draft board</span><span class="sp-t3" style="font-size: 12px">{{sub}}</span></div>
+  <div class="sp-seg"><sc-for list="{{modes}}" as="m" hint-placeholder-count="2"><button aria-pressed="{{m.on}}" onClick="{{m.pick}}">{{m.label}}</button></sc-for></div>
+</header>
+<div style="padding: 14px 20px 24px; display: flex; flex-direction: column; gap: 10px">
+  <div style="display: grid; grid-template-columns: 34px repeat(18, minmax(0, 1fr)); gap: 3px">
+    <span></span>
+    <sc-for list="{{heads}}" as="h" hint-placeholder-count="18"><div style="display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 2px; border-radius: 8px; background: {{h.bg}}; border: 1px solid {{h.line}}; min-width: 0"><img src="{{h.head}}" alt="" style="width: 28px"><span style="font: 700 10px 'Archivo'; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{{h.n}}</span><span class="sp-num" style="font-size: 9.5px; color: {{h.subC}}">{{h.sub}}</span></div></sc-for>
+    <sc-for list="{{cells}}" as="c" hint-placeholder-count="80"><div style="min-width: 0; height: 46px; padding: 4px 5px; border-radius: 6px; background: {{c.bg}}; border: 1px solid {{c.line}}; display: flex; flex-direction: column; justify-content: space-between; overflow: hidden"><span style="font: 700 10px 'Archivo'; color: {{c.tc}}; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{{c.n}}</span><span style="display: flex; justify-content: space-between; align-items: center; font: 700 9px 'JetBrains Mono'; color: {{c.mc}}"><span>{{c.p}}</span><span>{{c.m}}</span></span></div></sc-for>
+  </div>
+  <div style="display: flex; gap: 14px; flex-wrap: wrap; align-items: center; font-size: 12px" class="sp-t3"><span style="display: inline-flex; align-items: center; gap: 6px"><img src="specialty/guilly/head-calm.svg" alt="" style="width: 18px">Floor in the top third</span><span style="display: inline-flex; align-items: center; gap: 6px"><img src="specialty/guilly/head-nervous.svg" alt="" style="width: 18px">Floor in the bottom third — early chop risk</span><span>Cells are coloured by position. The floor is a team’s projected weakest week.</span></div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { m: 'auction' }; }
+  renderVals() {
+    const PL = [["Nikola Jokic", "C"], ["Shai Gilgeous-Alexander", "PG/SG"], ["Victor Wembanyama", "C/PF"], ["Luka Doncic", "PG/SG"], ["Giannis Antetokounmpo", "PF/C"], ["Anthony Davis", "PF/C"], ["Anthony Edwards", "SG/SF"], ["Domantas Sabonis", "C/PF"], ["Karl-Anthony Towns", "C/PF"], ["Cade Cunningham", "PG"], ["Jalen Johnson", "PF/SF"], ["Trae Young", "PG"], ["Tyrese Maxey", "PG"], ["Jalen Williams", "SG/SF"], ["Chet Holmgren", "C/PF"], ["Alperen Sengun", "C"], ["LaMelo Ball", "PG"], ["Donovan Mitchell", "SG"], ["Devin Booker", "SG/PG"], ["Jalen Brunson", "PG"], ["Stephen Curry", "PG"], ["Kevin Durant", "SF/PF"], ["LeBron James", "SF/PF"], ["Bam Adebayo", "C"], ["Joel Embiid", "C"], ["Paolo Banchero", "PF"], ["Franz Wagner", "SF/PF"], ["Scottie Barnes", "SF/PF"], ["Evan Mobley", "PF/C"], ["Pascal Siakam", "PF"], ["Jaren Jackson Jr.", "PF/C"], ["Ja Morant", "PG"], ["Josh Giddey", "PG/SF"], ["De\u2019Aaron Fox", "PG"], ["Jamal Murray", "PG"], ["Zion Williamson", "PF"], ["James Harden", "PG"], ["Kawhi Leonard", "SF"], ["Ivica Zubac", "C"], ["Lauri Markkanen", "PF"], ["Dyson Daniels", "SG/PG"], ["Amen Thompson", "SG/SF"], ["Derrick White", "PG/SG"], ["Desmond Bane", "SG"], ["Austin Reaves", "SG"], ["Darius Garland", "PG"], ["Jarrett Allen", "C"], ["Rudy Gobert", "C"], ["Myles Turner", "C"], ["Nikola Vucevic", "C"], ["Deni Avdija", "SF/PF"], ["Cooper Flagg", "SF/PF"], ["Mikal Bridges", "SF"], ["OG Anunoby", "SF/PF"], ["Josh Hart", "SG/SF"], ["Brandon Miller", "SF"], ["Trey Murphy III", "SF"], ["Jimmy Butler", "SF"], ["Zach LaVine", "SG"], ["DeMar DeRozan", "SF"], ["Coby White", "PG/SG"], ["Jalen Duren", "C"], ["Walker Kessler", "C"], ["Onyeka Okongwu", "C"], ["Nic Claxton", "C"], ["Jakob Poeltl", "C"], ["Mark Williams", "C"], ["Isaiah Hartenstein", "C"], ["Stephon Castle", "PG/SG"], ["Alex Sarr", "C/PF"], ["Tyler Herro", "SG"], ["Norman Powell", "SG/SF"], ["Michael Porter Jr.", "SF"], ["Aaron Gordon", "PF"], ["Julius Randle", "PF"], ["Jalen Green", "SG"], ["Anfernee Simons", "SG"], ["Christian Braun", "SG"], ["Keegan Murray", "PF"], ["Herbert Jones", "SF"], ["Andrew Wiggins", "SF"], ["Miles Bridges", "SF/PF"], ["Kyle Kuzma", "PF"], ["Jerami Grant", "PF"], ["RJ Barrett", "SF"], ["Immanuel Quickley", "PG"], ["Jordan Poole", "SG/PG"], ["CJ McCollum", "SG"], ["Malik Monk", "SG"], ["Mike Conley", "PG"], ["Russell Westbrook", "PG"], ["Collin Sexton", "SG/PG"], ["Jordan Clarkson", "SG"], ["Bennedict Mathurin", "SG/SF"], ["Andrew Nembhard", "PG/SG"], ["Ausar Thompson", "SF"], ["Tobias Harris", "PF"], ["Paul George", "SF/PF"], ["Draymond Green", "PF/C"], ["Jonathan Kuminga", "PF"], ["Brandin Podziemski", "SG"], ["Klay Thompson", "SG"], ["P.J. Washington", "PF"], ["Dereck Lively II", "C"], ["Naz Reid", "C/PF"], ["Rui Hachimura", "PF"], ["Jaden McDaniels", "SF/PF"], ["Donte DiVincenzo", "SG"], ["Bilal Coulibaly", "SF"], ["Tari Eason", "PF"], ["Jabari Smith Jr.", "PF"], ["Kel\u2019el Ware", "C"], ["Shaedon Sharpe", "SG"], ["Scoot Henderson", "PG"], ["Toumani Camara", "SF/PF"], ["Cam Thomas", "SG"], ["Cameron Johnson", "SF"], ["Nickeil Alexander-Walker", "SG"], ["Keldon Johnson", "SF"], ["Devin Vassell", "SG"], ["Jeremy Sochan", "PF"], ["Matas Buzelis", "SF/PF"], ["Ayo Dosunmu", "SG"], ["Payton Pritchard", "PG"], ["Jrue Holiday", "PG/SG"], ["Jaylen Brown", "SG/SF"], ["Al Horford", "C"], ["Kevin Huerter", "SG"], ["Max Strus", "SF"], ["De\u2019Andre Hunter", "SF"], ["Caris LeVert", "SG"], ["Ty Jerome", "PG"], ["Luguentz Dort", "SG"], ["Cason Wallace", "PG/SG"], ["Aaron Nesmith", "SF"], ["Obi Toppin", "PF"], ["Jaime Jaquez Jr.", "SF"], ["Grayson Allen", "SG"], ["Royce O\u2019Neale", "SF"], ["Naji Marshall", "SF"], ["Quentin Grimes", "SG"], ["Jalen Suggs", "PG/SG"], ["Wendell Carter Jr.", "C/PF"], ["Goga Bitadze", "C"], ["Bobby Portis", "PF/C"], ["Gary Trent Jr.", "SG"], ["Nikola Jovic", "PF"], ["Duncan Robinson", "SF"], ["Harrison Barnes", "SF"], ["Keon Ellis", "SG"], ["Isaiah Stewart", "C"], ["Jaden Ivey", "SG/PG"], ["Dennis Schroder", "PG"], ["Terance Mann", "SG"], ["Kris Dunn", "PG/SG"], ["Derrick Jones Jr.", "SF"], ["Brandon Ingram", "SF/PF"], ["Mitchell Robinson", "C"], ["Yves Missi", "C"], ["Tre Jones", "PG"], ["Day\u2019Ron Sharpe", "C"], ["Nick Richards", "C"], ["Moussa Diabate", "C"], ["Guerschon Yabusele", "PF"], ["Daniel Gafford", "C"], ["Brook Lopez", "C"], ["Clint Capela", "C"], ["Jusuf Nurkic", "C"], ["Deandre Ayton", "C"], ["Kristaps Porzingis", "C"], ["Jonas Valanciunas", "C"], ["Zach Edey", "C"], ["Donovan Clingan", "C"], ["Kelly Oubre Jr.", "SF"], ["Chris Paul", "PG"], ["Bradley Beal", "SG"], ["Kevin Porter Jr.", "PG"], ["Spencer Dinwiddie", "PG"]];
+const TM = ["You \u00b7 TheCiege26", "BucketsOnly", "LoadManagement", "BoxOutBandits", "DunkCity", "SplashZone", "TripleDoubleTrouble", "AndOneAddicts", "PostUpPros", "FastBreakFam", "GlassCleaners", "ZoneDefense", "AlleyOops", "PaintBeasts", "BankShotBoys", "FlagrantFoul", "ShotClock", "HeatCheck"];
+const POS = {"QB": ["#e0553f", "#fff"], "RB": ["#3abf7a", "#06200f"], "WR": ["#3d8fe0", "#fff"], "TE": ["#e89a2c", "#1a1004"], "FLEX": ["#8a8fa8", "#0b0d14"], "SFLEX": ["#c04fd0", "#fff"], "K": ["#b48cf0", "#1a0d33"], "DST": ["#8a6a4a", "#fff"], "DL": ["#2fb5a5", "#04201d"], "LB": ["#1f8f86", "#fff"], "DB": ["#5fd0e0", "#05242a"], "IDP": ["#4a7f7a", "#fff"], "PG": ["#3d8fe0", "#fff"], "SG": ["#4fb3d9", "#05242a"], "SF": ["#3abf7a", "#06200f"], "PF": ["#e89a2c", "#1a1004"], "C": ["#e0553f", "#fff"], "G": ["#7aa6ec", "#0b1830"], "F": ["#7fd09c", "#06200f"], "UTIL": ["#8a8fa8", "#0b0d14"], "BN": ["#1d2130", "#a3a9c2"], "IR": ["#2a1418", "#ff9a8a"], "IL": ["#2a1418", "#ff9a8a"]};
+const G = "specialty/guilly/";
+const rng = (seed) => { let s = seed; return () => { s = (s * 9301 + 49297) % 233280; return s / 233280; }; };
+const AVC = ['#3a1418','#22314f','#1d3a3a','#2c2a4a','#3a3418','#12352a','#3a1f30','#1f2a4d','#2a3a1a','#3a2a14'];
+const av = (n) => { const s = n.replace('You · ', ''); let h = 0; for (const ch of s) h = (h * 31 + ch.charCodeAt(0)) % 997; return { ini: s.replace(/[^A-Z0-9]/g, '').slice(0, 2) || s.slice(0, 2).toUpperCase(), c: AVC[h % AVC.length] }; };
+const short = (n) => { const p = n.split(' '); return p.length > 1 ? p[0][0] + '. ' + p.slice(1).join(' ') : n; };
+const pos1 = (p) => p.split('/')[0];
+const chip = (p) => ({ p, bg: POS[pos1(p)][0], c: POS[pos1(p)][1] });
+const fpg = (i) => Math.round((58 - i * 0.215 - (i > 40 ? (i - 40) * 0.04 : 0)) * 10) / 10;
+const price = (i) => Math.max(1, Math.round(74 * Math.exp(-i / 26)));
+const HEAD = { calm: G + 'head-calm.svg', nervous: G + 'head-nervous.svg', ko: G + 'head-ko.svg', crown: G + 'head-crown.svg' };
+// season: 18 teams, chops weeks 1..7 done, week 8 live
+const CHOPPED = [[1,'FlagrantFoul',498.2,'Started three centers who all sat the Sunday back-to-back.'],[2,'ShotClock',611.4,'Two games played all week. The schedule did him in.'],
+  [3,'HeatCheck',640.9,'Load-managed. Twice.'],[4,'BankShotBoys',702.3,'Lost by 0.6 to a late free throw.'],[5,'PaintBeasts',688.0,'Bid $0 on waivers for five straight weeks.'],
+  [6,'AlleyOops',731.5,'Benched a 61-point night. Bestball would have saved him.'],[7,'ZoneDefense',744.8,'Three starters on the injury report by Wednesday.']];
+const ALIVE = TM.filter(t => !CHOPPED.find(c => c[1] === t));
+    const auc = this.state.m === 'auction', N = 18, R = 14, live = auc ? 120 : 172;
+    const r = rng(auc ? 7 : 11);
+    const own = Array.from({ length: N }, () => []);
+    if (auc) { for (let i = 0; i < live; i += N) { const ord = Array.from({ length: N }, (_, k) => k).sort(() => r() - .5); ord.forEach((t, k) => { if (i + k < live) own[t].push(i + k); }); } }
+    else { for (let k = 0; k < live; k++) { const rd = Math.floor(k / N), j = k % N, t = rd % 2 ? N - 1 - j : j; own[t].push(k); } }
+    const fr = rng(99); const floor = own.map(a => a.slice().sort((x, y) => x - y).slice(0, 10).reduce((s, i) => s + fpg(i), 0) * 3.1 * (.74 + fr() * .16));
+    const sortedF = floor.slice().sort((a, b) => a - b), lo = sortedF[6], hi = sortedF[11];
+    const heads = TM.map((n, t) => { const spent = own[t].reduce((s, i) => s + Math.max(1, Math.round(price(i) * (.8 + r() * .5))), 0), f = floor[t];
+      return { n: n.startsWith('You') ? 'You' : n, head: f <= lo ? HEAD.nervous : HEAD.calm, sub: auc ? '$' + Math.max(0, 200 - Math.min(199, spent)) + ' left' : 'floor ' + Math.round(f),
+        subC: f <= lo ? '#ff9a8a' : '#a3a9c2', bg: n.startsWith('You') ? 'rgba(255,197,49,.1)' : '#10131c', line: n.startsWith('You') ? 'rgba(255,197,49,.5)' : 'rgba(255,255,255,.06)' }; });
+    const cells = [];
+    for (let row = 0; row < R; row++) {
+      cells.push({ n: String(row + 1), p: '', m: '', bg: 'transparent', line: 'transparent', tc: '#5a6078', mc: '#5a6078' });
+      for (let t = 0; t < N; t++) { const i = own[t][row];
+        if (i === undefined) { const onClock = !auc && row === Math.floor(live / N) && (row % 2 ? N - 1 - (live % N) : live % N) === t;
+          cells.push({ n: onClock ? 'On the clock' : '', p: '', m: '', bg: onClock ? 'rgba(255,61,46,.18)' : '#0b0d14', line: onClock ? '#ff3d2e' : 'rgba(255,255,255,.04)', tc: '#ff9a8a', mc: '#5a6078' }); continue; }
+        const p = pos1(PL[i][1]), col = POS[p][0];
+        cells.push({ n: short(PL[i][0]), p: PL[i][1], m: auc ? '$' + Math.max(1, Math.round(price(i) * (.85 + ((i * 37) % 10) / 25))) : (Math.floor(i / N) + 1) + '.' + String(i % N + 1).padStart(2, '0'),
+          bg: col + '2e', line: col + '66', tc: '#e8eaf2', mc: '#c9cee0' }); } }
+    return { heads, cells, sub: auc ? 'Auction · $200 each · 120 of 252 sold · nomination 121 is next' : 'Snake · bestball · round 10 of 14 · pick 172 of 252',
+      modes: [['auction', 'Auction'], ['snake', 'Snake · bestball']].map(([id, label]) => ({ label, on: this.state.m === id ? 'true' : 'false', pick: () => this.setState({ m: id }) })) };
+  }
+}
+</script>
+</body>
+</html>
