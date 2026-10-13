@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { assertLeagueMember } from '@/lib/league/league-access'
-import { getZombieRulesForSport } from '@/lib/zombie/zombieRules'
+import { getZombieRulesForLeague } from '@/lib/zombie/zombieRules'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,7 +33,7 @@ export async function GET(req: Request) {
     where: { seasonId: season.id, week },
   })
 
-  const rules = await getZombieRulesForSport(z.sport)
+  const rules = await getZombieRulesForLeague(lid, z.sport)
   const resolution = await prisma.zombieWeeklyResolution.findUnique({
     where: { zombieLeagueId_week: { zombieLeagueId: z.id, week } },
     select: { status: true, resolvedAt: true, infectionCount: true },

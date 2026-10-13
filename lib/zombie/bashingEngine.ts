@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma'
-import { getZombieRulesForSport } from '@/lib/zombie/zombieRules'
+import { getZombieRulesForLeague } from '@/lib/zombie/zombieRules'
 import { notifyCommissioner, notifyZombiePlayer } from '@/lib/zombie/commissionerNotificationService'
 import { queueAnimation } from '@/lib/zombie/animationEngine'
 import { setZombie } from '@/lib/zombie/ZombieOwnerStatusService'
@@ -47,7 +47,7 @@ export async function detectAndProcessBashings(
   const z = await prisma.zombieLeague.findUnique({ where: { id: zombieLeagueId } })
   if (!z) return []
 
-  const rules = await getZombieRulesForSport(z.sport)
+  const rules = await getZombieRulesForLeague(leagueId, z.sport)
   const season = await prisma.redraftSeason.findFirst({
     where: { leagueId, season: z.season },
   })
@@ -96,7 +96,7 @@ export async function detectAndProcessBashings(
         margin,
         bashingType: bt,
         requiresDecision: bt === 'survivor_bashes_survivor',
-        decisionDeadline: bt === 'survivor_bashes_survivor' ? new Date(Date.now() + 48 * 3600 * 1000) : null,
+        decisionDeadline: bt === 'survivor_bashes_survivor' ? new Date(Date.now() + rules.bashDecisionHours * 3600 * 1000) : null,
         serumAwarded: bt === 'survivor_bashes_zombie',
       },
     })

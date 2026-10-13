@@ -24,7 +24,10 @@ vi.mock('@/lib/prisma', () => ({
 }))
 vi.mock('@/lib/league/league-access', () => ({ assertLeagueMember: vi.fn(async () => ({ ok: true })) }))
 vi.mock('@/lib/league/permissions', () => ({ requireCommissionerOnly: vi.fn() }))
-vi.mock('@/lib/zombie/zombieRules', () => ({ getZombieRulesForSport: vi.fn(async () => ({})) }))
+vi.mock('@/lib/zombie/zombieRules', () => ({
+  getZombieRulesForSport: vi.fn(async () => ({})),
+  getZombieRulesForLeague: vi.fn(async () => ({})),
+}))
 vi.mock('@/lib/zombie/whispererViewer', () => ({ resolveWhispererViewer: hm.resolveWhispererViewer }))
 
 const IDENTITY = { rosterIds: new Set([W_ROSTER]), userIds: new Set([W_USER]) }

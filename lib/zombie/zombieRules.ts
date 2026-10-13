@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { getZombieSportConfig } from '@/lib/zombie/sportRulesConfig'
+import { readZombieRuleOverrides, type WhispererDefeatRule } from '@/lib/zombie/zombieLeagueRules'
 
 export type ZombieRulesResolved = {
   sport: string
@@ -34,5 +35,40 @@ export async function getZombieRulesForSport(sportRaw: string): Promise<ZombieRu
     reviveThreshold: row?.reviveThreshold ?? 3,
     serumMaxHold: row?.serumMaxHold ?? 5,
     lineupLockDesc: row?.lineupLockDesc ?? (sport === 'NFL' ? NFL_LOCK : 'First game of the scoring period.'),
+  }
+}
+
+export type ZombieLeagueRulesResolved = ZombieRulesResolved & {
+  bashDecisionHours: number
+  bombEnabled: boolean
+  whispererDefeatRule: WhispererDefeatRule
+  /** Which keys this league overrides, so an editor can tell "the sport's number" from "set here". */
+  overridden: string[]
+}
+
+/**
+ * The rules a LEAGUE plays by: the sport's rules with the commish's overrides from
+ * `League.settings.zombie_rules` on top (lib/zombie/zombieLeagueRules.ts). Every live engine that
+ * knows its league should call this rather than `getZombieRulesForSport`, or a commish's change is
+ * shown in settings and ignored at resolution.
+ */
+export async function getZombieRulesForLeague(leagueId: string, sportRaw: string): Promise<ZombieLeagueRulesResolved> {
+  const [base, league] = await Promise.all([
+    getZombieRulesForSport(sportRaw),
+    prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } }),
+  ])
+  const o = readZombieRuleOverrides(league?.settings)
+  return {
+    ...base,
+    bashingThreshold: o.bashingThreshold ?? base.bashingThreshold,
+    maulingThreshold: o.maulingThreshold ?? base.maulingThreshold,
+    weaponShieldThreshold: o.weaponShieldThreshold ?? base.weaponShieldThreshold,
+    weaponAmbushThreshold: o.weaponAmbushThreshold ?? base.weaponAmbushThreshold,
+    reviveThreshold: o.reviveThreshold ?? base.reviveThreshold,
+    serumMaxHold: o.serumMaxHold ?? base.serumMaxHold,
+    bashDecisionHours: o.bashDecisionHours ?? 48,
+    bombEnabled: o.bombEnabled ?? true,
+    whispererDefeatRule: o.whispererDefeatRule ?? 'commissioner_decides',
+    overridden: Object.keys(o),
   }
 }

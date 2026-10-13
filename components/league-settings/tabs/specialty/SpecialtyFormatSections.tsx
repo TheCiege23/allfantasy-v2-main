@@ -5,8 +5,8 @@
  * for the formats a league runs (SpecialtyTab imports this module per format with next/dynamic).
  *
  * Only editors that PERSIST are listed. ZombieWhisperer/Combat/Items/Universe panels are inputs
- * with hard-coded defaults and no save path; showing them would be settings that change nothing,
- * so they stay out until they are wired.
+ * with hard-coded defaults and no save path, so they stay out; the rules they gestured at are edited
+ * by ZombieRulesForm (rendered above the Zombie section), which the live engines actually read.
  */
 import { useEffect, useState, type ReactNode } from 'react'
 import Link from 'next/link'

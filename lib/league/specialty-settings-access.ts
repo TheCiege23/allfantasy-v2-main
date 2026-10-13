@@ -54,6 +54,8 @@ export const SPECIALTY_GATED_PATCH_KEYS: ReadonlySet<string> = new Set<string>([
 export const SPECIALTY_GATED_SETTINGS_MERGE_KEYS: ReadonlySet<string> = new Set<string>([
   'devy_league_config',
   'guillotineEndgame',
+  // Zombie rule overrides: the live engines read these, so they sit behind the same gate.
+  'zombie_rules',
 ])
 
 export type SpecialtyUnlockRecord = {

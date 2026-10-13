@@ -12,6 +12,7 @@ import { GuillotineSettingsForm, type GuillotineSettingsValue } from './Guilloti
 import { SalaryCapSettingsForm, type SalaryCapSettingsState } from './SalaryCapSettingsForm'
 import { TournamentSettingsForm, type TournamentSettingsState } from './TournamentSettingsForm'
 import { LegacyTournamentSettingsForm, type LegacyTournamentSettingsState } from './LegacyTournamentSettingsForm'
+import { ZombieRulesForm, type ZombieRulesState } from './ZombieRulesForm'
 
 type GatedFormat = 'guillotine' | 'survivor' | 'zombie' | 'big_brother' | 'salary_cap' | 'devy' | 'c2c' | 'tournament'
 
@@ -29,6 +30,7 @@ type SpecialtyState = {
   salaryCap: SalaryCapSettingsState | null
   tournament: TournamentSettingsState | null
   legacyTournament: LegacyTournamentSettingsState | null
+  zombie: ZombieRulesState | null
 }
 
 const TOKEN_RULE = 'commissioner_specialty_settings_league_unlock'
@@ -177,7 +179,12 @@ export function SpecialtyTab({ ctx, canEdit: isCommish }: LeagueSettingsTabProps
                     ) : format === 'tournament' && state.legacyTournament ? (
                       <LegacyTournamentSettingsForm leagueId={leagueId} initial={state.legacyTournament} />
                     ) : Section ? (
-                      <Section ctx={ctx} canEdit coveredBySubscription={state.coveredBySubscription} />
+                      <>
+                        {format === 'zombie' && state.zombie ? (
+                          <ZombieRulesForm leagueId={leagueId} initial={state.zombie} canEdit />
+                        ) : null}
+                        <Section ctx={ctx} canEdit coveredBySubscription={state.coveredBySubscription} />
+                      </>
                     ) : null}
                   </section>
                 )

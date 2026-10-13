@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma'
-import { getZombieRulesForSport } from '@/lib/zombie/zombieRules'
+import { getZombieRulesForLeague } from '@/lib/zombie/zombieRules'
 import { notifyCommissioner } from '@/lib/zombie/commissionerNotificationService'
 import { appendZombieAudit } from '@/lib/zombie/ZombieAuditLog'
 import { applyAmbush } from '@/lib/zombie/whispererEngine'
@@ -21,9 +21,8 @@ export async function validateAmbushTiming(
   week: number,
   sport: string,
 ): Promise<{ valid: boolean; reason?: string }> {
-  const rules = await getZombieRulesForSport(sport)
+  const rules = await getZombieRulesForLeague(leagueId, sport)
   // Deterministic placeholder: integrate live kickoff feed per sport using `rules.lineupLockDesc`.
-  void leagueId
   void week
   return { valid: true, reason: rules.lineupLockDesc ?? undefined }
 }

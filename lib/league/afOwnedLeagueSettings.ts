@@ -91,6 +91,7 @@ export const AF_OWNED_LEAGUE_SETTINGS_KEYS = [
   'dispersalDraftLastCompletion', // lib/dispersal-draft/DispersalDraftEngine.ts
   'audit', // lib/league-settings-engine/UnifiedLeagueSettingsService.ts change log
   'stat_overrides', // lib/redraft/leagueStatOverrides.ts — this league's commish stat corrections
+  'zombie_rules', // Specialty tab Zombie rules editor (lib/zombie/zombieLeagueRules.ts)
 
   // ── Import bookkeeping AllFantasy stamps AFTER the payload is written ─────
   'historicalBackfillStatus', // ImportedLeagueCommitService, backfill sweeper, retry route

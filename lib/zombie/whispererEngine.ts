@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { getZombieRulesForLeague } from '@/lib/zombie/zombieRules'
 import { setWhisperer } from '@/lib/zombie/ZombieOwnerStatusService'
 import { notifyCommissioner } from '@/lib/zombie/commissionerNotificationService'
 import { logAuditEntry } from '@/lib/zombie/auditService'
@@ -227,9 +228,10 @@ export async function handleWhispererDefeat(
     },
   })
 
-  const rule = rec.postDefeatRule ?? 'commissioner_decides'
   const z = await prisma.zombieLeague.findUnique({ where: { id: zombieLeagueId } })
   if (!z) return
+  // A rule recorded on this Whisperer wins; otherwise the league's (Specialty tab), else the default.
+  const rule = rec.postDefeatRule ?? (await getZombieRulesForLeague(z.leagueId, z.sport)).whispererDefeatRule
 
   const leagueId = z.leagueId
   const oldWhispererRoster = await prisma.roster.findFirst({

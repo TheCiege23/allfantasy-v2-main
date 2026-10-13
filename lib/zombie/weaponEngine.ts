@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma'
-import { getZombieRulesForSport } from '@/lib/zombie/zombieRules'
+import { getZombieRulesForLeague } from '@/lib/zombie/zombieRules'
 import { validateAmbushTiming } from '@/lib/zombie/ambushEngine'
 import { notifyCommissioner, notifyZombiePlayer } from '@/lib/zombie/commissionerNotificationService'
 import { queueAnimation } from '@/lib/zombie/animationEngine'
@@ -39,7 +39,7 @@ async function ensureTeamItem(
 export async function checkAndAwardWeapons(leagueId: string, week: number, zombieLeagueId: string): Promise<void> {
   const z = await prisma.zombieLeague.findUnique({ where: { id: zombieLeagueId } })
   if (!z) return
-  const rules = await getZombieRulesForSport(z.sport)
+  const rules = await getZombieRulesForLeague(leagueId, z.sport)
   const season = await prisma.redraftSeason.findFirst({
     where: { leagueId, season: z.season },
   })
@@ -85,7 +85,7 @@ export async function checkAndAwardWeapons(leagueId: string, week: number, zombi
     if (t.zombieAttacksSurvived >= 3) {
       await ensureTeamItem(leagueId, uid, zombieLeagueId, 'weapon_gun', '🔫 Gun')
     }
-    if (t.survivorWinStreak >= 5) {
+    if (rules.bombEnabled && t.survivorWinStreak >= 5) {
       await ensureTeamItem(leagueId, uid, zombieLeagueId, 'weapon_bomb', '💣 Bomb')
     }
   }

@@ -1,6 +1,6 @@
 import type { ZombieChimmyAction } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { getZombieRulesForSport } from '@/lib/zombie/zombieRules'
+import { getZombieRulesForLeague } from '@/lib/zombie/zombieRules'
 import { notifyCommissioner } from '@/lib/zombie/commissionerNotificationService'
 import { validateAmbushTiming } from '@/lib/zombie/ambushEngine'
 import { setRevived } from '@/lib/zombie/ZombieOwnerStatusService'
@@ -99,7 +99,7 @@ export async function processSerumAction(
 export async function processRevive(leagueId: string, userId: string, week: number): Promise<void> {
   const z = await prisma.zombieLeague.findUnique({ where: { leagueId } })
   if (!z) throw new Error('Zombie league not found')
-  const rules = await getZombieRulesForSport(z.sport)
+  const rules = await getZombieRulesForLeague(leagueId, z.sport)
 
   const roster = await prisma.roster.findFirst({ where: { leagueId, platformUserId: userId } })
   if (!roster) throw new Error('Not in league')

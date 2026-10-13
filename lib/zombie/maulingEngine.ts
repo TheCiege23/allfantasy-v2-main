@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma'
-import { getZombieRulesForSport } from '@/lib/zombie/zombieRules'
+import { getZombieRulesForLeague } from '@/lib/zombie/zombieRules'
 import { notifyCommissioner, notifyZombiePlayer } from '@/lib/zombie/commissionerNotificationService'
 import { queueAnimation } from '@/lib/zombie/animationEngine'
 import { handleWhispererDefeat } from '@/lib/zombie/whispererEngine'
@@ -35,7 +35,7 @@ export async function detectAndProcessMaulings(
   const z = await prisma.zombieLeague.findUnique({ where: { id: zombieLeagueId } })
   if (!z) return []
 
-  const rules = await getZombieRulesForSport(z.sport)
+  const rules = await getZombieRulesForLeague(leagueId, z.sport)
   const season = await prisma.redraftSeason.findFirst({
     where: { leagueId, season: z.season },
   })

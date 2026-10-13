@@ -16,6 +16,10 @@
  *         `{ legacyTournament: {...} }` — the same for a LEGACY tournament (`LegacyTournament`), rules in
  *         lib/tournament-mode/legacyTournamentEditor.ts. Its creator or staff with settings permission
  *         may save (canEditHubSettings, the hub's own rule).
+ *         `{ zombie: {...} }` — Zombie rules: per-league overrides of the sport's bash/maul/weapon/serum
+ *         rules (`League.settings.zombie_rules`, read by the live engines via getZombieRulesForLeague),
+ *         plus the Whisperer and infection columns the engines already read. `null` on an override
+ *         key puts it back to the sport's rule.
  *
  * Commish and co-commish only. Every other format's editor writes through its own route, and each
  * of those routes calls `specialtySettingsEditRefusal` itself.
@@ -42,6 +46,16 @@ import { buildRosterLabelMap } from '@/lib/scoring-engine/resolveTeamLabels'
 import { updateTournamentSettings } from '@/lib/tournament/updateTournamentSettings'
 import { parseTournamentEditorPatch, type TournamentEditorValue } from '@/lib/tournament/tournamentEditorPatch'
 import { canEditHubSettings, getLegacyTournamentAccess } from '@/lib/tournament/legacyTournamentAccess'
+import { getZombieRulesForLeague, getZombieRulesForSport } from '@/lib/zombie/zombieRules'
+import {
+  ZOMBIE_RULES_SETTINGS_KEY,
+  ZOMBIE_RULE_LIMITS,
+  parseZombieRulesPatch,
+  readZombieRuleOverrides,
+  type ZombieRuleOverrides,
+} from '@/lib/zombie/zombieLeagueRules'
+import { upsertZombieLeagueConfig } from '@/lib/zombie/ZombieLeagueConfig'
+import { logAuditEntry } from '@/lib/zombie/auditService'
 import { logTournamentAudit } from '@/lib/tournament-mode/TournamentAuditService'
 import {
   LEGACY_LIVE_STATUSES,
@@ -237,6 +251,82 @@ async function loadLegacyTournamentState(leagueId: string, userId: string): Prom
   }
 }
 
+const ZOMBIE_RULE_KEYS = [...Object.keys(ZOMBIE_RULE_LIMITS), 'bombEnabled', 'whispererDefeatRule'] as const
+const WHISPERER_SELECTIONS = ['random', 'veteran_priority'] as const
+
+type ZombieState = {
+  value: {
+    bashingThreshold: number
+    maulingThreshold: number
+    bashDecisionHours: number
+    weaponShieldThreshold: number
+    weaponAmbushThreshold: number
+    bombEnabled: boolean
+    reviveThreshold: number
+    serumMaxHold: number
+    whispererDefeatRule: string
+    whispererSelection: string
+    whispererAmbushCount: number
+    infectionLossToWhisperer: boolean
+    infectionLossToZombie: boolean
+  }
+  /** The sport's numbers, so the editor can show what a reset goes back to. */
+  sportDefaults: { bashingThreshold: number; maulingThreshold: number; weaponShieldThreshold: number; weaponAmbushThreshold: number; reviveThreshold: number; serumMaxHold: number }
+  overridden: string[]
+  /** Promotion and relegation belong to the universe (every league in it), so they are shown, not edited. */
+  universe: { name: string; promotionEnabled: boolean; promotionCount: number; relegationEnabled: boolean; relegationCount: number } | null
+}
+
+async function loadZombieState(leagueId: string): Promise<ZombieState | null> {
+  const z = await prisma.zombieLeague.findUnique({
+    where: { leagueId },
+    select: { sport: true, whispererAmbushCount: true, universeId: true },
+  })
+  if (!z) return null
+  const [rules, sportRules, cfg, universe] = await Promise.all([
+    getZombieRulesForLeague(leagueId, z.sport),
+    getZombieRulesForSport(z.sport),
+    prisma.zombieLeagueConfig.findUnique({
+      where: { leagueId },
+      select: { whispererSelection: true, infectionLossToWhisperer: true, infectionLossToZombie: true },
+    }),
+    z.universeId
+      ? prisma.zombieUniverse.findUnique({
+          where: { id: z.universeId },
+          select: { name: true, promotionEnabled: true, promotionCount: true, relegationEnabled: true, relegationCount: true },
+        })
+      : Promise.resolve(null),
+  ])
+  return {
+    value: {
+      bashingThreshold: rules.bashingThreshold,
+      maulingThreshold: rules.maulingThreshold,
+      bashDecisionHours: rules.bashDecisionHours,
+      weaponShieldThreshold: rules.weaponShieldThreshold,
+      weaponAmbushThreshold: rules.weaponAmbushThreshold,
+      bombEnabled: rules.bombEnabled,
+      reviveThreshold: rules.reviveThreshold,
+      serumMaxHold: rules.serumMaxHold,
+      whispererDefeatRule: rules.whispererDefeatRule,
+      // The activation engine honours random and veteran_priority only (activateNativeZombieLeague).
+      whispererSelection: cfg?.whispererSelection === 'veteran_priority' ? 'veteran_priority' : 'random',
+      whispererAmbushCount: z.whispererAmbushCount,
+      infectionLossToWhisperer: cfg?.infectionLossToWhisperer ?? true,
+      infectionLossToZombie: cfg?.infectionLossToZombie ?? true,
+    },
+    sportDefaults: {
+      bashingThreshold: sportRules.bashingThreshold,
+      maulingThreshold: sportRules.maulingThreshold,
+      weaponShieldThreshold: sportRules.weaponShieldThreshold,
+      weaponAmbushThreshold: sportRules.weaponAmbushThreshold,
+      reviveThreshold: sportRules.reviveThreshold,
+      serumMaxHold: sportRules.serumMaxHold,
+    },
+    overridden: rules.overridden,
+    universe,
+  }
+}
+
 export async function GET(_req: NextRequest, ctx: Ctx) {
   const user = await sessionUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -264,6 +354,7 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
   const tournament = formats.includes('tournament') ? await loadTournamentState(leagueId, user.id) : null
   const legacyTournament =
     formats.includes('tournament') && !tournament ? await loadLegacyTournamentState(leagueId, user.id) : null
+  const zombie = formats.includes('zombie') ? await loadZombieState(leagueId) : null
 
   return NextResponse.json({
     formats,
@@ -280,6 +371,7 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
     salaryCap,
     tournament,
     legacyTournament,
+    zombie,
   })
 }
 
@@ -346,7 +438,9 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     salaryCap?: unknown
     tournament?: unknown
     legacyTournament?: unknown
+    zombie?: unknown
   }
+  if (body.zombie !== undefined) return patchZombie(leagueId, user.id, body.zombie)
   if (body.legacyTournament !== undefined) return patchLegacyTournament(leagueId, user.id, body.legacyTournament)
   if (body.salaryCap !== undefined) return patchSalaryCap(leagueId, user.id, body.salaryCap)
   if (body.tournament !== undefined) return patchTournament(leagueId, user.id, body.tournament)
@@ -510,4 +604,98 @@ async function patchLegacyTournament(leagueId: string, userId: string, raw: unkn
     }).catch(() => {})
   }
   return NextResponse.json({ ok: true, legacyTournament: await loadLegacyTournamentState(leagueId, userId) })
+}
+
+async function patchZombie(leagueId: string, userId: string, raw: unknown) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return NextResponse.json({ error: 'zombie settings object required' }, { status: 400 })
+  }
+  const formats = await detectGatedSpecialtyFormats(leagueId)
+  const state = formats.includes('zombie') ? await loadZombieState(leagueId) : null
+  if (!state) return NextResponse.json({ error: 'This is not a Zombie league.' }, { status: 409 })
+  const body = raw as Record<string, unknown>
+
+  // Rule overrides: `null` resets a key to the sport's rule; a value is validated on the effective set.
+  const resets = ZOMBIE_RULE_KEYS.filter((k) => body[k] === null)
+  const ruleRaw = Object.fromEntries(ZOMBIE_RULE_KEYS.filter((k) => body[k] !== undefined && body[k] !== null).map((k) => [k, body[k]]))
+  const effective = {
+    ...state.value,
+    ...Object.fromEntries(resets.map((k) => [k, (state.sportDefaults as Record<string, unknown>)[k] ?? (k === 'bashDecisionHours' ? 48 : k === 'bombEnabled' ? true : 'commissioner_decides')])),
+  } as Parameters<typeof parseZombieRulesPatch>[1]
+  const parsed = parseZombieRulesPatch(ruleRaw, effective)
+  if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 })
+
+  // Columns the engines already read.
+  const cfgPatch: { whispererSelection?: string; infectionLossToWhisperer?: boolean; infectionLossToZombie?: boolean } = {}
+  if (body.whispererSelection !== undefined) {
+    if (!(WHISPERER_SELECTIONS as readonly unknown[]).includes(body.whispererSelection)) {
+      return NextResponse.json({ error: `whispererSelection must be one of: ${WHISPERER_SELECTIONS.join(', ')}` }, { status: 400 })
+    }
+    cfgPatch.whispererSelection = body.whispererSelection as string
+  }
+  for (const key of ['infectionLossToWhisperer', 'infectionLossToZombie'] as const) {
+    if (body[key] === undefined) continue
+    if (typeof body[key] !== 'boolean') return NextResponse.json({ error: `${key} must be true or false` }, { status: 400 })
+    cfgPatch[key] = body[key] as boolean
+  }
+  let ambushCount: number | undefined
+  if (body.whispererAmbushCount !== undefined) {
+    const n = body.whispererAmbushCount
+    if (typeof n !== 'number' || !Number.isInteger(n) || n < 0 || n > 10) {
+      return NextResponse.json({ error: 'whispererAmbushCount must be a whole number from 0 to 10' }, { status: 400 })
+    }
+    ambushCount = n
+  }
+
+  const changes: Record<string, { from: unknown; to: unknown }> = {}
+  const note = (k: string, to: unknown) => {
+    const from = (state.value as Record<string, unknown>)[k]
+    if (from !== to) changes[k] = { from, to }
+  }
+  for (const [k, v] of Object.entries(parsed.patch)) note(k, v)
+  for (const k of resets) if (state.overridden.includes(k)) changes[k] = { from: (state.value as Record<string, unknown>)[k], to: 'sport default' }
+  for (const [k, v] of Object.entries(cfgPatch)) note(k, v)
+  if (ambushCount !== undefined) note('whispererAmbushCount', ambushCount)
+
+  if (Object.keys(changes).length > 0) {
+    const ruleKeysTouched = Object.keys(parsed.patch).length > 0 || resets.length > 0
+    if (ruleKeysTouched) {
+      // Read-merge-write in one transaction so a concurrent settings save is not overwritten.
+      await prisma.$transaction(async (tx) => {
+        const league = await tx.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+        const prev = (league?.settings ?? {}) as Record<string, unknown>
+        const merged: ZombieRuleOverrides = { ...readZombieRuleOverrides(prev), ...parsed.patch }
+        for (const k of resets) delete (merged as Record<string, unknown>)[k]
+        await tx.league.update({
+          where: { id: leagueId },
+          data: { settings: { ...prev, [ZOMBIE_RULES_SETTINGS_KEY]: merged } as Prisma.InputJsonValue },
+        })
+      })
+    }
+    if (Object.keys(cfgPatch).length > 0) await upsertZombieLeagueConfig(leagueId, cfgPatch)
+    if (ambushCount !== undefined || cfgPatch.whispererSelection !== undefined) {
+      // whispererSelectionMode mirrors the config for the rules page; the ambush count is copied onto
+      // the Whisperer when one is chosen, so a change applies from the next selection.
+      await prisma.zombieLeague.update({
+        where: { leagueId },
+        data: {
+          ...(ambushCount !== undefined ? { whispererAmbushCount: ambushCount } : {}),
+          ...(cfgPatch.whispererSelection !== undefined ? { whispererSelectionMode: cfgPatch.whispererSelection } : {}),
+        },
+      })
+    }
+    const z = await prisma.zombieLeague.findUnique({ where: { leagueId }, select: { id: true } })
+    if (z) {
+      await logAuditEntry(z.id, {
+        category: 'commissioner_override',
+        action: 'RULES_CHANGED',
+        description: `Zombie rules changed: ${Object.keys(changes).join(', ')}`,
+        actorUserId: userId,
+        actorRole: 'commissioner',
+        previousState: Object.fromEntries(Object.entries(changes).map(([k, c]) => [k, c.from])) as Prisma.InputJsonValue,
+        newState: Object.fromEntries(Object.entries(changes).map(([k, c]) => [k, c.to])) as Prisma.InputJsonValue,
+      }).catch(() => {})
+    }
+  }
+  return NextResponse.json({ ok: true, zombie: await loadZombieState(leagueId) })
 }
