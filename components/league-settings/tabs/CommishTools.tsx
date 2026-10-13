@@ -298,3 +298,177 @@ export function ResetLeagueCard({ leagueId, leagueName }: { leagueId: string; le
     </section>
   )
 }
+
+type ScoreTeam = { rosterId: string; name: string; record: string } | null
+type ScoreRow = {
+  matchupId: string
+  home: ScoreTeam
+  away: ScoreTeam
+  homeScore: number
+  awayScore: number | null
+  status: string
+  editedByCommish: boolean
+}
+type ScoresPayload = { season: number; currentWeek: number; weeks: number[]; week: number | null; matchups: ScoreRow[] }
+
+/**
+ * Edit Matchup Scores: past regular-season weeks only. Saving writes the scores and rebuilds every
+ * record (W/L/T, points for/against, streaks, seeds, median game) in one step, so standings can never
+ * sit out of date between "edit" and "recalculate".
+ */
+export function EditMatchupScoresCard({ leagueId }: { leagueId: string }) {
+  const { t } = useLanguage()
+  const [data, setData] = useState<ScoresPayload | null>(null)
+  const [draft, setDraft] = useState<Record<string, { home: string; away: string }>>({})
+  const [status, setStatus] = useState<'loading' | 'ready' | 'none' | 'error'>('loading')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const base = `/api/leagues/${encodeURIComponent(leagueId)}/commish-scores`
+
+  const apply = useCallback((d: ScoresPayload) => {
+    setData(d)
+    setDraft(
+      Object.fromEntries(
+        d.matchups.map((m) => [m.matchupId, { home: String(m.homeScore), away: m.awayScore == null ? '' : String(m.awayScore) }]),
+      ),
+    )
+    setStatus(d.weeks.length === 0 ? 'none' : 'ready')
+  }, [])
+
+  const load = useCallback(
+    async (week?: number) => {
+      setError(null)
+      try {
+        const res = await fetch(week ? `${base}?week=${week}` : base, { credentials: 'include' })
+        if (res.status === 404) {
+          setStatus('none')
+          return
+        }
+        if (!res.ok) throw new Error(String(res.status))
+        apply((await res.json()) as ScoresPayload)
+      } catch {
+        setStatus('error')
+      }
+    },
+    [base, apply],
+  )
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  const changed = (data?.matchups ?? []).filter((m) => {
+    const d = draft[m.matchupId]
+    return d && (Number(d.home) !== m.homeScore || (m.away != null && Number(d.away) !== m.awayScore))
+  })
+
+  const save = async () => {
+    if (!data?.week) return
+    setSaving(true)
+    setError(null)
+    try {
+      const res = await fetch(base, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          week: data.week,
+          scores: changed.map((m) => ({
+            matchupId: m.matchupId,
+            homeScore: Number(draft[m.matchupId]!.home),
+            ...(m.away ? { awayScore: Number(draft[m.matchupId]!.away) } : {}),
+          })),
+        }),
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setError(typeof body.error === 'string' ? body.error : t('lsHub.sp.saveFailed'))
+        return
+      }
+      toast.success(t('lsHub.ms.saved').replace('{{week}}', String(data.week)))
+      await load(data.week)
+    } catch {
+      setError(t('lsHub.sp.saveFailed'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const scoreInput =
+    'w-20 rounded-full border border-cyan-400/40 bg-black/30 px-2 py-1.5 text-center text-[13px] font-semibold text-cyan-100 outline-none focus:border-cyan-300'
+  const clean = (v: string) => v.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1')
+
+  return (
+    <HubCard title={t('lsHub.ms.title')} testId="commish-edit-scores">
+      <p className="text-[12px] text-white/50">{t('lsHub.ms.hint')}</p>
+      {status === 'loading' ? (
+        <div className="h-24 animate-pulse rounded-xl bg-white/[0.05]" />
+      ) : status === 'none' ? (
+        <p className="text-[12px] text-white/50">{t('lsHub.ms.none')}</p>
+      ) : status === 'error' || !data ? (
+        <p className="text-[12px] text-red-300/85">{t('lsHub.ct.loadFailed')}</p>
+      ) : (
+        <>
+          <div className="scrollbar-none flex gap-1.5 overflow-x-auto pb-1" role="radiogroup" aria-label={t('lsHub.ms.selectWeek')}>
+            {[...data.weeks].reverse().map((w) => (
+              <button
+                key={w}
+                type="button"
+                role="radio"
+                aria-checked={w === data.week}
+                onClick={() => void load(w)}
+                className={`flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-full border text-[10px] leading-tight transition ${
+                  w === data.week ? 'border-cyan-300 bg-cyan-400 text-[#04131a]' : 'border-white/[0.12] bg-white/[0.06] text-white/70'
+                }`}
+              >
+                <span>{t('lsHub.ms.wk')}</span>
+                <span className="text-[15px] font-bold">{w}</span>
+              </button>
+            ))}
+          </div>
+          <ul className="divide-y divide-white/[0.06] rounded-2xl border border-white/[0.08] bg-black/20" data-testid="commish-edit-scores-list">
+            {data.matchups.map((m) => (
+              <li key={m.matchupId} className="space-y-2 px-3 py-3">
+                {[
+                  { side: 'home' as const, team: m.home },
+                  { side: 'away' as const, team: m.away },
+                ].map(({ side, team }) =>
+                  team ? (
+                    <div key={side} className="flex items-center justify-between gap-3">
+                      <span className="min-w-0">
+                        <span className="block truncate text-[13px] font-semibold text-white">{team.name}</span>
+                        <span className="text-[11px] text-white/45">{team.record}</span>
+                      </span>
+                      <input
+                        inputMode="decimal"
+                        aria-label={`${team.name} ${t('lsHub.ms.score')}`}
+                        className={scoreInput}
+                        value={draft[m.matchupId]?.[side] ?? ''}
+                        onChange={(e) =>
+                          setDraft((d) => ({ ...d, [m.matchupId]: { ...d[m.matchupId]!, [side]: clean(e.target.value) } }))
+                        }
+                      />
+                    </div>
+                  ) : (
+                    <p key={side} className="text-[11px] text-white/40">{t('lsHub.ms.bye')}</p>
+                  ),
+                )}
+                {m.editedByCommish ? <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-200/70">{t('lsHub.ms.edited')}</p> : null}
+              </li>
+            ))}
+          </ul>
+          {error ? <p className="text-[12px] text-amber-200/85" role="alert">{error}</p> : null}
+          <button
+            type="button"
+            disabled={saving || changed.length === 0}
+            onClick={() => void save()}
+            className="w-full rounded-full bg-cyan-400 px-4 py-3 text-[13px] font-extrabold tracking-wide text-[#04131a] disabled:opacity-40"
+            data-testid="commish-edit-scores-save"
+          >
+            {saving ? t('lsHub.saving') : t('lsHub.ms.save').replace('{{week}}', String(data.week ?? ''))}
+          </button>
+        </>
+      )}
+    </HubCard>
+  )
+}
