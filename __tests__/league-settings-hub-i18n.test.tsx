@@ -63,7 +63,7 @@ const ROOT = resolve(__dirname, '..')
 const FILES = [
   'components/league-settings/LeagueSettingsControlCenter.tsx', 'components/league-settings/DuplicateManagerWarningsSection.tsx',
   'app/league/[leagueId]/components/DeleteLeagueFromAfPanel.tsx',
-  ...['GeneralTab', 'WaiversTab', 'AISettingsTab', 'TradesTab', 'PlayoffsTab', 'ScoringTab', 'RostersTab', 'MembersTab', 'CommissionerTab', 'MyTeamTab', 'LeagueLegend',
+  ...['GeneralTab', 'WaiversTab', 'AISettingsTab', 'TradesTab', 'PlayoffsTab', 'ScoringTab', 'RostersTab', 'MembersTab', 'CommissionerTab', 'MyTeamTab', 'LeagueLegend', 'CommishTools',
     'specialty/SpecialtyTab', 'specialty/GuillotineSettingsForm', 'specialty/SpecialtyFormatSections'].map((f) => `components/league-settings/tabs/${f}.tsx`),
 ]
 const TAB_IDS = ['general', 'myTeam', 'draft', 'roster', 'scoring', 'playoffs', 'members', 'commissioner', 'specialty', 'ai']
