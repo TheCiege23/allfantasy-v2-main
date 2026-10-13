@@ -5,6 +5,7 @@ import { HelpCircle } from 'lucide-react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { useLeagueSettingsSectionAutosave } from '@/hooks/useLeagueSettingsSectionAutosave'
 import type { LeagueSettingsTabProps } from '../league-settings-tabs-types'
+import { HubToggle } from './hubFields'
 
 /** Option labels are dictionary keys, resolved at render. */
 const WAIVER_TYPES = [
@@ -22,13 +23,24 @@ export function WaiversTab({ ctx, canEdit }: LeagueSettingsTabProps) {
   const [waiverBudget, setWaiverBudget] = useState(ctx.league.waiverBudget ?? 100)
   const [waiverMinBid, setWaiverMinBid] = useState(ctx.league.waiverMinBid ?? 0)
   const [waiverHours, setWaiverHours] = useState(ctx.league.waiverHours ?? 24)
+  const [clearAfterGames, setClearAfterGames] = useState(ctx.league.waiverClearAfterGames ?? true)
+  const [customDaily, setCustomDaily] = useState(Boolean(ctx.league.customDailyWaivers))
 
   useEffect(() => {
     setWaiverType(ctx.league.waiverType ?? 'rolling')
     setWaiverBudget(ctx.league.waiverBudget ?? 100)
     setWaiverMinBid(ctx.league.waiverMinBid ?? 0)
     setWaiverHours(ctx.league.waiverHours ?? 24)
-  }, [ctx.league.waiverType, ctx.league.waiverBudget, ctx.league.waiverMinBid, ctx.league.waiverHours])
+    setClearAfterGames(ctx.league.waiverClearAfterGames ?? true)
+    setCustomDaily(Boolean(ctx.league.customDailyWaivers))
+  }, [
+    ctx.league.waiverType,
+    ctx.league.waiverBudget,
+    ctx.league.waiverMinBid,
+    ctx.league.waiverHours,
+    ctx.league.waiverClearAfterGames,
+    ctx.league.customDailyWaivers,
+  ])
 
   return (
     <div className="space-y-5">
@@ -109,6 +121,27 @@ export function WaiversTab({ ctx, canEdit }: LeagueSettingsTabProps) {
           />
         </label>
       </div>
+
+      <HubToggle
+        label={t('lsHub.wv.clearAfterGames')}
+        hint={t('lsHub.wv.clearAfterGamesHint')}
+        checked={clearAfterGames}
+        disabled={!canEdit}
+        onChange={(v) => {
+          setClearAfterGames(v)
+          queuePatch({ waiverClearAfterGames: v })
+        }}
+      />
+      <HubToggle
+        label={t('lsHub.wv.customDaily')}
+        hint={t('lsHub.wv.customDailyHint')}
+        checked={customDaily}
+        disabled={!canEdit}
+        onChange={(v) => {
+          setCustomDaily(v)
+          queuePatch({ customDailyWaivers: v })
+        }}
+      />
     </div>
   )
 }

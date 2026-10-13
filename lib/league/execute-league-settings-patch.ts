@@ -24,6 +24,12 @@ import { recordProductEvent } from '@/lib/analytics/recordAnalyticsEvent'
 import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
 import { structuralPatchRefusal } from '@/lib/league/structuralSettingsLock'
 import { leagueChatThreadLinkRefusalInPatch } from '@/lib/league/leagueChatThreadLink'
+import {
+  SPECIALTY_GATED_PATCH_KEYS,
+  SPECIALTY_GATED_SETTINGS_MERGE_KEYS,
+  SPECIALTY_UNLOCK_SETTINGS_KEY,
+  specialtySettingsEditRefusal,
+} from '@/lib/league/specialty-settings-access'
 
 const DRAFT_TYPES = new Set(['snake', 'linear', '3rd_reversal', 'auction'])
 const ORDER_METHODS = new Set([
@@ -280,6 +286,24 @@ export async function executeLeagueSettingsPatch(
   // here — before the first write below — against the one rule (lib/league/leagueChatThreadLink.ts).
   const chatLinkRefusal = leagueChatThreadLinkRefusalInPatch(leagueId, body.settingsMerge)
   if (chatLinkRefusal) return jsonError(chatLinkRefusal, 400)
+
+  // Specialty format rules are AF Commish (or a per-league token unlock) — enforced HERE, on every
+  // door into this patch, not by the settings tab. The unlock record itself is written only by
+  // /api/leagues/[leagueId]/specialty-settings after a charge; a merge must never forge it.
+  const mergeKeys =
+    body.settingsMerge && typeof body.settingsMerge === 'object' && !Array.isArray(body.settingsMerge)
+      ? Object.keys(body.settingsMerge as Record<string, unknown>)
+      : []
+  if (mergeKeys.includes(SPECIALTY_UNLOCK_SETTINGS_KEY)) {
+    return jsonError(`${SPECIALTY_UNLOCK_SETTINGS_KEY} cannot be written through league settings`, 400)
+  }
+  if (
+    Object.keys(body).some((k) => SPECIALTY_GATED_PATCH_KEYS.has(k)) ||
+    mergeKeys.some((k) => SPECIALTY_GATED_SETTINGS_MERGE_KEYS.has(k))
+  ) {
+    const refusal = await specialtySettingsEditRefusal(leagueId, userId)
+    if (refusal) return refusal
+  }
 
   const updatedFieldNames: string[] = []
 

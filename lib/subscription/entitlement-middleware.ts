@@ -25,6 +25,12 @@ export type FeatureGateMiddlewareOptions = {
   tokenDescription?: string
   tokenMetadata?: Record<string, unknown>
   /**
+   * Makes the token charge exactly-once for this key (TokenLedger.idempotencyKey). For an UNLOCK
+   * (one league, one season) rather than a per-request run, so a double tap or a retry after a
+   * dropped response returns the first ledger entry instead of charging again.
+   */
+  tokenIdempotencyKey?: string
+  /**
    * Take the token path EVEN THOUGH the plan grants the feature. For a feature a plan includes up to
    * an allowance (Chimmy: AF Pro, 100 answers a day — lib/chimmy/planAllowance.ts): once it is used,
    * the plan holder pays tokens exactly as a free account does, consent prompt and all. Requires
@@ -173,6 +179,7 @@ export async function requireFeatureEntitlement(
         featureId: options.featureId,
         ...(options.tokenMetadata ?? {}),
       },
+      idempotencyKey: options.tokenIdempotencyKey ?? null,
       userEmail: options.userEmail,
     })
   } catch (error) {

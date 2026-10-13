@@ -5,6 +5,7 @@ import { useLeagueSettingsSectionAutosave } from '@/hooks/useLeagueSettingsSecti
 import { PlayoffSettingsEditor } from '@/components/league-settings/PlayoffSettingsEditor'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import type { LeagueSettingsTabProps } from '../league-settings-tabs-types'
+import { HubCard, HubChoices, HubSavingNote, rangeChoices } from './hubFields'
 
 export function PlayoffsTab({ ctx, canEdit }: LeagueSettingsTabProps) {
   const { t } = useLanguage()
@@ -13,58 +14,94 @@ export function PlayoffsTab({ ctx, canEdit }: LeagueSettingsTabProps) {
 
   const [playoffTeams, setPlayoffTeams] = useState(ctx.league.playoffTeams ?? 6)
   const [playoffStartWeek, setPlayoffStartWeek] = useState(ctx.league.playoffStartWeek ?? 14)
+  const [weeksPerRound, setWeeksPerRound] = useState<number>(ctx.league.playoffWeeksPerRound ?? 1)
+  const [seeding, setSeeding] = useState<string>(ctx.league.playoffSeedingRule ?? 'default')
+  const [lower, setLower] = useState<string>(ctx.league.playoffLowerBracket ?? 'consolation')
 
   useEffect(() => {
     setPlayoffTeams(ctx.league.playoffTeams ?? 6)
     setPlayoffStartWeek(ctx.league.playoffStartWeek ?? 14)
-  }, [ctx.league.playoffTeams, ctx.league.playoffStartWeek])
+    setWeeksPerRound(ctx.league.playoffWeeksPerRound ?? 1)
+    setSeeding(ctx.league.playoffSeedingRule ?? 'default')
+    setLower(ctx.league.playoffLowerBracket ?? 'consolation')
+  }, [
+    ctx.league.playoffTeams,
+    ctx.league.playoffStartWeek,
+    ctx.league.playoffWeeksPerRound,
+    ctx.league.playoffSeedingRule,
+    ctx.league.playoffLowerBracket,
+  ])
 
   const teamCap = ctx.league.leagueSize ?? ctx.league.teams?.length ?? 12
+  const teamOptions = rangeChoices(2, Math.max(2, Math.min(teamCap, 16)))
+  const weekOptions = rangeChoices(10, 18, (n) => t('lsHub.ro.weekN').replace('{{n}}', String(n)))
 
   return (
     <div className="space-y-8">
-      <div className="rounded-2xl border border-white/[0.08] bg-[#0a1228]/90 p-4">
-        <h4 className="mb-3 text-[12px] font-bold uppercase tracking-wide text-white/55">{t('lsHub.po.quick')}</h4>
-        {saving ? <p className="mb-2 text-[11px] text-cyan-300/80">{t('lsHub.saving')}</p> : null}
-        <div className="grid gap-4 sm:grid-cols-2">
-          <label className="block">
-            <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-white/40">
-              {t('lsHub.po.teams')}
-            </span>
-            <input
-              type="number"
-              min={2}
-              max={teamCap}
-              value={playoffTeams}
-              disabled={!canEdit}
-              onChange={(e) => {
-                const v = Number(e.target.value)
-                setPlayoffTeams(v)
-                queuePatch({ playoffTeams: v })
-              }}
-              className="w-full rounded-xl border border-white/[0.10] bg-black/25 px-3 py-2 text-sm text-white disabled:opacity-50"
-            />
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-white/40">
-              {t('lsHub.po.start')}
-            </span>
-            <input
-              type="number"
-              min={10}
-              max={18}
-              value={playoffStartWeek}
-              disabled={!canEdit}
-              onChange={(e) => {
-                const v = Number(e.target.value)
-                setPlayoffStartWeek(v)
-                queuePatch({ playoffStartWeek: v })
-              }}
-              className="w-full rounded-xl border border-white/[0.10] bg-black/25 px-3 py-2 text-sm text-white disabled:opacity-50"
-            />
-          </label>
-        </div>
-      </div>
+      <HubCard title={t('lsHub.po.quick')} testId="league-settings-playoff-schedule">
+        <HubSavingNote saving={saving} text={t('lsHub.saving')} />
+        <HubChoices
+          label={t('lsHub.po.start')}
+          value={playoffStartWeek}
+          disabled={!canEdit}
+          options={weekOptions}
+          onChange={(n) => {
+            setPlayoffStartWeek(n)
+            queuePatch({ playoffStartWeek: n })
+          }}
+        />
+        <p className="text-[11px] leading-relaxed text-white/45">{t('lsHub.po.week18Hint')}</p>
+        <HubChoices
+          label={t('lsHub.po.teams')}
+          value={playoffTeams}
+          disabled={!canEdit}
+          options={teamOptions}
+          onChange={(n) => {
+            setPlayoffTeams(n)
+            queuePatch({ playoffTeams: n })
+          }}
+        />
+        <HubChoices
+          label={t('lsHub.po.weeksPerRound')}
+          value={weeksPerRound}
+          disabled={!canEdit}
+          options={[
+            { value: 1, label: t('lsHub.po.oneWeek'), hint: t('lsHub.po.oneWeekHint') },
+            { value: 2, label: t('lsHub.po.twoWeeks'), hint: t('lsHub.po.twoWeeksHint') },
+          ]}
+          onChange={(n) => {
+            setWeeksPerRound(n)
+            queuePatch({ playoffWeeksPerRound: n })
+          }}
+        />
+        <HubChoices
+          label={t('lsHub.po.seeding')}
+          value={seeding}
+          disabled={!canEdit}
+          options={[
+            { value: 'default', label: t('lsHub.po.seedDefault'), hint: t('lsHub.po.seedDefaultHint') },
+            { value: 'reseed', label: t('lsHub.po.reseed'), hint: t('lsHub.po.reseedHint') },
+          ]}
+          onChange={(v) => {
+            setSeeding(v)
+            queuePatch({ playoffSeedingRule: v })
+          }}
+        />
+        <HubChoices
+          label={t('lsHub.po.lower')}
+          value={lower}
+          disabled={!canEdit}
+          options={[
+            { value: 'toilet', label: t('lsHub.po.toilet'), hint: t('lsHub.po.toiletHint') },
+            { value: 'consolation', label: t('lsHub.po.consolation'), hint: t('lsHub.po.consolationHint') },
+            { value: 'none', label: t('lsHub.none') },
+          ]}
+          onChange={(v) => {
+            setLower(v)
+            queuePatch({ playoffLowerBracket: v })
+          }}
+        />
+      </HubCard>
 
       <div>
         <h4 className="mb-2 text-[12px] font-bold uppercase tracking-wide text-white/55">{t('lsHub.po.stages')}</h4>

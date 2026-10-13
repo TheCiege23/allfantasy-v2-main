@@ -63,7 +63,7 @@ export const AF_OWNED_LEAGUE_SETTINGS_KEYS = [
 
   // ── What a human told us about the league ─────────────────────────────────
   'leagueTypeConfirmation', // lib/career/leagueTypeConfirmation.ts — the only verified league type
-  'concept_rules_overlay', // ConceptRulesTab settingsMerge — an AF overlay ON TOP of platform rules
+  'concept_rules_overlay', // former ConceptRulesTab settingsMerge (editor retired 2026-10-13; data kept) — an AF overlay ON TOP of platform rules
   'devy_league_config', // execute-league-settings-patch — devy has no platform counterpart
   'c2cImport', // lib/league-import/c2cMultiSourceCommit.ts — links the college + pro sources
   'c2cTaxiLockMode', // /api/c2c/settings

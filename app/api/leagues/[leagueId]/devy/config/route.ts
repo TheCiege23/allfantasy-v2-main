@@ -8,6 +8,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
 import { isCommissioner } from '@/lib/commissioner/permissions'
+import { specialtySettingsEditRefusal } from '@/lib/league/specialty-settings-access'
 import { isDevyLeague, getDevyConfig, upsertDevyConfig } from '@/lib/devy/DevyLeagueConfig'
 
 export const dynamic = 'force-dynamic'
@@ -86,7 +87,9 @@ export async function PUT(
   if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
 
   const commissioner = await isCommissioner(leagueId, userId)
-  if (!commissioner) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+  if (!commissioner) return NextResponse.json({ error: 'Commish only' }, { status: 403 })
+  const refusal = await specialtySettingsEditRefusal(leagueId, userId)
+  if (refusal) return refusal
 
   const isDevy = await isDevyLeague(leagueId)
   if (!isDevy) return NextResponse.json({ error: 'Not a devy dynasty league' }, { status: 404 })

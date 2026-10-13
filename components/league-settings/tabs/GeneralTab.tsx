@@ -4,8 +4,12 @@ import { useEffect, useState } from 'react'
 import { HelpCircle } from 'lucide-react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { LeagueRulesSummarySection } from '@/app/league/[leagueId]/components/LeagueRulesSummarySection'
+import LeagueTypeConfirm from '@/components/league/LeagueTypeConfirm'
 import { useLeagueSettingsSectionAutosave } from '@/hooks/useLeagueSettingsSectionAutosave'
 import type { LeagueSettingsTabProps } from '../league-settings-tabs-types'
+import { HubCard, HubChoices, HubToggle, rangeChoices } from './hubFields'
+import { WaiversTab } from './WaiversTab'
+import { TradesTab } from './TradesTab'
 
 const TZ_PRESETS = [
   'America/New_York',
@@ -16,7 +20,27 @@ const TZ_PRESETS = [
   'Europe/London',
 ]
 
-export function GeneralTab({ ctx, canEdit }: LeagueSettingsTabProps) {
+/** The team counts commishes pick from; the league's own count is kept even when it is off-list. */
+const TEAM_COUNTS = [4, 6, 8, 10, 12, 14, 16, 18, 20]
+
+/** Core-rule switches, all plain `League` columns patched through the `general` section. */
+const CORE_TOGGLES = [
+  { key: 'medianGame', labelKey: 'lsHub.gen.median', hintKey: 'lsHub.gen.medianHint' },
+  { key: 'allowPreDraftMoves', labelKey: 'lsHub.gen.preDraftMoves', hintKey: null },
+  { key: 'preventBenchDrops', labelKey: 'lsHub.gen.benchDrops', hintKey: null },
+  { key: 'lockAllMoves', labelKey: 'lsHub.gen.lockMoves', hintKey: 'lsHub.gen.lockMovesHint' },
+  { key: 'overrideInviteCapacity', labelKey: 'lsHub.gen.inviteCapacity', hintKey: 'lsHub.gen.inviteCapacityHint' },
+  { key: 'disableInviteLinks', labelKey: 'lsHub.gen.disableInvites', hintKey: null },
+] as const
+type CoreToggleKey = (typeof CORE_TOGGLES)[number]['key']
+
+/**
+ * League tab: identity, format, team count and core rules, with waivers and trades as sections of
+ * the same screen (they used to be two more tabs). Everything autosaves through the sectioned
+ * settings PATCH, so the server's commish/co-commish check and lifecycle locks apply.
+ */
+export function GeneralTab(props: LeagueSettingsTabProps) {
+  const { ctx, canEdit } = props
   const { t } = useLanguage()
   const leagueId = ctx.league.id
   const { queuePatch, saving } = useLeagueSettingsSectionAutosave(leagueId, 'general', {
@@ -26,12 +50,20 @@ export function GeneralTab({ ctx, canEdit }: LeagueSettingsTabProps) {
   const [name, setName] = useState(ctx.league.name ?? '')
   const [timezone, setTimezone] = useState(ctx.league.timezone ?? 'America/New_York')
   const [logoUrl, setLogoUrl] = useState(ctx.league.logoUrl ?? '')
+  const [leagueSize, setLeagueSize] = useState<number>(ctx.league.leagueSize ?? ctx.league.teams?.length ?? 12)
+  const [dispersalRounds, setDispersalRounds] = useState<number>(ctx.league.dispersalDraftRounds ?? 0)
+  const [core, setCore] = useState<Record<CoreToggleKey, boolean>>(() => coreFrom(ctx.league))
 
   useEffect(() => {
     setName(ctx.league.name ?? '')
     setTimezone(ctx.league.timezone ?? 'America/New_York')
     setLogoUrl(ctx.league.logoUrl ?? '')
-  }, [ctx.league.name, ctx.league.timezone, ctx.league.logoUrl])
+    setLeagueSize(ctx.league.leagueSize ?? ctx.league.teams?.length ?? 12)
+    setDispersalRounds(ctx.league.dispersalDraftRounds ?? 0)
+    setCore(coreFrom(ctx.league))
+  }, [ctx.league])
+
+  const teamCounts = TEAM_COUNTS.includes(leagueSize) ? TEAM_COUNTS : [...TEAM_COUNTS, leagueSize].sort((a, b) => a - b)
 
   const sleeperSettingsHref = ctx.sleeperLeagueId
     ? `https://sleeper.com/leagues/${ctx.sleeperLeagueId}/settings`
@@ -114,6 +146,58 @@ export function GeneralTab({ ctx, canEdit }: LeagueSettingsTabProps) {
         ) : null}
       </div>
 
+      <LeagueTypeConfirm leagueId={leagueId} alwaysShow />
+
+      <HubCard title={t('lsHub.gen.format')} testId="league-settings-format-card">
+        <HubChoices
+          label={t('lsHub.gen.teams')}
+          value={leagueSize}
+          disabled={!canEdit}
+          options={teamCounts.map((n) => ({ value: n, label: String(n) }))}
+          onChange={(n) => {
+            setLeagueSize(n)
+            queuePatch({ leagueSize: n })
+          }}
+          testId="league-settings-team-count"
+        />
+        <p className="text-[11px] leading-relaxed text-white/45">{t('lsHub.gen.teamsLock')}</p>
+        <HubChoices
+          label={t('lsHub.gen.dispersal')}
+          value={dispersalRounds}
+          disabled={!canEdit}
+          options={rangeChoices(0, 7, (n) => (n === 0 ? t('lsHub.none') : String(n)))}
+          onChange={(n) => {
+            setDispersalRounds(n)
+            queuePatch({ dispersalDraftRounds: n })
+          }}
+        />
+      </HubCard>
+
+      <HubCard title={t('lsHub.gen.coreRules')} testId="league-settings-core-rules">
+        {CORE_TOGGLES.map((row) => (
+          <HubToggle
+            key={row.key}
+            label={t(row.labelKey)}
+            hint={row.hintKey ? t(row.hintKey) : undefined}
+            checked={core[row.key]}
+            disabled={!canEdit}
+            testId={`league-settings-${row.key}`}
+            onChange={(v) => {
+              setCore((c) => ({ ...c, [row.key]: v }))
+              queuePatch({ [row.key]: v })
+            }}
+          />
+        ))}
+      </HubCard>
+
+      <HubCard title={t('lsHub.tab.waivers')} testId="league-settings-waivers-section">
+        <WaiversTab {...props} />
+      </HubCard>
+
+      <HubCard title={t('lsHub.tab.trades')} testId="league-settings-trades-section">
+        <TradesTab {...props} />
+      </HubCard>
+
       <LeagueRulesSummarySection
         league={ctx.league}
         displayLeague={ctx.displayLeague}
@@ -122,4 +206,11 @@ export function GeneralTab({ ctx, canEdit }: LeagueSettingsTabProps) {
       />
     </div>
   )
+}
+
+function coreFrom(league: Partial<Record<CoreToggleKey, boolean | null>>): Record<CoreToggleKey, boolean> {
+  // Schema defaults: everything off except pre-draft moves.
+  return Object.fromEntries(
+    CORE_TOGGLES.map((row) => [row.key, league[row.key] ?? row.key === 'allowPreDraftMoves']),
+  ) as Record<CoreToggleKey, boolean>
 }

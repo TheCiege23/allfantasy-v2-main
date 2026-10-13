@@ -206,6 +206,18 @@ export const TOKEN_SPEND_RULE_MATRIX: readonly TokenPricingMatrixEntry[] = [
     requiredPlan: "commissioner",
   },
   {
+    // ONE charge per league per season, not per save — the unlock route passes an idempotency key
+    // (lib/league/specialty-settings-access.ts). Charging per request would bill every autosave.
+    code: "commissioner_specialty_settings_league_unlock",
+    category: "commissioner_function",
+    featureLabel: "Specialty league settings unlock (one league, one season)",
+    description: "Lets the commish and co-commishes edit this league's specialty format rules for the season.",
+    tier: "high",
+    complexity: "heavy",
+    tokenCost: 200,
+    requiredPlan: "commissioner",
+  },
+  {
     code: "commissioner_ai_full_league_recap",
     category: "commissioner_function",
     featureLabel: "Full league recap",

@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { requireCommissionerOnly } from '@/lib/league/permissions'
+import { specialtySettingsEditRefusal } from '@/lib/league/specialty-settings-access'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,6 +20,8 @@ export async function PATCH(req: Request) {
   if (!leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
 
   await requireCommissionerOnly(leagueId, userId)
+  const refusal = await specialtySettingsEditRefusal(leagueId, userId)
+  if (refusal) return refusal
 
   const z = await prisma.zombieLeague.findUnique({ where: { leagueId } })
   if (!z) return NextResponse.json({ error: 'Zombie league not found' }, { status: 404 })

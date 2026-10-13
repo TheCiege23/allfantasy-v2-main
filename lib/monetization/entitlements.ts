@@ -167,6 +167,16 @@ export const ENTITLEMENTS = {
     upgradeLabel: 'Get AF Commissioner',
     highlightParam: 'c2c_ai',
   },
+  commissioner_specialty_settings: {
+    key: 'commissioner_specialty_settings',
+    label: 'Specialty League Settings',
+    description:
+      'Edit specialty format rules (Guillotine, Survivor, Zombie, Big Brother, Salary Cap, Devy, C2C, Tournament). Included with AF Commish, or unlock one league for the season with AF Tokens.',
+    requiredPlan: ['af_commissioner', 'af_supreme'],
+    upgradeUrl: '/commissioner-upgrade',
+    upgradeLabel: 'Get AF Commish',
+    highlightParam: 'specialty_settings',
+  },
   commissioner_dispersal_draft: {
     key: 'commissioner_dispersal_draft',
     label: 'Dispersal Draft',
@@ -371,6 +381,7 @@ export const HIGHLIGHT_TO_PLAN_FAMILY: Record<string, SubscriptionPlanFamily> = 
   power_rankings: 'af_commissioner',
   idp_ai: 'af_commissioner',
   c2c_ai: 'af_commissioner',
+  specialty_settings: 'af_commissioner',
   draft_ai: 'af_pro',
   waiver_ai: 'af_pro',
   trade_ai: 'af_pro',

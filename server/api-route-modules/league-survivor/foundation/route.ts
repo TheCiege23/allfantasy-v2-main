@@ -29,6 +29,7 @@ import { tallyCouncil, revealCouncil } from '@/lib/survivor/survivorVoteTallySer
 import { resolveElimination } from '@/lib/survivor/survivorEliminationService'
 import { sendPushToUser } from '@/lib/push-notifications'
 import { getStealThreePreview, playStealThree } from '@/lib/survivor/survivorStealThree'
+import { specialtySettingsEditRefusal } from '@/lib/league/specialty-settings-access'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -217,8 +218,12 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
 
   if (action === 'update-settings' || action === 'set-commissioner-participation-mode') {
     if (!access.decisions.canUpdateSettings) {
-      return NextResponse.json({ error: 'Commissioner access required' }, { status: 403 })
+      return NextResponse.json({ error: 'Commish access required' }, { status: 403 })
     }
+    // Rule SETTINGS are AF Commish (or a per-league token unlock). Live host actions below — councils,
+    // votes, idols — are not settings and stay ungated, so a running season is never stopped mid-week.
+    const specialtyRefusal = await specialtySettingsEditRefusal(leagueId, userId)
+    if (specialtyRefusal) return specialtyRefusal
     if (action === 'set-commissioner-participation-mode') {
       const mode =
         body.mode === 'participating_player' || body.commissionerParticipationMode === 'participating_player'

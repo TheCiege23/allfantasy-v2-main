@@ -93,6 +93,13 @@ export const TOKEN_PURCHASABLE_RULES: readonly TokenPurchasableRule[] = [
     who: 'pool_manager',
     where: 'World Cup pool manager tools',
   },
+  {
+    // One charge per league per season (idempotent) — lib/league/specialty-settings-access.ts.
+    code: 'commissioner_specialty_settings_league_unlock',
+    label: 'Specialty league settings unlock (one league, one season)',
+    who: 'commissioner',
+    where: 'League settings → Specialty tab',
+  },
 ]
 
 const BY_CODE = new Map(TOKEN_PURCHASABLE_RULES.map((r) => [r.code, r]))

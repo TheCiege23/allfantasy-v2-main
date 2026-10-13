@@ -453,6 +453,21 @@ const PREMIUM_FEATURE_MONETIZATION_MATRIX: readonly PremiumFeatureMonetizationEn
     },
   },
   {
+    key: "commissioner_specialty_settings",
+    title: "Specialty league settings",
+    accessType: "subscription_or_tokens",
+    requiredPlanId: "commissioner",
+    tokenRuleCode: "commissioner_specialty_settings_league_unlock",
+    lockedReason: "Editing specialty format rules is part of AF Commish (or AF Supreme), or unlock one league for the season with AF Tokens.",
+    backendEnforcement: "specialtySettingsEditRefusal() on every specialty config write route + the conceptRules settings section; one-time unlock via POST /api/leagues/[leagueId]/specialty-settings.",
+    frontendGateBehavior: "Specialty tab in league settings shows read-only rules with upgrade + token unlock CTA.",
+    unavailableBehavior: "disable_with_fallback",
+    surfaceHints: {
+      routes: ["/league/[leagueId]?view=settings"],
+      components: ["SpecialtyTab"],
+    },
+  },
+  {
     key: "big_brother_ai",
     title: "Big Brother AI (player)",
     accessType: "subscription_or_tokens",

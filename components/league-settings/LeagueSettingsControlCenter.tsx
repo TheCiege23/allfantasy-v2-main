@@ -11,53 +11,63 @@ import { GeneralTab } from './tabs/GeneralTab'
 import { ScoringTab } from './tabs/ScoringTab'
 import { RostersTab } from './tabs/RostersTab'
 import { DraftTab } from './tabs/DraftTab'
-import { WaiversTab } from './tabs/WaiversTab'
-import { TradesTab } from './tabs/TradesTab'
 import { PlayoffsTab } from './tabs/PlayoffsTab'
+import { MembersTab } from './tabs/MembersTab'
 import { CommissionerTab } from './tabs/CommissionerTab'
-import { ConceptRulesTab } from './tabs/ConceptRulesTab'
+import { SpecialtyTab } from './tabs/specialty/SpecialtyTab'
 import { AISettingsTab } from './tabs/AISettingsTab'
 
+/**
+ * Nine tabs, consolidated 2026-10-13 from thirteen: Waivers and Trades are sections of League
+ * (`general`); Members, Permissions and Notifications were three tabs rendering the same panels
+ * and are now `members`; Advanced Rule Support became `specialty`, the gated specialty-format tab.
+ * Old ids still resolve (resolveInitialTab) so deep links keep landing somewhere sensible.
+ */
 export type LeagueSettingsHubTabId =
   | 'general'
-  | 'scoring'
-  | 'roster'
   | 'draft'
-  | 'waivers'
-  | 'trades'
+  | 'roster'
+  | 'scoring'
   | 'playoffs'
   | 'members'
-  | 'notifications'
-  | 'permissions'
   | 'commissioner'
-  | 'conceptRules'
+  | 'specialty'
   | 'ai'
 
 /**
  * Tab labels are dictionary keys (`lsHub.tab.<id>` for the desktop sidebar, `…Short` for the mobile
- * chip), resolved with t() at render. The English values — "Commissioner Intelligence", "League
- * Helper"… — are the customer-safe names; __tests__/g32-league-home-contract pins them there.
+ * chip), resolved with t() at render. The English values ("Commish Tools", "League Helper"…) are the
+ * customer-safe names, and "Commish" is the house word: never the full "Commissioner" in copy.
+ * __tests__/g32-league-home-contract pins them.
  */
 const TABS: { id: LeagueSettingsHubTabId; labelKey: string; shortKey: string }[] = (
-  ['general', 'draft', 'roster', 'scoring', 'waivers', 'trades', 'playoffs', 'members', 'notifications', 'permissions', 'commissioner', 'conceptRules', 'ai'] as const
+  ['general', 'draft', 'roster', 'scoring', 'playoffs', 'members', 'commissioner', 'specialty', 'ai'] as const
 ).map((id) => ({ id, labelKey: `lsHub.tab.${id}`, shortKey: `lsHub.tab.${id}Short` }))
 
 function resolveInitialTab(panel: string | null | undefined): LeagueSettingsHubTabId {
   if (!panel) return 'general'
   const m: Record<string, LeagueSettingsHubTabId> = {
     'general-info': 'general',
+    waivers: 'general',
+    trades: 'general',
     'commish-general': 'commissioner',
     'commish-controls': 'commissioner',
     'commish-note': 'commissioner',
-    'members-commish': 'commissioner',
-    'division-settings': 'commissioner',
     'league-dues': 'commissioner',
     'league-history': 'commissioner',
+    'members-commish': 'members',
+    'division-settings': 'members',
+    'co-owners': 'members',
+    members: 'members',
+    permissions: 'members',
+    notifications: 'members',
     scoring: 'scoring',
     roster: 'roster',
     draft: 'draft',
     playoffs: 'playoffs',
-    'devy-command-center': 'conceptRules',
+    conceptRules: 'specialty',
+    specialty: 'specialty',
+    'devy-command-center': 'specialty',
     'ai-chimmy-setup': 'ai',
   }
   return m[panel] ?? 'general'
@@ -89,39 +99,26 @@ export function LeagueSettingsControlCenter({
     switch (tab) {
       case 'general':
         return <GeneralTab {...tabProps} />
-      case 'scoring':
-        return <ScoringTab {...tabProps} />
-      case 'roster':
-        return <RostersTab {...tabProps} />
       case 'draft':
         return <DraftTab {...tabProps} />
-      case 'waivers':
-        return <WaiversTab {...tabProps} />
-      case 'trades':
-        return <TradesTab {...tabProps} />
+      case 'roster':
+        return <RostersTab {...tabProps} />
+      case 'scoring':
+        return <ScoringTab {...tabProps} />
       case 'playoffs':
         return <PlayoffsTab {...tabProps} />
       case 'members':
-        return <CommissionerTab {...tabProps} />
-      case 'notifications':
-        return (
-          <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-5 text-[13px] leading-relaxed text-white/65">
-            <p className="mb-2 text-[14px] font-semibold text-white/85">{t('lsHub.notif.title')}</p>
-            <p>{t('lsHub.notif.body')}</p>
-          </div>
-        )
-      case 'permissions':
-        return <CommissionerTab {...tabProps} />
+        return <MembersTab {...tabProps} />
       case 'commissioner':
         return <CommissionerTab {...tabProps} />
-      case 'conceptRules':
-        return <ConceptRulesTab {...tabProps} />
+      case 'specialty':
+        return <SpecialtyTab {...tabProps} />
       case 'ai':
         return <AISettingsTab {...tabProps} />
       default:
         return null
     }
-  }, [tab, tabProps, t])
+  }, [tab, tabProps])
 
   return (
     <div className="af-core af-league-admin flex min-h-[380px] flex-1 flex-col gap-0 md:min-h-[520px] md:flex-row">
