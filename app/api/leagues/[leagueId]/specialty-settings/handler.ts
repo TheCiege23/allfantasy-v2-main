@@ -13,6 +13,9 @@
  *         `{ tournament: {...} }` — the tournament's cut, bubble, tiebreaker, name and conference
  *         names, applied by lib/tournament/updateTournamentSettings.ts (which also audits). Only the
  *         TOURNAMENT's commish may save; a league co-commish sees the rules read-only.
+ *         `{ legacyTournament: {...} }` — the same for a LEGACY tournament (`LegacyTournament`), rules in
+ *         lib/tournament-mode/legacyTournamentEditor.ts. Its creator or staff with settings permission
+ *         may save (canEditHubSettings, the hub's own rule).
  *
  * Commish and co-commish only. Every other format's editor writes through its own route, and each
  * of those routes calls `specialtySettingsEditRefusal` itself.
@@ -38,6 +41,14 @@ import {
 import { buildRosterLabelMap } from '@/lib/scoring-engine/resolveTeamLabels'
 import { updateTournamentSettings } from '@/lib/tournament/updateTournamentSettings'
 import { parseTournamentEditorPatch, type TournamentEditorValue } from '@/lib/tournament/tournamentEditorPatch'
+import { canEditHubSettings, getLegacyTournamentAccess } from '@/lib/tournament/legacyTournamentAccess'
+import { logTournamentAudit } from '@/lib/tournament-mode/TournamentAuditService'
+import {
+  LEGACY_LIVE_STATUSES,
+  legacyTournamentEditorValue,
+  parseLegacyTournamentPatch,
+  type LegacyTournamentEditorValue,
+} from '@/lib/tournament-mode/legacyTournamentEditor'
 import {
   GUILLOTINE_ENDGAME_THRESHOLD,
   SPECIALTY_SETTINGS_FEATURE_ID,
@@ -174,6 +185,58 @@ async function loadTournamentState(leagueId: string, userId: string): Promise<To
   }
 }
 
+type LegacyTournamentState = {
+  tournamentId: string
+  canEdit: boolean
+  value: LegacyTournamentEditorValue
+  conferences: Array<{ id: string; name: string }>
+  overview: { sport: string; season: number; status: string; phase: string; roundIndex: number; conferenceName: string; leagueCount: number }
+  /** Name and description are frozen once the tournament is locked. */
+  locked: boolean
+  /** Draft type and the bubble week are frozen once the elimination rounds start. */
+  live: boolean
+}
+
+/** The legacy tournament this league feeds, as the editor shows it. Null when it is not one. */
+async function loadLegacyTournamentState(leagueId: string, userId: string): Promise<LegacyTournamentState | null> {
+  const link = await prisma.legacyTournamentLeague.findUnique({
+    where: { leagueId },
+    select: {
+      phase: true,
+      roundIndex: true,
+      conference: { select: { name: true } },
+      tournament: {
+        select: {
+          id: true, name: true, sport: true, season: true, status: true, settings: true, hubSettings: true, lockedAt: true,
+          conferences: { select: { id: true, name: true }, orderBy: { orderIndex: 'asc' } },
+          _count: { select: { leagues: true } },
+        },
+      },
+    },
+  })
+  if (!link) return null
+  const t = link.tournament
+  const settings = (t.settings ?? {}) as Record<string, unknown>
+  const access = await getLegacyTournamentAccess(userId, t.id)
+  return {
+    tournamentId: t.id,
+    canEdit: canEditHubSettings(access),
+    value: legacyTournamentEditorValue(t),
+    conferences: t.conferences,
+    overview: {
+      sport: t.sport,
+      season: t.season,
+      status: t.status,
+      phase: link.phase,
+      roundIndex: link.roundIndex,
+      conferenceName: link.conference.name,
+      leagueCount: t._count.leagues,
+    },
+    locked: Boolean(t.lockedAt) || Boolean(settings.locked),
+    live: (LEGACY_LIVE_STATUSES as readonly string[]).includes(t.status),
+  }
+}
+
 export async function GET(_req: NextRequest, ctx: Ctx) {
   const user = await sessionUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -199,6 +262,8 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
   }
   const salaryCap = formats.includes('salary_cap') ? await loadSalaryCapState(leagueId) : null
   const tournament = formats.includes('tournament') ? await loadTournamentState(leagueId, user.id) : null
+  const legacyTournament =
+    formats.includes('tournament') && !tournament ? await loadLegacyTournamentState(leagueId, user.id) : null
 
   return NextResponse.json({
     formats,
@@ -214,6 +279,7 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
     guillotine,
     salaryCap,
     tournament,
+    legacyTournament,
   })
 }
 
@@ -275,7 +341,13 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   const refusal = await specialtySettingsEditRefusal(leagueId, user.id, user.email)
   if (refusal) return refusal
 
-  const body = (await req.json().catch(() => ({}))) as { guillotine?: unknown; salaryCap?: unknown; tournament?: unknown }
+  const body = (await req.json().catch(() => ({}))) as {
+    guillotine?: unknown
+    salaryCap?: unknown
+    tournament?: unknown
+    legacyTournament?: unknown
+  }
+  if (body.legacyTournament !== undefined) return patchLegacyTournament(leagueId, user.id, body.legacyTournament)
   if (body.salaryCap !== undefined) return patchSalaryCap(leagueId, user.id, body.salaryCap)
   if (body.tournament !== undefined) return patchTournament(leagueId, user.id, body.tournament)
   if (!body.guillotine || typeof body.guillotine !== 'object' || Array.isArray(body.guillotine)) {
@@ -373,4 +445,69 @@ async function patchTournament(leagueId: string, userId: string, raw: unknown) {
   })
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status })
   return NextResponse.json({ ok: true, tournament: await loadTournamentState(leagueId, userId) })
+}
+
+async function patchLegacyTournament(leagueId: string, userId: string, raw: unknown) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return NextResponse.json({ error: 'legacyTournament settings object required' }, { status: 400 })
+  }
+  const state = await loadLegacyTournamentState(leagueId, userId)
+  if (!state) {
+    return NextResponse.json({ error: 'This league is not part of a tournament that can be edited here.' }, { status: 409 })
+  }
+  if (!state.canEdit) {
+    return NextResponse.json({ error: "Only the tournament's commish or its settings staff can change tournament rules." }, { status: 403 })
+  }
+  const parsed = parseLegacyTournamentPatch(raw as Record<string, unknown>, { locked: state.locked, live: state.live })
+  if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 })
+  const { name, description, settings, conferenceNames = [] } = parsed.patch
+
+  // ⚠ SCOPED TO THIS TOURNAMENT: conference ids come from the request body.
+  if (conferenceNames.length > 0) {
+    const owned = await prisma.legacyTournamentConference.count({
+      where: { tournamentId: state.tournamentId, id: { in: conferenceNames.map((c) => c.id) } },
+    })
+    if (owned !== new Set(conferenceNames.map((c) => c.id)).size) {
+      return NextResponse.json({ error: 'One of those conferences is not in this tournament.' }, { status: 404 })
+    }
+  }
+
+  const changed = [
+    ...(name !== undefined && name !== state.value.name ? ['name'] : []),
+    ...(description !== undefined && description !== state.value.description ? ['description'] : []),
+    ...Object.entries(settings)
+      .filter(([k, v]) => JSON.stringify((state.value as Record<string, unknown>)[k]) !== JSON.stringify(v))
+      .map(([k]) => k),
+    ...conferenceNames
+      .filter((c) => state.conferences.find((x) => x.id === c.id)?.name !== c.name)
+      .map((c) => `conference:${c.id}`),
+  ]
+  if (changed.length > 0) {
+    // Read-merge-write the JSON in one transaction so a concurrent hub save is not overwritten
+    // with a stale copy of the keys this editor does not touch.
+    await prisma.$transaction(async (tx) => {
+      const row = await tx.legacyTournament.findUnique({
+        where: { id: state.tournamentId },
+        select: { settings: true, hubSettings: true },
+      })
+      const prevSettings = (row?.settings ?? {}) as Record<string, unknown>
+      const prevHub = (row?.hubSettings ?? {}) as Record<string, unknown>
+      await tx.legacyTournament.update({
+        where: { id: state.tournamentId },
+        data: {
+          ...(name !== undefined ? { name } : {}),
+          ...(Object.keys(settings).length > 0 ? { settings: { ...prevSettings, ...settings } as Prisma.InputJsonValue } : {}),
+          ...(description !== undefined ? { hubSettings: { ...prevHub, description } as Prisma.InputJsonValue } : {}),
+        },
+      })
+      for (const c of conferenceNames) {
+        await tx.legacyTournamentConference.update({ where: { id: c.id }, data: { name: c.name } })
+      }
+    })
+    await logTournamentAudit(state.tournamentId, 'bulk_update', {
+      actorId: userId,
+      metadata: { fields: changed, source: 'league_settings_specialty_tab' },
+    }).catch(() => {})
+  }
+  return NextResponse.json({ ok: true, legacyTournament: await loadLegacyTournamentState(leagueId, userId) })
 }

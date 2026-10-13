@@ -11,6 +11,7 @@ import type { FormatSectionProps } from './SpecialtyFormatSections'
 import { GuillotineSettingsForm, type GuillotineSettingsValue } from './GuillotineSettingsForm'
 import { SalaryCapSettingsForm, type SalaryCapSettingsState } from './SalaryCapSettingsForm'
 import { TournamentSettingsForm, type TournamentSettingsState } from './TournamentSettingsForm'
+import { LegacyTournamentSettingsForm, type LegacyTournamentSettingsState } from './LegacyTournamentSettingsForm'
 
 type GatedFormat = 'guillotine' | 'survivor' | 'zombie' | 'big_brother' | 'salary_cap' | 'devy' | 'c2c' | 'tournament'
 
@@ -27,6 +28,7 @@ type SpecialtyState = {
   guillotine: GuillotineSettingsValue | null
   salaryCap: SalaryCapSettingsState | null
   tournament: TournamentSettingsState | null
+  legacyTournament: LegacyTournamentSettingsState | null
 }
 
 const TOKEN_RULE = 'commissioner_specialty_settings_league_unlock'
@@ -172,6 +174,8 @@ export function SpecialtyTab({ ctx, canEdit: isCommish }: LeagueSettingsTabProps
                       )
                     ) : format === 'tournament' && state.tournament ? (
                       <TournamentSettingsForm leagueId={leagueId} initial={state.tournament} />
+                    ) : format === 'tournament' && state.legacyTournament ? (
+                      <LegacyTournamentSettingsForm leagueId={leagueId} initial={state.legacyTournament} />
                     ) : Section ? (
                       <Section ctx={ctx} canEdit coveredBySubscription={state.coveredBySubscription} />
                     ) : null}
