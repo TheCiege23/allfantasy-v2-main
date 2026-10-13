@@ -139,6 +139,19 @@ async function resolveSeason(input: { seasonId?: string | null; leagueId?: strin
 
 type PlayoffSeasonForRuntime = NonNullable<Awaited<ReturnType<typeof resolveSeason>>>
 
+/**
+ * The commish's seed order from Edit Playoff Bracket: roster ids, seed 1 first, kept on the bracket
+ * row so EVERY read — display, round advance, reseeding between rounds, tie-breaks — sees the same
+ * seeds. Seeds are otherwise re-derived from the standings on every read, so an edit stored only on
+ * the matchup rows would be silently undone by the next round's reseed.
+ */
+export function manualSeedsFromStructure(structure: unknown): string[] | null {
+  const raw = asRecord(structure).manualSeeds
+  if (!Array.isArray(raw) || raw.length === 0) return null
+  const ids = raw.map((id) => (typeof id === 'string' ? id.trim() : ''))
+  return ids.every(Boolean) ? ids : null
+}
+
 function fallbackRulesForSeason(season: PlayoffSeasonForRuntime): NflRedraftPlayoffRulesInput {
   const playoffStartWeek = Math.max(2, Math.floor(numberOrNull((season as { playoffStartWeek?: unknown }).playoffStartWeek) ?? 15))
   return {
@@ -290,6 +303,7 @@ export async function resolveNflRedraftPlayoffRuntime(input: {
     matchups,
     bracketStatus: season.playoffBracket?.status ?? null,
     bracketId: season.playoffBracket?.id ?? null,
+    seedOverride: manualSeedsFromStructure(season.playoffBracket?.structure),
   })
 
   return {
@@ -365,6 +379,9 @@ export async function generateNflRedraftPlayoffRuntimeBracket(input: {
     actorUserId: input.actorUserId,
     lockBracket: input.lockBracket,
   })
+  // A regeneration that used the commish's seed order keeps it; one that changed the playoff team
+  // count (`playoffTeams`) rebuilt the seeds from the standings and drops it.
+  const manualSeeds = state.seedingSource === 'commissioner' ? state.seeds.map((seed) => seed.rosterId) : null
 
   const written = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     if (input.regenerate !== false) {
@@ -385,6 +402,7 @@ export async function generateNflRedraftPlayoffRuntimeBracket(input: {
           reseedAfterEachRound: state.settings.reseedAfterEachRound,
           consolationEnabled: state.settings.consolationEnabled,
           generatedAt: new Date().toISOString(),
+          ...(manualSeeds ? { manualSeeds } : {}),
         },
       },
       create: {
@@ -398,6 +416,7 @@ export async function generateNflRedraftPlayoffRuntimeBracket(input: {
           reseedAfterEachRound: state.settings.reseedAfterEachRound,
           consolationEnabled: state.settings.consolationEnabled,
           generatedAt: new Date().toISOString(),
+          ...(manualSeeds ? { manualSeeds } : {}),
         },
       },
     })

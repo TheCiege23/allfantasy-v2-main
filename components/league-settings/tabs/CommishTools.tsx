@@ -765,3 +765,217 @@ export function EditRostersCard({ leagueId }: { leagueId: string }) {
     </HubCard>
   )
 }
+
+type BracketSide = { rosterId: string; name: string; seed: number | null } | null
+type BracketData = {
+  seasonStatus: string
+  generated: boolean
+  playoffTeamCount: number
+  seedingSource: 'standings' | 'commissioner'
+  reseedBlocked: string | null
+  seeds: Array<{ seed: number; rosterId: string; name: string; record: string }>
+  teams: Array<{ rosterId: string; name: string; record: string }>
+  rounds: Array<{
+    roundNumber: number
+    roundName: string
+    status: string
+    matchups: Array<{
+      matchupId: string
+      home: BracketSide
+      away: BracketSide
+      homeScore: number | null
+      awayScore: number | null
+      winnerRosterId: string | null
+      bye: boolean
+      commishPick: boolean
+    }>
+  }>
+}
+
+/**
+ * Edit Playoff Bracket: reseed (who is in, in what order) until round one is decided, and pick a
+ * matchup winner in a round still being played. The server owns every rule; this only shows them.
+ */
+export function EditPlayoffBracketCard({ leagueId }: { leagueId: string }) {
+  const { t } = useLanguage()
+  const [data, setData] = useState<BracketData | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [order, setOrder] = useState<string[]>([])
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const url = `/api/leagues/${encodeURIComponent(leagueId)}/commish-playoffs`
+
+  const apply = useCallback((d: BracketData) => {
+    setData(d)
+    setOrder(d.seeds.map((s) => s.rosterId))
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    fetch(url, { credentials: 'include' })
+      .then(async (r) => {
+        const body = await r.json().catch(() => ({}))
+        if (cancelled) return
+        if (r.ok) apply(body as BracketData)
+        else setLoadError(typeof body.error === 'string' ? body.error : t('lsHub.ct.loadFailed'))
+      })
+      .catch(() => !cancelled && setLoadError(t('lsHub.ct.loadFailed')))
+    return () => {
+      cancelled = true
+    }
+  }, [url, t, apply])
+
+  const send = async (payload: Record<string, unknown>, done: string) => {
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setError(typeof body.error === 'string' ? body.error : t('lsHub.sp.saveFailed'))
+        return
+      }
+      apply(body as BracketData)
+      toast.success(done)
+    } catch {
+      setError(t('lsHub.sp.saveFailed'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const canReseed = data != null && data.generated && data.reseedBlocked == null
+  const changed = data != null && order.some((id, i) => id !== data.seeds[i]?.rosterId)
+  const duplicate = new Set(order).size !== order.length
+  const teamName = (id: string) => data?.teams.find((x) => x.rosterId === id)?.name ?? id
+
+  const pickWinner = (matchupId: string, team: NonNullable<BracketSide>) => {
+    if (!window.confirm(t('lsHub.pb.confirmWinner').replace('{{team}}', team.name))) return
+    void send({ action: 'set_winner', matchupId, winnerRosterId: team.rosterId }, t('lsHub.pb.winnerSaved'))
+  }
+
+  return (
+    <HubCard title={t('lsHub.pb.title')} testId="commish-edit-playoffs">
+      <p className="text-[12px] text-white/50">{t('lsHub.pb.hint')}</p>
+      {loadError ? (
+        <p className="text-[12px] text-white/50">{loadError}</p>
+      ) : !data ? (
+        <div className="h-24 animate-pulse rounded-xl bg-white/[0.05]" />
+      ) : (
+        <>
+          {!data.generated ? <p className="text-[12px] text-amber-200/80">{t('lsHub.pb.notGenerated')}</p> : null}
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-[11px] font-bold uppercase tracking-wide text-white/40">{t('lsHub.pb.seeds')}</p>
+              <span className="text-[11px] text-white/45">
+                {data.seedingSource === 'commissioner' ? t('lsHub.pb.commishSeeds') : t('lsHub.pb.standingsSeeds')}
+              </span>
+            </div>
+            <ul className="divide-y divide-white/[0.06] rounded-2xl border border-white/[0.08] bg-black/20" data-testid="commish-playoff-seeds">
+              {(canReseed ? order : data.seeds.map((s) => s.rosterId)).map((rosterId, i) => (
+                <li key={i} className="flex items-center gap-3 px-3 py-2">
+                  <span className="w-12 shrink-0 text-[12px] font-bold text-cyan-200/80">{t('lsHub.pb.seedN').replace('{{n}}', String(i + 1))}</span>
+                  {canReseed ? (
+                    <select
+                      value={rosterId}
+                      onChange={(e) => setOrder((o) => o.map((x, j) => (j === i ? e.target.value : x)))}
+                      aria-label={t('lsHub.pb.seedN').replace('{{n}}', String(i + 1))}
+                      className="min-w-0 flex-1 rounded-xl border border-white/[0.10] bg-black/25 px-3 py-2 text-[13px] text-white"
+                    >
+                      {data.teams.map((x) => (
+                        <option key={x.rosterId} value={x.rosterId} className="bg-[#0d1117]">
+                          {x.name} ({x.record})
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className="truncate text-[13px] font-semibold text-white">{teamName(rosterId)}</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+            {data.generated && data.reseedBlocked ? <p className="text-[12px] text-white/45">{t('lsHub.pb.seedsLocked')}</p> : null}
+            {canReseed && duplicate ? <p className="text-[12px] text-amber-200/85">{t('lsHub.pb.duplicate')}</p> : null}
+            {canReseed ? (
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={busy || !changed || duplicate}
+                  onClick={() => void send({ action: 'reseed', seeds: order }, t('lsHub.pb.seedsSaved'))}
+                  className="flex-1 rounded-full bg-cyan-400 px-4 py-3 text-[13px] font-extrabold text-[#04131a] disabled:opacity-40"
+                  data-testid="commish-playoff-save-seeds"
+                >
+                  {busy ? t('lsHub.saving') : t('lsHub.pb.saveSeeds')}
+                </button>
+                {data.seedingSource === 'commissioner' ? (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void send({ action: 'reset_seeds' }, t('lsHub.pb.seedsSaved'))}
+                    className="rounded-full border border-white/[0.14] px-4 py-3 text-[13px] font-bold text-white/80 disabled:opacity-40"
+                  >
+                    {t('lsHub.pb.resetSeeds')}
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+
+          {data.rounds.length ? (
+            <div className="space-y-3">
+              <p className="text-[12px] text-white/50">{t('lsHub.pb.pickWinner')}</p>
+              {data.rounds.map((r) => (
+                <div key={r.roundNumber} className="space-y-1.5">
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-white/40">{r.roundName}</p>
+                  <ul className="divide-y divide-white/[0.06] rounded-2xl border border-white/[0.08] bg-black/20">
+                    {r.matchups.map((m) => {
+                      const open = r.status !== 'completed' && data.seasonStatus !== 'complete' && !m.bye && m.home && m.away
+                      return (
+                        <li key={m.matchupId} className="space-y-1 px-3 py-2">
+                          {[
+                            { team: m.home, score: m.homeScore },
+                            { team: m.away, score: m.awayScore },
+                          ].map(({ team, score }, i) =>
+                            team ? (
+                              <button
+                                key={i}
+                                type="button"
+                                disabled={!open || busy}
+                                onClick={() => pickWinner(m.matchupId, team)}
+                                className={`flex w-full items-center justify-between gap-3 rounded-lg px-2 py-1.5 text-left text-[13px] disabled:cursor-default ${
+                                  m.winnerRosterId === team.rosterId ? 'bg-cyan-400/15 font-bold text-cyan-100' : 'text-white/85'
+                                }`}
+                              >
+                                <span className="truncate">
+                                  {team.seed ? <span className="mr-1.5 text-white/40">{team.seed}</span> : null}
+                                  {team.name}
+                                </span>
+                                <span className="shrink-0 tabular-nums text-white/60">{score ?? ''}</span>
+                              </button>
+                            ) : (
+                              <p key={i} className="px-2 py-1.5 text-[12px] text-white/40">
+                                {m.bye ? t('lsHub.pb.bye') : t('lsHub.pb.tbd')}
+                              </p>
+                            ),
+                          )}
+                          {m.commishPick ? <p className="px-2 text-[11px] font-semibold uppercase tracking-wide text-amber-200/70">{t('lsHub.pb.commishPick')}</p> : null}
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          ) : null}
+          {error ? <p className="text-[12px] text-amber-200/85" role="alert">{error}</p> : null}
+        </>
+      )}
+    </HubCard>
+  )
+}

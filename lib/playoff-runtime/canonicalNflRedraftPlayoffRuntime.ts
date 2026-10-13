@@ -196,6 +196,11 @@ export type NflRedraftPlayoffRuntimeState = {
   bubbleRosterIds: string[]
   eliminatedRosterIds: string[]
   bracket: NflRedraftPlayoffBracketState
+  /**
+   * `commissioner` when the seeds came from a commish's manual seed order (Edit Playoff Bracket,
+   * stored at `RedraftPlayoffBracket.structure.manualSeeds`) rather than from the standings.
+   */
+  seedingSource?: 'standings' | 'commissioner'
   coverage: {
     teamCount: number
     qualifiedTeams: number
@@ -425,7 +430,28 @@ function compareTeams(a: NflRedraftPlayoffTeamState, b: NflRedraftPlayoffTeamSta
   return a.displayName.localeCompare(b.displayName) || a.rosterId.localeCompare(b.rosterId)
 }
 
-function seedTeams(teams: NflRedraftPlayoffTeamState[], settings: NflRedraftPlayoffSettings): {
+/**
+ * A commish's seed order, usable only when it names exactly `playoffTeamCount` distinct teams that
+ * are all in the league. Anything else (a stale order after the playoff team count changed, a team
+ * that left) is ignored and the standings seed the bracket — a broken override must never leave a
+ * league without a bracket.
+ */
+export function validSeedOverride(
+  override: readonly string[] | null | undefined,
+  teamRosterIds: readonly string[],
+  playoffTeamCount: number,
+): string[] | null {
+  if (!override || override.length !== playoffTeamCount) return null
+  const known = new Set(teamRosterIds)
+  if (new Set(override).size !== override.length || override.some((id) => !known.has(id))) return null
+  return [...override]
+}
+
+function seedTeams(
+  teams: NflRedraftPlayoffTeamState[],
+  settings: NflRedraftPlayoffSettings,
+  seedOverride: string[] | null = null,
+): {
   teams: NflRedraftPlayoffTeamState[]
   seeds: NflRedraftPlayoffSeedState[]
   bubbleRosterIds: string[]
@@ -457,10 +483,15 @@ function seedTeams(teams: NflRedraftPlayoffTeamState[], settings: NflRedraftPlay
     qualifiedBy.set(team.rosterId, selectedRosterIds.length <= settings.playoffTeamCount ? 'wildcard' : 'standings')
   }
 
-  const selectedSet = new Set(selectedRosterIds)
-  const selected = sorted
-    .filter((team) => selectedSet.has(team.rosterId))
-    .sort((a, b) => compareTeams(a, b, settings.tiebreakers))
+  // A commish's seed order replaces the standings order outright — who is in AND in what order.
+  if (seedOverride) {
+    for (const id of seedOverride) if (!qualifiedBy.has(id)) qualifiedBy.set(id, 'wildcard')
+  }
+  const selectedSet = new Set(seedOverride ?? selectedRosterIds)
+  const byRosterId = new Map(sorted.map((team) => [team.rosterId, team]))
+  const selected = seedOverride
+    ? seedOverride.map((id) => byRosterId.get(id)!)
+    : sorted.filter((team) => selectedSet.has(team.rosterId)).sort((a, b) => compareTeams(a, b, settings.tiebreakers))
 
   const seededTeams = [...selected, ...sorted.filter((team) => !selectedSet.has(team.rosterId))]
   const teamsWithSeeds = seededTeams.map((team, index) => {
@@ -844,11 +875,18 @@ export function buildNflRedraftPlayoffRuntimeState(input: {
   matchups?: NflRedraftPlayoffMatchupInput[]
   bracketStatus?: string | null
   bracketId?: string | null
+  /** Roster ids in seed order (seed 1 first), from Edit Playoff Bracket. Ignored unless valid. */
+  seedOverride?: readonly string[] | null
   now?: Date
 }): NflRedraftPlayoffRuntimeState {
   const now = input.now ?? new Date()
   const settings = resolveSettings({ rules: input.rules, teamCount: input.teams.length })
-  const seeded = seedTeams(input.teams.map(normalizeTeam), settings)
+  const seedOverride = validSeedOverride(
+    input.seedOverride,
+    input.teams.map((team) => team.rosterId),
+    settings.playoffTeamCount,
+  )
+  const seeded = seedTeams(input.teams.map(normalizeTeam), settings, seedOverride)
   const seedByRosterId = new Map(seeded.seeds.map((seed) => [seed.rosterId, seed.seed]))
   const normalizedMatchups = (input.matchups ?? []).map((matchup) => normalizeMatchup(matchup, seedByRosterId))
   const championshipRounds = groupRounds(normalizedMatchups, 'championship')
@@ -869,6 +907,7 @@ export function buildNflRedraftPlayoffRuntimeState(input: {
     seeds: seeded.seeds,
     bubbleRosterIds: seeded.bubbleRosterIds,
     eliminatedRosterIds: seeded.eliminatedRosterIds,
+    seedingSource: seedOverride ? 'commissioner' : 'standings',
     bracket: {
       bracketId: input.bracketId ?? null,
       status,

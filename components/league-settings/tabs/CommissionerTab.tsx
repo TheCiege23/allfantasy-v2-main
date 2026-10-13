@@ -8,7 +8,7 @@ import type { LeagueSettingsTabProps } from '../league-settings-tabs-types'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { SettingsSubPanelBody } from '@/app/league/[leagueId]/components/LeagueSettingsSubPanels'
 import { HubCard } from './hubFields'
-import { EditMatchupScoresCard, EditRostersCard, EditWaiversCard, ResetLeagueCard, TransferCommishCard } from './CommishTools'
+import { EditMatchupScoresCard, EditPlayoffBracketCard, EditRostersCard, EditWaiversCard, ResetLeagueCard, TransferCommishCard } from './CommishTools'
 
 /** Commish Tools tab: league controls, commish note, edit waivers, transfer, dues, history, draft results,
  * audit, reset and removing the league. Transfer and reset are head-commish only, matching their routes. Members live in MembersTab. */
@@ -22,6 +22,7 @@ export function CommissionerTab({ ctx }: LeagueSettingsTabProps) {
       </HubCard>
       <EditRostersCard leagueId={ctx.league.id} />
       <EditMatchupScoresCard leagueId={ctx.league.id} />
+      <EditPlayoffBracketCard leagueId={ctx.league.id} />
       <EditWaiversCard leagueId={ctx.league.id} />
       {ctx.isHeadCommissioner ? <TransferCommishCard leagueId={ctx.league.id} /> : null}
       <LeagueDuesTrackerPanel leagueId={ctx.league.id} />
