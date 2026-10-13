@@ -169,8 +169,19 @@ async function loadPreviousMap(sport: string): Promise<Map<string, number>> {
   return map
 }
 
+export type FantraxNbaAdpRunStats =
+  | { ok: true; priced: number; matched: number; ambiguous: number; unmatched: number; duplicates: number; unmatchedSample: string[] }
+  | { ok: false; reason: string }
+
 export async function runAdpImporter(options?: {
   sports?: string[]
+  /**
+   * Opt in to the provider fetches that are new since the DB-first rule — today, Fantrax NBA ADP.
+   * Only the scheduled `/api/cron/adp-refresh` passes it. This importer is ALSO run from request
+   * paths (the draft pool's "no ADP yet" fallback, `lib/data/adp.ts`), and those must not reach a
+   * provider; left unset, they simply write nothing new for NBA.
+   */
+  allowProviderFetch?: boolean
 }): Promise<{
   imported: number
   sports: string[]
@@ -186,6 +197,8 @@ export async function runAdpImporter(options?: {
   consensusRowsAttemptedBySport: Record<string, number>
   consensusRowsBySport: Record<string, number>
   staticAdpCoverage: StaticAdpCoverage | null
+  /** Null when the NBA Fantrax fetch did not run (sport not requested, or no `allowProviderFetch`). */
+  fantraxNba: FantraxNbaAdpRunStats | null
 }> {
   const season = currentSeason()
   const week = currentWeekOfYear()
@@ -203,6 +216,7 @@ export async function runAdpImporter(options?: {
   const consensusRowsAttemptedBySport: Record<string, number> = {}
   const consensusRowsBySport: Record<string, number> = {}
   let staticAdpCoverage: StaticAdpCoverage | null = null
+  let fantraxNba: FantraxNbaAdpRunStats | null = null
 
   for (const sport of sports) {
     const previousMap = await loadPreviousMap(sport)
@@ -310,6 +324,53 @@ export async function runAdpImporter(options?: {
        * currently unreachable in practice â gated anyway, because "unreachable today" is not
        * a property worth relying on.)
        */
+      /*
+       * 🛑 NBA HAD NO ADP SOURCE AT ALL, so every NBA board and autopick sorted ALPHABETICALLY.
+       * Fantrax's `getAdp?sport=NBA` is a real market. Rows carry OUR name/position/team from the
+       * matched identity (Fantrax's position disagrees with ours on 70% of players) — see
+       * lib/adp/fantraxNbaAdp.ts. Scoring is `standard`: Fantrax publishes one board, and the pool
+       * falls back to any scoring for non-NFL sports when the league's own has no rows.
+       */
+      if (sport === 'NBA' && options?.allowProviderFetch) {
+        const { loadFantraxNbaAdp } = await import('@/lib/adp/fantraxNbaAdp')
+        const load = await loadFantraxNbaAdp().catch((err: unknown) => ({
+          ok: false as const,
+          reason: err instanceof Error ? err.message : String(err),
+        }))
+        if (!load.ok) {
+          fantraxNba = { ok: false, reason: load.reason }
+        } else {
+          const { matched, ambiguous, unmatched, duplicates } = load.result
+          fantraxNba = {
+            ok: true,
+            priced: load.priced,
+            matched: matched.length,
+            ambiguous: ambiguous.length,
+            unmatched: unmatched.length,
+            duplicates,
+            unmatchedSample: [...unmatched, ...ambiguous].slice(0, 10),
+          }
+          for (const m of matched) {
+            const playerId = `NBA:af:${m.identityId}`
+            const key = `${sport}:redraft:standard:${playerId}:fantrax`
+            rows.push({
+              sport,
+              format: 'redraft',
+              scoring: 'standard',
+              playerId,
+              playerName: m.playerName,
+              position: m.position,
+              team: m.team,
+              adp: m.adp,
+              adpChange: previousMap.has(key) ? Number((m.adp - Number(previousMap.get(key))).toFixed(2)) : null,
+              week,
+              season,
+              source: 'fantrax',
+            })
+          }
+        }
+      }
+
       const snapshots = isAiAdpConsumerEnabled()
         ? await prisma.aiAdpSnapshot.findMany({
             where: { sport },
@@ -396,5 +457,6 @@ export async function runAdpImporter(options?: {
      * rather than only in a row count that looks identical either way. Null when no NFL branch ran.
      */
     staticAdpCoverage,
+    fantraxNba,
   }
 }

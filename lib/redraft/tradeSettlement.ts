@@ -22,6 +22,7 @@
 import type { Prisma } from '@prisma/client'
 import { applyRedraftFaabDeltasInTransaction } from './faabTransfer'
 import { movePlayerBoundIdolsInTransaction } from '@/lib/survivor/playerBoundIdolTransfer'
+import { transferNbaSurvivorRosterPlayer } from '@/lib/survivor/transferNbaSurvivorRosterPlayer'
 
 export type TradeSettlementTx = Prisma.TransactionClient
 
@@ -64,6 +65,8 @@ export async function settleRedraftTradeAssets(
 
   let playersMoved = 0
   let picksRecorded = 0
+  const league = input.leagueId ? await tx.league.findUnique({ where: { id: input.leagueId }, select: { sport: true, survivorMode: true } }) : null
+  const preserveNbaSurvivorOwnership = league?.sport === 'NBA' && league.survivorMode === true
 
   // Net FAAB delta per roster (positive = gains FAAB).
   const faabDelta = new Map<string, number>([
@@ -80,11 +83,13 @@ export async function settleRedraftTradeAssets(
 
     if (asset.assetType === 'player') {
       if (!asset.playerId) throw new Error('Player asset missing playerId')
-      const moved = await tx.redraftRosterPlayer.updateMany({
-        where: { rosterId: fromRosterId, playerId: asset.playerId, droppedAt: null },
-        data: { rosterId: toRosterId, acquisitionType: 'trade', slotType: 'BENCH', isLocked: false },
-      })
-      if (moved.count === 0) {
+      const moved = preserveNbaSurvivorOwnership
+        ? await transferNbaSurvivorRosterPlayer(tx, { playerId: asset.playerId, fromRosterId, toRosterId, acquisitionType: 'trade', slotType: 'BENCH' })
+        : (await tx.redraftRosterPlayer.updateMany({
+          where: { rosterId: fromRosterId, playerId: asset.playerId, droppedAt: null },
+          data: { rosterId: toRosterId, acquisitionType: 'trade', slotType: 'BENCH', isLocked: false },
+        })).count
+      if (moved === 0) {
         throw new Error(`Traded player ${asset.playerId} is no longer on the sending roster`)
       }
       if (input.leagueId) await movePlayerBoundIdolsInTransaction(tx, {
@@ -94,7 +99,7 @@ export async function settleRedraftTradeAssets(
         toRedraftRosterId: toRosterId,
         reason: 'trade',
       })
-      playersMoved += moved.count
+      playersMoved += moved
       continue
     }
 

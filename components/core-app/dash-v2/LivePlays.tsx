@@ -27,6 +27,7 @@ const TYPE_LABEL: Record<string, string> = {
   FIELD_GOAL: 'FG',
   DEFENSIVE_SCORE: 'DEF TD',
   SPECIAL_TEAMS_SCORE: 'ST TD',
+  TWO_POINT_CONVERSION: '2PT',
 }
 
 /** Tone follows the semantic contract: a score is good, a turnover costs you. */

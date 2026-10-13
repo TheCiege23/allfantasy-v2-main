@@ -162,3 +162,46 @@
 .nl-rail,.nl-sidebar,.nl-content,.nl-switcher{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.16) transparent}
 .nl-mobile-tabs,.nl-mobile-rail{scrollbar-width:none}
 .nl-mobile-tabs::-webkit-scrollbar,.nl-mobile-rail::-webkit-scrollbar{display:none}
+/* Seat tracker (2026-10-13): who has joined, and open seats the commissioner can invite into. */
+.nl-seats-bar{height:6px;border-radius:999px;background:var(--raised);overflow:hidden;margin:0 0 12px}
+.nl-seats-bar>span{display:block;height:100%;border-radius:999px;background:var(--accent);transition:width .3s ease}
+.nl-seats-grid{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.nl-seat{display:flex;align-items:center;gap:10px;min-height:48px;min-width:0;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface2)}
+.nl-seat[data-own-team=true]{border-color:var(--accent)}
+.nl-seat[data-seat=open]{border-style:dashed;border-color:var(--line2);background:transparent;padding:0}
+.nl-seat-avatar{display:grid;place-items:center;width:32px;height:32px;flex:none;border-radius:50%;background:var(--raised);color:var(--accent);font-size:12px;font-weight:700;object-fit:cover}
+.nl-seat-name{display:flex;flex-direction:column;min-width:0}
+.nl-seat-name strong,.nl-seat-name small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nl-seat-name strong{font-size:12px;color:var(--text)}
+.nl-seat-name small{font-size:11px;color:var(--faint)}
+.nl-seat-invite{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;min-height:46px;border:0;border-radius:8px;background:transparent;color:var(--accent);font-size:12px;font-weight:600}
+.nl-seat-invite:hover{background:var(--raised)}
+.nl-seat-waiting{display:flex;align-items:center;justify-content:center;width:100%;min-height:46px;color:var(--faint);font-size:12px}
+@media(max-width:767px){.nl-seats-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+/* This week's stakes (2026-10-13): Survivor council, Big Brother block, Guillotine chop line. */
+.nl-stakes{border-color:var(--line2)}
+.nl-stakes[data-format=survivor] .nl-card-label>span:first-child{color:var(--gold)}
+.nl-stakes[data-format=big_brother] .nl-card-label>span:first-child{color:var(--accent)}
+.nl-stakes[data-format=guillotine] .nl-card-label>span:first-child{color:var(--bad)}
+.nl-stakes-you{padding:10px 12px;border-radius:8px;background:var(--raised);color:var(--text)!important;font-weight:600}
+.nl-stakes-you[data-tone=danger]{border-left:3px solid var(--bad)}
+.nl-stakes-you[data-tone=good]{border-left:3px solid var(--good)}
+.nl-stakes-you[data-tone=neutral]{border-left:3px solid var(--warn)}
+.nl-stakes-lines{margin:0;display:flex;flex-direction:column}
+.nl-stakes-lines>div{display:flex;align-items:baseline;justify-content:space-between;gap:16px;min-height:38px;padding:8px 0;border-bottom:1px solid var(--line);font-size:12px}
+.nl-stakes-lines>div:last-child{border-bottom:0}
+.nl-stakes-lines dt{flex:none;color:var(--faint)}
+.nl-stakes-lines dd{margin:0;min-width:0;text-align:right;color:var(--text);font-weight:600;overflow-wrap:anywhere}
+.nl-stakes-lines>div[data-tone=danger] dd{color:var(--bad)}
+.nl-stakes-lines>div[data-tone=good] dd{color:var(--good)}
+.nl-stakes-deadline{margin:12px 0 0!important;font:12px var(--font-jetbrains-mono,'JetBrains Mono',monospace);color:var(--warn)!important}
+/* Your week (2026-10-13): matchup, lineup lock, lineup problems, waivers. */
+.nl-yourweek-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
+.nl-yw-tile{display:flex;flex-direction:column;align-items:flex-start;gap:4px;min-height:88px;padding:12px 14px;border:1px solid var(--line);border-radius:8px;background:var(--surface2);text-align:left;color:var(--text)}
+.nl-yw-tile:hover{background:var(--raised)}
+.nl-yw-tile[data-state=soon]{border-color:var(--warn)}
+.nl-yw-tile[data-state=warn]{border-color:var(--bad)}
+.nl-yw-label{display:inline-flex;align-items:center;gap:6px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint)}
+.nl-yw-tile strong{font-size:16px;font-variant-numeric:tabular-nums;color:var(--text)}
+.nl-yw-tile small{font-size:12px;color:var(--text2)}
+@media(max-width:767px){.nl-yourweek-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
