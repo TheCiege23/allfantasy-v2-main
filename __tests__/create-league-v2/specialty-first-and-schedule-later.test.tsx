@@ -22,8 +22,12 @@ import { DraftStep, LeagueBasicsStep, ReviewCreateStep, freshCreateLeagueState }
 import { submitCreateLeagueV2 } from '@/lib/create-league-v2/submit'
 import { validateCreatePayload } from '@/lib/league-creation/canonical/validateCreateLeague'
 
+// Format tiles only — the group heading also carries a "?" help button.
 const ids = (group: HTMLElement) =>
-  within(group).getAllByRole('button').map((b) => b.getAttribute('data-testid')!.replace('g30-league-type-', ''))
+  within(group).getAllByRole('button')
+    .map((b) => b.getAttribute('data-testid') ?? '')
+    .filter((id) => id.startsWith('g30-league-type-'))
+    .map((id) => id.replace('g30-league-type-', ''))
 
 describe('specialty formats lead the Basics step', () => {
   it('NBA: specialties first with Survivor leading, classics after in their usual order', () => {

@@ -7,7 +7,7 @@
  * wizard starts on the device's own.
  */
 import { isValidIanaTimeZone } from '@/lib/timezone'
-import { CREATE_LEAGUE_TIMEZONES } from '@/lib/create-league-v2/simple-create'
+import { CREATE_LEAGUE_TIMEZONES, CREATE_LEAGUE_TIMEZONE_LABELS } from '@/lib/create-league-v2/simple-create'
 
 /**
  * The device's IANA timezone, or null when the runtime cannot say or names one the server would
@@ -22,6 +22,17 @@ export function readDeviceTimezone(
   } catch {
     return null
   }
+}
+
+/**
+ * The name shown for a timezone: the wizard's label ("Eastern Time (ET)"), or for a zone not on
+ * the list the city plus its id ("Madrid (Europe/Madrid)") — never a bare IANA string alone.
+ */
+export function timezoneLabel(timezone: string): string {
+  const known = CREATE_LEAGUE_TIMEZONE_LABELS[timezone]
+  if (known) return known
+  const city = timezone.split('/').at(-1)?.replaceAll('_', ' ')
+  return city && city !== timezone ? `${city} (${timezone})` : timezone
 }
 
 /**

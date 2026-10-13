@@ -12,6 +12,7 @@ import { setClientLeagueCreateOptionsCatalog } from '@/lib/create-league-v2/opti
 import { LEAGUE_CREATE_OPTIONS_CATALOG_V1 } from '@/lib/league-creation/options-catalog-seed-data'
 import {
   SURVIVOR_CAST_SIZE_OPTIONS,
+  SURVIVOR_CREATE_CAST_SIZES,
   clampSurvivorCastSize,
 } from '@/lib/league-creation-wizard/sport-team-limits'
 import {
@@ -164,8 +165,11 @@ describe('Survivor NBA creation pilot and underlying sport catalog', () => {
     // 29566580a (feat(survivor): add phase 1 foundation) deliberately widened the cast from
     // [16, 20, 24] to a contiguous 16-20 and did not update this assertion, leaving the file
     // red on main. The catalog is the authoritative side.
+    // 2026-10-12: new leagues are offered 16 or 20 (four tribes of four or five), a subset of the
+    // 16-20 the engine accepts, so every offered size still survives the server clamp below.
     const survivorTeams = LEAGUE_CREATE_OPTIONS_CATALOG_V1.teamCountOptionsByConceptSport.survivor?.NFL
-    expect(survivorTeams).toEqual([16, 17, 18, 19, 20])
+    expect(survivorTeams).toEqual([16, 20])
+    for (const size of survivorTeams ?? []) expect(SURVIVOR_CAST_SIZE_OPTIONS).toContain(size)
   })
 
   it('the pre-fetch fallback offers the same sizes as the catalog', () => {
@@ -176,7 +180,7 @@ describe('Survivor NBA creation pilot and underlying sport catalog', () => {
     setClientLeagueCreateOptionsCatalog(null)
     const fromFallback = getTeamCountOptions('NFL', 'survivor')
     expect(fromFallback).toEqual(fromCatalog)
-    expect(fromFallback).toEqual([...SURVIVOR_CAST_SIZE_OPTIONS])
+    expect(fromFallback).toEqual([...SURVIVOR_CREATE_CAST_SIZES])
   })
 
   it('every offered cast size survives the server clamp unchanged, on BOTH resolution paths', () => {

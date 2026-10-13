@@ -38,7 +38,8 @@ import {
 } from '@/lib/create-league-v2/simple-create'
 import { LEAGUE_TYPE_MEDIA, SPORT_MEDIA } from '@/lib/create-league-v2/theme'
 import { getClientLeagueCreateOptionsCatalog } from '@/lib/create-league-v2/options-catalog-client'
-import { timezoneOptions } from '@/lib/create-league-v2/device-timezone'
+import { timezoneLabel, timezoneOptions } from '@/lib/create-league-v2/device-timezone'
+import { CheckBox, HelpTip } from '@/components/create-league-v2/WizardControls'
 import { getDraftTypeMedia } from '@/lib/league-media/draftTypeMedia'
 import type { DraftTypeId, LeagueTypeId } from '@/lib/league-creation-wizard/types'
 
@@ -104,6 +105,23 @@ function getLeagueTypeLabel(t: (key: string) => string, leagueType: LeagueTypeId
   const key = `createLeague.g30.leagueType.${leagueType}`
   const translated = t(key)
   return translated === key ? fallback : translated
+}
+
+/** The "?" explanations, English fallback beside each dictionary key. */
+const HELP = {
+  formats: ['createLeague.g30.help.formats', 'Specialty formats add a twist to the season: Survivor votes managers off, Guillotine cuts the lowest score every week, Big Brother has weekly nominations, and Zombie spreads like an infection. Classic formats play a normal season. Each tile says how it plays.'],
+  teams: ['createLeague.g30.help.teams', 'How many managers play in the league. Some formats only allow certain sizes, so − and + step through the sizes this format allows.'],
+  privacy: ['createLeague.g30.help.privacy', "Private leagues are invite-only. Public leagues can also show up in AllFantasy's league finder, where other players can find them."],
+  draftType: ['createLeague.g30.help.draftType', 'Snake: the pick order reverses every round. Linear: the same order every round. Auction: managers bid a budget on players. Auto: the computer drafts for every team. Offline: draft in person, then the commissioner enters the picks.'],
+  scoring: ['createLeague.g30.help.scoring', 'How players earn points. PPR means points per reception: Full PPR gives 1 point per catch, Half PPR gives 0.5, and Standard gives none. Category leagues (some NBA and MLB options) rank teams by stat categories instead of points.'],
+  draftDate: ['createLeague.g30.help.draftDate', 'Pick a date and time now, or choose Schedule later to invite managers first. You can set or change the draft date any time in Commissioner settings → Draft.'],
+  timezone: ['createLeague.g30.help.timezone', "The draft time is set in this timezone, and it is your league's home timezone. It starts on your device's timezone."],
+  advanced: ['createLeague.g30.help.advanced', 'Optional extras that come with an AF Commissioner plan: Commissioner Intelligence tools, automatic trade approval and league health monitoring. Every format and setting above is free.'],
+} as const
+
+function help(t: (key: string) => string, which: keyof typeof HELP): string {
+  const [key, fallback] = HELP[which]
+  return tx(t, key, fallback)
 }
 
 /** When the draft is, as the summary and preview show it. */
@@ -365,8 +383,8 @@ export function CreateLeagueWizard(props: WizardProps) {
               </p>
             ) : null}
             {props.importCarryover && props.state.sport === 'MLB' ? (
-              <label className="flex items-start gap-3 rounded-xl border border-amber-500/35 bg-amber-500/10 p-3 text-sm leading-6">
-                <input type="checkbox" className="mt-1 h-5 w-5 shrink-0 accent-violet-600" checked={props.acceptWeeklyLineups ?? false} onChange={(event) => props.onAcceptWeeklyLineups?.(event.target.checked)} />
+              <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-amber-500/35 bg-amber-500/10 p-3 text-sm leading-6">
+                <CheckBox className="mt-1" checked={props.acceptWeeklyLineups ?? false} onChange={(checked) => props.onAcceptWeeklyLineups?.(checked)} />
                 <span>Use weekly lineups in this native baseball league. One lineup locks at the first game of each week and scores the entire week. Daily lineup changes from the source platform remain in the archive.</span>
               </label>
             ) : null}
@@ -751,6 +769,7 @@ export function LeagueBasicsStep({
           <div>
             <p className="text-xs font-black uppercase tracking-[0.16em] text-violet-600 dark:text-violet-300">
               {tx(t, 'createLeague.g30.formats.specialty', 'Specialty formats')}
+              <HelpTip label={tx(t, 'createLeague.g30.formats.specialty', 'Specialty formats')} testId="g30-help-formats">{help(t, 'formats')}</HelpTip>
             </p>
             <p className="mt-0.5 text-xs leading-5 text-[color:var(--text-secondary)]">
               {tx(t, 'createLeague.g30.formats.specialtyBody', 'Eliminations, alliances, college stars and more.')}
@@ -774,7 +793,7 @@ export function LeagueBasicsStep({
 
       {(getEffectiveLeagueType(state) === 'devy' || getEffectiveLeagueType(state) === 'c2c') ? (
         <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm leading-6">
-          College formats are in active build. Review roster, scoring, and future-season rules before inviting managers.
+          {tx(t, 'createLeague.g30.collegeNote', 'College formats are new. Check the roster, scoring and future-season rules before you invite managers.')}
         </p>
       ) : null}
 
@@ -806,6 +825,7 @@ export function LeagueBasicsStep({
         <div className="space-y-2">
           <label htmlFor="g30-team-count-input" className="block text-xs font-black uppercase tracking-wide text-[color:var(--text-tertiary)]">
             {t('createLeague.g30.teamCount.label')}
+            <HelpTip label={t('createLeague.g30.teamCount.label')} testId="g30-help-teams">{help(t, 'teams')}</HelpTip>
           </label>
           {/*
             Typing a number on a phone keypad and getting it refused is the slow path, so the
@@ -897,6 +917,7 @@ export function LeagueBasicsStep({
       <div className="space-y-2">
         <p className="text-xs font-black uppercase tracking-wide text-[color:var(--text-tertiary)]">
           {t('createLeague.g30.privacy.label')}
+          <HelpTip label={t('createLeague.g30.privacy.label')} testId="g30-help-privacy">{help(t, 'privacy')}</HelpTip>
         </p>
         <div className="grid grid-cols-2 gap-2">
           {(['private', 'public'] as const).map((privacy) => (
@@ -924,14 +945,18 @@ export function LeagueBasicsStep({
           head-to-head game for a median game to double. */}
       {getEffectiveLeagueType(state) === 'guillotine' ? null : (
       <label
-        className="flex min-h-12 cursor-pointer touch-manipulation items-start gap-3 rounded-xl border border-[color:var(--border-subtle)] bg-[color:var(--surface-card-soft)] px-4 py-3 text-sm"
+        className={cx(
+          'flex min-h-12 cursor-pointer touch-manipulation items-start gap-3 rounded-xl border px-4 py-3 text-sm transition',
+          state.medianGame === true
+            ? 'border-violet-500 bg-violet-600/10'
+            : 'border-[color:var(--border-subtle)] bg-[color:var(--surface-card-soft)]',
+        )}
         data-testid="g30-median-game"
       >
-        <input
-          type="checkbox"
-          className="mt-0.5 h-5 w-5 shrink-0 accent-violet-600"
+        <CheckBox
+          className="mt-0.5"
           checked={state.medianGame === true}
-          onChange={(event) => onChange({ medianGame: event.target.checked })}
+          onChange={(checked) => onChange({ medianGame: checked })}
         />
         <span>
           <span className="block font-bold">{t('createLeague.g30.medianGame.label')}</span>
@@ -972,6 +997,7 @@ export function DraftStep({
       <div className="space-y-2.5">
         <p id="g30-draft-type-label" className="text-xs font-black uppercase tracking-wide text-[color:var(--text-tertiary)]">
           {t('createLeague.g30.draftType.label')}
+          <HelpTip label={t('createLeague.g30.draftType.label')} testId="g30-help-draft-type">{help(t, 'draftType')}</HelpTip>
         </p>
         <div className="grid grid-cols-2 gap-2.5 sm:gap-3 xl:grid-cols-3" role="group" aria-labelledby="g30-draft-type-label" data-testid="g30-draft-type-tiles">
           {draftTypes.map((option) => {
@@ -1003,6 +1029,7 @@ export function DraftStep({
         <label className="space-y-2">
           <span className="text-xs font-black uppercase tracking-wide text-[color:var(--text-tertiary)]">
             {t('createLeague.g30.scoring.label')}
+            <HelpTip label={t('createLeague.g30.scoring.label')} testId="g30-help-scoring">{help(t, 'scoring')}</HelpTip>
           </span>
           <select
             value={state.scoringPresetId}
@@ -1025,14 +1052,10 @@ export function DraftStep({
           data-testid="g30-devy-rounds-panel"
         >
           <label className="flex min-h-12 cursor-pointer touch-manipulation items-center gap-3 text-sm font-bold">
-            <input
-              type="checkbox"
-              className="h-5 w-5 shrink-0 accent-violet-600"
+            <CheckBox
               checked={state.dynasty.devyRoundsEnabled === true}
-              onChange={(event) =>
-                onChange({ dynasty: { ...state.dynasty, devyRoundsEnabled: event.target.checked } })
-              }
-              data-testid="g30-devy-rounds-toggle"
+              onChange={(checked) => onChange({ dynasty: { ...state.dynasty, devyRoundsEnabled: checked } })}
+              testId="g30-devy-rounds-toggle"
             />
             <span>{t('createLeague.g30.devyRounds.enable')}</span>
           </label>
@@ -1144,6 +1167,7 @@ export function DraftStep({
       <div className="space-y-2">
         <p className="text-xs font-black uppercase tracking-wide text-[color:var(--text-tertiary)]">
           {tx(t, 'createLeague.g30.draftWhen.label', 'Draft date')}
+          <HelpTip label={tx(t, 'createLeague.g30.draftWhen.label', 'Draft date')} testId="g30-help-draft-date">{help(t, 'draftDate')}</HelpTip>
         </p>
         <div className="grid grid-cols-2 gap-2" role="group" aria-label={tx(t, 'createLeague.g30.draftWhen.label', 'Draft date')}>
           {([
@@ -1211,6 +1235,7 @@ export function DraftStep({
         <label className="col-span-2 min-w-0 space-y-2 md:col-span-1">
           <span className="text-xs font-black uppercase tracking-wide text-[color:var(--text-tertiary)]">
             {t('createLeague.g30.timezone.label')}
+            <HelpTip label={t('createLeague.g30.timezone.label')} testId="g30-help-timezone">{help(t, 'timezone')}</HelpTip>
           </span>
           <select
             value={state.timezone}
@@ -1220,7 +1245,7 @@ export function DraftStep({
           >
             {timezoneOptions(state.timezone).map((timezone) => (
               <option key={timezone} value={timezone}>
-                {timezone}
+                {timezoneLabel(timezone)}
               </option>
             ))}
           </select>
@@ -1387,7 +1412,7 @@ export function LeaguePreviewCard({
           <PreviewRow label={t('createLeague.summary.teams')} value={String(state.teamCount)} />
           <PreviewRow label={t('createLeague.g30.privacy.label')} value={t(`createLeague.g30.privacy.${state.privacy}`)} />
           <PreviewRow label={t('createLeague.summary.draft')} value={draftWhenLabel(t, state)} />
-          <PreviewRow label={t('createLeague.g30.timezone.label')} value={state.timezone} />
+          <PreviewRow label={t('createLeague.g30.timezone.label')} value={timezoneLabel(state.timezone)} />
           <PreviewRow label={t('createLeague.summary.scoring')} value={scoring?.label ?? t('createLeague.g30.empty')} />
           <PreviewRow label={t('createLeague.g30.preview.language')} value={language.toUpperCase()} />
           <PreviewRow label={t('createLeague.g30.preview.advanced')} value={enabledPremiumCount > 0 ? String(enabledPremiumCount) : t('createLeague.g30.preview.advancedNone')} />
@@ -1540,7 +1565,10 @@ export function LockedAdvancedSetupPanel({
     <section className="space-y-4" data-testid="g30-advanced-panel">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h3 className="text-lg font-black">{t('createLeague.g30.advanced.title')}</h3>
+          <h3 className="text-lg font-black">
+            {t('createLeague.g30.advanced.title')}
+            <HelpTip label={t('createLeague.g30.advanced.title')} testId="g30-help-advanced">{help(t, 'advanced')}</HelpTip>
+          </h3>
           <p className="mt-1 text-sm leading-6 text-[color:var(--text-secondary)]">
             {hasCommissioner ? t('createLeague.g30.advanced.unlockedBody') : t('createLeague.g30.advanced.lockedBody')}
           </p>
@@ -1561,23 +1589,22 @@ export function LockedAdvancedSetupPanel({
             <label
               key={key}
               className={cx(
-                'flex min-h-12 touch-manipulation items-center gap-3 rounded-xl border px-3 text-sm font-bold',
-                hasCommissioner
-                  ? 'border-[color:var(--border-subtle)] bg-[color:var(--surface-card-soft)]'
-                  : 'border-[color:var(--border-subtle)] bg-[color:var(--surface-card-soft)] text-[color:var(--text-tertiary)]',
+                'flex min-h-12 touch-manipulation items-center gap-3 rounded-xl border px-3 text-sm font-bold transition',
+                hasCommissioner ? 'cursor-pointer' : 'cursor-not-allowed text-[color:var(--text-tertiary)]',
+                checked
+                  ? 'border-violet-500 bg-violet-600/10'
+                  : 'border-[color:var(--border-subtle)] bg-[color:var(--surface-card-soft)]',
               )}
               data-testid={`g30-advanced-${key}`}
             >
-              <input
-                type="checkbox"
-                className="h-5 w-5 shrink-0 accent-violet-600"
+              <CheckBox
                 checked={checked}
                 disabled={!hasCommissioner}
-                onChange={(event) =>
+                onChange={(next) =>
                   onChange({
                     advancedSetup: {
                       ...state.advancedSetup,
-                      [key]: event.target.checked,
+                      [key]: next,
                     },
                   })
                 }
