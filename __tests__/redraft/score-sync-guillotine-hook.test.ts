@@ -33,7 +33,7 @@ vi.mock('@/lib/prisma', () => ({
 }))
 vi.mock('@/lib/c2c/scoringEngine', () => ({ updateC2CMatchupScores: vi.fn() }))
 vi.mock('@/lib/survivor/gameStateMachine', () => ({ syncWeeklyScores: vi.fn() }))
-vi.mock('@/lib/zombie/matchupCompletion', () => ({ checkAllMatchupsComplete: vi.fn() }))
+vi.mock('@/lib/zombie/matchupCompletion', () => ({ getZombieWeekReadiness: vi.fn() }))
 vi.mock('@/lib/zombie/weeklyResolutionEngine', () => ({ runWeeklyResolution: vi.fn() }))
 vi.mock('@/lib/zombie/ZombieLeagueConfig', () => ({ getZombieLeagueConfig: vi.fn() }))
 vi.mock('@/lib/redraft/playerWeeklyScoreService', () => ({

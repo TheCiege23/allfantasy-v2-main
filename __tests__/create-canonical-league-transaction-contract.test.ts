@@ -416,3 +416,22 @@ describe('dynasty commissioner choices reach the runtime', () => {
     expect(tx.league.create.mock.calls[0]?.[0].data).toMatchObject({ playoffTeams: 4, playoffStartWeek: 13, settings: { bench_slots: 11, ir_slots: 0, taxi_slots: 3, regular_season_weeks: 12, playoff_team_count: 4 } })
   })
 })
+
+
+/*
+ * 🛑 A ZOMBIE LEAGUE WAS CREATED WITH `leagueVariant: null`. The Zombie tab, its landing, the trades tab
+ * and Chimmy's zombie context all key on the variant, so a new zombie league looked like plain redraft.
+ */
+describe('zombie leagues carry their variant', () => {
+  it('writes leagueVariant "zombie" for an NBA zombie league', async () => {
+    const tx = buildTx()
+    await createCanonicalLeagueInTransaction(tx as any, 'app-user-1', buildBody({ concept: 'zombie', sport: 'NBA' }), buildEngine({ leagueFormatId: 'zombie' }))
+    expect(tx.league.create.mock.calls[0]?.[0].data).toMatchObject({ leagueType: 'zombie', leagueVariant: 'zombie' })
+  })
+
+  it('[control] a plain redraft league still carries no variant', async () => {
+    const tx = buildTx()
+    await createCanonicalLeagueInTransaction(tx as any, 'app-user-1', buildBody(), buildEngine())
+    expect(tx.league.create.mock.calls[0]?.[0].data.leagueVariant).toBeNull()
+  })
+})
