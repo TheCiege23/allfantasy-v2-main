@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { HubCard } from './hubFields'
+import { fitsSlot } from '@/lib/league/lineup-expand-template'
 
 type WaiverTeam = { rosterId: string; name: string; faabRemaining: number | null; waiverPriority: number | null }
 
@@ -975,6 +976,205 @@ export function EditPlayoffBracketCard({ leagueId }: { leagueId: string }) {
           ) : null}
           {error ? <p className="text-[12px] text-amber-200/85" role="alert">{error}</p> : null}
         </>
+      )}
+    </HubCard>
+  )
+}
+
+type LineupSection = 'bench' | 'ir' | 'taxi' | 'devy'
+type LineupData = {
+  rosterId: string
+  week: number
+  slots: Array<{ label: string; allowedPositions: string[] }>
+  limits: Record<'starters' | LineupSection, number>
+  players: Array<{ id: string; name: string; position: string | null; team: string | null }>
+  lineup: { starters: string[] } & Record<LineupSection, string[]>
+}
+const LINEUP_SECTIONS: LineupSection[] = ['bench', 'ir', 'taxi', 'devy']
+
+/**
+ * Edit Lineup: set any team's starters slot by slot, and bench / IR / taxi / devy, for the current week.
+ * Commish edits skip kickoff locks; the server checks slot eligibility and section limits again.
+ */
+export function EditLineupCard({ leagueId }: { leagueId: string }) {
+  const { t } = useLanguage()
+  const [teams, setTeams] = useState<Array<{ rosterId: string; name: string }> | null>(null)
+  const [teamId, setTeamId] = useState<string | null>(null)
+  const [data, setData] = useState<LineupData | null>(null)
+  const [draft, setDraft] = useState<LineupData['lineup'] | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const base = `/api/leagues/${encodeURIComponent(leagueId)}/commish-lineup`
+
+  useEffect(() => {
+    let cancelled = false
+    fetch(base, { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((d: { teams: Array<{ rosterId: string; name: string }> }) => !cancelled && setTeams(d.teams))
+      .catch(() => !cancelled && setError(t('lsHub.ct.loadFailed')))
+    return () => {
+      cancelled = true
+    }
+  }, [base, t])
+
+  const apply = (d: LineupData) => {
+    setData(d)
+    setDraft({ ...d.lineup, starters: [...d.lineup.starters] })
+  }
+
+  const open = async (rosterId: string) => {
+    setTeamId(rosterId)
+    setData(null)
+    setDraft(null)
+    setError(null)
+    try {
+      const res = await fetch(`${base}?rosterId=${encodeURIComponent(rosterId)}`, { credentials: 'include' })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setError(typeof body.error === 'string' ? body.error : t('lsHub.ct.loadFailed'))
+        return
+      }
+      apply(body as LineupData)
+    } catch {
+      setError(t('lsHub.ct.loadFailed'))
+    }
+  }
+
+  const player = (id: string) => data?.players.find((p) => p.id === id)
+  const label = (id: string) => {
+    const p = player(id)
+    return p ? [p.name, [p.position, p.team].filter(Boolean).join(' - ')].filter(Boolean).join('  ') : id
+  }
+
+  /** Put a player into a starting slot. Whoever held the slot goes to the bench; a starter moved from
+   * another slot swaps with them instead, so nobody drops off the lineup by accident. */
+  const setStarter = (slot: number, id: string) => {
+    if (!draft) return
+    const next = { ...draft, starters: [...draft.starters] }
+    const prev = next.starters[slot] ?? ''
+    for (const k of LINEUP_SECTIONS) next[k] = next[k].filter((x) => x !== id)
+    const from = id ? next.starters.indexOf(id) : -1
+    next.starters[slot] = id
+    if (from >= 0 && from !== slot) next.starters[from] = prev
+    else if (prev && prev !== id) next.bench = [...next.bench, prev]
+    setDraft(next)
+  }
+
+  /** Move a non-starter between bench, IR, taxi and devy. */
+  const setSection = (id: string, to: LineupSection) => {
+    if (!draft) return
+    const next = { ...draft }
+    for (const k of LINEUP_SECTIONS) next[k] = next[k].filter((x) => x !== id)
+    next[to] = [...next[to], id]
+    setDraft(next)
+  }
+
+  const changed = data != null && draft != null && JSON.stringify(draft) !== JSON.stringify(data.lineup)
+
+  const save = async () => {
+    if (!draft || !teamId) return
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await fetch(base, {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rosterId: teamId, lineup: draft }),
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setError(typeof body.error === 'string' ? body.error : t('lsHub.sp.saveFailed'))
+        return
+      }
+      apply(body as LineupData)
+      toast.success(t('lsHub.el.saved'))
+    } catch {
+      setError(t('lsHub.sp.saveFailed'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const team = teams?.find((x) => x.rosterId === teamId) ?? null
+  const usableSections = data ? LINEUP_SECTIONS.filter((k) => k === 'bench' || data.limits[k] > 0 || (draft?.[k].length ?? 0) > 0) : []
+  const selectCls = 'min-w-0 flex-1 rounded-xl border border-white/[0.10] bg-black/25 px-3 py-2 text-[13px] text-white'
+
+  return (
+    <HubCard title={t('lsHub.el.title')} testId="commish-edit-lineup">
+      <p className="text-[12px] text-white/50">{t('lsHub.el.hint')}</p>
+      {teams == null ? (
+        error ? <p className="text-[12px] text-red-300/85">{error}</p> : <div className="h-24 animate-pulse rounded-xl bg-white/[0.05]" />
+      ) : !team ? (
+        <ul className="divide-y divide-white/[0.06] rounded-2xl border border-white/[0.08] bg-black/20" data-testid="commish-edit-lineup-teams">
+          {teams.map((x) => (
+            <li key={x.rosterId}>
+              <button type="button" onClick={() => void open(x.rosterId)} className="w-full truncate px-4 py-3 text-left text-[14px] font-semibold text-white hover:bg-white/[0.04]">
+                {x.name}
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div className="space-y-3">
+          <button type="button" onClick={() => setTeamId(null)} className="text-[12px] font-semibold text-cyan-200/80">
+            ← {team.name}
+            {data ? ` · ${t('lsHub.el.week').replace('{{week}}', String(data.week))}` : ''}
+          </button>
+          {!data || !draft ? (
+            error ? <p className="text-[12px] text-amber-200/85">{error}</p> : <div className="h-24 animate-pulse rounded-xl bg-white/[0.05]" />
+          ) : (
+            <>
+              <p className="text-[11px] font-bold uppercase tracking-wide text-white/40">{t('lsHub.el.starters')}</p>
+              <ul className="divide-y divide-white/[0.06] rounded-2xl border border-white/[0.08] bg-black/20" data-testid="commish-lineup-starters">
+                {data.slots.map((slot, i) => (
+                  <li key={i} className="flex items-center gap-3 px-3 py-2">
+                    <span className="w-14 shrink-0 text-[12px] font-bold text-cyan-200/80">{slot.label}</span>
+                    <select value={draft.starters[i] ?? ''} onChange={(e) => setStarter(i, e.target.value)} aria-label={slot.label} className={selectCls}>
+                      <option value="" className="bg-[#0d1117]">{t('lsHub.el.empty')}</option>
+                      {data.players
+                        .filter((p) => fitsSlot(slot, p.position))
+                        .map((p) => (
+                          <option key={p.id} value={p.id} className="bg-[#0d1117]">
+                            {label(p.id)}
+                          </option>
+                        ))}
+                    </select>
+                  </li>
+                ))}
+              </ul>
+              <p className="text-[11px] font-bold uppercase tracking-wide text-white/40">{t('lsHub.el.reserves')}</p>
+              {LINEUP_SECTIONS.flatMap((k) => draft[k]).length === 0 ? (
+                <p className="text-[12px] text-white/45">{t('lsHub.el.noReserves')}</p>
+              ) : (
+                <ul className="divide-y divide-white/[0.06] rounded-2xl border border-white/[0.08] bg-black/20">
+                  {LINEUP_SECTIONS.flatMap((k) => draft[k].map((id) => ({ id, k }))).map(({ id, k }) => (
+                    <li key={id} className="flex items-center gap-3 px-3 py-2">
+                      <span className="min-w-0 flex-1 truncate text-[13px] text-white/85">{label(id)}</span>
+                      <select value={k} onChange={(e) => setSection(id, e.target.value as LineupSection)} aria-label={label(id)} className="w-28 shrink-0 rounded-xl border border-white/[0.10] bg-black/25 px-2 py-1.5 text-[12px] text-white">
+                        {usableSections.map((s) => (
+                          <option key={s} value={s} className="bg-[#0d1117]">
+                            {t(`lsHub.el.s.${s}`)}
+                          </option>
+                        ))}
+                      </select>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {error ? <p className="text-[12px] text-amber-200/85" role="alert">{error}</p> : null}
+              <button
+                type="button"
+                disabled={busy || !changed}
+                onClick={() => void save()}
+                className="w-full rounded-full bg-cyan-400 px-4 py-3 text-[13px] font-extrabold text-[#04131a] disabled:opacity-40"
+                data-testid="commish-lineup-save"
+              >
+                {busy ? t('lsHub.saving') : t('lsHub.el.save')}
+              </button>
+            </>
+          )}
+        </div>
       )}
     </HubCard>
   )

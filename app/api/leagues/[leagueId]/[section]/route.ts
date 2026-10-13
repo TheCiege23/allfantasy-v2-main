@@ -32,6 +32,7 @@ const HANDLERS: Record<string, () => Promise<Record<string, unknown>>> = {
   'bestball': () => import('../bestball/handler'),
   'claim-roster': () => import('../claim-roster/handler'),
   'commentary': () => import('../commentary/handler'),
+  'commish-lineup': () => import('../commish-lineup/handler'),
   'commish-playoffs': () => import('../commish-playoffs/handler'),
   'commish-rosters': () => import('../commish-rosters/handler'),
   'commish-scores': () => import('../commish-scores/handler'),
