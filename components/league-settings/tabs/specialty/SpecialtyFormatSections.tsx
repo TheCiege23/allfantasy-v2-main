@@ -28,12 +28,9 @@ import { ZombieAnimationsPanel } from '@/app/zombie/components/commissioner/Zomb
 import { ZombieAdvancedPanel } from '@/app/zombie/components/commissioner/ZombieAdvancedPanel'
 import { BigBrotherSettingsPanel } from '@/components/big-brother/BigBrotherSettingsPanel'
 import { DevyLeagueSettingsHub } from '@/components/devy/settings/DevyLeagueSettingsHub'
-import { C2CFormatPanel } from '@/app/c2c/components/settings/C2CFormatPanel'
-import { C2CRostersPanel } from '@/app/c2c/components/settings/C2CRostersPanel'
-import { C2CScoringPanel } from '@/app/c2c/components/settings/C2CScoringPanel'
 import { C2CTaxiPanel } from '@/app/c2c/components/settings/C2CTaxiPanel'
 import { C2CDevyPanel } from '@/app/c2c/components/settings/C2CDevyPanel'
-import { C2CDraftsPanel } from '@/app/c2c/components/settings/C2CDraftsPanel'
+import { MergedDevyC2CCommissionerSettings } from '@/components/merged-devy-c2c/MergedDevyC2CCommissionerSettings'
 import type { C2CConfigClient } from '@/lib/c2c/c2cUiLabels'
 // Type-only: taxiLockResolver imports prisma and must stay out of the client bundle.
 import type { TaxiLockMode } from '@/lib/c2c/taxiLockResolver'
@@ -127,15 +124,25 @@ export function C2CSection({ ctx, canEdit }: FormatSectionProps) {
   }, [ctx.league.id])
   return (
     <div className="space-y-2">
-      <Sub title={t('lsHub.sp.c.format')} defaultOpen><C2CFormatPanel config={config} canEdit={canEdit} /></Sub>
-      <Sub title={t('lsHub.sp.c.rosters')}><C2CRostersPanel config={config} canEdit={canEdit} /></Sub>
-      <Sub title={t('lsHub.sp.c.scoring')}><C2CScoringPanel config={config} /></Sub>
-      {/* Both panels save only when given the league and edit rights; without them every click was a no-op. */}
-      <Sub title={t('lsHub.sp.c.taxi')}>
-        <C2CTaxiPanel leagueId={ctx.league.id} canEdit={canEdit} initialMode={savedTaxiLockMode(ctx.league.settings)} />
-      </Sub>
-      <Sub title={t('lsHub.sp.c.devy')}><C2CDevyPanel config={config} leagueId={ctx.league.id} canEdit={canEdit} /></Sub>
-      <Sub title={t('lsHub.sp.c.drafts')}><C2CDraftsPanel config={config} /></Sub>
+      {/*
+        The C2C config league creation writes (C2CLeagueConfig) and the merged-devy-c2c engine reads.
+        Its PATCH is behind the specialty gate and type-checked (lib/merged-devy-c2c/c2cConfigPatch.ts).
+      */}
+      <Sub title={t('lsHub.sp.c.rules')} defaultOpen><MergedDevyC2CCommissionerSettings leagueId={ctx.league.id} /></Sub>
+      {/*
+        ⚠ The campus/canton panels below read a SEPARATE model (C2CLeague, via /api/c2c), which only
+        `POST /api/c2c` creates and nothing in the app calls. For a league without that row they have
+        nothing to load or save, so they show only when it exists. The Format/Rosters/Scoring/Drafts
+        panels are not shown at all: they save nothing.
+      */}
+      {config ? (
+        <>
+          <Sub title={t('lsHub.sp.c.taxi')}>
+            <C2CTaxiPanel leagueId={ctx.league.id} canEdit={canEdit} initialMode={savedTaxiLockMode(ctx.league.settings)} />
+          </Sub>
+          <Sub title={t('lsHub.sp.c.devy')}><C2CDevyPanel config={config} leagueId={ctx.league.id} canEdit={canEdit} /></Sub>
+        </>
+      ) : null}
     </div>
   )
 }
