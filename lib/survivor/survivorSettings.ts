@@ -8,6 +8,7 @@ export type SurvivorTieRule = 'revote_then_season_points' | 'season_points_only'
 export type SurvivorEliminationOutcome = 'removed_to_waivers' | 'exile_island'
 export type SurvivorScreenshotsPolicy = 'host_dm_private' | 'allowed_except_host_ai_dms'
 export type SurvivorConductPolicy = 'game_deception_allowed_platform_abuse_banned'
+export type SurvivorNbaWeeklyScoringMode = 'all_games' | 'one_game_per_player'
 
 export interface SurvivorFoundationSettings {
   tribeCount: number
@@ -34,6 +35,7 @@ export interface SurvivorFoundationSettings {
   eliminationOutcome: SurvivorEliminationOutcome
   sitOutsEnabled: boolean
   noConsecutiveSitOuts: boolean
+  nbaWeeklyScoringMode: SurvivorNbaWeeklyScoringMode
   idolExpiryRemainingPlayers: number
   idolInvalidRemainingPlayers: number
   idolCount: number
@@ -92,6 +94,7 @@ export const SURVIVOR_DEFAULT_FOUNDATION_SETTINGS: SurvivorFoundationSettings = 
   eliminationOutcome: 'removed_to_waivers',
   sitOutsEnabled: true,
   noConsecutiveSitOuts: true,
+  nbaWeeklyScoringMode: 'all_games',
   idolExpiryRemainingPlayers: 5,
   idolInvalidRemainingPlayers: 4,
   idolCount: 7,
@@ -257,6 +260,7 @@ export function normalizeSurvivorFoundationSettings(
     eliminationOutcome: normalizeEliminationOutcome(readString(s, ['eliminationOutcome'], readBoolean(s, ['exileIslandEnabled', 'exile_enabled', 'survivorExileEnabled'], base.exileIslandEnabled) ? 'exile_island' : 'removed_to_waivers')),
     sitOutsEnabled: readBoolean(s, ['sitOutsEnabled'], base.sitOutsEnabled),
     noConsecutiveSitOuts: readBoolean(s, ['noConsecutiveSitOuts'], base.noConsecutiveSitOuts),
+    nbaWeeklyScoringMode: readString(s, ['nbaWeeklyScoringMode'], base.nbaWeeklyScoringMode) === 'one_game_per_player' ? 'one_game_per_player' : 'all_games',
     idolExpiryRemainingPlayers: clampInt(
       readNumber(s, ['idolExpiryRemainingPlayers'], base.idolExpiryRemainingPlayers),
       2,
@@ -303,6 +307,7 @@ export function buildSurvivorSettingsSnapshotPatch(
     tribe_count: normalized.tribeCount,
     survivorTribeSlots: normalized.survivorTribeSlots,
     survivorIdolCount: normalized.idolCount,
+    nbaWeeklyScoringMode: normalized.nbaWeeklyScoringMode,
     tribe_assignment_mode: normalized.tribeAssignmentMode,
     merge_at_count: normalized.mergeActivePlayerCount,
     jury_threshold_percent: normalized.juryThresholdPercent,

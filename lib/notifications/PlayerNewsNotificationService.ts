@@ -15,8 +15,10 @@
 
 import { prisma } from '@/lib/prisma'
 import {
+  currentTeamForBinding,
   resolveNewsPlayerBinding,
   rosterRowIsBoundPlayer,
+  teamNewsSubject,
   type NewsPlayerBinding,
 } from '@/lib/notifications/newsPlayerBinding'
 import type { RunBudget } from '@/lib/cron/runBudget'
@@ -27,7 +29,8 @@ import { classifyPlayerNewsCategory } from '@/lib/news/player-news-category'
 import { listFollowerIdsForPlayerIdentity } from '@/lib/follows/playerFollows'
 import { listFollowerIdsForTeam } from '@/lib/follows/teamFollows'
 import { resolveNewsTeam, withinTeamFollowDailyCap } from '@/lib/follows/teamFollowAlerts'
-import { alreadyToldAbout, recordToldAbout } from '@/lib/notifications/playerNewsRepeatGuard'
+import { alreadyToldAbout, recordToldAbout, type PlayerNewsIdentity } from '@/lib/notifications/playerNewsRepeatGuard'
+import { getTeamInfo } from '@/lib/team-abbrev'
 
 type OptionalPlayerNewsNotificationModel = {
   findFirst?: (args: unknown) => Promise<unknown>
@@ -214,6 +217,16 @@ export async function dispatchPlayerNewsNotifications(
 }
 
 /**
+ * One headline told to one team's fans, however many rows carry it. "Commanders WR Terry McLaurin
+ * won't play London game" is stored once for McLaurin and once for "Washington Commanders"; the
+ * player-scoped story key differs between them, so without this a Commanders fan heard it twice.
+ * Checked and written with `storyOnly` — see playerNewsRepeatGuard's `ToldOptions`.
+ */
+function teamHeadlineIdentity(sport: string, teamAbbr: string, headline: string, category: string): PlayerNewsIdentity {
+  return { sport, playerName: `team:${teamAbbr}`, headline, category }
+}
+
+/**
  * Get unread news notifications for a user.
  */
 export async function getUnreadNewsNotifications(
@@ -358,6 +371,8 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
   teamFollowCapped: number
   /** Rows with no rostering manager AND no follower — nobody to tell. Includes `unboundPlayer`. */
   noRoster: number
+  /** Rows about ONE team rather than a player (see `teamNewsSubject`), routed to that team's followers. */
+  teamNews: number
   /**
    * Of the rows worth sending, those whose name did not bind to ONE registry player — a namesake the
    * row's tag could not settle, or a name that is not a player at all. Nobody is told about these.
@@ -397,6 +412,7 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
   let teamFollowCapped = 0
   let noRoster = 0
   let unboundPlayer = 0
+  let teamNews = 0
   let deferred = 0
   let repeatsSuppressed = 0
   const stamped: string[] = []
@@ -436,18 +452,55 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
      * player's team" would need a team we do not have. A missed alert is a gap; a wrong one is a
      * false statement someone acts on.
      *
-     * ⚠ THIS INCLUDES ROWS WHOSE "PLAYER" IS A TEAM ("Dallas Cowboys"). Measured over 30 days of
-     * high-impact NFL news: 277 such rows had been reaching managers who roster that team's D/ST by
-     * name, and could reach that team's followers through the tag. They are not player news and now
-     * tell nobody; routing them by the team they name would be a separate, deliberate feature.
+     * ⚠ A ROW WHOSE "PLAYER" IS A TEAM ("Dallas Cowboys") is not player news: it reaches no roster
+     * (it once reached D/ST managers by name — 277 high-impact rows in 30 days) and no player
+     * follower. Owner's decision 2026-10-13: it goes to THAT TEAM's followers, but only when
+     * `teamNewsSubject` finds the slot, the tag and the headline all naming the same one club.
      */
     const binding = await resolveNewsPlayerBinding(row.sport, row.playerName, row.team)
     if (binding.kind !== 'resolved') {
-      unboundPlayer++
-      noRoster++
+      const club = binding.kind === 'unresolved' ? teamNewsSubject(row.sport, row.playerName, row.team, row.headline) : null
+      // The resolver turns the canonical code into the key follows are stored under (or null).
+      const clubAbbr = club ? await resolveNewsTeam(row.sport, club, null).catch(() => null) : null
+      if (!club || !clubAbbr) {
+        unboundPlayer++
+        noRoster++
+        continue
+      }
+      teamNews++
+      const fans = (await listFollowerIdsForTeam(row.sport, clubAbbr).catch(() => null)) ?? []
+      if (fans.length === 0) {
+        noRoster++
+        continue
+      }
+      const story = teamHeadlineIdentity(row.sport, clubAbbr, row.headline, category)
+      const toldFans = await alreadyToldAbout(fans, story, undefined, { storyOnly: true })
+      repeatsSuppressed += toldFans.size
+      const freshFans = fans.filter((id) => !toldFans.has(id))
+      if (freshFans.length === 0) continue
+      const cappedFans = await withinTeamFollowDailyCap(freshFans)
+      teamFollowCapped += freshFans.length - cappedFans.length
+      if (cappedFans.length === 0) continue
+      const teamName = getTeamInfo(club)?.fullName ?? row.playerName
+      await dispatchNotification({
+        userIds: cappedFans,
+        category: 'followed_teams',
+        type: isInjury ? 'player_injury_update' : 'player_news_update',
+        title: `${CATEGORY_ICONS[category] ?? '📰'} ${CATEGORY_LABELS[category] ?? 'News'}: ${teamName}`.slice(0, 256),
+        body: row.headline.slice(0, 500),
+        leagueId: null,
+        severity: isInjury ? 'high' : 'medium',
+        dedupePrefix: `player-news:${row.id}`,
+        meta: { teamName, team: clubAbbr, sport: row.sport, newsCategory: category, followedTeam: clubAbbr, teamNews: true },
+      }).catch(() => {})
+      recipients += cappedFans.length
+      teamFollowerRecipients += cappedFans.length
+      await recordToldAbout(cappedFans, story, undefined, { storyOnly: true })
+      notified++
       continue
     }
-    const playerTeam = binding.identity.currentTeam
+    // His club NOW: the Sleeper row's team, the registry's only as a fallback (currentTeamForBinding).
+    const playerTeam = await currentTeamForBinding(binding, row.sport)
     const rosterPlayers = await rosterRowsForBinding(binding, row.playerName, row.sport)
 
     // dispatchNotification takes ONE leagueId, so group recipients by league rather than
@@ -510,7 +563,14 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
      * under the first league, not three times: `dedupePrefix` only ever collapsed the bell row.
      */
     const news = { sport: row.sport, playerName: row.playerName, headline: row.headline, category }
-    const told = await alreadyToldAbout([...rostered, ...allFollowersOnly, ...allTeamFollowersOnly], news)
+    const everyone = [...rostered, ...allFollowersOnly, ...allTeamFollowersOnly]
+    const told = await alreadyToldAbout(everyone, news)
+    // …and anyone already told this HEADLINE through his team: by this row's team-news twin, or by a
+    // teammate's row carrying the same headline (teamHeadlineIdentity).
+    const teamHeadline = teamAbbr ? teamHeadlineIdentity(row.sport, teamAbbr, row.headline, category) : null
+    if (teamHeadline) {
+      for (const id of await alreadyToldAbout(everyone, teamHeadline, undefined, { storyOnly: true })) told.add(id)
+    }
     const assigned = new Set<string>(told)
     for (const [leagueId, ids] of byLeague) {
       const fresh = new Set([...ids].filter((id) => !assigned.has(id)))
@@ -580,6 +640,7 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
     const toldNow: string[] = [...followersOnly, ...teamFollowersOnly]
     for (const ids of byLeague.values()) toldNow.push(...ids)
     await recordToldAbout(toldNow, news)
+    if (teamHeadline) await recordToldAbout(toldNow, teamHeadline, undefined, { storyOnly: true })
     notified++
   }
 
@@ -600,6 +661,7 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
     teamFollowCapped,
     noRoster,
     unboundPlayer,
+    teamNews,
     deferred,
     repeatsSuppressed,
   }

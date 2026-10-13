@@ -43,6 +43,8 @@ const ALERTABLE: ReadonlySet<LiveEvent['type']> = new Set([
   'DEFENSIVE_SCORE',
   'SPECIAL_TEAMS_SCORE',
   'TURNOVER',
+  // A score, worth 2 to the passer and the scorer — and never announced as the touchdown before it.
+  'TWO_POINT_CONVERSION',
 ])
 
 /**
@@ -353,16 +355,23 @@ export async function ownersByPlayerId(
  * slots on production, 2026-10-12) matched; only the owner-id translation failing kept it from
  * reaching anyone. Native leagues hold Sleeper ids too, but their owners are AF users and are
  * resolved by `starterImpactsByPlayerId`, not here.
+ *
+ * The owner also comes back as the CLAIM on the team this roster belongs to (`LeagueTeam` bound by
+ * the import's `source_team_id`) — see `addImportedLeagueOwners` for why that is the link.
  */
-const ROSTERED_SQL = `SELECT DISTINCT r."platformUserId"
+const ROSTERED_SQL = `SELECT DISTINCT r."platformUserId", t."claimedByUserId"
          FROM rosters r
          JOIN leagues l ON l.id = r."leagueId"
+         LEFT JOIN league_teams t ON t."leagueId" = r."leagueId"
+           AND t."externalId" = coalesce(r."playerData"->>'source_team_id', r."playerData"->'import'->>'sourceTeamId')
          WHERE l.sport::text = $2
            AND lower(l.platform) = 'sleeper'
            AND r."playerData"->'players' @> $1::jsonb`
-const STARTING_SQL = `SELECT DISTINCT r."platformUserId"
+const STARTING_SQL = `SELECT DISTINCT r."platformUserId", t."claimedByUserId"
          FROM rosters r
          JOIN leagues l ON l.id = r."leagueId"
+         LEFT JOIN league_teams t ON t."leagueId" = r."leagueId"
+           AND t."externalId" = coalesce(r."playerData"->>'source_team_id', r."playerData"->'import'->>'sourceTeamId')
          WHERE l.sport::text = $2
            AND lower(l.platform) = 'sleeper'
            AND r."playerData"->'starters' @> $1::jsonb`
@@ -383,50 +392,67 @@ async function addImportedLeagueOwners(
   try {
     if (identities.length === 0) return
 
-    // riId → the Sleeper user ids rostering that player on imported leagues.
+    /*
+     * 🛑 THE OWNER IS THE TEAM'S CLAIM, NOT A TRANSLATION OF `platformUserId`. When the importer
+     * resolves a Sleeper manager to an AllFantasy account it claims their `LeagueTeam` AND rewrites
+     * the roster's `platformUserId` to the AF user id (`importedRosterOwnerKey`). So the rows that
+     * HAVE an AF owner no longer carry a Sleeper id, and translating the column through
+     * `UserProfile.sleeperUserId` — the only route this had — resolved nobody. Measured on production
+     * 2026-10-13: 0 of 6,973 NFL Sleeper rosters translated; 582 are bound to a claimed team (42
+     * users), every one keyed by its claimer. The claim is what every "my team" read keys on.
+     *
+     * The profile translation stays as the fallback for a roster still keyed by the Sleeper id (a
+     * manager who linked Sleeper after the last sync). The other 6,391 rosters (91.7%) are Sleeper
+     * managers with no AF account — no claim, no profile, no `sleeper_<id>` user, no LegacyUser link —
+     * so there is nobody to send to, and nobody is guessed at.
+     */
+    const claimedOwnersByRiId = new Map<string, string[]>()
     const sleeperOwnersByRiId = new Map<string, string[]>()
+    const add = (map: Map<string, string[]>, riId: string, id: string) => {
+      const list = map.get(riId) ?? []
+      if (!list.includes(id)) list.push(id)
+      map.set(riId, list)
+    }
     for (const identity of identities) {
       const riId = identity.rollingInsightsId
       const sleeperId = identity.sleeperId
       if (!riId || !sleeperId) continue
 
-      const rosters = await prisma.$queryRawUnsafe<Array<{ platformUserId: string }>>(
+      const rosters = await prisma.$queryRawUnsafe<Array<{ platformUserId: string; claimedByUserId?: string | null }>>(
         startersOnly ? STARTING_SQL : ROSTERED_SQL,
         JSON.stringify([sleeperId]),
         sport,
       )
 
-      const list = sleeperOwnersByRiId.get(riId) ?? []
       for (const row of rosters) {
-        if (row.platformUserId && !list.includes(row.platformUserId)) {
-          list.push(row.platformUserId)
-        }
+        if (row.claimedByUserId) add(claimedOwnersByRiId, riId, row.claimedByUserId)
+        else if (row.platformUserId) add(sleeperOwnersByRiId, riId, row.platformUserId)
       }
-      if (list.length > 0) sleeperOwnersByRiId.set(riId, list)
     }
-    if (sleeperOwnersByRiId.size === 0) return
+    if (claimedOwnersByRiId.size === 0 && sleeperOwnersByRiId.size === 0) return
 
     /*
-     * ⚠ platformUserId, NOT our user id. On an imported league this is the
-     * SLEEPER user id, and NOTHING downstream resolves it — the dispatcher
-     * looks profiles up by our user id and silently skips ids it does not
-     * know. Translate here through UserProfile.sleeperUserId. A Sleeper
-     * manager who never linked an AF account has nowhere to receive the
-     * alert and is skipped.
+     * ⚠ An unclaimed row's platformUserId is the SLEEPER user id, and NOTHING downstream resolves
+     * it — the dispatcher looks profiles up by our user id and silently skips ids it does not know.
      */
     const sleeperUserIds = [...new Set([...sleeperOwnersByRiId.values()].flat())]
-    const profiles = await prisma.userProfile.findMany({
-      where: { sleeperUserId: { in: sleeperUserIds } },
-      select: { userId: true, sleeperUserId: true },
-    })
+    const profiles = sleeperUserIds.length > 0
+      ? await prisma.userProfile.findMany({
+        where: { sleeperUserId: { in: sleeperUserIds } },
+        select: { userId: true, sleeperUserId: true },
+      })
+      : []
     const userIdBySleeperId = new Map<string, string>()
     for (const profile of profiles) {
       if (profile.sleeperUserId) userIdBySleeperId.set(profile.sleeperUserId, profile.userId)
     }
 
-    for (const [riId, sleeperOwners] of sleeperOwnersByRiId) {
+    for (const riId of new Set([...claimedOwnersByRiId.keys(), ...sleeperOwnersByRiId.keys()])) {
       const list = out.get(riId) ?? []
-      for (const sleeperUserId of sleeperOwners) {
+      for (const userId of claimedOwnersByRiId.get(riId) ?? []) {
+        if (!list.includes(userId)) list.push(userId)
+      }
+      for (const sleeperUserId of sleeperOwnersByRiId.get(riId) ?? []) {
         const userId = userIdBySleeperId.get(sleeperUserId)
         if (userId && !list.includes(userId)) list.push(userId)
       }
@@ -454,6 +480,8 @@ export function notificationTitleFor(event: LiveEvent): string {
       return yards >= 20 ? `${yards}-yard return touchdown` : 'Special teams touchdown'
     case 'TURNOVER':
       return 'Turnover'
+    case 'TWO_POINT_CONVERSION':
+      return '2-pt conversion'
     default:
       return 'Live update'
   }
@@ -466,7 +494,7 @@ function severityFor(event: LiveEvent): NotificationEvent['severity'] {
   if (event.type === 'TOUCHDOWN' || event.type === 'DEFENSIVE_SCORE' || event.type === 'SPECIAL_TEAMS_SCORE') {
     return 'high'
   }
-  if (event.type === 'TURNOVER' || event.type === 'FIELD_GOAL') return 'medium'
+  if (event.type === 'TURNOVER' || event.type === 'FIELD_GOAL' || event.type === 'TWO_POINT_CONVERSION') return 'medium'
   return 'low'
 }
 
@@ -477,7 +505,7 @@ function severityFor(event: LiveEvent): NotificationEvent['severity'] {
  */
 function passerSide(event: LiveEvent): LiveEvent | null {
   if (!event.passerId || !event.passerName) return null
-  if (event.type !== 'TOUCHDOWN' && event.type !== 'BIG_PLAY') return null
+  if (event.type !== 'TOUCHDOWN' && event.type !== 'BIG_PLAY' && event.type !== 'TWO_POINT_CONVERSION') return null
   return {
     ...event,
     playerId: event.passerId,
@@ -552,7 +580,8 @@ function notificationFor(
       team: event.team,
       eventType: event.type,
       stat: event.stat,
-      yards: Number.isFinite(event.delta) ? Math.round(event.delta) : null,
+      // A try's delta is its two points, not yards.
+      yards: event.type !== 'TWO_POINT_CONVERSION' && Number.isFinite(event.delta) ? Math.round(event.delta) : null,
       affectedLeagues: leagues,
       starterLeagueIds: leagues.map((league) => league.leagueId),
       /*
