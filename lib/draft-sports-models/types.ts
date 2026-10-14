@@ -123,6 +123,8 @@ export interface NormalizedDraftEntry {
   adp?: number | null
   byeWeek?: number | null
   playerId?: string | null
+  /** Stored pool row that supplied the draft ID; never a verified player match by itself. */
+  draftIdProvenance?: { namespace: 'sleeper' | 'rolling_insights' | 'unknown'; sourceRecordId: string | null }
   /** AI ADP when available */
   aiAdp?: number | null
   aiAdpSampleSize?: number

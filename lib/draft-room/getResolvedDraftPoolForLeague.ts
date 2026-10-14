@@ -9,6 +9,7 @@ import { listInjuryFacts } from '@/lib/injuries/injuryReadPort'
 import { classifyAvatarSource } from '@/lib/draft-room/classify-avatar-source'
 import { getPlayerPoolForLeague } from '@/lib/sport-teams/SportPlayerPoolResolver'
 import { normalizePlayerList, type NormalizedDraftEntry } from '@/lib/draft-asset-pipeline'
+import { resolveDraftIdProvenance, type DraftIdProvenance } from './draftIdProvenance'
 import { applyStoredTeamLogos, loadDraftPoolTeamLogoResolver } from '@/lib/draft-room/draftPoolTeamLogos'
 import { getLeagueDraftTemplatePayload } from '@/lib/league/league-draft-template-payload'
 import { isDevyLeague } from '@/lib/devy'
@@ -133,6 +134,7 @@ export type DraftPoolRawRow = {
   /** Internal: preserve source IDs before any backfill or reconciliation. */
   sourcePlayerId?: string | null
   sourceSleeperId?: string | null
+  draftIdProvenance?: DraftIdProvenance
 }
 
 export type GetResolvedDraftPoolOptions = {
@@ -178,6 +180,7 @@ type SportPoolRow = {
    * Rolling Insights number that looks identical to a Sleeper one.
    */
   sleeper_id?: string | null
+  metadata?: Record<string, unknown>
   injury_status: string | null
   secondary_positions?: string[]
   image_url?: string | null
@@ -2333,8 +2336,10 @@ export async function getResolvedDraftPoolForLeague(
           sourcePlayerId,
           sourceSleeperId,
         }
+    const selectedDraftId = String(base.playerId ?? base.sleeperId ?? base.id ?? '').trim()
     return {
       ...base,
+      draftIdProvenance: resolveDraftIdProvenance(sport, selectedDraftId, poolMatch),
       graduatedToNFL: row.graduatedToNFL ?? (promoted ? true : undefined),
       school: row.school ?? promoted?.school ?? null,
       college: row.college ?? promoted?.school ?? null,
@@ -2475,7 +2480,7 @@ export async function getResolvedDraftPoolForLeague(
   }
 
   const dedupedEnrichedList = dedupeEnrichedRawRows(enrichedList as DraftPoolRawRow[], sport)
-  let entries = normalizePlayerList(dedupedEnrichedList, sport)
+  let entries: NormalizedDraftEntry[] = normalizePlayerList(dedupedEnrichedList, sport).map((entry, index) => ({ ...entry, draftIdProvenance: dedupedEnrichedList[index]?.draftIdProvenance }))
   if (nbaSurvivorRoster) {
     const activeRoster = nbaSurvivorRoster
     entries = entries.filter((entry) =>

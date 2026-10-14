@@ -53,6 +53,12 @@
 
 ---
 
+## N-19 — NBA discipline play attribution (measured 2026-10-13)
+
+`fixtures/play-by-play.NBA.json` captures one final 2026-03-15 NBA game (437 plays) via the documented one-time probe. Its only `technical_foul_committed` play is a delay-of-game technical with `players: []`; it has no flagrant foul example. Other fouls include both identified and unidentified participants. Player IDs on identified foul plays are numeric strings and must pass the verified provider registry. This proves the action exists in the feed, but **does not** prove complete player technical/flagrant attribution, zero-event coverage or how later stat corrections appear. Tournament default NBA scoring remains blocked until those contracts are verified and a full-current-game reconciliation is implemented. A local full-snapshot comparison now detects changes to plays when both snapshots are present; it does not prove the provider delivered every correction or resolve unattributed/team events. Do not infer a player from description text or set missing counts to zero.
+
+---
+
 ## Blocking — resolve before shipping that sport
 
 | ID | Gap | Status | Blocks | How to resolve |

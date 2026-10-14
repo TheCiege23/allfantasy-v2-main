@@ -62,7 +62,7 @@ async function runAutomation() {
   const errors: { id: string; message: string }[] = []
 
   const shells = await prisma.tournamentShell.findMany({
-    where: { status: { notIn: ['setup', 'complete'] } },
+    where: { status: { notIn: ['setup', 'complete', 'blueprint', 'rules_published'] } },
     include: { rounds: { orderBy: { roundNumber: 'asc' } } },
   })
 

@@ -1,3 +1,4 @@
+import { seasonSetupBlocked } from '@/lib/tournament/seasonNativeContract'
 /**
  * Persist lineup changes with validation, normalized sync, history, and optional lock cache.
  */
@@ -74,6 +75,7 @@ export async function persistRosterLineupWithEngine(
     where: { id: input.leagueId },
   })
   if (!league) return { ok: false, error: 'League not found', status: 404 }
+  if (seasonSetupBlocked(league.settings)) return { ok: false, error: 'Tournament lineups remain locked until season activation.', status: 409 }
 
   const roster = await prisma.roster.findFirst({
     where: { id: input.rosterId, leagueId: input.leagueId },

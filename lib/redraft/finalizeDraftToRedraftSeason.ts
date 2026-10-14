@@ -1,3 +1,4 @@
+import { seasonSetupBlocked } from '@/lib/tournament/seasonNativeContract'
 import { reconcileSurvivorDraftPlan } from '@/lib/survivor/reconcileSurvivorDraftPlan'
 import { withSurvivorSetupTransaction } from '@/lib/survivor/survivorSetupTransaction'
 import { readSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
@@ -433,10 +434,11 @@ export async function syncCompletedDraftToRedraftSeason(
 ): Promise<RedraftDraftFinalizationSummary> {
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { id: true, survivorMode: true },
+    select: { id: true, survivorMode: true, settings: true },
   })
 
   if (!league) return { ...EMPTY_SUMMARY, reason: 'league_not_found' }
+  if (seasonSetupBlocked(league.settings)) return { ...EMPTY_SUMMARY, reason: 'season_tournament_managed' }
 
   /*
    * 🛑 THIS GATE READ `leagueType === 'redraft' || isDynasty === false`, WHICH IS NOT A

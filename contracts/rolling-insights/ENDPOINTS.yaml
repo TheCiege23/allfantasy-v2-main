@@ -429,6 +429,14 @@ fields:
                  free_throws_made, free_throws_attempted]
     game_state:
       current: ["full_box.current.Quarter", "full_box.current.TimeRemaining"]
+    play_by_play_capture:
+      fixture: fixtures/play-by-play.NBA.json
+      game_id: "20260315-1-13"
+      plays: 437
+      measured_fields: [sequence, period, gameClock, event, action, players, details, description]
+      player_identity: "players[].id is a numeric string in captured foul plays; join only through verified provider identity"
+      discipline: "one technical_foul_committed play has players: [] (delay of game); no flagrant_foul_committed play occurs"
+      warning: "This one final-game capture cannot prove player attribution for technical/flagrant events or correction completeness."
 
   MLB:
     confidence: high   # for `live`; schedule/play_by_play below remain doc-derived

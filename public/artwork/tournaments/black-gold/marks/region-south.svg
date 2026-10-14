@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 306" width="300" height="306" role="img" aria-label="SOUTH REGION TOURNAMENT"><defs><linearGradient id="kbi-region-south-rSr" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff0b8"/><stop offset="1" stop-color="#9a6a14"/></linearGradient><linearGradient id="kbi-region-south-M" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff3c4"/><stop offset="0.45" stop-color="#e8b84a"/><stop offset="1" stop-color="#7a5214"/></linearGradient><radialGradient id="kbi-region-south-rSf" cx="50%" cy="35%" r="70%"><stop offset="0" stop-color="#22252e"/><stop offset="1" stop-color="#060709"/></radialGradient></defs><circle cx="150" cy="150" r="140" fill="url(#kbi-region-south-rSr)" stroke="#0e0a08" stroke-width="5"/>
+<circle cx="150" cy="150" r="112" fill="url(#kbi-region-south-rSf)" stroke="#0e0a08" stroke-width="4"/>
+<path id="kbi-region-south-rStop" d="M30,150 A120,120 0 0 1 270,150" fill="none"/><path id="kbi-region-south-rSbot" d="M14,150 A136,136 0 0 0 286,150" fill="none"/>
+<text font-family="Archivo Black, Archivo, Arial Black, sans-serif" font-weight="900" font-size="20" letter-spacing="4" fill="#1a1204"><textPath href="#kbi-region-south-rStop" startOffset="50%" text-anchor="middle">SOUTH REGION</textPath></text>
+<text font-family="Archivo Black, Archivo, Arial Black, sans-serif" font-weight="900" font-size="13" letter-spacing="4" fill="#1a1204"><textPath href="#kbi-region-south-rSbot" startOffset="50%" text-anchor="middle">TOURNAMENT</textPath></text>
+<circle cx="276.0" cy="150.0" r="3" fill="#1a1204"/><circle cx="24.0" cy="150.0" r="3" fill="#1a1204"/>
+<g transform="translate(150,150)">
+<path d="M0,-86 L14,-14 L86,0 L14,14 L0,86 L-14,14 L-86,0 L-14,-14 Z" fill="#2a2e38" stroke="#0e0a08" stroke-width="3"/>
+<g transform="rotate(180)"><path d="M0,-92 L20,-10 L0,0 Z" fill="url(#kbi-region-south-M)" stroke="#0e0a08" stroke-width="3.5" stroke-linejoin="round"/><path d="M0,-92 L-20,-10 L0,0 Z" fill="#b8862a" stroke="#0e0a08" stroke-width="3.5" stroke-linejoin="round"/></g>
+<circle r="30" fill="#0b0c10" stroke="url(#kbi-region-south-M)" stroke-width="5"/>
+<text y="12" text-anchor="middle" font-family="Archivo Black, Archivo, Arial Black, sans-serif" font-weight="900" font-size="34" fill="#ffd98a">S</text></g>
+<text x="150" y="300" text-anchor="middle" font-family="Caveat, cursive" font-weight="700" font-size="12" fill="#8d93ad" opacity=".9">created by KB</text></svg>

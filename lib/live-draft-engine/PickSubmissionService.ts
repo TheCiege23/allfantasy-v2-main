@@ -1,3 +1,6 @@
+import { seasonDraftSessionError } from '@/lib/tournament/seasonDraftBoard'
+import { prepareSeasonDraftPool } from '@/lib/tournament/seasonDraftRefresh'
+import { loadSeasonDraftContext, validateSeasonDraftPlayer } from '@/lib/tournament/seasonDraftRuntime'
 /**
  * Pick submission: validate, persist, advance timer, optional roster append.
  * Uses transaction to avoid race conditions (duplicate picks, wrong order).
@@ -103,6 +106,12 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
     include: { picks: { orderBy: { overall: 'asc' } } },
   })
   if (!session) return { success: false, error: 'Draft session not found' }
+  const seasonContext = await loadSeasonDraftContext(input.leagueId)
+  if (seasonContext) {
+    const contractError = seasonDraftSessionError(seasonContext, session)
+    if (contractError) return { success: false, error: contractError }
+    if (session.draftType === 'auction' || input.commissionerOverride || input.source === 'commissioner' || input.tradedPicks?.length || (input.assetType && input.assetType !== 'player') || (input.source && !['user', 'auto'].includes(input.source))) return { success: false, error: 'This tournament pick requires its frozen draft flow.' }
+  }
 
   logEngineInvariantOptional(
     assertDraftSessionBelongsToLeague({
@@ -209,7 +218,10 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
     }
   }
 
-  const rosterFit = await validateRosterFitForDraftPick({
+  const seasonError = await validateSeasonDraftPlayer(input.leagueId, effectiveRosterId, session.picks, input)
+  if (seasonError) return { success: false, error: seasonError }
+
+  const rosterFit = seasonContext ? { valid: true } : await validateRosterFitForDraftPick({
     leagueId: input.leagueId,
     rosterId: effectiveRosterId,
     existingPicks: session.picks.map((p) => ({ rosterId: p.rosterId, position: p.position })),
@@ -321,6 +333,7 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
       if (!locked) {
         throw new Error('Draft state changed; please retry')
       }
+      if (seasonContext && (locked.version !== session.version || locked.status !== session.status || seasonDraftSessionError(seasonContext, locked))) throw new Error('Draft state changed; please retry')
       if (locked.picks.length !== picksCountAtSubmit) {
         throw new Error('Draft state changed; please retry')
       }
@@ -363,7 +376,7 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
           ownerUserId: input.madeByUserId ?? null,
         },
       })
-      await (tx as any).draftSession.update({
+      const sessionMutation = {
         where: { id: session.id },
         data: keepPaused
           ? {
@@ -385,7 +398,12 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
               version: { increment: 1 },
               updatedAt: new Date(),
             },
-      })
+      }
+      if (seasonContext) {
+        const claim = await tx.draftSession.updateMany({ ...sessionMutation, where: { id: session.id, version: session.version, status: session.status, timerEndAt: session.timerEndAt } })
+        if (claim.count !== 1) throw new Error('Draft state changed; please retry')
+      } else await (tx as any).draftSession.update(sessionMutation)
+
       const selectedAt = new Date()
       const nextOverall = resolveNextOpenPickOverall([...locked.picks, created], session.rounds * session.teamCount) ?? session.rounds * session.teamCount + 1
       const archived = await recordArchiveEvent(tx, {...locked, status:keepPaused?'paused':'in_progress'}, 'selection', {
@@ -397,6 +415,7 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
         archive:{eventId:archived.eventId,context:archived.context,timing:archived.selected,clockAllowanceSeconds:timerSeconds,
           selectionRosterId:effectiveRosterId,originalRosterId:slotOriginalRosterId,actorUserId:input.madeByUserId??null},
       })}})
+
       return created
     })
   } catch (error) {
@@ -503,14 +522,22 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
     // non-fatal
   }
 
+  const attemptCompletion = async () => {
+    if (!seasonContext) return completeDraftSession(input.leagueId)
+    try { return await completeDraftSession(input.leagueId) } catch (error) {
+      logStructured('error', 'submit_pick', 'tournament_completion_pending', { leagueId: input.leagueId, error: String(error) })
+      return false // The pick is committed; checkpoint repair can retry without inserting another pick.
+    }
+  }
+
   if (overall >= totalPicks) {
-    let completed = await completeDraftSession(input.leagueId)
+    let completed = await attemptCompletion()
     if (!completed) {
-      completed = await completeDraftSession(input.leagueId)
+      completed = await attemptCompletion()
     }
     if (!completed) {
       const { repairDraftCompletionIfBoardFull } = await import('@/lib/live-draft-engine/postDraftFinalizeArtifacts')
-      completed = await repairDraftCompletionIfBoardFull(input.leagueId)
+      completed = seasonContext ? await attemptCompletion() : await repairDraftCompletionIfBoardFull(input.leagueId)
       if (!completed) {
         logStructured('error', 'submit_pick', 'draft_completion_failed', {
           leagueId: input.leagueId,
@@ -538,7 +565,7 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
         totalPicks,
       )
     ) {
-      await completeDraftSession(input.leagueId)
+      await attemptCompletion()
     }
   }
 
@@ -656,6 +683,8 @@ export async function submitPick(input: SubmitPickInput): Promise<SubmitPickResu
     }
   }
 
+  const poolError = await prepareSeasonDraftPool(input.leagueId)
+  if (poolError) return { success: false, error: poolError }
   const lockResult = await withPickLock(input.leagueId, () => _submitPickCore(input))
   if (!lockResult.acquired) {
     // Competing instance is writing — tell client to refresh and retry.

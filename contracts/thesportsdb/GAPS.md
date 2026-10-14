@@ -69,7 +69,7 @@ one that produced everything in `fixtures/`.
 | `G-11` | Real rate limits | CONFLICTING | `/documentation`: 30/100/120 per minute. `/free_sports_api`: 100/min. v2 YAML: "1000 per day". Using `/documentation` — it matches `/pricing`. |
 | `G-12` | `strStat` enum for non-soccer sports | UNVERIFIED | 18 observed values are all soccer. No enum in the spec — data-driven. Likely moot given `R-01`. |
 | `G-13` | Whether `intScore` / `intScoreVotes` are user votes or match data | UNVERIFIED | Naming suggests a community rating, not scoring. Don't use for anything. |
-| `G-14` | `searchplayers.php` top-level key — `player` or `players`? | CONFLICTING (in our code) | No fixture. `lib/workers/providers/thesportsdb.ts` reads `player`; the NFL canonical headshot adapter in `lib/nfl-provider/nflRedraftProductionProviderWiring.ts` read `players` (via `flattenPlayerish`). Found 2026-10-11 while fixing that adapter's `players[0]` pick; the fix tolerates both rather than guessing. Settle by capturing a `searchplayers` fixture with `scripts/probe.sh` — not by an ad-hoc call. |
+| `G-14` | `searchplayers.php` top-level key — `player` or `players`? | UNVERIFIED; code tolerates both | No `searchplayers` fixture. `lib/workers/providers/thesportsdb.ts` now accepts either key, while the measured `lookupplayer` fixture uses `players`. Settle the search response by capturing a `searchplayers` fixture through the approved probe script, not by an ad-hoc call. |
 
 ---
 
