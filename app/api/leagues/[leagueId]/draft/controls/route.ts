@@ -6,6 +6,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { assertLeagueActionGate } from '@/server/services/leagueActionGate'
+import { seasonSetupBlocked } from '@/lib/tournament/seasonNativeContract'
+import { hasSeasonDraftRelease } from '@/lib/tournament/seasonDraftReleaseGate'
 import {
   pauseDraftSession,
   resumeDraftSession,
@@ -184,6 +186,13 @@ export async function POST(
       { error: `Invalid action. Use one of: ${ALLOWED_ACTIONS.join(', ')}` },
       { status: 400 }
     )
+  }
+  const tournamentLeague = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+  if (seasonSetupBlocked(tournamentLeague?.settings)) {
+    const released = await hasSeasonDraftRelease(leagueId, tournamentLeague?.settings)
+    if (!released || !['start', 'pause', 'resume', 'reset_timer', 'complete'].includes(action)) {
+      return NextResponse.json({ error: 'This tournament draft control requires the audited opening-draft release.', code: 'TOURNAMENT_DRAFT_RELEASE_REQUIRED' }, { status: 409 })
+    }
   }
   try {
     if (action === 'create_next_draft') {

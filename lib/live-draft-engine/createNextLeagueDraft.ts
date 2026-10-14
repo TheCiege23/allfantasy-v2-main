@@ -1,3 +1,5 @@
+import { seasonSetupBlocked } from '@/lib/tournament/seasonNativeContract'
+import { SEASON_DRAFT_MUTATION_BLOCKED } from '@/lib/tournament/seasonDraftMutationGate'
 /**
  * Create a league's NEXT draft once its current one is complete and its season is over.
  *
@@ -59,6 +61,7 @@ export type CreateNextDraftResult =
   | {
       ok: false
       code:
+        | 'TOURNAMENT_RULES_FROZEN'
         | 'LEAGUE_NOT_FOUND'
         | 'NO_PRIOR_DRAFT'
         | 'DRAFT_STILL_OPEN'
@@ -171,9 +174,11 @@ export async function createNextLeagueDraft(leagueId: string, actorUserId: strin
       leagueSize: true,
       lifecycleState: true,
       lifecycleMetadata: true,
+      settings: true,
     },
   })
   if (!league) return { ok: false, code: 'LEAGUE_NOT_FOUND', message: 'League not found.' }
+  if (seasonSetupBlocked(league.settings)) return { ok: false, code: 'TOURNAMENT_RULES_FROZEN', message: SEASON_DRAFT_MUTATION_BLOCKED }
 
   const previous = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER })
   if (!previous) {

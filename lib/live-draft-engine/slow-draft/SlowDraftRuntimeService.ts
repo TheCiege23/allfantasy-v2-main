@@ -1,3 +1,5 @@
+import { isSeasonTournamentDraft, SEASON_DRAFT_MUTATION_BLOCKED } from '@/lib/tournament/seasonDraftMutationGate'
+import { loadSeasonDraftContext } from '@/lib/tournament/seasonDraftRuntime'
 import { prisma } from '@/lib/prisma'
 import { getDraftConfigForLeague } from '@/lib/draft-defaults/DraftRoomConfigResolver'
 import { getDraftUISettingsForLeague, isSoftTimerEnabled } from '@/lib/draft-defaults/DraftUISettingsResolver'
@@ -100,6 +102,7 @@ export async function tryQueueAutoPick(
   leagueId: string,
   rosterId: string
 ): Promise<{ success: boolean; playerName?: string; queuePlayerUnavailable?: boolean }> {
+  if (await loadSeasonDraftContext(leagueId)) return { success: false } // Published tournament timeouts use best-available legal selection.
   const draftSession = await prisma.draftSession.findFirst({
     where: { leagueId },
     orderBy: CURRENT_DRAFT_SESSION_ORDER,
@@ -174,6 +177,7 @@ export async function runSlowDraftAutomationTick(
   leagueId: string,
   now: Date = new Date()
 ): Promise<SlowDraftAutomationTickResult> {
+  if (await isSeasonTournamentDraft(leagueId)) return { changed: false, actions: [] }
   const actions: SlowDraftAutomationAction[] = []
   let changed = false
 

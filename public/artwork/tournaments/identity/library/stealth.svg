@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200" role="img" aria-label="stealth emblem"><defs><linearGradient id="div-library-stealth-M" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="0.45" stop-color="#b9c0cc"/><stop offset="1" stop-color="#4a515e"/></linearGradient></defs><g transform="translate(4,4) scale(.96)"><path d="M150,96 C176,92 192,104 196,120 C182,112 168,112 156,116 Z M150,104 C172,118 180,138 176,152 C168,136 156,128 146,124 Z" fill="#b06bff" stroke="#0e0a08" stroke-width="4.5" stroke-linejoin="round"/>
+<circle cx="100" cy="104" r="66" fill="url(#div-library-stealth-M)" stroke="#0e0a08" stroke-width="6"/>
+<path d="M54,70 Q100,40 146,70" stroke="#fff" stroke-opacity=".55" stroke-width="4" fill="none"/>
+<path d="M36,86 Q100,76 164,86 L164,118 Q100,108 36,118 Z" fill="#0e0a08"/>
+<path d="M58,98 L92,92 L90,106 L60,108 Z M142,98 L108,92 L110,106 L140,108 Z" fill="#b06bff"/>
+<path d="M40,128 Q100,118 160,128 L156,140 Q100,130 44,140 Z" fill="#0e0a08" opacity=".85"/>
+<rect x="146" y="92" width="16" height="20" rx="3" fill="#b06bff" stroke="#0e0a08" stroke-width="3.5"/></g></svg>

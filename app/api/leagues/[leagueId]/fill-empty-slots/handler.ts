@@ -1,3 +1,4 @@
+import { isSeasonTournamentDraft, SEASON_DRAFT_MUTATION_BLOCKED } from '@/lib/tournament/seasonDraftMutationGate'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { randomUUID } from 'crypto'
@@ -32,6 +33,8 @@ export async function POST(
   } catch {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
+
+  if (await isSeasonTournamentDraft(leagueId)) return NextResponse.json({ error: SEASON_DRAFT_MUTATION_BLOCKED, code: 'TOURNAMENT_RULES_FROZEN' }, { status: 409 })
 
   try {
     const [league, existingTeams] = await Promise.all([
