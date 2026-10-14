@@ -134,11 +134,9 @@ export function resolveDailySportWeekWindow(
   week: number,
 ): { start: Date; end: Date } | null {
   if (!Number.isInteger(week) || week < 1) return null
-  if (String(sport ?? '').toUpperCase() === 'NBA' && Number.isInteger(Number(season))) {
-    const start = nbaEasternWeekDay(Number(season), week)
-    const end = nbaEasternWeekDay(Number(season), week + 1)
-    if (start && end) return { start, end }
-  }
+  // These bounds are UTC-midnight DATE keys for game_date and easternCalendarDay,
+  // not instants. The inverse below uses actual Eastern-midnight instants to
+  // classify a kickoff, including the daylight-saving transition.
   const starts = gameweekStarts(sport, season)
   if (starts) {
     const day = starts[week - 1]
