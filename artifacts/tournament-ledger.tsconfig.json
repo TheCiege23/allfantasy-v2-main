@@ -30,7 +30,7 @@
     "../lib/tournament/seasonObservedBoxCapture.ts",
     "../lib/tournament/seasonOutcomeEvidenceWorker.ts",
     "../app/api/tournament/season-outcome-capture/route.ts",
-    "../contracts/rolling-insights/scripts/capture-tournament-outcomes.ts",
+    "../scripts/audit-tournament-outcomes.ts",
     "../lib/tournament/seasonPeriodLiveReview.ts",
     "../__tests__/tournament-season-actual-start-evidence.test.ts",
     "../__tests__/tournament-season-actual-start-store.test.ts",
