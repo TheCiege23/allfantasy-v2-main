@@ -126,7 +126,14 @@ vi.mock('@/lib/redraft/standingsEngine', () => ({
 }))
 vi.mock('@/server/services/auditService', () => ({ logAction: vi.fn(async () => ({ id: 'a' })) }))
 vi.mock('@/lib/league-events/publisher', () => ({ publishLeagueFanoutEvent: vi.fn(async () => undefined) }))
-vi.mock('@/lib/specialty-league/registry', () => ({ getSpecialtySpecByVariant: (v: string) => (v === 'guillotine' ? { id: 'guillotine' } : null) }))
+vi.mock('@/lib/league/pastWeekFormatPolicy', () => ({
+  // The decision table itself is past-week-format-policy.test.ts; here only its two outcomes matter.
+  resolvePastWeekFormat: vi.fn(async () =>
+    h.variant === 'guillotine'
+      ? { ok: false, reason: 'Past lineups cannot be changed in a Guillotine league.' }
+      : { ok: true, note: h.variant === 'zombie' ? 'zombie' : null },
+  ),
+}))
 vi.mock('@/lib/roster-lineup-engine/commissionerRosterOverride', () => ({
   commissionerForceRosterLineup: vi.fn(async (input: Record<string, unknown>) => {
     h.forced.push(input)
@@ -449,5 +456,20 @@ describe('past weeks — playoff weeks the team played', () => {
     expect((await putWeek(15, LINEUP)).status).toBe(409)
     expect(h.weekWrites).toEqual([])
     expect(h.playoffRescored).toEqual([])
+  })
+})
+
+describe('past weeks — specialty formats', () => {
+  it('a Zombie league re-scores the matchup and says its zombie events stand', async () => {
+    h.variant = 'zombie'
+    const body = await (await get('?rosterId=A&week=5')).json()
+    expect(body.formatNote).toBe('zombie')
+    expect((await put({ rosterId: 'A', week: 5, lineup: { starters: ['qb1', 'rb2', 'wr1'], bench: ['rb1'] } })).status).toBe(200)
+    expect(h.rescored).toEqual(['m5'])
+  })
+
+  it('an ordinary league carries no note', async () => {
+    const body = await (await get('?rosterId=A&week=5')).json()
+    expect(body.formatNote).toBeNull()
   })
 })

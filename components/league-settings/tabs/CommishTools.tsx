@@ -992,6 +992,8 @@ type LineupData = {
   savedForWeek?: boolean
   weekRosterRecorded?: boolean
   scoreEdited?: boolean
+  /** A specialty format whose own weekly outcome a re-score leaves as it is. */
+  formatNote?: 'zombie' | 'big_brother' | 'tournament' | null
   /** Past-week view of a playoff week: its round and the weeks the round scores. */
   playoff?: { roundNumber: number; weeks: number[] } | null
   /** Which of the listed weeks are playoff weeks. */
@@ -1182,6 +1184,17 @@ export function EditLineupCard({ leagueId }: { leagueId: string }) {
               ) : null}
               {data.savedForWeek === false ? <p className="text-[12px] text-white/45">{t('lsHub.el.pastUnsaved')}</p> : null}
               {data.weekRosterRecorded === false ? <p className="text-[12px] text-white/45">{t('lsHub.el.pastRosterToday')}</p> : null}
+              {data.formatNote ? (
+                <p className="text-[12px] text-amber-200/80">
+                  {t(
+                    data.formatNote === 'zombie'
+                      ? 'lsHub.el.pastZombie'
+                      : data.formatNote === 'big_brother'
+                        ? 'lsHub.el.pastBigBrother'
+                        : 'lsHub.el.pastTournament',
+                  )}
+                </p>
+              ) : null}
               {data.scoreEdited ? (
                 <p className="text-[12px] text-amber-200/85" role="alert">
                   {t(data.playoff ? 'lsHub.el.pastWinnerPicked' : 'lsHub.el.pastScoreEdited')}

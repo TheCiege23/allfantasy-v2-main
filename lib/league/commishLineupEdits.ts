@@ -36,6 +36,7 @@ import { syncAfRosterLineupAssignments } from '@/lib/roster-lineup-engine/lineup
 import { editableWeeks } from '@/lib/redraft/completedWeeks'
 import { loadFrozenWeekRoster, replaceFrozenWeekRoster } from '@/lib/redraft/rosterWeekHistory'
 import { playedPlayoffMatchups, rescorePlayoffMatchup, type PlayoffWeekMatchup } from '@/lib/league/commishPlayoffLineup'
+import { resolvePastWeekFormat } from '@/lib/league/pastWeekFormatPolicy'
 
 export class CommishLineupError extends Error {
   constructor(message: string, readonly status = 400) {
@@ -252,10 +253,13 @@ export async function saveCommishLineup(input: {
  * previous lineup rows are restored before the refusal is returned. Standings are not rebuilt for a
  * playoff week — they are the regular season's.
  *
+ * SPECIALTY FORMATS follow lib/league/pastWeekFormatPolicy.ts: Zombie, Big Brother and Tournament re-score
+ * the matchup and standings only, and the editor says their own outcome for that week (infections,
+ * HOH/eviction, advancement) stands; IDP is ordinary; Guillotine, Survivor, Survivor Guillotine, Devy and
+ * C2C are refused.
+ *
  * Refused: a matchup whose score was set by hand in Edit Matchup Scores (re-scoring would silently
- * replace the commish's number) or whose playoff winner was picked in Edit Playoff Bracket, and
- * specialty formats, whose weekly outcomes (a guillotine chop, a survivor elimination) are not undone
- * by re-scoring.
+ * replace the commish's number) or whose playoff winner was picked in Edit Playoff Bracket.
  */
 
 /** This team's played playoff matchups (title bracket, final), for the past-week editor. */
@@ -283,13 +287,9 @@ function pastWeekList(season: { currentWeek: number; playoffStartWeek: number | 
 
 async function loadPastWeekContext(leagueId: string, rosterId: string, week: number) {
   const ctx = await loadContext(leagueId, rosterId)
-  const variant = await prisma.league.findUnique({ where: { id: leagueId }, select: { leagueVariant: true } })
-  if (variant?.leagueVariant) {
-    const { getSpecialtySpecByVariant } = await import('@/lib/specialty-league/registry')
-    if (getSpecialtySpecByVariant(variant.leagueVariant)) {
-      throw new CommishLineupError('Past lineups cannot be changed in this league format.', 409)
-    }
-  }
+  // Specialty formats: some re-score with a warning, some are refused (lib/league/pastWeekFormatPolicy.ts).
+  const format = await resolvePastWeekFormat(leagueId)
+  if (!format.ok) throw new CommishLineupError(format.reason, 409)
   const season = await prisma.redraftSeason.findFirst({
     where: { leagueId },
     orderBy: { season: 'desc' },
@@ -326,7 +326,7 @@ async function loadPastWeekContext(leagueId: string, rosterId: string, week: num
     ? weekRoster.map((p) => ({ id: p.playerId, name: p.playerName, position: p.position || null, team: p.team }))
     : ctx.players
   const rosterIds = players.map((p) => p.id)
-  return { ...ctx, players, rosterIds, weekRosterRecorded: weekRoster != null, season, weeks, playoffWeeks: playoffWeekList(played), matchups, playoff, scoreEdited }
+  return { ...ctx, players, rosterIds, weekRosterRecorded: weekRoster != null, season, weeks, playoffWeeks: playoffWeekList(played), matchups, playoff, scoreEdited, formatNote: format.note }
 }
 
 export async function loadCommishPastLineup(leagueId: string, rosterId: string, week: number) {
@@ -375,6 +375,8 @@ export async function loadCommishPastLineup(leagueId: string, rosterId: string, 
     /** False: the week predates the roster record, so this is today's roster (saving records it). */
     weekRosterRecorded: ctx.weekRosterRecorded,
     scoreEdited: ctx.scoreEdited,
+    /** A specialty format whose own weekly outcome (infections, HOH/eviction, advancement) a re-score leaves alone. */
+    formatNote: ctx.formatNote,
     /** Set for a playoff week: the round it belongs to and every week that round scores. */
     playoff: ctx.playoff ? { roundNumber: ctx.playoff.roundNumber, weeks: ctx.playoff.weeks } : null,
     matchup: ctx.playoff
