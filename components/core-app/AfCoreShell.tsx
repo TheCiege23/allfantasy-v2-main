@@ -285,6 +285,11 @@ export type AfCoreShellProps = {
    */
   hiddenLeagueIds?: string[]
   /**
+   * Archived leagues (lib/core-app/archivedLeagues.ts). Unlike `hiddenLeagueIds`, these stay out of
+   * the league SEARCHES too (the top bar and the scope switcher) — except the open league.
+   */
+  archivedLeagueIds?: string[]
+  /**
    * This week's matchup per league id, for the expanded rail.
    *
    * Optional: the rail expands with or without it, and without it a row shows
@@ -1687,6 +1692,11 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
     [leagues, hiddenLeagueKey, props.selectedLeagueId],
   )
   const hiddenRailCount = leagues.length - railLeagues.length
+  const archivedLeagueKey = (props.archivedLeagueIds ?? []).join('.')
+  const searchLeagues = useMemo(
+    () => withoutHidden(leagues, archivedLeagueKey ? archivedLeagueKey.split('.') : [], props.selectedLeagueId ?? null),
+    [leagues, archivedLeagueKey, props.selectedLeagueId],
+  )
   const railRows = useMemo(() => groupLeagueHubs(railLeagues), [railLeagues])
   const railLabels = useMemo(() => distinctLeagueLabels(railRows.filter((l) => !l.hub)), [railRows])
   const selectedLeague = leagues.find((league) => league.id === props.selectedLeagueId)
@@ -2235,6 +2245,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
               favoriteIds={props.scope.favoriteIds}
               leagueScreen={isLeagueScreen(active)}
               hiddenIds={props.scope.hiddenIds}
+              archivedIds={props.archivedLeagueIds}
             />
           ) : null}
           {props.leagueFirst ? (
@@ -2277,7 +2288,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
               ) : null}
             </Link>
           ) : null}
-          <TopSearch leagues={leagues} />
+          <TopSearch leagues={searchLeagues} />
 
           <div className="af-topbar-right">
             {props.isAdmin ? (
