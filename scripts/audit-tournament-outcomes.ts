@@ -37,7 +37,7 @@ async function fetchRows(sport: string, date: string): Promise<{ rows: GameRow[]
 
 const [sport, date, mode] = process.argv.slice(2)
 if (!['NBA', 'NFL'].includes(sport ?? '') || !/^\d{4}-\d{2}-\d{2}$/.test(date ?? '') || (mode && mode !== '--refresh')) {
-  process.stderr.write('Usage: capture-tournament-outcomes.ts NBA|NFL YYYY-MM-DD [--refresh]\n')
+  process.stderr.write('Usage: audit-tournament-outcomes.ts NBA|NFL YYYY-MM-DD [--refresh]\n')
   process.exitCode = 2
 } else {
   void capture(sport!, date!)
