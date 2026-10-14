@@ -33,10 +33,10 @@ function game(startTime: string, extra: Partial<ScheduleRow> = {}): ScheduleRow 
 }
 
 describe('daily-sport weeks are derived from the opener, not the feed', () => {
-  it('keeps NBA Tuesday-to-Monday boundaries at Eastern midnight across daylight saving time', () => {
-    expect(resolveDailySportWeekWindow('NBA', 2026, 1)?.start.toISOString()).toBe('2026-10-20T04:00:00.000Z')
-    expect(resolveDailySportWeekWindow('NBA', 2026, 2)?.start.toISOString()).toBe('2026-10-27T04:00:00.000Z')
-    expect(resolveDailySportWeekWindow('NBA', 2026, 3)?.start.toISOString()).toBe('2026-11-03T05:00:00.000Z')
+  it('keeps NBA date keys at UTC midnight while classifying instants at Eastern midnight across daylight saving time', () => {
+    expect(resolveDailySportWeekWindow('NBA', 2026, 1)?.start.toISOString()).toBe('2026-10-20T00:00:00.000Z')
+    expect(resolveDailySportWeekWindow('NBA', 2026, 2)?.start.toISOString()).toBe('2026-10-27T00:00:00.000Z')
+    expect(resolveDailySportWeekWindow('NBA', 2026, 3)?.start.toISOString()).toBe('2026-11-03T00:00:00.000Z')
     expect(dailySportWeekForInstant('NBA', 2026, new Date('2026-11-03T04:59:59.999Z'))).toBe(2)
     expect(dailySportWeekForInstant('NBA', 2026, new Date('2026-11-03T05:00:00.000Z'))).toBe(3)
   })

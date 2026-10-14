@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { fromZonedTime } from 'date-fns-tz'
 import { prisma } from '@/lib/prisma'
 import { readWeekGames, type WeekGameRow } from '@/lib/redraft/weekGames'
 import { loadWeekLineups, weekSlotType } from '@/lib/redraft/weekLineupSlots'
@@ -41,10 +42,14 @@ async function loadRosterWeek(leagueId: string, legacyRosterId: string, week: nu
   if (!league?.survivorMode || league.sport !== 'NBA' || !roster?.redraftRosterId || !roster.platformUserId) return null
   const window = resolveDailySportWeekWindow('NBA', league.season, week)
   if (!window) return null
+  // The shared window is made of DATE keys. Roster add/drop timestamps are
+  // instants, so compare them against true Eastern midnights instead.
+  const startAt = fromZonedTime(`${window.start.toISOString().slice(0, 10)}T00:00:00`, 'America/New_York')
+  const endAt = fromZonedTime(`${window.end.toISOString().slice(0, 10)}T00:00:00`, 'America/New_York')
   const [games, players, picks] = await Promise.all([
     readWeekGames(prisma, { sport: 'NBA', season: league.season, week, seasonType: 'regular', dateWindow: window, now }),
     prisma.redraftRosterPlayer.findMany({ where: includeHistory
-      ? { rosterId: roster.redraftRosterId, addedAt: { lt: window.end }, OR: [{ droppedAt: null }, { droppedAt: { gt: window.start } }] }
+      ? { rosterId: roster.redraftRosterId, addedAt: { lt: endAt }, OR: [{ droppedAt: null }, { droppedAt: { gt: startAt } }] }
       : { rosterId: roster.redraftRosterId, droppedAt: null },
       select: { playerId: true, playerName: true, position: true, team: true, sport: true, slotType: true, addedAt: true, droppedAt: true } }),
     prisma.survivorCommissionerAction.findMany({ where: { leagueId, week, actionType: 'nba_game_pick', targetUserId: roster.platformUserId }, select: { newState: true }, orderBy: { executedAt: 'asc' } }),
