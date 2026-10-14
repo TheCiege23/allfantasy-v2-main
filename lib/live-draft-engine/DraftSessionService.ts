@@ -54,6 +54,7 @@ import { parseDispersalPoolConfig } from '@/lib/live-draft-engine/SpecialtyDraft
 import { DRAFT_ROSTER_CONFIGURATION_CLIENT_MESSAGE } from '@/lib/league/roster-configuration-gate-error'
 import { getEffectiveLeagueRosterTemplate } from '@/lib/league/getEffectiveLeagueRosterTemplate'
 import { COMPLETED_DRAFT_SESSION_STATUS, CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { CUSTOM_TIMER_MAX_SECONDS } from '@/lib/draft/draftSettingsPolicy'
 
 /**
  * Same rules as session creation: LeagueSettings pick timer wins when present; else draft config + UI slow-draft mode.
@@ -887,7 +888,8 @@ export async function setTimerSeconds(
   const session = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER })
   if (!session) return false
   if (await loadSeasonDraftContext(leagueId)) return false // Accepted tournament clocks are immutable.
-  const sec = Math.max(0, Math.min(86400, Math.round(seconds)))
+  // Same ceiling as the settings Draft tab / draft/controls (72h, lib/draft/draftSettingsPolicy.ts).
+  const sec = Math.max(0, Math.min(CUSTOM_TIMER_MAX_SECONDS, Math.round(seconds)))
   const data: Prisma.DraftSessionUpdateInput = {
     timerSeconds: sec,
     version: { increment: 1 },

@@ -46,12 +46,15 @@ export function ScoringSettingsFullSection({
     return keys.map((k) => ({ key: k, value: scoring[k]!, label: humanizeScoringKey(k) }))
   }, [scoring])
 
-  const sport = String(bundle.sport ?? 'NFL')
+  // The league's own sport first — never default to NFL: an NBA league must not be labelled (or
+  // flavour-detected as) football. PPR / Half PPR detection only means anything for football.
+  const sport = String(league.sport ?? bundle.sport ?? '').trim().toUpperCase() || '—'
+  const isFootball = sport === 'NFL' || sport === 'NCAAF'
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-start justify-between gap-3 border-b border-white/[0.06] pb-2">
-        <div className="flex items-center gap-2">
+    <div className="min-w-0 space-y-3">
+      <div className="flex min-w-0 items-start justify-between gap-3 border-b border-white/[0.06] pb-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span className="text-[15px] font-bold text-white">{t('lsPanel.sf.title')}</span>
           <span className="rounded border border-white/[0.08] bg-white/[0.04] px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white/45">
             {sport}
@@ -62,7 +65,11 @@ export function ScoringSettingsFullSection({
 
       <div className="rounded-lg border border-[#ff3d81]/20 bg-[#ff3d81]/[0.07] px-3 py-2 text-[11px] text-[#ffd7e5]/85">
         {t('lsPanel.sf.note')}
-        {' '}{t('lsPanel.sf.flavorHint')} <span className="font-semibold text-[#ffe9f1]">{flavor}</span>.
+        {isFootball ? (
+          <>
+            {' '}{t('lsPanel.sf.flavorHint')} <span className="font-semibold text-[#ffe9f1]">{flavor}</span>.
+          </>
+        ) : null}
       </div>
 
       <p className="text-[11px] font-bold uppercase tracking-wide text-white/38">{t('lsPanel.sf.allRules')}</p>

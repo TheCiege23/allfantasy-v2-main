@@ -26,6 +26,11 @@ import { notifyOrphanAiManagerAssigned } from '@/lib/draft-notifications'
 import { supportsIdpLeagueSport } from '@/lib/sport-scope'
 import { triggerDraftPoolPrewarmBackground } from '@/lib/draft-room/ensureDraftPoolReady'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
+import { getComputedDraftRounds } from '@/lib/draft/computedDraftRounds'
+import { slowDraftPauseAllowed, validateDraftTimerSeconds } from '@/lib/draft/draftSettingsPolicy'
+import { classifySeconds } from '@/lib/draft/timer-presets'
+import { syncDraftSessionFromLeagueSettings } from '@/lib/league/league-settings-draft-sync'
 
 export const dynamic = 'force-dynamic'
 
@@ -47,6 +52,54 @@ function parseSlotOrder(value: unknown): SlotOrderEntry[] {
       platformUserId: typeof record.platformUserId === 'string' ? record.platformUserId : undefined,
     }]
   })
+}
+
+/** AF Commissioner entitlement — the same check `/api/league/settings` reports as `hasAfCommissionerSub`. */
+async function hasAfCommissionerSub(userId: string): Promise<boolean> {
+  const r = await new EntitlementResolver()
+    .resolveForUser(userId, 'commissioner_ai_tools')
+    .catch(() => ({ hasAccess: false }))
+  return Boolean(r.hasAccess)
+}
+
+const HHMM_RE = /^([01]\d|2[0-3]):[0-5]\d$/
+
+type DraftOrderTeamSlot = { position: number; teamName: string | null; ownerName: string | null; avatarUrl: string | null; isEmpty: boolean }
+
+/**
+ * The draft order as the settings panel lists it: the saved `LeagueSettings.draftOrderSlots` when
+ * present (names refreshed from the live team rows), else the current teams, then empty seats up to
+ * the league size.
+ */
+async function loadDraftOrderTeams(leagueId: string, savedSlots: unknown, leagueSize: number | null): Promise<DraftOrderTeamSlot[]> {
+  const teams = await prisma.leagueTeam.findMany({
+    where: { leagueId, ...CURRENT_TEAMS },
+    select: { id: true, teamName: true, ownerName: true, avatarUrl: true },
+    orderBy: { externalId: 'asc' },
+  })
+  const byId = new Map(teams.map((t) => [t.id, t]))
+  const out: DraftOrderTeamSlot[] = []
+  const used = new Set<string>()
+  if (Array.isArray(savedSlots)) {
+    const sorted = [...savedSlots]
+      .filter((x): x is Record<string, unknown> => !!x && typeof x === 'object')
+      .sort((a, b) => Number(a.slot ?? 0) - Number(b.slot ?? 0))
+    for (const row of sorted) {
+      const ownerId = typeof row.ownerId === 'string' ? row.ownerId : null
+      const team = ownerId ? byId.get(ownerId) : undefined
+      if (team && !used.has(team.id)) {
+        used.add(team.id)
+        out.push({ position: out.length + 1, teamName: team.teamName ?? null, ownerName: team.ownerName ?? null, avatarUrl: team.avatarUrl ?? null, isEmpty: false })
+      }
+    }
+  }
+  for (const t of teams) {
+    if (used.has(t.id)) continue
+    out.push({ position: out.length + 1, teamName: t.teamName ?? null, ownerName: t.ownerName ?? null, avatarUrl: t.avatarUrl ?? null, isEmpty: false })
+  }
+  const size = typeof leagueSize === 'number' && leagueSize > 0 ? leagueSize : out.length
+  while (out.length < size) out.push({ position: out.length + 1, teamName: null, ownerName: null, avatarUrl: null, isEmpty: true })
+  return out
 }
 
 export async function GET(
@@ -89,6 +142,21 @@ export async function GET(
       getDraftOrderModeAndLotteryConfig(leagueId),
     ])
     const providerStatus = getProviderStatus()
+
+    const [lsRow, leagueMeta, draftSessionStatus, computedRounds, viewerHasSub] = await Promise.all([
+      prisma.leagueSettings.findUnique({
+        where: { leagueId },
+        select: {
+          draftDateUtc: true, autostart: true, slowDraftPause: true, slowPauseFrom: true,
+          slowPauseUntil: true, cpuAutoPick: true, draftOrderSlots: true, draftOrderLocked: true,
+        },
+      }),
+      prisma.league.findUnique({ where: { id: leagueId }, select: { leagueSize: true } }),
+      prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER, select: { status: true } }),
+      getComputedDraftRounds(leagueId).catch(() => null),
+      commissioner ? hasAfCommissionerSub(userId) : Promise.resolve(false),
+    ])
+    const teams = await loadDraftOrderTeams(leagueId, lsRow?.draftOrderSlots ?? null, leagueMeta?.leagueSize ?? null).catch(() => [])
 
     let orphanStatus: { orphanRosterIds: string[]; recentActions: Array<{ action: string; createdAt: string; reason: string | null }> } | null = null
     let commissionerAiDraft: ReturnType<typeof buildApiResponse> | null = null
@@ -146,6 +214,18 @@ export async function GET(
       lotteryLastSeed: orderModeAndLottery?.lotteryLastSeed ?? null,
       lotteryLastRunAt: orderModeAndLottery?.lotteryLastRunAt ?? null,
       commissionerAiDraft,
+      // Commissioner Draft tab (components/league-settings/DraftSettingsCommissionerPanel).
+      teams,
+      draftStatus: draftSessionStatus?.status ?? 'pre_draft',
+      draftDate: lsRow?.draftDateUtc?.toISOString() ?? null,
+      autostartEnabled: lsRow?.autostart ?? false,
+      slowDraftPauseEnabled: lsRow?.slowDraftPause ?? (variant.draftUISettings.timerMode === 'overnight_pause'),
+      slowDraftPauseFrom: lsRow?.slowPauseFrom ?? variant.draftUISettings.slowDraftPauseWindow?.start ?? null,
+      slowDraftPauseTo: lsRow?.slowPauseUntil ?? variant.draftUISettings.slowDraftPauseWindow?.end ?? null,
+      cpuAutoPickEnabled: lsRow?.cpuAutoPick ?? (variant.config?.autopick_behavior !== 'skip'),
+      draftOrderLocked: lsRow?.draftOrderLocked ?? false,
+      computedRounds,
+      hasAfCommissionerSub: viewerHasSub,
     })
     res.headers.set('Cache-Control', 'private, max-age=30, stale-while-revalidate=60')
     return res
@@ -181,8 +261,14 @@ export async function PATCH(
   // the same way they are on the dedicated settings/draft endpoint.
   const leagueForFormat = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { leagueType: true },
+    select: { leagueType: true, timezone: true, leagueSize: true },
   })
+
+  // AF Commissioner gates: custom pick timers, a manual round count. Resolved once, lazily.
+  let subCache: boolean | null = null
+  const viewerHasSub = async () => (subCache ??= await hasAfCommissionerSub(userId))
+  let currentVariantCache: Awaited<ReturnType<typeof getDraftVariantSettings>> | null = null
+  const currentVariant = async () => (currentVariantCache ??= await getDraftVariantSettings(leagueId))
 
   const configPatch: Record<string, unknown> = {}
   if (typeof body.draft_type === 'string' && body.draft_type.trim().length > 0) {
@@ -192,11 +278,26 @@ export async function PATCH(
     }
   }
   if (typeof body.rounds === 'number') {
-    const roundsError = await validateDraftRoundsFitRoster(leagueId, Math.round(body.rounds))
+    let rounds = Math.round(body.rounds)
+    // Rounds = draftable roster spots (IR excluded; taxi/devy counted for dynasty/devy/C2C/salary
+    // cap). Only an AF Commissioner may override it; anyone else gets the computed count.
+    if (!(await viewerHasSub())) {
+      const computed = await getComputedDraftRounds(leagueId).catch(() => null)
+      if (computed) rounds = computed.rounds
+    }
+    const roundsError = await validateDraftRoundsFitRoster(leagueId, rounds)
     if (roundsError) return NextResponse.json({ error: roundsError }, { status: 400 })
-    configPatch.rounds = body.rounds
+    configPatch.rounds = rounds
   }
-  if (body.timer_seconds !== undefined) configPatch.timer_seconds = body.timer_seconds
+  if (body.timer_seconds === null) configPatch.timer_seconds = null
+  else if (body.timer_seconds !== undefined) {
+    const timer = validateDraftTimerSeconds(body.timer_seconds, {
+      allowCustom: await viewerHasSub(),
+      currentSeconds: (await currentVariant()).config?.timer_seconds ?? null,
+    })
+    if (!timer.ok) return NextResponse.json({ error: timer.error, code: timer.code }, { status: 400 })
+    configPatch.timer_seconds = timer.seconds
+  }
   if (body.slow_timer_seconds !== undefined) configPatch.slow_timer_seconds = body.slow_timer_seconds
   if (typeof body.pick_order_rules === 'string') configPatch.pick_order_rules = body.pick_order_rules
   if (typeof body.snake_or_linear === 'string') configPatch.snake_or_linear = body.snake_or_linear
@@ -239,6 +340,56 @@ export async function PATCH(
     const w = body.slowDraftPauseWindow
     if (w == null || (typeof w === 'object' && typeof w.start === 'string' && typeof w.end === 'string' && typeof w.timezone === 'string')) {
       uiPatch.slowDraftPauseWindow = w
+    }
+  }
+
+  // Commissioner Draft tab fields that live on the LeagueSettings row (draft date, autostart, CPU
+  // auto-pick, slow-draft overnight pause). The panel used to send these and nothing stored them.
+  const lsPatch: Prisma.LeagueSettingsUpdateInput = {}
+  const lsSyncKeys = new Set<string>()
+  if (body.draftDate !== undefined) {
+    if (body.draftDate === null || body.draftDate === '') lsPatch.draftDateUtc = null
+    else {
+      const d = new Date(String(body.draftDate))
+      if (Number.isNaN(d.getTime())) return NextResponse.json({ error: 'Invalid draft date' }, { status: 400 })
+      lsPatch.draftDateUtc = d
+    }
+  }
+  if (typeof body.autostart === 'boolean') lsPatch.autostart = body.autostart
+  if (typeof body.cpuAutoPick === 'boolean') {
+    lsPatch.cpuAutoPick = body.cpuAutoPick
+    lsSyncKeys.add('cpuAutoPick')
+  }
+  if (typeof configPatch.rounds === 'number') lsPatch.rounds = configPatch.rounds as number
+  if (typeof configPatch.timer_seconds === 'number') {
+    const { preset, customSeconds } = classifySeconds(configPatch.timer_seconds as number)
+    lsPatch.pickTimerPreset = preset
+    lsPatch.pickTimerCustomValue = customSeconds
+  }
+  for (const k of ['slowDraftPauseFrom', 'slowDraftPauseTo'] as const) {
+    if (body[k] !== undefined && body[k] !== null && !HHMM_RE.test(String(body[k]))) {
+      return NextResponse.json({ error: 'Pause window times must be HH:MM' }, { status: 400 })
+    }
+  }
+  if (typeof body.slowDraftPauseEnabled === 'boolean') {
+    const effectiveTimer =
+      typeof configPatch.timer_seconds === 'number'
+        ? (configPatch.timer_seconds as number)
+        : ((await currentVariant()).config?.timer_seconds ?? null)
+    // The overnight pause exists only for a slow draft (≥ 30 min per pick).
+    const pauseOn = body.slowDraftPauseEnabled && slowDraftPauseAllowed(effectiveTimer)
+    const from = typeof body.slowDraftPauseFrom === 'string' ? body.slowDraftPauseFrom : '21:00'
+    const to = typeof body.slowDraftPauseTo === 'string' ? body.slowDraftPauseTo : '09:00'
+    lsPatch.slowDraftPause = pauseOn
+    lsPatch.slowPauseFrom = from
+    lsPatch.slowPauseUntil = to
+    if (pauseOn) {
+      uiPatch.timerMode = 'overnight_pause'
+      uiPatch.slowDraftPauseWindow = { start: from, end: to, timezone: leagueForFormat?.timezone ?? 'America/New_York' }
+      // Sleeper semantics: during the window the CLOCK stops, but managers may still pick.
+      uiPatch.allowPicksDuringOvernightPause = true
+    } else if ((await currentVariant()).draftUISettings.timerMode === 'overnight_pause') {
+      uiPatch.timerMode = 'per_pick'
     }
   }
 
@@ -326,6 +477,7 @@ export async function PATCH(
   const hasSessionVariant = Object.keys(sessionVariantPatch).length > 0
   const hasOrderMode = orderModePatch !== null
   const hasSessionFlags = Object.keys(sessionFlagsPatch).length > 0
+  const hasLeagueSettings = Object.keys(lsPatch).length > 0
 
   /** Live snake/linear drafts: never accept structural/config/order/sessionVariant mutations from settings PATCH while actively drafting (in_progress). Allow changes when paused. Room modal only sends UI prefs. */
   const draftSessionRow = await prisma.draftSession.findFirst({
@@ -354,7 +506,7 @@ export async function PATCH(
     Object.prototype.hasOwnProperty.call(uiPatch, 'orphanTeamAiManagerEnabled') ||
     Object.prototype.hasOwnProperty.call(uiPatch, 'orphanDrafterMode')
 
-  if (!hasConfig && !hasUI && !hasSessionVariant && !hasOrderMode && !hasSessionFlags) {
+  if (!hasConfig && !hasUI && !hasSessionVariant && !hasOrderMode && !hasSessionFlags && !hasLeagueSettings) {
     const current = await getDraftVariantSettings(leagueId)
     return NextResponse.json({
       ok: true,
@@ -424,6 +576,19 @@ export async function PATCH(
             })
           : Promise.resolve(),
       ])
+    }
+
+    if (hasLeagueSettings) {
+      const lsRow = await prisma.leagueSettings.upsert({
+        where: { leagueId },
+        create: { leagueId, ...(lsPatch as unknown as Omit<Prisma.LeagueSettingsUncheckedCreateInput, 'leagueId'>) },
+        update: lsPatch,
+      })
+      if (lsSyncKeys.size > 0) {
+        await syncDraftSessionFromLeagueSettings(leagueId, lsRow, leagueForFormat?.leagueSize ?? 0, lsSyncKeys).catch((e) =>
+          console.warn('[draft/settings PATCH] league-settings sync', e),
+        )
+      }
     }
 
     const updated = await updateDraftVariantSettings(leagueId, {

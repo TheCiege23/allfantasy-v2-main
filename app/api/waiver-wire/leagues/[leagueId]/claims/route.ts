@@ -25,7 +25,13 @@ function waiverClaimErrorCode(message: string): string {
   const m = message.toLowerCase()
   if (m.includes("already have a pending claim")) return "CLAIM_EXISTS"
   if (m.includes("claim not found")) return "CLAIM_NOT_FOUND"
-  if (m.includes("waiver claims are closed") || m.includes("submission window") || m.includes("waiver submissions are")) {
+  if (
+    m.includes("waiver claims are closed") ||
+    m.includes("submission window") ||
+    m.includes("waiver submissions are") ||
+    // Locked day of the commissioner's per-day schedule (lib/waivers/dailyWaiverSchedule.ts).
+    m.includes("daily waiver schedule")
+  ) {
     return "WAIVER_CLOSED"
   }
   if (m.includes("insufficient faab")) return "INSUFFICIENT_FAAB"

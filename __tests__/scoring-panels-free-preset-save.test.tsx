@@ -90,7 +90,8 @@ describe.each(CASES)('$sport scoring panel', (c) => {
     render(<c.Panel leagueId="league-1" isCommissioner />)
 
     const save = await screen.findByRole('button', { name: /Save Scoring/ })
-    fireEvent.click(screen.getByRole('button', { name: /^Yahoo$/ }))
+    // Presets are one dropdown now (was a row of chips that overflowed a phone screen).
+    fireEvent.change(screen.getByRole('combobox', { name: /Scoring preset/ }), { target: { value: c.yahooKey } })
     await waitFor(() => expect(save).not.toBeDisabled())
     fireEvent.click(save)
 
