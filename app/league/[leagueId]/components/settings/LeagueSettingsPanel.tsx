@@ -3,8 +3,6 @@
 import { useEffect, useState } from 'react'
 import type { CommissionerSettingsFormData } from '@/lib/league/commissioner-league-patch'
 import { COMMON_TIMEZONES } from '@/lib/timezone'
-import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
-import type { LeagueSport } from '@prisma/client'
 import { PremiumGate } from '@/components/subscription/PremiumGate'
 import { SubscriptionGateBadge } from '@/components/subscription/SubscriptionGateBadge'
 import { useEntitlements } from '@/hooks/useEntitlements'
@@ -37,7 +35,6 @@ export function LeagueSettingsPanel({
   debouncedSave: (partial: Record<string, unknown>) => void
 }) {
   const [name, setName] = useState(initialData.name ?? '')
-  const [sport, setSport] = useState<LeagueSport>((initialData.sport ?? 'NFL') as LeagueSport)
   const [season, setSeason] = useState(initialData.season ?? new Date().getFullYear())
   const [language, setLanguage] = useState(initialData.language ?? 'en')
   const [leagueDescription, setLeagueDescription] = useState(
@@ -71,7 +68,6 @@ export function LeagueSettingsPanel({
 
   useEffect(() => {
     setName(initialData.name ?? '')
-    setSport((initialData.sport ?? 'NFL') as LeagueSport)
     setSeason(initialData.season ?? new Date().getFullYear())
     setLanguage(initialData.language ?? 'en')
     setLeagueDescription(typeof settingsSnapshot.leagueDescription === 'string' ? settingsSnapshot.leagueDescription : '')
@@ -136,22 +132,10 @@ export function LeagueSettingsPanel({
       <div className="grid max-w-lg gap-4 sm:grid-cols-3">
         <div className="sm:col-span-1">
           <SettingsSectionLabel>Sport</SettingsSectionLabel>
-          <select
-            className={controlClass}
-            disabled={disabled}
-            value={sport}
-            onChange={(e) => {
-              const v = e.target.value as LeagueSport
-              setSport(v)
-              debouncedSave({ sport: v })
-            }}
-          >
-            {SUPPORTED_SPORTS.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
+          {/* Sport is fixed at creation — the server refuses to patch it (commissioner-league-patch). */}
+          <p className={controlClass} aria-readonly="true">
+            {initialData.sport ?? '—'}
+          </p>
         </div>
         <div className="sm:col-span-1">
           <SettingsSectionLabel>Season year</SettingsSectionLabel>
