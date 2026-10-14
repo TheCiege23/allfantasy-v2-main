@@ -4,7 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { assertLeagueCommissioner } from '@/lib/league/league-access'
 import { resolveLeagueAccess } from '@/lib/league-access'
 import { prisma } from '@/lib/prisma'
-import { advanceSGPeriod, auditSGHistoricalCorrections, chooseSGStartingTribe, finalizeSGCaptains, pickSGCaptainDraft, saveSGCalendar, saveSGCommissionerTie, saveSGDailyLineup, startSGCaptainDraft,
+import { advanceSGPeriod, auditSGHistoricalCorrections, chooseSGStartingTribe, finalizeSGCaptains, pickSGCaptainDraft, reviewSGHistoricalCorrection, saveSGCalendar, saveSGCommissionerTie, saveSGDailyLineup, startSGCaptainDraft,
   setSGTribes, settleSGGauntletAuction, submitSGGauntletBid, submitSGPeriodChoice, submitSGTribeChoice,
   voteSGCaptain } from '@/lib/survivor-guillotine/operations'
 import type { SGCalendarEntry } from '@/lib/survivor-guillotine/operations'
@@ -33,7 +33,7 @@ export async function POST(req: NextRequest, context: Context) {
   if (!await resolveLeagueAccess(leagueId, userId)) return NextResponse.json({ error: 'League access required' }, { status: 403 })
   const body = await req.json().catch(() => null) as Record<string, unknown> | null
   if (!body || typeof body.action !== 'string') return NextResponse.json({ error: 'Action required' }, { status: 400 })
-  const commissionerActions = new Set(['set_tribes', 'finalize_captains', 'save_calendar', 'advance', 'settle_auction', 'commissioner_choice', 'resolve_tie', 'audit_corrections', 'start_captain_draft', 'commissioner_draft_pick'])
+  const commissionerActions = new Set(['set_tribes', 'finalize_captains', 'save_calendar', 'advance', 'settle_auction', 'commissioner_choice', 'resolve_tie', 'audit_corrections', 'review_correction', 'start_captain_draft', 'commissioner_draft_pick'])
   if (commissionerActions.has(body.action)) {
     const access = await assertLeagueCommissioner(leagueId, userId)
     if (!access.ok) return NextResponse.json({ error: 'Commissioner access required' }, { status: access.status })
@@ -84,6 +84,11 @@ export async function POST(req: NextRequest, context: Context) {
       result = await saveSGCommissionerTie(leagueId, body.decision as Parameters<typeof saveSGCommissionerTie>[1])
     } else if (body.action === 'audit_corrections') {
       result = await auditSGHistoricalCorrections(leagueId)
+    } else if (body.action === 'review_correction') {
+      if (!Number.isInteger(body.period) ||
+          (body.decision !== 'keep_played_result' && body.decision !== 'manual_followup') ||
+          typeof body.reason !== 'string') throw new Error('Period, review decision, and reason required.')
+      result = await reviewSGHistoricalCorrection(leagueId, userId, Number(body.period), body.decision, body.reason)
     } else return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
     return NextResponse.json({ result })
   } catch (error) {

@@ -1,24 +1,29 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { buildSGSchedule, SG_MODE_LABELS } from '@/lib/survivor-guillotine/config'
 import { SG_POWER_LABELS } from '@/lib/survivor-guillotine/powers'
+import { buildSGCalendarPreset } from '@/lib/survivor-guillotine/calendar-presets'
 import type { SGConfig, SGPower } from '@/lib/survivor-guillotine/types'
 import type { SGLivePeriod, SGTribeMember } from '@/lib/survivor-guillotine/live'
-import type { SGTribeDraftState } from '@/lib/survivor-guillotine/operations'
+import type { SGCalendarEntry, SGTribeDraftState } from '@/lib/survivor-guillotine/operations'
 import styles from './league.module.css'
 
 type Team = { legacyRosterId: string | null; teamName: string; ownerName: string; eliminatedAt: string | null }
 type Player = { id: string; name: string; position: string; team: string | null }
 type Day = { gameDay: string; playerIds: string[] }
+type CorrectionCase = { period: number; result: string; changedRosterIds: string[];
+  originalChops?: string[]; proposedChops?: string[];
+  review?: { decision: string; reason: string; reviewedAt: string } | null }
 type Data = { season: { config: SGConfig; tribes: SGTribeMember[]; periodState: SGLivePeriod | null;
-  currentPeriod: number; status: string; periodHistory: Record<string, { mode: string; choppedTeamIds: string[];
+  currentPeriod: number; status: string; periodHistory: Record<string, { mode: string; completedAt?: string; choppedTeamIds: string[];
     savedTeamIds: string[]; scores: Record<string, number>; immuneTribeId: string | null }>;
   tribeDraftState: SGTribeDraftState | null };
   ownRoster: { id: string; faabRemaining: number; players: Player[]; dailyLineups: Day[];
     ownBid: { amount: number; status: string } | null; tribeChoice: string | null } | null;
   teams: Team[]; scores: { rosterId: string; totalPoints: number; status: string }[];
-  powers: SGPower[]; chops: { period: number; rosterId: string }[] }
+  powers: SGPower[]; chops: { period: number; rosterId: string }[];
+  stealTargets: (Player & { rosterId: string })[] }
 
 function localDay() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric',
   month: '2-digit', day: '2-digit' }).format(new Date()) }
@@ -32,8 +37,7 @@ function localInput(value?: string | null) {
 
 export function SurvivorGuillotineLeague({ leagueId }: { leagueId: string }) {
   const [data, setData] = useState<Data | null>(null)
-  const [calendar, setCalendar] = useState<Record<number, { ceremonyAt: string; scoringStartsAt?: string;
-    scoringEndsAt?: string; selectionDeadlineAt?: string; auctionClosesAt?: string; tribes?: SGTribeMember[] }>>({})
+  const [calendar, setCalendar] = useState<Record<number, SGCalendarEntry>>({})
   const [isCommissioner, setIsCommissioner] = useState(false)
   const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState(false)
@@ -46,6 +50,9 @@ export function SurvivorGuillotineLeague({ leagueId }: { leagueId: string }) {
   const [powerTarget, setPowerTarget] = useState('')
   const [dropPlayer, setDropPlayer] = useState('')
   const [rewardWeeks, setRewardWeeks] = useState('')
+  const [presetStart, setPresetStart] = useState('')
+  const [presetDays, setPresetDays] = useState(7)
+  const [extendedPeriods, setExtendedPeriods] = useState('')
   const [captainDeadline, setCaptainDeadline] = useState('')
   const [tribeDraft, setTribeDraft] = useState<Record<string, string>>({})
   const [retribePeriod, setRetribePeriod] = useState(0)
@@ -59,22 +66,51 @@ export function SurvivorGuillotineLeague({ leagueId }: { leagueId: string }) {
   const [tieChops, setTieChops] = useState('')
   const [tiePlacements, setTiePlacements] = useState('')
   const [tieReason, setTieReason] = useState('')
+  const [correctionCases, setCorrectionCases] = useState<CorrectionCase[]>([])
+  const [correctionReasons, setCorrectionReasons] = useState<Record<number, string>>({})
   const [replayPeriod, setReplayPeriod] = useState('')
   const [replayStep, setReplayStep] = useState(0)
+  const [replayAuto, setReplayAuto] = useState(true)
+  const newestSeen = useRef<number | null>(null)
+  const lineupLoadedFor = useRef('')
   const api = `/api/leagues/${encodeURIComponent(leagueId)}/survivor-guillotine`
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (includeCommissioner = true) => {
     const response = await fetch(api, { cache: 'no-store' })
     const payload = await response.json()
     if (!response.ok) throw new Error(payload.error ?? 'League unavailable')
     setData(payload as Data)
+    const latest = Math.max(0, ...Object.keys((payload as Data).season.periodHistory ?? {}).map(Number))
+    if (newestSeen.current !== null && latest > newestSeen.current &&
+        (payload as Data).season.config.ceremonyPresentation) {
+      const completedAt = (payload as Data).season.periodHistory[String(latest)]?.completedAt
+      const completedMs = completedAt ? Date.parse(completedAt) : NaN
+      const elapsed = Number.isFinite(completedMs) ? Math.max(0, Date.now() - completedMs) : 0
+      setReplayPeriod(String(latest)); setReplayStep(Math.min(3, Math.floor(elapsed / 3_500))); setReplayAuto(true)
+    }
+    newestSeen.current = latest
     setTribeDraft(current => Object.keys(current).length ? current : Object.fromEntries(
       (payload as Data).teams.filter(t => t.legacyRosterId).map((t, index) => [t.legacyRosterId!,
         (payload as Data).season.tribes.find(m => m.rosterId === t.legacyRosterId)?.tribeId ?? `tribe-${index % (payload as Data).season.config.tribeCount}`])))
-    const ops = await fetch(`${api}/operations`, { cache: 'no-store' })
-    if (ops.ok) { const privateData = await ops.json(); setIsCommissioner(true); setCalendar(privateData.calendar ?? {}) }
+    if (includeCommissioner) {
+      const ops = await fetch(`${api}/operations`, { cache: 'no-store' })
+      if (ops.ok) { const privateData = await ops.json(); setIsCommissioner(true); setCalendar(privateData.calendar ?? {}) }
+    }
   }, [api])
   useEffect(() => { refresh().catch(error => setNotice(error instanceof Error ? error.message : 'Could not load league')) }, [refresh])
   useEffect(() => {
+    const timer = window.setInterval(() => { refresh(false).catch(() => undefined) }, 8_000)
+    return () => window.clearInterval(timer)
+  }, [refresh])
+  useEffect(() => {
+    if (!replayPeriod || !replayAuto || replayStep >= 3 ||
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    const timer = window.setTimeout(() => setReplayStep(step => Math.min(step + 1, 3)), 3_500)
+    return () => window.clearTimeout(timer)
+  }, [replayPeriod, replayAuto, replayStep])
+  useEffect(() => {
+    const key = `${data?.ownRoster?.id ?? ''}:${gameDay}`
+    if (lineupLoadedFor.current === key) return
+    lineupLoadedFor.current = key
     const saved = data?.ownRoster?.dailyLineups.find(row => row.gameDay.slice(0, 10) === gameDay)
     setLineup(saved?.playerIds ?? [])
   }, [data, gameDay])
@@ -84,11 +120,17 @@ export function SurvivorGuillotineLeague({ leagueId }: { leagueId: string }) {
       const response = await fetch(`${api}${path}`, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       const payload = await response.json()
       if (!response.ok) throw new Error(payload.error ?? 'Action failed')
+      if (body.action === 'audit_corrections') setCorrectionCases(payload.result?.changes ?? [])
       setNotice(body.action === 'audit_corrections'
         ? (payload.result?.changes?.length ? `${payload.result.changes.length} earlier periods need commissioner review: ${payload.result.changes.map((row: { period: number; result: string }) => `${row.period} (${row.result})`).join(', ')}` : 'No earlier score changes found.')
         : payload.result?.votesNeeded ? `Private tribe vote recorded: ${payload.result.votesForChoice} of ${payload.result.votesNeeded} needed.`
           : 'Saved. League state is up to date.')
       await refresh()
+      if (body.action === 'review_correction') {
+        const audit = await fetch(`${api}/operations`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'audit_corrections' }) }).then(response => response.json())
+        setCorrectionCases(audit.result?.changes ?? [])
+      }
       if (body.action === 'start_captain_draft') setCaptainChoices({})
       if (path === '/chop' && Number.isInteger(body.period)) { setReplayPeriod(String(body.period)); setReplayStep(0) }
     } catch (error) { setNotice(error instanceof Error ? error.message : 'Action failed') }
@@ -146,7 +188,7 @@ export function SurvivorGuillotineLeague({ leagueId }: { leagueId: string }) {
             row.savedTeamIds.length ? `${row.savedTeamIds.map(id => names.get(id)).join(', ')} survived through an immunity idol.` : 'No immunity idol changed the chop line.',
             row.choppedTeamIds.length ? `${row.choppedTeamIds.map(id => names.get(id)).join(', ')} eliminated. Their players enter league waivers.` : 'The final placements are complete.',
           ]
-          return <div className={styles.replay} role="dialog" aria-modal="true" aria-label={`Period ${replayPeriod} ceremony replay`}><span className={styles.eyebrow}>CHOP NIGHT REPLAY · {replayStep + 1} / {stages.length}</span><p aria-live="polite">{stages[replayStep]}</p><button onClick={() => setReplayPeriod('')}>Close</button><button onClick={() => setReplayStep(step => Math.min(step + 1, stages.length - 1))} disabled={replayStep === stages.length - 1}>Next reveal</button></div>
+          return <div className={styles.replay} role="dialog" aria-modal="true" aria-label={`Period ${replayPeriod} ceremony replay`}><span className={styles.eyebrow}>CHOP NIGHT REPLAY · {replayStep + 1} / {stages.length}</span><p aria-live="polite">{stages[replayStep]}</p><button onClick={() => setReplayPeriod('')}>Close</button><button onClick={() => setReplayStep(step => Math.min(step + 1, stages.length - 1))} disabled={replayStep === stages.length - 1}>Next reveal</button><button onClick={() => setReplayAuto(value => !value)}>{replayAuto ? 'Pause reveals' : 'Play reveals'}</button></div>
         })()}
         {isCommissioner && state && !state.ceremonyStarted && <button disabled={busy} onClick={() => action('/chop', { period: state.period })}>Run hosted Chop Night</button>}
       </section>
@@ -157,10 +199,11 @@ export function SurvivorGuillotineLeague({ leagueId }: { leagueId: string }) {
           const needsRoster = power.kind === 'ally_immunity' || power.kind === 'tribe_swap'
           const needsPlayer = power.kind === 'steal_player'
           const command = `@chimmy use ${power.kind.includes('immunity') ? 'idol' : 'token'} ${power.id}${powerTarget ? ` on ${powerTarget}` : ''}${dropPlayer ? ` drop ${dropPlayer}` : ''}`
-          return <div className={styles.controls}><h3>{SG_POWER_LABELS[power.kind]}</h3><p>This command goes privately to Chimmy. Immunity is announced only at the chop; action tokens reveal when played.</p>{needsRoster && <label>Target manager<select value={powerTarget} onChange={e => setPowerTarget(e.target.value)}><option value="">Choose manager</option>{alive.map(t => <option key={t.legacyRosterId} value={t.legacyRosterId!}>{t.teamName}</option>)}</select></label>}{needsPlayer && <><label>Player to steal (player ID)<input value={powerTarget} onChange={e => setPowerTarget(e.target.value)} /></label><label>Your player to drop if the roster is full<select value={dropPlayer} onChange={e => setDropPlayer(e.target.value)}><option value="">No drop</option>{data.ownRoster?.players.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label></>}<button disabled={busy || ((needsRoster || needsPlayer) && !powerTarget)} onClick={() => action('/chimmy', { message: command })}>Send private Chimmy command</button><button onClick={() => setActivePower('')}>Cancel</button></div>
+          return <div className={styles.controls}><h3>{SG_POWER_LABELS[power.kind]}</h3><p>This command goes privately to Chimmy. Immunity is announced only at the chop; action tokens reveal when played.</p>{needsRoster && <label>Target manager<select value={powerTarget} onChange={e => setPowerTarget(e.target.value)}><option value="">Choose manager</option>{alive.map(t => <option key={t.legacyRosterId} value={t.legacyRosterId!}>{t.teamName}</option>)}</select></label>}{needsPlayer && <><label>Player to steal<select value={powerTarget} onChange={e => setPowerTarget(e.target.value)}><option value="">Choose an opponent’s player</option>{data.stealTargets?.map(p => <option key={`${p.rosterId}:${p.id}`} value={p.id}>{p.name} · {p.position} · {names.get(p.rosterId)}</option>)}</select></label><p>Players already locked for a game cannot be stolen. Chimmy checks the lock when you submit.</p><label>Your player to drop if the roster is full<select value={dropPlayer} onChange={e => setDropPlayer(e.target.value)}><option value="">No drop</option>{data.ownRoster?.players.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label></>}<button disabled={busy || ((needsRoster || needsPlayer) && !powerTarget)} onClick={() => action('/chimmy', { message: command })}>Send private Chimmy command</button><button onClick={() => setActivePower('')}>Cancel</button></div>
         })()}</section>
       {data.ownRoster && current?.mode === 'gauntlet' && season?.config.gauntletIdolAuction && <section className={styles.card}><h2>Sealed Gauntlet auction</h2><p>Available FAAB: {data.ownRoster.faabRemaining}. Only your own bid is visible.</p><label>FAAB bid<input type="number" min={1} max={data.ownRoster.faabRemaining} value={bid} onChange={e => setBid(e.target.value)} /></label><button disabled={busy || !bid} onClick={() => action('/operations', { action: 'auction_bid', amount: Number(bid) })}>Submit sealed bid</button>{data.ownRoster.ownBid && <p>Your bid: {data.ownRoster.ownBid.amount} · {data.ownRoster.ownBid.status}</p>}</section>}
       {isCommissioner && <section className={styles.card}><h2>Commissioner control</h2><p>Set real scoring dates, including combined NBA and All-Star periods. Reward weeks stay concealed from league members.</p>
+        <div className={styles.controls}><h3>Calendar preset</h3><p>Fill unscheduled periods from one start date. Review the resulting dates below before saving. For an NBA combined week, enter its period number to make it two weeks long.</p><label>First scoring period starts<input type="datetime-local" value={presetStart} onChange={e => setPresetStart(e.target.value)} /></label><label>Days per period<input type="number" min={1} max={28} value={presetDays} onChange={e => setPresetDays(Number(e.target.value))} /></label>{season?.config.sport === 'NBA' && <label>Combined period numbers (comma separated)<input value={extendedPeriods} onChange={e => setExtendedPeriods(e.target.value)} placeholder="9, 14" /></label>}<button disabled={busy || !presetStart} onClick={() => { try { setCalendar(buildSGCalendarPreset(schedule, calendar, season?.currentPeriod ?? 0, { firstStart: presetStart, daysPerPeriod: presetDays, extendedPeriods: extendedPeriods.split(',').map(s => Number(s.trim())).filter(Boolean), selectionHoursBeforeStart: 24, ceremonyHoursAfterEnd: 2 })); setNotice('Calendar draft ready. Review each date and save it below.') } catch (error) { setNotice(error instanceof Error ? error.message : 'Calendar preset failed') } }}>Fill empty dates</button></div>
         {season?.currentPeriod === 0 && season.config.tribeFormation === 'captain_draft' && !captainDraft && <div className={styles.controls}><h3>Start captain draft</h3>{Array.from({ length: season.config.tribeCount }, (_, i) => <label key={i}>Tribe {i + 1} draft leader<select value={captainChoices[`tribe-${i}`] ?? ''} onChange={e => setCaptainChoices(v => ({ ...v, [`tribe-${i}`]: e.target.value }))}><option value="">Choose leader</option>{alive.map(t => <option key={t.legacyRosterId} value={t.legacyRosterId!}>{t.teamName}</option>)}</select></label>)}<label>Draft deadline<input type="datetime-local" value={captainDeadline} onChange={e => setCaptainDeadline(e.target.value)} /></label><button disabled={busy || Array.from({ length: season.config.tribeCount }, (_, i) => !captainChoices[`tribe-${i}`]).some(Boolean)} onClick={() => action('/operations', { action: 'start_captain_draft', captainRosterIds: Array.from({ length: season.config.tribeCount }, (_, i) => captainChoices[`tribe-${i}`]), deadlineAt: captainDeadline ? new Date(captainDeadline).toISOString() : null })}>Open captain draft</button></div>}
         {season?.currentPeriod === 0 && <div className={styles.controls}><h3>Form starting tribes</h3>{data.teams.filter(t => t.legacyRosterId).map(t => <label key={t.legacyRosterId}>{t.teamName}<select value={tribeDraft[t.legacyRosterId!] ?? ''} onChange={e => setTribeDraft(v => ({ ...v, [t.legacyRosterId!]: e.target.value }))}>{Array.from({ length: season.config.tribeCount }, (_, i) => <option key={i} value={`tribe-${i}`}>Tribe {i + 1}</option>)}</select></label>)}
           <label>Captain vote deadline<input type="datetime-local" value={captainDeadline} onChange={e => setCaptainDeadline(e.target.value)} /></label><button disabled={busy} onClick={() => action('/operations', { action: 'set_tribes', members: Object.entries(tribeDraft).map(([rosterId, tribeId]) => ({ rosterId, tribeId })), deadlineAt: captainDeadline ? new Date(captainDeadline).toISOString() : null })}>Save tribes & open captain vote</button></div>}
@@ -172,7 +215,8 @@ export function SurvivorGuillotineLeague({ leagueId }: { leagueId: string }) {
         <button disabled={busy} onClick={() => action('/operations', { action: 'finalize_captains', choices: captainChoices })}>Finalize captain votes</button>
         <button disabled={busy} onClick={() => action('/operations', { action: 'advance' })}>Advance period</button><button disabled={busy} onClick={() => action('/operations', { action: 'settle_auction' })}>Settle sealed auction</button>
         <button disabled={busy} onClick={() => action('/operations', { action: 'audit_corrections' })}>Audit earlier stat corrections</button>
-        {state && !state.ceremonyStarted && <div className={styles.controls}><h3>Resolve a true scoring tie</h3><p>Use after Chop Night reports a tie. The server accepts this decision only when finalized scores remain tied; include a reason for the replay audit.</p><label>Immune tribe<select value={tieTribe} onChange={e => setTieTribe(e.target.value)}><option value="">No tribe immunity</option>{[...new Set(season?.tribes.map(m => m.tribeId) ?? [])].map(id => <option key={id} value={id}>{id}</option>)}</select></label><label>Chopped roster IDs (comma separated)<input value={tieChops} onChange={e => setTieChops(e.target.value)} /></label>{current?.mode === 'final_three' && <label>Final placement roster IDs, first to third<input value={tiePlacements} onChange={e => setTiePlacements(e.target.value)} /></label>}<label>Reason<input value={tieReason} onChange={e => setTieReason(e.target.value)} /></label><button disabled={busy || !tieReason} onClick={() => action('/operations', { action: 'resolve_tie', decision: { immuneTribeId: tieTribe || null, choppedTeamIds: tieChops.split(',').map(s => s.trim()).filter(Boolean), placements: tiePlacements.split(',').map(s => s.trim()).filter(Boolean), reason: tieReason } })}>Record tie decision</button></div>}
+        {correctionCases.filter(row => row.changedRosterIds.length).map(row => <div key={row.period} className={styles.controls}><h3>Period {row.period} correction</h3><p>{row.result.replaceAll('_', ' ')}. Played chop: {(row.originalChops ?? []).map(id => names.get(id) ?? id).join(', ') || 'none'}. Corrected projection: {(row.proposedChops ?? []).map(id => names.get(id) ?? id).join(', ') || 'requires tie review'}.</p>{row.review ? <p>Reviewed: {row.review.decision.replaceAll('_', ' ')} · {row.review.reason}</p> : <><p>Later drafts, waivers, and chops remain in place until the commissioner resolves their consequences. This records the decision and alerts the league.</p><label>Review reason<input value={correctionReasons[row.period] ?? ''} onChange={e => setCorrectionReasons(current => ({ ...current, [row.period]: e.target.value }))} /></label><button disabled={busy || (correctionReasons[row.period] ?? '').trim().length < 10} onClick={() => action('/operations', { action: 'review_correction', period: row.period, decision: 'keep_played_result', reason: correctionReasons[row.period] })}>Keep played result</button><button disabled={busy || (correctionReasons[row.period] ?? '').trim().length < 10} onClick={() => action('/operations', { action: 'review_correction', period: row.period, decision: 'manual_followup', reason: correctionReasons[row.period] })}>Flag manual follow-up</button></>}</div>)}
+        {state && !state.ceremonyStarted && <div className={styles.controls}><h3>Resolve a true scoring tie</h3><p>Use after Chop Night reports a tie. The server accepts this decision only when finalized scores remain tied; include a reason for the replay audit.</p><label>Immune tribe<select value={tieTribe} onChange={e => setTieTribe(e.target.value)}><option value="">No tribe immunity</option>{[...new Set(season?.tribes.map(m => m.tribeId) ?? [])].map(id => <option key={id} value={id}>{id}</option>)}</select></label><fieldset><legend>Managers to chop</legend>{alive.map(team => <label key={team.legacyRosterId} className={styles.player}><input type="checkbox" checked={tieChops.split(',').includes(team.legacyRosterId!)} onChange={e => setTieChops(current => { const ids = current.split(',').filter(Boolean); return (e.target.checked ? [...ids, team.legacyRosterId!] : ids.filter(id => id !== team.legacyRosterId)).join(',') })} />{team.teamName}</label>)}</fieldset>{current?.mode === 'final_three' && <><label>First place<select value={tiePlacements.split(',')[0] ?? ''} onChange={e => setTiePlacements([e.target.value, ...tiePlacements.split(',').slice(1)].join(','))}><option value="">Choose manager</option>{alive.map(team => <option key={team.legacyRosterId} value={team.legacyRosterId!}>{team.teamName}</option>)}</select></label><label>Second place<select value={tiePlacements.split(',')[1] ?? ''} onChange={e => { const ids = tiePlacements.split(','); ids[1] = e.target.value; setTiePlacements(ids.join(',')) }}><option value="">Choose manager</option>{alive.map(team => <option key={team.legacyRosterId} value={team.legacyRosterId!}>{team.teamName}</option>)}</select></label><label>Third place<select value={tiePlacements.split(',')[2] ?? ''} onChange={e => { const ids = tiePlacements.split(','); ids[2] = e.target.value; setTiePlacements(ids.join(',')) }}><option value="">Choose manager</option>{alive.map(team => <option key={team.legacyRosterId} value={team.legacyRosterId!}>{team.teamName}</option>)}</select></label></>}<label>Reason<input value={tieReason} onChange={e => setTieReason(e.target.value)} /></label><button disabled={busy || !tieReason} onClick={() => action('/operations', { action: 'resolve_tie', decision: { immuneTribeId: tieTribe || null, choppedTeamIds: tieChops.split(',').map(s => s.trim()).filter(Boolean), placements: tiePlacements.split(',').map(s => s.trim()).filter(Boolean), reason: tieReason } })}>Record tie decision</button></div>}
       </section>}
     </aside></div>
   </main>
