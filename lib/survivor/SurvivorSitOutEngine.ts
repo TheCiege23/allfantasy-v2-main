@@ -255,9 +255,10 @@ async function getNominatedAndAcceptedActions(leagueId: string, week: number): P
 }
 
 export async function getSurvivorTribeBalanceState(leagueId: string, week: number): Promise<SurvivorTribeBalanceState> {
-  const [league, tribes] = await Promise.all([
+  const [league, tribes, config] = await Promise.all([
     prisma.league.findUnique({ where: { id: leagueId }, select: { survivorPhase: true } }),
     getTribesWithMembers(leagueId),
+    getSurvivorConfig(leagueId),
   ])
 
   const merged = ['merge', 'post_merge', 'jury', 'finale'].includes(league?.survivorPhase ?? '')
@@ -286,10 +287,12 @@ export async function getSurvivorTribeBalanceState(leagueId: string, week: numbe
     tribeName: tribe.name,
     activeCount: tribe.members.filter((m) => activeRosterIds.has(m.rosterId)).length,
   }))
-  const activeSizes = tribeSizes.map(t => t.activeCount).filter(size => size > 0)
+  const activeSizes = tribeSizes.map(t => t.activeCount)
   const minTribeSize = activeSizes.length ? Math.min(...activeSizes) : 0
   const maxTribeSize = Math.max(...tribeSizes.map((t) => t.activeCount))
-  const shouldSuggestShuffle = minTribeSize <= 2
+  const originalTribeSize = config?.tribeSize ?? maxTribeSize
+  const shuffleThreshold = Math.floor(originalTribeSize * 0.4)
+  const shouldSuggestShuffle = originalTribeSize > 0 && minTribeSize <= shuffleThreshold
 
   return {
     leagueId,
@@ -300,7 +303,7 @@ export async function getSurvivorTribeBalanceState(leagueId: string, week: numbe
     maxTribeSize,
     shouldSuggestShuffle,
     suggestionReason: shouldSuggestShuffle
-      ? 'At least one active tribe has dropped to 2 or fewer members.'
+      ? `At least one tribe has dropped to 40% or less of its original ${originalTribeSize} members.`
       : null,
     requiredSitOuts: requiredTribeSitOuts(Object.fromEntries(tribeSizes.map(tribe => [tribe.tribeId, tribe.activeCount]))),
   }
@@ -712,7 +715,7 @@ export async function maybeTriggerSurvivorTribeShuffleRecommendation(
   ])
 
   if (!balance.shouldSuggestShuffle) {
-    return { triggered: false, reason: 'No tribe is at or below 2 active members.' }
+    return { triggered: false, reason: 'No tribe has dropped to 40% or less of its original size.' }
   }
   if (existingRecommendation) {
     return { triggered: false, reason: 'Shuffle recommendation has already been used this season.' }
@@ -734,7 +737,7 @@ export async function maybeTriggerSurvivorTribeShuffleRecommendation(
       commissionerId: CHIMMY_HOST_USER_ID,
       week,
       actionType: 'sit_out_shuffle_recommendation',
-      description: 'One-time recommendation: consider tribe shuffle due to low tribe size.',
+      description: 'One-time recommendation: approve or postpone a random tribe redraw after a tribe reaches 40% of its original size.',
       newState: {
         minTribeSize: balance.minTribeSize,
         maxTribeSize: balance.maxTribeSize,
@@ -748,7 +751,7 @@ export async function maybeTriggerSurvivorTribeShuffleRecommendation(
     enqueueNotification(leagueId, 'tribe_shuffle_recommendation', {
       recipientRole: 'commissioner',
       title: '⚖️ Survivor shuffle recommended',
-      body: 'A tribe has reached 2 active members. Review one-time shuffle recommendation.',
+      body: 'A tribe has reached 40% or less of its original size. Approve or postpone a random redraw.',
       deepLinkPath: `/league/${leagueId}/survivor/commissioner`,
       urgency: 'high',
       isSpoilerSafe: true,
