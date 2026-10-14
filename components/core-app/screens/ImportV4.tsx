@@ -1892,18 +1892,15 @@ export function ImportV4({
         }
       : null
 
+  // The Enter handlers check this too: with only the button disabled, Enter started overlapping lookups.
+  const lookupBusy = phase.k === 'discovering' || phase.k === 'previewing'
+
   /*
    * The connect action, hoisted so it can sit ON the field's row for every
    * provider that has a field, and stand alone for Yahoo, which does not. Same
    * button, same handler, same disabled rule — declared once so the two
    * placements cannot drift apart.
    */
-  /*
-   * ⚠ ENTER OBEYS THE SAME RULE AS THE BUTTON. Only the button was disabled while a lookup ran, so
-   * pressing Enter in the field started a second, overlapping lookup.
-   */
-  const lookupBusy = phase.k === 'discovering' || phase.k === 'previewing'
-
   const submitButton = (
     <button
       type="button"
