@@ -477,7 +477,7 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
       <section className="af-ls-card space-y-2" data-testid="draft-rounds">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <p className="af-ls-eyebrow">{t('lsEd.dr.v2.rounds')}</p>
-          {hasSub && <span className="rounded-full border border-amber-400/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold text-amber-300">{t('lsEd.dr.v2.afBadge')}</span>}
+          {hasSub && <span className="rounded-full border border-amber-400/30 bg-amber-500/10 px-2 py-0.5 text-[11px] font-bold text-amber-300">{t('lsEd.dr.v2.afBadge')}</span>}
         </div>
         {hasSub && !ro ? (
           <>
@@ -717,7 +717,7 @@ function PaceBadge({ pace, t }: { pace: DraftPace; t: T }) {
   }[pace]
   return (
     <span title={cfg.hint} data-pace={pace}
-      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${cfg.cls}`}>
+      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide ${cfg.cls}`}>
       {cfg.label}
     </span>
   )
