@@ -25,6 +25,15 @@ describe('leagueLifecycleService', () => {
     expect(isActionAllowed('settings_edit_roster', 'drafting')).toBe(false)
   })
 
+  it('commissioners can edit general settings in every post-season state', () => {
+    for (const state of ['completed', 'offseason', 'renewal_pending'] as const) {
+      expect(isActionAllowed('settings_edit_general', state)).toBe(true)
+      expect(isActionAllowed('settings_edit_scoring', state)).toBe(false)
+    }
+    // Archived leagues stay read-only.
+    expect(isActionAllowed('settings_edit_general', 'archived')).toBe(false)
+  })
+
   it('commissioners can edit general settings in the offseason', () => {
     expect(isActionAllowed('settings_edit_general', 'offseason')).toBe(true)
     // Other offseason rules are unchanged.
