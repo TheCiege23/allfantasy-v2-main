@@ -154,7 +154,10 @@ export type LeagueActivityItem = {
   managerName: string
   badge: string
   badgeTone: 'neutral' | 'teal' | 'green'
+  /** Display string. Not sortable — use `occurredAt`. */
   timestamp: string
+  /** ISO time the move happened, so callers can merge this list with other activity in order. */
+  occurredAt?: string | null
   amountLabel?: string | null
   summary?: string | null
   lines: LeagueActivityLine[]
