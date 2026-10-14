@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
-import { Flame, MessageSquare, Settings, Sparkles, Zap, ChevronDown, Users } from 'lucide-react'
+import { MessageSquare, Settings, Sparkles, Zap, ChevronDown, Users } from 'lucide-react'
 import type { SurvivorSummary, SurvivorView } from './types'
 import { SurvivorTribeBoard } from './SurvivorTribeBoard'
 import { SurvivorNbaGamePicker } from './SurvivorNbaGamePicker'
@@ -16,12 +16,12 @@ import { SurvivorFirstEntryModal } from './SurvivorFirstEntryModal'
 import {
   EXILE_ISLAND_RULES,
   SURVIVOR_CONDUCT_BULLETS,
-  SURVIVOR_ISLAND_TAGLINE,
   SURVIVOR_TOKEN_POOL_BLURB,
   SURVIVOR_TIPS,
   SURVIVOR_WELCOME_BLURB,
 } from '@/lib/survivor/survivorIslandContent'
-import { getSurvivorThemeById, survivorSceneArtwork } from '@/lib/survivor/survivorVisuals'
+import { getSurvivorThemeById } from '@/lib/survivor/survivorVisuals'
+import { SurvivorIslandHero } from './SurvivorIslandHero'
 
 const VIEW_LABELS: Record<SurvivorView, string> = {
   'tribe-board': 'Tribe Board',
@@ -98,13 +98,37 @@ export function SurvivorHome({ leagueId }: SurvivorHomeProps) {
 
   const names = summary?.rosterDisplayNames ?? {}
   const cal = summary?.seasonCalendar
-  const themeHeadline =
-    summary?.config?.seasonThemeLabel?.trim() ||
-    summary?.leagueName || 'Survivor League'
+  const leagueName = summary?.leagueName || 'Survivor League'
   const tribeChatHref = summary?.myTribeSource
     ? `/league/${leagueId}?tab=Chat&source=${encodeURIComponent(summary.myTribeSource)}`
     : `/league/${leagueId}?tab=Chat`
   const theme = getSurvivorThemeById(summary?.config?.visualThemeId, leagueId)
+  const tribesFormed = Boolean(summary?.tribes?.some((tribe) => tribe.members.length > 0))
+  const openCouncil = summary?.council && !summary.council.closedAt && !summary.council.isRevealed
+  const openChallenge = summary?.challenges?.find((challenge) => challenge.status === 'open')
+  const nextAction = !tribesFormed
+    ? {
+        headline: 'Your island is filling up',
+        description: 'Invite managers, set the draft time, and get your queue ready. Tribes form after the draft.',
+        primaryAction: { href: `/league/${leagueId}/draft`, label: 'Open draft board' },
+      }
+    : openCouncil
+      ? {
+          headline: 'The elimination vote is open',
+          description: 'Eligible managers vote privately with @Chimmy and @the manager they choose. Ballots stay sealed until the read.',
+          primaryAction: { href: `/survivor/${leagueId}/tribal`, label: 'View council' },
+        }
+      : openChallenge
+        ? {
+            headline: openChallenge.title || 'Your next challenge is live',
+            description: 'See the challenge rules and submit before it closes.',
+            primaryAction: { href: `/survivor/${leagueId}/challenges`, label: 'Open challenge' },
+          }
+        : {
+            headline: summary?.merged ? 'The island has merged' : 'This week on the island',
+            description: 'See tribe standings, your private advantages, Exile, and the latest league activity.',
+            primaryAction: { href: `/survivor/${leagueId}`, label: 'Explore island home' },
+          }
 
   return (
     <div className={`relative overflow-hidden rounded-[28px] ${theme.backgroundClass} p-4 sm:p-5` }>
@@ -117,33 +141,18 @@ export function SurvivorHome({ leagueId }: SurvivorHomeProps) {
       />
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.04),transparent_25%,rgba(0,0,0,0.28)_100%)] opacity-40" />
       <div className="relative space-y-6">
-      {/* Survivor branding header */}
-      <header className="relative flex min-h-48 flex-wrap items-center gap-4 overflow-hidden rounded-2xl border border-amber-200/20 bg-[#08110e] p-4 sm:p-6">
-        <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-cover bg-center opacity-55" style={{ backgroundImage: `url(${survivorSceneArtwork(cal?.sport, theme.id)})` }} />
-        <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-gradient-to-r from-[#07100e]/95 via-[#07100e]/70 to-[#07100e]/20" />
-        <div className="relative flex w-full flex-wrap items-center gap-4">
-        <div className="flex h-16 w-16 items-center justify-center rounded-xl border border-amber-500/30 bg-amber-950/30 sm:h-20 sm:w-20">
-          <Flame className="h-8 w-8 text-amber-400 sm:h-10 sm:w-10" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <h1 className="text-xl font-bold text-white sm:text-2xl">{themeHeadline}</h1>
-          <p className="mt-1 text-sm text-amber-100/85">{SURVIVOR_ISLAND_TAGLINE}</p>
-          {cal && (
-            <p className="mt-2 text-xs text-cyan-200/80">
-              Regular-season weeks (no playoffs): {cal.firstWeek}–{cal.lastWeek} · {cal.sport}
-            </p>
-          )}
-          <p className="mt-2 text-xs text-amber-100/80">
-            {summary?.tribes?.some((tribe) => tribe.members.length > 0)
-              ? `${summary.tribes.length} tribes · ${summary.merged ? 'Merged island' : 'Tribes formed'}`
-              : `${summary?.config?.tribeCount ?? 4} tribes planned · Members are assigned after the draft`}
-          </p>
-          <p className="mt-2 text-sm text-white/60">
-            Tribes · Challenges · Elimination Council · Idols · Exile · Merge & Jury
-          </p>
-        </div>
-        </div>
-      </header>
+      <SurvivorIslandHero
+        leagueId={leagueId}
+        leagueName={leagueName}
+        sport={cal?.sport}
+        week={summary?.currentWeek}
+        phase={tribesFormed ? (summary?.merged ? 'Merged island' : 'Tribe season') : 'Before the draft'}
+        visualThemeId={summary?.config?.visualThemeId}
+        headline={nextAction.headline}
+        description={nextAction.description}
+        primaryAction={nextAction.primaryAction}
+        secondaryAction={{ href: `/survivor/${leagueId}`, label: 'Full island home' }}
+      />
 
       <section className="rounded-2xl border border-white/10 bg-white/[0.02] p-4 sm:p-5">
         <h2 className="text-sm font-semibold text-white">How this league works</h2>
