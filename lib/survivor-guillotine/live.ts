@@ -223,7 +223,7 @@ export async function awardSGLiveWeeklyPower(leagueId: string, period: number) {
   const expectedActive = await prisma.roster.count({ where: { leagueId } }) - eliminated.size
   if (eligible.length !== expectedActive) throw new Error('All active managers need finalized scores before a reward is awarded.')
   if (eligible.length < 2 || eligible[0].totalPoints === eligible[1].totalPoints) throw new Error('A unique finalized high scorer is required.')
-  const winner = await prisma.leagueTeam.findFirst({ where: { leagueId, legacyRosterId: eligible[0].rosterId }, select: { claimedByUserId: true } })
+  const winner = await prisma.leagueTeam.findFirst({ where: { leagueId, externalId: eligible[0].rosterId }, select: { claimedByUserId: true } })
   if (!winner?.claimedByUserId) throw new Error('The winning manager must claim their league team before receiving a private reward.')
   const reward = createSGWeeklyReward({ managerId: winner.claimedByUserId, allowedKinds: config.enabledPowers,
     expiresAfterPeriod: merge - 1 })
@@ -239,10 +239,10 @@ export async function awardSGLiveWeeklyPower(leagueId: string, period: number) {
 export async function readSGLivePowers(leagueId: string, userId: string): Promise<SGPower[]> {
   const [rows, teams, rosters] = await Promise.all([
     prisma.survivorGuillotinePower.findMany({ where: { leagueId, status: { in: ['held', 'sealed', 'used'] } } }),
-    prisma.leagueTeam.findMany({ where: { leagueId, claimedByUserId: userId, eliminatedAt: null }, select: { legacyRosterId: true } }),
+    prisma.leagueTeam.findMany({ where: { leagueId, claimedByUserId: userId, eliminatedAt: null }, select: { externalId: true } }),
     prisma.roster.findMany({ where: { leagueId }, select: { id: true, playerData: true, redraftRosterId: true } }),
   ])
-  const ownRosterIds = new Set(teams.map(t => t.legacyRosterId).filter(Boolean))
+  const ownRosterIds = new Set(teams.map(t => t.externalId).filter(Boolean))
   const powers: SGPower[] = rows.map(row => {
     const playerRoster = row.playerId ? rosters.find(r => getRosterPlayerIds(r.playerData).includes(row.playerId!)) : null
     const ownerId = row.binding === 'player' ? (playerRoster && ownRosterIds.has(playerRoster.id) ? userId : '')
@@ -267,8 +267,8 @@ async function activateSGLiveImmunity(leagueId: string, userId: string, message:
   if (!row) throw new Error('This power is unavailable.')
   if (row.awardPeriod != null && state.period <= row.awardPeriod) throw new Error('This weekly reward becomes usable next scoring period.')
   if (row.kind !== 'personal_immunity' && row.kind !== 'ally_immunity') throw new Error('This action power requires the dedicated commissioner action flow.')
-  const owned = await prisma.leagueTeam.findMany({ where: { leagueId, claimedByUserId: userId, eliminatedAt: null }, select: { legacyRosterId: true } })
-  const ownIds = owned.map(t => t.legacyRosterId).filter((id): id is string => !!id)
+  const owned = await prisma.leagueTeam.findMany({ where: { leagueId, claimedByUserId: userId, eliminatedAt: null }, select: { externalId: true } })
+  const ownIds = owned.map(t => t.externalId)
   if (ownIds.length !== 1) throw new Error('Choose one claimed, active league team to play an idol.')
   const ownRosters = await prisma.roster.findMany({ where: { leagueId, id: { in: ownIds } }, select: { id: true, playerData: true } })
   const rosterPlayerIds = ownRosters.flatMap(r => getRosterPlayerIds(r.playerData))
@@ -303,8 +303,8 @@ export async function activateSGLivePower(leagueId: string, userId: string, mess
   const row = await prisma.survivorGuillotinePower.findFirst({ where: { leagueId, id: command.powerId } })
   if (!row || row.status !== 'held') throw new Error('This power is unavailable.')
   const claimedTeams = await prisma.leagueTeam.findMany({ where: { leagueId, claimedByUserId: userId,
-    eliminatedAt: null }, select: { legacyRosterId: true } })
-  const claimedRosterIds = claimedTeams.map(t => t.legacyRosterId).filter((id): id is string => !!id)
+    eliminatedAt: null }, select: { externalId: true } })
+  const claimedRosterIds = claimedTeams.map(t => t.externalId)
   if (!claimedRosterIds.length) throw new Error('This power is unavailable.')
   if (row.binding === 'manager' && row.ownerUserId !== userId) throw new Error('This power is unavailable.')
   if (row.binding === 'player') {
@@ -320,8 +320,8 @@ export async function activateSGLivePower(leagueId: string, userId: string, mess
   const merge = buildSGSchedule(config).periods.find(p => p.mode === 'merged')?.period ?? config.championshipPeriod
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { season: true, userId: true, rosterSize: true } })
   if (!league) throw new Error('League not found.')
-  const ownTeams = await prisma.leagueTeam.findMany({ where: { leagueId, claimedByUserId: userId, eliminatedAt: null }, select: { legacyRosterId: true } })
-  const ownIds = ownTeams.map(t => t.legacyRosterId).filter((id): id is string => !!id)
+  const ownTeams = await prisma.leagueTeam.findMany({ where: { leagueId, claimedByUserId: userId, eliminatedAt: null }, select: { externalId: true } })
+  const ownIds = ownTeams.map(t => t.externalId)
   if (ownIds.length !== 1) throw new Error('Choose one claimed, active league team to play a token.')
   const ownRoster = await prisma.roster.findUnique({ where: { id: ownIds[0] }, select: { id: true, playerData: true, faabRemaining: true, redraftRosterId: true, updatedAt: true } })
   if (!ownRoster) throw new Error('Your roster is unavailable.')
@@ -511,8 +511,8 @@ export async function executeSGLiveChop(leagueId: string, periodNumber: number) 
   }
   if (result.status !== 'resolved') throw new Error(result.reasons.join(' '))
   const choppedOwners = await prisma.leagueTeam.findMany({ where: { leagueId,
-    legacyRosterId: { in: result.choppedTeamIds } },
-    select: { claimedByUserId: true, legacyRosterId: true, teamName: true, ownerName: true } })
+    externalId: { in: result.choppedTeamIds } },
+    select: { claimedByUserId: true, externalId: true, teamName: true, ownerName: true } })
   const now = new Date()
   await prisma.$transaction(async tx => {
     for (const rosterId of result.choppedTeamIds) {
@@ -520,7 +520,7 @@ export async function executeSGLiveChop(leagueId: string, periodNumber: number) 
       const activeRedraftPlayers = roster.redraftRosterId ? await tx.redraftRosterPlayer.findMany({
         where: { rosterId: roster.redraftRosterId, droppedAt: null }, select: { id: true, playerId: true },
       }) : []
-      const choppedOwner = choppedOwners.find(owner => owner.legacyRosterId === rosterId)?.claimedByUserId
+      const choppedOwner = choppedOwners.find(owner => owner.externalId === rosterId)?.claimedByUserId
       const managerPowers = choppedOwner ? await tx.survivorGuillotinePower.findMany({
         where: { leagueId, ownerUserId: choppedOwner, binding: 'manager', status: 'held' },
         select: { id: true },
@@ -539,7 +539,7 @@ export async function executeSGLiveChop(leagueId: string, periodNumber: number) 
         choppedAt: now, choppedInPeriod: periodNumber, choppedReason: 'survivor_guillotine' },
         update: { choppedAt: now, choppedInPeriod: periodNumber, choppedReason: 'survivor_guillotine' } })
       await tx.waiverClaim.updateMany({ where: { leagueId, rosterId, status: 'pending' }, data: { status: 'cancelled' } })
-      await tx.leagueTeam.updateMany({ where: { leagueId, legacyRosterId: rosterId }, data: { eliminatedAt: now } })
+      await tx.leagueTeam.updateMany({ where: { leagueId, externalId: rosterId }, data: { eliminatedAt: now } })
       await tx.afRosterLineupAssignment.deleteMany({ where: { leagueId, rosterId, season: league.season,
         week: { gt: periodNumber } } })
       if (roster.redraftRosterId) {
@@ -560,7 +560,7 @@ export async function executeSGLiveChop(leagueId: string, periodNumber: number) 
     }
     if (result.choppedTeamIds.length) {
       const names = result.choppedTeamIds.map(id => {
-        const team = choppedOwners.find(owner => owner.legacyRosterId === id)
+        const team = choppedOwners.find(owner => owner.externalId === id)
         return team?.teamName || team?.ownerName || id
       })
       await tx.leagueChatMessage.create({ data: { leagueId, userId: league.userId, type: 'system',
@@ -685,7 +685,7 @@ export async function reconcileSGLiveStatCorrection(leagueId: string) {
         data: { choppedAt: null, choppedInPeriod: null, choppedReason: null } })
       if (snapshot.expiredPowerIds?.length) await tx.survivorGuillotinePower.updateMany({ where: {
         leagueId, id: { in: snapshot.expiredPowerIds }, status: 'expired' }, data: { status: 'held' } })
-      await tx.leagueTeam.updateMany({ where: { leagueId, legacyRosterId: chop.rosterId }, data: { eliminatedAt: null } })
+      await tx.leagueTeam.updateMany({ where: { leagueId, externalId: chop.rosterId }, data: { eliminatedAt: null } })
       await tx.survivorGuillotineChop.update({ where: { id: chop.id }, data: {
         reversedAt: new Date(), reversalReason: 'final_score_correction' } })
     }

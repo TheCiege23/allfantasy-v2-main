@@ -32,31 +32,32 @@ export async function GET(_req: NextRequest, context: Context) {
     orderBy: [{ period: 'desc' }, { score: 'asc' }] })
   const league = await prisma.league.findUniqueOrThrow({ where: { id: leagueId }, select: { season: true } })
   const [teams, ownedTeam, scores] = await Promise.all([
-    prisma.leagueTeam.findMany({ where: { leagueId }, select: { legacyRosterId: true, teamName: true,
+    prisma.leagueTeam.findMany({ where: { leagueId }, select: { externalId: true, teamName: true,
       ownerName: true, eliminatedAt: true } }),
-    prisma.leagueTeam.findFirst({ where: { leagueId, claimedByUserId: userId, eliminatedAt: null,
-      legacyRosterId: { not: null } }, select: { legacyRosterId: true } }),
+    prisma.leagueTeam.findFirst({ where: { leagueId, claimedByUserId: userId, eliminatedAt: null },
+      select: { externalId: true } }),
     prisma.teamWeekResult.findMany({ where: { leagueId, season: league.season, week: season.currentPeriod },
       select: { rosterId: true, totalPoints: true, status: true } }),
   ])
-  const roster = ownedTeam?.legacyRosterId ? await prisma.roster.findUnique({ where: { id: ownedTeam.legacyRosterId },
+  const roster = ownedTeam?.externalId ? await prisma.roster.findUnique({ where: { id: ownedTeam.externalId },
     select: { playerData: true, faabRemaining: true } }) : null
   const playerIds = roster ? getRosterPlayerIds(roster.playerData) : []
   const [players, dailyLineups, ownBid, ownTribeChoice] = await Promise.all([
     prisma.player.findMany({ where: { id: { in: playerIds } }, select: { id: true, name: true, position: true, team: true } }),
-    ownedTeam?.legacyRosterId ? prisma.survivorGuillotineDailyLineup.findMany({ where: { leagueId,
-      period: season.currentPeriod, rosterId: ownedTeam.legacyRosterId }, select: { gameDay: true, playerIds: true } }) : [],
-    ownedTeam?.legacyRosterId ? prisma.survivorGuillotineAuctionBid.findUnique({ where: {
-      leagueId_period_rosterId: { leagueId, period: season.currentPeriod, rosterId: ownedTeam.legacyRosterId } },
+    ownedTeam?.externalId ? prisma.survivorGuillotineDailyLineup.findMany({ where: { leagueId,
+      period: season.currentPeriod, rosterId: ownedTeam.externalId }, select: { gameDay: true, playerIds: true } }) : [],
+    ownedTeam?.externalId ? prisma.survivorGuillotineAuctionBid.findUnique({ where: {
+      leagueId_period_rosterId: { leagueId, period: season.currentPeriod, rosterId: ownedTeam.externalId } },
       select: { amount: true, status: true } }) : null,
-    ownedTeam?.legacyRosterId ? prisma.survivorGuillotineTribeChoice.findUnique({ where: {
-      leagueId_rosterId: { leagueId, rosterId: ownedTeam.legacyRosterId } }, select: { tribeId: true } }) : null,
+    ownedTeam?.externalId ? prisma.survivorGuillotineTribeChoice.findUnique({ where: {
+      leagueId_rosterId: { leagueId, rosterId: ownedTeam.externalId } }, select: { tribeId: true } }) : null,
   ])
   return NextResponse.json({ season: { leagueId, config: season.config, tribes: readSGTribes(season.tribes),
     periodState, currentPeriod: season.currentPeriod,
     status: season.status, revision: season.revision, periodHistory: season.periodHistory,
     tribeDraftState: readSGTribeDraftState(season.tribeDraftState) }, powers, chops,
-    teams, scores, ownRoster: ownedTeam?.legacyRosterId ? { id: ownedTeam.legacyRosterId,
+    teams: teams.map(team => ({ ...team, legacyRosterId: team.externalId })), scores,
+    ownRoster: ownedTeam?.externalId ? { id: ownedTeam.externalId,
       faabRemaining: roster?.faabRemaining ?? 0, players, dailyLineups, ownBid,
       tribeChoice: ownTribeChoice?.tribeId ?? null } : null })
 }

@@ -314,17 +314,23 @@ export async function processWaiverClaimsForLeague(
       const linked = await prisma.roster.findUnique({ where: { id: claim.rosterId }, select: { redraftRosterId: true } })
       const player = await prisma.player.findUnique({ where: { id: addId }, select: {
         name: true, position: true, team: true, sport: true } })
-      if (!linked?.redraftRosterId || !player) {
-        await pushFail('Survivor Guillotine claim needs a linked redraft roster and a known player.')
+      if (!player) {
+        await pushFail('Survivor Guillotine claim needs a known player.')
         continue
       }
-      if (dropId) survivorGuillotineWrites.push(prisma.redraftRosterPlayer.updateMany({ where: {
-        rosterId: linked.redraftRosterId, playerId: dropId, droppedAt: null }, data: { droppedAt: new Date() } }))
-      survivorGuillotineWrites.push(prisma.redraftRosterPlayer.create({ data: { rosterId: linked.redraftRosterId,
-        playerId: addId, playerName: player.name, position: player.position, team: player.team,
-        sport: player.sport, slotType: 'bench', acquisitionType: 'waiver' } }))
-      if (faabSpent != null) survivorGuillotineWrites.push(prisma.redraftRoster.update({ where: { id: linked.redraftRosterId },
-        data: { faabBalance: { decrement: faabSpent } } }))
+      if (!linked?.redraftRosterId && await prisma.redraftSeason.count({ where: { leagueId } })) {
+        await pushFail('Survivor Guillotine roster needs its redraft link reconciled before waivers.')
+        continue
+      }
+      if (linked?.redraftRosterId) {
+        if (dropId) survivorGuillotineWrites.push(prisma.redraftRosterPlayer.updateMany({ where: {
+          rosterId: linked.redraftRosterId, playerId: dropId, droppedAt: null }, data: { droppedAt: new Date() } }))
+        survivorGuillotineWrites.push(prisma.redraftRosterPlayer.create({ data: { rosterId: linked.redraftRosterId,
+          playerId: addId, playerName: player.name, position: player.position, team: player.team,
+          sport: player.sport, slotType: 'bench', acquisitionType: 'waiver' } }))
+        if (faabSpent != null) survivorGuillotineWrites.push(prisma.redraftRoster.update({ where: { id: linked.redraftRosterId },
+          data: { faabBalance: { decrement: faabSpent } } }))
+      }
     }
 
     await (prisma as any).$transaction([
