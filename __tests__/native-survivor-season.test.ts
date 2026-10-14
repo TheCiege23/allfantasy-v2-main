@@ -78,6 +78,10 @@ describe('NBA Survivor creation pilot and multi-sport season capabilities', () =
     expect(p.startWeek).toBe(3)
     expect(p.eliminationWeeks.every(w => w > 3)).toBe(true)
   })
+  it('NBA creation on opening day starts after the already-open Tuesday period', () => {
+    const p = buildSurvivorFullSeasonPlan({ sport: 'NBA', season: 2026, castSize: 20, now: new Date('2026-10-20T16:00:00Z') })
+    expect(p.startWeek).toBe(2)
+  })
   it('future draft timing can refuse a cast that no longer fits, instead of silently truncating', () => {
     expect(() => buildSurvivorFullSeasonPlan({ sport: 'NBA', season: 2026, castSize: 20, now, draftAt: new Date('2027-03-01T23:00:00Z') })).toThrow('Not enough season remains')
     expect(() => buildSurvivorFullSeasonPlan({ sport: 'NBA', season: 2027, castSize: 16, now })).toThrow('has not been verified')

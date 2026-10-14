@@ -39,6 +39,10 @@ const {
     survivorGameState: { findUnique: vi.fn() },
     roster: { count: vi.fn() },
     survivorChatChannel: { count: vi.fn() },
+    leagueTeam: { count: vi.fn() },
+    redraftTradeProposal: { count: vi.fn() },
+    exileIsland: { findUnique: vi.fn() },
+    survivorChallenge: { count: vi.fn() },
   },
 }))
 
@@ -113,7 +117,7 @@ describe('survivor commissioner dashboard payload', () => {
     getLeagueRole.mockResolvedValue('commissioner')
     resolveSurvivorAccessContext.mockResolvedValue({
       isLeagueMember: true,
-      settings: { commissionerParticipationMode: 'non_participating_host' },
+      settings: { commissionerParticipationMode: 'non_participating_host', exileIslandEnabled: false, idolCount: 7, mergeTriggerType: 'active_player_count' },
       isParticipatingCommissioner: false,
       decisions: {
         canSeeHiddenIdolAssignments: true,
@@ -123,13 +127,15 @@ describe('survivor commissioner dashboard payload', () => {
       privacyWarnings: [],
     })
     isSurvivorLeague.mockResolvedValue(true)
-    getSurvivorConfig.mockResolvedValue({ configId: 'cfg-1', leagueId: 'league-1' })
+    getSurvivorConfig.mockResolvedValue({ configId: 'cfg-1', leagueId: 'league-1', exileReturnEnabled: false, idolCount: 7, mergeTrigger: 'player_count' })
     prisma.league.findUnique.mockResolvedValue({
       id: 'league-1',
       name: 'Island Test',
       sport: 'NFL',
       leagueSize: 12,
       leagueVariant: 'survivor',
+      waiverType: 'faab',
+      settings: { waiverSettings: { waiverType: 'faab' } },
     })
     resolveSurvivorCurrentWeek.mockResolvedValue(3)
     getTribesWithMembers.mockResolvedValue([
@@ -140,7 +146,7 @@ describe('survivor commissioner dashboard payload', () => {
     getJuryMembers.mockResolvedValue([{ id: 'jury-1' }])
     isMergeTriggered.mockResolvedValue(false)
     getExileLeagueId.mockResolvedValue(null)
-    prisma.draftSession.findUnique.mockResolvedValue({ id: 'draft-1' })
+    prisma.draftSession.findUnique.mockResolvedValue({ id: 'draft-1', status: 'pre_draft', rounds: 12, teamCount: 12, timerSeconds: 90, _count: { picks: 0 } })
     prisma.survivorGameState.findUnique.mockResolvedValue({
       phase: 'tribal',
       currentWeek: 3,
@@ -154,6 +160,10 @@ describe('survivor commissioner dashboard payload', () => {
     })
     prisma.roster.count.mockResolvedValue(12)
     prisma.survivorChatChannel.count.mockResolvedValue(3)
+    prisma.leagueTeam.count.mockResolvedValue(1)
+    prisma.redraftTradeProposal.count.mockResolvedValue(0)
+    prisma.exileIsland.findUnique.mockResolvedValue({ isActive: false })
+    prisma.survivorChallenge.count.mockResolvedValue(0)
     getSurvivorAuditLog.mockResolvedValue([])
     resolveSnapshot.mockResolvedValue({ plans: ['pro'], status: 'active' })
     resolveForUser.mockResolvedValue({ balance: 42 })
@@ -183,6 +193,16 @@ describe('survivor commissioner dashboard payload', () => {
       draftSessionExists: true,
       survivorChatChannels: 3,
       exileLeagueLinked: false,
+    })
+    expect(result.operations).toEqual({
+      claimedManagers: 1,
+      draft: { status: 'pre_draft', picksMade: 0, totalPicks: 144, timerSeconds: 90 },
+      pendingTrades: 0,
+      completedTrades: 0,
+      exileActive: false,
+      activeChallenges: 0,
+      automationNeedsAttention: false,
+      readinessIssues: ['11 manager seats still need to be claimed.'],
     })
     expect(result.monetization).toEqual({
       afPlan: 'pro',

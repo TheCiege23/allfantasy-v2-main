@@ -35,7 +35,7 @@ async function context(db: Db, leagueId: string, now: Date) {
   if (!game || ['pre_draft', 'drafting', 'complete'].includes(game.phase)) throw new Error('Exile waivers are not open.')
   const day = easternCalendarDay(now)
   if (!day) throw new Error('Invalid scoring date.')
-  const week = dailySportWeekForInstant(league.sport, league.season, day) ?? Math.max(1, game.currentWeek)
+  const week = dailySportWeekForInstant(league.sport, league.season, now) ?? Math.max(1, game.currentWeek)
   const window = await exileWeekWindow(db, league.sport, league.season, week)
   if (!window) throw new Error('The verified scoring calendar is not available yet.')
   return { league, island, week, window }

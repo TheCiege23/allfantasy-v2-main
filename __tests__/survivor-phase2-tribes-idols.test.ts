@@ -144,7 +144,7 @@ describe('computeIdolSeedPlan', () => {
 
 describe('player-bound NBA idol plan', () => {
   const candidates = Array.from({ length: 18 }, (_, owner) =>
-    Array.from({ length: 3 }, (_, player) => ({ ownerUserId: `owner-${owner}`, rosterId: `roster-${owner}`, playerId: `nba-${owner}-${player}` })),
+    Array.from({ length: 4 }, (_, player) => ({ ownerUserId: `owner-${owner}`, rosterId: `roster-${owner}`, playerId: `nba-${owner}-${player}` })),
   ).flat()
 
   it('gives six distinct managers a player-bound idol by default', () => {
@@ -162,8 +162,11 @@ describe('player-bound NBA idol plan', () => {
     expect(plan.ok).toBe(true)
     if (!plan.ok) return
     expect(new Set(plan.assignments.map(assignment => assignment.playerId)).size).toBe(21)
-    expect(new Set(plan.assignments.map(assignment => assignment.ownerUserId)).size).toBeLessThan(21)
+    expect(new Set(plan.assignments.map(assignment => assignment.ownerUserId)).size).toBe(6)
+    expect(plan.assignments.filter(assignment => assignment.expiresAtMerge)).toHaveLength(10)
+    expect(plan.assignments.filter(assignment => !assignment.expiresAtMerge)).toHaveLength(11)
     expect(computePlayerBoundIdolSeedPlan({ candidates, idolCount: 21, seed: 9 })).toEqual(plan)
+    expect(computePlayerBoundIdolSeedPlan({ candidates, idolCount: 25, seed: 9 })).toMatchObject({ ok: false, code: 'invalid_count' })
   })
 
   it('refuses unavailable powers and missing stable player identities', () => {

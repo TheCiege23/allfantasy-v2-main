@@ -1,4 +1,5 @@
 import { readSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
+import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/survivorSettings'
 /**
  * Runs all sport-specific bootstrap steps after league creation so the league
  * has correct roster, scoring, waiver, settings, and context for its sport.
@@ -246,11 +247,19 @@ export async function runLeagueBootstrap(
           : 4)
       const tribeSize = Math.max(1, Math.ceil(teamCount / tribeCount))
       const mode = String(sw.mode ?? 'redraft').toLowerCase() === 'bestball' ? 'bestball' : 'redraft'
+      const foundation = normalizeSurvivorFoundationSettings({ ...sw, defaultTeamCount: teamCount, tribeCount })
       await upsertSurvivorConfig(leagueId, {
         mode,
         tribeCount,
         tribeSize,
         tribeFormation: String(sw.tribeFormation ?? 'random'),
+        mergeTrigger: foundation.mergeTriggerType === 'active_player_count' ? 'player_count' : 'week',
+        mergeWeek: foundation.mergeWeek,
+        mergePlayerCount: foundation.mergeActivePlayerCount,
+        exileReturnEnabled: foundation.exileIslandEnabled,
+        exileReturnTokens: foundation.exileReturnTokens,
+        idolCount: foundation.idolCount,
+        selfVoteDisallowed: !foundation.selfVotesAllowed,
         seasonThemeLabel:
           typeof sw.survivor_season_theme_label === 'string' && sw.survivor_season_theme_label.trim().length > 0
             ? String(sw.survivor_season_theme_label).trim()
@@ -258,7 +267,7 @@ export async function runLeagueBootstrap(
         challengesSystemRun: sw.survivor_challenges_system_run !== false,
         regularSeasonEndWeek: readSurvivorFullSeasonPlan(sw)?.endWeek ?? null,
       })
-      if (sw.exileIslandEnabled === true || sw.exile_enabled === true) await getOrCreateExileLeague(leagueId).catch(() => {})
+      if (foundation.exileIslandEnabled) await getOrCreateExileLeague(leagueId).catch(() => {})
       await runSurvivorLeagueBootstrap(leagueId).catch(() => {})
     } catch {
       // non-fatal; legacy wizard path will fill in if used
