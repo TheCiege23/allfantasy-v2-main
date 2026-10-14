@@ -40,6 +40,7 @@ vi.mock('@/lib/league/league-roster-draft-gate', () => ({
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     $transaction: hm.prismaTransaction,
+    league: { findUnique: vi.fn().mockResolvedValue(null) },
     draftSession: {
       findUnique: hm.draftSessionFindUnique,
       findFirst: hm.draftSessionFindUnique,
