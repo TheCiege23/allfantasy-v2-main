@@ -4,7 +4,9 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useSession } from 'next-auth/react'
-import { joinCallbackUrl, joinLandingHref } from '@/lib/league-join/joinLanding'
+import { inviteSource, joinCallbackUrl, joinLandingHref } from '@/lib/league-join/joinLanding'
+import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
+import { RECAP_SHARE } from '@/lib/analytics/eventNames'
 import { ClassGateNotice, isClassGateBlocked, type ClassGateBlocked } from '@/components/league-join/ClassGateNotice'
 import { SurvivorJoin, type SurvivorJoinPreview } from '@/components/survivor/SurvivorJoin'
 import { SleeperTeamClaim } from '@/components/league-join/SleeperTeamClaim'
@@ -16,6 +18,8 @@ export default function JoinByCodePage() {
   const searchParams = useSearchParams()
   const codeFromUrl = searchParams?.get('code')?.trim()
   const joinOnArrival = searchParams?.get('go') === '1'
+  /* Where the link came from — `recap` for one shared from Chimmy's weekly recap (RecapShareButton). */
+  const src = inviteSource(searchParams?.get('src'))
   const { status: authStatus } = useSession()
   /*
    * Set when the join itself answers 401. Most people opening a link someone shared from a Sleeper
@@ -24,6 +28,7 @@ export default function JoinByCodePage() {
    */
   const [needsSignIn, setNeedsSignIn] = useState(false)
   const autoJoined = useRef(false)
+  const openCounted = useRef(false)
 
   const [code, setCode] = useState(codeFromUrl ?? '')
   const [password, setPassword] = useState('')
@@ -96,6 +101,12 @@ export default function JoinByCodePage() {
           if (data.success) {
             setStatus('success')
             setJoinedLeagueId(data.leagueId)
+            sendProductAnalyticsBeacon(RECAP_SHARE.INVITE_JOINED, {
+              leagueId: data.leagueId,
+              src,
+              memberOnly: Boolean(data.memberOnly),
+              alreadyMember: Boolean(data.alreadyMember),
+            })
             if (data.memberOnly && data.sleeperClaim) {
               setSleeperClaim(true)
               setMessage(data.alreadyMember ? 'You are already in this league.' : 'You’re in.')
@@ -149,8 +160,23 @@ export default function JoinByCodePage() {
           setMessage('Something went wrong')
         })
     },
-    [effectiveCode, password]
+    [effectiveCode, password, src]
   )
+
+  /*
+   * One open per visit, once the league is known and we know whether they are signed in. The return
+   * from signing in (`go=1`) counts again as `returning`, so first opens are those without it.
+   */
+  useEffect(() => {
+    if (openCounted.current || !codeFromUrl || !preview?.leagueId || authStatus === 'loading') return
+    openCounted.current = true
+    sendProductAnalyticsBeacon(RECAP_SHARE.INVITE_OPEN, {
+      leagueId: preview.leagueId,
+      src,
+      signedIn: authStatus === 'authenticated',
+      returning: joinOnArrival,
+    })
+  }, [authStatus, codeFromUrl, joinOnArrival, preview?.leagueId, src])
 
   /* Back from signing in with `go=1`: join at once, once. A password-protected league still asks. */
   useEffect(() => {
@@ -168,7 +194,7 @@ export default function JoinByCodePage() {
       survivor={preview.survivor}
       authStatus={authStatus}
       needsSignIn={needsSignIn}
-      callbackUrl={joinCallbackUrl(codeFromUrl)}
+      callbackUrl={joinCallbackUrl(codeFromUrl, src)}
       requiresPassword={preview.requiresPassword}
       password={password}
       onPasswordChange={setPassword}
@@ -180,7 +206,7 @@ export default function JoinByCodePage() {
   }
 
   if (codeFromUrl && preview && !previewError && status === 'idle' && (authStatus === 'unauthenticated' || needsSignIn)) {
-    const callbackUrl = joinCallbackUrl(codeFromUrl)
+    const callbackUrl = joinCallbackUrl(codeFromUrl, src)
     return (
       <div className="min-h-screen flex items-center justify-center mode-surface mode-readable">
         <div className="max-w-md mx-auto px-4 w-full" data-testid="league-join-signin">

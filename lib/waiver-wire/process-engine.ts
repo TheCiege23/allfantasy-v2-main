@@ -235,6 +235,11 @@ export async function processWaiverClaimsForLeague(
       await pushFail("Roster's waiver moves are frozen by an active Survivor idol effect.")
       continue
     }
+    if (league.leagueVariant === 'survivor_guillotine' &&
+        await prisma.survivorGuillotineChop.count({ where: { leagueId, rosterId: claim.rosterId, reversedAt: null } })) {
+      await pushFail('Eliminated Survivor Guillotine rosters cannot win waiver claims.')
+      continue
+    }
     if (rosterGuard && !(await rosterGuard(leagueId, claim.rosterId))) {
       await pushFail('Roster cannot make waiver claims (eliminated or inactive).')
       continue
@@ -314,6 +319,24 @@ export async function processWaiverClaimsForLeague(
       priorityAfter = newWaiverPriority
     }
 
+    const survivorGuillotineWrites: Array<Promise<unknown>> = []
+    if (league.leagueVariant === 'survivor_guillotine') {
+      const linked = await prisma.roster.findUnique({ where: { id: claim.rosterId }, select: { redraftRosterId: true } })
+      const player = await prisma.player.findUnique({ where: { id: addId }, select: {
+        name: true, position: true, team: true, sport: true } })
+      if (!linked?.redraftRosterId || !player) {
+        await pushFail('Survivor Guillotine claim needs a linked redraft roster and a known player.')
+        continue
+      }
+      if (dropId) survivorGuillotineWrites.push(prisma.redraftRosterPlayer.updateMany({ where: {
+        rosterId: linked.redraftRosterId, playerId: dropId, droppedAt: null }, data: { droppedAt: new Date() } }))
+      survivorGuillotineWrites.push(prisma.redraftRosterPlayer.create({ data: { rosterId: linked.redraftRosterId,
+        playerId: addId, playerName: player.name, position: player.position, team: player.team,
+        sport: player.sport, slotType: 'bench', acquisitionType: 'waiver' } }))
+      if (faabSpent != null) survivorGuillotineWrites.push(prisma.redraftRoster.update({ where: { id: linked.redraftRosterId },
+        data: { faabBalance: { decrement: faabSpent } } }))
+    }
+
     await (prisma as any).$transaction([
       (prisma as any).waiverClaim.update({
         where: claimSnapshotWhere(claim),
@@ -341,6 +364,7 @@ export async function processWaiverClaimsForLeague(
           waiverPriorityAfter: priorityAfter ?? null,
         },
       }),
+      ...survivorGuillotineWrites,
     ])
 
     rosteredByPlayer.set(addId, claim.rosterId)

@@ -85,6 +85,11 @@ type Props = {
    * shows.
    */
   hiddenIds?: string[]
+  /**
+   * Archived leagues (lib/core-app/archivedLeagues.ts): out of the list AND out of search, unlike
+   * `hiddenIds`. The open league always shows.
+   */
+  archivedIds?: string[]
 }
 
 function writeCookie(name: string, value: string | null, maxAgeSeconds: number | null) {
@@ -101,7 +106,7 @@ function writeCookie(name: string, value: string | null, maxAgeSeconds: number |
   }
 }
 
-export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, favoriteIds, leagueScreen, hiddenIds = [] }: Props) {
+export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, favoriteIds, leagueScreen, hiddenIds = [], archivedIds = [] }: Props) {
   const router = useRouter()
   const pathname = usePathname() ?? '/core'
   /*
@@ -149,19 +154,23 @@ export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, fa
   const labelOf = (l: ScopeSwitcherLeague) => labels.get(l.id) ?? l.name
   const q = query.trim().toLowerCase()
   const hiddenKey = hiddenIds.join('.')
+  const archivedKey = archivedIds.join('.')
   const shownLeagues = useMemo(() => {
     const hidden = new Set(hiddenKey ? hiddenKey.split('.') : [])
+    const archived = new Set(archivedKey ? archivedKey.split('.') : [])
+    // An archived league is never offered here, typed for or not — only the open one stays.
+    const offered = leagues.filter((l) => !archived.has(l.id) || l.id === selectedLeagueId)
     const matched = q
-      ? leagues.filter(
+      ? offered.filter(
           (l) =>
             (labels.get(l.id) ?? l.name).toLowerCase().includes(q) ||
             l.sport.toLowerCase() === q ||
             platformLabel(l.platform).toLowerCase().includes(q),
         )
-      : leagues.filter((l) => !hidden.has(l.id) || l.id === selectedLeagueId)
+      : offered.filter((l) => !hidden.has(l.id) || l.id === selectedLeagueId)
     // Starred first, then the order the rail uses (by name) — stable within each group.
     return [...matched].sort((a, b) => Number(favorites.has(b.id)) - Number(favorites.has(a.id)))
-  }, [leagues, labels, favorites, q, hiddenKey, selectedLeagueId])
+  }, [leagues, labels, favorites, q, hiddenKey, archivedKey, selectedLeagueId])
 
   const filterHref = (value: string | null) =>
     value == null ? `/core?${HOME_SCOPE_PARAM}=all` : `/core?${HOME_SCOPE_PARAM}=${encodeURIComponent(value)}`

@@ -2,7 +2,9 @@
 
 import { useRef, useState } from 'react'
 import { Share2 } from 'lucide-react'
-import { buildRecapShareText } from '@/lib/league-chat/recapShare'
+import { buildRecapShareText, tagRecapInviteLink } from '@/lib/league-chat/recapShare'
+import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
+import { RECAP_SHARE } from '@/lib/analytics/eventNames'
 
 /**
  * "Share with your league" under Chimmy's weekly recap.
@@ -36,7 +38,7 @@ export function RecapShareButton({
     try {
       const res = await fetch(`/api/leagues/join?leagueId=${encodeURIComponent(leagueId)}`, { cache: 'no-store' })
       const data = res.ok ? ((await res.json().catch(() => null)) as { inviteLink?: unknown } | null) : null
-      link.current = typeof data?.inviteLink === 'string' ? data.inviteLink : null
+      link.current = typeof data?.inviteLink === 'string' ? tagRecapInviteLink(data.inviteLink) : null
     } catch {
       link.current = null
     }
@@ -46,17 +48,24 @@ export function RecapShareButton({
   async function share() {
     if (state === 'busy') return
     setState('busy')
-    const text = buildRecapShareText(recap, await inviteLink())
+    sendProductAnalyticsBeacon(RECAP_SHARE.TAP, { leagueId })
+    const invite = await inviteLink()
+    const text = buildRecapShareText(recap, invite)
+    /* How the tap ended — the share sheet itself reports nothing back, so this is all we will know. */
+    const done = (outcome: 'shared' | 'copied' | 'cancelled' | 'failed') => {
+      sendProductAnalyticsBeacon(RECAP_SHARE.DONE, { leagueId, outcome, hasLink: Boolean(invite) })
+      setState(outcome === 'cancelled' ? 'idle' : outcome)
+    }
     const nav = typeof navigator !== 'undefined' ? navigator : null
     if (nav && typeof nav.share === 'function') {
       try {
         await nav.share({ title: leagueName ? `${leagueName} recap` : 'Weekly recap', text })
-        setState('shared')
+        done('shared')
         return
       } catch (err) {
         /* Closing the sheet is a choice, not a failure — go back to the button as it was. */
         if (err instanceof Error && err.name === 'AbortError') {
-          setState('idle')
+          done('cancelled')
           return
         }
         /* Any other refusal (no permission, an unsupported target) falls through to copying. */
@@ -65,9 +74,9 @@ export function RecapShareButton({
     try {
       await nav?.clipboard?.writeText(text)
       if (!nav?.clipboard) throw new Error('no clipboard')
-      setState('copied')
+      done('copied')
     } catch {
-      setState('failed')
+      done('failed')
     }
   }
 

@@ -6320,6 +6320,14 @@ model League {
   createdAt                             DateTime                               @default(now())
   updatedAt                             DateTime                               @updatedAt
   leagueVariant                         String?                                @db.VarChar(32)
+  survivorGuillotineLeague               SurvivorGuillotineLeague?
+  survivorGuillotinePowers               SurvivorGuillotinePower[]
+  survivorGuillotineChops                SurvivorGuillotineChop[]
+  survivorGuillotineCaptainVotes         SurvivorGuillotineCaptainVote[]
+  survivorGuillotineChoiceVotes          SurvivorGuillotineChoiceVote[]
+  survivorGuillotineTribeChoices         SurvivorGuillotineTribeChoice[]
+  survivorGuillotineDailyLineups         SurvivorGuillotineDailyLineup[]
+  survivorGuillotineAuctionBids          SurvivorGuillotineAuctionBid[]
   importBatchId                         String?                                @db.VarChar(64)
   importedAt                            DateTime?
   /// League logo (AllFantasy commissioner upload; separate from imported avatarUrl when set).
@@ -15601,6 +15609,153 @@ model GuillotineSeason {
 
   @@index([leagueId])
   @@map("guillotine_seasons")
+}
+
+/// Native Survivor Guillotine season. Public competition state is separate from sealed powers.
+model SurvivorGuillotineLeague {
+  id             String   @id @default(cuid())
+  leagueId       String   @unique
+  config         Json
+  tribes         Json     @default("[]")
+  tribeDraftState Json    @default("{}")
+  periodState    Json     @default("{}")
+  scoreHistory   Json     @default("{}")
+  periodHistory  Json     @default("{}")
+  rewardPeriods  Json     @default("[]")
+  periodCalendar Json     @default("{}")
+  captainElectionDeadlineAt DateTime?
+  currentPeriod  Int      @default(0)
+  status         String   @default("setup")
+  revision       Int      @default(1)
+  lastCorrectionCheckAt DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  league         League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  @@map("survivor_guillotine_leagues")
+}
+
+/// Sealed owner and type never travel through the public season endpoint.
+model SurvivorGuillotinePower {
+  id                 String    @id @default(cuid())
+  leagueId           String
+  kind               String
+  binding            String
+  playerId           String?
+  ownerUserId        String?
+  awardPeriod        Int?
+  activationPeriod   Int?
+  expiresAfterPeriod Int
+  status             String    @default("held")
+  source             String    @default("draft")
+  targetRosterId     String?
+  revealedAt         DateTime?
+  activatedAt        DateTime?
+  createdAt          DateTime  @default(now())
+  league             League    @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  @@index([leagueId, ownerUserId, status])
+  @@index([leagueId, playerId, status])
+  @@unique([leagueId, awardPeriod])
+  @@map("survivor_guillotine_powers")
+}
+
+model SurvivorGuillotineCaptainVote {
+  id                String   @id @default(cuid())
+  leagueId          String
+  period            Int
+  tribeId           String
+  voterRosterId     String
+  candidateRosterId String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  league            League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  @@unique([leagueId, period, voterRosterId])
+  @@index([leagueId, period, tribeId])
+  @@map("survivor_guillotine_captain_votes")
+}
+
+model SurvivorGuillotineChoiceVote {
+  id            String   @id @default(cuid())
+  leagueId      String
+  period        Int
+  slotKey       String
+  tribeId       String
+  voterRosterId String
+  choice        Json
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  league        League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  @@unique([leagueId, period, slotKey, voterRosterId])
+  @@index([leagueId, period, slotKey])
+  @@map("survivor_guillotine_choice_votes")
+}
+
+model SurvivorGuillotineTribeChoice {
+  id        String   @id @default(cuid())
+  leagueId  String
+  rosterId  String
+  tribeId   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  league    League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  @@unique([leagueId, rosterId])
+  @@index([leagueId, tribeId])
+  @@map("survivor_guillotine_tribe_choices")
+}
+
+model SurvivorGuillotineDailyLineup {
+  id        String   @id @default(cuid())
+  leagueId  String
+  period    Int
+  rosterId  String
+  gameDay   DateTime @db.Date
+  playerIds Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  league    League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  @@unique([leagueId, period, rosterId, gameDay])
+  @@index([leagueId, period, gameDay])
+  @@map("survivor_guillotine_daily_lineups")
+}
+
+model SurvivorGuillotineAuctionBid {
+  id        String   @id @default(cuid())
+  leagueId  String
+  period    Int
+  rosterId  String
+  amount    Int
+  status    String   @default("sealed")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  league    League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  @@unique([leagueId, period, rosterId])
+  @@index([leagueId, period, status])
+  @@map("survivor_guillotine_auction_bids")
+}
+
+/// Durable chop attempts; reversed rows remain for audit, while active rows drive eligibility.
+model SurvivorGuillotineChop {
+  id          String   @id @default(cuid())
+  leagueId    String
+  period      Int
+  rosterId    String
+  score       Float
+  tribeId     String?
+  releaseSnapshot Json?
+  reversedAt  DateTime?
+  reversalReason String?
+  createdAt   DateTime @default(now())
+  league      League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  @@index([leagueId, period, rosterId])
+  @@index([leagueId, period])
+  @@map("survivor_guillotine_chops")
 }
 
 model GuillotineElimination {

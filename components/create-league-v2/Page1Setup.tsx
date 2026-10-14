@@ -275,6 +275,9 @@ export function Page1Setup({ state, accent, onChange }: Page1SetupProps) {
             )
           })}
         </div>
+        <a href="/survivor-guillotine/setup" className="mt-4 block rounded-xl border border-amber-400/40 bg-amber-400/10 p-4 text-sm text-amber-100 hover:bg-amber-400/20">
+          <strong>Survivor Guillotine</strong> · Create an NFL or NBA league with tribe immunity, secret idols, and weekly chops →
+        </a>
 
         {/* League type hero video */}
         <LeagueTypeHeroVideo

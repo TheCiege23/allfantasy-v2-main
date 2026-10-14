@@ -97,13 +97,36 @@ describe('ensureZombieSeasonActivated', () => {
 
   it('ends the zombie season at the last scheduled week, not at totalWeeks (NBA: 22 weeks, schedule ends at 19)', async () => {
     overrides.set('redraftSeason.findFirst', async () => ({ season: 2026, totalWeeks: 22 }))
-    overrides.set('redraftMatchup.findFirst', async () => ({ week: 19 }))
+    // The schedule's last week is 19; its first is 1 (drafted before the season).
+    overrides.set('redraftMatchup.findFirst', async (args: any) => ({ week: args?.orderBy?.week === 'asc' ? 1 : 19 }))
     const spy = vi.spyOn(await import('@/lib/zombie/whispererEngine'), 'selectWhisperer').mockResolvedValue({ whispererRecordId: 'w', rosterId: 'R1' })
 
     await ensureZombieSeasonActivated({ leagueId: 'L1', redraftSeasonId: 's1' })
 
     expect(argsOf('zombieLeague.updateMany')[0].data).toEqual({ status: 'active', season: 2026, totalWeeks: 19, currentWeek: 1 })
     expect(argsOf('redraftMatchup.findFirst')[0]).toMatchObject({ where: { seasonId: 's1', awayRosterId: { not: null } } })
+    spy.mockRestore()
+  })
+
+  /*
+   * 🛑 A LEAGUE DRAFTED MID-SEASON STARTED AT WEEK 1 AND NEVER LEFT IT. Its schedule now begins at the
+   * sport's current week, and the zombie league must begin there too — week 1 has no matchups.
+   */
+  it('a league drafted mid-season starts on its first scheduled week, not week 1', async () => {
+    overrides.set('redraftSeason.findFirst', async () => ({ season: 2026, totalWeeks: 22 }))
+    overrides.set('redraftMatchup.findFirst', async (args: any) => ({ week: args?.orderBy?.week === 'asc' ? 6 : 19 }))
+    const spy = vi.spyOn(await import('@/lib/zombie/whispererEngine'), 'selectWhisperer').mockResolvedValue({ whispererRecordId: 'w', rosterId: 'R1' })
+
+    await ensureZombieSeasonActivated({ leagueId: 'L1', redraftSeasonId: 's1' })
+
+    expect(argsOf('zombieLeague.updateMany')[0].data).toEqual({ status: 'active', season: 2026, totalWeeks: 19, currentWeek: 6 })
+    spy.mockRestore()
+  })
+
+  it('[control] with no schedule yet it still starts at week 1', async () => {
+    const spy = vi.spyOn(await import('@/lib/zombie/whispererEngine'), 'selectWhisperer').mockResolvedValue({ whispererRecordId: 'w', rosterId: 'R1' })
+    await ensureZombieSeasonActivated({ leagueId: 'L1', redraftSeasonId: 's1' })
+    expect(argsOf('zombieLeague.updateMany')[0].data).toMatchObject({ currentWeek: 1 })
     spy.mockRestore()
   })
 

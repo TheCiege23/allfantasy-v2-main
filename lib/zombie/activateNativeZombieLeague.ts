@@ -17,7 +17,7 @@ import { prisma } from '@/lib/prisma'
 import { ensureLeagueTeamRows } from '@/lib/zombie/ZombieOwnerStatusService'
 import { selectWhisperer } from '@/lib/zombie/whispererEngine'
 import { getZombieLeagueConfig } from '@/lib/zombie/ZombieLeagueConfig'
-import { getLastScheduledWeek } from '@/lib/zombie/matchupCompletion'
+import { getFirstScheduledWeek, getLastScheduledWeek } from '@/lib/zombie/matchupCompletion'
 
 export type ZombieActivationResult =
   | { ok: true; activated: boolean; whispererPicked: boolean; zombieLeagueId: string }
@@ -46,6 +46,9 @@ export async function ensureZombieSeasonActivated(input: {
   const lastScheduledWeek = await getLastScheduledWeek(input.redraftSeasonId)
   const totalWeeks =
     lastScheduledWeek != null ? Math.min(season.totalWeeks ?? lastScheduledWeek, lastScheduledWeek) : season.totalWeeks
+  // A league drafted mid-season has a schedule that starts at the sport's current week. Starting the
+  // zombie league at week 1 pointed it at a week with no matchups, where it waited forever.
+  const currentWeek = (await getFirstScheduledWeek(input.redraftSeasonId)) ?? 1
 
   await ensureLeagueTeamRows(input.leagueId, z.id)
 
@@ -61,7 +64,7 @@ export async function ensureZombieSeasonActivated(input: {
   // The resolver matches matchups by season YEAR, so the zombie league must carry the draft's.
   const flipped = await prisma.zombieLeague.updateMany({
     where: { id: z.id, status: { in: STARTABLE } },
-    data: { status: 'active', season: season.season, totalWeeks, currentWeek: 1 },
+    data: { status: 'active', season: season.season, totalWeeks, currentWeek },
   })
   return { ok: true, activated: flipped.count > 0, whispererPicked, zombieLeagueId: z.id }
 }
