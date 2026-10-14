@@ -52,12 +52,27 @@ export async function GET(_req: NextRequest, context: Context) {
     ownedTeam?.externalId ? prisma.survivorGuillotineTribeChoice.findUnique({ where: {
       leagueId_rosterId: { leagueId, rosterId: ownedTeam.externalId } }, select: { tribeId: true } }) : null,
   ])
+  const stealTargets = ownedTeam?.externalId && powers.some(power => power.kind === 'steal_player' && power.status === 'held')
+    ? await (async () => {
+      const opponentIds = teams.filter(team => !team.eliminatedAt && team.externalId &&
+        team.externalId !== ownedTeam.externalId).map(team => team.externalId!)
+      const opponents = await prisma.roster.findMany({ where: { leagueId, id: { in: opponentIds } },
+        select: { id: true, playerData: true } })
+      const ids = [...new Set(opponents.flatMap(row => getRosterPlayerIds(row.playerData)))]
+      const availablePlayers = await prisma.player.findMany({ where: { id: { in: ids } },
+        select: { id: true, name: true, position: true, team: true } })
+      const byId = new Map(availablePlayers.map(player => [player.id, player]))
+      return opponents.flatMap(roster => getRosterPlayerIds(roster.playerData).flatMap(id => {
+        const player = byId.get(id)
+        return player ? [{ ...player, rosterId: roster.id }] : []
+      }))
+    })() : []
   return NextResponse.json({ season: { leagueId, config: season.config, tribes: readSGTribes(season.tribes),
     periodState, currentPeriod: season.currentPeriod,
     status: season.status, revision: season.revision, periodHistory: season.periodHistory,
     tribeDraftState: readSGTribeDraftState(season.tribeDraftState) }, powers, chops,
     teams: teams.map(team => ({ ...team, legacyRosterId: team.externalId })), scores,
-    ownRoster: ownedTeam?.externalId ? { id: ownedTeam.externalId,
+    stealTargets, ownRoster: ownedTeam?.externalId ? { id: ownedTeam.externalId,
       faabRemaining: roster?.faabRemaining ?? 0, players, dailyLineups, ownBid,
       tribeChoice: ownTribeChoice?.tribeId ?? null } : null })
 }
