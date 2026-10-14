@@ -399,7 +399,7 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
                   <Link href={`${base}/exile`} className="rounded-lg border border-white/20 px-3 py-2 text-sm text-white">Exile status</Link>
                 </div>
               </WarRoomPanel>
-              {data.privacy.canSeeHiddenIdolAssignments && !data.privacy.blindModeActive ? (
+              {data.privacy?.canSeeHiddenIdolAssignments && !data.privacy.blindModeActive ? (
                 <WarRoomPanel title="Private idol oversight" subtitle="Visible only to a non-playing host. Managers see only their own idols.">
                   {data.privateIdols.length ? <ul className="space-y-2 text-sm text-white/75">{data.privateIdols.map(idol => <li key={idol.id}><strong>{idol.ownerName}</strong> · {idol.powerLabel}</li>)}</ul> : <p className="text-sm text-white/60">No active idols have been seeded.</p>}
                 </WarRoomPanel>
@@ -489,7 +489,7 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
           {tab === 'tribal' && (
             <div className="space-y-4">
               <SurvivorCouncilControl leagueId={leagueId} />
-              {data?.privacy.canSeePrivateVotes && !data.privacy.blindModeActive ? (
+              {data?.privacy?.canSeePrivateVotes && !data.privacy.blindModeActive ? (
                 <WarRoomPanel title="Private ballot oversight" subtitle="Visible only to a non-playing host until the read.">
                   {data.privateBallots.length ? <ul className="space-y-2 text-sm text-white/75">{data.privateBallots.map((vote, index) => <li key={`${vote.voterName}-${index}`}><strong>{vote.voterName}</strong> voted for <strong>{vote.targetName}</strong>{vote.doesNotCount ? ' · does not count' : ''}</li>)}</ul> : <p className="text-sm text-white/60">No ballots have been submitted for the current council.</p>}
                 </WarRoomPanel>
