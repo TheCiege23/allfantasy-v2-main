@@ -93,6 +93,10 @@ const ACTIONS: Record<LeagueLifecycleState, Set<LeagueLifecycleAction>> = {
   drafting: new Set([
     'draft_pick',
     'draft_commissioner_control',
+    // Name, timezone, logo, description. The structural keys a "general" patch could also carry
+    // (sport, season, leagueSize, leagueType, isDynasty) stay locked once a draft has started by
+    // `structuralPatchRefusal`, independently of this gate.
+    'settings_edit_general',
     'settings_edit_draft',
     'settings_edit_commissioner',
     'league_lock_toggle',
