@@ -35,6 +35,16 @@ export type SurvivorCommissionerDashboardResult =
         survivorChatChannels: number
         exileLeagueLinked: boolean
       }
+      operations: {
+        claimedManagers: number
+        draft: { status: string; picksMade: number; totalPicks: number; timerSeconds: number | null } | null
+        pendingTrades: number
+        completedTrades: number
+        exileActive: boolean
+        activeChallenges: number
+        automationNeedsAttention: boolean
+        readinessIssues: string[]
+      }
       gameState: {
         phase: string
         currentWeek: number
@@ -50,6 +60,8 @@ export type SurvivorCommissionerDashboardResult =
       week: number
       tribes: Awaited<ReturnType<typeof getTribesWithMembers>>
       council: Awaited<ReturnType<typeof getCouncil>>
+      privateBallots: { voterName: string; targetName: string; submittedAt: string; doesNotCount: boolean }[]
+      privateIdols: { id: string; ownerName: string; powerLabel: string }[]
       juryCount: number
       merged: boolean
       rosterCount: number
@@ -92,11 +104,15 @@ export async function buildSurvivorCommissionerDashboard(
 
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { id: true, name: true, sport: true, leagueSize: true, leagueVariant: true },
+    select: { id: true, name: true, sport: true, leagueSize: true, leagueVariant: true, waiverType: true, settings: true },
   })
   if (!league || league.leagueVariant !== 'survivor') {
     return { ok: false, error: 'Not a Survivor league', status: 404 }
   }
+  const savedSettings = league.settings && typeof league.settings === 'object' && !Array.isArray(league.settings) ? league.settings as Record<string, unknown> : {}
+  const fullSeasonPlan = savedSettings.survivor_full_season_plan && typeof savedSettings.survivor_full_season_plan === 'object' && !Array.isArray(savedSettings.survivor_full_season_plan)
+    ? savedSettings.survivor_full_season_plan as Record<string, unknown> : {}
+  const nbaSeason = typeof fullSeasonPlan.season === 'number' ? fullSeasonPlan.season : new Date().getFullYear()
 
   const week = await resolveSurvivorCurrentWeek(leagueId, null)
 
@@ -115,6 +131,12 @@ export async function buildSurvivorCommissionerDashboard(
     entitlementSnapshot,
     tokenBalance,
     eliminatedIds,
+    claimedManagers,
+    pendingTrades,
+    completedTrades,
+    exileIsland,
+    activeChallenges,
+    nbaAdpRows,
   ] = await Promise.all([
     getSurvivorConfig(leagueId),
     getTribesWithMembers(leagueId),
@@ -122,7 +144,7 @@ export async function buildSurvivorCommissionerDashboard(
     getJuryMembers(leagueId),
     isMergeTriggered(leagueId, week),
     getExileLeagueId(leagueId),
-    prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER, select: { id: true } }),
+    prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER, select: { id: true, status: true, rounds: true, teamCount: true, timerSeconds: true, _count: { select: { picks: true } } } }),
     prisma.survivorGameState.findUnique({ where: { leagueId } }),
     prisma.roster.count({ where: { leagueId } }),
     prisma.survivorChatChannel.count({ where: { leagueId } }),
@@ -130,6 +152,12 @@ export async function buildSurvivorCommissionerDashboard(
     new EntitlementResolver().resolveSnapshot(userId, email),
     new TokenBalanceResolver().resolveForUser(userId, email),
     getCurrentlyEliminatedRosterIds(leagueId),
+    prisma.leagueTeam.count({ where: { leagueId, claimedByUserId: { not: null } } }),
+    prisma.redraftTradeProposal.count({ where: { leagueId, status: 'pending' } }),
+    prisma.redraftTradeProposal.count({ where: { leagueId, status: 'accepted' } }),
+    prisma.exileIsland.findUnique({ where: { leagueId }, select: { isActive: true } }),
+    prisma.survivorChallenge.count({ where: { leagueId, status: { in: ['active', 'open'] } } }),
+    league.sport === 'NBA' ? prisma.adpDataRecord.count({ where: { sport: 'NBA', season: nbaSeason } }) : Promise.resolve(null),
   ])
 
   const tribes = tribeRows.map((tribe: Awaited<ReturnType<typeof getTribesWithMembers>>[number]) => ({
@@ -144,6 +172,30 @@ export async function buildSurvivorCommissionerDashboard(
   }
 
   const gs = gameState
+  const privateIdolRows = access.isNonParticipatingCommissionerHost
+    ? await prisma.survivorIdol.findMany({
+        where: { leagueId, status: { in: ['hidden', 'revealed'] }, isUsed: false },
+        select: { id: true, currentOwnerUserId: true, powerLabel: true, powerType: true },
+      })
+    : []
+  const idolOwners = privateIdolRows.length
+    ? await prisma.survivorPlayer.findMany({
+        where: { leagueId, userId: { in: privateIdolRows.map(idol => idol.currentOwnerUserId).filter((id): id is string => Boolean(id)) } },
+        select: { userId: true, displayName: true },
+      })
+    : []
+  const ownerNames = new Map(idolOwners.map(owner => [owner.userId, owner.displayName]))
+  const readinessIssues: string[] = []
+  if (league.leagueSize && claimedManagers < league.leagueSize) readinessIssues.push(`${league.leagueSize - claimedManagers} manager seats still need to be claimed.`)
+  if (!draftRow) readinessIssues.push('No current draft session is available.')
+  if (draftRow && ['pre_draft', 'scheduled'].includes(draftRow.status) && nbaAdpRows === 0) readinessIssues.push('NBA ADP is unavailable. Verify the player pool and autopick order before starting the draft.')
+  if (!exileId && access.settings.exileIslandEnabled) readinessIssues.push('Exile is enabled but its side league is not linked.')
+  if (config.exileReturnEnabled !== access.settings.exileIslandEnabled) readinessIssues.push('Exile return rules disagree between league settings and the Survivor engine.')
+  if (config.idolCount !== access.settings.idolCount) readinessIssues.push('Idol inventory disagrees between league settings and the Survivor engine.')
+  if (config.mergeTrigger !== (access.settings.mergeTriggerType === 'active_player_count' ? 'player_count' : 'week')) readinessIssues.push('Merger trigger disagrees between league settings and the Survivor engine.')
+  const nestedWaivers = savedSettings.waiverSettings && typeof savedSettings.waiverSettings === 'object' && !Array.isArray(savedSettings.waiverSettings) ? savedSettings.waiverSettings as Record<string, unknown> : {}
+  if (typeof nestedWaivers.waiverType === 'string' && nestedWaivers.waiverType !== league.waiverType) readinessIssues.push('Waiver method disagrees between the saved league and waiver settings.')
+  if (gs?.lastError && !gs.lastError.startsWith('PAUSED:')) readinessIssues.push('Season automation reported an error; review the runtime before resuming.')
   return {
     ok: true,
     role,
@@ -157,6 +209,21 @@ export async function buildSurvivorCommissionerDashboard(
       draftSessionExists: Boolean(draftRow),
       survivorChatChannels: chatCount,
       exileLeagueLinked: Boolean(exileId),
+    },
+    operations: {
+      claimedManagers,
+      draft: draftRow ? {
+        status: draftRow.status,
+        picksMade: draftRow._count.picks,
+        totalPicks: draftRow.rounds * draftRow.teamCount,
+        timerSeconds: draftRow.timerSeconds,
+      } : null,
+      pendingTrades,
+      completedTrades,
+      exileActive: exileIsland?.isActive ?? false,
+      activeChallenges,
+      automationNeedsAttention: Boolean(gs?.lastError && !gs.lastError.startsWith('PAUSED:')),
+      readinessIssues,
     },
     gameState: gs
       ? {
@@ -175,6 +242,19 @@ export async function buildSurvivorCommissionerDashboard(
     week,
     tribes,
     council: survivorPublicCouncil(council, access.decisions.canSeePrivateVotes),
+    privateBallots: access.isNonParticipatingCommissionerHost
+      ? (council?.votes ?? []).map(vote => ({
+          voterName: vote.voterName ?? vote.voterUserId ?? 'Manager',
+          targetName: vote.targetName ?? vote.targetUserId ?? 'Manager',
+          submittedAt: vote.submittedAt.toISOString(),
+          doesNotCount: vote.doesNotCount,
+        }))
+      : [],
+    privateIdols: privateIdolRows.map(idol => ({
+      id: idol.id,
+      ownerName: ownerNames.get(idol.currentOwnerUserId ?? '') ?? 'Manager',
+      powerLabel: idol.powerLabel ?? idol.powerType.replace(/_/g, ' '),
+    })),
     juryCount: jury.length,
     merged,
     rosterCount,

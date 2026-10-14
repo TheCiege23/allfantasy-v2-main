@@ -101,6 +101,8 @@ export interface SurvivorSummary {
   /** Regular-season week window for main island + exile (no playoffs). */
   seasonCalendar?: SurvivorSeasonCalendar
   currentWeek: number
+  tribeScores?: Record<string, number>
+  scoresFinalized?: boolean
   nbaWeeklyScoringMode?: 'all_games' | 'one_game_per_player'
   tribes: SurvivorSummaryTribe[]
   council: SurvivorSummaryCouncil | null

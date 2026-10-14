@@ -145,7 +145,7 @@ export function SurvivorTribeBoard({ leagueId, summary, names, onRefresh }: Surv
                 </ul>
                 {required > 0 && <p className="mt-2 text-xs text-cyan-200">Sit-outs: {accepted} of {required} confirmed. Chimmy selects the rest at first tipoff.</p>}
                 <p className="mt-2 text-xs text-white/50">
-                  Tribe score: —{bonuses.length > 0 ? ` · Bonus: ${bonuses.join(', ')}` : ''}
+                  Tribe score: {summary.tribeScores?.[tribe.id] != null ? `${summary.tribeScores[tribe.id].toFixed(1)}${summary.scoresFinalized ? ' final' : ' provisional'}` : 'No score yet'}{bonuses.length > 0 ? ` · Bonus: ${bonuses.join(', ')}` : ''}
                 </p>
               </div>
             )

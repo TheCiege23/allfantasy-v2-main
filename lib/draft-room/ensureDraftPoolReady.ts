@@ -10,6 +10,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { compactDraftPoolCacheKey } from './draftPoolCacheKey'
 import {
   getEffectiveLeagueRosterTemplate,
   starterEligiblePlayerPositionsFromTemplate,
@@ -94,7 +95,7 @@ function getDraftPoolCacheModel(): DraftPoolCacheModel | null {
 export const DRAFT_POOL_CACHE_VERSION = 'dbmerge_v4:nflproj_v2:nflfoundation_v1:nba_roster_v1'
 
 export function buildDraftPoolCacheKey(leagueId: string, rosterFp: string, apiCacheKey: string): string {
-  return `draft_pool:${leagueId}:${rosterFp}:${DRAFT_POOL_CACHE_VERSION}:${apiCacheKey}`
+  return compactDraftPoolCacheKey(leagueId, rosterFp, DRAFT_POOL_CACHE_VERSION, apiCacheKey)
 }
 
 function buildStandardPoolApiCacheKey(leagueId: string): string {

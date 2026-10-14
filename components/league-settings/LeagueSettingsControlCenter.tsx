@@ -43,6 +43,7 @@ export type LeagueSettingsHubTabId =
  * __tests__/g32-league-home-contract pins them.
  */
 const TABS: { id: LeagueSettingsHubTabId; labelKey: string; shortKey: string }[] = (
+  // 'waivers' is not a tab: Waivers & free agents is a section of General (2026-10-14).
   ['general', 'myTeam', 'draft', 'roster', 'scoring', 'playoffs', 'members', 'commissioner', 'specialty', 'ai'] as const
 ).map((id) => ({ id, labelKey: `lsHub.tab.${id}`, shortKey: `lsHub.tab.${id}Short` }))
 
@@ -134,7 +135,7 @@ export function LeagueSettingsControlCenter({
   return (
     <div className="af-core af-league-admin flex min-h-[380px] flex-1 flex-col gap-0 md:min-h-[520px] md:flex-row">
       {/* Mobile tabs */}
-      <nav aria-label={t('lsHub.sections')} className="af-settings-mobile-nav scrollbar-none flex gap-1 overflow-x-auto border-b border-white/[0.06] pb-2 md:hidden">
+      <nav aria-label={t('lsHub.sections')} className="af-settings-mobile-nav grid grid-cols-4 gap-1.5 border-b border-white/[0.06] pb-3 md:hidden">
         {TABS.map((tb) => (
           <button
             key={tb.id}
@@ -142,8 +143,9 @@ export function LeagueSettingsControlCenter({
             onClick={() => setTab(tb.id)}
             aria-current={tab === tb.id ? 'page' : undefined}
             data-testid={`league-settings-hub-tab-${tb.id}`}
-            className={`shrink-0 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold transition ${
-              tab === tb.id ? 'bg-cyan-500/15 text-cyan-200' : 'text-white/45 hover:text-white/75'
+            title={t(tb.labelKey)}
+            className={`min-w-0 truncate rounded-lg px-1 py-1.5 text-center text-[11px] font-semibold ${
+              tab === tb.id ? 'bg-cyan-500/15 text-cyan-200' : 'text-white/60'
             }`}
           >
             {t(tb.shortKey)}
@@ -175,15 +177,15 @@ export function LeagueSettingsControlCenter({
         })}
       </nav>
 
-      <div className="af-settings-content min-h-0 flex-1 overflow-y-auto overscroll-contain px-1 py-2 md:px-5 md:py-1">
+      <div className="af-settings-content min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-0.5 py-2 md:px-5 md:py-1">
         <AnimatePresence mode="wait">
           <motion.div
             key={tab}
-            initial={{ opacity: 0, x: 8 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -8 }}
-            transition={{ duration: 0.18 }}
-            className="pb-8"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="min-w-0 pb-8"
           >
             {body}
           </motion.div>

@@ -237,6 +237,19 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'sleeperLeagueId is required' }, { status: 400 });
   }
 
+  /*
+   * 🛑 NEVER DEFAULT A NATIVE LEAGUE'S SPORT. This used to read `sportInput ?? 'NFL'`, so any body
+   * without `sport` became an NFL league — and with `league_type: 'big_brother'` it then resolved the
+   * NFL concept preset (fb_half_ppr, QB/RB/WR/TE/K/DST), persisting an NBA manager's league as
+   * "NFL · Half PPR" with nothing red anywhere. Refuse instead. The Sleeper import path is the one
+   * exception: the imported league carries its own sport, and `sport` here only feeds pre-checks.
+   */
+  if (!sportInput && !createFromSleeperImport) {
+    return NextResponse.json(
+      { error: 'sport is required', errors: [{ path: 'sport', message: 'Choose a sport for this league.' }] },
+      { status: 400 }
+    );
+  }
   let sport = sportInput ?? 'NFL';
   const normalizeWizardEnum = (value: string | undefined): string | undefined => {
     if (!value) return undefined;
@@ -366,7 +379,7 @@ export async function POST(req: Request) {
     );
   }
   if (isDevyRequested) {
-    const devySport = (sportInput ?? 'NFL').toString().toUpperCase();
+    const devySport = String(sport).toUpperCase();
     /** Devy is supported for NFL/NCAAF and NBA/NCAAB pipelines only (no MLB/NHL/Soccer). */
     if (!['NFL', 'NBA', 'NCAAF', 'NCAAB'].includes(devySport)) {
       return NextResponse.json(
@@ -379,7 +392,7 @@ export async function POST(req: Request) {
     }
   }
   if (isC2CRequested) {
-    const c2cSport = (sportInput ?? 'NFL').toString().toUpperCase();
+    const c2cSport = String(sport).toUpperCase();
     if (!['NFL', 'NBA', 'NCAAF', 'NCAAB'].includes(c2cSport)) {
       return NextResponse.json(
         {

@@ -47,9 +47,9 @@ export function RostersTab({ ctx, canEdit }: LeagueSettingsTabProps) {
   const showTaxi = hasTaxiSquad(league)
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-6">
       <p className="text-[12px] text-white/45">{t('lsHub.ro.note')}</p>
-      <RosterSettingsEditor leagueId={league.id} />
+      <RosterSettingsEditor leagueId={league.id} sport={league.sport} />
 
       <HubCard title={t('lsHub.ro.reserves')} testId="league-settings-ir-card">
         <HubSavingNote saving={saving} text={t('lsHub.saving')} />

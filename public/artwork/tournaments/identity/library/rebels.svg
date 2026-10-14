@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200" role="img" aria-label="rebels emblem"><defs><linearGradient id="div-library-rebels-M" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="0.45" stop-color="#b9c0cc"/><stop offset="1" stop-color="#4a515e"/></linearGradient></defs><g transform="translate(4,4) scale(.96)"><g stroke="#0e0a08" stroke-width="5" stroke-linejoin="round">
+<path d="M30,176 L150,40 L160,30 L170,40 L160,50 L40,186 Z" fill="url(#div-library-rebels-M)"/><path d="M170,176 L50,40 L40,30 L30,40 L40,50 L160,186 Z" fill="url(#div-library-rebels-M)"/>
+<rect x="18" y="164" width="34" height="12" rx="3" fill="#e0334f" transform="rotate(-48 35 170)"/><rect x="148" y="164" width="34" height="12" rx="3" fill="#e0334f" transform="rotate(48 165 170)"/></g>
+<path d="M100,22 L120,74 L176,76 L132,110 L148,164 L100,132 L52,164 L68,110 L24,76 L80,74 Z" fill="url(#div-library-rebels-M)" stroke="#0e0a08" stroke-width="6" stroke-linejoin="round"/>
+<path d="M100,44 L114,80 L152,82" stroke="#fff" stroke-opacity=".6" stroke-width="4" fill="none"/>
+<circle cx="100" cy="98" r="20" fill="#e0334f" stroke="#0e0a08" stroke-width="4.5"/><path d="M100,84 L104,94 L114,96 L106,102 L108,112 L100,106 L92,112 L94,102 L86,96 L96,94 Z" fill="#fff"/></g></svg>

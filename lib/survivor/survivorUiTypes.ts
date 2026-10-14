@@ -86,10 +86,11 @@ export type SurvivorSeasonPayload = {
   exileStatus?: { isActive?: boolean; currentWeek?: number; bossName?: string | null } | null
   juryStatus?: unknown
   userState?: SurvivorSeasonPlayer | null
+  weeklyScores?: Array<{ userId: string; finalScore: number; tribeId: string | null; countedTowardTribeTotal: boolean; isFinalized: boolean }>
 }
 
 export type LeagueSettingsBrief = {
-  league?: { name?: string | null }
+  league?: { name?: string | null; sport?: string | null }
   userRole?: string | null
   canEdit?: boolean
   hasAfCommissionerSub?: boolean

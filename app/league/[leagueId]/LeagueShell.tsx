@@ -3047,8 +3047,8 @@ function LeagueHeader({
         <div className="scrollbar-none -mx-1 mt-2 flex snap-x snap-mandatory gap-1 overflow-x-auto scroll-pb-1 border-t border-amber-500/15 bg-gradient-to-r from-amber-950/20 to-transparent px-4 py-2 sm:mx-0 sm:px-5 [-webkit-overflow-scrolling:touch]">
           {(
             [
-              ['Island', `/league/${leagueId}?view=survivor`],
-              ['Full hub', `/survivor/${leagueId}`],
+              ['Island dashboard', `/league/${leagueId}?view=survivor`],
+              ['Island home', `/survivor/${leagueId}`],
               ['Tribal', `/survivor/${leagueId}/tribal`],
               ['Challenges', `/survivor/${leagueId}/challenges`],
               ['Chimmy', `/survivor/${leagueId}/chimmy`],

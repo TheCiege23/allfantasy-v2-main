@@ -75,3 +75,144 @@ html[data-mode='light'] .af-league-admin :is(input, select, textarea) { color-sc
 
 .af-league-admin :is(input, textarea)::placeholder { color: var(--faint); opacity: 1; }
 .af-league-admin select option { background: var(--surface); color: var(--text); }
+
+/* ─── League settings modal: mode switch (USER / GENERAL / CI) ───────────────────
+   A segmented control built on theme tokens only, so light and dark both read.
+   ⚠ Colours are NOT transitioned: toggling the theme from the USER tab used to
+   animate every pill from its dark value to its light one, which read as a flash.
+   Only transform/box-shadow animate. Specificity (0,4,0)+ deliberately beats the
+   generic `.af-league-admin button[aria-pressed='true']` and white-alpha remaps above. */
+.af-league-admin.af-settings-dialog .af-ls-mode-tabs {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 4px;
+  width: 100%;
+  max-width: 420px;
+  margin-inline: auto;
+  padding: 4px;
+  border: 1px solid var(--line2);
+  border-radius: 999px;
+  background: var(--surface2);
+}
+.af-league-admin.af-settings-dialog .af-ls-mode-tabs .af-ls-mode-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 40px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text2);
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: .04em;
+  white-space: nowrap;
+  box-shadow: none;
+  transition: box-shadow .15s ease, transform .15s ease;
+}
+.af-league-admin.af-settings-dialog .af-ls-mode-tabs .af-ls-mode-pill:hover:not([data-active='true']) {
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--line2);
+}
+.af-league-admin.af-settings-dialog .af-ls-mode-tabs .af-ls-mode-pill[data-active='true'] {
+  background: var(--surface);
+  color: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .18);
+}
+.af-league-admin.af-settings-dialog .af-ls-mode-tabs .af-ls-mode-pill .af-ls-mode-icon { color: currentColor; flex-shrink: 0; }
+.af-league-admin.af-settings-dialog .af-ls-mode-tabs .af-ls-mode-pill[data-tone='ai'] .af-ls-mode-icon { color: #a78bfa; }
+.af-league-admin.af-settings-dialog .af-ls-mode-tabs .af-ls-mode-pill[data-tone='ai'][data-active='true'] { color: #c4b5fd; border-color: #8b5cf6; }
+.af-league-admin.af-settings-dialog .af-ls-mode-tabs .af-ls-mode-pill[data-tone='idp'][data-active='true'] { color: var(--bad); border-color: var(--bad); }
+html[data-mode='light'] .af-league-admin.af-settings-dialog .af-ls-mode-tabs .af-ls-mode-pill[data-tone='ai'] .af-ls-mode-icon { color: #7c3aed; }
+html[data-mode='light'] .af-league-admin.af-settings-dialog .af-ls-mode-tabs .af-ls-mode-pill[data-tone='ai'][data-active='true'] { color: #5b21b6; border-color: #7c3aed; }
+html[data-mode='light'] .af-league-admin.af-settings-dialog .af-ls-mode-tabs .af-ls-mode-pill[data-active='true'] { box-shadow: 0 1px 2px rgba(11, 16, 32, .12); }
+
+/* ─── Settings hub: sub-section nav on phones is a wrapping grid, never a side-scroller ── */
+@media (max-width: 767px) {
+  .af-league-admin.af-settings-dialog .af-settings-mobile-nav {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+    overflow: visible;
+    padding: 4px 0 12px;
+  }
+  .af-league-admin.af-settings-dialog .af-settings-mobile-nav button {
+    min-width: 0;
+    min-height: 40px;
+    padding: 0 4px;
+    border: 1px solid var(--line2);
+    border-radius: 10px;
+    background: var(--surface2);
+    color: var(--text2);
+    font-size: 11.5px;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: none;
+  }
+  .af-league-admin.af-settings-dialog .af-settings-mobile-nav button[aria-current='page'] {
+    background: var(--accent-soft);
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+}
+@media (max-width: 359px) {
+  .af-league-admin.af-settings-dialog .af-settings-mobile-nav { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+/* ─── Settings content: nothing may push the dialog sideways at 360–390px ─────────── */
+.af-league-admin.af-settings-dialog .af-settings-content { min-width: 0; overflow-x: hidden; overflow-wrap: anywhere; }
+.af-league-admin.af-settings-dialog .af-settings-content :is(table, pre) { max-width: 100%; }
+.af-league-admin.af-settings-dialog .af-settings-content select { min-width: 0; max-width: 100%; }
+
+/* Shared settings card — the one surface every owned tab uses. */
+.af-league-admin .af-ls-card {
+  border: 1px solid var(--line2);
+  border-radius: 14px;
+  background: var(--surface);
+  padding: 14px;
+  min-width: 0;
+}
+.af-league-admin .af-ls-card-title { font-size: 15px; font-weight: 700; color: var(--text); line-height: 1.3; }
+.af-league-admin .af-ls-card-sub { margin-top: 2px; font-size: 12px; color: var(--muted); line-height: 1.45; }
+.af-league-admin .af-ls-eyebrow { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+
+/* Compact roster stepper: label left, [− n +] right, always on one line. */
+.af-league-admin .af-ls-stepper-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  padding: 6px 4px 6px 8px;
+  border-radius: 10px;
+}
+.af-league-admin .af-ls-stepper-row + .af-ls-stepper-row { border-top: 1px solid var(--line); }
+.af-league-admin .af-ls-stepper {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  border: 1px solid var(--line2);
+  border-radius: 999px;
+  background: var(--surface2);
+}
+.af-league-admin .af-ls-stepper button,
+.af-league-admin.af-settings-dialog .af-ls-stepper button[aria-label] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  min-width: 40px;
+  min-height: 40px;
+  height: 40px;
+  border-radius: 999px;
+  color: var(--text2);
+}
+.af-league-admin .af-ls-stepper button:disabled { opacity: .35; }
+.af-league-admin .af-ls-stepper output { min-width: 28px; text-align: center; font-variant-numeric: tabular-nums; font-weight: 700; color: var(--text); font-size: 14px; }

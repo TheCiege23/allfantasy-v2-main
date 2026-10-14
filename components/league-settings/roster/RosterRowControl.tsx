@@ -27,8 +27,30 @@ const SLOT_DOT_CLASS: Record<string, string> = {
   DEF: 'bg-slate-300',
   BN: 'bg-amber-400',
   IR: 'bg-rose-400',
+  IL: 'bg-rose-400',
 }
 
+/** Position dot colour: a known slot key first, then its category, then neutral. */
+export function rosterDotClass(def: SlotDef): string {
+  return SLOT_DOT_CLASS[def.key] ?? CATEGORY_DOT_CLASS[def.category] ?? 'bg-white/60'
+}
+
+/** The slot's name, with its short code when the long label does not already say it. */
+export function RosterSlotLabel({ def }: { def: SlotDef }) {
+  const short = def.shortLabel || def.key
+  const showShort = short && short.toUpperCase() !== def.label.toUpperCase()
+  return (
+    <span className="flex min-w-0 items-center gap-2">
+      <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${rosterDotClass(def)}`} aria-hidden />
+      {showShort ? (
+        <span className="w-11 shrink-0 font-mono text-[12px] font-bold text-white">{short}</span>
+      ) : null}
+      <span className="min-w-0 truncate text-[13px] text-white/80">{def.label}</span>
+    </span>
+  )
+}
+
+/** One editable roster slot: label left, a compact [− n +] stepper right — never wider than the screen. */
 export function RosterRowControl({
   def,
   count,
@@ -44,34 +66,28 @@ export function RosterRowControl({
   const decrease = t('lsEd.ro.decrease').replace('{{label}}', def.label)
   const increase = t('lsEd.ro.increase').replace('{{label}}', def.label)
   return (
-    <div className="flex items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-white/[0.03]">
-      <button
-        type="button"
-        title={decrease}
-        aria-label={decrease}
-        disabled={disabled || count <= def.minCount}
-        onClick={() => onAdjust(def.key, -1)}
-        className="flex h-7 w-7 items-center justify-center rounded-full border border-white/15 bg-white/5 text-white/60 transition hover:bg-white/10 disabled:cursor-default disabled:opacity-30"
-      >
-        <Minus className="h-3.5 w-3.5" />
-      </button>
-
-      <span className="w-6 text-center font-mono text-sm text-white">{count}</span>
-
-      <button
-        type="button"
-        title={increase}
-        aria-label={increase}
-        disabled={disabled || count >= def.maxCount}
-        onClick={() => onAdjust(def.key, 1)}
-        className="flex h-7 w-7 items-center justify-center rounded-full border border-white/15 bg-white/5 text-white/60 transition hover:bg-white/10 disabled:cursor-default disabled:opacity-30"
-      >
-        <Plus className="h-3.5 w-3.5" />
-      </button>
-
-      <div className="flex items-center gap-2">
-        <div className={`h-3 w-3 rounded-full ${SLOT_DOT_CLASS[def.key] ?? CATEGORY_DOT_CLASS[def.category] ?? 'bg-white/60'}`} />
-        <span className="text-[12px] text-white/80">{def.label}</span>
+    <div className="af-ls-stepper-row" data-testid={`roster-row-${def.key}`}>
+      <RosterSlotLabel def={def} />
+      <div className="af-ls-stepper">
+        <button
+          type="button"
+          title={decrease}
+          aria-label={decrease}
+          disabled={disabled || count <= def.minCount}
+          onClick={() => onAdjust(def.key, -1)}
+        >
+          <Minus className="h-3.5 w-3.5" />
+        </button>
+        <output aria-live="polite">{count}</output>
+        <button
+          type="button"
+          title={increase}
+          aria-label={increase}
+          disabled={disabled || count >= def.maxCount}
+          onClick={() => onAdjust(def.key, 1)}
+        >
+          <Plus className="h-3.5 w-3.5" />
+        </button>
       </div>
     </div>
   )

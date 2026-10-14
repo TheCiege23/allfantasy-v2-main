@@ -19,6 +19,9 @@ const SECTIONS = new Set([
   'ai',
 ])
 
+/** Waiver types the AF engine runs (`normalizeWaiverTypeForEngine`); the settings UI offers the first three. */
+const WAIVER_TYPES = new Set(['faab', 'rolling', 'reverse_standings', 'fcfs', 'standard'])
+
 function jsonError(message: string, status: number) {
   return NextResponse.json({ error: message }, { status })
 }
@@ -65,6 +68,14 @@ export async function PATCH(
   }
   if (!updates || Object.keys(updates).length === 0) {
     return jsonError('updates required', 400)
+  }
+
+  // A blank name would be written verbatim by the column patch.
+  if (updates.name !== undefined && (typeof updates.name !== 'string' || updates.name.trim() === '')) {
+    return jsonError('League name cannot be empty', 400)
+  }
+  if (updates.waiverType !== undefined && !WAIVER_TYPES.has(String(updates.waiverType))) {
+    return jsonError('Invalid waiverType', 400)
   }
 
   const league = await prisma.league.findFirst({

@@ -1,3 +1,4 @@
+import { isSeasonTournamentDraft, SEASON_DRAFT_MUTATION_BLOCKED } from '@/lib/tournament/seasonDraftMutationGate'
 /**
  * POST: Run weighted lottery (commissioner). Body: { seed?: string; confirm: boolean }
  */
@@ -39,6 +40,8 @@ export async function POST(
   if (!lotteryEligibility.eligible) {
     return NextResponse.json({ error: lotteryEligibility.reason }, { status: 403 })
   }
+
+  if (await isSeasonTournamentDraft(leagueId)) return NextResponse.json({ error: SEASON_DRAFT_MUTATION_BLOCKED, code: 'TOURNAMENT_RULES_FROZEN' }, { status: 409 })
 
   const body = (await req.json().catch(() => ({}))) as { seed?: string; confirm?: boolean }
   if (body.confirm !== true) {

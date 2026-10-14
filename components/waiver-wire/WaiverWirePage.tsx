@@ -45,6 +45,7 @@ import CommissionerWaiverInsightsPanel from "@/components/waivers/CommissionerWa
 import { formatWaiverOutcomeLabel, outcomeCodeFromMetadata } from "@/lib/waiver-wire/waiver-outcome-labels"
 import type { UnifiedPlayerWireDto } from "@/lib/player-data/serializeUnifiedPlayerForApi"
 import { adaptWaiverWirePlayer } from "@/lib/player-data/adapters/waiverPlayerAdapter"
+import { isImmediateAddAllowedToday, dailyModeLabel, type DailyPolicySnapshot } from "@/lib/waiver-wire/immediate-add-policy"
 
 type WaiverSettings = {
   leagueId?: string
@@ -59,6 +60,8 @@ type WaiverSettings = {
   faabBudget?: number | null
   tiebreakRule?: string | null
   instantFaAfterClear?: boolean
+  /** Today under the per-day waiver schedule; null/absent when the league has none. */
+  dailyPolicy?: DailyPolicySnapshot | null
 }
 
 type Player = UnifiedPlayerWireDto
@@ -554,7 +557,7 @@ export default function WaiverWirePage({
 
   const handleAddClick = useCallback(
     (player: Player) => {
-      const immediateAddAllowed = settings?.waiverType === "fcfs" || settings?.instantFaAfterClear === true
+      const immediateAddAllowed = isImmediateAddAllowedToday(settings)
       if (!immediateAddAllowed) {
         // Waiver league — use the existing claim drawer.
         setImmediateMode(false)
@@ -572,7 +575,7 @@ export default function WaiverWirePage({
         setDrawerOpen(true)
       }
     },
-    [settings?.waiverType, settings?.instantFaAfterClear, rosterCapacity, rosterPlayerIds, addDropPlayer],
+    [settings, rosterCapacity, rosterPlayerIds, addDropPlayer],
   )
 
   const cancelClaimById = async (claimId: string) => {
@@ -630,7 +633,7 @@ export default function WaiverWirePage({
 
   const isFaab = settings?.waiverType === "faab"
   const hasOpenRosterSpot = rosterCapacity == null ? true : rosterPlayerIds.length < rosterCapacity
-  const immediateAddAllowed = settings?.waiverType === "fcfs" || settings?.instantFaAfterClear === true
+  const immediateAddAllowed = isImmediateAddAllowedToday(settings)
   const watchlistIdSet = useMemo(() => new Set(watchlistPlayerIds), [watchlistPlayerIds])
   const uniqueTeams = useMemo(
     () =>
@@ -1071,6 +1074,9 @@ export default function WaiverWirePage({
         <div className="mt-2 grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-3">
           <StatusItem label="Next processing deadline" value={nextRunAt ? formatInTimezone(nextRunAt) : 'Not available yet'} />
           <StatusItem label="Waiver type" value={getWaiverTypeLabel(settings?.waiverType ?? null)} />
+          {settings?.dailyPolicy ? (
+            <StatusItem label="Today" value={dailyModeLabel(settings.dailyPolicy)} />
+          ) : null}
           {isFaab ? (
             <StatusItem
               label="Your FAAB remaining"

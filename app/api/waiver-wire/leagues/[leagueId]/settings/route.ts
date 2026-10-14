@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getEffectiveLeagueWaiverSettings, upsertLeagueWaiverSettings } from "@/lib/waiver-wire"
 import { buildWriteAuthorityEnvelope } from "@/lib/league/write-authority"
+import { loadDailyTransactionPolicy } from "@/lib/waiver-wire/daily-schedule-gate"
 
 export async function GET(_req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
   const params = await props.params
@@ -19,13 +20,26 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ leagueId
   const hasAccess = league && (league.userId === userId || rosterAsMember)
   if (!hasAccess) return NextResponse.json({ error: "League not found" }, { status: 404 })
 
-  const settings = await getEffectiveLeagueWaiverSettings(leagueId)
+  const [settings, daily] = await Promise.all([
+    getEffectiveLeagueWaiverSettings(leagueId),
+    loadDailyTransactionPolicy(leagueId).catch(() => null),
+  ])
   const variant = (league as { leagueVariant?: string })?.leagueVariant ?? ""
   const formatType = (variant === "IDP" || variant === "DYNASTY_IDP" || variant === "idp") ? "IDP" : undefined
   return NextResponse.json({
     ...settings,
     sport: (league as { sport?: string })?.sport ?? null,
     formatType: formatType ?? undefined,
+    // Today's mode under the per-day waiver schedule (null = no schedule). The page uses it to offer
+    // an instant Add on a free-agent day, Sleeper-style, instead of the league type's claim flow.
+    dailyPolicy: daily
+      ? {
+          mode: daily.policy.mode,
+          claimsAllowed: daily.policy.claimsAllowed,
+          immediateAddsAllowed: daily.policy.immediateAddsAllowed,
+          immediateRefusal: daily.policy.immediateRefusal,
+        }
+      : null,
     // Loaded with the rest of the waiver shell so the page can disclose SHADOW status before a
     // manager files a claim, not only in the toast afterwards.
     writeAuthority: buildWriteAuthorityEnvelope('waiver_claim', (league as { platform?: string })?.platform ?? null),

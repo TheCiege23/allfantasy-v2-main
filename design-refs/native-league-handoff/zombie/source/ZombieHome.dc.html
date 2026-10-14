@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Zombie league home</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./specialty/sp.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Cinzel:wght@600;700&amp;family=Caveat:wght@600;700&amp;family=Bebas+Neue&amp;family=Pirata+One&amp;family=Creepster&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080d}
+.zb-t{font-family:'Creepster',cursive;letter-spacing:.04em;color:#c8f08a}
+.zb-lg{display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:12px;background:#10131c;border:1px solid rgba(255,255,255,.07)}
+.zb-dot{width:10px;height:10px;border-radius:99px;flex:none}
+.zb-st{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:99px;font:700 10.5px 'Archivo';letter-spacing:.04em;text-transform:uppercase}
+</style>
+</helmet>
+<div class="sp" style="--acc: #8be03a; --acc2: #c8f08a; --accInk: #0a1a04; --disp: Creepster; min-height: 100vh; display: flex; flex-direction: column">
+<section class="sp-hero" style="margin: 20px 28px 0">
+  <img class="sp-bg" src="specialty/zombie/banner.svg" alt="">
+  <div class="sp-veil"></div>
+  <div class="sp-in">
+    <img src="specialty/zombie/emblem.svg" alt="" style="width: 150px; flex: none; filter: drop-shadow(0 14px 22px rgba(0,0,0,.6))">
+    <div style="flex: 1 1 460px; display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; flex-wrap: wrap; gap: 6px"><span class="sp-chip">NFL</span><span class="sp-chip">2026</span><span class="sp-chip">Zombie universe</span><span class="sp-chip">6 leagues · 72 managers</span><span class="sp-chip">You: Gamma 2</span></div>
+      <span class=""><span class="zb-t" style="font-size: 52px; line-height: 1">The Outbreak</span></span>
+      <span style="font-size: 16px; font-weight: 600; color: var(--acc2)">Week 6 · You’re still a Survivor. 7 of 12 in Gamma 2 have turned.</span>
+      <span class="sp-t2" style="font-size: 14px; max-width: 620px">Every league has one Whisperer. Lose to the Whisperer or a Zombie and you turn. Serums cure, weapons swing matchups, and the universe standings decide who moves up a level next season.</span>
+      <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 4px"><a class="sp-btn sp-btn-p" href="ZombieArmory.dc.html" style="min-height: 46px; padding: 0 20px">Armory</a><a class="sp-btn" href="ZombieTurn.dc.html" style="min-height: 46px; padding: 0 20px">Infection night</a><a class="sp-btn" href="ZombieUniverse.dc.html" style="min-height: 46px; padding: 0 20px">Universe board</a></div>
+    </div>
+    <div class="sp-clock"><span class="sp-lbl" style="color: var(--acc2)">Infections run in</span><span class="sp-num" style="font-size: 36px; font-weight: 700; color: #fff">2d 11:20</span><span class="sp-t3" style="font-size: 12px">Tuesday 10:00 AM ET, after stat corrections</span></div>
+  </div>
+</section>
+<div style="display: flex; flex-wrap: wrap; gap: 20px; padding: 20px 28px 32px; align-items: flex-start">
+  <section style="flex: 1 1 720px; display: flex; flex-direction: column; gap: 16px; min-width: 0">
+    <div class="sp-card" style="padding: 18px 20px; display: flex; flex-direction: column; gap: 12px">
+      <div style="display: flex; align-items: center; gap: 10px"><span class="sp-lbl" style="flex: 1">The universe · infection by league</span><span class="sp-t3" style="font-size: 12px">Top 2 per Gamma league move up next season</span></div>
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px">
+        <sc-for list="{{tiers}}" as="t" hint-placeholder-count="3">
+          <div style="display: flex; flex-direction: column; gap: 10px">
+            <div style="display: flex; align-items: center; gap: 8px"><span style="font: 800 15px 'Archivo'; letter-spacing: .12em; color: {{t.c}}">{{t.name}}</span><span class="sp-t3" style="font-size: 11.5px">{{t.sub}}</span></div>
+            <sc-for list="{{t.leagues}}" as="l" hint-placeholder-count="2">
+              <div class="zb-lg" style="border-color: {{l.line}}; background: {{l.bg}}">
+                <div style="display: flex; align-items: center; gap: 8px"><span style="flex: 1; font-weight: 700">{{l.name}}</span><span class="sp-num" style="font-size: 12px; color: #c8f08a">{{l.z}}/12</span></div>
+                <div style="display: flex; gap: 2px"><sc-for list="{{l.cells}}" as="c" hint-placeholder-count="12"><span style="flex: 1; height: 12px; border-radius: 2px; background: {{c}}"></span></sc-for></div>
+                <span class="sp-t3" style="font-size: 11px">{{l.note}}</span>
+              </div>
+            </sc-for>
+          </div>
+        </sc-for>
+      </div>
+      <div style="display: flex; gap: 14px; font-size: 11.5px; color: #a3a9c2"><span style="display: flex; align-items: center; gap: 6px"><span class="zb-dot" style="background: #3b6aa8"></span>Survivor</span><span style="display: flex; align-items: center; gap: 6px"><span class="zb-dot" style="background: #8be03a"></span>Zombie</span><span style="display: flex; align-items: center; gap: 6px"><span class="zb-dot" style="background: #a78bfa"></span>Whisperer</span></div>
+    </div>
+    <div class="sp-card" style="padding: 20px; display: flex; flex-wrap: wrap; gap: 20px; align-items: center; border-color: rgba(139,224,58,.35); background: radial-gradient(ellipse at 80% 50%, rgba(139,224,58,.12), transparent 60%), #0b0d14">
+      <div style="flex: 1 1 260px; display: flex; flex-direction: column; gap: 6px"><span class="sp-lbl" style="color: #c8f08a">This week’s matchup · danger</span><span style="font-size: 20px; font-weight: 800">You vs Open Team 9</span><span class="sp-t2" style="font-size: 13px">Open Team 9 turned in week 4. Lose and you become a Zombie.</span></div>
+      <div style="display: flex; align-items: center; gap: 16px">
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 4px"><span class="sp-av" style="width: 54px; height: 54px; background: #22314f; box-shadow: 0 0 0 3px #07080d, 0 0 0 5px #3b6aa8">TC</span><span class="zb-st" style="background: rgba(127,183,232,.14); color: #9fd0ff">Survivor</span><span class="sp-num" style="font-size: 22px; font-weight: 700">108.4</span><span class="sp-t3" style="font-size: 11px">proj 121.0</span></div>
+        <span style="font: 400 30px 'Creepster'; color: #8be03a">vs</span>
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 4px"><span class="sp-av" style="width: 54px; height: 54px; background: #3a3418; box-shadow: 0 0 0 3px #07080d, 0 0 0 5px #8be03a; filter: hue-rotate(40deg) saturate(.7)">O9</span><span class="zb-st" style="background: rgba(139,224,58,.16); color: #c8f08a">Zombie</span><span class="sp-num" style="font-size: 22px; font-weight: 700">112.9</span><span class="sp-t3" style="font-size: 11px">proj 118.6</span></div>
+      </div>
+      <div style="flex: 1 1 200px; display: flex; flex-direction: column; gap: 8px"><div class="sp-bar"><span style="width: 56%; background: linear-gradient(90deg,#1e3a6a,#3b6aa8)"></span></div><span class="sp-t2" style="font-size: 12.5px">AF gives you a <b style="color: #9fd0ff">56%</b> chance to stay human. A weapon adds 6 points to your score.</span></div>
+    </div>
+  </section>
+  <aside style="flex: 0 1 380px; display: flex; flex-direction: column; gap: 16px">
+    <div class="sp-card2" style="padding: 16px; display: flex; flex-direction: column; gap: 12px">
+      <span class="sp-lbl">Your supplies</span>
+      <sc-for list="{{inv}}" as="i" hint-placeholder-count="3"><div style="display: flex; align-items: center; gap: 12px"><img src="{{i.icon}}" alt="" style="width: 40px"><div style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 700">{{i.name}} <span class="sp-num" style="color: #c8f08a">×{{i.n}}</span></span><span class="sp-t3" style="font-size: 11.5px">{{i.what}}</span></div><button class="sp-btn" style="min-height: 34px" disabled="{{i.off}}">{{i.cta}}</button></div></sc-for>
+    </div>
+    <div class="sp-card" style="padding: 16px; display: flex; flex-direction: column; gap: 10px"><span class="sp-lbl">Rules in 30 seconds</span><div class="sp-rule"><b>1</b><span>Everyone starts as a Survivor except one Whisperer per league.</span></div><div class="sp-rule"><b>2</b><span>Lose to the Whisperer or a Zombie and you turn into a Zombie.</span></div><div class="sp-rule"><b>3</b><span>Zombies keep playing and can infect Survivors who lose to them.</span></div><div class="sp-rule"><b>4</b><span>Serums shield you (1) or revive a Zombie (3). Weapons add points against the horde.</span></div><div class="sp-rule"><b>5</b><span>Universe standings move managers between Gamma, Beta and Alpha each season.</span></div></div>
+    <div class="sp-card" style="padding: 14px 16px; display: flex; flex-direction: column"><span class="sp-lbl" style="margin-bottom: 4px">Weekly board</span><div class="sp-feed"><img src="specialty/zombie/icon-infect.svg" alt=""><div style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 600; font-size: 13px">3 Survivors turned in Gamma 2</span><span class="sp-t3" style="font-size: 11.5px">Week 5 · 7 Zombies now</span></div></div><div class="sp-feed"><img src="specialty/zombie/icon-serum.svg" alt=""><div style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 600; font-size: 13px">Open Team 14 used a serum</span><span class="sp-t3" style="font-size: 11.5px">Revived after one week</span></div></div><div class="sp-feed"><img src="specialty/zombie/icon-whisperer.svg" alt=""><div style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 600; font-size: 13px">The Whisperer ambushed Open Team 6</span><span class="sp-t3" style="font-size: 11.5px">Week 5 · Gamma 2</span></div></div></div>
+  </aside>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1080}}'>
+class Component extends DCLogic { renderVals() {
+  const S = '#3b6aa8', Zc = '#8be03a', W = '#a78bfa';
+  const cells = z => Array.from({ length: 12 }, (_, i) => i === 0 ? W : i <= z ? Zc : S);
+  const L = (name, z, note, me) => ({ name, z, note, cells: cells(z), line: me ? 'rgba(127,183,232,.5)' : 'rgba(255,255,255,.07)', bg: me ? 'rgba(59,106,168,.12)' : '#10131c' });
+  return { tiers: [
+      { name: 'ALPHA', c: '#f2c94c', sub: '1 league', leagues: [L('Alpha 1', 6, 'Top level · 6 turned', false)] },
+      { name: 'BETA', c: '#c4b5fd', sub: '2 leagues', leagues: [L('Beta 1', 4, '4 turned', false), L('Beta 2', 8, 'Outbreak · 8 turned', false)] },
+      { name: 'GAMMA', c: '#9fd0ff', sub: '3 leagues', leagues: [L('Gamma 1', 3, '3 turned', false), L('Gamma 2 · you', 7, 'You’re 2nd in universe points here', true), L('Gamma 3', 9, 'Worst hit · 9 turned', false)] }],
+    inv: [['specialty/zombie/icon-serum.svg', 'Serum', 1, '1 shields you for a week. 3 revive a Zombie.', 'Hold', true], ['specialty/zombie/icon-weapon.svg', 'Weapon', 2, '+6 points this week against a Zombie.', 'Use', false], ['specialty/zombie/icon-whisperer.svg', 'Ambush', 0, 'Whisperer only.', 'None', true]]
+      .map(([icon, name, n, what, cta, off]) => ({ icon, name, n, what, cta, off })) };
+} }
+</script>
+</body>
+</html>

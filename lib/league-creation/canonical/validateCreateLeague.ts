@@ -38,6 +38,7 @@ import {
   normalizeBestBallSettings,
 } from '@/lib/bestball/rules'
 import { isSupportedDevyCreateDraftType } from '@/lib/league-concepts/devyDefaults'
+import { receptionPointsForScoringPresetId } from '@/lib/league-creation-preset/scoring-presets'
 
 /** Maps execution modes (offline/auto/team) to a core draft id for format-engine checks. */
 export function normalizeDraftTypeForEngine(draftType: string): string {
@@ -244,6 +245,18 @@ export function validateCreatePayload(input: unknown): ValidateCreateLeagueResul
       error: 'IDP leagues are available only for NFL and NCAAF',
       status: 400,
       errors: [{ path: 'sport', message: `IDP is not supported for ${sport}` }],
+    }
+  }
+
+  // A football scoring preset (it carries points per reception) on a non-football league is the
+  // "NBA league scored as Half PPR" shape. The catalog check in the handler is skipped for a concept
+  // the catalog does not list, so the invariant is enforced here, for every concept.
+  if (receptionPointsForScoringPresetId(data.scoringPreset) != null && sport !== 'NFL' && sport !== 'NCAAF') {
+    return {
+      ok: false,
+      error: 'Selected scoring preset is not available for this sport',
+      status: 400,
+      errors: [{ path: 'scoringPreset', message: `Scoring preset ${data.scoringPreset} is a football preset and is not valid for ${sport}` }],
     }
   }
 

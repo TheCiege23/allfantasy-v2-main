@@ -27,6 +27,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, Info, Lock, RotateCcw } from 'lucide-react'
 import { SubscriptionGateModal } from '@/components/subscription/SubscriptionGateModal'
+import { ScoringPresetSelect, pickInitialPreset } from '@/components/league-settings/scoring/ScoringPresetSelect'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { translateStat } from '@/lib/i18n/scoring-stats'
 import { FOOTBALL_STATS_ES } from '@/lib/i18n/scoring-stats/football'
@@ -108,6 +109,8 @@ export function NcaafScoringSettingsPanel({ leagueId, isCommissioner = false }: 
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
   const [gateOpen, setGateOpen] = useState(false)
+  /** Sleeper default staged for a league whose scoring was never saved — Save applies it. */
+  const [defaultStaged, setDefaultStaged] = useState(false)
 
   const [selectedPreset, setSelectedPreset] = useState<NcaafScoringPresetKey>('af_default')
   const [editedRules, setEditedRules] = useState<Record<string, number>>({})
@@ -129,10 +132,12 @@ export function NcaafScoringSettingsPanel({ leagueId, isCommissioner = false }: 
         setPresets(data.presets ?? [])
         setConfig(data.config ?? null)
         setIsPremium(data.isPremium ?? false)
-        setSelectedPreset((data.config?.presetKey ?? 'af_default') as NcaafScoringPresetKey)
+        const initialPreset = pickInitialPreset<NcaafScoringPresetKey>(data.config, data.presets, 'sleeper_compatible' as NcaafScoringPresetKey, 'af_default' as NcaafScoringPresetKey, isCommissioner)
+        setSelectedPreset(initialPreset.key)
+        setDefaultStaged(Boolean(initialPreset.stagedRules))
         // Merge category defaults with saved rules so every key has a value
         const defaults = buildNcaafScoringDefaults()
-        setEditedRules({ ...defaults, ...(data.config?.rules ?? {}) })
+        setEditedRules({ ...defaults, ...(data.config?.rules ?? {}), ...(initialPreset.stagedRules ?? {}) })
       })
       .catch(() => { if (active) setError(t('lsScore.err.load')) })
       .finally(() => { if (active) setLoading(false) })
@@ -209,6 +214,7 @@ export function NcaafScoringSettingsPanel({ leagueId, isCommissioner = false }: 
       if (data.error === 'premiumRequired') { setGateOpen(true); return }
       if (!res.ok) { setError(data.error ?? t('lsScore.err.save')); return }
       setConfig(data.config)
+      setDefaultStaged(false)
       setSuccess(true)
       setTimeout(() => setSuccess(false), 3000)
     } catch {
@@ -256,38 +262,18 @@ export function NcaafScoringSettingsPanel({ leagueId, isCommissioner = false }: 
         {t('lsScore.notice.ncaafTypes')}
       </div>
 
-      {/* Preset selector */}
-      <div className="space-y-2">
-        <label className="text-[11px] font-semibold uppercase tracking-wider text-white/40">
-          {t('lsScore.presetHeading')}
-        </label>
-        <div className="flex flex-wrap gap-2">
-          {(
-            ['af_default', 'sleeper_compatible', 'espn_compatible', 'yahoo_compatible', 'custom'] as NcaafScoringPresetKey[]
-          ).map((key) => {
-            const isCustomLocked = key === 'custom' && !isPremium && isCommissioner
-            const active = selectedPreset === key
-            return (
-              <button
-                key={key}
-                type="button"
-                disabled={!isCommissioner}
-                onClick={() => handlePresetChange(key)}
-                className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
-                  active
-                    ? 'border-cyan-500/40 bg-cyan-500/15 text-cyan-200'
-                    : isCustomLocked
-                      ? 'cursor-pointer border-white/5 bg-white/[0.02] text-white/30'
-                      : 'border-white/10 bg-white/[0.03] text-white/60 hover:bg-white/[0.06] disabled:cursor-default disabled:opacity-50'
-                }`}
-              >
-                {PRESET_LABEL_KEYS[key] ? t(PRESET_LABEL_KEYS[key]) : key}
-                {isCustomLocked && <Lock className="ml-1 inline h-3 w-3 text-white/30" />}
-              </button>
-            )
-          })}
-        </div>
-      </div>
+      {/* Preset selector — one dropdown of THIS sport's presets, Sleeper-style first (default). */}
+      <ScoringPresetSelect<NcaafScoringPresetKey>
+        presetKeys={['af_default', 'sleeper_compatible', 'espn_compatible', 'yahoo_compatible', 'custom'] as NcaafScoringPresetKey[]}
+        value={selectedPreset}
+        onChange={handlePresetChange}
+        labelFor={(key) => (PRESET_LABEL_KEYS[key] ? t(PRESET_LABEL_KEYS[key]) : key)}
+        defaultKey={'sleeper_compatible' as NcaafScoringPresetKey}
+        isCommissioner={isCommissioner}
+        isPremium={isPremium}
+        hint={defaultStaged && isCommissioner && selectedPreset === 'sleeper_compatible' ? t('lsScore2.defaultNotSaved') : null}
+        id={`scoring-preset-${leagueId}`}
+      />
 
       {/* Warning banner for external/compatible presets */}
       {currentPreset?.warning && (
@@ -310,7 +296,7 @@ export function NcaafScoringSettingsPanel({ leagueId, isCommissioner = false }: 
       )}
 
       {/* ===== Category tab pills ===== */}
-      <div className="scrollbar-none -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
+      <div className="flex flex-wrap gap-1.5" role="group" aria-label={t('lsScore2.categoriesAria')}>
         {allCategories.map((cat) => {
           const active = activeTab === cat.id
           const isPremiumTab = cat.id === 'advanced'
@@ -323,7 +309,7 @@ export function NcaafScoringSettingsPanel({ leagueId, isCommissioner = false }: 
               key={cat.id}
               type="button"
               onClick={() => setActiveTab(cat.id)}
-              className={`flex shrink-0 items-center gap-1 rounded-full border px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide transition ${colorClass}`}
+              className={`flex items-center gap-1 rounded-full border px-2.5 py-1.5 text-[11px] font-bold uppercase tracking-wide transition ${colorClass}`}
             >
               {st(cat.label)}
               {isPremiumTab && !isPremium && <Lock className="h-3 w-3 opacity-60" />}
@@ -334,7 +320,7 @@ export function NcaafScoringSettingsPanel({ leagueId, isCommissioner = false }: 
 
       {/* ===== Scoring rows for active tab ===== */}
       {activeCategory && (
-        <div className="max-h-[52vh] space-y-0.5 overflow-y-auto rounded-xl border border-white/10 bg-white/[0.02] p-3">
+        <div className="min-w-0 space-y-0.5 rounded-xl border border-white/10 bg-white/[0.02] p-2 sm:max-h-[52vh] sm:overflow-y-auto sm:p-3">
           {/* Premium lock overlay */}
           {activeCategory.id === 'advanced' && !isPremium && (
             <div className="mb-3 flex items-start gap-2 rounded-lg border border-cyan-500/20 bg-cyan-950/20 px-3 py-2.5">
@@ -375,12 +361,12 @@ export function NcaafScoringSettingsPanel({ leagueId, isCommissioner = false }: 
             return (
               <div
                 key={row.key}
-                className="group flex items-center justify-between gap-3 rounded-lg px-2.5 py-2 hover:bg-white/[0.03]"
+                className="group flex min-w-0 items-center justify-between gap-2 rounded-lg px-2 py-2 hover:bg-white/[0.03]"
               >
                 {/* Label + helper */}
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
-                    <span className="text-[12px] text-white/80">{st(row.label)}</span>
+                    <span className="break-words text-[12px] text-white/80">{st(row.label)}</span>
                     {row.premium && <Lock className="h-3 w-3 text-cyan-400/60" />}
                   </div>
                   {row.helper && (
@@ -399,7 +385,7 @@ export function NcaafScoringSettingsPanel({ leagueId, isCommissioner = false }: 
                       onChange={(e) =>
                         handleRuleChange(row.key, parseFloat(e.target.value) || 0)
                       }
-                      className={`w-20 rounded-md border bg-white/5 px-2 py-1.5 text-right font-mono text-[12px] transition focus:border-cyan-500/50 focus:outline-none focus:ring-1 focus:ring-cyan-500/30 ${
+                      className={`w-[4.5rem] rounded-md border bg-white/5 px-2 py-1.5 text-right font-mono text-[12px] transition focus:border-cyan-500/50 focus:outline-none focus:ring-1 focus:ring-cyan-500/30 ${
                         isNonZero
                           ? 'border-white/15 text-white'
                           : 'border-white/10 text-white/30'
@@ -407,7 +393,7 @@ export function NcaafScoringSettingsPanel({ leagueId, isCommissioner = false }: 
                     />
                   ) : (
                     <span
-                      className={`inline-block w-20 rounded-md border border-white/10 bg-white/[0.03] px-2 py-1.5 text-right font-mono text-[12px] ${
+                      className={`inline-block w-[4.5rem] rounded-md border border-white/10 bg-white/[0.03] px-2 py-1.5 text-right font-mono text-[12px] ${
                         isNonZero ? 'text-white' : 'text-white/30'
                       }`}
                     >

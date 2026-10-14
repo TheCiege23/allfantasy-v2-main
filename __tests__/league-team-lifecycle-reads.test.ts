@@ -88,8 +88,10 @@ describe('the display reads that were migrated actually use it', () => {
    * filter was removed from `fill-empty-slots`'s seat count and all 23 tests stayed green. Pinning
    * both counts is what makes a partial revert visible.
    *
-   * `draft/settings` is deliberately 2 reads / 1 filtered: the second is a label lookup over an
-   * already-randomized order, and filtering it would blank a name rather than hide a team.
+   * `draft/settings` is deliberately 3 reads / 2 filtered: the GET's draft-order list and the
+   * PATCH randomize are filtered (a departed team must not be shown or dealt a slot); the third is a
+   * label lookup over an already-randomized order, and filtering it would blank a name rather than
+   * hide a team.
    */
   const FILES: Array<[file: string, reads: number, filtered: number]> = [
     ['lib/core-app/leagueHome.ts', 1, 1],
@@ -97,7 +99,9 @@ describe('the display reads that were migrated actually use it', () => {
     ['app/api/dynasty-outlook/route.ts', 1, 1],
     // A departed franchise must not hold a seat or be dealt a draft slot.
     ['app/api/leagues/[leagueId]/fill-empty-slots/handler.ts', 2, 2],
-    ['app/api/leagues/[leagueId]/draft/settings/route.ts', 2, 1],
+    ['app/api/leagues/[leagueId]/draft/settings/route.ts', 3, 2],
+    // Randomize ×N deals slots only to current teams.
+    ['app/api/leagues/[leagueId]/draft/randomize-order/route.ts', 1, 1],
   ]
 
   const countOf = (src: string, needle: string) => src.split(needle).length - 1

@@ -109,10 +109,11 @@ async function updateFoundationSettings(leagueId: string, body: JsonRecord, user
   if (settings.defaultTeamCount !== previousSettings.defaultTeamCount) return NextResponse.json({ error: 'Choose league size during creation. Changing it here would leave draft seats and rosters inconsistent.' }, { status: 409 })
   if (settings.tribeCount !== previousSettings.tribeCount || JSON.stringify(settings.survivorTribeSlots) !== JSON.stringify(previousSettings.survivorTribeSlots)) return NextResponse.json({ error: 'Use Tribe identities and capacities to save tribe structure together.' }, { status: 409 })
   const exileChanged = settings.exileIslandEnabled !== previousSettings.exileIslandEnabled || settings.exileReturnWeek !== previousSettings.exileReturnWeek || settings.exileReturnTokens !== previousSettings.exileReturnTokens
-  const idolCountChanged = settings.idolCount !== previousSettings.idolCount
-  const nbaScoringChanged = settings.nbaWeeklyScoringMode !== previousSettings.nbaWeeklyScoringMode
-  if ((exileChanged || idolCountChanged || nbaScoringChanged) && await prisma.draftSession.findFirst({ where: { leagueId, status: { in: ['in_progress', 'paused', 'completed'] } }, select: { id: true } })) {
-    return NextResponse.json({ error: 'Exile, idol inventory, and NBA weekly scoring rules are locked once the draft starts. Configure them before drafting.' }, { status: 409 })
+  const mutableAfterDraft = new Set(['tribalCouncilDay', 'tribalCouncilTime', 'voteOpenOffset', 'voteCloseOffset'])
+  const lockedRuleChanged = Object.keys(settings).some(key => !mutableAfterDraft.has(key) &&
+    JSON.stringify(settings[key as keyof typeof settings]) !== JSON.stringify(previousSettings[key as keyof typeof previousSettings]))
+  if (lockedRuleChanged && await prisma.draftSession.findFirst({ where: { leagueId, status: { in: ['in_progress', 'paused', 'completed'] } }, select: { id: true } })) {
+    return NextResponse.json({ error: 'Season rules lock when the draft starts. Only the vote schedule can change during the season.' }, { status: 409 })
   }
   const settingsPatch = buildSurvivorSettingsSnapshotPatch(settings as unknown as JsonRecord)
   const columnPatch = buildSurvivorLeagueColumnPatch(settings)

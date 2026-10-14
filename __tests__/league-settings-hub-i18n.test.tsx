@@ -130,10 +130,11 @@ describe('🛑 the hub reads Spanish in Spanish', () => {
   afterEach(() => { lang.language = 'en'; vi.unstubAllGlobals(); cleanup() })
 
   it.each([
-    // League carries waivers and trades as sections since the 2026-10-13 consolidation.
+    // League carries waivers and trades as sections since the 2026-10-13 consolidation; FAAB fields show only
+    // when FAAB is in use, and the daily schedule replaced the custom-daily-claims switch (2026-10-14).
     ['general', ['Básicos', 'Guardado automático', 'Nombre de la liga', 'Zona horaria', 'URL del logo', 'Formato', 'Equipos', 'Reglas principales',
-      'Partido extra cada semana contra la mediana de la liga', 'Los cambios se aplican al registro oficial', 'Tipo de reclamos',
-      'Prioridad de reclamo rotativa', 'Presupuesto FAAB', 'Puja mínima', 'Período de reclamos (h)', 'Permitir reclamos diarios personalizados',
+      'Partido extra cada semana contra la mediana de la liga', 'Reclamos y agentes libres', 'Tipo de reclamos',
+      'Prioridad de reclamo rotativa', 'Prioridad de reclamo por clasificación inversa', 'Período de reclamos (h)', 'Calendario diario',
       'Permitir trades de picks del draft', 'Ventana de revisión (horas)', 'Límite de trades (n.º de semana)']],
     ['myTeam', ['Mi equipo', 'Notificaciones', 'Leyenda de la liga', 'Estado del jugador', 'Es muy probable que juegue', 'En alza', 'En baja']],
     ['playoffs', ['Calendario rápido', 'Equipos en playoffs', 'Inicio de playoffs (semana)', 'Rondas de playoffs por semana', 'Siembra de playoffs', 'Bracket inferior', 'Consolación', 'Fases y brackets']],
