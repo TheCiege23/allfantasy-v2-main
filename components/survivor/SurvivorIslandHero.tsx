@@ -39,7 +39,7 @@ export function SurvivorIslandHero({
       <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-r from-[#05100e]/95 via-[#05100e]/80 to-[#05100e]/25" />
       <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-t from-[#05100e]/90 via-transparent to-[#05100e]/35" />
       <div className="relative flex min-h-[278px] flex-col justify-between sm:min-h-[318px]">
-        <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em]">
+        <div className="flex flex-wrap items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em]">
           <span className="rounded-full border border-amber-300/35 bg-amber-950/55 px-3 py-1.5 text-amber-100">{sport ?? 'Fantasy'} island</span>
           <span className="rounded-full border border-white/20 bg-black/40 px-3 py-1.5 text-white/85">{phase.replace(/_/g, ' ')}</span>
           {week && week > 0 ? <span className="rounded-full border border-white/20 bg-black/40 px-3 py-1.5 text-white/85">Week {week}</span> : null}
