@@ -49,8 +49,8 @@ async function resolveClaimRoster(leagueId: string, userId: string) {
   if (direct) return direct
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { leagueVariant: true } })
   if (league?.leagueVariant !== 'survivor_guillotine') return null
-  const team = await prisma.leagueTeam.findFirst({ where: { leagueId, claimedByUserId: userId }, select: { legacyRosterId: true } })
-  return team?.legacyRosterId ? prisma.roster.findFirst({ where: { id: team.legacyRosterId, leagueId } }) : null
+  const team = await prisma.leagueTeam.findFirst({ where: { leagueId, claimedByUserId: userId }, select: { externalId: true } })
+  return team ? prisma.roster.findFirst({ where: { id: team.externalId, leagueId } }) : null
 }
 
 export async function GET(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {

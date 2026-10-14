@@ -4,7 +4,7 @@ import { defaultSGConfig } from '@/lib/survivor-guillotine/config'
 vi.mock('server-only', () => ({}))
 const db = vi.hoisted(() => ({ findUniqueOrThrow: vi.fn(), findMany: vi.fn(), updateMany: vi.fn(), update: vi.fn() }))
 const teamDb = vi.hoisted(() => ({ findFirst: vi.fn() }))
-const rosterDb = vi.hoisted(() => ({ findMany: vi.fn(), findUniqueOrThrow: vi.fn() }))
+const rosterDb = vi.hoisted(() => ({ findMany: vi.fn(), findFirst: vi.fn(), findUniqueOrThrow: vi.fn() }))
 const tribeDb = vi.hoisted(() => ({ findMany: vi.fn(), upsert: vi.fn() }))
 vi.mock('@/lib/prisma', () => ({ prisma: { survivorGuillotineLeague: db,
   leagueTeam: teamDb, roster: rosterDb, survivorGuillotineTribeChoice: tribeDb,
@@ -26,6 +26,7 @@ describe('Survivor Guillotine calendar and concealed rewards', () => {
     db.update.mockReset()
     teamDb.findFirst.mockReset()
     rosterDb.findMany.mockReset()
+    rosterDb.findFirst.mockReset()
     rosterDb.findUniqueOrThrow.mockReset()
     tribeDb.findMany.mockReset()
     tribeDb.upsert.mockReset()
@@ -104,8 +105,8 @@ describe('Survivor Guillotine calendar and concealed rewards', () => {
   it('rejects a manager choice that would overfill a starting tribe', async () => {
     db.findUniqueOrThrow.mockResolvedValue({ config: { ...defaultSGConfig(), teamCount: 4,
       tribeCount: 2, tribeFormation: 'manager_choice' }, currentPeriod: 0, tribes: [], revision: 1 })
-    teamDb.findFirst.mockResolvedValue({ legacyRosterId: 'd' })
-    rosterDb.findUniqueOrThrow.mockResolvedValue({ id: 'd', playerData: {}, faabRemaining: 100 })
+    teamDb.findFirst.mockResolvedValue({ externalId: 'd', platformUserId: 'manager' })
+    rosterDb.findFirst.mockResolvedValue({ id: 'd', playerData: {}, faabRemaining: 100 })
     rosterDb.findMany.mockResolvedValue([{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }])
     tribeDb.findMany.mockResolvedValue([{ rosterId: 'a', tribeId: 'tribe-0' },
       { rosterId: 'b', tribeId: 'tribe-0' }, { rosterId: 'c', tribeId: 'tribe-1' }])

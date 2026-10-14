@@ -20,10 +20,14 @@ function easternDay(date: Date): string {
 
 export async function getSGManagerRoster(leagueId: string, userId: string) {
   const team = await prisma.leagueTeam.findFirst({ where: { leagueId, claimedByUserId: userId,
-    eliminatedAt: null, legacyRosterId: { not: null } }, select: { legacyRosterId: true } })
-  if (!team?.legacyRosterId) throw new Error('Claim an active league team before taking this action.')
-  return prisma.roster.findUniqueOrThrow({ where: { id: team.legacyRosterId },
-    select: { id: true, playerData: true, faabRemaining: true, redraftRosterId: true } })
+    eliminatedAt: null }, select: { externalId: true, platformUserId: true } })
+  if (!team) throw new Error('Claim an active league team before taking this action.')
+  const roster = await prisma.roster.findFirst({ where: { leagueId, OR: [
+    { id: team.externalId }, { platformUserId: userId },
+    ...(team.platformUserId ? [{ platformUserId: team.platformUserId }] : []),
+  ] }, select: { id: true, playerData: true, faabRemaining: true, redraftRosterId: true } })
+  if (!roster) throw new Error('The claimed team has no matching active roster.')
+  return roster
 }
 
 /** Draft-completion hook; idempotent and safe to retry after roster finalization. */
@@ -568,7 +572,7 @@ export async function settleSGGauntletAuction(leagueId: string, now = new Date()
   let roster: { redraftRosterId: string | null; faabRemaining: number | null } | null = null
   for (const bid of bids) {
     const [candidateOwner, candidateRoster] = await Promise.all([
-      prisma.leagueTeam.findFirst({ where: { leagueId, legacyRosterId: bid.rosterId,
+      prisma.leagueTeam.findFirst({ where: { leagueId, externalId: bid.rosterId,
         eliminatedAt: null }, select: { claimedByUserId: true } }),
       prisma.roster.findUnique({ where: { id: bid.rosterId }, select: { redraftRosterId: true, faabRemaining: true } }),
     ])
