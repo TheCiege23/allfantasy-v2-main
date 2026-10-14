@@ -60,6 +60,8 @@ export type SurvivorCommissionerDashboardResult =
       week: number
       tribes: Awaited<ReturnType<typeof getTribesWithMembers>>
       council: Awaited<ReturnType<typeof getCouncil>>
+      privateBallots: { voterName: string; targetName: string; submittedAt: string; doesNotCount: boolean }[]
+      privateIdols: { id: string; ownerName: string; powerLabel: string }[]
       juryCount: number
       merged: boolean
       rosterCount: number
@@ -164,6 +166,19 @@ export async function buildSurvivorCommissionerDashboard(
   }
 
   const gs = gameState
+  const privateIdolRows = access.isNonParticipatingCommissionerHost
+    ? await prisma.survivorIdol.findMany({
+        where: { leagueId, status: { in: ['hidden', 'revealed'] }, isUsed: false },
+        select: { id: true, currentOwnerUserId: true, powerLabel: true, powerType: true },
+      })
+    : []
+  const idolOwners = privateIdolRows.length
+    ? await prisma.survivorPlayer.findMany({
+        where: { leagueId, userId: { in: privateIdolRows.map(idol => idol.currentOwnerUserId).filter((id): id is string => Boolean(id)) } },
+        select: { userId: true, displayName: true },
+      })
+    : []
+  const ownerNames = new Map(idolOwners.map(owner => [owner.userId, owner.displayName]))
   const readinessIssues: string[] = []
   if (league.leagueSize && claimedManagers < league.leagueSize) readinessIssues.push(`${league.leagueSize - claimedManagers} manager seats still need to be claimed.`)
   if (!draftRow) readinessIssues.push('No current draft session is available.')
@@ -221,6 +236,19 @@ export async function buildSurvivorCommissionerDashboard(
     week,
     tribes,
     council: survivorPublicCouncil(council, access.decisions.canSeePrivateVotes),
+    privateBallots: access.isNonParticipatingCommissionerHost
+      ? (council?.votes ?? []).map(vote => ({
+          voterName: vote.voterName ?? vote.voterUserId ?? 'Manager',
+          targetName: vote.targetName ?? vote.targetUserId ?? 'Manager',
+          submittedAt: vote.submittedAt.toISOString(),
+          doesNotCount: vote.doesNotCount,
+        }))
+      : [],
+    privateIdols: privateIdolRows.map(idol => ({
+      id: idol.id,
+      ownerName: ownerNames.get(idol.currentOwnerUserId ?? '') ?? 'Manager',
+      powerLabel: idol.powerLabel ?? idol.powerType.replace(/_/g, ' '),
+    })),
     juryCount: jury.length,
     merged,
     rosterCount,

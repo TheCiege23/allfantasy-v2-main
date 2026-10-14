@@ -124,8 +124,8 @@ export function buildSurvivorAccessContextFromSnapshot(
     (isLeagueCommissioner && !isCommissionerParticipating) ||
     (isCoCommissioner && !isParticipant && settings.coCommissionerMode === 'non_participating_host')
   const isAiHostActor = Boolean(snapshot.isAiHostActor)
-  // Human hosts operate the season without receiving unpublished ballots or idol holders.
-  const hostCanSeeHidden = isAiHostActor
+  // A non-playing human host has full game oversight; playing commissioners stay blind.
+  const hostCanSeeHidden = isAiHostActor || isNonParticipatingCommissionerHost
   const hostCanControl = isAiHostActor || isNonParticipatingCommissionerHost
 
   const canAccessTribeChat = Boolean(snapshot.player?.canAccessTribeChat ?? isParticipant)

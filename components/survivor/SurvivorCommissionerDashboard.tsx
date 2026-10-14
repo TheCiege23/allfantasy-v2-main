@@ -102,6 +102,8 @@ type DashboardPayload = {
   week: number
   tribes: { id: string; name: string; emoji?: string | null; members: unknown[] }[]
   council: unknown
+  privateBallots: { voterName: string; targetName: string; submittedAt: string; doesNotCount: boolean }[]
+  privateIdols: { id: string; ownerName: string; powerLabel: string }[]
   juryCount: number
   merged: boolean
   rosterCount: number
@@ -283,7 +285,7 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
         </div>
 
         {data?.privacy ? <div className="mb-4 rounded-xl border border-amber-400/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-100" role="status">
-          {data.privacy.blindModeActive ? 'Fairness shield on · as a playing commissioner, hidden idols, private ballots, other tribe huddles and unrevealed results stay sealed.' : 'Non-playing host · operational oversight is available. Ballots and secret idol plays stay sealed until the read.'}
+          {data.privacy.blindModeActive ? 'Fairness shield on · as a playing commissioner, hidden idols, private ballots, other tribe huddles and unrevealed results stay sealed.' : 'Non-playing host · hidden idols, ballots, tribe huddles and Exile status are available for oversight. Private manager DMs stay private.'}
         </div> : null}
 
         {error ? (
@@ -397,6 +399,11 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
                   <Link href={`${base}/exile`} className="rounded-lg border border-white/20 px-3 py-2 text-sm text-white">Exile status</Link>
                 </div>
               </WarRoomPanel>
+              {data.privacy.canSeeHiddenIdolAssignments && !data.privacy.blindModeActive ? (
+                <WarRoomPanel title="Private idol oversight" subtitle="Visible only to a non-playing host. Managers see only their own idols.">
+                  {data.privateIdols.length ? <ul className="space-y-2 text-sm text-white/75">{data.privateIdols.map(idol => <li key={idol.id}><strong>{idol.ownerName}</strong> · {idol.powerLabel}</li>)}</ul> : <p className="text-sm text-white/60">No active idols have been seeded.</p>}
+                </WarRoomPanel>
+              ) : null}
             </div>
           )}
 
@@ -480,7 +487,14 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
           )}
 
           {tab === 'tribal' && (
-            <SurvivorCouncilControl leagueId={leagueId} />
+            <div className="space-y-4">
+              <SurvivorCouncilControl leagueId={leagueId} />
+              {data?.privacy.canSeePrivateVotes && !data.privacy.blindModeActive ? (
+                <WarRoomPanel title="Private ballot oversight" subtitle="Visible only to a non-playing host until the read.">
+                  {data.privateBallots.length ? <ul className="space-y-2 text-sm text-white/75">{data.privateBallots.map((vote, index) => <li key={`${vote.voterName}-${index}`}><strong>{vote.voterName}</strong> voted for <strong>{vote.targetName}</strong>{vote.doesNotCount ? ' · does not count' : ''}</li>)}</ul> : <p className="text-sm text-white/60">No ballots have been submitted for the current council.</p>}
+                </WarRoomPanel>
+              ) : null}
+            </div>
           )}
 
           {tab === 'minigames' && (
