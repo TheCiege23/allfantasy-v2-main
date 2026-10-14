@@ -90,7 +90,7 @@ export type SurvivorSeasonPayload = {
 }
 
 export type LeagueSettingsBrief = {
-  league?: { name?: string | null }
+  league?: { name?: string | null; sport?: string | null }
   userRole?: string | null
   canEdit?: boolean
   hasAfCommissionerSub?: boolean
