@@ -43,6 +43,8 @@ const {
     redraftTradeProposal: { count: vi.fn() },
     exileIsland: { findUnique: vi.fn() },
     survivorChallenge: { count: vi.fn() },
+    survivorIdol: { findMany: vi.fn() },
+    survivorPlayer: { findMany: vi.fn() },
   },
 }))
 
@@ -119,6 +121,7 @@ describe('survivor commissioner dashboard payload', () => {
       isLeagueMember: true,
       settings: { commissionerParticipationMode: 'non_participating_host', exileIslandEnabled: false, idolCount: 7, mergeTriggerType: 'active_player_count' },
       isParticipatingCommissioner: false,
+      isNonParticipatingCommissionerHost: true,
       decisions: {
         canSeeHiddenIdolAssignments: true,
         canSeePrivateVotes: true,
@@ -164,6 +167,8 @@ describe('survivor commissioner dashboard payload', () => {
     prisma.redraftTradeProposal.count.mockResolvedValue(0)
     prisma.exileIsland.findUnique.mockResolvedValue({ isActive: false })
     prisma.survivorChallenge.count.mockResolvedValue(0)
+    prisma.survivorIdol.findMany.mockResolvedValue([])
+    prisma.survivorPlayer.findMany.mockResolvedValue([])
     getSurvivorAuditLog.mockResolvedValue([])
     resolveSnapshot.mockResolvedValue({ plans: ['pro'], status: 'active' })
     resolveForUser.mockResolvedValue({ balance: 42 })
@@ -236,6 +241,22 @@ describe('survivor commissioner dashboard payload', () => {
       status: 404,
     })
   })
+  it('shows a non-playing host private ballots and active idol holders only', async () => {
+    getCouncil.mockResolvedValue({
+      id: 'council-1', status: 'voting_open', isRevealed: false,
+      votes: [{ voterName: 'Alex', targetName: 'Sam', submittedAt: new Date('2026-04-20T10:00:00Z'), doesNotCount: false }],
+    })
+    prisma.survivorIdol.findMany.mockResolvedValue([{ id: 'idol-1', currentOwnerUserId: 'owner-1', powerLabel: 'Vote Shield', powerType: 'vote_shield' }])
+    prisma.survivorPlayer.findMany.mockResolvedValue([{ userId: 'owner-1', displayName: 'Jordan' }])
+
+    const result = await buildSurvivorCommissionerDashboard('league-1', 'host-1', null)
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.privateBallots).toEqual([{ voterName: 'Alex', targetName: 'Sam', submittedAt: '2026-04-20T10:00:00.000Z', doesNotCount: false }])
+    expect(result.privateIdols).toEqual([{ id: 'idol-1', ownerName: 'Jordan', powerLabel: 'Vote Shield' }])
+    expect(result.council?.votes).toEqual([])
+  })
   it('does not fetch unclassified audit metadata or expose a tallied ballot', async () => {
     getLeagueRole.mockResolvedValue('commissioner')
     isSurvivorLeague.mockResolvedValue(true)
@@ -246,6 +267,7 @@ describe('survivor commissioner dashboard payload', () => {
     expect(result.ok).toBe(true)
     expect(JSON.stringify(result)).not.toContain('SECRET_MANAGER')
     expect(getSurvivorAuditLog).not.toHaveBeenCalled()
+    expect(prisma.survivorIdol.findMany).not.toHaveBeenCalled()
     if (result.ok) expect(result.privacy.blindModeActive).toBe(true)
   })
 })
