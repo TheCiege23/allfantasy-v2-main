@@ -25,6 +25,13 @@ describe('leagueLifecycleService', () => {
     expect(isActionAllowed('settings_edit_roster', 'drafting')).toBe(false)
   })
 
+  it('commissioners can edit general settings in the offseason', () => {
+    expect(isActionAllowed('settings_edit_general', 'offseason')).toBe(true)
+    // Other offseason rules are unchanged.
+    expect(isActionAllowed('settings_edit_scoring', 'offseason')).toBe(false)
+    expect(isActionAllowed('settings_edit_roster', 'offseason')).toBe(false)
+  })
+
   it('a mid-draft general save still cannot change structural keys', () => {
     // structuralPatchRefusal refuses these once a draft has started, independently of the gate.
     expect(changedStructuralKeys({ name: 'New name', leagueSize: 14, sport: 'NBA' }, { leagueSize: 12, sport: 'NFL' }))
