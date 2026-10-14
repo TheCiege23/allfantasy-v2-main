@@ -61,6 +61,14 @@ export async function GET(
   const weekParam = req.nextUrl.searchParams?.get('week')
   const requestedWeek = weekParam ? Math.max(1, parseInt(weekParam, 10)) || 1 : null
   const currentWeek = await resolveSurvivorCurrentWeek(leagueId, requestedWeek)
+  const weeklyScoreRows = currentWeek > 0 ? await prisma.survivorWeeklyScore.findMany({
+    where: { leagueId, week: currentWeek, countedTowardTribeTotal: true },
+    select: { tribeId: true, finalScore: true, isFinalized: true },
+  }) : []
+  const tribeScores: Record<string, number> = {}
+  for (const score of weeklyScoreRows) {
+    if (score.tribeId) tribeScores[score.tribeId] = (tribeScores[score.tribeId] ?? 0) + score.finalScore
+  }
 
   const [config, tribesRaw, council, challenges, jury, exileLeagueId, tokenStates, audit, merged, myRosterId, eliminatedRosterIds, mainLeagueRosters, finaleState, leagueSettingsRow, sitOutState, tribeBalance] = await Promise.all([
     getSurvivorConfig(leagueId),
@@ -262,6 +270,8 @@ export async function GET(
     },
     seasonCalendar,
     currentWeek,
+    tribeScores,
+    scoresFinalized: weeklyScoreRows.length > 0 && weeklyScoreRows.every(row => row.isFinalized),
     tribes: tribes.map((t) => ({
       id: t.id,
       name: t.name,

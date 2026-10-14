@@ -83,13 +83,15 @@ export async function PUT(
 
   const body = await req.json().catch(() => ({}))
   if (body.idolCount != null) return NextResponse.json({ error: 'Set idol count in Survivor Idols settings before the draft.' }, { status: 400 })
+  const mutableAfterDraft = new Set(['voteDeadlineDayOfWeek', 'voteDeadlineTimeUtc'])
+  const changingLockedRule = Object.keys(body).some(key => !mutableAfterDraft.has(key))
+  if (changingLockedRule && await prisma.draftSession.findFirst({ where: { leagueId, status: { in: ['in_progress', 'paused', 'completed'] } }, select: { id: true } })) {
+    return NextResponse.json({ error: 'Season rules lock when the draft starts. Only the vote deadline can change during the season.' }, { status: 409 })
+  }
   if (body.idolPowerPool != null) {
     if (!Array.isArray(body.idolPowerPool) || body.idolPowerPool.length === 0 ||
       body.idolPowerPool.some((power: unknown) => typeof power !== 'string' || SURVIVOR_IDOL_CATALOG[power as SurvivorIdolPowerType]?.resolution !== 'phase2')) {
       return NextResponse.json({ error: 'The idol pool may contain only implemented powers.' }, { status: 422 })
-    }
-    if (await prisma.draftSession.findFirst({ where: { leagueId, status: { in: ['in_progress', 'paused', 'completed'] } }, select: { id: true } })) {
-      return NextResponse.json({ error: 'Idol powers are locked once the draft starts.' }, { status: 409 })
     }
   }
   if (body.tribeCount != null || body.tribeSize != null) {

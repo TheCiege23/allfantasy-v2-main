@@ -163,15 +163,24 @@ export async function runLegacyWizardSpecialtyBootstrapsAfterLeagueCreate(
           ? String(seasonThemeRaw).trim()
           : null
       const challengesSystemRun = sw.survivor_challenges_system_run !== false
+      const { normalizeSurvivorFoundationSettings } = await import('@/lib/survivor/survivorSettings')
+      const foundation = normalizeSurvivorFoundationSettings({ ...sw, defaultTeamCount: teamCount, tribeCount })
       await upsertSurvivorConfig(league.id, {
         mode: mode === 'bestball' ? 'bestball' : 'redraft',
         tribeCount,
         tribeSize,
         tribeFormation,
+        mergeTrigger: foundation.mergeTriggerType === 'active_player_count' ? 'player_count' : 'week',
+        mergeWeek: foundation.mergeWeek,
+        mergePlayerCount: foundation.mergeActivePlayerCount,
+        exileReturnEnabled: foundation.exileIslandEnabled,
+        exileReturnTokens: foundation.exileReturnTokens,
+        idolCount: foundation.idolCount,
+        selfVoteDisallowed: !foundation.selfVotesAllowed,
         seasonThemeLabel,
         challengesSystemRun,
       })
-      await getOrCreateExileLeague(league.id).catch((err) => {
+      if (foundation.exileIslandEnabled) await getOrCreateExileLeague(league.id).catch((err) => {
         console.warn('[league/create] Survivor exile bootstrap non-fatal:', err)
       })
       try {

@@ -102,6 +102,20 @@ const GAMEWEEK_STARTS: Readonly<Record<string, Readonly<Record<number, readonly 
 
 const DAY_MS = 86_400_000
 
+// NBA fantasy periods follow Eastern calendar days. A fixed seven-day UTC offset
+// moves the boundary by an hour when daylight saving time changes in November.
+function nbaEasternWeekDay(season: number, week: number): Date | null {
+  const opener = REGULAR_SEASON_START_UTC.NBA[season]
+  if (!opener) return null
+  const day = new Date(Date.parse(opener) + (week - 1) * 7 * DAY_MS)
+  const noon = new Date(Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate(), 12))
+  const zone = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', timeZoneName: 'shortOffset' })
+    .formatToParts(noon).find(part => part.type === 'timeZoneName')?.value ?? ''
+  const offsetHours = Number(zone.match(/^GMT([+-]\d+)$/)?.[1])
+  if (!Number.isFinite(offsetHours)) return null
+  return new Date(Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate()) - offsetHours * 3_600_000)
+}
+
 function gameweekStarts(sport: string | null | undefined, season: number | null | undefined): readonly string[] | null {
   const key = String(sport ?? '').trim().toUpperCase()
   const year = Number(season)
@@ -120,6 +134,11 @@ export function resolveDailySportWeekWindow(
   week: number,
 ): { start: Date; end: Date } | null {
   if (!Number.isInteger(week) || week < 1) return null
+  if (String(sport ?? '').toUpperCase() === 'NBA' && Number.isInteger(Number(season))) {
+    const start = nbaEasternWeekDay(Number(season), week)
+    const end = nbaEasternWeekDay(Number(season), week + 1)
+    if (start && end) return { start, end }
+  }
   const starts = gameweekStarts(sport, season)
   if (starts) {
     const day = starts[week - 1]
@@ -141,6 +160,21 @@ export function dailySportWeekForInstant(
 ): number | null {
   const t = instant.getTime()
   if (Number.isNaN(t)) return null
+  if (String(sport ?? '').toUpperCase() === 'NBA' && Number.isInteger(Number(season))) {
+    const anchor = nbaEasternWeekDay(Number(season), 1)
+    if (anchor) {
+      if (t < anchor.getTime()) return null
+      const approximate = Math.floor((t - anchor.getTime()) / (7 * DAY_MS)) + 1
+      // DST can move the true edge an hour relative to elapsed UTC time.
+      for (const week of [approximate - 1, approximate, approximate + 1]) {
+        if (week < 1) continue
+        const start = nbaEasternWeekDay(Number(season), week)
+        const end = nbaEasternWeekDay(Number(season), week + 1)
+        if (start && end && t >= start.getTime() && t < end.getTime()) return week
+      }
+      return null
+    }
+  }
   const starts = gameweekStarts(sport, season)
   if (starts) {
     for (let i = 0; i < starts.length; i++) {

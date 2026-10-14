@@ -80,6 +80,11 @@ export default function SurvivorIslandHomePage() {
 
   const voteEnd = parseDeadlineMs(council?.voteDeadlineAt ?? council?.votingDeadline ?? null)
   const challengeEnd = parseDeadlineMs(ch?.locksAt ?? ch?.lockAt ?? null)
+  const scoresByUser = new Map((ctx.season?.weeklyScores ?? []).map(score => [score.userId, score]))
+  const tribeTotals = new Map<string, number>()
+  for (const score of ctx.season?.weeklyScores ?? []) {
+    if (score.tribeId && score.countedTowardTribeTotal) tribeTotals.set(score.tribeId, (tribeTotals.get(score.tribeId) ?? 0) + score.finalScore)
+  }
 
   const { heroTitle, heroSubtext } = useMemo(() => {
     if (council?.status === 'voting_open' && voteEnd) {
@@ -232,7 +237,7 @@ export default function SurvivorIslandHomePage() {
                   key={t.id}
                   tribe={t}
                   memberCount={n}
-                  weeklyScore={undefined}
+                  weeklyScore={tribeTotals.get(t.id)}
                   status={attending ? 'tribal' : 'neutral'}
                 />
               )
@@ -259,7 +264,7 @@ export default function SurvivorIslandHomePage() {
                   <tr key={p.userId} className="border-b border-white/[0.04]">
                     <td className="px-3 py-2 font-mono tabular-nums text-white/60">{i + 1}</td>
                     <td className="px-3 py-2 text-white">{p.displayName}</td>
-                    <td className="px-3 py-2 font-mono text-sky-200">—</td>
+                    <td className="px-3 py-2 font-mono text-sky-200">{scoresByUser.has(p.userId) ? scoresByUser.get(p.userId)!.finalScore.toFixed(1) : 'No score yet'}</td>
                     <td className="px-3 py-2">
                       {p.hasImmunityThisWeek ? (
                         <span className="text-[11px] text-cyan-300">Immune</span>

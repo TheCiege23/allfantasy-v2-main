@@ -86,6 +86,7 @@ export type SurvivorSeasonPayload = {
   exileStatus?: { isActive?: boolean; currentWeek?: number; bossName?: string | null } | null
   juryStatus?: unknown
   userState?: SurvivorSeasonPlayer | null
+  weeklyScores?: Array<{ userId: string; finalScore: number; tribeId: string | null; countedTowardTribeTotal: boolean; isFinalized: boolean }>
 }
 
 export type LeagueSettingsBrief = {

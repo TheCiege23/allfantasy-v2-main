@@ -3,7 +3,6 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { dailySportWeekForInstant } from '@/lib/season-week/dailySportSeasonStarts'
-import { easternCalendarDay } from '@/lib/sports-data/easternGameDay'
 import { rotatingBatch } from '@/lib/redraft/scoreSyncBatch'
 import { readSurvivorFullSeasonPlan, type SurvivorFullSeasonPlan } from './survivorFullSeasonPlan'
 import {
@@ -35,8 +34,7 @@ export async function runPlannedSurvivorLeague(leagueId: string, now = new Date(
   if (!league?.survivorMode || !isNativePlatform(league.platform) || !plan || league.sport !== plan.sport || league.season !== plan.season) return 'not_planned'
   const game = await getOrCreateSurvivorGameState(leagueId)
   if (['pre_draft', 'drafting', 'complete', 'paused'].includes(game.phase)) return game.phase
-  const day = easternCalendarDay(now)
-  const calendarWeek = day ? dailySportWeekForInstant(plan.sport, plan.season, day) : null
+  const calendarWeek = dailySportWeekForInstant(plan.sport, plan.season, now)
   if (!calendarWeek || calendarWeek < plan.startWeek) return 'awaiting_opening'
 
   if (game.currentWeek < plan.startWeek) {
