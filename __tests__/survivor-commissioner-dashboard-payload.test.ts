@@ -45,6 +45,7 @@ const {
     survivorChallenge: { count: vi.fn() },
     survivorIdol: { findMany: vi.fn() },
     survivorPlayer: { findMany: vi.fn() },
+    adpDataRecord: { count: vi.fn() },
   },
 }))
 
@@ -169,6 +170,7 @@ describe('survivor commissioner dashboard payload', () => {
     prisma.survivorChallenge.count.mockResolvedValue(0)
     prisma.survivorIdol.findMany.mockResolvedValue([])
     prisma.survivorPlayer.findMany.mockResolvedValue([])
+    prisma.adpDataRecord.count.mockResolvedValue(0)
     getSurvivorAuditLog.mockResolvedValue([])
     resolveSnapshot.mockResolvedValue({ plans: ['pro'], status: 'active' })
     resolveForUser.mockResolvedValue({ balance: 42 })
@@ -256,6 +258,19 @@ describe('survivor commissioner dashboard payload', () => {
     expect(result.privateBallots).toEqual([{ voterName: 'Alex', targetName: 'Sam', submittedAt: '2026-04-20T10:00:00.000Z', doesNotCount: false }])
     expect(result.privateIdols).toEqual([{ id: 'idol-1', ownerName: 'Jordan', powerLabel: 'Vote Shield' }])
     expect(result.council?.votes).toEqual([])
+  })
+  it('flags a pre-draft NBA league whose ADP import has not populated', async () => {
+    prisma.league.findUnique.mockResolvedValue({
+      id: 'league-1', name: 'NBA Survivor', sport: 'NBA', leagueSize: 12,
+      leagueVariant: 'survivor', waiverType: 'faab',
+      settings: { waiverSettings: { waiverType: 'faab' }, survivor_full_season_plan: { season: 2026 } },
+    })
+
+    const result = await buildSurvivorCommissionerDashboard('league-1', 'host-1', null)
+
+    expect(prisma.adpDataRecord.count).toHaveBeenCalledWith({ where: { sport: 'NBA', season: 2026 } })
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.operations.readinessIssues).toContain('NBA ADP is unavailable. Verify the player pool and autopick order before starting the draft.')
   })
   it('does not fetch unclassified audit metadata or expose a tallied ballot', async () => {
     getLeagueRole.mockResolvedValue('commissioner')
