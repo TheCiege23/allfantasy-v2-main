@@ -4,6 +4,11 @@ import { SeasonNativeSetup } from './SeasonNativeSetup'
 import type { SeasonRegistrationBoard } from '@/lib/tournament/seasonRegistration'
 
 const field = 'min-h-11 w-full rounded-xl border border-white/20 bg-slate-900 px-3 py-2'
+function localDateTimeValue(instant: string | Date) {
+  const date = new Date(instant)
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
 export function SeasonRegistrationManager({ tournamentId, publicationId }: { tournamentId: string; publicationId: string }) {
   const [board, setBoard] = useState<SeasonRegistrationBoard | null>(null)
   const [closes, setCloses] = useState('')
@@ -21,8 +26,8 @@ export function SeasonRegistrationManager({ tournamentId, publicationId }: { tou
     setBoard(body.board)
     if (initial && body.board) {
       setLimit(body.board.waitlistLimit)
-      if (body.board.closesAt) setCloses(new Date(body.board.closesAt).toISOString().slice(0, 16))
-      else if (body.board.openingDraftAt) setCloses(new Date(Date.parse(body.board.openingDraftAt) - 24 * 3600000).toISOString().slice(0, 16))
+      if (body.board.closesAt) setCloses(localDateTimeValue(body.board.closesAt))
+      else if (body.board.openingDraftAt) setCloses(localDateTimeValue(new Date(Date.parse(body.board.openingDraftAt) - 24 * 3600000)))
     }
   }
   useEffect(() => { let live = true; reload(true).catch(e => { if (live) setError(e.message) }); return () => { live = false } }, [tournamentId])
@@ -59,10 +64,10 @@ export function SeasonRegistrationManager({ tournamentId, publicationId }: { tou
       </div>}
       {board.frozenField && <SeasonNativeSetup tournamentId={tournamentId} />}
       <fieldset disabled={busy || !!board.frozenField} className="space-y-4">
-      <label className="block">Registration closes (UTC)<input type="datetime-local" className={field} value={closes} onChange={e => setCloses(e.target.value)} disabled={busy} /></label>
+      <label className="block">Registration closes (your local time)<input type="datetime-local" className={field} value={closes} onChange={e => setCloses(e.target.value)} disabled={busy} /></label>
       <label className="block">Waitlist capacity<input type="number" className={field} min={0} max={192} value={limit} onChange={e => setLimit(Number(e.target.value))} disabled={busy} /></label>
       <div className="flex flex-wrap gap-3">
-        <button className="min-h-11 rounded-xl bg-cyan-300 px-4 font-semibold text-slate-950 disabled:opacity-40" disabled={busy || !closes} onClick={() => action('open', { publicationId, closesAt: new Date(closes + ':00Z').toISOString(), waitlistLimit: limit })}>{board.state === 'not_opened' ? 'Open registration and create invite' : 'Reopen and replace invite link'}</button>
+        <button className="min-h-11 rounded-xl bg-cyan-300 px-4 font-semibold text-slate-950 disabled:opacity-40" disabled={busy || !closes} onClick={() => action('open', { publicationId, closesAt: new Date(closes).toISOString(), waitlistLimit: limit })}>{board.state === 'not_opened' ? 'Open registration and create invite' : 'Reopen and replace invite link'}</button>
         <button className="min-h-11 rounded-xl border border-white/20 px-4" disabled={busy || board.state !== 'open'} onClick={() => action('pause')}>Pause new joins</button>
         <button className="min-h-11 rounded-xl border border-white/20 px-4" disabled={busy} onClick={() => reload().catch(e => setError(e.message))}>Refresh entrants</button>
       </div>

@@ -52,6 +52,27 @@ describe('commissioner registration interface', () => {
     const body = JSON.parse(fetchMock.mock.calls[1]![1]!.body as string)
     expect(body).toMatchObject({ action: 'open', publicationId: 'pub1', closesAt: '2026-10-17T00:00:00.000Z', waitlistLimit: 64 })
   })
+  it('shows the deadline in local time and saves the selected instant', async () => {
+    const previousTimeZone = process.env.TZ
+    process.env.TZ = 'America/New_York'
+    try {
+      const datedBoard = { ...board, closesAt: '2026-10-17T00:00:00.000Z' }
+      const fetchMock = vi.spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(new Response(JSON.stringify({ board: datedBoard })))
+        .mockResolvedValueOnce(new Response(JSON.stringify({ invitePath: '/tournament-entry/t1?invite=' + 'a'.repeat(64) })))
+        .mockResolvedValueOnce(new Response(JSON.stringify({ board: { ...datedBoard, state: 'open' } })))
+      render(<SeasonRegistrationManager tournamentId="t1" publicationId="pub1" />)
+      const deadline = await screen.findByLabelText('Registration closes (your local time)') as HTMLInputElement
+      expect(deadline.value).toBe('2026-10-16T20:00')
+      fireEvent.change(deadline, { target: { value: '2026-10-16T21:00' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Open registration and create invite' }))
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3))
+      expect(JSON.parse(fetchMock.mock.calls[1]![1]!.body as string).closesAt).toBe('2026-10-17T01:00:00.000Z')
+    } finally {
+      if (previousTimeZone === undefined) delete process.env.TZ
+      else process.env.TZ = previousTimeZone
+    }
+  })
   it('requires a removal reason and sends only the selected entrant ID', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(JSON.stringify({ board }))).mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }))).mockResolvedValueOnce(new Response(JSON.stringify({ board })))
     render(<SeasonRegistrationManager tournamentId="t1" publicationId="pub1" />)
