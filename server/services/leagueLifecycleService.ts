@@ -170,6 +170,9 @@ const ACTIONS: Record<LeagueLifecycleState, Set<LeagueLifecycleAction>> = {
   ]),
   completed: new Set([
     'standings_view',
+    // Name, timezone, logo, description. Structural keys stay locked by `structuralPatchRefusal`
+    // once a season exists; changing those is the renewal flow's job.
+    'settings_edit_general',
     'settings_edit_commissioner',
     'league_archive',
     'league_lock_toggle',
@@ -190,6 +193,9 @@ const ACTIONS: Record<LeagueLifecycleState, Set<LeagueLifecycleAction>> = {
   ]),
   renewal_pending: new Set([
     'standings_view',
+    // Name, timezone, logo, description. Structural keys stay locked by `structuralPatchRefusal`
+    // once a season exists; changing those is the renewal flow's job.
+    'settings_edit_general',
     'settings_edit_commissioner',
     'league_archive',
     'league_lock_toggle',
