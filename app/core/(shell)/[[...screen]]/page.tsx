@@ -11,7 +11,7 @@ import { prisma } from '@/lib/prisma'
 import { recordDashboardActivation } from '@/lib/analytics/recordDashboardActivation'
 import { getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-league-list'
 import { toPlayedLeagues } from '@/lib/core-app/playedLeagues'
-import { withArchivedHidden } from '@/lib/core-app/archivedLeagues'
+import { archivedLeagueIds, withArchivedHidden } from '@/lib/core-app/archivedLeagues'
 import { tradeDeadlineWeek } from '@/lib/core-app/seasonTimeline'
 import { findPlayedAlias } from '@/lib/core-app/leagueRowAlias'
 import { selectResyncCandidates } from '@/lib/core-app/resyncableLeagues'
@@ -796,6 +796,8 @@ export default async function AfCorePage({
    * `?league=` authorization boundary below — so a link to one still opens (lib/core-app/archivedLeagues.ts).
    */
   const shellHiddenIds = withArchivedHidden(leaguePrefs.hidden, playedLeagues)
+  // Archived leagues also stay out of both league searches; leagues the account hid stay searchable.
+  const shellArchivedIds = archivedLeagueIds(playedLeagues)
   const selectedLeagueRow = selectedLeagueId
     ? (playedLeagues.find((league) => league.id === selectedLeagueId) ?? null)
     : null
@@ -1635,6 +1637,7 @@ export default async function AfCorePage({
       leagueChatPreview={leagueChatPreview}
       leagues={rail}
       hiddenLeagueIds={shellHiddenIds}
+      archivedLeagueIds={shellArchivedIds}
       syncAge={{ label: syncAge.label, stale: syncAge.stale }}
       syncEligibleCount={syncEligibleCount}
       leagueHasScoredWeek={leagueHasScoredWeek}
