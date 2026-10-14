@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const m = vi.hoisted(() => ({
   survivor: vi.fn(), finalize: vi.fn(), sync: vi.fn(), rankings: vi.fn(), currentDraft: vi.fn(),
 }))
-vi.mock('@/lib/prisma', () => ({ prisma: { draftSession: { findFirst: m.currentDraft } } }))
+vi.mock('@/lib/prisma', () => ({ prisma: { league: { findUnique: vi.fn().mockResolvedValue(null) }, draftSession: { findFirst: m.currentDraft } } }))
 vi.mock('@/lib/live-draft-engine/RosterAssignmentService', () => ({ finalizeRosterAssignments: m.finalize }))
 vi.mock('@/lib/redraft/finalizeDraftToRedraftSeason', () => ({ syncCompletedDraftToRedraftSeason: m.sync }))
 vi.mock('@/lib/survivor/SurvivorDraftBootstrapService', () => ({ runSurvivorPostDraftBootstrap: m.survivor }))

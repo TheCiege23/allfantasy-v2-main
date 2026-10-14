@@ -220,7 +220,14 @@ export async function runAuctionAutomationTick(leagueId: string): Promise<Auctio
       const pool = await loadSeasonDraftPlayers(leagueId, season.config.sport)
       const taken = new Set(pool.filter(p => draftedNames.has(normalizeName(p.playerName))).map(p => p.playerId))
       const own = session.picks.filter(p => p.rosterId === currentNominator.rosterId && p.playerName.trim() && p.position.trim()).map(p => ({ playerId: p.playerId ?? '', playerName: p.playerName, position: p.position }))
-      first = selectSeasonAutodraft(season.config, own, pool, taken) ?? undefined
+      const selected = selectSeasonAutodraft(season.config, own, pool, taken)
+      first = selected ? {
+        playerName: selected.playerName,
+        position: selected.position,
+        team: selected.team ?? null,
+        playerId: selected.playerId,
+        byeWeek: null,
+      } : undefined
     } else first = (await loadAutoNominationCandidates(leagueId, normalizedSport, draftedNames))[0]
     if (!first) return { changed: false, actions }
 
