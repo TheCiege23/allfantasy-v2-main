@@ -31,7 +31,7 @@
 
 import type { Prisma, PrismaClient } from '@prisma/client'
 import { prisma as defaultPrisma } from '@/lib/prisma'
-import { scoreRosterForWeek } from '@/lib/redraft/scoringEngine'
+import { recordScoredWeekRoster, scoreRosterForWeek } from '@/lib/redraft/scoringEngine'
 import { finalizeWeekWithRefresh, type WeekFinalizerDeps } from '@/lib/redraft/weekFinalizer'
 import { REDRAFT_SEASON_STATUS } from '@/lib/redraft/seasonStatus'
 import { CHAMPIONSHIP_ROUND_WHERE, playoffRoundWeeks } from './playoffRoundWeeks'
@@ -71,6 +71,7 @@ export type PlayoffRoundScoreDeps = {
   scoreRoster?: typeof scoreRosterForWeek
   finalizeWeek?: typeof finalizeWeekWithRefresh
   syncWeekStats?: WeekFinalizerDeps['syncWeekStats']
+  recordWeekRoster?: typeof recordScoredWeekRoster
 }
 
 type PlayoffMatchupRow = {
@@ -104,6 +105,7 @@ export async function scoreActivePlayoffRound(
   const db = deps.prisma ?? (defaultPrisma as unknown as PrismaClient)
   const scoreRoster = deps.scoreRoster ?? scoreRosterForWeek
   const finalizeWeek = deps.finalizeWeek ?? finalizeWeekWithRefresh
+  const recordRoster = deps.recordWeekRoster ?? recordScoredWeekRoster
   const result: PlayoffRoundScoreResult = {
     seasonId: params.seasonId,
     outcome: 'not_in_playoffs',
@@ -218,6 +220,13 @@ export async function scoreActivePlayoffRound(
         },
       })
       withRound.matchupsScored += 1
+      // Freeze who each side played each week with, so a later re-score of this round (a commish
+      // lineup edit, a stat correction) uses those rosters, not today's (rosterWeekHistory.ts).
+      for (const week of weeks) {
+        for (const rosterId of [matchup.homeRosterId, matchup.awayRosterId]) {
+          await recordRoster({ rosterId, seasonId: season.id, week, freeze: true })
+        }
+      }
     } else {
       // ⚠ STATUS IS LEFT ALONE WHILE LIVE. The column is CHECK-constrained to scheduled /
       // in_progress / final / bye / cancelled, so the runtime's 'active' is refused (23514) — the

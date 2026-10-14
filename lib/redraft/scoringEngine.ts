@@ -512,9 +512,13 @@ export async function scoreRosterForWeek(args: {
 
 /** Snapshot the roster a scoring pass just used for (roster, week), unless that week is already frozen. */
 export async function recordScoredWeekRoster(input: { rosterId: string; seasonId: string; week: number; freeze: boolean }) {
-  const { players, frozen } = await rosterPlayersForWeek(input.rosterId, input.week)
-  if (frozen) return
-  await recordWeekRoster({ ...input, players })
+  try {
+    const { players, frozen } = await rosterPlayersForWeek(input.rosterId, input.week)
+    if (frozen) return
+    await recordWeekRoster({ ...input, players })
+  } catch {
+    // Recording is a by-product of scoring; it must never fail a scoring pass.
+  }
 }
 
 export async function updateMatchupScores(matchupId: string): Promise<MatchupScoreUpdateSummary | null> {

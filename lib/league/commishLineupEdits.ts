@@ -35,6 +35,7 @@ import { commissionerForceRosterLineup } from '@/lib/roster-lineup-engine/commis
 import { syncAfRosterLineupAssignments } from '@/lib/roster-lineup-engine/lineupAssignmentSync'
 import { editableWeeks } from '@/lib/redraft/completedWeeks'
 import { loadFrozenWeekRoster, replaceFrozenWeekRoster } from '@/lib/redraft/rosterWeekHistory'
+import { playedPlayoffMatchups, rescorePlayoffMatchup, type PlayoffWeekMatchup } from '@/lib/league/commishPlayoffLineup'
 
 export class CommishLineupError extends Error {
   constructor(message: string, readonly status = 400) {
@@ -93,7 +94,7 @@ export function validateCommishLineup(input: {
 async function loadContext(leagueId: string, rosterId: string) {
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { platform: true, sport: true, leagueVariant: true, settings: true, season: true },
+    select: { platform: true, sport: true, leagueVariant: true, settings: true, season: true, playoffWeeksPerRound: true },
   })
   if (!league) throw new CommishLineupError('League not found', 404)
   if (resolveWriteAuthority(league.platform) !== 'NATIVE') {
@@ -161,13 +162,15 @@ export async function loadCommishLineup(leagueId: string, rosterId: string) {
   const season = await prisma.redraftSeason.findFirst({
     where: { leagueId },
     orderBy: { season: 'desc' },
-    select: { currentWeek: true, playoffStartWeek: true },
+    select: { id: true, currentWeek: true, playoffStartWeek: true },
   })
+  const played = season ? await playoffMatchupsFor(ctx, season) : []
   return {
     rosterId,
     week: weekFromLeagueSettingsForLineup(ctx.league.settings),
-    /** Completed weeks whose lineup can still be changed (the past-week editor). */
-    pastWeeks: season ? editableWeeks(season.currentWeek, season.playoffStartWeek) : [],
+    /** Completed weeks whose lineup can still be changed (the past-week editor), playoff weeks included. */
+    pastWeeks: season ? pastWeekList(season, played) : [],
+    playoffWeeks: playoffWeekList(played),
     slots: ctx.slots.map((s) => ({ label: s.label, allowedPositions: s.allowedPositions })),
     limits: ctx.limits,
     players: ctx.players,
@@ -243,10 +246,40 @@ export async function saveCommishLineup(input: {
  * one picked up in week 5 is not. A week sealed before that record existed has none, so the editor uses
  * the current roster (and says so) — and saving records it, so later trades no longer move that week.
  *
+ * PLAYOFF WEEKS the team played are editable too (lib/league/commishPlayoffLineup.ts): the round is
+ * re-scored from all its weeks, and a changed result moves the new winner into the next round only
+ * while that round is unplayed. Any other flip is refused AFTER the lineup was written, so the week's
+ * previous lineup rows are restored before the refusal is returned. Standings are not rebuilt for a
+ * playoff week — they are the regular season's.
+ *
  * Refused: a matchup whose score was set by hand in Edit Matchup Scores (re-scoring would silently
- * replace the commish's number), and specialty formats, whose weekly outcomes (a guillotine chop, a
- * survivor elimination) are not undone by re-scoring.
+ * replace the commish's number) or whose playoff winner was picked in Edit Playoff Bracket, and
+ * specialty formats, whose weekly outcomes (a guillotine chop, a survivor elimination) are not undone
+ * by re-scoring.
  */
+
+/** This team's played playoff matchups (title bracket, final), for the past-week editor. */
+async function playoffMatchupsFor(
+  ctx: { roster: { redraftRosterId: string | null }; league: { playoffWeeksPerRound?: number | null } },
+  season: { id: string; playoffStartWeek: number | null },
+): Promise<PlayoffWeekMatchup[]> {
+  if (!ctx.roster.redraftRosterId || season.playoffStartWeek == null) return []
+  return playedPlayoffMatchups({
+    seasonId: season.id,
+    redraftRosterId: ctx.roster.redraftRosterId,
+    playoffStartWeek: season.playoffStartWeek,
+    weeksPerRound: ctx.league.playoffWeeksPerRound ?? null,
+  })
+}
+
+function playoffWeekList(played: PlayoffWeekMatchup[]): number[] {
+  return [...new Set(played.flatMap((m) => m.weeks))].sort((a, b) => b - a)
+}
+
+/** Newest first: the playoff weeks this team played, then the completed regular-season weeks. */
+function pastWeekList(season: { currentWeek: number; playoffStartWeek: number | null }, played: PlayoffWeekMatchup[]): number[] {
+  return [...playoffWeekList(played), ...editableWeeks(season.currentWeek, season.playoffStartWeek)]
+}
 
 async function loadPastWeekContext(leagueId: string, rosterId: string, week: number) {
   const ctx = await loadContext(leagueId, rosterId)
@@ -263,11 +296,18 @@ async function loadPastWeekContext(leagueId: string, rosterId: string, week: num
     select: { id: true, season: true, currentWeek: true, playoffStartWeek: true },
   })
   if (!season) throw new CommishLineupError('This league has no AllFantasy season yet.', 404)
-  const weeks = editableWeeks(season.currentWeek, season.playoffStartWeek)
-  if (!weeks.includes(week)) throw new CommishLineupError('Only completed regular-season weeks can be edited.', 400)
   if (!ctx.roster.redraftRosterId) throw new CommishLineupError('This team has no scoring record for that week.', 409)
+  const played = await playoffMatchupsFor(ctx, season)
+  const weeks = pastWeekList(season, played)
+  if (!weeks.includes(week)) {
+    throw new CommishLineupError('Only completed weeks this team played can be edited — not the current week, or a playoff round it did not play.', 400)
+  }
+  // A playoff week belongs to the bracket matchup whose round covers it, not to a RedraftMatchup.
+  const playoff = editableWeeks(season.currentWeek, season.playoffStartWeek).includes(week)
+    ? null
+    : (played.find((m) => m.weeks.includes(week)) ?? null)
 
-  const matchups = await prisma.redraftMatchup.findMany({
+  const matchups = playoff ? [] : await prisma.redraftMatchup.findMany({
     where: {
       seasonId: season.id,
       week,
@@ -276,7 +316,9 @@ async function loadPastWeekContext(leagueId: string, rosterId: string, week: num
     },
     select: { id: true, homeRosterId: true, awayRosterId: true, homeScore: true, awayScore: true, lineupSnapshots: true },
   })
-  const scoreEdited = matchups.some((m) => Boolean((m.lineupSnapshots as Record<string, unknown> | null)?.commissionerEdit))
+  const scoreEdited = playoff
+    ? playoff.winnerPicked
+    : matchups.some((m) => Boolean((m.lineupSnapshots as Record<string, unknown> | null)?.commissionerEdit))
 
   // The roster this team had in that week, when the week was recorded; otherwise today's.
   const weekRoster = await loadFrozenWeekRoster(ctx.roster.redraftRosterId, week)
@@ -284,7 +326,7 @@ async function loadPastWeekContext(leagueId: string, rosterId: string, week: num
     ? weekRoster.map((p) => ({ id: p.playerId, name: p.playerName, position: p.position || null, team: p.team }))
     : ctx.players
   const rosterIds = players.map((p) => p.id)
-  return { ...ctx, players, rosterIds, weekRosterRecorded: weekRoster != null, season, weeks, matchups, scoreEdited }
+  return { ...ctx, players, rosterIds, weekRosterRecorded: weekRoster != null, season, weeks, playoffWeeks: playoffWeekList(played), matchups, playoff, scoreEdited }
 }
 
 export async function loadCommishPastLineup(leagueId: string, rosterId: string, week: number) {
@@ -328,11 +370,20 @@ export async function loadCommishPastLineup(leagueId: string, rosterId: string, 
     rosterId,
     week,
     weeks: ctx.weeks,
+    playoffWeeks: ctx.playoffWeeks,
     savedForWeek: saved.length > 0,
     /** False: the week predates the roster record, so this is today's roster (saving records it). */
     weekRosterRecorded: ctx.weekRosterRecorded,
     scoreEdited: ctx.scoreEdited,
-    matchup: ctx.matchups[0]
+    /** Set for a playoff week: the round it belongs to and every week that round scores. */
+    playoff: ctx.playoff ? { roundNumber: ctx.playoff.roundNumber, weeks: ctx.playoff.weeks } : null,
+    matchup: ctx.playoff
+      ? {
+          home: ctx.playoff.homeRosterId === ctx.roster.redraftRosterId,
+          myScore: ctx.playoff.homeRosterId === ctx.roster.redraftRosterId ? ctx.playoff.homeScore : ctx.playoff.awayScore,
+          theirScore: ctx.playoff.homeRosterId === ctx.roster.redraftRosterId ? ctx.playoff.awayScore : ctx.playoff.homeScore,
+        }
+      : ctx.matchups[0]
       ? {
           home: ctx.matchups[0].homeRosterId === ctx.roster.redraftRosterId,
           myScore: ctx.matchups[0].homeRosterId === ctx.roster.redraftRosterId ? ctx.matchups[0].homeScore : ctx.matchups[0].awayScore,
@@ -356,7 +407,9 @@ export async function saveCommishPastLineup(input: {
   const ctx = await loadPastWeekContext(input.leagueId, input.rosterId, input.week)
   if (ctx.scoreEdited) {
     throw new CommishLineupError(
-      'This matchup’s score was set by hand in Edit Matchup Scores. Change the score there instead.',
+      ctx.playoff
+        ? 'The commish picked this playoff matchup’s winner in Edit Playoff Bracket, so its lineups are not re-scored.'
+        : 'This matchup’s score was set by hand in Edit Matchup Scores. Change the score there instead.',
       409,
     )
   }
@@ -379,7 +432,9 @@ export async function saveCommishPastLineup(input: {
     taxi: input.lineup.taxi.map(rowFor),
     devy: input.lineup.devy.map(rowFor),
   }
-  const before = ctx.matchups.map((m) => ({ matchupId: m.id, homeScore: m.homeScore, awayScore: m.awayScore }))
+  const before = ctx.playoff
+    ? [{ matchupId: ctx.playoff.matchupId, homeScore: ctx.playoff.homeScore, awayScore: ctx.playoff.awayScore }]
+    : ctx.matchups.map((m) => ({ matchupId: m.id, homeScore: m.homeScore, awayScore: m.awayScore }))
 
   // Pin who was on the team that week before re-scoring, so a later trade cannot move it again.
   if (!ctx.weekRosterRecorded) {
@@ -390,6 +445,15 @@ export async function saveCommishPastLineup(input: {
     await replaceFrozenWeekRoster({ rosterId: ctx.roster.redraftRosterId!, seasonId: ctx.season.id, week: input.week, players: current })
   }
 
+  // A playoff re-score can be refused AFTER the lineup is written (it would flip a round whose next
+  // round was already played), so keep the week's rows to put back.
+  const previousRows = ctx.playoff
+    ? await prisma.afRosterLineupAssignment.findMany({
+        where: { rosterId: input.rosterId, season: ctx.season.season, week: input.week },
+        select: { leagueId: true, rosterId: true, season: true, week: true, section: true, slotIndex: true, playerId: true },
+      })
+    : []
+
   // The engine's own per-week writer; `playerData` here is only the week's sections, never saved to the roster.
   await syncAfRosterLineupAssignments({
     leagueId: input.leagueId,
@@ -399,15 +463,32 @@ export async function saveCommishPastLineup(input: {
     playerData: buildPlayerDataFromSections({}, sections),
   })
 
-  const { updateMatchupScores } = await import('@/lib/redraft/scoringEngine')
-  const { updateStandings } = await import('@/lib/redraft/standingsEngine')
   const after: Array<{ matchupId: string; homeScore: number | null; awayScore: number | null }> = []
-  for (const m of ctx.matchups) {
-    const s = await updateMatchupScores(m.id)
-    after.push({ matchupId: m.id, homeScore: s?.homeScore ?? null, awayScore: s?.awayScore ?? null })
+  let advancedChanged = false
+  if (ctx.playoff) {
+    const result = await rescorePlayoffMatchup({
+      leagueId: input.leagueId,
+      seasonId: ctx.season.id,
+      seasonYear: ctx.season.season,
+      matchup: ctx.playoff,
+    })
+    if (!result.ok) {
+      await prisma.afRosterLineupAssignment.deleteMany({ where: { rosterId: input.rosterId, season: ctx.season.season, week: input.week } })
+      if (previousRows.length > 0) await prisma.afRosterLineupAssignment.createMany({ data: previousRows })
+      throw new CommishLineupError(result.reason, 409)
+    }
+    after.push({ matchupId: ctx.playoff.matchupId, homeScore: result.homeScore, awayScore: result.awayScore })
+    advancedChanged = result.flipped
+  } else {
+    const { updateMatchupScores } = await import('@/lib/redraft/scoringEngine')
+    const { updateStandings } = await import('@/lib/redraft/standingsEngine')
+    for (const m of ctx.matchups) {
+      const s = await updateMatchupScores(m.id)
+      after.push({ matchupId: m.id, homeScore: s?.homeScore ?? null, awayScore: s?.awayScore ?? null })
+    }
+    // Standings are cumulative: rebuild through the latest completed week, never just the edited one.
+    await updateStandings(ctx.season.id, Math.max(input.week, ctx.season.currentWeek - 1))
   }
-  // Standings are cumulative: rebuild through the latest completed week, never just the edited one.
-  await updateStandings(ctx.season.id, Math.max(input.week, ctx.season.currentWeek - 1))
 
   const { logAction } = await import('@/server/services/auditService')
   await logAction({
@@ -417,7 +498,7 @@ export async function saveCommishPastLineup(input: {
     entityType: 'roster',
     entityId: input.rosterId,
     beforeState: before as never,
-    afterState: { week: input.week, lineup: input.lineup, scores: after } as never,
+    afterState: { week: input.week, lineup: input.lineup, scores: after, playoffRound: ctx.playoff?.roundNumber ?? null, advancedChanged } as never,
   }).catch(() => undefined)
   void import('@/lib/league-events/publisher')
     .then(({ publishLeagueFanoutEvent }) =>
@@ -425,11 +506,15 @@ export async function saveCommishPastLineup(input: {
         leagueId: input.leagueId,
         eventType: 'commissioner_override',
         title: `Commish lineup change — week ${input.week}`,
-        message: `The commish changed a lineup for week ${input.week}; the matchup and standings were re-scored.`,
+        message: ctx.playoff
+          ? advancedChanged
+            ? `The commish changed a lineup for week ${input.week}; playoff round ${ctx.playoff.roundNumber} was re-scored and a different team now advances.`
+            : `The commish changed a lineup for week ${input.week}; playoff round ${ctx.playoff.roundNumber} was re-scored.`
+          : `The commish changed a lineup for week ${input.week}; the matchup and standings were re-scored.`,
         category: 'league_announcements',
         visibility: 'all_members',
         actorUserId: input.actorUserId,
-        meta: { rosterId: input.rosterId, week: input.week, scores: after },
+        meta: { rosterId: input.rosterId, week: input.week, scores: after, playoffRound: ctx.playoff?.roundNumber ?? null, advancedChanged },
         dedupeKey: `commish_past_lineup:${input.rosterId}:${input.week}:${Date.now()}`,
       }),
     )

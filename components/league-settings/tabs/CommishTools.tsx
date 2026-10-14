@@ -992,6 +992,10 @@ type LineupData = {
   savedForWeek?: boolean
   weekRosterRecorded?: boolean
   scoreEdited?: boolean
+  /** Past-week view of a playoff week: its round and the weeks the round scores. */
+  playoff?: { roundNumber: number; weeks: number[] } | null
+  /** Which of the listed weeks are playoff weeks. */
+  playoffWeeks?: number[]
   matchup?: { myScore: number; theirScore: number | null } | null
   slots: Array<{ label: string; allowedPositions: string[] }>
   limits: Record<'starters' | LineupSection, number>
@@ -1016,6 +1020,7 @@ export function EditLineupCard({ leagueId }: { leagueId: string }) {
   /** null = this week; a number = that completed week. */
   const [viewWeek, setViewWeek] = useState<number | null>(null)
   const [pastWeeks, setPastWeeks] = useState<number[]>([])
+  const [playoffWeeks, setPlayoffWeeks] = useState<number[]>([])
   const base = `/api/leagues/${encodeURIComponent(leagueId)}/commish-lineup`
 
   useEffect(() => {
@@ -1034,6 +1039,7 @@ export function EditLineupCard({ leagueId }: { leagueId: string }) {
     setDraft({ ...d.lineup, starters: [...d.lineup.starters] })
     if (d.pastWeeks) setPastWeeks(d.pastWeeks)
     else if (d.weeks) setPastWeeks(d.weeks)
+    if (d.playoffWeeks) setPlayoffWeeks(d.playoffWeeks)
   }
 
   const open = async (rosterId: string, week: number | null = null) => {
@@ -1151,24 +1157,36 @@ export function EditLineupCard({ leagueId }: { leagueId: string }) {
                     viewWeek === w ? 'border-cyan-300 bg-cyan-400 text-[#04131a]' : 'border-white/[0.12] bg-white/[0.04] text-white/70'
                   }`}
                 >
-                  {w == null ? t('lsHub.el.thisWeek') : t('lsHub.el.week').replace('{{week}}', String(w))}
+                  {w == null
+                    ? t('lsHub.el.thisWeek')
+                    : t(playoffWeeks.includes(w) ? 'lsHub.el.playoffWeek' : 'lsHub.el.week').replace('{{week}}', String(w))}
                 </button>
               ))}
             </div>
           ) : null}
           {data && viewWeek != null ? (
             <div className="space-y-1">
-              <p className="text-[12px] text-amber-200/80">{t('lsHub.el.pastHint')}</p>
+              <p className="text-[12px] text-amber-200/80">
+                {data.playoff
+                  ? t('lsHub.el.pastPlayoff')
+                      .replace('{{round}}', String(data.playoff.roundNumber))
+                      .replace('{{weeks}}', data.playoff.weeks.join(', '))
+                  : t('lsHub.el.pastHint')}
+              </p>
               {data.matchup ? (
                 <p className="text-[12px] text-white/60">
-                  {t('lsHub.el.pastScore')
+                  {t(data.playoff ? 'lsHub.el.pastRoundScore' : 'lsHub.el.pastScore')
                     .replace('{{mine}}', data.matchup.myScore.toFixed(2))
                     .replace('{{theirs}}', data.matchup.theirScore != null ? data.matchup.theirScore.toFixed(2) : '—')}
                 </p>
               ) : null}
               {data.savedForWeek === false ? <p className="text-[12px] text-white/45">{t('lsHub.el.pastUnsaved')}</p> : null}
               {data.weekRosterRecorded === false ? <p className="text-[12px] text-white/45">{t('lsHub.el.pastRosterToday')}</p> : null}
-              {data.scoreEdited ? <p className="text-[12px] text-amber-200/85" role="alert">{t('lsHub.el.pastScoreEdited')}</p> : null}
+              {data.scoreEdited ? (
+                <p className="text-[12px] text-amber-200/85" role="alert">
+                  {t(data.playoff ? 'lsHub.el.pastWinnerPicked' : 'lsHub.el.pastScoreEdited')}
+                </p>
+              ) : null}
             </div>
           ) : null}
           {!data || !draft ? (

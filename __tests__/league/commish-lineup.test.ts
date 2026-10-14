@@ -26,6 +26,11 @@ const h = vi.hoisted(() => ({
   weekRoster: null as Array<Record<string, unknown>> | null,
   pinned: [] as Array<Record<string, any>>,
   order: [] as string[],
+  played: [] as Array<Record<string, any>>,
+  playoffResult: { ok: true, homeScore: 130, awayScore: 120, flipped: false, winnerRosterId: 'rA' } as Record<string, any>,
+  playoffRescored: [] as Array<Record<string, any>>,
+  restored: [] as Array<Record<string, any>>,
+  cleared: 0,
 }))
 
 const template = {
@@ -49,7 +54,17 @@ vi.mock('@/lib/prisma', () => ({
     redraftMatchup: {
       findMany: vi.fn(async () => [{ id: 'm5', homeRosterId: 'rA', awayRosterId: 'rB', homeScore: 90, awayScore: 95, lineupSnapshots: h.matchupSnapshot }]),
     },
-    afRosterLineupAssignment: { findMany: vi.fn(async () => h.assignments) },
+    afRosterLineupAssignment: {
+      findMany: vi.fn(async () => h.assignments),
+      deleteMany: vi.fn(async () => {
+        h.cleared += 1
+        return { count: 0 }
+      }),
+      createMany: vi.fn(async ({ data }: { data: Array<Record<string, any>> }) => {
+        h.restored.push(...data)
+        return { count: data.length }
+      }),
+    },
     roster: {
       findFirst: vi.fn(async ({ where }: { where: { id: string } }) =>
         where.id === 'A' ? { id: 'A', playerData: JSON.parse(JSON.stringify(h.playerData)), redraftRosterId: 'rA' } : null,
@@ -79,6 +94,14 @@ vi.mock('@/lib/guillotine/guillotineGuard', () => ({ isRosterChopped: vi.fn(asyn
 vi.mock('@/lib/roster-lineup-engine/lineupAssignmentSync', () => ({
   syncAfRosterLineupAssignments: vi.fn(async (input: Record<string, any>) => {
     h.weekWrites.push(input)
+  }),
+}))
+vi.mock('@/lib/league/commishPlayoffLineup', () => ({
+  playedPlayoffMatchups: vi.fn(async () => h.played),
+  rescorePlayoffMatchup: vi.fn(async (input: Record<string, any>) => {
+    h.playoffRescored.push(input)
+    h.order.push('playoff-rescore')
+    return h.playoffResult
   }),
 }))
 vi.mock('@/lib/redraft/rosterWeekHistory', () => ({
@@ -132,6 +155,11 @@ beforeEach(() => {
   h.weekRoster = null
   h.pinned = []
   h.order = []
+  h.played = []
+  h.playoffResult = { ok: true, homeScore: 130, awayScore: 120, flipped: false, winnerRosterId: 'rA' }
+  h.playoffRescored = []
+  h.restored = []
+  h.cleared = 0
   h.role = 'co_commissioner'
   h.platform = 'allfantasy'
   h.chopped = false
@@ -364,5 +392,62 @@ describe('past weeks — the roster the team had that week', () => {
     expect(h.pinned[0]).toMatchObject({ rosterId: 'rA', seasonId: 'S1', week: 5 })
     expect(h.pinned[0]!.players.map((p: { playerId: string }) => p.playerId).sort()).toEqual(['qb1', 'rb1', 'rb2', 'wr1'])
     expect(h.order).toEqual(['pin', 'rescore'])
+  })
+})
+
+describe('past weeks — playoff weeks the team played', () => {
+  const getWeek = (week: number) => get(`?rosterId=A&week=${week}`)
+  const putWeek = (week: number, lineup: Record<string, unknown>) => put({ rosterId: 'A', week, lineup })
+  // Round 1 is weeks 15–16 (two weeks per round); rA beat rC 130–120.
+  const ROUND1 = { matchupId: 'p1', roundNumber: 1, weeks: [15, 16], homeRosterId: 'rA', awayRosterId: 'rC', homeScore: 130, awayScore: 120, winnerPicked: false }
+  const LINEUP = { starters: ['qb1', 'rb2', 'wr1'], bench: ['rb1'] }
+
+  it('lists the playoff weeks first and marks them; the regular season follows', async () => {
+    h.played = [ROUND1]
+    h.currentWeek = 17
+    const body = await (await get('?rosterId=A')).json()
+    expect(body.pastWeeks).toEqual([16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1])
+    expect(body.playoffWeeks).toEqual([16, 15])
+  })
+
+  it('a playoff week shows its round and the round score, not a regular matchup', async () => {
+    h.played = [ROUND1]
+    h.currentWeek = 17
+    const body = await (await getWeek(15)).json()
+    expect(body.playoff).toEqual({ roundNumber: 1, weeks: [15, 16] })
+    expect(body.matchup).toEqual({ home: true, myScore: 130, theirScore: 120 })
+  })
+
+  it('saving re-scores the playoff round; no regular matchup and no standings rebuild', async () => {
+    h.played = [ROUND1]
+    h.currentWeek = 17
+    expect((await putWeek(16, LINEUP)).status).toBe(200)
+    expect(h.weekWrites[0]).toMatchObject({ week: 16 })
+    expect(h.playoffRescored).toHaveLength(1)
+    expect(h.playoffRescored[0]).toMatchObject({ seasonId: 'S1', seasonYear: 2026, matchup: { matchupId: 'p1' } })
+    expect(h.rescored).toEqual([])
+    expect(h.standings).toEqual([])
+  })
+
+  it('a refused flip puts the week’s previous lineup back and says why', async () => {
+    h.played = [ROUND1]
+    h.currentWeek = 17
+    h.assignments = [{ section: 'starters', slotIndex: 0, playerId: 'qb1' }]
+    h.playoffResult = { ok: false, reason: 'This change would flip round 1, but the next round has already been played. Nothing was saved.' }
+    const res = await putWeek(16, LINEUP)
+    expect(res.status).toBe(409)
+    expect((await res.json()).error).toContain('already been played')
+    expect(h.weekWrites).toHaveLength(1) // it was written…
+    expect(h.cleared).toBe(1) // …then cleared…
+    expect(h.restored).toEqual([{ section: 'starters', slotIndex: 0, playerId: 'qb1' }]) // …and put back
+  })
+
+  it('refuses a playoff round the team did not play, and one whose winner the commish picked', async () => {
+    h.currentWeek = 17
+    expect((await putWeek(15, LINEUP)).status).toBe(400)
+    h.played = [{ ...ROUND1, winnerPicked: true }]
+    expect((await putWeek(15, LINEUP)).status).toBe(409)
+    expect(h.weekWrites).toEqual([])
+    expect(h.playoffRescored).toEqual([])
   })
 })
