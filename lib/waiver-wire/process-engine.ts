@@ -11,6 +11,7 @@ import { getSpecialtySpecByVariant } from '@/lib/specialty-league/registry'
 import { isWaiverFrozenForRoster } from '@/lib/survivor/SurvivorEffectEngine'
 import type { ProcessedClaimResult, WaiverClaimOutcomeCode } from './types'
 import { normalizeWaiverTypeForEngine } from './waiver-engine-config'
+import { isAutomatedWaiverRunBlocked, resolveEngineWaiverTypeForDate } from '@/lib/waivers/dailyWaiverSchedule'
 import { commissionerOverrideAllowed, getCommissionerOverrides } from './commissioner-claim-override'
 import { recordAfLearningEvent } from '@/lib/ai-learning-system/recordEvent'
 import { resolveLeagueSport } from '@/lib/ai-learning-system/resolveLeagueSport'
@@ -89,7 +90,7 @@ export async function processWaiverClaimsForLeague(
     getEffectiveLeagueWaiverSettings(leagueId),
     (prisma as any).league.findUnique({
       where: { id: leagueId },
-      select: { id: true, rosterSize: true, leagueVariant: true, sport: true },
+      select: { id: true, rosterSize: true, leagueVariant: true, sport: true, settings: true, timezone: true },
     }),
     (prisma as any).waiverClaim.findMany({
       where: { leagueId, status: 'pending' },
@@ -118,10 +119,21 @@ export async function processWaiverClaimsForLeague(
   ])
 
   if (!league) return []
+  // Per-day schedule: an automated run on a Free-agents or Locked day processes nothing (guards stale
+  // engine processing days). A commissioner's manual run is never blocked.
+  if (isAutomatedWaiverRunBlocked(league.settings, new Date(), league.timezone, opts?.runType)) return []
   const specialtySpec = getSpecialtySpecByVariant(league.leagueVariant ?? null)
   const rosterGuard = specialtySpec?.rosterGuard
-  const waiverType =
+  const configuredWaiverType =
     effectiveSettings.normalizedWaiverType ?? normalizeWaiverTypeForEngine(effectiveSettings.waiverType)
+  // A commissioner's per-day schedule (lib/waivers/dailyWaiverSchedule.ts) may name THIS day's type
+  // (Mon reverse standings, Tue rolling …). Null — no schedule, or a non-processing day reached by
+  // a manual run — keeps the configured type. FCFS leagues are never overridden.
+  const dayWaiverType =
+    configuredWaiverType === 'fcfs'
+      ? null
+      : resolveEngineWaiverTypeForDate(league.settings, new Date(), league.timezone)
+  const waiverType = dayWaiverType ?? configuredWaiverType
   const tiebreakRule =
     (effectiveSettings.tiebreakRule ?? effectiveSettings.waiverEngineConfig?.faab_tiebreaker ?? '')
       .toString()

@@ -1,66 +1,55 @@
 import { ReadOnlyRosterRow } from './ReadOnlyRosterRow'
 import { RosterRowControl } from './RosterRowControl'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
-import type { SlotDef } from './types'
+import type { RosterGroup } from './buildRosterGroups'
 
-const CATEGORY_ORDER = ['offense', 'flex', 'kicker', 'dst', 'idp', 'bench', 'reserve', 'college']
-/** Category headings are dictionary keys (`lsEd.ro.cat.<category>`); unknown categories print raw. */
-const CATEGORY_KEYS = new Set(CATEGORY_ORDER)
-
+/**
+ * Renders sport-driven roster groups (see `buildRosterGroups`). Category headings are dictionary
+ * keys (`lsEd.ro.cat.<category>`); a non-football "offense" group reads "Starting lineup", and the
+ * injured list is headed "IR (doesn't count toward draft rounds)" with the sport's own code.
+ */
 export function RosterSectionRenderer({
   title,
-  slotDefs,
+  groups,
   pendingSlots,
   isCommissioner,
-  slotKeyFilter,
+  football,
   onAdjust,
 }: {
   title?: string
-  slotDefs: SlotDef[]
+  groups: RosterGroup[]
   pendingSlots: Record<string, number>
   isCommissioner: boolean
-  slotKeyFilter?: Set<string>
+  football: boolean
   onAdjust: (key: string, delta: number) => void
 }) {
   const { t } = useLanguage()
-  const grouped = new Map<string, SlotDef[]>()
-  for (const def of slotDefs) {
-    if (slotKeyFilter && !slotKeyFilter.has(def.key)) continue
-    const list = grouped.get(def.category) ?? []
-    list.push(def)
-    grouped.set(def.category, list)
-  }
-
-  const renderCategory = (cat: string) => {
-    const slots = grouped.get(cat)
-    if (!slots || slots.length === 0) return null
-    if (cat === 'college' && !slots.some((s) => (pendingSlots[s.key] ?? 0) > 0) && !isCommissioner) return null
-
-    return (
-      <div key={cat}>
-        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-white/30">
-          {CATEGORY_KEYS.has(cat) ? t(`lsEd.ro.cat.${cat}`) : cat}
-        </p>
-        <div className="space-y-1">
-          {slots.map((def) => {
-            const count = pendingSlots[def.key] ?? 0
-            if (count === 0 && (def.category === 'idp' || def.category === 'college') && !isCommissioner) return null
-
-            if (!isCommissioner) {
-              return <ReadOnlyRosterRow key={def.key} def={def} count={count} />
-            }
-
-            return <RosterRowControl key={def.key} def={def} count={count} onAdjust={onAdjust} />
-          })}
-        </div>
-      </div>
-    )
+  const heading = (g: RosterGroup): string | null => {
+    if (g.kind === 'offense') return football ? t('lsEd.ro.cat.offense') : t('lsEd.ro2.starters')
+    if (g.kind === 'injured') return t('lsEd.ro2.injured').replace('{{slot}}', g.injuredCode ?? 'IR')
+    if (g.kind === 'other') return null
+    return t(`lsEd.ro.cat.${g.kind}`)
   }
 
   return (
-    <div className="space-y-4">
-      {title && <p className="text-[11px] font-semibold uppercase tracking-wider text-white/50">{title}</p>}
-      {CATEGORY_ORDER.map((cat) => renderCategory(cat))}
+    <div className="space-y-3">
+      {title ? <p className="af-ls-eyebrow">{title}</p> : null}
+      {groups.map((g) => {
+        const h = heading(g)
+        return (
+          <section key={g.kind} className="af-ls-card !p-1.5" data-testid={`roster-group-${g.kind}`}>
+            {h ? <p className="af-ls-eyebrow px-2 pb-1 pt-1.5">{h}</p> : null}
+            <div>
+              {g.defs.map((def) => {
+                const count = pendingSlots[def.key] ?? 0
+                return isCommissioner
+                  ? <RosterRowControl key={def.key} def={def} count={count} onAdjust={onAdjust} />
+                  : <ReadOnlyRosterRow key={def.key} def={def} count={count} />
+              })}
+            </div>
+          </section>
+        )
+      })}
     </div>
   )
 }

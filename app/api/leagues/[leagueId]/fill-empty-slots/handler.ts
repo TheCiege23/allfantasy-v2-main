@@ -11,6 +11,16 @@ import { createStrategyLog, initializeDraftStrategyTracking } from '@/lib/draft-
 import { getOrCreateDraftSession, buildSessionSnapshot } from '@/lib/live-draft-engine/DraftSessionService'
 import { transitionLeagueState } from '@/server/services/leagueLifecycleService'
 import { CURRENT_TEAMS } from '@/lib/leagues/leagueTeamLifecycle'
+import { updateDraftConfigForLeague } from '@/lib/draft-defaults/DraftVariantSettingsHub'
+import { FILL_WITH_CI_PICK_TIMER_SECONDS } from '@/lib/draft/draftSettingsPolicy'
+
+/**
+ * Fill turns the draft into a fast CPU-assisted draft. The pick clock it sets is written to ALL
+ * three stores that carry one — the draft session, `LeagueSettings.pickTimerPreset`, and
+ * `League.settings.draft_timer_seconds` (what the commissioner Draft tab reads). Writing only the
+ * first two left the tab showing the old clock, and its Save then wrote the stale value back.
+ */
+const FILL_PICK_TIMER_SECONDS = FILL_WITH_CI_PICK_TIMER_SECONDS
 
 export const dynamic = 'force-dynamic'
 
@@ -80,7 +90,7 @@ export async function POST(
 
     for (let i = 0; i < emptySlotCount; i++) {
       const slotNum = existingTeams.length + i + 1
-      const aiName = `AI Team ${slotNum}`
+      const aiName = `CI Team ${slotNum}`
       const orphanId = `orphan-ai-${randomUUID()}`
 
       // Assign a random strategy to this AI team
@@ -169,9 +179,12 @@ export async function POST(
       data: {
         slotOrder: slotOrder as unknown as Prisma.InputJsonValue,
         cpuAutoPick: true,
-        timerSeconds: 30,
+        timerSeconds: FILL_PICK_TIMER_SECONDS,
       },
     })
+
+    // Keep the settings-tab clock in step with the session (see FILL_PICK_TIMER_SECONDS).
+    await updateDraftConfigForLeague(leagueId, { timer_seconds: FILL_PICK_TIMER_SECONDS })
 
     // Update league settings with draft order AND enable CPU auto-pick with shorter timer
     await prisma.leagueSettings.upsert({
@@ -179,12 +192,12 @@ export async function POST(
       create: {
         leagueId,
         cpuAutoPick: true,
-        pickTimerPreset: '30s',
+        pickTimerPreset: `${FILL_PICK_TIMER_SECONDS}s`,
         draftOrderSlots: draftOrderSlots as unknown as Prisma.InputJsonValue,
       },
       update: {
         cpuAutoPick: true,
-        pickTimerPreset: '30s',
+        pickTimerPreset: `${FILL_PICK_TIMER_SECONDS}s`,
         draftOrderSlots: draftOrderSlots as unknown as Prisma.InputJsonValue,
       },
     })
@@ -201,7 +214,9 @@ export async function POST(
       ok: true,
       teamsCreated: teamsCreated.length,
       totalTeams: allTeams.length + teamsCreated.length,
-      message: `Created ${teamsCreated.length} AI teams and populated draft order`,
+      message: `Created ${teamsCreated.length} Chimmy Intelligence teams and populated draft order`,
+      pickTimerSeconds: FILL_PICK_TIMER_SECONDS,
+      cpuAutoPick: true,
       draftOrderSlots,
       strategiesAssigned: strategyAssignments.map((a) => ({
         teamId: a.teamId,
