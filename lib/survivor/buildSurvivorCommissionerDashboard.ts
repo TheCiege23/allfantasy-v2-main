@@ -109,6 +109,10 @@ export async function buildSurvivorCommissionerDashboard(
   if (!league || league.leagueVariant !== 'survivor') {
     return { ok: false, error: 'Not a Survivor league', status: 404 }
   }
+  const savedSettings = league.settings && typeof league.settings === 'object' && !Array.isArray(league.settings) ? league.settings as Record<string, unknown> : {}
+  const fullSeasonPlan = savedSettings.survivor_full_season_plan && typeof savedSettings.survivor_full_season_plan === 'object' && !Array.isArray(savedSettings.survivor_full_season_plan)
+    ? savedSettings.survivor_full_season_plan as Record<string, unknown> : {}
+  const nbaSeason = typeof fullSeasonPlan.season === 'number' ? fullSeasonPlan.season : new Date().getFullYear()
 
   const week = await resolveSurvivorCurrentWeek(leagueId, null)
 
@@ -132,6 +136,7 @@ export async function buildSurvivorCommissionerDashboard(
     completedTrades,
     exileIsland,
     activeChallenges,
+    nbaAdpRows,
   ] = await Promise.all([
     getSurvivorConfig(leagueId),
     getTribesWithMembers(leagueId),
@@ -152,6 +157,7 @@ export async function buildSurvivorCommissionerDashboard(
     prisma.redraftTradeProposal.count({ where: { leagueId, status: 'accepted' } }),
     prisma.exileIsland.findUnique({ where: { leagueId }, select: { isActive: true } }),
     prisma.survivorChallenge.count({ where: { leagueId, status: { in: ['active', 'open'] } } }),
+    league.sport === 'NBA' ? prisma.adpDataRecord.count({ where: { sport: 'NBA', season: nbaSeason } }) : Promise.resolve(null),
   ])
 
   const tribes = tribeRows.map((tribe: Awaited<ReturnType<typeof getTribesWithMembers>>[number]) => ({
@@ -182,11 +188,11 @@ export async function buildSurvivorCommissionerDashboard(
   const readinessIssues: string[] = []
   if (league.leagueSize && claimedManagers < league.leagueSize) readinessIssues.push(`${league.leagueSize - claimedManagers} manager seats still need to be claimed.`)
   if (!draftRow) readinessIssues.push('No current draft session is available.')
+  if (draftRow && ['pre_draft', 'scheduled'].includes(draftRow.status) && nbaAdpRows === 0) readinessIssues.push('NBA ADP is unavailable. Verify the player pool and autopick order before starting the draft.')
   if (!exileId && access.settings.exileIslandEnabled) readinessIssues.push('Exile is enabled but its side league is not linked.')
   if (config.exileReturnEnabled !== access.settings.exileIslandEnabled) readinessIssues.push('Exile return rules disagree between league settings and the Survivor engine.')
   if (config.idolCount !== access.settings.idolCount) readinessIssues.push('Idol inventory disagrees between league settings and the Survivor engine.')
   if (config.mergeTrigger !== (access.settings.mergeTriggerType === 'active_player_count' ? 'player_count' : 'week')) readinessIssues.push('Merger trigger disagrees between league settings and the Survivor engine.')
-  const savedSettings = league.settings && typeof league.settings === 'object' && !Array.isArray(league.settings) ? league.settings as Record<string, unknown> : {}
   const nestedWaivers = savedSettings.waiverSettings && typeof savedSettings.waiverSettings === 'object' && !Array.isArray(savedSettings.waiverSettings) ? savedSettings.waiverSettings as Record<string, unknown> : {}
   if (typeof nestedWaivers.waiverType === 'string' && nestedWaivers.waiverType !== league.waiverType) readinessIssues.push('Waiver method disagrees between the saved league and waiver settings.')
   if (gs?.lastError && !gs.lastError.startsWith('PAUSED:')) readinessIssues.push('Season automation reported an error; review the runtime before resuming.')
