@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Zombie season end</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./specialty/sp.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Cinzel:wght@600;700&amp;family=Caveat:wght@600;700&amp;family=Bebas+Neue&amp;family=Pirata+One&amp;family=Creepster&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080d}
+.zb-t{font-family:'Creepster',cursive;letter-spacing:.04em;color:#c8f08a}
+.zb-lg{display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:12px;background:#10131c;border:1px solid rgba(255,255,255,.07)}
+.zb-dot{width:10px;height:10px;border-radius:99px;flex:none}
+.zb-st{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:99px;font:700 10.5px 'Archivo';letter-spacing:.04em;text-transform:uppercase}.gy-d{font-family:'Bebas Neue',sans-serif;letter-spacing:.03em;line-height:.95}
+.gy-cut{position:relative;height:0;border-top:2px dashed #ff3d2e;margin:9px 0}
+.gy-cut>span{position:absolute;left:50%;top:-12px;transform:translateX(-50%);white-space:nowrap;padding:2px 10px;border-radius:5px;background:#ff3d2e;color:#fff;font:800 10px 'Archivo';letter-spacing:.1em}
+.gy-head{width:34px;height:34px;flex:none}
+.gy-pos{display:inline-grid;place-items:center;height:20px;min-width:26px;padding:0 4px;border-radius:5px;font:900 9.5px 'Archivo';letter-spacing:.02em}
+.gy-gl{display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:22px;padding:0 6px;border-radius:6px;background:#151926;font:700 11px 'JetBrains Mono';color:#e8eaf2}
+.gy-meter{position:relative;height:14px;border-radius:99px;background:linear-gradient(90deg,#7a1410,#ff3d2e 30%,#ffc531 55%,#3abf7a 80%);overflow:visible}
+.gy-meter>i{position:absolute;top:-6px;width:4px;height:26px;border-radius:2px;background:#fff;box-shadow:0 0 0 2px #07080d}
+@keyframes gyBlade{0%{transform:translateY(-120%)}70%{transform:translateY(6%)}85%{transform:translateY(-3%)}100%{transform:translateY(0)}}
+@keyframes gyRoll{0%{transform:translate(-40px,-30px) rotate(-90deg);opacity:0}40%{opacity:1}100%{transform:translate(0,0) rotate(200deg);opacity:1}}
+@keyframes gyShake{0%,100%{transform:translate(0,0)}20%{transform:translate(-6px,3px)}40%{transform:translate(6px,-3px)}60%{transform:translate(-4px,2px)}80%{transform:translate(3px,-1px)}}
+.gy-blade{animation:gyBlade .55s cubic-bezier(.5,0,.75,0) both}
+.gy-roll{animation:gyRoll .9s .45s cubic-bezier(.2,.8,.2,1) both}
+.gy-shake{animation:gyShake .4s .5s both}
+.gy-tomb{position:relative;width:100%;aspect-ratio:200/240}
+.gy-tomb>img{position:absolute;inset:0;width:100%}
+.gy-tomb>div{position:absolute;left:18%;right:18%;top:49%;display:flex;flex-direction:column;align-items:center;gap:1px;text-align:center}
+.gy-tomb>div>b{font:800 12.5px 'Archivo';color:#1a1d24;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gy-tomb>div>span{font:700 10px 'JetBrains Mono';color:#2a2f3a}
+.gy-mode{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px 0 4px;border-radius:99px;background:#151926;border:1px solid rgba(255,255,255,.1);font:700 12px 'Archivo'}
+.gy-mode>img{width:22px}
+.tt-ck{display:flex;align-items:center;gap:14px;padding:14px 16px;border-radius:10px;background:#10131c;border:1px solid rgba(255,255,255,.06)}
+.tt-ck>i{flex:none;width:28px;height:28px;border-radius:99px;display:grid;place-items:center;font:800 13px 'Archivo';font-style:normal}
+.tt-ck>div{flex:1;display:flex;flex-direction:column;gap:2px}
+.tt-ck>div>b{font:600 14px 'Archivo'}
+.tt-ck>div>span{font-size:12px;color:#7d84a3}
+.tt-job{display:flex;align-items:center;gap:10px;font-size:12.5px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+.tt-job:last-child{border-bottom:0}
+.nt-ev{display:flex;align-items:center;gap:12px;width:100%;padding:9px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.07);background:#0b0d14;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.nt-ev>img{width:30px;flex:none}
+.nt-ev>div{flex:1;display:flex;flex-direction:column;gap:1px;min-width:0}
+.nt-ev>div>b{font:700 13px 'Archivo'}
+.nt-ev>div>span{font-size:11px;color:#7d84a3}
+.nt-ev[aria-pressed="true"]{border-color:#ffc531;background:rgba(255,197,49,.08)}
+.nt-phone{position:relative;width:340px;height:700px;flex:none;border-radius:46px;border:10px solid #1b1e29;overflow:hidden;background:radial-gradient(ellipse at 30% 20%,var(--wa),transparent 60%),radial-gradient(ellipse at 80% 90%,var(--wb),transparent 60%),#0a0b12;box-shadow:0 30px 60px rgba(0,0,0,.5)}
+.nt-push{display:flex;gap:10px;padding:11px 12px;border-radius:18px;background:rgba(40,44,60,.72);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);text-align:left}
+.nt-push>img{width:38px;height:38px;flex:none;border-radius:9px;background:#07080d;padding:2px}
+.nt-push>div{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.nt-push>div>small{display:flex;justify-content:space-between;font:600 10.5px 'Archivo';color:#a3a9c2;letter-spacing:.03em}
+.nt-push>div>b{font:700 13px 'Archivo';color:#fff}
+.nt-push>div>span{font-size:12px;color:#d6d9e6;line-height:1.35}
+.nt-push.dim{opacity:.55;transform:scale(.97)}
+.nt-on{display:inline-block;min-width:34px;padding:2px 6px;border-radius:5px;font:700 10px 'Archivo';letter-spacing:.06em;text-transform:uppercase}
+.lu-row{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:10px;background:#10131c;border:1px solid rgba(255,255,255,.05)}
+.lu-row>.s{width:44px;flex:none}
+.lu-row>.n{flex:1;min-width:0;display:flex;flex-direction:column}
+.lu-row>.n>b{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lu-row>.n>span{font-size:11px;color:#7d84a3}
+.lu-flag{display:inline-flex;align-items:center;height:20px;padding:0 7px;border-radius:5px;font:800 9.5px 'Archivo';letter-spacing:.06em;text-transform:uppercase}
+.gy-step{display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;padding:16px 12px;border-radius:14px;background:#10131c;border:1px solid rgba(255,255,255,.06)}
+.gy-step>img{height:84px}
+.gy-step>b{font:800 15px 'Archivo'}
+.gy-step>span{font-size:12.5px;color:#a3a9c2}
+.gy-step>i{font:900 11px 'Archivo';font-style:normal;color:#ffc531;letter-spacing:.12em}
+.gy-tl{display:flex;flex-direction:column;align-items:center;gap:3px;width:62px;flex:none}
+.gy-tl>img{width:40px}
+.gy-tl>b{font:800 9.5px 'Archivo';color:#ffc531;letter-spacing:.06em}
+.gy-tl>span{font:600 9.5px 'Archivo';color:#a3a9c2;max-width:62px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nt-ev[aria-pressed="true"]{border-color:#8be03a;background:rgba(139,224,58,.08)}
+.gy-step>i{color:#8be03a}
+.zt{font-family:'Creepster',cursive;letter-spacing:.04em;line-height:1}
+.zs{position:relative;display:grid;place-items:center;border-radius:18px;overflow:hidden;background:radial-gradient(circle at 50% 45%,var(--zg,rgba(139,224,58,.25)),transparent 62%),#0b0d14;border:1px solid rgba(255,255,255,.07)}
+.zs>img.f{position:absolute;width:300px;height:300px;top:50%;left:50%;margin:-170px 0 0 -150px;opacity:0}
+.zs>img.f0{opacity:1}
+@keyframes zbIn{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:none}}
+@keyframes zbOut{from{opacity:1}to{opacity:0}}
+@keyframes zbFlash{0%{opacity:0}30%{opacity:.9}100%{opacity:0}}
+@keyframes zbShake{0%,100%{transform:none}20%{transform:translate(-5px,2px)}40%{transform:translate(5px,-2px)}60%{transform:translate(-3px,1px)}80%{transform:translate(3px,0)}}
+@keyframes zbPulse{0%,100%{box-shadow:0 0 0 0 rgba(139,224,58,.0)}50%{box-shadow:0 0 0 10px rgba(139,224,58,.18)}}
+@keyframes zbFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+@keyframes zbLoot{0%{transform:translateX(-90px);opacity:0}30%{opacity:1}100%{transform:none;opacity:1}}
+.zs.play>img.f0{animation:zbOut .4s ease-in 1.1s forwards}
+.zs.play>img.f1{animation:zbIn .5s ease-out .9s forwards,zbOut .4s ease-in 2.1s forwards}
+.zs.play>img.f2{animation:zbIn .6s ease-out 1.9s forwards,zbOut .4s ease-in 3.1s forwards}
+.zs.play>img.f3{animation:zbIn .6s ease-out 2.9s forwards}
+.zs.play{animation:zbShake .45s ease-in-out 2.9s 1}
+.zs .fl{position:absolute;inset:0;background:radial-gradient(circle,rgba(200,255,106,.55),transparent 60%);opacity:0;pointer-events:none}
+.zs.play .fl{animation:zbFlash .7s ease-out .9s 1,zbFlash 1s ease-out 2.9s 1}
+.zs.still>img.f{opacity:1;animation:zbFloat 4s ease-in-out infinite}
+.zi{position:relative;display:flex;flex-direction:column;align-items:center;gap:8px;padding:14px 12px 16px;border-radius:14px;background:radial-gradient(circle at 50% 32%,var(--g),transparent 66%),#0b0d14;border:1px solid rgba(255,255,255,.07);color:inherit;font:inherit;text-align:center;cursor:pointer}
+.zi[aria-pressed="true"]{border-color:#8be03a;box-shadow:0 0 0 1px #8be03a inset}
+.zi>img{height:120px}
+.zi>b{font:800 15px 'Archivo'}
+.zi>span{font-size:11.5px;color:#a3a9c2}
+.zi>em{position:absolute;top:10px;right:10px;font:800 11px 'JetBrains Mono';font-style:normal;padding:2px 7px;border-radius:99px;background:#151926;color:#c8f08a}
+.zi[data-off="true"]>img{filter:grayscale(1) brightness(.55)}
+.zpip{display:flex;gap:6px}.zpip>span{width:18px;height:26px;border-radius:6px;border:2px solid #3a5a1a;background:#0b0d14}.zpip>span.on{background:linear-gradient(#e8ff7a,#5ec82a);border-color:#8be03a}
+.zm{position:relative;height:16px;border-radius:99px;background:#151926;overflow:visible}
+.zm>span{position:absolute;left:0;top:0;bottom:0;border-radius:99px}
+.zm>i{position:absolute;top:-6px;bottom:-6px;width:2px;background:#fff;opacity:.6}
+.zm>i>b{position:absolute;top:-18px;left:50%;transform:translateX(-50%);font:700 10px 'Archivo';font-style:normal;white-space:nowrap;color:#a3a9c2}
+.zl{animation:zbLoot .8s cubic-bezier(.2,.8,.2,1) both}
+@media (prefers-reduced-motion: reduce){.zs.play>img.f,.zs.play,.zs.play .fl,.zs.still>img.f,.zl{animation:none!important;opacity:1}}
+.zbg{position:relative;border-radius:14px;overflow:hidden;border:1px solid rgba(255,255,255,.08);background:#0b0d14;cursor:pointer;padding:0;color:inherit;font:inherit;text-align:left}
+.zbg>img{display:block;width:100%;aspect-ratio:8/3;object-fit:cover;object-position:62% 60%}
+.zbg>span{display:block;padding:8px 10px;font:700 12.5px 'Archivo'}
+.zbg[aria-pressed="true"]{border-color:#8be03a;box-shadow:0 0 0 2px #8be03a}
+.zhd{position:relative;height:330px;border-radius:18px;overflow:hidden;border:1px solid rgba(255,255,255,.08)}
+.zhd>img.b{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:62% 60%}
+.zhd::before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(7,8,13,.92),rgba(7,8,13,.55) 42%,transparent 72%);z-index:1}
+.zhd::after{content:"";position:absolute;inset:0;background:linear-gradient(transparent 55%,#07080d);z-index:1}
+.zhd>.in{position:relative;z-index:2;height:100%;display:flex;align-items:center;gap:22px;padding:0 34px}
+.zpaper{background:#0e110a;border:1px solid rgba(139,224,58,.25);border-radius:16px}
+.zrule{height:2px;background:linear-gradient(90deg,#8be03a,transparent)}
+.zcard{width:270px;height:480px;border-radius:22px;overflow:hidden;position:relative;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding:22px;gap:6px;text-align:center;border:1px solid rgba(255,255,255,.1)}
+.zcard>img.b{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:60% 50%;opacity:.8}
+.zcard::before{content:"";position:absolute;inset:0;background:linear-gradient(rgba(7,8,13,.15),rgba(7,8,13,.92) 70%);z-index:1}
+.zcard>*:not(img.b){position:relative;z-index:2}
+</style>
+</helmet>
+<div class="sp" style="--acc: #8be03a; --acc2: #c8f08a; --accInk: #0a1a04; --disp: Creepster; min-height: 100vh; display: flex; flex-direction: column">
+<div class="zhd" style="height: 380px; border-radius: 0; border: 0"><img class="b" src="specialty/zombie/bg/wasteland-arena.svg" alt="">
+  <div class="in" style="justify-content: center; text-align: center; flex-direction: column; gap: 8px">
+    <span class="sp-lbl" style="color: #ffd23a">The Outbreak · NFL 2026 · Gamma 2 · final</span>
+    <span class="zt" style="font-size: 76px; color: #fff">4 still human</span>
+    <span style="font-size: 15px; color: #e8eaf2">17 weeks. 8 turned, 2 came back, 1 Whisperer fell. Here’s who made it.</span>
+    <div style="display: flex; gap: 20px; margin-top: 10px"><sc-for list="{{last}}" as="l" hint-placeholder-count="3"><div style="display: flex; flex-direction: column; align-items: center; gap: 4px"><img src="{{l.img}}" alt="" style="width: 92px; animation: zbFloat 4s ease-in-out infinite; animation-delay: {{l.d}}"><b>{{l.n}}</b><span class="sp-num" style="font-size: 12px; color: #c8f08a">{{l.p}}</span></div></sc-for></div>
+  </div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 18px; padding: 10px 34px 34px">
+  <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px"><sc-for list="{{awards}}" as="a" hint-placeholder-count="6"><div class="gy-step"><i>{{a.k}}</i><img src="{{a.art}}" alt=""><b>{{a.n}}</b><span>{{a.d}}</span></div></sc-for></div>
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px">
+    <div class="sp-card" style="padding: 16px; display: flex; flex-direction: column; gap: 10px; border-color: rgba(127,224,166,.35)"><span class="sp-lbl" style="color: #7fe0a6">Moving up to Beta next season</span>
+      <sc-for list="{{up}}" as="u" hint-placeholder-count="2"><div style="display: flex; align-items: center; gap: 12px"><img src="{{u.img}}" alt="" style="width: 46px"><div style="flex: 1; display: flex; flex-direction: column"><b>{{u.n}}</b><span class="sp-t3" style="font-size: 12px">{{u.s}}</span></div><span class="sp-num" style="color: #7fe0a6">{{u.p}}</span></div></sc-for>
+      <span class="sp-t3" style="font-size: 12px">Gamma is the bottom level, so nobody drops. Everyone else stays in Gamma.</span></div>
+    <div class="sp-card" style="padding: 16px; display: flex; flex-direction: column"><span class="sp-lbl" style="margin-bottom: 4px">Final order · universe points</span>
+      <sc-for list="{{order}}" as="o" hint-placeholder-count="12"><div style="display: flex; align-items: center; gap: 10px; padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,.04)"><span class="sp-num" style="width: 22px; color: #7d84a3">{{o.r}}</span><span style="flex: 1; font-size: 13px; font-weight: 600">{{o.n}}</span><span class="zb-st" style="background: {{o.sb}}; color: {{o.sc}}">{{o.st}}</span><span class="sp-num" style="width: 80px; text-align: right; font-size: 12.5px">{{o.p}}</span></div></sc-for></div>
+  </div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1120}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const ST = { Survivor: ['rgba(127,183,232,.14)', '#9fd0ff', 'status-survivor.svg'], Zombie: ['rgba(139,224,58,.16)', '#c8f08a', 'status-zombie.svg'], Whisperer: ['rgba(167,139,250,.18)', '#c4b5fd', 'status-whisperer.svg'], Revived: ['rgba(242,201,76,.16)', '#f2c94c', 'status-revived.svg'] };
+    const Z = "specialty/zombie/";
+    const O = [['Open Team 5', 'Survivor', '2,512.4'], ['TheCiege26', 'Survivor', '2,446.0'], ['Open Team 7', 'Survivor', '2,398.7'], ['Open Team 9', 'Whisperer', '2,377.1'], ['Open Team 10', 'Revived', '2,290.3'], ['Open Team 11', 'Zombie', '2,241.6'],
+      ['Open Team 4', 'Zombie', '2,198.0'], ['Open Team 12', 'Zombie', '2,170.8'], ['Open Team 2', 'Zombie', '2,066.5'], ['Open Team 6', 'Zombie', '2,012.9'], ['Open Team 3', 'Zombie', '1,944.2'], ['Open Team 8', 'Zombie', '1,861.0']];
+    return { last: [['Open Team 5', '2,512.4', '0s', 'char-survivor.svg'], ['TheCiege26', '2,446.0', '.5s', 'char-survivor.svg'], ['Open Team 7', '2,398.7', '1s', 'char-survivor.svg'], ['Open Team 10', '2,290.3', '1.5s', 'char-revived.svg']].map(([n, p, d, i]) => ({ n, p, d, img: Z + i })),
+      awards: [['Patient zero', 'char-bitten.svg', 'Open Team 8', 'First to turn, week 2'], ['Top of the horde', 'char-zombie.svg', 'Open Team 11', '5 Survivors turned'], ['Head basher', 'bash.svg', 'Open Team 7', '4 bashings'],
+        ['Back from the dead', 'char-revived.svg', 'Open Team 10', 'Revived in week 6, never turned again'], ['Untouchable', 'serum-shield.svg', 'Open Team 5', 'Beat the horde 9 times'], ['Kingslayer', 'maul.svg', 'Open Team 9', 'Mauled the Whisperer, week 11']].map(([k, a, n, d]) => ({ k: k.toUpperCase(), art: Z + a, n, d })),
+      up: [['Open Team 5', '1st in Gamma 2 · never turned', '2,512.4'], ['TheCiege26', '2nd in Gamma 2 · shield saved week 9', '2,446.0']].map(([n, s, p]) => ({ n, s, p, img: Z + 'char-survivor.svg' })),
+      order: O.map(([n, st, p], i) => ({ r: String(i + 1), n, st, p, sb: ST[st][0], sc: ST[st][1] })) };
+  }
+}
+</script>
+</body>
+</html>
