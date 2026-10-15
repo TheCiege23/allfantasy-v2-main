@@ -16,6 +16,7 @@ let completedWeek: number
 const scope = { userId: 'owner', leagueId: 'L', season: 2026 }
 beforeEach(() => {
   vi.clearAllMocks(); row = null; completedWeek = 3
+  vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://allfantasy.ai')
   mocks.session.mockResolvedValue({ user: { id: 'owner' } }); mocks.role.mockResolvedValue('member'); mocks.league.mockResolvedValue({ season: 2026 })
   mocks.read.mockImplementation(async () => structuredClone(row))
   mocks.initialize.mockImplementation(async () => row ??= { ...scope, id: 'S', active: 'balanced', revision: 0, lastObservedWeek: null, pending: null })
