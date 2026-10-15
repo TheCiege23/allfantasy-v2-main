@@ -2,18 +2,24 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { defaultSGConfig } from '@/lib/survivor-guillotine/config'
 
 vi.mock('server-only', () => ({}))
+const live = vi.hoisted(() => ({ executeChop: vi.fn() }))
+vi.mock('@/lib/survivor-guillotine/live', async importOriginal => ({
+  ...await importOriginal<typeof import('@/lib/survivor-guillotine/live')>(),
+  executeSGLiveChop: live.executeChop,
+}))
 const db = vi.hoisted(() => ({ findUniqueOrThrow: vi.fn(), findMany: vi.fn(), updateMany: vi.fn(), update: vi.fn() }))
 const teamDb = vi.hoisted(() => ({ findFirst: vi.fn() }))
 const rosterDb = vi.hoisted(() => ({ findMany: vi.fn(), findFirst: vi.fn(), findUniqueOrThrow: vi.fn() }))
 const tribeDb = vi.hoisted(() => ({ findMany: vi.fn(), upsert: vi.fn() }))
 const chatDb = vi.hoisted(() => ({ create: vi.fn() }))
+const chopDb = vi.hoisted(() => ({ count: vi.fn() }))
 vi.mock('@/lib/prisma', () => ({ prisma: { survivorGuillotineLeague: db,
   leagueTeam: teamDb, roster: rosterDb, survivorGuillotineTribeChoice: tribeDb,
-  leagueChatMessage: chatDb,
+  leagueChatMessage: chatDb, survivorGuillotineChop: chopDb,
   $transaction: (fn: (tx: unknown) => unknown) => fn({ survivorGuillotineLeague: db,
     survivorGuillotineTribeChoice: tribeDb, leagueChatMessage: chatDb }) } }))
 
-import { advanceSGHostedCeremony, advanceSGPeriod, chooseSGStartingTribe, pickSGCaptainDraft, runSGSelectionDeadlines,
+import { advanceSGHostedCeremony, advanceSGPeriod, chooseSGStartingTribe, pickSGCaptainDraft, restartSGHostedCeremony, runSGSelectionDeadlines,
   saveSGCalendar, startSGCaptainDraft } from '@/lib/survivor-guillotine/operations'
 
 const row = (start: string, end: string, ceremony: string) => ({ scoringStartsAt: start,
@@ -33,6 +39,8 @@ describe('Survivor Guillotine calendar and concealed rewards', () => {
     tribeDb.findMany.mockReset()
     tribeDb.upsert.mockReset()
     chatDb.create.mockReset()
+    chopDb.count.mockReset().mockResolvedValue(0)
+    live.executeChop.mockReset()
   })
 
   it('publishes each hosted reveal once and requires the previous chop', async () => {
@@ -55,6 +63,35 @@ describe('Survivor Guillotine calendar and concealed rewards', () => {
       periodHistory: { '1': { hostedCeremony: { stage: 2 } } } })
     expect(await advanceSGPeriod('league')).toEqual({ advanced: false,
       reason: 'hosted_ceremony_in_progress' })
+  })
+
+  it('commits a hosted chop only at the final reveal and restarts if its plan changed', async () => {
+    const season = { config: { ...defaultSGConfig(), ceremonyMode: 'hosted', ceremonyPresentation: true },
+      currentPeriod: 1, revision: 7, periodState: { period: 1, ceremonyStarted: true },
+      periodHistory: { '1': { mode: 'match_play', pendingCommit: true,
+        hostedCeremony: { stage: 2 } } } }
+    db.findUniqueOrThrow.mockResolvedValue(season)
+    live.executeChop.mockResolvedValueOnce({ status: 'resolved', choppedTeamIds: ['r1'] })
+    expect(await advanceSGHostedCeremony('league', 'commissioner', 1)).toEqual({ period: 1, stage: 3 })
+    expect(live.executeChop).toHaveBeenCalledWith('league', 1)
+    expect(db.updateMany).not.toHaveBeenCalled()
+    expect(chatDb.create).not.toHaveBeenCalled()
+    live.executeChop.mockResolvedValueOnce({ status: 'resolved', hostedRestarted: true })
+    expect(await advanceSGHostedCeremony('league', 'commissioner', 1)).toEqual({ period: 1,
+      stage: 0, restarted: true })
+  })
+
+  it('lets a commissioner reset only an uncommitted hosted ceremony', async () => {
+    const season = { currentPeriod: 1, revision: 7,
+      periodState: { period: 1, ceremonyStarted: true, commissionerTie: { reason: 'old result' } },
+      periodHistory: { '1': { pendingCommit: true, hostedCeremony: { stage: 2 } } } }
+    db.findUniqueOrThrow.mockResolvedValue(season)
+    expect(await restartSGHostedCeremony('league', 'commissioner', 1)).toEqual({ period: 1, restarted: true })
+    expect(db.updateMany.mock.calls[0][0].data.periodHistory['1']).toBeUndefined()
+    expect(db.updateMany.mock.calls[0][0].data.periodState).toMatchObject({ ceremonyStarted: false })
+    expect(db.updateMany.mock.calls[0][0].data.periodState.commissionerTie).toBeUndefined()
+    chopDb.count.mockResolvedValue(1)
+    await expect(restartSGHostedCeremony('league', 'commissioner', 1)).rejects.toThrow('uncommitted')
   })
 
   it('rejects overlapping scoring periods before saving a season', async () => {

@@ -14,7 +14,7 @@ describe('hosted Chop Night projection', () => {
     const immunity = projectSGHostedHistory({ '2': { ...result['2'], hostedCeremony: { stage: 1 } } }, 2)
     expect(immunity.history['2']).toMatchObject({ immuneTribeId: 'tribe-a', savedTeamIds: [], choppedTeamIds: [] })
     const idols = projectSGHostedHistory({ '2': { ...result['2'], hostedCeremony: { stage: 2 } } }, 2)
-    expect(idols.history['2']).toMatchObject({ savedTeamIds: ['r2'], choppedTeamIds: [] })
+    expect(idols.history['2']).toMatchObject({ savedTeamIds: ['r2'], protectedTeamIds: ['r2'], choppedTeamIds: [] })
     const final = projectSGHostedHistory({ '2': { ...result['2'], hostedCeremony: { stage: 3 } } }, 2)
     expect(final.hiddenHostedChop).toBe(false)
     expect(final.history['2'].choppedTeamIds).toEqual(['r3'])

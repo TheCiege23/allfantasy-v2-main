@@ -17,7 +17,7 @@ type CorrectionCase = { period: number; result: string; changedRosterIds: string
   review?: { decision: string; reason: string; reviewedAt: string } | null }
 type Data = { season: { config: SGConfig; tribes: SGTribeMember[]; periodState: SGLivePeriod | null;
   currentPeriod: number; status: string; periodHistory: Record<string, { mode: string; completedAt?: string; choppedTeamIds: string[];
-    savedTeamIds: string[]; scores: Record<string, number>; immuneTribeId: string | null;
+    savedTeamIds: string[]; protectedTeamIds?: string[]; scores: Record<string, number>; immuneTribeId: string | null;
     hostedCeremony?: { stage: number; updatedAt: string } | null }>;
   tribeDraftState: SGTribeDraftState | null };
   ownRoster: { id: string; faabRemaining: number; players: Player[]; dailyLineups: Day[];
@@ -125,6 +125,7 @@ export function SurvivorGuillotineLeague({ leagueId }: { leagueId: string }) {
       if (body.action === 'audit_corrections') setCorrectionCases(payload.result?.changes ?? [])
       setNotice(body.action === 'audit_corrections'
         ? (payload.result?.changes?.length ? `${payload.result.changes.length} earlier periods need commissioner review: ${payload.result.changes.map((row: { period: number; result: string }) => `${row.period} (${row.result})`).join(', ')}` : 'No earlier score changes found.')
+        : payload.result?.restarted ? 'The hosted ceremony restarted. Earlier reveals are superseded; no roster was chopped. Begin the reveal again.'
         : payload.result?.votesNeeded ? `Private tribe vote recorded: ${payload.result.votesForChoice} of ${payload.result.votesNeeded} needed.`
           : 'Saved. League state is up to date.')
       await refresh()
@@ -187,12 +188,12 @@ export function SurvivorGuillotineLeague({ leagueId }: { leagueId: string }) {
           const stages = [
             `Period ${replayPeriod}: ${row.mode.replaceAll('_', ' ')}. The tribe race is complete.`,
             row.immuneTribeId ? `${row.immuneTribeId} won immunity.` : 'No tribe has immunity in this period.',
-            row.savedTeamIds.length ? `${row.savedTeamIds.map(id => names.get(id)).join(', ')} survived through an immunity idol.` : 'No immunity idol changed the chop line.',
+            row.protectedTeamIds?.length ? `Immunity idols were played for ${row.protectedTeamIds.map(id => names.get(id)).join(', ')}.${row.savedTeamIds.length ? ` ${row.savedTeamIds.map(id => names.get(id)).join(', ')} survived.` : ''}` : 'No immunity idol was played.',
             row.choppedTeamIds.length ? `${row.choppedTeamIds.map(id => names.get(id)).join(', ')} eliminated. Their players enter league waivers.` : 'The final placements are complete.',
           ]
           const hostedLive = row.hostedCeremony && row.hostedCeremony.stage < 3
           const step = hostedLive ? row.hostedCeremony!.stage : replayStep
-          return <div className={styles.replay} role="dialog" aria-modal="true" aria-label={`Period ${replayPeriod} ceremony replay`}><span className={styles.eyebrow}>{hostedLive ? 'LIVE HOSTED CHOP NIGHT' : 'CHOP NIGHT REPLAY'} · {step + 1} / {stages.length}</span><p aria-live="polite">{stages[step]}</p><button onClick={() => setReplayPeriod('')}>Close</button>{hostedLive ? isCommissioner && <button disabled={busy} onClick={() => action('/operations', { action: 'advance_hosted_ceremony', period: Number(replayPeriod) })}>Reveal next stage to league</button> : <><button onClick={() => setReplayStep(value => Math.min(value + 1, stages.length - 1))} disabled={replayStep === stages.length - 1}>Next reveal</button><button onClick={() => setReplayAuto(value => !value)}>{replayAuto ? 'Pause reveals' : 'Play reveals'}</button></>}</div>
+          return <div className={styles.replay} role="dialog" aria-modal="true" aria-label={`Period ${replayPeriod} ceremony replay`}><span className={styles.eyebrow}>{hostedLive ? 'LIVE HOSTED CHOP NIGHT' : 'CHOP NIGHT REPLAY'} · {step + 1} / {stages.length}</span><p aria-live="polite">{stages[step]}</p><button onClick={() => setReplayPeriod('')}>Close</button>{hostedLive ? isCommissioner && <><button disabled={busy} onClick={() => action('/operations', { action: 'advance_hosted_ceremony', period: Number(replayPeriod) })}>Reveal next stage to league</button><button disabled={busy} onClick={() => action('/operations', { action: 'restart_hosted_ceremony', period: Number(replayPeriod) })}>Restart ceremony</button></> : <><button onClick={() => setReplayStep(value => Math.min(value + 1, stages.length - 1))} disabled={replayStep === stages.length - 1}>Next reveal</button><button onClick={() => setReplayAuto(value => !value)}>{replayAuto ? 'Pause reveals' : 'Play reveals'}</button></>}</div>
         })()}
         {isCommissioner && state && !state.ceremonyStarted && <button disabled={busy} onClick={() => action('/chop', { period: state.period })}>Run hosted Chop Night</button>}
       </section>

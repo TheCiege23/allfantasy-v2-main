@@ -4,7 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { assertLeagueCommissioner } from '@/lib/league/league-access'
 import { resolveLeagueAccess } from '@/lib/league-access'
 import { prisma } from '@/lib/prisma'
-import { advanceSGHostedCeremony, advanceSGPeriod, auditSGHistoricalCorrections, chooseSGStartingTribe, finalizeSGCaptains, pickSGCaptainDraft, reviewSGHistoricalCorrection, saveSGCalendar, saveSGCommissionerTie, saveSGDailyLineup, startSGCaptainDraft,
+import { advanceSGHostedCeremony, advanceSGPeriod, auditSGHistoricalCorrections, chooseSGStartingTribe, finalizeSGCaptains, pickSGCaptainDraft, restartSGHostedCeremony, reviewSGHistoricalCorrection, saveSGCalendar, saveSGCommissionerTie, saveSGDailyLineup, startSGCaptainDraft,
   setSGTribes, settleSGGauntletAuction, submitSGGauntletBid, submitSGPeriodChoice, submitSGTribeChoice,
   voteSGCaptain } from '@/lib/survivor-guillotine/operations'
 import type { SGCalendarEntry } from '@/lib/survivor-guillotine/operations'
@@ -33,7 +33,7 @@ export async function POST(req: NextRequest, context: Context) {
   if (!await resolveLeagueAccess(leagueId, userId)) return NextResponse.json({ error: 'League access required' }, { status: 403 })
   const body = await req.json().catch(() => null) as Record<string, unknown> | null
   if (!body || typeof body.action !== 'string') return NextResponse.json({ error: 'Action required' }, { status: 400 })
-  const commissionerActions = new Set(['set_tribes', 'finalize_captains', 'save_calendar', 'advance', 'advance_hosted_ceremony', 'settle_auction', 'commissioner_choice', 'resolve_tie', 'audit_corrections', 'review_correction', 'start_captain_draft', 'commissioner_draft_pick'])
+  const commissionerActions = new Set(['set_tribes', 'finalize_captains', 'save_calendar', 'advance', 'advance_hosted_ceremony', 'restart_hosted_ceremony', 'settle_auction', 'commissioner_choice', 'resolve_tie', 'audit_corrections', 'review_correction', 'start_captain_draft', 'commissioner_draft_pick'])
   if (commissionerActions.has(body.action)) {
     const access = await assertLeagueCommissioner(leagueId, userId)
     if (!access.ok) return NextResponse.json({ error: 'Commissioner access required' }, { status: access.status })
@@ -67,6 +67,9 @@ export async function POST(req: NextRequest, context: Context) {
     } else if (body.action === 'advance_hosted_ceremony') {
       if (!Number.isInteger(body.period)) throw new Error('Scoring period required.')
       result = await advanceSGHostedCeremony(leagueId, userId, Number(body.period))
+    } else if (body.action === 'restart_hosted_ceremony') {
+      if (!Number.isInteger(body.period)) throw new Error('Scoring period required.')
+      result = await restartSGHostedCeremony(leagueId, userId, Number(body.period))
     } else if (body.action === 'daily_lineup') {
       if (!Number.isInteger(body.period) || typeof body.gameDay !== 'string' || !Array.isArray(body.playerIds) ||
           body.playerIds.some(id => typeof id !== 'string')) throw new Error('Scoring period, game day, and players required.')
