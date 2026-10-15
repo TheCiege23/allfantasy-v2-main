@@ -2,15 +2,15 @@
 import { randomBytes, randomUUID } from 'node:crypto'
 import bcrypt from 'bcryptjs'
 import { expect, test } from '@playwright/test'
-import { prisma } from '../lib/prisma'
-import { nba2026PilotProposal } from '../artifacts/tournament-nba-2026-pilot-proposal'
-import { seasonContractHash } from '../lib/tournament/seasonCalendarVerification'
-import { joinSeasonTournament } from '../lib/tournament/seasonRegistration'
 import { loginAs } from './helpers/credentials-login'
 
 test('signed-in NBA invite joins, freezes and provisions eight draft-locked leagues @db', async ({ browser, page, request }) => {
   test.skip(process.env.TOURNAMENT_PILOT_BROWSER !== '1', 'Requires the guarded isolated pilot database')
   test.setTimeout(900_000)
+  const { prisma } = require('../lib/prisma') as typeof import('../lib/prisma')
+  const { nba2026PilotProposal } = require('../artifacts/tournament-nba-2026-pilot-proposal') as typeof import('../artifacts/tournament-nba-2026-pilot-proposal')
+  const { seasonContractHash } = require('../lib/tournament/seasonCalendarVerification') as typeof import('../lib/tournament/seasonCalendarVerification')
+  const { joinSeasonTournament } = require('../lib/tournament/seasonRegistration') as typeof import('../lib/tournament/seasonRegistration')
   const target = new URL(process.env.DATABASE_URL ?? '')
   expect(target.hostname).toBe('ep-billowing-dream-b7cf9pxk-pooler.c-13.us-east-1.aws.neon.tech')
   expect(target.pathname).toBe('/tournament_pilot')
