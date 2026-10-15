@@ -6,7 +6,13 @@ Every image is 1080×1350 (4:5): Instagram, Facebook, LinkedIn, TikTok photo mod
 ```bash
 node marketing/social/render-daily.mjs marketing/social/posts/2026-10-15.json
 node marketing/social/render-carousels.mjs
+node marketing/social/render-reels.mjs [name ...]   # 1080x1920 MP4 reels, silent
 ```
+
+Reels are timed "beats" of animated HTML, captured frame by frame at 30fps and encoded with
+ffmpeg (H.264, yuv420p, faststart), so they upload cleanly to Reels, TikTok and Shorts. They are
+silent on purpose: the owner adds a trending sound in the app. Keep text inside the safe zone
+(clear of the top ~220px, bottom ~440px and right ~160px, where the apps draw their UI).
 
 Output lands in `marketing/social/out/` (git-ignored). Each daily run also writes `CAPTIONS.md`
 beside the PNGs. Needs Playwright + Chromium (preinstalled in Claude Code cloud sessions) and
