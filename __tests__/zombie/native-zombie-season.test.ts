@@ -334,4 +334,33 @@ describe('selectWhisperer', () => {
       expect(r.rosterId).toBe('R-human')
     }
   })
+
+  it('tells the chosen manager, and only them, that they are the Whisperer', async () => {
+    const { notifyZombiePlayer } = await import('@/lib/zombie/commissionerNotificationService')
+    vi.mocked(notifyZombiePlayer).mockClear()
+    overrides.set('zombieLeague.findUniqueOrThrow', async () => ({
+      id: 'z1', leagueId: 'L1', whispererAmbushCount: 3, whispererIsPublic: false, league: { name: 'Tip-Off Outbreak' },
+    }))
+    overrides.set('zombieLeagueTeam.findMany', async () => [{ rosterId: 'R-human' }])
+    overrides.set('roster.findMany', async () => [{ id: 'R-human', platformUserId: 'user-1' }])
+    overrides.set('roster.findUnique', async () => ({ platformUserId: 'user-1' }))
+    await selectWhisperer('z1', 'random')
+    expect(notifyZombiePlayer).toHaveBeenCalledTimes(1)
+    const [userId, type, title, opts] = vi.mocked(notifyZombiePlayer).mock.calls[0]!
+    expect([userId, type, title]).toEqual(['user-1', 'whisperer_selected', "You're the Whisperer"])
+    expect(opts?.body).toContain('Nobody else knows')
+    // The stored title must be the real one: spoiler-safe mode would store "League update".
+    expect(opts?.pushSpoilerSafe).toBeFalsy()
+  })
+
+  it('notifies nobody when the only seat is open', async () => {
+    const { notifyZombiePlayer } = await import('@/lib/zombie/commissionerNotificationService')
+    vi.mocked(notifyZombiePlayer).mockClear()
+    overrides.set('zombieLeague.findUniqueOrThrow', async () => ({ id: 'z1', leagueId: 'L1', whispererAmbushCount: 3, league: {} }))
+    overrides.set('zombieLeagueTeam.findMany', async () => [{ rosterId: 'R-open' }])
+    overrides.set('roster.findMany', async () => [{ id: 'R-open', platformUserId: 'open-slot-L1-1' }])
+    overrides.set('roster.findUnique', async () => ({ platformUserId: 'open-slot-L1-1' }))
+    await selectWhisperer('z1', 'random')
+    expect(notifyZombiePlayer).not.toHaveBeenCalled()
+  })
 })
