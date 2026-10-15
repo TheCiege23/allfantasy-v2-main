@@ -6,12 +6,14 @@ const db = vi.hoisted(() => ({ findUniqueOrThrow: vi.fn(), findMany: vi.fn(), up
 const teamDb = vi.hoisted(() => ({ findFirst: vi.fn() }))
 const rosterDb = vi.hoisted(() => ({ findMany: vi.fn(), findFirst: vi.fn(), findUniqueOrThrow: vi.fn() }))
 const tribeDb = vi.hoisted(() => ({ findMany: vi.fn(), upsert: vi.fn() }))
+const chatDb = vi.hoisted(() => ({ create: vi.fn() }))
 vi.mock('@/lib/prisma', () => ({ prisma: { survivorGuillotineLeague: db,
   leagueTeam: teamDb, roster: rosterDb, survivorGuillotineTribeChoice: tribeDb,
+  leagueChatMessage: chatDb,
   $transaction: (fn: (tx: unknown) => unknown) => fn({ survivorGuillotineLeague: db,
-    survivorGuillotineTribeChoice: tribeDb }) } }))
+    survivorGuillotineTribeChoice: tribeDb, leagueChatMessage: chatDb }) } }))
 
-import { chooseSGStartingTribe, pickSGCaptainDraft, runSGSelectionDeadlines,
+import { advanceSGHostedCeremony, advanceSGPeriod, chooseSGStartingTribe, pickSGCaptainDraft, runSGSelectionDeadlines,
   saveSGCalendar, startSGCaptainDraft } from '@/lib/survivor-guillotine/operations'
 
 const row = (start: string, end: string, ceremony: string) => ({ scoringStartsAt: start,
@@ -30,6 +32,29 @@ describe('Survivor Guillotine calendar and concealed rewards', () => {
     rosterDb.findUniqueOrThrow.mockReset()
     tribeDb.findMany.mockReset()
     tribeDb.upsert.mockReset()
+    chatDb.create.mockReset()
+  })
+
+  it('publishes each hosted reveal once and requires the previous chop', async () => {
+    const season = { config: { ...defaultSGConfig(), ceremonyMode: 'hosted', ceremonyPresentation: true },
+      currentPeriod: 1, revision: 7, periodState: { period: 1, ceremonyStarted: true },
+      periodHistory: { '1': { mode: 'match_play', hostedCeremony: { stage: 1 } } } }
+    db.findUniqueOrThrow.mockResolvedValue(season)
+    expect(await advanceSGHostedCeremony('league', 'commissioner', 1)).toEqual({ period: 1, stage: 2 })
+    expect(db.updateMany.mock.calls[0][0].data.periodHistory['1'].hostedCeremony.stage).toBe(2)
+    expect(chatDb.create).toHaveBeenCalledTimes(1)
+    db.findUniqueOrThrow.mockResolvedValue({ ...season, periodHistory: { '1': {
+      mode: 'match_play', hostedCeremony: { stage: 3 } } } })
+    await expect(advanceSGHostedCeremony('league', 'commissioner', 1)).rejects.toThrow('already complete')
+    expect(db.updateMany).toHaveBeenCalledTimes(1)
+  })
+
+  it('holds the next scoring period until the host finishes all reveals', async () => {
+    db.findUniqueOrThrow.mockResolvedValue({ config: { ...defaultSGConfig(), ceremonyMode: 'hosted' },
+      currentPeriod: 1, status: 'active', periodState: { period: 1, ceremonyStarted: true },
+      periodHistory: { '1': { hostedCeremony: { stage: 2 } } } })
+    expect(await advanceSGPeriod('league')).toEqual({ advanced: false,
+      reason: 'hosted_ceremony_in_progress' })
   })
 
   it('rejects overlapping scoring periods before saving a season', async () => {

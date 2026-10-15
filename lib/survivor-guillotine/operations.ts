@@ -479,6 +479,10 @@ export async function advanceSGPeriod(leagueId: string, now = new Date()) {
   if (!row || season.status === 'completed') return { advanced: false, reason: 'season_complete' }
   const previous = readSGPeriodState(season.periodState)
   if (season.currentPeriod > 0 && !previous?.ceremonyStarted) return { advanced: false, reason: 'previous_ceremony_pending' }
+  const priorHistory = (season.periodHistory as Record<string, { hostedCeremony?: { stage: number } }>)[String(season.currentPeriod)]
+  if (priorHistory?.hostedCeremony && priorHistory.hostedCeremony.stage < 3) {
+    return { advanced: false, reason: 'hosted_ceremony_in_progress' }
+  }
   const calendar = readSGCalendar(season.periodCalendar)[nextPeriod]
   if (!calendar) return { advanced: false, reason: 'calendar_missing' }
   if (calendar.scoringStartsAt && Date.parse(calendar.scoringStartsAt) > now.getTime()) return { advanced: false, reason: 'not_started' }
@@ -707,6 +711,44 @@ export async function runSGSelectionDeadlines(now = new Date(), limit = 10) {
   return { scanned, due: due.length, results }
 }
 
+/** Persist the host's reveal step so every viewer sees the same ceremony. */
+export async function advanceSGHostedCeremony(leagueId: string, actorUserId: string, period: number) {
+  const season = await prisma.survivorGuillotineLeague.findUniqueOrThrow({ where: { leagueId } })
+  const config = season.config as unknown as SGConfig
+  if (config.ceremonyMode !== 'hosted' || !config.ceremonyPresentation || season.currentPeriod !== period) {
+    throw new Error('There is no active hosted ceremony for this period.')
+  }
+  const state = readSGPeriodState(season.periodState)
+  if (!state?.ceremonyStarted || state.period !== period) throw new Error('Complete Chop Night before revealing stages.')
+  const history = season.periodHistory as Record<string, Record<string, unknown>>
+  const entry = history[String(period)]
+  const hosted = entry?.hostedCeremony as { stage?: number; updatedAt?: string } | null | undefined
+  if (!hosted || !Number.isInteger(hosted.stage) || hosted.stage! < 0 || hosted.stage! >= 3) {
+    throw new Error('The hosted ceremony is already complete or unavailable.')
+  }
+  const stage = hosted.stage! + 1
+  await prisma.$transaction(async tx => {
+    const saved = await tx.survivorGuillotineLeague.updateMany({ where: { leagueId, revision: season.revision },
+      data: { revision: { increment: 1 }, periodHistory: { ...history,
+        [String(period)]: { ...entry, hostedCeremony: { stage, updatedAt: new Date().toISOString() } } } as Prisma.InputJsonValue } })
+    if (saved.count !== 1) throw new Error('The ceremony changed. Reload and try again.')
+    const immuneTribeId = entry.immuneTribeId as string | null
+    const savedTeamIds = Array.isArray(entry.savedTeamIds) ? entry.savedTeamIds as string[] : []
+    const choppedTeamIds = Array.isArray(entry.choppedTeamIds) ? entry.choppedTeamIds as string[] : []
+    const message = stage === 1 ? (immuneTribeId
+      ? `Survivor Guillotine period ${period}: ${immuneTribeId} won tribe immunity.`
+      : `Survivor Guillotine period ${period}: no tribe won immunity.`)
+      : stage === 2 ? (savedTeamIds.length
+        ? `Survivor Guillotine period ${period}: immunity idols saved ${savedTeamIds.join(', ')}.`
+        : `Survivor Guillotine period ${period}: no immunity idol changed the chop.`)
+        : `Survivor Guillotine period ${period} chop: ${choppedTeamIds.join(', ')} eliminated. Their players enter waivers.`
+    await tx.leagueChatMessage.create({ data: { leagueId, userId: actorUserId, type: 'system',
+      message,
+      metadata: { survivorGuillotine: true, event: 'hosted_ceremony_advanced', period, stage } } })
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
+  return { period, stage }
+}
+
 /** Earlier-period corrections are reviewed without silently rewriting later drafts, waivers, or chops. */
 export async function auditSGHistoricalCorrections(leagueId: string) {
   const season = await prisma.survivorGuillotineLeague.findUniqueOrThrow({ where: { leagueId } })
@@ -772,14 +814,33 @@ export async function reviewSGHistoricalCorrection(leagueId: string, actorUserId
     reviewedByUserId: actorUserId, scoreFingerprint: JSON.stringify(change.correctedScores),
     originalChops: change.originalChops ?? [],
     proposedChops: change.proposedChops ?? null }
+  const entry = history[String(period)]
+  const originalScores = entry.scores as Record<string, number>
+  const scoreHistory = season.scoreHistory && typeof season.scoreHistory === 'object' && !Array.isArray(season.scoreHistory)
+    ? season.scoreHistory as Record<string, Record<string, number>> : {}
+  const correctedEntry = decision === 'keep_played_result' ? {
+    ...entry, scores: change.correctedScores,
+    teams: (entry.teams as { id: string; points: number }[]).map(team => ({ ...team,
+      points: change.correctedScores![team.id] ?? team.points })),
+    correctionReview: { ...review, originalScores, scoresApplied: true },
+  } : { ...entry, correctionReview: review }
   await prisma.$transaction(async tx => {
     const saved = await tx.survivorGuillotineLeague.updateMany({ where: { leagueId, revision: season.revision },
       data: { revision: { increment: 1 }, periodHistory: { ...history,
-        [String(period)]: { ...history[String(period)], correctionReview: review } } as Prisma.InputJsonValue } })
+        [String(period)]: correctedEntry } as Prisma.InputJsonValue,
+      ...(decision === 'keep_played_result' ? { scoreHistory: { ...scoreHistory,
+        [String(period)]: change.correctedScores } as Prisma.InputJsonValue } : {}) } })
     if (saved.count !== 1) throw new Error('Season changed during correction review; reload and retry.')
+    if (decision === 'keep_played_result') {
+      for (const rosterId of change.originalChops ?? []) {
+        const score = change.correctedScores?.[rosterId]
+        if (score !== undefined) await tx.survivorGuillotineChop.updateMany({ where: {
+          leagueId, period, rosterId, reversedAt: null }, data: { score } })
+      }
+    }
     await tx.leagueChatMessage.create({ data: { leagueId, userId: actorUserId, type: 'system',
       message: `The commissioner reviewed a period ${period} stat correction. ${decision === 'keep_played_result'
-        ? 'The played result remains in place.' : 'Manual follow-up is required.'}`,
+        ? 'Corrected scores are official; the played elimination and later transactions remain in place.' : 'Manual follow-up is required.'}`,
       metadata: { survivorGuillotine: true, event: 'historical_correction_review', period, decision } } })
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
   return { period, ...review }

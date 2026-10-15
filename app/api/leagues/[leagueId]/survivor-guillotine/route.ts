@@ -10,6 +10,7 @@ import { awardSGLiveWeeklyPower, configureSGLivePeriod, readSGLivePowers, readSG
 import type { SGTribeMember, SGLivePeriod } from '@/lib/survivor-guillotine/live'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import { readSGTribeDraftState } from '@/lib/survivor-guillotine/operations'
+import { projectSGHostedHistory } from '@/lib/survivor-guillotine/hosted-presentation'
 
 export const dynamic = 'force-dynamic'
 type Context = { params: Promise<{ leagueId: string }> }
@@ -27,6 +28,9 @@ export async function GET(_req: NextRequest, context: Context) {
   const fullPeriodState = readSGPeriodState(season.periodState)
   const periodState = fullPeriodState ? (({ chopSnapshot: _private, commissionerTie: _decision,
     ...publicState }) => publicState)(fullPeriodState) : null
+  const presentation = projectSGHostedHistory(season.periodHistory as Record<string, Record<string, unknown>>,
+    season.currentPeriod)
+  const hiddenIds = new Set(presentation.hiddenChopRosterIds)
   const chops = await prisma.survivorGuillotineChop.findMany({ where: { leagueId, reversedAt: null },
     select: { id: true, leagueId: true, period: true, rosterId: true, score: true, tribeId: true, createdAt: true },
     orderBy: [{ period: 'desc' }, { score: 'asc' }] })
@@ -69,9 +73,11 @@ export async function GET(_req: NextRequest, context: Context) {
     })() : []
   return NextResponse.json({ season: { leagueId, config: season.config, tribes: readSGTribes(season.tribes),
     periodState, currentPeriod: season.currentPeriod,
-    status: season.status, revision: season.revision, periodHistory: season.periodHistory,
-    tribeDraftState: readSGTribeDraftState(season.tribeDraftState) }, powers, chops,
-    teams: teams.map(team => ({ ...team, legacyRosterId: team.externalId })), scores,
+    status: season.status, revision: season.revision, periodHistory: presentation.history,
+    tribeDraftState: readSGTribeDraftState(season.tribeDraftState) }, powers,
+    chops: presentation.hiddenHostedChop ? chops.filter(chop => chop.period !== season.currentPeriod) : chops,
+    teams: teams.map(team => ({ ...team, eliminatedAt: hiddenIds.has(team.externalId ?? '') ? null : team.eliminatedAt,
+      legacyRosterId: team.externalId })), scores,
     stealTargets, ownRoster: ownedTeam?.externalId ? { id: ownedTeam.externalId,
       faabRemaining: roster?.faabRemaining ?? 0, players, dailyLineups, ownBid,
       tribeChoice: ownTribeChoice?.tribeId ?? null } : null })
