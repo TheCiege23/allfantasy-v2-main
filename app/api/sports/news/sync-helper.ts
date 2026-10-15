@@ -3,6 +3,7 @@ import { normalizeTeamAbbrev } from '@/lib/team-abbrev';
 import { createHash } from 'crypto';
 import { SUPPORTED_SPORTS, type SupportedSport } from '@/lib/sport-scope';
 import { ESPN_SITE_API_BASE } from '@/lib/providers/espnUrls'
+import { isCollegeStoryForProSport } from '@/lib/news/breakingNews'
 
 const NEWS_FRESHNESS_MS = 30 * 60 * 1000;
 
@@ -275,6 +276,10 @@ async function mapEspnNewsJsonToArticles(
 
     const title = String(a.headline || a.title || '');
     const desc = String(a.description || '');
+    // ESPN's pro feeds carry college stories (the NHL feed runs college hockey); stamping them with
+    // the feed's sport mislabels them, and a college sport outside the seven has no right label.
+    const webUrl = (a.links as { web?: { href?: string } } | undefined)?.web?.href || '';
+    if (isCollegeStoryForProSport(sport, webUrl)) continue;
     const combinedText = `${title} ${desc}`;
     const allTeams = extractAllTeamsFromText(combinedText);
     const playerNames = extractPlayerNamesFromText(combinedText, knownPlayers);
@@ -456,6 +461,8 @@ async function parseNewsAPIResponse(
     const description = a.description ? String(a.description) : null;
     const articleContent = a.content ? String(a.content) : null;
     const articleUrl = String(a.url || '');
+    // The sport here is a default, not a reading of the article: never file a college story under a pro league.
+    if (isCollegeStoryForProSport(impliedSport, articleUrl)) continue;
     const publishedAt = String(a.publishedAt || '');
     const author = a.author ? String(a.author) : null;
     const imageUrl = a.urlToImage ? String(a.urlToImage) : null;

@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import {
   breakingStoryKey,
   classifyBreakingHeadline,
+  isCollegeStoryForProSport,
   teamNickname,
   teamsMentioned,
   trustedOutlet,
@@ -102,5 +103,30 @@ describe('breakingStoryKey', () => {
     const a = breakingStoryKey({ sport: 'NFL', kind: 'trade', teams: ['ARI', 'HOU'], title: 'Sources: Cardinals trade MHJ to Texans', publishedAt: at })
     const b = breakingStoryKey({ sport: 'NFL', kind: 'trade', teams: ['HOU', 'ARI'], title: 'Texans acquire Marvin Harrison Jr.', publishedAt: at })
     expect(a).toBe(b)
+  })
+})
+
+describe('isCollegeStoryForProSport', () => {
+  // Real rows from production, 2026-10-15: ESPN's NHL feed and NewsAPI's NFL default.
+  it('flags college stories filed under a pro league', () => {
+    expect(
+      isCollegeStoryForProSport('NHL', 'https://www.espn.com/college-sports/story/_/id/50189567/arizona-state-hockey-coach-exits-amid-probe-collapse'),
+    ).toBe(true)
+    expect(
+      isCollegeStoryForProSport(
+        'NFL',
+        'https://sports.yahoo.com/college-sports/article/lsu-soccers-jocelyn-olliverre-jazmin-ferguson-become-first-5th-year-seniors-215400350.html',
+      ),
+    ).toBe(true)
+    expect(isCollegeStoryForProSport('nba', 'https://www.espn.com/mens-college-basketball/story/_/id/1/x')).toBe(true)
+  })
+
+  it('keeps pro stories and every story under a college sport', () => {
+    expect(isCollegeStoryForProSport('MLB', 'https://www.espn.com/mlb/story/_/id/50181619/phillies-hire-don-mattingly-2-year-deal')).toBe(false)
+    expect(isCollegeStoryForProSport('NHL', 'https://www.espn.com/nhl/story/_/id/1/collegeville-native-signs')).toBe(false)
+    expect(isCollegeStoryForProSport('NCAAB', 'https://www.espn.com/mens-college-basketball/story/_/id/50182031/florida-todd-golden')).toBe(false)
+    expect(isCollegeStoryForProSport('NCAAF', 'https://www.espn.com/college-sports/story/_/id/1/nil')).toBe(false)
+    expect(isCollegeStoryForProSport('NHL', null)).toBe(false)
+    expect(isCollegeStoryForProSport('NHL', 'not a url')).toBe(false)
   })
 })
