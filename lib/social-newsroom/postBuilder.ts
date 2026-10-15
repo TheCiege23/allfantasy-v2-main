@@ -51,7 +51,8 @@ export type StoryInput = {
 
 export type SocialPost = {
   platform: SocialPlatform
-  tone: 'straight' | 'fun'
+  /** `viral` = an engagement post: a poll, a prediction, a "wrong answers only". */
+  tone: 'straight' | 'fun' | 'viral'
   text: string
   /** Characters as the platform counts them (X weights links at 23). */
   charCount: number
@@ -196,7 +197,24 @@ export function buildStoryPosts(story: StoryInput): SocialPost[] {
       [`${funLead ?? straightLead} ${headline}`, `Source: ${story.outletName}`, [...tags, '#sportstok', '#AllFantasy'].join(' ')].join('\n\n'),
     ),
   )
+
+  // X — an engagement prompt. Opinions are asked for, never given: the post states no fact beyond
+  // the outlet's headline, so the prompt is where the personality goes.
+  const prompt = sombre ? null : pick(VIRAL_STORY_PROMPTS[kind], `${headline}|viral`)
+  if (prompt) posts.push(finish('x', 'viral', fitX(prompt, headline, `${via}\n${story.url}\n${tags.slice(0, 2).join(' ')}`)))
   return posts
+}
+
+/** Engagement prompts per kind. Questions to the audience — never claims. */
+const VIRAL_STORY_PROMPTS: Record<BreakingKind | 'news', readonly string[]> = {
+  trade: ['Who won this trade? 👇', 'Grade this trade A–F 👇', 'Winners and losers? Go 👇'],
+  signing: ['Grade this deal A–F 👇', 'Worth it? 👍 or 👎', 'Bargain or overpay? 👇'],
+  release: ['Where do they land next? 👇', 'Right call? 👍 or 👎'],
+  coaching: ['Grade the hire A–F 👇', 'Right call? 👍 or 👎', 'Who should they have gone after? 👇'],
+  retirement: ['Favorite career moment? 👇', 'Hall of Fame? 👍 or 👎'],
+  suspension: [],
+  injury: [],
+  news: ['Your reaction in one emoji 👇', 'Hot take time 🔥 Go 👇', 'Thoughts? 👇'],
 }
 
 export type HighlightInput = {
@@ -220,4 +238,136 @@ export function buildHighlightPosts(h: HighlightInput): SocialPost[] {
     finish('threads', 'fun', `${lead}: ${score}\n\nWho was your player of the game? 👇\n\n▶️ ${h.videoUrl}\n🎬 Video via YouTube\n${tags.join(' ')}`),
     finish('facebook', 'fun', `${lead}: ${score}\n\n${h.videoUrl}`),
   ]
+}
+
+
+/* ── Tonight's games ─────────────────────────────────────────────────────────────────────────── */
+
+export type GameInput = {
+  sport: string
+  homeTeam: string
+  awayTeam: string
+  /** ISO kickoff. Rendered in US Eastern, the clock most of this audience reads. */
+  startTime: string
+  venue?: string | null
+  homeScore?: number | null
+  awayScore?: number | null
+  /** The game is over and both scores are known. */
+  final?: boolean
+  /** It went past regulation (overtime, extra innings, a shootout). */
+  overtime?: boolean
+  /** Decided by a shootout / penalties (TheSportsDB `AP`). */
+  shootout?: boolean
+}
+
+const SPORT_EMOJI: Record<string, string> = {
+  NFL: '🏈',
+  NCAAF: '🏈',
+  NBA: '🏀',
+  NCAAB: '🏀',
+  NHL: '🏒',
+  MLB: '⚾',
+  SOCCER: '⚽',
+}
+
+/** "One score" per sport, for calling a final close. */
+const CLOSE_MARGIN: Record<string, number> = { NFL: 8, NCAAF: 8, NBA: 5, NCAAB: 5, NHL: 1, MLB: 1, SOCCER: 1 }
+
+/** "Toronto Raptors" -> "Raptors"; a school stays whole ("Old Dominion"). */
+function nick(name: string, sport: string): string {
+  const S = sport.toUpperCase()
+  if (S === 'NCAAF' || S === 'NCAAB' || S === 'SOCCER') return name
+  return hashtagForTeam(name).slice(1).replace(/([a-z])([A-Z])/g, '$1 $2')
+}
+
+/** "7:30 PM ET". */
+export function easternTime(iso: string): string {
+  const d = new Date(iso)
+  if (!Number.isFinite(d.getTime())) return ''
+  return `${new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' }).format(d)} ET`
+}
+
+const PREVIEW_LEADS = [
+  'Game night 🔥',
+  'Lights. Camera. Action. 🎬',
+  'Clear your schedule 📅',
+  'Snacks ready? 🍿',
+  'Main character energy tonight ⭐',
+]
+
+/** Posts for one of today's games: a straight listing and viral engagement prompts. */
+export function buildGamePreviewPosts(g: GameInput): SocialPost[] {
+  const S = g.sport.toUpperCase()
+  const emoji = SPORT_EMOJI[S] ?? '🏟️'
+  const away = nick(g.awayTeam, S)
+  const home = nick(g.homeTeam, S)
+  const when = easternTime(g.startTime)
+  const line = `${g.awayTeam} at ${g.homeTeam}${when ? ` · ${when}` : ''}${g.venue ? ` · ${g.venue}` : ''}`
+  const tags = hashtagsFor(S, [g.awayTeam, g.homeTeam]).join(' ')
+  const seed = `${g.awayTeam}|${g.homeTeam}|${g.startTime}`
+
+  const posts: SocialPost[] = [
+    finish('x', 'straight', `${emoji} ${line}\n\n${tags}`),
+    finish('x', 'fun', `${pick(PREVIEW_LEADS, seed)}\n\n${line}\n\n${tags}`),
+    // The repost-or-like poll: the single most shareable format on X.
+    finish('x', 'viral', `${away} or ${home}? ${emoji}\n\n🔁 Repost for ${away}\n❤️ Like for ${home}\n\n${when ? `${startWord(S)}: ${when}\n` : ''}${tags}`),
+    finish('x', 'viral', `Predict the final score 👇\n\n${g.awayTeam} at ${g.homeTeam}${when ? ` · ${when}` : ''}\n\nClosest guess gets bragging rights 🏆\n${tags}`),
+    finish('x', 'viral', `${pick(['Name one player who goes off tonight 🔥👇', `Tag the ${away} fan in your life 😤`, `Tag the ${home} fan in your life 😤`, 'Confidence level in your team tonight: 1–10 👇'], `${seed}|v3`)}\n\n${emoji} ${line}\n${tags}`),
+    finish(
+      'instagram',
+      'viral',
+      [`${emoji} ${away} vs ${home}`, line, `Who you got? Drop your score prediction in the comments 👇`, `${tags} #GameDay #AllFantasy`].join('\n\n'),
+    ),
+  ]
+  return posts
+}
+
+function startWord(S: string): string {
+  if (S === 'MLB') return 'First pitch'
+  if (S === 'NHL') return 'Puck drop'
+  if (S === 'NBA' || S === 'NCAAB') return 'Tip-off'
+  return 'Kickoff'
+}
+
+/** Posts for a finished game. The score is the fact; everything else is a question. */
+export function buildGameFinalPosts(g: GameInput): SocialPost[] {
+  if (g.homeScore == null || g.awayScore == null) return []
+  const S = g.sport.toUpperCase()
+  const emoji = SPORT_EMOJI[S] ?? '🏟️'
+  const away = nick(g.awayTeam, S)
+  const home = nick(g.homeTeam, S)
+  const a = g.awayScore
+  const h = g.homeScore
+  const tags = hashtagsFor(S, [g.awayTeam, g.homeTeam]).join(' ')
+  const score = `${g.awayTeam} ${a}, ${g.homeTeam} ${h}`
+  const margin = Math.abs(a - h)
+  const close = margin <= (CLOSE_MARGIN[S] ?? 1)
+  const winner = a === h ? null : a > h ? away : home
+  const loser = a === h ? null : a > h ? home : away
+  const seed = `${score}|final`
+
+  const posts: SocialPost[] = [finish('x', 'straight', `FINAL ${emoji}\n\n${score}\n\n${tags}`)]
+  if (g.overtime) {
+    const bonus = S === 'MLB' ? 'FREE BASEBALL' : S === 'NHL' ? 'BONUS HOCKEY' : S === 'SOCCER' ? 'EXTRA TIME' : 'OVERTIME'
+    const label =
+      S === 'MLB'
+        ? 'FINAL (extra innings)'
+        : S === 'SOCCER'
+          ? g.shootout
+            ? 'FINAL (penalties)'
+            : 'FINAL (extra time)'
+          : g.shootout
+            ? 'FINAL/SO'
+            : 'FINAL/OT'
+    posts.push(finish('x', 'fun', `WE NEEDED ${bonus} 😤${emoji}\n\n${label}: ${score}\n\n${tags}`))
+  } else if (close) {
+    posts.push(finish('x', 'fun', `${pick(['WHAT A FINISH 😱', 'Heart rate: 📈📈📈', 'They really made us sweat that one out 😮‍💨', 'Instant classic alert 🚨'], seed)}\n\nFINAL: ${score}\n\n${tags}`))
+  } else if (winner) {
+    posts.push(finish('x', 'fun', `${pick([`${winner} handled business ✅`, `Comfortable night for the ${winner} 😌`, `${winner} said "not tonight" 🙅`], seed)}\n\nFINAL: ${score}\n\n${tags}`))
+  }
+  if (winner && loser) {
+    posts.push(finish('x', 'viral', `${winner} fans, how we feeling? 😎\n${loser} fans, we'll get 'em next time 🫡\n\nFINAL: ${score}\n${tags}`))
+  }
+  posts.push(finish('x', 'viral', `${pick(['Describe this game in one emoji 👇', 'Player of the game? Wrong answers only 😂👇', 'Rate this game 1–10 👇'], `${seed}|v2`)}\n\nFINAL: ${score}\n${tags}`))
+  return posts
 }
