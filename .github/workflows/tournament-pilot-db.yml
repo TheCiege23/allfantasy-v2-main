@@ -32,3 +32,20 @@ jobs:
       - run: npm ci
       - name: Run the isolated tournament pilot
         run: node artifacts/tournament-pilot-staging-cli.cjs test
+      - name: Install Chromium for the authenticated invite rehearsal
+        run: npx playwright install --with-deps chromium
+      - name: Run signed-in invite and frozen-draft rehearsal
+        env:
+          DATABASE_URL: ${{ secrets.TOURNAMENT_PILOT_DATABASE_URL }}
+          COMMISH_TENANT_ID: tournament-pilot
+          TOURNAMENT_PILOT_BROWSER: '1'
+          NODE_OPTIONS: --conditions=react-server
+          PLAYWRIGHT_SERVER_NODE_OPTIONS: ''
+          PLAYWRIGHT_PORT: '3169'
+          E2E_WARM_ROUTES: /api/auth/csrf
+          CI: '1'
+        run: |
+          export NEXTAUTH_SECRET="$(openssl rand -hex 32)"
+          export DIRECT_URL="${DATABASE_URL/-pooler./.}"
+          node artifacts/tournament-pilot-staging-cli.cjs verify
+          npx playwright test e2e/tournament-authenticated-pilot.spec.ts --project=chromium --reporter=line --retries=0
