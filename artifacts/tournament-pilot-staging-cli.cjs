@@ -19,7 +19,7 @@ async function main() {
   if (action !== 'push' && action !== 'test') return
   const env = { ...process.env, DATABASE_URL: url.toString(), DIRECT_URL: direct.toString(), ALLOW_UNKNOWN_DB_TARGET: '1' }
   if (action === 'test') { env.COMMISH_TENANT_ID = 'tournament-pilot'; env.TOURNAMENT_PILOT_DB = '1'; env.COMMISH_APP_URL = url.toString() }
-  const args = action === 'push' ? ['node_modules/prisma/build/index.js', 'db', 'push', '--skip-generate'] : ['node_modules/vitest/vitest.mjs', 'run', '__tests__/tournament-season-pilot-postgres.test.ts', '--environment=node', '--maxWorkers=1']
+  const args = action === 'push' ? ['node_modules/prisma/build/index.js', 'db', 'push', '--skip-generate'] : ['node_modules/vitest/vitest.mjs', 'run', '__tests__/tournament-season-pilot-postgres.test.ts', '__tests__/tournament-season-pilot-draft-postgres.test.ts', '--environment=node', '--maxWorkers=1']
   const result = spawnSync(process.execPath, args,
     { env, stdio: 'inherit', cwd: process.cwd(), shell: false })
   process.exitCode = result.status ?? 1
