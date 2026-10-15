@@ -163,6 +163,68 @@ export function trustedOutlet(sourceUrl: string | null | undefined): { host: str
   return { host: match, ...OUTLETS[match] }
 }
 
+const PRO_SPORTS = new Set(['NFL', 'NBA', 'NHL', 'MLB', 'SOCCER'])
+/**
+ * College SECTIONS of outlets' sites, matched as a whole path segment. A slug is never a section:
+ * Sporting News files "college-football-pressure-bryce-underwood-..." under /ncaa-football/, and a
+ * prefix match on the slug would misread any pro story whose slug starts with "college-".
+ */
+const COLLEGE_SECTIONS: Record<string, 'NCAAF' | 'NCAAB' | 'OTHER'> = {
+  'college-football': 'NCAAF',
+  'ncaa-football': 'NCAAF',
+  ncaaf: 'NCAAF',
+  'college-basketball': 'NCAAB',
+  'mens-college-basketball': 'NCAAB',
+  'ncaa-basketball': 'NCAAB',
+  ncaab: 'NCAAB',
+  // College sports outside the seven: no right label, so the story is not stored at all.
+  'college-sports': 'OTHER',
+  'womens-college-basketball': 'OTHER',
+  'college-baseball': 'OTHER',
+  'college-hockey': 'OTHER',
+  'college-soccer': 'OTHER',
+  ncaaw: 'OTHER',
+}
+
+/** The college sport an article's URL section names, 'OTHER' for a college sport outside the seven, or null. */
+export function collegeSectionSport(sourceUrl: string | null | undefined): 'NCAAF' | 'NCAAB' | 'OTHER' | null {
+  if (!sourceUrl) return null
+  let segments: string[]
+  try {
+    segments = new URL(sourceUrl).pathname.toLowerCase().split('/')
+  } catch {
+    return null
+  }
+  for (const seg of segments) {
+    const hit = COLLEGE_SECTIONS[seg]
+    if (hit) return hit
+  }
+  return null
+}
+
+/**
+ * The sport to store a news article under. Pro feeds and defaults mislabel college stories: ESPN's NHL
+ * feed carries college hockey, and the NewsAPI path files everything it cannot place under NFL, which
+ * put 460 college football stories under NFL on production (2026-10-15). A college football or
+ * basketball story moves to NCAAF / NCAAB; any other college story returns null (do not store it).
+ * A sport that is already college, or a URL with no college section, is left as it is.
+ */
+export function correctedNewsSport(sport: string, sourceUrl: string | null | undefined): string | null {
+  if (!PRO_SPORTS.has(String(sport ?? '').toUpperCase())) return sport
+  const college = collegeSectionSport(sourceUrl)
+  if (!college) return sport
+  return college === 'OTHER' ? null : college
+}
+
+/**
+ * True for a college story stored under a PRO sport. Readers skip such rows: they would be posted with
+ * the pro league's hashtags and pushed to everyone who plays it (an Arizona State hockey coaching
+ * change went out as an "NHL Coaching change" alert on 2026-10-15). NCAAF and NCAAB are never flagged.
+ */
+export function isCollegeStoryForProSport(sport: string | null | undefined, sourceUrl: string | null | undefined): boolean {
+  return PRO_SPORTS.has(String(sport ?? '').toUpperCase()) && collegeSectionSport(sourceUrl) !== null
+}
+
 export type TeamNameEntry = { abbr: string; name: string }
 
 /** Nicknames that are two words; everything else is the last word of "<City> <Nickname>". */

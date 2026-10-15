@@ -130,4 +130,14 @@ describe('game posts', () => {
   it('no final posts without both scores', () => {
     expect(buildGameFinalPosts({ ...knicks, final: true, homeScore: null, awayScore: 3 })).toEqual([])
   })
+
+  it('gives every game post for all five platforms, each within its limit and stating only schedule or score', () => {
+    const preview = buildGamePreviewPosts(knicks)
+    const final = buildGameFinalPosts({ ...knicks, final: true, homeScore: 101, awayScore: 99 })
+    for (const posts of [preview, final]) {
+      expect(new Set(posts.map((p) => p.platform))).toEqual(new Set(['x', 'threads', 'instagram', 'facebook', 'tiktok']))
+      for (const p of posts) expect(p.withinLimit).toBe(true)
+    }
+    for (const p of final.filter((x) => x.platform !== 'x')) expect(p.text).toContain('Toronto Raptors 99, New York Knicks 101')
+  })
 })

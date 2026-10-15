@@ -318,6 +318,10 @@ export function buildGamePreviewPosts(g: GameInput): SocialPost[] {
       'viral',
       [`${emoji} ${away} vs ${home}`, line, `Who you got? Drop your score prediction in the comments 👇`, `${tags} #GameDay #AllFantasy`].join('\n\n'),
     ),
+    // The other platforms get the same facts and a question; nothing here is new information.
+    finish('threads', 'viral', `${pick(PREVIEW_LEADS, `${seed}|threads`)}\n\n${line}\n\n${away} or ${home}? Make your pick 👇\n${tags}`),
+    finish('facebook', 'viral', `${emoji} ${line}\n\nWho's taking this one, ${away} or ${home}? Tell us in the comments 👇`),
+    finish('tiktok', 'viral', `${emoji} ${away} vs ${home}${when ? ` · ${when}` : ''}. Who you got? 👇\n\n${tags} #sportstok #AllFantasy`),
   ]
   return posts
 }
@@ -369,5 +373,12 @@ export function buildGameFinalPosts(g: GameInput): SocialPost[] {
     posts.push(finish('x', 'viral', `${winner} fans, how we feeling? 😎\n${loser} fans, we'll get 'em next time 🫡\n\nFINAL: ${score}\n${tags}`))
   }
   posts.push(finish('x', 'viral', `${pick(['Describe this game in one emoji 👇', 'Player of the game? Wrong answers only 😂👇', 'Rate this game 1–10 👇'], `${seed}|v2`)}\n\nFINAL: ${score}\n${tags}`))
+  // The other platforms: the score is still the only fact.
+  posts.push(
+    finish('threads', 'viral', `FINAL ${emoji}\n\n${score}\n\nRate this game 1–10 👇\n${tags}`),
+    finish('instagram', 'viral', [`FINAL ${emoji}`, score, 'Rate this game 1–10 in the comments 👇', `${tags} #AllFantasy`].join('\n\n')),
+    finish('facebook', 'viral', `FINAL ${emoji}\n\n${score}\n\nWhat did you think of this one? Tell us in the comments 👇`),
+    finish('tiktok', 'viral', `FINAL ${emoji} ${score}. Rate it 1–10 👇\n\n${tags} #sportstok #AllFantasy`),
+  )
   return posts
 }
