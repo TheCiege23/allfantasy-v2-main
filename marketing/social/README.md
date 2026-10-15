@@ -57,6 +57,21 @@ All four take `attachment: image`, `image: <raw url>`, `scheduled_at` (UTC ISO),
 ⚠ **Cost:** every draft is one Zapier task, so a full day is 5 posts × 4 platforms = 20 tasks
 (~600 a month). Check the plan has room before a run; Zapier stops mid-batch when it runs out.
 
+## Daily reel: one a day
+
+Alongside the 5 posts, the daily run makes **one** 10–15s reel, written as data in
+`posts/reels/<YYYY-MM-DD>.json` (shape in the header of `render-reels.mjs`; `posts/reels/_example.json`
+is a working example) and rendered with `node marketing/social/render-reels.mjs <spec>` to
+`out/reels/<name>.mp4`.
+
+- **Pick the strongest of the day's 5 posts and make it move**, rather than a sixth topic. A site
+  update makes the best reel when one shipped; otherwise a quick-tips or format explainer.
+- **Hook in the first 2 seconds**, one idea per beat (about 1.2–2s each), end card last.
+- Same fact rules as the posts. `art` may only be a `league-type-*.png` (the sport art carries
+  third-party branding).
+- Captions for `instagram`, `tiktok`, `youtube` and `facebook`. YouTube captions end with `#shorts`.
+- Before sending, pull 4–5 frames with `ffmpeg -ss <t> -i <mp4> -frames:v 1` and look at them.
+
 ## Brown Pig LLC: one post a day
 
 > ⏸ **PAUSED (owner's call, 2026-10-15): the daily run makes AllFantasy posts only.** Keep this

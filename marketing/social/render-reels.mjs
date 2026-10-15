@@ -1,12 +1,18 @@
 // Renders short vertical reels (1080x1920, 30fps, H.264 MP4, silent) for Instagram Reels, TikTok
 // and YouTube Shorts. Silent on purpose: add trending audio in the app, which also helps reach.
 // Usage: node marketing/social/render-reels.mjs [reel-name ...]   -> out/reels/<name>.mp4
+//        node marketing/social/render-reels.mjs posts/reels/<date>.json   (a reel written as data)
+//
+// A JSON reel: { name, accent, seconds (10-15), stage?, art?, caption: {instagram,tiktok,youtube,facebook},
+//   beats: [{ in, out, text, size: 'h1'|'h2'|'p', emoji?, pop?, top }], end: { in, line, top? } }
+// `text` uses [brackets] for the accent color and \n for line breaks. `top` is px inside the stage.
+// `art` names a public/ image for a slow-zoom backdrop (league-type-*.png only; see README).
 //
 // Each reel is a page of timed "beats". A beat is visible from `in` to `out` seconds. Frames are
 // captured by pausing every CSS animation and seeking it, so the output is deterministic and
 // does not depend on how fast the machine renders.
 const { chromium } = await import('playwright').catch(() => import('/opt/node22/lib/node_modules/playwright/index.mjs'))
-import { mkdirSync, writeFileSync, rmSync } from 'node:fs'
+import { mkdirSync, writeFileSync, rmSync, readFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import { execFileSync } from 'node:child_process'
 import path from 'node:path'
@@ -122,7 +128,28 @@ const REELS = {
   },
 }
 
-const only = process.argv.slice(2)
+// A reel written as data (see the header), so the daily run can add one without touching code.
+function reelFromSpec(spec) {
+  const beats = spec.beats.map((b) => {
+    const tag = b.size === 'p' ? 'p' : b.size === 'h1' ? 'h1' : 'h2'
+    const emoji = b.emoji ? `<div class="emoji">${esc(b.emoji)}</div>` : ''
+    return beat(b.in, b.out ?? 99, `${emoji}<${tag}>${hl(b.text)}</${tag}>`, b.pop ? 'pop' : '', `top:${b.top ?? 200}px`)
+  })
+  if (spec.end) beats.push(endCard(spec.end.in, spec.end.line, spec.end.top ?? 300))
+  return {
+    accent: spec.accent || '#3BC4FF', seconds: spec.seconds, stage: spec.stage || (spec.art ? 'top:900px' : 'top:430px'),
+    backdrop: spec.art ? () => `<div class="art" style="background-image:url('${A(spec.art)}');--dur:${spec.seconds}s"></div><div class="shade"></div>` : undefined,
+    body: () => beats.join(''), caption: spec.caption,
+  }
+}
+let only = process.argv.slice(2)
+const specArg = only.find((a) => a.endsWith('.json'))
+if (specArg) {
+  const spec = JSON.parse(readFileSync(specArg, 'utf8'))
+  for (const k of Object.keys(REELS)) delete REELS[k]
+  REELS[spec.name] = reelFromSpec(spec)
+  only = [spec.name]
+}
 const outRoot = path.join(DIR, 'out', 'reels')
 mkdirSync(outRoot, { recursive: true })
 const browser = await chromium.launch()
@@ -150,5 +177,5 @@ for (const [name, reel] of Object.entries(REELS)) {
   captions += `## ${name} · ${reel.seconds}s\n\n` + Object.entries(reel.caption).map(([k, v]) => `**${k}**\n\n${v}\n`).join('\n') + '\n---\n\n'
   console.log('rendered', name, frames, 'frames ->', mp4)
 }
-writeFileSync(path.join(outRoot, 'CAPTIONS.md'), captions)
+writeFileSync(path.join(outRoot, specArg ? `${only[0]}.CAPTIONS.md` : 'CAPTIONS.md'), captions)
 await browser.close()
