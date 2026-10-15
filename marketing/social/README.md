@@ -27,6 +27,30 @@ Every post's `caption` is an object with one entry per platform (`instagram`, `t
 handle, because the handles differ by platform. YouTube Shorts need video, which this generator
 does not make, so YouTube gets Community posts.
 
+## Publishing through Buffer (via Zapier)
+
+Images are hosted in the public repo `TheCiege23/allfantasy-social` at
+`posts/<YYYY-MM-DD>/post-N.png`; Buffer fetches them from
+`https://raw.githubusercontent.com/TheCiege23/allfantasy-social/main/posts/<date>/post-N.png`.
+
+Each post goes to Buffer as a **scheduled draft** (`method: schedule_draft`): it sits at its
+time slot and publishes only after the owner approves it in Buffer. Never use `share_now`,
+`queue` or `schedule`; those publish without approval.
+
+| platform | Buffer channel id | extra fields |
+|---|---|---|
+| Instagram | `6ad0ce6d778b240e2f18515d` | `ig_post_type: post` |
+| TikTok | `6ad0cea2778b240e2f185ccd` | `image_alttext` |
+| Facebook | `6ad0cee5778b240e2f186784` | `image_alttext` |
+| X | `6ad0cf0f778b240e2f186b95` | `image_alttext` |
+
+Organization `655cbba41f7fd95c8c81df0e`. Zapier connection "Buffer" (numeric id `66868387`).
+All four take `attachment: image`, `image: <raw url>`, `scheduled_at` (UTC ISO),
+`scheduling_type: direct` and `text`, nested under `dynamic_properties`.
+
+⚠ **Cost:** every draft is one Zapier task, so a full day is 5 posts × 4 platforms = 20 tasks
+(~600 a month). Check the plan has room before a run; Zapier stops mid-batch when it runs out.
+
 ## Daily playbook: 5 posts
 
 A day's spec is one JSON file in `posts/`, named for the date. `posts/` is also the history:
