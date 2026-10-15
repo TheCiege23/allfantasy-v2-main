@@ -134,6 +134,22 @@ describe('followers of a player in the news', () => {
     expect(followerCalls()[0]).toMatchObject({ type: 'player_news_update', severity: 'medium' })
   })
 
+  it('a MEDIUM-impact signing still reaches followers (the old impact gate dropped every one)', async () => {
+    h.newsFind.mockResolvedValue([{ ...ROW, impact: 'medium', headline: 'Gibbs signs four-year extension' }])
+    h.classify.mockReturnValue('signing')
+    h.followers.mockResolvedValue(['fan-1'])
+    await dispatchPendingPlayerNewsNotifications()
+    expect(followerCalls()[0]).toMatchObject({ type: 'player_news_update' })
+  })
+
+  it('an unconfirmed trade rumour is held, however high its impact', async () => {
+    h.newsFind.mockResolvedValue([{ ...ROW, impact: 'high', headline: 'Gibbs reportedly traded to Dallas' }])
+    h.classify.mockReturnValue('trade')
+    h.followers.mockResolvedValue(['fan-1'])
+    await dispatchPendingPlayerNewsNotifications()
+    expect(followerCalls()).toHaveLength(0)
+  })
+
   it('no roster and no follower counts as noRoster, and the row is still stamped', async () => {
     const out = await dispatchPendingPlayerNewsNotifications()
     expect(out).toMatchObject({ notified: 0, noRoster: 1, scanned: 1 })

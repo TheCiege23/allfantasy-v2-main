@@ -26,6 +26,7 @@ import type { NotificationCategoryId } from '@/lib/notification-settings/types'
 import type { NewsCategory } from '@/lib/workers/x-news-ingestion'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 import { classifyPlayerNewsCategory } from '@/lib/news/player-news-category'
+import { decidePlayerNewsEligibility } from '@/lib/notifications/playerNewsEligibility'
 import { listFollowerIdsForPlayerIdentity } from '@/lib/follows/playerFollows'
 import { listFollowerIdsForTeam } from '@/lib/follows/teamFollows'
 import { resolveNewsTeam, withinTeamFollowDailyCap } from '@/lib/follows/teamFollowAlerts'
@@ -440,7 +441,19 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
 
     const category = classifyPlayerNewsCategory(row.headline, row.body)
     const isInjury = category === 'injury'
-    if (row.impact !== 'high' && !isInjury) continue
+    /*
+     * Eligibility by EVENT CATEGORY (lib/notifications/playerNewsEligibility). The rule this replaces,
+     * `impact !== 'high' && !isInjury`, dropped every signing and extension, because ingestion scores
+     * those MEDIUM. Injuries still always qualify; a trade now needs confirming wording, and a
+     * negated transaction ("will not be traded", "release rescinded") never goes out.
+     */
+    const eligibility = decidePlayerNewsEligibility({
+      category,
+      impact: row.impact,
+      headline: row.headline,
+      body: row.body,
+    })
+    if (!eligibility.eligible) continue
 
     /*
      * ONE player, and HIS team, from the registry — never the row's `team` tag, which names whatever
