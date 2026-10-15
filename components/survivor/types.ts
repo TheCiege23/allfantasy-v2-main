@@ -44,6 +44,7 @@ export interface SurvivorSummaryConfig {
 /** Matches `ScrollRevealStep` from `lib/survivor/votingEngine.ts` (JSON on council). */
 export type SurvivorScrollRevealStep =
   | { type: 'vote'; voterName: string; targetName: string }
+  | { type: 'ballot'; targetName: string; stamp: string }
   | { type: 'pause' }
   | { type: 'does_not_count'; voterName: string }
   | { type: 'elimination'; userName: string }
