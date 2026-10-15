@@ -77,7 +77,7 @@ export async function GET(_req: NextRequest, context: Context) {
     tribeDraftState: readSGTribeDraftState(season.tribeDraftState) }, powers,
     chops: presentation.hiddenHostedChop ? chops.filter(chop => chop.period !== season.currentPeriod) : chops,
     teams: teams.map(team => ({ ...team, eliminatedAt: hiddenIds.has(team.externalId ?? '') ? null : team.eliminatedAt,
-      legacyRosterId: team.externalId })), scores,
+      legacyRosterId: team.externalId })), scores: presentation.hiddenHostedChop ? [] : scores,
     stealTargets, ownRoster: ownedTeam?.externalId ? { id: ownedTeam.externalId,
       faabRemaining: roster?.faabRemaining ?? 0, players, dailyLineups, ownBid,
       tribeChoice: ownTribeChoice?.tribeId ?? null } : null })

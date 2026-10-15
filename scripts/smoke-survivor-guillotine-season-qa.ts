@@ -64,7 +64,44 @@ async function main() {
     assert(leagueId, 'League creation returned no ID')
     const path = `/api/leagues/${leagueId}/survivor-guillotine`
     const op = (action: string, rest: Record<string, unknown> = {}) => post(commissioner, `${path}/operations`, { action, ...rest })
+    const chop = async (period: number) => {
+      const prepared = await post(commissioner, `${path}/chop`, { period })
+      if (process.env.SG_QA_HOSTED !== '1') return prepared
+      const chopped = (prepared.result as { choppedTeamIds: string[] }).choppedTeamIds[0]
+      const original = chopped ? await prisma.roster.findUniqueOrThrow({ where: { id: chopped }, select: { playerData: true } }) : null
+      assert(await prisma.survivorGuillotineChop.count({ where: { leagueId: leagueId!, period, reversedAt: null } }) === 0,
+        'Hosted preview committed a chop before the final reveal')
+      for (const stage of [1, 2, 3]) {
+        if (stage === 3 && period === 2 && process.env.SG_QA_HOSTED_STALE === '1' && chopped) {
+          await prisma.roster.update({ where: { id: chopped }, data: { updatedAt: new Date(Date.now() + 1000) } })
+          const stale = await op('advance_hosted_ceremony', { period }) as { result?: { stage?: number; restarted?: boolean } }
+          assert(stale.result?.stage === 0 && stale.result.restarted === true,
+            'A changed hosted roster did not restart the reveal')
+          assert(await prisma.survivorGuillotineChop.count({ where: { leagueId: leagueId!, period, reversedAt: null } }) === 0,
+            'A stale hosted plan chopped a roster')
+          await op('advance_hosted_ceremony', { period })
+          await op('advance_hosted_ceremony', { period })
+        }
+        const reveal = await op('advance_hosted_ceremony', { period }) as { result?: { stage?: number } }
+        assert(reveal.result?.stage === stage, `Hosted reveal did not reach stage ${stage}`)
+        if (stage < 3) {
+          assert(await prisma.survivorGuillotineChop.count({ where: { leagueId: leagueId!, period, reversedAt: null } }) === 0,
+            'Hosted reveal released players early')
+          if (chopped && original) {
+            const roster = await prisma.roster.findUniqueOrThrow({ where: { id: chopped }, select: { playerData: true } })
+            assert(JSON.stringify(roster.playerData) === JSON.stringify(original.playerData),
+              'Hosted reveal changed the chopped roster before the final stage')
+          }
+        }
+      }
+      assert(await prisma.survivorGuillotineChop.count({ where: { leagueId: leagueId!, period, reversedAt: null } }) ===
+        (prepared.result as { choppedTeamIds: string[] }).choppedTeamIds.length,
+      'Final hosted reveal did not commit the expected chops')
+      return prepared
+    }
     let config = { ...defaultSGConfig(sport, sport === 'NBA' ? 18 : 17), tribeCount: 4,
+      ceremonyMode: process.env.SG_QA_HOSTED === '1' ? 'hosted' as const : 'automatic' as const,
+      ceremonyPresentation: process.env.SG_QA_HOSTED === '1',
       nbaScoring: sport === 'NBA' ? 'capped_games' as const : 'total_points' as const, nbaGameCap: 1,
       gauntletElimination: 'league_lowest_two' as const,
       gauntletIdolAuction: process.env.SG_QA_EXERCISE_AUCTION === '1',
@@ -300,7 +337,7 @@ async function main() {
         result = { result: { choppedTeamIds: autoChops.map(c => c.rosterId) } }
         nextPeriodPreAdvanced = true
       } else {
-        result = await post(commissioner, `${path}/chop`, { period: row.period })
+        result = await chop(row.period)
       }
       if (row.period === 1) {
         const firstChop = (result.result as { choppedTeamIds: string[] }).choppedTeamIds[0]
@@ -315,7 +352,7 @@ async function main() {
         assert((corrected.result as { status: string }).status === 'reversed', 'Stat correction did not reverse the chop')
         assert(await prisma.survivorGuillotineChop.count({ where: { leagueId, period: 1, reversedAt: { not: null } } }) === 1,
           'Reversed chop lacks its audit row')
-        result = await post(commissioner, `${path}/chop`, { period: 1 })
+        result = await chop(1)
         assert((result.result as { choppedTeamIds: string[] }).choppedTeamIds[0] !== firstChop,
           'Corrected scores did not change the chopped roster')
       }
