@@ -137,6 +137,7 @@ const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
    */
   { name: 'browser-only', why: 'loaded by the visitor\'s browser (SDK, embed, beacon) and listed in the CSP allowlist; never fetched by our code', test: /^(sdk\.scdn\.co|open\.spotify\.com|www\.youtube-nocookie\.com|platform\.twitter\.com|syndication\.twitter\.com|api\.stripe\.com|www\.google-analytics\.com)$/i },
   { name: 'share-link', why: 'a URL we hand the user, never fetched', test: /^(twitter\.com|x\.com|www\.reddit\.com|www\.facebook\.com|www\.linkedin\.com|wa\.me|api\.whatsapp\.com|discord\.gg|discord\.new|www\.youtube\.com|fancred\.app)$/i },
+  { name: 'share-link', why: 'the social newsroom opens these composers / upload pages in the admin\'s browser, never fetched — app/admin/social-newsroom/NewsroomBoard.tsx', test: /^(www\.threads\.net|www\.instagram\.com|www\.tiktok\.com)$/i },
   /*
    * Bare sleeper.com is a DEEP LINK, not a feed — href targets like
    * /leagues/<id>/settings and "Open in Sleeper" buttons. It sat in the
