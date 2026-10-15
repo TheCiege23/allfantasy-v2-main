@@ -3,6 +3,9 @@ import { prisma } from '@/lib/prisma'
 import { getLeagueMode } from '@/lib/zombie/zombieLeagueMode'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { getZombieSportConfig } from '@/lib/zombie/sportRulesConfig'
+import { BASH_TRANSFER_SHARE, MAUL_TRANSFER_SHARE } from '@/lib/zombie/winningsShares'
+
+const pct = (share: number) => `${Math.round(share * 100)}%`
 
 function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
@@ -57,8 +60,8 @@ function buildSections(
     `- ${cfg.infectionTiming}`,
     '',
     mode === 'paid'
-      ? 'PAID: Infection transfers weekly winnings from victim to infector where configured.'
-      : `FREE: Infection transfers ${freeCurrency} from victim to infector (symbolic).`,
+      ? 'PAID: An infected Survivor\'s whole week of winnings goes to the team that infected them.'
+      : `FREE: An infected Survivor's whole week of ${freeCurrency} goes to the team that infected them (symbolic).`,
   ].join('\n')
 
   const sectionScoring = [
@@ -78,8 +81,8 @@ function buildSections(
     'Bashing result: The loser receives a public "Bashed" marker for the week.',
     '',
     mode === 'paid'
-      ? 'PAID: The loser may forfeit an additional slice of their weekly pot (commissioner settings).'
-      : `FREE: The loser may lose additional ${freeCurrency} (symbolic).`,
+      ? `PAID: The loser hands ${pct(BASH_TRANSFER_SHARE)} of their week's winnings to the winner.`
+      : `FREE: The loser hands ${pct(BASH_TRANSFER_SHARE)} of their week's ${freeCurrency} to the winner (symbolic).`,
   ].join('\n')
 
   const sectionMauling = [
@@ -88,8 +91,8 @@ function buildSections(
     'Mauling result: Double loot transfer where enabled; mauling animation triggers.',
     '',
     mode === 'paid'
-      ? 'PAID: Double winnings transferred when the pot engine applies it.'
-      : `FREE: Double ${freeCurrency} transferred (symbolic); badges may be awarded.`,
+      ? `PAID: The loser hands ${pct(MAUL_TRANSFER_SHARE)} of their week's winnings to the winner — double a Bashing.`
+      : `FREE: The loser hands ${pct(MAUL_TRANSFER_SHARE)} of their week's ${freeCurrency} to the winner — double a Bashing (symbolic).`,
   ].join('\n')
 
   let sectionWinnings = ''
