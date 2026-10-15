@@ -1,6 +1,7 @@
 // Renders single-image AllFantasy posts (1080x1350) from a JSON spec.
 // Usage: node marketing/social/render-daily.mjs marketing/social/posts/2026-10-15.json   -> out/daily/2026-10-15/post-N.png
 // Spec: { date, posts: [{ kind: 'hero'|'shipped'|'poll'|'list', accent, eyebrow, title, lead, big, bullets, options, art, cta, caption }] }
+// caption: a string, or { instagram, tiktok, facebook, x, youtube } — see PLATFORMS below.
 // In `title`, wrap words in [brackets] to color them with the accent.
 const { chromium } = await import('playwright').catch(() => import('/opt/node22/lib/node_modules/playwright/index.mjs'))
 import { mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs'
@@ -72,16 +73,39 @@ const outDir = path.join(DIR, 'out', 'daily', spec.date)
 mkdirSync(outDir, { recursive: true })
 const browser = await chromium.launch()
 const pg = await browser.newPage({ viewport: { width: 1080, height: 1350 } })
-let captions = `# AllFantasy posts for ${spec.date}\n\n`
+// Accounts, in the order captions are written. `caption` may be one string (used everywhere) or an
+// object keyed by these ids; a platform missing from the object is left out for that post.
+const PLATFORMS = [
+  ['instagram', 'Instagram', '@allfantasyos'],
+  ['tiktok', 'TikTok (photo mode)', '@allfantasyos'],
+  ['facebook', 'Facebook', 'AllFantasy page'],
+  ['x', 'X', '@AFSportsApp'],
+  ['youtube', 'YouTube (Community / Shorts)', '@AllFantasyHQ'],
+]
+const X_LIMIT = 280
+// X weighs emoji and CJK as 2 characters; counting code points would pass a post X rejects.
+const xLength = (t) => [...t].reduce((n, ch) => n + (ch.codePointAt(0) >= 0x1100 ? 2 : 1), 0)
+const warnings = []
+const captionBlock = (p, i) => {
+  if (typeof p.caption !== 'object' || !p.caption) return `${p.caption || ''}\n\n`
+  return PLATFORMS.filter(([k]) => p.caption[k]).map(([k, label, handle]) => {
+    const text = p.caption[k]
+    if (k === 'x' && xLength(text) > X_LIMIT) warnings.push(`post ${i + 1}: X caption weighs ${xLength(text)} (limit ${X_LIMIT})`)
+    return `**${label}** · ${handle}\n\n${text}\n\n`
+  }).join('')
+}
+let captions = `# AllFantasy posts for ${spec.date}\n\n` +
+  PLATFORMS.map(([, label, handle]) => `- ${label}: ${handle}`).join('\n') + '\n\n'
 for (const [i, p] of spec.posts.entries()) {
   const f = path.join(outDir, `_tmp.html`)
   writeFileSync(f, html(p))
   await pg.goto(pathToFileURL(f).href, { waitUntil: 'networkidle' })
   await pg.evaluate(() => document.fonts.ready)
   await pg.screenshot({ path: path.join(outDir, `post-${i + 1}.png`) })
-  captions += `## Post ${i + 1}${p.slot ? ` · ${p.slot}` : ''}\n\n${p.caption || ''}\n\n---\n\n`
+  captions += `## Post ${i + 1}${p.slot ? ` · ${p.slot}` : ''}\n\n${captionBlock(p, i)}---\n\n`
 }
 rmSync(path.join(outDir, '_tmp.html'), { force: true })
 writeFileSync(path.join(outDir, 'CAPTIONS.md'), captions)
 await browser.close()
+for (const w of warnings) console.warn('⚠', w)
 console.log('rendered', spec.posts.length, '->', outDir)

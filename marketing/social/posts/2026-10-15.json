@@ -3,41 +3,143 @@
   "posts": [
     {
       "slot": "9 AM · Site update",
-      "kind": "shipped", "accent": "green", "pill": "Just shipped",
+      "kind": "shipped",
+      "accent": "green",
+      "pill": "Just shipped",
       "title": "Free-agent day?\n[Add him now.]",
       "lead": "On free-agent days the waiver wire now lets you add players instantly, Sleeper-style. No claim. No waiting overnight.",
-      "bullets": [["Instant adds on free-agent days", "Claims still apply on waiver days"], ["A “Today” row shows the day’s mode", "So you always know: add or claim"]],
-      "caption": "New on AllFantasy 🟢\n\nFree-agent day? You can now add players instantly on the waiver wire, Sleeper-style. No claim, no waiting for the overnight run.\n\nA new “Today” row tells you whether it’s an add day or a claim day, so you never guess.\n\nallfantasy.ai (link in bio)\n\n#fantasyfootball #waiverwire #fantasyfootballcommunity #sleeperfantasy #allfantasy #buildinpublic"
+      "bullets": [
+        [
+          "Instant adds on free-agent days",
+          "Claims still apply on waiver days"
+        ],
+        [
+          "A “Today” row shows the day’s mode",
+          "So you always know: add or claim"
+        ]
+      ],
+      "caption": {
+        "instagram": "New on AllFantasy 🟢\n\nFree-agent day? You can now add players instantly on the waiver wire, Sleeper-style. No claim, no waiting for the overnight run.\n\nA new “Today” row tells you whether it’s an add day or a claim day, so you never guess.\n\nallfantasy.ai (link in bio)\n\n#fantasyfootball #waiverwire #fantasyfootballcommunity #sleeperfantasy #allfantasy #buildinpublic",
+        "tiktok": "Free-agent day = instant adds now 🟢 No claim, no waiting overnight. A “Today” row tells you if it’s an add day or a claim day. Link in bio.\n\n#fantasyfootball #waiverwire #fantasyfootballtok #allfantasy",
+        "facebook": "New on AllFantasy 🟢\n\nOn free-agent days, the waiver wire now lets you add players instantly, Sleeper-style. No claim, no waiting for the overnight run. A new “Today” row shows whether it’s an add day or a claim day.\n\nTry it free: https://allfantasy.ai",
+        "x": "New: free-agent day? Add him now. 🟢\n\nInstant adds on the waiver wire, Sleeper-style. No claim, no overnight wait. A “Today” row tells you add day vs claim day.\n\nallfantasy.ai #FantasyFootball",
+        "youtube": "Just shipped 🟢 On free-agent days you can now add players instantly on the AllFantasy waiver wire, no claim and no overnight wait.\n\nWhat should we build next for waivers? Tell us below 👇\n\nallfantasy.ai"
+      }
     },
     {
       "slot": "11 AM · NBA",
-      "kind": "hero", "accent": "orange", "eyebrow": "Fantasy basketball",
-      "big": "5", "title": "days until\n[tip-off.]",
+      "kind": "hero",
+      "accent": "orange",
+      "eyebrow": "Fantasy basketball",
+      "big": "5",
+      "title": "days until\n[tip-off.]",
       "lead": "The NBA season starts Tuesday, Oct 20. Get your fantasy basketball league drafted before opening night.",
       "cta": "START A LEAGUE FREE →",
-      "caption": "🏀 5 days. The NBA season tips off Tuesday, Oct 20.\n\nIs your fantasy basketball league drafted yet? If your group chat is still “we should do one this year”… this is your sign.\n\nCreate an NBA league free on AllFantasy. Takes a couple minutes.\n\n#fantasybasketball #nbafantasy #fantasybball #nba #allfantasy"
+      "caption": {
+        "instagram": "🏀 5 days. The NBA season tips off Tuesday, Oct 20.\n\nIs your fantasy basketball league drafted yet? If your group chat is still “we should do one this year”… this is your sign.\n\nCreate an NBA league free on AllFantasy. Takes a couple minutes.\n\n#fantasybasketball #nbafantasy #fantasybball #nba #allfantasy",
+        "tiktok": "5 days until NBA tip-off 🏀 (Tuesday, Oct 20). Your group chat said “we should do a league this year”… this is the sign. Start one free, link in bio.\n\n#fantasybasketball #nba #nbatok #allfantasy",
+        "facebook": "🏀 5 days. The NBA season tips off Tuesday, Oct 20.\n\nIs your fantasy basketball league drafted yet? Create one free on AllFantasy in a couple of minutes: https://allfantasy.ai\n\nTag the friend who always says “we should do one this year” 👇",
+        "x": "5 days until NBA tip-off 🏀 (Tue, Oct 20)\n\nIs your fantasy basketball league drafted? If the group chat is still saying “we should do one”… this is the sign.\n\nStart one free: allfantasy.ai #FantasyBasketball",
+        "youtube": "🏀 5 days until NBA opening night (Tuesday, Oct 20).\n\nIs your fantasy basketball league drafted yet, or still “we should do one”? Be honest 👇\n\nStart one free: allfantasy.ai"
+      }
     },
     {
       "slot": "2 PM · Commissioner update",
-      "kind": "list", "accent": "cyan", "pill": "Commish update",
+      "kind": "list",
+      "accent": "cyan",
+      "pill": "Commish update",
       "title": "Run your league\n[from your phone.]",
-      "bullets": [["Draft pick timers from 30 sec to 8 hours", "Slow draft, mid-pace or live: your call"], ["Set waivers day by day", "FAAB, rolling, free agents or locked"], ["Rename the league or swap the logo mid-draft", "And in the offseason, and at renewal"], ["League settings rebuilt for mobile", "No more sideways scrolling"]],
-      "caption": "Commissioners, this one’s for you 📱\n\nWe rebuilt league settings for your phone:\n✅ Draft pick timers from 30 seconds to 8 hours\n✅ A waiver schedule for each day of the week (FAAB, rolling, free agents or locked)\n✅ Rename the league or fix the logo even mid-draft, in the offseason or at renewal\n✅ No more sideways scrolling on mobile\n\nTag the commish in your league 👇\n\n#fantasyfootball #fantasycommissioner #fantasyfootballleague #dynastyfootball #allfantasy #buildinpublic"
+      "bullets": [
+        [
+          "Draft pick timers from 30 sec to 8 hours",
+          "Slow draft, mid-pace or live: your call"
+        ],
+        [
+          "Set waivers day by day",
+          "FAAB, rolling, free agents or locked"
+        ],
+        [
+          "Rename the league or swap the logo mid-draft",
+          "And in the offseason, and at renewal"
+        ],
+        [
+          "League settings rebuilt for mobile",
+          "No more sideways scrolling"
+        ]
+      ],
+      "caption": {
+        "instagram": "Commissioners, this one’s for you 📱\n\nWe rebuilt league settings for your phone:\n✅ Draft pick timers from 30 seconds to 8 hours\n✅ A waiver schedule for each day of the week (FAAB, rolling, free agents or locked)\n✅ Rename the league or fix the logo even mid-draft, in the offseason or at renewal\n✅ No more sideways scrolling on mobile\n\nTag the commish in your league 👇\n\n#fantasyfootball #fantasycommissioner #fantasyfootballleague #dynastyfootball #allfantasy #buildinpublic",
+        "tiktok": "Commissioners: you can now run your whole league from your phone 📱 Draft timers 30 sec to 8 hrs, waivers set day by day, edit settings even mid-draft. Tag your commish 👇\n\n#fantasyfootball #commissioner #fantasyfootballtok #allfantasy",
+        "facebook": "Commissioners, this one’s for you 📱\n\nWe rebuilt league settings for your phone:\n✅ Draft pick timers from 30 seconds to 8 hours\n✅ A waiver schedule for each day of the week\n✅ Rename the league or fix the logo even mid-draft\n✅ No more sideways scrolling\n\nTag your commish 👇 https://allfantasy.ai",
+        "x": "Commish update 📱\n\n✅ Draft timers: 30 sec to 8 hrs\n✅ Waivers set day by day (FAAB, rolling, FA, locked)\n✅ Edit league settings mid-draft or offseason\n✅ Built for your phone\n\nallfantasy.ai #FantasyFootball",
+        "youtube": "Commissioners 📱 League settings on AllFantasy are rebuilt for your phone: draft timers from 30 sec to 8 hours, a waiver schedule for every day of the week, and you can edit settings even mid-draft.\n\nWhat’s the one setting your league always fights about? 👇"
+      }
     },
     {
       "slot": "5 PM · NHL",
-      "kind": "list", "accent": "ice", "eyebrow": "Fantasy hockey",
-      "big": "🏒", "title": "The most slept-on\n[fantasy sport.]",
-      "bullets": [["82 games a season", "Way more chances to win your week"], ["Lineup decisions almost every night", "The managers who pay attention win"], ["Goalies swing whole matchups", "One hot streak changes everything"]],
-      "caption": "Fantasy hockey is the most slept-on fantasy sport. Change our mind 🏒\n\n🧊 82 games a season\n🧊 Lineup decisions almost every night\n🧊 One hot goalie can swing your whole week\n\nRun an NHL league free on AllFantasy.\n\n#fantasyhockey #nhl #fantasysports #hockeytwitter #allfantasy"
+      "kind": "list",
+      "accent": "ice",
+      "eyebrow": "Fantasy hockey",
+      "big": "🏒",
+      "title": "The most slept-on\n[fantasy sport.]",
+      "bullets": [
+        [
+          "82 games a season",
+          "Way more chances to win your week"
+        ],
+        [
+          "Lineup decisions almost every night",
+          "The managers who pay attention win"
+        ],
+        [
+          "Goalies swing whole matchups",
+          "One hot streak changes everything"
+        ]
+      ],
+      "caption": {
+        "instagram": "Fantasy hockey is the most slept-on fantasy sport. Change our mind 🏒\n\n🧊 82 games a season\n🧊 Lineup decisions almost every night\n🧊 One hot goalie can swing your whole week\n\nRun an NHL league free on AllFantasy.\n\n#fantasyhockey #nhl #fantasysports #hockeytwitter #allfantasy",
+        "tiktok": "Fantasy hockey is the most slept-on fantasy sport 🏒 82 games, lineup moves almost every night, and one hot goalie swings your whole week. Change our mind 👇\n\n#fantasyhockey #nhl #hockeytok #allfantasy",
+        "facebook": "Fantasy hockey is the most slept-on fantasy sport. Change our mind 🏒\n\n🧊 82 games a season\n🧊 Lineup decisions almost every night\n🧊 One hot goalie can swing your whole week\n\nRun an NHL league free: https://allfantasy.ai",
+        "x": "Fantasy hockey is the most slept-on fantasy sport. 🏒\n\n🧊 82 games\n🧊 Lineup calls almost every night\n🧊 One hot goalie swings your week\n\nChange our mind. #FantasyHockey",
+        "youtube": "Hot take 🏒 Fantasy hockey is the most slept-on fantasy sport: 82 games, lineup calls almost every night, and goalies that swing whole matchups.\n\nAgree or disagree? 👇"
+      }
     },
     {
       "slot": "8 PM · Poll",
-      "kind": "poll", "accent": "purple", "eyebrow": "Settle this in the comments",
+      "kind": "poll",
+      "accent": "purple",
+      "eyebrow": "Settle this in the comments",
       "title": "Best fantasy\n[season?]",
-      "options": [["🏈", "Football"], ["🏀", "Basketball"], ["🏒", "Hockey"], ["⚾", "Baseball"], ["⚽", "Soccer"]],
+      "options": [
+        [
+          "🏈",
+          "Football"
+        ],
+        [
+          "🏀",
+          "Basketball"
+        ],
+        [
+          "🏒",
+          "Hockey"
+        ],
+        [
+          "⚾",
+          "Baseball"
+        ],
+        [
+          "⚽",
+          "Soccer"
+        ]
+      ],
       "cta": "COMMENT A–E 👇",
-      "caption": "Settle it. Which fantasy season is the best one? 👇\n\nA 🏈 Football\nB 🏀 Basketball\nC 🏒 Hockey\nD ⚾ Baseball\nE ⚽ Soccer\n\nDrop your letter and defend it. (You can run leagues in all of them on AllFantasy.)\n\n#fantasysports #fantasyfootball #fantasybasketball #fantasyhockey #fantasybaseball #allfantasy"
+      "caption": {
+        "instagram": "Settle it. Which fantasy season is the best one? 👇\n\nA 🏈 Football\nB 🏀 Basketball\nC 🏒 Hockey\nD ⚾ Baseball\nE ⚽ Soccer\n\nDrop your letter and defend it. (You can run leagues in all of them on AllFantasy.)\n\n#fantasysports #fantasyfootball #fantasybasketball #fantasyhockey #fantasybaseball #allfantasy",
+        "tiktok": "Settle it: best fantasy season? 🏈🏀🏒⚾⚽ Comment A–E and defend your pick 👇\n\n#fantasysports #fantasyfootball #fantasybasketball #allfantasy",
+        "facebook": "Settle it 👇 Which fantasy season is the best one?\n\nA 🏈 Football\nB 🏀 Basketball\nC 🏒 Hockey\nD ⚾ Baseball\nE ⚽ Soccer\n\nDrop your letter and defend it. (You can run leagues in all of them on AllFantasy.)",
+        "x": "Settle it. Best fantasy season?\n\nA 🏈 Football\nB 🏀 Basketball\nC 🏒 Hockey\nD ⚾ Baseball\nE ⚽ Soccer\n\nReply with your letter and defend it 👇",
+        "youtube": "Settle it 👇 Which fantasy season is the best one?\n\nFootball, basketball, hockey, baseball or soccer? Vote and defend your pick in the comments."
+      }
     }
   ]
 }

@@ -12,6 +12,21 @@ Output lands in `marketing/social/out/` (git-ignored). Each daily run also write
 beside the PNGs. Needs Playwright + Chromium (preinstalled in Claude Code cloud sessions) and
 network access to Google Fonts (Anton + Inter).
 
+## Accounts
+
+| platform | handle | caption style |
+|---|---|---|
+| Instagram | [@allfantasyos](https://www.instagram.com/allfantasyos/) | full caption, 5–8 hashtags, "link in bio" |
+| TikTok (photo mode) | @allfantasyos | 1–3 punchy lines, 3–4 hashtags, "link in bio" |
+| Facebook | [AllFantasy page](https://www.facebook.com/profile.php?id=61584227235673) | conversational, a clickable `https://allfantasy.ai` link, few or no hashtags |
+| X | [@AFSportsApp](https://x.com/AFSportsApp) | **280 max** (the renderer warns; emoji count double), `allfantasy.ai`, 1–2 hashtags |
+| YouTube | [@AllFantasyHQ](https://www.youtube.com/@AllFantasyHQ) | Community-tab post: lead with a question; polls fit natively |
+
+Every post's `caption` is an object with one entry per platform (`instagram`, `tiktok`,
+`facebook`, `x`, `youtube`). The graphics stay the same everywhere and carry the website, not a
+handle, because the handles differ by platform. YouTube Shorts need video, which this generator
+does not make, so YouTube gets Community posts.
+
 ## Daily playbook: 5 posts
 
 A day's spec is one JSON file in `posts/`, named for the date. `posts/` is also the history:
@@ -53,7 +68,8 @@ Sports AllFantasy can **create** leagues for: NFL, NBA, NHL, MLB, NCAAF, NCAAB, 
 ```json
 { "slot": "9 AM · Site update", "kind": "shipped", "accent": "green", "pill": "Just shipped",
   "title": "Free-agent day?\n[Add him now.]", "lead": "...", "bullets": [["Main", "sub"]],
-  "cta": "LINK IN BIO →", "caption": "..." }
+  "cta": "LINK IN BIO →",
+  "caption": { "instagram": "...", "tiktok": "...", "facebook": "...", "x": "...", "youtube": "..." } }
 ```
 
 - `kind`: `shipped` (✓ bullets), `list` (numbered bullets), `hero`, `poll` (`options: [[emoji, text]]`)
