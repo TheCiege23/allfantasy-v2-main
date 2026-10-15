@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Image from 'next/image'
 import { Gem, Eye, EyeOff } from 'lucide-react'
 import type { SurvivorSummary } from './types'
 import { SurvivorIdolPlay } from './SurvivorIdolPlay'
@@ -56,9 +57,16 @@ export function SurvivorIdolsView({ leagueId, summary }: SurvivorIdolsViewProps)
                   {IDOL_ART[idol.powerType] ? <img src={`/survivor/idols/${IDOL_ART[idol.powerType]}-icon.svg`} alt="" className="h-10 w-10 object-contain" /> : <Eye className="h-4 w-4 text-amber-400" />}
                   <span className="font-medium text-white">{formatPowerLabel(idol.powerType)}</span>
                 </div>
-                <span className="text-xs text-white/60">
-                  Player: {idol.playerId} · ID: {idol.id.slice(0, 8)}… · {idol.powerType === 'triple_steal' ? 'Play before the playoffs' : 'Eligible at Elimination Council'}
-                </span>
+                <div className="flex items-center gap-2 text-xs text-white/75">
+                  {idol.playerImageUrl ? (
+                    <Image src={idol.playerImageUrl} alt={`${idol.playerName ?? 'Idol player'} headshot`} width={36} height={36} unoptimized className="h-9 w-9 rounded-full border border-amber-400/35 object-cover" />
+                  ) : (
+                    <span aria-hidden="true" className="flex h-9 w-9 items-center justify-center rounded-full border border-amber-400/35 bg-amber-500/10 font-bold text-amber-200">
+                      {(idol.playerName ?? '?').slice(0, 1)}
+                    </span>
+                  )}
+                  <span>{idol.playerName ?? 'Player name unavailable'} · {idol.powerType === 'triple_steal' ? 'Play before the playoffs' : 'Eligible at Elimination Council'}</span>
+                </div>
                 {['triple_steal', 'island_raid'].includes(idol.powerType) && <button type="button" onClick={() => setSelectedIdolId(selectedIdolId === idol.id ? null : idol.id)} aria-expanded={selectedIdolId === idol.id} className="rounded-lg border border-amber-400/50 px-3 py-2 text-xs font-bold text-amber-100">{selectedIdolId === idol.id ? 'Close' : idol.powerType === 'triple_steal' ? 'Play Steal 3' : 'Play idol'}</button>}
               </li>
             ))}

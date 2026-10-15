@@ -1,3 +1,4 @@
+import { seasonSetupBlocked } from '@/lib/tournament/seasonNativeContract'
 import { reconcileSurvivorDraftPlan } from '@/lib/survivor/reconcileSurvivorDraftPlan'
 import { withSurvivorSetupTransaction } from '@/lib/survivor/survivorSetupTransaction'
 import { readSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
@@ -320,9 +321,16 @@ async function ensureRedraftRosterForGenericRoster(params: {
 
 /**
  * The week a FRESH season (no matchups yet) starts on: its sport's next unplayed week for a
- * standard weekly format, else 1. See lib/redraft/seasonStartWeek.ts.
+ * standard weekly format or zombie, else 1. See lib/redraft/seasonStartWeek.ts.
+ *
+ * 🛑 ZOMBIE WAS PINNED TO WEEK 1, SO A LEAGUE DRAFTED MID-SEASON NEVER LEFT IT. Its schedule began at
+ * week 1 — weeks already played before anyone drafted — and the finalizer looks back only a few
+ * weeks, so week 1 never sealed, the zombie week never resolved, and the league sat at week 1 for
+ * good. Zombie plays a head-to-head schedule like the standard formats, so it starts the same way.
+ * It is deliberately NOT added to `STANDARD_WEEKLY_SEASON_FORMATS`: that set also hands a league to
+ * the round-robin roller and playoff runtime, which would fight zombie's own week engine.
  */
-async function resolveStartWeekForFreshSeason(
+export async function resolveStartWeekForFreshSeason(
   leagueId: string,
   season: { id: string; sport: string; season: number; totalWeeks: number; playoffStartWeek: number },
 ): Promise<number> {
@@ -334,7 +342,8 @@ async function resolveStartWeekForFreshSeason(
   const survivorPlan = readSurvivorFullSeasonPlan(league?.settings)
   if (survivorPlan) return survivorPlan.startWeek
   const format = String(league?.leagueType ?? 'redraft').trim().toLowerCase() || 'redraft'
-  if (!STANDARD_WEEKLY_SEASON_FORMATS.has(format) || isNativeTournamentLeague(league)) return 1
+  const startsOnCurrentWeek = STANDARD_WEEKLY_SEASON_FORMATS.has(format) || format === 'zombie'
+  if (!startsOnCurrentWeek || isNativeTournamentLeague(league)) return 1
   const regularSeasonEnd = Math.min(season.totalWeeks, Math.max(1, season.playoffStartWeek - 1))
   const start = await resolveSeasonStartWeek({ sport: season.sport, seasonYear: season.season, regularSeasonEnd })
   if (start.startWeek > 1) {
@@ -425,10 +434,11 @@ export async function syncCompletedDraftToRedraftSeason(
 ): Promise<RedraftDraftFinalizationSummary> {
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { id: true, survivorMode: true },
+    select: { id: true, survivorMode: true, settings: true },
   })
 
   if (!league) return { ...EMPTY_SUMMARY, reason: 'league_not_found' }
+  if (seasonSetupBlocked(league.settings)) return { ...EMPTY_SUMMARY, reason: 'season_tournament_managed' }
 
   /*
    * 🛑 THIS GATE READ `leagueType === 'redraft' || isDynasty === false`, WHICH IS NOT A

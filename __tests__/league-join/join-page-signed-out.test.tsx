@@ -13,6 +13,8 @@ const m = vi.hoisted(() => ({
   params: new URLSearchParams('code=ABC123'),
 }))
 
+const beacon = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/analytics/client', () => ({ sendProductAnalyticsBeacon: beacon }))
 vi.mock('next-auth/react', () => ({ useSession: () => ({ status: m.auth, data: null }) }))
 vi.mock('next/navigation', () => ({ useSearchParams: () => m.params }))
 vi.mock('@/components/league-join/SleeperTeamClaim', () => ({ SleeperTeamClaim: ({ leagueId }: { leagueId: string }) => <div data-testid="claim-card">{leagueId}</div> }))
@@ -22,7 +24,8 @@ vi.mock('@/components/league-join/ClassGateNotice', () => ({
 }))
 
 import JoinByCodePage from '@/app/join/page'
-import { joinCallbackUrl, joinLandingHref } from '@/lib/league-join/joinLanding'
+import { inviteSource, joinCallbackUrl, joinLandingHref } from '@/lib/league-join/joinLanding'
+import { RECAP_SHARE } from '@/lib/analytics/eventNames'
 
 type Call = { url: string; init?: RequestInit }
 let calls: Call[] = []
@@ -30,6 +33,7 @@ let joinResponse: { status: number; body: Record<string, unknown> } = { status: 
 
 beforeEach(() => {
   calls = []
+  beacon.mockClear()
   m.auth = 'unauthenticated'
   m.params = new URLSearchParams('code=ABC123')
   joinResponse = { status: 200, body: { success: true, leagueId: 'L1', memberOnly: true, alreadyMember: false } }
@@ -106,5 +110,36 @@ describe('joinLanding', () => {
   })
   it('the sign-in return keeps the code and joins on arrival', () => {
     expect(joinCallbackUrl('AB C')).toBe('/join?code=AB%20C&go=1')
+  })
+})
+
+describe('counting invite opens and joins', () => {
+  const sent = (event: string) => beacon.mock.calls.filter((c) => c[0] === event).map((c) => c[1])
+
+  it('a signed-out open from a shared recap is counted once, and sign-in keeps src', async () => {
+    m.params = new URLSearchParams('code=ABC123&src=recap')
+    render(<JoinByCodePage />)
+    await screen.findByTestId('league-join-signin')
+    await waitFor(() => expect(sent(RECAP_SHARE.INVITE_OPEN)).toEqual([{ leagueId: 'L1', src: 'recap', signedIn: false, returning: false }]))
+    const back = encodeURIComponent('/join?code=ABC123&go=1&src=recap')
+    expect(screen.getByText('Create account & join').closest('a')!.getAttribute('href')).toBe(`/signup?callbackUrl=${back}`)
+  })
+
+  it('the return from signing in counts as returning, then the join is counted with its src', async () => {
+    m.auth = 'authenticated'
+    m.params = new URLSearchParams('code=ABC123&go=1&src=recap')
+    render(<JoinByCodePage />)
+    await screen.findByText('You’re in. Opening the league chat…')
+    expect(sent(RECAP_SHARE.INVITE_OPEN)).toEqual([{ leagueId: 'L1', src: 'recap', signedIn: true, returning: true }])
+    expect(sent(RECAP_SHARE.INVITE_JOINED)).toEqual([{ leagueId: 'L1', src: 'recap', memberOnly: true, alreadyMember: false }])
+  })
+
+  it('an ordinary invite has no src, and a strange one is dropped rather than recorded', async () => {
+    m.params = new URLSearchParams('code=ABC123&src=%3Cscript%3E')
+    render(<JoinByCodePage />)
+    await screen.findByTestId('league-join-signin')
+    await waitFor(() => expect(sent(RECAP_SHARE.INVITE_OPEN)).toEqual([{ leagueId: 'L1', src: null, signedIn: false, returning: false }]))
+    expect(inviteSource('recap')).toBe('recap')
+    expect(joinCallbackUrl('ABC', '<x>')).toBe('/join?code=ABC&go=1')
   })
 })

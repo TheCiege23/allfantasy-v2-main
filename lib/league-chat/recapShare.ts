@@ -32,6 +32,22 @@ export function isWeeklyRecap(metadata: Record<string, unknown> | null | undefin
  * and lands in its chat (POST /api/leagues/join). Claiming a provider team needs proof of the Sleeper
  * account, which a shared link cannot give, so the line promises only what the link does.
  */
+/**
+ * The invite link as it leaves in a shared recap, marked `src=recap` so its opens and joins can be
+ * counted apart from every other invite (`RECAP_SHARE` in lib/analytics/eventNames.ts). Anything that
+ * is not an http(s) URL comes back untouched, and buildRecapShareText then leaves it out.
+ */
+export function tagRecapInviteLink(link: string | null | undefined): string | null {
+  if (typeof link !== 'string' || !/^https?:\/\//i.test(link.trim())) return link ?? null
+  try {
+    const url = new URL(link.trim())
+    url.searchParams.set('src', 'recap')
+    return url.toString()
+  } catch {
+    return link
+  }
+}
+
 export function buildRecapShareText(recap: string, inviteLink: string | null | undefined): string {
   const body = recap.replace(IN_APP_FOOTER, '').trimEnd()
   const link = typeof inviteLink === 'string' && /^https?:\/\//i.test(inviteLink.trim()) ? inviteLink.trim() : null

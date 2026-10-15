@@ -100,6 +100,7 @@ vi.mock('@/lib/survivor/auditEntry', () => ({
 import {
   applySurvivorSitOutToMiniGames,
   applySurvivorSitOutToScoring,
+  getSurvivorTribeBalanceState,
   maybeTriggerSurvivorTribeShuffleRecommendation,
   nominateSurvivorSitOut,
   respondToSurvivorSitOut,
@@ -328,7 +329,7 @@ describe('SurvivorSitOutEngine', () => {
       { redraftRosterId: 'r1' },
       { redraftRosterId: 'r2' },
     ])
-    hm.getSurvivorConfig.mockResolvedValue(null)
+    hm.getSurvivorConfig.mockResolvedValue({ tribeSize: 4, tribeShuffleEnabled: false })
     hm.survivorCommissionerActionFindFirst.mockResolvedValue({ id: 'shuffle-1' })
 
     const result = await maybeTriggerSurvivorTribeShuffleRecommendation('league-1', 9)
@@ -338,5 +339,26 @@ describe('SurvivorSitOutEngine', () => {
       reason: 'Shuffle recommendation has already been used this season.',
     })
     expect(hm.survivorCommissionerActionCreate).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    [4, 2, false],
+    [4, 1, true],
+    [5, 2, true],
+    [6, 2, true],
+  ])('recommends a redraw at 40%% of original tribe size (%i original, %i active)', async (originalSize, survivingSize, expected) => {
+    const firstMembers = Array.from({ length: survivingSize }, (_, i) => ({ rosterId: `a-${i}` }))
+    const secondMembers = Array.from({ length: originalSize }, (_, i) => ({ rosterId: `b-${i}` }))
+    hm.getTribesWithMembers.mockResolvedValue([
+      { id: 'tribe-a', name: 'Alpha', members: firstMembers },
+      { id: 'tribe-b', name: 'Beta', members: secondMembers },
+    ])
+    hm.leagueFindUnique.mockResolvedValue({ survivorPhase: 'tribe' })
+    hm.getSurvivorConfig.mockResolvedValue({ tribeSize: originalSize })
+    hm.survivorPlayerFindMany.mockResolvedValue([...firstMembers, ...secondMembers].map(member => ({ redraftRosterId: member.rosterId })))
+
+    const result = await getSurvivorTribeBalanceState('league-1', 9)
+
+    expect(result.shouldSuggestShuffle).toBe(expected)
   })
 })

@@ -169,6 +169,7 @@ export interface PlayerBoundIdolCandidate {
 export interface PlayerBoundIdolAssignment extends IdolSeedAssignment {
   playerId: string
   playerName?: string
+  expiresAtMerge: boolean
 }
 
 /**
@@ -209,11 +210,19 @@ export function computePlayerBoundIdolSeedPlan(input: {
   const firstWave = owners.slice(0, Math.min(idolCount, Math.ceil(owners.length / 3)))
   const selected: PlayerBoundIdolCandidate[] = firstWave.map(owner => shuffled(byOwner.get(owner)!)[0])
   const used = new Set(selected.map(candidate => candidate.playerId))
-  selected.push(...shuffled(candidates.filter(candidate => !used.has(candidate.playerId))).slice(0, idolCount - selected.length))
+  // Keep the hidden holder set at one third of the cast even when the
+  // commissioner enables multiple idols per manager.
+  const holderIds = new Set(firstWave)
+  selected.push(...shuffled(candidates.filter(candidate => holderIds.has(candidate.ownerUserId) && !used.has(candidate.playerId))).slice(0, idolCount - selected.length))
+  if (selected.length !== idolCount) {
+    return { ok: false, code: 'invalid_count', error: 'The selected idol holders do not have enough distinct drafted players for this many idols.' }
+  }
   const powerOrder = shuffled(Array.from({ length: idolCount }, (_, index) => powerPool[index % powerPool.length]))
+  const mergeExpiryOrder = shuffled(Array.from({ length: idolCount }, (_, index) => index < Math.floor(idolCount / 2)))
   return { ok: true, seed, assignments: selected.map((candidate, index) => ({
     ...candidate,
     powerType: powerOrder[index],
     expiresAtRemainingPlayers: SURVIVOR_IDOL_CATALOG[powerOrder[index]].expiresAtRemainingPlayers,
+    expiresAtMerge: mergeExpiryOrder[index],
   })) }
 }

@@ -147,6 +147,7 @@ export type LeagueHomeData = {
   pairing: PairedHalf | null
   league: {
     id: string
+    variant: string | null
     name: string
     platform: string
     format: string | null
@@ -957,6 +958,7 @@ export async function getLeagueHomeData(
     calendar: leagueCalendar(league.settings),
     league: {
       id: league.id,
+      variant: league.leagueVariant,
       name: leagueDisplayName(league.name),
       platform: String(league.platform ?? 'manual').toLowerCase(),
       format: league.leagueType ?? null,

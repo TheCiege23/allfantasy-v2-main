@@ -270,6 +270,36 @@ describe('POST /api/league/create sport defaults integration', () => {
     })
   })
 
+  it('refuses a body with no sport instead of silently creating an NFL league', async () => {
+    const { POST } = await import('@/app/api/league/create/route')
+    const res = await POST(new Request('http://localhost/api/league/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Blah', platform: 'manual', league_type: 'big_brother', leagueSize: 12, isDynasty: false }),
+    }))
+    expect(res.status).toBe(400)
+    expect(executeCanonicalLeagueCreationMock).not.toHaveBeenCalled()
+    expect(leagueCreateMock).not.toHaveBeenCalled()
+  })
+
+  it('creates an NBA Big Brother league as NBA with a non-football scoring preset', async () => {
+    const { POST } = await import('@/app/api/league/create/route')
+    const { receptionPointsForScoringPresetId } = await import('@/lib/league-creation-preset/scoring-presets')
+    const res = await POST(new Request('http://localhost/api/league/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Blah', platform: 'manual', sport: 'NBA', league_type: 'big_brother', draft_type: 'snake',
+        leagueSize: 12, scoring: 'HALF_PPR', isDynasty: false,
+      }),
+    }))
+    expect(res.status).toBe(200)
+    expect((await res.json())?.league?.sport).toBe('NBA')
+    const body = executeCanonicalLeagueCreationMock.mock.calls[0]?.[0]?.body as { sport: string; concept: string; scoringPreset: string }
+    expect(body).toMatchObject({ sport: 'NBA', concept: 'big_brother' })
+    expect(receptionPointsForScoringPresetId(body.scoringPreset)).toBeNull()
+  })
+
   it('persists NFL variant matrix and Soccer standard variant', async () => {
     const { POST } = await import('@/app/api/league/create/route')
 

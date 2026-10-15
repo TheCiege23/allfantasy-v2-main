@@ -61,6 +61,20 @@ export async function getLastScheduledWeek(seasonId: string): Promise<number | n
   return last?.week ?? null
 }
 
+/**
+ * The first week the season scheduled a head-to-head matchup in, or null when none. A season drafted
+ * mid-season starts its schedule at the sport's current week (see `resolveStartWeekForFreshSeason`), so
+ * a zombie league activated on it must start THERE, not at week 1, which has no matchups.
+ */
+export async function getFirstScheduledWeek(seasonId: string): Promise<number | null> {
+  const first = await prisma.redraftMatchup.findFirst({
+    where: { seasonId, awayRosterId: { not: null } },
+    orderBy: { week: 'asc' },
+    select: { week: true },
+  })
+  return first?.week ?? null
+}
+
 export type ZombieWeekReadiness =
   | { ready: true }
   | {

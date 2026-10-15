@@ -81,6 +81,7 @@ describe('RecapShareButton', () => {
     await screen.findByText('Shared')
     fireEvent.click(screen.getByRole('button'))
     await waitFor(() => expect((navigator.share as unknown as ReturnType<typeof vi.fn>).mock.calls.length).toBe(2))
-    expect(fetchFn).toHaveBeenCalledTimes(1)
+    // Only the invite-link reads — the share-tap beacons (recap-share-telemetry.test.tsx) also fetch here.
+    expect(fetchFn.mock.calls.filter((c) => String((c as unknown[])[0]).startsWith('/api/leagues/join'))).toHaveLength(1)
   })
 })

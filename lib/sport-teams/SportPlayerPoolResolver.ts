@@ -668,7 +668,7 @@ async function buildPlayerPoolRecords(
     age: r.age ?? null,
     experience: null,
     secondary_positions: [],
-    metadata: {},
+    metadata: { source: r.source },
     image_url: toImageUrl((r as { imageUrl?: string | null }).imageUrl),
   }))
 

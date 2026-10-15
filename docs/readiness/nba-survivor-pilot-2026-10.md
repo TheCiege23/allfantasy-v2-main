@@ -18,11 +18,12 @@ The commissioner can configure a league and start a native draft, but the curren
 - Private idol assignment notice with the bound player's name and available headshot.
 - The native draft-to-season roster bridge and transactional idol changes during trades, reversals, waiver claims, drops, and elimination.
 - Private inventory follows the current owner, including while an idol-bearing player is on waivers.
+- On 2026-10-15, `scripts/verify-nba-survivor-20-draft.ts` completed an isolated 20-manager, 12-round NBA Survivor draft with 240 verified current NBA players. It exercised draft start, pause/resume, a queue-first expired-timer pick, reciprocal traded picks, all 240 saved pick-chat cards, automatic completion, 20 season rosters, four tribes, and seven private idol notices. The synthetic league and managers were removed after verification; no production league was changed.
 
 ## Launch gates, in order
 
 1. Build and verify Tuesday-to-Monday Eastern NBA scoring for both commissioner-selected modes, including daylight-saving changes, pre-tipoff locks, missed picks, stat corrections, and finalization.
-2. Run a complete draft rehearsal with actual users: scheduling, timer, queue, auto-pick, reconnect, chat, completion, season roster materialization, private idol notice, and commissioner blind mode.
+2. Finish the draft rehearsal with actual users in browsers: scheduling, multi-device reconnect, live chat rendering, commissioner pick correction, private idol notice display, and commissioner blind mode. The isolated service-level 20-manager draft and its saved artifacts passed on 2026-10-15, but those browser and role checks remain.
 3. Persist Shot in the Dark, implement the 40% tribe-switch prompt and unbiased redraw, and test member/huddle access before and after elimination and merge.
 4. Define the Exile weekly score-to-beat contest from the commissioner examples; then verify token reset, challenge rewards, weekly roster exclusivity, and the single deadline return.
 5. Verify the full weekly challenge slate, official ballots and Torch reveal, commissioner recovery controls, and season-finale flow under scheduled automation. The planned-season runner currently requires an enablement flag; confirm its production schedule and idempotent retries.

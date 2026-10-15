@@ -70,13 +70,25 @@ export function topicKey(userId: string, n: PlayerNewsIdentity): string {
   return `${PREFIX}topic:${userId}:${hash(`${n.sport}|${norm(n.playerName)}|${n.category}|${status}`)}`
 }
 
+/**
+ * `storyOnly`: check and write the STORY key alone. For a team-scoped identity (`playerName` set to a
+ * team key by the sender): one headline is one alert per fan however many rows carry it, but the TOPIC
+ * key would make "Cowboys, injury, out" swallow every other Cowboys injury for a day.
+ */
+export type ToldOptions = { storyOnly?: boolean }
+
 /** Of `userIds`, who has already been told this story or this topic. Empty on any read failure. */
-export async function alreadyToldAbout(userIds: readonly string[], news: PlayerNewsIdentity, now = new Date()): Promise<Set<string>> {
+export async function alreadyToldAbout(
+  userIds: readonly string[],
+  news: PlayerNewsIdentity,
+  now = new Date(),
+  opts: ToldOptions = {},
+): Promise<Set<string>> {
   if (userIds.length === 0) return new Set()
   const byKey = new Map<string, string>()
   for (const id of userIds) {
     byKey.set(storyKey(id, news), id)
-    byKey.set(topicKey(id, news), id)
+    if (!opts.storyOnly) byKey.set(topicKey(id, news), id)
   }
   try {
     const rows = await prisma.sportsDataCache.findMany({
@@ -95,12 +107,17 @@ export async function alreadyToldAbout(userIds: readonly string[], news: PlayerN
 }
 
 /** Record that these people were told. Best-effort: a failed write only means a later repeat. */
-export async function recordToldAbout(userIds: readonly string[], news: PlayerNewsIdentity, now = new Date()): Promise<void> {
+export async function recordToldAbout(
+  userIds: readonly string[],
+  news: PlayerNewsIdentity,
+  now = new Date(),
+  opts: ToldOptions = {},
+): Promise<void> {
   if (userIds.length === 0) return
   const data = { v: 1, at: now.toISOString() }
   const rows = userIds.flatMap((id) => [
     { cacheKey: storyKey(id, news), data, expiresAt: new Date(now.getTime() + STORY_TTL_MS) },
-    { cacheKey: topicKey(id, news), data, expiresAt: new Date(now.getTime() + TOPIC_TTL_MS) },
+    ...(opts.storyOnly ? [] : [{ cacheKey: topicKey(id, news), data, expiresAt: new Date(now.getTime() + TOPIC_TTL_MS) }]),
   ])
   try {
     // An expired row with the same key would block createMany's insert; clear those first.

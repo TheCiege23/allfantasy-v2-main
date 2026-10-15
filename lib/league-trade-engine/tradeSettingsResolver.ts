@@ -74,6 +74,12 @@ export function resolveLeagueTradeSettings(league: League): ResolvedLeagueTradeS
     const g = (snap as Record<string, unknown>).guillotineSettings as { tradesAllowed?: boolean } | undefined
     tradesAllowed = tradesAllowed && Boolean(g?.tradesAllowed ?? false)
   }
+  if (league.leagueVariant === 'survivor_guillotine') {
+    const raw = league.settings && typeof league.settings === 'object' && !Array.isArray(league.settings)
+      ? league.settings as Record<string, unknown> : {}
+    const survivorGuillotine = raw.survivorGuillotine as { tradesEnabled?: boolean } | undefined
+    tradesAllowed = tradesAllowed && survivorGuillotine?.tradesEnabled === true
+  }
   if (nativeBestBall && league.bbTradesEnabled === false) {
     tradesAllowed = false
   }

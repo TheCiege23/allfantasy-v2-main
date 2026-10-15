@@ -264,6 +264,7 @@ export type LeagueShellProps = {
   userName: string
   userImage?: string | null
   draftDateIso: string | null
+  draftSetupSession?: { rounds: number; timerSeconds: number | null } | null
   sleeperCommissionerId: string | null
   sleeperUsersByPlatformId: SleeperMemberMap
   currentSleeperUserId: string | null
@@ -299,6 +300,7 @@ export function LeagueShell({
   userName,
   userImage = null,
   draftDateIso,
+  draftSetupSession = null,
   sleeperCommissionerId,
   sleeperUsersByPlatformId,
   currentSleeperUserId,
@@ -1673,6 +1675,7 @@ export function LeagueShell({
               onSelectTab={setActiveTab}
               isPredraftLifecycle={isPredraftLifecycle}
               draftDateIso={draftDateIso}
+              draftSetupSession={draftSetupSession}
               hasActiveRedraftSeason={hasActiveRedraftSeason}
             />
           </div>
@@ -1974,6 +1977,7 @@ function LeagueTabRouter({
   onSelectTab,
   isPredraftLifecycle,
   draftDateIso,
+  draftSetupSession,
   hasActiveRedraftSeason,
   importedLeagueCount,
 }: {
@@ -1998,6 +2002,7 @@ function LeagueTabRouter({
   onSelectTab: (tabId: string) => void
   isPredraftLifecycle: boolean
   draftDateIso: string | null
+  draftSetupSession: { rounds: number; timerSeconds: number | null } | null
   hasActiveRedraftSeason: boolean
   /** Imported (non AF-hosted) leagues this user has — 10a's "chat is AF-only" note. */
   importedLeagueCount: number
@@ -2047,8 +2052,12 @@ function LeagueTabRouter({
       nestedDraftSettings.draftType,
       nestedDraftSettings.engineCore,
     ) ?? 'snake'
-    const rounds = readNumber(settings.draft_rounds, nestedDraftSettings.rounds) ?? (sport === 'NCAAF' ? 20 : 15)
-    const timerSeconds = readNumber(settings.draft_timer_seconds, nestedDraftSettings.timerSeconds) ?? 90
+    const rounds = draftSetupSession?.rounds ?? readNumber(settings.draft_rounds, nestedDraftSettings.rounds) ?? (sport === 'NCAAF' ? 20 : 15)
+    const timerLabel = draftSetupSession
+      ? draftSetupSession.timerSeconds == null || draftSetupSession.timerSeconds <= 0
+        ? 'Untimed'
+        : `${draftSetupSession.timerSeconds}s`
+      : 'Set in draft room'
     const draftDateLabel = draftDateIso
       ? new Date(draftDateIso).toLocaleString(undefined, {
           weekday: 'short',
@@ -2113,7 +2122,7 @@ function LeagueTabRouter({
             <div className="rounded-2xl border border-white/[0.07] bg-white/[0.04] p-4">
               <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/45">Rounds / timer</p>
               <p className="mt-1 text-sm font-semibold text-white">
-                {rounds} rounds / {timerSeconds}s
+                {rounds} rounds / {timerLabel}
               </p>
             </div>
           </div>
@@ -3038,8 +3047,8 @@ function LeagueHeader({
         <div className="scrollbar-none -mx-1 mt-2 flex snap-x snap-mandatory gap-1 overflow-x-auto scroll-pb-1 border-t border-amber-500/15 bg-gradient-to-r from-amber-950/20 to-transparent px-4 py-2 sm:mx-0 sm:px-5 [-webkit-overflow-scrolling:touch]">
           {(
             [
-              ['Island', `/league/${leagueId}?view=survivor`],
-              ['Full hub', `/survivor/${leagueId}`],
+              ['Island dashboard', `/league/${leagueId}?view=survivor`],
+              ['Island home', `/survivor/${leagueId}`],
               ['Tribal', `/survivor/${leagueId}/tribal`],
               ['Challenges', `/survivor/${leagueId}/challenges`],
               ['Chimmy', `/survivor/${leagueId}/chimmy`],

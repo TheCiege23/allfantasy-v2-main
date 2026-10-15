@@ -114,6 +114,11 @@ export async function GET(req: NextRequest) {
   const exile = await prisma.exileIsland.findUnique({ where: { leagueId } })
   const jury = await prisma.jurySession.findUnique({ where: { leagueId } })
   const me = await prisma.survivorPlayer.findFirst({ where: { leagueId, userId } })
+  const gameWeek = (await prisma.survivorGameState.findUnique({ where: { leagueId }, select: { currentWeek: true } }))?.currentWeek ?? 0
+  const weeklyScores = gameWeek > 0 ? await prisma.survivorWeeklyScore.findMany({
+    where: { leagueId, week: gameWeek },
+    select: { userId: true, finalScore: true, tribeId: true, countedTowardTribeTotal: true, isFinalized: true },
+  }) : []
 
   const settingsJson =
     league?.settings && typeof league.settings === 'object' && !Array.isArray(league.settings)
@@ -153,6 +158,7 @@ export async function GET(req: NextRequest) {
       revealedAt: jury.revealedAt,
     },
     userState: me,
+    weeklyScores,
   }
 
   if (fairPlayRedact) {

@@ -25,6 +25,7 @@ import { markViewingChat, readChatPresence } from '@/lib/chat-core/chatPresence'
 import { redactAnonymousPollVotes } from '@/lib/chat-core/messagePolls'
 import { syncTradeCardsForLeague } from '@/lib/league-chat/tradeChatCards'
 import { generateChimmyPrivateReply } from '@/lib/chat-core/chimmyPrivateReply'
+import { activateSGLivePower } from '@/lib/survivor-guillotine/live'
 import { decisionAnswerMeta } from '@/lib/chimmy/decisionAnswerContract'
 import { getLeagueMemberUserIds } from '@/lib/league-chat/leagueMemberIds'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
@@ -404,11 +405,16 @@ export async function POST(req: NextRequest) {
     const voteResult = survivorVote
       ? await processSurvivorOfficialCommand({ leagueId, userId, command: message, source: 'private_chimmy' })
       : null
-    const replyText = voteResult?.handled
+    let sgReply: string | null = null
+    if (/^@chimmy\s+(?:use|play)\s+(?:idol|token)\b/i.test(message)) {
+      try { sgReply = (await activateSGLivePower(leagueId, userId, message))?.reply ?? null }
+      catch (error) { sgReply = error instanceof Error ? error.message : 'Power activation failed.' }
+    }
+    const replyText = sgReply ?? (voteResult?.handled
       ? voteResult.ok
         ? voteResult.message ?? 'Your vote was recorded privately.'
         : `${voteResult.error ?? 'Vote was not recorded.'} To vote, send @Chimmy @manager or @Chimmy vote @manager.`
-      : await generateChimmyPrivateReply(message, { leagueId, userId, onDecision: result => { decision = decisionAnswerMeta(result) } })
+      : await generateChimmyPrivateReply(message, { leagueId, userId, onDecision: result => { decision = decisionAnswerMeta(result) } }))
     const leagueRow = await prisma.league.findUnique({
       where: { id: leagueId },
       select: { userId: true },

@@ -1,0 +1,50 @@
+import { fireEvent, render, screen } from '@testing-library/react'
+import { beforeEach, expect, it, vi } from 'vitest'
+import { SeasonScoringPanel } from '@/components/tournament/SeasonScoringPanel'
+const setup: any = { freezeId: 'f1', scoringPeriods: [1,2], launchReady: false, leagues: [1,2].map(i => ({ key: 'pool-'+i, leagueId: 'l'+i, name: 'Opening '+i, slots: 8, state: 'created' })) }
+const report = (key: string, state = 'ready') => ({ key, period: 1, mode:'locked_setup', state, revision:1, reviewToken:'a'.repeat(64), teams:8, missingResults:0, provisionalResults:0, blockers:state==='missing'?['No verified score batch is available.']:[],finalizesAt:'2026-10-09T00:00:00Z',canFinalize:state==='ready',launchReady:false })
+beforeEach(() => vi.restoreAllMocks())
+it('reviews bounded leagues and displays missing scores without a finalize button', async () => {
+ const fetch = vi.spyOn(globalThis,'fetch').mockResolvedValueOnce(new Response(JSON.stringify(report('pool-1')))).mockResolvedValueOnce(new Response(JSON.stringify(report('pool-2','missing'))))
+ render(<SeasonScoringPanel tournamentId="t1" setup={setup} />)
+ fireEvent.click(screen.getByRole('button',{name:'Review weekly scores'}))
+ expect(await screen.findByText('Waiting for scores')).toBeInTheDocument()
+ expect(screen.getByRole('status')).toHaveTextContent('Checked 2 of 2 leagues for week 1')
+ expect(screen.getAllByRole('button',{name:/Finalize .* setup week/})).toHaveLength(1)
+ expect(fetch.mock.calls.map(c=>JSON.parse(c[1]!.body as string).key)).toEqual(['pool-1','pool-2'])
+})
+it('shows safe full-period correction counts without exposing player evidence', async () => {
+ vi.spyOn(globalThis,'fetch').mockResolvedValueOnce(new Response(JSON.stringify({...report('pool-1'),statRefresh:{baselineRows:96,correctedRows:2,backfilledRows:1,statusChangedGames:1}})))
+ render(<SeasonScoringPanel tournamentId="t1" setup={{...setup,leagues:[setup.leagues[0]]}} />)
+ fireEvent.click(screen.getByRole('button',{name:'Review weekly scores'}))
+ expect(await screen.findByText(/Latest full-period refresh: 2 revised player results/)).toHaveTextContent('1 backfilled')
+ expect(screen.getByText(/Latest full-period refresh:/)).toHaveTextContent('1 game status changes')
+ expect(screen.queryByText(/provider-player/)).not.toBeInTheDocument()
+})
+it('finalizes only the reviewed revision then reloads saved status', async () => {
+ const fetch = vi.spyOn(globalThis,'fetch').mockResolvedValueOnce(new Response(JSON.stringify(report('pool-1')))).mockResolvedValueOnce(new Response(JSON.stringify({finalized:true}))).mockResolvedValueOnce(new Response(JSON.stringify({...report('pool-1','finalized'),finalizedAt:'2026-10-09T01:00:00Z'})))
+ render(<SeasonScoringPanel tournamentId="t1" setup={{...setup,leagues:[setup.leagues[0]]}} />)
+ fireEvent.click(screen.getByRole('button',{name:'Review weekly scores'}))
+ fireEvent.click(await screen.findByRole('button',{name:'Finalize Opening 1 setup week'}))
+ expect(await screen.findByText('Setup week finalized')).toBeInTheDocument()
+ expect(JSON.parse(fetch.mock.calls[1]![1]!.body as string)).toEqual({action:'finalize',tournamentId:'t1',freezeId:'f1',key:'pool-1',period:1,revision:1,reviewToken:'a'.repeat(64)})
+ expect(screen.getByText('Setup checkpoints · launch locked')).toBeInTheDocument()
+})
+it('removes stale finalization actions after a conflict and keeps review available', async () => {
+ vi.spyOn(globalThis,'fetch').mockResolvedValueOnce(new Response(JSON.stringify(report('pool-1')))).mockResolvedValueOnce(new Response(JSON.stringify({error:'Scores changed. Review again.'}),{status:409}))
+ render(<SeasonScoringPanel tournamentId="t1" setup={{...setup,leagues:[setup.leagues[0]]}} />)
+ fireEvent.click(screen.getByRole('button',{name:'Review weekly scores'}))
+ fireEvent.click(await screen.findByRole('button',{name:'Finalize Opening 1 setup week'}))
+ expect(await screen.findByRole('alert')).toHaveTextContent('Scores changed')
+ expect(screen.queryByRole('button',{name:/Finalize .* setup week/})).not.toBeInTheDocument()
+ expect(screen.getByRole('button',{name:'Review weekly scores'})).toBeEnabled()
+})
+it('changing weeks clears old review tokens and partial failures preserve completed checks', async () => {
+ vi.spyOn(globalThis,'fetch').mockResolvedValueOnce(new Response(JSON.stringify(report('pool-1')))).mockRejectedValueOnce(new Error('Network unavailable'))
+ render(<SeasonScoringPanel tournamentId="t1" setup={setup} />)
+ fireEvent.click(screen.getByRole('button',{name:'Review weekly scores'}))
+ expect(await screen.findByRole('alert')).toHaveTextContent('Network unavailable')
+ expect(screen.getByRole('button',{name:'Finalize Opening 1 setup week'})).toBeInTheDocument()
+ fireEvent.change(screen.getByLabelText('Scoring week'),{target:{value:'2'}})
+ expect(screen.queryByRole('button',{name:/Finalize .* setup week/})).not.toBeInTheDocument()
+})

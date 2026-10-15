@@ -166,3 +166,40 @@ describe('offline access and token refresh',()=>{
     expect(m.fetch).toHaveBeenCalledTimes(1);expect(m.cacheCreate).not.toHaveBeenCalled()
   })
 })
+
+describe('brand (newsroom) connection is separate from the weekly one',()=>{
+  async function connect(purpose:'weekly'|'brand') {
+    m.cacheCreate.mockClear();m.fetch.mockReset()
+    const url=new URL(await beginWeeklyXConnection('user-A',null,purpose)),state=url.searchParams.get('state')!
+    m.cacheFind.mockResolvedValue(m.cacheCreate.mock.calls[0][0].data)
+    m.fetch.mockResolvedValueOnce(Response.json({access_token:'t',token_type:'bearer',expires_in:7200,scope:'tweet.read tweet.write users.read'})).mockResolvedValueOnce(Response.json({data:{id:'999',username:'AllFantasy'}}))
+    return {state,result:await completeWeeklyXConnection('user-A',state,'code')}
+  }
+  it('stores the brand account under its own provider and leaves the weekly connection alone',async()=>{
+    await connect('brand')
+    expect(m.accountCreate.mock.calls[0][0].data.provider).toBe('x-brand-newsroom')
+    // Replacing a previous account touches only the brand provider, never the personal weekly one.
+    expect(m.accountDelete.mock.calls[0][0].where.provider).toBe('x-brand-newsroom')
+    m.accountCreate.mockClear();m.accountDelete.mockClear()
+    await connect('weekly')
+    expect(m.accountCreate.mock.calls[0][0].data.provider).toBe('x-weekly-publish')
+    expect(m.accountDelete.mock.calls[0][0].where.provider).toBe('x-weekly-publish')
+  })
+  it('reads the purpose from the state so the callback can return to the newsroom',async()=>{
+    const { weeklyXStatePurpose }=await import('@/lib/core-app/weeklyXPublishing')
+    const url=new URL(await beginWeeklyXConnection('user-A',null,'brand')),state=url.searchParams.get('state')!
+    m.cacheFind.mockResolvedValue(m.cacheCreate.mock.calls.at(-1)![0].data)
+    expect(await weeklyXStatePurpose(state)).toBe('brand')
+    m.cacheFind.mockResolvedValue(null)
+    expect(await weeklyXStatePurpose(state)).toBe('weekly')
+  })
+  it('posts and checks status with the brand token, not the weekly one',async()=>{
+    m.fetch.mockResolvedValueOnce(Response.json({data:{id:'321'}}))
+    await publishWeeklyXPost('user-A',request,'brand')
+    expect(m.accountFind.mock.calls.every(c=>c[0].where.provider==='x-brand-newsroom')).toBe(true)
+    expect(m.cacheCreate.mock.calls.at(-1)![0].data.cacheKey).toMatch(/^brand-x:post:/)
+    m.accountFind.mockClear()
+    await weeklyXStatus('user-A','brand')
+    expect(m.accountFind.mock.calls[0][0].where.provider).toBe('x-brand-newsroom')
+  })
+})

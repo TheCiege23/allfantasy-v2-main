@@ -82,8 +82,9 @@ export async function applyConferencePlan(args: {
 
   const shell = await prisma.tournamentShell.findFirst({
     where: { id: tournamentId, commissionerId: commissionerUserId },
-    select: { id: true, currentRoundNumber: true },
+    select: { id: true, status: true, currentRoundNumber: true },
   })
+  if (shell && ['blueprint', 'rules_published'].includes(shell.status)) return { ok: false, error: 'Use the season tournament planner. Published rules are frozen.', status: 409 }
   if (!shell) return { ok: false, error: 'Tournament not found', status: 404 }
 
   const round = await prisma.tournamentRound.findFirst({

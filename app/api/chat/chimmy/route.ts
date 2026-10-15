@@ -83,6 +83,8 @@ import { buildRedraftContextForChimmy } from '@/lib/redraft-war-room/redraftChim
 import { buildZombieContextForChimmy } from '@/lib/zombie/ai/zombieContextForChimmy'
 import { buildDevyContextForChimmy } from '@/lib/devy/ai/devyContextForChimmy'
 import { buildGuillotineContextForChimmy } from '@/lib/guillotine/ai/guillotineContextForChimmy'
+import { activateSGLivePower } from '@/lib/survivor-guillotine/live'
+import { resolveLeagueAccess } from '@/lib/league-access'
 import { buildC2CContextForChimmy } from '@/lib/merged-devy-c2c/ai/c2cContextForChimmy'
 import { buildSalaryCapContextForChimmy } from '@/lib/salary-cap/ai/salaryCapContextForChimmy'
 import { buildDynastyContextForChimmy } from '@/lib/dynasty-core/dynastyContextForChimmy'
@@ -1341,6 +1343,18 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
     conversation: parsedConversation,
     hasImage,
   } = parseResult.data
+  if (requestedLeagueId && /^@chimmy\s+(?:use|play)\s+(?:idol|token)\b/i.test(message)) {
+    const access = await resolveLeagueAccess(requestedLeagueId, userId)
+    if (!access) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    try {
+      const activation = await activateSGLivePower(requestedLeagueId, userId, message)
+      if (activation) return NextResponse.json({ response: activation.reply, result: activation.reply,
+        source: 'survivor_guillotine_private_power' })
+    } catch (error) {
+      const reply = error instanceof Error ? error.message : 'Power activation failed.'
+      return NextResponse.json({ response: reply, result: reply, source: 'survivor_guillotine_private_power' })
+    }
+  }
   question.entry = questionEntry({ source, coreSurface })
   const requestedConnectedLeagueIds = (() => {
     if (!rawConnectedLeagueIds) return null

@@ -16,6 +16,7 @@ const db = vi.hoisted(() => ({
   zombieLeagueTeam: { findMany: vi.fn() },
   zombieRulesTemplate: { findUnique: vi.fn() },
   league: { findUnique: vi.fn() },
+  survivorGuillotineLeague: { findUnique: vi.fn() },
   roster: { findFirst: vi.fn() },
 }))
 vi.mock('@/lib/prisma', () => ({ prisma: db }))
@@ -36,6 +37,7 @@ beforeEach(() => {
   db.zombieLeagueConfig.findUnique.mockResolvedValue({ zombieTradeBlocked: true })
   db.zombieLeagueTeam.findMany.mockResolvedValue([])
   db.zombieRulesTemplate.findUnique.mockResolvedValue(null)
+  db.survivorGuillotineLeague.findUnique.mockResolvedValue(null)
 })
 
 describe('zombie trade block', () => {
@@ -92,9 +94,10 @@ describe('zombie trade block', () => {
 })
 
 describe('bash/maul thresholds fall back to the sport, not to NFL', () => {
-  it('NBA uses its own 45/70 margins when no rules-template row exists', async () => {
+  it('NBA uses its own 128/211 margins when no rules-template row exists', async () => {
+    // Calibrated to NFL's bash/maul rates (52% / 29% of wins); 45/70 fired on 82% / 73% of NBA wins.
     const r = await getZombieRulesForSport('NBA')
-    expect([r.bashingThreshold, r.maulingThreshold]).toEqual([45, 70])
+    expect([r.bashingThreshold, r.maulingThreshold]).toEqual([128, 211])
   })
 
   it('[control] NFL keeps 30/50', async () => {
@@ -106,5 +109,32 @@ describe('bash/maul thresholds fall back to the sport, not to NFL', () => {
     db.zombieRulesTemplate.findUnique.mockResolvedValue({ bashingThreshold: 80, maulingThreshold: 130 })
     const r = await getZombieRulesForSport('NBA')
     expect([r.bashingThreshold, r.maulingThreshold]).toEqual([80, 130])
+  })
+})
+
+/*
+ * 🛑 Weapons were NFL lines for every sport: a Knife at 100, a Bow at 120, an Axe for a 20-point win.
+ * An NBA zombie team scores ~1,200 a week, so every NBA team held a Knife and a Bow every week.
+ */
+describe('weapon thresholds fall back to the sport, not to NFL', () => {
+  it('NBA: Knife 900, Bow 1,050, Axe for a win by 90', async () => {
+    const r = await getZombieRulesForSport('NBA')
+    expect([r.weaponShieldThreshold, r.weaponAmbushThreshold, r.weaponAxeMargin]).toEqual([900, 1050, 90])
+  })
+
+  it('[control] NFL keeps 100 / 120 / 20', async () => {
+    const r = await getZombieRulesForSport('NFL')
+    expect([r.weaponShieldThreshold, r.weaponAmbushThreshold, r.weaponAxeMargin]).toEqual([100, 120, 20])
+  })
+
+  it('[control] a sport with no calibration of its own keeps the defaults rather than borrowing NBA', async () => {
+    const r = await getZombieRulesForSport('NHL')
+    expect([r.weaponShieldThreshold, r.weaponAmbushThreshold, r.weaponAxeMargin]).toEqual([100, 120, 20])
+  })
+
+  it('a seeded rules-template row still wins for the score lines', async () => {
+    db.zombieRulesTemplate.findUnique.mockResolvedValue({ weaponShieldThreshold: 800, weaponAmbushThreshold: 1000 })
+    const r = await getZombieRulesForSport('NBA')
+    expect([r.weaponShieldThreshold, r.weaponAmbushThreshold, r.weaponAxeMargin]).toEqual([800, 1000, 90])
   })
 })

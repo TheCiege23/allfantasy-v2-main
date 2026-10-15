@@ -23,7 +23,7 @@ const prismaMock = vi.hoisted(() => ({
   playerGameLogCache: { findMany: vi.fn() },
   playerGameStat: { findMany: vi.fn() },
   playerIdentityMap: { findFirst: vi.fn() },
-  playerWeeklyScore: { upsert: vi.fn(), findUnique: vi.fn() },
+  playerWeeklyScore: { upsert: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(async () => []) },
   redraftRoster: { findMany: vi.fn() },
   redraftRosterPlayer: { findMany: vi.fn() },
   redraftSeason: { findFirst: vi.fn() },

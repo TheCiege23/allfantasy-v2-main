@@ -57,6 +57,23 @@ export const CREATE_LEAGUE = {
   SERVER_FAIL: 'product.create_league.server_fail',
 } as const
 
+/**
+ * The weekly recap's trip out of AllFantasy and back (client beacons). The share sheet runs on the
+ * phone and tells us nothing, and before these the funnel read "43 pushes, 0 joins" with no way to
+ * tell "nobody shared" from "people shared and nobody tapped". `product.` keeps them inside the
+ * beacon's allowlist. A beacon can be blocked, so every count is a floor.
+ */
+export const RECAP_SHARE = {
+  /** Tapped "Share with your league" under a recap. meta: leagueId. */
+  TAP: 'product.recap_share.tap',
+  /** How that tap ended. meta: leagueId, outcome (shared | copied | cancelled | failed), hasLink. */
+  DONE: 'product.recap_share.done',
+  /** Someone opened an invite link (signed in or not). meta: leagueId, src, signedIn, returning. */
+  INVITE_OPEN: 'product.league_invite.open',
+  /** That link's join succeeded. meta: leagueId, src, memberOnly, alreadyMember. */
+  INVITE_JOINED: 'product.league_invite.joined',
+} as const
+
 /** Engagement (server or client). */
 export const ENGAGEMENT = {
   DRAFT_COMPLETED: 'engagement.draft_completed',

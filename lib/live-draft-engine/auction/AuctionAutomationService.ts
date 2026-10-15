@@ -1,3 +1,7 @@
+import { prepareSeasonDraftPool } from '@/lib/tournament/seasonDraftRefresh'
+import { loadSeasonDraftContext, loadSeasonDraftPlayers } from '@/lib/tournament/seasonDraftRuntime'
+import { nextSeasonNominator } from '@/lib/tournament/seasonAuctionPolicy'
+import { selectSeasonAutodraft } from '@/lib/tournament/seasonDraftPolicy'
 /**
  * Deterministic auction automation tick.
  * Handles timer-expiry resolution, optional auto-bid, and optional auto-nomination.
@@ -14,7 +18,7 @@ import { getPlayerPoolForLeague } from '@/lib/sport-teams/SportPlayerPoolResolve
 import { appendPickToRosterDraftSnapshot } from '@/lib/live-draft-engine/RosterAssignmentService'
 import type { AuctionNomination, SlotOrderEntry } from '@/lib/live-draft-engine/types'
 import {
-  getAuctionConfigFromSession,
+  getAuctionConfigForLeague,
   getAuctionStateFromSession,
   getBudgetsFromSession,
   nominatePlayer,
@@ -151,18 +155,20 @@ export async function runAuctionAutomationTick(leagueId: string): Promise<Auctio
   if (slotOrder.length === 0) return { changed: false, actions }
 
   const uiSettings = await getDraftUISettingsForLeague(leagueId)
-  const config = getAuctionConfigFromSession(session)
+  const config = await getAuctionConfigForLeague(leagueId, session)
   const budgets = getBudgetsFromSession(session)
-  const nominationIndex = normalizeNominationIndex(state.nominationOrderIndex, slotOrder.length)
-  const currentNominator = slotOrder[nominationIndex]
+  const season = await loadSeasonDraftContext(leagueId)
+  if (season && await prepareSeasonDraftPool(leagueId)) return { changed: false, actions }
+  const nominationIndex = season ? nextSeasonNominator(slotOrder, state.nominationOrderIndex, session.picks, session.rounds, budgets, config.minBid) : normalizeNominationIndex(state.nominationOrderIndex, slotOrder.length)
+  const currentNominator = nominationIndex === null ? undefined : slotOrder[nominationIndex]
   const orphanRosterIds = uiSettings.orphanTeamAiManagerEnabled
     ? await getOrphanRosterIdsForLeague(leagueId)
     : []
   const nominatorIsOrphan = currentNominator != null && orphanRosterIds.includes(currentNominator.rosterId)
 
-  // Timer expired with an active nomination: optional auto-bid, then resolve deterministically.
+  // Tournament expiry preserves the winning bid; no synthetic late bids.
   if (state.currentNomination && isExpired(session.timerEndAt, now)) {
-    if (state.currentBid <= 0 && currentNominator && uiSettings.autoPickEnabled) {
+    if (!season && state.currentBid <= 0 && currentNominator && uiSettings.autoPickEnabled) {
       const nominatorBudget = budgets[currentNominator.rosterId] ?? 0
       const nominatorPicks = session.picks.filter((pick) => pick.rosterId === currentNominator.rosterId).length
       const rosterSlotsRemaining = Math.max(0, session.rounds - nominatorPicks)
@@ -185,7 +191,7 @@ export async function runAuctionAutomationTick(leagueId: string): Promise<Auctio
       }
     }
 
-    const resolve = await resolveAuctionWin(leagueId, { force: true, now })
+    const resolve = await resolveAuctionWin(leagueId, { now })
     if (resolve.success) {
       if (resolve.sold && resolve.winnerRosterId) {
         await appendLatestAuctionPickToRoster(leagueId, session.id, resolve.winnerRosterId)
@@ -202,18 +208,30 @@ export async function runAuctionAutomationTick(leagueId: string): Promise<Auctio
 
   // No active nomination: optional auto-nomination when nomination clock expires.
   const autoNominationAllowed =
-    uiSettings.auctionAutoNominationEnabled ||
+    Boolean(season) || uiSettings.auctionAutoNominationEnabled ||
     (uiSettings.orphanTeamAiManagerEnabled && nominatorIsOrphan)
   if (!state.currentNomination && autoNominationAllowed && isExpired(session.timerEndAt, now) && currentNominator) {
     const normalizedSport = normalizeToSupportedSport(
       (session.league?.sport as string | null | undefined) ?? session.sportType ?? DEFAULT_SPORT
     ) as LeagueSport
     const draftedNames = new Set(session.picks.map((pick) => normalizeName(pick.playerName)))
-    const candidates = await loadAutoNominationCandidates(leagueId, normalizedSport, draftedNames)
-    const first = candidates[0]
+    let first: AuctionNomination | undefined
+    if (season) {
+      const pool = await loadSeasonDraftPlayers(leagueId, season.config.sport)
+      const taken = new Set(pool.filter(p => draftedNames.has(normalizeName(p.playerName))).map(p => p.playerId))
+      const own = session.picks.filter(p => p.rosterId === currentNominator.rosterId && p.playerName.trim() && p.position.trim()).map(p => ({ playerId: p.playerId ?? '', playerName: p.playerName, position: p.position }))
+      const selected = selectSeasonAutodraft(season.config, own, pool, taken)
+      first = selected ? {
+        playerName: selected.playerName,
+        position: selected.position,
+        team: selected.team ?? null,
+        playerId: selected.playerId,
+        byeWeek: null,
+      } : undefined
+    } else first = (await loadAutoNominationCandidates(leagueId, normalizedSport, draftedNames))[0]
     if (!first) return { changed: false, actions }
 
-    const nominate = await nominatePlayer(leagueId, first, currentNominator.rosterId)
+    const nominate = await nominatePlayer(leagueId, first, currentNominator.rosterId, season ? { autoMinimumBid: true } : undefined)
     if (nominate.success) {
       actions.push({
         type: 'auto_nominate',

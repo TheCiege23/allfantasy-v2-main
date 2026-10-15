@@ -1,3 +1,4 @@
+vi.mock('@/lib/tournament/seasonDraftBoard', () => ({ seasonDraftSessionError: () => null }))
 /**
  * Service-level coverage for PickSubmissionService.submitPick with mocked Prisma $transaction.
  * Verifies timer reset, consecutive picks, stale overall, duplicate slot/player, completion, traded ownership.
@@ -74,6 +75,9 @@ const ctx = vi.hoisted(() => {
       c2cConfig: null,
       version: 5,
     },
+    season: false,
+    transactionVersionOverride: null as number | null,
+    rejectVersionClaim: false,
     pickIdSeq: 0,
   }
 
@@ -82,6 +86,11 @@ const ctx = vi.hoisted(() => {
     return `pick-id-${store.pickIdSeq}`
   }
 
+  async function txSessionUpdate(data: any) {
+    if (data.timerEndAt !== undefined) store.session.timerEndAt = data.timerEndAt
+    if (data.status !== undefined) store.session.status = data.status
+    if (data.version?.increment) store.session.version += data.version.increment
+  }
   function buildTx() {
     return {
       $queryRaw: vi.fn(async () => []),
@@ -90,10 +99,12 @@ const ctx = vi.hoisted(() => {
         create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({ id: 'archive-event', ...data })),
       },
       draftSession: {
+        updateMany: vi.fn(async (args: any) => { if (store.rejectVersionClaim || args.where.version !== store.session.version || args.where.status !== store.session.status) return { count: 0 }; await txSessionUpdate(args.data); return { count: 1 } }),
         // leagueId reads are findFirst now (DraftSession.leagueId is not unique); answer them from findUnique
         findFirst(...a: unknown[]) { return (this as any).findUnique(...a) },
         findUnique: vi.fn(async () => ({
           ...store.session,
+          version: store.transactionVersionOverride ?? store.session.version,
           picks: (store.transactionLockedPicksOverride ?? store.picks).map((p) => ({ ...p })),
         })),
         update: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
@@ -158,11 +169,13 @@ const ctx = vi.hoisted(() => {
       findFirst: vi.fn(async () => null),
     },
     $transaction: vi.fn(async (fn: (tx: ReturnType<typeof buildTx>) => Promise<unknown>) => {
-      return fn(buildTx())
+      const snapshot = structuredClone({ picks: store.picks, session: store.session })
+      try { return await fn(buildTx()) } catch (e) { store.picks = snapshot.picks; store.session = snapshot.session; throw e }
     }),
   }
 
   function resetStore() {
+    store.season = false; store.transactionVersionOverride = null; store.rejectVersionClaim = false
     store.picks = []
     store.transactionLockedPicksOverride = null
     store.pickIdSeq = 0
@@ -180,6 +193,8 @@ const ctx = vi.hoisted(() => {
   return { store, prisma, resetStore }
 })
 
+vi.mock('@/lib/tournament/seasonDraftRuntime', () => ({ loadSeasonDraftContext: async () => ctx.store.season ? {} : null, validateSeasonDraftPlayer: async () => null }))
+vi.mock('@/lib/tournament/seasonDraftRefresh', () => ({ prepareSeasonDraftPool: async () => null }))
 vi.mock('@/lib/prisma', () => ({
   prisma: ctx.prisma,
 }))
@@ -507,5 +522,27 @@ describe('PickSubmissionService.submitPick (mocked Prisma transaction)', () => {
       originalRosterId: 'roster-a',
       newOwnerName: 'Team B',
     })
+  })
+})
+
+
+describe('tournament pick versus control version fencing', () => {
+  beforeEach(() => { ctx.resetStore(); vi.clearAllMocks(); ctx.store.season = true })
+  const input = { leagueId: 'league-1', playerName: 'Josh Allen', position: 'QB', playerId: 'p1', rosterId: 'roster-a', expectedOverall: 1 }
+  it('rejects a changed session version before inserting a pick', async () => {
+    ctx.store.transactionVersionOverride = 6
+    expect(await submitPick(input)).toMatchObject({ success: false, code: DRAFT_PICK_RACE_RETRY })
+    expect(ctx.store.picks).toHaveLength(0)
+  })
+  it('rolls back pick insertion if a control wins the session version claim', async () => {
+    ctx.store.rejectVersionClaim = true
+    expect(await submitPick(input)).toMatchObject({ success: false, code: DRAFT_PICK_RACE_RETRY })
+    expect(ctx.store.picks).toHaveLength(0)
+    expect(ctx.store.session.version).toBe(5)
+  })
+  it('commits a valid tournament pick with one version increment', async () => {
+    expect((await submitPick(input)).success).toBe(true)
+    expect(ctx.store.picks).toHaveLength(1)
+    expect(ctx.store.session.version).toBe(6)
   })
 })

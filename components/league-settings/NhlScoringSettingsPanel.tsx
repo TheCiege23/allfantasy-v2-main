@@ -15,6 +15,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, Info, Lock, RotateCcw } from 'lucide-react'
 import { SubscriptionGateModal } from '@/components/subscription/SubscriptionGateModal'
+import { ScoringPresetSelect, pickInitialPreset } from '@/components/league-settings/scoring/ScoringPresetSelect'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { translateStat } from '@/lib/i18n/scoring-stats'
 import { HOCKEY_STATS_ES } from '@/lib/i18n/scoring-stats/hockey'
@@ -106,6 +107,8 @@ export function NhlScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
   const [gateOpen, setGateOpen] = useState(false)
+  /** Sleeper default staged for a league whose scoring was never saved — Save applies it. */
+  const [defaultStaged, setDefaultStaged] = useState(false)
 
   const [selectedPreset, setSelectedPreset] = useState<NhlScoringPresetKey>('af_default')
   const [editedRules, setEditedRules] = useState<Record<string, number>>({})
@@ -126,9 +129,11 @@ export function NhlScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
         setPresets(data.presets ?? [])
         setConfig(data.config ?? null)
         setIsPremium(data.isPremium ?? false)
-        setSelectedPreset((data.config?.presetKey ?? 'af_default') as NhlScoringPresetKey)
+        const initialPreset = pickInitialPreset<NhlScoringPresetKey>(data.config, data.presets, 'sleeper_compatible' as NhlScoringPresetKey, 'af_default' as NhlScoringPresetKey, isCommissioner)
+        setSelectedPreset(initialPreset.key)
+        setDefaultStaged(Boolean(initialPreset.stagedRules))
         const defaults = buildNhlScoringDefaults()
-        setEditedRules({ ...defaults, ...(data.config?.rules ?? {}) })
+        setEditedRules({ ...defaults, ...(data.config?.rules ?? {}), ...(initialPreset.stagedRules ?? {}) })
       })
       .catch(() => { if (active) setError(t('lsScore.err.load')) })
       .finally(() => { if (active) setLoading(false) })
@@ -205,6 +210,7 @@ export function NhlScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
       if (data.error === 'premiumRequired') { setGateOpen(true); return }
       if (!res.ok) { setError(data.error ?? t('lsScore.err.save')); return }
       setConfig(data.config)
+      setDefaultStaged(false)
       setSuccess(true)
       setTimeout(() => setSuccess(false), 3000)
     } catch {
@@ -252,38 +258,18 @@ export function NhlScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
         {t('lsScore.notice.specialtyFormats')}
       </div>
 
-      {/* Preset selector */}
-      <div className="space-y-2">
-        <label className="text-[11px] font-semibold uppercase tracking-wider text-white/40">
-          {t('lsScore.presetHeading')}
-        </label>
-        <div className="flex flex-wrap gap-2">
-          {(
-            ['af_default', 'sleeper_compatible', 'espn_compatible', 'yahoo_default', 'custom'] as NhlScoringPresetKey[]
-          ).map((key) => {
-            const isCustomLocked = key === 'custom' && !isPremium && isCommissioner
-            const active = selectedPreset === key
-            return (
-              <button
-                key={key}
-                type="button"
-                disabled={!isCommissioner}
-                onClick={() => handlePresetChange(key)}
-                className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
-                  active
-                    ? 'border-cyan-500/40 bg-cyan-500/15 text-cyan-200'
-                    : isCustomLocked
-                      ? 'cursor-pointer border-white/5 bg-white/[0.02] text-white/30'
-                      : 'border-white/10 bg-white/[0.03] text-white/60 hover:bg-white/[0.06] disabled:cursor-default disabled:opacity-50'
-                }`}
-              >
-                {PRESET_LABEL_KEYS[key] ? t(PRESET_LABEL_KEYS[key]) : key}
-                {isCustomLocked && <Lock className="ml-1 inline h-3 w-3 text-white/30" />}
-              </button>
-            )
-          })}
-        </div>
-      </div>
+      {/* Preset selector — one dropdown of THIS sport's presets, Sleeper-style first (default). */}
+      <ScoringPresetSelect<NhlScoringPresetKey>
+        presetKeys={['af_default', 'sleeper_compatible', 'espn_compatible', 'yahoo_default', 'custom'] as NhlScoringPresetKey[]}
+        value={selectedPreset}
+        onChange={handlePresetChange}
+        labelFor={(key) => (PRESET_LABEL_KEYS[key] ? t(PRESET_LABEL_KEYS[key]) : key)}
+        defaultKey={'sleeper_compatible' as NhlScoringPresetKey}
+        isCommissioner={isCommissioner}
+        isPremium={isPremium}
+        hint={defaultStaged && isCommissioner && selectedPreset === 'sleeper_compatible' ? t('lsScore2.defaultNotSaved') : null}
+        id={`scoring-preset-${leagueId}`}
+      />
 
       {/* Warning banner for external presets */}
       {currentPreset?.warning && (
@@ -316,7 +302,7 @@ export function NhlScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
               <p className="mb-1 text-[11px] font-bold uppercase tracking-widest text-white/20">
                 {t(labelKey)}
               </p>
-              <div className="scrollbar-none flex gap-1.5 overflow-x-auto pb-0.5">
+              <div className="flex flex-wrap gap-1.5" role="group" aria-label={t('lsScore2.categoriesAria')}>
                 {cats.map((cat) => {
                   const active = activeTab === cat.id
                   const colorClass = active
@@ -327,7 +313,7 @@ export function NhlScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
                       key={cat.id}
                       type="button"
                       onClick={() => setActiveTab(cat.id)}
-                      className={`flex shrink-0 items-center gap-1 rounded-full border px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide transition ${colorClass}`}
+                      className={`flex items-center gap-1 rounded-full border px-2.5 py-1.5 text-[11px] font-bold uppercase tracking-wide transition ${colorClass}`}
                     >
                       {st(cat.label)}
                       {isPremiumGroup && !isPremium && (
@@ -344,7 +330,7 @@ export function NhlScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
 
       {/* ===== Scoring rows for active tab ===== */}
       {activeCategory && (
-        <div className="max-h-[52vh] space-y-0.5 overflow-y-auto rounded-xl border border-white/10 bg-white/[0.02] p-3">
+        <div className="min-w-0 space-y-0.5 rounded-xl border border-white/10 bg-white/[0.02] p-2 sm:max-h-[52vh] sm:overflow-y-auto sm:p-3">
           {/* Premium lock notice */}
           {activeCategory.id === 'advanced' && !isPremium && (
             <div className="mb-3 flex items-start gap-2 rounded-lg border border-cyan-500/20 bg-cyan-950/20 px-3 py-2.5">
@@ -385,12 +371,12 @@ export function NhlScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
             return (
               <div
                 key={row.key}
-                className="group flex items-center justify-between gap-3 rounded-lg px-2.5 py-2 hover:bg-white/[0.03]"
+                className="group flex min-w-0 items-center justify-between gap-2 rounded-lg px-2 py-2 hover:bg-white/[0.03]"
               >
                 {/* Label + helper */}
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
-                    <span className="text-[12px] text-white/80">{st(row.label)}</span>
+                    <span className="break-words text-[12px] text-white/80">{st(row.label)}</span>
                     {row.premium && <Lock className="h-3 w-3 text-cyan-400/60" />}
                   </div>
                   {row.helper && (
@@ -407,7 +393,7 @@ export function NhlScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
                       value={value}
                       aria-label={st(row.label)}
                       onChange={(e) => handleRuleChange(row.key, e.target.value)}
-                      className={`w-20 rounded-md border bg-white/5 px-2 py-1.5 text-right font-mono text-[12px] transition focus:border-cyan-500/50 focus:outline-none focus:ring-1 focus:ring-cyan-500/30 ${
+                      className={`w-[4.5rem] rounded-md border bg-white/5 px-2 py-1.5 text-right font-mono text-[12px] transition focus:border-cyan-500/50 focus:outline-none focus:ring-1 focus:ring-cyan-500/30 ${
                         isNonZero
                           ? 'border-white/15 text-white'
                           : 'border-white/10 text-white/30'
@@ -415,7 +401,7 @@ export function NhlScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
                     />
                   ) : (
                     <span
-                      className={`inline-block w-20 rounded-md border border-white/10 bg-white/[0.03] px-2 py-1.5 text-right font-mono text-[12px] ${
+                      className={`inline-block w-[4.5rem] rounded-md border border-white/10 bg-white/[0.03] px-2 py-1.5 text-right font-mono text-[12px] ${
                         isNonZero ? 'text-white' : 'text-white/30'
                       }`}
                     >
