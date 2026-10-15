@@ -139,6 +139,13 @@ function inferEntryCountFromPayload(payload: unknown): number {
   return Array.isArray(record.entries) ? record.entries.length : 0
 }
 
+function hasDraftableEntries(payload: unknown): payload is DraftPoolSnapshotPayload {
+  const entries = payload && typeof payload === 'object'
+    ? (payload as DraftPoolSnapshotPayload).entries
+    : null
+  return Array.isArray(entries) && entries.length > 0
+}
+
 function withWarmSnapshotMeta(
   payload: unknown,
   meta: {
@@ -175,7 +182,7 @@ export async function getWarmDraftPoolSnapshotFast(
   try {
     const cacheContext = await resolveDraftPoolCacheContext(leagueId, options)
     const cached = getApiCached(cacheContext.standardCacheKey)
-    if (cached) {
+    if (cached && hasDraftableEntries(cached.body)) {
       const syncedAt =
         cached.body &&
         typeof cached.body === 'object' &&
@@ -203,7 +210,7 @@ export async function getWarmDraftPoolSnapshotFast(
       where: { cacheKey: cacheContext.standardCacheKey, expiresAt: { gt: now } },
       select: { payload: true, entryCount: true, syncedAt: true },
     })
-    if (exactFresh?.payload && typeof exactFresh.payload === 'object') {
+    if (hasDraftableEntries(exactFresh?.payload)) {
       const syncedAt = exactFresh.syncedAt instanceof Date ? exactFresh.syncedAt.toISOString() : null
       const entryCount = Number(exactFresh.entryCount ?? inferEntryCountFromPayload(exactFresh.payload))
       return {
@@ -230,7 +237,7 @@ export async function getWarmDraftPoolSnapshotFast(
       orderBy: { syncedAt: 'desc' },
       select: { payload: true, entryCount: true, syncedAt: true, cacheKey: true },
     })
-    if (fallbackFresh?.payload && typeof fallbackFresh.payload === 'object') {
+    if (hasDraftableEntries(fallbackFresh?.payload)) {
       const syncedAt = fallbackFresh.syncedAt instanceof Date ? fallbackFresh.syncedAt.toISOString() : null
       const effectiveCacheKey =
         typeof fallbackFresh.cacheKey === 'string' ? fallbackFresh.cacheKey : cacheContext.standardCacheKey
@@ -357,21 +364,25 @@ export async function ensureDraftPoolReady(leagueId: string): Promise<EnsureDraf
       try {
         const exactFresh = await model.findFirst({
           where: { cacheKey, expiresAt: { gt: new Date() } },
-          select: { id: true },
+          select: { payload: true },
         })
-        if (exactFresh) return { ok: true, source: 'db-cache' }
+        if (hasDraftableEntries(exactFresh?.payload)) return { ok: true, source: 'db-cache' }
       } catch {
         // non-fatal
       }
     }
 
     const coldBuildStart = Date.now()
-      const resolved = await getResolvedDraftPoolForLeague(leagueId, {
-        limit: 300,
-        poolType: null,
-        effectiveLeagueTemplate,
-      })
+    const resolved = await getResolvedDraftPoolForLeague(leagueId, {
+      limit: 300,
+      poolType: null,
+      effectiveLeagueTemplate,
+    })
     console.info('[draft-perf] ensureDraftPoolReady cold build done', { leagueId, ms: Date.now() - coldBuildStart })
+
+    if (!resolved.entries.length) {
+      return { ok: false, error: 'Draft pool is empty. Check the player feed and try again.' }
+    }
 
     if (model) {
       const expiresAt = new Date(Date.now() + Math.max(1, dbFirstMode.draftPoolCacheTtlSeconds) * 1000)
