@@ -795,7 +795,10 @@ export async function auditSGHistoricalCorrections(leagueId: string) {
   const schedule = buildSGSchedule(config).periods
   const changes: { period: number; changedRosterIds: string[]; result: string; proposedChops?: string[];
     originalChops?: string[]; correctedScores?: Record<string, number>;
-    review?: { decision: string; reason: string; reviewedAt: string; scoreFingerprint: string } | null }[] = []
+    review?: { decision: string; reason: string; reviewedAt: string; scoreFingerprint: string;
+      originalScores?: Record<string, number>; originalChops?: string[]; proposedChops?: string[] | null;
+      scoresApplied?: boolean; compensations?: { recipientRosterId: string; kind: string; amount: number;
+        reason: string; awardedAt: string; awardedByUserId: string }[] } | null }[] = []
   for (const [key, entry] of Object.entries(history)) {
     const periodNumber = Number(key)
     if (!Number.isInteger(periodNumber) || periodNumber >= season.currentPeriod || !entry.scores || !entry.teams) continue
@@ -810,15 +813,28 @@ export async function auditSGHistoricalCorrections(leagueId: string) {
       ? await loadCappedGameScores({ leagueId, season: league.season, period: periodNumber,
         rosterIds: ids, cap: config.nbaGameCap, startsAt: row.scoringStartsAt, endsAt: row.scoringEndsAt })
       : new Map(final.map(s => [s.rosterId, s.totalPoints]))
+    const correctedScores = Object.fromEntries([...scores].sort(([a], [b]) => a.localeCompare(b)))
+    const review = (entry as typeof entry & { correctionReview?: { decision: string; reason: string;
+      reviewedAt: string; scoreFingerprint: string; originalScores?: Record<string, number>;
+      originalChops?: string[]; proposedChops?: string[] | null; scoresApplied?: boolean;
+      compensations?: { recipientRosterId: string; kind: string; amount: number; reason: string;
+        awardedAt: string; awardedByUserId: string }[] } }).correctionReview
     const changedRosterIds = ids.filter(id => scores.get(id) !== entry.scores![id])
-    if (!changedRosterIds.length) continue
+    if (!changedRosterIds.length) {
+      const originallyChanged = ids.filter(id => review?.originalScores?.[id] !== undefined &&
+        review.originalScores[id] !== entry.scores![id])
+      if (review?.scoresApplied && originallyChanged.length &&
+          review.scoreFingerprint === JSON.stringify(correctedScores)) changes.push({
+        period: periodNumber, changedRosterIds: originallyChanged, result: 'reviewed_played_result',
+        proposedChops: review.proposedChops ?? undefined, originalChops: review.originalChops ?? entry.choppedTeamIds ?? [],
+        correctedScores, review,
+      })
+      continue
+    }
     const teams = entry.teams.map(team => ({ ...team, points: scores.get(team.id)! }))
     const resolution = resolveSGPeriod({ config, period, teams, matchups: entry.matchups ?? [],
       protectedTeamIds: entry.protectedTeamIds ?? [],
       gauntletImmuneTribeId: entry.gauntletImmuneTribeId ?? undefined })
-    const correctedScores = Object.fromEntries([...scores].sort(([a], [b]) => a.localeCompare(b)))
-    const review = (entry as typeof entry & { correctionReview?: { decision: string; reason: string;
-      reviewedAt: string; scoreFingerprint: string } }).correctionReview
     changes.push({ period: periodNumber, changedRosterIds,
       result: resolution.status === 'resolved' && JSON.stringify([...resolution.choppedTeamIds].sort()) ===
         JSON.stringify([...(entry.choppedTeamIds ?? [])].sort()) ? 'scores_changed_chop_same' : 'commissioner_reconciliation_required',
@@ -837,6 +853,7 @@ export async function reviewSGHistoricalCorrection(leagueId: string, actorUserId
   const audit = await auditSGHistoricalCorrections(leagueId)
   const change = audit.changes.find(row => row.period === period && row.changedRosterIds.length > 0)
   if (!change?.correctedScores) throw new Error('No finalized historical correction is available for this period.')
+  if (change.review?.scoresApplied) throw new Error('This correction was already reviewed and applied.')
   const season = await prisma.survivorGuillotineLeague.findUniqueOrThrow({ where: { leagueId } })
   const activeState = readSGPeriodState(season.periodState)
   if (activeState?.ceremonyStarted && activeState.period === period) {
@@ -848,14 +865,17 @@ export async function reviewSGHistoricalCorrection(leagueId: string, actorUserId
     originalChops: change.originalChops ?? [],
     proposedChops: change.proposedChops ?? null }
   const entry = history[String(period)]
-  const originalScores = entry.scores as Record<string, number>
+  const priorReview = entry.correctionReview as { originalScores?: Record<string, number>;
+    compensations?: unknown[] } | undefined
+  const originalScores = priorReview?.originalScores ?? entry.scores as Record<string, number>
   const scoreHistory = season.scoreHistory && typeof season.scoreHistory === 'object' && !Array.isArray(season.scoreHistory)
     ? season.scoreHistory as Record<string, Record<string, number>> : {}
   const correctedEntry = decision === 'keep_played_result' ? {
     ...entry, scores: change.correctedScores,
     teams: (entry.teams as { id: string; points: number }[]).map(team => ({ ...team,
       points: change.correctedScores![team.id] ?? team.points })),
-    correctionReview: { ...review, originalScores, scoresApplied: true },
+    correctionReview: { ...review, originalScores, scoresApplied: true,
+      compensations: priorReview?.compensations ?? [] },
   } : { ...entry, correctionReview: review }
   await prisma.$transaction(async tx => {
     const saved = await tx.survivorGuillotineLeague.updateMany({ where: { leagueId, revision: season.revision },
@@ -877,4 +897,58 @@ export async function reviewSGHistoricalCorrection(leagueId: string, actorUserId
       metadata: { survivorGuillotine: true, event: 'historical_correction_review', period, decision } } })
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
   return { period, ...review }
+}
+
+/** A reviewed earlier chop stays played; commissioners can record a remedy and optionally credit live FAAB. */
+export async function awardSGHistoricalCompensation(leagueId: string, actorUserId: string, period: number,
+  recipientRosterId: string, amount: number, reason: string) {
+  if (!Number.isInteger(period) || period < 1 || !recipientRosterId || !Number.isInteger(amount) || amount < 0 ||
+      reason.trim().length < 10) throw new Error('Choose a recipient, whole-number FAAB amount, and a reason of at least 10 characters.')
+  const audit = await auditSGHistoricalCorrections(leagueId)
+  const change = audit.changes.find(row => row.period === period)
+  if (change?.review?.decision !== 'keep_played_result' || !change.review.scoresApplied) {
+    throw new Error('Apply the corrected scores and keep the played result before recording compensation.')
+  }
+  const season = await prisma.survivorGuillotineLeague.findUniqueOrThrow({ where: { leagueId } })
+  const config = season.config as unknown as SGConfig
+  if (amount > config.faabBudget) throw new Error('Compensation cannot exceed the league starting FAAB budget.')
+  const history = season.periodHistory as Record<string, Record<string, unknown>>
+  const entry = history[String(period)]
+  const review = entry.correctionReview as NonNullable<typeof change.review>
+  const prior = review.compensations ?? []
+  if (prior.some(item => item.recipientRosterId === recipientRosterId)) {
+    throw new Error('This manager already has a compensation decision for this correction.')
+  }
+  const team = await prisma.leagueTeam.findFirst({ where: { leagueId, externalId: recipientRosterId },
+    select: { eliminatedAt: true, teamName: true, ownerName: true } })
+  if (!team) throw new Error('Recipient is not a member of this league.')
+  if (amount > 0 && team.eliminatedAt) throw new Error('FAAB can only be credited to an active manager; use zero for a recorded external remedy.')
+  const roster = amount > 0 ? await prisma.roster.findFirst({ where: { id: recipientRosterId, leagueId },
+    select: { id: true, redraftRosterId: true, faabRemaining: true, updatedAt: true } }) : null
+  if (amount > 0 && !roster) throw new Error('Active recipient roster is unavailable.')
+  const compensation = { recipientRosterId, kind: amount > 0 ? 'faab' : 'record_only', amount,
+    reason: reason.trim(), awardedAt: new Date().toISOString(), awardedByUserId: actorUserId,
+    ...(amount > 0 ? { balanceBefore: roster!.faabRemaining ?? 0,
+      balanceAfter: (roster!.faabRemaining ?? 0) + amount } : {}) }
+  await prisma.$transaction(async tx => {
+    const saved = await tx.survivorGuillotineLeague.updateMany({ where: { leagueId, revision: season.revision },
+      data: { revision: { increment: 1 }, periodHistory: { ...history, [String(period)]: {
+        ...entry, correctionReview: { ...review, compensations: [...prior, compensation] },
+      } } as Prisma.InputJsonValue } })
+    if (saved.count !== 1) throw new Error('Correction review changed; reload and retry.')
+    if (amount > 0 && roster) {
+      const credited = await tx.roster.updateMany({ where: { id: roster.id, leagueId, updatedAt: roster.updatedAt },
+        data: { faabRemaining: compensation.balanceAfter } })
+      if (credited.count !== 1) throw new Error('Recipient FAAB changed; reload and retry.')
+      if (roster.redraftRosterId) await tx.redraftRoster.update({ where: { id: roster.redraftRosterId },
+        data: { faabBalance: { increment: amount } } })
+    }
+    await tx.leagueChatMessage.create({ data: { leagueId, userId: actorUserId, type: 'system',
+      message: amount > 0
+        ? `The commissioner awarded ${amount} FAAB to ${team.teamName || team.ownerName} for a period ${period} stat correction. Reason: ${reason.trim()}`
+        : `The commissioner recorded a non-FAAB remedy for ${team.teamName || team.ownerName} after the period ${period} stat correction. Reason: ${reason.trim()}`,
+      metadata: { survivorGuillotine: true, event: 'historical_correction_compensation', period,
+        recipientRosterId, amount } } })
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
+  return { period, compensation }
 }
