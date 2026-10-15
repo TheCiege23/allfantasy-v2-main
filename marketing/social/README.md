@@ -53,6 +53,9 @@ All four take `attachment: image`, `image: <raw url>`, `scheduled_at` (UTC ISO),
 
 ## Brown Pig LLC: one post a day
 
+> ⏸ **PAUSED (owner's call, 2026-10-15): the daily run makes AllFantasy posts only.** Keep this
+> section for when Brown Pig posts resume; do not make them until the owner says so.
+
 Alongside the 5 AllFantasy posts, the daily run makes **one** post for a Brown Pig LLC
 product, in `posts/brownpig/<YYYY-MM-DD>.json` with `"date": "brownpig-<YYYY-MM-DD>"`,
 `"theme": "brownpig"` and `"title": "Brown Pig LLC posts"`.
