@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import type { getStealThreePreview } from '@/lib/survivor/survivorStealThree'
+import { idolDefinition, type IdolPlayPreview } from '@/lib/survivor/survivorIdolCatalog'
 import './survivorIdolPlay.css'
 
 type PreviewResult = Awaited<ReturnType<typeof getStealThreePreview>>
@@ -9,7 +10,7 @@ type Preview = Extract<PreviewResult, { ok: true }>['value']
 type Played = { playerNames: string[]; dropNames: string[]; week: number }
 const STEPS = ['Pick a team', 'Pick 3 players', 'Make room', 'Confirm']
 
-export function SurvivorIdolPlay({ leagueId, idolId, powerType, onFinished }: { leagueId: string; idolId: string; powerType: string; onFinished: () => void }) {
+function SurvivorRosterIdolPlay({ leagueId, idolId, powerType, onFinished }: { leagueId: string; idolId: string; powerType: string; onFinished: () => void }) {
   const [preview, setPreview] = useState<Preview | null>(null)
   const [step, setStep] = useState(1)
   const [teamId, setTeamId] = useState('')
@@ -89,6 +90,74 @@ export function SurvivorIdolPlay({ leagueId, idolId, powerType, onFinished }: { 
           </div>
           <footer><button type="button" disabled={busy || step === 1} onClick={() => setStep(step === 4 && preview.requiredDrops === 0 ? 2 : step - 1)}>Back</button><button className="idol-primary" type="button" disabled={busy || !ready} onClick={() => step === 4 ? void confirm() : setStep(step === 2 && preview.requiredDrops === 0 ? 4 : step + 1)}>{step === 4 ? busy ? 'Playing...' : `Play ${title}` : 'Next'}</button></footer>
         </>}
+      </div>
+    </div>
+  </section>
+}
+
+
+type IdolPlayProps = { leagueId: string; idolId: string; powerType: string; onFinished: () => void }
+
+export function SurvivorIdolPlay(props: IdolPlayProps) {
+  return ['triple_steal', 'island_raid'].includes(props.powerType)
+    ? <SurvivorRosterIdolPlay {...props} /> : <SurvivorCouncilIdolPlay {...props} />
+}
+
+/** All council/catalog powers share one target and confirmation layout. */
+function SurvivorCouncilIdolPlay({ leagueId, idolId, powerType, onFinished }: IdolPlayProps) {
+  const definition = idolDefinition(powerType)
+  const [preview, setPreview] = useState<IdolPlayPreview | null>(null)
+  const [target, setTarget] = useState('')
+  const [confirming, setConfirming] = useState(!definition.needsTarget)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [played, setPlayed] = useState(false)
+  const submitting = useRef(false)
+  const heading = useRef<HTMLHeadingElement>(null)
+  async function request(action: string, body: Record<string, unknown>) {
+    const response = await fetch(`/api/leagues/${leagueId}/survivor/${action}`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+    const result = await response.json()
+    if (!response.ok) throw new Error(result.error ?? 'The action could not be completed.')
+    return result
+  }
+  useEffect(() => {
+    let active = true
+    request('idol-play-preview', { idolId }).then(result => { if (active) setPreview(result) })
+      .catch(cause => { if (active) setError(cause.message) })
+    return () => { active = false }
+  }, [leagueId, idolId])
+  useEffect(() => { heading.current?.focus() }, [confirming, played])
+  async function play() {
+    if (submitting.current || !definition.action) return
+    submitting.current = true; setBusy(true); setError(null)
+    try {
+      await request(definition.action, { idolId, ...(definition.needsTarget ? { stolenVoterUserId: target } : {}) })
+      setPlayed(true); onFinished()
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'The idol could not be played.') }
+    finally { setBusy(false); submitting.current = false }
+  }
+  return <section className="survivor-idol-play survivor-catalog-play" aria-label={`Play ${definition.name}`} aria-busy={busy}>
+    <header><div><h3>Play an idol</h3><p>Your idols - only you can see this page</p></div></header>
+    <div className="idol-layout">
+      <aside className="idol-card" style={{ borderColor: definition.glow }}>
+        {definition.id && <img src={`/survivor/idols/${definition.id}.svg`} alt="" />}
+        <h3 style={{ color: definition.glow }}>{definition.name}</h3><p>{definition.power}</p>
+        <dl><dt>When</dt><dd>{definition.when}</dd><dt>Target</dt><dd>{definition.target}</dd><dt>Who sees it</dt><dd>Nobody until the scroll is read</dd></dl>
+      </aside>
+      <div className="idol-flow">
+        {error && <p role="alert" className="idol-warning">{error}</p>}
+        <div className="idol-panel">
+          <h4 ref={heading} tabIndex={-1}>{played ? 'Played in secret' : !definition.action ? 'Not playable yet' : confirming ? `Confirm ${definition.name}` : 'Whose vote do you take?'}</h4>
+          {played ? <><p>{definition.power}</p><p>Nobody else can see this play until the read. Your idol has left the vault.</p>{['vote_steal', 'extra_vote'].includes(powerType) && <><p>You can now cast 2 votes at Tribal Council. Send your own vote, then your additional vote privately:</p><p><code>@Chimmy vote @manager</code><br /><code>@Chimmy extra vote @manager</code></p><a className="idol-primary" href={`/survivor/${leagueId}/tribal`}>Go to Tribal Council</a></>}</> : <>
+            {!definition.action ? <p>This idol has no server play action yet. Keep it in your vault.</p> : !preview ? <p role="status">Checking the council window...</p> : <>
+              {definition.needsTarget && !confirming && <><p>Choose a manager in your own tribe going to Tribal Council. They will not know until the scroll is read; their slip is stamped Taken.</p>{preview.targets.map(manager => <button type="button" className="idol-row" key={manager.userId} disabled={busy || manager.disabled} aria-pressed={target === manager.userId} onClick={() => setTarget(manager.userId)}><strong>{manager.name}</strong><span>{manager.reason ?? 'At Tribal Council'}</span></button>)}</>}
+              {confirming && <><p>{definition.power}</p>{definition.needsTarget && <p>Selected manager: {preview.targets.find(manager => manager.userId === target)?.name}</p>}<p>Played in secret. You cannot undo this play.</p></>}
+              <p>Votes close: {preview.deadline ? <time dateTime={preview.deadline}>{new Date(preview.deadline).toLocaleString()}</time> : 'No council scheduled'}</p>
+              {preview.reason && <p role="status">{preview.reason}</p>}
+              <footer>{definition.needsTarget && confirming && <button type="button" disabled={busy} onClick={() => setConfirming(false)}>Back</button>}<button type="button" className="idol-primary" disabled={busy || !preview.playable || (definition.needsTarget && !target)} onClick={() => confirming ? void play() : setConfirming(true)}>{busy ? 'Playing...' : confirming ? `Play ${definition.name}` : 'Next'}</button></footer>
+            </>}
+          </>}
+        </div>
       </div>
     </div>
   </section>

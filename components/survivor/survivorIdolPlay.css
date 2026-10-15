@@ -244,3 +244,13 @@
     margin:0 auto 16px
   }
 }
+
+@media(max-width:700px) {
+  .survivor-catalog-play .idol-card {
+    display:block;
+    margin-bottom:16px
+  }
+  .survivor-catalog-play .idol-card>img {
+    height:120px
+  }
+}

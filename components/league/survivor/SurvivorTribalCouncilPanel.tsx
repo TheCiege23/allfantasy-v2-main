@@ -1,8 +1,10 @@
 'use client'
 
 import { useState } from 'react'
+import { SurvivorIdolPlay } from '@/components/survivor/SurvivorIdolPlay'
+import { idolDefinition } from '@/lib/survivor/survivorIdolCatalog'
 import { SurvivorVoteWindowCard } from './SurvivorVoteWindowCard'
-import { SurvivorIdolPlayPanel, type PlayableIdol } from './SurvivorIdolPlayPanel'
+import { type PlayableIdol } from './SurvivorIdolPlayPanel'
 import { SurvivorVoteRevealScrolls, type RevealScroll } from './SurvivorVoteRevealScrolls'
 
 export type TribalCouncilView = {
@@ -24,6 +26,7 @@ export type TribalCouncilView = {
     voteDoesNotCount: boolean
     eligibleTargets: Array<{ userId: string; displayName: string }>
     playableIdols: PlayableIdol[]
+    additionalVotes?: Array<{ idolId: string; targetName: string | null; locked: boolean }>
     isSafeFromVote: boolean
   }
   host: { eligibleVoterCount: number; submittedCount: number; missingVoteCount: number } | null
@@ -57,8 +60,8 @@ export function SurvivorTribalCouncilPanel({
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState<string | null>(null)
   const [voteTarget, setVoteTarget] = useState('')
-  const [stolenVoter, setStolenVoter] = useState('')
-  const [stolenVoteTarget, setStolenVoteTarget] = useState('')
+  const [additionalTarget, setAdditionalTarget] = useState('')
+  const [selectedIdol, setSelectedIdol] = useState<PlayableIdol | null>(null)
   const [attendingTribeId, setAttendingTribeId] = useState('')
 
   const windowOpen = council.status === 'voting_open' && !council.isRevealed
@@ -84,24 +87,6 @@ export function SurvivorTribalCouncilPanel({
     }
   }
 
-  function playIdol(action: string, needsTarget: boolean) {
-    if (!action) return
-    if (action === 'play-vote-steal') {
-      if (!council.you.hasVoted) { setNote('Cast your own vote before playing Vote Steal.'); return }
-      if (!stolenVoter || !stolenVoteTarget) { setNote('Choose a tribemate whose ballot to take and the target for your second vote.'); return }
-      void post(action, { stolenVoterUserId: stolenVoter, targetUserId: stolenVoteTarget })
-      return
-    }
-    if (needsTarget) {
-      if (!voteTarget) {
-        setNote('Choose a target first (the dropdown above), then play Extra Vote.')
-        return
-      }
-      void post(action, { targetUserId: voteTarget })
-    } else {
-      void post(action)
-    }
-  }
 
   return (
     <section className="space-y-3 border-t border-neutral-800 pt-4">
@@ -172,23 +157,12 @@ export function SurvivorTribalCouncilPanel({
             </div>
           ) : null}
 
-          {windowOpen && council.you.playableIdols.some(idol => idol.powerType === 'vote_steal' && !idol.alreadyPlayed) ? (
-            <div className="rounded border border-amber-700/40 bg-amber-950/20 p-3 text-xs text-amber-100">
-              <label htmlFor="stolen-voter" className="mb-1 block">Vote Steal: whose ballot will be taken?</label>
-              <select id="stolen-voter" value={stolenVoter} onChange={event => setStolenVoter(event.target.value)} className="w-full rounded border border-amber-700/40 bg-neutral-950 px-2 py-2">
-                <option value="">Choose a non-immune tribemate</option>
-                {council.you.eligibleTargets.map(target => <option key={target.userId} value={target.userId}>{target.displayName}</option>)}
-              </select>
-              <label htmlFor="stolen-vote-target" className="mb-1 mt-3 block">Where does your second vote go?</label>
-              <select id="stolen-vote-target" value={stolenVoteTarget} onChange={event => setStolenVoteTarget(event.target.value)} className="w-full rounded border border-amber-700/40 bg-neutral-950 px-2 py-2">
-                <option value="">Choose a second vote target</option>
-                {council.you.eligibleTargets.map(target => <option key={target.userId} value={target.userId}>{target.displayName}</option>)}
-              </select>
-              <p className="mt-1">Cast your own ballot first. The taken ballot stays secret until the read.</p>
-            </div>
-          ) : null}
-          {/* Idol plays (owner-only) */}
-          <SurvivorIdolPlayPanel idols={council.you.playableIdols} windowOpen={windowOpen} busy={busy} voteDeadline={council.votingDeadline} onPlay={(action, needsTarget) => playIdol(action, needsTarget)} />
+          {(council.you.additionalVotes ?? []).map(ballot => <div key={ballot.idolId} className="rounded border border-amber-700/40 p-3 text-sm">
+            <p>Your additional private vote: {ballot.targetName ?? 'Not cast yet'}{ballot.locked ? ' - Locked' : ''}</p>
+            {windowOpen && !ballot.locked && <><label htmlFor={`additional-${ballot.idolId}`}>Choose your additional vote target</label><select id={`additional-${ballot.idolId}`} value={additionalTarget} onChange={event => setAdditionalTarget(event.target.value)} className="m-2 rounded bg-neutral-900 p-2"><option value="">Choose a manager</option>{council.you.eligibleTargets.map(target => <option key={target.userId} value={target.userId}>{target.displayName}</option>)}</select><button type="button" disabled={busy || !additionalTarget} onClick={() => post('submit-vote', { message: `@Chimmy extra vote <@${additionalTarget}>` })} className="rounded bg-orange-600 p-2 disabled:opacity-50">Send additional vote to @Chimmy</button></>}
+          </div>)}
+          <nav aria-label="Your held council idols" className="flex flex-wrap gap-2">{council.you.playableIdols.filter(idol => !idol.alreadyPlayed).map(idol => <button key={idol.idolId} type="button" aria-pressed={selectedIdol?.idolId === idol.idolId} onClick={() => setSelectedIdol(idol)} className="rounded border border-amber-400/50 p-2 text-sm">{idolDefinition(idol.powerType).name}</button>)}</nav>
+          {selectedIdol && <SurvivorIdolPlay key={selectedIdol.idolId} leagueId={leagueId} idolId={selectedIdol.idolId} powerType={selectedIdol.powerType} onFinished={onRefresh} />}
 
           {/* Host operational missing-vote count */}
           {council.host ? (
