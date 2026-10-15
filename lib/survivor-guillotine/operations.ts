@@ -8,7 +8,7 @@ import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import { buildSGSchedule } from './config'
 import { resolveSGPeriod } from './competition'
 import { loadCappedGameScores } from './capped-scoring'
-import { readSGPeriodState, readSGTribes, seedSGLiveDraftPowers } from './live'
+import { executeSGLiveChop, readSGPeriodState, readSGTribes, seedSGLiveDraftPowers } from './live'
 import { configureSGLivePeriod } from './live'
 import type { SGTribeMember, SGLivePeriod } from './live'
 import type { SGConfig } from './types'
@@ -727,6 +727,12 @@ export async function advanceSGHostedCeremony(leagueId: string, actorUserId: str
     throw new Error('The hosted ceremony is already complete or unavailable.')
   }
   const stage = hosted.stage! + 1
+  if (stage === 3) {
+    if (entry.pendingCommit !== true) throw new Error('Hosted chop preparation is missing; restart Chop Night.')
+    const result = await executeSGLiveChop(leagueId, period)
+    return { period, stage: 'hostedRestarted' in result ? 0 : 3,
+      ...('hostedRestarted' in result ? { restarted: true } : {}) }
+  }
   await prisma.$transaction(async tx => {
     const saved = await tx.survivorGuillotineLeague.updateMany({ where: { leagueId, revision: season.revision },
       data: { revision: { increment: 1 }, periodHistory: { ...history,
@@ -734,19 +740,46 @@ export async function advanceSGHostedCeremony(leagueId: string, actorUserId: str
     if (saved.count !== 1) throw new Error('The ceremony changed. Reload and try again.')
     const immuneTribeId = entry.immuneTribeId as string | null
     const savedTeamIds = Array.isArray(entry.savedTeamIds) ? entry.savedTeamIds as string[] : []
+    const protectedTeamIds = Array.isArray(entry.protectedTeamIds) ? entry.protectedTeamIds as string[] : []
     const choppedTeamIds = Array.isArray(entry.choppedTeamIds) ? entry.choppedTeamIds as string[] : []
     const message = stage === 1 ? (immuneTribeId
       ? `Survivor Guillotine period ${period}: ${immuneTribeId} won tribe immunity.`
       : `Survivor Guillotine period ${period}: no tribe won immunity.`)
-      : stage === 2 ? (savedTeamIds.length
-        ? `Survivor Guillotine period ${period}: immunity idols saved ${savedTeamIds.join(', ')}.`
-        : `Survivor Guillotine period ${period}: no immunity idol changed the chop.`)
+      : stage === 2 ? (protectedTeamIds.length
+        ? `Survivor Guillotine period ${period}: immunity idols were played for ${protectedTeamIds.join(', ')}. ${savedTeamIds.length ? `Saved: ${savedTeamIds.join(', ')}.` : 'No idol changed the chop.'}`
+        : `Survivor Guillotine period ${period}: no immunity idol was played.`)
         : `Survivor Guillotine period ${period} chop: ${choppedTeamIds.join(', ')} eliminated. Their players enter waivers.`
     await tx.leagueChatMessage.create({ data: { leagueId, userId: actorUserId, type: 'system',
       message,
       metadata: { survivorGuillotine: true, event: 'hosted_ceremony_advanced', period, stage } } })
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
   return { period, stage }
+}
+
+/** Clear an uncommitted reveal after corrected scores or a commissioner tie decision. */
+export async function restartSGHostedCeremony(leagueId: string, actorUserId: string, period: number) {
+  const season = await prisma.survivorGuillotineLeague.findUniqueOrThrow({ where: { leagueId } })
+  const state = readSGPeriodState(season.periodState)
+  const history = season.periodHistory as Record<string, Record<string, unknown>>
+  const entry = history[String(period)]
+  if (season.currentPeriod !== period || state?.period !== period || !state.ceremonyStarted ||
+      entry?.pendingCommit !== true ||
+      await prisma.survivorGuillotineChop.count({ where: { leagueId, period, reversedAt: null } })) {
+    throw new Error('Only an uncommitted hosted ceremony can be restarted.')
+  }
+  const nextHistory = { ...history }
+  delete nextHistory[String(period)]
+  const { commissionerTie: _supersededTie, ...resetState } = state
+  await prisma.$transaction(async tx => {
+    const saved = await tx.survivorGuillotineLeague.updateMany({ where: { leagueId, revision: season.revision },
+      data: { revision: { increment: 1 }, periodHistory: nextHistory as Prisma.InputJsonValue,
+        periodState: { ...resetState, ceremonyStarted: false } as unknown as Prisma.InputJsonValue } })
+    if (saved.count !== 1) throw new Error('Ceremony changed; reload and retry.')
+    await tx.leagueChatMessage.create({ data: { leagueId, userId: actorUserId, type: 'system',
+      message: `Survivor Guillotine period ${period} hosted ceremony was restarted. Earlier reveal stages are superseded; no roster was chopped.`,
+      metadata: { survivorGuillotine: true, event: 'hosted_ceremony_restarted', period } } })
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
+  return { period, restarted: true }
 }
 
 /** Earlier-period corrections are reviewed without silently rewriting later drafts, waivers, or chops. */

@@ -13,7 +13,8 @@ export function projectSGHostedHistory(history: Record<string, HistoryEntry>, cu
     history: { ...history, [key]: { ...entry,
       immuneTribeId: hosted.stage >= 1 ? entry.immuneTribeId : null,
       savedTeamIds: hosted.stage >= 2 ? entry.savedTeamIds : [],
-      choppedTeamIds: [], placements: [], scores: {}, teams: [], protectedTeamIds: [],
+      choppedTeamIds: [], placements: [], scores: {}, teams: [],
+      protectedTeamIds: hosted.stage >= 2 ? entry.protectedTeamIds : [],
     } },
   }
 }
