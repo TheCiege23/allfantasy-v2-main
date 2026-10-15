@@ -14,6 +14,7 @@ import {
   breakingAlertTitle,
   breakingStoryKey,
   classifyBreakingHeadline,
+  isCollegeStoryForProSport,
   teamsMentioned,
   trustedOutlet,
   type BreakingClassification,
@@ -114,6 +115,8 @@ export async function findBreakingCandidates(now: Date = new Date()): Promise<Br
     // A future-dated row is a provider clock error, not news from the future.
     const at = row.publishedAt ?? row.fetchedAt
     if (at.getTime() > now.getTime() + 10 * 60 * 1000) continue
+    // A college story stored under a pro league would push to everyone who plays that league.
+    if (isCollegeStoryForProSport(row.sport, row.sourceUrl)) continue
     const classification = classifyBreakingHeadline(row.title, row.description)
     if (!classification) continue
     const outlet = trustedOutlet(row.sourceUrl)

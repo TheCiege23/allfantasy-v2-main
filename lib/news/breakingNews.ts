@@ -163,6 +163,27 @@ export function trustedOutlet(sourceUrl: string | null | undefined): { host: str
   return { host: match, ...OUTLETS[match] }
 }
 
+const PRO_SPORTS = new Set(['NFL', 'NBA', 'NHL', 'MLB', 'SOCCER'])
+/** A college section of an outlet's site: ESPN's /college-sports/ and /mens-college-basketball/, Yahoo's /college-sports/ and the like. */
+const COLLEGE_PATH = /\/(?:college-[a-z-]+|mens-college-[a-z-]+|womens-college-[a-z-]+|ncaa[a-z]*)(?:\/|$)/i
+
+/**
+ * True for a college story filed under a PRO sport. ESPN's NHL news feed carries college hockey
+ * (Arizona State's coaching change, 2026-10-15), and the NewsAPI path defaults unknown articles to
+ * NFL (an LSU soccer story). Both arrive tagged with the pro league, so they would be posted as
+ * #NHL / #NFL and pushed to everyone who plays that sport. College hockey and college soccer are not
+ * among the seven sports, so such a story has no right sport to be relabelled to: drop it.
+ * NCAAF and NCAAB are college sports, so college paths are expected there and never flagged.
+ */
+export function isCollegeStoryForProSport(sport: string | null | undefined, sourceUrl: string | null | undefined): boolean {
+  if (!PRO_SPORTS.has(String(sport ?? '').toUpperCase()) || !sourceUrl) return false
+  try {
+    return COLLEGE_PATH.test(new URL(sourceUrl).pathname)
+  } catch {
+    return false
+  }
+}
+
 export type TeamNameEntry = { abbr: string; name: string }
 
 /** Nicknames that are two words; everything else is the last word of "<City> <Nickname>". */
