@@ -1114,6 +1114,8 @@ export const translationsEsParity: Record<string, string> = {
   "settings.notifications.category.autocoach": "Cambios de alineación de Chimmy AutoCoach",
   "settings.notifications.category.bracket_updates": "Actualizaciones de brackets",
   "settings.notifications.category.career_milestones": "Hitos de carrera — títulos, premios y récords",
+  "settings.notifications.category.breaking_news": "Noticias de última hora — traspasos, fichajes y lesiones graves",
+  "settings.notifications.category.live_game_alerts": "Momentos en vivo — partidos cerrados, prórroga y playoffs",
   "settings.notifications.category.chat_mentions": "Menciones en el chat",
   "settings.notifications.category.commissioner_alerts": "Alertas del comisionado",
   "settings.notifications.category.direct_messages": "Mensajes directos y huddles",

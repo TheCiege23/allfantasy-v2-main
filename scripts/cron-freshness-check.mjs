@@ -336,6 +336,9 @@ export const PROBES = {
    * is not done here.
    */
   '/api/cron/notification-outbox-relay': { heartbeat: 'cron-notification-outbox-relay' },
+  // Breaking-news and live-game-moment alerts (2026-10-15). A heartbeat: it correctly sends nothing
+  // on a quiet news day with no games, so an output probe would cry wolf.
+  '/api/cron/sports-alerts': { heartbeat: 'cron-sports-alerts' },
 
   // ── heartbeat probes ──
   // `heartbeat` reads max(started_at) from sync_job_runs for that job_name instead of looking at

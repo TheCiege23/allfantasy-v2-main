@@ -39,6 +39,9 @@ export const PUSH_NOTIFICATION_CATEGORIES = [
   // A title won, a new award tier, a career-wins mark (2026-10-01) — rare by construction: once per
   // milestone ever, only for a season that just finished.
   "career_milestones",
+  // Real-world breaking news and live game moments (2026-10-15). Both capped per person per day.
+  "breaking_news",
+  "live_game_alerts",
 ] as const
 
 export type PushNotificationCategory = (typeof PUSH_NOTIFICATION_CATEGORIES)[number]
