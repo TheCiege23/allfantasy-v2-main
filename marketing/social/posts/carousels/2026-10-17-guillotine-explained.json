@@ -1,0 +1,71 @@
+{
+  "date": "carousel-2026-10-17-guillotine-explained",
+  "carousel": true,
+  "name": "Guillotine Explained",
+  "slot": "Sat Oct 17 · 12 PM",
+  "caption": {
+    "instagram": "How a Guillotine league works 🪓\n\n• Lowest score each week gets chopped\n• Their roster drops to waivers\n• Your FAAB becomes your lifeline\n• Last team standing wins\n\nEvery week is a playoff game. Would your league survive it? 👇\n\nStart one free on AllFantasy, link in bio.\n\n#fantasyfootball #guillotineleague #fantasyfootballleague #faab #allfantasy",
+    "tiktok": "Guillotine league in 30 seconds 🪓 Lowest score gets chopped every week, their roster hits waivers, last team standing wins. Would your league survive? 👇\n\n#fantasyfootball #guillotine #fantasyfootballtok #allfantasy",
+    "facebook": "How a Guillotine league works 🪓\n\nLowest score each week gets chopped. Their whole roster drops to waivers. Your FAAB becomes your lifeline. Last team standing wins.\n\nTag the commissioner who needs to run this next season 👇 https://allfantasy.ai",
+    "x": "Guillotine league, explained 🪓\n\n• Lowest score each week is out\n• Their roster hits waivers\n• FAAB becomes your lifeline\n• Last team standing wins\n\nWould your league survive it? #FantasyFootball"
+  },
+  "posts": [
+    {
+      "kind": "hero",
+      "art": "league-type-guillotine.png",
+      "eyebrow": "League formats",
+      "title": "How a Guillotine league [works.]",
+      "titleSize": "xl",
+      "lead": "The format that makes every single week a playoff game.",
+      "accent": "red"
+    },
+    {
+      "kind": "hero",
+      "big": "🪓",
+      "title": "Lowest score each week [gets chopped.]",
+      "lead": "No byes from losing. No “we’ll get them next week.” One bad week and you’re out.",
+      "accent": "red"
+    },
+    {
+      "kind": "hero",
+      "big": "🔁",
+      "title": "Their roster [hits waivers.]",
+      "lead": "Every chopped team’s players drop to the wire. Week after week, stars come free.",
+      "accent": "red"
+    },
+    {
+      "kind": "hero",
+      "big": "💰",
+      "title": "So your [FAAB] is your lifeline.",
+      "lead": "Spend too early and you’re broke when the best roster drops. Spend too late and you never make it there.",
+      "accent": "red"
+    },
+    {
+      "kind": "list",
+      "title": "Play for [survival],\nnot points.",
+      "bullets": [
+        [
+          "Weekly floor beats ceiling",
+          "A safe score keeps you alive"
+        ],
+        [
+          "Watch the chop line",
+          "How far are you from last place?"
+        ],
+        [
+          "Guard your FAAB",
+          "The best rosters drop late"
+        ]
+      ],
+      "accent": "red"
+    },
+    {
+      "kind": "hero",
+      "big": "👑",
+      "title": "Last team [standing] wins.",
+      "lead": "Create a Guillotine league on AllFantasy, free.",
+      "cta": "START FREE · LINK IN BIO →",
+      "accent": "red"
+    }
+  ]
+}

@@ -1,0 +1,67 @@
+{
+  "date": "carousel-2026-10-18-waivers-decoded",
+  "carousel": true,
+  "name": "Waivers Decoded",
+  "slot": "Sun Oct 18 · 12 PM",
+  "caption": {
+    "instagram": "Claim or instant add? Waivers, decoded 🔄\n\n🔄 Rolling: make a claim, drop to the back\n📉 Reverse: worst record picks first\n💰 FAAB: blind bids with a season budget\n⚡ Free-agent days: first come, first served\n\nWhich one does your league use? 👇\n\nOn AllFantasy, commissioners can set the rule for each day of the week. Free, link in bio.\n\n#fantasyfootball #waiverwire #faab #fantasyfootballadvice #allfantasy",
+    "tiktok": "Rolling vs reverse vs FAAB vs free agents: waivers explained 🔄 Which one does your league use? 👇\n\n#fantasyfootball #waiverwire #faab #fantasyfootballtok #allfantasy",
+    "facebook": "Claim or instant add? Waivers, decoded 🔄\n\nRolling: make a claim, drop to the back of the line.\nReverse: worst record picks first.\nFAAB: blind bids with a season budget.\nFree-agent days: first come, first served.\n\nOn AllFantasy, commissioners can set the rule for each day of the week. https://allfantasy.ai",
+    "x": "Waivers, decoded:\n\n🔄 Rolling: claim, go to the back\n📉 Reverse: worst record first\n💰 FAAB: blind bids, season budget\n⚡ Free agents: first come, first served\n\nWhich does your league use? #FantasyFootball"
+  },
+  "posts": [
+    {
+      "kind": "hero",
+      "eyebrow": "Waiver wire",
+      "title": "Claim or instant add?\n[Waivers, decoded.]",
+      "titleSize": "xl",
+      "accent": "green"
+    },
+    {
+      "kind": "hero",
+      "big": "🔄",
+      "title": "[Rolling] waivers",
+      "lead": "Everyone has a spot in line. Make a claim and you drop to the back.",
+      "accent": "green"
+    },
+    {
+      "kind": "hero",
+      "big": "📉",
+      "title": "[Reverse] standings",
+      "lead": "Worst record gets first dibs. A losing streak buys you priority.",
+      "accent": "green"
+    },
+    {
+      "kind": "hero",
+      "big": "💰",
+      "title": "[FAAB] bidding",
+      "lead": "Everyone gets a season budget. Blind bids, highest one wins.",
+      "accent": "green"
+    },
+    {
+      "kind": "hero",
+      "big": "⚡",
+      "title": "[Free-agent] days",
+      "lead": "First come, first served. On AllFantasy, that’s an instant add: no claim, no overnight wait.",
+      "accent": "green"
+    },
+    {
+      "kind": "list",
+      "pill": "Commish tip",
+      "title": "Mix them [by day.]",
+      "lead": "On AllFantasy, commissioners can set the waiver rule for each day of the week:",
+      "bullets": [
+        [
+          "FAAB on Wednesday",
+          "Rolling, reverse or free agents on other days"
+        ],
+        [
+          "Lock it on game day",
+          "A “Today” row tells managers which rule is live"
+        ]
+      ],
+      "cta": "START FREE · LINK IN BIO →",
+      "accent": "green"
+    }
+  ]
+}

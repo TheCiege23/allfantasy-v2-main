@@ -5,6 +5,8 @@
 // Spec-level `theme: 'brownpig'` switches to the Brown Pig LLC family look (cream, serif, pig logo);
 // each post then sets `brand` (product name in the footer) and `cta` (its site). `title` and
 // `accounts` ([[id, label, handle]]) override the caption sheet's heading and account list.
+// Spec-level `carousel: true` renders the posts as slides of ONE carousel; its `name`, `slot` and
+// `caption` live on the spec, not on the slides.
 // `titleSize`: 'xl' or 'sm'; `dense: true` packs a long bullet list tighter.
 // In `title`, wrap words in [brackets] to color them with the accent.
 const { chromium } = await import('playwright').catch(() => import('/opt/node22/lib/node_modules/playwright/index.mjs'))
@@ -51,9 +53,10 @@ p.lead{font-size:38px;line-height:1.35;color:#C6D6EA;font-weight:500;margin-top:
 .foot{position:absolute;left:84px;right:84px;bottom:58px;display:flex;align-items:center;justify-content:space-between;font-weight:800;font-size:26px;color:#9FB6D3}
 .brand{display:flex;align-items:center;gap:14px;color:#EAF4FF}.brand img{height:54px}
 .cta{color:var(--ac);letter-spacing:.06em}
+.dots{display:flex;gap:8px}.dots i{width:10px;height:10px;border-radius:50%;background:color-mix(in srgb,var(--ac) 25%,#28405f)}.dots i.on{background:var(--ac);width:30px;border-radius:5px}
 `
 const ART = (f) => `<div style="position:absolute;inset:0;background:url('${A(f)}') center 30%/cover"></div>
-<div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(3,8,23,.2),rgba(3,8,23,.1) 30%,rgba(3,8,23,.9) 62%,#030817 80%)"></div>`
+<div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(3,8,23,.15),rgba(3,8,23,.25) 28%,rgba(3,8,23,.93) 50%,#030817 66%)"></div>`
 
 function body(p) {
   const head = `${p.pill ? `<div class="pill">${esc(p.pill)}</div>` : ''}${p.eyebrow ? `<div class="eyebrow" style="${p.pill ? 'margin-top:30px' : ''}">${esc(p.eyebrow)}</div>` : ''}`
@@ -86,18 +89,23 @@ p.lead{color:#5A4636}
 `
 const BROWNPIG_ACCENTS = { pig: '#A0522D', amber: '#C9821B', teal: '#1F8A84', field: '#2F7D32', dog: '#E06A2B', quest: '#6A4BC4', coffee: '#7A4A2B' }
 let THEME = 'allfantasy'
-const html = (p) => THEME === 'brownpig' ? `<!doctype html><html><head><meta charset="utf-8"><style>${CSS(BROWNPIG_ACCENTS[p.accent] || p.accent || BROWNPIG_ACCENTS.pig)}${BROWNPIG_CSS}</style></head><body>
+let CAROUSEL = false
+// Carousel slides get progress dots, and every slide but the last says SWIPE instead of its cta.
+const dots = (i, n) => CAROUSEL ? `<div class="dots">${Array.from({ length: n }, (_, k) => `<i class="${k === i ? 'on' : ''}"></i>`).join('')}</div>` : ''
+const ctaFor = (p, i, n) => CAROUSEL && i < n - 1 ? 'SWIPE →' : (p.cta || 'LINK IN BIO →')
+const html = (p, i = 0, n = 1) => THEME === 'brownpig' ? `<!doctype html><html><head><meta charset="utf-8"><style>${CSS(BROWNPIG_ACCENTS[p.accent] || p.accent || BROWNPIG_ACCENTS.pig)}${BROWNPIG_CSS}</style></head><body>
 <div class="bg"></div>
 <div class="wrap">${body(p)}</div>
-<div class="foot"><div class="brand"><img src="${A('brand/brown-pig-llc.png')}"/>${esc((p.brand || 'Brown Pig LLC').toUpperCase())}</div><div class="cta">${esc(p.cta || 'LINK IN BIO →')}</div></div></body></html>`
+<div class="foot"><div class="brand"><img src="${A('brand/brown-pig-llc.png')}"/>${esc((p.brand || 'Brown Pig LLC').toUpperCase())}</div>${dots(i, n)}<div class="cta">${esc(ctaFor(p, i, n))}</div></div></body></html>`
 : `<!doctype html><html><head><meta charset="utf-8"><style>${CSS(ACCENTS[p.accent] || p.accent || ACCENTS.cyan)}</style></head><body>
 <div class="bg"></div>${p.art ? ART(p.art) : ''}<div class="grid"></div>
 <div class="wrap">${body(p)}</div>
-<div class="foot"><div class="brand"><img src="${A('af-crest.svg')}"/>ALLFANTASY.AI</div><div class="cta">${esc(p.cta || 'LINK IN BIO →')}</div></div></body></html>`
+<div class="foot"><div class="brand"><img src="${A('af-crest.svg')}"/>ALLFANTASY.AI</div>${dots(i, n)}<div class="cta">${esc(ctaFor(p, i, n))}</div></div></body></html>`
 
 const specPath = process.argv[2]
 const spec = JSON.parse(readFileSync(specPath, 'utf8'))
 THEME = spec.theme || 'allfantasy'
+CAROUSEL = Boolean(spec.carousel)
 const outDir = path.join(DIR, 'out', 'daily', spec.date)
 mkdirSync(outDir, { recursive: true })
 const browser = await chromium.launch()
@@ -127,13 +135,15 @@ let captions = `# ${spec.title || 'AllFantasy posts'} for ${spec.date}\n\n` +
   PLATFORMS.map(([, label, handle]) => `- ${label}: ${handle}`).join('\n') + '\n\n'
 for (const [i, p] of spec.posts.entries()) {
   const f = path.join(outDir, `_tmp.html`)
-  writeFileSync(f, html(p))
+  writeFileSync(f, html(p, i, spec.posts.length))
   await pg.goto(pathToFileURL(f).href, { waitUntil: 'networkidle' })
   await pg.evaluate(() => document.fonts.ready)
   await pg.screenshot({ path: path.join(outDir, `post-${i + 1}.png`) })
-  captions += `## Post ${i + 1}${p.slot ? ` · ${p.slot}` : ''}\n\n${captionBlock(p, i)}---\n\n`
+  if (!CAROUSEL) captions += `## Post ${i + 1}${p.slot ? ` · ${p.slot}` : ''}\n\n${captionBlock(p, i)}---\n\n`
 }
 rmSync(path.join(outDir, '_tmp.html'), { force: true })
+// A carousel is one post: one caption set (spec.caption) for all its slides.
+if (CAROUSEL) captions += `## ${spec.name || 'Carousel'} · ${spec.posts.length} slides${spec.slot ? ` · ${spec.slot}` : ''}\n\n${captionBlock(spec, 0)}`
 writeFileSync(path.join(outDir, 'CAPTIONS.md'), captions)
 await browser.close()
 for (const w of warnings) console.warn('⚠', w)
