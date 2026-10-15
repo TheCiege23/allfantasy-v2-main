@@ -187,6 +187,9 @@ export default defineConfig({
     timeout: 300_000,
     env: {
       ...process.env,
+      // Direct service imports in isolated DB specs need this Node condition, but
+      // passing it to Next dev breaks react-dom/server in server components.
+      NODE_OPTIONS: process.env.PLAYWRIGHT_SERVER_NODE_OPTIONS ?? '',
       PORT: String(PLAYWRIGHT_PORT),
       AF_NEXT_DIST_DIR: PLAYWRIGHT_DIST_DIR,
       DATABASE_URL:

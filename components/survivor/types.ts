@@ -115,7 +115,7 @@ export interface SurvivorSummary {
   myRosterId?: string
   myTribeId?: string
   myTribeSource?: string | null
-  myIdols: { id: string; playerId: string; powerType: string }[]
+  myIdols: { id: string; playerId: string; powerType: string; playerName?: string | null; playerImageUrl?: string | null }[]
   myActiveEffects?: {
     rewardType: string
     week: number
