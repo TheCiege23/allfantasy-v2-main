@@ -36,6 +36,7 @@ export interface TribalCouncilView {
     voteDoesNotCount: boolean
     eligibleTargets: Array<{ userId: string; displayName: string }>
     playableIdols: Array<{ idolId: string; powerType: string; label: string; alreadyPlayed: boolean }>
+    additionalVotes?: Array<{ idolId: string; targetName: string | null; locked: boolean }>
     isSafeFromVote: boolean
   }
   host: { eligibleVoterCount: number; submittedCount: number; missingVoteCount: number } | null
@@ -170,6 +171,7 @@ export async function buildTribalCouncilView(access: SurvivorAccessContext): Pro
       voteDoesNotCount: Boolean(ownVote?.doesNotCount),
       eligibleTargets,
       playableIdols,
+      additionalVotes: council.idolsPlayed.filter(p => p.playerUserId === userId && ['vote_steal', 'extra_vote'].includes(p.powerType)).map(p => ({ idolId: p.idolId, targetName: p.extraTargetUserId ? nameByUser.get(p.extraTargetUserId) ?? null : null, locked: Boolean(p.extraTargetUserId) && access.settings.voteChangePolicy === 'first_valid_locks' })),
       isSafeFromVote,
     },
     host,

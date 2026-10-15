@@ -71,7 +71,7 @@ export async function tallyCouncil(leagueId: string, councilId: string): Promise
     council.idolsPlayed.filter((p) => p.powerType === 'vote_shield').map((p) => p.protectedRosterId ?? p.playerRosterId),
   )
   const safeRosters = new Set(ctx.scopePlayers.filter(player => !ctx.eligibility.targetUserIds.includes(player.userId)).map(player => player.rosterId))
-  const extraBallots = council.idolsPlayed.filter((p) => p.powerType === 'extra_vote' || p.powerType === 'vote_steal')
+  const extraBallots = council.idolsPlayed.filter((p) => (p.powerType === 'extra_vote' || p.powerType === 'vote_steal') && p.extraTargetUserId)
   const stolenVoterRosters = new Set(council.idolsPlayed.filter((p) => p.powerType === 'vote_steal').map((p) => p.stolenVoterRosterId))
 
   const counts: Record<string, number> = {}
