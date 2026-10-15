@@ -27,6 +27,10 @@ const PLAYWRIGHT_DIST_DIR =
  * runs zero tests and reports success.
  */
 const MOBILE_SPECS = /[\\/]e2e[\\/]mobile[\\/].*\.spec\.ts$/;
+const NBA_SURVIVOR_OPT_IN_SPEC = /[\\/]e2e[\\/]nba-survivor-authenticated-rehearsal\.spec\.ts$/;
+const DESKTOP_TEST_IGNORE = process.env.AF_NBA_SURVIVOR_BROWSER_DB === '1'
+  ? MOBILE_SPECS
+  : [MOBILE_SPECS, NBA_SURVIVOR_OPT_IN_SPEC];
 
 export default defineConfig({
   testDir: './e2e',
@@ -124,19 +128,19 @@ export default defineConfig({
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
-      testIgnore: MOBILE_SPECS,
+      testIgnore: DESKTOP_TEST_IGNORE,
     },
 
     {
       name: 'firefox',
       use: { ...devices['Desktop Firefox'] },
-      testIgnore: MOBILE_SPECS,
+      testIgnore: DESKTOP_TEST_IGNORE,
     },
 
     {
       name: 'webkit',
       use: { ...devices['Desktop Safari'] },
-      testIgnore: MOBILE_SPECS,
+      testIgnore: DESKTOP_TEST_IGNORE,
     },
 
     /*

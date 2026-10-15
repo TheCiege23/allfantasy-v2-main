@@ -83,5 +83,5 @@ export async function updateSessionWithArchive(session: Parameters<typeof record
         const updated = await tx.draftSession.update({ where: { id: session.id }, data });
         await recordArchiveEvent(tx, updated, event, details, event === 'start' && updated.startedAt ? updated.startedAt : new Date());
         return updated;
-    });
+    }, { timeout: event === 'start' ? 30_000 : 10_000, maxWait: 10_000 });
 }
