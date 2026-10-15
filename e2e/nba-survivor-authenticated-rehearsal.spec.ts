@@ -1,17 +1,8 @@
 /** Opt-in, real-route browser rehearsal against an allowlisted non-production database. */
 import { randomUUID } from 'node:crypto'
-import { createRequire } from 'node:module'
 import bcrypt from 'bcryptjs'
 import { expect, test, type Page } from '@playwright/test'
-import { prisma } from '../lib/prisma'
-import { validateCreatePayload } from '../lib/league-creation/canonical/validateCreateLeague'
-import { runPresetEngine } from '../lib/league-creation/preset-engine/runPresetEngine'
-import { createCanonicalLeagueInTransaction } from '../lib/league-creation/canonical/createCanonicalLeagueInTransaction'
-import { resolveDraftPoolCacheContext } from '../lib/draft-room/ensureDraftPoolReady'
-import { loadNbaSurvivorRosterEligibility } from '../lib/draft-room/nbaSurvivorRosterEligibility'
-import { canonicalName } from '../lib/draft-room/player-canonical-identity'
-import { normalizePlayerList } from '../lib/draft-asset-pipeline'
-import { configureEventInfrastructure, InMemoryOutboxStore } from '../lib/events'
+import { identifyTarget } from '../scripts/db-target-identity.cjs'
 
 async function signIn(page: Page, email: string, password: string, userId: string) {
   const csrf = await (await page.request.get('/api/auth/csrf')).json()
@@ -25,11 +16,19 @@ async function signIn(page: Page, email: string, password: string, userId: strin
 test('two signed-in NBA Survivor managers see draft controls and private idol notices @db', async ({ browser, page }) => {
   test.skip(process.env.AF_NBA_SURVIVOR_BROWSER_DB !== '1', 'Explicit isolated database opt-in required')
   test.setTimeout(900_000)
-  const identity = createRequire(import.meta.url)('../scripts/db-target-identity.cjs')
-  if (identity.identifyTarget(process.env.DATABASE_URL).kind !== 'safe') throw new Error('ALLOWLISTED_TEST_DATABASE_REQUIRED')
+  if (identifyTarget(process.env.DATABASE_URL).kind !== 'safe') throw new Error('ALLOWLISTED_TEST_DATABASE_REQUIRED')
   if (process.env.UPSTASH_REDIS_REST_URL || process.env.UPSTASH_REDIS_REST_TOKEN) {
     throw new Error('SHARED_REDIS_MUST_BE_DISABLED')
   }
+  const { prisma } = await import('../lib/prisma')
+  const { validateCreatePayload } = await import('../lib/league-creation/canonical/validateCreateLeague')
+  const { runPresetEngine } = await import('../lib/league-creation/preset-engine/runPresetEngine')
+  const { createCanonicalLeagueInTransaction } = await import('../lib/league-creation/canonical/createCanonicalLeagueInTransaction')
+  const { resolveDraftPoolCacheContext } = await import('../lib/draft-room/ensureDraftPoolReady')
+  const { loadNbaSurvivorRosterEligibility } = await import('../lib/draft-room/nbaSurvivorRosterEligibility')
+  const { canonicalName } = await import('../lib/draft-room/player-canonical-identity')
+  const { normalizePlayerList } = await import('../lib/draft-asset-pipeline')
+  const { configureEventInfrastructure, InMemoryOutboxStore } = await import('../lib/events')
   configureEventInfrastructure({ outboxStore: new InMemoryOutboxStore() })
 
   const marker = `nba-browser-${randomUUID().slice(0, 8)}`
