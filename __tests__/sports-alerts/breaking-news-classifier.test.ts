@@ -1,0 +1,93 @@
+// @vitest-environment node
+import { describe, expect, it } from 'vitest'
+
+import {
+  breakingStoryKey,
+  classifyBreakingHeadline,
+  teamNickname,
+  teamsMentioned,
+  trustedOutlet,
+} from '@/lib/news/breakingNews'
+
+const NFL = [
+  { abbr: 'ARI', name: 'Arizona Cardinals' },
+  { abbr: 'HOU', name: 'Houston Texans' },
+  { abbr: 'NYJ', name: 'New York Jets' },
+  { abbr: 'NYG', name: 'New York Giants' },
+]
+
+describe('classifyBreakingHeadline', () => {
+  it('flags the Marvin Harrison Jr. trade as a major, sourced trade', () => {
+    expect(classifyBreakingHeadline('Sources: Cardinals trade Marvin Harrison Jr. to Texans')).toEqual({
+      kind: 'trade',
+      tier: 'major',
+      confidence: 'report',
+    })
+    expect(classifyBreakingHeadline('Cardinals trade Marvin Harrison Jr. to Texans for two picks')?.confidence).toBe('confirmed')
+  })
+
+  it.each([
+    ['Knicks sign Jalen Brunson to 5-year, $269M extension', 'signing', 'major'],
+    ['Jets sign veteran long snapper', 'signing', 'notable'],
+    ['Giants release backup quarterback', 'release', 'notable'],
+    ['Raiders fire head coach after 1-6 start', 'coaching', 'major'],
+    ['Rangers name Mike Sullivan head coach', 'coaching', 'major'],
+    ['NFL suspends linebacker three games for hit', 'suspension', 'major'],
+    ['Ravens WR suffers torn ACL, out for season', 'injury', 'major'],
+    ['Legendary goalie announces retirement after 18 seasons', 'retirement', 'major'],
+  ])('%s → %s/%s', (title, kind, tier) => {
+    expect(classifyBreakingHeadline(title)).toMatchObject({ kind, tier })
+  })
+
+  it.each([
+    'Could the Cardinals trade Marvin Harrison Jr.?',
+    'Why the Texans traded for Marvin Harrison Jr.',
+    'Trade rumors: Five teams eyeing Cardinals receiver',
+    'NFL Week 7 power rankings',
+    'Best bets and odds for Sunday',
+    'Fantasy football: Who to start after the Harrison trade',
+    'Cardinals in talks to trade receiver',
+    'Texans expected to sign free agent',
+    'Celtics to retire No. 34 jersey',
+    'Takeaways from the Texans blockbuster trade',
+  ])('is not breaking: %s', (title) => {
+    expect(classifyBreakingHeadline(title)).toBeNull()
+  })
+})
+
+describe('trustedOutlet', () => {
+  it('trusts ESPN and other newsrooms by host, with credit', () => {
+    expect(trustedOutlet('https://www.espn.com/nfl/story/_/id/1')).toEqual({ host: 'espn.com', name: 'ESPN', handle: '@espn' })
+    expect(trustedOutlet('https://apnews.com/article/x')?.name).toBe('AP')
+    expect(trustedOutlet('https://www.nytimes.com/athletic/123/')?.name).toBe('The Athletic')
+  })
+  it('does not trust rumour sites, look-alike hosts, the rest of nytimes.com, or a missing link', () => {
+    expect(trustedOutlet('https://nfltraderumors.co/x')).toBeNull()
+    expect(trustedOutlet('https://espn.com.fake-news.io/x')).toBeNull()
+    expect(trustedOutlet('https://www.nytimes.com/2026/10/15/politics/x.html')).toBeNull()
+    expect(trustedOutlet(null)).toBeNull()
+    expect(trustedOutlet('javascript:alert(1)')).toBeNull()
+  })
+})
+
+describe('teamsMentioned', () => {
+  it('finds teams by nickname, in order, case-sensitively', () => {
+    expect(teamsMentioned('Sources: Cardinals trade Marvin Harrison Jr. to Texans', NFL)).toEqual(['ARI', 'HOU'])
+    expect(teamsMentioned("Giants' rookie shines", NFL)).toEqual(['NYG'])
+    expect(teamsMentioned('giants of the game', NFL)).toEqual([])
+  })
+  it('keeps two-word nicknames whole', () => {
+    expect(teamNickname('Portland Trail Blazers')).toBe('Trail Blazers')
+    expect(teamNickname('Boston Red Sox')).toBe('Red Sox')
+    expect(teamNickname('Houston Texans')).toBe('Texans')
+  })
+})
+
+describe('breakingStoryKey', () => {
+  it('collapses the same trade from two outlets into one key, whatever the team order', () => {
+    const at = new Date('2026-10-15T16:00:00Z')
+    const a = breakingStoryKey({ sport: 'NFL', kind: 'trade', teams: ['ARI', 'HOU'], title: 'Sources: Cardinals trade MHJ to Texans', publishedAt: at })
+    const b = breakingStoryKey({ sport: 'NFL', kind: 'trade', teams: ['HOU', 'ARI'], title: 'Texans acquire Marvin Harrison Jr.', publishedAt: at })
+    expect(a).toBe(b)
+  })
+})

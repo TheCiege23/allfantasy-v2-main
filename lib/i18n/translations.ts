@@ -3430,6 +3430,8 @@ export const translations: Record<string, Record<string, string>> = {
     "settings.notifications.category.direct_messages": "Direct messages & huddles",
     "settings.notifications.category.league_chat": "League chat messages",
     "settings.notifications.category.career_milestones": "Career milestones — titles, awards & records",
+    "settings.notifications.category.breaking_news": "Breaking news — trades, signings & major injuries",
+    "settings.notifications.category.live_game_alerts": "Live game moments — close games, OT & playoff updates",
     "settings.notifications.leagues.title": "Per-league settings",
     "settings.notifications.leagues.customised": "{{count}} customised",
     "settings.notifications.leagues.intro":
