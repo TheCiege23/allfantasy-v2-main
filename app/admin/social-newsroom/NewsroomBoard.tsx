@@ -2,8 +2,8 @@
 
 import { useMemo, useState, useTransition } from "react"
 
-import type { NewsroomHighlight, NewsroomStory } from "@/lib/social-newsroom/loadNewsroom"
-import { SOCIAL_CHAR_LIMITS, SOCIAL_PLATFORM_LABELS, type SocialPost } from "@/lib/social-newsroom/postBuilder"
+import type { NewsroomGame, NewsroomHighlight, NewsroomStory } from "@/lib/social-newsroom/loadNewsroom"
+import { easternTime, SOCIAL_CHAR_LIMITS, SOCIAL_PLATFORM_LABELS, type SocialPost } from "@/lib/social-newsroom/postBuilder"
 import { draftFunVariants } from "./actions"
 
 const KIND_LABELS: Record<string, string> = {
@@ -50,7 +50,7 @@ function PostBox({ post }: { post: SocialPost }) {
     <div className="rounded-xl border border-white/10 bg-black/30 p-3">
       <div className="mb-2 flex items-center justify-between gap-2 text-xs">
         <span className="font-bold text-white/80">
-          {SOCIAL_PLATFORM_LABELS[post.platform]} · {post.tone === "fun" ? "fun" : "straight"}
+          {SOCIAL_PLATFORM_LABELS[post.platform]} · {post.tone === "viral" ? "viral 🔁" : post.tone}
         </span>
         <span className="flex items-center gap-2">
           <span className={post.withinLimit ? "text-white/45" : "text-rose-300"}>
@@ -219,8 +219,69 @@ function HighlightCard({ h }: { h: NewsroomHighlight }) {
   )
 }
 
-export function NewsroomBoard({ stories, highlights }: { stories: NewsroomStory[]; highlights: NewsroomHighlight[] }) {
-  const [tab, setTab] = useState<"news" | "breaking" | "highlights">("news")
+function TeamMark({ name, logo }: { name: string; logo: string | null }) {
+  return (
+    <span className="flex min-w-0 items-center gap-2">
+      {logo ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={logo} alt="" className="h-8 w-8 shrink-0 object-contain" loading="lazy" />
+      ) : (
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10 text-xs font-bold">
+          {name.slice(0, 2).toUpperCase()}
+        </span>
+      )}
+      <span className="truncate font-bold">{name}</span>
+    </span>
+  )
+}
+
+function GameCard({ g }: { g: NewsroomGame }) {
+  return (
+    <article className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+      <div className="flex flex-wrap items-center gap-2 text-[11px] font-bold uppercase tracking-wide">
+        <span className="rounded-full bg-white/10 px-2 py-0.5 text-white/75">{g.sport}</span>
+        {g.final ? (
+          <span className="rounded-full bg-emerald-300/15 px-2 py-0.5 text-emerald-200">Final</span>
+        ) : (
+          <span className="rounded-full bg-cyan-300/15 px-2 py-0.5 text-cyan-100">{easternTime(g.startTime)}</span>
+        )}
+        {g.scoreCheck === "confirmed" ? (
+          <span className="rounded-full bg-emerald-300/10 px-2 py-0.5 normal-case text-emerald-200/90">Score confirmed by 2 sources</span>
+        ) : g.scoreCheck === "single" ? (
+          <span className="rounded-full bg-amber-300/15 px-2 py-0.5 normal-case text-amber-200">1 source: check the score before posting</span>
+        ) : null}
+        {g.venue ? <span className="normal-case text-white/45">{g.venue}</span> : null}
+      </div>
+      {g.scoreCheck === "conflict" ? (
+        <p className="rounded-lg border border-rose-300/30 bg-rose-300/[0.08] p-2 text-sm text-rose-100" data-testid="game-score-conflict">
+          Score unconfirmed: our data providers disagree on this result, so no posts were written. Check the official box score first.
+        </p>
+      ) : null}
+      <div className="grid grid-cols-[1fr_auto] items-center gap-x-3 gap-y-1">
+        <TeamMark name={g.awayTeam} logo={g.awayLogo} />
+        <span className="text-lg font-black tabular-nums">{g.final ? g.awayScore : ""}</span>
+        <TeamMark name={`@ ${g.homeTeam}`} logo={g.homeLogo} />
+        <span className="text-lg font-black tabular-nums">{g.final ? g.homeScore : ""}</span>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {g.posts.map((p, i) => (
+          <PostBox key={i} post={p} />
+        ))}
+      </div>
+    </article>
+  )
+}
+
+export function NewsroomBoard({
+  stories,
+  highlights,
+  games = [],
+}: {
+  stories: NewsroomStory[]
+  highlights: NewsroomHighlight[]
+  games?: NewsroomGame[]
+}) {
+  const [tab, setTab] = useState<"news" | "breaking" | "games" | "highlights">("news")
   const shown = useMemo(() => (tab === "breaking" ? stories.filter((s) => s.classification) : stories), [stories, tab])
   const breakingCount = stories.filter((s) => s.classification).length
 
@@ -231,6 +292,7 @@ export function NewsroomBoard({ stories, highlights }: { stories: NewsroomStory[
           [
             ["news", `All stories (${stories.length})`],
             ["breaking", `Breaking (${breakingCount})`],
+            ["games", `Tonight's games (${games.length})`],
             ["highlights", `Highlight videos (${highlights.length})`],
           ] as const
         ).map(([id, label]) => (
@@ -252,6 +314,10 @@ export function NewsroomBoard({ stories, highlights }: { stories: NewsroomStory[
           <li>&quot;Report&quot; means the outlet credits sources and the team has not announced it yet. Keep the word &quot;report&quot; in the post.</li>
           <li>Every post keeps the source credit and the link. Do not remove them.</li>
           <li>
+            Viral posts ask the audience questions (polls, predictions, &quot;wrong answers only&quot;). They state nothing beyond the schedule
+            or the final score, so keep it that way if you edit one. Never add a stat or a record you have not checked.
+          </li>
+          <li>
             Videos: post the YouTube link and X, Threads and Facebook play the official clip inline. Do not download and re-upload league
             footage, because the leagues file copyright strikes against accounts that do.
           </li>
@@ -259,7 +325,13 @@ export function NewsroomBoard({ stories, highlights }: { stories: NewsroomStory[
         </ul>
       </details>
 
-      {tab === "highlights" ? (
+      {tab === "games" ? (
+        games.length === 0 ? (
+          <p className="text-sm text-white/55">No games on the schedule for the next 18 hours, and no finals from today, for this filter.</p>
+        ) : (
+          games.map((g) => <GameCard key={g.id} g={g} />)
+        )
+      ) : tab === "highlights" ? (
         highlights.length === 0 ? (
           <p className="text-sm text-white/55">No highlight videos stored for recent games in this sport yet.</p>
         ) : (

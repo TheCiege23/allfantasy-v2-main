@@ -2,7 +2,7 @@ import Link from "next/link"
 import { redirect } from "next/navigation"
 
 import { getAdminAccessState } from "@/lib/adminAuth"
-import { loadNewsroom } from "@/lib/social-newsroom/loadNewsroom"
+import { loadNewsroom, loadTonightsGames } from "@/lib/social-newsroom/loadNewsroom"
 import { SUPPORTED_SPORTS } from "@/lib/sport-scope"
 import { NewsroomBoard } from "./NewsroomBoard"
 
@@ -28,7 +28,7 @@ export default async function SocialNewsroomPage(props: { searchParams?: Promise
   }
 
   const sport = searchParams?.sport?.toUpperCase() ?? null
-  const { stories, highlights } = await loadNewsroom({ sport })
+  const [{ stories, highlights }, games] = await Promise.all([loadNewsroom({ sport }), loadTonightsGames({ sport })])
 
   return (
     <main className="min-h-dvh bg-[#020817] text-white">
@@ -59,7 +59,7 @@ export default async function SocialNewsroomPage(props: { searchParams?: Promise
             )
           })}
         </nav>
-        <NewsroomBoard stories={stories} highlights={highlights} />
+        <NewsroomBoard stories={stories} highlights={highlights} games={games} />
       </div>
     </main>
   )
