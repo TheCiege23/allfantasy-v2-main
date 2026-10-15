@@ -53,3 +53,27 @@ export async function draftFunVariants(input: {
     return { ok: false, error: err instanceof Error ? err.message.slice(0, 200) : "AI drafting failed." }
   }
 }
+
+/** The signed-in APP user's id: the X connection belongs to that account, not to the admin cookie. */
+async function appSessionUserId(): Promise<string | null> {
+  const { getServerSession } = await import("next-auth")
+  const { authOptions } = await import("@/lib/auth")
+  const session = (await getServerSession(authOptions as never).catch(() => null)) as { user?: { id?: string | null } } | null
+  return session?.user?.id ?? null
+}
+
+/**
+ * One-tap "Post to X". Posts only when an admin taps and confirms; nothing here is scheduled.
+ * Goes to the X account connected on this admin's own app account (see lib/social-newsroom/postToX).
+ */
+export async function postToX(input: {
+  requestId: string
+  text: string
+}): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
+  const gate = await getAdminAccessState()
+  if (gate.status !== "admin") return { ok: false, error: "Admin access required." }
+  const userId = await appSessionUserId()
+  if (!userId) return { ok: false, error: "Sign in to the app with the account that has X connected." }
+  const { postNewsroomX } = await import("@/lib/social-newsroom/postToX")
+  return postNewsroomX(userId, String(input?.requestId ?? ""), String(input?.text ?? ""))
+}

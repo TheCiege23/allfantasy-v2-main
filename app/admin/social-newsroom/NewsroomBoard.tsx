@@ -1,10 +1,14 @@
 "use client"
 
-import { useMemo, useState, useTransition } from "react"
+import Link from "next/link"
+import { createContext, useContext, useMemo, useRef, useState, useTransition } from "react"
 
 import type { NewsroomGame, NewsroomHighlight, NewsroomStory } from "@/lib/social-newsroom/loadNewsroom"
-import { easternTime, SOCIAL_CHAR_LIMITS, SOCIAL_PLATFORM_LABELS, type SocialPost } from "@/lib/social-newsroom/postBuilder"
-import { draftFunVariants } from "./actions"
+import { easternTime, SOCIAL_CHAR_LIMITS, SOCIAL_PLATFORM_LABELS, xLength, type SocialPost } from "@/lib/social-newsroom/postBuilder"
+import { draftFunVariants, postToX } from "./actions"
+
+/** The X account "Post to X" would post to, or null when the signed-in account has none connected. */
+const XAccountContext = createContext<{ handle: string } | null>(null)
 
 const KIND_LABELS: Record<string, string> = {
   trade: "Trade",
@@ -45,6 +49,56 @@ function CopyButton({ text, label = "Copy" }: { text: string; label?: string }) 
   )
 }
 
+/**
+ * One tap, one confirm, one post. The request id is made once per box, so a double tap or a retry
+ * after a timeout returns the first tweet instead of posting twice.
+ */
+function PostToXButton({ text, fits }: { text: string; fits: boolean }) {
+  const account = useContext(XAccountContext)
+  const requestId = useRef<string | null>(null)
+  const [pending, start] = useTransition()
+  const [url, setUrl] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  if (!account) {
+    return (
+      <Link href="/core/week" className="text-xs text-white/45 underline" title="Connect an X account on the Weekly page to post from here">
+        Connect X
+      </Link>
+    )
+  }
+  if (url) {
+    return (
+      <a href={url} target="_blank" rel="noreferrer" className="text-xs font-bold text-emerald-300 underline">
+        Posted ✓ View
+      </a>
+    )
+  }
+  return (
+    <span className="flex items-center gap-2">
+      {error && <span className="max-w-[16rem] text-xs text-rose-300">{error}</span>}
+      <button
+        type="button"
+        disabled={pending || !fits}
+        title={fits ? `Post to X as @${account.handle}` : "Too long for X"}
+        onClick={() => {
+          if (!window.confirm(`Post this to X as @${account.handle} now?\n\n${text}`)) return
+          requestId.current ??= crypto.randomUUID()
+          setError(null)
+          start(async () => {
+            const res = await postToX({ requestId: requestId.current!, text })
+            if (res.ok) setUrl(res.url)
+            else setError(res.error)
+          })
+        }}
+        className="rounded-lg border border-white/30 bg-white px-2.5 py-1 text-xs font-bold text-[#020817] hover:bg-white/90 disabled:opacity-40"
+      >
+        {pending ? "Posting…" : `Post to @${account.handle}`}
+      </button>
+    </span>
+  )
+}
+
 function PostBox({ post }: { post: SocialPost }) {
   return (
     <div className="rounded-xl border border-white/10 bg-black/30 p-3">
@@ -57,6 +111,7 @@ function PostBox({ post }: { post: SocialPost }) {
             {post.charCount}/{SOCIAL_CHAR_LIMITS[post.platform]}
           </span>
           <CopyButton text={post.text} />
+          {post.platform === "x" && <PostToXButton text={post.text} fits={post.withinLimit} />}
         </span>
       </div>
       <pre className="whitespace-pre-wrap break-words font-sans text-sm text-white/85">{post.text}</pre>
@@ -72,13 +127,27 @@ function MediaStrip({ story }: { story: NewsroomStory }) {
   return (
     <div className="flex flex-wrap items-end gap-3">
       {story.articleImage && (
-        <a href={story.articleImage} target="_blank" rel="noreferrer" className="block" title="Article photo (the publisher's — share via the link card)">
+        <a
+          href={story.articleImage}
+          target="_blank"
+          rel="noreferrer"
+          className="block"
+          title="Article photo (the publisher's — share via the link card)"
+        >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={story.articleImage} alt="" className="h-20 w-32 rounded-lg object-cover" loading="lazy" />
         </a>
       )}
       {items.map((m) => (
-        <a key={m.src} href={m.src} target="_blank" rel="noreferrer" download className="flex flex-col items-center gap-1" title={`Open ${m.label}`}>
+        <a
+          key={m.src}
+          href={m.src}
+          target="_blank"
+          rel="noreferrer"
+          download
+          className="flex flex-col items-center gap-1"
+          title={`Open ${m.label}`}
+        >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={m.src}
@@ -106,13 +175,13 @@ function StoryCard({ story }: { story: NewsroomStory }) {
     <article className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
       <div className="flex flex-wrap items-center gap-2 text-[11px] font-bold uppercase tracking-wide">
         <span className="rounded-full bg-white/10 px-2 py-0.5 text-white/75">{story.sport}</span>
-        {c && (
-          <span className="rounded-full bg-rose-400/15 px-2 py-0.5 text-rose-200">
-            Breaking · {KIND_LABELS[c.kind] ?? c.kind}
-          </span>
+        {c && <span className="rounded-full bg-rose-400/15 px-2 py-0.5 text-rose-200">Breaking · {KIND_LABELS[c.kind] ?? c.kind}</span>}
+        {c?.confidence === "report" && (
+          <span className="rounded-full bg-amber-300/15 px-2 py-0.5 text-amber-200">Report — sourced, not announced</span>
         )}
-        {c?.confidence === "report" && <span className="rounded-full bg-amber-300/15 px-2 py-0.5 text-amber-200">Report — sourced, not announced</span>}
-        <span className={`rounded-full px-2 py-0.5 ${story.corroboratedBy > 1 ? "bg-emerald-300/15 text-emerald-200" : "bg-white/5 text-white/50"}`}>
+        <span
+          className={`rounded-full px-2 py-0.5 ${story.corroboratedBy > 1 ? "bg-emerald-300/15 text-emerald-200" : "bg-white/5 text-white/50"}`}
+        >
           {story.corroboratedBy > 1 ? `${story.corroboratedBy} reports` : "1 source"}
         </span>
         <span className="text-white/40">{timeAgo(story.publishedAt)}</span>
@@ -171,7 +240,10 @@ function StoryCard({ story }: { story: NewsroomStory }) {
             <div key={i} className="rounded-xl border border-fuchsia-300/20 bg-fuchsia-300/[0.06] p-3">
               <div className="mb-2 flex items-center justify-between text-xs">
                 <span className="font-bold text-fuchsia-100">AI draft — check the facts</span>
-                <CopyButton text={text} />
+                <span className="flex items-center gap-2">
+                  <CopyButton text={text} />
+                  <PostToXButton text={text} fits={xLength(text) <= SOCIAL_CHAR_LIMITS.x} />
+                </span>
               </div>
               <pre className="whitespace-pre-wrap break-words font-sans text-sm text-white/85">{text}</pre>
             </div>
@@ -248,7 +320,9 @@ function GameCard({ g }: { g: NewsroomGame }) {
         {g.scoreCheck === "confirmed" ? (
           <span className="rounded-full bg-emerald-300/10 px-2 py-0.5 normal-case text-emerald-200/90">Score confirmed by 2 sources</span>
         ) : g.scoreCheck === "single" ? (
-          <span className="rounded-full bg-amber-300/15 px-2 py-0.5 normal-case text-amber-200">1 source: check the score before posting</span>
+          <span className="rounded-full bg-amber-300/15 px-2 py-0.5 normal-case text-amber-200">
+            1 source: check the score before posting
+          </span>
         ) : null}
         {g.venue ? <span className="normal-case text-white/45">{g.venue}</span> : null}
       </div>
@@ -276,72 +350,92 @@ export function NewsroomBoard({
   stories,
   highlights,
   games = [],
+  xAccount = null,
 }: {
   stories: NewsroomStory[]
   highlights: NewsroomHighlight[]
   games?: NewsroomGame[]
+  xAccount?: { handle: string } | null
 }) {
   const [tab, setTab] = useState<"news" | "breaking" | "games" | "highlights">("news")
   const shown = useMemo(() => (tab === "breaking" ? stories.filter((s) => s.classification) : stories), [stories, tab])
   const breakingCount = stories.filter((s) => s.classification).length
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap gap-2 text-sm">
-        {(
-          [
-            ["news", `All stories (${stories.length})`],
-            ["breaking", `Breaking (${breakingCount})`],
-            ["games", `Tonight's games (${games.length})`],
-            ["highlights", `Highlight videos (${highlights.length})`],
-          ] as const
-        ).map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => setTab(id)}
-            className={`rounded-xl px-3 py-1.5 font-bold ${tab === id ? "bg-white text-[#020817]" : "bg-white/10 text-white/75"}`}
-          >
-            {label}
-          </button>
-        ))}
+    <XAccountContext.Provider value={xAccount}>
+      <div className="flex flex-col gap-4">
+        <p className="text-xs text-white/55">
+          {xAccount
+            ? `"Post to @${xAccount.handle}" posts to that X account after you confirm. Nothing posts on its own.`
+            : "To post from here, connect an X account on the Weekly page (/core/week) while signed in to the app."}
+        </p>
+        <div className="flex flex-wrap gap-2 text-sm">
+          {(
+            [
+              ["news", `All stories (${stories.length})`],
+              ["breaking", `Breaking (${breakingCount})`],
+              ["games", `Tonight's games (${games.length})`],
+              ["highlights", `Highlight videos (${highlights.length})`],
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setTab(id)}
+              className={`rounded-xl px-3 py-1.5 font-bold ${tab === id ? "bg-white text-[#020817]" : "bg-white/10 text-white/75"}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <details className="rounded-xl border border-amber-300/20 bg-amber-300/[0.06] p-3 text-sm text-amber-50/85">
+          <summary className="cursor-pointer font-bold text-amber-100">Posting rules — read once</summary>
+          <ul className="mt-2 list-disc space-y-1 pl-5">
+            <li>
+              Only trusted outlets appear here, and rumours, betting, rankings and question headlines are filtered out. Still read the
+              article before posting.
+            </li>
+            <li>
+              &quot;Report&quot; means the outlet credits sources and the team has not announced it yet. Keep the word &quot;report&quot; in
+              the post.
+            </li>
+            <li>Every post keeps the source credit and the link. Do not remove them.</li>
+            <li>
+              Viral posts ask the audience questions (polls, predictions, &quot;wrong answers only&quot;). They state nothing beyond the
+              schedule or the final score, so keep it that way if you edit one. Never add a stat or a record you have not checked.
+            </li>
+            <li>
+              Videos: post the YouTube link and X, Threads and Facebook play the official clip inline. Do not download and re-upload league
+              footage, because the leagues file copyright strikes against accounts that do.
+            </li>
+            <li>
+              Photos: posting the article link shows the publisher&apos;s own preview image. Use logos and headshots for your own graphics,
+              editorially.
+            </li>
+          </ul>
+        </details>
+
+        {tab === "games" ? (
+          games.length === 0 ? (
+            <p className="text-sm text-white/55">
+              No games on the schedule for the next 18 hours, and no finals from today, for this filter.
+            </p>
+          ) : (
+            games.map((g) => <GameCard key={g.id} g={g} />)
+          )
+        ) : tab === "highlights" ? (
+          highlights.length === 0 ? (
+            <p className="text-sm text-white/55">No highlight videos stored for recent games in this sport yet.</p>
+          ) : (
+            highlights.map((h) => <HighlightCard key={h.id} h={h} />)
+          )
+        ) : shown.length === 0 ? (
+          <p className="text-sm text-white/55">No stories from trusted outlets in the last 36 hours for this filter.</p>
+        ) : (
+          shown.map((s) => <StoryCard key={s.id} story={s} />)
+        )}
       </div>
-
-      <details className="rounded-xl border border-amber-300/20 bg-amber-300/[0.06] p-3 text-sm text-amber-50/85">
-        <summary className="cursor-pointer font-bold text-amber-100">Posting rules — read once</summary>
-        <ul className="mt-2 list-disc space-y-1 pl-5">
-          <li>Only trusted outlets appear here, and rumours, betting, rankings and question headlines are filtered out. Still read the article before posting.</li>
-          <li>&quot;Report&quot; means the outlet credits sources and the team has not announced it yet. Keep the word &quot;report&quot; in the post.</li>
-          <li>Every post keeps the source credit and the link. Do not remove them.</li>
-          <li>
-            Viral posts ask the audience questions (polls, predictions, &quot;wrong answers only&quot;). They state nothing beyond the schedule
-            or the final score, so keep it that way if you edit one. Never add a stat or a record you have not checked.
-          </li>
-          <li>
-            Videos: post the YouTube link and X, Threads and Facebook play the official clip inline. Do not download and re-upload league
-            footage, because the leagues file copyright strikes against accounts that do.
-          </li>
-          <li>Photos: posting the article link shows the publisher&apos;s own preview image. Use logos and headshots for your own graphics, editorially.</li>
-        </ul>
-      </details>
-
-      {tab === "games" ? (
-        games.length === 0 ? (
-          <p className="text-sm text-white/55">No games on the schedule for the next 18 hours, and no finals from today, for this filter.</p>
-        ) : (
-          games.map((g) => <GameCard key={g.id} g={g} />)
-        )
-      ) : tab === "highlights" ? (
-        highlights.length === 0 ? (
-          <p className="text-sm text-white/55">No highlight videos stored for recent games in this sport yet.</p>
-        ) : (
-          highlights.map((h) => <HighlightCard key={h.id} h={h} />)
-        )
-      ) : shown.length === 0 ? (
-        <p className="text-sm text-white/55">No stories from trusted outlets in the last 36 hours for this filter.</p>
-      ) : (
-        shown.map((s) => <StoryCard key={s.id} story={s} />)
-      )}
-    </div>
+    </XAccountContext.Provider>
   )
 }

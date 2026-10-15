@@ -1,8 +1,12 @@
 import Link from "next/link"
 import { redirect } from "next/navigation"
 
+import { getServerSession } from "next-auth"
+
 import { getAdminAccessState } from "@/lib/adminAuth"
+import { authOptions } from "@/lib/auth"
 import { loadNewsroom, loadTonightsGames } from "@/lib/social-newsroom/loadNewsroom"
+import { newsroomXAccount } from "@/lib/social-newsroom/postToX"
 import { SUPPORTED_SPORTS } from "@/lib/sport-scope"
 import { NewsroomBoard } from "./NewsroomBoard"
 
@@ -13,7 +17,8 @@ export const runtime = "nodejs"
  * Social Newsroom — the last 36 hours of real sports news from trusted outlets across the seven
  * sports, each with copy-and-paste posts for X, Threads, Instagram, Facebook and TikTok, the source
  * credit and link, team logos and player headshots, plus official highlight videos for recent games.
- * Read-only: nothing here posts anywhere. See lib/social-newsroom.
+ * Nothing posts on its own. The one write is the "Post to X" button, which posts a single post to the
+ * X account connected on the signed-in app account, after the admin confirms. See lib/social-newsroom.
  */
 export default async function SocialNewsroomPage(props: { searchParams?: Promise<{ sport?: string }> }) {
   const searchParams = await props.searchParams
@@ -28,7 +33,12 @@ export default async function SocialNewsroomPage(props: { searchParams?: Promise
   }
 
   const sport = searchParams?.sport?.toUpperCase() ?? null
-  const [{ stories, highlights }, games] = await Promise.all([loadNewsroom({ sport }), loadTonightsGames({ sport })])
+  const session = (await getServerSession(authOptions as never).catch(() => null)) as { user?: { id?: string | null } } | null
+  const [{ stories, highlights }, games, xAccount] = await Promise.all([
+    loadNewsroom({ sport }),
+    loadTonightsGames({ sport }),
+    newsroomXAccount(session?.user?.id ?? null),
+  ])
 
   return (
     <main className="min-h-dvh bg-[#020817] text-white">
@@ -59,7 +69,7 @@ export default async function SocialNewsroomPage(props: { searchParams?: Promise
             )
           })}
         </nav>
-        <NewsroomBoard stories={stories} highlights={highlights} games={games} />
+        <NewsroomBoard stories={stories} highlights={highlights} games={games} xAccount={xAccount} />
       </div>
     </main>
   )
