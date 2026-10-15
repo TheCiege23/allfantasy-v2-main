@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { getServedOrigin } from '@/lib/http/served-origin'
 import { resolveUserOsSnapshot } from '@/lib/decision-os/userOs'
 import { authorizeLeagueRead } from '@/lib/decision-os/leagueReadAuthorization'
 import { strategyPrismaPort } from '@/lib/decision-os/value-v2/strategyPrisma'
@@ -59,6 +60,27 @@ async function strategyScopeFor(request: Request): Promise<StrategyScopeResult> 
   return { scope: { userId, leagueId, season: league.season } }
 }
 
+/**
+ * The request's own URL cannot be the comparison: on Railway a route handler's `request.url` origin
+ * is the bind address (https://0.0.0.0:8080), so every real browser write would be refused. Compare
+ * against the served origin and the configured app origins instead — the same set
+ * app/api/core/team-alerts uses — and refuse anything the browser marks cross-site.
+ */
+function isSameOriginWrite(request: Request): boolean {
+  const origin = request.headers.get('origin')
+  if (!origin || request.headers.get('sec-fetch-site') === 'cross-site') return false
+  const allowed = new Set([getServedOrigin(request)])
+  for (const configured of [process.env.NEXTAUTH_URL, process.env.NEXT_PUBLIC_APP_URL]) {
+    if (!configured) continue
+    try {
+      allowed.add(new URL(configured).origin)
+    } catch {
+      /* Ignore invalid server configuration. */
+    }
+  }
+  return allowed.has(origin)
+}
+
 function isStrategyView(request: Request): boolean {
   return new URL(request.url).searchParams.get('view') === 'strategy'
 }
@@ -103,8 +125,7 @@ export async function POST(request: Request) {
   if (!isStrategyView(request)) return noStore({ error: 'Not found' }, 404)
   try {
     // Session cookies alone do not authorize cross-origin writes. Same-origin browser JSON only.
-    const origin = request.headers.get('origin')
-    if (!origin || origin !== new URL(request.url).origin) {
+    if (!isSameOriginWrite(request)) {
       return noStore({ error: 'Same-origin confirmation required' }, 403)
     }
     const authorized = await strategyScopeFor(request)

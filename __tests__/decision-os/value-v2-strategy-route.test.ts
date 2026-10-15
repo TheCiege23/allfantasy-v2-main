@@ -13,6 +13,7 @@ import { GET, POST } from '@/app/api/decision-os/user-os/route'
 const url = 'https://allfantasy.ai/api/decision-os/user-os?view=strategy&leagueId=L'
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://allfantasy.ai')
   mocks.session.mockResolvedValue({ user: { id: 'owner' } })
   mocks.role.mockResolvedValue('member')
   mocks.league.mockResolvedValue({ season: 2026 })
@@ -61,6 +62,16 @@ it('requires same-origin explicit confirmation and rejects injected observations
     expect((await post(body)).status).toBe(400)
   }
   expect(mocks.commit).not.toHaveBeenCalled()
+})
+it('accepts the real site origin when the handler sees the Railway bind address, and still refuses cross-site', async () => {
+  // Production shape: request.url is https://0.0.0.0:8080/…, the browser sends the site's own Origin.
+  const bound = (headers: Record<string, string>) => POST(new Request(
+    'https://0.0.0.0:8080/api/decision-os/user-os?view=strategy&leagueId=L',
+    { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify({ action: 'refresh' }) },
+  ))
+  expect((await bound({ origin: 'https://allfantasy.ai' })).status).toBe(200)
+  expect((await bound({ origin: 'https://0.0.0.0:8080' })).status).toBe(403)
+  expect((await bound({ origin: 'https://allfantasy.ai', 'sec-fetch-site': 'cross-site' })).status).toBe(403)
 })
 it('confirms only the owners current revision and reports concurrent changes', async () => {
   expect((await post({ expectedRevision: 2, strategy: 'rebuild', confirmed: true })).status).toBe(409)
