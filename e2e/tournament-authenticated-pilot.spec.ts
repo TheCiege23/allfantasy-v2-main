@@ -56,7 +56,10 @@ test('signed-in NBA invite joins, freezes and provisions eight draft-locked leag
     const join = friend.getByRole('button', { name: 'Join tournament' })
     await expect(join).toBeDisabled()
     await friend.getByLabel('I accept this published tournament rule version').check()
+    const joinResponse = friend.waitForResponse(response => response.url().endsWith('/api/tournament/season-registration') && response.request().method() === 'POST')
     await join.click()
+    const joined = await joinResponse
+    expect(joined.ok(), `Join returned ${joined.status()}: ${await joined.text()}`).toBe(true)
     await expect.poll(async () => prisma.tournamentParticipant.count({ where: { tournamentId, userId: friendId, status: 'registered' } })).toBe(1)
     for (const userId of otherIds) expect((await joinSeasonTournament(userId, tournamentId, token, publication.id, hash)).status).toBe('registered')
 
