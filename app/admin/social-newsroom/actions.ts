@@ -64,7 +64,7 @@ async function appSessionUserId(): Promise<string | null> {
 
 /**
  * One-tap "Post to X". Posts only when an admin taps and confirms; nothing here is scheduled.
- * Goes to the X account connected on this admin's own app account (see lib/social-newsroom/postToX).
+ * Goes to the AllFantasy brand X connection (see lib/social-newsroom/postToX).
  */
 export async function postToX(input: {
   requestId: string
@@ -76,4 +76,14 @@ export async function postToX(input: {
   if (!userId) return { ok: false, error: "Sign in to the app with the account that has X connected." }
   const { postNewsroomX } = await import("@/lib/social-newsroom/postToX")
   return postNewsroomX(userId, String(input?.requestId ?? ""), String(input?.text ?? ""))
+}
+
+/** Start connecting the AllFantasy brand X account. Sign in to that account on x.com first. */
+export async function connectBrandX(): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
+  const gate = await getAdminAccessState()
+  if (gate.status !== "admin") return { ok: false, error: "Admin access required." }
+  const userId = await appSessionUserId()
+  if (!userId) return { ok: false, error: "Sign in to the app first." }
+  const { beginNewsroomXConnection } = await import("@/lib/social-newsroom/postToX")
+  return beginNewsroomXConnection(userId)
 }
