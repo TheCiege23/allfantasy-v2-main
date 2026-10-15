@@ -51,6 +51,35 @@ All four take `attachment: image`, `image: <raw url>`, `scheduled_at` (UTC ISO),
 ⚠ **Cost:** every draft is one Zapier task, so a full day is 5 posts × 4 platforms = 20 tasks
 (~600 a month). Check the plan has room before a run; Zapier stops mid-batch when it runs out.
 
+## Brown Pig LLC: one post a day
+
+Alongside the 5 AllFantasy posts, the daily run makes **one** post for a Brown Pig LLC
+product, in `posts/brownpig/<YYYY-MM-DD>.json` with `"date": "brownpig-<YYYY-MM-DD>"`,
+`"theme": "brownpig"` and `"title": "Brown Pig LLC posts"`.
+
+**Rotate** through the products in this order, picking the one posted least recently (read
+`posts/brownpig/*.json`): StoryVault, PetPass, Parent Playbook, Gooby, SideQuest, Cafe Con
+Chimmy, and every seventh day a Brown Pig LLC family post.
+
+| product | accent | site (unverified: no fetch from the cloud box reaches it) | flavor |
+|---|---|---|---|
+| StoryVault | `amber` | storyvault.chimaura.com | most heart, never salesy |
+| PetPass | `teal` | petpass.chimaura.com | warmest, everyday-relatable |
+| Parent Playbook | `field` | playbook.chimaura.com | dad-to-dad, learning together |
+| Gooby | `dog` | gogooby.com | playful |
+| SideQuest | `quest` | sidequest.chimaura.com | builder, competitive |
+| Cafe Con Chimmy | `coffee` | cafeconchimmy.com | playful, family, food-love |
+| Brown Pig LLC | `pig` | (link in bio) | the family / the why |
+
+**Voice:** load the `brown-pig-brand-voice` skill and pass its quick test before shipping.
+Rotate its pillars (Workshop, Autopsy, Playbook, Why, Scoreboard) so posts don't repeat a shape.
+
+**Facts:** describe a product only with its one-liner from `lib/i18n/landing-copy.ts`
+(`network.cards`) or what the owner has told you. Never invent features, user counts, prices or
+launch status. Personal story lines come only from the brand-voice skill. Never make up a
+number: ask a question instead of quoting a statistic. Handles are not known yet, so `accounts`
+uses "(your handle)" placeholders until the owner provides them.
+
 ## Daily playbook: 5 posts
 
 A day's spec is one JSON file in `posts/`, named for the date. `posts/` is also the history:
