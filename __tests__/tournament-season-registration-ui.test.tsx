@@ -9,6 +9,15 @@ vi.mock('next/navigation', () => ({ useRouter: () => nav }))
 const entry = (): SeasonEntryView => ({ tournamentId: 't1', name: 'NBA Pilot', sport: 'NBA', publicationId: 'pub1', hash: 'rule-hash', config: completeConfig(), scheduleExceptions: { pendingGames: 30, excludedGames: [{ gameId: 'gap1', startsAt: '2026-11-01T12:00:00Z' }] }, registered: 63, capacity: 64, status: 'not_joined', participantId: null, waitlistPosition: null, canJoin: true, canWithdraw: false, fieldFrozen: false, closesAt: '2026-10-17T00:00:00Z' })
 beforeEach(() => { vi.restoreAllMocks(); nav.refresh.mockReset() })
 describe('entrant registration interface', () => {
+  it('opens a released draft from the saved league reveal without exposing an unreleased room', () => {
+    const view = entry()
+    view.assignment = { key: 'opening-1', name: 'Opening One', division: null, art: { sideId: 'gold', emblemId: 'basketball' }, teams: 8, draftSlot: 3, startsAt: '2026-10-19T22:00:00Z' }
+    const { rerender } = render(<SeasonTournamentEntry entry={view} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Reveal my league' }))
+    expect(screen.queryByRole('link', { name: 'Open my draft room' })).not.toBeInTheDocument()
+    rerender(<SeasonTournamentEntry entry={{ ...view, assignment: { ...view.assignment, draftId: 'draft-one' } }} />)
+    expect(screen.getByRole('link', { name: 'Open my draft room' })).toHaveAttribute('href', '/drafts/draft-one')
+  })
   it('requires acceptance and submits the displayed rule version', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ status: 'registered' })))
     render(<SeasonTournamentEntry entry={entry()} token={'a'.repeat(64)} />)

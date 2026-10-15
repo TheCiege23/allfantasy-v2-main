@@ -103,6 +103,17 @@ describe('native opening setup', () => {
     expect(rows.league![0].settings.nba_roster_config.slots).toMatchObject({ PG: 1, UTIL: 1, BN: 4, IR: 2 })
     expect((await loadSeasonNativeSetup('owner', 't1'))?.scoringSource).toMatchObject({ source: 'Rolling Insights NBA box', boxContractReady: false, launchReady: false, missing: ['technical_foul', 'flagrant_foul'] })
   })
+  it('shows the commissioner a draft link only for the matching audited release', async () => {
+    await provision()
+    const league = rows.league![0], draft = rows.draftSession![0]
+    const marker = league.settings.seasonTournament
+    expect((await loadSeasonNativeSetup('owner', 't1'))?.leagues[0]).toMatchObject({ draftReleased: false, draftId: null })
+    const release = { id: 'release-preview', tournamentId: 't1', action: 'season_opening_draft_released', targetType: 'league', targetId: league.id, data: { freezeId: 'f1', manifestHash: marker.manifestHash, publicationId: 'pub1', key: marker.key, leagueId: league.id, draftId: 'another-draft', seasonLaunchReady: false } }
+    rows.tournamentAuditLog!.push(release)
+    expect((await loadSeasonNativeSetup('owner', 't1'))?.leagues[0]).toMatchObject({ draftReleased: false, draftId: null })
+    release.data.draftId = draft.id
+    expect((await loadSeasonNativeSetup('owner', 't1'))?.leagues[0]).toMatchObject({ draftReleased: true, draftId: draft.id })
+  })
   it('resumes all pools and reconciles repeated requests without duplicating records', async () => {
     for (let i = 0; i < 8; i++) await provision()
     const before = rows.roster!.length
