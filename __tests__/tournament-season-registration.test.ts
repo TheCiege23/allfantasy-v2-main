@@ -193,6 +193,21 @@ describe('opening field freeze', () => {
     expect(board?.state).toBe('field_frozen')
     expect(board?.frozenField?.id).toBe(result.freezeId)
   })
+  it('shows only a matched, audited opening draft link to its assigned manager', async () => {
+    for (let i = 0; i < 64; i++) await join('u' + i)
+    const { freezeId } = await freezeSeasonOpeningField('owner', 't1', 'pub1')
+    const frozen = state.logs.find(e => e.id === freezeId)
+    const league = frozen.data.leagues.find((l: any) => l.members.some((m: any) => m.userId === 'u0'))
+    const other = frozen.data.leagues.find((l: any) => l.key !== league.key).members[0].userId
+    expect((await loadSeasonEntry('u0', 't1'))?.assignment?.draftId).toBeUndefined()
+    state.logs.push({ id: 'provision', tournamentId: 't1', action: 'season_opening_league_provisioned', targetType: 'opening_league', targetId: league.key, createdAt: new Date('2026-10-12T13:00:00Z'), data: { freezeId, manifestHash: frozen.data.manifestHash, leagueId: 'native-one', draftId: 'draft-one' } })
+    state.logs.push({ id: 'wrong-release', tournamentId: 't1', action: 'season_opening_draft_released', targetType: 'league', targetId: 'native-one', createdAt: new Date('2026-10-12T14:00:00Z'), data: { freezeId, manifestHash: frozen.data.manifestHash, publicationId: 'pub1', key: league.key, leagueId: 'native-one', draftId: 'different-draft', seasonLaunchReady: false } })
+    expect((await loadSeasonEntry('u0', 't1'))?.assignment?.draftId).toBeUndefined()
+    state.logs.push({ id: 'release', tournamentId: 't1', action: 'season_opening_draft_released', targetType: 'league', targetId: 'native-one', createdAt: new Date('2026-10-12T15:00:00Z'), data: { freezeId, manifestHash: frozen.data.manifestHash, publicationId: 'pub1', key: league.key, leagueId: 'native-one', draftId: 'draft-one', seasonLaunchReady: false } })
+    expect((await loadSeasonEntry('u0', 't1'))?.assignment?.draftId).toBe('draft-one')
+    expect((await loadSeasonEntry(other, 't1'))?.assignment?.draftId).toBeUndefined()
+    expect(await loadSeasonEntry('outsider', 't1')).toBeNull()
+  })
   it('blocks every membership/control write and disables entrant actions after freeze', async () => {
     await fill(); await freezeSeasonOpeningField('owner', 't1', 'pub1')
     await expect(join('new')).rejects.toMatchObject({ status: 409 })

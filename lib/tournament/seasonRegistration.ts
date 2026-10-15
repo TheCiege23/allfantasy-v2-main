@@ -218,7 +218,7 @@ export async function loadSeasonEntry(userId: string, tournamentId: string, toke
   const frozen = await prisma.tournamentAuditLog.findFirst({ where: { tournamentId, action: 'season_opening_field_frozen' } })
   const registered = await prisma.tournamentParticipant.count({ where: { tournamentId, status: 'registered' } })
   const queue = entrant?.status === 'waitlisted' ? await prisma.tournamentParticipant.findMany({ where: { tournamentId, status: 'waitlisted' }, orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }], select: { id: true } }) : []
-  let assignment: { key: string; name: string; division: string | null; art: SeasonArt; teams: number; draftSlot: number; startsAt: string } | undefined
+  let assignment: { key: string; name: string; division: string | null; art: SeasonArt; teams: number; draftSlot: number; startsAt: string; draftId?: string } | undefined
   if (frozen && entrant?.status === 'registered') {
     const raw = frozen.data as Record<string, unknown>, { manifestHash, ...payload } = raw
     if (seasonContractHash(payload) !== manifestHash) throw new BlueprintOperationError('The frozen assignment needs review.', 409)
@@ -226,7 +226,17 @@ export async function loadSeasonEntry(userId: string, tournamentId: string, toke
     if (manifest.publicationId !== pub.id || manifest.rulesHash !== pub.hash) throw new BlueprintOperationError('The frozen assignment needs review.', 409)
     const index = manifest.leagues.findIndex(l => l.members.some(m => m.id === entrant.id && m.userId === userId))
     const league = manifest.leagues[index], member = league?.members.find(m => m.id === entrant.id && m.userId === userId)
-    if (league && member) assignment = { key: league.key, name: league.name, division: league.division, art: identityArt(manifest.config, index), teams: league.slots, draftSlot: member.draftSlot, startsAt: manifest.config.rules!.calendar.drafts.find(d => d.stage === 1)!.startsAt }
+    if (league && member) {
+      const provision = await prisma.tournamentAuditLog.findFirst({ where: { tournamentId, action: 'season_opening_league_provisioned', targetType: 'opening_league', targetId: league.key }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] })
+      const native = provision?.data as { freezeId?: string; manifestHash?: string; leagueId?: string; draftId?: string } | undefined
+      let draftId: string | undefined
+      if (native?.freezeId === frozen.id && native.manifestHash === manifest.manifestHash && native.leagueId && native.draftId) {
+        const release = await prisma.tournamentAuditLog.findFirst({ where: { tournamentId, action: 'season_opening_draft_released', targetType: 'league', targetId: native.leagueId }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] })
+        const data = release?.data as { freezeId?: string; manifestHash?: string; publicationId?: string; key?: string; leagueId?: string; draftId?: string; seasonLaunchReady?: boolean } | undefined
+        if (data?.freezeId === frozen.id && data.manifestHash === manifest.manifestHash && data.publicationId === manifest.publicationId && data.key === league.key && data.leagueId === native.leagueId && data.draftId === native.draftId && data.seasonLaunchReady === false) draftId = native.draftId
+      }
+      assignment = { key: league.key, name: league.name, division: league.division, art: identityArt(manifest.config, index), teams: league.slots, draftSlot: member.draftSlot, startsAt: manifest.config.rules!.calendar.drafts.find(d => d.stage === 1)!.startsAt, ...(draftId ? { draftId } : {}) }
+    }
   }
   return { tournamentId, name: pub.config.name, sport: pub.config.sport, publicationId: pub.id, hash: pub.hash, config: pub.config, scheduleExceptions: pub.exceptions, registered, capacity: pub.config.participants,
     status: entrant?.status ?? 'not_joined', participantId: entrant?.id ?? null, waitlistPosition: entrant?.status === 'waitlisted' ? queue.findIndex(e => e.id === entrant.id) + 1 : null,

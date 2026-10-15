@@ -1,6 +1,6 @@
 # Tournament project plan
 
-Updated: 2026-10-13. Owner: tournament product / engineering. Target: first playable 64-entrant NBA pilot, then NFL. This file is the working tracker; update status and evidence after each implementation batch.
+Updated: 2026-10-15. Owner: tournament product / engineering. Target: first playable 64-entrant NBA pilot, then NFL. This file is the working tracker; update status and evidence after each implementation batch.
 
 Status legend: Complete = implemented and locally verified; In progress = some acceptance criteria remain; Pending = not implemented for this tournament format. Production deployment is tracked separately.
 
@@ -15,7 +15,7 @@ NFL and NBA; 64–192 entrants in multiples of four. Recommended pilot: 64 entra
 | 0 | Planner and commissioner access | Complete locally | Saved editable plans, owner-managed co-commissioners/reviewers, stale-save protection, league/seed previews. Existing 149-test baseline. |
 | 1 | Playing rules and verified calendar | Implemented locally; real pilot verification pending | Exact scoring snapshot; positional roster; lineup locks; NBA counted starts; waivers/trade deadlines; dated periods/drafts; correction and postponement policy; validate actual game coverage; publish immutable version before invites. |
 | 2 | Registration | Implemented; 64-entry isolated Postgres happy path verified | Depends on 1. Use the frozen publication as the accepted version; one tournament invite; unique entrants; capacity enforcement under concurrency; waitlist, withdrawal and owner participant controls; full-field launch gate. Concurrent admission and mobile join still need staging certification. |
-| 3 | Opening leagues and drafts | Eight native leagues and blocked drafts verified on isolated Postgres; draft release pending | Depends on 2. Provision only stage-one native leagues and real drafts; same rules everywhere; deterministic assignments; idempotent retries/reconciliation; draft readiness, autodraft and failure recovery. |
+| 3 | Opening leagues and drafts | Eight native leagues and one released/completed 96-pick draft verified on isolated Postgres; live friend pilot pending | Depends on 2. Provision only stage-one native leagues and real drafts; same rules everywhere; deterministic assignments; idempotent retries/reconciliation; draft readiness, autodraft and failure recovery. |
 | 4 | Live scores and seeding | In progress: pure engine only | Depends on 3. Persistent versioned scores; provider/lineup integration; enforce counted starts; missing vs zero; finalization; global board, cut line, weekly movement and correction history. |
 | 5 | Qualifier cuts and redrafts | Pending | Depends on 4. Audited tie resolution; preview qualifiers; atomically commit cut once; halve entrants/leagues; provision/reseed/redraft; archive prior-stage rosters; recover interrupted jobs. |
 | 6 | Championship bracket | Pending | Depends on 5. Persist cross-league matchups and byes; identical windows; weekly winners, ties and score locks; eliminated rosters locked; exactly one champion. |
@@ -623,3 +623,15 @@ Next ordered work: obtain written vendor semantics and raw DNP/correction exampl
 - [ ] Recheck the proposed calendar's 56 excluded games with the commissioner, keep monitoring the 30 Cup games, and test desktop/iOS/Android invite and draft flows before exposing friend invitations. The provider's actual-start, DNP and correction gaps still block competitive scoring.
 
 **Next milestone toward invitations:** run the actual proposed NBA schedule through the publish/release checks and validate the join, commissioner, and draft flows on desktop, iOS, and Android browser sizes. Present the October 19 draft window, 56 excluded games, and pending Cup-game policy for commissioner approval. Once these pass, enable draft-only access for a small invited pilot; keep scoring and tournament advancement behind their separate provider-evidence gates.
+
+## In progress: actual-schedule and browser invite audit (October 15)
+
+- [x] A read-only call to the live Rolling Insights 2026–27 season schedule returned 1,200 regular games. The proposed calendar passed its validator with 1,144 assigned games, 56 scheduled exclusions and 30 Cup-dependent pending games. The exact digest, UTC excluded-day counts, proposed windows and commissioner decisions are in [the NBA pilot calendar review](TOURNAMENT_NBA_PILOT_CALENDAR_REVIEW.md).
+- [x] Added an audited direct draft-room link for an assigned manager only after the frozen league's provision and release receipts match the publication, manifest, league and draft IDs. Commissioner setup also links released drafts; long league names wrap on phone widths.
+- [x] Synthetic browser previews passed nine Playwright checks across desktop Chromium, Android-sized Chromium and iPhone-sized WebKit: rule acceptance/join request, league reveal/draft link, and commissioner draft release/link. The preview server used an unreachable localhost database URL and mocked requests; no real friend accounts or invites were created. Physical devices remain untested.
+- [x] Focused registration/UI/native-setup regressions passed (174 tests), plus a targeted commissioner release-link receipt test. The repository TypeScript ratchet passed with 139 existing diagnostics against a 143-error baseline, with no new errors; changed-file ESLint found no errors and one pre-existing hook warning.
+- [x] Shifted the proposed stage-2/3 redrafts to 6–10 p.m. Eastern with the following scoring periods starting at 10 a.m. Eastern; the live provider recheck still assigned 1,144 games and excluded 56.
+- [ ] Obtain commissioner approval for all three draft windows, registration cutoff, 56 scoring exclusions and Cup handling. Re-verify the calendar after any date change and publish the frozen rule version before registration.
+- [ ] Validate a real signed-in invite link and a full eight-league release against the isolated pilot database/deployment, with 64 consenting managers (or an expressly test-only synthetic cohort), production catalog/config checks and physical iOS/Android smoke. Keep scoring and advancement disabled until their separate provider-evidence gates are met.
+
+**Next practical milestone:** resolve the commissioner calendar choices, recheck the live provider slate, and exercise the real authenticated invite-to-draft path against the isolated pilot environment. Only then open draft-only friend invitations. A 64-manager field remains required for the actual tournament draft.

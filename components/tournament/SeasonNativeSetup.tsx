@@ -6,6 +6,7 @@ import { SeasonDraftReviewPanel } from './SeasonDraftReviewPanel'
 import { SeasonScheduleReviewPanel } from './SeasonScheduleReviewPanel'
 import { useEffect, useState } from 'react'
 import { SeasonCrest } from './SeasonIdentity'
+import Link from 'next/link'
 import type { checkSeasonDraftReadiness } from '@/lib/tournament/seasonDraftReadiness'
 import type { loadSeasonNativeSetup } from '@/lib/tournament/seasonNativeProvisioning'
 type Setup = NonNullable<Awaited<ReturnType<typeof loadSeasonNativeSetup>>>
@@ -71,7 +72,7 @@ export function SeasonNativeSetup({ tournamentId }: { tournamentId: string }) {
     <h3 className="font-semibold">Create opening leagues and drafts</h3>
     <p className="text-sm text-slate-300">Creates the saved teams, scoring, roster settings, waiver balances and draft sessions. An opening draft can be released only after its player pool and the published NBA schedule pass fresh checks. Player moves and live scoring remain locked.</p>
     {error && <p role="alert" className="text-red-200">{error}</p>}{progress && <p role="status">{progress}</p>}
-    {setup && <><ul className="space-y-2">{setup.leagues.map(l => <li key={l.key} className="flex flex-wrap items-center gap-3">{l.art && <SeasonCrest art={l.art} division={l.division ?? ''} className="w-14 shrink-0" />}<span>{l.name} · {l.slots} teams · {l.state.replaceAll('_', ' ')}{l.draftReleased ? ' · draft released' : ''}</span>{setup.draftReleaseEnabled && l.state === 'created' && !l.draftReleased && <button className="min-h-11 rounded-xl border border-cyan-300/60 px-3 text-sm text-cyan-100 disabled:opacity-40" disabled={busy || !setup.leagues.every(entry => entry.state === 'created')} onClick={() => releaseDraft(l.key)}>Release opening draft</button>}</li>)}</ul>
+    {setup && <><ul className="space-y-2">{setup.leagues.map(l => <li key={l.key} className="flex min-w-0 flex-wrap items-center gap-3">{l.art && <SeasonCrest art={l.art} division={l.division ?? ''} className="w-14 shrink-0" />}<span className="min-w-0 break-words">{l.name} · {l.slots} teams · {l.state.replaceAll('_', ' ')}{l.draftReleased ? ' · draft released' : ''}</span>{l.draftId && <Link className="flex min-h-11 items-center rounded-xl border border-cyan-300/60 px-3 text-sm text-cyan-100" href={`/drafts/${encodeURIComponent(l.draftId)}`}>Open draft room</Link>}{setup.draftReleaseEnabled && l.state === 'created' && !l.draftReleased && <button className="min-h-11 rounded-xl border border-cyan-300/60 px-3 text-sm text-cyan-100 disabled:opacity-40" disabled={busy || !setup.leagues.every(entry => entry.state === 'created')} onClick={() => releaseDraft(l.key)}>Release opening draft</button>}</li>)}</ul>
       {!setup.draftReleaseEnabled && <p className="text-sm text-amber-200">Opening draft release is disabled on this deployment. The commissioner can still verify the saved setup and player pools.</p>}
       <button className="min-h-11 rounded-xl bg-cyan-300 px-4 font-semibold text-slate-950 disabled:opacity-40" disabled={busy} onClick={provision}>{busy ? 'Working…' : setup.leagues.every(l => l.state === 'created') ? 'Verify saved setup' : 'Create or resume opening setup'}</button></>}
     {setup?.scoringSource && <section aria-label="Tournament scoring feed readiness" className="min-w-0 space-y-2 rounded-xl border border-amber-300/30 bg-amber-300/5 p-3 text-sm">
