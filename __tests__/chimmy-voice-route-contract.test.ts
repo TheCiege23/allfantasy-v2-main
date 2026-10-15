@@ -14,6 +14,12 @@ vi.mock('@/lib/auth', () => ({
   authOptions: {},
 }))
 
+// The route now runs the AI cost gate before reading the body. This suite tests the voice
+// contract, not the gate (__tests__/ai-cost-gate-wiring.test.ts covers that), so let it through.
+vi.mock('@/lib/ai-protection/costGate', () => ({
+  aiCostGate: async () => null,
+}))
+
 function buildRequest(body: Record<string, unknown>) {
   return createMockNextRequest('http://localhost/api/chimmy/voice', {
     method: 'POST',
