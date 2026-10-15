@@ -9,6 +9,7 @@ import { createCanonicalLeagueInTransaction } from '../lib/league-creation/canon
 import { buildSessionSnapshot, pauseDraftSession, resumeDraftSession, startDraftSession } from '../lib/live-draft-engine/DraftSessionService'
 import { submitPick } from '../lib/live-draft-engine/PickSubmissionService'
 import { processExpiredDraftPickForLeague } from '../lib/live-draft-engine/expired-picks/processExpiredDraftPicks'
+import { commissionerPickEdit } from '../lib/live-draft-engine/commissioner/commissionerPickEditService'
 import { loadNbaSurvivorRosterEligibility } from '../lib/draft-room/nbaSurvivorRosterEligibility'
 import { canonicalName } from '../lib/draft-room/player-canonical-identity'
 import { configureEventInfrastructure, InMemoryOutboxStore } from '../lib/events'
@@ -99,7 +100,24 @@ async function main() {
     assert.equal(autopick.source, 'auto')
     console.log('PASS start, pause/resume, expiry and queue-first pick 1')
 
-    const nextByPosition = new Map<string, number>([['PG', 1], ['SG', 0], ['SF', 0], ['PF', 0], ['C', 0]])
+    const replacement = buckets.get('PG')![1]
+    assert.equal(await pauseDraftSession(leagueId, userIds[0]), true)
+    const corrected = await commissionerPickEdit({
+      leagueId, actorUserId: userIds[0], action: 'REPLACE_PLAYER_ON_PICK',
+      overallPickNumber: 1, playerId: replacement.id, playerName: replacement.name,
+      position: 'PG', team: replacement.team, reason: 'Rehearsal correction',
+      confirmSelfBenefit: true,
+    })
+    assert.ok(corrected.ok, corrected.ok ? '' : `${corrected.code ?? ''} ${corrected.error}`)
+    assert.equal((await prisma.draftPick.findFirstOrThrow({ where: { sessionId: draft.id, overall: 1 } })).playerId, replacement.id)
+    const correctionAudit = await prisma.draftPickAuditLog.findFirstOrThrow({ where: {
+      draftSessionId: draft.id, overallPickNumber: 1, action: 'REPLACE_PLAYER_ON_PICK',
+    } })
+    assert.equal(correctionAudit.actorUserId, userIds[0])
+    assert.equal(await resumeDraftSession(leagueId), true)
+    console.log('PASS paused commissioner correction and persisted audit')
+
+    const nextByPosition = new Map<string, number>([['PG', 2], ['SG', 0], ['SF', 0], ['PF', 0], ['C', 0]])
     for (let overall = 2; overall <= 240; overall++) {
       const snapshot = await buildSessionSnapshot(leagueId)
       assert.equal(snapshot?.currentPick?.overall, overall)
