@@ -1,8 +1,21 @@
 /** Opt-in, real-route browser rehearsal against an allowlisted non-production database. */
 import { randomUUID } from 'node:crypto'
+import { execFileSync } from 'node:child_process'
+import { resolve } from 'node:path'
 import bcrypt from 'bcryptjs'
 import { expect, test, type Page } from '@playwright/test'
 import { identifyTarget } from '../scripts/db-target-identity.cjs'
+import { prisma } from '../lib/prisma'
+import { validateCreatePayload } from '../lib/league-creation/canonical/validateCreateLeague'
+import { runPresetEngine } from '../lib/league-creation/preset-engine/runPresetEngine'
+import { createCanonicalLeagueInTransaction } from '../lib/league-creation/canonical/createCanonicalLeagueInTransaction'
+import { resolveDraftPoolCacheContext } from '../lib/draft-room/ensureDraftPoolReady'
+import { loadNbaSurvivorRosterEligibility } from '../lib/draft-room/nbaSurvivorRosterEligibility'
+import { canonicalName } from '../lib/draft-room/player-canonical-identity'
+import { normalizePlayerList } from '../lib/draft-asset-pipeline'
+import { configureEventInfrastructure, InMemoryOutboxStore } from '../lib/events'
+import { getSurvivorConfig, upsertSurvivorConfig } from '../lib/survivor/SurvivorLeagueConfig'
+import { firstEntryIntroStorageKey } from '../lib/league/post-create-welcome'
 
 async function signIn(page: Page, email: string, password: string, userId: string) {
   const csrf = await (await page.request.get('/api/auth/csrf')).json()
@@ -13,22 +26,20 @@ async function signIn(page: Page, email: string, password: string, userId: strin
   await expect.poll(async () => (await (await page.request.get('/api/auth/session')).json()).user?.id).toBe(userId)
 }
 
-test('two signed-in NBA Survivor managers see draft controls and private idol notices @db', async ({ browser, page }) => {
+function seedPick(args: { leagueId: string; userId: string; rosterId: string; playerId: string; playerName: string; position: string; team: string | null; overall: number }) {
+  execFileSync(process.execPath, [
+    '--conditions=react-server', '--import', 'tsx', resolve(__dirname, '../scripts/seed-nba-survivor-browser-pick.ts'),
+    args.leagueId, args.userId, args.rosterId, args.playerId, args.playerName, args.position, args.team ?? '', String(args.overall),
+  ], { env: process.env, stdio: 'pipe', timeout: 180_000 })
+}
+
+test('two signed-in NBA Survivor managers verify pick correction and private idol vault @db', async ({ browser, page }) => {
   test.skip(process.env.AF_NBA_SURVIVOR_BROWSER_DB !== '1', 'Explicit isolated database opt-in required')
-  test.setTimeout(900_000)
+  test.setTimeout(1_800_000)
   if (identifyTarget(process.env.DATABASE_URL).kind !== 'safe') throw new Error('ALLOWLISTED_TEST_DATABASE_REQUIRED')
   if (process.env.UPSTASH_REDIS_REST_URL || process.env.UPSTASH_REDIS_REST_TOKEN) {
     throw new Error('SHARED_REDIS_MUST_BE_DISABLED')
   }
-  const { prisma } = await import('../lib/prisma')
-  const { validateCreatePayload } = await import('../lib/league-creation/canonical/validateCreateLeague')
-  const { runPresetEngine } = await import('../lib/league-creation/preset-engine/runPresetEngine')
-  const { createCanonicalLeagueInTransaction } = await import('../lib/league-creation/canonical/createCanonicalLeagueInTransaction')
-  const { resolveDraftPoolCacheContext } = await import('../lib/draft-room/ensureDraftPoolReady')
-  const { loadNbaSurvivorRosterEligibility } = await import('../lib/draft-room/nbaSurvivorRosterEligibility')
-  const { canonicalName } = await import('../lib/draft-room/player-canonical-identity')
-  const { normalizePlayerList } = await import('../lib/draft-asset-pipeline')
-  const { configureEventInfrastructure, InMemoryOutboxStore } = await import('../lib/events')
   configureEventInfrastructure({ outboxStore: new InMemoryOutboxStore() })
 
   const marker = `nba-browser-${randomUUID().slice(0, 8)}`
@@ -55,6 +66,10 @@ test('two signed-in NBA Survivor managers see draft controls and private idol no
       tx => createCanonicalLeagueInTransaction(tx, userIds[0], validated.data, preset),
       { timeout: 120_000 },
     )).leagueId
+    await upsertSurvivorConfig(leagueId, {
+      tribeCount: 4, tribeSize: 5, idolCount: 7, exileReturnEnabled: true,
+      mergeTrigger: 'player_count', mergePlayerCount: 10,
+    })
     const rosters = await prisma.roster.findMany({ where: { leagueId }, orderBy: { id: 'asc' } })
     expect(rosters).toHaveLength(20)
     rosters.sort((a, b) => Number(b.platformUserId === userIds[0]) - Number(a.platformUserId === userIds[0]))
@@ -92,6 +107,8 @@ test('two signed-in NBA Survivor managers see draft controls and private idol no
       return true
     })
     expect(players.length).toBeGreaterThanOrEqual(240)
+    const firstPlayer = players.find(row => row.position === 'PG')!
+    const replacement = players.find(row => row.position === 'PG' && row.id !== firstPlayer.id)!
     const cache = await resolveDraftPoolCacheContext(leagueId)
     const entries = normalizePlayerList(players.map((row, index) => ({
       playerId: row.id, name: row.name, position: row.position, team: row.team, adp: index + 1,
@@ -106,7 +123,23 @@ test('two signed-in NBA Survivor managers see draft controls and private idol no
 
     await signIn(page, `${userIds[0]}@example.invalid`, password, userIds[0])
     await signIn(managerPage, `${userIds[1]}@example.invalid`, password, userIds[1])
+    page.on('response', response => {
+      if (response.url().includes('/draft/commissioner/pick-edit')) {
+        console.log(`NBA browser: commissioner edit HTTP ${response.status()}`)
+      }
+    })
+    // Age confirmation is a separate onboarding flow. Keep its optional
+    // one-session prompt from covering draft controls in this fixture.
+    await Promise.all([page, managerPage].map((viewer, index) => viewer.addInitScript(({ introKey }) => {
+      sessionStorage.setItem('af_age_prompt_dismissed', '1')
+      localStorage.setItem(introKey, '1')
+    }, { introKey: firstEntryIntroStorageKey('survivor', leagueId!, userIds[index]) })))
     console.log('NBA browser fixture: two distinct signed-in sessions')
+    const poolResponse = await page.request.get(`/api/leagues/${leagueId}/draft/pool`, { timeout: 120_000 })
+    expect(poolResponse.ok()).toBeTruthy()
+    const poolPayload = await poolResponse.json()
+    expect(poolPayload.entries).toContainEqual(expect.objectContaining({ playerId: replacement.id }))
+    console.log('NBA browser fixture: draft pool API contains replacement player')
     const draftDate = new Date(Date.now() + 86_400_000).toISOString()
     const schedule = await page.request.patch(`/api/leagues/${leagueId}/draft/settings`, { data: { draftDate } })
     expect(schedule.ok(), await schedule.text()).toBeTruthy()
@@ -115,33 +148,136 @@ test('two signed-in NBA Survivor managers see draft controls and private idol no
     console.log('NBA browser: schedule saved; manager edit rejected')
 
     const draftUrl = `/drafts/${draft.id}`
-    await Promise.all([
-      page.goto(draftUrl, { waitUntil: 'domcontentloaded', timeout: 120_000 }),
-      managerPage.goto(draftUrl, { waitUntil: 'domcontentloaded', timeout: 120_000 }),
-    ])
+    await page.goto(draftUrl, { waitUntil: 'domcontentloaded', timeout: 240_000 })
+    await managerPage.goto(draftUrl, { waitUntil: 'domcontentloaded', timeout: 240_000 })
     await expect(page.getByTestId('draft-desktop-layout')).toBeVisible()
     await expect(managerPage.getByTestId('draft-desktop-layout')).toBeVisible()
+    await expect(page.getByTestId('draft-pool-loading-message')).toHaveCount(0, { timeout: 120_000 })
+    await expect(managerPage.getByTestId('draft-pool-loading-message')).toHaveCount(0, { timeout: 120_000 })
+    console.log('NBA browser: player pool loaded in both draft boards')
     const managerBoard = managerPage.getByTestId('draft-desktop-layout')
     await expect(managerBoard.getByTestId('draft-board-cell-1')).toBeVisible()
     await expect(managerPage.getByTestId('draft-board-cell-commish-edit-1')).toHaveCount(0)
+    const initialManagerSync = await managerPage.request.get(`/api/leagues/${leagueId}/draft/live-sync?queue=0&chat=0`, { timeout: 120_000 })
+    expect(initialManagerSync.ok()).toBeTruthy()
     console.log('NBA browser: both draft boards rendered; manager editor hidden')
 
-    const start = await page.request.post(`/api/leagues/${leagueId}/draft/controls`, { data: { action: 'start' } })
+    const start = await page.request.post(`/api/leagues/${leagueId}/draft/controls`, { data: { action: 'start' }, timeout: 120_000 })
     expect(start.ok(), await start.text()).toBeTruthy()
-    expect((await managerPage.request.post(`/api/leagues/${leagueId}/draft/controls`, { data: { action: 'pause' } })).status()).toBe(403)
-    const pause = await page.request.post(`/api/leagues/${leagueId}/draft/controls`, { data: { action: 'pause' } })
+    console.log('NBA browser: draft started')
+    seedPick({ leagueId, userId: userIds[0], rosterId: rosters[0].id,
+      playerId: firstPlayer.id, playerName: firstPlayer.name, position: 'PG', team: firstPlayer.team, overall: 1 })
+    console.log('NBA browser: first pick seeded through draft service')
+    expect((await managerPage.request.post(`/api/leagues/${leagueId}/draft/controls`, { data: { action: 'pause' }, timeout: 120_000 })).status()).toBe(403)
+    const pause = await page.request.post(`/api/leagues/${leagueId}/draft/controls`, { data: { action: 'pause' }, timeout: 120_000 })
     expect(pause.ok(), await pause.text()).toBeTruthy()
     expect((await prisma.draftSession.findUniqueOrThrow({ where: { id: draft.id } })).status).toBe('paused')
-    await managerPage.reload({ waitUntil: 'domcontentloaded', timeout: 120_000 })
-    await expect(managerPage.getByTestId('draft-paused-room-banner')).toBeVisible()
-    const resume = await page.request.post(`/api/leagues/${leagueId}/draft/controls`, { data: { action: 'resume' } })
+    console.log('NBA browser: draft paused')
+    const pausedManagerSync = await managerPage.request.get(`/api/leagues/${leagueId}/draft/live-sync?queue=0&chat=0`, { timeout: 120_000 })
+    expect(pausedManagerSync.ok()).toBeTruthy()
+    expect((await pausedManagerSync.json()).session?.status).toBe('paused')
+    console.log('NBA browser: manager live-sync API sees paused state')
+    await expect(managerPage.getByTestId('draft-paused-room-banner')).toBeVisible({ timeout: 90_000 })
+    console.log('NBA browser: manager saw paused state through live sync')
+    const forbiddenCorrection = await managerPage.request.post(`/api/leagues/${leagueId}/draft/commissioner/pick-edit`, {
+      data: { action: 'REPLACE_PLAYER_ON_PICK', overallPickNumber: 1, playerId: replacement.id,
+        playerName: replacement.name, position: 'PG', team: replacement.team, reason: 'Unauthorized rehearsal' },
+    })
+    expect(forbiddenCorrection.status()).toBe(403)
+    console.log('NBA browser: manager pick correction rejected')
+    const firstCell = page.getByTestId('draft-premium-board-zone').getByTestId('draft-board-cell-1')
+    await expect(firstCell).toContainText(firstPlayer.name, { timeout: 90_000 })
+    console.log('NBA browser: commissioner board updated through live sync')
+    console.log('NBA browser: waiting for commissioner edit button hydration')
+    await page.waitForFunction(() => {
+      const button = document.querySelector('[data-testid="draft-premium-board-zone"] [data-testid="draft-board-cell-commish-edit-1"]')
+      if (!button) return false
+      const reactPropsKey = Object.keys(button).find(key => key.startsWith('__reactProps$'))
+      return Boolean(reactPropsKey && typeof (button as unknown as Record<string, { onClick?: unknown }>)[reactPropsKey]?.onClick === 'function')
+    }, null, { timeout: 60_000 })
+    console.log('NBA browser: commissioner edit button hydrated')
+    const editButton = firstCell.getByTestId('draft-board-cell-commish-edit-1')
+    await editButton.focus({ timeout: 20_000 })
+    await expect(editButton).toBeFocused()
+    console.log('NBA browser: commissioner edit button focused')
+    await editButton.press('Enter', { timeout: 20_000 })
+    console.log('NBA browser: commissioner edit button activated by keyboard')
+    const editor = page.getByTestId('draft-commish-edit-overlay')
+    await expect(editor.getByTestId('commish-edit-panel')).toBeVisible({ timeout: 30_000 })
+    console.log('NBA browser: commissioner editor visible')
+    await editor.getByTestId('commish-edit-action').selectOption('REPLACE_PLAYER_ON_PICK', { timeout: 20_000 })
+    console.log('NBA browser: replacement action selected')
+    await expect(editor.getByTestId('commish-edit-overall')).toHaveValue('1')
+    await editor.getByTestId('commish-edit-player-search').fill(replacement.name, { timeout: 20_000 })
+    console.log('NBA browser: replacement player searched')
+    await expect(editor.getByTestId('commish-edit-player-result-count')).not.toHaveText('No matches.', { timeout: 30_000 })
+    await editor.getByTestId('commish-edit-player').selectOption(replacement.id, { timeout: 20_000 })
+    console.log('NBA browser: replacement player selected')
+    await editor.getByTestId('commish-edit-reason').fill('Correct an incorrect commissioner pick', { timeout: 20_000 })
+    console.log('NBA browser: correction reason entered')
+    await editor.getByTestId('commish-edit-submit').click({ timeout: 20_000 })
+    console.log('NBA browser: correction submitted')
+    await expect(editor.getByTestId('commish-edit-self-benefit')).toBeVisible({ timeout: 120_000 })
+    await editor.getByTestId('commish-edit-self-benefit-confirm').click({ timeout: 20_000 })
+    await expect(editor.getByTestId('commish-edit-success')).toContainText('Pick updated', { timeout: 120_000 })
+    await expect.poll(async () => (await prisma.draftPick.findFirstOrThrow({ where: { sessionId: draft.id, overall: 1 } })).playerId).toBe(replacement.id)
+    const correctionAudit = await prisma.draftPickAuditLog.findFirstOrThrow({ where: {
+      draftSessionId: draft.id, overallPickNumber: 1, action: 'REPLACE_PLAYER_ON_PICK',
+    } })
+    expect(correctionAudit.actorUserId).toBe(userIds[0])
+    expect(correctionAudit.reason).toBe('Correct an incorrect commissioner pick')
+    await expect(firstCell).toContainText(replacement.name)
+    console.log('NBA browser: commissioner corrected own pick in UI; manager denied; audit persisted')
+    const resume = await page.request.post(`/api/leagues/${leagueId}/draft/controls`, { data: { action: 'resume' }, timeout: 120_000 })
     expect(resume.ok(), await resume.text()).toBeTruthy()
     expect((await prisma.draftSession.findUniqueOrThrow({ where: { id: draft.id } })).status).toBe('in_progress')
     const managerSession = await (await managerPage.request.get(`/api/leagues/${leagueId}/draft/session`)).json()
     expect(managerSession.session?.status).toBe('in_progress')
     console.log('NBA browser: pause, reconnect, resume and manager session state verified')
 
-    const idolPlayer = players.find(row => row.position === 'PG')!
+    const idolPlayer = players.find(row => row.id !== firstPlayer.id && row.id !== replacement.id && row.imageUrl)!
+    expect(idolPlayer?.imageUrl).toBeTruthy()
+    seedPick({ leagueId, userId: userIds[1], rosterId: rosters[1].id,
+      playerId: idolPlayer.id, playerName: idolPlayer.name, position: idolPlayer.position!, team: idolPlayer.team, overall: 2 })
+    const survivorConfig = await getSurvivorConfig(leagueId)
+    expect(survivorConfig?.configId).toBeTruthy()
+    const ownerIdol = await prisma.survivorIdol.create({ data: {
+      leagueId, configId: survivorConfig!.configId, rosterId: rosters[1].id,
+      playerId: idolPlayer.id, powerType: 'protect_self', status: 'hidden',
+      currentOwnerUserId: userIds[1], originalOwnerUserId: userIds[1],
+    } })
+    const ownerSummaryResponse = await managerPage.request.get(`/api/leagues/${leagueId}/survivor/summary`)
+    const commissionerSummaryResponse = await page.request.get(`/api/leagues/${leagueId}/survivor/summary`)
+    expect(ownerSummaryResponse.ok()).toBeTruthy()
+    expect(commissionerSummaryResponse.ok()).toBeTruthy()
+    const ownerSummary = await ownerSummaryResponse.json()
+    const commissionerSummary = await commissionerSummaryResponse.json()
+    expect(ownerSummary.myIdols).toContainEqual(expect.objectContaining({
+      id: ownerIdol.id, playerId: idolPlayer.id, playerName: idolPlayer.name, playerImageUrl: idolPlayer.imageUrl,
+    }))
+    expect(commissionerSummary.myIdols).not.toContainEqual(expect.objectContaining({ id: ownerIdol.id }))
+    expect(JSON.stringify(commissionerSummary)).not.toContain(ownerIdol.id)
+    console.log('NBA browser: private idol summary contains owner headshot, sealed from playing commissioner')
+
+    const survivorUrl = `/league/${leagueId}?view=survivor`
+    // The first native league render compiles a large route in next dev. Loading
+    // the two authenticated sessions serially avoids making both wait on that
+    // cold compile while the draft room is still mounted in each browser.
+    await page.goto(survivorUrl, { waitUntil: 'domcontentloaded', timeout: 240_000 })
+    await managerPage.goto(survivorUrl, { waitUntil: 'domcontentloaded', timeout: 240_000 })
+    for (const viewer of [page, managerPage]) {
+      const idolTab = viewer.getByRole('button', { name: 'Idols & Advantages' })
+      await expect(idolTab).toBeVisible({ timeout: 120_000 })
+      await idolTab.click()
+    }
+    const ownerVault = managerPage.getByRole('heading', { name: 'Your idols & advantages' }).locator('..')
+    const commissionerVault = page.getByRole('heading', { name: 'Your idols & advantages' }).locator('..')
+    await expect(ownerVault).toContainText(idolPlayer.name)
+    await expect(ownerVault.getByRole('img', { name: `${idolPlayer.name} headshot` })).toBeVisible()
+    await expect(commissionerVault).toContainText('You have no active idols')
+    await expect(commissionerVault).not.toContainText(idolPlayer.name)
+    console.log('NBA browser: owner-only idol vault shows attached player headshot; playing commissioner sees no private idol')
+
     const secretText = `${marker} private idol notice`
     await prisma.leagueChatMessage.create({ data: {
       leagueId, userId: userIds[0], message: secretText, type: 'system',
@@ -159,6 +295,7 @@ test('two signed-in NBA Survivor managers see draft controls and private idol no
     expect(JSON.stringify(commissionerChat.messages)).not.toContain(idolPlayer.id)
     console.log('NBA browser: owner-only idol notice hidden from playing commissioner')
   } finally {
+    console.log('NBA browser: cleaning isolated fixture')
     await manager.close()
     if (leagueId) {
       await prisma.analyticsEvent.deleteMany({ where: { OR: [{ meta: { path: ['leagueId'], equals: leagueId } }, { userId: { in: userIds } }] } })
