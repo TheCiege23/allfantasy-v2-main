@@ -9,9 +9,10 @@ import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
 import { RECAP_SHARE } from '@/lib/analytics/eventNames'
 import { ClassGateNotice, isClassGateBlocked, type ClassGateBlocked } from '@/components/league-join/ClassGateNotice'
 import { SurvivorJoin, type SurvivorJoinPreview } from '@/components/survivor/SurvivorJoin'
+import { ZombieJoin, type ZombieJoinPreview } from '@/components/zombie/ZombieJoin'
 import { SleeperTeamClaim } from '@/components/league-join/SleeperTeamClaim'
 
-type Preview = { leagueId: string; name: string | null; sport: string; requiresPassword: boolean; survivor?: SurvivorJoinPreview | null }
+type Preview = { leagueId: string; name: string | null; sport: string; requiresPassword: boolean; survivor?: SurvivorJoinPreview | null; zombie?: ZombieJoinPreview | null }
 
 
 export default function JoinByCodePage() {
@@ -58,6 +59,7 @@ export default function JoinByCodePage() {
             sport: data.sport,
             requiresPassword: !!data.requiresPassword,
             survivor: data.survivor ?? null,
+            zombie: data.zombie ?? null,
           })
           setPreviewError(typeof data.error === 'string' ? data.error : null)
           setPreviewErrorCode(typeof data.errorCode === 'string' ? data.errorCode : null)
@@ -186,6 +188,24 @@ export default function JoinByCodePage() {
     autoJoined.current = true
     join(codeFromUrl, '')
   }, [authStatus, codeFromUrl, join, joinOnArrival, preview, previewError, status])
+
+  if (codeFromUrl && preview?.zombie && !previewError) {
+    return <ZombieJoin
+      leagueName={preview.name ?? 'Zombie League'}
+      sport={preview.sport}
+      zombie={preview.zombie}
+      authStatus={authStatus}
+      needsSignIn={needsSignIn}
+      callbackUrl={joinCallbackUrl(codeFromUrl, src)}
+      requiresPassword={preview.requiresPassword}
+      password={password}
+      onPasswordChange={setPassword}
+      onJoin={() => join(codeFromUrl, password)}
+      status={status}
+      message={message}
+      joinedLeagueId={joinedLeagueId}
+    />
+  }
 
   if (codeFromUrl && preview?.survivor && !previewError) {
     return <SurvivorJoin

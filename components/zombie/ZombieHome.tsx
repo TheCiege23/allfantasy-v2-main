@@ -3,65 +3,83 @@
 import { useState, useEffect, useCallback } from 'react'
 import clsx from 'clsx'
 import Link from 'next/link'
-import {
-  Skull,
-  MessageSquare,
-  Settings,
-  Sparkles,
-  ChevronDown,
-  FileText,
-  ExternalLink,
-  Biohazard,
-  Radio,
-} from 'lucide-react'
-import type { ZombieSummary, ZombieView } from './types'
-import { ZOMBIE_ITEM_ICON, ZOMBIE_STATUS_ICON } from '@/lib/zombie/iconSystem'
-import { ZombieWhispererCard } from './ZombieWhispererCard'
-import { ZombieSurvivorsList } from './ZombieSurvivorsList'
-import { ZombieZombiesList } from './ZombieZombiesList'
-import { ZombieWinningsSummary } from './ZombieWinningsSummary'
-import { ZombieResourcesSummary } from './ZombieResourcesSummary'
-import { ZombieChompinBlock } from './ZombieChompinBlock'
-import { ZombieMovementOutlook } from './ZombieMovementOutlook'
-import { ZombieWeeklyBoard } from './ZombieWeeklyBoard'
-import { ZombieResourcesView } from './ZombieResourcesView'
-import { ZombieAmbushBoard } from './ZombieAmbushBoard'
-import { ZombieAIPanel } from './ZombieAIPanel'
+import type { ZombieBoardEntry, ZombieSummary } from './types'
+import { ZombieSceneBackground } from './ZombieSceneBackground'
+import { ZombieStatusChip, zombieChipStatus, type ZombieChipStatus } from './ZombieStatusChip'
 
-const VIEW_LABELS: Record<ZombieView, string> = {
-  home: 'Home',
-  resources: 'Resources',
-  ambush: 'Ambush & Matchups',
-  'weekly-board': 'Weekly Board',
-  ai: 'AI Tools',
-}
+/*
+ * The Zombie league's home (the Zombie tab on /league/[id]). Layout from the design handoff's
+ * ZombieHome screen; every number on it comes from the summary route, which reads the engine's own rules
+ * (`getZombieRulesForSport`) — never the handoff's sample values. Deliberately absent in v1: a countdown
+ * (infections run once the week's matchups are final, not at a fixed time), a win-probability bar, and
+ * any "Use" button for items whose effects the engine does not apply yet.
+ */
 
 export interface ZombieHomeProps {
   leagueId: string
+}
+
+const CELL_TONE: Record<ZombieChipStatus, string> = {
+  survivor: 'border-sky-400/30 bg-sky-500/15 text-sky-50',
+  revived: 'border-amber-400/35 bg-amber-500/15 text-amber-50',
+  zombie: 'border-lime-400/40 bg-lime-500/20 text-lime-50',
+  whisperer: 'border-violet-400/40 bg-violet-500/20 text-violet-50',
+}
+
+const fmt = (n: number) => (Math.round(n * 10) / 10).toLocaleString(undefined, { maximumFractionDigits: 1 })
+const pct = (share: number) => `${Math.round(share * 100)}%`
+
+function statusLine(summary: ZombieSummary, chip: ZombieChipStatus | null, turned: number, total: number): string {
+  const lg = summary.league
+  const tally = `${turned} of ${total} ${turned === 1 ? 'has' : 'have'} turned.`
+  if (lg && lg.currentWeek === 0) return 'The draft comes first. Everyone starts as a Survivor — except one.'
+  const prefix = `Week ${summary.week} · `
+  switch (chip) {
+    case 'survivor':
+      return `${prefix}You're still a Survivor. ${tally}`
+    case 'revived':
+      return `${prefix}You're back from the dead — a Survivor again. ${tally}`
+    case 'zombie':
+      return `${prefix}You've turned. Beat a Survivor and they turn too. ${tally}`
+    case 'whisperer':
+      return `${prefix}You're the Whisperer. Every Survivor you beat turns. ${tally}`
+    default:
+      return `${prefix}${tally}`
+  }
+}
+
+function matchupStakes(me: ZombieChipStatus, them: ZombieChipStatus, lossToZombieInfects: boolean, theirName: string): string {
+  const meHuman = me === 'survivor' || me === 'revived'
+  const themHuman = them === 'survivor' || them === 'revived'
+  if (meHuman && (them === 'whisperer' || (them === 'zombie' && lossToZombieInfects))) {
+    return `${theirName} is infected. Lose and you become a Zombie.`
+  }
+  if (!meHuman && themHuman && (me === 'whisperer' || lossToZombieInfects)) {
+    return `Beat ${theirName} and they turn.`
+  }
+  return 'No infection on the line — a big enough win still takes a share of their Outbreak Points.'
 }
 
 export function ZombieHome({ leagueId }: ZombieHomeProps) {
   const [summary, setSummary] = useState<ZombieSummary | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [view, setView] = useState<ZombieView>('home')
-  const [week, setWeek] = useState(1)
+  /** Null until the first load: the server picks the league's current week. */
+  const [week, setWeek] = useState<number | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(
-        `/api/leagues/${encodeURIComponent(leagueId)}/zombie/summary?week=${week}`,
-        { cache: 'no-store' }
-      )
+      const qs = week != null ? `?week=${week}` : ''
+      const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/zombie/summary${qs}`, { cache: 'no-store' })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
         setError((data as { error?: string }).error ?? `Error ${res.status}`)
         setSummary(null)
         return
       }
-      const data = await res.json()
+      const data = (await res.json()) as ZombieSummary
       setSummary(data)
     } catch {
       setError('Failed to load Zombie summary')
@@ -87,221 +105,283 @@ export function ZombieHome({ leagueId }: ZombieHomeProps) {
     return (
       <div className="rounded-2xl border border-red-500/35 bg-red-950/25 p-4">
         <p className="text-sm text-red-100">{error}</p>
-        <button
-          type="button"
-          onClick={() => load()}
-          className="mt-2 text-xs font-medium text-cyan-300 hover:underline"
-        >
+        <button type="button" onClick={() => load()} className="mt-2 text-xs font-medium text-cyan-300 hover:underline">
           Retry
         </button>
       </div>
     )
   }
+  if (!summary) return null
 
-  const names = summary?.rosterDisplayNames ?? {}
+  const names = summary.rosterDisplayNames ?? {}
+  const nameOf = (rosterId: string | null | undefined) => (rosterId ? names[rosterId] ?? 'A team' : 'A team')
+  const revived = new Set(summary.revivedRosterIds ?? [])
+  const chipFor = (rosterId: string, status: string) => zombieChipStatus(status, revived.has(rosterId))
+  const lg = summary.league
+  const totalWeeks = Math.max(1, lg?.totalWeeks ?? summary.week)
+  const turned = summary.statuses.filter((s) => chipFor(s.rosterId, s.status) === 'zombie').length
+  const total = summary.statuses.length
+  const myChip = summary.myRosterId && summary.myStatus ? chipFor(summary.myRosterId, summary.myStatus) : null
+  const lossToZombieInfects = summary.config.infectionLossToZombie !== false
+  const rules = summary.rules
+  const reviveSerums = rules?.reviveSerums ?? 3
+  const hub = `/zombie/${encodeURIComponent(leagueId)}`
 
-  const itemEmojiStrip = Object.values(ZOMBIE_ITEM_ICON).join(' ')
+  /* Grid order: you first, then Whisperer, Zombies, revived, Survivors — then name. */
+  const order: Record<ZombieChipStatus, number> = { whisperer: 0, zombie: 1, revived: 2, survivor: 3 }
+  const cells = [...summary.statuses].sort((a, b) => {
+    if (a.rosterId === summary.myRosterId) return -1
+    if (b.rosterId === summary.myRosterId) return 1
+    const d = order[chipFor(a.rosterId, a.status)] - order[chipFor(b.rosterId, b.status)]
+    return d !== 0 ? d : nameOf(a.rosterId).localeCompare(nameOf(b.rosterId))
+  })
+
+  const m = summary.myMatchup
+  const items = summary.myResources ?? { serums: 0, weapons: 0, ambush: 0 }
 
   return (
-    <div className="space-y-6 text-[var(--zombie-text-full)]">
-      <header className="zombie-hero-shell relative overflow-hidden border border-white/10 shadow-[0_18px_60px_rgba(0,0,0,0.4)]">
-        <div className="zombie-hero-fog opacity-80" aria-hidden />
-        <div
-          className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_15%_0%,rgba(74,222,128,0.12),transparent_55%),linear-gradient(180deg,rgba(8,10,18,0.92),rgba(4,5,10,0.98))]"
-          aria-hidden
-        />
-        <div className="relative z-[1] p-4 sm:p-6">
-          <div className="mb-3 flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--zombie-toxic)]/35 bg-black/35 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-[var(--zombie-toxic)]">
-              <Radio className="h-3 w-3" aria-hidden />
-              League embed
-            </span>
-          </div>
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-[var(--zombie-toxic)]/35 bg-black/45 sm:h-16 sm:w-16">
-              <Skull className="h-7 w-7 text-[var(--zombie-toxic)] sm:h-8 sm:w-8" aria-hidden />
+    <div className="space-y-5 text-[var(--zombie-text-full)]">
+      {/* Hero */}
+      <header className="relative overflow-hidden rounded-3xl border border-white/10 shadow-[0_18px_60px_rgba(0,0,0,0.4)]">
+        <ZombieSceneBackground themeId={lg?.backgroundTheme} />
+        <div className="relative z-[1] flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:gap-6 sm:p-7">
+          {/* eslint-disable-next-line @next/next/no-img-element -- local SVG */}
+          <img
+            src={`/zombie/art/char-${myChip ?? 'survivor'}.svg`}
+            alt=""
+            className="h-20 w-20 shrink-0 drop-shadow-[0_8px_24px_rgba(0,0,0,0.6)] sm:h-28 sm:w-28"
+          />
+          <div className="min-w-0 flex-1">
+            <div className="mb-2 flex flex-wrap gap-1.5">
+              {[lg?.sport, lg?.season ? String(lg.season) : null, 'Zombie', lg ? `${lg.teamCount} teams` : null]
+                .filter(Boolean)
+                .map((chip) => (
+                  <span key={chip} className="rounded-md border border-white/15 bg-black/40 px-2 py-0.5 text-[11px] font-semibold text-white/80">
+                    {chip}
+                  </span>
+                ))}
+              {myChip && <ZombieStatusChip status={myChip} />}
             </div>
-            <div className="min-w-0 flex-1">
-              <h1 className="text-xl font-black tracking-tight text-white sm:text-2xl">Zombie League</h1>
-              <p className="text-sm text-white/72">
-                Tactical chaos · Whisperer · Horde · serums · weapons · ambushes — stay human or join the swarm.
-              </p>
-              <p className="mt-2 text-[11px] leading-relaxed text-white/45" title="Status keys">
-                {ZOMBIE_STATUS_ICON.survivor} Survivor · {ZOMBIE_STATUS_ICON.whisperer} Whisperer ·{' '}
-                {ZOMBIE_STATUS_ICON.zombie} Zombie · {ZOMBIE_STATUS_ICON.revived_survivor} Revived
-              </p>
-              <p className="mt-1 text-[11px] text-white/38" title="Serums, weapons, ambush">
-                {itemEmojiStrip}
-              </p>
-            </div>
+            <h1 className="truncate text-2xl font-black tracking-tight text-[var(--zombie-toxic,#4ade80)] sm:text-4xl">
+              {lg?.name || 'Zombie League'}
+            </h1>
+            <p className="mt-1 text-sm font-semibold text-lime-100 sm:text-base">{statusLine(summary, myChip, turned, total)}</p>
+            <p className="mt-2 max-w-2xl text-[13px] leading-relaxed text-white/70">
+              One Whisperer hides among you. Lose to the Whisperer{lossToZombieInfects ? ' or a Zombie' : ''} and you turn.
+              Infections run after the week&apos;s last game.
+            </p>
+            <nav className="mt-4 flex flex-wrap gap-2" aria-label="Zombie league">
+              <Link href={`${hub}/matchups`} className="inline-flex min-h-[44px] items-center rounded-xl bg-lime-400 px-4 text-sm font-bold text-black hover:bg-lime-300">
+                Matchups
+              </Link>
+              {[
+                ['Items', `${hub}/items`],
+                ['Standings', `${hub}/standings`],
+                ['Rules', `${hub}/rules`],
+                ['Chat', `/league/${leagueId}?tab=Chat`],
+              ].map(([label, href]) => (
+                <Link
+                  key={label}
+                  href={href}
+                  className="inline-flex min-h-[44px] items-center rounded-xl border border-white/15 bg-black/45 px-4 text-sm font-semibold text-white/90 hover:bg-black/60"
+                >
+                  {label}
+                </Link>
+              ))}
+            </nav>
           </div>
         </div>
       </header>
 
-      {/* Quick links — command-center accents */}
-      <div className="flex flex-wrap gap-2">
-        <Link
-          href={`/league/${leagueId}?tab=Chat`}
-          className="inline-flex min-h-[44px] items-center gap-2 rounded-2xl border border-cyan-500/30 bg-cyan-950/30 px-4 py-2 text-sm font-semibold text-cyan-50 ring-1 ring-inset ring-cyan-400/25 transition hover:bg-cyan-950/50"
-        >
-          <MessageSquare className="h-4 w-4 shrink-0" /> League Chat (@Chimmy)
-        </Link>
-        <Link
-          href={`/zombie/${leagueId}`}
-          className="inline-flex min-h-[44px] items-center gap-2 rounded-2xl border border-[var(--zombie-toxic)]/35 bg-emerald-950/20 px-4 py-2 text-sm font-semibold text-emerald-50 ring-1 ring-inset ring-[var(--zombie-toxic)]/25 transition hover:bg-emerald-950/40"
-        >
-          <ExternalLink className="h-4 w-4 shrink-0" /> Full Zombie hub
-        </Link>
-        <Link
-          href={`/zombie/${leagueId}/rules`}
-          className="inline-flex min-h-[44px] items-center gap-2 rounded-2xl border border-white/12 bg-white/[0.05] px-4 py-2 text-sm font-semibold text-white/88 transition hover:bg-white/10"
-        >
-          <FileText className="h-4 w-4 shrink-0" /> Rules (no waivers · zombie trade limits)
-        </Link>
-        <Link
-          href={`/league/${leagueId}?tab=Settings`}
-          className="inline-flex min-h-[44px] items-center gap-2 rounded-2xl border border-white/12 bg-white/[0.05] px-4 py-2 text-sm font-semibold text-white/88 transition hover:bg-white/10"
-        >
-          <Settings className="h-4 w-4 shrink-0" /> Settings
-        </Link>
-        <Link
-          href={`/league/${leagueId}?tab=Intelligence`}
-          className="inline-flex min-h-[44px] items-center gap-2 rounded-2xl border border-fuchsia-500/28 bg-fuchsia-950/25 px-4 py-2 text-sm font-semibold text-fuchsia-100 ring-1 ring-inset ring-fuchsia-400/20 transition hover:bg-fuchsia-950/45"
-        >
-          <Sparkles className="h-4 w-4 shrink-0" /> Storyline & AI
-        </Link>
-        {summary?.myRosterId && (
-          <Link
-            href={`/app/zombie-universe`}
-            className="inline-flex min-h-[44px] items-center gap-2 rounded-2xl border border-amber-500/35 bg-amber-950/25 px-4 py-2 text-sm font-semibold text-amber-50 ring-1 ring-inset ring-amber-400/25 transition hover:bg-amber-950/45"
-          >
-            <Biohazard className="h-4 w-4 shrink-0" /> Universe (Alpha / Beta / Gamma)
-          </Link>
-        )}
-      </div>
-
-      <section className="zombie-glass zombie-panel-shine relative rounded-2xl border border-cyan-500/20 p-4 sm:p-5">
-        <h2 className="text-sm font-bold text-cyan-100">@Chimmy — items & ambush</h2>
-        <p className="mt-1 text-[12px] leading-relaxed text-white/58">
-          The engine validates timing and inventory. After a Whisperer ambush, the commissioner can remap matchups for
-          that week in{' '}
-          <span className="text-cyan-200/90">Commissioner → Zombie → Combat / Ambush</span> if your league allows it.
-        </p>
-        <ul className="mt-3 space-y-1.5 text-[12px] text-white/72">
-          <li>
-            <span className="font-medium text-violet-200/90">Ambush:</span> @Chimmy ambush steal · horde boost · swap matchup …
-          </li>
-          <li>
-            <span className="font-medium text-teal-200/90">Serum:</span> @Chimmy serum … (antidote / revive flow per rules)
-          </li>
-          <li>
-            <span className="font-medium text-amber-200/90">Weapons:</span> @Chimmy knife · bow · axe · gun · bomb / dynamite
-          </li>
-          <li>
-            <span className="font-medium text-fuchsia-200/90">Whisperer:</span> @Chimmy activate … (dark whisper / infection override …)
-          </li>
-        </ul>
-      </section>
-
-      {/* Week selector */}
-      <div className="flex flex-wrap items-center gap-2">
-        <label className="text-sm text-white/50">Week</label>
+      {/* Week selector: the whole season, defaulting to the league's current week. */}
+      <div className="flex items-center gap-2">
+        <label htmlFor="zombie-week" className="text-sm text-white/55">
+          Week
+        </label>
         <select
-          value={week}
+          id="zombie-week"
+          value={summary.week}
           onChange={(e) => setWeek(Math.max(1, parseInt(e.target.value, 10) || 1))}
-          className="rounded-xl border border-white/15 bg-black/30 py-2 pl-3 pr-8 text-sm text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/40"
+          className="min-h-[40px] rounded-xl border border-white/15 bg-black/30 pl-3 pr-8 text-sm text-white focus:outline-none focus:ring-2 focus:ring-lime-500/40"
         >
-          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18].map((w) => (
+          {Array.from({ length: totalWeeks }, (_, i) => i + 1).map((w) => (
             <option key={w} value={w}>
               {w}
+              {lg && w === lg.currentWeek ? ' (now)' : ''}
             </option>
           ))}
         </select>
+        {loading && <span className="text-xs text-white/40">Updating…</span>}
       </div>
 
-      {/* View switcher */}
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm text-white/50 sm:hidden">View:</span>
-        <div className="relative sm:hidden">
-          <select
-            value={view}
-            onChange={(e) => setView(e.target.value as ZombieView)}
-            className="rounded-xl border border-white/15 bg-black/30 py-2 pl-3 pr-8 text-sm text-white appearance-none focus:outline-none focus:ring-2 focus:ring-cyan-500/40"
-          >
-            {(Object.keys(VIEW_LABELS) as ZombieView[]).map((v) => (
-              <option key={v} value={v}>
-                {VIEW_LABELS[v]}
-              </option>
-            ))}
-          </select>
-          <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-white/50" />
-        </div>
-        <div className="hidden flex-wrap gap-1 sm:flex">
-          {(Object.keys(VIEW_LABELS) as ZombieView[]).map((v) => (
-            <button
-              key={v}
-              type="button"
-              onClick={() => setView(v)}
-              className={clsx(
-                'rounded-xl border px-3 py-2 text-sm font-semibold transition',
-                view === v
-                  ? 'border-cyan-500/35 bg-cyan-500/15 text-cyan-50 shadow-[0_0_20px_rgba(34,211,238,0.12)]'
-                  : 'border-white/10 bg-white/[0.04] text-white/70 hover:border-white/15 hover:bg-white/[0.07]',
-              )}
-            >
-              {VIEW_LABELS[v]}
-            </button>
-          ))}
-        </div>
-      </div>
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="min-w-0 space-y-5">
+          {/* Infection grid */}
+          <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h2 className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/55">The outbreak</h2>
+              <span className="font-mono text-sm text-lime-300">
+                {turned}/{total} turned
+              </span>
+            </div>
+            <ul className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">
+              {cells.map((s) => {
+                const chip = chipFor(s.rosterId, s.status)
+                const isMe = s.rosterId === summary.myRosterId
+                return (
+                  <li
+                    key={s.rosterId}
+                    className={clsx('flex min-w-0 items-center gap-2 rounded-xl border px-2 py-2', CELL_TONE[chip], isMe && 'ring-2 ring-white/60')}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element -- local SVG */}
+                    <img src={`/zombie/art/status-${chip}.svg`} alt="" className="h-6 w-6 shrink-0" />
+                    <span className="min-w-0">
+                      <span className="block truncate text-[13px] font-semibold">
+                        {nameOf(s.rosterId)}
+                        {isMe ? ' · you' : ''}
+                      </span>
+                      <span className="block text-[10px] font-bold uppercase tracking-[0.12em] opacity-70">{chip}</span>
+                    </span>
+                  </li>
+                )
+              })}
+            </ul>
+            {summary.whispererHidden && (
+              <p className="mt-3 text-[12px] text-violet-200/80">A Whisperer walks among the Survivors. Nobody knows who.</p>
+            )}
+          </section>
 
-      {/* Panel content */}
-      {view === 'home' && summary && (
-        <div className="space-y-6">
-          <div className="grid gap-6 sm:grid-cols-2">
-            <ZombieWhispererCard
-              whispererRosterId={summary.whispererRosterId}
-              hidden={summary.whispererHidden === true}
-              displayNames={names}
-            />
-            <ZombieResourcesSummary
-              serums={summary.myResources?.serums}
-              weapons={summary.myResources?.weapons}
-              ambushCount={summary.myResources?.ambush}
-            />
-          </div>
-          <ZombieSurvivorsList survivors={summary.survivors} displayNames={names} />
-          <ZombieZombiesList zombies={summary.zombies} displayNames={names} />
-          <ZombieWinningsSummary myRosterId={summary.myRosterId} />
-          <ZombieChompinBlock candidates={[]} displayNames={names} week={summary.week} />
-          <ZombieMovementOutlook movementWatch={summary.movementWatch} displayNames={names} />
-          <ZombieWeeklyBoard leagueId={leagueId} week={summary.week} />
+          {/* This week's matchup */}
+          <section className="rounded-2xl border border-lime-500/25 bg-[linear-gradient(180deg,rgba(20,30,10,0.35),rgba(7,8,13,0.9))] p-4 sm:p-5">
+            <h2 className="text-[11px] font-bold uppercase tracking-[0.18em] text-lime-300">Week {summary.week} matchup</h2>
+            {m && myChip ? (
+              <>
+                <p className="mt-1 text-lg font-bold text-white">You vs {m.opponentName}</p>
+                <p className="mt-1 text-[13px] text-white/70">
+                  {matchupStakes(myChip, chipFor(m.opponentRosterId, m.opponentStatus), lossToZombieInfects, m.opponentName)}
+                </p>
+                <div className="mt-4 grid grid-cols-[1fr_auto_1fr] items-center gap-3 text-center">
+                  <div>
+                    <ZombieStatusChip status={myChip} />
+                    <p className="mt-2 font-mono text-2xl font-bold text-white">{fmt(m.myScore)}</p>
+                    <p className="text-[11px] text-white/45">You</p>
+                  </div>
+                  <span className="text-xl font-black text-lime-300">VS</span>
+                  <div>
+                    <ZombieStatusChip status={chipFor(m.opponentRosterId, m.opponentStatus)} />
+                    <p className="mt-2 font-mono text-2xl font-bold text-white">{fmt(m.opponentScore)}</p>
+                    <p className="truncate text-[11px] text-white/45">{m.opponentName}</p>
+                  </div>
+                </div>
+                <p className="mt-3 text-center text-[11px] text-white/45">{m.final ? 'Final' : "Not final yet — infections run after the week's last game"}</p>
+              </>
+            ) : (
+              <p className="mt-2 text-sm text-white/60">No matchup for you this week.</p>
+            )}
+          </section>
+
+          {/* Weekly board */}
+          <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
+            <h2 className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/55">Week {summary.week} board</h2>
+            {(summary.weeklyBoard ?? []).length === 0 ? (
+              <p className="mt-2 text-sm text-white/55">Nothing yet — the board fills once the week&apos;s matchups are final.</p>
+            ) : (
+              <ul className="mt-2 divide-y divide-white/[0.06]">
+                {(summary.weeklyBoard ?? []).map((e, i) => (
+                  <BoardRow key={i} entry={e} nameOf={nameOf} />
+                ))}
+              </ul>
+            )}
+          </section>
         </div>
-      )}
-      {view === 'resources' && summary && (
-        <ZombieResourcesView
-          serums={summary.myResources?.serums ?? 0}
-          weapons={summary.myResources?.weapons ?? 0}
-          ambushCount={summary.myResources?.ambush ?? 0}
-          bombAvailable={false}
-          serumReviveCount={summary.config.serumReviveCount}
-          displayNames={names}
-        />
-      )}
-      {view === 'ambush' && summary && (
-        <ZombieAmbushBoard
-          leagueId={leagueId}
-          week={summary.week}
-          matchups={[]}
-          displayNames={names}
-        />
-      )}
-      {view === 'weekly-board' && summary && (
-        <ZombieWeeklyBoard leagueId={leagueId} week={summary.week} />
-      )}
-      {view === 'ai' && summary && (
-        <ZombieAIPanel leagueId={leagueId} summary={summary} displayNames={names} />
-      )}
+
+        <aside className="space-y-5">
+          {/* Supplies — counts only in v1. */}
+          <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
+            <h2 className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/55">Your supplies</h2>
+            {summary.myRosterId ? (
+              <ul className="mt-3 space-y-3">
+                <SupplyRow art="serum" label="Serums" count={items.serums} note={`${reviveSerums} bring a Zombie back as a Survivor.`} />
+                <SupplyRow
+                  art="weapon-knife"
+                  label="Weapons"
+                  count={items.weapons}
+                  note={rules ? `Earned by big weeks: ${fmt(rules.knifeScore)}+ points, ${fmt(rules.bowScore)}+, or a ${fmt(rules.axeMargin)}+ point win.` : 'Earned by big weeks.'}
+                />
+                {myChip === 'whisperer' && <SupplyRow art="ambush" label="Ambushes" count={items.ambush} note="The Whisperer's alone." />}
+              </ul>
+            ) : (
+              <p className="mt-2 text-sm text-white/55">Join the league to collect supplies.</p>
+            )}
+            {summary.myWinnings && (
+              <div className="mt-4 rounded-xl border border-lime-500/20 bg-lime-500/[0.06] p-3">
+                <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-lime-300">Outbreak Points</p>
+                <p className="mt-1 font-mono text-xl font-bold text-white">{fmt(summary.myWinnings.total)}</p>
+                <p className="text-[11px] text-white/55">
+                  {summary.myWinnings.week != null
+                    ? `Week ${summary.week}: ${summary.myWinnings.week >= 0 ? '+' : ''}${fmt(summary.myWinnings.week)}`
+                    : `Week ${summary.week} not settled yet`}
+                </p>
+              </div>
+            )}
+          </section>
+
+          {/* Rules in 30 seconds — the engine's numbers for this sport. */}
+          <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
+            <h2 className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/55">Rules in 30 seconds</h2>
+            <ol className="mt-3 space-y-2.5 text-[13px] leading-snug text-white/80">
+              {[
+                'Everyone starts as a Survivor — except one secret Whisperer.',
+                `Lose to the Whisperer${lossToZombieInfects ? ' or a Zombie' : ''} and you turn into a Zombie.`,
+                rules
+                  ? `You bank your score every week as Outbreak Points. Get infected and that week goes to whoever turned you; lose by ${fmt(rules.maulingMargin)}+ and ${pct(rules.maulShare)} of it goes, by ${fmt(rules.bashingMargin)}+ and ${pct(rules.bashShare)}.`
+                  : 'You bank your score every week as Outbreak Points.',
+                `${reviveSerums} serums bring a Zombie back as a Survivor.`,
+                `Infections run after the week's last game.${summary.config.zombieTradeBlocked ? ' Zombies can\'t trade.' : ''}`,
+              ].map((text, i) => (
+                <li key={i} className="flex gap-2.5">
+                  <span className="font-mono font-bold text-lime-300">{i + 1}</span>
+                  <span>{text}</span>
+                </li>
+              ))}
+            </ol>
+            <Link href={`${hub}/rules`} className="mt-3 inline-block text-xs font-semibold text-lime-300 hover:underline">
+              Full rules
+            </Link>
+          </section>
+        </aside>
+      </div>
     </div>
+  )
+}
+
+function SupplyRow({ art, label, count, note }: { art: string; label: string; count: number; note: string }) {
+  return (
+    <li className="flex items-start gap-3">
+      {/* eslint-disable-next-line @next/next/no-img-element -- local SVG */}
+      <img src={`/zombie/art/${art}.svg`} alt="" className="h-9 w-9 shrink-0" />
+      <div className="min-w-0">
+        <p className="text-sm font-bold text-white">
+          {label} <span className="font-mono text-lime-300">×{count}</span>
+        </p>
+        <p className="text-[12px] leading-snug text-white/55">{note}</p>
+      </div>
+    </li>
+  )
+}
+
+function BoardRow({ entry, nameOf }: { entry: ZombieBoardEntry; nameOf: (id: string | null) => string }) {
+  const [art, title] =
+    entry.kind === 'infection'
+      ? ['turn', entry.infectorRosterId ? `${nameOf(entry.infectorRosterId)} infected ${nameOf(entry.victimRosterId)}` : `${nameOf(entry.victimRosterId)} was infected`]
+      : entry.kind === 'mauling'
+        ? ['maul', `${nameOf(entry.winnerRosterId)} mauled ${nameOf(entry.loserRosterId)} by ${fmt(entry.margin)}`]
+        : ['bash', `${nameOf(entry.winnerRosterId)} bashed ${nameOf(entry.loserRosterId)} by ${fmt(entry.margin)}`]
+  return (
+    <li className="flex items-center gap-3 py-2.5">
+      {/* eslint-disable-next-line @next/next/no-img-element -- local SVG */}
+      <img src={`/zombie/art/${art}.svg`} alt="" className="h-8 w-8 shrink-0" />
+      <p className="text-sm font-semibold text-white/90">{title}</p>
+    </li>
   )
 }
