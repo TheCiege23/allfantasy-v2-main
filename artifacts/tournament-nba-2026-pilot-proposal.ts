@@ -1,4 +1,4 @@
-/** Proposed 2026–27 NBA pilot dates. Review only; never publish without commissioner approval. */
+/** Commissioner-approved 2026–27 NBA pilot dates. Publication still requires a fresh provider check. */
 import { defaultSeasonBlueprint } from '@/lib/tournament/seasonBlueprint'
 import { defaultSeasonRules } from '@/lib/tournament/seasonRules'
 
