@@ -49,7 +49,7 @@ describe('postNewsroomX', () => {
     publishMock.mockResolvedValueOnce({ id: '1', url: 'https://x.com/i/status/1' })
     const res = await postNewsroomX('user-1', ID, '  Trade: A to B via @espn  ')
     expect(res).toEqual({ ok: true, url: 'https://x.com/i/status/1' })
-    expect(publishMock).toHaveBeenCalledWith('user-1', { requestId: ID, text: 'Trade: A to B via @espn' })
+    expect(publishMock).toHaveBeenCalledWith('user-1', { requestId: ID, text: 'Trade: A to B via @espn' }, 'brand')
   })
 
   it('never calls X for an invalid post', async () => {
@@ -61,7 +61,7 @@ describe('postNewsroomX', () => {
   it('turns an expired connection into a reconnect instruction', async () => {
     publishMock.mockRejectedValueOnce(new FakeWeeklyXError('reconnect', 409))
     const res = await postNewsroomX('user-1', ID, 'hello')
-    expect(res).toEqual({ ok: false, error: expect.stringMatching(/Reconnect X/) })
+    expect(res).toEqual({ ok: false, error: expect.stringMatching(/expired.*Change account/) })
   })
 
   it('says to check X rather than retry when the post may have landed', async () => {
@@ -75,6 +75,7 @@ describe('newsroomXAccount', () => {
   it('names the handle only for a live connection', async () => {
     statusMock.mockResolvedValueOnce({ configured: true, connected: true, handle: 'TheCiege' })
     expect(await newsroomXAccount('user-1')).toEqual({ handle: 'TheCiege' })
+    expect(statusMock).toHaveBeenCalledWith('user-1', 'brand')
     statusMock.mockResolvedValueOnce({ configured: true, connected: false, handle: 'TheCiege' })
     expect(await newsroomXAccount('user-1')).toBeNull()
     expect(await newsroomXAccount(null)).toBeNull()

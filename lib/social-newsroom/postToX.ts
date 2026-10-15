@@ -1,14 +1,17 @@
 import 'server-only'
 
-import { publishWeeklyXPost, weeklyXStatus, WeeklyXError } from '@/lib/core-app/weeklyXPublishing'
+import { beginWeeklyXConnection, publishWeeklyXPost, weeklyXStatus, WeeklyXError } from '@/lib/core-app/weeklyXPublishing'
 import { xLength } from '@/lib/social-newsroom/postBuilder'
 
 /**
  * One-tap "Post to X" for the social newsroom.
  *
- * It reuses the X connection the admin already made for weekly recaps (`/core/week`, stored as an
- * `authAccount` row with provider `x-weekly-publish`), so there are no new API keys to hold. The
- * post goes to WHICHEVER X account that admin connected, which is why the button names the handle.
+ * It posts to the AllFantasy BRAND X account: a connection of its own (`authAccount` provider
+ * `x-brand-newsroom`), made from the newsroom's "Connect AllFantasy X" button through the same X
+ * OAuth app as the weekly recaps. It is kept apart from the admin's personal weekly-recap
+ * connection (`x-weekly-publish`) on purpose: connecting the brand account must never re-point
+ * the personal one, and vice versa. The button still names the handle, because the brand
+ * connection is whichever X account was signed in on x.com when it was made.
  *
  * Nothing here runs on a schedule. A post leaves only when an admin taps the button and confirms.
  *
@@ -36,7 +39,7 @@ export function validNewsroomXPost(requestId: unknown, text: unknown): string | 
 }
 
 const ERROR_TEXT: Record<string, string> = {
-  reconnect: 'Your X connection expired. Reconnect X on the Weekly page, then try again.',
+  reconnect: 'The AllFantasy X connection expired. Use "Change account" to reconnect it, then try again.',
   not_configured: 'X posting is not configured on this server.',
   request_changed: 'This post was already sent with different text. Reload the page.',
   post_failed: 'X refused this post (it may be a duplicate of a recent tweet).',
@@ -47,7 +50,7 @@ export async function postNewsroomX(userId: string, requestId: string, text: str
   const invalid = validNewsroomXPost(requestId, text)
   if (invalid) return { ok: false, error: invalid }
   try {
-    const { url } = await publishWeeklyXPost(userId, { requestId, text: text.trim() })
+    const { url } = await publishWeeklyXPost(userId, { requestId, text: text.trim() }, 'brand')
     return { ok: true, url }
   } catch (err) {
     if (err instanceof WeeklyXError) return { ok: false, error: ERROR_TEXT[err.code] ?? `X posting failed (${err.code}).` }
@@ -56,13 +59,23 @@ export async function postNewsroomX(userId: string, requestId: string, text: str
   }
 }
 
-/** The X account a newsroom post would go to, or null when this admin has none connected. */
+/** The brand X account a newsroom post would go to, or null when none is connected. */
 export async function newsroomXAccount(userId: string | null): Promise<{ handle: string } | null> {
   if (!userId) return null
   try {
-    const status = await weeklyXStatus(userId)
+    const status = await weeklyXStatus(userId, 'brand')
     return status.configured && status.connected && status.handle ? { handle: status.handle } : null
   } catch {
     return null
+  }
+}
+
+/** Start connecting the brand X account. Returns X's consent URL; the callback comes back to the newsroom. */
+export async function beginNewsroomXConnection(userId: string): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
+  try {
+    return { ok: true, url: await beginWeeklyXConnection(userId, null, 'brand') }
+  } catch (err) {
+    if (err instanceof WeeklyXError) return { ok: false, error: ERROR_TEXT[err.code] ?? `Could not start the X connection (${err.code}).` }
+    return { ok: false, error: 'Could not start the X connection.' }
   }
 }

@@ -1,11 +1,10 @@
 "use client"
 
-import Link from "next/link"
 import { createContext, useContext, useMemo, useRef, useState, useTransition } from "react"
 
 import type { NewsroomGame, NewsroomHighlight, NewsroomStory } from "@/lib/social-newsroom/loadNewsroom"
 import { easternTime, SOCIAL_CHAR_LIMITS, SOCIAL_PLATFORM_LABELS, xLength, type SocialPost } from "@/lib/social-newsroom/postBuilder"
-import { draftFunVariants, postToX } from "./actions"
+import { connectBrandX, draftFunVariants, postToX } from "./actions"
 
 /** The X account "Post to X" would post to, or null when the signed-in account has none connected. */
 const XAccountContext = createContext<{ handle: string } | null>(null)
@@ -62,9 +61,9 @@ function PostToXButton({ text, fits }: { text: string; fits: boolean }) {
 
   if (!account) {
     return (
-      <Link href="/core/week" className="text-xs text-white/45 underline" title="Connect an X account on the Weekly page to post from here">
-        Connect X
-      </Link>
+      <span className="text-xs text-white/40" title="Connect the AllFantasy X account at the top of the page to post from here">
+        X not connected
+      </span>
     )
   }
   if (url) {
@@ -96,6 +95,44 @@ function PostToXButton({ text, fits }: { text: string; fits: boolean }) {
         {pending ? "Posting…" : `Post to @${account.handle}`}
       </button>
     </span>
+  )
+}
+
+/**
+ * The brand X connection. It is separate from the personal weekly-recap connection, so connecting
+ * here never changes which account the weekly recaps post to. X authorises whichever account is
+ * signed in on x.com, hence the instruction to sign in as AllFantasy first.
+ */
+function BrandXBar({ account }: { account: { handle: string } | null }) {
+  const [pending, start] = useTransition()
+  const [error, setError] = useState<string | null>(null)
+  const connect = () => {
+    setError(null)
+    start(async () => {
+      const res = await connectBrandX()
+      if (res.ok) window.location.href = res.url
+      else setError(res.error)
+    })
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] p-3 text-xs text-white/65">
+      {account ? (
+        <span>
+          Posting as <b className="text-white">@{account.handle}</b>. Each post goes out only after you confirm it.
+        </span>
+      ) : (
+        <span>Connect the AllFantasy X account to post from here. Sign in to that account on x.com first.</span>
+      )}
+      <button
+        type="button"
+        onClick={connect}
+        disabled={pending}
+        className="rounded-lg border border-white/25 px-2.5 py-1 font-bold text-white hover:border-white/50 disabled:opacity-40"
+      >
+        {pending ? "Opening X…" : account ? "Change account" : "Connect AllFantasy X"}
+      </button>
+      {error && <span className="text-rose-300">{error}</span>}
+    </div>
   )
 }
 
@@ -364,11 +401,7 @@ export function NewsroomBoard({
   return (
     <XAccountContext.Provider value={xAccount}>
       <div className="flex flex-col gap-4">
-        <p className="text-xs text-white/55">
-          {xAccount
-            ? `"Post to @${xAccount.handle}" posts to that X account after you confirm. Nothing posts on its own.`
-            : "To post from here, connect an X account on the Weekly page (/core/week) while signed in to the app."}
-        </p>
+        <BrandXBar account={xAccount} />
         <div className="flex flex-wrap gap-2 text-sm">
           {(
             [
