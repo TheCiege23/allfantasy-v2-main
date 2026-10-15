@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import {
   breakingStoryKey,
   classifyBreakingHeadline,
+  correctedNewsSport,
   isCollegeStoryForProSport,
   teamNickname,
   teamsMentioned,
@@ -106,27 +107,44 @@ describe('breakingStoryKey', () => {
   })
 })
 
-describe('isCollegeStoryForProSport', () => {
-  // Real rows from production, 2026-10-15: ESPN's NHL feed and NewsAPI's NFL default.
-  it('flags college stories filed under a pro league', () => {
-    expect(
-      isCollegeStoryForProSport('NHL', 'https://www.espn.com/college-sports/story/_/id/50189567/arizona-state-hockey-coach-exits-amid-probe-collapse'),
-    ).toBe(true)
-    expect(
-      isCollegeStoryForProSport(
-        'NFL',
-        'https://sports.yahoo.com/college-sports/article/lsu-soccers-jocelyn-olliverre-jazmin-ferguson-become-first-5th-year-seniors-215400350.html',
-      ),
-    ).toBe(true)
-    expect(isCollegeStoryForProSport('nba', 'https://www.espn.com/mens-college-basketball/story/_/id/1/x')).toBe(true)
+describe('college stories under a pro sport', () => {
+  // Real URLs from production rows, 2026-10-15.
+  const ASU_HOCKEY = 'https://www.espn.com/college-sports/story/_/id/50189567/arizona-state-hockey-coach-exits-amid-probe-collapse'
+  const LSU_SOCCER =
+    'https://sports.yahoo.com/college-sports/article/lsu-soccers-jocelyn-olliverre-jazmin-ferguson-become-first-5th-year-seniors-215400350.html'
+  const CFB = [
+    'https://sports.yahoo.com/college-football/article/heisman-watch-is-it-already-jeremiah-smiths-award-to-lose-after-just-6-weeks-134531451.html',
+    'https://www.cbssports.com/college-football/news/michigan-alex-bauman-jeremiah-earby-transfer-portal/',
+    'https://www.foxsports.com/stories/college-football/joel-klatt-show-college-football-playoff-predictions',
+    'https://www.sportingnews.com/us/ncaa-football/news/college-football-pressure-bryce-underwood-lincoln-riley-sec/47761a40142b13e5bad05d0b',
+    'https://www.thescore.com/ncaaf/news/3584634/oregons-lanning-rips-nfl-players-returning-to-college-unfair-to-the-sport',
+  ]
+
+  it('moves college football and basketball to NCAAF / NCAAB', () => {
+    for (const url of CFB) expect(correctedNewsSport('NFL', url)).toBe('NCAAF')
+    expect(correctedNewsSport('NBA', 'https://www.espn.com/mens-college-basketball/story/_/id/1/x')).toBe('NCAAB')
   })
 
-  it('keeps pro stories and every story under a college sport', () => {
-    expect(isCollegeStoryForProSport('MLB', 'https://www.espn.com/mlb/story/_/id/50181619/phillies-hire-don-mattingly-2-year-deal')).toBe(false)
-    expect(isCollegeStoryForProSport('NHL', 'https://www.espn.com/nhl/story/_/id/1/collegeville-native-signs')).toBe(false)
-    expect(isCollegeStoryForProSport('NCAAB', 'https://www.espn.com/mens-college-basketball/story/_/id/50182031/florida-todd-golden')).toBe(false)
-    expect(isCollegeStoryForProSport('NCAAF', 'https://www.espn.com/college-sports/story/_/id/1/nil')).toBe(false)
-    expect(isCollegeStoryForProSport('NHL', null)).toBe(false)
-    expect(isCollegeStoryForProSport('NHL', 'not a url')).toBe(false)
+  it('drops college sports outside the seven', () => {
+    expect(correctedNewsSport('NHL', ASU_HOCKEY)).toBeNull()
+    expect(correctedNewsSport('NFL', LSU_SOCCER)).toBeNull()
+  })
+
+  it('leaves pro stories, college sports and unreadable URLs alone', () => {
+    expect(correctedNewsSport('MLB', 'https://www.espn.com/mlb/story/_/id/50181619/phillies-hire-don-mattingly-2-year-deal')).toBe('MLB')
+    // A slug is not a section: a pro story whose slug starts with "college-" stays where it is.
+    expect(correctedNewsSport('NFL', 'https://www.espn.com/nfl/story/_/id/1/college-teammates-reunite-in-denver')).toBe('NFL')
+    expect(correctedNewsSport('NFL', 'https://www.espn.com/nfl/story/_/id/2/college-football-coach-joins-bears-staff')).toBe('NFL')
+    expect(correctedNewsSport('NCAAB', 'https://www.espn.com/mens-college-basketball/story/_/id/50182031/florida-todd-golden')).toBe('NCAAB')
+    expect(correctedNewsSport('NCAAF', ASU_HOCKEY)).toBe('NCAAF')
+    expect(correctedNewsSport('NHL', null)).toBe('NHL')
+    expect(correctedNewsSport('NHL', 'not a url')).toBe('NHL')
+  })
+
+  it('flags stored rows that readers must skip', () => {
+    expect(isCollegeStoryForProSport('NHL', ASU_HOCKEY)).toBe(true)
+    expect(isCollegeStoryForProSport('nfl', CFB[0])).toBe(true)
+    expect(isCollegeStoryForProSport('NCAAF', CFB[0])).toBe(false)
+    expect(isCollegeStoryForProSport('NFL', 'https://www.espn.com/nfl/story/_/id/1/college-teammates-reunite-in-denver')).toBe(false)
   })
 })
