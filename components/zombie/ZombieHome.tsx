@@ -240,7 +240,7 @@ export function ZombieHome({ leagueId }: ZombieHomeProps) {
                         {nameOf(s.rosterId)}
                         {isMe ? ' · you' : ''}
                       </span>
-                      <span className="block text-[10px] font-bold uppercase tracking-[0.12em] opacity-70">{chip}</span>
+                      <span className="block text-[11px] font-bold uppercase tracking-[0.12em] opacity-70">{chip}</span>
                     </span>
                   </li>
                 )
