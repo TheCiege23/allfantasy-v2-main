@@ -9,6 +9,7 @@ import { identifyTarget } from './db-target-identity.cjs'
 
 const endpoint = new URL(process.env.DATABASE_URL ?? '').hostname.split('.')[0].replace(/-pooler$/, '')
 const sport = process.env.SG_QA_SPORT === 'NBA' ? 'NBA' : 'NFL'
+const coldPool = process.env.SG_QA_COLD_POOL === '1'
 if (!process.env.SG_QA_ENDPOINT || endpoint !== process.env.SG_QA_ENDPOINT ||
     identifyTarget(process.env.DATABASE_URL ?? '').kind === 'production') {
   throw new Error('An explicitly named, nonproduction QA database branch is required.')
@@ -24,7 +25,7 @@ function browser() {
   const cookies = new Map<string, string>()
   return async (path: string, init: RequestInit = {}) => {
     const response = await fetch(base + path, {
-      ...init, redirect: 'manual', signal: AbortSignal.timeout(180_000),
+      ...init, redirect: 'manual', signal: AbortSignal.timeout(coldPool ? 360_000 : 180_000),
       headers: { ...Object.fromEntries(new Headers(init.headers)),
         cookie: [...cookies].map(([key, value]) => `${key}=${value}`).join('; ') },
     })
@@ -139,8 +140,17 @@ async function main() {
     const draft = await prisma.draftSession.findFirstOrThrow({ where: { leagueId: id },
       orderBy: { createdAt: 'desc' } })
     await prisma.draftSession.update({ where: { id: draft.id }, data: { rounds: 1, timerSeconds: 3600 } })
-    await seedQADraftPool(id)
+    if (coldPool) {
+      if (await prisma.draftPoolCache.count({ where: { leagueId: id } })) {
+        throw new Error('Cold-pool pilot expected an unseeded league')
+      }
+    } else {
+      await seedQADraftPool(id)
+    }
     const pool = await json(commissioner, `/api/leagues/${id}/draft/pool?limit=100`, {})
+    if (coldPool && (pool.body.meta as { source?: string } | undefined)?.source !== 'rebuilt') {
+      throw new Error('Cold-pool pilot did not exercise a provider rebuild')
+    }
     let started = await json(commissioner, `/api/leagues/${id}/draft/session`, {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ action: 'start' }),
@@ -173,7 +183,8 @@ async function main() {
     if (draftIdols < 1) throw new Error('Draft completion did not seed hidden player-bound idols')
     console.log(JSON.stringify({ target: 'isolated Neon branch', sport, created: true, ruleSave: true,
       variant: league.leagueVariant, rosterSeats: 22, inviteJoins: 3, managerRead: true,
-      memberRulesDenied: true, nativeDraftPicks: 22, draftIdols }))
+      memberRulesDenied: true, nativeDraftPicks: 22, draftIdols,
+      draftPool: coldPool ? 'unseeded-provider-build' : 'qa-player-fixture' }))
   } finally {
     for (const id of leagues) {
       await prisma.draftPoolCache.deleteMany({ where: { leagueId: id } })

@@ -182,8 +182,26 @@ export async function seedSGLiveDraftPowers(leagueId: string, playerIds: string[
   const config = season.config as unknown as SGConfig
   const uniqueIds = [...new Set(playerIds)]
   if (uniqueIds.length !== playerIds.length || uniqueIds.length < count) throw new Error('Choose distinct eligible draft players.')
-  const verified = await prisma.player.count({ where: { id: { in: uniqueIds }, sport: config.sport } })
-  if (verified !== uniqueIds.length) throw new Error('Draft pool includes a missing player or a different sport.')
+  const verified = await prisma.player.findMany({ where: { id: { in: uniqueIds }, sport: config.sport },
+    select: { id: true } })
+  const known = new Set(verified.map(player => player.id))
+  const unresolved = uniqueIds.filter(id => !known.has(id))
+  if (unresolved.length) {
+    // Native provider IDs are often not Player primary keys. A completed pick plus live roster
+    // ownership is the authoritative same-league proof for those IDs.
+    const draft = await prisma.draftSession.findFirst({ where: { leagueId, status: 'completed' },
+      orderBy: { completedAt: 'desc' }, select: { id: true } })
+    const [picks, rosters] = await Promise.all([
+      draft ? prisma.draftPick.findMany({ where: { sessionId: draft.id, playerId: { in: unresolved } },
+        select: { playerId: true } }) : Promise.resolve([]),
+      prisma.roster.findMany({ where: { leagueId }, select: { playerData: true } }),
+    ])
+    const picked = new Set(picks.map(pick => pick.playerId))
+    const owned = new Set(rosters.flatMap(roster => getRosterPlayerIds(roster.playerData)))
+    if (unresolved.some(id => !picked.has(id) || !owned.has(id))) {
+      throw new Error('Draft pool includes a missing player or a different sport.')
+    }
+  }
   const merge = buildSGSchedule(config).periods.find(p => p.mode === 'merged')?.period
   if (!merge) throw new Error('A merge period is required.')
   const powers = seedSGDraftIdols({ playerIds, count, allowedKinds: config.enabledPowers, expiresAfterPeriod: merge - 1 })
@@ -345,9 +363,13 @@ export async function activateSGLivePower(leagueId: string, userId: string, mess
   if (row.binding === 'manager') deadline = state.ceremonyAt
   if (row.binding === 'player' && row.playerId) {
     const attached = await prisma.player.findFirst({ where: { id: row.playerId }, select: { team: true, sport: true } })
-    if (!attached?.team || attached.sport !== config.sport) throw new Error('The attached player has no verifiable next game.')
+    const nativePick = attached?.sport !== config.sport ? await prisma.draftPick.findFirst({ where: {
+      playerId: row.playerId, session: { is: { leagueId, status: 'completed' } } },
+      orderBy: { pickedAt: 'desc' }, select: { team: true } }) : null
+    const playerTeam = attached?.sport === config.sport ? attached.team : nativePick?.team
+    if (!playerTeam) throw new Error('The attached player has no verifiable next game.')
     const nextGame = await prisma.gameSchedule.findFirst({ where: { sportType: config.sport, season: league.season,
-      weekOrRound: state.period, startTime: { gt: new Date() }, OR: [{ homeTeam: attached.team }, { awayTeam: attached.team }] },
+      weekOrRound: state.period, startTime: { gt: new Date() }, OR: [{ homeTeam: playerTeam }, { awayTeam: playerTeam }] },
       orderBy: { startTime: 'asc' }, select: { startTime: true } })
     const ownPlayer = ownRoster.redraftRosterId ? await prisma.redraftRosterPlayer.findFirst({ where: {
       rosterId: ownRoster.redraftRosterId, playerId: row.playerId, droppedAt: null }, select: { isLocked: true } }) : null
@@ -553,12 +575,12 @@ export async function executeSGLiveChop(leagueId: string, periodNumber: number) 
     const lostOwnerIds = choppedOwners.map(owner => owner.claimedByUserId).filter((id): id is string => !!id)
     if (lostOwnerIds.length) await tx.survivorGuillotinePower.updateMany({ where: { leagueId,
       binding: 'manager', ownerUserId: { in: lostOwnerIds }, status: 'held' }, data: { status: 'expired' } })
-    for (const power of sealed) {
+    for (const power of config.ceremonyMode === 'hosted' && config.ceremonyPresentation ? [] : sealed) {
       await tx.leagueChatMessage.create({ data: { leagueId, userId: league.userId, type: 'system',
         message: `An immunity idol was played at the period ${periodNumber} chop. ${power.targetRosterId ?? 'A manager'} was protected.`,
         metadata: { survivorGuillotine: true, event: 'idol_revealed', powerId: power.id, targetRosterId: power.targetRosterId } } })
     }
-    if (result.choppedTeamIds.length) {
+    if (result.choppedTeamIds.length && !(config.ceremonyMode === 'hosted' && config.ceremonyPresentation)) {
       const names = result.choppedTeamIds.map(id => {
         const team = choppedOwners.find(owner => owner.externalId === id)
         return team?.teamName || team?.ownerName || id
@@ -567,7 +589,7 @@ export async function executeSGLiveChop(leagueId: string, periodNumber: number) 
         message: `Survivor Guillotine period ${periodNumber} chop: ${names.join(', ')} eliminated. Their players enter league waivers.`,
         metadata: { survivorGuillotine: true, event: 'chop', period: periodNumber, rosterIds: result.choppedTeamIds } } })
     }
-    if (result.placements.length) await tx.leagueChatMessage.create({ data: { leagueId, userId: league.userId,
+    if (result.placements.length && !(config.ceremonyMode === 'hosted' && config.ceremonyPresentation)) await tx.leagueChatMessage.create({ data: { leagueId, userId: league.userId,
       type: 'system', message: `Survivor Guillotine final placements are set for period ${periodNumber}.`,
       metadata: { survivorGuillotine: true, event: 'final_placements', period: periodNumber, rosterIds: result.placements } } })
     const finished = await tx.survivorGuillotineLeague.updateMany({ where: { leagueId, revision: season.revision },
@@ -580,6 +602,8 @@ export async function executeSGLiveChop(leagueId: string, periodNumber: number) 
           teams, matchups: state.matchups, protectedTeamIds: sealed.map(p => p.targetRosterId).filter((id): id is string => !!id),
           gauntletImmuneTribeId: state.gauntletImmuneTribeId ?? null,
           completedAt: now.toISOString(),
+          hostedCeremony: config.ceremonyMode === 'hosted' && config.ceremonyPresentation
+            ? { stage: 0, updatedAt: now.toISOString() } : null,
         } } as Prisma.InputJsonValue,
         periodState: { ...state, ceremonyStarted: true, placements: result.placements,
           chopSnapshot: { teams, protectedTeamIds: sealed.map(p => p.targetRosterId).filter((id): id is string => !!id),
