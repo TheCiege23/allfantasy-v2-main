@@ -51,6 +51,12 @@ const TRADE = /\b(trades?|traded|acquires?|acquired|deal sends|ships|shipped|dea
 
 const SIGNING = /\b(signs?|signed|re-signs?|re-signed|agrees? to|agreed to|extension|extend(s|ed)?|lands? .+ deal|inks?|inked)\b/i
 const RELEASE = /\b(releases?|released|waives?|waived|cuts?|designated for assignment|DFA'?d|parts? ways|parted ways)\b/i
+/**
+ * "Release" as a noun or of a THING, not of a player. "Packers' Josh Jacobs sues to block release of
+ * records, video of altercation" went out as an NFL "Roster move" alert on 2026-10-15.
+ */
+const RELEASE_NOT_ROSTER =
+  /\b(release of|press release|release date|(releases?|released) (a |an |the |his |her |their |its )?(statement|video|footage|records?|documents?|details|names?|schedule|report|findings|album|song|book|film|trailer|data|audio|photos?|images?))\b/gi
 const COACHING =
   /\b(fires?|fired|dismiss(es|ed)?|hires?|hired|names? .{0,40}(coach|manager|coordinator|general manager|GM|president)|steps? down|stepped down|resigns?|resigned|out as)\b/i
 const SUSPENSION = /\b(suspend(s|ed)?|suspension|banned)\b/i
@@ -83,7 +89,8 @@ export function classifyBreakingHeadline(title: string, description?: string | n
   if (COACHING.test(v)) return { kind: 'coaching', tier: 'major', confidence }
   if (RETIREMENT.test(v) && !JERSEY_RETIREMENT.test(v)) return { kind: 'retirement', tier: 'major', confidence }
   if (SIGNING.test(v)) return { kind: 'signing', tier: BIG_SIGNING.test(text) ? 'major' : 'notable', confidence }
-  if (RELEASE.test(v)) return { kind: 'release', tier: 'notable', confidence }
+  // Strip the non-roster phrases, then look again: "release statement and waive linebacker" is still a roster move.
+  if (RELEASE.test(v.replace(RELEASE_NOT_ROSTER, ' '))) return { kind: 'release', tier: 'notable', confidence }
   return null
 }
 

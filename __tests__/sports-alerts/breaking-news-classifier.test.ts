@@ -42,6 +42,9 @@ describe('classifyBreakingHeadline', () => {
     ['Celtics to extend guard Payton Pritchard on 2-year, $44.2M deal', 'signing', 'major'],
     ["Rams' Alaric Jackson has suspension cut to 1 game following appeal", 'suspension', 'major'],
     ['Chicago Fire fire head coach after missing playoffs', 'coaching', 'major'],
+    // "Release" of a player stays a roster move; release OF something does not (next table).
+    ['Browns released veteran tight end on Tuesday', 'release', 'notable'],
+    ['Steelers release statement and waive linebacker', 'release', 'notable'],
   ])('%s → %s/%s', (title, kind, tier) => {
     expect(classifyBreakingHeadline(title)).toMatchObject({ kind, tier })
   })
@@ -65,6 +68,10 @@ describe('classifyBreakingHeadline', () => {
     'Cowboys’ Jerry Jones reportedly still has strong feelings about Micah Parsons trade',
     "Ohio Gov. Mike DeWine signs order letting state's 2022 athletes play in 2026-27",
     'Sources: Alex DeBrincat, Red Wings close in on 7-year extension',
+    // Sent as an NFL "Roster move" alert on 2026-10-15: a lawsuit over releasing records, not a player.
+    "Packers' Josh Jacobs sues to block release of records, video of altercation",
+    'Jaguars release statement on stadium renovation',
+    'NFL sets release date for 2027 schedule',
   ])('is not breaking: %s', (title) => {
     expect(classifyBreakingHeadline(title)).toBeNull()
   })
