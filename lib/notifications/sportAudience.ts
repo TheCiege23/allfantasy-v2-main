@@ -1,19 +1,21 @@
 import 'server-only'
 
-import type { LeagueSport } from '@prisma/client'
-
 import { prisma } from '@/lib/prisma'
 import { isSupportedSport, normalizeToSupportedSport } from '@/lib/sport-scope'
 
 /**
- * Who "plays" a sport: everyone who owns (created or imported) a league in it. The audience for
- * sport-wide alerts — breaking news and live game moments — that are not tied to one roster or one
- * followed team. Followers of the teams involved are added by each sender on top of this.
+ * Who "plays" a sport: everyone who is IN a league of that sport, by the same four-branch
+ * membership predicate the dashboard league list uses (lib/dashboard/get-dashboard-league-list.ts):
+ * the league's owner, a redraft member, a claimed team, or a roster whose platform user id IS the
+ * AllFantasy user id (rewritten on claim). The audience for sport-wide alerts — breaking news and
+ * live game moments — that are not tied to one roster or one followed team.
  *
- * ⚠ OWNERS ONLY, AND THAT IS A KNOWN UNDER-COUNT. `League.userId` is the account that brought the
- * league in; league-mates who joined through an invite are not listed here. They are still reached
- * through their own team follows, and this is the one membership signal that is cheap, indexed and
- * the same shape for every platform.
+ * 🛑 THIS WAS OWNERS ONLY (`League.userId`), WHICH SKIPS EVERY LEAGUE-MATE WHO JOINED BY INVITE OR
+ * CLAIMED A TEAM. Measured on production 2026-10-15: owners-only counts 47 NFL users, membership
+ * counts 51 — four people who play NFL here and would never have heard about a trade.
+ *
+ * The roster branch joins `app_users`, because an unclaimed roster holds the PROVIDER's id (a
+ * Sleeper numeric id), which must never be read as one of ours.
  *
  * Cached per process for 10 minutes: a busy night asks this for every close game.
  */
@@ -30,14 +32,23 @@ export async function listUserIdsPlayingSport(sport: string): Promise<string[]> 
   const hit = cache.get(key)
   if (hit && Date.now() - hit.at < CACHE_MS) return hit.ids
   try {
-    const rows = await prisma.league.findMany({
-      where: { sport: key as LeagueSport },
-      distinct: ['userId'],
-      select: { userId: true },
-      orderBy: { userId: 'asc' },
-      take: SPORT_AUDIENCE_MAX,
-    })
-    const ids = rows.map((r) => r.userId).filter(Boolean)
+    const rows = await prisma.$queryRaw<Array<{ uid: string }>>`
+      SELECT DISTINCT uid FROM (
+        SELECT l."userId" AS uid FROM leagues l WHERE l.sport::text = ${key}
+        UNION
+        SELECT m."userId" FROM redraft_league_members m JOIN leagues l ON l.id = m."leagueId" WHERE l.sport::text = ${key}
+        UNION
+        SELECT t."claimedByUserId" FROM league_teams t JOIN leagues l ON l.id = t."leagueId"
+          WHERE l.sport::text = ${key} AND t."claimedByUserId" IS NOT NULL
+        UNION
+        SELECT r."platformUserId" FROM rosters r JOIN leagues l ON l.id = r."leagueId"
+          JOIN app_users u ON u.id = r."platformUserId" WHERE l.sport::text = ${key}
+      ) members
+      WHERE uid IS NOT NULL
+      ORDER BY uid
+      LIMIT ${SPORT_AUDIENCE_MAX}
+    `
+    const ids = rows.map((r) => r.uid).filter(Boolean)
     cache.set(key, { at: Date.now(), ids })
     return ids
   } catch (err) {

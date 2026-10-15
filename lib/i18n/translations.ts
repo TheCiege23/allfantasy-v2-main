@@ -3422,7 +3422,7 @@ export const translations: Record<string, Record<string, string>> = {
     "follows.sport.NCAAB": "College Basketball",
     "follows.settings.title": "Teams you follow",
     "follows.settings.body":
-      "News and injury updates for these teams and their players, plus halftime and final scores for NFL and college football — not the whole league. News and scores each have their own \"Teams you follow\" switch below.",
+      "News and injury updates for these teams and their players, plus live game moments — halftime, close finishes, overtime and final scores — in every sport. News and scores each have their own \"Teams you follow\" switch below.",
     "follows.settings.none": "You're not following any teams yet.",
     "follows.settings.add": "Add teams",
     "follows.settings.retry": "Try again",
@@ -3450,6 +3450,10 @@ export const translations: Record<string, Record<string, string>> = {
     "settings.notifications.leagues.hideCategories": "Hide categories",
     "settings.notifications.leagues.muteIndividual": "Mute individual categories",
     "settings.notifications.leagues.muteCategory": "Mute {{label}}",
+    "settings.notifications.leagues.search": "Search your leagues",
+    "settings.notifications.leagues.showAll": "Show all {{count}} leagues",
+    "settings.notifications.leagues.showFewer": "Show fewer",
+    "settings.notifications.leagues.noMatch": "No league matches \"{{query}}\".",
 
     "settings.push.notConfigured": "Push alerts aren't available yet — the server isn't configured to send them.",
     "settings.push.title": "Game-day alerts",
