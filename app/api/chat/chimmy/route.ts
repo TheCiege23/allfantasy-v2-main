@@ -213,6 +213,9 @@ import {
   parseOrchestrationResponseSections,
 } from '@/lib/chimmy-orchestration'
 import { deriveWantFromIntent } from '@/lib/decision-os/grounding/intentToWant'
+import { readStrategy } from '@/lib/decision-os/value-v2/strategyStore'
+import { strategyPrismaPort } from '@/lib/decision-os/value-v2/strategyPrisma'
+import { strategyPrompt } from '@/lib/decision-os/value-v2/strategyPrompt'
 import { resolvePairedHalf } from '@/lib/core-app/leaguePairing'
 import { renderConnectedFranchiseGrounding } from '@/lib/chimmy/connectedFranchiseGrounding'
 
@@ -1529,6 +1532,12 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
     if (lce.ok) normalizedLeagueContext = lce.context
   }
 
+  /* The owner's CONFIRMED league strategy (value-v2). Absent or unreadable → no block, never a guess. */
+  const savedStrategyPrompt = normalizedLeagueContext && leagueId && userId
+    ? await readStrategy({ userId, leagueId, season: normalizedLeagueContext.season }, strategyPrismaPort)
+      .then(strategyPrompt).catch(() => undefined)
+    : undefined
+
   const sportExplicit =
     typeof sportRaw === 'string' && sportRaw.trim().length > 0
       ? normalizeToSupportedSport(sportRaw)
@@ -2412,6 +2421,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
   }
 
   const combinedMemorySection = [
+    savedStrategyPrompt,
     memPrompt.contextBlock,
     homeSignalsBlock ?? undefined,
     coreSurfaceBlock ?? undefined,
@@ -3081,11 +3091,12 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
        *
        * And Chimmy's own track record with this user and with everyone, so "how good are your
        * picks?" is answered from graded calls instead of invented. Per-user, so it rides here,
-       * after the cached instructions — never inside them.
+       * after the cached instructions — never inside them. The saved league strategy too.
        */
       styleLine: [
         personalizationDirectives,
         renderTrackRecordPromptLine(chimmyTrackRecordFor(await readAdviceLearningSnapshot(), userId ?? null)),
+        savedStrategyPrompt,
         /* Fun mode reaches the path that answers first too, not only the fallback prompt. */
         isFunModeTone(tone) ? `RESPONSE STYLE — FUN MODE:\n${FUN_MODE_DIRECTIVE}` : null,
       ]
