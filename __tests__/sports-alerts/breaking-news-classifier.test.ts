@@ -35,6 +35,11 @@ describe('classifyBreakingHeadline', () => {
     ['NFL suspends linebacker three games for hit', 'suspension', 'major'],
     ['Ravens WR suffers torn ACL, out for season', 'injury', 'major'],
     ['Legendary goalie announces retirement after 18 seasons', 'retirement', 'major'],
+    // Real breaking stories from production news, 2026-10-15:
+    ['Phillies hire Don Mattingly to 2-year deal as manager', 'coaching', 'major'],
+    ['Celtics to extend guard Payton Pritchard on 2-year, $44.2M deal', 'signing', 'major'],
+    ["Rams' Alaric Jackson has suspension cut to 1 game following appeal", 'suspension', 'major'],
+    ['Chicago Fire fire head coach after missing playoffs', 'coaching', 'major'],
   ])('%s → %s/%s', (title, kind, tier) => {
     expect(classifyBreakingHeadline(title)).toMatchObject({ kind, tier })
   })
@@ -50,6 +55,14 @@ describe('classifyBreakingHeadline', () => {
     'Texans expected to sign free agent',
     'Celtics to retire No. 34 jersey',
     'Takeaways from the Texans blockbuster trade',
+    // Real false positives from production news, 2026-10-15:
+    'Chicago Fire FC vs. Philadelphia Union - Game Highlights',
+    "Men's NCAA basketball 2026-27 coaching hot seat, retirement guide",
+    'McAvoy scores in his 1st game back from a suspension to lead the Bruins past the Sharks 6-3',
+    "Terry Bradshaw hints at retirement, says his time as an NFL analyst is 'coming to an end'",
+    'Cowboys’ Jerry Jones reportedly still has strong feelings about Micah Parsons trade',
+    "Ohio Gov. Mike DeWine signs order letting state's 2022 athletes play in 2026-27",
+    'Sources: Alex DeBrincat, Red Wings close in on 7-year extension',
   ])('is not breaking: %s', (title) => {
     expect(classifyBreakingHeadline(title)).toBeNull()
   })

@@ -37,7 +37,14 @@ export type BreakingClassification = {
 
 /** Analysis, opinion, betting, fantasy and speculation — never breaking, whatever verb they contain. */
 const NOT_NEWS =
-  /\b(takeaways?|rankings?|mock|fantasy|grades?|graded|predictions?|(expert|staff|our|my|best) picks|pick'?em|odds|bets?|betting|parlays?|props?|what we learned|things to know|winners and losers|overreactions?|debate|hot takes?|should|could|would|might|may|why|how|what|who|which|whether|if|listen|watch|podcast|quiz|stock (up|down)|preview|recap|film study|mailbag|power poll|buzz|rumou?rs?|rumou?red|speculation|interest(ed)?|targets?|candidates?|eyeing|linked to|in talks|talks|exploring|consider(s|ing)?|monitor(s|ing)?|wants?|hopes?|expects?|expected|likely|possible|potential|plans? to|open to|best|worst|top \d+)\b/i
+  /\b(takeaways?|rankings?|mock|fantasy|grades?|graded|predictions?|(expert|staff|our|my|best) picks|pick'?em|odds|bets?|betting|parlays?|props?|what we learned|things to know|winners and losers|overreactions?|debate|hot takes?|should|could|would|might|may|why|how|what|who|which|whether|if|listen|watch|podcast|quiz|stock (up|down)|preview|recap|film study|mailbag|power poll|buzz|rumou?rs?|rumou?red|speculation|interest(ed)?|targets?|candidates?|eyeing|linked to|in talks|talks|exploring|consider(s|ing)?|monitor(s|ing)?|wants?|hopes?|expects?|expected|likely|possible|potential|plans? to|open to|best|worst|top \d+|guide|hot seat|highlights|vs\.?|hints?|hinted|feelings|still|back from|returns? from|game back|reflects?|recalls?|looks? back|anniversary|years? ago|close in on|closing in|nears?|nearing|signs (an )?(order|bill|law|petition))\b/i
+
+/**
+ * Team names that read as a breaking verb. "Chicago Fire FC vs. Philadelphia Union - Game
+ * Highlights" was classified a coaching change (measured on production news 2026-10-15) because
+ * "Fire" matched "fires". Stripped before the verb tests, never before NOT_NEWS.
+ */
+const VERB_LIKE_TEAM_NAMES = /\b(Chicago Fire( FC)?|Fire FC)\b/g
 
 /** A completed trade, not the market around one. */
 const TRADE = /\b(trades?|traded|acquires?|acquired|deal sends|ships|shipped|dealt)\b/i
@@ -66,15 +73,17 @@ export function classifyBreakingHeadline(title: string, description?: string | n
   if (NOT_NEWS.test(t)) return null
 
   const confidence: BreakingClassification['confidence'] = REPORT.test(t) ? 'report' : 'confirmed'
-  const text = `${t} ${description ?? ''}`
+  // The verb tests read the headline with verb-like team names removed.
+  const v = t.replace(VERB_LIKE_TEAM_NAMES, ' ')
+  const text = `${v} ${description ?? ''}`
 
-  if (MAJOR_INJURY.test(t)) return { kind: 'injury', tier: 'major', confidence }
-  if (TRADE.test(t)) return { kind: 'trade', tier: 'major', confidence }
-  if (SUSPENSION.test(t)) return { kind: 'suspension', tier: 'major', confidence }
-  if (COACHING.test(t)) return { kind: 'coaching', tier: 'major', confidence }
-  if (RETIREMENT.test(t) && !JERSEY_RETIREMENT.test(t)) return { kind: 'retirement', tier: 'major', confidence }
-  if (SIGNING.test(t)) return { kind: 'signing', tier: BIG_SIGNING.test(text) ? 'major' : 'notable', confidence }
-  if (RELEASE.test(t)) return { kind: 'release', tier: 'notable', confidence }
+  if (MAJOR_INJURY.test(v)) return { kind: 'injury', tier: 'major', confidence }
+  if (TRADE.test(v)) return { kind: 'trade', tier: 'major', confidence }
+  if (SUSPENSION.test(v)) return { kind: 'suspension', tier: 'major', confidence }
+  if (COACHING.test(v)) return { kind: 'coaching', tier: 'major', confidence }
+  if (RETIREMENT.test(v) && !JERSEY_RETIREMENT.test(v)) return { kind: 'retirement', tier: 'major', confidence }
+  if (SIGNING.test(v)) return { kind: 'signing', tier: BIG_SIGNING.test(text) ? 'major' : 'notable', confidence }
+  if (RELEASE.test(v)) return { kind: 'release', tier: 'notable', confidence }
   return null
 }
 
