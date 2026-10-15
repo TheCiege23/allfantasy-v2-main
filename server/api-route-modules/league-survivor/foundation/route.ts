@@ -555,8 +555,7 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
     }
     const result = await playStealThree(leagueId, userId, { idolId: body.idolId, playerRowIds: body.playerRowIds, dropRowIds: body.dropRowIds })
     if (!result.ok) return NextResponse.json(result, { status: result.status })
-    await Promise.allSettled(result.value.raidedUserIds.map(raidedUserId => sendPushToUser(raidedUserId, { title: 'Your Survivor roster was raided', body: 'Open your league to see the move. You have top waiver priority this week.', href: `/league/${leagueId}` })))
-    return NextResponse.json({ ok: true, playerNames: result.value.playerNames, week: result.value.week })
+    return NextResponse.json({ ok: true, playerNames: result.value.playerNames, dropNames: result.value.dropNames, week: result.value.week })
   }
 
   // Resolve a council id for lifecycle actions: explicit body id, else the active council,
