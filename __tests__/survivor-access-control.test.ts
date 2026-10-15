@@ -79,3 +79,10 @@ describe('Survivor blind-mode bypass prevention', () => {
     expect(canSeeSurvivorChannel(access, { channelType: 'tribe', tribeId: null })).toBe(false)
   })
 })
+
+it('honors hideIdolsFromCommissioner for a non-playing host while preserving council control', () => {
+  const access = buildSurvivorAccessContextFromSnapshot({ leagueId: 'l', userId: 'host', role: 'commissioner', settings: { hideIdolsFromCommissioner: true }, player: null, roster: null })
+  expect(access.decisions.canSeeHiddenIdolAssignments).toBe(false)
+  expect(access.decisions.canSeePrivateVotes).toBe(false)
+  expect(access.decisions.canPerformSensitiveHostAction).toBe(true)
+})

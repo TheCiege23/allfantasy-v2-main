@@ -3,6 +3,7 @@ import { normalizeTeamAbbrev } from '@/lib/team-abbrev';
 import { createHash } from 'crypto';
 import { SUPPORTED_SPORTS, type SupportedSport } from '@/lib/sport-scope';
 import { ESPN_SITE_API_BASE } from '@/lib/providers/espnUrls'
+import { correctedNewsSport } from '@/lib/news/breakingNews'
 
 const NEWS_FRESHNESS_MS = 30 * 60 * 1000;
 
@@ -275,6 +276,11 @@ async function mapEspnNewsJsonToArticles(
 
     const title = String(a.headline || a.title || '');
     const desc = String(a.description || '');
+    // ESPN's pro feeds carry college stories (the NHL feed runs college hockey, the NFL feed college
+    // football). File them by their section: NCAAF / NCAAB, or not at all for a sport outside the seven.
+    const webUrl = (a.links as { web?: { href?: string } } | undefined)?.web?.href || '';
+    const articleSport = correctedNewsSport(sport, webUrl) as SupportedSport | null;
+    if (!articleSport) continue;
     const combinedText = `${title} ${desc}`;
     const allTeams = extractAllTeamsFromText(combinedText);
     const playerNames = extractPlayerNamesFromText(combinedText, knownPlayers);
@@ -283,7 +289,7 @@ async function mapEspnNewsJsonToArticles(
 
     results.push({
       id: String(a.id || ''),
-      sport,
+      sport: articleSport,
       title,
       description: desc || null,
       content: String(a.story || a.description || ''),
@@ -456,6 +462,9 @@ async function parseNewsAPIResponse(
     const description = a.description ? String(a.description) : null;
     const articleContent = a.content ? String(a.content) : null;
     const articleUrl = String(a.url || '');
+    // impliedSport is a default, not a reading of the article: file a college story by its section.
+    const articleSport = correctedNewsSport(impliedSport, articleUrl) as SupportedSport | null;
+    if (!articleSport) continue;
     const publishedAt = String(a.publishedAt || '');
     const author = a.author ? String(a.author) : null;
     const imageUrl = a.urlToImage ? String(a.urlToImage) : null;
@@ -475,7 +484,7 @@ async function parseNewsAPIResponse(
 
     results.push({
       id: articleId,
-      sport: impliedSport,
+      sport: articleSport,
       title,
       description,
       content: articleContent,

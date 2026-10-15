@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { randomInt, randomUUID } from 'node:crypto'
+import { createHash, randomInt, randomUUID } from 'node:crypto'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { addPlayerToRosterData, getRosterPlayerIds, removePlayerFromRosterData } from '@/lib/waiver-wire/roster-utils'
@@ -182,8 +182,26 @@ export async function seedSGLiveDraftPowers(leagueId: string, playerIds: string[
   const config = season.config as unknown as SGConfig
   const uniqueIds = [...new Set(playerIds)]
   if (uniqueIds.length !== playerIds.length || uniqueIds.length < count) throw new Error('Choose distinct eligible draft players.')
-  const verified = await prisma.player.count({ where: { id: { in: uniqueIds }, sport: config.sport } })
-  if (verified !== uniqueIds.length) throw new Error('Draft pool includes a missing player or a different sport.')
+  const verified = await prisma.player.findMany({ where: { id: { in: uniqueIds }, sport: config.sport },
+    select: { id: true } })
+  const known = new Set(verified.map(player => player.id))
+  const unresolved = uniqueIds.filter(id => !known.has(id))
+  if (unresolved.length) {
+    // Native provider IDs are often not Player primary keys. A completed pick plus live roster
+    // ownership is the authoritative same-league proof for those IDs.
+    const draft = await prisma.draftSession.findFirst({ where: { leagueId, status: 'completed' },
+      orderBy: { completedAt: 'desc' }, select: { id: true } })
+    const [picks, rosters] = await Promise.all([
+      draft ? prisma.draftPick.findMany({ where: { sessionId: draft.id, playerId: { in: unresolved } },
+        select: { playerId: true } }) : Promise.resolve([]),
+      prisma.roster.findMany({ where: { leagueId }, select: { playerData: true } }),
+    ])
+    const picked = new Set(picks.map(pick => pick.playerId))
+    const owned = new Set(rosters.flatMap(roster => getRosterPlayerIds(roster.playerData)))
+    if (unresolved.some(id => !picked.has(id) || !owned.has(id))) {
+      throw new Error('Draft pool includes a missing player or a different sport.')
+    }
+  }
   const merge = buildSGSchedule(config).periods.find(p => p.mode === 'merged')?.period
   if (!merge) throw new Error('A merge period is required.')
   const powers = seedSGDraftIdols({ playerIds, count, allowedKinds: config.enabledPowers, expiresAfterPeriod: merge - 1 })
@@ -345,9 +363,13 @@ export async function activateSGLivePower(leagueId: string, userId: string, mess
   if (row.binding === 'manager') deadline = state.ceremonyAt
   if (row.binding === 'player' && row.playerId) {
     const attached = await prisma.player.findFirst({ where: { id: row.playerId }, select: { team: true, sport: true } })
-    if (!attached?.team || attached.sport !== config.sport) throw new Error('The attached player has no verifiable next game.')
+    const nativePick = attached?.sport !== config.sport ? await prisma.draftPick.findFirst({ where: {
+      playerId: row.playerId, session: { is: { leagueId, status: 'completed' } } },
+      orderBy: { pickedAt: 'desc' }, select: { team: true } }) : null
+    const playerTeam = attached?.sport === config.sport ? attached.team : nativePick?.team
+    if (!playerTeam) throw new Error('The attached player has no verifiable next game.')
     const nextGame = await prisma.gameSchedule.findFirst({ where: { sportType: config.sport, season: league.season,
-      weekOrRound: state.period, startTime: { gt: new Date() }, OR: [{ homeTeam: attached.team }, { awayTeam: attached.team }] },
+      weekOrRound: state.period, startTime: { gt: new Date() }, OR: [{ homeTeam: playerTeam }, { awayTeam: playerTeam }] },
       orderBy: { startTime: 'asc' }, select: { startTime: true } })
     const ownPlayer = ownRoster.redraftRosterId ? await prisma.redraftRosterPlayer.findFirst({ where: {
       rosterId: ownRoster.redraftRosterId, playerId: row.playerId, droppedAt: null }, select: { isLocked: true } }) : null
@@ -448,7 +470,12 @@ export async function executeSGLiveChop(leagueId: string, periodNumber: number) 
   const period = buildSGSchedule(config).periods.find(p => p.period === periodNumber)
   const state = readSGPeriodState(season.periodState)
   if (!period || !state || state.period !== periodNumber) throw new Error('Period rules are unavailable.')
-  if (state.ceremonyStarted) throw new Error('This ceremony has already completed.')
+  const historyEntry = (season.periodHistory as Record<string, Record<string, unknown>>)[String(periodNumber)]
+  const hosted = config.ceremonyMode === 'hosted' && config.ceremonyPresentation
+  const pendingHosted = hosted && historyEntry?.pendingCommit === true
+  const revealStage = (historyEntry?.hostedCeremony as { stage?: number } | undefined)?.stage
+  if (state.ceremonyStarted && !pendingHosted) throw new Error('This ceremony has already completed.')
+  if (pendingHosted && revealStage !== 2) throw new Error('Advance the hosted ceremony before committing its chop.')
   const immunityLock = config.immunityDeadline === 'custom' ? state.immunityDeadlineAt : state.ceremonyAt
   if (period.chops && (!immunityLock || !Number.isFinite(Date.parse(immunityLock)) || Date.now() < Date.parse(immunityLock))) {
     throw new Error('The immunity deadline has not passed; the chop cannot start yet.')
@@ -510,6 +537,45 @@ export async function executeSGLiveChop(leagueId: string, periodNumber: number) 
       reasons: [`Commissioner resolved tie: ${decision.reason}`] }
   }
   if (result.status !== 'resolved') throw new Error(result.reasons.join(' '))
+  const planFingerprint = createHash('sha256').update(JSON.stringify({
+    result, scores: Object.fromEntries(scoreById), teams, matchups: state.matchups,
+    powerIds: sealed.map(power => power.id).sort(),
+    rosters: active.map(roster => [roster.id, roster.updatedAt.toISOString()]).sort(([a], [b]) => a.localeCompare(b)),
+  })).digest('hex')
+  if (hosted && !pendingHosted) {
+    const now = new Date().toISOString()
+    const saved = await prisma.survivorGuillotineLeague.updateMany({ where: { leagueId, revision: season.revision },
+      data: { revision: { increment: 1 },
+        periodHistory: { ...(season.periodHistory as Record<string, unknown>), [String(periodNumber)]: {
+          period: periodNumber, mode: period.mode, immuneTribeId: result.immuneTribeId,
+          choppedTeamIds: result.choppedTeamIds, savedTeamIds: result.savedTeamIds,
+          placements: result.placements, scores: Object.fromEntries(scoreById), reasons: result.reasons,
+          teams, matchups: state.matchups, protectedTeamIds: sealed.map(power => power.targetRosterId).filter((id): id is string => !!id),
+          gauntletImmuneTribeId: state.gauntletImmuneTribeId ?? null,
+          hostedCeremony: { stage: 0, updatedAt: now }, pendingCommit: true, planFingerprint,
+        } } as Prisma.InputJsonValue,
+        periodState: { ...state, ceremonyStarted: true } as unknown as Prisma.InputJsonValue } })
+    if (saved.count !== 1) throw new Error('Season changed before Chop Night; retry.')
+    return { ...result, hostedPrepared: true }
+  }
+  if (pendingHosted && historyEntry.planFingerprint !== planFingerprint) {
+    await prisma.$transaction(async tx => {
+      const restarted = await tx.survivorGuillotineLeague.updateMany({ where: { leagueId, revision: season.revision },
+        data: { revision: { increment: 1 },
+          periodHistory: { ...(season.periodHistory as Record<string, unknown>), [String(periodNumber)]: {
+            ...historyEntry, immuneTribeId: result.immuneTribeId, choppedTeamIds: result.choppedTeamIds,
+            savedTeamIds: result.savedTeamIds, placements: result.placements,
+            scores: Object.fromEntries(scoreById), reasons: result.reasons, teams,
+            protectedTeamIds: sealed.map(power => power.targetRosterId).filter((id): id is string => !!id),
+            hostedCeremony: { stage: 0, updatedAt: new Date().toISOString() }, planFingerprint,
+          } } as Prisma.InputJsonValue } })
+      if (restarted.count !== 1) throw new Error('Season changed during Chop Night; retry.')
+      await tx.leagueChatMessage.create({ data: { leagueId, userId: league.userId, type: 'system',
+        message: `Survivor Guillotine period ${periodNumber} hosted ceremony restarted after the scores or rosters changed. Earlier reveals are superseded; no roster was chopped.`,
+        metadata: { survivorGuillotine: true, event: 'hosted_ceremony_restarted', period: periodNumber } } })
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
+    return { ...result, hostedRestarted: true }
+  }
   const choppedOwners = await prisma.leagueTeam.findMany({ where: { leagueId,
     externalId: { in: result.choppedTeamIds } },
     select: { claimedByUserId: true, externalId: true, teamName: true, ownerName: true } })
@@ -553,12 +619,12 @@ export async function executeSGLiveChop(leagueId: string, periodNumber: number) 
     const lostOwnerIds = choppedOwners.map(owner => owner.claimedByUserId).filter((id): id is string => !!id)
     if (lostOwnerIds.length) await tx.survivorGuillotinePower.updateMany({ where: { leagueId,
       binding: 'manager', ownerUserId: { in: lostOwnerIds }, status: 'held' }, data: { status: 'expired' } })
-    for (const power of sealed) {
+    for (const power of hosted ? [] : sealed) {
       await tx.leagueChatMessage.create({ data: { leagueId, userId: league.userId, type: 'system',
         message: `An immunity idol was played at the period ${periodNumber} chop. ${power.targetRosterId ?? 'A manager'} was protected.`,
         metadata: { survivorGuillotine: true, event: 'idol_revealed', powerId: power.id, targetRosterId: power.targetRosterId } } })
     }
-    if (result.choppedTeamIds.length) {
+    if (result.choppedTeamIds.length && !hosted) {
       const names = result.choppedTeamIds.map(id => {
         const team = choppedOwners.find(owner => owner.externalId === id)
         return team?.teamName || team?.ownerName || id
@@ -567,7 +633,7 @@ export async function executeSGLiveChop(leagueId: string, periodNumber: number) 
         message: `Survivor Guillotine period ${periodNumber} chop: ${names.join(', ')} eliminated. Their players enter league waivers.`,
         metadata: { survivorGuillotine: true, event: 'chop', period: periodNumber, rosterIds: result.choppedTeamIds } } })
     }
-    if (result.placements.length) await tx.leagueChatMessage.create({ data: { leagueId, userId: league.userId,
+    if (result.placements.length && !hosted) await tx.leagueChatMessage.create({ data: { leagueId, userId: league.userId,
       type: 'system', message: `Survivor Guillotine final placements are set for period ${periodNumber}.`,
       metadata: { survivorGuillotine: true, event: 'final_placements', period: periodNumber, rosterIds: result.placements } } })
     const finished = await tx.survivorGuillotineLeague.updateMany({ where: { leagueId, revision: season.revision },
@@ -580,12 +646,19 @@ export async function executeSGLiveChop(leagueId: string, periodNumber: number) 
           teams, matchups: state.matchups, protectedTeamIds: sealed.map(p => p.targetRosterId).filter((id): id is string => !!id),
           gauntletImmuneTribeId: state.gauntletImmuneTribeId ?? null,
           completedAt: now.toISOString(),
+          hostedCeremony: hosted ? { stage: 3, updatedAt: now.toISOString() } : null,
         } } as Prisma.InputJsonValue,
         periodState: { ...state, ceremonyStarted: true, placements: result.placements,
           chopSnapshot: { teams, protectedTeamIds: sealed.map(p => p.targetRosterId).filter((id): id is string => !!id),
             powerIds: sealed.map(p => p.id), choppedTeamIds: result.choppedTeamIds,
             immuneTribeId: result.immuneTribeId } } as unknown as Prisma.InputJsonValue } })
     if (finished.count !== 1) throw new Error('Season changed during the chop; retry with fresh scores and powers.')
+    if (hosted) await tx.leagueChatMessage.create({ data: { leagueId, userId: league.userId, type: 'system',
+      message: result.placements.length
+        ? `Survivor Guillotine period ${periodNumber} final placements: ${result.placements.join(', ')}.`
+        : `Survivor Guillotine period ${periodNumber} chop: ${result.choppedTeamIds.join(', ')} eliminated. Their players enter waivers.`,
+      metadata: { survivorGuillotine: true, event: 'hosted_ceremony_advanced', period: periodNumber, stage: 3,
+        rosterIds: result.choppedTeamIds, placements: result.placements } } })
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
   return result
 }

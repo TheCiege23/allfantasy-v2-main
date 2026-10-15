@@ -192,4 +192,14 @@ describe('Survivor state sanitizer', () => {
     const result = await buildSurvivorStateForUser('league-1', 'commish')
     expect(result.ok && result.state.initialization.phase2Complete).toBe(true)
   })
+  it('keeps the entire non-owner state payload identical when a secret Vote Steal is played', async () => {
+    const before = await buildSurvivorStateForUser('league-1', 'commish')
+    const council = await prisma.survivorTribalCouncil.findFirst()
+    prisma.survivorTribalCouncil.findFirst.mockResolvedValue({ ...council, idolsPlayed: [{ idolId: 'secret-steal', powerType: 'vote_steal', playerUserId: 'other', playerRosterId: 'roster-b', stolenVoterUserId: 'commish', stolenVoterRosterId: 'roster-a', extraTargetUserId: 'commish' }] })
+    const after = await buildSurvivorStateForUser('league-1', 'commish')
+    expect(after.ok).toBe(true)
+    expect(after).toEqual(before)
+    expect(JSON.stringify(after)).not.toMatch(/secret-steal|vote_steal|stolenVoter|extraTarget/)
+  })
+
 })

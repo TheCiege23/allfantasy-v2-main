@@ -19,6 +19,8 @@ import {
  * collision with the legacy `SurvivorTribalCouncilService.ts`.
  */
 
+type CouncilDatabase = Pick<typeof prisma, 'league' | 'survivorPlayer' | 'survivorTribalCouncil' | 'survivorGameState'>
+
 export type CouncilStatus = 'scheduled' | 'voting_open' | 'closed' | 'revealed' | 'cancelled' | 'tie_pending'
 
 export interface IdolPlayRecord {
@@ -89,26 +91,27 @@ async function ensureConfigId(leagueId: string): Promise<string> {
   return created.id
 }
 
-async function loadSettings(leagueId: string): Promise<SurvivorFoundationSettings> {
-  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+async function loadSettings(leagueId: string, db: CouncilDatabase = prisma): Promise<SurvivorFoundationSettings> {
+  const league = await db.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
   return normalizeSurvivorFoundationSettings(
     league?.settings && typeof league.settings === 'object' ? (league.settings as Record<string, unknown>) : {},
   )
 }
 
 /** Active players in a council's scope: attending tribe (pre-merge) or all active (merge). */
-async function loadScopePlayers(leagueId: string, phase: string, attendingTribeId: string | null): Promise<CouncilScopePlayer[]> {
+async function loadScopePlayers(leagueId: string, phase: string, attendingTribeId: string | null, db: CouncilDatabase = prisma): Promise<CouncilScopePlayer[]> {
   const where: Prisma.SurvivorPlayerWhereInput =
     (phase === 'pre_merge' || phase === 'revote') && attendingTribeId
       ? { leagueId, playerState: 'active', tribeId: attendingTribeId }
       : { leagueId, playerState: 'active' }
-  const players = await prisma.survivorPlayer.findMany({
+  const players = await db.survivorPlayer.findMany({
     where,
-    select: { userId: true, displayName: true, redraftRosterId: true },
+    select: { userId: true, displayName: true, redraftRosterId: true, tribeId: true },
     orderBy: { displayName: 'asc' },
   })
-  return (players as Array<{ userId: string; displayName: string; redraftRosterId: string | null }>).map((p) => ({
+  return (players as Array<{ userId: string; displayName: string; redraftRosterId: string | null; tribeId: string | null }>).map((p) => ({
     userId: p.userId,
+    tribeId: p.tribeId,
     rosterId: p.redraftRosterId ?? p.userId,
     displayName: p.displayName,
   }))
@@ -148,8 +151,8 @@ export function restrictCouncilToRevote(eligibility: CouncilEligibility, tiedUse
 }
 
 /** The current council that is not yet finalized (revealed/cancelled). */
-export async function getActiveCouncil(leagueId: string) {
-  return prisma.survivorTribalCouncil.findFirst({
+export async function getActiveCouncil(leagueId: string, db: CouncilDatabase = prisma) {
+  return db.survivorTribalCouncil.findFirst({
     where: { leagueId, isRevealed: false, status: { in: ['scheduled', 'voting_open', 'closed', 'tie_pending'] } },
     orderBy: [{ week: 'desc' }, { councilNumber: 'desc' }, { createdAt: 'desc' }],
   })
@@ -164,15 +167,15 @@ export async function getLatestCouncil(leagueId: string) {
 }
 
 /** Load full shared context for a council id (or the active council if id omitted). */
-export async function loadCouncilContext(leagueId: string, councilId?: string): Promise<CouncilContext | null> {
+export async function loadCouncilContext(leagueId: string, councilId?: string, db: CouncilDatabase = prisma): Promise<CouncilContext | null> {
   const council = councilId
-    ? await prisma.survivorTribalCouncil.findFirst({ where: { id: councilId, leagueId } })
-    : await getActiveCouncil(leagueId)
+    ? await db.survivorTribalCouncil.findFirst({ where: { id: councilId, leagueId } })
+    : await getActiveCouncil(leagueId, db)
   if (!council) return null
-  const settings = await loadSettings(leagueId)
+  const settings = await loadSettings(leagueId, db)
   const idolsPlayed = parseIdolPlays(council.idolsPlayed)
-  const scopePlayers = await loadScopePlayers(leagueId, council.phase, council.attendingTribeId)
-  const game = await prisma.survivorGameState.findUnique({ where: { leagueId }, select: { immunePlayerId: true } })
+  const scopePlayers = await loadScopePlayers(leagueId, council.phase, council.attendingTribeId, db)
+  const game = await db.survivorGameState.findUnique({ where: { leagueId }, select: { immunePlayerId: true } })
   const parts = buildCouncilContextParts(scopePlayers, idolsPlayed, settings, game?.immunePlayerId)
   const { rosterToUser, userToRoster } = parts
   const eligibility = council.phase === 'revote' ? restrictCouncilToRevote(parts.eligibility, council.tiePlayerIds) : parts.eligibility

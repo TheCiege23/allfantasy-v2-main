@@ -1816,6 +1816,13 @@ export default async function AdminPage(
               <a className="af-cc-tab" href="#email-center">
                 Email
               </a>
+              {/*
+                A page, not a section anchor. Its only other link sits in the Fast Paths card,
+                below the verdict, freshness, growth and traffic panels: present, but nobody found it.
+              */}
+              <a className="af-cc-tab" href="/admin/social-newsroom" data-testid="admin-social-newsroom-tab">
+                Social newsroom
+              </a>
             </nav>
             {/*
               `/core`, not `/dashboard`. The latter was retired on 2026-08-24 (`99e408317`);

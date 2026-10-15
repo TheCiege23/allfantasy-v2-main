@@ -10,6 +10,7 @@
  */
 
 export interface CouncilScopePlayer {
+  tribeId?: string | null
   userId: string
   rosterId: string
   displayName: string

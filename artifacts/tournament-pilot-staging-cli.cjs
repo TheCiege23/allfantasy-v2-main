@@ -16,6 +16,7 @@ async function main() {
     process.stdout.write(JSON.stringify({ target: 'isolated_nba_pilot', tables: result.rows[0].tables }) + '\n')
   } finally { await client.end() }
   const action = process.argv[2]
+  if (action === 'verify') return
   if (action !== 'push' && action !== 'test') return
   const env = { ...process.env, DATABASE_URL: url.toString(), DIRECT_URL: direct.toString(), ALLOW_UNKNOWN_DB_TARGET: '1' }
   if (action === 'test') { env.COMMISH_TENANT_ID = 'tournament-pilot'; env.TOURNAMENT_PILOT_DB = '1'; env.COMMISH_APP_URL = url.toString() }

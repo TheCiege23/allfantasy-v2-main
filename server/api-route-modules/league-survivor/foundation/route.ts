@@ -24,7 +24,7 @@ import { postSurvivorIntroAnnouncement } from '@/lib/survivor/survivorAnnounceme
 import type { SurvivorTribeAssignmentMode } from '@/lib/survivor/normalizeSurvivorSettings'
 import { openTribalCouncil, closeVoteWindow, cancelCouncil, loadCouncilContext, getLatestCouncil } from '@/lib/survivor/survivorCouncilService'
 import { submitPrivateVoteCommand } from '@/lib/survivor/survivorPrivateVoteCommand'
-import { playVoteShield, playExtraVote, playSkipTribal, playVoteSteal } from '@/lib/survivor/survivorIdolResolutionService'
+import { playVoteShield, playExtraVote, playSkipTribal, playVoteSteal, getCouncilIdolPreview } from '@/lib/survivor/survivorIdolResolutionService'
 import { tallyCouncil, revealCouncil } from '@/lib/survivor/survivorVoteTallyService'
 import { resolveElimination } from '@/lib/survivor/survivorEliminationService'
 import { sendPushToUser } from '@/lib/push-notifications'
@@ -394,7 +394,7 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
     'set-auto-reveal',
     'resolve-exact-tie',
   ])
-  const PHASE3_PARTICIPANT_ACTIONS = new Set(['submit-vote', 'play-idol', 'play-extra-vote', 'play-skip-tribal', 'play-vote-steal', 'steal-three-preview', 'play-steal-three'])
+  const PHASE3_PARTICIPANT_ACTIONS = new Set(['submit-vote', 'play-idol', 'play-extra-vote', 'play-skip-tribal', 'play-vote-steal', 'steal-three-preview', 'play-steal-three', 'idol-play-preview'])
 
   const BLIND_SAFE_ADMIN_ACTIONS = new Set(['council-control', 'nudge-voter', 'extend-votes-hour', 'set-auto-reveal', 'close-vote-window', 'tally-votes', 'reveal-votes'])
   if (PHASE3_ADMIN_ACTIONS.has(action) && !(BLIND_SAFE_ADMIN_ACTIONS.has(action) ? access.decisions.canPerformAdminAction : access.decisions.canPerformSensitiveHostAction)) {
@@ -516,28 +516,34 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
     return NextResponse.json({ ...result, action, noFakeGameplayState: true })
   }
 
+  const idolId = typeof body.idolId === 'string' ? body.idolId : undefined
+  if (action === 'idol-play-preview') {
+    if (!idolId) return NextResponse.json({ error: 'idolId required' }, { status: 422 })
+    const preview = await getCouncilIdolPreview(leagueId, userId, idolId)
+    return preview ? NextResponse.json(preview) : NextResponse.json({ error: 'Idol unavailable' }, { status: 404 })
+  }
+
   if (action === 'play-idol') {
-    const result = await playVoteShield(leagueId, userId)
+    const result = await playVoteShield(leagueId, userId, idolId)
     if (!result.ok) return NextResponse.json({ ...result, action }, { status: result.status })
     return NextResponse.json({ ...result, action, noFakeGameplayState: true })
   }
 
   if (action === 'play-extra-vote') {
-    if (!targetUserId) return NextResponse.json({ error: 'targetUserId required', action }, { status: 422 })
-    const result = await playExtraVote(leagueId, userId, targetUserId)
+    const result = await playExtraVote(leagueId, userId, targetUserId ?? undefined, idolId)
     if (!result.ok) return NextResponse.json({ ...result, action }, { status: result.status })
     return NextResponse.json({ ...result, action, noFakeGameplayState: true })
   }
 
   if (action === 'play-skip-tribal') {
-    const result = await playSkipTribal(leagueId, userId, { forfeitsVote: body.forfeitsVote === true })
+    const result = await playSkipTribal(leagueId, userId, { forfeitsVote: body.forfeitsVote === true, idolId })
     if (!result.ok) return NextResponse.json({ ...result, action }, { status: result.status })
     return NextResponse.json({ ...result, action, noFakeGameplayState: true })
   }
 
   if (action === 'play-vote-steal') {
-    if (!targetUserId || typeof body.stolenVoterUserId !== 'string') return NextResponse.json({ error: 'Choose an eligible vote target and a manager whose vote to take.', action }, { status: 422 })
-    const result = await playVoteSteal(leagueId, userId, body.stolenVoterUserId, targetUserId)
+    if (typeof body.stolenVoterUserId !== 'string') return NextResponse.json({ error: 'Choose an eligible vote target and a manager whose vote to take.', action }, { status: 422 })
+    const result = await playVoteSteal(leagueId, userId, body.stolenVoterUserId, targetUserId ?? undefined, idolId)
     if (!result.ok) return NextResponse.json({ ...result, action }, { status: result.status })
     return NextResponse.json({ ...result, action, noFakeGameplayState: true })
   }
@@ -555,8 +561,7 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
     }
     const result = await playStealThree(leagueId, userId, { idolId: body.idolId, playerRowIds: body.playerRowIds, dropRowIds: body.dropRowIds })
     if (!result.ok) return NextResponse.json(result, { status: result.status })
-    await Promise.allSettled(result.value.raidedUserIds.map(raidedUserId => sendPushToUser(raidedUserId, { title: 'Your Survivor roster was raided', body: 'Open your league to see the move. You have top waiver priority this week.', href: `/league/${leagueId}` })))
-    return NextResponse.json({ ok: true, playerNames: result.value.playerNames, week: result.value.week })
+    return NextResponse.json({ ok: true, playerNames: result.value.playerNames, dropNames: result.value.dropNames, week: result.value.week })
   }
 
   // Resolve a council id for lifecycle actions: explicit body id, else the active council,

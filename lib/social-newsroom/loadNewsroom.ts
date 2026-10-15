@@ -8,6 +8,7 @@ import { getTeamLogoUrl } from '@/lib/players/teamLogos'
 import {
   breakingStoryKey,
   classifyBreakingHeadline,
+  isCollegeStoryForProSport,
   normalizedHeadline,
   teamsMentioned,
   trustedOutlet,
@@ -140,6 +141,9 @@ export async function loadNewsroom(opts: { sport?: string | null; now?: Date } =
     const outlet = trustedOutlet(r.sourceUrl)
     if (!outlet || !r.sourceUrl) continue
     if (isClickbait(r.title)) continue
+    // A college story stored under a pro league (ESPN's NHL feed carries college hockey) would be
+    // posted with the wrong league's hashtags.
+    if (isCollegeStoryForProSport(r.sport, r.sourceUrl)) continue
     const sport = r.sport.toUpperCase()
     const classification = classifyBreakingHeadline(r.title, r.description)
     const abbrs = await teamsFor(sport, r.title, r.team)

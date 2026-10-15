@@ -3,7 +3,14 @@
 import { createContext, useContext, useMemo, useRef, useState, useTransition } from "react"
 
 import type { NewsroomGame, NewsroomHighlight, NewsroomStory } from "@/lib/social-newsroom/loadNewsroom"
-import { easternTime, SOCIAL_CHAR_LIMITS, SOCIAL_PLATFORM_LABELS, xLength, type SocialPost } from "@/lib/social-newsroom/postBuilder"
+import {
+  easternTime,
+  SOCIAL_CHAR_LIMITS,
+  SOCIAL_PLATFORM_LABELS,
+  xLength,
+  type SocialPlatform,
+  type SocialPost,
+} from "@/lib/social-newsroom/postBuilder"
 import { connectBrandX, draftFunVariants, postToX } from "./actions"
 
 /** The X account "Post to X" would post to, or null when the signed-in account has none connected. */
@@ -136,10 +143,91 @@ function BrandXBar({ account }: { account: { handle: string } | null }) {
   )
 }
 
-function PostBox({ post }: { post: SocialPost }) {
+/**
+ * Posting to the other platforms. X posts through the brand connection; the others have no
+ * connection here, so the button hands the post to the platform: Threads opens its composer with
+ * the text filled in, and Facebook, Instagram and TikTok copy the text and open the app or site,
+ * where it is pasted. Facebook's share dialog takes only a link, so it gets the article link.
+ */
+const SHARE_TARGETS: Partial<
+  Record<SocialPlatform, { label: string; url: (text: string, link: string | null) => string; copies: boolean }>
+> = {
+  threads: {
+    label: "Post to Threads",
+    url: (text) => `https://www.threads.net/intent/post?text=${encodeURIComponent(text)}`,
+    copies: false,
+  },
+  facebook: {
+    label: "Copy & share on Facebook",
+    url: (_text, link) => (link ? `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(link)}` : "https://www.facebook.com/"),
+    copies: true,
+  },
+  instagram: { label: "Copy & open Instagram", url: () => "https://www.instagram.com/", copies: true },
+  tiktok: { label: "Copy & open TikTok", url: () => "https://www.tiktok.com/upload", copies: true },
+}
+
+function ShareButton({ post, link }: { post: SocialPost; link: string | null }) {
+  const target = SHARE_TARGETS[post.platform]
+  const [copied, setCopied] = useState(false)
+  if (!target) return null
+  return (
+    <button
+      type="button"
+      title={target.copies ? "Copies the text, then opens the app. Paste it there." : "Opens the composer with this text filled in"}
+      onClick={() => {
+        // Both run inside the tap itself, which the browser requires for the clipboard and a new tab.
+        if (target.copies) {
+          navigator.clipboard?.writeText(post.text).then(
+            () => setCopied(true),
+            () => setCopied(false),
+          )
+        }
+        window.open(target.url(post.text, link), "_blank", "noopener,noreferrer")
+      }}
+      className="rounded-lg border border-white/30 bg-white px-2.5 py-1 text-xs font-bold text-[#020817] hover:bg-white/90"
+    >
+      {copied ? "Copied ✓ paste it there" : target.label}
+    </button>
+  )
+}
+
+const PLATFORM_ORDER: SocialPlatform[] = ["x", "threads", "instagram", "facebook", "tiktok"]
+
+/** One card's posts, one platform at a time: a chip per platform, then that platform's posts. */
+function PlatformPosts({ posts, link }: { posts: SocialPost[]; link: string | null }) {
+  const platforms = PLATFORM_ORDER.filter((p) => posts.some((x) => x.platform === p))
+  const [platform, setPlatform] = useState<SocialPlatform>(platforms[0] ?? "x")
+  if (platforms.length === 0) return null
+  const shown = posts.filter((p) => p.platform === platform)
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Platform">
+        {platforms.map((p) => (
+          <button
+            key={p}
+            type="button"
+            role="tab"
+            aria-selected={p === platform}
+            onClick={() => setPlatform(p)}
+            className={`rounded-lg px-2.5 py-1 text-xs font-bold ${p === platform ? "bg-cyan-300 text-[#020817]" : "bg-white/10 text-white/70 hover:text-white"}`}
+          >
+            {SOCIAL_PLATFORM_LABELS[p]} ({posts.filter((x) => x.platform === p).length})
+          </button>
+        ))}
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {shown.map((p, i) => (
+          <PostBox key={`${p.platform}-${i}`} post={p} link={link} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function PostBox({ post, link = null }: { post: SocialPost; link?: string | null }) {
   return (
     <div className="rounded-xl border border-white/10 bg-black/30 p-3">
-      <div className="mb-2 flex items-center justify-between gap-2 text-xs">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs">
         <span className="font-bold text-white/80">
           {SOCIAL_PLATFORM_LABELS[post.platform]} · {post.tone === "viral" ? "viral 🔁" : post.tone}
         </span>
@@ -148,7 +236,7 @@ function PostBox({ post }: { post: SocialPost }) {
             {post.charCount}/{SOCIAL_CHAR_LIMITS[post.platform]}
           </span>
           <CopyButton text={post.text} />
-          {post.platform === "x" && <PostToXButton text={post.text} fits={post.withinLimit} />}
+          {post.platform === "x" ? <PostToXButton text={post.text} fits={post.withinLimit} /> : <ShareButton post={post} link={link} />}
         </span>
       </div>
       <pre className="whitespace-pre-wrap break-words font-sans text-sm text-white/85">{post.text}</pre>
@@ -200,13 +288,10 @@ function MediaStrip({ story }: { story: NewsroomStory }) {
 }
 
 function StoryCard({ story }: { story: NewsroomStory }) {
-  const [open, setOpen] = useState(false)
   const [ai, setAi] = useState<string[] | null>(null)
   const [aiError, setAiError] = useState<string | null>(null)
   const [pending, start] = useTransition()
   const c = story.classification
-  const xPosts = story.posts.filter((p) => p.platform === "x")
-  const others = story.posts.filter((p) => p.platform !== "x")
 
   return (
     <article className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
@@ -231,15 +316,8 @@ function StoryCard({ story }: { story: NewsroomStory }) {
         </a>
       </div>
       <MediaStrip story={story} />
-      <div className="grid gap-2 sm:grid-cols-2">
-        {xPosts.map((p, i) => (
-          <PostBox key={`x-${i}`} post={p} />
-        ))}
-      </div>
+      <PlatformPosts posts={story.posts} link={story.url} />
       <div className="flex flex-wrap gap-2">
-        <button type="button" onClick={() => setOpen((o) => !o)} className="text-sm font-bold text-cyan-300">
-          {open ? "Hide" : "Show"} Threads · Instagram · Facebook · TikTok
-        </button>
         <button
           type="button"
           disabled={pending}
@@ -263,13 +341,6 @@ function StoryCard({ story }: { story: NewsroomStory }) {
           {pending ? "Writing…" : "✨ More fun versions (AI)"}
         </button>
       </div>
-      {open && (
-        <div className="grid gap-2 sm:grid-cols-2">
-          {others.map((p, i) => (
-            <PostBox key={`${p.platform}-${i}`} post={p} />
-          ))}
-        </div>
-      )}
       {aiError && <p className="text-sm text-rose-300">{aiError}</p>}
       {ai && (
         <div className="grid gap-2 sm:grid-cols-3">
@@ -319,11 +390,7 @@ function HighlightCard({ h }: { h: NewsroomHighlight }) {
           </div>
         </div>
       </div>
-      <div className="grid gap-2 sm:grid-cols-3">
-        {h.posts.map((p, i) => (
-          <PostBox key={i} post={p} />
-        ))}
-      </div>
+      <PlatformPosts posts={h.posts} link={h.videoUrl} />
     </article>
   )
 }
@@ -374,11 +441,7 @@ function GameCard({ g }: { g: NewsroomGame }) {
         <TeamMark name={`@ ${g.homeTeam}`} logo={g.homeLogo} />
         <span className="text-lg font-black tabular-nums">{g.final ? g.homeScore : ""}</span>
       </div>
-      <div className="grid gap-2 sm:grid-cols-2">
-        {g.posts.map((p, i) => (
-          <PostBox key={i} post={p} />
-        ))}
-      </div>
+      <PlatformPosts posts={g.posts} link={null} />
     </article>
   )
 }
