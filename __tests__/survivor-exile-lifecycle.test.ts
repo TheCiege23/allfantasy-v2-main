@@ -3,6 +3,7 @@ const m = vi.hoisted(() => {
   const db = {
     $queryRaw: vi.fn(), league: { findUnique: vi.fn() },
     survivorAuditEntry: { findFirst: vi.fn(), create: vi.fn() },
+    survivorNotification: { create: vi.fn() },
     survivorGameState: { findUnique: vi.fn(), update: vi.fn(), upsert: vi.fn(), updateMany: vi.fn() },
     survivorPlayer: { findMany: vi.fn(), findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn(), count: vi.fn() },
     roster: { findFirst: vi.fn(), update: vi.fn(), create: vi.fn() },

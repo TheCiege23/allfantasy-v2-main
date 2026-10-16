@@ -245,6 +245,8 @@ export type RevealOutcome =
 export async function revealCouncil(leagueId: string, councilId: string, actorUserId?: string): Promise<RevealOutcome> {
   return prisma.$transaction(async (tx: Prisma.TransactionClient): Promise<RevealOutcome> => {
     await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`survivor-setup:${leagueId}`}, 0))::text`
+    const game = await tx.survivorGameState.findUnique({ where: { leagueId }, select: { pausedSnapshot: true } })
+    if (game?.pausedSnapshot != null) return { ok: false, status: 409, code: 'league_paused', error: 'The league is paused.' }
     const council = await tx.survivorTribalCouncil.findFirst({ where: { id: councilId, leagueId } })
     if (!council) return { ok: false, status: 404, code: 'not_found', error: 'Council not found.' }
     const seq = Array.isArray(council.revealSequence) ? (council.revealSequence as unknown as RevealScroll[]) : []
@@ -263,6 +265,13 @@ export async function revealCouncil(leagueId: string, councilId: string, actorUs
       contentType: 'host_announcement', content: `Torch Ceremony · Week ${council.week}\n${ballots}\n${outcome}` } })
     const now = new Date()
     await tx.survivorTribalCouncil.update({ where: { id: councilId }, data: { isRevealed: true, revealStartsAt: now, status: council.isTie ? 'tie_pending' : 'revealed' } })
+    // The existing notification worker delivers this after the public read commits.
+    // The idempotent reveal gate also prevents duplicate notifications on retries.
+    await tx.survivorNotification.create({ data: {
+      leagueId, type: 'council_read', recipientRole: 'all', title: 'The scroll has been read',
+      body: `Week ${council.week} Council is ready to view.`, deepLinkPath: `/survivor/${leagueId}/tribal`,
+      urgency: 'high', isSpoilerSafe: true, scheduledFor: now, status: 'pending',
+    } })
     if (opensRevote) {
       const deadline = new Date(now.getTime() + 2 * 60 * 60 * 1000)
       const revote = await tx.survivorTribalCouncil.create({
