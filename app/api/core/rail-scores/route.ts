@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { currentSleeperWeek, sleeperRailFeed } from '@/lib/core-app/sleeperRailFeed'
 import { parseLiveMatchups, summarizeLiveScores } from '@/lib/core-app/liveRailScores'
 import { managerArtUrl } from '@/lib/core-app/leagueArt'
+import { realManagerName, rosterLabel } from '@/lib/core-app/managerName'
 
 export const dynamic = 'force-dynamic'
 const headers = { 'Cache-Control': 'private, no-store' }
@@ -45,9 +46,17 @@ export async function GET(request: NextRequest) {
           const mine = teams.find(row => row.leagueId === league.id && row.externalId === team.externalId)
           const other = teams.find(row => row.leagueId === league.id && row.externalId === scores.opponentRosterId)
           updates[league.id] = { ...scores, ...current, updatedAt: new Date().toISOString(),
-            yourTeam: mine?.teamName || mine?.ownerName || null,
+            /*
+             * ⚠ THE SAME NAMING RULE AS THE SERVER-RENDERED RAIL (railMatchups.ts), OR THIS REFRESH UNDOES
+             * IT. Every unowned Sleeper roster is stored as teamName/ownerName "Unknown"; railMatchups.ts
+             * learned to print "Team N" for it on 2026-10-05, but this route kept `teamName || ownerName`,
+             * so the live refresh overwrote "Team 3" with "Unknown" seconds after paint (reported from an
+             * iPhone 2026-10-08). The mismatch also dropped the opponent projection, which the client
+             * keeps only while the saved and live opponent names agree.
+             */
+            yourTeam: realManagerName(mine?.teamName) || realManagerName(mine?.ownerName) || null,
             yourAvatarUrl: managerArtUrl({ avatarUrl: mine?.avatarUrl, platform: 'sleeper' }),
-            opponentTeam: other?.teamName || other?.ownerName || null,
+            opponentTeam: scores.opponentRosterId ? rosterLabel([other?.teamName, other?.ownerName], scores.opponentRosterId) : null,
             opponentAvatarUrl: managerArtUrl({ avatarUrl: other?.avatarUrl, platform: 'sleeper' }),
             standing: scores.standing ? { ...scores.standing, elimination: league.guillotineMode } : null,
           }

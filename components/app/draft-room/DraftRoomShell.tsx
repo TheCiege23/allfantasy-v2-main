@@ -23,6 +23,8 @@ export type DraftRoomShellProps = {
   rosterPanel?: ReactNode
   keeperPanel?: ReactNode
   mobileStickyBar?: ReactNode
+  /** Floating control pinned above the mobile tab bars, so it never covers a tab. */
+  mobileDockAccessory?: ReactNode
   mobileTab: MobileDraftTab
   onMobileTabChange: (tab: MobileDraftTab) => void
   /**
@@ -70,6 +72,7 @@ export function DraftRoomShell({
   rosterPanel,
   keeperPanel,
   mobileStickyBar,
+  mobileDockAccessory,
   auctionStrip,
   mobileTab,
   onMobileTabChange,
@@ -407,63 +410,70 @@ export function DraftRoomShell({
             {keeperPanel && mobileTab === 'keepers' && keeperPanel}
           </div>
         </div>
-        {secondaryMobileTabs.length > 0 ? (
-          <div
-            className="safe-area-bottom border-t border-white/10 bg-[#060d1f]/95 px-2 pb-1 pt-1"
-            data-testid="draft-mobile-quick-dock"
-          >
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
-              {secondaryMobileTabs.map(({ id, icon: Icon }) => {
-                const label = t(MOBILE_TAB_I18N[id])
-                return (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => onMobileTabChange(id)}
-                    data-testid={`draft-mobile-tab-${id}`}
-                    className={`inline-flex min-h-[38px] shrink-0 touch-manipulation items-center gap-1.5 rounded-full border px-3 text-[11px] font-medium transition active:scale-[0.98] ${
-                      mobileTab === id
-                        ? 'border-cyan-400/45 bg-cyan-500/15 text-cyan-100'
-                        : 'border-white/15 bg-black/20 text-white/70'
-                    }`}
-                    aria-pressed={mobileTab === id}
-                    aria-label={label}
-                  >
-                    <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                    <span>{label}</span>
-                  </button>
-                )
-              })}
+        <div className="relative shrink-0">
+          {mobileDockAccessory ? (
+            <div className="absolute bottom-full right-4 z-20 mb-3" data-testid="draft-mobile-dock-accessory">
+              {mobileDockAccessory}
             </div>
-          </div>
-        ) : null}
-        <nav
-          className="safe-area-bottom flex shrink-0 border-t border-cyan-400/20 bg-[#070f21]/95"
-          data-testid="draft-mobile-primary-nav"
-          aria-label={t('draftRoom.shell.aria.draftSections')}
-        >
-          {primaryMobileTabs.map(({ id, icon: Icon }) => {
-            const label = t(MOBILE_TAB_I18N[id])
-            return (
-              <button
-                key={id}
-                type="button"
-                onClick={() => onMobileTabChange(id)}
-                data-testid={`draft-mobile-tab-${id}`}
-                className={`flex min-h-[48px] flex-1 touch-manipulation flex-col items-center justify-center gap-0.5 py-2 text-[11px] active:scale-[0.98] ${
-                  mobileTab === id
-                    ? 'bg-cyan-500/12 text-cyan-100 shadow-[inset_0_1px_0_rgba(34,211,238,0.2)]'
-                    : 'text-white/65 hover:text-white/85'
-                }`}
-                aria-pressed={mobileTab === id}
-                aria-label={label}
-              >
-                <Icon className="h-5 w-5 shrink-0" aria-hidden />
-                <span>{label}</span>
-              </button>
-            )
-          })}
-        </nav>
+          ) : null}
+          {secondaryMobileTabs.length > 0 ? (
+            <div
+              className="safe-area-bottom border-t border-white/10 bg-[#060d1f]/95 px-2 pb-1 pt-1"
+              data-testid="draft-mobile-quick-dock"
+            >
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
+                {secondaryMobileTabs.map(({ id, icon: Icon }) => {
+                  const label = t(MOBILE_TAB_I18N[id])
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => onMobileTabChange(id)}
+                      data-testid={`draft-mobile-tab-${id}`}
+                      className={`inline-flex min-h-[38px] shrink-0 touch-manipulation items-center gap-1.5 rounded-full border px-3 text-[11px] font-medium transition active:scale-[0.98] ${
+                        mobileTab === id
+                          ? 'border-cyan-400/45 bg-cyan-500/15 text-cyan-100'
+                          : 'border-white/15 bg-black/20 text-white/70'
+                      }`}
+                      aria-pressed={mobileTab === id}
+                      aria-label={label}
+                    >
+                      <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                      <span>{label}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          ) : null}
+          <nav
+            className="safe-area-bottom flex shrink-0 border-t border-cyan-400/20 bg-[#070f21]/95"
+            data-testid="draft-mobile-primary-nav"
+            aria-label={t('draftRoom.shell.aria.draftSections')}
+          >
+            {primaryMobileTabs.map(({ id, icon: Icon }) => {
+              const label = t(MOBILE_TAB_I18N[id])
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => onMobileTabChange(id)}
+                  data-testid={`draft-mobile-tab-${id}`}
+                  className={`flex min-h-[48px] flex-1 touch-manipulation flex-col items-center justify-center gap-0.5 py-2 text-[11px] active:scale-[0.98] ${
+                    mobileTab === id
+                      ? 'bg-cyan-500/12 text-cyan-100 shadow-[inset_0_1px_0_rgba(34,211,238,0.2)]'
+                      : 'text-white/65 hover:text-white/85'
+                  }`}
+                  aria-pressed={mobileTab === id}
+                  aria-label={label}
+                >
+                  <Icon className="h-5 w-5 shrink-0" aria-hidden />
+                  <span>{label}</span>
+                </button>
+              )
+            })}
+          </nav>
+        </div>
       </div>
     </div>
   )

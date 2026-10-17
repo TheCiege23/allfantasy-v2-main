@@ -5209,6 +5209,16 @@ export function DraftRoomPageClient({
       rosterPanel={rosterPanel}
       keeperPanel={keeperPanel}
       mobileStickyBar={mobileStickyBar}
+      mobileDockAccessory={
+        hasDraftHelperData ? (
+          <DraftHelperFloatingBubble
+            badgeCount={draftHelperBadgeCount}
+            hasContent={hasDraftHelperData}
+            onClick={() => floatingHelperState.setVisible(true)}
+            anchor="mobile-dock"
+          />
+        ) : undefined
+      }
       mobileTab={mobileTab}
       onMobileTabChange={setMobileTab}
     />
@@ -5421,7 +5431,7 @@ export function DraftRoomPageClient({
         badgeCount={draftHelperBadgeCount}
         hasContent={hasDraftHelperData}
         onClick={() => floatingHelperState.setVisible(true)}
-        className="xl:hidden"
+        className="hidden md:flex xl:hidden"
       />
     )}
 
