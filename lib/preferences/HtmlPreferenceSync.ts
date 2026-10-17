@@ -2,6 +2,7 @@ import {
   DEFAULT_LANG,
   LANG_STORAGE_KEY,
   SUPPORTED_LANGUAGES,
+  getLanguageTextDirection,
   resolveLanguage,
   type LanguageCode,
 } from "@/lib/i18n/constants";
@@ -37,6 +38,9 @@ export function applyLanguageToDocument(
   if (root) {
     root.setAttribute("lang", resolved);
     root.setAttribute("data-lang", resolved);
+    // The server sets `dir` from the cookie (app/layout.tsx); keep it in step on a live switch,
+    // or a right-to-left language picked in-session would lay out left-to-right until reload.
+    root.setAttribute("dir", getLanguageTextDirection(resolved));
   }
   return resolved;
 }

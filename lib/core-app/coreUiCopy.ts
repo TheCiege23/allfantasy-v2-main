@@ -1285,6 +1285,36 @@ const spanish: Record<string, string> = {
   'Not saved — check your connection and try again.': 'No se guardó. Revisa tu conexión e inténtalo de nuevo.',
   'Try again': 'Reintentar',
   'Nothing picked yet — picks save as you make them.': 'Aún no has elegido nada. Tus selecciones se guardan al hacerlas.',
+  // Server-rendered "could not read" panels on /core (ScreenUnavailable): titles and bodies.
+  Scout: 'Exploración',
+  'Your Week': 'Tu semana',
+  "Bracket Challenge": "Desafío de brackets",
+  "Format hubs": "Centros de formatos",
+  "Live Scores": "Marcadores en vivo",
+  "Career Share": "Compartir trayectoria",
+  "Career": "Trayectoria",
+  "The team list for this sport could not be read just now. Nothing is lost — reload, or pick another sport.":
+    "No pudimos leer la lista de equipos de este deporte en este momento. No se perdió nada: recarga o elige otro deporte.",
+  "We could not read your leagues just now. This is a read failure on our side, not a sign that you have none.":
+    "No pudimos leer tus ligas en este momento. Es un fallo de lectura de nuestra parte, no una señal de que no tengas ninguna.",
+  "We could not read this league just now. This is a read failure on our side, not a sign that you do not run it.":
+    "No pudimos leer esta liga en este momento. Es un fallo de lectura de nuestra parte, no una señal de que no seas su comisionado.",
+  "We could not read this league's weekly results just now. This is a read failure on our side, not a season with no games in it.":
+    "No pudimos leer los resultados semanales de esta liga en este momento. Es un fallo de lectura de nuestra parte, no una temporada sin partidos.",
+  "We could not read the slate just now. This is a read failure on our side, not a day with no games on — your players may well be playing.":
+    "No pudimos leer la jornada en este momento. Es un fallo de lectura de nuestra parte, no un día sin partidos: puede que tus jugadores sí estén jugando.",
+  "We could not run the simulations just now. This is a read failure on our side, not a season with nothing left to decide.":
+    "No pudimos ejecutar las simulaciones en este momento. Es un fallo de lectura de nuestra parte, no una temporada sin nada por decidir.",
+  "We could not read your notifications just now. This is a read failure on our side, not an empty inbox.":
+    "No pudimos leer tus notificaciones en este momento. Es un fallo de lectura de nuestra parte, no una bandeja vacía.",
+  "We could not read your career just now, and this card is built from it. This is a read failure on our side, not a career with nothing in it.":
+    "No pudimos leer tu trayectoria en este momento, y esta tarjeta se construye a partir de ella. Es un fallo de lectura de nuestra parte, no una trayectoria vacía.",
+  "We could not read the rankings just now. This is a read failure on our side, not a sign that nobody is ranked.":
+    "No pudimos leer las clasificaciones en este momento. Es un fallo de lectura de nuestra parte, no una señal de que nadie esté clasificado.",
+  "We could not read your career history just now. This is a read failure on our side, not a sign that you have none.":
+    "No pudimos leer tu historial en este momento. Es un fallo de lectura de nuestra parte, no una señal de que no tengas ninguno.",
+  "We could not load your leagues just now. This is a read failure on our side, not a sign that you have none.":
+    "No pudimos cargar tus ligas en este momento. Es un fallo de lectura de nuestra parte, no una señal de que no tengas ninguna.",
 }
 
 /** "3 min ago" / "2h 5m ago" / "4d ago" / "just now" (RefreshLineups `asOfLabel`) → Spanish. */
