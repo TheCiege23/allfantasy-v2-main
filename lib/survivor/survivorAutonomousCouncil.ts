@@ -27,7 +27,7 @@ export async function resolveAutonomousCouncil(leagueId: string, councilId: stri
   const council = await prisma.survivorTribalCouncil.findUnique({ where: { id: councilId, leagueId } })
   if (!council || council.isRevealed || council.eliminatedUserId) return
   if (!['closed', 'tie_pending'].includes(council.status)) throw new Error('Council is not tallied')
-  const protectedRosters = new Set(ctx.council.idolsPlayed.filter(play => play.powerType === 'vote_shield' || (play.powerType === 'shot_in_the_dark' && play.safe === true)).map(play => play.protectedRosterId ?? play.playerRosterId))
+  const protectedRosters = new Set(ctx.council.idolsPlayed.filter(play => play.powerType === 'vote_shield').map(play => play.protectedRosterId ?? play.playerRosterId))
   // A tied tally must reach the revote path; autonomous fallback applies only when nobody
   // cast a valid ballot. It must never erase a tied public result before its first read.
   if (council.isTie || council.phase === 'revote') return

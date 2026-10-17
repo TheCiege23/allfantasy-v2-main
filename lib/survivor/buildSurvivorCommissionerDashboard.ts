@@ -19,7 +19,7 @@ import type { AfPlanId } from '@/lib/tournament/af-premium-plans'
 import { extractLeadingTribeIcon } from '@/lib/survivor/survivorVisuals'
 import { resolveSurvivorAccessContext } from '@/lib/survivor/survivorAccessControl'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
-import { getTribeRedrawStatus, type TribeRedrawStatus } from '@/lib/survivor/survivorTribeRedraw'
+import { getPendingTribeRedraw } from './survivorTribeRedrawDecision'
 
 export type SurvivorCommissionerDashboardResult =
   | {
@@ -45,7 +45,6 @@ export type SurvivorCommissionerDashboardResult =
         activeChallenges: number
         automationNeedsAttention: boolean
         readinessIssues: string[]
-        tribeRedraw: TribeRedrawStatus
       }
       gameState: {
         phase: string
@@ -61,6 +60,7 @@ export type SurvivorCommissionerDashboardResult =
       config: Awaited<ReturnType<typeof getSurvivorConfig>>
       week: number
       tribes: Awaited<ReturnType<typeof getTribesWithMembers>>
+      tribeRedraw: Awaited<ReturnType<typeof getPendingTribeRedraw>>
       council: Awaited<ReturnType<typeof getCouncil>>
       privateBallots: { voterName: string; targetName: string; submittedAt: string; doesNotCount: boolean }[]
       privateIdols: { id: string; ownerName: string; powerLabel: string }[]
@@ -139,6 +139,7 @@ export async function buildSurvivorCommissionerDashboard(
     exileIsland,
     activeChallenges,
     nbaAdpRows,
+    tribeRedraw,
   ] = await Promise.all([
     getSurvivorConfig(leagueId),
     getTribesWithMembers(leagueId),
@@ -160,6 +161,7 @@ export async function buildSurvivorCommissionerDashboard(
     prisma.exileIsland.findUnique({ where: { leagueId }, select: { isActive: true } }),
     prisma.survivorChallenge.count({ where: { leagueId, status: { in: ['active', 'open'] } } }),
     league.sport === 'NBA' ? prisma.adpDataRecord.count({ where: { sport: 'NBA', season: nbaSeason } }) : Promise.resolve(null),
+    getPendingTribeRedraw(leagueId),
   ])
 
   const tribes = tribeRows.map((tribe: Awaited<ReturnType<typeof getTribesWithMembers>>[number]) => ({
@@ -226,7 +228,6 @@ export async function buildSurvivorCommissionerDashboard(
       activeChallenges,
       automationNeedsAttention: Boolean(gs?.lastError && !gs.lastError.startsWith('PAUSED:')),
       readinessIssues,
-      tribeRedraw: await getTribeRedrawStatus(leagueId),
     },
     gameState: gs
       ? {
@@ -244,6 +245,7 @@ export async function buildSurvivorCommissionerDashboard(
     config,
     week,
     tribes,
+    tribeRedraw,
     council: survivorPublicCouncil(council, access.decisions.canSeePrivateVotes),
     privateBallots: access.isNonParticipatingCommissionerHost
       ? (council?.votes ?? []).map(vote => ({

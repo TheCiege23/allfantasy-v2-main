@@ -319,7 +319,7 @@ describe('SurvivorSitOutEngine', () => {
     })
   })
 
-  it('does not issue a second shuffle recommendation once one already exists', async () => {
+  it('does not issue a duplicate shuffle recommendation in the same week', async () => {
     hm.getTribesWithMembers.mockResolvedValue([
       { id: 'tribe-a', name: 'Alpha', members: [{ rosterId: 'r1' }] },
       { id: 'tribe-b', name: 'Beta', members: [{ rosterId: 'r2' }] },
@@ -330,13 +330,13 @@ describe('SurvivorSitOutEngine', () => {
       { redraftRosterId: 'r2' },
     ])
     hm.getSurvivorConfig.mockResolvedValue({ tribeSize: 4, tribeShuffleEnabled: false })
-    hm.survivorCommissionerActionFindFirst.mockResolvedValue({ id: 'shuffle-1' })
+    hm.survivorCommissionerActionFindFirst.mockResolvedValue({ id: 'shuffle-1', week: 9 })
 
     const result = await maybeTriggerSurvivorTribeShuffleRecommendation('league-1', 9)
 
     expect(result).toEqual({
       triggered: false,
-      reason: 'Shuffle recommendation has already been used this season.',
+      reason: 'This week’s shuffle recommendation already exists.',
     })
     expect(hm.survivorCommissionerActionCreate).not.toHaveBeenCalled()
   })

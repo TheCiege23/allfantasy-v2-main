@@ -43,13 +43,13 @@ const {
     redraftTradeProposal: { count: vi.fn() },
     exileIsland: { findUnique: vi.fn() },
     survivorChallenge: { count: vi.fn() },
+    survivorCommissionerAction: { findFirst: vi.fn() },
     survivorIdol: { findMany: vi.fn() },
     survivorPlayer: { findMany: vi.fn() },
     adpDataRecord: { count: vi.fn() },
   },
 }))
 
-vi.mock('@/lib/survivor/survivorTribeRedraw', () => ({ getTribeRedrawStatus: vi.fn(async () => ({ status: 'none', recommendedWeek: null })) }))
 vi.mock('@/lib/league/permissions', () => ({
   getLeagueRole,
 }))
@@ -169,6 +169,7 @@ describe('survivor commissioner dashboard payload', () => {
     prisma.redraftTradeProposal.count.mockResolvedValue(0)
     prisma.exileIsland.findUnique.mockResolvedValue({ isActive: false })
     prisma.survivorChallenge.count.mockResolvedValue(0)
+    prisma.survivorCommissionerAction.findFirst.mockResolvedValue(null)
     prisma.survivorIdol.findMany.mockResolvedValue([])
     prisma.survivorPlayer.findMany.mockResolvedValue([])
     prisma.adpDataRecord.count.mockResolvedValue(0)
@@ -211,7 +212,6 @@ describe('survivor commissioner dashboard payload', () => {
       activeChallenges: 0,
       automationNeedsAttention: false,
       readinessIssues: ['11 manager seats still need to be claimed.'],
-      tribeRedraw: { status: 'none', recommendedWeek: null },
     })
     expect(result.monetization).toEqual({
       afPlan: 'pro',

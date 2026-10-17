@@ -78,7 +78,7 @@ export async function provisionSurvivorChats(
   }
 
   const tribes = await db.survivorTribe.findMany({
-    where: { leagueId },
+    where: { leagueId, isActive: true, isMerged: false },
     select: { id: true, name: true, chatChannelId: true },
     orderBy: { slotIndex: 'asc' },
   })
@@ -90,7 +90,7 @@ export async function provisionSurvivorChats(
     let channelCreated = false
 
     const existing = channelId
-      ? await db.survivorChatChannel.findFirst({ where: { id: channelId, leagueId }, select: { id: true } })
+      ? await db.survivorChatChannel.findFirst({ where: { id: channelId, leagueId, isArchived: false }, select: { id: true } })
       : await db.survivorChatChannel.findFirst({ where: { leagueId, channelType: 'tribe', tribeId: tribe.id, isArchived: false }, select: { id: true } })
 
     if (existing) {

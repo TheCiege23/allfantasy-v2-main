@@ -1,8 +1,8 @@
 import 'server-only'
 
-import { prisma } from '@/lib/prisma'
 import { loadCouncilContext } from './survivorCouncilService'
 import { isEligibleTarget, isEligibleVoter } from './survivorBallotEligibility'
+import { withSurvivorSetupTransaction } from './survivorSetupTransaction'
 
 /**
  * SURVIVOR PRIVATE VOTE SUBMISSION (canonical Phase 3).
@@ -56,9 +56,6 @@ export async function submitVote(
   if (!isEligibleVoter(eligibility, voterUserId)) {
     return { ok: false, status: 403, code: 'not_eligible_voter', error: 'You are not eligible to vote at this council.' }
   }
-  if (council.idolsPlayed.some((p) => p.powerType === 'shot_in_the_dark' && p.playerUserId === voterUserId)) {
-    return { ok: false, status: 409, code: 'vote_given_up', error: 'You gave up your vote for a Shot in the Dark at this council.' }
-  }
   if (voterUserId === targetUserId && !settings.selfVotesAllowed) {
     return { ok: false, status: 422, code: 'self_vote_disallowed', error: 'Self-votes are not allowed.' }
   }
@@ -85,57 +82,39 @@ export async function submitVote(
     return { ok: false, status: 400, code: 'roster_unresolved', error: 'Could not resolve voter/target roster.' }
   }
 
-  const existing = await prisma.survivorVote.findUnique({
-    where: { councilId_voterRosterId: { councilId: council.id, voterRosterId } },
-    select: { id: true, doesNotCount: true },
-  })
-
   const firstValidLocks = settings.voteChangePolicy === 'first_valid_locks'
-  if (existing && firstValidLocks && !existing.doesNotCount) {
-    return { ok: false, status: 409, code: 'vote_locked', error: 'Your first valid vote is locked and cannot be changed.' }
-  }
-
   const doesNotCount = late && !settings.lateVotesAllowed
   const target = ctx.scopePlayers.find((p) => p.userId === targetUserId)
-
-  await prisma.survivorVote.upsert({
-    where: { councilId_voterRosterId: { councilId: council.id, voterRosterId } },
-    create: {
-      councilId: council.id,
-      leagueId,
-      voterRosterId,
-      targetRosterId,
-      voterUserId,
-      targetUserId,
-      targetName: target?.displayName ?? null,
-      isLateVote: late,
-      doesNotCount,
-    },
-    update: {
-      targetRosterId,
-      targetUserId,
-      targetName: target?.displayName ?? null,
-      isLateVote: late,
-      doesNotCount,
-      submittedAt: now,
-    },
-  })
-
-  // Private audit: actor = voter so only the voter (and full hosts) can see it; not public.
-  await prisma.survivorAuditEntry.create({
-    data: {
-      leagueId,
-      week: council.week,
-      category: 'vote',
-      action: 'vote_submitted',
-      actorUserId: voterUserId,
-      relatedEntityId: council.id,
-      relatedEntityType: 'council',
+  const saved = await withSurvivorSetupTransaction(leagueId, async tx => {
+    // Vote and draw take the same league lock: neither can slip past the other.
+    const shot = await tx.survivorAuditEntry.findUnique({
+      where: { id: `survivor-shot:${leagueId}:${voterUserId}` }, select: { relatedEntityId: true },
+    })
+    if (shot?.relatedEntityId === council.id) return { ok: false as const, status: 409 as const, code: 'shot_forfeited_vote', error: 'Playing Shot in the Dark forfeited your vote at this council.' }
+    const existing = await tx.survivorVote.findUnique({
+      where: { councilId_voterRosterId: { councilId: council.id, voterRosterId } },
+      select: { id: true, doesNotCount: true },
+    })
+    if (existing && firstValidLocks && !existing.doesNotCount) {
+      return { ok: false as const, status: 409 as const, code: 'vote_locked', error: 'Your first valid vote is locked and cannot be changed.' }
+    }
+    await tx.survivorVote.upsert({
+      where: { councilId_voterRosterId: { councilId: council.id, voterRosterId } },
+      create: { councilId: council.id, leagueId, voterRosterId, targetRosterId, voterUserId, targetUserId,
+        targetName: target?.displayName ?? null, isLateVote: late, doesNotCount },
+      update: { targetRosterId, targetUserId, targetName: target?.displayName ?? null,
+        isLateVote: late, doesNotCount, submittedAt: now },
+    })
+    // Private audit: no ballot target is exposed to another player or a playing commissioner.
+    await tx.survivorAuditEntry.create({ data: {
+      leagueId, week: council.week, category: 'vote', action: 'vote_submitted', actorUserId: voterUserId,
+      relatedEntityId: council.id, relatedEntityType: 'council',
       data: { late, doesNotCount, changed: Boolean(existing) },
-      isVisibleToCommissioner: false,
-      isVisibleToPublic: false,
-    },
+      isVisibleToCommissioner: false, isVisibleToPublic: false,
+    } })
+    return { ok: true as const }
   })
+  if (!saved.ok) return saved
 
   return {
     ok: true,

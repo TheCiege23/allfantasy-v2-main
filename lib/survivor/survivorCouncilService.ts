@@ -25,7 +25,7 @@ export type CouncilStatus = 'scheduled' | 'voting_open' | 'closed' | 'revealed' 
 
 export interface IdolPlayRecord {
   idolId: string
-  powerType: 'vote_shield' | 'extra_vote' | 'skip_tribal' | 'vote_steal' | 'shot_in_the_dark'
+  powerType: 'vote_shield' | 'extra_vote' | 'skip_tribal' | 'vote_steal'
   playerUserId: string
   playerRosterId: string
   /** vote_shield: protected roster (self). */
@@ -38,8 +38,6 @@ export interface IdolPlayRecord {
   stolenVoterRosterId?: string
   /** skip_tribal: whether the holder also forfeits their own vote. */
   forfeitsVote?: boolean
-  /** shot_in_the_dark: the sealed one-in-six roll; protectedRosterId is set only when safe. */
-  safe?: boolean
   playedAt: string
 }
 

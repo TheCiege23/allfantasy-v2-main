@@ -87,7 +87,6 @@ type DashboardPayload = {
     activeChallenges: number
     automationNeedsAttention: boolean
     readinessIssues: string[]
-    tribeRedraw?: { status: 'none' | 'recommended' | 'postponed' | 'done'; recommendedWeek: number | null }
   }
   gameState: {
     phase: string
@@ -102,6 +101,7 @@ type DashboardPayload = {
   } | null
   week: number
   tribes: { id: string; name: string; emoji?: string | null; members: unknown[] }[]
+  tribeRedraw: { id: string; week: number | null; minTribeSize: number | null; maxTribeSize: number | null } | null
   council: unknown
   privateBallots: { voterName: string; targetName: string; submittedAt: string; doesNotCount: boolean }[]
   privateIdols: { id: string; ownerName: string; powerLabel: string }[]
@@ -116,13 +116,15 @@ type DashboardPayload = {
 export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }) {
   const searchParams = useSearchParams()
   const created = searchParams?.get('created') === '1'
-  const [tab, setTab] = useState<TabId>('overview')
+  const [tab, setTab] = useState<TabId>(searchParams?.get('tab') === 'tribes' ? 'tribes' : 'overview')
   const [data, setData] = useState<DashboardPayload | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [tribeDrafts, setTribeDrafts] = useState<Record<string, { name: string; emoji: string }>>({})
   const [announcement, setAnnouncement] = useState('')
   const [announcementState, setAnnouncementState] = useState<string | null>(null)
   const [sendingAnnouncement, setSendingAnnouncement] = useState(false)
+  const [redrawPending, setRedrawPending] = useState(false)
+  const [redrawMessage, setRedrawMessage] = useState<string | null>(null)
 
   const base = `/survivor/${leagueId}`
 
@@ -190,26 +192,24 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
     await load()
   }, [leagueId, load, tribeDrafts])
 
-  const [redrawState, setRedrawState] = useState<string | null>(null)
-  const [redrawBusy, setRedrawBusy] = useState(false)
   const decideRedraw = useCallback(async (decision: 'approve' | 'postpone') => {
-    setRedrawBusy(true)
-    setRedrawState(null)
+    if (!data?.tribeRedraw || redrawPending) return
+    setRedrawPending(true)
+    setRedrawMessage(null)
     try {
-      const res = await fetch('/api/survivor/commissioner', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ leagueId, action: decision === 'approve' ? 'approve_tribe_redraw' : 'postpone_tribe_redraw' }),
+      const response = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/survivor/tribes`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: decision === 'approve' ? 'approve_redraw' : 'postpone_redraw', recommendationId: data.tribeRedraw.id }),
       })
-      const body = await res.json().catch(() => ({}))
-      if (!res.ok) { setRedrawState(typeof body.error === 'string' ? body.error : 'The redraw decision was not saved.'); return }
-      setRedrawState(decision === 'approve' ? 'Tribes redrawn. Everyone has been moved to their new tribe chat.' : 'Postponed. You can still approve the redraw before the merge.')
-      await load()
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok || !result.ok) setRedrawMessage(result.error ?? 'The redraw decision could not be saved.')
+      else { setRedrawMessage(decision === 'approve' ? 'Tribes were randomly redrawn. New private huddles are ready.' : 'The redraw was postponed. Current tribes stay in place.'); await load() }
     } catch {
-      setRedrawState('Network error. The redraw decision was not confirmed.')
+      setRedrawMessage('Network error. Reload the dashboard to check whether the decision saved.')
     } finally {
-      setRedrawBusy(false)
+      setRedrawPending(false)
     }
-  }, [leagueId, load])
+  }, [data?.tribeRedraw, leagueId, load, redrawPending])
 
   const sendAnnouncement = useCallback(async () => {
     const message = announcement.trim()
@@ -413,21 +413,6 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
                   <li>Season automation: <strong>{data.operations.automationNeedsAttention ? 'needs review' : 'no reported error'}</strong></li>
                 </ul>
               </WarRoomPanel>
-              {data.operations.tribeRedraw && ['recommended', 'postponed'].includes(data.operations.tribeRedraw.status) && (
-                <WarRoomPanel title="Tribe redraw" subtitle="A tribe is down to 40% of its original size.">
-                  <p className="text-sm text-white/75">
-                    You can redraw every remaining manager into new tribes at random. This happens once per season and cannot be undone.
-                    {data.operations.tribeRedraw.status === 'postponed' ? ' You postponed it earlier; it stays available until the merge.' : ''}
-                  </p>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <button type="button" disabled={redrawBusy} onClick={() => void decideRedraw('approve')} className="rounded-lg border border-amber-400/40 bg-amber-500/15 px-3 py-2 text-sm text-amber-100 disabled:opacity-50" data-testid="survivor-redraw-approve">Redraw tribes now</button>
-                    {data.operations.tribeRedraw.status === 'recommended' && (
-                      <button type="button" disabled={redrawBusy} onClick={() => void decideRedraw('postpone')} className="rounded-lg border border-white/20 px-3 py-2 text-sm text-white disabled:opacity-50" data-testid="survivor-redraw-postpone">Postpone</button>
-                    )}
-                  </div>
-                  {redrawState && <p className="mt-3 text-sm text-white/70" role="status">{redrawState}</p>}
-                </WarRoomPanel>
-              )}
               <WarRoomPanel title="Draft & trades" subtitle="Current status and review workload.">
                 <p className="text-sm text-white/70">{data.operations.pendingTrades} trade{data.operations.pendingTrades === 1 ? '' : 's'} awaiting a decision · {data.operations.completedTrades} completed.</p>
                 <div className="mt-4 flex flex-wrap gap-2">
@@ -452,6 +437,15 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
 
           {tab === 'tribes' && (
             <WarRoomPanel title="Tribes" subtitle="Roster-based tribe assignment runs after the startup draft completes.">
+              {data?.tribeRedraw && <div className="mb-5 rounded-xl border border-amber-400/40 bg-amber-500/10 p-4">
+                <p className="font-semibold text-amber-100">Tribe redraw recommended</p>
+                <p className="mt-1 text-sm text-white/70">A tribe has fallen to 40% or less of its original size. Current sizes range from {data.tribeRedraw.minTribeSize ?? '?'} to {data.tribeRedraw.maxTribeSize ?? '?'} active managers. Approve a system-randomized redraw or postpone it. The commissioner cannot choose teammates. Approval archives the old private huddles and opens fresh ones.</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button type="button" disabled={redrawPending} onClick={() => void decideRedraw('approve')} className="rounded-lg bg-amber-400 px-3 py-2 text-sm font-semibold text-black disabled:opacity-50">{redrawPending ? 'Saving…' : 'Approve random redraw'}</button>
+                  <button type="button" disabled={redrawPending} onClick={() => void decideRedraw('postpone')} className="rounded-lg border border-white/20 px-3 py-2 text-sm text-white disabled:opacity-50">Postpone</button>
+                </div>
+              </div>}
+              {redrawMessage && <p role="status" className="mb-4 text-sm text-amber-200">{redrawMessage}</p>}
               <p className="mb-4 text-sm text-white/60">
                 {data?.tribes?.length
                   ? `${data.tribes.length} tribes configured.`
