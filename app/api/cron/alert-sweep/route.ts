@@ -110,6 +110,7 @@ import { followFreeAgentDeps } from '@/lib/follows/followFreeAgentDeps'
 import { injuredStarterDedupeKey, injuredStarterHref, mergeAudience } from '@/lib/chimmy-alerts/sweepAudience'
 import { buildFanOutLeagues } from '@/lib/chimmy-alerts/injuryFanOut'
 import { digestCopy, fanOutCopy, groupAlertsByPlayer } from '@/lib/chimmy-alerts/injuryFanOutCopy'
+import { finalCallSms, injurySmsEnabled } from '@/lib/chimmy-alerts/finalCallSms'
 import { allSportsInjuryAlertsEnabled, onGameDay } from '@/lib/chimmy-alerts/gameDayScope'
 import { liveFirstSeen, planLiveFold, sleeperIdentities } from '@/lib/chimmy-alerts/liveStatusFold'
 import { sleeperIdWhere } from '@/lib/player-identity/externalIdNamespace'
@@ -488,6 +489,8 @@ interface SweepUserResult {
   mutedByChimmyPrefs?: boolean
   /** Players named in this sweep's message — more than one is the game-day digest. */
   playersSent?: number
+  /** Final-call messages (the one injury alert that may text) dispatched this sweep. */
+  finalCalls?: number
   errors: string[]
 }
 
@@ -639,16 +642,73 @@ async function handle(req: NextRequest) {
         const now = new Date()
         const groups = groupAlertsByPlayer(alerts)
         const unsent: Array<{ group: (typeof alerts)[number][]; key: string }> = []
+        /*
+         * 📱 THE ONE INJURY ALERT THAT TEXTS (2026-10-17; the A2P 10DLC sender is approved, owner
+         * signed off). Within ~3h of lock (urgency ≥ 78) a starter still ruled out and still in the
+         * lineup is worth an SMS — once per player, designation and Eastern day:
+         *   - first seen inside the window → the REGULAR row carries the text (the digest push and
+         *     email stay exactly as they were), and that row is stamped `meta.texted`;
+         *   - already told earlier that day → a separate FINAL CALL row (`<key>:final`) with a push
+         *     and the text, so the morning heads-up never uses up the near-lock text.
+         * Several players in one sweep share ONE text. Everything else about the text is the
+         * dispatcher's: SMS consent, the injury_alerts SMS switch, quiet hours (high severity
+         * passes only for users who allow critical alerts) and the per-user daily cap.
+         * `INJURY_ALERTS_SMS=off` turns all of it off without a deploy.
+         */
+        const smsOn = injurySmsEnabled()
+        const nearLock = (g: (typeof alerts)[number][]) => smsOn && g[0]!.urgencySignal >= 78
+        const finalCalls: Array<{ group: (typeof alerts)[number][]; key: string }> = []
         for (const g of groups) {
           const key = injuredStarterDedupeKey(g[0]!, now)
-          // Today's message about this player and designation already went out: say nothing again.
+          // Today's message about this player and designation already went out: say nothing again —
+          // unless it went out before the lock window and the final call has not been made.
           const already = await prisma.platformNotification
-            .findFirst({ where: { sourceKey: `${key}:${sub.userId}` }, select: { id: true } })
+            .findFirst({ where: { sourceKey: `${key}:${sub.userId}` }, select: { id: true, meta: true } })
             .catch(() => null)
-          if (!already) unsent.push({ group: g, key })
+          if (!already) {
+            unsent.push({ group: g, key })
+            continue
+          }
+          if (!nearLock(g) || (already.meta as { texted?: boolean } | null)?.texted === true) continue
+          const finalKey = `${key}:final`
+          const finalSaid = await prisma.platformNotification
+            .findFirst({ where: { sourceKey: `${finalKey}:${sub.userId}` }, select: { id: true } })
+            .catch(() => null)
+          if (!finalSaid) finalCalls.push({ group: g, key: finalKey })
         }
+        if (finalCalls.length > 0) {
+          const fanOutsF = await Promise.all(finalCalls.map((f) => buildFanOutLeagues(sub.userId, f.group, now).catch(() => [])))
+          const copiesF = finalCalls.map((f, i) => fanOutCopy(f.group, fanOutsF[i]!))
+          const hrefsF = await Promise.all(finalCalls.map(async (f) => injuredStarterHref(f.group[0]!, await alertPlayerRef(f.group[0]!).catch(() => null))))
+          // One text for all of them: his own copy and card for one player, the digest for several.
+          const smsBody =
+            finalCalls.length === 1
+              ? finalCallSms(copiesF[0]!, `${getBaseUrl()}${hrefsF[0]!}`)
+              : finalCallSms(digestCopy(finalCalls.map((f) => f.group)), `${getBaseUrl()}/core/players`)
+          for (let i = 0; i < finalCalls.length; i++) {
+            const f = finalCalls[i]!
+            await dispatchNotification({
+              userIds: [sub.userId],
+              category: 'injury_alerts',
+              productType: 'app',
+              type: 'chimmy_alert',
+              title: `Final call: ${copiesF[i]!.title}`,
+              body: copiesF[i]!.body,
+              actionHref: hrefsF[i]!,
+              actionLabel: 'Open his card',
+              leagueId: f.group[0]!.leagueId ?? null,
+              severity: 'high',
+              meta: { chimmyAlert: true, finalCall: true, class: f.group[0]!.class, alertType: f.group[0]!.type, ...(f.group[0]!.metadata ?? {}) },
+              dedupePrefix: f.key,
+              // The morning email already said it. The text rides the first row only.
+              skipChannels: { email: true, sms: i !== 0 },
+              ...(i === 0 ? { smsBody } : {}),
+            }).catch(() => undefined)
+          }
+        }
+        result.finalCalls = finalCalls.length
         if (unsent.length === 0) {
-          result.deduped = true
+          result.deduped = finalCalls.length === 0
           totalDeduped += 1
           results.push(result)
           continue
@@ -696,14 +756,25 @@ async function handle(req: NextRequest) {
          * Email rides `emailOverride` deliberately. The dispatcher's default
          * sender strips its own HTML — every tag replaced with a space — so
          * anything designed must come through the override, which is the only
-         * path to sendTemplatedEmail. SMS and push stay skipped: the targeted
-         * push below is the only push, and SMS has no registered sender yet
-         * (Twilio A2P 10DLC).
+         * path to sendTemplatedEmail. SMS and push stay skipped here: the targeted
+         * push below is the only push, and the one alert that texts is the
+         * FINAL CALL near lock (see `finalCalls` above), so the morning heads-up
+         * never spends a text.
          */
+        // Players first told about inside the lock window: their rows carry ONE shared text.
+        const textNow = unsent.map((u, i) => (nearLock(u.group) ? i : -1)).filter((i) => i >= 0)
+        const textBody =
+          textNow.length === 0
+            ? null
+            : textNow.length === 1
+              ? finalCallSms(copies[textNow[0]!]!, `${getBaseUrl()}${hrefs[textNow[0]!]!}`)
+              : finalCallSms(digestCopy(textNow.map((i) => unsent[i]!.group)), `${getBaseUrl()}/core/players`)
         for (let i = 0; i < unsent.length; i++) {
           const u = unsent[i]!
           const top = u.group[0]!
           const withEmail = i === 0 && injuryEmail != null
+          const texts = textBody != null && i === textNow[0]
+          const covered = textNow.includes(i)
           await dispatchNotification({
             userIds: [sub.userId],
             category: 'injury_alerts',
@@ -716,9 +787,11 @@ async function handle(req: NextRequest) {
             actionLabel: 'Open his card',
             leagueId: top.leagueId ?? null,
             severity: severityOf(u),
-            meta: { chimmyAlert: true, class: top.class, alertType: top.type, ...(top.metadata ?? {}) },
+            // `texted` tells a later sweep the near-lock text for this player already went out.
+            meta: { chimmyAlert: true, class: top.class, alertType: top.type, ...(top.metadata ?? {}), ...(covered ? { texted: true } : {}) },
             dedupePrefix: u.key,
-            skipChannels: { email: !withEmail, sms: true, push: true },
+            skipChannels: { email: !withEmail, sms: !texts, push: true },
+            ...(texts && textBody ? { smsBody: textBody } : {}),
             ...(withEmail && injuryEmail ? { emailOverride: injuryEmail } : {}),
           })
         }

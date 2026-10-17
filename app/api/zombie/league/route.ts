@@ -11,6 +11,7 @@ import { getZombieHordeSitOutStateForWeek } from '@/lib/zombie/ZombieHordeSitOut
 import { resolveWhispererViewer } from '@/lib/zombie/whispererViewer'
 import { redactWhispererRecord, redactZombieEvent, redactZombieTeam } from '@/lib/zombie/whispererRedaction'
 import { withWhispererDisplayName } from '@/lib/zombie/zombieTeamNames'
+import { loadNativeSeasonRecords } from '@/lib/zombie/ZombieInfectionEngine'
 
 export const dynamic = 'force-dynamic'
 
@@ -163,6 +164,16 @@ export async function GET(req: Request) {
     },
   })
   if (!z) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  // A native league's records live on its season rosters; the team rows' wins/losses/pointsFor are
+  // written only by the legacy import path and read 0-0 all season. Overlay before anything sorts on them.
+  const records = await loadNativeSeasonRecords(leagueId, z.season).catch(() => null)
+  if (records) {
+    for (const t of z.teams) {
+      const r = records.get(t.rosterId)
+      if (r) Object.assign(t, { wins: r.wins, losses: r.losses, pointsFor: r.pointsFor })
+    }
+  }
 
   const config = await prisma.zombieLeagueConfig.findUnique({
     where: { leagueId },

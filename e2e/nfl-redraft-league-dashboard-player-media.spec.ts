@@ -16,6 +16,13 @@ test.describe.configure({ timeout: 180_000 })
 const HARNESS_PATH = '/e2e/nfl-redraft-league-dashboard'
 
 /*
+ * The shell's internal fetches 404 in dev and can keep the network busy. An unbounded
+ * networkidle wait used the whole 180s test budget, so bound it and rely on the test-id
+ * wait and clickHydrated for readiness.
+ */
+const NETWORK_IDLE_TIMEOUT_MS = 10_000
+
+/*
  * ⚠ THE SHELL HAS TWO LEVELS OF NAVIGATION, AND THIS SPEC ONLY KNEW ABOUT ONE.
  *
  * LeagueShell renders GROUP pills (`league-tab-group-<group>`, plain buttons carrying
@@ -40,7 +47,7 @@ const LEAGUE_GROUP_TABS = ['home', 'matchups', 'players', 'trades'] as const
 async function gotoHarnessReady(page: Page): Promise<void> {
   await page.goto(HARNESS_PATH, { waitUntil: 'domcontentloaded', timeout: 120_000 })
   await page.getByTestId('nfl-redraft-league-dashboard-harness').waitFor({ state: 'visible', timeout: 120_000 })
-  await page.waitForLoadState('networkidle').catch(() => null)
+  await page.waitForLoadState('networkidle', { timeout: NETWORK_IDLE_TIMEOUT_MS }).catch(() => null)
   await page.getByTestId('league-tab-group-league').waitFor({ state: 'visible', timeout: 30_000 })
 }
 
