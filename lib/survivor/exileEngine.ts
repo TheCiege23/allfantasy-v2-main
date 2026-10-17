@@ -1,10 +1,10 @@
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
+import { createHash } from 'node:crypto'
 import { resolveScheduledExileReturn } from './survivorExileLifecycle'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { postHostMessage } from './hostEngine'
 import { logSurvivorAuditEntry } from './auditEntry'
-import { EXILE_BOSS_USER_ID } from './exileRosterRules'
 
 /** Default conversion: 1 token → $5 FAAB on main league roster (Int field). */
 const TOKEN_TO_FAAB = 5
@@ -162,6 +162,16 @@ export async function scoreExileWeek(leagueId: string, week: number): Promise<bo
     const finalized = await tx.survivorAuditEntry.findFirst({ where: { leagueId, week, action: 'exile_results_finalized' }, select: { id: true, data: true } })
     if (!finalized) return false
     const proof = finalized.data as { source?: string; userIds?: string[] } | null
+    // Roster scores alone do not establish a winner against the host. A verified
+    // boss result is a separate prerequisite; without it this week stays retryable.
+    const bossResult = island.bossWinsEnabled
+      ? await tx.survivorAuditEntry.findFirst({ where: { leagueId, week, action: 'exile_boss_result_finalized' }, select: { id: true, data: true } })
+      : null
+    const bossData = bossResult?.data && typeof bossResult.data === 'object' && !Array.isArray(bossResult.data)
+      ? bossResult.data as { score?: unknown; source?: unknown } : null
+    const bossScore = typeof bossData?.score === 'number' && Number.isFinite(bossData.score) &&
+      typeof bossData.source === 'string' && bossData.source.trim() ? bossData.score : null
+    if (island.bossWinsEnabled && bossScore == null) return false
     const league = await tx.league.findUnique({ where: { id: leagueId }, select: { survivorTokenCap: true } })
     const entries = await tx.exileWeeklyEntry.findMany({ where: { exileId: island.id, week }, orderBy: [{ weeklyScore: 'desc' }, { userId: 'asc' }] })
     // Empty/missing results are retryable; do not consume the weekly idempotency marker.
@@ -172,29 +182,39 @@ export async function scoreExileWeek(leagueId: string, week: number): Promise<bo
       const player = await tx.survivorPlayer.findUnique({ where: { leagueId_userId: { leagueId, userId: entry.userId } } })
       if (player?.playerState === 'exile') eligible.push({ entry, player })
     }
-    const boss = entries.find(entry => entry.userId === EXILE_BOSS_USER_ID && (proof?.source !== 'closed_exile_rosters_v1' || proof.userIds?.includes(entry.userId)))
-    const exiles = boss ? await tx.survivorPlayer.findMany({ where: { leagueId, playerState: 'exile' }, select: { userId: true, tokenBalance: true } }) : []
-    // An exile who fielded no roster scored nothing, so Chimmy's team still has to beat zero.
-    if (!eligible.length && !(boss && exiles.length)) return false
-    const best = eligible[0]?.entry.weeklyScore ?? 0
-    if (boss && boss.weeklyScore > best) {
-      // Chimmy outscored every exile: nobody earns a token and every balance returns to zero.
-      const shielded = await userIdsWithTokenShield(leagueId)
-      const reset = exiles.filter(player => player.tokenBalance > 0 && !shielded.has(player.userId)).map(player => player.userId)
-      if (reset.length) await tx.survivorPlayer.updateMany({ where: { leagueId, userId: { in: reset } }, data: { tokenBalance: 0 } })
-      await tx.survivorAuditEntry.create({ data: { leagueId, week, category: 'exile', action: 'exile_boss_won', targetUserId: EXILE_BOSS_USER_ID,
-        data: { bossScore: boss.weeklyScore, bestExileScore: best, resetUserIds: reset }, isVisibleToCommissioner: true, isVisibleToPublic: true } })
-      const channel = island.chatChannelId ? { id: island.chatChannelId } : await tx.survivorChatChannel.findFirst({ where: { leagueId, channelType: 'exile', isArchived: false }, select: { id: true } })
-      if (channel) await tx.survivorChatMessage.create({ data: { leagueId, channelId: channel.id, channelType: 'exile', senderUserId: 'survivor-host-chimmy', senderName: 'Chimmy', senderIsHost: true, isSystemMessage: true,
-        contentType: 'host_announcement', content: `Exile · Week ${week}\nChimmy's team scored ${boss.weeklyScore.toFixed(1)} and beat every exile (best: ${best.toFixed(1)}). All Exile tokens are reset to 0.` } })
-    } else for (const { entry, player } of eligible.filter(row => row.entry.weeklyScore === best)) {
-      const award = league?.survivorTokenCap != null && player.tokenBalance >= league.survivorTokenCap ? 0 : 1
-      await tx.survivorPlayer.update({ where: { id: player.id }, data: { tokenBalance: { increment: award }, totalTokensEarned: { increment: award } } })
-      await tx.exileWeeklyEntry.update({ where: { id: entry.id }, data: { tokenEarned: award } })
+    if (!eligible.length) return false
+    const best = eligible[0].entry.weeklyScore
+    const bossWon = bossScore != null && bossScore >= best
+    const tiedLeaders = eligible.filter(row => row.entry.weeklyScore === best)
+    const winner = bossWon ? null : tiedLeaders.sort((a, b) => {
+      const rank = (userId: string) => createHash('sha256').update(`${leagueId}:${week}:${userId}`).digest('hex')
+      return rank(a.entry.userId).localeCompare(rank(b.entry.userId))
+    })[0]
+    let shielded = new Set<string>()
+    if (bossWon && island.bossTokenResetOnWin) {
+      const idols = await tx.survivorIdol.findMany({ where: { leagueId, powerType: 'token_shield', status: 'hidden' }, select: { currentOwnerUserId: true, rosterId: true } })
+      shielded = new Set(idols.map(idol => idol.currentOwnerUserId).filter((id): id is string => Boolean(id)))
+      for (const idol of idols.filter(row => !row.currentOwnerUserId && row.rosterId)) {
+        const holder = await tx.roster.findFirst({ where: { id: idol.rosterId, leagueId }, select: { platformUserId: true } })
+        if (holder?.platformUserId) shielded.add(holder.platformUserId)
+      }
+      await tx.survivorPlayer.updateMany({ where: { leagueId, playerState: 'exile', userId: { notIn: [...shielded] } }, data: { tokenBalance: 0 } })
+    }
+    for (const { entry, player } of eligible) {
+      const award = winner?.entry.id === entry.id &&
+        (league?.survivorTokenCap == null || player.tokenBalance < league.survivorTokenCap) ? 1 : 0
+      if (award) await tx.survivorPlayer.update({ where: { id: player.id }, data: { tokenBalance: { increment: 1 }, totalTokensEarned: { increment: 1 } } })
+      await tx.exileWeeklyEntry.update({ where: { id: entry.id }, data: {
+        bossScore, bossWon, tokenEarned: award,
+        tokenWiped: bossWon && island.bossTokenResetOnWin && player.tokenBalance > 0 && !shielded.has(entry.userId),
+      } })
     }
     await tx.exileIsland.update({ where: { id: island.id }, data: { currentWeek: Math.max(island.currentWeek, week) } })
     const balances = await tx.survivorPlayer.findMany({ where: { leagueId, playerState: 'exile' }, select: { userId: true, tokenBalance: true, totalTokensEarned: true, eliminatedWeek: true } })
-    await tx.survivorAuditEntry.create({ data: { leagueId, week, category: 'exile', action: 'exile_week_scored', data: { entryCount: entries.length, balances }, isVisibleToCommissioner: true, isVisibleToPublic: false } })
+    await tx.survivorAuditEntry.create({ data: { leagueId, week, category: 'exile', action: 'exile_week_scored', data: {
+      entryCount: entries.length, bossScore, bossWon, winnerUserId: winner?.entry.userId ?? null,
+      tieBreak: tiedLeaders.length > 1 && winner ? 'seeded_random' : null, balances,
+    }, isVisibleToCommissioner: true, isVisibleToPublic: false } })
     return true
   }, { timeout: 30_000, maxWait: 10_000 })
 }

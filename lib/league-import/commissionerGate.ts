@@ -276,6 +276,20 @@ async function checkEspn(appUserId: string, sourceLeagueId: string): Promise<Com
       includePreviousSeasons: false,
     })
     const viewerTeamId = payload.viewerTeamId?.trim() || null
+    /*
+     * ⚠ CONNECTED IS A DIFFERENT FAILURE. The saved cookies belong to an ESPN account with no
+     * team here, so "connect your ESPN account" contradicts the "ESPN connected" badge and sends
+     * the user to redo a step they already did. Name the wrong account instead.
+     */
+    if (!viewerTeamId && payload.viewerEspnConnected) {
+      return {
+        ok: false,
+        leagueReadable: true,
+        reason:
+          'Your connected ESPN account has no team in this league. Reconnect ESPN with the ' +
+          'account that has a team here — that step needs a desktop browser.',
+      }
+    }
     if (!viewerTeamId) {
       return {
         ok: false,
