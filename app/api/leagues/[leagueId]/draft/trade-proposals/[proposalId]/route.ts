@@ -7,7 +7,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft, getCurrentUserRosterIdForLeague } from '@/lib/live-draft-engine/auth'
-import { appendDraftPickTrades } from '@/lib/live-draft-engine/DraftPickTradeService'
+import { appendDraftPickTrades, type DraftPickTradeSessionView } from '@/lib/live-draft-engine/DraftPickTradeService'
+import { resolvePickOwner } from '@/lib/live-draft-engine/PickOwnershipResolver'
+import { resolveOverallForRoundSlot } from '@/lib/live-draft-engine/draftPickTradeInventory'
 import { buildSessionSnapshot } from '@/lib/live-draft-engine/DraftSessionService'
 import { onTradeReaction } from '@/lib/commentary-engine'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
@@ -80,7 +82,10 @@ export async function POST(
         newOwnerName: previousGive || proposal.proposerName || 'Team',
       },
     ]
-    const appendResult = await appendDraftPickTrades(leagueId, newTrades as any)
+    const appendResult = await appendDraftPickTrades(leagueId, newTrades as any, {
+      sessionId: proposal.sessionId,
+      validate: (s) => validateAcceptAgainstSession(proposal, s),
+    })
     if (!appendResult.success) {
       return NextResponse.json({ error: appendResult.error ?? 'Failed to record trade' }, { status: 400 })
     }
@@ -203,4 +208,44 @@ async function emitAcceptedTradeCommentary(input: {
   } catch {
     // non-fatal
   }
+}
+
+/**
+ * The same checks the propose route makes, re-run against the session as it stands at accept time:
+ * a pending offer can outlive its picks (made, or traded away elsewhere) and the draft itself.
+ */
+function validateAcceptAgainstSession(
+  proposal: {
+    proposerRosterId: string
+    receiverRosterId: string
+    giveRound: number
+    giveSlot: number
+    receiveRound: number
+    receiveSlot: number
+  },
+  s: DraftPickTradeSessionView
+): string | null {
+  if (s.status !== 'in_progress') return 'The draft is no longer in progress.'
+  const giveOwner = resolvePickOwner(proposal.giveRound, proposal.giveSlot, s.slotOrder, s.tradedPicks)
+  const receiveOwner = resolvePickOwner(proposal.receiveRound, proposal.receiveSlot, s.slotOrder, s.tradedPicks)
+  if (!giveOwner || giveOwner.rosterId !== proposal.proposerRosterId) {
+    return 'The offered pick is no longer owned by the proposing manager.'
+  }
+  if (!receiveOwner || receiveOwner.rosterId !== proposal.receiverRosterId) {
+    return 'You no longer own the requested pick.'
+  }
+  const overallFor = (round: number, slot: number) =>
+    resolveOverallForRoundSlot({
+      round,
+      slot,
+      teamCount: s.teamCount,
+      draftType: s.draftType as 'snake' | 'linear' | 'auction',
+      thirdRoundReversal: s.thirdRoundReversal,
+    })
+  const giveOverall = overallFor(proposal.giveRound, proposal.giveSlot)
+  const receiveOverall = overallFor(proposal.receiveRound, proposal.receiveSlot)
+  if ((giveOverall != null && s.draftedOveralls.has(giveOverall)) || (receiveOverall != null && s.draftedOveralls.has(receiveOverall))) {
+    return 'One of these picks has already been made.'
+  }
+  return null
 }
