@@ -94,8 +94,39 @@ export function isTimeoutError(err) {
   return code === 'UND_ERR_HEADERS_TIMEOUT' || code === 'UND_ERR_BODY_TIMEOUT'
 }
 
+/**
+ * A failed attempt is retried only if it failed within this long.
+ *
+ * 🛑 THE SEPTEMBER FIX CLASSIFIED THE WRONG CUT. `isTimeoutError` covers undici's ~300.9s headers
+ * timeout, but that never gets to fire against the worker: Railway's edge closes a request after
+ * 5 minutes with no data transferred (docs: networking/public-networking/specs-and-limits), and it
+ * gets there ~0.9s first. The client then sees `TypeError: fetch failed` with
+ * `cause.code UND_ERR_SOCKET "other side closed"` -- measured on Node 22.22 and 24.11 -- which is
+ * a CONNECTION failure, so `callJob` retried it. Production, 2026-10-16:
+ *
+ *     03:10:02  /api/cron/import-schedules?riProfiles=1   499 at 300,008ms  "client has closed the request"
+ *     03:15:02  the retry -- while the first handler ran on until 03:33
+ *
+ * sync_job_runs shows the same pair shape on ~30 slow-tier fires in one week (compute-projections,
+ * import-players, the RI profile and TheSportsDB schedule passes, image sync, ...).
+ *
+ * So the retry decision no longer depends on recognising every way a long request can end. It
+ * asks the question that actually matters -- could this request have reached a handler? -- and
+ * elapsed time answers it: a refused connection or a deploy-swap 502 fails in seconds, while
+ * anything that failed after half a minute was almost certainly running. Retrying THAT is the
+ * concurrent double-ingest this file exists to prevent.
+ */
+const RETRY_WINDOW_MS = 30_000
+
 function parseArgs(argv) {
-  const args = { schedule: null, path: null, all: false, dryRun: false, timeoutMs: DEFAULT_TIMEOUT_MS }
+  const args = {
+    schedule: null,
+    path: null,
+    all: false,
+    dryRun: false,
+    timeoutMs: DEFAULT_TIMEOUT_MS,
+    retryWindowMs: RETRY_WINDOW_MS,
+  }
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i]
     if (a === '--schedule') args.schedule = argv[++i] ?? null
@@ -103,6 +134,10 @@ function parseArgs(argv) {
     else if (a === '--all') args.all = true
     else if (a === '--dry-run') args.dryRun = true
     else if (a === '--timeout') args.timeoutMs = Number(argv[++i]) || DEFAULT_TIMEOUT_MS
+    else if (a === '--retry-window-ms') {
+      const n = Number(argv[++i])
+      args.retryWindowMs = Number.isFinite(n) && n >= 0 ? n : RETRY_WINDOW_MS
+    }
   }
   return args
 }
@@ -127,8 +162,11 @@ function selectJobs(crons, args) {
  * because it checks runningTooLong before freshness and can never escalate to red.
  *
  * 4xx is not retried either: a 401 or 404 will not fix itself on a second attempt.
+ *
+ * AND A 5xx OR CONNECTION FAILURE IS RETRIED ONLY IF IT CAME FAST (within `retryWindowMs`). The
+ * edge's own 5-minute cut arrives as a dropped socket, not a timeout -- see RETRY_WINDOW_MS.
  */
-async function callJob(baseUrl, secret, job, timeoutMs) {
+async function callJob(baseUrl, secret, job, timeoutMs, retryWindowMs = RETRY_WINDOW_MS) {
   const url = `${baseUrl.replace(/\/+$/, '')}${job.path}`
   let lastError = null
 
@@ -148,6 +186,12 @@ async function callJob(baseUrl, secret, job, timeoutMs) {
       const body = (await res.text().catch(() => '')).slice(0, 1500)
 
       if (res.ok) return { ok: true, status: res.status, elapsedMs, body, attempt }
+      if (res.status >= 500 && attempt === 1 && elapsedMs > retryWindowMs) {
+        return {
+          ok: false, status: res.status, elapsedMs, body, attempt,
+          error: `HTTP ${res.status} after ${elapsedMs}ms (NOT retried -- a request that ran this long reached its handler)`,
+        }
+      }
       if (res.status >= 500 && attempt === 1) {
         lastError = `HTTP ${res.status}`
         continue
@@ -169,6 +213,15 @@ async function callJob(baseUrl, secret, job, timeoutMs) {
         }
       }
       lastError = err?.message ?? String(err)
+      if (attempt === 1 && elapsedMs > retryWindowMs) {
+        const cause = err?.cause?.code ?? err?.code
+        return {
+          ok: false, status: null, elapsedMs, body: '', attempt,
+          error:
+            `${lastError}${cause ? ` (${cause})` : ''} after ${elapsedMs}ms` +
+            ' (NOT retried -- a request that ran this long reached its handler)',
+        }
+      }
       if (attempt === 1) continue
       return { ok: false, status: null, elapsedMs, body: '', attempt, error: lastError }
     } finally {
@@ -213,7 +266,7 @@ async function main() {
   // per-league fan-out shape already took production to an OOM (53200) once.
   for (const job of jobs) {
     process.stdout.write(`-> ${job.path} ... `)
-    const r = await callJob(baseUrl, secret, job, args.timeoutMs)
+    const r = await callJob(baseUrl, secret, job, args.timeoutMs, args.retryWindowMs)
     results.push({ job, ...r })
     console.log(r.ok ? `OK ${r.status} (${r.elapsedMs}ms)` : `FAIL ${r.error} (${r.elapsedMs}ms)`)
     if (r.body) console.log(`   ${r.body.replace(/\n/g, '\n   ')}`)
