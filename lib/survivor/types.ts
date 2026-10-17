@@ -134,6 +134,7 @@ export type SurvivorCommandIntent =
   | 'challenge_pick'
   | 'immunity_choice'
   | 'confirm_minigame'
+  | 'shot_in_the_dark'
   | 'unknown'
 
 export interface SurvivorParsedCommand {

@@ -3,6 +3,7 @@ import 'server-only'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { loadCouncilContext } from './survivorCouncilService'
+import { shotInTheDarkAnnouncements } from './survivorShotInTheDark'
 
 /**
  * SURVIVOR VOTE TALLY (canonical Phase 3) — deterministic, no fabrication.
@@ -68,7 +69,9 @@ export async function tallyCouncil(leagueId: string, councilId: string): Promise
   const voteRows = votes as VoteRow[]
 
   const protectedRosters = new Set(
-    council.idolsPlayed.filter((p) => p.powerType === 'vote_shield').map((p) => p.protectedRosterId ?? p.playerRosterId),
+    council.idolsPlayed
+      .filter((p) => p.powerType === 'vote_shield' || (p.powerType === 'shot_in_the_dark' && p.safe === true))
+      .map((p) => p.protectedRosterId ?? p.playerRosterId),
   )
   const safeRosters = new Set(ctx.scopePlayers.filter(player => !ctx.eligibility.targetUserIds.includes(player.userId)).map(player => player.rosterId))
   const extraBallots = council.idolsPlayed.filter((p) => (p.powerType === 'extra_vote' || p.powerType === 'vote_steal') && p.extraTargetUserId)
@@ -259,8 +262,11 @@ export async function revealCouncil(leagueId: string, councilId: string, actorUs
     const ballots = seq.length ? seq.map((scroll, index) => `Ballot ${index + 1}: ${scroll.targetName ?? 'No eligible target'}${scroll.status === 'counts' ? '' : scroll.status === 'taken_by_vote_steal' ? ' (Taken — does not count)' : ' (does not count)'}.`).join('\n') : 'No ballots were cast.'
     const opensRevote = council.isTie && council.tiePhase === 'revote_required' && council.phase !== 'revote'
     const outcome = council.isTie ? opensRevote ? 'The vote is tied. Eligible managers have two hours to revote for the tied managers. Nobody leaves yet.' : 'The vote remains tied. An independent commissioner must decide the exact season-points tie.' : `${council.eliminatedName ?? 'The selected manager'} has been voted off the main island.${council.tiePhase === 'season_points_decided' ? ' The tiebreak used finalized season points.' : ''}`
+    const shotPlayers = Array.isArray(council.idolsPlayed) ? (council.idolsPlayed as Array<{ powerType?: string; playerUserId?: string }>).filter(p => p?.powerType === 'shot_in_the_dark').map(p => String(p.playerUserId)) : []
+    const shotNames = shotPlayers.length ? new Map((await tx.survivorPlayer.findMany({ where: { leagueId, userId: { in: shotPlayers } }, select: { userId: true, displayName: true } })).map(p => [p.userId, p.displayName])) : new Map<string, string>()
+    const shots = shotInTheDarkAnnouncements(council.idolsPlayed, userId => shotNames.get(userId) ?? 'A manager')
     await tx.survivorChatMessage.create({ data: { leagueId, channelId: channel.id, channelType: 'league', senderUserId: 'survivor-host-chimmy', senderName: 'Chimmy', senderIsHost: true, isSystemMessage: true,
-      contentType: 'host_announcement', content: `Torch Ceremony · Week ${council.week}\n${ballots}\n${outcome}` } })
+      contentType: 'host_announcement', content: `Torch Ceremony · Week ${council.week}\n${shots.map(line => `${line}\n`).join('')}${ballots}\n${outcome}` } })
     const now = new Date()
     await tx.survivorTribalCouncil.update({ where: { id: councilId }, data: { isRevealed: true, revealStartsAt: now, status: council.isTie ? 'tie_pending' : 'revealed' } })
     if (opensRevote) {

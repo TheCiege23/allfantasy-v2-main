@@ -8,6 +8,8 @@ import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { movePlayerBoundIdolsInTransaction } from './playerBoundIdolTransfer'
 
+const JURY_PHASES = new Set(['merge', 'post_merge', 'jury', 'finale'])
+
 export type EliminationOutcome =
   | { ok: true; alreadyResolved: boolean; outcome: 'removed_to_waivers' | 'exile_island'; eliminatedUserId: string; removedFromChats: number; pendingRelease: boolean; pendingExile: boolean; releasedPlayerCount?: number }
   | { ok: false; status: 400 | 404 | 409; code: string; error: string }
@@ -66,7 +68,16 @@ export async function resolveElimination(leagueId: string, councilId: string, ac
         relatedEntityId: roster.id, relatedEntityType: 'roster', data: { councilId, releasedPlayerIds: [...released], reason: 'voted_out' }, isVisibleToCommissioner: true, isVisibleToPublic: true } })
     }
     const newState = outcome === 'exile_island' ? 'exile' : 'eliminated'
-    await tx.survivorPlayer.update({ where: { id: player.id }, data: { playerState: newState, eliminatedWeek: council.week, canAccessTribeChat: false, canAccessMergeChat: false, canAccessExileChat: outcome === 'exile_island', exileReturnEligible: outcome === 'exile_island' && council.week < settings.exileReturnWeek } })
+    // Everyone voted out after the merge sits on the jury that crowns the winner.
+    const game = await tx.survivorGameState.findUnique({ where: { leagueId }, select: { phase: true } })
+    const joinsJury = settings.juryEnabled && JURY_PHASES.has(game?.phase ?? council.phase)
+    await tx.survivorPlayer.update({ where: { id: player.id }, data: { playerState: newState, eliminatedWeek: council.week, canAccessTribeChat: false, canAccessMergeChat: false, canAccessExileChat: outcome === 'exile_island', exileReturnEligible: outcome === 'exile_island' && council.week < settings.exileReturnWeek,
+      ...(joinsJury ? { isJuryMember: true, canAccessJuryChat: true } : {}) } })
+    if (joinsJury) {
+      await tx.survivorJuryMember.upsert({ where: { leagueId_rosterId: { leagueId, rosterId: roster.id } }, create: { leagueId, rosterId: roster.id, votedOutWeek: council.week }, update: {} })
+      await tx.survivorAuditEntry.create({ data: { leagueId, week: council.week, category: 'jury', action: 'jury_joined', targetUserId: userId,
+        relatedEntityId: roster.id, relatedEntityType: 'roster', data: { councilId }, isVisibleToCommissioner: true, isVisibleToPublic: true } })
+    }
     let removedFromChats = 0
     const channels = await tx.survivorChatChannel.findMany({ where: { leagueId, channelType: { in: ['tribe', 'merge', 'alliance'] } }, select: { id: true, memberUserIds: true } })
     for (const ch of channels) if (ch.memberUserIds.includes(userId)) {

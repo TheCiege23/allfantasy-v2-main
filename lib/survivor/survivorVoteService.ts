@@ -56,6 +56,9 @@ export async function submitVote(
   if (!isEligibleVoter(eligibility, voterUserId)) {
     return { ok: false, status: 403, code: 'not_eligible_voter', error: 'You are not eligible to vote at this council.' }
   }
+  if (council.idolsPlayed.some((p) => p.powerType === 'shot_in_the_dark' && p.playerUserId === voterUserId)) {
+    return { ok: false, status: 409, code: 'vote_given_up', error: 'You gave up your vote for a Shot in the Dark at this council.' }
+  }
   if (voterUserId === targetUserId && !settings.selfVotesAllowed) {
     return { ok: false, status: 422, code: 'self_vote_disallowed', error: 'Self-votes are not allowed.' }
   }
