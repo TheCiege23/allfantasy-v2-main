@@ -5,6 +5,8 @@ import { Search } from 'lucide-react'
 import { CommissionerPageContainer } from '@/components/commissioner-os/shell/CommissionerPageContainer'
 import { Button } from '@/components/ui/button'
 import { useCommissionerPlatform } from '@/components/commissioner-os/providers/CommissionerPlatformProvider'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { toolsText } from '@/lib/commissioner-os/i18n/toolsCopy'
 
 /**
  * Global Search & Command Palette is a platform service, reached
@@ -18,6 +20,8 @@ import { useCommissionerPlatform } from '@/components/commissioner-os/providers/
  */
 export default function SearchPage() {
   const { openService } = useCommissionerPlatform()
+  const { language } = useOptionalLanguage()
+  const t = (english: string) => toolsText(english, language)
 
   useEffect(() => {
     openService('search')
@@ -33,12 +37,14 @@ export default function SearchPage() {
           <Search size={28} aria-hidden />
         </div>
         <h1 className="text-lg font-semibold" style={{ color: 'var(--text)' }}>
-          Search
+          {t('Search')}
         </h1>
         <p className="max-w-md text-sm" style={{ color: 'var(--muted)' }}>
-          Global Search &amp; Command Palette is a platform service, not a module — find anything across recommendations, managers, tasks, reports, and automations from the header search button or &#8984;K/Ctrl+K, anywhere in Commissioner OS.
+          {t(
+            'Global Search & Command Palette is a platform service, not a module — find anything across recommendations, managers, tasks, reports, and automations from the header search button or ⌘K/Ctrl+K, anywhere in Commissioner OS.'
+          )}
         </p>
-        <Button onClick={() => openService('search')}>Open Search</Button>
+        <Button onClick={() => openService('search')}>{t('Open Search')}</Button>
       </div>
     </CommissionerPageContainer>
   )

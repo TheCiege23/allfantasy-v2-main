@@ -17,6 +17,7 @@ vi.mock("@/lib/analytics/recordAnalyticsEvent", () => ({ recordAnalyticsEvent: v
 import { sendMetaCAPIEvent } from "@/lib/meta-capi"
 import { ensureMetaPixel } from "@/lib/meta-client"
 import { IOS_APP_UA_TEST_JS, isInIosAppClient } from "@/lib/platform/iosApp"
+import { AD_OPT_OUT_TEST_JS } from "@/lib/privacy/adMeasurementOptOut"
 
 const IOS_UA =
   "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 AllFantasyiOS/1.0"
@@ -104,29 +105,38 @@ describe("inline loaders in the root layout (GTM, Google tag, Meta Pixel)", () =
   it("every tracking loader is behind it", () => {
     const src = readFileSync(path.join(process.cwd(), "app/layout.tsx"), "utf8")
     // GTM carries the Meta, TikTok and Reddit pixels in production.
-    expect(src).toMatch(/if \(!\$\{IOS_APP_UA_TEST_JS\}\) \(function\(w,d,s,l,i\)\{/)
+    // Each loader also carries the "Do Not Sell or Share" guard (lib/privacy/adMeasurementOptOut).
+    expect(src).toMatch(/if \(!\$\{IOS_APP_UA_TEST_JS\} && !\(\$\{AD_OPT_OUT_TEST_JS\}\)\) \(function\(w,d,s,l,i\)\{/)
     // Google tag: loaded by the guarded inline script, never by a <Script src>.
     expect(src).not.toMatch(/<Script\s+src=\{`https:\/\/www\.googletagmanager\.com\/gtag/)
-    expect(src).toMatch(/id="google-gtag"[\s\S]{0,120}if \(!\$\{IOS_APP_UA_TEST_JS\}\)/)
+    expect(src).toMatch(/id="google-gtag"[\s\S]{0,120}if \(!\$\{IOS_APP_UA_TEST_JS\} && !\(\$\{AD_OPT_OUT_TEST_JS\}\)\)/)
     // Both Meta Pixel bootstraps.
-    expect(src).toContain("if (!pixelId || ${IOS_APP_UA_TEST_JS}) return;")
-    expect(src).toMatch(/id="meta-pixel-base"[\s\S]{0,80}if \(!\$\{IOS_APP_UA_TEST_JS\}\) \{/)
+    expect(src).toContain("if (!pixelId || ${IOS_APP_UA_TEST_JS} || ${AD_OPT_OUT_TEST_JS}) return;")
+    expect(src).toMatch(/id="meta-pixel-base"[\s\S]{0,80}if \(!\$\{IOS_APP_UA_TEST_JS\} && !\(\$\{AD_OPT_OUT_TEST_JS\}\)\) \{/)
   })
 
   it("the guarded GTM loader really does nothing in the app, and runs on the website", () => {
     const src = readFileSync(path.join(process.cwd(), "app/layout.tsx"), "utf8")
-    const loader = /\{`(if \(!\$\{IOS_APP_UA_TEST_JS\}\) \(function\(w,d,s,l,i\)[\s\S]*?)`\}/.exec(src)?.[1]
+    const loader = /\{`(if \(!\$\{IOS_APP_UA_TEST_JS\} && !\(\$\{AD_OPT_OUT_TEST_JS\}\)\) \(function\(w,d,s,l,i\)[\s\S]*?)`\}/.exec(src)?.[1]
     expect(loader).toBeTruthy()
     const run = (ua: string) => {
       setUserAgent(ua)
       document.head.innerHTML = ""
       document.body.innerHTML = "<script></script>"
       delete (window as { dataLayer?: unknown }).dataLayer
-      const js = loader!.replace("${IOS_APP_UA_TEST_JS}", IOS_APP_UA_TEST_JS).replace("${gtmId}", "GTM-TEST")
+      const js = loader!
+        .replace("${IOS_APP_UA_TEST_JS}", IOS_APP_UA_TEST_JS)
+        .replace("${AD_OPT_OUT_TEST_JS}", AD_OPT_OUT_TEST_JS)
+        .replace("${gtmId}", "GTM-TEST")
       new Function(js)()
       return Array.from(document.getElementsByTagName("script")).filter((s) => s.src.includes("googletagmanager.com/gtm.js"))
     }
     expect(run(SAFARI_UA)).toHaveLength(1)
     expect(run(IOS_UA)).toHaveLength(0)
+    // Global Privacy Control on the website: the container never loads.
+    Object.defineProperty(window.navigator, "globalPrivacyControl", { value: true, configurable: true })
+    expect(run(SAFARI_UA)).toHaveLength(0)
+    Object.defineProperty(window.navigator, "globalPrivacyControl", { value: undefined, configurable: true })
+    expect(run(SAFARI_UA)).toHaveLength(1)
   })
 })

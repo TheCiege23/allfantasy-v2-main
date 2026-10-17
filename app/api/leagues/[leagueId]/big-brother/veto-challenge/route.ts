@@ -11,9 +11,7 @@ import { prisma } from '@/lib/prisma'
 import { isBigBrotherLeague, getBigBrotherConfig } from '@/lib/big-brother/BigBrotherLeagueConfig'
 import { getCurrentCycleForLeague, transitionPhase } from '@/lib/big-brother/BigBrotherPhaseStateMachine'
 import { setVetoWinner } from '@/lib/big-brother/BigBrotherVetoEngine'
-import { resolveChallengeByScore, resolveChallengeBySeededRandom } from '@/lib/big-brother/BigBrotherChallengeEngine'
-import { applyHaveNotChallengeScorePenalty } from '@/lib/big-brother/BigBrotherHaveNotPenaltyService'
-import { resolveHaveNotRosterIdsForCycle } from '@/lib/big-brother/BigBrotherChatChannels'
+import { runAutomation } from '@/lib/big-brother/BigBrotherAutomationService'
 import { getRosterDisplayNamesForLeague } from '@/lib/big-brother/ai/getRosterDisplayNames'
 import { getVetoChallengeThemeHints } from '@/lib/big-brother/sport-adapter'
 import { appendBigBrotherAudit } from '@/lib/big-brother/BigBrotherAuditLog'
@@ -107,40 +105,18 @@ export async function POST(
   }
 
   const body = await req.json().catch(() => ({}))
-  const scores = body.scores as Record<string, number> | undefined
-  const manualWinnerId = body.winnerRosterId as string | undefined
-
-  let winnerId: string | null = null
-
-  if (manualWinnerId) {
-    if (!participants.includes(manualWinnerId)) {
-      return NextResponse.json({ error: 'Winner is not a veto participant' }, { status: 400 })
+  if (config.weekProgressionPaused) return NextResponse.json({ error: 'Week progression is paused' }, { status: 409 })
+  const manualWinnerId = typeof body.winnerRosterId === 'string' ? body.winnerRosterId : null
+  if (!manualWinnerId) {
+    const result = await runAutomation({ leagueId, action: 'auto_veto', systemUserId: userId })
+    if (!result.ok || result.actionTaken?.startsWith('skipped_')) {
+      return NextResponse.json({ error: result.error ?? (result.actionTaken === 'skipped_paused' ? 'Week progression is paused' : 'Waiting for finalized scores for every eligible competitor') }, { status: 409 })
     }
-    winnerId = manualWinnerId
-  } else if (config.challengeMode === 'deterministic_score' && scores && Object.keys(scores).length > 0) {
-    const haveNotIds = await resolveHaveNotRosterIdsForCycle(leagueId, current.id)
-    const penalisedScores = applyHaveNotChallengeScorePenalty(scores, haveNotIds)
-    winnerId = await resolveChallengeByScore({
-      leagueId,
-      configId: config.configId,
-      week: current.week,
-      participantRosterIds: participants,
-      challengeType: 'veto',
-      scores: penalisedScores,
-    })
-  } else {
-    winnerId = resolveChallengeBySeededRandom({
-      leagueId,
-      configId: config.configId,
-      week: current.week,
-      participantRosterIds: participants,
-      challengeType: 'veto',
-    })
+    const resolved = await prisma.bigBrotherCycle.findUnique({ where: { id: current.id }, select: { vetoWinnerRosterId: true } })
+    return NextResponse.json({ ok: true, vetoWinnerRosterId: resolved?.vetoWinnerRosterId })
   }
-
-  if (!winnerId) {
-    return NextResponse.json({ error: 'Could not determine veto winner' }, { status: 500 })
-  }
+  if (!participants.includes(manualWinnerId)) return NextResponse.json({ error: 'Winner is not a veto participant' }, { status: 400 })
+  const winnerId = manualWinnerId
 
   const setResult = await setVetoWinner(current.id, winnerId)
   if (!setResult.ok) {

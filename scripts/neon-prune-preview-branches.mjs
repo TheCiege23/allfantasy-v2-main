@@ -9,8 +9,10 @@
  * This is always invoked as `node scripts/…`, so the shebang bought nothing.
  *
  * ── WHY A RECONCILER AND NOT ANOTHER FIX TO THE DELETE JOB ─────────────────────────────────────
- * `.github/workflows/neon-pr-branches.yml` already deletes a branch when its PR closes, and it
- * works: 295 of the last 300 runs succeeded, with the rest still in flight. But on 2026-09-20 the
+ * (Since 2026-10-01 this sweep is the ONLY cleanup: the close-time delete job was removed once
+ * branch creation had stopped and it had nothing left to delete — see the workflow header.)
+ * `.github/workflows/neon-pr-branches.yml` deleted a branch when its PR closed, and it
+ * worked: 295 of the last 300 runs succeeded, with the rest still in flight. But on 2026-09-20 the
  * project held 71 preview branches, 67 of them for PRs long since closed — 124 GB.
  *
  * 🛑 THE PER-EVENT CAUSE OF THOSE MISSES IS UNKNOWN, AND THIS DOES NOT PRETEND TO KNOW IT. Two

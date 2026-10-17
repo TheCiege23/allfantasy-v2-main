@@ -1,0 +1,2505 @@
+{
+  "rules": {
+    "rec": 1,
+    "kr_td": 6,
+    "pr_td": 6,
+    "rec_td": 6,
+    "rec_yd": 0.1,
+    "pass_td": 6,
+    "pass_yd": 0.04,
+    "rec_2pt": 2,
+    "rush_td": 6,
+    "rush_yd": 0.1,
+    "rush_2pt": 2,
+    "fum_rec_td": 6,
+    "bonus_rec_te": 0.5
+  },
+  "period": 5,
+  "individualSourceScores": "unavailable",
+  "teams": [
+    {
+      "team": "Yourdyinggrandpa",
+      "sourcePoints": 181.24,
+      "expectedIndependentPoints": 181.44,
+      "players": [
+        {
+          "name": "Roderick Robinson II",
+          "position": "RB",
+          "rows": [
+            {
+              "name": "Roderick Robinson II",
+              "_team": "UAB",
+              "_opponent": "Samford",
+              "_homeAway": "home",
+              "rushing.CAR": 14,
+              "rushing.YDS": 75,
+              "rushing.AVG": 5.4,
+              "rushing.TD": 0,
+              "rushing.LONG": 10,
+              "fumbles.FUM": 1,
+              "fumbles.LOST": 1,
+              "fumbles.REC": 0
+            }
+          ]
+        },
+        {
+          "name": "LJ Martin",
+          "position": "RB",
+          "rows": [
+            {
+              "name": "LJ Martin",
+              "_team": "BYU",
+              "_opponent": "TCU",
+              "_homeAway": "away",
+              "rushing.CAR": 2,
+              "rushing.YDS": 16,
+              "rushing.AVG": 8,
+              "rushing.TD": 0,
+              "rushing.LONG": 11,
+              "receiving.REC": 1,
+              "receiving.YDS": 0,
+              "receiving.AVG": 0,
+              "receiving.TD": 0,
+              "receiving.LONG": 0
+            }
+          ]
+        },
+        {
+          "name": "Chris Marshall",
+          "position": "WR",
+          "rows": [
+            {
+              "name": "Chris Marshall",
+              "_team": "Arkansas",
+              "_opponent": "Texas A&M",
+              "_homeAway": "away",
+              "receiving.REC": 7,
+              "receiving.YDS": 76,
+              "receiving.AVG": 10.9,
+              "receiving.TD": 1,
+              "receiving.LONG": 26
+            }
+          ]
+        },
+        {
+          "name": "Kiotti Armstrong",
+          "position": "TE",
+          "rows": [
+            {
+              "name": "Kiotti Armstrong",
+              "_team": "Texas A&M",
+              "_opponent": "Arkansas",
+              "_homeAway": "home",
+              "receiving.REC": 1,
+              "receiving.YDS": 54,
+              "receiving.AVG": 54,
+              "receiving.TD": 0,
+              "receiving.LONG": 54
+            }
+          ]
+        },
+        {
+          "name": "Charlie Becker",
+          "position": "WR",
+          "rows": [
+            {
+              "name": "Charlie Becker",
+              "_team": "Indiana",
+              "_opponent": "Rutgers",
+              "_homeAway": "away",
+              "receiving.REC": 8,
+              "receiving.YDS": 107,
+              "receiving.AVG": 13.4,
+              "receiving.TD": 2,
+              "receiving.LONG": 48
+            }
+          ]
+        },
+        {
+          "name": "Kayden Dixon-Wyatt",
+          "position": "WR",
+          "rows": [
+            {
+              "name": "Kayden Dixon-Wyatt",
+              "_team": "USC",
+              "_opponent": "Washington",
+              "_homeAway": "home",
+              "rushing.CAR": 1,
+              "rushing.YDS": -5,
+              "rushing.AVG": -5,
+              "rushing.TD": 0,
+              "rushing.LONG": 0
+            }
+          ]
+        },
+        {
+          "name": "Scottre Humphrey",
+          "position": "RB",
+          "rows": [
+            {
+              "name": "Scottre Humphrey",
+              "_team": "New Mexico",
+              "_opponent": "UTEP",
+              "_homeAway": "home",
+              "rushing.CAR": 13,
+              "rushing.YDS": 47,
+              "rushing.AVG": 3.6,
+              "rushing.TD": 1,
+              "rushing.LONG": 14,
+              "receiving.REC": 1,
+              "receiving.YDS": 8,
+              "receiving.AVG": 8,
+              "receiving.TD": 0,
+              "receiving.LONG": 8
+            }
+          ]
+        },
+        {
+          "name": "Jackson Arnold",
+          "position": "QB",
+          "rows": [
+            {
+              "name": "Jackson Arnold",
+              "_team": "UNLV",
+              "_opponent": "California",
+              "_homeAway": "home",
+              "passing.COMPLETIONS": 11,
+              "passing.ATT": 22,
+              "passing.YDS": 177,
+              "passing.AVG": 8,
+              "passing.TD": 3,
+              "passing.INT": 0,
+              "passing.QBR": 73.6,
+              "rushing.CAR": 15,
+              "rushing.YDS": 110,
+              "rushing.AVG": 7.3,
+              "rushing.TD": 2,
+              "rushing.LONG": 55,
+              "conversions.RUSH": 1,
+              "_conversionSource": "espn-summary",
+              "_conversionPlayIds": "401858247775"
+            }
+          ]
+        },
+        {
+          "name": "CJ Carr",
+          "position": "QB",
+          "rows": [
+            {
+              "name": "C.J. Carr",
+              "_team": "Notre Dame",
+              "_opponent": "North Carolina",
+              "_homeAway": "away",
+              "passing.COMPLETIONS": 21,
+              "passing.ATT": 29,
+              "passing.YDS": 234,
+              "passing.AVG": 8.1,
+              "passing.TD": 4,
+              "passing.INT": 0,
+              "passing.QBR": 93.1,
+              "rushing.CAR": 4,
+              "rushing.YDS": 15,
+              "rushing.AVG": 3.8,
+              "rushing.TD": 1,
+              "rushing.LONG": 9
+            }
+          ]
+        },
+        {
+          "name": "Braydon Bennett",
+          "position": "RB",
+          "rows": [
+            {
+              "name": "Braydon Bennett",
+              "_team": "Eastern Michigan",
+              "_opponent": "Massachusetts",
+              "_homeAway": "away",
+              "rushing.CAR": 10,
+              "rushing.YDS": 42,
+              "rushing.AVG": 4.2,
+              "rushing.TD": 1,
+              "rushing.LONG": 16
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "team": "Scorescotty",
+      "sourcePoints": 127.54,
+      "expectedIndependentPoints": 127.53999999999999,
+      "players": [
+        {
+          "name": "Aneyas Williams",
+          "position": "RB",
+          "rows": [
+            {
+              "name": "Aneyas Williams",
+              "_team": "Notre Dame",
+              "_opponent": "North Carolina",
+              "_homeAway": "away",
+              "rushing.CAR": 8,
+              "rushing.YDS": 42,
+              "rushing.AVG": 5.3,
+              "rushing.TD": 0,
+              "rushing.LONG": 24,
+              "receiving.REC": 3,
+              "receiving.YDS": 6,
+              "receiving.AVG": 2,
+              "receiving.TD": 0,
+              "receiving.LONG": 3
+            }
+          ]
+        },
+        {
+          "name": "Jesse Legree",
+          "position": "WR",
+          "rows": [
+            {
+              "name": "Jesse Legree",
+              "_team": "Oregon State",
+              "_opponent": "Colorado State",
+              "_homeAway": "away",
+              "receiving.REC": 5,
+              "receiving.YDS": 156,
+              "receiving.AVG": 31.2,
+              "receiving.TD": 3,
+              "receiving.LONG": 52
+            }
+          ]
+        },
+        {
+          "name": "Owen McCown",
+          "position": "QB",
+          "rows": [
+            {
+              "name": "Owen McCown",
+              "_team": "UTSA",
+              "_opponent": "Rice",
+              "_homeAway": "away",
+              "passing.COMPLETIONS": 19,
+              "passing.ATT": 29,
+              "passing.YDS": 148,
+              "passing.AVG": 5.1,
+              "passing.TD": 0,
+              "passing.INT": 1,
+              "passing.QBR": 17.9,
+              "rushing.CAR": 8,
+              "rushing.YDS": 0,
+              "rushing.AVG": 0,
+              "rushing.TD": 0,
+              "rushing.LONG": 15,
+              "fumbles.FUM": 1,
+              "fumbles.LOST": 1,
+              "fumbles.REC": 0
+            }
+          ]
+        },
+        {
+          "name": "Jekail Middlebrook",
+          "position": "RB",
+          "rows": [
+            {
+              "name": "Jekail Middlebrook",
+              "_team": "Virginia",
+              "_opponent": "Florida State",
+              "_homeAway": "away",
+              "rushing.CAR": 10,
+              "rushing.YDS": 65,
+              "rushing.AVG": 6.5,
+              "rushing.TD": 0,
+              "rushing.LONG": 13,
+              "receiving.REC": 2,
+              "receiving.YDS": 24,
+              "receiving.AVG": 12,
+              "receiving.TD": 0,
+              "receiving.LONG": 12
+            }
+          ]
+        },
+        {
+          "name": "JJ Buchanan",
+          "position": "WR",
+          "rows": [
+            {
+              "name": "JJ Buchanan",
+              "_team": "Michigan",
+              "_opponent": "Minnesota",
+              "_homeAway": "away",
+              "receiving.REC": 4,
+              "receiving.YDS": 50,
+              "receiving.AVG": 12.5,
+              "receiving.TD": 0,
+              "receiving.LONG": 17
+            }
+          ]
+        },
+        {
+          "name": "KJ Duff",
+          "position": "WR",
+          "rows": [
+            {
+              "name": "KJ Duff",
+              "_team": "Rutgers",
+              "_opponent": "Indiana",
+              "_homeAway": "home",
+              "receiving.REC": 4,
+              "receiving.YDS": 78,
+              "receiving.AVG": 19.5,
+              "receiving.TD": 0,
+              "receiving.LONG": 41
+            }
+          ]
+        },
+        {
+          "name": "Amare Thomas",
+          "position": "WR",
+          "rows": [
+            {
+              "name": "Amare Thomas",
+              "_team": "Houston",
+              "_opponent": "UCF",
+              "_homeAway": "home",
+              "receiving.REC": 4,
+              "receiving.YDS": 43,
+              "receiving.AVG": 10.8,
+              "receiving.TD": 0,
+              "receiving.LONG": 17
+            }
+          ]
+        },
+        {
+          "name": "Gavin Freeman",
+          "position": "WR",
+          "rows": [
+            {
+              "name": "Gavin Freeman",
+              "_team": "Baylor",
+              "_opponent": "Arizona State",
+              "_homeAway": "away",
+              "receiving.REC": 7,
+              "receiving.YDS": 115,
+              "receiving.AVG": 16.4,
+              "receiving.TD": 0,
+              "receiving.LONG": 31
+            }
+          ]
+        },
+        {
+          "name": "Rocco Becht",
+          "position": "QB",
+          "rows": [
+            {
+              "name": "Rocco Becht",
+              "_team": "Penn State",
+              "_opponent": "Northwestern",
+              "_homeAway": "away",
+              "passing.COMPLETIONS": 26,
+              "passing.ATT": 41,
+              "passing.YDS": 243,
+              "passing.AVG": 5.9,
+              "passing.TD": 1,
+              "passing.INT": 2,
+              "passing.QBR": 58.9,
+              "rushing.CAR": 7,
+              "rushing.YDS": 10,
+              "rushing.AVG": 1.4,
+              "rushing.TD": 0,
+              "rushing.LONG": 10
+            }
+          ]
+        },
+        {
+          "name": "Luke Dehnicke",
+          "position": "TE",
+          "rows": []
+        }
+      ]
+    },
+    {
+      "team": "Ciege82",
+      "sourcePoints": 139.54,
+      "expectedIndependentPoints": 139.54,
+      "players": [
+        {
+          "name": "Austyn Dendy",
+          "position": "RB",
+          "rows": [
+            {
+              "name": "Austyn Dendy",
+              "_team": "Bowling Green",
+              "_opponent": "Miami (OH)",
+              "_homeAway": "away",
+              "rushing.CAR": 7,
+              "rushing.YDS": 11,
+              "rushing.AVG": 1.6,
+              "rushing.TD": 0,
+              "rushing.LONG": 5,
+              "receiving.REC": 1,
+              "receiving.YDS": 1,
+              "receiving.AVG": 1,
+              "receiving.TD": 0,
+              "receiving.LONG": 1
+            }
+          ]
+        },
+        {
+          "name": "Colton Joseph",
+          "position": "QB",
+          "rows": [
+            {
+              "name": "Colton Joseph",
+              "_team": "Wisconsin",
+              "_opponent": "Michigan State",
+              "_homeAway": "home",
+              "passing.COMPLETIONS": 9,
+              "passing.ATT": 20,
+              "passing.YDS": 145,
+              "passing.AVG": 7.3,
+              "passing.TD": 3,
+              "passing.INT": 0,
+              "passing.QBR": 91.1,
+              "rushing.CAR": 13,
+              "rushing.YDS": 141,
+              "rushing.AVG": 10.8,
+              "rushing.TD": 1,
+              "rushing.LONG": 47
+            }
+          ]
+        },
+        {
+          "name": "Anthony Evans III",
+          "position": "WR",
+          "rows": [
+            {
+              "name": "Anthony Evans III",
+              "_team": "Mississippi State",
+              "_opponent": "Alabama",
+              "_homeAway": "home",
+              "receiving.REC": 12,
+              "receiving.YDS": 166,
+              "receiving.AVG": 13.8,
+              "receiving.TD": 2,
+              "receiving.LONG": 45
+            }
+          ]
+        },
+        {
+          "name": "Jeremy Payne",
+          "position": "RB",
+          "rows": [
+            {
+              "name": "Jeremy Payne",
+              "_team": "TCU",
+              "_opponent": "BYU",
+              "_homeAway": "home",
+              "rushing.CAR": 14,
+              "rushing.YDS": 77,
+              "rushing.AVG": 5.5,
+              "rushing.TD": 0,
+              "rushing.LONG": 25,
+              "receiving.REC": 4,
+              "receiving.YDS": 23,
+              "receiving.AVG": 5.8,
+              "receiving.TD": 0,
+              "receiving.LONG": 17
+            }
+          ]
+        },
+        {
+          "name": "Antwan Raymond",
+          "position": "RB",
+          "rows": [
+            {
+              "name": "Antwan Raymond",
+              "_team": "Rutgers",
+              "_opponent": "Indiana",
+              "_homeAway": "home",
+              "rushing.CAR": 11,
+              "rushing.YDS": 31,
+              "rushing.AVG": 2.8,
+              "rushing.TD": 0,
+              "rushing.LONG": 6,
+              "receiving.REC": 2,
+              "receiving.YDS": 7,
+              "receiving.AVG": 3.5,
+              "receiving.TD": 0,
+              "receiving.LONG": 6
+            }
+          ]
+        },
+        {
+          "name": "Roman Gagliano",
+          "position": "QB",
+          "rows": [
+            {
+              "name": "Roman Gagliano",
+              "_team": "Middle Tennessee",
+              "_opponent": "Kansas",
+              "_homeAway": "away",
+              "passing.COMPLETIONS": 9,
+              "passing.ATT": 26,
+              "passing.YDS": 81,
+              "passing.AVG": 3.1,
+              "passing.TD": 0,
+              "passing.INT": 0,
+              "passing.QBR": 11.7,
+              "rushing.CAR": 1,
+              "rushing.YDS": -4,
+              "rushing.AVG": -4,
+              "rushing.TD": 0,
+              "rushing.LONG": 0
+            }
+          ]
+        },
+        {
+          "name": "Brady Hunt",
+          "position": "TE",
+          "rows": [
+            {
+              "name": "Brady Hunt",
+              "_team": "South Carolina",
+              "_opponent": "Kentucky",
+              "_homeAway": "home",
+              "receiving.REC": 2,
+              "receiving.YDS": 14,
+              "receiving.AVG": 7,
+              "receiving.TD": 0,
+              "receiving.LONG": 8
+            }
+          ]
+        },
+        {
+          "name": "Carlos Hernandez",
+          "position": "WR",
+          "rows": [
+            {
+              "name": "Carlos Hernandez",
+              "_team": "Wake Forest",
+              "_opponent": "Stanford",
+              "_homeAway": "home",
+              "receiving.REC": 7,
+              "receiving.YDS": 87,
+              "receiving.AVG": 12.4,
+              "receiving.TD": 0,
+              "receiving.LONG": 19,
+              "puntReturns.NO": 1,
+              "puntReturns.YDS": -1,
+              "puntReturns.AVG": -1,
+              "puntReturns.LONG": 0,
+              "puntReturns.TD": 0
+            }
+          ]
+        },
+        {
+          "name": "Cam'ron Lacy",
+          "position": "WR",
+          "rows": [
+            {
+              "name": "Cam'Ron Lacy",
+              "_team": "Middle Tennessee",
+              "_opponent": "Kansas",
+              "_homeAway": "away",
+              "receiving.REC": 2,
+              "receiving.YDS": 25,
+              "receiving.AVG": 12.5,
+              "receiving.TD": 0,
+              "receiving.LONG": 15
+            }
+          ]
+        },
+        {
+          "name": "Marcel Williams",
+          "position": "WR",
+          "rows": [
+            {
+              "name": "Marcel Williams",
+              "_team": "Akron",
+              "receiving.REC": 2,
+              "receiving.YDS": 36,
+              "receiving.AVG": 18,
+              "receiving.TD": 0,
+              "receiving.LONG": 31
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "team": "Georgia Bulldogs",
+      "sourcePoints": 204.74,
+      "expectedIndependentPoints": 204.74,
+      "players": [
+        {
+          "name": "Cam Cook",
+          "position": "RB",
+          "rows": [
+            {
+              "name": "Cam Cook",
+              "_team": "West Virginia",
+              "_opponent": "Iowa State",
+              "_homeAway": "away",
+              "rushing.CAR": 20,
+              "rushing.YDS": 142,
+              "rushing.AVG": 7.1,
+              "rushing.TD": 2,
+              "rushing.LONG": 37,
+              "receiving.REC": 2,
+              "receiving.YDS": 5,
+              "receiving.AVG": 2.5,
+              "receiving.TD": 0,
+              "receiving.LONG": 3
+            }
+          ]
+        },
+        {
+          "name": "DeSean Bishop",
+          "position": "RB",
+          "rows": [
+            {
+              "name": "DeSean Bishop",
+              "_team": "Tennessee",
+              "_opponent": "Auburn",
+              "_homeAway": "home",
+              "rushing.CAR": 34,
+              "rushing.YDS": 220,
+              "rushing.AVG": 6.5,
+              "rushing.TD": 3,
+              "rushing.LONG": 44
+            }
+          ]
+        },
+        {
+          "name": "Lotzeir Brooks",
+          "position": "WR",
+          "rows": [
+            {
+              "name": "Lotzeir Brooks",
+              "_team": "Alabama",
+              "_opponent": "Mississippi State",
+              "_homeAway": "away",
+              "receiving.REC": 4,
+              "receiving.YDS": 96,
+              "receiving.AVG": 24,
+              "receiving.TD": 0,
+              "receiving.LONG": 50
+            }
+          ]
+        },
+        {
+          "name": "Winston Watkins Jr.",
+          "position": "WR",
+          "rows": [
+            {
+              "name": "Winston Watkins",
+              "_team": "LSU",
+              "_opponent": "McNeese",
+              "_homeAway": "home",
+              "receiving.REC": 3,
+              "receiving.YDS": 40,
+              "receiving.AVG": 13.3,
+              "receiving.TD": 0,
+              "receiving.LONG": 22
+            }
+          ]
+        },
+        {
+          "name": "Chris Durr Jr.",
+          "position": "WR",
+          "rows": [
+            {
+              "name": "Chris Durr Jr.",
+              "_team": "Maryland",
+              "_opponent": "Nebraska",
+              "_homeAway": "away",
+              "receiving.REC": 7,
+              "receiving.YDS": 149,
+              "receiving.AVG": 21.3,
+              "receiving.TD": 1,
+              "receiving.LONG": 65
+            }
+          ]
+        },
+        {
+          "name": "Davian Jackson",
+          "position": "WR",
+          "rows": [
+            {
+              "name": "Davian Jackson",
+              "_team": "Texas State",
+              "_opponent": "San Diego State",
+              "_homeAway": "away",
+              "rushing.CAR": 13,
+              "rushing.YDS": 53,
+              "rushing.AVG": 4.1,
+              "rushing.TD": 0,
+              "rushing.LONG": 13,
+              "receiving.REC": 1,
+              "receiving.YDS": 6,
+              "receiving.AVG": 6,
+              "receiving.TD": 1,
+              "receiving.LONG": 6,
+              "kickReturns.NO": 3,
+              "kickReturns.YDS": 65,
+              "kickReturns.AVG": 21.7,
+              "kickReturns.LONG": 23,
+              "kickReturns.TD": 0
+            }
+          ]
+        },
+        {
+          "name": "Jayden Maiava",
+          "position": "QB",
+          "rows": [
+            {
+              "name": "Jayden Maiava",
+              "_team": "USC",
+              "_opponent": "Washington",
+              "_homeAway": "home",
+              "passing.COMPLETIONS": 21,
+              "passing.ATT": 34,
+              "passing.YDS": 245,
+              "passing.AVG": 7.2,
+              "passing.TD": 1,
+              "passing.INT": 1,
+              "passing.QBR": 54.3,
+              "rushing.CAR": 3,
+              "rushing.YDS": -3,
+              "rushing.AVG": -1,
+              "rushing.TD": 0,
+              "rushing.LONG": 6
+            }
+          ]
+        },
+        {
+          "name": "LaNorris Sellers",
+          "position": "QB",
+          "rows": [
+            {
+              "name": "Lanorris Sellers",
+              "_team": "South Carolina",
+              "_opponent": "Kentucky",
+              "_homeAway": "home",
+              "passing.COMPLETIONS": 20,
+              "passing.ATT": 36,
+              "passing.YDS": 226,
+              "passing.AVG": 6.3,
+              "passing.TD": 2,
+              "passing.INT": 0,
+              "passing.QBR": 54.4,
+              "rushing.CAR": 17,
+              "rushing.YDS": 147,
+              "rushing.AVG": 8.6,
+              "rushing.TD": 0,
+              "rushing.LONG": 74,
+              "fumbles.FUM": 3,
+              "fumbles.LOST": 1,
+              "fumbles.REC": 0
+            }
+          ]
+        },
+        {
+          "name": "Willie Rodriguez",
+          "position": "TE",
+          "rows": [
+            {
+              "name": "Willie Rodriguez",
+              "_team": "Kentucky",
+              "_opponent": "South Carolina",
+              "_homeAway": "away",
+              "rushing.CAR": 2,
+              "rushing.YDS": 5,
+              "rushing.AVG": 2.5,
+              "rushing.TD": 0,
+              "rushing.LONG": 3,
+              "receiving.REC": 5,
+              "receiving.YDS": 57,
+              "receiving.AVG": 11.4,
+              "receiving.TD": 0,
+              "receiving.LONG": 20,
+              "conversions.REC": 1,
+              "_conversionSource": "espn-summary",
+              "_conversionPlayIds": "401856709890"
+            }
+          ]
+        },
+        {
+          "name": "Jackson Harris",
+          "position": "WR",
+          "rows": [
+            {
+              "name": "Jackson Harris",
+              "_team": "LSU",
+              "_opponent": "McNeese",
+              "_homeAway": "home",
+              "receiving.REC": 4,
+              "receiving.YDS": 37,
+              "receiving.AVG": 9.3,
+              "receiving.TD": 0,
+              "receiving.LONG": 20
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "team": "Grindingffb",
+      "sourcePoints": 179.1,
+      "expectedIndependentPoints": 179.1,
+      "players": [
+        {
+          "name": "T.J. Moore",
+          "position": "WR",
+          "rows": [
+            {
+              "name": "T.J. Moore",
+              "_team": "Clemson",
+              "_opponent": "Miami",
+              "_homeAway": "home",
+              "receiving.REC": 4,
+              "receiving.YDS": 39,
+              "receiving.AVG": 9.8,
+              "receiving.TD": 0,
+              "receiving.LONG": 17
+            }
+          ]
+        },
+        {
+          "name": "Brad Jackson",
+          "position": "QB",
+          "rows": [
+            {
+              "name": "Brad Jackson",
+              "_team": "Texas State",
+              "_opponent": "San Diego State",
+              "_homeAway": "away",
+              "passing.COMPLETIONS": 27,
+              "passing.ATT": 43,
+              "passing.YDS": 372,
+              "passing.AVG": 8.7,
+              "passing.TD": 3,
+              "passing.INT": 2,
+              "passing.QBR": 68.9,
+              "rushing.CAR": 22,
+              "rushing.YDS": 80,
+              "rushing.AVG": 3.6,
+              "rushing.TD": 0,
+              "rushing.LONG": 19
+            }
+          ]
+        },
+        {
+          "name": "Keshaun Singleton",
+          "position": "WR",
+          "rows": [
+            {
+              "name": "Keshaun Singleton",
+              "_team": "Auburn",
+              "_opponent": "Tennessee",
+              "_homeAway": "away",
+              "receiving.REC": 7,
+              "receiving.YDS": 54,
+              "receiving.AVG": 7.7,
+              "receiving.TD": 0,
+              "receiving.LONG": 16
+            }
+          ]
+        },
+        {
+          "name": "Ousmane Kromah",
+          "position": "RB",
+          "rows": [
+            {
+              "name": "Ousmane Kromah",
+              "_team": "Florida State",
+              "_opponent": "Virginia",
+              "_homeAway": "home",
+              "rushing.CAR": 17,
+              "rushing.YDS": 80,
+              "rushing.AVG": 4.7,
+              "rushing.TD": 0,
+              "rushing.LONG": 14,
+              "receiving.REC": 2,
+              "receiving.YDS": 13,
+              "receiving.AVG": 6.5,
+              "receiving.TD": 0,
+              "receiving.LONG": 11
+            }
+          ]
+        },
+        {
+          "name": "Patrick Overmyer",
+          "position": "TE",
+          "rows": [
+            {
+              "name": "Patrick Overmyer",
+              "_team": "Houston",
+              "_opponent": "UCF",
+              "_homeAway": "home",
+              "receiving.REC": 6,
+              "receiving.YDS": 76,
+              "receiving.AVG": 12.7,
+              "receiving.TD": 0,
+              "receiving.LONG": 23,
+              "fumbles.FUM": 1,
+              "fumbles.LOST": 1,
+              "fumbles.REC": 0
+            }
+          ]
+        },
+        {
+          "name": "Cameron Dickey",
+          "position": "RB",
+          "rows": [
+            {
+              "name": "Cameron Dickey",
+              "_team": "Texas Tech",
+              "_opponent": "Colorado",
+              "_homeAway": "away",
+              "rushing.CAR": 4,
+              "rushing.YDS": 15,
+              "rushing.AVG": 3.8,
+              "rushing.TD": 0,
+              "rushing.LONG": 5
+            }
+          ]
+        },
+        {
+          "name": "Jordan Dwyer",
+          "position": "WR",
+          "rows": []
+        },
+        {
+          "name": "Kenny Darby",
+          "position": "WR",
+          "rows": [
+            {
+              "name": "Kenny Darby",
+              "_team": "Kentucky",
+              "_opponent": "South Carolina",
+              "_homeAway": "away",
+              "receiving.REC": 12,
+              "receiving.YDS": 96,
+              "receiving.AVG": 8,
+              "receiving.TD": 1,
+              "receiving.LONG": 22
+            }
+          ]
+        },
+        {
+          "name": "David Amador",
+          "position": "WR",
+          "rows": [
+            {
+              "name": "David Amador",
+              "_team": "UTSA",
+              "_opponent": "Rice",
+              "_homeAway": "away",
+              "rushing.CAR": 1,
+              "rushing.YDS": 3,
+              "rushing.AVG": 3,
+              "rushing.TD": 0,
+              "rushing.LONG": 3,
+              "receiving.REC": 7,
+              "receiving.YDS": 48,
+              "receiving.AVG": 6.9,
+              "receiving.TD": 0,
+              "receiving.LONG": 17,
+              "defensive.TOT": 1,
+              "defensive.SOLO": 1,
+              "defensive.SACKS": 0,
+              "defensive.TFL": 0,
+              "defensive.PD": 0,
+              "defensive.QB HUR": 0,
+              "defensive.TD": 0,
+              "puntReturns.NO": 3,
+              "puntReturns.YDS": 44,
+              "puntReturns.AVG": 14.7,
+              "puntReturns.LONG": 18,
+              "puntReturns.TD": 0
+            }
+          ]
+        },
+        {
+          "name": "Marcus Stokes",
+          "position": "QB",
+          "rows": [
+            {
+              "name": "Marcus Stokes",
+              "_team": "Memphis",
+              "_opponent": "Charlotte",
+              "_homeAway": "away",
+              "passing.COMPLETIONS": 20,
+              "passing.ATT": 25,
+              "passing.YDS": 318,
+              "passing.AVG": 12.7,
+              "passing.TD": 5,
+              "passing.INT": 0,
+              "passing.QBR": 96.2,
+              "rushing.CAR": 9,
+              "rushing.YDS": 61,
+              "rushing.AVG": 6.8,
+              "rushing.TD": 0,
+              "rushing.LONG": 21
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "team": "TQ Trojans",
+      "sourcePoints": 150.2,
+      "expectedIndependentPoints": 150.2,
+      "players": [
+        {
+          "name": "Darius Taylor",
+          "position": "RB",
+          "rows": [
+            {
+              "name": "Darius Taylor",
+              "_team": "Minnesota",
+              "_opponent": "Michigan",
+              "_homeAway": "home",
+              "rushing.CAR": 18,
+              "rushing.YDS": 32,
+              "rushing.AVG": 1.8,
+              "rushing.TD": 1,
+              "rushing.LONG": 7,
+              "receiving.REC": 3,
+              "receiving.YDS": 32,
+              "receiving.AVG": 10.7,
+              "receiving.TD": 1,
+              "receiving.LONG": 33
+            }
+          ]
+        },
+        {
+          "name": "Kwazi Gilmer",
+          "position": "WR",
+          "rows": [
+            {
+              "name": "Kwazi Gilmer",
+              "_team": "Nebraska",
+              "_opponent": "Maryland",
+              "_homeAway": "home",
+              "receiving.REC": 11,
+              "receiving.YDS": 147,
+              "receiving.AVG": 13.4,
+              "receiving.TD": 2,
+              "receiving.LONG": 30
+            }
+          ]
+        },
+        {
+          "name": "Kamario Taylor",
+          "position": "QB",
+          "rows": [
+            {
+              "name": "Kamario Taylor",
+              "_team": "Mississippi State",
+              "_opponent": "Alabama",
+              "_homeAway": "home",
+              "passing.COMPLETIONS": 19,
+              "passing.ATT": 34,
+              "passing.YDS": 258,
+              "passing.AVG": 7.6,
+              "passing.TD": 3,
+              "passing.INT": 2,
+              "passing.QBR": 62,
+              "rushing.CAR": 6,
+              "rushing.YDS": -26,
+              "rushing.AVG": -4.3,
+              "rushing.TD": 0,
+              "rushing.LONG": 4,
+              "fumbles.FUM": 1,
+              "fumbles.LOST": 1,
+              "fumbles.REC": 0
+            }
+          ]
+        },
+        {
+          "name": "Peter Clarke",
+          "position": "TE",
+          "rows": [
+            {
+              "name": "Peter Clarke",
+              "_team": "Temple",
+              "_opponent": "South Florida",
+              "_homeAway": "away",
+              "receiving.REC": 1,
+              "receiving.YDS": 23,
+              "receiving.AVG": 23,
+              "receiving.TD": 0,
+              "receiving.LONG": 23
+            }
+          ]
+        },
+        {
+          "name": "Tre Wisner",
+          "position": "RB",
+          "rows": [
+            {
+              "name": "Tre Wisner",
+              "_team": "Florida State",
+              "_opponent": "Virginia",
+              "_homeAway": "home",
+              "rushing.CAR": 9,
+              "rushing.YDS": 46,
+              "rushing.AVG": 5.1,
+              "rushing.TD": 0,
+              "rushing.LONG": 11,
+              "receiving.REC": 2,
+              "receiving.YDS": 60,
+              "receiving.AVG": 30,
+              "receiving.TD": 0,
+              "receiving.LONG": 48
+            }
+          ]
+        },
+        {
+          "name": "Jadan Baugh",
+          "position": "RB",
+          "rows": [
+            {
+              "name": "Jadan Baugh",
+              "_team": "Florida",
+              "_opponent": "Missouri",
+              "_homeAway": "away",
+              "rushing.CAR": 12,
+              "rushing.YDS": 13,
+              "rushing.AVG": 1.1,
+              "rushing.TD": 0,
+              "rushing.LONG": 12,
+              "receiving.REC": 3,
+              "receiving.YDS": 17,
+              "receiving.AVG": 5.7,
+              "receiving.TD": 0,
+              "receiving.LONG": 8
+            }
+          ]
+        },
+        {
+          "name": "Talyn Taylor",
+          "position": "WR",
+          "rows": [
+            {
+              "name": "Talyn Taylor",
+              "_team": "Georgia",
+              "_opponent": "Vanderbilt",
+              "_homeAway": "home",
+              "receiving.REC": 3,
+              "receiving.YDS": 7,
+              "receiving.AVG": 2.3,
+              "receiving.TD": 0,
+              "receiving.LONG": 3
+            }
+          ]
+        },
+        {
+          "name": "Nyck Harbor",
+          "position": "WR",
+          "rows": [
+            {
+              "name": "Nyck Harbor",
+              "_team": "South Carolina",
+              "_opponent": "Kentucky",
+              "_homeAway": "home",
+              "receiving.REC": 2,
+              "receiving.YDS": 26,
+              "receiving.AVG": 13,
+              "receiving.TD": 0,
+              "receiving.LONG": 18
+            }
+          ]
+        },
+        {
+          "name": "Malachi Toney",
+          "position": "WR",
+          "rows": [
+            {
+              "name": "Malachi Toney",
+              "_team": "Miami",
+              "_opponent": "Clemson",
+              "_homeAway": "away",
+              "rushing.CAR": 1,
+              "rushing.YDS": 19,
+              "rushing.AVG": 19,
+              "rushing.TD": 0,
+              "rushing.LONG": 19,
+              "receiving.REC": 5,
+              "receiving.YDS": 40,
+              "receiving.AVG": 8,
+              "receiving.TD": 0,
+              "receiving.LONG": 17,
+              "puntReturns.NO": 1,
+              "puntReturns.YDS": 11,
+              "puntReturns.AVG": 11,
+              "puntReturns.LONG": 11,
+              "puntReturns.TD": 0
+            }
+          ]
+        },
+        {
+          "name": "Darian Mensah",
+          "position": "QB",
+          "rows": [
+            {
+              "name": "Darian Mensah",
+              "_team": "Miami",
+              "_opponent": "Clemson",
+              "_homeAway": "away",
+              "passing.COMPLETIONS": 18,
+              "passing.ATT": 27,
+              "passing.YDS": 227,
+              "passing.AVG": 8.4,
+              "passing.TD": 1,
+              "passing.INT": 0,
+              "passing.QBR": 83.4,
+              "rushing.CAR": 3,
+              "rushing.YDS": 27,
+              "rushing.AVG": 9,
+              "rushing.TD": 1,
+              "rushing.LONG": 34,
+              "fumbles.FUM": 1,
+              "fumbles.LOST": 0,
+              "fumbles.REC": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "team": "Team JMasc",
+      "sourcePoints": 225.26,
+      "expectedIndependentPoints": 225.26000000000002,
+      "players": [
+        {
+          "name": "Austin Simmons",
+          "position": "TE",
+          "rows": [
+            {
+              "name": "Austin Simmons",
+              "_team": "Missouri",
+              "_opponent": "Florida",
+              "_homeAway": "home",
+              "passing.COMPLETIONS": 23,
+              "passing.ATT": 30,
+              "passing.YDS": 340,
+              "passing.AVG": 11.3,
+              "passing.TD": 2,
+              "passing.INT": 0,
+              "passing.QBR": 91.5,
+              "rushing.CAR": 3,
+              "rushing.YDS": 1,
+              "rushing.AVG": 0.3,
+              "rushing.TD": 0,
+              "rushing.LONG": 5,
+              "fumbles.FUM": 1,
+              "fumbles.LOST": 0,
+              "fumbles.REC": 0,
+              "conversions.PASS": 1,
+              "_conversionSource": "espn-summary",
+              "_conversionPlayIds": "401856708575"
+            }
+          ]
+        },
+        {
+          "name": "Cooper Barkate",
+          "position": "WR",
+          "rows": [
+            {
+              "name": "Cooper Barkate",
+              "_team": "Miami",
+              "_opponent": "Clemson",
+              "_homeAway": "away",
+              "receiving.REC": 5,
+              "receiving.YDS": 98,
+              "receiving.AVG": 19.6,
+              "receiving.TD": 1,
+              "receiving.LONG": 61
+            }
+          ]
+        },
+        {
+          "name": "DJ Vonnahme",
+          "position": "TE",
+          "rows": [
+            {
+              "name": "DJ Vonnahme",
+              "_team": "Iowa",
+              "_opponent": "Ohio State",
+              "_homeAway": "home",
+              "receiving.REC": 6,
+              "receiving.YDS": 64,
+              "receiving.AVG": 10.7,
+              "receiving.TD": 0,
+              "receiving.LONG": 18
+            }
+          ]
+        },
+        {
+          "name": "Julian Sayin",
+          "position": "QB",
+          "rows": [
+            {
+              "name": "Julian Sayin",
+              "_team": "Ohio State",
+              "_opponent": "Iowa",
+              "_homeAway": "away",
+              "passing.COMPLETIONS": 20,
+              "passing.ATT": 27,
+              "passing.YDS": 324,
+              "passing.AVG": 12,
+              "passing.TD": 3,
+              "passing.INT": 0,
+              "passing.QBR": 89.9,
+              "rushing.CAR": 9,
+              "rushing.YDS": -1,
+              "rushing.AVG": -0.1,
+              "rushing.TD": 0,
+              "rushing.LONG": 9,
+              "fumbles.FUM": 1,
+              "fumbles.LOST": 0,
+              "fumbles.REC": 0
+            }
+          ]
+        },
+        {
+          "name": "Tre Richardson",
+          "position": "WR",
+          "rows": [
+            {
+              "name": "Tre Richardson",
+              "_team": "Louisville",
+              "_opponent": "NC State",
+              "_homeAway": "away",
+              "receiving.REC": 8,
+              "receiving.YDS": 117,
+              "receiving.AVG": 14.6,
+              "receiving.TD": 1,
+              "receiving.LONG": 38
+            }
+          ]
+        },
+        {
+          "name": "Dylan Edwards",
+          "position": "RB",
+          "rows": [
+            {
+              "name": "Dylan Edwards",
+              "_team": "Kansas",
+              "_opponent": "Middle Tennessee",
+              "_homeAway": "home",
+              "rushing.CAR": 20,
+              "rushing.YDS": 137,
+              "rushing.AVG": 6.9,
+              "rushing.TD": 3,
+              "rushing.LONG": 34,
+              "receiving.REC": 1,
+              "receiving.YDS": 30,
+              "receiving.AVG": 30,
+              "receiving.TD": 0,
+              "receiving.LONG": 30
+            }
+          ]
+        },
+        {
+          "name": "Duce Robinson",
+          "position": "WR",
+          "rows": [
+            {
+              "name": "Duce Robinson",
+              "_team": "Florida State",
+              "_opponent": "Virginia",
+              "_homeAway": "home",
+              "receiving.REC": 2,
+              "receiving.YDS": 18,
+              "receiving.AVG": 9,
+              "receiving.TD": 0,
+              "receiving.LONG": 10
+            }
+          ]
+        },
+        {
+          "name": "Donovan Olugbode",
+          "position": "WR",
+          "rows": [
+            {
+              "name": "Donovan Olugbode",
+              "_team": "Missouri",
+              "_opponent": "Florida",
+              "_homeAway": "home",
+              "receiving.REC": 6,
+              "receiving.YDS": 94,
+              "receiving.AVG": 15.7,
+              "receiving.TD": 1,
+              "receiving.LONG": 47
+            }
+          ]
+        },
+        {
+          "name": "Jamal Roberts",
+          "position": "RB",
+          "rows": [
+            {
+              "name": "Jamal Roberts",
+              "_team": "Missouri",
+              "_opponent": "Florida",
+              "_homeAway": "home",
+              "rushing.CAR": 24,
+              "rushing.YDS": 211,
+              "rushing.AVG": 8.8,
+              "rushing.TD": 3,
+              "rushing.LONG": 80,
+              "receiving.REC": 3,
+              "receiving.YDS": 29,
+              "receiving.AVG": 9.7,
+              "receiving.TD": 0,
+              "receiving.LONG": 10
+            }
+          ]
+        },
+        {
+          "name": "Savion Hiter",
+          "position": "RB",
+          "rows": [
+            {
+              "name": "Savion Hiter",
+              "_team": "Michigan",
+              "_opponent": "Minnesota",
+              "_homeAway": "away",
+              "rushing.CAR": 8,
+              "rushing.YDS": 9,
+              "rushing.AVG": 1.1,
+              "rushing.TD": 0,
+              "rushing.LONG": 5
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "team": "rfasti",
+      "sourcePoints": 172.18,
+      "expectedIndependentPoints": 172.18,
+      "players": [
+        {
+          "name": "King Miller",
+          "position": "RB",
+          "rows": [
+            {
+              "name": "King Miller",
+              "_team": "USC",
+              "_opponent": "Washington",
+              "_homeAway": "home",
+              "rushing.CAR": 18,
+              "rushing.YDS": 81,
+              "rushing.AVG": 4.5,
+              "rushing.TD": 0,
+              "rushing.LONG": 35,
+              "receiving.REC": 1,
+              "receiving.YDS": 12,
+              "receiving.AVG": 12,
+              "receiving.TD": 0,
+              "receiving.LONG": 12
+            }
+          ]
+        },
+        {
+          "name": "Benjamin Blackburn",
+          "position": "TE",
+          "rows": [
+            {
+              "name": "Benjamin Blackburn",
+              "_team": "Stanford",
+              "_opponent": "Wake Forest",
+              "_homeAway": "away",
+              "receiving.REC": 4,
+              "receiving.YDS": 21,
+              "receiving.AVG": 5.3,
+              "receiving.TD": 0,
+              "receiving.LONG": 11
+            }
+          ]
+        },
+        {
+          "name": "Conner Weigman",
+          "position": "QB",
+          "rows": [
+            {
+              "name": "Conner Weigman",
+              "_team": "Houston",
+              "_opponent": "UCF",
+              "_homeAway": "home",
+              "passing.COMPLETIONS": 18,
+              "passing.ATT": 33,
+              "passing.YDS": 239,
+              "passing.AVG": 7.2,
+              "passing.TD": 0,
+              "passing.INT": 0,
+              "passing.QBR": 68.5,
+              "rushing.CAR": 13,
+              "rushing.YDS": 50,
+              "rushing.AVG": 3.8,
+              "rushing.TD": 3,
+              "rushing.LONG": 19
+            }
+          ]
+        },
+        {
+          "name": "Mason Heintschel",
+          "position": "QB",
+          "rows": [
+            {
+              "name": "Mason Heintschel",
+              "_team": "Pittsburgh",
+              "_opponent": "Virginia Tech",
+              "_homeAway": "away",
+              "passing.COMPLETIONS": 10,
+              "passing.ATT": 18,
+              "passing.YDS": 113,
+              "passing.AVG": 6.3,
+              "passing.TD": 1,
+              "passing.INT": 0,
+              "passing.QBR": 32.2,
+              "rushing.CAR": 4,
+              "rushing.YDS": 2,
+              "rushing.AVG": 0.5,
+              "rushing.TD": 0,
+              "rushing.LONG": 7
+            }
+          ]
+        },
+        {
+          "name": "Nick Marsh",
+          "position": "WR",
+          "rows": [
+            {
+              "name": "Nick Marsh",
+              "_team": "Indiana",
+              "_opponent": "Rutgers",
+              "_homeAway": "away",
+              "receiving.REC": 7,
+              "receiving.YDS": 120,
+              "receiving.AVG": 17.1,
+              "receiving.TD": 1,
+              "receiving.LONG": 30
+            }
+          ]
+        },
+        {
+          "name": "Isaiah Horton",
+          "position": "WR",
+          "rows": [
+            {
+              "name": "Isaiah Horton",
+              "_team": "Texas A&M",
+              "_opponent": "Arkansas",
+              "_homeAway": "home",
+              "receiving.REC": 2,
+              "receiving.YDS": 35,
+              "receiving.AVG": 17.5,
+              "receiving.TD": 0,
+              "receiving.LONG": 28
+            }
+          ]
+        },
+        {
+          "name": "Mark Fletcher Jr.",
+          "position": "RB",
+          "rows": [
+            {
+              "name": "Mark Fletcher Jr.",
+              "_team": "Miami",
+              "_opponent": "Clemson",
+              "_homeAway": "away",
+              "rushing.CAR": 16,
+              "rushing.YDS": 77,
+              "rushing.AVG": 4.8,
+              "rushing.TD": 2,
+              "rushing.LONG": 18,
+              "receiving.REC": 2,
+              "receiving.YDS": 16,
+              "receiving.AVG": 8,
+              "receiving.TD": 0,
+              "receiving.LONG": 11
+            }
+          ]
+        },
+        {
+          "name": "Isaac Brown",
+          "position": "RB",
+          "rows": [
+            {
+              "name": "Isaac Brown",
+              "_team": "Louisville",
+              "_opponent": "NC State",
+              "_homeAway": "away",
+              "rushing.CAR": 9,
+              "rushing.YDS": 125,
+              "rushing.AVG": 13.9,
+              "rushing.TD": 1,
+              "rushing.LONG": 70,
+              "receiving.REC": 1,
+              "receiving.YDS": 0,
+              "receiving.AVG": 0,
+              "receiving.TD": 0,
+              "receiving.LONG": 0,
+              "fumbles.FUM": 1,
+              "fumbles.LOST": 0,
+              "fumbles.REC": 0,
+              "kickReturns.NO": 4,
+              "kickReturns.YDS": 82,
+              "kickReturns.AVG": 20.5,
+              "kickReturns.LONG": 21,
+              "kickReturns.TD": 0
+            }
+          ]
+        },
+        {
+          "name": "Dylan Riley",
+          "position": "RB",
+          "rows": [
+            {
+              "name": "Dylan Riley",
+              "_team": "Boise State",
+              "_opponent": "Utah State",
+              "_homeAway": "home",
+              "rushing.CAR": 18,
+              "rushing.YDS": 93,
+              "rushing.AVG": 5.2,
+              "rushing.TD": 2,
+              "rushing.LONG": 33,
+              "receiving.REC": 1,
+              "receiving.YDS": 7,
+              "receiving.AVG": 7,
+              "receiving.TD": 0,
+              "receiving.LONG": 7
+            }
+          ]
+        },
+        {
+          "name": "Dezmen Roebuck",
+          "position": "WR",
+          "rows": [
+            {
+              "name": "Dezmen Roebuck",
+              "_team": "Washington",
+              "_opponent": "USC",
+              "_homeAway": "away",
+              "passing.COMPLETIONS": 1,
+              "passing.ATT": 1,
+              "passing.YDS": 5,
+              "passing.AVG": 5,
+              "passing.TD": 1,
+              "passing.INT": 0,
+              "receiving.REC": 5,
+              "receiving.YDS": 30,
+              "receiving.AVG": 6,
+              "receiving.TD": 0,
+              "receiving.LONG": 14
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "team": "loganhall",
+      "sourcePoints": 185.66,
+      "expectedIndependentPoints": 185.66,
+      "players": [
+        {
+          "name": "Joseph Williams",
+          "position": "WR",
+          "rows": [
+            {
+              "name": "Joseph Williams",
+              "_team": "Colorado",
+              "_opponent": "Texas Tech",
+              "_homeAway": "home",
+              "passing.COMPLETIONS": 1,
+              "passing.ATT": 2,
+              "passing.YDS": 0,
+              "passing.AVG": 0,
+              "passing.TD": 0,
+              "passing.INT": 1,
+              "receiving.REC": 10,
+              "receiving.YDS": 93,
+              "receiving.AVG": 9.3,
+              "receiving.TD": 1,
+              "receiving.LONG": 20
+            }
+          ]
+        },
+        {
+          "name": "Chance Morrow",
+          "position": "WR",
+          "rows": [
+            {
+              "name": "Chance Morrow",
+              "_team": "Buffalo",
+              "_opponent": "Western Michigan",
+              "_homeAway": "home",
+              "receiving.REC": 7,
+              "receiving.YDS": 90,
+              "receiving.AVG": 12.9,
+              "receiving.TD": 0,
+              "receiving.LONG": 20
+            }
+          ]
+        },
+        {
+          "name": "Mason Mini",
+          "position": "TE",
+          "rows": [
+            {
+              "name": "Mason Mini",
+              "_team": "California",
+              "_opponent": "UNLV",
+              "_homeAway": "away",
+              "receiving.REC": 3,
+              "receiving.YDS": 42,
+              "receiving.AVG": 14,
+              "receiving.TD": 0,
+              "receiving.LONG": 24
+            }
+          ]
+        },
+        {
+          "name": "Omarion Miller",
+          "position": "WR",
+          "rows": [
+            {
+              "name": "Omarion Miller",
+              "_team": "Arizona State",
+              "_opponent": "Baylor",
+              "_homeAway": "home",
+              "rushing.CAR": 1,
+              "rushing.YDS": 5,
+              "rushing.AVG": 5,
+              "rushing.TD": 0,
+              "rushing.LONG": 5,
+              "receiving.REC": 5,
+              "receiving.YDS": 85,
+              "receiving.AVG": 17,
+              "receiving.TD": 1,
+              "receiving.LONG": 30,
+              "fumbles.FUM": 1,
+              "fumbles.LOST": 1,
+              "fumbles.REC": 0
+            }
+          ]
+        },
+        {
+          "name": "Josh Hoover",
+          "position": "QB",
+          "rows": [
+            {
+              "name": "Josh Hoover",
+              "_team": "Indiana",
+              "_opponent": "Rutgers",
+              "_homeAway": "away",
+              "passing.COMPLETIONS": 20,
+              "passing.ATT": 27,
+              "passing.YDS": 251,
+              "passing.AVG": 9.3,
+              "passing.TD": 4,
+              "passing.INT": 0,
+              "passing.QBR": 87.2,
+              "rushing.CAR": 3,
+              "rushing.YDS": -3,
+              "rushing.AVG": -1,
+              "rushing.TD": 0,
+              "rushing.LONG": 9
+            }
+          ]
+        },
+        {
+          "name": "Jayden Scott",
+          "position": "RB",
+          "rows": [
+            {
+              "name": "Jayden Scott",
+              "_team": "NC State",
+              "_opponent": "Louisville",
+              "_homeAway": "home",
+              "rushing.CAR": 5,
+              "rushing.YDS": 12,
+              "rushing.AVG": 2.4,
+              "rushing.TD": 0,
+              "rushing.LONG": 9
+            }
+          ]
+        },
+        {
+          "name": "Ryan Williams",
+          "position": "WR",
+          "rows": [
+            {
+              "name": "Ryan Williams",
+              "_team": "Alabama",
+              "_opponent": "Mississippi State",
+              "_homeAway": "away",
+              "receiving.REC": 3,
+              "receiving.YDS": 43,
+              "receiving.AVG": 14.3,
+              "receiving.TD": 1,
+              "receiving.LONG": 22
+            }
+          ]
+        },
+        {
+          "name": "CJ Bailey",
+          "position": "QB",
+          "rows": [
+            {
+              "name": "CJ Bailey",
+              "_team": "NC State",
+              "_opponent": "Louisville",
+              "_homeAway": "home",
+              "passing.COMPLETIONS": 24,
+              "passing.ATT": 40,
+              "passing.YDS": 373,
+              "passing.AVG": 9.3,
+              "passing.TD": 2,
+              "passing.INT": 1,
+              "passing.QBR": 89.1,
+              "rushing.CAR": 7,
+              "rushing.YDS": 19,
+              "rushing.AVG": 2.7,
+              "rushing.TD": 0,
+              "rushing.LONG": 9,
+              "receiving.REC": 1,
+              "receiving.YDS": 0,
+              "receiving.AVG": 0,
+              "receiving.TD": 0,
+              "receiving.LONG": 0,
+              "conversions.PASS": 1,
+              "_conversionSource": "espn-summary",
+              "_conversionPlayIds": "401858248537"
+            }
+          ]
+        },
+        {
+          "name": "Adam Mohammed",
+          "position": "RB",
+          "rows": []
+        },
+        {
+          "name": "Kelby Valsin",
+          "position": "WR",
+          "rows": [
+            {
+              "name": "Kelby Valsin",
+              "_team": "Florida Atlantic",
+              "_opponent": "Texas Southern",
+              "_homeAway": "home",
+              "receiving.REC": 7,
+              "receiving.YDS": 126,
+              "receiving.AVG": 18,
+              "receiving.TD": 3,
+              "receiving.LONG": 55,
+              "fumbles.FUM": 1,
+              "fumbles.LOST": 0,
+              "fumbles.REC": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "team": "king gustov",
+      "sourcePoints": 167.16,
+      "expectedIndependentPoints": 167.16000000000003,
+      "players": [
+        {
+          "name": "Junior Sherrill",
+          "position": "WR",
+          "rows": [
+            {
+              "name": "Junior Sherrill",
+              "_team": "Vanderbilt",
+              "_opponent": "Georgia",
+              "_homeAway": "away",
+              "receiving.REC": 7,
+              "receiving.YDS": 107,
+              "receiving.AVG": 15.3,
+              "receiving.TD": 1,
+              "receiving.LONG": 60,
+              "defensive.TOT": 1,
+              "defensive.SOLO": 1,
+              "defensive.SACKS": 0,
+              "defensive.TFL": 0,
+              "defensive.PD": 0,
+              "defensive.QB HUR": 0,
+              "defensive.TD": 0
+            }
+          ]
+        },
+        {
+          "name": "Rashid Williams",
+          "position": "WR",
+          "rows": []
+        },
+        {
+          "name": "Camryn Edwards",
+          "position": "RB",
+          "rows": []
+        },
+        {
+          "name": "Ja'Kyrian Turner",
+          "position": "RB",
+          "rows": [
+            {
+              "name": "Ja'Kyrian Turner",
+              "_team": "Pittsburgh",
+              "_opponent": "Virginia Tech",
+              "_homeAway": "away",
+              "rushing.CAR": 14,
+              "rushing.YDS": 65,
+              "rushing.AVG": 4.6,
+              "rushing.TD": 1,
+              "rushing.LONG": 20,
+              "receiving.REC": 6,
+              "receiving.YDS": 35,
+              "receiving.AVG": 5.8,
+              "receiving.TD": 0,
+              "receiving.LONG": 14
+            }
+          ]
+        },
+        {
+          "name": "Keelon Russell",
+          "position": "QB",
+          "rows": [
+            {
+              "name": "Keelon Russell",
+              "_team": "Alabama",
+              "_opponent": "Mississippi State",
+              "_homeAway": "away",
+              "passing.COMPLETIONS": 16,
+              "passing.ATT": 22,
+              "passing.YDS": 285,
+              "passing.AVG": 13,
+              "passing.TD": 3,
+              "passing.INT": 0,
+              "passing.QBR": 96.8,
+              "rushing.CAR": 5,
+              "rushing.YDS": 16,
+              "rushing.AVG": 3.2,
+              "rushing.TD": 1,
+              "rushing.LONG": 17
+            }
+          ]
+        },
+        {
+          "name": "Jamari Johnson",
+          "position": "TE",
+          "rows": []
+        },
+        {
+          "name": "Vernell Brown III",
+          "position": "WR",
+          "rows": []
+        },
+        {
+          "name": "Kam Davis",
+          "position": "RB",
+          "rows": [
+            {
+              "name": "Kam Davis",
+              "_team": "Liberty",
+              "_opponent": "Delaware",
+              "_homeAway": "away",
+              "rushing.CAR": 17,
+              "rushing.YDS": 147,
+              "rushing.AVG": 8.6,
+              "rushing.TD": 2,
+              "rushing.LONG": 56
+            }
+          ]
+        },
+        {
+          "name": "Jordan Faison",
+          "position": "WR",
+          "rows": [
+            {
+              "name": "Jordan Faison",
+              "_team": "Notre Dame",
+              "_opponent": "North Carolina",
+              "_homeAway": "away",
+              "receiving.REC": 8,
+              "receiving.YDS": 132,
+              "receiving.AVG": 16.5,
+              "receiving.TD": 2,
+              "receiving.LONG": 39,
+              "puntReturns.NO": 2,
+              "puntReturns.YDS": 20,
+              "puntReturns.AVG": 10,
+              "puntReturns.LONG": 14,
+              "puntReturns.TD": 0
+            }
+          ]
+        },
+        {
+          "name": "Lincoln Kienholz",
+          "position": "QB",
+          "rows": [
+            {
+              "name": "Lincoln Kienholz",
+              "_team": "Louisville",
+              "_opponent": "NC State",
+              "_homeAway": "away",
+              "passing.COMPLETIONS": 21,
+              "passing.ATT": 30,
+              "passing.YDS": 254,
+              "passing.AVG": 8.5,
+              "passing.TD": 2,
+              "passing.INT": 0,
+              "passing.QBR": 65.1,
+              "rushing.CAR": 7,
+              "rushing.YDS": 24,
+              "rushing.AVG": 3.4,
+              "rushing.TD": 0,
+              "rushing.LONG": 23,
+              "fumbles.FUM": 1,
+              "fumbles.LOST": 1,
+              "fumbles.REC": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "team": "Connor0488",
+      "sourcePoints": 113.7,
+      "expectedIndependentPoints": 113.7,
+      "players": [
+        {
+          "name": "Dallas Wilson",
+          "position": "WR",
+          "rows": [
+            {
+              "name": "Dallas Wilson",
+              "_team": "Florida",
+              "_opponent": "Missouri",
+              "_homeAway": "away",
+              "receiving.REC": 4,
+              "receiving.YDS": 66,
+              "receiving.AVG": 16.5,
+              "receiving.TD": 1,
+              "receiving.LONG": 24
+            }
+          ]
+        },
+        {
+          "name": "Kendrick Raphael",
+          "position": "RB",
+          "rows": [
+            {
+              "name": "Kendrick Raphael",
+              "_team": "SMU",
+              "_opponent": "Boston College",
+              "_homeAway": "home",
+              "rushing.CAR": 15,
+              "rushing.YDS": 45,
+              "rushing.AVG": 3,
+              "rushing.TD": 1,
+              "rushing.LONG": 20
+            }
+          ]
+        },
+        {
+          "name": "Luke Reynolds",
+          "position": "TE",
+          "rows": [
+            {
+              "name": "Luke Reynolds",
+              "_team": "Virginia Tech",
+              "_opponent": "Pittsburgh",
+              "_homeAway": "home",
+              "receiving.REC": 7,
+              "receiving.YDS": 93,
+              "receiving.AVG": 13.3,
+              "receiving.TD": 0,
+              "receiving.LONG": 23,
+              "defensive.TOT": 1,
+              "defensive.SOLO": 1,
+              "defensive.SACKS": 0,
+              "defensive.TFL": 0,
+              "defensive.PD": 0,
+              "defensive.QB HUR": 0,
+              "defensive.TD": 0
+            }
+          ]
+        },
+        {
+          "name": "Craig Dandridge",
+          "position": "WR",
+          "rows": [
+            {
+              "name": "Craig Dandridge",
+              "_team": "Georgia",
+              "_opponent": "Vanderbilt",
+              "_homeAway": "home",
+              "receiving.REC": 1,
+              "receiving.YDS": 6,
+              "receiving.AVG": 6,
+              "receiving.TD": 0,
+              "receiving.LONG": 6
+            }
+          ]
+        },
+        {
+          "name": "Jayvan Boggs",
+          "position": "WR",
+          "rows": [
+            {
+              "name": "Jayvan Boggs",
+              "_team": "Florida State",
+              "_opponent": "Virginia",
+              "_homeAway": "home",
+              "receiving.REC": 1,
+              "receiving.YDS": 17,
+              "receiving.AVG": 17,
+              "receiving.TD": 0,
+              "receiving.LONG": 17
+            }
+          ]
+        },
+        {
+          "name": "Dilin Jones",
+          "position": "RB",
+          "rows": [
+            {
+              "name": "Dilin Jones",
+              "_team": "LSU",
+              "_opponent": "McNeese",
+              "_homeAway": "home",
+              "rushing.CAR": 16,
+              "rushing.YDS": 79,
+              "rushing.AVG": 4.9,
+              "rushing.TD": 1,
+              "rushing.LONG": 8,
+              "receiving.REC": 2,
+              "receiving.YDS": 5,
+              "receiving.AVG": 2.5,
+              "receiving.TD": 0,
+              "receiving.LONG": 4
+            }
+          ]
+        },
+        {
+          "name": "Jai'Den Thomas",
+          "position": "RB",
+          "rows": [
+            {
+              "name": "Jai'Den Thomas",
+              "_team": "UNLV",
+              "_opponent": "California",
+              "_homeAway": "home",
+              "rushing.CAR": 16,
+              "rushing.YDS": 46,
+              "rushing.AVG": 2.9,
+              "rushing.TD": 0,
+              "rushing.LONG": 10,
+              "receiving.REC": 2,
+              "receiving.YDS": 2,
+              "receiving.AVG": 1,
+              "receiving.TD": 0,
+              "receiving.LONG": 4
+            }
+          ]
+        },
+        {
+          "name": "Jeremiah Cobb",
+          "position": "RB",
+          "rows": [
+            {
+              "name": "Jeremiah Cobb",
+              "_team": "Auburn",
+              "_opponent": "Tennessee",
+              "_homeAway": "away",
+              "rushing.CAR": 3,
+              "rushing.YDS": 17,
+              "rushing.AVG": 5.7,
+              "rushing.TD": 0,
+              "rushing.LONG": 11,
+              "receiving.REC": 2,
+              "receiving.YDS": 14,
+              "receiving.AVG": 7,
+              "receiving.TD": 0,
+              "receiving.LONG": 7
+            }
+          ]
+        },
+        {
+          "name": "Gunner Stockton",
+          "position": "QB",
+          "rows": [
+            {
+              "name": "Gunner Stockton",
+              "_team": "Georgia",
+              "_opponent": "Vanderbilt",
+              "_homeAway": "home",
+              "passing.COMPLETIONS": 25,
+              "passing.ATT": 32,
+              "passing.YDS": 295,
+              "passing.AVG": 9.2,
+              "passing.TD": 3,
+              "passing.INT": 0,
+              "passing.QBR": 86.7,
+              "rushing.CAR": 7,
+              "rushing.YDS": 22,
+              "rushing.AVG": 3.1,
+              "rushing.TD": 0,
+              "rushing.LONG": 9
+            }
+          ]
+        },
+        {
+          "name": "Daniel Hill",
+          "position": "RB",
+          "rows": [
+            {
+              "name": "Daniel Hill",
+              "_team": "Alabama",
+              "_opponent": "Mississippi State",
+              "_homeAway": "away",
+              "rushing.CAR": 5,
+              "rushing.YDS": 22,
+              "rushing.AVG": 4.4,
+              "rushing.TD": 0,
+              "rushing.LONG": 8,
+              "fumbles.FUM": 2,
+              "fumbles.LOST": 1,
+              "fumbles.REC": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "team": "Jws452",
+      "sourcePoints": 176.52,
+      "expectedIndependentPoints": 176.52,
+      "players": [
+        {
+          "name": "Deuce Bailey",
+          "position": "QB",
+          "rows": [
+            {
+              "name": "Deuce Bailey",
+              "_team": "Coastal Carolina",
+              "_opponent": "Georgia Southern",
+              "_homeAway": "home",
+              "passing.COMPLETIONS": 19,
+              "passing.ATT": 33,
+              "passing.YDS": 228,
+              "passing.AVG": 6.9,
+              "passing.TD": 2,
+              "passing.INT": 0,
+              "passing.QBR": 49.3,
+              "rushing.CAR": 14,
+              "rushing.YDS": 58,
+              "rushing.AVG": 4.1,
+              "rushing.TD": 0,
+              "rushing.LONG": 15
+            }
+          ]
+        },
+        {
+          "name": "Will Henderson III",
+          "position": "RB",
+          "rows": [
+            {
+              "name": "Will Henderson III",
+              "_team": "UTSA",
+              "_opponent": "Rice",
+              "_homeAway": "away",
+              "rushing.CAR": 18,
+              "rushing.YDS": 90,
+              "rushing.AVG": 5,
+              "rushing.TD": 1,
+              "rushing.LONG": 19,
+              "receiving.REC": 1,
+              "receiving.YDS": 12,
+              "receiving.AVG": 12,
+              "receiving.TD": 0,
+              "receiving.LONG": 12
+            }
+          ]
+        },
+        {
+          "name": "Mike Matthews",
+          "position": "WR",
+          "rows": [
+            {
+              "name": "Mike Matthews",
+              "_team": "Tennessee",
+              "_opponent": "Auburn",
+              "_homeAway": "home",
+              "receiving.REC": 4,
+              "receiving.YDS": 57,
+              "receiving.AVG": 14.3,
+              "receiving.TD": 0,
+              "receiving.LONG": 42
+            }
+          ]
+        },
+        {
+          "name": "Jaylin Carter",
+          "position": "RB",
+          "rows": [
+            {
+              "name": "Jaylin Carter",
+              "_team": "Memphis",
+              "_opponent": "Charlotte",
+              "_homeAway": "away",
+              "rushing.CAR": 15,
+              "rushing.YDS": 76,
+              "rushing.AVG": 5.1,
+              "rushing.TD": 0,
+              "rushing.LONG": 20,
+              "receiving.REC": 1,
+              "receiving.YDS": 8,
+              "receiving.AVG": 8,
+              "receiving.TD": 0,
+              "receiving.LONG": 8
+            }
+          ]
+        },
+        {
+          "name": "Dylan Wade",
+          "position": "TE",
+          "rows": [
+            {
+              "name": "Dylan Wade",
+              "_team": "UCF",
+              "_opponent": "Houston",
+              "_homeAway": "away",
+              "defensive.TOT": 1,
+              "defensive.SOLO": 1,
+              "defensive.SACKS": 0,
+              "defensive.TFL": 0,
+              "defensive.PD": 0,
+              "defensive.QB HUR": 0,
+              "defensive.TD": 0
+            }
+          ]
+        },
+        {
+          "name": "Jahiem White",
+          "position": "RB",
+          "rows": [
+            {
+              "name": "Jahiem White",
+              "_team": "North Texas",
+              "_opponent": "Tulsa",
+              "_homeAway": "away",
+              "rushing.CAR": 32,
+              "rushing.YDS": 219,
+              "rushing.AVG": 6.8,
+              "rushing.TD": 1,
+              "rushing.LONG": 84,
+              "receiving.REC": 2,
+              "receiving.YDS": 12,
+              "receiving.AVG": 6,
+              "receiving.TD": 0,
+              "receiving.LONG": 9
+            }
+          ]
+        },
+        {
+          "name": "Chris Dawn Jr.",
+          "position": "WR",
+          "rows": [
+            {
+              "name": "Chris Dawn Jr.",
+              "_team": "Texas State",
+              "_opponent": "San Diego State",
+              "_homeAway": "away",
+              "receiving.REC": 5,
+              "receiving.YDS": 57,
+              "receiving.AVG": 11.4,
+              "receiving.TD": 0,
+              "receiving.LONG": 20
+            }
+          ]
+        },
+        {
+          "name": "Yamir Knight",
+          "position": "WR",
+          "rows": [
+            {
+              "name": "Yamir Knight",
+              "_team": "SMU",
+              "_opponent": "Boston College",
+              "_homeAway": "home",
+              "receiving.REC": 2,
+              "receiving.YDS": 22,
+              "receiving.AVG": 11,
+              "receiving.TD": 0,
+              "receiving.LONG": 12,
+              "puntReturns.NO": 2,
+              "puntReturns.YDS": 28,
+              "puntReturns.AVG": 14,
+              "puntReturns.LONG": 24,
+              "puntReturns.TD": 0
+            }
+          ]
+        },
+        {
+          "name": "Jeremiah Smith",
+          "position": "WR",
+          "rows": [
+            {
+              "name": "Jeremiah Smith",
+              "_team": "Ohio State",
+              "_opponent": "Iowa",
+              "_homeAway": "away",
+              "receiving.REC": 11,
+              "receiving.YDS": 206,
+              "receiving.AVG": 18.7,
+              "receiving.TD": 2,
+              "receiving.LONG": 57
+            }
+          ]
+        },
+        {
+          "name": "Kevin Jennings",
+          "position": "QB",
+          "rows": [
+            {
+              "name": "Kevin Jennings",
+              "_team": "SMU",
+              "_opponent": "Boston College",
+              "_homeAway": "home",
+              "passing.COMPLETIONS": 20,
+              "passing.ATT": 30,
+              "passing.YDS": 160,
+              "passing.AVG": 5.3,
+              "passing.TD": 2,
+              "passing.INT": 0,
+              "passing.QBR": 65.9,
+              "rushing.CAR": 10,
+              "rushing.YDS": -7,
+              "rushing.AVG": -0.7,
+              "rushing.TD": 1,
+              "rushing.LONG": 10
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "providerDiscrepancy": {
+    "team": "Yourdyinggrandpa",
+    "athlete": "Jackson Arnold",
+    "stat": "passing.YDS",
+    "gameId": "401858247",
+    "cfbd": 177,
+    "espn": 172,
+    "sourcePointDelta": 0.2
+  }
+}

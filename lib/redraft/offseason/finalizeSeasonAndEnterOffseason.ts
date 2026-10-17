@@ -1,3 +1,4 @@
+import { finalizeRotoSeason, type RotoFinalizeResult } from './finalizeRotoSeason'
 /**
  * Crown the champion, archive the season, enter the offseason, open the keeper
  * window — as one call, because it is one thing.
@@ -44,27 +45,30 @@ export type FinalizeSeasonResult =
       offseasonSnapshotId: string | null
       keeperOffseasonTriggered: boolean
       /** The runtime state and events, for callers that render them. */
-      result: Awaited<ReturnType<typeof finalizeNflRedraftPlayoffRuntimeSeason>>
+      result: Awaited<ReturnType<typeof finalizeNflRedraftPlayoffRuntimeSeason>> | RotoFinalizeResult
     }
   | {
       ok: false
       code: string
       message: string
-      result: Awaited<ReturnType<typeof finalizeNflRedraftPlayoffRuntimeSeason>>
+      result: Awaited<ReturnType<typeof finalizeNflRedraftPlayoffRuntimeSeason>> | RotoFinalizeResult
     }
 
 export async function finalizeSeasonAndEnterOffseason(input: {
   seasonId: string
   leagueId: string
   actorUserId: string
+  tiebreakerRosterId?: string
 }): Promise<FinalizeSeasonResult> {
-  const result = await finalizeNflRedraftPlayoffRuntimeSeason({
+  const leagueScoring=await prisma.league.findUnique({where:{id:input.leagueId},select:{settings:true,leagueType:true,isDynasty:true}})
+  const isRoto=(leagueScoring?.settings as Record<string,unknown> | null)?.scoring_mode === 'roto'
+  const result = isRoto ? await finalizeRotoSeason(input.seasonId,input.actorUserId,input.tiebreakerRosterId) : await finalizeNflRedraftPlayoffRuntimeSeason({
     seasonId: input.seasonId,
     actorUserId: input.actorUserId,
   })
 
   if (!result.ok) {
-    return { ok: false, code: result.code, message: describe(result.code), result }
+    return { ok: false, code: result.code, message: isRoto ? result.message : describe(result.code), result }
   }
 
   const alreadyFinalized = 'alreadyFinalized' in result && result.alreadyFinalized === true
@@ -73,9 +77,12 @@ export async function finalizeSeasonAndEnterOffseason(input: {
   let offseasonSnapshotId: string | null = null
   let keeperOffseasonTriggered = false
 
-  if (!alreadyFinalized) {
+  // Roto retries repair a failed archive; the archive service is idempotent.
+  if (!alreadyFinalized || isRoto) {
     try {
-      const offseason = await enterRedraftOffseason(input.seasonId, input.actorUserId)
+      const offseason = 'format' in result && result.format === 'roto'
+        ? await enterRedraftOffseason(input.seasonId, input.actorUserId, {finishOrder:result.finalStandings.map(r=>r.rosterId)})
+        : await enterRedraftOffseason(input.seasonId, input.actorUserId)
       if (offseason.ok) {
         offseasonEntered = true
         offseasonSnapshotId = offseason.snapshotId
@@ -94,14 +101,11 @@ export async function finalizeSeasonAndEnterOffseason(input: {
       })
     }
 
-    const leagueMeta = await prisma.league.findUnique({
-      where: { id: input.leagueId },
-      select: { leagueType: true, isDynasty: true },
-    })
+    const leagueMeta = leagueScoring
     const keeperEligible =
       !!leagueMeta && (supportsKeeperDeclarations(leagueMeta.leagueType) || leagueMeta.isDynasty === true)
 
-    if (keeperEligible) {
+    if (keeperEligible && !alreadyFinalized) {
       keeperOffseasonTriggered = true
       // ⚠ NOT AWAITED, MATCHING THE ROUTE. This opens a keeper window and can
       // create next season's shell plus a full generated schedule — real work

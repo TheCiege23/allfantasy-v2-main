@@ -1,6 +1,18 @@
 import { leagueWeekFromSettings } from './seasonTimeline'
 import { finishedWeekKey, type FinishedNflWeeks } from './finishedNflWeeks.types'
 
+type WeekLeague = { settings?: unknown; season?: number | null; status?: string | null; sport?: string | null }
+
+/** Advance a delayed NFL marker only to an immediately scheduled period after the last game is final. */
+export function currentScheduledLeagueWeek(league: WeekLeague, season: number, scheduledWeeks: readonly number[], finishedNflWeeks?: FinishedNflWeeks): number | null {
+  const progress = leagueWeekProgress(league, finishedNflWeeks)
+  const week = progress.currentWeek
+  if (week == null) return null
+  const complete = ['complete', 'completed', 'finished'].includes(String(league.status ?? '').toLowerCase())
+  return String(league.sport ?? '').toUpperCase() === 'NFL' && !complete && league.season === season
+    && progress.isFinal(season, week) && scheduledWeeks.includes(week + 1) ? week + 1 : week
+}
+
 /**
  * A scored Thursday is still an unfinished fantasy week.
  *
@@ -13,7 +25,7 @@ import { finishedWeekKey, type FinishedNflWeeks } from './finishedNflWeeks.types
  * and never a week AHEAD of the league's marker, which the schedule cannot speak for.
  */
 export function leagueWeekProgress(
-  league: { settings?: unknown; season?: number | null; status?: string | null; sport?: string | null },
+  league: WeekLeague,
   finishedNflWeeks?: FinishedNflWeeks,
 ) {
   const currentWeek = leagueWeekFromSettings(league.settings)

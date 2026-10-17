@@ -1,3 +1,4 @@
+import { loadFantraxNativePresentation } from '@/lib/redraft/fantraxNativePresentation'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -8,6 +9,7 @@ import { generateSchedule } from '@/lib/redraft/scheduleEngine'
 import { leagueSportToConfigSport } from '@/lib/redraft/sportKey'
 import { tryGetSportConfig } from '@/lib/sportConfig'
 import { parseOptionalRedraftPositiveInteger } from '@/lib/redraft/betaRouteInput'
+import { resolveEffectiveRedraftWeek } from '@/lib/season-week'
 
 export const dynamic = 'force-dynamic'
 
@@ -47,7 +49,15 @@ export async function GET(req: NextRequest) {
   const gate = await assertLeagueMember(season.leagueId, userId)
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
 
-  return NextResponse.json({ season })
+  const imported = await loadFantraxNativePresentation(season)
+  if (imported) {
+    return NextResponse.json({ season: { ...season, currentWeek: imported.currentWeek ?? season.currentWeek, source: imported.source, playoffStartWeek: imported.playoffStartWeek ?? season.playoffStartWeek } })
+  }
+  // Every client consumer (RedraftTab's roster, matchup and live-scoring requests) takes its week
+  // from here, so an imported season's never-advanced `currentWeek` is resolved once, at the source.
+  const league = await prisma.league.findUnique({ where: { id: season.leagueId }, select: { platform: true } })
+  const currentWeek = await resolveEffectiveRedraftWeek(season, league?.platform)
+  return NextResponse.json({ season: { ...season, currentWeek } })
 }
 
 export async function POST(req: NextRequest) {

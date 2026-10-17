@@ -13,7 +13,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { relabelDailySportWeeks, resolveSportWeekFromSchedule } from '@/lib/season-week/sportWeekSignal'
-import { resolveDailySportSeasonStart } from '@/lib/season-week/dailySportSeasonStarts'
+import { dailySportWeekForInstant, resolveDailySportSeasonStart, resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
 import type { ScheduleRow } from '@/lib/season-week/types'
 
 const NHL_OPENER = new Date(resolveDailySportSeasonStart('NHL', 2026)!)
@@ -33,6 +33,13 @@ function game(startTime: string, extra: Partial<ScheduleRow> = {}): ScheduleRow 
 }
 
 describe('daily-sport weeks are derived from the opener, not the feed', () => {
+  it('keeps NBA date keys at UTC midnight while classifying instants at Eastern midnight across daylight saving time', () => {
+    expect(resolveDailySportWeekWindow('NBA', 2026, 1)?.start.toISOString()).toBe('2026-10-20T00:00:00.000Z')
+    expect(resolveDailySportWeekWindow('NBA', 2026, 2)?.start.toISOString()).toBe('2026-10-27T00:00:00.000Z')
+    expect(resolveDailySportWeekWindow('NBA', 2026, 3)?.start.toISOString()).toBe('2026-11-03T00:00:00.000Z')
+    expect(dailySportWeekForInstant('NBA', 2026, new Date('2026-11-03T04:59:59.999Z'))).toBe(2)
+    expect(dailySportWeekForInstant('NBA', 2026, new Date('2026-11-03T05:00:00.000Z'))).toBe(3)
+  })
   it('ignores the feed week entirely', () => {
     const rows = [game('2026-09-29T23:00:00Z'), game('2026-10-01T23:00:00Z')]
     const out = relabelDailySportWeeks(rows, NHL_OPENER)
@@ -153,9 +160,9 @@ describe('resolveSportWeek no longer refuses the daily sports', () => {
   // anchor — widening the gate must not become "resolve everything".
   it('still returns NO_WEEK_SIGNAL for a sport with no anchor', async () => {
     const { resolveSportWeek } = await import('@/lib/season-week/seasonWeekService')
-    const resolved = await resolveSportWeek('MLB', 2026, {
-      prisma: fakeDb([game('2026-05-01T23:00:00Z')]),
-      now: new Date('2026-05-02T12:00:00Z'),
+    const resolved = await resolveSportWeek('MLB', 2028, {
+      prisma: fakeDb([game('2028-05-01T23:00:00Z')]),
+      now: new Date('2028-05-02T12:00:00Z'),
     })
     expect(resolved).toEqual({ ok: false, reason: 'NO_WEEK_SIGNAL' })
   })

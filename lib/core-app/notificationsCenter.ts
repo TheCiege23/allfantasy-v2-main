@@ -73,6 +73,8 @@ export type NotificationRow = {
 }
 
 export type NotificationsCenterData = {
+  /** Authenticated owner of this server snapshot; prevents rendering it after account switches. */
+  viewerId?: string
   /** Urgent, deadline-bound. Rendered first, with a direct action per item. */
   actToday: NotificationRow[]
   /** Everything else, newest first. */
@@ -435,8 +437,10 @@ export async function getNotificationsCenter(input: {
       severity: severityOf(n.severity),
       action: n.leagueId
         ? {
-            label: kind === 'lineups' ? 'Review lineup' : kind === 'trades' ? 'Review trade' : kind === 'waivers' ? 'Review waivers' : kind === 'drafts' ? 'Open Draft HQ' : 'Open league',
-            href: `/core${kind === 'lineups' ? '/my-team' : kind === 'trades' ? '/trades' : kind === 'waivers' ? '/waivers' : kind === 'drafts' ? '/draft-hq' : ''}?league=${encodeURIComponent(n.leagueId)}`,
+            label: n.type === 'trade_offer_reminder' || n.type === 'trade_offer_expiring' ? 'Respond to offer' : kind === 'lineups' ? 'Review lineup' : kind === 'trades' ? 'Review trade' : kind === 'waivers' ? 'Review waivers' : kind === 'drafts' ? 'Open Draft HQ' : 'Open league',
+            href: n.type === 'trade_offer_reminder' || n.type === 'trade_offer_expiring'
+              ? `/league/${encodeURIComponent(n.leagueId)}?view=trades`
+              : `/core${kind === 'lineups' ? '/my-team' : kind === 'trades' ? '/trades' : kind === 'waivers' ? '/waivers' : kind === 'drafts' ? '/draft-hq' : ''}?league=${encodeURIComponent(n.leagueId)}`,
             external: false,
           }
         : null,
@@ -498,6 +502,7 @@ export async function getNotificationsCenter(input: {
   ])
 
   return {
+    viewerId: input.userId,
     actToday: scopedActToday,
     rest,
     counts,

@@ -1,0 +1,15 @@
+.bb-schedule{padding:clamp(16px,3vw,28px);min-width:0;color:var(--af-text,#f8fafc)}
+.bb-schedule__header,.bb-schedule__summary{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
+.bb-schedule h2{font-size:24px;font-weight:750;letter-spacing:-.03em;margin:4px 0 8px}.bb-schedule h3{font-size:15px;font-weight:650;margin:0}
+.bb-schedule__header p,.bb-schedule__note{font-size:13px;color:var(--af-muted,#94a3b8);line-height:1.6}
+.bb-schedule__eyebrow{font-size:11px!important;text-transform:uppercase;letter-spacing:.12em;color:var(--af-accent,#22d3ee)!important}
+.bb-schedule__button,.bb-schedule select,.bb-schedule__nav a{min-height:44px;padding:10px 14px;border:1px solid var(--af-border,rgba(255,255,255,.12));border-radius:12px;background:var(--af-surface,#11182c);font:inherit;font-size:13px;color:inherit}
+.bb-schedule__button:disabled{opacity:.5}.bb-schedule :is(a,button,select):focus-visible{outline:2px solid var(--af-accent,#22d3ee);outline-offset:3px}
+.bb-schedule__nav{display:flex;gap:8px;flex-wrap:wrap;margin:20px 0}.bb-schedule__nav a{display:inline-flex;align-items:center;text-decoration:none}
+.bb-schedule__summary{padding:16px;border:1px solid var(--af-border,rgba(255,255,255,.12));border-radius:16px;background:var(--af-surface,#11182c);font-size:14px}
+.bb-schedule__summary label{display:flex;gap:10px;align-items:center;font-size:12px}.bb-schedule__note{margin:16px 0}
+.bb-schedule__timeline{list-style:none;padding:0;margin:0;display:grid;gap:10px}.bb-schedule__timeline li{padding:18px;border:1px solid var(--af-border,rgba(255,255,255,.12));border-radius:14px;background:var(--af-surface,#11182c)}
+.bb-schedule__timeline li[data-state=current]{border-color:var(--af-accent,#22d3ee);background:rgba(34,211,238,.04)}
+.bb-schedule__timeline li>div{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}.bb-schedule__timeline span{font-size:11px;color:var(--af-muted,#94a3b8)}
+.bb-schedule__timeline time,.bb-schedule__timeline li>p{display:block;margin:8px 0 0;font-size:13px;color:var(--af-muted,#94a3b8)}
+@media(max-width:480px){.bb-schedule__header{align-items:flex-start}.bb-schedule__header>div{min-width:0;flex:1 1 200px}.bb-schedule h2{font-size:21px}}

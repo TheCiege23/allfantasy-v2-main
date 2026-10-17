@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 300" width="240" height="300" role="img" aria-label="Tribal torch lit">
+<defs>
+<radialGradient id="tl-glow"><stop offset="0" stop-color="#ffb547" stop-opacity=".55"/><stop offset=".55" stop-color="#ff7a2a" stop-opacity=".15"/><stop offset="1" stop-color="#ff7a2a" stop-opacity="0"/></radialGradient>
+<linearGradient id="tl-fl1" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#ff5a1f"/><stop offset=".6" stop-color="#ff9a3c"/><stop offset="1" stop-color="#ffd27a"/></linearGradient>
+<linearGradient id="tl-fl2" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#ffb547"/><stop offset="1" stop-color="#ffe9a8"/></linearGradient>
+<linearGradient id="tl-wood" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#3e220c"/><stop offset=".45" stop-color="#c98a52"/><stop offset="1" stop-color="#3e220c"/></linearGradient>
+</defs>
+<ellipse cx="120" cy="290" rx="40" ry="6" fill="#000" opacity=".4"/>
+<circle cx="120" cy="92" r="80" fill="url(#tl-glow)"/>
+<path d="M120,10 C150,40 164,70 156,98 C150,118 136,128 120,128 C104,128 90,118 84,98 C78,76 92,56 102,40 C106,58 112,64 116,66 C116,48 112,30 120,10 Z" fill="url(#tl-fl1)" stroke="#5a1c06" stroke-width="3"/>
+<path d="M120,48 C138,66 144,88 138,104 C134,116 126,122 120,122 C112,122 104,116 102,104 C98,90 106,76 112,66 C114,78 118,80 120,80 C122,70 118,60 120,48 Z" fill="url(#tl-fl2)"/>
+<path d="M120,80 C128,90 130,102 126,110 C124,116 116,116 114,110 C110,102 114,92 120,80 Z" fill="#fffbe6"/>
+<path d="M78,130 L162,130 L150,160 L90,160 Z" fill="#5a3416" stroke="#1a0f06" stroke-width="4" stroke-linejoin="round"/>
+<path d="M84,138 L156,138" stroke="#e9c27a" stroke-width="3"/>
+<path d="M92,150 l8,-6 l8,6 l8,-6 l8,6 l8,-6 l8,6 l8,-6 l8,6" fill="none" stroke="#e9c27a" stroke-width="2"/>
+<path d="M96,160 L144,160 L136,172 L104,172 Z" fill="#2e1a0a" stroke="#1a0f06" stroke-width="3"/>
+<rect x="108" y="170" width="24" height="118" rx="6" fill="url(#tl-wood)" stroke="#1a0f06" stroke-width="4"/>
+<path d="M108,176 h24" stroke="#1a0f06" stroke-width="2.5"/><path d="M108,212 h24" stroke="#1a0f06" stroke-width="2.5"/><path d="M108,248 h24" stroke="#1a0f06" stroke-width="2.5"/>
+<path d="M106,190 L134,198 M106,198 L134,190" stroke="#b8925a" stroke-width="3"/>
+</svg>

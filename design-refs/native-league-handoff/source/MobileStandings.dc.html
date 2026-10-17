@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Blah — Standings (phone)</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./af-shell.css">
+<link rel="stylesheet" href="./draft-sleek.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500;700;800&amp;display=swap" rel="stylesheet">
+<style>body{margin:0;background:#07080d}</style>
+</helmet>
+<div class="af ph" style="min-height: 0">
+  <div class="ph-scroll">
+    <div style="display: flex; align-items: center; gap: 8px; padding: 10px 12px">
+      <a class="iconbtn" href="Mobile.dc.html" aria-label="Back to Blah">‹</a>
+      <span style="flex: 1; display: flex; flex-direction: column; gap: 4px"><span style="font-weight: 700; font-size: 22px; letter-spacing: -0.03em">Standings</span><span class="lbl">Blah · after week 4</span></span>
+    </div>
+    <div style="padding: 0 12px 12px"><div class="seg" role="tablist" aria-label="View"><sc-for list="{{views}}" as="v" hint-placeholder-count="3"><button role="tab" class="{{v.cls}}" onClick="{{v.pick}}">{{v.label}}</button></sc-for></div></div>
+
+    <div style="margin: 0 12px 12px; padding: 12px 14px; border-radius: 14px; border: 1px solid rgba(34,211,238,.28); background: #10131c; display: flex; align-items: center; gap: 12px">
+      <span class="num" style="font-size: 28px; font-weight: 600; color: #34d399">81%</span>
+      <span style="font-size: 12px; line-height: 1.4; color: #c3c9e6">Your playoff odds · 44% for a bye. A win this week makes it 58%.</span>
+    </div>
+
+    <section style="margin: 0 12px 16px; border-radius: 14px; border: 1px solid rgba(255,255,255,.07); background: #10131c">
+      <div class="lbl" style="display: grid; grid-template-columns: 22px 1fr 44px 56px 46px; gap: 8px; padding: 12px">
+        <span>#</span><span>Team</span><span style="text-align: right">W–L</span><span style="text-align: right">PF</span><span style="text-align: right">{{lastCol}}</span>
+      </div>
+      <sc-for list="{{rows}}" as="r" hint-placeholder-count="12">
+        <div style="display: grid; grid-template-columns: 22px 1fr 44px 56px 46px; gap: 8px; align-items: center; padding: 10px 12px; border-top: {{r.border}}; background: {{r.bg}}; min-height: 48px">
+          <span class="num" style="font-size: 11px; color: #7d84a8">{{r.rank}}</span>
+          <span style="font-size: 13px; font-weight: {{r.weight}}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{r.name}}</span>
+          <span class="num" style="font-size: 12px; font-weight: 600; text-align: right">{{r.wl}}</span>
+          <span class="num" style="font-size: 11px; color: #c3c9e6; text-align: right">{{r.pf}}</span>
+          <span class="num" style="font-size: 11px; font-weight: 700; color: {{r.c}}; text-align: right">{{r.last}}</span>
+        </div>
+      </sc-for>
+    </section>
+  </div>
+  <nav class="bnav" aria-label="Primary">
+    <a class="bb" href="Mobile.dc.html"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>League</a>
+    <a class="bb" href="MobileMatchup.dc.html"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 4h6v16H4zM14 4h6v16h-6z"/></svg>Matchup</a>
+    <a class="bb" href="MobileLineup.dc.html"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>Team</a>
+    <a class="bb" href="MobileWaivers.dc.html"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>Players</a>
+    <a class="bb" href="MobileChat.dc.html"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Chat</a>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { v: 'table' }; }
+  renderVals() {
+    const v = this.state.v;
+    const views = [['table','Standings'],['odds','Playoff odds'],['power','Power']].map(([id,label]) => ({ label,
+      cls: 'sg' + (v === id ? ' sg-on' : ''), pick: () => this.setState({ v: id }) }));
+    const T = [['Open Team 9','4–0','512.3','W4',97,94],["TheCiege26's Team",'3–1','478.6','W2',81,88],['Open Team 5','3–1','470.2','W1',74,79],['Open Team 2','3–1','455.8','L1',66,71],['Open Team 11','2–2','462.0','W1',52,75],['Open Team 3','2–2','449.1','L1',43,62],['Sunday Scaries','2–2','441.7','W1',39,66],['Open Team 8','2–2','420.4','L2',28,48],['Open Team 12','1–3','430.9','L1',14,51],['Open Team 10','1–3','401.5','W1',9,39],['Open Team 6','1–3','398.2','L3',6,41],['Open Team 4','0–4','377.0','L4',1,22]];
+    const list = v === 'power' ? T.slice().sort((a, b) => b[5] - a[5]) : T;
+    const rows = list.map(([name, wl, pf, strk, odds, pw], i) => {
+      const last = v === 'table' ? strk : v === 'odds' ? odds + '%' : String(pw);
+      const n = v === 'odds' ? odds : v === 'power' ? pw : null;
+      const c = n === null ? (strk.startsWith('W') ? '#34d399' : '#fb5b78') : n >= 70 ? '#34d399' : n >= 35 ? '#22d3ee' : n >= 10 ? '#fbbf24' : '#fb5b78';
+      const me = name.startsWith('TheCiege');
+      return { rank: i + 1, name, wl, pf, last, c, weight: me ? 800 : 600, bg: me ? 'rgba(34,211,238,.07)' : 'transparent',
+        border: v !== 'power' && i === 6 ? '2px solid #22d3ee' : '1px solid rgba(255,255,255,.05)' };
+    });
+    return { views, rows, lastCol: v === 'table' ? 'Strk' : v === 'odds' ? 'Odds' : 'Pwr' };
+  }
+}
+</script>
+</body>
+</html>

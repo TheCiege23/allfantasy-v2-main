@@ -35,7 +35,7 @@ describe('Commentary route contracts', () => {
   })
 
   it('enforces auth/membership and validates list filters', async () => {
-    const { GET } = await import('@/app/api/leagues/[leagueId]/commentary/route')
+    const { GET } = await import('@/app/api/leagues/[leagueId]/commentary/handler')
 
     getServerSessionMock.mockResolvedValueOnce(null)
     const unauthReq = new Request('http://localhost/api/leagues/lg-1/commentary')
@@ -57,7 +57,7 @@ describe('Commentary route contracts', () => {
 
   it('forwards normalized list query params', async () => {
     listCommentaryMock.mockResolvedValueOnce({ entries: [], nextCursor: 'c-2' })
-    const { GET } = await import('@/app/api/leagues/[leagueId]/commentary/route')
+    const { GET } = await import('@/app/api/leagues/[leagueId]/commentary/handler')
     const req = new Request(
       'http://localhost/api/leagues/lg-1/commentary?eventType=matchup_commentary&limit=99&cursor=c-1'
     )

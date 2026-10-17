@@ -31,6 +31,9 @@ import { lastSyncByLeagueFrom, staleLeagueIds } from './outstandingIssues'
  */
 
 export const URGENCY_KEY_PREFIX = 'core-urgency:v1:'
+// Lineup and offer writers must not rewrite one another's state. Keep the old
+// offer key so rolling deployments and existing pending-offer scans remain readable.
+export const LINEUP_URGENCY_KEY_PREFIX = 'core-lineup-urgency:v1:'
 export const URGENCY_TTL_MS = 10 * 60_000
 export const DRAFT_SOON_MS = 24 * 3_600_000
 const CACHE_ROW_TTL_MS = 60 * 60_000
@@ -92,21 +95,21 @@ function asCache(value: unknown): UrgencyCache {
   }
 }
 
-async function readCache(userId: string): Promise<UrgencyCache> {
+async function readCache(userId: string, prefix = URGENCY_KEY_PREFIX): Promise<UrgencyCache> {
   const row = await prisma.sportsDataCache
-    .findUnique({ where: { cacheKey: `${URGENCY_KEY_PREFIX}${userId}` }, select: { data: true } })
+    .findUnique({ where: { cacheKey: `${prefix}${userId}` }, select: { data: true } })
     .catch(() => null)
   return asCache(row?.data)
 }
 
-async function writeCache(userId: string, cache: UrgencyCache, now: Date): Promise<void> {
+async function writeCache(userId: string, cache: UrgencyCache, now: Date, prefix = URGENCY_KEY_PREFIX): Promise<void> {
   const data = cache as unknown as object
   const expiresAt = new Date(now.getTime() + CACHE_ROW_TTL_MS)
   await prisma.sportsDataCache
     .upsert({
-      where: { cacheKey: `${URGENCY_KEY_PREFIX}${userId}` },
+      where: { cacheKey: `${prefix}${userId}` },
       update: { data, expiresAt },
-      create: { cacheKey: `${URGENCY_KEY_PREFIX}${userId}`, data, expiresAt },
+      create: { cacheKey: `${prefix}${userId}`, data, expiresAt },
     })
     .catch(() => undefined)
 }
@@ -144,13 +147,18 @@ export async function getUrgencyBadges(input: {
 }): Promise<UrgencyBadges> {
   const { userId, leagues, now } = input
   const played = new Set(leagues.map((l) => l.id))
-  const cache = await readCache(userId)
+  const [cache, lineupCache] = await Promise.all([
+    readCache(userId), readCache(userId, LINEUP_URGENCY_KEY_PREFIX),
+  ])
+  // A fresh new row wins. During rollout, reuse a still-fresh old lineup row
+  // until the first home/recompute writes the dedicated key.
+  if (lineupCache.lineup && isFresh(lineupCache.lineup.at, now)) cache.lineup = lineupCache.lineup
 
   let lineupIds: string[] | null = null
   if (input.lineupLeagues) {
     lineupIds = lineupLeagueIds(input.lineupLeagues)
     cache.lineup = { at: now.toISOString(), leagueIds: lineupIds }
-    await writeCache(userId, cache, now)
+    await writeCache(userId, { version: 1, lineup: cache.lineup, offers: {} }, now, LINEUP_URGENCY_KEY_PREFIX)
   } else if (cache.lineup && isFresh(cache.lineup.at, now)) {
     lineupIds = cache.lineup.leagueIds
   } else {
@@ -158,7 +166,7 @@ export async function getUrgencyBadges(input: {
     if (loaded) {
       lineupIds = lineupLeagueIds(loaded)
       cache.lineup = { at: now.toISOString(), leagueIds: lineupIds }
-      await writeCache(userId, cache, now)
+      await writeCache(userId, { version: 1, lineup: cache.lineup, offers: {} }, now, LINEUP_URGENCY_KEY_PREFIX)
     }
   }
 

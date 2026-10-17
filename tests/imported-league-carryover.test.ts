@@ -60,4 +60,13 @@ describe('standalone imported league carryover', () => {
   it('rejects lineups that name players outside the team roster', () => {
     expect(() => importedOwnedPlayerIds({ players: ['one'], starters: ['two'] })).toThrow(/missing from its team roster/)
   })
+
+  it('checks numeric lineup IDs against ownership and recovers legacy numeric-only lineups', () => {
+    expect(() => importedOwnedPlayerIds({ players: [123], lineup_sections: { starters: [456] } })).toThrow(/missing from its team roster/)
+    const data = { starters: [123], lineup_sections: { bench: [456] } }
+    expect(importedOwnedPlayerIds(data)).toEqual(['123', '456'])
+    const carried = translateImportedRosterData(data, new Map([['123', 'native-123'], ['456', 'native-456']]), 'source')
+    expect(carried.players).toEqual(['native-123', 'native-456'])
+    expect(carried.lineup_sections).toEqual({ bench: ['native-456'] })
+  })
 })

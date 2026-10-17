@@ -13,6 +13,8 @@
  * visibly changes on hydration.
  */
 
+import { kickoffDayLabel } from './kickoffLabel'
+
 /**
  * Past this, a countdown is not a deadline any more.
  *
@@ -54,13 +56,16 @@ export function formatLockLabel(atMs: number, nowMs: number): LockLabel {
 
   if (d >= DISTANT_LOCK_DAYS) {
     /*
-     * ⚠ FORMATTED IN UTC, NOT IN THE SERVER'S ZONE. This string is rendered on
-     * the server for the first paint and re-rendered in the browser by the
-     * clock; `toLocaleDateString` with no zone would resolve to two different
-     * zones and the date would change on hydration.
+     * ⚠ A PINNED ZONE, NOT THE SERVER'S OR THE BROWSER'S. This string is
+     * rendered on the server for the first paint and re-rendered in the browser
+     * by the clock; `toLocaleDateString` with no zone would resolve to two
+     * different zones and the date would change on hydration.
+     *
+     * Eastern rather than UTC, because UTC moved every night game to the next
+     * day — a Sunday-night kickoff read as Monday. `kickoffDayLabel` pins the
+     * same zone and locale every schedule surface uses.
      */
-    const at = new Date(atMs)
-    const day = at.toUTCString().slice(5, 11).trim()
+    const day = kickoffDayLabel(new Date(atMs).toISOString()) ?? new Date(atMs).toUTCString().slice(5, 11).trim()
     return { text: day, locked: false, urgent: false, distant: true }
   }
 

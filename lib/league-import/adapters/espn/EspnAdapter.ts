@@ -1,3 +1,4 @@
+import { ESPN_MLB_POINT_KEYS } from '@/lib/league-import/espn/EspnMlbScoring'
 import type { ILeagueImportAdapter } from '../ILeagueImportAdapter'
 import type { NormalizedImportResult, SourceTracking } from '../../types'
 import type { EspnImportPayload } from './types'
@@ -6,7 +7,7 @@ import { readEspnDivisions, STANDINGS_DIVISIONS_KEY } from '@/lib/league-import/
 import { commissionerTeamSet } from '../commissionerTeamSet'
 
 function detectEspnScoringFormat(raw: EspnImportPayload): string | null {
-  const receptionRule = raw.settings?.scoringItems.find((rule) => rule.statId === 53)
+  const receptionRule = raw.league.sport === 'NFL' ? raw.settings?.scoringItems.find((rule) => rule.statId === 53) : undefined
   const receptionPoints = receptionRule?.points ?? 0
   if (receptionPoints >= 1) return 'ppr'
   if (receptionPoints >= 0.5) return 'half'
@@ -60,7 +61,7 @@ export const EspnAdapter: ILeagueImportAdapter<EspnImportPayload> = {
       rosterPositions.length > 0
         ? rosterPositions.reduce((total, slot) => total + Math.max(0, slot.count), 0)
         : null
-    const receptionRule = raw.settings?.scoringItems.find((rule) => rule.statId === 53)
+    const receptionRule = raw.league.sport === 'NFL' ? raw.settings?.scoringItems.find((rule) => rule.statId === 53) : undefined
 
     /* ESPN's league-manager flag, resolved to teams by the fetch service. It was fetched and
        read by the commissioner gate, then dropped here — so no imported ESPN team was ever
@@ -94,7 +95,7 @@ export const EspnAdapter: ILeagueImportAdapter<EspnImportPayload> = {
         ? {
             scoring_format: scoringFormat ?? raw.settings.scoringType ?? 'standard',
             rules: raw.settings.scoringItems.map((rule) => ({
-              stat_key: `espn_stat_${rule.statId}`,
+              stat_key: raw.league.sport === 'MLB' && /POINTS/i.test(raw.settings?.scoringType ?? '') ? ESPN_MLB_POINT_KEYS[rule.statId] ?? `espn_stat_${rule.statId}` : `espn_stat_${rule.statId}`,
               points_value: rule.points,
             })),
             raw: raw.settings.raw,

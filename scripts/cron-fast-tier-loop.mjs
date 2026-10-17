@@ -204,6 +204,13 @@ const SYSTEMIC_FAILURE_MIN_ATTEMPTS = 3
  */
 export const FAST_TIER_OPERATIONAL_OVERLAYS = Object.freeze([
   Object.freeze({ path: '/api/cron/fantasy-os-active-sync', schedule: '*/5 * * * *' }),
+  // The production manifest currently has no draft-tick entry. Survivor's
+  // scheduled start and server draft advancement need the minute heartbeat.
+  Object.freeze({ path: '/api/cron/draft-tick', schedule: '* * * * *' }),
+  // Breaking-news and live-game-moment alerts (2026-10-15). cron-schedule.json sits at the
+  // cron-budget-check ceiling (60/60), and this fast-tier overlay is the slot-free way to run a
+  // two-minute job. A live "close game, 2:00 left" alert is worthless five minutes late.
+  Object.freeze({ path: '/api/cron/sports-alerts', schedule: '*/2 * * * *' }),
 ])
 
 export function withFastTierOperationalOverlays(crons) {

@@ -1,6 +1,8 @@
 import { getServerSession } from 'next-auth'
 import { notFound, redirect } from 'next/navigation'
 import { authOptions } from '@/lib/auth'
+import { loadSeasonBlueprint } from '@/lib/tournament/seasonBlueprintStore'
+import { SeasonTournamentPlanner } from '@/components/tournament/SeasonTournamentPlanner'
 import { getTournamentStandingsBoard } from '@/lib/tournament/standingsBoard'
 import { TournamentStandingsBoard } from './TournamentStandingsBoard'
 
@@ -36,6 +38,9 @@ export default async function TournamentHubPage({
   if (!userId) {
     redirect(`/api/auth/signin?callbackUrl=${encodeURIComponent(`/tournament-hub/${tournamentId}`)}`)
   }
+
+  const blueprint = await loadSeasonBlueprint(tournamentId, userId)
+  if (blueprint) return <SeasonTournamentPlanner key={blueprint.tournamentId + blueprint.revision} saved={blueprint} />
 
   const board = await getTournamentStandingsBoard(tournamentId, userId)
   if (!board) notFound()

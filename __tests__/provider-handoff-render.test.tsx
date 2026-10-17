@@ -13,6 +13,11 @@ import { render, screen, within } from '@testing-library/react'
 // Device-only cards on the notifications screen are not under test.
 vi.mock('@/components/notifications/EnableWebPushCard', () => ({ EnableWebPushCard: () => null }))
 vi.mock('@/components/pwa/PWAActions', () => ({ InstallButton: () => null }))
+// The Matchup week banner's refresh control calls useRouter, which needs an app router outside one.
+vi.mock('next/navigation', async (orig) => ({
+  ...(await orig<typeof import('next/navigation')>()),
+  useRouter: () => ({ refresh() {}, push() {}, replace() {}, prefetch() {}, back() {}, forward() {} }),
+}))
 
 import NotificationsCenter from '@/components/core-app/screens/NotificationsCenter'
 import { DashSinceLastVisit } from '@/components/core-app/screens/DashSinceLastVisit'

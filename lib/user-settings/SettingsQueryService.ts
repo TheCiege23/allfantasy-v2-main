@@ -4,6 +4,7 @@ import { getUserSettingsRecord } from "./UserSettingsService"
 import { resolveSharedProfileBootstrap } from "./SharedProfileBootstrapService"
 import { updateUserProfile } from "./UserProfileService"
 import type { SettingsSnapshot, UserProfileForSettings } from "./types"
+import { readEmailSubscription } from "@/lib/email/emailSubscription"
 
 /**
  * Fetches the full profile and account data needed for the settings UI.
@@ -314,6 +315,8 @@ export async function getSettingsSnapshot(
 
   const profileWithSettingsPlaceholder: UserProfileForSettings = {
     ...bootstrapped.profile,
+    // One indexed lookup; the dispatcher reads it from here, so it costs no second query there.
+    emailSubscription: await readEmailSubscription(bootstrapped.profile.email),
     settings: null,
   }
 

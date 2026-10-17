@@ -1,3 +1,4 @@
+import { isNativePlatform } from '@/lib/dashboard/platform-label'
 /**
  * Survivor Exile tokens: award, reset when Boss wins, check return (PROMPT 346). Deterministic.
  */
@@ -66,6 +67,8 @@ export async function resetAllTokensWhenBossWins(exileLeagueId: string, mainLeag
  * Get token state for a roster in exile league.
  */
 export async function getTokenState(exileLeagueId: string, rosterId: string): Promise<SurvivorExileTokenState | null> {
+  const native = await readNativeExileTokens(exileLeagueId)
+  if (native) return native.find(row => row.rosterId === rosterId) ?? null
   const row = await prisma.survivorExileToken.findUnique({
     where: { exileLeagueId_rosterId: { exileLeagueId, rosterId } },
   })
@@ -81,6 +84,8 @@ export async function getTokenState(exileLeagueId: string, rosterId: string): Pr
  * Get all token states for exile league.
  */
 export async function getAllTokenStates(exileLeagueId: string): Promise<SurvivorExileTokenState[]> {
+  const native = await readNativeExileTokens(exileLeagueId)
+  if (native) return native
   const rows = await prisma.survivorExileToken.findMany({
     where: { exileLeagueId },
   })
@@ -89,4 +94,15 @@ export async function getAllTokenStates(exileLeagueId: string): Promise<Survivor
     tokens: r.tokens,
     lastAwardedWeek: r.lastAwardedWeek,
   }))
+}
+
+/** Native Exile uses the main cast's single token balance. Legacy linked leagues retain their ledger. */
+async function readNativeExileTokens(exileLeagueId: string): Promise<SurvivorExileTokenState[] | null> {
+  const link = await prisma.survivorExileLeague.findFirst({ where: { exileLeagueId }, select: { mainLeagueId: true } })
+  if (!link) return null
+  const league = await prisma.league.findUnique({ where: { id: link.mainLeagueId }, select: { platform: true } })
+  if (!league || !isNativePlatform(league.platform)) return null
+  const rosters = await prisma.roster.findMany({ where: { leagueId: exileLeagueId }, select: { id: true, platformUserId: true } })
+  const players = await prisma.survivorPlayer.findMany({ where: { leagueId: link.mainLeagueId }, select: { userId: true, tokenBalance: true } })
+  return rosters.map(roster => ({ rosterId: roster.id, tokens: players.find(player => player.userId === roster.platformUserId)?.tokenBalance ?? 0, lastAwardedWeek: null }))
 }

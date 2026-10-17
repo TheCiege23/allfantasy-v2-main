@@ -4,7 +4,6 @@ import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db';
 import {
   calculateDynastyScore,
   findPlayerTier,
-  ALL_TIERED_PLAYERS,
   AssetTier,
 } from './dynasty-tiers';
 import { fetchPlayerNewsFromGrok } from './ai-gm-intelligence';
@@ -197,9 +196,7 @@ export async function analyzeUserTradingProfile(
       stat.acquired++;
       positionStats.set(p.position, stat);
 
-      const tieredPlayer = ALL_TIERED_PLAYERS.find(tp => 
-        tp.name.toLowerCase() === p.name.toLowerCase()
-      );
+      const tieredPlayer = findPlayerTier(p.name, p.position);
       if (tieredPlayer) {
         tiersEncountered.push(tieredPlayer.tier);
         if (tieredPlayer.age && tieredPlayer.age < 26) youthScore++;
@@ -211,9 +208,7 @@ export async function analyzeUserTradingProfile(
       stat.traded++;
       positionStats.set(p.position, stat);
 
-      const tieredPlayer = ALL_TIERED_PLAYERS.find(tp => 
-        tp.name.toLowerCase() === p.name.toLowerCase()
-      );
+      const tieredPlayer = findPlayerTier(p.name, p.position);
       if (tieredPlayer && tieredPlayer.age && tieredPlayer.age >= 28) youthScore++;
     }
 
@@ -344,8 +339,8 @@ export async function generateSmartRecommendations(
   }
 
   const userRosterEnriched = userRoster.map(player => {
-    const fcPlayer = findPlayerByName(fcValues, player.name);
-    const tieredPlayer = findPlayerTier(player.name);
+    const fcPlayer = findPlayerByName(fcValues, player.name, { position: player.position });
+    const tieredPlayer = findPlayerTier(player.name, player.position);
     const baseValue = fcPlayer?.value || 0;
     const position = player.position || 'WR';
     const age = tieredPlayer?.age;
@@ -363,8 +358,8 @@ export async function generateSmartRecommendations(
   const leagueRostersEnriched = leagueRosters.map(roster => ({
     ...roster,
     players: roster.players.map(p => {
-      const fcPlayer = findPlayerByName(fcValues, p.name);
-      const tieredPlayer = findPlayerTier(p.name);
+      const fcPlayer = findPlayerByName(fcValues, p.name, { position: p.position });
+      const tieredPlayer = findPlayerTier(p.name, p.position);
       return {
         ...p,
         value: fcPlayer?.value || 0,

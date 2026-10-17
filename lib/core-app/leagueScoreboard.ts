@@ -198,9 +198,10 @@ export async function getLeagueScoreboard(args: {
   // In Sleeper ids: ESPN translated, any other foreign platform emptied (see rosterIdSpace.ts).
   const rosters = await sleeperReadableRosters(
     await prisma.roster
-      .findMany({ where: { leagueId }, select: { platformUserId: true, playerData: true, league: { select: { platform: true } } } })
+      .findMany({ where: { leagueId }, select: { platformUserId: true, playerData: true, league: { select: { platform: true, sport: true } } } })
       .catch(() => []),
     (r) => r.league?.platform,
+    (r) => r.league?.sport,
   )
   const rosterBy = new Map(rosters.map((r) => [r.platformUserId, r]))
 

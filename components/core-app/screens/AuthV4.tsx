@@ -160,7 +160,29 @@ const PROVIDERS: { id: SocialProvider; label: string }[] = [
   { id: 'discord', label: 'Discord' },
 ]
 
-function OAuthGrid({ callbackUrl }: { callbackUrl: string }) {
+/** Which way someone chose to sign up — counted so the Google-first layout can be judged. */
+function trackSignupMethod(method: SocialProvider | 'email'): void {
+  if (typeof window === 'undefined') return
+  void fetch('/api/analytics/track', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ event: 'signup_method_chosen', toolKey: 'signup', path: window.location?.pathname ?? null, meta: { method } }),
+  }).catch(() => {})
+}
+
+/*
+ * ⚠ ON SIGN-UP THE SOCIAL BUTTONS LEAD, BELOW THE FORM THEY DID NOT (2026-10-11).
+ * Measured in production over 60 days: sign-ups through Google confirmed their email 32 of 32;
+ * email-and-password sign-ups 33 of 71, and the 30 still stuck on 09-26 never came back. The
+ * buttons sat under the whole form — name, email, password, Sleeper, two checkboxes, Create —
+ * behind "Or continue with". `lead` puts them first. Sign-in keeps them below its two fields.
+ *
+ * ⚠ AND THE 18+ / NOT-IN-WA NOTICE GOES WITH THEM. It lived only in the form's checkbox, so a
+ * person who now presses Google first would never pass it. The line under the buttons states the
+ * same facts with the same links; it records nothing — the buttons' consent handling is
+ * unchanged by this (see signupConsentCookie.ts for the separate, pre-existing gap there).
+ */
+function OAuthGrid({ callbackUrl, lead = false }: { callbackUrl: string; lead?: boolean }) {
   const [pending, setPending] = useState<SocialProvider | null>(null)
 
   return (
@@ -170,24 +192,30 @@ function OAuthGrid({ callbackUrl }: { callbackUrl: string }) {
      * an embedded WebView anyway. /login and /signup render THIS grid, not NocturneOAuthGrid —
      * marking only the older components let every social button through to App Review.
      */
-    <div className="af-au-oauth" data-hide-in-ios-app>
-      <div className="af-au-divider">
-        <span className="af-label">Or continue with</span>
-      </div>
+    <div className={lead ? 'af-au-oauth af-au-oauth--lead' : 'af-au-oauth'} data-hide-in-ios-app data-testid={lead ? 'signup-oauth-lead' : undefined}>
+      {lead ? null : (
+        <div className="af-au-divider">
+          <span className="af-label">Or continue with</span>
+        </div>
+      )}
       <div className="af-au-oauth-grid">
         {PROVIDERS.map((p) => {
           const enabled = isSocialProviderEnabled(p.id)
           const busy = pending === p.id
+          /* Leading the page, a "soon" tile is clutter between the visitor and the form. */
+          if (lead && !enabled) return null
           return (
             <button
               key={p.id}
               type="button"
+              data-provider={p.id}
               className="af-au-oauth-btn"
               disabled={!enabled || pending !== null}
               aria-disabled={!enabled}
               title={enabled ? `Continue with ${p.label}` : `${p.label} — coming soon`}
               onClick={async () => {
                 if (!enabled) return
+                if (lead) trackSignupMethod(p.id)
                 setPending(p.id)
                 try {
                   await signIn(p.id, { callbackUrl })
@@ -196,7 +224,9 @@ function OAuthGrid({ callbackUrl }: { callbackUrl: string }) {
                 }
               }}
             >
-              <span className="af-au-oauth-label">{busy ? 'Opening…' : p.label}</span>
+              <span className="af-au-oauth-label">
+                {busy ? 'Opening…' : lead && p.id === 'google' ? 'Continue with Google' : p.label}
+              </span>
               {/* Naming the state matters: a dimmed button with no label reads as
                   loading rather than as an unavailable provider. */}
               {!enabled ? <span className="af-au-soon af-num">soon</span> : null}
@@ -204,6 +234,18 @@ function OAuthGrid({ callbackUrl }: { callbackUrl: string }) {
           )
         })}
       </div>
+      {lead ? (
+        <>
+          <p className="af-au-oauth-note">
+            Season-long fantasy for adults 18+ — no gambling or daily fantasy. Not available in WA.{' '}
+            <Link href="/disclaimer?from=signup">State notice</Link> · <Link href="/terms">Terms</Link> ·{' '}
+            <Link href="/privacy">Privacy</Link>
+          </p>
+          <div className="af-au-divider">
+            <span className="af-label">Or sign up with email</span>
+          </div>
+        </>
+      ) : null}
     </div>
   )
 }
@@ -387,6 +429,7 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
       return
     }
 
+    trackSignupMethod('email')
     setLoading(true)
     try {
       const res = await fetch('/api/auth/register', {
@@ -470,6 +513,8 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
         </div>
       </header>
 
+      <OAuthGrid callbackUrl={callbackUrl} lead />
+
       <form className="af-au-form" onSubmit={onSubmit}>
         <label className="af-au-field">
           <span className="af-label">Display name</span>
@@ -528,7 +573,8 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
           <span>
             I am <strong>18 or older</strong> and understand AllFantasy is{' '}
             <strong>season-long fantasy sports only</strong> — no gambling, no daily fantasy. Not
-            available in WA.
+            available in WA. See the{' '}
+            <Link href="/disclaimer?from=signup">Fantasy Sports &amp; State Notice</Link>.
           </span>
         </label>
 
@@ -550,8 +596,6 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
           {loading ? 'Creating account…' : 'Create account'}
         </button>
       </form>
-
-      <OAuthGrid callbackUrl={callbackUrl} />
     </div>
   )
 }

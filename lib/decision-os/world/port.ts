@@ -36,6 +36,7 @@ import { loadLatestPlayerValueSnapshots } from '@/lib/player-values/latestPlayer
 import { mapRedraftRosterRowToRawRoster, unionRosterRows, type RawRedraftRosterRow } from './redraftRoster'
 import { resolveLeagueConcept } from '@/lib/league/leagueConceptOptions'
 import { sleeperReadableRosters } from '@/lib/core-app/rosterIdSpace'
+import { applyBridgeKeepingSlots, bridgeColumnFor, loadBridgedLeagues } from '@/lib/core-app/bridgedRosterIds'
 import { nonSleeperExternalIdWhere } from '@/lib/player-identity/externalIdNamespace'
 
 export interface CanonicalWorldPort {
@@ -173,20 +174,40 @@ export const defaultCanonicalWorldPort: CanonicalWorldPort = {
      * translated into Sleeper ids (ids with no identity dropped): ESPN 12483 is Matthew Stafford, and
      * read raw it was Sleeper's Jack Bech.
      */
+    const rawRows = await prisma.roster.findMany({
+      where: { leagueId },
+      select: {
+        id: true,
+        platformUserId: true,
+        playerData: true,
+        faabRemaining: true,
+        waiverPriority: true,
+        settings: true,
+        league: { select: { platform: true } },
+      },
+    })
+    /*
+     * A Fleaflicker / MFL league is read THROUGH the identity bridge (bridgedRosterIds.ts) when most of
+     * it translates — the same `BRIDGE_MIN_COVERAGE` rule the Player Finder applies, so a miss here
+     * can still be trusted as "not on this roster". Bridged ids become Sleeper ids; an empty slot
+     * stays '0' and an unbridged id stays in its slot as `unbridged:<id>` (never a bare number), so
+     * lineup readers keep slot order and can count what they cannot see. Below the coverage rule, or
+     * on any failure, the roster is stripped exactly as before.
+     */
+    const platformOfLeague = rawRows[0]?.league?.platform ?? null
+    let bridgedMap: ReadonlyMap<string, string> | null = null
+    if (bridgeColumnFor(platformOfLeague)) {
+      const bridged = await loadBridgedLeagues([{ id: leagueId, platform: platformOfLeague }]).catch(() => null)
+      const verdict = bridged?.get(leagueId)
+      if (verdict?.readable) bridgedMap = verdict.map
+    }
+    const prepared: Array<Omit<(typeof rawRows)[number], 'playerData'> & { playerData: unknown }> = bridgedMap
+      ? rawRows.map((r) => ({ ...r, playerData: applyBridgeKeepingSlots(r.playerData, bridgedMap!) }))
+      : rawRows
     const rows = await sleeperReadableRosters(
-      await prisma.roster.findMany({
-        where: { leagueId },
-        select: {
-          id: true,
-          platformUserId: true,
-          playerData: true,
-          faabRemaining: true,
-          waiverPriority: true,
-          settings: true,
-          league: { select: { platform: true } },
-        },
-      }),
-      (row: { league: { platform: string | null } | null }) => row.league?.platform,
+      prepared,
+      // Bridged rows are already in Sleeper's space; anything else goes through the one translator.
+      (row: { league: { platform: string | null } | null }) => (bridgedMap ? 'sleeper' : row.league?.platform),
     )
     const canonical: RawRosterRow[] = rows.map((row: {
       id: string
@@ -585,7 +606,9 @@ export async function loadScheduleGameRows(
  * READ-ONLY injury-context read for the F2.3 injury/availability enrichment seam.
  *
  * Reads the SAME SportsPlayer cache as F2.1 player metadata but selects freshness fields
- * (fetchedAt / expiresAt / updatedAt) that the F2.1 read does not include. One `findMany` only —
+ * (fetchedAt / expiresAt / updatedAt) that the F2.1 read does not include, plus the IDENTITY
+ * (name / team / position) the injury feed is matched on — `status` here is a ROSTER status, never
+ * the designation (see `resolveInjuryContext`). One `findMany` only —
  * no writes, no cache warming, no live API calls. Freshest row per id wins (orderBy fetchedAt desc).
  */
 export async function loadInjuryContextRows(
@@ -609,6 +632,9 @@ export async function loadInjuryContextRows(
       fetchedAt: true,
       expiresAt: true,
       updatedAt: true,
+      name: true,
+      team: true,
+      position: true,
     },
   })
   const claimed = new Set<string>()
@@ -630,6 +656,9 @@ export async function loadInjuryContextRows(
             fetchedAt: true,
             expiresAt: true,
             updatedAt: true,
+            name: true,
+            team: true,
+            position: true,
           },
         })
       : []
@@ -643,6 +672,9 @@ export async function loadInjuryContextRows(
       fetchedAt: Date
       expiresAt: Date
       updatedAt: Date
+      name?: string | null
+      team?: string | null
+      position?: string | null
     }) => ({
       externalId: row.externalId,
       sleeperId: row.sleeperId ?? null,
@@ -651,6 +683,9 @@ export async function loadInjuryContextRows(
       fetchedAt: row.fetchedAt ?? null,
       expiresAt: row.expiresAt ?? null,
       updatedAt: row.updatedAt ?? null,
+      name: row.name ?? null,
+      team: row.team ?? null,
+      position: row.position ?? null,
     }),
   )
 }

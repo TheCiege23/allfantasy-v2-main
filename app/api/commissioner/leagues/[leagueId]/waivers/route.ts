@@ -6,6 +6,7 @@ import { getEffectiveLeagueWaiverSettings, upsertLeagueWaiverSettings } from '@/
 import { getPendingClaims, getProcessedClaimsAndTransactions } from '@/lib/waiver-wire'
 import { processWaiverClaimsForLeague } from '@/lib/waiver-wire/process-engine'
 import { setWaiverProcessingLocked } from '@/lib/waiver-wire/waiver-state-service'
+import { waiverSettingsRequestSchema } from '@/lib/waiver-wire/settings-request'
 
 export async function GET(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
   const params = await props.params
@@ -20,7 +21,8 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
   }
 
   const type = req.nextUrl.searchParams?.get('type') || 'pending'
-  const limit = Math.min(100, Math.max(1, Number(req.nextUrl.searchParams?.get('limit') || '50')))
+  const limitRaw = Number(req.nextUrl.searchParams?.get('limit') || '50')
+  const limit = Math.min(100, Math.max(1, Number.isFinite(limitRaw) ? Math.floor(limitRaw) : 50))
 
   if (type === 'settings') {
     const settings = await getEffectiveLeagueWaiverSettings(params.leagueId)
@@ -48,29 +50,9 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ leagueId:
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const body = await req.json().catch(() => ({}))
-  const settings = await upsertLeagueWaiverSettings(params.leagueId, {
-    waiverType: body.waiverType,
-    processingDayOfWeek: body.processingDayOfWeek,
-    processingTimeUtc: body.processingTimeUtc,
-    claimLimitPerPeriod: body.claimLimitPerPeriod,
-    claimLimitPerWeek: body.claimLimitPerWeek,
-    claimLimitPerRun: body.claimLimitPerRun,
-    faabBudget: body.faabBudget,
-    faabResetDate: body.faabResetDate,
-    faabResetType: body.faabResetType,
-    waiverOrderResetPolicy: body.waiverOrderResetPolicy,
-    postGameWaiverBehavior: body.postGameWaiverBehavior,
-    processingDays: body.processingDays,
-    freeAgentWindowRules: body.freeAgentWindowRules,
-    dropRestrictions: body.dropRestrictions,
-    commissionerOverrideRules: body.commissionerOverrideRules,
-    specialtyConceptOverrides: body.specialtyConceptOverrides,
-    tiebreakRule: body.tiebreakRule,
-    lockType: body.lockType,
-    instantFaAfterClear: body.instantFaAfterClear,
-    waiverEngineConfig: body.waiverEngineConfig,
-  })
+  const parsed = waiverSettingsRequestSchema.safeParse(await req.json().catch(() => null))
+  if (!parsed.success) return NextResponse.json({ error: 'Invalid waiver settings', details: parsed.error.flatten() }, { status: 400 })
+  const settings = await upsertLeagueWaiverSettings(params.leagueId, parsed.data)
   return NextResponse.json(settings)
 }
 
@@ -87,8 +69,21 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const body = await req.json().catch(() => ({}))
-  const action = typeof body?.action === 'string' ? body.action : ''
+  let body: Record<string, unknown>
+  try {
+    const text = await req.text()
+    const parsed: unknown = text === '' ? {} : JSON.parse(text)
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('Invalid action')
+    body = parsed as Record<string, unknown>
+  } catch {
+    return NextResponse.json({ error: 'Invalid waiver action request' }, { status: 400 })
+  }
+  // Empty requests remain the documented legacy manual-run contract. A typo,
+  // truncated body or other action must never trigger roster-changing work.
+  const action = Object.keys(body).length === 0 ? 'process' : body.action
+  if (action !== 'process' && action !== 'lock_waivers' && action !== 'unlock_waivers') {
+    return NextResponse.json({ error: 'Unknown waiver action' }, { status: 400 })
+  }
 
   if (action === 'lock_waivers') {
     await setWaiverProcessingLocked(params.leagueId, true)

@@ -80,8 +80,14 @@ registerScreenSummary<WaiversBoardData | null>({
    * ⚠ Bump whenever `WaiversBoardData` changes shape — the version is part of the cache key.
    * 2: the per-sport `sports` sections, and `considered` counting NFL leagues only. A v1 entry for a
    * basketball-only account would otherwise keep serving the board with its leagues silently gone.
+   * 4: ranked by lineup gain, with `withheld.noUpgrade`, `startsOver` and `dropBasis`. A v3 entry
+   * would keep serving backup-QB adds for up to the stale window after deploy.
+   * 5: `alternatives`, `runsAtUtc`, `multiLeague`, and up to 40 rows (was 10).
+   * 6: `runsAtUtc` -> `runsSchedule` (a zoned schedule), and Sleeper rows gain an OBSERVED schedule.
+   * 7: keyed on the CLAIM WEEK (`period`) and priced on next week's board when that is the claim
+   *    week (`pricedOn`). A v6 entry would keep pricing the week already played for a stale window.
    */
-  version: 3,
+  version: 8,
   ttlMs: TTL_MS,
   staleWhileRevalidateMs: STALE_WHILE_REVALIDATE_MS,
   // See the header: a user-scoped key carries no league id, so a league sweep would match nothing.
@@ -89,19 +95,27 @@ registerScreenSummary<WaiversBoardData | null>({
   build: async (scope) => {
     const userId = scope.userId ?? ''
     if (!userId) return null
-    return getWaiversBoard(userId)
+    /*
+     * `period` is the claim week (lib/core-app/waiverClaimWeek.ts), decided by the caller from the
+     * clock — the board itself stays clock-free, and a different week is a different key.
+     */
+    return getWaiversBoard(userId, { week: scope.period ?? null })
   },
 })
 
-/** Read the cross-league waiver board through the summary cache. Scoped on `userId` alone. */
+/**
+ * Read the cross-league waiver board through the summary cache. Scoped on `userId` and the claim
+ * week — pass `claimWeek` only when it is NEXT week; the current week keeps the period-less key.
+ */
 export async function readWaiversBoardSummary(
   userId: string,
   leagueRows: readonly Dash34LeagueRow[],
+  claimWeek: number | null = null,
 ): Promise<Fresh<WaiversBoardData | null> | null> {
   if (!userId) return null
   return readScreenSummary<WaiversBoardData | null>(
     WAIVERS_BOARD_SCREEN,
-    { userId, fingerprint: portfolioFingerprint(leagueRows) },
+    { userId, fingerprint: portfolioFingerprint(leagueRows), period: claimWeek },
     { durable: sportsDataCacheTier() },
   )
 }

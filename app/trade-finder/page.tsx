@@ -219,7 +219,7 @@ function LeagueGate({ onSelect, requestedLeagueId }: { onSelect: (l: UserLeague)
             <div className="text-5xl mb-4">🔄</div>
             <h3 className="text-xl font-bold text-white mb-2">No leagues connected yet</h3>
             <p className="text-sm text-white/50 mb-6">Import a league to unlock AI trade finding.</p>
-            <Link href="/af-rankings"
+            <Link href="/core/rankings"
               className="inline-flex items-center gap-2 rounded-xl px-5 py-3 text-sm font-bold text-white"
               style={{ background: 'linear-gradient(135deg, #7c3aed, #0891b2)' }}>
               Import a League →

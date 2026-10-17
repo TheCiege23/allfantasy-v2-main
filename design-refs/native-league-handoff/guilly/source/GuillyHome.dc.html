@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Guilly league home</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./specialty/sp.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Cinzel:wght@600;700&amp;family=Caveat:wght@600;700&amp;family=Bebas+Neue&amp;family=Pirata+One&amp;family=Creepster&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080d}
+.gy-d{font-family:'Bebas Neue',sans-serif;letter-spacing:.03em;line-height:.95}
+.gy-cut{position:relative;height:0;border-top:2px dashed #ff3d2e;margin:9px 0}
+.gy-cut>span{position:absolute;left:50%;top:-12px;transform:translateX(-50%);white-space:nowrap;padding:2px 10px;border-radius:5px;background:#ff3d2e;color:#fff;font:800 10px 'Archivo';letter-spacing:.1em}
+.gy-head{width:34px;height:34px;flex:none}
+.gy-pos{display:inline-grid;place-items:center;height:20px;min-width:26px;padding:0 4px;border-radius:5px;font:900 9.5px 'Archivo';letter-spacing:.02em}
+.gy-gl{display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:22px;padding:0 6px;border-radius:6px;background:#151926;font:700 11px 'JetBrains Mono';color:#e8eaf2}
+.gy-meter{position:relative;height:14px;border-radius:99px;background:linear-gradient(90deg,#7a1410,#ff3d2e 30%,#ffc531 55%,#3abf7a 80%);overflow:visible}
+.gy-meter>i{position:absolute;top:-6px;width:4px;height:26px;border-radius:2px;background:#fff;box-shadow:0 0 0 2px #07080d}
+@keyframes gyBlade{0%{transform:translateY(-120%)}70%{transform:translateY(6%)}85%{transform:translateY(-3%)}100%{transform:translateY(0)}}
+@keyframes gyRoll{0%{transform:translate(-40px,-30px) rotate(-90deg);opacity:0}40%{opacity:1}100%{transform:translate(0,0) rotate(200deg);opacity:1}}
+@keyframes gyShake{0%,100%{transform:translate(0,0)}20%{transform:translate(-6px,3px)}40%{transform:translate(6px,-3px)}60%{transform:translate(-4px,2px)}80%{transform:translate(3px,-1px)}}
+.gy-blade{animation:gyBlade .55s cubic-bezier(.5,0,.75,0) both}
+.gy-roll{animation:gyRoll .9s .45s cubic-bezier(.2,.8,.2,1) both}
+.gy-shake{animation:gyShake .4s .5s both}
+.gy-tomb{position:relative;width:100%;aspect-ratio:200/240}
+.gy-tomb>img{position:absolute;inset:0;width:100%}
+.gy-tomb>div{position:absolute;left:18%;right:18%;top:49%;display:flex;flex-direction:column;align-items:center;gap:1px;text-align:center}
+.gy-tomb>div>b{font:800 12.5px 'Archivo';color:#1a1d24;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gy-tomb>div>span{font:700 10px 'JetBrains Mono';color:#2a2f3a}
+.gy-mode{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px 0 4px;border-radius:99px;background:#151926;border:1px solid rgba(255,255,255,.1);font:700 12px 'Archivo'}
+.gy-mode>img{width:22px}
+</style>
+</helmet>
+<div class="sp" style="--acc: #ff3d2e; --acc2: #ffc531; --accInk: #fff; --disp: Bebas Neue; min-height: 100vh; display: flex; flex-direction: column">
+<section class="sp-hero" style="margin: 20px 28px 0">
+  <img class="sp-bg" src="specialty/guilly/banner.svg" alt="">
+  <div class="sp-veil"></div>
+  <div class="sp-in">
+    <img src="specialty/guilly/emblem.svg" alt="" style="width: 150px; flex: none; filter: drop-shadow(0 14px 22px rgba(0,0,0,.6))">
+    <div style="flex: 1 1 460px; display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; flex-wrap: wrap; gap: 6px"><span class="sp-chip">NBA</span><span class="sp-chip">2025–26</span><span class="sp-chip">Guilly</span><span class="sp-chip">18 teams · 11 alive</span><span class="sp-chip"><img src="specialty/guilly/icon-gavel.svg" alt="" style="width: 16px; vertical-align: -3px"> Auction</span><span class="sp-chip"><img src="specialty/guilly/icon-bestball.svg" alt="" style="width: 16px; vertical-align: -3px"> Managed lineups</span></div>
+      <span class=""><img src="specialty/guilly/wordmark.svg" alt="Guilly" style="height: 92px; margin: -6px 0 -4px -6px"></span>
+      <span style="font-size: 16px; font-weight: 600; color: var(--acc2)">Week 8 · You’re #9 of 11 · projected 41.6 over the blade</span>
+      <span class="sp-t2" style="font-size: 14px; max-width: 620px">One league-wide points race. Every Monday the lowest weekly score gets chopped — off with their head — and their whole roster goes to waivers. Last team standing wins.</span>
+      <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 4px"><a class="sp-btn sp-btn-p" href="#" style="min-height: 46px; padding: 0 20px">Set lineup</a><a class="sp-btn" href="GuillyWaivers.dc.html" style="min-height: 46px; padding: 0 20px">Waivers</a><a class="sp-btn" href="GuillyGraveyard.dc.html" style="min-height: 46px; padding: 0 20px">Graveyard</a></div>
+    </div>
+    <div class="sp-clock"><span class="sp-lbl" style="color: var(--acc2)">Chop happens in</span><span class="sp-num" style="font-size: 36px; font-weight: 700; color: #fff">2d 04:18</span><span class="sp-t3" style="font-size: 12px">Week 8 ends Sun · chop Mon 11:00 AM ET</span></div>
+  </div>
+</section>
+<div style="display: flex; flex-wrap: wrap; gap: 20px; padding: 20px 28px 32px; align-items: flex-start">
+  <section class="sp-card" style="flex: 1 1 700px; padding: 18px 20px; display: flex; flex-direction: column; gap: 8px; min-width: 0">
+    <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap">
+      <img src="specialty/guilly/icon-danger.svg" alt="" style="width: 30px">
+      <span class="sp-lbl" style="flex: 1">The blade line · week 8 · live</span>
+      <div class="sp-seg"><sc-for list="{{views}}" as="v" hint-placeholder-count="2"><button aria-pressed="{{v.on}}" onClick="{{v.pick}}">{{v.label}}</button></sc-for></div>
+    </div>
+    <div style="display: flex; gap: 10px; padding: 0 12px; font: 600 10.5px 'Archivo'; letter-spacing: .08em; text-transform: uppercase; color: #5a6078"><span style="width: 22px; text-align: right">#</span><span style="width: 34px"></span><span style="flex: 1">Team</span><span style="width: 70px; text-align: right">Now</span><span style="width: 74px; text-align: center">Games left</span><span style="width: 74px; text-align: right">Projected</span><span style="width: 110px; text-align: center">Status</span></div>
+    <sc-for list="{{rows}}" as="r" hint-placeholder-count="11">
+      <sc-if value="{{r.cutAbove}}" hint-placeholder-val="{{ false }}"><div class="gy-cut"><span>BLADE LINE · PROJECTED {{cutProj}}</span></div></sc-if>
+      <div class="sp-row" style="background: {{r.bg}}; border-color: {{r.line}}">
+        <span style="width: 22px; text-align: right; font: 700 12px 'JetBrains Mono'; color: #7d84a3">{{r.rank}}</span>
+        <img class="gy-head" src="{{r.head}}" alt="">
+        <span style="flex: 1; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{{r.name}}</span>
+        <span class="sp-num" style="width: 70px; text-align: right; font-weight: 700">{{r.now}}</span>
+        <span style="width: 74px; display: flex; justify-content: center"><span class="gy-gl" style="color: {{r.glc}}">{{r.gl}}</span></span>
+        <span class="sp-num" style="width: 74px; text-align: right; color: #a3a9c2">{{r.proj}}</span>
+        <span style="width: 110px; display: flex; justify-content: center"><span class="sp-tag" style="background: {{r.tagBg}}; color: {{r.tagC}}">{{r.tag}}</span></span>
+      </div>
+    </sc-for>
+    <span class="sp-t3" style="font-size: 12px; margin-top: 4px">Games left matters in Guilly: a team with 9 games left can erase a 120-point hole by Sunday. Ties go to the team with more season points.</span>
+  </section>
+  <aside style="flex: 0 1 380px; display: flex; flex-direction: column; gap: 16px">
+    <div class="sp-card2" style="padding: 18px; display: flex; flex-direction: column; gap: 12px; border-color: rgba(255,197,49,.4)">
+      <div style="display: flex; align-items: center; gap: 12px"><img src="specialty/guilly/head-nervous.svg" alt="" style="width: 64px"><div style="flex: 1; display: flex; flex-direction: column"><span class="sp-lbl" style="color: #ffc531">Your neck this week</span><span class="gy-d" style="font-size: 46px; color: #fff">+41.6</span><span class="sp-t3" style="font-size: 12px">projected over the blade</span></div></div>
+      <div class="gy-meter"><i style="left: 58%"></i></div>
+      <div style="display: flex; justify-content: space-between; font: 600 10.5px 'Archivo'; letter-spacing: .06em; text-transform: uppercase; color: #7d84a3"><span>Chopped</span><span>Sweating</span><span>Safe</span></div>
+      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px"><sc-for list="{{my}}" as="m" hint-placeholder-count="3"><div class="sp-card" style="padding: 10px; display: flex; flex-direction: column; gap: 2px"><span class="sp-num" style="font-size: 18px; font-weight: 700">{{m.v}}</span><span class="sp-t3" style="font-size: 10.5px">{{m.l}}</span></div></sc-for></div>
+      <span class="sp-t2" style="font-size: 12.5px">Wembanyama plays 3 more times. You need about 52 fantasy points a game from here to stay clear.</span>
+    </div>
+    <div class="sp-card" style="padding: 14px 16px; display: flex; flex-direction: column; gap: 8px">
+      <div style="display: flex; align-items: center; gap: 8px"><img src="specialty/guilly/icon-tomb.svg" alt="" style="width: 26px"><span class="sp-lbl" style="flex: 1">The graveyard · 7 heads</span><a class="sp-btn" href="GuillyGraveyard.dc.html" style="min-height: 30px; padding: 0 10px">See all</a></div>
+      <sc-for list="{{dead}}" as="d" hint-placeholder-count="3"><div class="sp-feed"><img src="specialty/guilly/head-ko.svg" alt=""><div style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 600; font-size: 13px">{{d.t}}</span><span class="sp-t3" style="font-size: 11.5px">{{d.s}}</span></div></div></sc-for>
+    </div>
+    <div class="sp-card" style="padding: 14px 16px; display: flex; flex-direction: column; gap: 10px"><span class="sp-lbl">How Guilly works</span><div class="sp-rule"><b>1</b><span>Everyone plays everyone: one weekly points race across the whole league.</span></div><div class="sp-rule"><b>2</b><span>Lowest weekly score is chopped every Monday. Off with their head.</span></div><div class="sp-rule"><b>3</b><span>Their full roster drops into a blind FAAB auction on Tuesday.</span></div><div class="sp-rule"><b>4</b><span>Last team standing wins. Your FAAB has to last all season.</span></div></div>
+  </aside>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1240}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { v: 'line' }; }
+  renderVals() {
+    const PL = [["Nikola Jokic", "C"], ["Shai Gilgeous-Alexander", "PG/SG"], ["Victor Wembanyama", "C/PF"], ["Luka Doncic", "PG/SG"], ["Giannis Antetokounmpo", "PF/C"], ["Anthony Davis", "PF/C"], ["Anthony Edwards", "SG/SF"], ["Domantas Sabonis", "C/PF"], ["Karl-Anthony Towns", "C/PF"], ["Cade Cunningham", "PG"], ["Jalen Johnson", "PF/SF"], ["Trae Young", "PG"], ["Tyrese Maxey", "PG"], ["Jalen Williams", "SG/SF"], ["Chet Holmgren", "C/PF"], ["Alperen Sengun", "C"], ["LaMelo Ball", "PG"], ["Donovan Mitchell", "SG"], ["Devin Booker", "SG/PG"], ["Jalen Brunson", "PG"], ["Stephen Curry", "PG"], ["Kevin Durant", "SF/PF"], ["LeBron James", "SF/PF"], ["Bam Adebayo", "C"], ["Joel Embiid", "C"], ["Paolo Banchero", "PF"], ["Franz Wagner", "SF/PF"], ["Scottie Barnes", "SF/PF"], ["Evan Mobley", "PF/C"], ["Pascal Siakam", "PF"], ["Jaren Jackson Jr.", "PF/C"], ["Ja Morant", "PG"], ["Josh Giddey", "PG/SF"], ["De\u2019Aaron Fox", "PG"], ["Jamal Murray", "PG"], ["Zion Williamson", "PF"], ["James Harden", "PG"], ["Kawhi Leonard", "SF"], ["Ivica Zubac", "C"], ["Lauri Markkanen", "PF"], ["Dyson Daniels", "SG/PG"], ["Amen Thompson", "SG/SF"], ["Derrick White", "PG/SG"], ["Desmond Bane", "SG"], ["Austin Reaves", "SG"], ["Darius Garland", "PG"], ["Jarrett Allen", "C"], ["Rudy Gobert", "C"], ["Myles Turner", "C"], ["Nikola Vucevic", "C"], ["Deni Avdija", "SF/PF"], ["Cooper Flagg", "SF/PF"], ["Mikal Bridges", "SF"], ["OG Anunoby", "SF/PF"], ["Josh Hart", "SG/SF"], ["Brandon Miller", "SF"], ["Trey Murphy III", "SF"], ["Jimmy Butler", "SF"], ["Zach LaVine", "SG"], ["DeMar DeRozan", "SF"], ["Coby White", "PG/SG"], ["Jalen Duren", "C"], ["Walker Kessler", "C"], ["Onyeka Okongwu", "C"], ["Nic Claxton", "C"], ["Jakob Poeltl", "C"], ["Mark Williams", "C"], ["Isaiah Hartenstein", "C"], ["Stephon Castle", "PG/SG"], ["Alex Sarr", "C/PF"], ["Tyler Herro", "SG"], ["Norman Powell", "SG/SF"], ["Michael Porter Jr.", "SF"], ["Aaron Gordon", "PF"], ["Julius Randle", "PF"], ["Jalen Green", "SG"], ["Anfernee Simons", "SG"], ["Christian Braun", "SG"], ["Keegan Murray", "PF"], ["Herbert Jones", "SF"], ["Andrew Wiggins", "SF"], ["Miles Bridges", "SF/PF"], ["Kyle Kuzma", "PF"], ["Jerami Grant", "PF"], ["RJ Barrett", "SF"], ["Immanuel Quickley", "PG"], ["Jordan Poole", "SG/PG"], ["CJ McCollum", "SG"], ["Malik Monk", "SG"], ["Mike Conley", "PG"], ["Russell Westbrook", "PG"], ["Collin Sexton", "SG/PG"], ["Jordan Clarkson", "SG"], ["Bennedict Mathurin", "SG/SF"], ["Andrew Nembhard", "PG/SG"], ["Ausar Thompson", "SF"], ["Tobias Harris", "PF"], ["Paul George", "SF/PF"], ["Draymond Green", "PF/C"], ["Jonathan Kuminga", "PF"], ["Brandin Podziemski", "SG"], ["Klay Thompson", "SG"], ["P.J. Washington", "PF"], ["Dereck Lively II", "C"], ["Naz Reid", "C/PF"], ["Rui Hachimura", "PF"], ["Jaden McDaniels", "SF/PF"], ["Donte DiVincenzo", "SG"], ["Bilal Coulibaly", "SF"], ["Tari Eason", "PF"], ["Jabari Smith Jr.", "PF"], ["Kel\u2019el Ware", "C"], ["Shaedon Sharpe", "SG"], ["Scoot Henderson", "PG"], ["Toumani Camara", "SF/PF"], ["Cam Thomas", "SG"], ["Cameron Johnson", "SF"], ["Nickeil Alexander-Walker", "SG"], ["Keldon Johnson", "SF"], ["Devin Vassell", "SG"], ["Jeremy Sochan", "PF"], ["Matas Buzelis", "SF/PF"], ["Ayo Dosunmu", "SG"], ["Payton Pritchard", "PG"], ["Jrue Holiday", "PG/SG"], ["Jaylen Brown", "SG/SF"], ["Al Horford", "C"], ["Kevin Huerter", "SG"], ["Max Strus", "SF"], ["De\u2019Andre Hunter", "SF"], ["Caris LeVert", "SG"], ["Ty Jerome", "PG"], ["Luguentz Dort", "SG"], ["Cason Wallace", "PG/SG"], ["Aaron Nesmith", "SF"], ["Obi Toppin", "PF"], ["Jaime Jaquez Jr.", "SF"], ["Grayson Allen", "SG"], ["Royce O\u2019Neale", "SF"], ["Naji Marshall", "SF"], ["Quentin Grimes", "SG"], ["Jalen Suggs", "PG/SG"], ["Wendell Carter Jr.", "C/PF"], ["Goga Bitadze", "C"], ["Bobby Portis", "PF/C"], ["Gary Trent Jr.", "SG"], ["Nikola Jovic", "PF"], ["Duncan Robinson", "SF"], ["Harrison Barnes", "SF"], ["Keon Ellis", "SG"], ["Isaiah Stewart", "C"], ["Jaden Ivey", "SG/PG"], ["Dennis Schroder", "PG"], ["Terance Mann", "SG"], ["Kris Dunn", "PG/SG"], ["Derrick Jones Jr.", "SF"], ["Brandon Ingram", "SF/PF"], ["Mitchell Robinson", "C"], ["Yves Missi", "C"], ["Tre Jones", "PG"], ["Day\u2019Ron Sharpe", "C"], ["Nick Richards", "C"], ["Moussa Diabate", "C"], ["Guerschon Yabusele", "PF"], ["Daniel Gafford", "C"], ["Brook Lopez", "C"], ["Clint Capela", "C"], ["Jusuf Nurkic", "C"], ["Deandre Ayton", "C"], ["Kristaps Porzingis", "C"], ["Jonas Valanciunas", "C"], ["Zach Edey", "C"], ["Donovan Clingan", "C"], ["Kelly Oubre Jr.", "SF"], ["Chris Paul", "PG"], ["Bradley Beal", "SG"], ["Kevin Porter Jr.", "PG"], ["Spencer Dinwiddie", "PG"]];
+const TM = ["You \u00b7 TheCiege26", "BucketsOnly", "LoadManagement", "BoxOutBandits", "DunkCity", "SplashZone", "TripleDoubleTrouble", "AndOneAddicts", "PostUpPros", "FastBreakFam", "GlassCleaners", "ZoneDefense", "AlleyOops", "PaintBeasts", "BankShotBoys", "FlagrantFoul", "ShotClock", "HeatCheck"];
+const POS = {"QB": ["#e0553f", "#fff"], "RB": ["#3abf7a", "#06200f"], "WR": ["#3d8fe0", "#fff"], "TE": ["#e89a2c", "#1a1004"], "FLEX": ["#8a8fa8", "#0b0d14"], "SFLEX": ["#c04fd0", "#fff"], "K": ["#b48cf0", "#1a0d33"], "DST": ["#8a6a4a", "#fff"], "DL": ["#2fb5a5", "#04201d"], "LB": ["#1f8f86", "#fff"], "DB": ["#5fd0e0", "#05242a"], "IDP": ["#4a7f7a", "#fff"], "PG": ["#3d8fe0", "#fff"], "SG": ["#4fb3d9", "#05242a"], "SF": ["#3abf7a", "#06200f"], "PF": ["#e89a2c", "#1a1004"], "C": ["#e0553f", "#fff"], "G": ["#7aa6ec", "#0b1830"], "F": ["#7fd09c", "#06200f"], "UTIL": ["#8a8fa8", "#0b0d14"], "BN": ["#1d2130", "#a3a9c2"], "IR": ["#2a1418", "#ff9a8a"], "IL": ["#2a1418", "#ff9a8a"]};
+const G = "specialty/guilly/";
+const rng = (seed) => { let s = seed; return () => { s = (s * 9301 + 49297) % 233280; return s / 233280; }; };
+const AVC = ['#3a1418','#22314f','#1d3a3a','#2c2a4a','#3a3418','#12352a','#3a1f30','#1f2a4d','#2a3a1a','#3a2a14'];
+const av = (n) => { const s = n.replace('You · ', ''); let h = 0; for (const ch of s) h = (h * 31 + ch.charCodeAt(0)) % 997; return { ini: s.replace(/[^A-Z0-9]/g, '').slice(0, 2) || s.slice(0, 2).toUpperCase(), c: AVC[h % AVC.length] }; };
+const short = (n) => { const p = n.split(' '); return p.length > 1 ? p[0][0] + '. ' + p.slice(1).join(' ') : n; };
+const pos1 = (p) => p.split('/')[0];
+const chip = (p) => ({ p, bg: POS[pos1(p)][0], c: POS[pos1(p)][1] });
+const fpg = (i) => Math.round((58 - i * 0.215 - (i > 40 ? (i - 40) * 0.04 : 0)) * 10) / 10;
+const price = (i) => Math.max(1, Math.round(74 * Math.exp(-i / 26)));
+const HEAD = { calm: G + 'head-calm.svg', nervous: G + 'head-nervous.svg', ko: G + 'head-ko.svg', crown: G + 'head-crown.svg' };
+// season: 18 teams, chops weeks 1..7 done, week 8 live
+const CHOPPED = [[1,'FlagrantFoul',498.2,'Started three centers who all sat the Sunday back-to-back.'],[2,'ShotClock',611.4,'Two games played all week. The schedule did him in.'],
+  [3,'HeatCheck',640.9,'Load-managed. Twice.'],[4,'BankShotBoys',702.3,'Lost by 0.6 to a late free throw.'],[5,'PaintBeasts',688.0,'Bid $0 on waivers for five straight weeks.'],
+  [6,'AlleyOops',731.5,'Benched a 61-point night. Bestball would have saved him.'],[7,'ZoneDefense',744.8,'Three starters on the injury report by Wednesday.']];
+const ALIVE = TM.filter(t => !CHOPPED.find(c => c[1] === t));
+    const R = [['BucketsOnly',812.4,6,1192.0],['DunkCity',790.1,8,1188.5],['SplashZone',744.6,9,1171.2],['LoadManagement',801.9,4,1140.6],['PostUpPros',760.3,6,1122.4],
+      ['TripleDoubleTrouble',702.0,8,1109.9],['GlassCleaners',688.5,7,1084.3],['AndOneAddicts',731.8,5,1069.0],['You · TheCiege26',655.2,8,1061.6],['FastBreakFam',690.4,5,1020.0],['BoxOutBandits',640.7,5,987.3]];
+    const cut = 1020.0;
+    const sorted = (this.state.v === 'proj' ? R.slice().sort((a, b) => b[3] - a[3]) : R.slice().sort((a, b) => b[1] - a[1]));
+    const rows = sorted.map(([name, now, gl, proj], i) => { const me = name.startsWith('You'), danger = proj <= cut, sweat = !danger && proj - cut < 50;
+      return { rank: i + 1, name, now: now.toFixed(1), gl, glc: gl >= 8 ? '#7fe0a6' : gl <= 4 ? '#ff9a8a' : '#e8eaf2', proj: proj.toFixed(1),
+        head: danger ? HEAD.ko : sweat ? HEAD.nervous : HEAD.calm,
+        tag: danger ? 'Chopping block' : sweat ? 'Sweating' : 'Safe for now', tagBg: danger ? 'rgba(255,61,46,.16)' : sweat ? 'rgba(255,197,49,.14)' : 'rgba(58,190,120,.12)', tagC: danger ? '#ff9a8a' : sweat ? '#ffd66b' : '#7fe0a6',
+        bg: me ? 'rgba(255,197,49,.08)' : danger ? 'rgba(255,61,46,.06)' : '#10131c', line: me ? 'rgba(255,197,49,.5)' : 'rgba(255,255,255,.05)', cutAbove: false }; });
+    if (this.state.v === 'proj') { const k = rows.findIndex(r => parseFloat(r.proj) <= cut); if (k >= 0) rows[k].cutAbove = true; }
+    return { rows, cutProj: cut.toFixed(1),
+      views: [['line', 'Score now'], ['proj', 'Projected']].map(([id, label]) => ({ label, on: this.state.v === id ? 'true' : 'false', pick: () => this.setState({ v: id }) })),
+      my: [['8', 'games left'], ['$412', 'FAAB left'], ['7', 'weeks survived']].map(([v, l]) => ({ v, l })),
+      dead: CHOPPED.slice(-3).reverse().map(([w, t, s, why]) => ({ t: 'Week ' + w + ' · ' + t + ' · ' + s.toFixed(1), s: why })) };
+  }
+}
+</script>
+</body>
+</html>

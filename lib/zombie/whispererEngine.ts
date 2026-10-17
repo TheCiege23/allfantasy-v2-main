@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { setWhisperer } from '@/lib/zombie/ZombieOwnerStatusService'
-import { notifyCommissioner } from '@/lib/zombie/commissionerNotificationService'
+import { notifyCommissioner, notifyZombiePlayer } from '@/lib/zombie/commissionerNotificationService'
 import { logAuditEntry } from '@/lib/zombie/auditService'
 import { queueAnimation } from '@/lib/zombie/animationEngine'
 
@@ -147,6 +147,22 @@ export async function selectWhisperer(
       isPublic: z.whispererIsPublic,
     },
   })
+
+  /*
+   * Tell the Whisperer — privately. The announcement above goes to the whole league and, in a secret
+   * league, says only that one exists; nothing told the chosen manager. `notifyZombiePlayer` writes an
+   * in-app row only (no push), visible to that user alone. Not `pushSpoilerSafe`: that rewrites the stored
+   * title to "League update", and nothing reads `meta.inAppTitle` back, so the Whisperer would never learn.
+   */
+  if (uid !== 'unknown' && !/^(open-slot-|orphan-|roster:)/.test(uid)) {
+    await notifyZombiePlayer(uid, 'whisperer_selected', "You're the Whisperer", {
+      severity: 'high',
+      body: z.whispererIsPublic
+        ? `${z.league?.name ?? 'Your Zombie league'}: every Survivor you beat turns. The whole league knows it's you.`
+        : `${z.league?.name ?? 'Your Zombie league'}: every Survivor you beat turns. Nobody else knows — keep it that way.`,
+      meta: { leagueId },
+    }).catch(() => {})
+  }
 
   await queueAnimation(
     leagueId,

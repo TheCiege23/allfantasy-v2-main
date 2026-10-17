@@ -15,7 +15,7 @@ import { describe, expect, it } from 'vitest'
 import { render, screen } from '@testing-library/react'
 
 import { LanguageProviderClient } from '@/components/i18n/LanguageProviderClient'
-import { KickerValuationBand } from '@/app/power-rankings/KickerValuationBand'
+import { KickerValuationBand } from '@/components/core-app/rankings/power/KickerValuationBand'
 
 /** The page's own formatter, so the test asserts what a reader actually sees. */
 const formatCurrency = (v: number) => (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(Math.round(v)))

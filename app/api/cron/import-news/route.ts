@@ -59,6 +59,15 @@ async function handle(req: NextRequest) {
    */
   const budget = createRunBudget()
   const url = new URL(req.url)
+  // Manual clip-only refresh reuses this authenticated route without triggering news notifications.
+  if (url.searchParams.get('clips') === '1') {
+    try {
+      const { refreshXCatalog } = await import('@/lib/highlights/x-catalog')
+      return NextResponse.json(await refreshXCatalog(), { headers: { 'Cache-Control': 'no-store' } })
+    } catch {
+      return NextResponse.json({ error: 'Clip refresh unavailable.' }, { status: 503 })
+    }
+  }
   const sportParam = url.searchParams.get("sport")
 
   const sports = sportParam
@@ -192,6 +201,16 @@ async function handle(req: NextRequest) {
     }
   }
 
+  // Share the established hourly full-news pass. X failures must not stop news ingestion.
+  let clips: unknown = null
+  if (full && (!sports || sports.includes('NFL'))) {
+    try {
+      const { refreshXCatalog } = await import('@/lib/highlights/x-catalog')
+      clips = await refreshXCatalog()
+    } catch {
+      clips = { status: 'unavailable' }
+    }
+  }
   try {
     // Ingest FIRST. runNewsImporter re-reads sports_news, so without a preceding
     // fetch it can only recycle whatever is already there — which is exactly how
@@ -252,6 +271,7 @@ async function handle(req: NextRequest) {
         articlesFetched,
         sourceBreakdown: fetched?.breakdown ?? null,
         sourceError: fetchError,
+        clips,
         normalizedOffered: result.imported,
         sports: result.sports,
         dispatch,

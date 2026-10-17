@@ -69,6 +69,7 @@ import 'server-only'
 import { createHash } from 'node:crypto'
 import { prisma } from '@/lib/prisma'
 import { getSeasonOutlook, type SeasonOutlook } from './seasonOutlook'
+import { nativeWeeklyLeague } from './weeklyCapabilities'
 import { latestProjectionWeek } from './playerProjections'
 import { toPlayedLeagues } from './playedLeagues'
 import { getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-league-list'
@@ -98,7 +99,7 @@ const STALE_WHILE_REVALIDATE_MS = 6 * 60 * 60_000
 registerScreenSummary<SeasonOutlook | null>({
   screen: SEASON_OUTLOOK_SCREEN,
   /** ⚠ Bump whenever `SeasonOutlook` changes shape — the version is part of the cache key. */
-  version: 3,
+  version: 4,
   ttlMs: TTL_MS,
   staleWhileRevalidateMs: STALE_WHILE_REVALIDATE_MS,
   // See the header: a partial league sweep would desynchronize the focused and cross-league boards.
@@ -174,7 +175,7 @@ export async function readSeasonOutlookSummary(
   )
 }
 
-type FingerprintLeague = { id: string; platformLeagueId?: string | null; settings?: unknown }
+type FingerprintLeague = { id: string; platform?: string | null; platformLeagueId?: string | null; settings?: unknown }
 
 const stamp = (d: Date | null | undefined) => (d ? d.getTime() : 0)
 
@@ -198,7 +199,8 @@ export async function seasonOutlookFingerprint(
     .filter((v): v is string => typeof v === 'string' && v.length > 0)
   const ids = leagues.map((l) => l.id)
 
-  const [matchups, facts, teams, rosters, injuries, projection] = await Promise.all([
+  const nativeIds = leagues.filter(nativeWeeklyLeague).map(l => l.id)
+  const [matchups, facts, teams, rosters, injuries, projection, native] = await Promise.all([
     safe(
       prisma.weeklyMatchup.aggregate({
         where: { leagueId: { in: pids } },
@@ -232,9 +234,17 @@ export async function seasonOutlookFingerprint(
         )
       : Promise.resolve(null),
     focusLeagueId ? safe(latestProjectionWeek()) : Promise.resolve(null),
+    nativeIds.length ? safe(Promise.resolve().then(() => prisma.redraftMatchup.findMany({
+      where: { leagueId: { in: nativeIds }, isMedianMatchup: false }, orderBy: { id: 'asc' },
+      select: { id: true, leagueId: true, week: true, homeScore: true, awayScore: true, status: true,
+        season: { select: { season: true, currentWeek: true, updatedAt: true } },
+        homeRoster: { select: { ownerId: true, teamName: true, ownerName: true } },
+        awayRoster: { select: { ownerId: true, teamName: true, ownerName: true } } },
+    }))) : Promise.resolve(null),
   ])
 
   const parts: string[] = [
+    JSON.stringify(native),
     ids.join(','),
     pids.join(','),
     matchups === 'err' ? 'err' : `${stamp(matchups._max.updatedAt)}/${matchups._count._all}`,

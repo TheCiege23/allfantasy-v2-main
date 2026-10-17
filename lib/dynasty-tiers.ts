@@ -1,4 +1,5 @@
 import { pickRoundTable } from '@/lib/pick-curve';
+import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch';
 export type AssetTier = 0 | 1 | 2 | 3 | 4;
 export type SemanticTier = 'elite' | 'high' | 'starter' | 'replaceable' | 'depth';
 
@@ -428,12 +429,35 @@ export function isIDPPosition(position: string): boolean {
   return idpPositions.includes(position.toUpperCase());
 }
 
-export function findPlayerTier(playerName: string): TieredPlayer | null {
-  const normalized = playerName.toLowerCase().trim();
-  return ALL_TIERED_PLAYERS.find(p => 
-    p.name.toLowerCase() === normalized ||
-    p.name.toLowerCase().includes(normalized) ||
-    normalized.includes(p.name.toLowerCase())
+/** QB / RB / WR / TE / IDP / K / DEF, or null when the label makes no claim (FLEX, blank, unknown). */
+function tierPositionGroup(position: string | null | undefined): string | null {
+  const p = String(position ?? '').trim().toUpperCase();
+  if (!p) return null;
+  if (p === 'QB' || p === 'WR' || p === 'TE') return p;
+  if (p === 'RB' || p === 'HB' || p === 'FB') return 'RB';
+  if (isIDPPosition(p) || ['NT', 'ILB', 'OLB', 'MLB', 'SS', 'FS', 'SAF'].includes(p)) return 'IDP';
+  if (p === 'K' || p === 'PK' || p === 'P') return 'K';
+  if (p === 'DEF' || p === 'DST' || p === 'D/ST') return 'DEF';
+  return null;
+}
+
+/**
+ * The hardcoded tier entry for a player, by exact normalized name — and, when the caller knows the
+ * player's position, only if it is the same position group.
+ *
+ * 🛑 THIS MATCHED WITH `includes` IN BOTH DIRECTIONS AND TOOK THE FIRST HIT (fixed 2026-10-12). A name
+ * is not an identity: LB Justin Jefferson (CLE) took WR Justin Jefferson's Tier 0 (950), and CB DeVonta
+ * Smith and CB Lamar Jackson took the WR and QB entries, so a depth defender priced as a cornerstone in
+ * every surface that reads this. The substring half also bound any name CONTAINED in a listed one.
+ * A caller with no position gets exact-name-only, never a substring.
+ */
+export function findPlayerTier(playerName: string, position?: string | null): TieredPlayer | null {
+  const key = normalizeMatchName(playerName);
+  if (!key) return null;
+  const wantGroup = tierPositionGroup(position);
+  return ALL_TIERED_PLAYERS.find(p =>
+    normalizeMatchName(p.name) === key &&
+    (wantGroup == null || tierPositionGroup(p.position) === wantGroup)
   ) || null;
 }
 
@@ -565,7 +589,7 @@ export function evaluateAsset(
     };
   }
 
-  const tieredPlayer = findPlayerTier(asset.name);
+  const tieredPlayer = findPlayerTier(asset.name, asset.position);
   const position = asset.position || tieredPlayer?.position || 'WR';
   const age = asset.age || tieredPlayer?.age;
   const tier = tieredPlayer?.tier ?? 4;
@@ -597,403 +621,12 @@ export function evaluateAsset(
   };
 }
 
-function getBestTier(assets: EvaluatedAsset[]): AssetTier | null {
-  const playerAssets = assets.filter(a => a.tier !== null);
-  if (playerAssets.length === 0) return null;
-  return Math.min(...playerAssets.map(a => a.tier!)) as AssetTier;
-}
-
-function checkTierParity(
-  senderAssets: EvaluatedAsset[],
-  receiverAssets: EvaluatedAsset[]
-): { passed: boolean; senderBestTier: SemanticTier | null; receiverBestTier: SemanticTier | null; violation: string | null } {
-  const senderBestNumeric = getBestTier(senderAssets);
-  const receiverBestNumeric = getBestTier(receiverAssets);
-  
-  const senderBestTier = senderBestNumeric !== null ? TIER_TO_SEMANTIC[senderBestNumeric] : null;
-  const receiverBestTier = receiverBestNumeric !== null ? TIER_TO_SEMANTIC[receiverBestNumeric] : null;
-  
-  if (receiverBestTier === 'elite') {
-    const hasEliteReturn = senderBestTier === 'elite';
-    const hasHighPlusPick = senderBestTier === 'high' && senderAssets.some(a => a.isPick && a.pickRound === 1);
-    const hasTwoHigh = senderAssets.filter(a => a.tier !== null && a.tier <= 1).length >= 2;
-    
-    if (!hasEliteReturn && !hasHighPlusPick && !hasTwoHigh) {
-      return {
-        passed: false,
-        senderBestTier,
-        receiverBestTier,
-        violation: `Elite assets require elite-level return: another elite OR (high-tier + 1st) OR (two high-tier assets)`
-      };
-    }
-  }
-  
-  if (receiverBestTier === 'high' && senderBestTier !== 'elite' && senderBestTier !== 'high') {
-    const hasStarterPlusPick = senderBestTier === 'starter' && senderAssets.some(a => a.isPick && a.pickRound === 1);
-    if (!hasStarterPlusPick) {
-      return {
-        passed: false,
-        senderBestTier,
-        receiverBestTier,
-        violation: `High-tier assets require tier parity: high-tier return OR (starter + 1st)`
-      };
-    }
-  }
-  
-  return { passed: true, senderBestTier, receiverBestTier, violation: null };
-}
-
-function checkTimelineAlignment(
-  senderAssets: EvaluatedAsset[],
-  receiverAssets: EvaluatedAsset[],
-  senderTimeline: 'contender' | 'rebuild' | 'middle',
-  receiverTimeline: 'contender' | 'rebuild' | 'middle'
-): { aligned: boolean; mismatchReason: string | null } {
-  const senderAgingVets = senderAssets.filter(a => a.isAging);
-  const receiverAgingVets = receiverAssets.filter(a => a.isAging);
-  const senderPicks = senderAssets.filter(a => a.isPick);
-  const receiverPicks = receiverAssets.filter(a => a.isPick);
-  const senderYoungStars = senderAssets.filter(a => {
-    if (!a.age || a.tier === null || a.tier > 2) return false;
-    const pos = (a.position || '').toUpperCase();
-    if (pos === 'RB') return a.age <= 24;
-    return a.age <= 25;
-  });
-  
-  if (senderTimeline === 'rebuild') {
-    if (senderAgingVets.length >= 2 && receiverPicks.length === 0 && receiverAssets.filter(a => a.tier !== null && a.tier <= 2 && !a.isAging).length === 0) {
-      return { aligned: false, mismatchReason: 'Rebuilding team acquiring aging vets without young assets or picks in return' };
-    }
-  }
-  
-  if (senderTimeline === 'contender') {
-    if (senderYoungStars.length > 0 && receiverAgingVets.length >= 2 && receiverPicks.filter(a => a.pickRound === 1).length === 0) {
-      return { aligned: false, mismatchReason: 'Contender trading young cornerstone for aging assets without elite return' };
-    }
-  }
-  
-  return { aligned: true, mismatchReason: null };
-}
-
-// NEW: Calculate window delta between two asset sides
-function calculateWindowDelta(senderAssets: EvaluatedAsset[], receiverAssets: EvaluatedAsset[]): number {
-  const getAvgWindow = (assets: EvaluatedAsset[]) => {
-    const playerAssets = assets.filter(a => !a.isPick && a.position && a.age);
-    if (playerAssets.length === 0) return 5;
-    const totalWindow = playerAssets.reduce((sum, a) => {
-      return sum + getExpectedWindow(a.position || 'WR', a.age);
-    }, 0);
-    return totalWindow / playerAssets.length;
-  };
-  
-  return Math.abs(getAvgWindow(senderAssets) - getAvgWindow(receiverAssets));
-}
-
-function performSanityCheck(
-  senderAssets: EvaluatedAsset[],
-  receiverAssets: EvaluatedAsset[],
-  deltaPct: number,
-  tierParity: { passed: boolean; violation: string | null },
-  settings: LeagueSettings
-): { wouldMostReject: boolean; rejectReason: string | null; rejectionRate: number; windowMismatch: boolean; windowMismatchYears: number; qbRbVeto: boolean; asymmetricValue: boolean } {
-  let rejectionRate = 0;
-  const reasons: string[] = [];
-  let windowMismatch = false;
-  let windowMismatchYears = 0;
-  let qbRbVeto = false;
-  let asymmetricValue = false;
-  
-  if (deltaPct >= 30) {
-    rejectionRate = Math.min(95, 70 + deltaPct - 30);
-    reasons.push(`Value gap of ${deltaPct}% is too large`);
-  }
-  
-  if (!tierParity.passed) {
-    rejectionRate = Math.max(rejectionRate, 80);
-    reasons.push(tierParity.violation || 'Tier parity not met');
-  }
-  
-  const receiverElite = receiverAssets.filter(a => a.tier !== null && a.tier <= 1);
-  const senderLowTier = senderAssets.filter(a => a.tier !== null && a.tier >= 3);
-  if (receiverElite.length > 0 && senderAssets.length >= 3 && senderLowTier.length >= 2) {
-    rejectionRate = Math.max(rejectionRate, 85);
-    reasons.push('Garbage bundle for elite asset - quantity does not equal quality');
-  }
-  
-  // RULE 1: QB-for-RB in Superflex (Hard Gate)
-  if (settings.isSF) {
-    const receiverQBs = receiverAssets.filter(a => (a.position || '').toUpperCase() === 'QB' && a.tier !== null && a.tier <= 2);
-    const senderAgingRBs = senderAssets.filter(a => (a.position || '').toUpperCase() === 'RB' && a.age && a.age >= 27);
-    const senderHasQB = senderAssets.some(a => (a.position || '').toUpperCase() === 'QB');
-    const senderHasEarly1st = senderAssets.some(a => a.isPick && a.pickRound === 1 && a.pickSlot === 'early');
-    const senderHasWR1 = senderAssets.some(a => (a.position || '').toUpperCase() === 'WR' && a.tier !== null && a.tier <= 1);
-    
-    // If trading QB for aging RB without premium asset added
-    if (receiverQBs.length > 0 && senderAgingRBs.length > 0 && !senderHasQB && !senderHasEarly1st && !senderHasWR1) {
-      rejectionRate = Math.max(rejectionRate, 85);
-      qbRbVeto = true;
-      reasons.push('SF Veto: QB vs aging RB requires premium asset (WR1, early 1st, or QB) added');
-    }
-    
-    // Original QB check
-    const receiverTopQB = receiverAssets.filter(a => (a.position || '').toUpperCase() === 'QB' && a.tier !== null && a.tier <= 1);
-    if (receiverTopQB.length > 0 && !senderHasQB && !senderHasEarly1st) {
-      rejectionRate = Math.max(rejectionRate, 75);
-      reasons.push('SF league: Elite QB requires QB or early 1st in return');
-    }
-  }
-  
-  // RULE 2: Window Mismatch Flag (5+ years difference = grade downgrade)
-  windowMismatchYears = calculateWindowDelta(senderAssets, receiverAssets);
-  if (windowMismatchYears >= 5) {
-    windowMismatch = true;
-    rejectionRate = Math.max(rejectionRate, 60);
-    reasons.push(`Window mismatch: ${windowMismatchYears.toFixed(1)} year difference in expected production`);
-  }
-  
-  // RULE 3: Single-Asset Fragility (1 aging RB for cornerstone)
-  const senderSingleAgingRB = senderAssets.filter(a => !a.isPick).length === 1 && 
-    senderAssets.some(a => (a.position || '').toUpperCase() === 'RB' && a.age && a.age >= 28);
-  const receiverCornerstone = receiverAssets.some(a => 
-    ((a.position || '').toUpperCase() === 'QB' || (a.position || '').toUpperCase() === 'WR') && 
-    a.tier !== null && a.tier <= 1
-  );
-  if (senderSingleAgingRB && receiverCornerstone) {
-    asymmetricValue = true;
-    rejectionRate = Math.max(rejectionRate, 80);
-    reasons.push('Asymmetric Value: Single aging RB cannot acquire QB/WR cornerstone');
-  }
-  
-  const receiverYoungCornerstone = receiverAssets.filter(a => {
-    if (!a.age || a.tier === null || a.tier > 1) return false;
-    return a.age <= 25;
-  });
-  const senderAgingCount = senderAssets.filter(a => a.isAging).length;
-  if (receiverYoungCornerstone.length > 0 && senderAgingCount >= 2 && !senderAssets.some(a => a.isPick && a.pickRound === 1 && a.pickSlot === 'early')) {
-    rejectionRate = Math.max(rejectionRate, 80);
-    reasons.push('Young cornerstone traded for multiple aging assets');
-  }
-  
-  return {
-    wouldMostReject: rejectionRate >= 70,
-    rejectReason: reasons.length > 0 ? reasons[0] : null,
-    rejectionRate,
-    windowMismatch,
-    windowMismatchYears,
-    qbRbVeto,
-    asymmetricValue
-  };
-}
-
-export function evaluateTrade(
-  senderGives: TradeAsset[],
-  receiverGives: TradeAsset[],
-  settings: LeagueSettings = { isSF: true, isTEP: false, idpStarterCount: 0 },
-  senderTimeline: 'contender' | 'rebuild' | 'middle' = 'middle',
-  receiverTimeline: 'contender' | 'rebuild' | 'middle' = 'middle'
-): TradeEvaluation {
-  const senderAssets = senderGives.map(a => evaluateAsset(a, settings));
-  const receiverAssets = receiverGives.map(a => evaluateAsset(a, settings));
-  
-  let senderTotalValue = senderAssets.reduce((sum, a) => sum + a.adjustedValue, 0);
-  let receiverTotalValue = receiverAssets.reduce((sum, a) => sum + a.adjustedValue, 0);
-  
-  if (senderTimeline === 'contender') {
-    senderAssets.filter(a => a.isAging).forEach(a => { senderTotalValue += Math.round(a.adjustedValue * 0.05); });
-    senderAssets.filter(a => a.isPick).forEach(a => { senderTotalValue -= Math.round(a.adjustedValue * 0.05); });
-  } else if (senderTimeline === 'rebuild') {
-    senderAssets.filter(a => a.isPick || (a.tier !== null && a.tier <= 2 && !a.isAging)).forEach(a => { senderTotalValue += Math.round(a.adjustedValue * 0.08); });
-    senderAssets.filter(a => a.isAging).forEach(a => { senderTotalValue -= Math.round(a.adjustedValue * 0.08); });
-  }
-  
-  let consolidationPenaltyApplied = false;
-  const allAssets = [...senderAssets, ...receiverAssets];
-  const bestAsset = allAssets.reduce((best, curr) => 
-    (curr.adjustedValue > best.adjustedValue) ? curr : best
-  );
-  
-  const receiverHasBest = receiverAssets.some(a => a.name === bestAsset.name);
-  if (receiverHasBest && senderAssets.length >= 3) {
-    senderTotalValue = Math.round(senderTotalValue * 0.88);
-    consolidationPenaltyApplied = true;
-  }
-  
-  const senderHasBest = senderAssets.some(a => a.name === bestAsset.name);
-  if (senderHasBest && receiverAssets.length >= 3) {
-    receiverTotalValue = Math.round(receiverTotalValue * 0.88);
-    consolidationPenaltyApplied = true;
-  }
-  
-  const maxValue = Math.max(senderTotalValue, receiverTotalValue);
-  const deltaPct = maxValue > 0 ? Math.round(Math.abs(senderTotalValue - receiverTotalValue) / maxValue * 100) : 100;
-  const minValue = Math.min(senderTotalValue, receiverTotalValue);
-  const valueRatio = minValue > 0 ? maxValue / minValue : 999;
-  
-  const tierParityCheck = checkTierParity(senderAssets, receiverAssets);
-  const timelineCheck = {
-    senderTimeline,
-    receiverTimeline,
-    ...checkTimelineAlignment(senderAssets, receiverAssets, senderTimeline, receiverTimeline)
-  };
-  const sanityCheck = performSanityCheck(senderAssets, receiverAssets, deltaPct, tierParityCheck, settings);
-  
-  const warnings: string[] = [];
-  let tierViolation = !tierParityCheck.passed;
-  let tierViolationReason = tierParityCheck.violation;
-  
-  if (tierViolation && tierViolationReason) {
-    warnings.push(`TIER VIOLATION: ${tierViolationReason}`);
-  }
-  
-  if (!timelineCheck.aligned && timelineCheck.mismatchReason) {
-    warnings.push(`TIMELINE MISMATCH: ${timelineCheck.mismatchReason}`);
-  }
-  
-  if (sanityCheck.wouldMostReject && sanityCheck.rejectReason) {
-    warnings.push(`SANITY CHECK FAILED (${sanityCheck.rejectionRate}% would reject): ${sanityCheck.rejectReason}`);
-  }
-  
-  const idpAssets = senderAssets.filter(a => a.isIDP);
-  if (idpAssets.length > 0 && receiverAssets.some(a => a.tier !== null && a.tier <= 2)) {
-    if (settings.idpStarterCount === 0) {
-      warnings.push(`IDP players (${idpAssets.map(a => a.name).join(', ')}) have minimal value in offense-only leagues`);
-    }
-  }
-  
-  const agingAssets = senderAssets.filter(a => a.isAging);
-  if (agingAssets.length > 0) {
-    warnings.push(`Aging assets with depreciated value: ${agingAssets.map(a => a.name).join(', ')}`);
-  }
-  
-  if (consolidationPenaltyApplied) {
-    warnings.push('Consolidation penalty applied (12%) - depth does not equal stars');
-  }
-  
-  let plausibility: TradeEvaluation['plausibility'];
-  let verdict: TradeEvaluation['verdict'];
-  let maxGrade: string;
-  
-  if (sanityCheck.wouldMostReject || tierViolation || deltaPct >= 30) {
-    plausibility = 'UNREALISTIC';
-    verdict = 'UNREALISTIC';
-    maxGrade = 'C-';
-  } else if (deltaPct >= 20 || !timelineCheck.aligned) {
-    plausibility = 'LOW';
-    verdict = 'VERY_LOPSIDED';
-    maxGrade = 'D';
-  } else if (deltaPct >= 12) {
-    plausibility = 'MEDIUM';
-    verdict = 'LOPSIDED';
-    maxGrade = 'C';
-  } else if (deltaPct >= 5) {
-    plausibility = 'HIGH';
-    verdict = 'SLIGHT_EDGE';
-    maxGrade = 'B';
-  } else {
-    plausibility = 'HIGH';
-    verdict = 'FAIR';
-    maxGrade = 'A-';
-  }
-  
-  if (agingAssets.length >= 2 && maxGrade === 'A-') {
-    maxGrade = 'B+';
-    warnings.push('Grade capped due to multiple aging assets');
-  }
-  
-  let suggestedFix: string | null = null;
-  if (plausibility === 'UNREALISTIC') {
-    if (tierViolation) {
-      suggestedFix = 'Add an early 1st OR include an elite/high-tier asset to make this realistic';
-    } else if (sanityCheck.wouldMostReject) {
-      suggestedFix = `${sanityCheck.rejectionRate}% of managers would reject. Add significant value to close the gap.`;
-    } else {
-      suggestedFix = 'Value gap too large - add premium picks or reduce ask';
-    }
-  } else if (plausibility === 'LOW') {
-    suggestedFix = 'Add a mid-1st or high-tier player to balance this trade';
-  }
-  
-  // Calculate window analysis
-  const getAvgWindowForSide = (assets: EvaluatedAsset[]) => {
-    const playerAssets = assets.filter(a => !a.isPick && a.position && a.age);
-    if (playerAssets.length === 0) return 5;
-    return playerAssets.reduce((sum, a) => sum + getExpectedWindow(a.position || 'WR', a.age), 0) / playerAssets.length;
-  };
-  
-  const senderAvgWindow = getAvgWindowForSide(senderAssets);
-  const receiverAvgWindow = getAvgWindowForSide(receiverAssets);
-  const windowDelta = Math.abs(senderAvgWindow - receiverAvgWindow);
-  
-  // Determine dynasty verdict
-  let dynastyVerdict: 'LONG_TERM_WIN' | 'SHORT_TERM_WIN' | 'BALANCED' | 'ASYMMETRIC';
-  let dynastyLabel: string;
-  
-  if (sanityCheck.asymmetricValue) {
-    dynastyVerdict = 'ASYMMETRIC';
-    dynastyLabel = 'Asymmetric Value - Dynasty format strongly disfavors this trade structure';
-  } else if (windowDelta >= 5) {
-    if (receiverAvgWindow > senderAvgWindow) {
-      dynastyVerdict = 'LONG_TERM_WIN';
-      dynastyLabel = 'Long-Term Dynasty Win / Short-Term Production Loss';
-    } else {
-      dynastyVerdict = 'SHORT_TERM_WIN';
-      dynastyLabel = 'Short-Term Production Win / Long-Term Dynasty Loss';
-    }
-  } else if (windowDelta >= 2) {
-    if (receiverAvgWindow > senderAvgWindow) {
-      dynastyVerdict = 'LONG_TERM_WIN';
-      dynastyLabel = 'Slight Long-Term Advantage';
-    } else {
-      dynastyVerdict = 'SHORT_TERM_WIN';
-      dynastyLabel = 'Slight Short-Term Advantage';
-    }
-  } else {
-    dynastyVerdict = 'BALANCED';
-    dynastyLabel = 'Balanced Trade - Similar Production Windows';
-  }
-  
-  // Add window mismatch warning
-  if (sanityCheck.windowMismatch) {
-    warnings.push(`WINDOW MISMATCH: ${sanityCheck.windowMismatchYears.toFixed(1)} year production gap - ${dynastyLabel}`);
-  }
-  
-  // Add QB-RB veto warning
-  if (sanityCheck.qbRbVeto) {
-    warnings.push('SF VETO: QB-for-aging-RB trades require premium asset (WR1, early 1st, or QB) added');
-  }
-  
-  // Add asymmetric value warning
-  if (sanityCheck.asymmetricValue) {
-    warnings.push('ASYMMETRIC VALUE: Single aging RB cannot acquire QB/WR cornerstone in dynasty');
-  }
-
-  return {
-    senderAssets,
-    receiverAssets,
-    senderTotalValue,
-    receiverTotalValue,
-    deltaPct,
-    valueRatio,
-    tierViolation,
-    tierViolationReason,
-    tierParityCheck,
-    timelineCheck,
-    sanityCheck,
-    windowAnalysis: {
-      senderAvgWindow,
-      receiverAvgWindow,
-      windowDelta,
-      dynastyVerdict,
-      dynastyLabel,
-    },
-    plausibility,
-    maxGrade,
-    verdict,
-    warnings,
-    suggestedFix,
-    consolidationPenaltyApplied,
-  };
-}
+/*
+ * The tier system's own `evaluateTrade` (and its private parity / timeline / sanity helpers) lived here
+ * until 2026-10-12. It had no importer left — every surface grades through the one trade engine,
+ * `lib/decision-os/trade/evaluateTrade.ts` — and a second verdict-shaped export is what
+ * scripts/check-decision-engine-boundary.mjs exists to stop. Same move as pick-valuation's analyzeTrade.
+ */
 
 export function formatEvaluationForAI(evaluation: TradeEvaluation): string {
   const tierParityStatus = evaluation.tierParityCheck.passed 

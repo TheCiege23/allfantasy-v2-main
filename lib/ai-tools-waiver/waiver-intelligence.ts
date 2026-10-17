@@ -1,3 +1,4 @@
+import { injuryStatusLookup } from '@/lib/injuries/matchInjuryRows'
 import { toImageUrl } from '@/lib/media/imageUrl'
 import 'server-only'
 
@@ -8,6 +9,13 @@ import {
   leagueToolAccessUserMessage,
 } from '@/lib/ai-tools/league-tool-access-messages'
 import { buildNameIndex } from '@/lib/player-identity/nameIndex'
+import { selectAuthoritativePlayerRow } from '@/lib/player-match/authoritativePlayerRow'
+import {
+  buildNameIndex as buildVerifiedNameIndex,
+  normalizeMatchName,
+  resolveVerifiedMatch,
+} from '@/lib/player-match/verifiedNameMatch'
+import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { prisma } from '@/lib/prisma'
 import { assertLeagueMemberWithCode } from '@/lib/league/league-access'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
@@ -294,6 +302,8 @@ const SPORTS_PLAYER_FIELDS = {
   team: true,
   age: true,
   imageUrl: true,
+  source: true,
+  fetchedAt: true,
 } as const
 
 /**
@@ -314,10 +324,19 @@ const SPORTS_PLAYER_FIELDS = {
  * wins, and the fallback only runs where nothing in the Sleeper space claims the id.
  */
 async function findSportsPlayerForLeagueId(sport: string, leaguePlayerId: string) {
-  const authoritative = await prisma.sportsPlayer.findFirst({
+  /*
+   * 🛑 EVERY SOURCE'S ROW, JUDGED BY THE SLEEPER ROW (2026-10-12). This was an unordered
+   * `findFirst` over the Sleeper space, which holds one row per source — and TheSportsDB's rows
+   * got their `sleeperId` by NAME, so 11304 could come back as G Elgton Jenkins rather than TE
+   * E.J. Jenkins. `selectAuthoritativePlayerRow` keeps the Sleeper row's identity
+   * (`lib/player-match/authoritativePlayerRow.ts`).
+   */
+  const rows = await prisma.sportsPlayer.findMany({
     where: { sport, OR: [{ sleeperId: leaguePlayerId }, { externalId: `sleeper:${leaguePlayerId}` }] },
     select: SPORTS_PLAYER_FIELDS,
+    orderBy: { fetchedAt: 'desc' },
   })
+  const authoritative = selectAuthoritativePlayerRow(rows)?.row
   if (authoritative) return authoritative
   return prisma.sportsPlayer.findFirst({
     where: { sport, externalId: leaguePlayerId },
@@ -325,29 +344,74 @@ async function findSportsPlayerForLeagueId(sport: string, leaguePlayerId: string
   })
 }
 
-async function resolveSportsPlayerRecord(sport: string, rosterPlayerId: string): Promise<SportsPlayerRecord | null> {
-  const direct = await prisma.sportsPlayerRecord.findUnique({ where: { id: rosterPlayerId } })
-  if (direct) return direct
-  const sp =
-    (await findSportsPlayerForLeagueId(sport, rosterPlayerId)) ??
-    (await prisma.sportsPlayer.findFirst({ where: { sport, id: rosterPlayerId }, select: SPORTS_PLAYER_FIELDS }))
-  if (!sp) return null
-  return prisma.sportsPlayerRecord.findFirst({
-    where: { sport, name: { equals: sp.name, mode: 'insensitive' } },
-  })
+function recordTeamKey(sport: string, team: string | null | undefined): string | null {
+  const t = String(team ?? '').trim()
+  if (!t) return null
+  // `SportsPlayer`'s Sleeper rows spell NFL clubs out ("Minnesota Vikings"); `sports_players` writes `MIN`.
+  return sport.toUpperCase() === 'NFL' ? normalizeTeamAbbrev(t) : t.toUpperCase()
 }
 
-async function resolveRecordForFreeAgent(sport: string, externalId: string): Promise<SportsPlayerRecord | null> {
-  const byId = await prisma.sportsPlayerRecord.findUnique({ where: { id: externalId } })
-  if (byId) return byId
-  const sp = await prisma.sportsPlayer.findFirst({
-    where: { sport, externalId },
-    select: { name: true },
+/**
+ * A league player id → its `sports_players` (`SportsPlayerRecord`) row.
+ *
+ * 🛑 IT USED TO BIND ON NAME ALONE, UNORDERED (2026-10-12). Record ids are `${sport}:${sleeperId}`
+ * (`NFL:6794`), so a bare roster id never hit the direct lookup and every player fell through to
+ * `findFirst({ name })` — and `sports_players` holds WR Justin Jefferson (`NFL:6794`, MIN) AND LB
+ * Justin Jefferson (`NFL:13524`, CLE). Either could price the receiver, in the drop candidates and
+ * the roster-needs count alike. Free agents went through `externalId` too — the Rolling Insights
+ * space, where a bare Sleeper id names a stranger.
+ *
+ * Now: the id's own row (`${sport}:${id}`) first. Failing that, the player's identity from the
+ * authoritative `SportsPlayer` row, bound to a record by name AND verified by position and team,
+ * refusing ambiguity (`resolveVerifiedMatch`). Rows repeating one athlete under several ids
+ * (`NFL:6794`, `NFL:sleeper:6794`, slug ids) collapse first, so duplicates do not read as a collision.
+ *
+ * ⚠ ON NFL THIS DECIDES IDENTITY, NOT PRICE. Measured the same day, 0 of 30,034 NFL rows here are
+ * priceable by `sportsRecordToPricedAsset` (no `dynasty_value`, and no projection under a key it
+ * reads), so NFL drop candidates skip as unpriced either way; what the wrong row changed was the
+ * position counted in roster needs and the record id a free agent carries. SOCCER (800 rows with a
+ * dynasty value) and MLB (29) are where the price itself rides on this.
+ */
+export async function resolveSportsPlayerRecord(
+  sport: string,
+  rosterPlayerId: string,
+): Promise<SportsPlayerRecord | null> {
+  const direct = await prisma.sportsPlayerRecord.findUnique({ where: { id: rosterPlayerId } })
+  if (direct) return direct
+  const own = await prisma.sportsPlayerRecord.findUnique({ where: { id: `${sport}:${rosterPlayerId}` } })
+  if (own) return own
+
+  const identity =
+    (await findSportsPlayerForLeagueId(sport, rosterPlayerId)) ??
+    (await prisma.sportsPlayer.findFirst({ where: { sport, id: rosterPlayerId }, select: SPORTS_PLAYER_FIELDS }))
+  if (!identity?.name) return null
+
+  const sameName = await prisma.sportsPlayerRecord.findMany({
+    where: { sport, name: { equals: identity.name, mode: 'insensitive' } },
+    take: 50,
   })
-  if (!sp) return null
-  return prisma.sportsPlayerRecord.findFirst({
-    where: { sport, name: { equals: sp.name, mode: 'insensitive' } },
-  })
+  // One candidate per (name, position, team); a priced row speaks for its group.
+  const priced = (r: SportsPlayerRecord) => Number(sportsRecordToPricedAsset(r) != null)
+  const ranked = [...sameName].sort((a, b) => priced(b) - priced(a))
+  const groups = new Map<string, SportsPlayerRecord>()
+  for (const r of ranked) {
+    const key = [normalizeMatchName(r.name), String(r.position ?? '').trim().toUpperCase(), recordTeamKey(sport, r.team) ?? ''].join('|')
+    if (!groups.has(key)) groups.set(key, r)
+  }
+  const index = buildVerifiedNameIndex(
+    [...groups.values()].map((r) => ({ name: r.name, position: r.position, team: recordTeamKey(sport, r.team), row: r })),
+  )
+  const bound = resolveVerifiedMatch(
+    index,
+    { name: identity.name, position: identity.position, team: recordTeamKey(sport, identity.team) },
+    { refuseContradictedSingle: true },
+  ).match?.row
+  return bound ?? null
+}
+
+/** Free agents arrive keyed the way roster players are — by the league's (Sleeper) id. */
+export async function resolveRecordForFreeAgent(sport: string, externalId: string): Promise<SportsPlayerRecord | null> {
+  return resolveSportsPlayerRecord(sport, externalId)
 }
 
 async function computeTeamPositionNeeds(
@@ -789,15 +853,21 @@ async function runSingleSportAnalysis(args: RunArgs): Promise<{
    * waiver candidates. The port serves the fed table (SportsInjury), one row
    * per player, and we drop stale rows outright: no badge beats a wrong badge.
    */
-  const injuryByName = new Map<string, string>()
+  /*
+   * Bound per athlete (name + team/position via matchInjuryRows). Keyed by lower-cased name, the
+   * LAST fact won — two athletes sharing a name (WR vs LB Justin Jefferson) swapped badges.
+   */
+  let injuryStatusOf: (p: { name: string; team?: string | null; position?: string | null }) => string | null = () => null
   if (SUPPORTED_SPORTS.includes(sportStr as (typeof SUPPORTED_SPORTS)[number])) {
     try {
       const { listInjuryFacts } = await import('@/lib/injuries/injuryReadPort')
       const factList = await listInjuryFacts({ sport: sportStr, limit: 300 })
-      for (const f of factList.facts) {
-        if (f.stale || !f.status) continue
-        injuryByName.set(f.playerName.toLowerCase(), String(f.status))
-      }
+      injuryStatusOf = injuryStatusLookup(
+        factList.facts
+          .filter((f) => !f.stale && Boolean(f.status))
+          .map((f) => ({ playerName: f.playerName, team: f.team, position: f.position, status: String(f.status) })),
+        sportStr,
+      )
     } catch {
       dataGaps.push(`Injury designations unavailable for ${sportStr}.`)
     }
@@ -913,7 +983,7 @@ async function runSingleSportAnalysis(args: RunArgs): Promise<{
     let marketValue = 1000
     let headshotUrl: string | null = null
     let imageUrl: string | null = null
-    let injuryStatus: string | null = injuryByName.get(c.name.toLowerCase()) ?? null
+    let injuryStatus: string | null = injuryStatusOf({ name: c.name, team: c.team, position: c.position })
     let recordId: string | null = null
 
     const idpTierValue = idpTierValues?.get(c.externalId) ?? null
@@ -925,7 +995,7 @@ async function runSingleSportAnalysis(args: RunArgs): Promise<{
       const nflRec = await resolveRecordForFreeAgent(sportStr, c.externalId)
       if (nflRec) recordId = nflRec.id
     } else if (sportStr === 'NFL' && nflBundle) {
-      const matched = findPlayerByName(nflBundle.fc, c.name)
+      const matched = findPlayerByName(nflBundle.fc, c.name, { position: c.position, team: c.team })
       try {
         let priced = await pricePlayer(c.name, nflBundle.ctx)
         priced = applyTePremiumToPlayerValue(priced, nflBundle.tePremium)

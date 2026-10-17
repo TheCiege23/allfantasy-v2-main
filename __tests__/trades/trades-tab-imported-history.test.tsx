@@ -105,6 +105,11 @@ describe('TradesTab — completed history', () => {
     expect(screen.getByText('2027 round 3 · 1,500')).toBeInTheDocument()
     const letters = screen.getAllByText(/^[ABCDF]$/).map((n) => n.textContent)
     expect(letters).toEqual(['D', 'B'])
+    // Each column is what that manager GOT: Hoovi's D is for the 3rd (1,500), not Woody Marks.
+    expect(screen.getByText('Hoovi').closest('.min-w-0')!.textContent).toContain('2027 round 3 · 1,500')
+    expect(screen.getByText('Nicolodeon').closest('.min-w-0')!.textContent).toContain('Woody Marks · 2,000')
+    expect(screen.getByText('Side A gets')).toBeInTheDocument()
+    expect(screen.queryByText(/Side A sends/)).not.toBeInTheDocument()
     expect(screen.getByText('Nicolodeon got the better end — Hoovi got 1,500 in league value for 2,000.')).toBeInTheDocument()
     // The realized-points letter is the one that contradicted the board; it must not come back.
     expect(screen.queryByText(/net -17\.8/)).not.toBeInTheDocument()
@@ -140,7 +145,7 @@ describe('TradesTab — completed history', () => {
     render(<TradesTab league={imported} teams={[]} />)
     fireEvent.click(await screen.findByRole('button', { name: /History · 1/ }))
     // A completed trade keeps its frozen original grade (frozenCompletedGrade.ts), so the label no longer says "today".
-    expect(screen.getByText('Each trade keeps the grade it got when first graded on this league’s values — the same grade as the Trade Center')).toBeInTheDocument()
+    expect(screen.getByText('Each trade keeps its original grade on this league’s values — priced at the time of the trade where a market record covers that date — the same grade as the Trade Center')).toBeInTheDocument()
   })
 
   it('an unreadable history leaves the live rows and never invents an empty log', async () => {

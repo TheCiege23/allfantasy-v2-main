@@ -186,10 +186,10 @@ async function main(): Promise<void> {
   assertCheck(russell.length === 1, 'Russell Wilson remains one row', failures)
   assertCheck((russell[0]?.sleeperId ?? null) === '1234', 'Russell Wilson sleeperId is 1234', failures)
 
-  // 4) De'Von Achane one row with sleeperId 7373.
+  // 4) De'Von Achane one row with sleeperId 9226 (7373 is Gus Cumberlander, not Achane).
   const achane = matching(rows, "De'Von Achane")
   assertCheck(achane.length === 1, "De'Von Achane remains one row", failures)
-  assertCheck((achane[0]?.sleeperId ?? null) === '7373', "De'Von Achane sleeperId is 7373", failures)
+  assertCheck((achane[0]?.sleeperId ?? null) === '9226', "De'Von Achane sleeperId is 9226", failures)
 
   // 5) missingHeadshots stays 0.
   const missingHeadshots = rows.filter((row) => !row.headshotUrl).length

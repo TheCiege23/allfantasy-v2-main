@@ -234,6 +234,19 @@ function ensureNameIndex() {
   }
 }
 
+/**
+ * The board's entry for a name ONLY when the board holds exactly one player by that name.
+ *
+ * `findMultiADP(name)` falls back to the first candidate, which is a guess the moment the board
+ * carries namesakes (it lists Byron Young LB/LAR and DT/PHI, and Lamar Jackson QB/BAL and CB).
+ * Use this where the entry is evidence of WHO the name means rather than a value lookup.
+ */
+export function findUniqueMultiADP(name: string): MultiPlatformADP | null {
+  ensureNameIndex()
+  const candidates = nameIndex.get(normalizePlayerName(name))
+  return candidates && candidates.length === 1 ? candidates[0] : null
+}
+
 export function findMultiADP(name: string, position?: string, team?: string): MultiPlatformADP | null {
   ensureNameIndex()
   const key = normalizePlayerName(name)

@@ -56,6 +56,7 @@ export default async function LivePage({
           gameId: game.detail.gameId,
           homeAbbrev: game.detail.home.abbrev,
           awayAbbrev: game.detail.away.abbrev,
+          upcoming: game.detail.status?.state === 'pre',
         })
       : null
     return (

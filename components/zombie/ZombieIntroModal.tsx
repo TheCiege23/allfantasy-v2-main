@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 import { getZombieTheme } from '@/lib/zombie/zombieBackgroundThemes'
+import { ZombieSceneBackground } from './ZombieSceneBackground'
 
 const ZOMBIE_INTRO_VIDEO = '/league-type-zombie-intro.mp4'
 const STORAGE_PREFIX = 'af_zombie_intro_seen_'
@@ -84,8 +85,9 @@ export function ZombieIntroModal({
       aria-label="Zombie League intro"
     >
       <div className={`relative w-full max-w-3xl overflow-hidden rounded-2xl border border-red-900/50 shadow-2xl`}>
-        {/* Background gradient */}
+        {/* The league's scene, over its gradient (which stays as the fallback for an unknown theme). */}
         <div className={`absolute inset-0 ${backgroundClass} opacity-90`} />
+        {theme && <ZombieSceneBackground themeId={theme.id} />}
 
         {/* Close button */}
         <button

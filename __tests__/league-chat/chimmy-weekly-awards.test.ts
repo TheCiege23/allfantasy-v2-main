@@ -193,3 +193,61 @@ describe('the recap reads in Chimmy’s voice, with the week’s real numbers', 
     expect(text).not.toMatch(/restraining order|support group|abandoned|check on/i)
   })
 })
+
+describe('one name per manager across the recap', () => {
+  it('the awards use the same team name the results do, not the H2H display name', () => {
+    const text = buildWeeklyRecap({
+      leagueName: 'Iron Horse',
+      sleeperLeagueId: 'sl-1',
+      h2h: { managers, records } as never,
+      awards: awards as never,
+      rosters: [
+        { roster_id: 1, owner_id: 'o1', settings: { wins: 3, losses: 0, fpts: 420 } },
+        { roster_id: 2, owner_id: 'o2', settings: { wins: 2, losses: 1, fpts: 390 } },
+        { roster_id: 3, owner_id: 'o3', settings: { wins: 1, losses: 2, fpts: 350 } },
+        { roster_id: 4, owner_id: 'o4', settings: { wins: 0, losses: 3, fpts: 300 } },
+      ],
+      users: [
+        { user_id: 'o1', display_name: 'Alex', metadata: { team_name: 'Hammer Time' } },
+        { user_id: 'o2', display_name: 'Sam' },
+        { user_id: 'o3', display_name: 'Jordan', metadata: { team_name: 'KuppMyFootBalls' } },
+        { user_id: 'o4', display_name: 'Riley' },
+      ],
+      matchups: [
+        { roster_id: 1, matchup_id: 1, points: 162.44 },
+        { roster_id: 4, matchup_id: 1, points: 71.2 },
+        { roster_id: 2, matchup_id: 2, points: 118.6 },
+        { roster_id: 3, matchup_id: 2, points: 116.8 },
+      ],
+    })
+    expect(text).toContain('Hammer Time 162.4 def. Riley 71.2')
+    expect(text).toContain('Boom of the week: Hammer Time, 162.4')
+    expect(text).toContain('Narrow escape: Sam over KuppMyFootBalls by 1.8')
+    expect(text).not.toMatch(/\bAlex\b/)
+    expect(text).not.toMatch(/\bJordan\b/)
+  })
+
+  it('falls back to the H2H name when the week feed did not load', () => {
+    const text = buildWeeklyRecap({
+      leagueName: 'Iron Horse',
+      sleeperLeagueId: 'sl-1',
+      h2h: { managers, records } as never,
+      awards: awards as never,
+      rosters: null,
+      users: null,
+      matchups: null,
+    })
+    expect(text).toContain('Boom of the week: Alex, 162.4')
+  })
+})
+
+describe('all-time records are only claimed from a complete history', () => {
+  it('leaves the records section out when a season could not be read', () => {
+    const base = { leagueName: 'Iron Horse', sleeperLeagueId: 'sl-1', awards: awards as never, rosters: null, users: null, matchups: null }
+    const complete = buildWeeklyRecap({ ...base, h2h: { managers, records, missing: [] } as never })
+    const partial = buildWeeklyRecap({ ...base, h2h: { managers, records, missing: ['2023: matchups'] } as never })
+    expect(complete).toContain('Records broken')
+    expect(partial).not.toContain('Records broken')
+    expect(partial).toContain('Boom of the week')
+  })
+})

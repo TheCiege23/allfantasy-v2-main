@@ -53,11 +53,18 @@ name: Playwright Tests
 # Eleven concurrent Playwright runs were carrying 33 of them, all destined to fail
 # and gate nothing, while the ten required checks -- about 7 minutes of wall-clock
 # in parallel -- waited 33 minutes for a runner. The concurrency block above stops
-# SUPERSEDED runs; this stops running them on PRs at all. They still run on push,
-# nightly, and on demand.
+# SUPERSEDED runs; this stops running them on PRs at all. They still run nightly
+# and on demand.
+#
+# ⚠ AND AS OF 2026-10-01 NOTHING RUNS ON PUSH TO MAIN. Measured that day: 37 push
+# runs on main, ZERO green — 29 `cancelled` (the one-pending-per-group eviction the
+# concurrency comment below describes) and 8 `failure` (the core shards). They spent
+# 1,370 runner-minutes, the largest single consumer of the account's job ceiling,
+# while PR jobs that take 6-15 minutes waited up to 64 minutes for a runner. Every
+# lane a push ran had already run on the PR that produced the push, and the core
+# shards still run on the nightly sweep below. This is the "core lane is a nightly
+# signal on main" option the concurrency comment names.
 on:
-  push:
-    branches: [ main, master ]
   pull_request:
     # No `branches:` filter on purpose. Filtering PR runs to base
     # main/master silently skipped every stacked PR (a PR based on
@@ -124,8 +131,14 @@ jobs:
         # that sees a phone, it takes minutes rather than hours, and a mobile
         # regression that only surfaces on the nightly push run is a regression
         # somebody has already merged.
+        #
+        # `mobile-auth` is nightly and on demand only, as of 2026-10-01. It is not a
+        # required check, and it was the most expensive PR lane: 14 runner-minutes per
+        # PR on average (39 under contention), against 9 for mobile-smoke, while required
+        # lanes queued up to 64 minutes behind it. mobile-smoke stays on PRs as the phone
+        # lane; an auth-only mobile regression now surfaces on the nightly run.
         include: ${{ github.event_name == 'pull_request'
-          && fromJSON('[{"label":"retention-engagement","lane":"retention-engagement","job-timeout":60},{"label":"onboarding-activation","lane":"onboarding-activation","job-timeout":60},{"label":"referral-growth-db","lane":"referral-growth-db","job-timeout":60},{"label":"mobile-smoke","lane":"mobile-smoke","job-timeout":45},{"label":"mobile-auth","lane":"mobile-auth","job-timeout":60}]')
+          && fromJSON('[{"label":"retention-engagement","lane":"retention-engagement","job-timeout":60},{"label":"onboarding-activation","lane":"onboarding-activation","job-timeout":60},{"label":"referral-growth-db","lane":"referral-growth-db","job-timeout":60},{"label":"mobile-smoke","lane":"mobile-smoke","job-timeout":45}]')
           || fromJSON('[{"label":"core 1/3","lane":"core-shard-1","shard":"1/3","job-timeout":180},{"label":"core 2/3","lane":"core-shard-2","shard":"2/3","job-timeout":180},{"label":"core 3/3","lane":"core-shard-3","shard":"3/3","job-timeout":180},{"label":"retention-engagement","lane":"retention-engagement","job-timeout":60},{"label":"onboarding-activation","lane":"onboarding-activation","job-timeout":60},{"label":"referral-growth-db","lane":"referral-growth-db","job-timeout":60},{"label":"mobile-smoke","lane":"mobile-smoke","job-timeout":45},{"label":"mobile-auth","lane":"mobile-auth","job-timeout":60}]') }}
     services:
       postgres:
@@ -259,6 +272,13 @@ jobs:
         # #776 fixed mobile-auth this way (0 restarts after). Judge by the restart line's
         # count in each lane's log, not by a green run.
         NODE_OPTIONS: --max-old-space-size=8192
+        # ⚠ AND THE 8192MB HEAP WAS NOT ENOUGH ON ITS OWN HERE. This lane runs ONE spec
+        # (e2e/engagement-notification-routing-click-audit.spec.ts) yet global setup warmed all
+        # 33 default routes (161s), and the server still restarted mid-test in 6 of 13 runs
+        # measured 2026-10-03 — every one of those 6 flaky or failed, against 6 of 7 clean runs
+        # without a restart. Warm only the four routes the spec visits (one of which, /chimmy,
+        # the default list does not warm at all). If you add a @retention spec, add its routes.
+        E2E_WARM_ROUTES: /e2e/engagement-notification-routing,/trade-analyzer,/chimmy,/tools-hub
       run: npm run test:e2e:retention
     - name: Run Playwright tests (onboarding activation)
       if: matrix.lane == 'onboarding-activation'
@@ -279,6 +299,16 @@ jobs:
         NEXTAUTH_URL: http://localhost:3000
         # 8192MB heap: see the note on the retention-engagement step above.
         NODE_OPTIONS: --max-old-space-size=8192
+        # ⚠ THE SAME RESTART THE RETENTION LANE HAD, AND THE SAME FIX (2026-10-04). Global setup
+        # warmed all 33 default routes ("warmed 33 routes in 239s", /core among them) for a spec that
+        # renders two pages, and next dev then restarted on its memory line ("Server is approaching
+        # the used memory threshold, restarting...") just as the tests began. Every referral log
+        # measured that day had exactly one restart — the failed run on #2010 and the "1 flaky" runs on
+        # #2007 and #2035 — and the symptoms were the restart's: a /core goto that never finished,
+        # a track-click wait that timed out, an API call that died with ECONNRESET. Warm only what
+        # the spec touches: its two pages, and the API routes it calls (a POST-only route answers a
+        # GET with 405, which still compiles it). If you add a referral spec, add its routes.
+        E2E_WARM_ROUTES: /,/referral,/api/auth/csrf,/api/auth/session,/api/auth/register,/api/referral/link,/api/referral/stats,/api/referral/rewards,/api/referral/track-click
       run: npx playwright test e2e/referral-growth-suite.spec.ts --project=chromium
     # The phone gate. Two device projects over the public routes only — no login,
     # no fixture league, nothing that makes the core shards slow and flaky.

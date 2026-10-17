@@ -93,7 +93,7 @@ export default function SurvivorChatPage() {
             <p className="text-[11px] font-bold uppercase text-sky-200/80">🔒 Private · {tribeName}</p>
             <p className="mt-1 text-[12px] text-white/50">Only your tribe sees this channel.</p>
             <div className="mt-4 rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-[12px] text-amber-100">
-              🗳 Tribal Council tonight — vote through @Chimmy before the deadline.
+              🗳 Elimination Council tonight — vote through @Chimmy before the deadline.
             </div>
           </>
         )}

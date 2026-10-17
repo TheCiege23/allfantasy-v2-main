@@ -6,6 +6,7 @@ import { HubSwitcher } from '@/components/core-app/hubs/HubSwitcher'
 import { HubHeroMedia } from '@/components/core-app/hubs/HubHeroMedia'
 import { FocusComposerButton, HubBroadcast } from '@/components/core-app/hubs/HubBroadcast'
 import { OverviewQueue } from '@/components/core-app/hubs/OverviewQueue'
+import { TopicTip } from '@/components/core-app/TopicTip'
 
 /**
  * Commissioner Hub, all leagues — `/core/commissioner` (five-doors restyle, 2026-09-17).
@@ -102,6 +103,7 @@ function LeagueCard({ l }: { l: OverviewLeagueCard }) {
           Commissioner
         </Link>
         <Link href={`/core?league=${encodeURIComponent(l.leagueId)}`}>Overview</Link>
+        {l.variant === 'survivor_guillotine' && <Link href={`/survivor-guillotine/${encodeURIComponent(l.leagueId)}`}>Survivor control</Link>}
         <Link href={`/core/standings?league=${encodeURIComponent(l.leagueId)}`}>Standings</Link>
       </nav>
     </article>
@@ -113,7 +115,8 @@ export function CommissionerOverview({ data }: { data: CommissionerOverviewData 
   const canSend = data.broadcastLeagueIds.length > 0
 
   return (
-    <div className="afh" data-format="all" data-testid="commissioner-overview">
+    // `afh--overview`: on a phone the queue moves above the hero and the league cards (af-format-hubs.css).
+    <div className="afh afh--overview" data-format="all" data-testid="commissioner-overview">
       <HubSwitcher current="all" counts={data.formatCounts} runCount={data.runCount} />
 
       <header className="afh-head">
@@ -139,7 +142,8 @@ export function CommissionerOverview({ data }: { data: CommissionerOverviewData 
           {has ? (
             <>
               <div className="afh-label">
-                Across the {data.runCount} {data.runCount === 1 ? 'league' : 'leagues'} you run
+                Across the {data.runCount} {data.runCount === 1 ? 'league' : 'leagues'} you run{' '}
+                <TopicTip topic="commissionerOverviewStats" />
               </div>
               <div className="afh-stats">
                 {data.stats.map((s) => (
@@ -168,6 +172,8 @@ export function CommissionerOverview({ data }: { data: CommissionerOverviewData 
               <h2 id="afh-run" className="afh-label" style={{ margin: 0 }}>
                 Leagues you run
               </h2>
+              {/* Beside the heading, not in it: the h2 names this section (aria-labelledby). One key for every card's meter. */}
+              <TopicTip topic="activeManagers" />
             </div>
             <div className="afh-grid">
               {data.leagues.map((l) => (
@@ -256,16 +262,15 @@ export function CommissionerOverview({ data }: { data: CommissionerOverviewData 
       <footer className="afh-foot">
         <p>
           Rulings and settings are applied on each league’s own platform.
-          {data.ownsAny ? ' Health trends, manager intelligence and reports are in Commissioner OS.' : ''}
+          {data.runCount > 0 ? ' Health trends, manager intelligence and reports are in Commissioner OS.' : ''}
           {has && data.partial ? ' Some figures couldn’t be read just now and may be low.' : ''}
         </p>
         <Link className="afh-link" href={`/core/hubs`}>
           Format hubs →
         </Link>
         {data.ownsAny ? (
-          <Link className="afh-link" href="/commissioner-os">
-            Open Commissioner OS →
-          </Link>
+          <><Link className="afh-link" href="/commissioner-os">Open Commissioner OS →</Link>
+          <Link className="afh-link" href="/commissioner-os/networks">Manage commissioner networks →</Link></>
         ) : null}
       </footer>
     </div>

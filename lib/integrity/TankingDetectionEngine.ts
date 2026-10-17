@@ -191,7 +191,7 @@ async function resolvePlayerNames(ids: string[], sport: string): Promise<Map<str
   return byId
 }
 
-export async function scanWeekForTanking(leagueId: string, weekNumber: number): Promise<TankingScanResult> {
+export async function scanWeekForTanking(leagueId: string, weekNumber: number, seasonId?: string): Promise<TankingScanResult> {
   const scannedAt = new Date().toISOString()
   const settings = await prisma.leagueIntegritySettings.findUnique({ where: { leagueId } })
   if (!settings?.tankingMonitorEnabled) {
@@ -217,7 +217,7 @@ export async function scanWeekForTanking(leagueId: string, weekNumber: number): 
   const checkBenchPattern = settings.tankingBenchPatternCheck !== false
 
   const matchups = await prisma.redraftMatchup.findMany({
-    where: { leagueId, week: weekNumber },
+    where: { leagueId, week: weekNumber, ...(seasonId ? { seasonId } : {}) },
     include: {
       homeRoster: true,
       awayRoster: true,

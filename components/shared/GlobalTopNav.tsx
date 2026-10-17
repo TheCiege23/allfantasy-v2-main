@@ -253,7 +253,7 @@ export default function GlobalTopNav({
           )}
           <Link href={isAuthenticated ? "/dashboard" : "/"} className="flex shrink-0 items-center gap-2">
             <Image
-              src="/af-crest.png"
+              src="/af-crest.svg"
               alt="AllFantasy crest"
               width={32}
               height={32}

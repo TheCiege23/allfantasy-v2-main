@@ -35,8 +35,13 @@ export function LegacyRankingsImportPanel({ onImportSuccess, variant = 'default'
   useEffect(() => {
     void (async () => {
       setLoading(true)
-      setLegacyStatus(await refreshLegacyImportStatus())
-      setLoading(false)
+      try {
+        setLegacyStatus(await refreshLegacyImportStatus())
+      } catch {
+        // The service throws on a failed load (it used to return an empty result). Keep the panel usable.
+      } finally {
+        setLoading(false)
+      }
     })()
   }, [])
 
@@ -88,7 +93,9 @@ export function LegacyRankingsImportPanel({ onImportSuccess, variant = 'default'
       } else {
         throw new Error('Use the Import page for this provider — link below.')
       }
-      setLegacyStatus(await refreshLegacyImportStatus())
+      // The import itself succeeded; a failed status refresh must not be reported as a failed import.
+      const refreshed = await refreshLegacyImportStatus().catch(() => null)
+      if (refreshed) setLegacyStatus(refreshed)
       onImportSuccess()
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Import failed'
@@ -117,7 +124,7 @@ export function LegacyRankingsImportPanel({ onImportSuccess, variant = 'default'
         </div>
         {variant === 'dashboard' ? (
           <Link
-            href="/af-rankings"
+            href="/core/rankings?scope=portfolio&panel=legacy"
             className="shrink-0 text-xs font-semibold text-cyan-300/90 hover:text-cyan-200"
           >
             Full rankings page →

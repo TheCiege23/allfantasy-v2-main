@@ -1,0 +1,69 @@
+/* Shared AF Core presentation for league home and standings. */
+.af-core.af-league-overview {
+  min-width: 0;
+  color: var(--text);
+  background: var(--bg);
+  font-family: var(--font-archivo, 'Archivo', system-ui, sans-serif);
+}
+.af-league-overview :is(h1, h2, h3) { color: var(--text); font-style: normal; letter-spacing: -.02em; }
+.af-league-overview h2 { font-size: 20px; font-weight: 750; line-height: 1.3; }
+.af-league-overview h3 { font-size: 14px; font-weight: 650; line-height: 1.4; }
+.af-league-overview :is(p, th, td) { overflow-wrap: anywhere; }
+.af-league-overview :is(button, input:not([type='checkbox']):not([type='radio']), select) { min-height: 44px; }
+.af-league-overview a[aria-label] { min-width: 44px; min-height: 44px; }
+.af-league-overview :is(button, a, input, select, textarea, [tabindex]):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.af-league-overview :is(input, select, textarea) { max-width: 100%; color-scheme: dark; }
+html[data-mode='light'] .af-league-overview :is(input, select, textarea) { color-scheme: light; }
+.af-league-overview :is(input, textarea)::placeholder { color: var(--faint); opacity: 1; }
+/* Exact utility tokens keep hover-only styles from becoming permanent. */
+.af-league-overview :is([class~='text-white'], [class~='text-white/90'], [class~='text-white/95']) { color: var(--text); }
+.af-league-overview :is([class~='text-white/70'], [class~='text-white/75'], [class~='text-white/80'], [class~='text-white/85']) { color: var(--text2); }
+.af-league-overview :is([class~='text-white/30'], [class~='text-white/35'], [class~='text-white/38'], [class~='text-white/40'], [class~='text-white/45'], [class~='text-white/50'], [class~='text-white/55'], [class~='text-white/58'], [class~='text-white/60'], [class~='text-white/65']) { color: var(--muted); }
+.af-league-overview :is([class~='border-white/10'], [class~='border-white/12'], [class~='border-white/15'], [class~='border-white/[0.05]'], [class~='border-white/[0.06]'], [class~='border-white/[0.07]'], [class~='border-white/[0.08]'], [class~='border-white/[0.1]']) { border-color: var(--line2); }
+.af-league-overview :is([class~='bg-white/[0.025]'], [class~='bg-white/[0.03]'], [class~='bg-white/[0.035]'], [class~='bg-white/[0.04]'], [class~='bg-white/[0.06]'], [class~='bg-[#11182b]']) { background: var(--surface); }
+.af-league-overview :is([class~='bg-black/15'], [class~='bg-black/20'], [class~='bg-black/30'], [class~='bg-white/10'], [class~='bg-[#151a28]'], [class~='bg-[#12192e]']) { background: var(--surface2); }
+.af-league-overview :is([class~='text-violet-200'], [class~='text-violet-300'], [class~='text-violet-200/75'], [class~='text-violet-200/80'], [class~='text-[#ffb8d1]'], [class~='text-[#ffd7e5]'], [class~='text-[#ff9ec0]/90']) { color: var(--accent); }
+.af-league-overview :is([class~='text-sky-200/45'], [class~='text-sky-200/55']) { color: var(--muted); }
+.af-league-overview [class*='divide-white/'] > :not([hidden]) ~ :not([hidden]) { border-color: var(--line); }
+.af-league-overview .card-premium { border-color: var(--line2); background: var(--surface); border-radius: 12px; box-shadow: none; }
+.af-league-overview .af-overview-header { flex-shrink: 0; padding: 20px; border-color: var(--line2); background: var(--surface); border-radius: 12px; box-shadow: none; }
+.af-league-overview .af-overview-header h2 { font-size: 24px; }
+.af-league-overview .af-overview-header > div { flex-direction: row; flex-wrap: wrap; }
+.af-league-overview .af-overview-header > div > div { min-width: 0; }
+.af-league-overview .af-overview-header > div > div:first-child { flex: 1 1 320px; }
+.af-league-overview .af-overview-header > div > div:last-child { flex: 1 1 240px; }
+.af-league-overview .af-overview-card { padding: 16px; border-color: var(--line2); background: var(--surface); border-radius: 12px; }
+.af-league-overview :is(button, a):hover > .af-overview-card { border-color: var(--accent); background: var(--surface2); }
+.af-league-overview .af-overview-card > p { line-height: 1.6; }
+.af-league-overview .af-overview-card > p[class*='uppercase'] { text-transform: none; letter-spacing: 0; font-weight: 550; }
+.af-league-overview .af-overview-metric { border-color: var(--line2); border-radius: 8px; }
+.af-league-overview .af-overview-metric > div { text-transform: none; letter-spacing: 0; font-weight: 550; }
+.af-league-overview .af-overview-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); }
+.af-league-overview .af-overview-grid > * { min-width: 0; }
+.af-core.af-overview-standings-card { background: var(--surface); border-color: var(--line2); border-radius: 12px; }
+.af-overview-standings-card h2 { font-size: 16px; }
+.af-overview-standings-card li { padding-block: 12px; }
+.af-overview-standings-card li [class*='leading-tight'] { overflow-wrap: anywhere; }
+.af-league-overview .af-standings-scroll { max-width: 100%; background: var(--surface); border-color: var(--line2); scrollbar-width: thin; scrollbar-color: var(--line2) var(--surface2); }
+.af-league-overview .af-standings-scroll table { table-layout: fixed; }
+.af-league-overview .af-standings-scroll :is(th, td) { padding: 12px; font-variant-numeric: tabular-nums; }
+.af-league-overview .af-standings-scroll :is(th, td):first-child { width: 44px; }
+.af-league-overview .af-standings-scroll thead th:nth-child(2) { width: 200px; }
+.af-league-overview .af-standings-scroll thead { background: var(--surface2); text-transform: none; }
+.af-league-overview .af-standings-scroll thead th { font-weight: 600; }
+.af-league-overview .af-standings-team { min-width: 150px; max-width: 240px; font-weight: 600; }
+.af-league-overview .af-standings-scroll tbody tr:hover { background: var(--surface2); }
+.af-league-overview .af-standings-scroll-hint { font-size: 12px; color: var(--muted); line-height: 1.5; }
+.af-league-overview [data-testid='redraft-generate-bracket'] { background: var(--accent); color: var(--bg); padding-inline: 12px; border-radius: 8px; }
+.af-league-overview :is([data-testid='redraft-standings-loading'], [data-testid='redraft-standings-no-season']) { background: var(--surface); border-color: var(--line2); }
+@media (max-width: 767px) {
+  .af-league-overview .af-overview-header { padding: 16px; }
+  .af-league-overview .af-overview-header h2 { font-size: 22px; }
+}
+
+.af-league-overview .af-overview-header > div > div > p:first-child { font-weight: 600; letter-spacing: .08em; }
+.af-league-overview .af-overview-card .lucide-lock { color: var(--muted); }
+.af-league-overview :is([class~='text-rose-200'], [class~='text-rose-300']) { color: var(--bad); }
+.af-league-overview :is([class~='text-emerald-200'], [class~='text-emerald-300']) { color: var(--good); }
+.af-league-overview :is([class~='text-amber-100'], [class~='text-amber-200'], [class~='text-amber-300']) { color: var(--warn); }
+.af-league-overview .af-standings-scroll :is(th, td):is(:nth-child(4), :nth-child(5)) { text-align: right; }

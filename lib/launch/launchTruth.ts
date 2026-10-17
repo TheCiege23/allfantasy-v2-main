@@ -18,6 +18,7 @@
 
 import {
   IMPORT_PROVIDER_UI_OPTIONS,
+  type ImportSupportedSport,
 } from "@/lib/league-import/provider-ui-config"
 import {
   getMonetizationCatalog,
@@ -35,7 +36,7 @@ export type LaunchPlatform = {
   label: string
   /** Real user can complete an import today. */
   available: boolean
-  supportedSports: readonly LaunchSport[]
+  supportedSports: readonly ImportSupportedSport[]
 }
 
 /** Launch platforms, derived from the guarded provider config (not a 2nd list). */

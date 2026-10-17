@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 306" width="300" height="306" role="img" aria-label="CONFERENCE FINALS TOURNAMENT"><defs><linearGradient id="kbi-conference-finals-cfr" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff0b8"/><stop offset="1" stop-color="#9a6a14"/></linearGradient><linearGradient id="kbi-conference-finals-M" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff3c4"/><stop offset="0.45" stop-color="#e8b84a"/><stop offset="1" stop-color="#7a5214"/></linearGradient><radialGradient id="kbi-conference-finals-cff" cx="50%" cy="35%" r="70%"><stop offset="0" stop-color="#22252e"/><stop offset="1" stop-color="#060709"/></radialGradient></defs><circle cx="150" cy="150" r="140" fill="url(#kbi-conference-finals-cfr)" stroke="#0e0a08" stroke-width="5"/>
+<circle cx="150" cy="150" r="112" fill="url(#kbi-conference-finals-cff)" stroke="#0e0a08" stroke-width="4"/>
+<path id="kbi-conference-finals-cftop" d="M30,150 A120,120 0 0 1 270,150" fill="none"/><path id="kbi-conference-finals-cfbot" d="M14,150 A136,136 0 0 0 286,150" fill="none"/>
+<text font-family="Archivo Black, Archivo, Arial Black, sans-serif" font-weight="900" font-size="20" letter-spacing="4" fill="#1a1204"><textPath href="#kbi-conference-finals-cftop" startOffset="50%" text-anchor="middle">CONFERENCE FINALS</textPath></text>
+<text font-family="Archivo Black, Archivo, Arial Black, sans-serif" font-weight="900" font-size="13" letter-spacing="4" fill="#1a1204"><textPath href="#kbi-conference-finals-cfbot" startOffset="50%" text-anchor="middle">TOURNAMENT</textPath></text>
+<circle cx="276.0" cy="150.0" r="3" fill="#1a1204"/><circle cx="24.0" cy="150.0" r="3" fill="#1a1204"/>
+<g transform="translate(150,156)">
+<path d="M-60,-40 L0,-70 L60,-40 L60,10 C60,50 30,72 0,82 C-30,72 -60,50 -60,10 Z" fill="url(#kbi-conference-finals-M)" stroke="#0e0a08" stroke-width="5" stroke-linejoin="round"/>
+<path d="M-44,-30 L0,-52 L44,-30 L44,8 C44,38 22,56 0,64 C-22,56 -44,38 -44,8 Z" fill="#0b0c10"/>
+<text y="-4" text-anchor="middle" font-family="Archivo Black, Archivo, Arial Black, sans-serif" font-weight="900" font-size="22" fill="#ffd98a">FINAL</text><text y="22" text-anchor="middle" font-family="Archivo Black, Archivo, Arial Black, sans-serif" font-weight="900" font-size="22" fill="#ffd98a">FOUR</text>
+<path d="M-24,36 H24" stroke="#e8b84a" stroke-width="3"/></g>
+<text x="150" y="300" text-anchor="middle" font-family="Caveat, cursive" font-weight="700" font-size="12" fill="#8d93ad" opacity=".9">created by KB</text></svg>

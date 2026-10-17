@@ -5,8 +5,10 @@ on:
     # No `branches:` filter, matching i18n-placeholder-parity: filtering PR runs
     # to main/master silently skipped every stacked PR, and cron entries are
     # exactly the kind of change that arrives on one.
-  push:
-    branches: [main, master]
+  # No push-to-main run, as of 2026-10-02. This check already passed on the PR's merge result, and a
+  # rebase-merge cannot change its verdict; re-running it after every merge only queued another job
+  # ahead of PR CI on the ~20 runner slots the account has. ts-error-ratchet.yml and unit-tests.yml
+  # keep their main runs: they are the checks that catch two PRs which only break in combination.
 
 # Cancel this PR's previous run when the branch is updated; never touch a run on main.
 #

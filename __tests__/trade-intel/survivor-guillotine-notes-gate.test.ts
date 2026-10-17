@@ -164,12 +164,18 @@ describe('a confirmed Pirate league keeps its trade notes whatever the column sa
 describe('the rail keeps a confirmed Survivor Guillotine league flagged as an elimination format', () => {
   /*
    * `railMatchups.ts` reads `leagueTypeConfirmation.type` before the column in a
-   * raw query with no test harness, so the predicate is pinned by source. It must
-   * name both ids: the confirmation says `survivor_guillotine`, never `guillotine`.
+   * raw query with no test harness, so the query and the hand-off are pinned by
+   * source. The predicate itself moved to `eliminationFormat` (shared with both
+   * matchup screens, 2026-10-02) and is asserted on behaviour here, not on spelling:
+   * the confirmation says `survivor_guillotine`, never `guillotine`.
    */
-  it('matches survivor_guillotine as well as guillotine', () => {
+  it('matches survivor_guillotine as well as guillotine', async () => {
     const src = readFileSync(resolve(process.cwd(), 'lib/core-app/railMatchups.ts'), 'utf8')
     expect(src).toContain("settings->'leagueTypeConfirmation'->>'type' AS \"confirmedType\"")
-    expect(src).toContain("type === 'guillotine' || type === 'survivor_guillotine'")
+    expect(src).toContain('confirmedType: l.confirmedType')
+    const { eliminationFormat } = await import('@/lib/core-app/railMatchupMode')
+    expect(eliminationFormat({ confirmedType: 'survivor_guillotine', leagueType: 'guillotine' })).toBe('survivor_guillotine')
+    expect(eliminationFormat({ confirmedType: 'guillotine', leagueType: 'redraft' })).toBe('guillotine')
+    expect(eliminationFormat({ confirmedType: 'pirate', leagueType: 'dynasty' })).toBeNull()
   })
 })

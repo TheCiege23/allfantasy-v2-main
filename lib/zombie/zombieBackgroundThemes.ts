@@ -114,6 +114,14 @@ export function getRandomZombieTheme(): ZombieBackgroundTheme {
   return themes[Math.floor(Math.random() * themes.length)]
 }
 
+/**
+ * The scene art for a theme (`public/zombie/bg/<id>.svg`, 1600×600, from the design handoff). Every theme
+ * id has one; the gradient class stays as the fallback behind it.
+ */
+export function zombieThemeImageSrc(themeId: ZombieBackgroundTheme): string {
+  return `/zombie/bg/${themeId}.svg`
+}
+
 export function getZombieTheme(themeId: string | null | undefined): ZombieThemeMetadata | null {
   if (!themeId || !(themeId in ZOMBIE_BACKGROUND_THEMES)) return null
   return ZOMBIE_BACKGROUND_THEMES[themeId as ZombieBackgroundTheme] ?? null

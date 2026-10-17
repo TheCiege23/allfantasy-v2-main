@@ -1,10 +1,14 @@
 import { normalizeTeamAbbrev, getTeamInfo } from '@/lib/team-abbrev'
+import { isTop25Sport, pollIsKnown, showCollegeGame } from '@/lib/live/collegeTop25'
+import { readFollowedTeams, readRankBook } from '@/lib/live/collegeTop25Store'
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { resolveCurrentWeek } from './currentWeek'
 import type { SectionState } from './leagueHome'
 import { getTeamLogoUrl } from '@/lib/player-media-urls'
+import { liveLogoOrNull } from '@/lib/sport-teams/knownDeadLogoGuess'
+import { getStoredTeamLogoResolver } from '@/lib/sport-teams/storedTeamLogos'
 
 /**
  * The three cross-league cards that sit at the top of Dashboard v2: today's
@@ -49,12 +53,28 @@ export type HealthReading = {
 
 /* ── Next 24 hours ───────────────────────────────────────────────────────── */
 
+/**
+ * What a game row's `odds` line was built from (2026-10-04) — the /core home's game-day band says it in
+ * Spanish at render (lib/core-app/homeBandsCopy.ts). The English `odds` is unchanged.
+ */
+export type Next24OddsParts = {
+  /** The favoured side's code, with `spread` its margin; both null without a line. */
+  favorite: string | null
+  spread: number | null
+  pickem: boolean
+  total: number | null
+  /** "1:05 PM ET" — set only when the line is over an hour old. */
+  staleClock: string | null
+}
+
 export type Next24Row = {
-  game?: { home: string; away: string; homeLogo: string | null; awayLogo: string | null; href: string; odds: string; oddsAt: string | null }
+  game?: { home: string; away: string; homeLogo: string | null; awayLogo: string | null; href: string; odds: string; oddsParts?: Next24OddsParts; oddsAt: string | null }
   kind: 'game' | 'waiver'
   text: string
   /** League name for a waiver run; sport and week for a game. */
   sub: string | null
+  /** What a GAME row's `sub` was built from, for the home's Spanish. Absent on a waiver row. */
+  parts?: { sport: string; week: number | null }
   /** ISO instant. Localised on the client — never formatted here. */
   time: string
   tone: 'accent' | 'warn' | null
@@ -358,6 +378,7 @@ function oddsClock(at: Date): string {
 async function resolveNext24(
   leagues: TodayStripLeague[],
   now: Date,
+  userId: string | null = null,
 ): Promise<Next24Row[]> {
   if (leagues.length === 0) return []
 
@@ -367,7 +388,7 @@ async function resolveNext24(
   // The LeagueWaiverSettings read is gone with the waiver rows — see the header.
   // Querying a column we have proven we cannot trust would just invite someone to
   // render it again.
-  const games = await prisma.sportsGame
+  const slate = await prisma.sportsGame
     .findMany({
       where: { sport: { in: sports }, startTime: { gte: now, lte: horizon } },
       orderBy: { startTime: 'asc' },
@@ -375,6 +396,29 @@ async function resolveNext24(
       select: { sport: true, externalId: true, source: true, startTime: true, week: true, homeTeam: true, awayTeam: true },
     })
     .catch(() => [])
+
+  /*
+   * College fixtures: the current Top 25 plus the teams you follow (founder, 2026-10-08) — the same
+   * rule as /core/live, read from the same rank book (lib/live/collegeTop25.ts). A Saturday is 50+
+   * NCAAF games and eight slots; unranked strangers should not take them. Fails open with no poll.
+   */
+  const top25 = new Map(
+    await Promise.all(
+      sports.filter((s) => isTop25Sport(s)).map(async (s) => {
+        const [book, follows] = await Promise.all([
+          readRankBook(s).catch(() => null),
+          readFollowedTeams(userId, s).catch(() => []),
+        ])
+        return [s, { book, follows, known: pollIsKnown(book, []) }] as const
+      }),
+    ),
+  )
+  const games = slate.filter((g) => {
+    const t = top25.get(g.sport.toUpperCase())
+    if (!t) return true
+    const side = (team: string | null) => ({ abbrev: team, name: team, rank: null })
+    return showCollegeGame({ home: side(g.homeTeam), away: side(g.awayTeam) }, t.book, t.follows, t.known)
+  })
 
   const rows: Next24Row[] = []
   /*
@@ -402,34 +446,103 @@ async function resolveNext24(
    * correct arithmetic waiting on a trustworthy input.
    */
 
-  const seenFixtures = new Set<string>()
+  /*
+   * 🛑 OUTSIDE THE NFL THE LOGO IS THE STORED CREST, NOT A GUESS. `getTeamLogoUrl` builds an ESPN
+   * path from the team string, and ESPN keys college and soccer crests by numeric id — so every
+   * college game here drew a broken-image glyph for both teams (2026-10-01), while the crests sat
+   * in `SportsTeam.logo`. Measured on the test DB that day: 658 of 705 NCAAF game team names, and
+   * every NBA one, resolve to a stored crest; the misses are mostly D-II/D-III schools we hold no
+   * crest for, and they get no image rather than a dead one. The NFL path is unchanged.
+   */
+  const storedLogoBySport = new Map(
+    await Promise.all(
+      [...new Set(games.map((g) => g.sport.toUpperCase()))]
+        .filter((s) => s !== 'NFL')
+        .map(async (s) => [s, await getStoredTeamLogoResolver(s)] as const),
+    ),
+  )
+  const logoFor = (team: string | null, sport: string, key: string | null): string | null => {
+    const stored = storedLogoBySport.get(sport.toUpperCase())
+    if (!stored) return getTeamLogoUrl(key, sport)
+    return stored(team) ?? liveLogoOrNull(getTeamLogoUrl(key, sport))
+  }
+
+  const keyFor = (sport: string, team: string | null) =>
+    sport.toUpperCase() === 'NFL' ? normalizeTeamAbbrev(team) : String(team ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
+
+  /*
+   * 🛑 ONE GAME FROM TWO FEEDS IS ONE ROW. The feeds spell teams differently — CFBD writes
+   * "Pittsburgh", ESPN's live feed "PIT" — so an exact name key listed "PIT at VIRGINIA TECH" and
+   * "Pittsburgh at Virginia Tech" as two games (2026-10-01). Two rows are the same fixture when
+   * they share a sport and kickoff and ANY team matches, either way round: a team cannot play two
+   * games at one kickoff. A team matches by its name key, or by resolving to the same stored crest
+   * (so "PIT at VT" still meets "Pittsburgh at Virginia Tech" wherever both resolve). Placeholder
+   * names never match — two "TBD" games at one kickoff are two games.
+   */
+  type Game = (typeof games)[number]
+  const PLACEHOLDER = /^(tbd|tba|bye|-+|—)?$/i
+  const sameTeam = (sport: string, a: string | null, b: string | null): boolean => {
+    const ka = keyFor(sport, a)
+    const kb = keyFor(sport, b)
+    if (!ka || !kb || PLACEHOLDER.test(ka) || PLACEHOLDER.test(kb)) return false
+    if (ka === kb) return true
+    const stored = storedLogoBySport.get(sport.toUpperCase())
+    const ca = stored?.(a) ?? null
+    return ca != null && ca === (stored?.(b) ?? null)
+  }
+  const sameFixture = (x: Game, y: Game): boolean =>
+    x.sport === y.sport &&
+    x.startTime?.getTime() === y.startTime?.getTime() &&
+    [x.homeTeam, x.awayTeam].some((t) => sameTeam(x.sport, t, y.homeTeam) || sameTeam(x.sport, t, y.awayTeam))
+  const fixtures: Game[][] = []
   for (const g of games) {
     if (!g.startTime) continue
-    const teamKey = (team: string | null) => g.sport.toUpperCase() === 'NFL' ? normalizeTeamAbbrev(team) : String(team ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
-    const key = `${g.sport}:${g.startTime.toISOString()}:${teamKey(g.awayTeam)}:${teamKey(g.homeTeam)}`
-    if (seenFixtures.has(key)) continue
-    seenFixtures.add(key)
+    const group = fixtures.find((f) => sameFixture(f[0]!, g))
+    if (group) group.push(g)
+    else fixtures.push([g])
+  }
+  /*
+   * The copy shown is the one that names the teams best: most crests resolved, then (outside the
+   * NFL, whose names are expanded from the code anyway) the fuller spelling. Ties keep the first.
+   */
+  const shownScore = (g: Game): number =>
+    (logoFor(g.homeTeam, g.sport, keyFor(g.sport, g.homeTeam)) ? 1000 : 0) +
+    (logoFor(g.awayTeam, g.sport, keyFor(g.sport, g.awayTeam)) ? 1000 : 0) +
+    (g.sport.toUpperCase() === 'NFL' ? 0 : g.homeTeam.length + g.awayTeam.length)
+
+  for (const fixture of fixtures) {
+    const g = fixture.reduce((best, x) => (shownScore(x) > shownScore(best) ? x : best))
+    if (!g.startTime) continue
+    const teamKey = (team: string | null) => keyFor(g.sport, team)
+    const espnCopy = fixture.find((x) => x.source === 'espn')
     rows.push({
       kind: 'game',
       text: `${g.awayTeam} at ${g.homeTeam}`,
       sub: [g.sport, g.week != null ? `Week ${g.week}` : null].filter(Boolean).join(' · ') || null,
+      parts: { sport: g.sport, week: g.week ?? null },
       time: g.startTime.toISOString(),
       tone: 'accent',
       game: (() => {
-        const peers = games.filter(peer => peer.sport === g.sport && peer.startTime?.getTime() === g.startTime?.getTime() && teamKey(peer.homeTeam) === teamKey(g.homeTeam) && teamKey(peer.awayTeam) === teamKey(g.awayTeam))
-        const market = odds.find(o => peers.some(peer => o.sport === peer.sport && o.gameExternalId === peer.externalId && o.source === peer.source))
+        // Every feed's copy of this game may hold the line, not only the copy shown.
+        const market = odds.find(o => fixture.some(peer => o.sport === peer.sport && o.gameExternalId === peer.externalId && o.source === peer.source))
         const spread = market?.spreadHome
         const favorite = spread == null ? null : spread === 0 ? 'Pick’em' : `${spread < 0 ? g.homeTeam : g.awayTeam} favored by ${Math.abs(spread)}`
+        const stale = (favorite || market?.totalPoints != null) && market && now.getTime() - market.fetchedAt.getTime() > ODDS_FRESH_MS
         return { home: g.sport === 'NFL' ? getTeamInfo(g.homeTeam)?.fullName ?? g.homeTeam : g.homeTeam, away: g.sport === 'NFL' ? getTeamInfo(g.awayTeam)?.fullName ?? g.awayTeam : g.awayTeam,
-          homeLogo: getTeamLogoUrl(teamKey(g.homeTeam), g.sport), awayLogo: getTeamLogoUrl(teamKey(g.awayTeam), g.sport),
-          href: `/core/live?sport=${encodeURIComponent(g.sport)}${g.source === 'espn' ? `&game=${encodeURIComponent(g.externalId)}` : ''}`,
+          homeLogo: logoFor(g.homeTeam, g.sport, teamKey(g.homeTeam)), awayLogo: logoFor(g.awayTeam, g.sport, teamKey(g.awayTeam)),
+          href: `/core/live?sport=${encodeURIComponent(g.sport)}${espnCopy ? `&game=${encodeURIComponent(espnCopy.externalId)}` : ''}`,
           odds: [
             favorite,
             market?.totalPoints != null ? `O/U ${market.totalPoints}` : null,
-            (favorite || market?.totalPoints != null) && market && now.getTime() - market.fetchedAt.getTime() > ODDS_FRESH_MS
-              ? `line as of ${oddsClock(market.fetchedAt)}`
-              : null,
+            stale && market ? `line as of ${oddsClock(market.fetchedAt)}` : null,
           ].filter(Boolean).join(' · ') || 'Odds unavailable',
+          oddsParts: {
+            favorite: spread == null || spread === 0 ? null : spread < 0 ? g.homeTeam : g.awayTeam,
+            spread: spread == null || spread === 0 ? null : Math.abs(spread),
+            pickem: spread === 0,
+            total: market?.totalPoints ?? null,
+            staleClock: stale && market ? oddsClock(market.fetchedAt) : null,
+          },
           oddsAt: market?.fetchedAt.toISOString() ?? null }
       })(),
     })
@@ -457,7 +570,7 @@ export async function getTodayStrip(
         reason: 'league health could not be read',
       }),
     ),
-    resolveNext24(leagues, now).catch(() => [] as Next24Row[]),
+    resolveNext24(leagues, now, userId).catch(() => [] as Next24Row[]),
   ])
 
   return { record, health, next24 }

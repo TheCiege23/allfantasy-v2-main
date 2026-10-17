@@ -1,3 +1,4 @@
+import { isSeasonTournamentDraft, SEASON_DRAFT_MUTATION_BLOCKED } from '@/lib/tournament/seasonDraftMutationGate'
 /**
  * GET / PATCH /api/leagues/[leagueId]/settings/draft
  *
@@ -141,6 +142,8 @@ export async function PATCH(
   if (league.userId !== userId) {
     return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
   }
+
+  if (await isSeasonTournamentDraft(leagueId)) return NextResponse.json({ error: SEASON_DRAFT_MUTATION_BLOCKED, code: 'TOURNAMENT_RULES_FROZEN' }, { status: 409 })
 
   const body = (await req.json().catch(() => null)) as {
     draftType?: string

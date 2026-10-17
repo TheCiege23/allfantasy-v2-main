@@ -19,15 +19,19 @@
 
 import { PrismaClient } from '@prisma/client'
 import { canonicalName, canonicalPosition, canonicalTeam } from '../lib/draft-room/player-canonical-identity'
+import { defaultNflPlayerStatsSeason } from '../lib/draft/analytics/nfl-rolling-insights-draft-analytics'
 
 const prisma = new PrismaClient()
 
-type Args = { json: boolean; verbose: boolean }
+type Args = { json: boolean; verbose: boolean; days: number }
 
 function parseArgs(argv: string[]): Args {
+  const daysArg = argv.find((a) => a.startsWith('--days='))
+  const days = daysArg ? Number(daysArg.slice('--days='.length)) : 14
   return {
     json: argv.includes('--json'),
     verbose: argv.includes('--verbose'),
+    days: Number.isFinite(days) && days > 0 ? days : 14,
   }
 }
 
@@ -80,6 +84,7 @@ type PoolRow = {
   fantasyPointsPerGame: number | null
   projectionSource: string | null
   rollingInsightsSupplementalFppg: number | null
+  rollingInsightsSupplementalSeason: string | null
   yearsExp: number | null
   isRookie: boolean | null
   headshotUrl: string | null
@@ -112,6 +117,7 @@ function toPoolRows(payload: unknown): PoolRow[] {
         fantasyPointsPerGame: num(stats?.fantasyPointsPerGame),
         projectionSource: str(entry.projectionSource) ?? str(stats?.projectionSource),
         rollingInsightsSupplementalFppg: num(supplemental?.fantasyPointsPerGame),
+        rollingInsightsSupplementalSeason: str(supplemental?.season),
         yearsExp: num(entry.yearsExp),
         isRookie: boolOrNull(entry.isRookie),
         headshotUrl: str(assets?.headshotUrl) ?? null,
@@ -156,6 +162,7 @@ type LeagueMetrics = {
   fallbackProjectionCount: number
   fallbackBySource: Record<string, number>
   taggedRealRows: number
+  staleRiSupplementalRows: number
   rookieSignalCoveragePct: number
   identityMissingSleeperCarryForward: number
   duplicateSleeperIdGroups: number
@@ -255,11 +262,12 @@ async function evaluateLeague(
     })
   }
 
-  // De'Von Achane sleeperId pin
+  // De'Von Achane sleeperId pin. 9226, NOT 7373: PlayerIdentityMap has 7373 as Gus Cumberlander
+  // (DL, NO). The old 7373 pin failed this check in nearly every league.
   const achane = matchRows(rows, "De'Von Achane")
-  if (achane.length !== 1 || (achane[0]?.sleeperId ?? null) !== '7373') {
+  if (achane.length !== 1 || (achane[0]?.sleeperId ?? null) !== '9226') {
     failures.push({
-      check: 'devon_achane_sleeper_id_7373',
+      check: 'devon_achane_sleeper_id_9226',
       severity: 'error',
       classification: 'backfill_resolvable',
       detail: `rows=${achane.length} sleeperId=${achane[0]?.sleeperId ?? 'null'}`,
@@ -317,9 +325,26 @@ async function evaluateLeague(
     })
   }
 
-  // real projection rows not fallback-tagged
+  // real projection rows not fallback-tagged.
+  // Only RI stats from a season the pool would USE count (this season or last, the rule in
+  // resolveNflDraftPoolAnalytics). A player whose newest RI season is older correctly gets the
+  // position fallback, and flagging those reported ~210 "real" rows per pool that were not.
+  const statsSeason = Number(defaultNflPlayerStatsSeason())
+  const usableSeason = (s: string | null) => s != null && (Number(s) === statsSeason || Number(s) === statsSeason - 1)
   const taggedRealRows = rows.filter(
-    (r) => r.projectionSource != null && r.rollingInsightsSupplementalFppg != null,
+    (r) =>
+      r.projectionSource != null &&
+      r.rollingInsightsSupplementalFppg != null &&
+      usableSeason(r.rollingInsightsSupplementalSeason),
+  ).length
+  // Reported, never failed: a fallback row whose RI stats are older than last season. Some players
+  // genuinely have nothing newer, so this cannot be a check; it is the trend to watch. Before the
+  // 2026-10-07 loader fix (newest usable season, not newest write) it was ~290 per pool.
+  const staleRiSupplementalRows = rows.filter(
+    (r) =>
+      r.projectionSource != null &&
+      r.rollingInsightsSupplementalSeason != null &&
+      Number(r.rollingInsightsSupplementalSeason) < statsSeason - 1,
   ).length
   if (taggedRealRows > 0) {
     failures.push({
@@ -388,6 +413,7 @@ async function evaluateLeague(
     fallbackProjectionCount: fallbackRows.length,
     fallbackBySource,
     taggedRealRows,
+    staleRiSupplementalRows,
     rookieSignalCoveragePct: Number(rookieSignalPct.toFixed(2)),
     identityMissingSleeperCarryForward,
     duplicateSleeperIdGroups: dupSleeperIdGroups.length,
@@ -411,7 +437,7 @@ async function main(): Promise<void> {
   // 2. Latest cache per league
   const allCacheRows = await prisma.draftPoolCache.findMany({
     where: { cacheKey: { contains: 'draft_pool:' } },
-    select: { leagueId: true, cacheKey: true, syncedAt: true, entryCount: true, payload: true },
+    select: { leagueId: true, cacheKey: true, sport: true, syncedAt: true, entryCount: true, payload: true },
     orderBy: { syncedAt: 'desc' },
     take: 500,
   })
@@ -421,7 +447,25 @@ async function main(): Promise<void> {
     if (!latestCacheByLeague.has(row.leagueId)) latestCacheByLeague.set(row.leagueId, row)
   }
 
-  const cachedLeagueIds = [...latestCacheByLeague.keys()]
+  // Only judge pools someone is likely to see again. Every check below is NFL-specific (the
+  // Russell Wilson / Achane / Marvin Harrison pins, the projection fields), so an NBA or NCAAF
+  // pool failed all of them by construction. And the cache TTL is minutes — a pool synced months
+  // ago is rebuilt on its next read, so its old contents say nothing about what a draft room
+  // would show today. Both kinds are counted and reported as skipped, never silently dropped.
+  const cutoff = new Date(Date.now() - args.days * 24 * 60 * 60 * 1000)
+  const skipped = { notNfl: 0, olderThanWindow: 0 }
+  const cachedLeagueIds = [...latestCacheByLeague.keys()].filter((leagueId) => {
+    const cache = latestCacheByLeague.get(leagueId)!
+    if (String(cache.sport ?? '').toUpperCase() !== 'NFL') {
+      skipped.notNfl++
+      return false
+    }
+    if (cache.syncedAt < cutoff) {
+      skipped.olderThanWindow++
+      return false
+    }
+    return true
+  })
   const uncachedLeagues = allLeagues.filter((l) => !latestCacheByLeague.has(l.id))
 
   type LeagueResult = {
@@ -464,7 +508,10 @@ async function main(): Promise<void> {
     sweepDate: new Date().toISOString(),
     prismaValidate: 'PASS',
     totalLeagues: allLeagues.length,
-    totalCachedLeagues: cachedLeagueIds.length,
+    totalCachedLeagues: latestCacheByLeague.size,
+    sweptLeagues: cachedLeagueIds.length,
+    windowDays: args.days,
+    skipped,
     totalUncachedLeagues: uncachedLeagues.length,
     passCount,
     failCount,
@@ -516,6 +563,8 @@ function printReport(report: ReturnType<typeof buildFixOrder> extends string[] ?
 
   console.log(`  Total leagues in DB : ${r.totalLeagues}`)
   console.log(`  Leagues with cache  : ${r.totalCachedLeagues}`)
+  console.log(`  Swept (NFL, synced in last ${r.windowDays} days): ${r.sweptLeagues}`)
+  console.log(`  Skipped             : ${r.skipped.notNfl} not NFL, ${r.skipped.olderThanWindow} synced before the window`)
   console.log(`  Leagues without cache: ${r.totalUncachedLeagues}`)
   console.log(`  Prisma validate     : ${r.prismaValidate}`)
   console.log()
@@ -528,7 +577,7 @@ function printReport(report: ReturnType<typeof buildFixOrder> extends string[] ?
     console.log(`         entries   : ${league.entryCount}`)
     console.log(`         syncedAt  : ${league.cacheSyncedAt}`)
     const m = league.metrics
-    console.log(`         metrics   : dupPlayerIds=${m.duplicatePlayerIdGroups}  dupSleeperIds=${m.duplicateSleeperIdGroups}  pairCollisions=${m.knownPairCollisionViolations}  missingHeadshots=${m.missingHeadshots}  missingTeamLogos=${m.trueMissingTeamLogos}  missingProjections=${m.missingProjectionCount}  identityMissingSleeperForward=${m.identityMissingSleeperCarryForward}  rookieSignalPct=${m.rookieSignalCoveragePct}`)
+    console.log(`         metrics   : dupPlayerIds=${m.duplicatePlayerIdGroups}  dupSleeperIds=${m.duplicateSleeperIdGroups}  pairCollisions=${m.knownPairCollisionViolations}  missingHeadshots=${m.missingHeadshots}  missingTeamLogos=${m.trueMissingTeamLogos}  missingProjections=${m.missingProjectionCount}  identityMissingSleeperForward=${m.identityMissingSleeperCarryForward}  rookieSignalPct=${m.rookieSignalCoveragePct}  staleRiFallbackRows=${m.staleRiSupplementalRows}`)
 
     if (!league.pass || verbose) {
       for (const f of league.failures) {
@@ -540,8 +589,8 @@ function printReport(report: ReturnType<typeof buildFixOrder> extends string[] ?
   }
 
   if (r.uncachedLeagues.length > 0) {
-    console.log('  Leagues without cache (not yet swept):')
-    for (const u of r.uncachedLeagues) {
+    console.log(`  Leagues without cache (not yet swept): ${r.uncachedLeagues.length}${verbose ? '' : ' — first 10 (--verbose for all)'}`)
+    for (const u of verbose ? r.uncachedLeagues : r.uncachedLeagues.slice(0, 10)) {
       console.log(`    - ${u.leagueName} (${u.leagueId})`)
       console.log(`      → ${u.recommendation}`)
     }

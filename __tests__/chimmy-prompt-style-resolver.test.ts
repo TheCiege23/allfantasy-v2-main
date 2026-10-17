@@ -24,6 +24,17 @@ describe('ChimmyPromptStyleResolver', () => {
     expect(CHIMMY_IDENTITY).toMatch(/^You are Chimmy, AllFantasy's fantasy sports sidekick/)
   })
 
+  /* Owner's ask 2026-10-10: every recommendation explained on fact and logic. */
+  it('makes every recommendation cite its facts, state a confidence, and never fill a gap with a guess', () => {
+    const block = getChimmyPromptStyleBlock()
+    expect(block).toContain('each evidence bullet names a specific number or fact from a tool result or the context above')
+    expect(block).toContain('Never state a number, injury status, score or setting you were not given.')
+    expect(block).toContain('Confidence: high | medium | low')
+    expect(block).toContain('never fill the gap with an assumption stated as fact')
+    // The old wording asked for a guess with no warning attached.
+    expect(block).not.toContain('give your best read anyway and name the fact')
+  })
+
   it('builds style block from custom config', () => {
     const block = buildChimmyPromptStyleBlock({
       voiceTraits: ['Calm and concise'],

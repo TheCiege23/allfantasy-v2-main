@@ -1,16 +1,14 @@
 /*
  * 🛑 THE CARD SAT ON TOP OF THE CHAT BUBBLE. Both were anchored to the bottom-right corner — the
- * card at 24px (82px on a phone), the bubble at `--af-fab-bottom` — so during the tour a tap on the
- * bubble hit the card, and a drag selected page text (live test 2026-09-25, phone/tablet/desktop
- * -01). The card now takes slot 1 of the corner's shared geometry (af-core.css): directly above the
- * bubble, clearing it by the standard gap, at every width. Nothing else renders in slot 1.
+ * card at 24px, the bubble at `--af-fab-bottom` — so during the tour a tap on the bubble
+ * hit the card. Keep the guide in document flow at every width so it cannot cover
+ * the weekly playoff path or sharing controls on tablets and desktops either.
  */
 .af-welcome {
-  position: fixed;
+  position: relative;
   z-index: 170;
-  right: var(--af-fab-inset, 18px);
-  bottom: var(--af-fab-slot-1, 86px);
-  width: min(390px, calc(100vw - 32px));
+  width: 100%;
+  margin-bottom: 18px;
   padding: 20px;
   border: 1px solid var(--accent-line);
   border-radius: 18px;
@@ -52,12 +50,13 @@
 
 @media (max-width: 720px) {
   .af-welcome {
-    right: 12px;
-    /* Above the bubble, which sits above the tab bar; the slot token already carries the home-indicator inset. */
-    bottom: var(--af-fab-slot-1, 136px);
-    width: calc(100vw - 24px);
-    max-height: min(440px, calc(100dvh - var(--af-fab-slot-1, 136px) - 16px - env(safe-area-inset-top, 0px)));
-    overflow-y: auto;
+    position: relative;
+    right: auto;
+    bottom: auto;
+    width: 100%;
+    max-height: none;
+    margin-bottom: 18px;
+    overflow: visible;
     padding: 17px;
   }
   .af-welcome h2 { font-size: 19px; }

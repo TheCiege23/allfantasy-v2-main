@@ -9,7 +9,12 @@ vi.mock('@/lib/core-app/tradesBoard', () => ({
 }))
 vi.mock('@/lib/sports-os/durableTier', () => ({ sportsDataCacheTier: () => null }))
 
-const { readTradesBoardSummary, TRADES_BOARD_SCREEN } = await import(
+/** The input digest query. Each test sets what the board's rows look like; a rejection is a failed read. */
+const queryRaw = vi.fn()
+vi.mock('@/lib/prisma', () => ({ prisma: { $queryRaw: (...a: unknown[]) => queryRaw(...a) } }))
+const digestRow = (trades: string) => [{ claimed: '95:abc', trades, pending: '0:' }]
+
+const { readTradesBoardSummary, TRADES_BOARD_SCREEN, tradesBoardFingerprint } = await import(
   '@/lib/core-app/tradesBoardSummary'
 )
 const { __resetLayeredCacheForTests } = await import('@/lib/sports-os/layeredCache')
@@ -20,6 +25,11 @@ const BOARD = { trades: [{ id: 't1' }], leaguesCounted: 4 }
 /** Two league lists that differ only in `lastSyncedAt` — i.e. exactly what a finished sync does. */
 const ROWS_BEFORE = [{ id: 'L1', name: 'A', platform: 'sleeper', lastSyncedAt: new Date('2026-09-16T10:00:00Z') }] as never
 const ROWS_AFTER = [{ id: 'L1', name: 'A', platform: 'sleeper', lastSyncedAt: new Date('2026-09-16T11:00:00Z') }] as never
+/** A newly imported league — the case the fingerprint was introduced for. */
+const ROWS_IMPORTED = [
+  { id: 'L1', name: 'A', platform: 'sleeper', lastSyncedAt: new Date('2026-09-16T11:00:00Z') },
+  { id: 'L2', name: 'B', platform: 'sleeper', lastSyncedAt: new Date('2026-09-16T11:00:00Z') },
+] as never
 
 
 describe('tradesBoardSummary', () => {
@@ -27,6 +37,8 @@ describe('tradesBoardSummary', () => {
     __resetLayeredCacheForTests()
     getTradesBoard.mockReset()
     getTradesBoard.mockResolvedValue(BOARD)
+    queryRaw.mockReset()
+    queryRaw.mockResolvedValue(digestRow('733:t1'))
   })
 
   it('registers itself on import, with a stale window longer than its TTL', () => {
@@ -101,13 +113,42 @@ describe('tradesBoardSummary', () => {
     expect(getTradesBoard.mock.calls[0]![1]).toBe(7)
   })
 
-  it('🛑 a sync that only moves lastSyncedAt forces a rebuild, with no event plumbed', async () => {
+  it('🛑 a sync that only moves lastSyncedAt does NOT evict the board (2026-10-03)', async () => {
+    // Production held 29 boards for one user and one week, one per sync-moved fingerprint, each a
+    // ~30s cold build. A sync that imported nothing must leave the cached board where it is.
+    await readTradesBoardSummary('u1', 3, ROWS_BEFORE)
+    await readTradesBoardSummary('u1', 3, ROWS_AFTER)
+    expect(getTradesBoard).toHaveBeenCalledTimes(1)
+  })
+
+  it('🛑 a sync that imports OR REWRITES a trade still forces a cold rebuild', async () => {
     await readTradesBoardSummary('u1', 3, ROWS_BEFORE)
     expect(getTradesBoard).toHaveBeenCalledTimes(1)
+    // Same row count, different content — an upsert onto an existing trade row.
+    queryRaw.mockResolvedValue(digestRow('733:t2'))
+    await readTradesBoardSummary('u1', 3, ROWS_AFTER)
+    expect(getTradesBoard).toHaveBeenCalledTimes(2)
+  })
+
+  it('🛑 a newly imported league still forces a cold rebuild, with no trade change', async () => {
+    await readTradesBoardSummary('u1', 3, ROWS_BEFORE)
+    await readTradesBoardSummary('u1', 3, ROWS_IMPORTED)
+    expect(getTradesBoard).toHaveBeenCalledTimes(2)
+  })
+
+  it('🛑 a failed digest falls back to the full fingerprint, which rebuilds on lastSyncedAt', async () => {
+    queryRaw.mockRejectedValue(new Error('db down'))
+    await readTradesBoardSummary('u1', 3, ROWS_BEFORE)
     await readTradesBoardSummary('u1', 3, ROWS_BEFORE)
     expect(getTradesBoard).toHaveBeenCalledTimes(1)
     await readTradesBoardSummary('u1', 3, ROWS_AFTER)
     expect(getTradesBoard).toHaveBeenCalledTimes(2)
+  })
+
+  it('the fingerprint ignores lastSyncedAt only when a digest is present', () => {
+    expect(tradesBoardFingerprint(ROWS_BEFORE, 'd')).toBe(tradesBoardFingerprint(ROWS_AFTER, 'd'))
+    expect(tradesBoardFingerprint(ROWS_BEFORE, 'd')).not.toBe(tradesBoardFingerprint(ROWS_BEFORE, 'e'))
+    expect(tradesBoardFingerprint(ROWS_BEFORE, null)).not.toBe(tradesBoardFingerprint(ROWS_AFTER, null))
   })
 
   it('🛑 the fingerprint replaced the short ttl, so the ttl is no longer short', () => {

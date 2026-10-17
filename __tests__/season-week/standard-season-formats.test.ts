@@ -85,7 +85,10 @@ describe('which leagues the weekly season covers', () => {
     ['NFL', 'guillotine', false],
     ['NFL', 'survivor', false],
     ['NFL', 'zombie', false],
-    ['MLB', 'redraft', false],
+    ['MLB', 'redraft', true],
+    ['MLB', 'dynasty', true],
+    ['MLB', 'keeper', true],
+    ['MLB', 'best_ball', true],
     ['SOCCER', 'redraft', false],
   ])('%s %s → %s', (sport, format, expected) => {
     expect(runsStandardWeeklySeason(sport, format)).toBe(expected)
@@ -201,3 +204,6 @@ describe('score-sync reaches every season', () => {
     expect(rotatingBatch(ids.slice(0, 30), 50, 12345)).toHaveLength(30)
   })
 })
+
+// These native-season fixtures have no imported source history.
+vi.mock('@/lib/redraft/fantraxNativePresentation', () => ({ loadFantraxNativePresentation: vi.fn().mockResolvedValue(null) }))

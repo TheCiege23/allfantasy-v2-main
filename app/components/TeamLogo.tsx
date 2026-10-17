@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { getTeamLogoCandidates } from '@/lib/players/teamLogos'
+import { getTeamLogoCandidates, isNoTeam } from '@/lib/players/teamLogos'
+import { liveLogoOrNull } from '@/lib/sport-teams/knownDeadLogoGuess'
 
 type TeamLogoProps = {
   teamAbbr: string
@@ -17,20 +18,34 @@ function sportFallbackClass(sport: string): string {
   if (s === 'NBA') return 'bg-red-800'
   if (s === 'MLB') return 'bg-blue-900'
   if (s === 'NHL') return 'bg-slate-700'
+  if (s === 'NCAAF' || s === 'NCAAFB') return 'bg-amber-800'
+  if (s === 'NCAAB' || s === 'NCAABB') return 'bg-orange-800'
+  if (s === 'SOCCER') return 'bg-emerald-800'
   return 'bg-slate-600'
 }
 
-function initials(abbr: string): string {
-  const t = abbr.trim().toUpperCase()
-  if (t.length >= 2) return t.slice(0, 2)
-  return t || '?'
+/** Words that carry no identity in a school or club name. */
+const NAME_FILLER = new Set(['UNIVERSITY', 'OF', 'THE', 'AT', 'COLLEGE', 'FC', 'CF', 'AFC', 'SC'])
+
+/**
+ * Two letters that identify the team. An abbreviation ("KC", "UCLA") keeps its first two
+ * characters; a name ("Ohio State University", "Real Madrid") uses its meaningful words' initials,
+ * so college and soccer teams without a crest read "OS" / "RM" rather than "OH" / "RE".
+ */
+function initials(team: string): string {
+  const t = team.trim().toUpperCase()
+  const words = t.split(/[\s\-–—.]+/).filter((w) => w && !NAME_FILLER.has(w))
+  if (words.length >= 2) return `${words[0]![0]}${words[1]![0]}`
+  const one = words[0] ?? t
+  return one.slice(0, 2) || '?'
 }
 
 export function TeamLogo({ teamAbbr, sport = 'nfl', logoUrl = null, size = 24, className = '' }: TeamLogoProps) {
   const [fallbackIndex, setFallbackIndex] = useState(0)
   const urls = useMemo(() => {
     const base = getTeamLogoCandidates(teamAbbr, sport)
-    const preferred = String(logoUrl ?? '').trim()
+    // A passed logo is tried first — unless it is a guess the CDN is known never to serve.
+    const preferred = liveLogoOrNull(logoUrl)
     return preferred ? [preferred, ...base.filter((u) => u !== preferred)] : base
   }, [teamAbbr, sport, logoUrl])
 
@@ -38,7 +53,7 @@ export function TeamLogo({ teamAbbr, sport = 'nfl', logoUrl = null, size = 24, c
     setFallbackIndex(0)
   }, [teamAbbr, sport, logoUrl])
 
-  if (!teamAbbr || teamAbbr === 'FA') {
+  if (isNoTeam(teamAbbr)) {
     return (
       <div
         className={`flex shrink-0 items-center justify-center rounded-full border border-white/[0.12] text-[11px] font-bold text-white/50 ${sportFallbackClass(sport)} ${className}`}

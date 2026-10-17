@@ -14,7 +14,7 @@ export function survivorClipFromAuditEntry(row: { category: string; action: stri
   const cat = row.category.toLowerCase()
   const act = row.action.toUpperCase()
   if (cat === 'tribal' && act === 'TRIBAL_OPENED') {
-    return { url: SURVIVOR_LEAGUE_INTRO_VIDEO, type: 'video', label: 'Tribal Council' }
+    return { url: SURVIVOR_LEAGUE_INTRO_VIDEO, type: 'video', label: 'Elimination Council' }
   }
   return null
 }

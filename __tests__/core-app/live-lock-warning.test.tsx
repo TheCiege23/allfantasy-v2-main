@@ -1,3 +1,5 @@
+import { vi } from 'vitest'
+vi.mock('next/navigation', () => ({ usePathname: () => '/core/live', useSearchParams: () => new URLSearchParams(), useRouter: () => ({ refresh() {}, push() {}, replace() {}, prefetch() {} }) }))
 import React from 'react'
 import { describe, expect, it } from 'vitest'
 import { render } from '@testing-library/react'

@@ -3,12 +3,13 @@
 import type { ReactNode } from 'react'
 import { useMemo } from 'react'
 import type { UserLeague } from '@/app/dashboard/types'
+import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import type { LeagueSettingsModalLeague } from './LeagueSettingsSubPanels'
 import {
   extractWaiverScheduleLines,
   getSleeperLikeBundle,
   getSettingsRecord,
-  waiverTypeLabel,
+  waiverTypeText,
 } from './league-settings-modal-utils'
 
 function SectionLabel({ children }: { children: ReactNode }) {
@@ -40,6 +41,7 @@ export function LeagueRulesSummarySection({
   /** When true and href set, show an Edit control (opens host in new tab). */
   showEditLink?: boolean
 }) {
+  const { t } = useLanguage()
   const bundle = useMemo(() => getSleeperLikeBundle(league.settings), [league.settings])
   const settings = useMemo(() => getSettingsRecord(league.settings), [league.settings])
   const waiverMeta = useMemo(() => extractWaiverScheduleLines(league.settings), [league.settings])
@@ -72,8 +74,8 @@ export function LeagueRulesSummarySection({
     <div className="space-y-5">
       <div className="flex items-start justify-between gap-3 border-b border-white/[0.06] pb-2">
         <div>
-          <h3 className="text-[15px] font-bold text-white">League rules</h3>
-          <p className="text-[11px] text-white/40">Read-only snapshot · edit on your host platform</p>
+          <h3 className="text-[15px] font-bold text-white">{t('lsPanel.rules.title')}</h3>
+          <p className="text-[11px] text-white/40">{t('lsPanel.rules.subtitle')}</p>
         </div>
         {showEdit ? (
           <a
@@ -83,32 +85,32 @@ export function LeagueRulesSummarySection({
             className="text-[13px] font-semibold text-[#ff3d81] hover:text-[#ff9ec0]"
             data-testid="league-rules-edit-sleeper"
           >
-            Edit
+            {t('lsPanel.edit')}
           </a>
         ) : null}
       </div>
 
       <div>
-        <SectionLabel>Roster construction</SectionLabel>
+        <SectionLabel>{t('lsPanel.rosterConstruction')}</SectionLabel>
         <p className="text-[13px] leading-relaxed text-white/88">{rosterLine}</p>
       </div>
 
       <div>
-        <SectionLabel>Playoffs</SectionLabel>
+        <SectionLabel>{t('lsPanel.playoffs')}</SectionLabel>
         <SummaryRow
-          label="Bracket"
+          label={t('lsPanel.rules.bracket')}
           value={
             playoffTeams != null && playoffStart != null
-              ? `${playoffTeams} teams, starts week ${playoffStart}`
+              ? t('lsPanel.rules.bracketStarts').replace('{{teams}}', String(playoffTeams)).replace('{{week}}', String(playoffStart))
               : playoffTeams != null
-                ? `${playoffTeams} teams`
+                ? t('lsPanel.rules.bracketTeams').replace('{{teams}}', String(playoffTeams))
                 : '—'
           }
         />
       </div>
 
       <div>
-        <SectionLabel>Daily waivers</SectionLabel>
+        <SectionLabel>{t('lsPanel.rules.dailyWaivers')}</SectionLabel>
         {waiverMeta.daily.length > 0 ? (
           <ul className="space-y-1.5 text-[13px] text-white/85">
             {waiverMeta.daily.map((line) => (
@@ -119,40 +121,39 @@ export function LeagueRulesSummarySection({
           </ul>
         ) : (
           <p className="text-[12px] text-amber-200/75">
-            Daily waiver schedule not present in synced JSON. Open Edit to configure Mon–Sun behavior on your host app.
+            {t('lsPanel.rules.noDaily')}
           </p>
         )}
         {waiverMeta.clearWaivers ? (
           <p className="mt-2 text-[12px] text-white/70">{waiverMeta.clearWaivers}</p>
         ) : (
-          <SummaryRow label="Clear waivers" value="—" />
+          <SummaryRow label={t('lsPanel.rules.clearWaivers')} value="—" />
         )}
       </div>
 
       <div>
-        <SectionLabel>Waivers & budget</SectionLabel>
-        <SummaryRow label="Waiver type" value={waiverTypeLabel(waiverType)} />
-        <SummaryRow label="Waiver / FAAB budget" value={waiverBudget != null ? `$${waiverBudget}` : '—'} />
+        <SectionLabel>{t('lsPanel.rules.waiversBudget')}</SectionLabel>
+        <SummaryRow label={t('lsPanel.waiverType')} value={waiverTypeText(waiverType, t)} />
+        <SummaryRow label={t('lsPanel.rules.budget')} value={waiverBudget != null ? `$${waiverBudget}` : '—'} />
         {waiverTime != null ? (
-          <SummaryRow label="Waiver time" value={String(waiverTime)} />
+          <SummaryRow label={t('lsPanel.rules.waiverTime')} value={String(waiverTime)} />
         ) : null}
       </div>
 
       <div>
-        <SectionLabel>Roster slots</SectionLabel>
-        <SummaryRow label="Teams" value={String(numTeams)} />
-        <SummaryRow label="Injured reserve" value={reserveSlots != null ? String(reserveSlots) : '—'} />
-        <SummaryRow label="Taxi" value={taxiSlots != null ? String(taxiSlots) : '—'} />
+        <SectionLabel>{t('lsPanel.rules.rosterSlots')}</SectionLabel>
+        <SummaryRow label={t('lsPanel.teams')} value={String(numTeams)} />
+        <SummaryRow label={t('lsPanel.rules.ir')} value={reserveSlots != null ? String(reserveSlots) : '—'} />
+        <SummaryRow label={t('lsPanel.rules.taxi')} value={taxiSlots != null ? String(taxiSlots) : '—'} />
       </div>
 
       <div>
-        <SectionLabel>Trades</SectionLabel>
-        <SummaryRow label="Trade deadline" value={tradeDl != null ? `Week ${tradeDl}` : '—'} />
+        <SectionLabel>{t('lsPanel.trades')}</SectionLabel>
+        <SummaryRow label={t('lsPanel.rules.tradeDeadline')} value={tradeDl != null ? t('lsPanel.weekN').replace('{{n}}', String(tradeDl)) : '—'} />
       </div>
 
       <p className="text-[11px] text-white/38">
-        Synced from your host league settings. After you save changes in Sleeper (or your platform), re-sync or refresh
-        to see updates here.
+        {t('lsPanel.rules.syncNote')}
       </p>
 
       {editHref ? (
@@ -163,7 +164,7 @@ export function LeagueRulesSummarySection({
           className="inline-block text-[12px] font-medium text-[#ff3d81]/90 hover:underline"
           data-testid="league-rules-open-sleeper"
         >
-          Open full league settings on host →
+          {t('lsPanel.rules.openOnHost')}
         </a>
       ) : null}
     </div>

@@ -1,0 +1,47 @@
+name: League readiness integration
+on:
+  pull_request:
+    paths:
+      - 'lib/big-brother/**'
+      - 'lib/league-chat/LeagueChatMessageService.ts'
+      - 'lib/scoring-engine/**'
+      - 'server/services/**'
+      - '__tests__/league-readiness-five-db.test.ts'
+      - '.github/workflows/league-readiness.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: league-readiness-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  integration:
+    name: League readiness real database
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: readiness
+          POSTGRES_PASSWORD: readiness-test-only
+          POSTGRES_DB: readiness
+        ports: ['55477:5432']
+        options: >-
+          --health-cmd "pg_isready -U readiness -d readiness"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://readiness:readiness-test-only@127.0.0.1:55477/readiness
+      DIRECT_URL: postgresql://readiness:readiness-test-only@127.0.0.1:55477/readiness
+      RUN_LEAGUE_READINESS_DB: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+      - run: npm ci
+      - name: Create isolated test schema
+        run: node scripts/prisma-cli-guard.cjs db push --skip-generate
+      - name: Complete cycles, scoring corrections, deadlines and reminders
+        run: npx vitest run __tests__/league-readiness-five-db.test.ts

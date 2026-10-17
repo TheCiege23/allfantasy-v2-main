@@ -2,21 +2,28 @@
  * Decision OS — Phase 2 / F2.3: Canonical World INJURY / AVAILABILITY enrichment (read-only derived VIEW).
  *
  * Builds ADDITIVELY on the F2.1 metadata-enriched world. The frozen Canonical World still carries ids only;
- * this module never mutates it. It reads ONLY already-persisted SportsPlayer cache rows and folds
- * deterministic injury/availability context onto F2.1 enriched players:
+ * this module never mutates it. It folds deterministic injury/availability context onto F2.1 enriched
+ * players:
  *   - player availability category (available / uncertain / unavailable / unknown)
  *   - injury status freshness (fetchedAt / expiresAt / isStale)
  *   - source / provenance
  *   - honest completeness / uncertainty / warnings
  *
+ * 🛑 THE DESIGNATION COMES FROM THE INJURY FEED — NEVER FROM `SportsPlayer.status` (2026-10-11).
+ * `SportsPlayer.status` on Sleeper's row is Sleeper's ROSTER status ("Active", "Injured Reserve"), and on
+ * Rolling Insights' row "ACT"/"INACT" — so an Out player read "Active" here and was reported AVAILABLE to
+ * the lineup signal facts and to this world. `resolveInjuryContext` now reads the player's IDENTITY
+ * (name / team / position) off his cached row — keyed in the league's id space by `indexRowsByLeagueId`,
+ * so a Sleeper id never resolves to the Rolling Insights player who shares its number — and asks
+ * `resolveCurrentInjuryDesignations` for his current designation: live feed rows by verified name,
+ * stale game-day words suppressed, and a ROSTER status counted only when it is Sleeper's own row AND a
+ * season-scale absence (`isRosterAbsence`: IR, PUP, NFI, a suspension — never a game-day "Out").
+ *
  * HONEST DEGRADATION (P2 — never fabricate):
- *   - Source: SportsPlayer (same seam as F2.1). Richer fields (practiceStatus / gameStatus / bodyPart /
- *     description) are NOT available via any player-id-keyed read-only source (InjuryReportRecord and
- *     InjuryReport use API-Sports IDs, a different namespace — see ADR_F2_3_INJURY_STATUS.md §2).
- *     Those fields are always null + warned, never invented.
+ *   - practiceStatus / gameStatus / bodyPart / description are not carried — always null + warned.
  *   - No live API calls, no cache warming, no writes.
- *   - Missing rows → all fields null + injury_status_unavailable warning.
- *   - Stale rows → isStale=true + staleReason surfaced, status still carried (it is what it is).
+ *   - Missing rows (or a row with no name to ask about) → all fields null + injury_status_unavailable.
+ *   - No current designation → status null, category 'unknown' ("no news" — never "healthy").
  *
  * READ-ONLY: this file imports NO prisma. The port function is in world/port.ts.
  */
@@ -25,6 +32,13 @@ import { loadInjuryContextRows } from './port'
 import type { EnrichedCanonicalWorld, EnrichedPlayer, EnrichedRosterFacts } from './enrichedWorld'
 import { resolveEnrichedCanonicalWorld } from './enrichedWorld'
 import type { ResolveCanonicalWorldOptions } from './index'
+import { indexRowsByLeagueId } from './rowKeys'
+import {
+  designationSeverity,
+  resolveCurrentInjuryDesignations,
+  type CurrentInjuryDesignation,
+  type DesignationLookup,
+} from '@/lib/injuries/currentInjuryDesignations'
 
 export type InjuryAvailabilityCategory = 'available' | 'uncertain' | 'unavailable' | 'unknown'
 
@@ -59,7 +73,11 @@ export interface InjuryStatusFreshness {
 }
 
 export interface InjuryContext {
-  /** Raw status string from SportsPlayer.status (e.g. "Q", "O", "IR", "Active"). Null when unresolved. */
+  /**
+   * The player's CURRENT injury designation as its source spelled it ("Out", "Questionable", "IR",
+   * "Injured Reserve") — from the injury feed, or Sleeper's season-scale roster absence. Null when there
+   * is none or the player is unresolved: "no news", never "healthy".
+   */
   status: string | null
   /** Deterministic category derived from status. 'unknown' when status unrecognized or null. */
   availabilityCategory: InjuryAvailabilityCategory
@@ -123,11 +141,21 @@ export interface InjuryContextResult {
 }
 
 export interface InjuryContextPort {
+  /** The players' cached rows — their IDENTITY (name / team / position) and, on Sleeper's row, roster status. */
   loadRows: (sport: string, ids: string[]) => Promise<RawInjuryContextRow[]>
+  /**
+   * The CURRENT designation per player, from the injury feed. Defaults to
+   * `resolveCurrentInjuryDesignations`; injectable for tests.
+   */
+  resolveDesignations?: (args: {
+    sport: string
+    players: DesignationLookup<string>[]
+  }) => Promise<Map<string, CurrentInjuryDesignation>>
 }
 
 export const defaultInjuryContextPort: InjuryContextPort = {
   loadRows: (sport, ids) => loadInjuryContextRows(sport, ids),
+  resolveDesignations: (args) => resolveCurrentInjuryDesignations(args),
 }
 
 export interface InjuryEnrichedWorldDeps {
@@ -172,9 +200,14 @@ function computeFreshness(row: RawInjuryContextRow, now: Date): InjuryStatusFres
 }
 
 /**
- * Pure: build an InjuryContext from a raw SportsPlayer cache row. Deterministic, no IO.
+ * Pure: build an InjuryContext from a row whose `status` IS a designation. Deterministic, no IO.
  * Richer fields (practiceStatus / gameStatus / bodyPart / description) are always null —
  * no player-id-keyed source available (see ADR §2). These are documented as uncertainty, not errors.
+ *
+ * ⚠ NOT FOR A RAW `SportsPlayer` ROW. Its `status` is a roster status ("Active", "ACT"), which this maps
+ * to 'available' whatever the injury report says. `resolveInjuryContext` no longer feeds it one; it
+ * builds a context from the feed's designation with {@link projectDesignationContext}, and uses this
+ * only for a player it could not resolve (`row = null`).
  */
 export function projectInjuryContext(row: RawInjuryContextRow | null | undefined, now: Date): InjuryContext {
   if (!row) {
@@ -227,8 +260,94 @@ export function projectInjuryContext(row: RawInjuryContextRow | null | undefined
 }
 
 /**
- * Read-only resolver for per-player injury context. Reads the SportsPlayer cache (same seam as F2.1
- * but selecting freshness fields). NEVER throws — a read failure degrades to unresolved contexts.
+ * Pure: the availability category a CURRENT designation supports — the shared buckets
+ * (`designationSeverity`, i.e. `isRuledOut` for absence). Null designation → 'unknown': "no news"
+ * is not "healthy".
+ */
+export function categoryForDesignation(status: string | null | undefined): InjuryAvailabilityCategory {
+  const severity = designationSeverity(status)
+  if (severity == null) return 'unknown'
+  if (severity === 'unavailable') return 'unavailable'
+  // Doubtful, questionable, or any other word on the report (a bare body part, "Day-To-Day") — a risk.
+  return 'uncertain'
+}
+
+const ALWAYS_UNAVAILABLE_FIELDS = [
+  'practice_status_unavailable',
+  'game_status_unavailable',
+  'body_part_unavailable',
+  'injury_description_unavailable',
+]
+
+/**
+ * Pure: build an InjuryContext from a player's resolved CURRENT designation (or none). `row` is the
+ * identity row the feed was asked about — used for freshness only when the designation IS that row's
+ * Sleeper roster absence. Deterministic, no IO.
+ */
+export function projectDesignationContext(
+  row: RawInjuryContextRow,
+  designation: CurrentInjuryDesignation | null | undefined,
+  now: Date,
+): InjuryContext {
+  const status = designation?.status?.trim() || null
+  const uncertainty = [...ALWAYS_UNAVAILABLE_FIELDS]
+  let freshness: InjuryStatusFreshness
+  let source: string | null
+  if (designation && status && designation.source === 'roster_status') {
+    freshness = computeFreshness(row, now)
+    source = `${row.source ?? 'unknown'}_roster_status`
+  } else if (designation && status && designation.fact) {
+    const fact = designation.fact
+    const fetchedAt = toIso(fact.fetchedAt)
+    freshness = {
+      fetchedAt,
+      expiresAt: null,
+      updatedAt: toIso(fact.reportedAt) ?? fetchedAt,
+      isStale: fact.stale,
+      staleReason: fact.stale ? 'injury_claim_stale' : null,
+    }
+    source = fact.source ?? 'injury_feed'
+  } else {
+    freshness = emptyFreshness()
+    source = 'injury_feed'
+    uncertainty.push('no_current_injury_designation')
+  }
+  if (freshness.isStale === true) uncertainty.push('injury_status_stale')
+  return {
+    status,
+    availabilityCategory: categoryForDesignation(status),
+    practiceStatus: null,
+    gameStatus: null,
+    bodyPart: null,
+    description: null,
+    freshness,
+    provenance: { source },
+    // Resolved = the injury source was asked about THIS player. A player with no current designation is
+    // resolved too — the answer was "nothing to report", which is not the same as never having asked.
+    resolved: true,
+    uncertainty,
+  }
+}
+
+function unresolvedContexts(ids: string[], now: Date, warning: string): InjuryContextResult {
+  return {
+    byId: new Map(ids.map((id) => [id, projectInjuryContext(null, now)])),
+    resolvedCount: 0,
+    unresolvedIds: ids,
+    warnings: [warning],
+  }
+}
+
+/**
+ * Read-only resolver for per-player injury context, keyed by the league's player ids. NEVER throws — a
+ * read failure degrades to unresolved contexts.
+ *
+ * 🛑 THE DESIGNATION IS THE INJURY FEED'S, NOT `SportsPlayer.status` (2026-10-11). The ids give only an
+ * identity: each id's cached row is found in the league's id space (`loadRows`, then
+ * `indexRowsByLeagueId` — a Sleeper id is answered by a row carrying THAT Sleeper id, never by a provider
+ * row whose own number happens to match), and the row's name / team / position are what the feed is
+ * matched on. Only Sleeper's own row offers a roster status, and `resolveCurrentInjuryDesignations`
+ * counts it only as a season-scale absence when no fresh fact contradicts it.
  */
 export async function resolveInjuryContext(
   sport: string,
@@ -245,27 +364,43 @@ export async function resolveInjuryContext(
   try {
     rows = await port.loadRows(sport, requested)
   } catch {
-    return {
-      byId: new Map(requested.map((id) => [id, projectInjuryContext(null, now)])),
-      resolvedCount: 0,
-      unresolvedIds: requested,
-      warnings: ['injury_context_source_unavailable'],
-    }
+    return unresolvedContexts(requested, now, 'injury_context_source_unavailable')
   }
 
-  const rowByKey = new Map<string, RawInjuryContextRow>()
-  for (const row of rows) {
-    if (row.externalId && !rowByKey.has(row.externalId)) rowByKey.set(row.externalId, row)
-    if (row.sleeperId && !rowByKey.has(row.sleeperId)) rowByKey.set(row.sleeperId, row)
+  // One key per row, in the space it belongs to — never a provider number as a Sleeper id (rowKeys.ts).
+  const rowByKey = indexRowsByLeagueId(rows)
+
+  const lookups: DesignationLookup<string>[] = []
+  for (const id of requested) {
+    const row = rowByKey.get(id)
+    const name = row?.name?.trim()
+    if (!row || !name) continue
+    lookups.push({
+      key: id,
+      name,
+      team: row.team ?? null,
+      position: row.position ?? null,
+      // Only Sleeper's own row holds a roster status; another provider's `status` is its own vocabulary.
+      rosterStatus: row.source === 'sleeper' ? row.status ?? null : null,
+    })
   }
 
+  let designations: Map<string, CurrentInjuryDesignation>
+  try {
+    const resolveDesignations = port.resolveDesignations ?? defaultInjuryContextPort.resolveDesignations!
+    designations = lookups.length > 0 ? await resolveDesignations({ sport, players: lookups }) : new Map()
+  } catch {
+    return unresolvedContexts(requested, now, 'injury_feed_unavailable')
+  }
+
+  const asked = new Set(lookups.map((l) => l.key))
   const byId = new Map<string, InjuryContext>()
   const unresolvedIds: string[] = []
   let resolvedCount = 0
 
   for (const id of requested) {
     const row = rowByKey.get(id)
-    const ctx = projectInjuryContext(row ?? null, now)
+    const ctx = row && asked.has(id) ? projectDesignationContext(row, designations.get(id) ?? null, now) : projectInjuryContext(null, now)
     byId.set(id, ctx)
     if (ctx.resolved) {
       resolvedCount++

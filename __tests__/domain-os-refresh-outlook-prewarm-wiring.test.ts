@@ -25,7 +25,8 @@ describe('domain-os-refresh → Season Outlook pre-compute wiring', () => {
 
   it('🛑 its runs, errors, failures and deferrals reach the run telemetry', () => {
     expect(src).toMatch(/\+ r\.portfolio\.written \+ r\.outlook\.computed,/)
-    expect(src).toMatch(/\.\.\.r\.portfolio\.errors, \.\.\.r\.outlook\.errors\]/)
+    // `[,\]]`, not `\]`: later writers (the Class rating, 2026-10-01) append after it.
+    expect(src).toMatch(/\.\.\.r\.portfolio\.errors, \.\.\.r\.outlook\.errors[,\]]/)
     expect(src).toMatch(/r\.outlook\.failed > 0/)
     expect(src).toMatch(/r\.outlook\.deferred \+/)
     /* `cooling` is how you tell "the queue is quiet" from "the cooldown is holding leagues back". */

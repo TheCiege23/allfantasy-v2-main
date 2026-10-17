@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200" role="img" aria-label="thunder emblem"><defs><linearGradient id="div-library-thunder-M" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="0.45" stop-color="#b9c0cc"/><stop offset="1" stop-color="#4a515e"/></linearGradient></defs><g transform="translate(4,4) scale(.96)"><path d="M48,112 C26,112 18,92 30,78 C26,58 44,44 64,50 C70,28 98,18 118,30 C134,18 160,26 164,48 C184,50 192,72 180,86 C192,104 176,122 158,118 Z" fill="url(#div-library-thunder-M)" stroke="#0e0a08" stroke-width="6" stroke-linejoin="round"/>
+<path d="M60,58 C66,40 92,30 112,40 M124,36 C138,30 154,38 156,52" stroke="#fff" stroke-opacity=".6" stroke-width="4" fill="none" stroke-linecap="round"/>
+<path d="M108,84 L72,140 L100,140 L82,194 L140,118 L110,118 L130,84 Z" fill="#ffd23f" stroke="#0e0a08" stroke-width="6" stroke-linejoin="round"/>
+<path d="M114,92 L90,132" stroke="#fff" stroke-width="4" opacity=".8"/>
+<path d="M40,140 L30,160 M168,136 L178,158 M150,150 L156,166" stroke="#ffd23f" stroke-width="5" stroke-linecap="round" opacity=".7"/></g></svg>

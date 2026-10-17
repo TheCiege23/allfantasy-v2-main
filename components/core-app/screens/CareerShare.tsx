@@ -5,6 +5,7 @@ import { AfCrest } from '@/components/core-app/AfCrest'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CareerData } from '@/lib/core-app/career'
 import { chooseShareVideoFormat } from '@/lib/core-app/shareVideo'
+import { TopicTip } from '@/components/core-app/TopicTip'
 import '@/components/core-app/af-career-share.css'
 
 /**
@@ -504,7 +505,9 @@ export function CareerShare({
           {league ? (
             <div className="af-cs-block af-cs-wrapped">
               <div className="af-cs-blockhead">
-                <h2 className="af-cs-blocktitle">{wrapped?.season ?? 'Season'} recap</h2>
+                <h2 className="af-cs-blocktitle">
+                  {wrapped?.season ?? 'Season'} recap <TopicTip topic="wrappedRecap" />
+                </h2>
                 {wrapped?.commissioner ? (
                   <div className="af-cs-chips af-cs-chips--tight">
                     <button type="button" className="af-cs-chip" data-on={edition === 'manager'} onClick={() => setEdition('manager')}>My team</button>
@@ -546,7 +549,9 @@ export function CareerShare({
             <h2 className="af-cs-blocktitle">What&apos;s going on it</h2>
             <dl className="af-cs-stats">
               <div>
-                <dt>Level</dt>
+                <dt>
+                  Level <TopicTip topic="careerXp" />
+                </dt>
                 <dd className="af-num">
                   {career.level != null ? career.level : '—'}
                   {career.levelName ? <span className="af-cs-statsub">{career.levelName}</span> : null}
@@ -738,9 +743,9 @@ export function CareerShare({
                   {/*
                     ⚠ THE DRAWN CREST, NOT THE "AF" TEXT MARK IT REPLACED, and not
                     `/af-crest.png` either — that file is a JPEG with a .png
-                    extension, so it carries a baked-in white background that
-                    would put a white square on a dark gradient card. See
-                    `AfCrest.tsx`.
+                    extension, so it carries a baked-in black square that the
+                    gradient card would show around it, and it is an older
+                    variant of the mark. See `AfCrest.tsx`.
                   */}
                   <span className="af-cs-card-mark">
                     <AfCrest size={26} />

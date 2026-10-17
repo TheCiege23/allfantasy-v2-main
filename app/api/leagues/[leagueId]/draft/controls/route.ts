@@ -6,6 +6,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { assertLeagueActionGate } from '@/server/services/leagueActionGate'
+import { seasonSetupBlocked } from '@/lib/tournament/seasonNativeContract'
+import { hasSeasonDraftRelease } from '@/lib/tournament/seasonDraftReleaseGate'
 import {
   pauseDraftSession,
   resumeDraftSession,
@@ -61,6 +63,7 @@ import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
 import { getDraftPoolReadiness, triggerDraftPoolPrewarmBackground } from '@/lib/draft-room/ensureDraftPoolReady'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { createNextLeagueDraft } from '@/lib/live-draft-engine/createNextLeagueDraft'
+import { CUSTOM_TIMER_MAX_SECONDS, CUSTOM_TIMER_MIN_SECONDS, decideCommissionerTimerSeconds } from '@/lib/draft/draftSettingsPolicy'
 
 export const dynamic = 'force-dynamic'
 
@@ -185,6 +188,13 @@ export async function POST(
       { status: 400 }
     )
   }
+  const tournamentLeague = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+  if (seasonSetupBlocked(tournamentLeague?.settings)) {
+    const released = await hasSeasonDraftRelease(leagueId, tournamentLeague?.settings)
+    if (!released || !['start', 'pause', 'resume', 'reset_timer', 'complete'].includes(action)) {
+      return NextResponse.json({ error: 'This tournament draft control requires the audited opening-draft release.', code: 'TOURNAMENT_DRAFT_RELEASE_REQUIRED' }, { status: 409 })
+    }
+  }
   try {
     if (action === 'create_next_draft') {
       const result = await createNextLeagueDraft(leagueId, userId)
@@ -230,6 +240,9 @@ export async function POST(
       if (!started.ok) {
         if (started.reason === 'ROSTER_CONFIGURATION_INCOMPLETE') {
           return NextResponse.json(rosterConfigurationIncompleteBody({ leagueId }), { status: 409 })
+        }
+        if (started.reason === 'SURVIVOR_CAST_INCOMPLETE') {
+          return NextResponse.json({ code: started.reason, error: started.error }, { status: 409 })
         }
         return NextResponse.json({ error: 'Cannot start draft' }, { status: 400 })
       }
@@ -702,16 +715,14 @@ export async function POST(
       })
     }
     if (action === 'set_timer_seconds') {
-      // Commit R — reject obviously-bad timer values at the route layer with
-      // a structured `COMMISSIONER_TIMER_OUT_OF_RANGE` code so the client can
-      // render an inline validation error. The underlying
-      // `setTimerSeconds` helper already clamps to [0, 86400] silently;
-      // that's fine as a defense-in-depth floor but a UX-grade refusal here
-      // is what stops the commissioner from accidentally setting a 0s timer
-      // (which would make every pick auto-fire) or a multi-day timer (which
-      // would freeze the draft).
-      const TIMER_MIN_SECONDS = 5
-      const TIMER_MAX_SECONDS = 86400 // 24h — same upper bound as the helper
+      // Commit R — reject bad timer values at the route layer with structured codes so the client
+      // can render an inline error. Bounds and the subscriber rule are the SAME as the league
+      // settings Draft tab (lib/draft/draftSettingsPolicy.ts): standard/legacy values (and the
+      // session's current value) are open to every commissioner; any other value is a custom timer
+      // (10s..72h) that needs the AF Commissioner entitlement. `setTimerSeconds` clamps to the same
+      // range as defense in depth.
+      const TIMER_MIN_SECONDS = CUSTOM_TIMER_MIN_SECONDS
+      const TIMER_MAX_SECONDS = CUSTOM_TIMER_MAX_SECONDS
       const rawSeconds = Number(body.seconds ?? body.timerSeconds ?? 90)
       if (!Number.isFinite(rawSeconds)) {
         return NextResponse.json(
@@ -732,8 +743,23 @@ export async function POST(
           { status: 400 },
         )
       }
+      const timerSession = await prisma.draftSession.findFirst({
+        where: { leagueId },
+        orderBy: CURRENT_DRAFT_SESSION_ORDER,
+        select: { timerSeconds: true },
+      })
+      const timerDecision = await decideCommissionerTimerSeconds({
+        rawSeconds: seconds,
+        currentSeconds: timerSession?.timerSeconds ?? null,
+        hasCustomEntitlement: async () =>
+          Boolean((await new EntitlementResolver().resolveForUser(userId, 'commissioner_ai_tools')).hasAccess),
+      })
+      if (!timerDecision.ok) {
+        return NextResponse.json({ error: timerDecision.error, code: timerDecision.code }, { status: timerDecision.status })
+      }
+      const allowedSeconds = timerDecision.seconds
       const resetCurrentTimer = Boolean(body.resetCurrentTimer ?? body.reset_current_timer ?? true)
-      const ok = await setTimerSeconds(leagueId, seconds, { resetCurrentTimer })
+      const ok = await setTimerSeconds(leagueId, allowedSeconds, { resetCurrentTimer })
       if (!ok) return NextResponse.json({ error: 'Failed to set timer' }, { status: 400 })
       const snapshot = await buildSessionSnapshot(leagueId)
       return NextResponse.json({

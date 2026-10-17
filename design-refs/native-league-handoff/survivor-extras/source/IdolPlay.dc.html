@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Play an idol</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./exile/exile.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Caveat:wght@500;600;700&amp;family=Cinzel:wght@600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080d}
+.ex-sg{white-space:nowrap;display:inline-flex;align-items:center;gap:8px}
+.ex-sg img{width:20px;height:20px}
+.ip-steps{display:flex;gap:6px}
+.ip-st{flex:1;display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;background:#0b0d14;border:1px solid rgba(255,255,255,.06);font-size:12.5px;font-weight:600;color:#6f7590}
+.ip-st i{width:20px;height:20px;border-radius:999px;display:grid;place-items:center;font:700 11px 'JetBrains Mono',monospace;font-style:normal;background:#151926}
+.ip-row{display:flex;align-items:center;gap:12px;width:100%;padding:9px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.06);background:#0b0d14;color:#e8eaf2;font:inherit;text-align:left;cursor:pointer;min-height:52px}
+.ip-row:disabled{cursor:default;opacity:.45}
+.ip-pos{width:34px;height:22px;flex:none;border-radius:5px;display:grid;place-items:center;font:700 10.5px 'Archivo';color:#0b0d14}
+.ip-box{width:20px;height:20px;flex:none;border-radius:5px;border:1.5px solid rgba(255,255,255,.25);display:grid;place-items:center;font:700 12px 'Archivo'}
+.ip-av{width:34px;height:34px;flex:none;border-radius:999px;display:grid;place-items:center;font:700 11px 'Archivo';color:#fff}
+.ip-glow{position:relative;border-radius:12px;padding:18px;background:radial-gradient(circle at 50% 30%, rgba(229,72,77,.28), transparent 65%),#0b0d14;border:1px solid rgba(229,72,77,.35)}
+.ip-name{font:700 22px 'Cinzel',serif;letter-spacing:.04em}
+@keyframes ipFly{0%{transform:translateX(-60px) scale(.9);opacity:0}100%{transform:none;opacity:1}}
+.ip-fly{animation:ipFly .6s cubic-bezier(.2,.8,.2,1) both}
+@media (prefers-reduced-motion: reduce){.ip-fly{animation:none}}
+</style>
+</helmet>
+<div class="ex" style="min-height: 100vh; display: flex; flex-direction: column">
+  <header style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 18px 28px; border-bottom: 1px solid rgba(255,255,255,.06)">
+    <a class="ex-btn" href="IdolVault.dc.html" aria-label="Back" style="padding: 0 12px">‹</a>
+    <div style="flex: 1 1 320px; display: flex; flex-direction: column; gap: 3px">
+      <h1 class="ex-h1">Play an idol</h1>
+      <span class="ex-t2">Your idols · only you can see this page · week 6</span>
+    </div>
+    <div class="ex-seg"><sc-for list="{{idols}}" as="i" hint-placeholder-count="3"><button class="ex-sg {{i.cls}}" onClick="{{i.pick}}" aria-pressed="{{i.on}}"><img src="{{i.icon}}" alt="">{{i.name}}</button></sc-for></div>
+  </header>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 24px; padding: 24px 28px; align-items: flex-start">
+    <!-- idol card -->
+    <aside style="flex: 0 1 320px; min-width: 280px; display: flex; flex-direction: column; gap: 12px">
+      <div class="ip-glow" style="border-color: {{card.line}}; background: radial-gradient(circle at 50% 30%, {{card.glow}}, transparent 65%), #0b0d14; display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center">
+        <img src="{{card.art}}" alt="" style="height: 190px">
+        <span class="ip-name" style="color: {{card.c}}">{{card.name}}</span>
+        <span class="ex-t2" style="font-size: 13px">{{card.power}}</span>
+      </div>
+      <div class="ex-card" style="padding: 14px 16px; display: flex; flex-direction: column; gap: 8px">
+        <sc-for list="{{card.facts}}" as="f" hint-placeholder-count="4"><div style="display: flex; gap: 10px; font-size: 12.5px"><span class="ex-lbl" style="width: 92px; flex: none; padding-top: 2px">{{f.k}}</span><span>{{f.v}}</span></div></sc-for>
+      </div>
+    </aside>
+
+    <!-- flow -->
+    <section style="flex: 1 1 620px; min-width: 0; display: flex; flex-direction: column; gap: 14px">
+
+      <sc-if value="{{isSteal}}" hint-placeholder-val="{{ true }}">
+        <div class="ip-steps"><sc-for list="{{steps}}" as="s" hint-placeholder-count="4"><div class="ip-st" style="border-color: {{s.line}}; color: {{s.c}}"><i style="background: {{s.ib}}; color: {{s.ic}}">{{s.mark}}</i>{{s.t}}</div></sc-for></div>
+
+        <sc-if value="{{s1}}" hint-placeholder-val="{{ false }}">
+          <div class="ex-card" style="padding: 16px; display: flex; flex-direction: column; gap: 8px">
+            <div style="display: flex; align-items: baseline; gap: 10px"><b style="font-size: 15px; flex: 1">Whose roster do you raid?</b><span class="ex-t3" style="font-size: 12px">Any team still in the game, either tribe</span></div>
+            <sc-for list="{{teams}}" as="t" hint-placeholder-count="8">
+              <button class="ip-row" onClick="{{t.pick}}" aria-pressed="{{t.on}}" style="border-color: {{t.line}}; background: {{t.bg}}">
+                <span class="ip-av" style="background: {{t.c}}">{{t.ini}}</span>
+                <span style="flex: 1; display: flex; flex-direction: column; gap: 1px"><span style="font-weight: 600">{{t.name}}</span><span class="ex-t3" style="font-size: 11.5px">{{t.top}}</span></span>
+                <img src="{{t.mark}}" alt="" style="height: 22px"><span class="ex-t2" style="font-size: 12px; width: 44px">{{t.tribe}}</span>
+                <span class="ex-num ex-t2" style="font-size: 12px; width: 70px; text-align: right">{{t.pts}}/wk</span>
+              </button>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{s2}}" hint-placeholder-val="{{ false }}">
+          <div class="ex-card" style="padding: 16px; display: flex; flex-direction: column; gap: 8px">
+            <div style="display: flex; align-items: baseline; gap: 10px"><b style="font-size: 15px; flex: 1">Pick 3 from Open Team 7</b><span class="ex-num ex-gold" style="font-size: 13px">{{takeN}} of 3</span></div>
+            <sc-for list="{{theirs}}" as="p" hint-placeholder-count="10">
+              <button class="ip-row" onClick="{{p.pick}}" disabled="{{p.off}}" aria-pressed="{{p.on}}" style="border-color: {{p.line}}; background: {{p.bg}}">
+                <span class="ip-box" style="border-color: {{p.bc}}; background: {{p.bb}}; color: #1a1204">{{p.tick}}</span>
+                <span class="ip-pos" style="background: {{p.pc}}">{{p.pos}}</span>
+                <span style="flex: 1; display: flex; flex-direction: column; gap: 1px"><span style="font-weight: 600">{{p.n}}</span><span class="ex-t3" style="font-size: 11.5px">{{p.sub}}</span></span>
+                <span class="ex-num" style="font-size: 12.5px; color: {{p.fc}}">{{p.fp}}</span>
+              </button>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{s3}}" hint-placeholder-val="{{ false }}">
+          <div class="ex-card" style="padding: 16px; display: flex; flex-direction: column; gap: 8px">
+            <div style="display: flex; align-items: baseline; gap: 10px"><b style="font-size: 15px; flex: 1">Make room: drop 3 from your roster</b><span class="ex-num ex-gold" style="font-size: 13px">{{dropN}} of 3</span></div>
+            <span class="ex-t2" style="font-size: 12.5px">Your roster is full (16 of 16). Dropped players go to waivers and clear Wednesday.</span>
+            <sc-for list="{{mine}}" as="p" hint-placeholder-count="10">
+              <button class="ip-row" onClick="{{p.pick}}" disabled="{{p.off}}" aria-pressed="{{p.on}}" style="border-color: {{p.line}}; background: {{p.bg}}">
+                <span class="ip-box" style="border-color: {{p.bc}}; background: {{p.bb}}; color: #fff">{{p.tick}}</span>
+                <span class="ip-pos" style="background: {{p.pc}}">{{p.pos}}</span>
+                <span style="flex: 1; display: flex; flex-direction: column; gap: 1px"><span style="font-weight: 600">{{p.n}}</span><span class="ex-t3" style="font-size: 11.5px">{{p.sub}}</span></span>
+                <span class="ex-num" style="font-size: 12.5px; color: {{p.fc}}">{{p.fp}}</span>
+              </button>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{s4}}" hint-placeholder-val="{{ false }}">
+          <div class="ex-card" style="padding: 18px; display: flex; flex-direction: column; gap: 14px">
+            <b style="font-size: 15px">Check the raid</b>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
+              <div class="ex-card2" style="padding: 14px; display: flex; flex-direction: column; gap: 8px; border-color: rgba(58,190,120,.3)"><span class="ex-lbl" style="color: #7fe0a6">Coming to you</span><sc-for list="{{inList}}" as="p" hint-placeholder-count="3"><div style="display: flex; align-items: center; gap: 10px"><span class="ip-pos" style="background: {{p.pc}}">{{p.pos}}</span><span style="flex: 1; font-weight: 600">{{p.n}}</span><span class="ex-num ex-t2" style="font-size: 12px">{{p.fp}}</span></div></sc-for></div>
+              <div class="ex-card2" style="padding: 14px; display: flex; flex-direction: column; gap: 8px; border-color: rgba(229,72,77,.3)"><span class="ex-lbl" style="color: #ff9a8a">To waivers</span><sc-for list="{{outList}}" as="p" hint-placeholder-count="3"><div style="display: flex; align-items: center; gap: 10px"><span class="ip-pos" style="background: {{p.pc}}">{{p.pos}}</span><span style="flex: 1; font-weight: 600">{{p.n}}</span><span class="ex-num ex-t2" style="font-size: 12px">{{p.fp}}</span></div></sc-for></div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 10px; background: rgba(229,72,77,.07); border: 1px solid rgba(229,72,77,.3); font-size: 12.5px">This one can’t be secret. The moment you play it, the whole league sees the raid, and Open Team 7 gets top waiver priority this week. You can’t undo it.</div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{s5}}" hint-placeholder-val="{{ false }}">
+          <div class="ip-glow" style="display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; padding: 26px">
+            <span class="ex-lbl" style="color: #ff9a8a">Steal 3 played · week 6</span>
+            <span class="ip-name" style="font-size: 30px; color: #fff">The hand has struck</span>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center">
+              <sc-for list="{{inList}}" as="p" hint-placeholder-count="3"><div class="ex-card2 ip-fly" style="padding: 12px 14px; display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 150px; animation-delay: {{p.d}}"><span class="ip-pos" style="background: {{p.pc}}">{{p.pos}}</span><b>{{p.n}}</b><span class="ex-t3" style="font-size: 11.5px">from Open Team 7</span></div></sc-for>
+            </div>
+            <span class="ex-t2" style="max-width: 460px">They’re on your bench now. Set your lineup before Sunday’s lock. The idol is gone from your vault.</span>
+            <a class="ex-btn ex-btn-gold" href="Lineup.dc.html">Set lineup</a>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px">
+            <div class="ex-card" style="padding: 14px 16px; display: flex; flex-direction: column; gap: 10px">
+              <span class="ex-lbl">What the league sees · league chat</span>
+              <div style="display: flex; gap: 10px; align-items: flex-start"><img src="survivor/idols/steal-three-icon.svg" alt="" style="height: 32px"><div style="display: flex; flex-direction: column; gap: 2px"><b style="font-size: 13px">AF Host</b><span class="ex-t2" style="font-size: 12.5px">TheCiege26 played Steal 3 on Open Team 7 and took Josh Jacobs, Trey McBride and Chase Brown.</span></div></div>
+            </div>
+            <div class="ex-card" style="padding: 14px 16px; display: flex; flex-direction: column; gap: 10px">
+              <span class="ex-lbl">What Open Team 7 gets · DM and push</span>
+              <div style="display: flex; gap: 10px; align-items: flex-start"><img src="survivor/idols/steal-three-icon.svg" alt="" style="height: 32px"><div style="display: flex; flex-direction: column; gap: 2px"><b style="font-size: 13px">You’ve been raided</b><span class="ex-t2" style="font-size: 12.5px">TheCiege26 took 3 of your players. You have top waiver priority this week, and the 3 dropped players hit waivers now.</span></div></div>
+            </div>
+          </div>
+        </sc-if>
+
+        <div style="display: flex; gap: 10px; justify-content: flex-end">
+          <sc-if value="{{canBack}}" hint-placeholder-val="{{ false }}"><button class="ex-btn" onClick="{{back}}">Back</button></sc-if>
+          <sc-if value="{{canNext}}" hint-placeholder-val="{{ true }}"><button class="ex-btn ex-btn-gold" onClick="{{next}}" disabled="{{nextOff}}" style="min-width: 140px">{{nextL}}</button></sc-if>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{isVote}}" hint-placeholder-val="{{ false }}">
+        <div class="ex-card" style="padding: 16px; display: flex; flex-direction: column; gap: 8px">
+          <b style="font-size: 15px">Whose vote do you take?</b>
+          <span class="ex-t2" style="font-size: 12.5px">Tribe Vela goes to Tribal Council. They won’t know until the scroll is read; their slip is stamped “Taken”.</span>
+          <sc-for list="{{vtargets}}" as="t" hint-placeholder-count="3">
+            <button class="ip-row" onClick="{{t.pick}}" disabled="{{t.off}}" aria-pressed="{{t.on}}" style="border-color: {{t.line}}; background: {{t.bg}}"><span class="ip-av" style="background: {{t.c}}">{{t.ini}}</span><span style="flex: 1; font-weight: 600">{{t.name}}</span><span class="ex-t3" style="font-size: 12px">{{t.sub}}</span></button>
+          </sc-for>
+          <sc-if value="{{vPlayed}}" hint-placeholder-val="{{ false }}"><div style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 10px; background: rgba(167,139,250,.08); border: 1px solid rgba(167,139,250,.35)"><img src="survivor/idols/vote-steal-icon.svg" alt="" style="height: 32px"><div style="display: flex; flex-direction: column"><b>Played in secret</b><span class="ex-t2" style="font-size: 12.5px">You now cast two votes at Tribal Council: yours and Open Team 4’s.</span></div></div></sc-if>
+          <div style="display: flex; justify-content: flex-end"><sc-if value="{{vCan}}" hint-placeholder-val="{{ true }}"><button class="ex-btn ex-btn-gold" onClick="{{vPlay}}">Play Vote steal</button></sc-if></div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{isImm}}" hint-placeholder-val="{{ false }}">
+        <div class="ex-card" style="padding: 18px; display: flex; flex-direction: column; gap: 12px">
+          <b style="font-size: 15px">Play it on yourself before votes close</b>
+          <span class="ex-t2" style="font-size: 12.5px">Every vote cast against you this week is read out and stamped “Does not count”. Nobody knows you played it until the read.</span>
+          <div style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 10px; background: #10131c"><img src="weekly/urn.svg" alt="" style="height: 40px"><span style="flex: 1; font-size: 13px">Votes close Tue 8:00 PM ET · 1 day 4 hours left</span></div>
+          <div style="display: flex; justify-content: flex-end; gap: 10px"><button class="ex-btn">Keep it for later</button><button class="ex-btn ex-btn-gold">Play Immunity idol</button></div>
+        </div>
+      </sc-if>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":960}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { idol: 'steal', step: 1, team: 'Open Team 7', take: [1, 3, 6], drop: [9, 12, 14], vt: 'Open Team 4', vPlayed: false }; }
+  renderVals() {
+    const st = this.state, POS = { QB: '#e5728a', RB: '#3fbf95', WR: '#5b9cf0', TE: '#e0a84a', K: '#a99ae6', DEF: '#9a958f' };
+    const idols = [['steal', 'Steal 3', 'steal-three'], ['vote', 'Vote steal', 'vote-steal'], ['imm', 'Immunity idol', 'immunity']].map(([id, name, f]) => ({ name, icon: 'survivor/idols/' + f + '-icon.svg', on: st.idol === id ? 'true' : 'false', cls: st.idol === id ? 'ex-sg-on' : '', pick: () => this.setState({ idol: id }) }));
+    const CARDS = {
+      steal: { name: 'Steal 3', art: 'survivor/idols/steal-three.svg', c: '#ff7a7f', glow: 'rgba(229,72,77,.28)', line: 'rgba(229,72,77,.35)', power: 'Take any 3 players from one team’s roster and add them to yours.',
+        facts: [['When', 'Any week before the playoffs, before Sunday’s lineup lock'], ['Can’t take', 'Players whose game has started, or players on IR'], ['Make room', 'Drop players to fit your roster; they go to waivers'], ['Who sees it', 'The whole league, the moment it’s played']] },
+      vote: { name: 'Vote steal', art: 'survivor/idols/vote-steal.svg', c: '#b9a6ff', glow: 'rgba(167,139,250,.28)', line: 'rgba(167,139,250,.35)', power: 'Take another manager’s vote at Tribal Council and cast it yourself.',
+        facts: [['When', 'Before votes close'], ['Target', 'One manager in your tribe at Tribal'], ['Can’t take', 'The immune manager’s vote'], ['Who sees it', 'Nobody until the scroll is read']] },
+      imm: { name: 'Immunity idol', art: 'survivor/idols/immunity.svg', c: '#f2c94c', glow: 'rgba(242,201,76,.25)', line: 'rgba(242,201,76,.35)', power: 'Cancels every vote cast against you at one Tribal Council.',
+        facts: [['When', 'Before votes close'], ['Target', 'Yourself'], ['Uses', 'Once, then it’s gone'], ['Who sees it', 'Nobody until the scroll is read']] } };
+    const c0 = CARDS[st.idol];
+    const card = { ...c0, facts: c0.facts.map(([k, v]) => ({ k, v })) };
+    const step = st.step;
+    const steps = ['Pick a team', 'Pick 3 players', 'Make room', 'Confirm'].map((t, i) => { const n = i + 1, done = step > n, on = step === n;
+      return { t, mark: done ? '✓' : String(n), line: on ? 'rgba(217,180,90,.45)' : 'rgba(255,255,255,.06)', c: on ? '#e8eaf2' : done ? '#a3a9c2' : '#6f7590', ib: done ? 'rgba(58,190,120,.2)' : on ? '#d9b45a' : '#151926', ic: done ? '#7fe0a6' : on ? '#1a1204' : '#6f7590' }; });
+    const T = [['Open Team 7', 'O7', '#1d3a3a', 'Koa', 'shark', '139.2', 'Puka Nacua · Josh Jacobs · Trey McBride'], ['Open Team 2', 'O2', '#4a1f2c', 'Koa', 'shark', '131.4', 'Bijan Robinson · Nico Collins · Jalen Hurts'],
+      ['Open Team 6', 'O6', '#2c2a4a', 'Koa', 'shark', '127.9', 'Ja’Marr Chase · Kyren Williams · Brock Bowers'], ['Open Team 9', 'O9', '#3a3418', 'Koa', 'shark', '124.5', 'Saquon Barkley · Drake London · Joe Burrow'],
+      ['Open Team 5', 'O5', '#12352a', 'Vela', 'manta', '142.6', 'Jahmyr Gibbs · Justin Jefferson · Lamar Jackson'], ['Open Team 4', 'O4', '#1f2a4d', 'Vela', 'manta', '104.8', 'Derrick Henry · Garrett Wilson · George Kittle'], ['Open Team 8', 'O8', '#3a2410', 'Vela', 'manta', '96.2', 'Breece Hall · Mike Evans · Jayden Daniels']];
+    const teams = T.map(([name, ini, c, tribe, m, pts, top]) => { const on = st.team === name; return { name, ini, c, tribe, pts, top, mark: 'tribes/marks/' + m + '.svg', on: on ? 'true' : 'false', line: on ? '#d9b45a' : 'rgba(255,255,255,.06)', bg: on ? '#151926' : '#0b0d14', pick: () => this.setState({ team: name, take: [] }) }; });
+    const THEIRS = [['Puka Nacua', 'WR', 'LAR vs BAL · Sun 4:25 PM', '22.4', false], ['Josh Jacobs', 'RB', 'GB vs ARI · Sun 1:00 PM', '18.9', false], ['Chris Olave', 'WR', 'NO at TB · Sun 1:00 PM', '14.1', false], ['Trey McBride', 'TE', 'ARI at GB · Sun 1:00 PM', '15.6', false],
+      ['Kyler Murray', 'QB', 'ARI at GB · Sun 1:00 PM', '19.7', false], ['DK Metcalf', 'WR', 'PIT vs CLE · played Thu', '11.2', true], ['Chase Brown', 'RB', 'CIN at DAL · Sun 4:25 PM', '15.8', false], ['Tyler Warren', 'TE', 'IND vs LV · Sun 1:00 PM', '9.8', false],
+      ['Jauan Jennings', 'WR', 'SF vs LAR · Sun 8:20 PM', '10.4', false], ['Jaylen Warren', 'RB', 'PIT vs CLE · played Thu', '9.1', true], ['Tank Bigsby', 'RB', 'JAX · on IR', '—', 'ir']];
+    const take = st.take, full = take.length >= 3;
+    const theirs = THEIRS.map(([n, pos, sub, fp, lock], i) => { const on = take.includes(i), off = !!lock || (full && !on);
+      return { n, pos, pc: POS[pos], sub: lock === 'ir' ? 'On IR · can’t be taken' : lock ? sub + ' · locked' : sub, fp: fp + (fp === '—' ? '' : ' proj'), fc: on ? '#f1d58a' : '#a3a9c2', off, on: on ? 'true' : 'false', tick: on ? '✓' : '', bc: on ? '#d9b45a' : 'rgba(255,255,255,.25)', bb: on ? '#d9b45a' : 'transparent',
+        line: on ? 'rgba(217,180,90,.5)' : 'rgba(255,255,255,.06)', bg: on ? 'rgba(217,180,90,.06)' : '#0b0d14', pick: () => this.setState({ take: on ? take.filter(x => x !== i) : take.concat(i) }) }; });
+    const MINE = [['Josh Allen', 'QB', 'Starter', '24.1', true], ['Christian McCaffrey', 'RB', 'Starter', '19.3', true], ['Ladd McConkey', 'WR', 'Starter', '15.2', true], ['Tee Higgins', 'WR', 'Starter', '14.8', true],
+      ['Sam LaPorta', 'TE', 'Starter', '11.7', true], ['Rhamondre Stevenson', 'RB', 'Flex', '12.3', true], ['Jakobi Meyers', 'WR', 'Bench', '10.9', false], ['Rashid Shaheed', 'WR', 'Bench', '8.6', false], ['Justin Fields', 'QB', 'Bench', '14.0', false],
+      ['Roschon Johnson', 'RB', 'Bench', '4.2', false], ['Brandin Cooks', 'WR', 'Bench', '7.1', false], ['Jake Bates', 'K', 'Starter', '8.0', true], ['Noah Gray', 'TE', 'Bench', '3.9', false], ['Steelers D/ST', 'DEF', 'Starter', '7.5', true], ['Tyjae Spears', 'RB', 'Bench', '6.4', false], ['Darnell Mooney', 'WR', 'Bench', '7.8', false]];
+    const drop = st.drop, dfull = drop.length >= 3;
+    const mine = MINE.map(([n, pos, sub, fp], i) => ({ i, n, pos, sub, fp })).filter(r => r.sub.indexOf('Bench') === 0).map(({ i, n, pos, sub, fp }) => { const on = drop.includes(i), off = dfull && !on;
+      return { n, pos, pc: POS[pos], sub, fp: fp + ' proj', fc: on ? '#ff9a8a' : '#a3a9c2', off, on: on ? 'true' : 'false', tick: on ? '−' : '', bc: on ? '#e5484d' : 'rgba(255,255,255,.25)', bb: on ? '#e5484d' : 'transparent',
+        line: on ? 'rgba(229,72,77,.45)' : 'rgba(255,255,255,.06)', bg: on ? 'rgba(229,72,77,.06)' : '#0b0d14', pick: () => this.setState({ drop: on ? drop.filter(x => x !== i) : drop.concat(i) }) }; });
+    const inList = take.map((i, k) => ({ n: THEIRS[i][0], pos: THEIRS[i][1], pc: POS[THEIRS[i][1]], fp: THEIRS[i][3], d: (k * 0.15) + 's' }));
+    const outList = drop.map(i => ({ n: MINE[i][0], pos: MINE[i][1], pc: POS[MINE[i][1]], fp: MINE[i][3] }));
+    const nextOff = step === 1 ? !st.team : step === 2 ? take.length !== 3 : step === 3 ? drop.length !== 3 : false;
+    const vt = [['Open Team 4', 'O4', '#1f2a4d', 'Tribe Vela', false], ['Open Team 8', 'O8', '#3a2410', 'Tribe Vela', false], ['Open Team 5', 'O5', '#12352a', 'Immune this week', true]].map(([name, ini, c, sub, off]) => { const on = st.vt === name;
+      return { name, ini, c, sub, off: off || st.vPlayed, on: on ? 'true' : 'false', line: on ? '#b9a6ff' : 'rgba(255,255,255,.06)', bg: on ? '#151926' : '#0b0d14', pick: () => this.setState({ vt: name }) }; });
+    return { idols, card, steps, teams, theirs, mine, inList, outList, takeN: take.length, dropN: drop.length,
+      isSteal: st.idol === 'steal', isVote: st.idol === 'vote', isImm: st.idol === 'imm',
+      s1: step === 1, s2: step === 2, s3: step === 3, s4: step === 4, s5: step === 5,
+      canBack: step > 1 && step < 5, canNext: step < 5, nextOff, nextL: step === 4 ? 'Play Steal 3' : 'Next',
+      back: () => this.setState({ step: step - 1 }), next: () => this.setState({ step: step + 1 }),
+      vtargets: vt, vPlayed: st.vPlayed, vCan: !st.vPlayed, vPlay: () => this.setState({ vPlayed: true }) };
+  }
+}
+</script>
+</body>
+</html>

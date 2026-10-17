@@ -1,49 +1,53 @@
 import type { ClearSportsSport } from '@/lib/clear-sports'
+import { foldInjuryTeam } from '@/lib/injuries/matchInjuryRows'
+import { buildNameIndex, resolveVerifiedMatch } from '@/lib/player-match/verifiedNameMatch'
+
+type CsRow = Record<string, unknown>
+
+const str = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v.trim() : null)
 
 /**
- * Build a lookup from ClearSports projection rows (shape varies by endpoint).
- * Keys: lowercase player name, optional id fields.
+ * Build a lookup from ClearSports projection rows (shape varies by endpoint), keyed by name and
+ * holding EVERY row for that name, with the row's team and position for disambiguation.
+ *
+ * 🛑 NO ID INDEX ANY MORE, AND NO LAST-WRITE-WINS BY NAME (2026-10-11). The id index was keyed by
+ * ClearSports' own ids and read with `SportsPlayer.externalId ?? riRow.playerId` — a Rolling
+ * Insights or Sleeper-space number, which can only collide (RI 8394 is Rome Odunze, Sleeper 8394
+ * is Percy Butler), never genuinely match. And `byName.set(name, row)` kept whichever of two
+ * same-named athletes came last (WR vs LB Justin Jefferson). Rows are now bound by name, verified by
+ * team/position when the name is shared, and left unbound when they cannot be told apart.
  */
 export function indexClearSportsProjections(
-  rows: Array<Record<string, unknown>>,
+  rows: Array<CsRow>,
   sport: ClearSportsSport,
-): {
-  byName: Map<string, Record<string, unknown>>
-  byId: Map<string, Record<string, unknown>>
-} {
-  const byName = new Map<string, Record<string, unknown>>()
-  const byId = new Map<string, Record<string, unknown>>()
-
-  for (const row of rows) {
-    const nameRaw =
-      (typeof row.name === 'string' && row.name) ||
-      (typeof row.playerName === 'string' && row.playerName) ||
-      (typeof row.fullName === 'string' && row.fullName) ||
-      (typeof row.player === 'string' && row.player) ||
-      null
-    const idRaw =
-      (typeof row.playerId === 'string' && row.playerId) ||
-      (typeof row.id === 'string' && row.id) ||
-      (typeof row.player_id === 'string' && row.player_id) ||
-      (typeof row.externalId === 'string' && row.externalId) ||
-      null
-
-    if (nameRaw) byName.set(nameRaw.trim().toLowerCase(), row)
-    if (idRaw) byId.set(String(idRaw).trim(), row)
-  }
-
-  void sport
-  return { byName, byId }
+): { byName: Map<string, Array<{ name: string; team: string | null; position: string | null; row: CsRow }>> } {
+  const candidates = rows.flatMap((row) => {
+    const name = str(row.name) ?? str(row.playerName) ?? str(row.fullName) ?? str(row.player)
+    if (!name) return []
+    const team = str(row.team_abbr) ?? str(row.teamAbbr) ?? str(row.team) ?? str(row.team_name)
+    const position = str(row.position) ?? str(row.pos)
+    return [{ name, team: foldInjuryTeam(team, sport), position: position?.toUpperCase() ?? null, row }]
+  })
+  return { byName: buildNameIndex(candidates) }
 }
 
 export function pickProjectionRowForPlayer(args: {
   name: string
-  externalId?: string | null
-  index: { byName: Map<string, Record<string, unknown>>; byId: Map<string, Record<string, unknown>> }
-}): Record<string, unknown> | null {
-  if (args.externalId) {
-    const hit = args.index.byId.get(args.externalId.trim())
-    if (hit) return hit
-  }
-  return args.index.byName.get(args.name.trim().toLowerCase()) ?? null
+  team?: string | null
+  position?: string | null
+  sport?: string | null
+  index: ReturnType<typeof indexClearSportsProjections>
+}): CsRow | null {
+  return (
+    resolveVerifiedMatch(
+      args.index.byName,
+      {
+        name: args.name,
+        team: foldInjuryTeam(args.team, args.sport ?? 'NFL'),
+        position: args.position?.trim().toUpperCase() || null,
+      },
+      // Projections cover offensive players only, so LB Justin Jefferson's lone namesake here is the WR.
+      { refuseContradictedSingle: true },
+    ).match?.row ?? null
+  )
 }

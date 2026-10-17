@@ -1,0 +1,114 @@
+# Compiles the iOS shell (ios-app/) — twice — whenever it changes. Never signs, never uploads.
+#
+# Why it exists: nobody working on this repo has a Mac, so Swift in ios-app/ was otherwise first
+# compiled by ios-testflight.yml, i.e. during a release. This catches a compile error on the push
+# that introduced it instead.
+#
+#   1. the project exactly as committed (what every default TestFlight build archives)
+#   2. the same project with BOTH build-time extensions added — the "Your career" widget
+#      (scripts/add-career-widget-target.rb, a `career_widget` build) and the notification image
+#      extension (scripts/add-notification-service-target.rb, a `notification_images` build).
+#      Built together because a release may tick both, and the two scripts share one embed phase.
+#
+# Unsigned (CODE_SIGNING_ALLOWED=NO), like the release archive step, so it needs no secrets and
+# no registered device. Entitlements and provisioning are the release workflow's job.
+name: ios-build-check
+
+on:
+  push:
+    paths:
+      - 'ios-app/**'
+      - '.github/workflows/ios-build-check.yml'
+  pull_request:
+    paths:
+      - 'ios-app/**'
+      - '.github/workflows/ios-build-check.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-build-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    # Same runner and Xcode rule as ios-testflight.yml, so "compiles here" means "compiles there".
+    runs-on: macos-26
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: ios-app
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Select Xcode 26 or later
+        run: |
+          xcode=$(ls -d /Applications/Xcode_2[6-9]*.app /Applications/Xcode_[3-9][0-9]*.app 2>/dev/null | sort -V | tail -1)
+          if [ -z "$xcode" ]; then
+            echo "::error::No Xcode 26+ on this runner. Installed:"; ls -d /Applications/Xcode*.app
+            exit 1
+          fi
+          sudo xcode-select -s "$xcode/Contents/Developer"
+          xcodebuild -version
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ios-app/package-lock.json
+
+      - name: Install Capacitor
+        run: npm ci --no-audit --no-fund
+
+      - name: Sync plugins into the Xcode project
+        run: npx cap sync ios
+
+      # The full log is kept and only its errors printed: `tail` on xcodebuild hides the one line
+      # that matters, and the status is read from xcodebuild itself, never from a pipe.
+      - name: Build the app as committed
+        run: |
+          set +e
+          xcodebuild build \
+            -project ios/App/App.xcodeproj \
+            -scheme App \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/dd-default" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            > "$RUNNER_TEMP/build-default.log" 2>&1
+          status=$?
+          grep -E "error:|warning: .*CareerWidget|\*\* BUILD" "$RUNNER_TEMP/build-default.log" | tail -60
+          exit $status
+
+      - name: Add the career widget and notification image extension targets
+        run: |
+          gem list -i xcodeproj >/dev/null || gem install xcodeproj --no-document
+          ruby scripts/add-career-widget-target.rb
+          ruby scripts/add-notification-service-target.rb
+          # Idempotence is part of the contract: a second run must leave one target, not two.
+          ruby scripts/add-notification-service-target.rb | grep -q "already present"
+
+      - name: Build the app with both extensions
+        run: |
+          set +e
+          xcodebuild build \
+            -project ios/App/App.xcodeproj \
+            -scheme App \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/dd-widget" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            > "$RUNNER_TEMP/build-widget.log" 2>&1
+          status=$?
+          grep -E "error:|warning: .*(CareerWidget|NotificationService)|\*\* BUILD" "$RUNNER_TEMP/build-widget.log" | tail -60
+          [ "$status" = "0" ] || exit "$status"
+          for ext in CareerWidget NotificationService; do
+            appex=$(find "$RUNNER_TEMP/dd-widget/Build/Products" -path "*App.app/PlugIns/$ext.appex" -maxdepth 4 | head -1)
+            if [ -z "$appex" ]; then
+              echo "::error::Build succeeded but $ext.appex is not embedded in App.app/PlugIns"
+              exit 1
+            fi
+            echo "Embedded: $appex"
+          done

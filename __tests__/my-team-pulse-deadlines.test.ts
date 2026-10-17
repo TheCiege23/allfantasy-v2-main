@@ -8,7 +8,8 @@ const db = vi.hoisted(() => ({
  sportsInjury: { findMany: vi.fn(async () => [{sport:'NFL',playerName:'Omar Cooper Jr.',status:'IR',team:'NYJ'}]) },
  sportsGame: { findMany: vi.fn(async () => [{homeTeam:'ATL',awayTeam:'GB',startTime:new Date('2026-09-25T00:15:00Z')},{homeTeam:'NYJ',awayTeam:'DET',startTime:new Date('2026-09-27T17:00:00Z')}]) },
 }))
-vi.mock('@/lib/prisma', () => ({prisma:db}))
+const identities = vi.hoisted(() => vi.fn(async () => []))
+vi.mock('@/lib/prisma', () => ({prisma:{...db,playerIdentityMap:{findMany:identities}}}))
 vi.mock('@/lib/core-app/sportsWeek', () => ({resolveSportsWeek:vi.fn(async () => ({season:2026,week:3,seasonType:'regular'}))}))
 vi.mock('@/lib/core-app/byeWeeks', () => ({getByeWeeks:vi.fn(async () => ({byWeek:new Map([[3,[]]])}))}))
 vi.mock('@/lib/core-app/leagueHome', () => ({leagueDisplayName:(name:string)=>name}))
@@ -31,6 +32,10 @@ it('does not turn a failed primary read into a healthy empty account', async () 
  db.leagueTeam.findMany.mockRejectedValueOnce(new Error('read unavailable'))
  await expect(getMyTeamPulse('user')).rejects.toThrow('read unavailable')
  expect(db.roster.findMany).not.toHaveBeenCalled()
+})
+it('filters a focused weekly league in the database before the display cap',async()=>{
+ await getMyTeamPulse('user',new Date('2026-09-27T12:00:00Z'),undefined,null,'L64')
+ expect(db.leagueTeam.findMany).toHaveBeenCalledWith(expect.objectContaining({where:{claimedByUserId:'user',leagueId:'L64'}}))
 })
 it('treats explicit Best Ball rules as an automatic lineup, not a manual issue', async () => {
  db.leagueTeam.findMany.mockResolvedValueOnce([{leagueId:'L0',externalId:'4',platformUserId:'su',teamName:'Mine',league:{id:'L0',name:'Neutral name',sport:'NFL',platform:'sleeper',platformLeagueId:'1000',userId:'user',season:2026,updatedAt:new Date(),settings:{best_ball:1}}}] as any)
@@ -65,4 +70,100 @@ it('CONTROL: the same lineup in a Sleeper league IS read, and its OUT starter fl
  const pulse=await getMyTeamPulse('user',new Date('2026-09-27T12:00:00Z'))
  expect(pulse.needsTotal).toBe(1)
  expect(pulse.needs[0]).toMatchObject({leagueId:'L0',out:1})
+})
+/*
+ * A questionable starter was invisible to the order: `set` sorted on lock time alone, so
+ * "4 questionable" tied "SET · nothing missing" (observed live 2026-10-02). L0 is first in
+ * query order, so a lock-only sort leaves it first — the assertion fails without the fix.
+ */
+it('puts a lineup with a questionable starter ahead of a clean one locking at the same time', async () => {
+ const league = (i: number) => ({leagueId:`L${i}`,externalId:'4',platformUserId:'su',teamName:'Mine',league:{id:`L${i}`,name:`League ${i}`,sport:'NFL',platform:'sleeper',platformLeagueId:`${1000+i}`,userId:'user',season:2026,updatedAt:new Date()}})
+ db.leagueTeam.findMany.mockResolvedValueOnce([league(0), league(1)] as any)
+ db.roster.findMany.mockResolvedValueOnce([
+  {leagueId:'L0',platformUserId:'su',playerData:{players:['healthy'],starters:['healthy']}},
+  {leagueId:'L1',platformUserId:'su',playerData:{players:['healthy','qp'],starters:['healthy','qp']}},
+ ] as any)
+ db.sportsPlayer.findMany.mockResolvedValueOnce([{sleeperId:'healthy',name:'Healthy Player',team:'ATL'},{sleeperId:'qp',name:'Quinn Maybe',team:'NYJ'}] as any)
+ db.sportsInjury.findMany.mockResolvedValueOnce([{sport:'NFL',playerName:'Quinn Maybe',status:'Questionable',team:'NYJ'}] as any)
+ const pulse=await getMyTeamPulse('user',new Date('2026-09-24T12:00:00Z'))
+ expect(pulse.needsTotal).toBe(0)
+ expect(pulse.set.map(row=>[row.leagueId,row.questionable,row.lockAt])).toEqual([
+  ['L1',1,'2026-09-25T00:15:00.000Z'],
+  ['L0',0,'2026-09-25T00:15:00.000Z'],
+ ])
+})
+/*
+ * `status ?? lifecycleState` never read the lifecycle state (status is set on every import),
+ * and `archived` / `renewal_pending` were not in the list — a finished league's stale roster
+ * was checked as a live lineup.
+ */
+it.each([
+ ['archived', 'in_season'],
+ ['renewal_pending', 'in_season'],
+ ['in_season', 'archived'],
+])('treats lifecycleState=%s (status %s) as inactive, never as a live lineup', async (lifecycleState, status) => {
+ db.leagueTeam.findMany.mockResolvedValueOnce([{leagueId:'L0',externalId:'4',platformUserId:'su',teamName:'Mine',league:{id:'L0',name:'Done',sport:'NFL',platform:'sleeper',platformLeagueId:'1000',userId:'user',season:2026,updatedAt:new Date(),status,lifecycleState}}] as any)
+ const pulse=await getMyTeamPulse('user',new Date('2026-09-27T12:00:00Z'))
+ const inactive = lifecycleState === 'in_season' ? status : lifecycleState
+ expect(['archived','renewal_pending']).toContain(inactive)
+ expect(pulse.checked).toBe(0)
+ expect(pulse.notChecked.inactive).toBe(1)
+})
+it('CONTROL: an in-season league with an in-season lifecycle is still checked', async () => {
+ db.leagueTeam.findMany.mockResolvedValueOnce([{leagueId:'L0',externalId:'4',platformUserId:'su',teamName:'Mine',league:{id:'L0',name:'Live',sport:'NFL',platform:'sleeper',platformLeagueId:'1000',userId:'user',season:2026,updatedAt:new Date(),status:'in_season',lifecycleState:'in_season'}}] as any)
+ const pulse=await getMyTeamPulse('user',new Date('2026-09-27T12:00:00Z'))
+ expect(pulse.checked).toBe(1)
+ expect(pulse.notChecked.inactive).toBe(0)
+})
+/*
+ * End to end through the loader: a starter whose club is off this week. Needs a slate complete
+ * enough for getByeWeeks to call anything a bye, so this mocks that module's answer directly.
+ */
+it('🛑 a starter on bye is a bye on the row, not a starter "without a kickoff"', async () => {
+ const { getByeWeeks } = await import('@/lib/core-app/byeWeeks')
+ vi.mocked(getByeWeeks).mockResolvedValueOnce({ byWeek: new Map([[3, ['healthy']]]) } as any)
+ db.leagueTeam.findMany.mockResolvedValueOnce(oneLeague('sleeper'))
+ const pulse=await getMyTeamPulse('user',new Date('2026-09-24T12:00:00Z'))
+ const row = [...pulse.needs, ...pulse.set][0]
+ expect(row).toMatchObject({ leagueId: 'L0', bye: 1, out: 1, unknownKickoffs: 0 })
+ expect(row.actionableSeverity).toBe(2)
+})
+
+it('starts elimination reads while the roster read is still pending', async () => {
+ const rosterRows=await db.roster.findMany()
+ vi.clearAllMocks()
+ let release!: (rows: typeof rosterRows) => void
+ db.roster.findMany.mockImplementationOnce(() => new Promise(resolve => {release=resolve}))
+ const loading=getMyTeamPulse('user',new Date('2026-09-27T12:00:00Z'))
+ try { await vi.waitFor(() => expect(db.guillotineElimination.findMany).toHaveBeenCalledTimes(1)) }
+ finally { release(rosterRows) }
+ expect((await loading).checked).toBe(65)
+})
+it('batches selected ESPN lineups without translating paused or opponent rosters', async () => {
+ const claims=[0,1,2].map(i=>({...oneLeague('espn')[0],leagueId:`L${i}`,league:{...oneLeague('espn')[0].league,id:`L${i}`,platformLeagueId:`${1000+i}`}}))
+ db.leagueTeam.findMany.mockResolvedValueOnce(claims)
+ db.roster.findMany.mockResolvedValueOnce([0,1,2].flatMap(i=>[
+  {leagueId:`L${i}`,platformUserId:'su',playerData:{players:[`${10+i}`],starters:[`${10+i}`]}},
+  {leagueId:`L${i}`,platformUserId:'opponent',playerData:{players:['999'],starters:['999']}},
+ ]) as any)
+ identities.mockResolvedValueOnce([{espnId:'10',sleeperId:'healthy'},{espnId:'11',sleeperId:'out'}] as any)
+ const pulse=await getMyTeamPulse('user',new Date('2026-09-27T12:00:00Z'),new Set(['L2']))
+ expect(identities).toHaveBeenCalledTimes(1)
+ expect(identities).toHaveBeenCalledWith(expect.objectContaining({where:{espnId:{in:['10','11']},sleeperId:{not:null}}}))
+ expect(pulse).toMatchObject({checked:2,paused:1,needsTotal:1})
+ expect(pulse.needs[0]).toMatchObject({leagueId:'L1',out:1})
+})
+it('starts schedule and bye reads before independent injury and kickoff reads finish', async () => {
+ const injuryRows=await db.sportsInjury.findMany()
+ const gameRows=await db.sportsGame.findMany()
+ vi.clearAllMocks()
+ let releaseInjury!: (rows: typeof injuryRows) => void
+ let releaseGames!: (rows: typeof gameRows) => void
+ db.sportsInjury.findMany.mockImplementationOnce(() => new Promise(resolve => {releaseInjury=resolve}))
+ db.sportsGame.findMany.mockImplementationOnce(() => new Promise(resolve => {releaseGames=resolve}))
+ const {getByeWeeks}=await import('@/lib/core-app/byeWeeks')
+ const loading=getMyTeamPulse('user',new Date('2026-09-27T12:00:00Z'))
+ try { await vi.waitFor(() => {expect(db.sportsGame.findMany).toHaveBeenCalledTimes(1);expect(getByeWeeks).toHaveBeenCalledTimes(1)}) }
+ finally { releaseInjury(injuryRows);releaseGames(gameRows) }
+ expect((await loading).needs[0]).toMatchObject({out:1,locked:false,bye:0})
 })

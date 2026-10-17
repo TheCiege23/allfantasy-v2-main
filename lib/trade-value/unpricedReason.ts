@@ -82,6 +82,7 @@ const SPORT_NAMES: Record<string, string> = {
   NCAAFB: 'college football',
   NCAAB: 'college basketball',
   NCAABB: 'college basketball',
+  SOCCER: 'soccer',
 }
 
 function reason(code: UnpricedReasonCode, label: string): UnpricedReason {
@@ -104,6 +105,22 @@ function sportReason(sport: string | null | undefined): UnpricedReason | null {
   // An unknown sport is not evidence of a feed gap; the caller's other facts decide.
   if (!s || s === FEED_SPORT) return null
   return reason('no_feed_for_sport', `No values on file for ${SPORT_NAMES[s] ?? s} players`)
+}
+
+/**
+ * A draft pick in a sport nothing prices picks for. Every pick price on file is the NFL's (the
+ * FantasyCalc chart), so outside the NFL a pick is unpriced rather than read off a football chart —
+ * the same rule `pickPolicyRefusal` applies inside a league, extended to the open analyzer and the
+ * roster picker's previews, which had no sport check (trade grade audit, 2026-10-09).
+ */
+export function noSportPickMarketUnpricedReason(sport: string | null | undefined): UnpricedReason {
+  const s = String(sport ?? '').trim().toUpperCase()
+  return reason('no_pick_market', `Draft picks have no ${SPORT_NAMES[s] ?? (s || 'league')} price yet`)
+}
+
+/** Whether a pick in this sport has any price source at all. Only the NFL's chart carries picks. */
+export function sportHasPickMarket(sport: string | null | undefined): boolean {
+  return String(sport ?? '').trim().toUpperCase() === FEED_SPORT
 }
 
 /**

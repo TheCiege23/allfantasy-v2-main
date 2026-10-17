@@ -1,5 +1,6 @@
 'use client'
 
+import { TopicTip } from '@/components/core-app/TopicTip'
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import MiniPlayerImg from '@/components/MiniPlayerImg'
@@ -85,9 +86,14 @@ export function mergeStarters(
 
 const LIVE_POLL_MS = 20_000
 const IDLE_POLL_MS = 120_000
+export const FINAL_CORRECTION_POLLS = 10
 const YARD_MARKS = [10, 20, 30, 40, 50, 60, 70, 80, 90]
 
-export function LiveGameView({
+export function LiveGameView(props: Parameters<typeof ScopedLiveGameView>[0]) {
+  return <ScopedLiveGameView key={`${props.sport}:${props.gameId}`} {...props} />
+}
+
+function ScopedLiveGameView({
   initial,
   sport,
   gameId,
@@ -119,7 +125,7 @@ export function LiveGameView({
     try {
       const res = await fetch(
         `/api/dashboard/live-scores?view=game&sport=${encodeURIComponent(sport)}&game=${encodeURIComponent(gameId)}`,
-        { cache: 'no-store' },
+        { cache: 'no-store', signal: AbortSignal.timeout(15_000) },
       )
       if (!res.ok) throw new Error('Game feed unavailable')
       const next = (await res.json()) as GameViewPayload
@@ -139,10 +145,14 @@ export function LiveGameView({
   }, [sport, gameId])
 
   useEffect(() => {
-    // A final does not change; polling it would only spend requests.
-    if (state === 'post') return
-    const id = window.setInterval(() => void load(), state === 'in' ? LIVE_POLL_MS : IDLE_POLL_MS)
-    return () => window.clearInterval(id)
+    // Final totals and personal points may still be corrected. Stop after ten
+    // slower checks rather than polling a completed game indefinitely.
+    let finalPolls = 0
+    const id = window.setInterval(() => {
+      void load()
+      if (state === 'post' && ++finalPolls >= FINAL_CORRECTION_POLLS) window.clearInterval(id)
+    }, state === 'in' ? LIVE_POLL_MS : IDLE_POLL_MS)
+    return () => { window.clearInterval(id); seq.current += 1 }
   }, [load, state])
 
   if (!detail) {
@@ -323,6 +333,8 @@ function YourStartersPanel({
         groups={groups}
         selectedLeagueId={selectedLeagueId}
         renderStatLine={(group) => <StarterBoxLine detail={detail} group={group} />}
+        /* Before kickoff each row shows this week's projection, as on the slate card. */
+        upcoming={detail.status.state === 'pre'}
       />
     </section>
   )
@@ -920,9 +932,13 @@ function LastPlay({ detail, play }: { detail: LiveGameDetail; play: GameDetailPl
       <div className="af-gv-lastplay-top">
         <strong className="af-gv-lastplay-title">{title}</strong>
         {favored && favoredPct != null ? (
-          <span className="af-gv-wp af-num" title="ESPN's win probability after this play">
-            ESPN win % · {favored.abbrev} {favoredPct}
-          </span>
+          <>
+            <span className="af-gv-wp af-num">
+              ESPN win % · {favored.abbrev} {favoredPct}
+            </span>
+            {/* Replaces a `title=` a phone never shows; a sibling, so no title sits over the popover. */}
+            <TopicTip topic="espnWinProbability" />
+          </>
         ) : null}
         <span className="af-label af-gv-lastplay-tag">Last play</span>
       </div>
@@ -1149,6 +1165,7 @@ function ShotChart({ detail, basketball }: { detail: LiveGameDetail; basketball:
         <h2 className="af-label" id="af-gv-shots">
           Shot chart
         </h2>
+        <TopicTip topic="shotChartCount" />
         <span className="af-gv-muted af-num">
           {made}/{visible.length} FG
         </span>
@@ -1456,6 +1473,7 @@ function RinkShotMap({ detail, hockey }: { detail: LiveGameDetail; hockey: Hocke
         <h2 className="af-label" id="af-gv-rink">
           Shot map
         </h2>
+        <TopicTip topic="hockeyShotsOnGoal" />
         <span className="af-gv-muted af-num">
           {goals} G · {onGoal} SOG
         </span>
@@ -1557,9 +1575,12 @@ function HockeyPlayByPlay({
 
   return (
     <section className="af-gv-card" aria-labelledby="af-gv-hpbp">
-      <h2 className="af-label" id="af-gv-hpbp">
-        Play-by-play
-      </h2>
+      <div className="af-gv-shots-head">
+        <h2 className="af-label" id="af-gv-hpbp">
+          Play-by-play
+        </h2>
+        <TopicTip topic="hockeyStrength" />
+      </div>
       <div className="af-live-scope af-gv-tabs" role="group" aria-label="Which plays to show">
         <button
           type="button"
@@ -2163,9 +2184,12 @@ function BaseballBoxScore({ detail, baseball }: { detail: LiveGameDetail; baseba
   if (teams.length === 0) return null
   return (
     <section className="af-gv-card af-gv-box" aria-labelledby="af-gv-mlbbox">
-      <h2 className="af-label" id="af-gv-mlbbox">
-        Box score
-      </h2>
+      <div className="af-gv-shots-head">
+        <h2 className="af-label" id="af-gv-mlbbox">
+          Box score
+        </h2>
+        <TopicTip topic="baseballBoxColumns" />
+      </div>
       {teams.map(({ team, box }) => (
         <div key={team.id} className="af-gv-box-team" data-team={team.id}>
           <div className="af-gv-box-team-head">

@@ -1,4 +1,5 @@
 import { getConsensusADP as getMultiPlatformConsensus } from './multi-platform-adp'
+import { valuePositionsAgree } from '@/lib/league-values/playerValueIdentity'
 
 export interface FantasyCalcPlayerIdentity {
   id: number;
@@ -88,7 +89,15 @@ export function findPlayerByName(
   /** Narrow a candidate set by position, then team; null when still ambiguous. */
   const disambiguate = (candidates: FantasyCalcPlayer[]): FantasyCalcPlayer | null => {
     if (candidates.length === 0) return null;
-    if (candidates.length === 1) return candidates[0]!;
+    /*
+     * 🛑 A SINGLE NAME MATCH STILL HAS TO BE THE RIGHT KIND OF PLAYER (2026-10-11). FantasyCalc lists
+     * offensive players only, so LB Josh Allen, LB Justin Jefferson and CB DeVonta Smith each find
+     * exactly ONE row — the star's — and took his market value whenever the caller said the player
+     * was a defender. When the caller knows the position and it disagrees, there is no match.
+     */
+    if (candidates.length === 1) {
+      return !wantPos || valuePositionsAgree(wantPos, candidates[0]!.player.position) ? candidates[0]! : null;
+    }
     let narrowed = candidates;
     if (wantPos) {
       const byPos = narrowed.filter(p => token(p.player.position) === wantPos);
@@ -109,8 +118,8 @@ export function findPlayerByName(
     const fcNorm = normalizeFcName(p.player.name);
     return fcNorm.includes(normalized) || normalized.includes(fcNorm);
   });
-  // A substring match is only trustworthy when nothing else could have matched.
-  if (partialMatches.length === 1) return partialMatches[0]!;
+  // A substring match is only trustworthy when nothing else could have matched — and, like an exact
+  // one, only when it is the position the caller said (disambiguate checks a single candidate too).
   return disambiguate(partialMatches);
 }
 

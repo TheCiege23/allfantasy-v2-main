@@ -10,6 +10,8 @@ import { AUTOMATION_RESULT_LABELS } from './automationLabels'
 import type { SeverityTier } from '@/lib/commissioner-ui/tokens/colors'
 import type { AutomationCatalogEntry, AutomationExecutionEntry, AutomationExecutionResult } from '@/lib/commissioner-ui/automations/decision-os-client'
 import { shortDate } from '@/components/commissioner-os/primitives/pinnedTime'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { automationText, dateText, historyTitleText, toolsText } from '@/lib/commissioner-os/i18n/toolsCopy'
 
 export interface AutomationHistoryDialogProps {
   automation: AutomationCatalogEntry | null
@@ -30,6 +32,8 @@ const RESULT_SEVERITY: Record<AutomationExecutionResult, SeverityTier> = {
  */
 export function AutomationHistoryDialog({ automation, history, onOpenChange }: AutomationHistoryDialogProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const { language } = useOptionalLanguage()
+  const t = (english: string) => toolsText(english, language)
 
   return (
     <Dialog open={automation !== null} onOpenChange={onOpenChange}>
@@ -37,20 +41,20 @@ export function AutomationHistoryDialog({ automation, history, onOpenChange }: A
         {automation && (
           <>
             <DialogHeader>
-              <DialogTitle>{automation.name} — Execution History</DialogTitle>
-              <DialogDescription>{automation.schedule.description}</DialogDescription>
+              <DialogTitle>{historyTitleText(automationText(automation.name, language), language)}</DialogTitle>
+              <DialogDescription>{automationText(automation.schedule.description, language)}</DialogDescription>
             </DialogHeader>
 
             {history.length === 0 ? (
-              <EmptyState icon={History} title="No executions yet." description="This automation hasn't run yet." />
+              <EmptyState icon={History} title={t('No executions yet.')} description={t("This automation hasn't run yet.")} />
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>When</TableHead>
-                    <TableHead>Result</TableHead>
-                    <TableHead>Duration</TableHead>
-                    <TableHead>Summary</TableHead>
+                    <TableHead>{t('When')}</TableHead>
+                    <TableHead>{t('Result')}</TableHead>
+                    <TableHead>{t('Duration')}</TableHead>
+                    <TableHead>{t('Summary')}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -72,17 +76,17 @@ export function AutomationHistoryDialog({ automation, history, onOpenChange }: A
                           }}
                           className="focus-ring cursor-pointer"
                         >
-                          <TableCell>{shortDate(entry.startedAt)}</TableCell>
+                          <TableCell>{dateText(shortDate(entry.startedAt), language)}</TableCell>
                           <TableCell>
-                            <span style={{ color: style.text }}>{AUTOMATION_RESULT_LABELS[entry.result]}</span>
+                            <span style={{ color: style.text }}>{t(AUTOMATION_RESULT_LABELS[entry.result])}</span>
                           </TableCell>
                           <TableCell>{(entry.durationMs / 1000).toFixed(1)}s</TableCell>
-                          <TableCell>{entry.summary}</TableCell>
+                          <TableCell>{automationText(entry.summary, language)}</TableCell>
                         </TableRow>
                         {isExpanded && (
                           <TableRow>
                             <TableCell colSpan={4} style={{ color: 'var(--muted)' }} className="text-sm">
-                              {entry.detail}
+                              {automationText(entry.detail, language)}
                             </TableCell>
                           </TableRow>
                         )}

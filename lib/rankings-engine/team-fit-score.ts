@@ -1,4 +1,5 @@
 import type { AdaptivePlayerRank } from './adaptive-rankings'
+import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 
 export interface TeamFitScoreBreakdown {
   slotNeedFit: number
@@ -58,11 +59,21 @@ const AGE_CURVES: Record<string, { peak: number; dropoff: number }> = {
   TE: { peak: 27, dropoff: 31 },
 }
 
-const NFL_BYE_WEEKS_2025: Record<string, number> = {
-  ARI: 14, ATL: 11, BAL: 14, BUF: 12, CAR: 7, CHI: 10, CIN: 10, CLE: 9,
-  DAL: 7, DEN: 14, DET: 5, GB: 10, HOU: 7, IND: 14, JAX: 12, KC: 6,
-  LAC: 5, LAR: 6, LV: 10, MIA: 6, MIN: 9, NE: 14, NO: 12, NYG: 11,
-  NYJ: 12, PHI: 5, PIT: 9, SEA: 11, SF: 9, TB: 11, TEN: 5, WAS: 14,
+/**
+ * Club → bye week for the season being ranked, from `resolveByeWeekMap` (`lib/core-app/byeWeekMap`).
+ *
+ * 🛑 THIS WAS A HARD-CODED `NFL_BYE_WEEKS_2025` TABLE, READ IN 2026. Every bye-cluster score it
+ * produced was last season's slate — the same defect `byeWeekMap.ts` records retiring from
+ * `waiver-engine/team-needs.ts`. This module is pure, so the map is passed IN by the caller, which
+ * can read the schedule. A club missing from the map is "bye unknown" and scores neutral; an empty
+ * map is no bye opinion at all, never last year's.
+ */
+export type TeamByeWeeks = Readonly<Record<string, number>>
+
+function byeOf(team: string | null | undefined, byeWeeks: TeamByeWeeks): number | null {
+  if (!team) return null
+  const club = normalizeTeamAbbrev(team)
+  return club ? byeWeeks[club] ?? null : null
 }
 
 export function computeTeamFitScore(
@@ -70,11 +81,12 @@ export function computeTeamFitScore(
   weakestSlots: SlotGap[],
   rosterPlayers: AdaptivePlayerRank[],
   goal: 'win-now' | 'balanced' | 'rebuild',
+  byeWeeks: TeamByeWeeks = {},
 ): TeamFitScoreBreakdown {
   const slotNeedFit = computeSlotNeedFit(player, weakestSlots)
   const volatilityBalance = computeVolatilityBalance(player, rosterPlayers)
   const ageCurveFit = computeAgeCurvePreferenceFit(player, rosterPlayers, goal)
-  const byeClusterRelief = computeByeClusterRelief(player, rosterPlayers)
+  const byeClusterRelief = computeByeClusterRelief(player, rosterPlayers, byeWeeks)
 
   const raw = slotNeedFit * 0.40 + volatilityBalance * 0.20 + ageCurveFit * 0.25 + byeClusterRelief * 0.15
   const scaled = Math.round(clamp(raw, 0, 100))
@@ -132,15 +144,17 @@ function computeAgeCurvePreferenceFit(
   return 45
 }
 
-function computeByeClusterRelief(player: AdaptivePlayerRank, rosterPlayers: AdaptivePlayerRank[]): number {
-  const playerTeam = player.team
-  if (!playerTeam) return 50
-  const playerBye = NFL_BYE_WEEKS_2025[playerTeam]
+function computeByeClusterRelief(
+  player: AdaptivePlayerRank,
+  rosterPlayers: AdaptivePlayerRank[],
+  teamByes: TeamByeWeeks,
+): number {
+  const playerBye = byeOf(player.team, teamByes)
   if (!playerBye) return 50
 
   const samePos = rosterPlayers.filter(p => p.position === player.position)
   const byeWeeks = samePos
-    .map(p => p.team ? NFL_BYE_WEEKS_2025[p.team] : null)
+    .map(p => byeOf(p.team, teamByes))
     .filter((w): w is number => w !== null)
 
   const byeCount = byeWeeks.filter(w => w === playerBye).length

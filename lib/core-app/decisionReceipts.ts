@@ -11,6 +11,7 @@ import {
 } from '@/lib/trade-intel/sleeperTradeGradeService'
 import { computeWeeklyMaxPf, type WeeklyRosterPlayer } from '@/lib/commissioner-os/efl/maxPfEngine'
 import { listAdviceForUser, type ChimmyAdvice } from '@/lib/chimmy-advice/adviceStore'
+import { AF_TIP_SURFACE, isChimmyAdvice } from '@/lib/chimmy-advice/adviceSurfaces'
 import { readAdviceLearningSnapshot } from '@/lib/chimmy-outcomes/learningStore'
 import { chimmyTrackRecordFor, type TrackRecordLine } from '@/lib/chimmy-outcomes/trackRecord'
 import { addAdviceKey, startSitAdviceKey } from '@/lib/chimmy-advice/adviceKeys'
@@ -198,6 +199,11 @@ export type DecisionReceiptsData = {
   chimmyRecord?: TrackRecordLine
   /** Chimmy's recent start/sit advice. Absent = none, or advice is unavailable (table not applied). */
   chimmy?: ChimmyReceipt[]
+  /**
+   * The home triage card's "swap in X" tips, resolved like any start call. AllFantasy's rule, not
+   * Chimmy's — kept out of `chimmy`, `chimmyRecord` and the outcome loop. Absent = none resolved.
+   */
+  afTips?: ChimmyReceipt[]
   /** Advice for a week still being played. */
   chimmyPending?: number
   /** Advice with no weekly score on file for one of the two players. */
@@ -255,6 +261,8 @@ export async function getTradeReceipts(args: {
   /** Your Sleeper user id — the only way to tell which side of a trade was yours. */
   ownerSleeperId: string | null
   currentWeek: number | null
+  /** Rows returned; the home card's five unless a caller (the Career decision record) needs all. */
+  limit?: number
 }): Promise<DecisionReceiptsData | null> {
   if (!args.ownerSleeperId) return null
 
@@ -313,7 +321,7 @@ export async function getTradeReceipts(args: {
   }
 
   receipts.sort((a, b) => b.createdIso.localeCompare(a.createdIso))
-  return { trades: receipts.slice(0, MAX_TRADE_RECEIPTS), tooEarly: early, uncoveredLeagues }
+  return { trades: receipts.slice(0, args.limit ?? MAX_TRADE_RECEIPTS), tooEarly: early, uncoveredLeagues }
 }
 
 /* ── Waiver adds ──────────────────────────────────────────────────────────────── */
@@ -525,6 +533,8 @@ export async function getWaiverReceipts(args: {
   userId: string
   leagues: readonly ReceiptsLeague[]
   currentWeek: number | null
+  /** Rows returned; the home card's five unless a caller (the Career decision record) needs all. */
+  limit?: number
 }): Promise<{ waivers: WaiverReceipt[]; tooEarly: number; unscored: number } | null> {
   const loaded = await loadSeasonAdds(args)
   if (!loaded) return null
@@ -567,7 +577,7 @@ export async function getWaiverReceipts(args: {
   }
 
   receipts.sort((x, y) => y.week - x.week || y.points - x.points)
-  return { waivers: receipts.slice(0, MAX_WAIVER_RECEIPTS), tooEarly: early, unscored }
+  return { waivers: receipts.slice(0, args.limit ?? MAX_WAIVER_RECEIPTS), tooEarly: early, unscored }
 }
 
 /* ── Lineups (start/sit) ──────────────────────────────────────────────────────── */
@@ -690,7 +700,7 @@ export async function getLineupReceipts(args: {
     ids.length
       ? await prisma.sportsPlayer.findMany({
           where: { sleeperId: { in: ids } },
-          select: { sleeperId: true, name: true, position: true, team: true, sport: true, imageUrl: true },
+          select: { sleeperId: true, name: true, position: true, team: true, sport: true, imageUrl: true, source: true, fetchedAt: true },
         })
       : [],
   )
@@ -790,6 +800,13 @@ export async function getAutoCoachReceipts(args: {
   userId: string
   leagues: readonly ReceiptsLeague[]
   currentWeek: number | null
+  /**
+   * The Career decision record reads a whole season through THIS function rather than a copy of its
+   * rules: `since` widens the window from the card's 45 days, `limit` lifts the card's five. Both
+   * default to the card's own values, so the home card is unchanged.
+   */
+  since?: Date
+  limit?: number
 }): Promise<{ autocoach: AutoCoachReceipt[]; pending: number; unscored: number; unreadable: number } | null> {
   if (!args.userId) return null
   const sleeper = args.leagues.filter(isSleeper).slice(0, MAX_WAIVER_LEAGUES)
@@ -799,10 +816,10 @@ export async function getAutoCoachReceipts(args: {
     where: {
       userId: args.userId,
       leagueId: { in: sleeper.map((l) => l.id) },
-      swapMadeAt: { gte: new Date(Date.now() - AUTOCOACH_LOOKBACK_DAYS * 86_400_000) },
+      swapMadeAt: { gte: args.since ?? new Date(Date.now() - AUTOCOACH_LOOKBACK_DAYS * 86_400_000) },
     },
     orderBy: { swapMadeAt: 'desc' },
-    take: 60,
+    take: args.since ? 600 : 60,
     select: {
       leagueId: true,
       slotPosition: true,
@@ -878,7 +895,7 @@ export async function getAutoCoachReceipts(args: {
     })),
   )
   return {
-    autocoach: scored.receipts.slice(0, MAX_AUTOCOACH_RECEIPTS),
+    autocoach: scored.receipts.slice(0, args.limit ?? MAX_AUTOCOACH_RECEIPTS),
     pending,
     unscored: scored.unscored,
     unreadable: unreadable + scored.unreadable,
@@ -991,8 +1008,10 @@ export async function resolveChimmyAdviceOutcomes(args: {
   if (!args.userId) return null
   const sleeper = args.leagues.filter(isSleeper).slice(0, MAX_WAIVER_LEAGUES)
   if (sleeper.length === 0) return { advice: [], startSits: [], adds: [] }
-  const advice = await listAdviceForUser({ userId: args.userId, leagueIds: sleeper.map((l) => l.id), since: args.since })
-  if (!advice) return null
+  const stored = await listAdviceForUser({ userId: args.userId, leagueIds: sleeper.map((l) => l.id), since: args.since })
+  if (!stored) return null
+  // What CHIMMY learns from is Chimmy's advice only — never the triage card's rule-based tips.
+  const advice = stored.filter(isChimmyAdvice)
   const startSits = advice.filter((a) => a.adviceType === 'start_sit' && a.alt)
   const addCalls = advice.filter((a) => a.adviceType === 'add')
   const [starts, adds] = await Promise.all([
@@ -1022,6 +1041,8 @@ export async function getChimmyAdviceReceipts(args: {
   leagues: readonly ReceiptsLeague[]
   currentWeek: number | null
 }): Promise<{
+  /** The triage card's resolved "swap in X" tips (AllFantasy's, not Chimmy's). */
+  afTips?: ChimmyReceipt[]
   chimmy: ChimmyReceipt[]
   pending: number
   unscored: number
@@ -1040,16 +1061,21 @@ export async function getChimmyAdviceReceipts(args: {
     leagueIds: sleeper.map((l) => l.id),
     since: new Date(Date.now() - CHIMMY_LOOKBACK_DAYS * 86_400_000),
   })
-  const all = advice ?? []
+  const everything = advice ?? []
+  const all = everything.filter(isChimmyAdvice)
   const startSits = all.filter((a) => a.adviceType === 'start_sit' && a.alt)
   const addCalls = all.filter((a) => a.adviceType === 'add')
-  if (startSits.length === 0 && addCalls.length === 0) return null
+  // The triage card's "swap in X" tips — AllFantasy's, resolved by the same rules, shown apart.
+  const tipCalls = everything.filter((a) => a.surface === AF_TIP_SURFACE && a.adviceType === 'start_sit' && a.alt)
+  if (startSits.length === 0 && addCalls.length === 0 && tipCalls.length === 0) return null
 
-  const [starts, adds] = await Promise.all([
+  const [starts, adds, tips] = await Promise.all([
     startSits.length > 0 ? chimmyStartSitReceipts(args, sleeper, startSits) : null,
     addCalls.length > 0 ? chimmyAddReceipts(args, sleeper, addCalls) : null,
+    tipCalls.length > 0 ? chimmyStartSitReceipts(args, sleeper, tipCalls) : null,
   ])
   return {
+    ...(tips && tips.chimmy.length > 0 ? { afTips: tips.chimmy } : {}),
     chimmy: starts?.chimmy ?? [],
     pending: starts?.pending ?? 0,
     unscored: starts?.unscored ?? 0,
@@ -1257,6 +1283,7 @@ export async function getDecisionReceipts(args: {
         }
       : {}),
     ...(chimmyRecord ? { chimmyRecord } : {}),
+    ...(chimmy?.afTips ? { afTips: chimmy.afTips } : {}),
     ...(chimmy
       ? {
           chimmy: chimmy.chimmy,

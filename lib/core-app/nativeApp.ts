@@ -88,11 +88,26 @@ export function appLinkLanding(platform: string | null | undefined, screen: stri
   return ANDROID_CLAIMED.has(p) ? 'unknown' : null
 }
 
-/** The one line under the button: "Opens in the Yahoo app when it's installed". Null when nothing is known. */
-export function appLinkHint(platform: string | null | undefined, screen: string | null | undefined, os: PhoneOs | null): string | null {
+/**
+ * The one line under the button: "Opens in the Yahoo app when it's installed". Null when nothing is known.
+ * `language` (2026-10-04): 'es' says it in Spanish; without it the English is byte-identical.
+ */
+export function appLinkHint(
+  platform: string | null | undefined,
+  screen: string | null | undefined,
+  os: PhoneOs | null,
+  language?: string,
+): string | null {
   const landing = appLinkLanding(platform, screen, os)
   if (!landing) return null
   const name = LABEL[platformKey(platform)!] ?? platform
+  if (language === 'es') {
+    if (landing === 'app') return `Se abre en la app de ${name} si la tienes instalada`
+    if (landing === 'unknown') return `Puede abrirse en la app de ${name}`
+    return os === 'ios' && platformKey(platform) === 'sleeper'
+      ? `Abre ${name} en la web: su app no acepta enlaces de ligas en iPhone`
+      : `Abre ${name} en la web`
+  }
   if (landing === 'app') return `Opens in the ${name} app when it’s installed`
   if (landing === 'unknown') return `May open the ${name} app`
   return os === 'ios' && platformKey(platform) === 'sleeper'

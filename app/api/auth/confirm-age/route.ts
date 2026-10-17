@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { recordLegalAcceptances } from "@/lib/legal/recordLegalAcceptance"
 
 export const runtime = "nodejs"
 
@@ -59,6 +60,9 @@ export async function POST() {
       update: { ageConfirmedAt: new Date() },
       create: { userId: session.user.id, ageConfirmedAt: new Date() },
     })
+    // The prompt asks the user to agree to the Terms and the Privacy Policy (AgeConfirmationPrompt).
+    // Best-effort: a failed audit write never turns a confirmed age into an error.
+    await recordLegalAcceptances(session.user.id, ["terms", "privacy"], "age_prompt")
 
     return NextResponse.json({ ok: true })
   } catch (err) {

@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Black & Gold art pack</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./specialty/sp.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Cinzel:wght@600;700&amp;family=Caveat:wght@600;700&amp;family=Bebas+Neue&amp;family=Pirata+One&amp;family=Creepster&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080d}
+.kb-cr{display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 6px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.06);background:#0b0d14;cursor:pointer;color:inherit;font:inherit}
+.kb-cr>img{width:100%;max-width:120px}
+.kb-cr>span{font:700 11px 'Archivo';letter-spacing:.08em;color:#a3a9c2}
+.kb-cr[aria-pressed="true"]{border-color:#e8b84a;background:rgba(232,184,74,.08);box-shadow:0 0 0 3px rgba(232,184,74,.12)}
+.kb-cr[aria-pressed="true"]>span{color:#ffd98a}
+.kb-mk{display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center}
+.kb-mk>img{height:120px}
+.kb-mk>span{font:600 11px 'Archivo';color:#7d84a3}
+.kb-bn{position:relative;border-radius:10px;overflow:hidden;border:1px solid rgba(255,255,255,.08);aspect-ratio:16/5;cursor:pointer;padding:0;background:#000}
+.kb-bn>img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.kb-bn>b{position:absolute;left:10px;bottom:8px;font:800 12px 'Archivo';letter-spacing:.06em;color:#fff;text-shadow:0 1px 4px #000}
+.kb-bn[aria-pressed="true"]{outline:3px solid #e8b84a}
+.kb-tm{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:9px;background:rgba(7,8,13,.72);border:1px solid rgba(255,255,255,.08)}
+.kb-tm>b{width:18px;font:700 12px 'JetBrains Mono';color:#ffd98a}
+.kb-tm>i{flex:1;font-style:normal;font-weight:600}
+.kb-tm>em{font-style:normal;font:600 12px 'JetBrains Mono';color:#a3a9c2}
+</style>
+</helmet>
+<div class="sp" style="--acc: #e8b84a; --acc2: #ffd98a; --accInk: #1a1204; --disp: Archivo; min-height: 100vh; display: flex; flex-direction: column">
+<header style="display: flex; flex-wrap: wrap; align-items: center; gap: 18px; padding: 20px 28px; border-bottom: 1px solid rgba(255,255,255,.06)">
+  <img src="specialty/kbi/marks/kbi.svg" alt="" style="width: 64px">
+  <div style="flex: 1 1 400px; display: flex; flex-direction: column; gap: 3px"><h1 class="sp-h1">Black &amp; Gold leagues · art pack <span style="font: 700 20px Caveat, cursive; color: #a3a9c2; margin-left: 8px">created by KB</span></h1><span class="sp-t2">Reusable for any Black &amp; Gold tournament: 2 divisions × 10 conferences = 20 leagues, each with a crest and a banner, plus 10 tournament marks. Sample standings: KBI 2026.</span></div>
+  <div class="sp-seg"><sc-for list="{{divs}}" as="d" hint-placeholder-count="2"><button aria-pressed="{{d.on}}" onClick="{{d.pick}}">{{d.label}}</button></sc-for></div>
+</header>
+<div style="display: flex; flex-direction: column; gap: 22px; padding: 22px 28px 34px">
+  <section class="sp-hero" style="min-height: 330px; border-color: {{line}}">
+    <img class="sp-bg" src="{{banner}}" alt="">
+    <div class="sp-veil" style="background: linear-gradient(90deg, rgba(7,8,13,.94) 0%, rgba(7,8,13,.7) 45%, rgba(7,8,13,0) 75%)"></div>
+    <div class="sp-in" style="min-height: 330px; align-items: center">
+      <img src="{{crest}}" alt="" style="width: 190px; flex: none; filter: drop-shadow(0 16px 24px rgba(0,0,0,.6))">
+      <div style="flex: 0 1 520px; display: flex; flex-direction: column; gap: 10px">
+        <div style="display: flex; gap: 6px; flex-wrap: wrap"><span class="sp-chip">Sample · KBI 2026</span><span class="sp-chip" style="color: {{divC}}; border-color: {{divC}}">{{divLbl}} division</span><span class="sp-chip">12 teams</span></div>
+        <span class="sp-title" style="font-size: 46px">{{name}}</span>
+        <span style="font-size: 15px; font-weight: 600; color: {{acc}}">Conference points · <span class="sp-num">{{cp}}</span></span>
+        <div style="display: flex; flex-direction: column; gap: 6px; max-width: 420px"><sc-for list="{{top}}" as="t" hint-placeholder-count="3"><div class="kb-tm"><b>{{t.r}}</b><i>{{t.n}}</i><em>{{t.wl}}</em><em style="width: 56px; text-align: right; color: #e8eaf2">{{t.p}}</em></div></sc-for></div>
+      </div>
+    </div>
+  </section>
+  <section style="display: flex; flex-direction: column; gap: 10px">
+    <div style="display: flex; align-items: center; gap: 10px"><span class="sp-lbl" style="flex: 1">{{divLbl}} division · league crests (click to preview)</span><span class="sp-t3" style="font-size: 12px">crests/&lt;conference&gt;-{{divSlug}}.svg</span></div>
+    <div style="display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 10px"><sc-for list="{{crests}}" as="c" hint-placeholder-count="10"><button class="kb-cr" aria-pressed="{{c.on}}" onClick="{{c.pick}}"><img src="{{c.src}}" alt=""><span>{{c.n}}</span></button></sc-for></div>
+  </section>
+  <section style="display: flex; flex-direction: column; gap: 10px">
+    <div style="display: flex; align-items: center; gap: 10px"><span class="sp-lbl" style="flex: 1">{{divLbl}} division · league banners (1600 × 500)</span><span class="sp-t3" style="font-size: 12px">banners/&lt;conference&gt;-{{divSlug}}.svg</span></div>
+    <div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px"><sc-for list="{{banners}}" as="b" hint-placeholder-count="10"><button class="kb-bn" aria-pressed="{{b.on}}" onClick="{{b.pick}}"><img src="{{b.src}}" alt=""><b>{{b.n}}</b></button></sc-for></div>
+  </section>
+  <section class="sp-card" style="padding: 18px 20px; display: flex; flex-direction: column; gap: 14px">
+    <span class="sp-lbl">Tournament marks</span>
+    <div style="display: flex; flex-wrap: wrap; gap: 26px; align-items: flex-end; justify-content: space-between">
+      <sc-for list="{{marks}}" as="m" hint-placeholder-count="10"><div class="kb-mk"><img src="{{m.src}}" alt="" style="height: {{m.h}}"><span>{{m.n}}</span></div></sc-for>
+    </div>
+  </section>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1500}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { div: 'BLACK', conf: 'SMOKE' }; }
+  renderVals() {
+    const D = {"BEAST|BLACK": {"teams": [["dyap", "4-0", 728.7], ["emmae", "3-1", 645.6], ["TyT1", "3-1", 558.8]], "cp": 6940.94}, "GOAT|BLACK": {"teams": [["Omega_Tron", "4-0", 660.4], ["KDubTheMagnificent", "3-1", 741.5], ["Nikokmc", "3-1", 657.2]], "cp": 6969.3}, "GRIZZ|BLACK": {"teams": [["UndraftedChamp9", "4-0", 715.5], ["TheRFM", "3-1", 656.7], ["ChuiiMVP", "3-1", 599.7]], "cp": 7089.24}, "KINGS|BLACK": {"teams": [["NYGIANTSBIGBLUE", "4-0", 683.0], ["Savages13", "4-0", 649.2], ["Layes23", "3-1", 617.7]], "cp": 6861.78}, "REBELS|BLACK": {"teams": [["Love4MVP10", "3-1", 656.3], ["Shadowww", "3-1", 641.0], ["T23T", "3-1", 611.5]], "cp": 6988.14}, "SMOKE|BLACK": {"teams": [["Captainameri", "4-0", 681.1], ["TheCiege24", "3-1", 611.8], ["CaucasianJesus", "3-1", 576.8]], "cp": 6854.36}, "STEALTH|BLACK": {"teams": [["Mambamob", "4-0", 689.1], ["dreadedsaiyan", "4-0", 653.7], ["gregmagee", "3-1", 598.2]], "cp": 6831.94}, "SWAMP|BLACK": {"teams": [["arveatz21", "4-0", 612.5], ["JuuBo15", "3-1", 589.7], ["EmrysEmmanuel", "3-1", 541.6]], "cp": 6817.1}, "THUNDER|BLACK": {"teams": [["Raiders1995", "4-0", 683.6], ["jarrettsteward", "3-1", 620.7], ["pezsen", "3-1", 588.2]], "cp": 6903.8}, "WARRIOR|BLACK": {"teams": [["Colbabyy", "4-0", 598.7], ["BRONXTYRANTS", "3-1", 591.8], ["rizvii", "3-1", 580.8]], "cp": 6976.14}, "BEAST|GOLD": {"teams": [["JustPuddy", "4-0", 637.0], ["drmot00", "4-0", 621.9], ["Ortho12K", "3-1", 689.9]], "cp": 6966.06}, "GOAT|GOLD": {"teams": [["TheGreatColbino", "4-0", 665.4], ["ega4bstn", "4-0", 660.7], ["ghettomadness", "4-0", 618.8]], "cp": 6749.9}, "GRIZZ|GOLD": {"teams": [["Andoid14", "4-0", 645.8], ["timmybanderson", "3-1", 641.9], ["OptimusDyme", "3-1", 535.9]], "cp": 6963.06}, "KINGS|GOLD": {"teams": [["RicardoVGV", "4-0", 684.3], ["TalkTotheLAMB", "4-0", 650.9], ["KingJ2111", "3-1", 625.0]], "cp": 6825.48}, "REBELS|GOLD": {"teams": [["nikhilkayal", "4-0", 687.4], ["Giukissoum", "4-0", 643.8], ["Fleety13", "3-1", 691.2]], "cp": 6885.34}, "SMOKE|GOLD": {"teams": [["Angs", "4-0", 658.3], ["TDWilliams", "3-1", 630.7], ["Randycoke2", "2-2", 701.4]], "cp": 6942.04}, "STEALTH|GOLD": {"teams": [["Nathan2748", "3-1", 675.7], ["Scoobyallstars", "3-1", 647.7], ["Sportstlk365", "3-1", 633.6]], "cp": 7081.24}, "SWAMP|GOLD": {"teams": [["Bales007", "4-0", 735.7], ["RodgersTheGoat", "3-1", 601.5], ["MrTwig", "3-1", 545.5]], "cp": 6844.88}, "THUNDER|GOLD": {"teams": [["greenm4n", "4-0", 723.1], ["JacobFry", "4-0", 602.5], ["Egcowboy", "3-1", 594.1]], "cp": 6900.95}, "WARRIOR|GOLD": {"teams": [["DONKMAN", "4-0", 702.9], ["DFraz35", "3-1", 668.6], ["Mr24kgod", "3-1", 638.6]], "cp": 6921.02}};
+    const A = {"BEAST": "#e5432f", "GOAT": "#9b6bff", "GRIZZ": "#e08a3c", "KINGS": "#3d7dff", "REBELS": "#e0334f", "SMOKE": "#7fd6d0", "STEALTH": "#b06bff", "SWAMP": "#4fcf6a", "THUNDER": "#ffd23f", "WARRIOR": "#ff7a2f"};
+    const C = ['BEAST','GOAT','GRIZZ','KINGS','REBELS','SMOKE','STEALTH','SWAMP','THUNDER','WARRIOR'];
+    const st = this.state, div = st.div, ds = div.toLowerCase(), cs = st.conf.toLowerCase();
+    const cap = (s) => s.charAt(0) + s.slice(1).toLowerCase();
+    const d = D[st.conf + '|' + div];
+    const pick = (c) => () => this.setState({ conf: c });
+    return { divs: ['BLACK','GOLD'].map(x => ({ label: cap(x) + ' division', on: div === x ? 'true' : 'false', pick: () => this.setState({ div: x }) })),
+      divLbl: cap(div), divSlug: ds, divC: div === 'GOLD' ? '#ffd98a' : '#c9ced8', acc: A[st.conf], line: div === 'GOLD' ? 'rgba(232,184,74,.45)' : 'rgba(201,206,216,.3)',
+      banner: 'specialty/kbi/banners/' + cs + '-' + ds + '.svg', crest: 'specialty/kbi/crests/' + cs + '-' + ds + '.svg',
+      name: cap(st.conf) + ' ' + cap(div), cp: d.cp.toLocaleString('en-US', { minimumFractionDigits: 2 }),
+      top: d.teams.map(([n, wl, p], i) => ({ r: i + 1, n, wl, p: p.toFixed(1) })),
+      crests: C.map(c => ({ n: c, src: 'specialty/kbi/crests/' + c.toLowerCase() + '-' + ds + '.svg', on: c === st.conf ? 'true' : 'false', pick: pick(c) })),
+      banners: C.map(c => ({ n: cap(c) + ' ' + cap(div), src: 'specialty/kbi/banners/' + c.toLowerCase() + '-' + ds + '.svg', on: c === st.conf ? 'true' : 'false', pick: pick(c) })),
+      marks: [['kbi','King Buffalo · KB mark','130px'],['black-buffalo','Black division','130px'],['gold-buffalo','Gold division','130px'],['region-north','North region','110px'],['region-east','East region','110px'],['region-south','South region','110px'],['region-west','West region','110px'],['conference-finals','Conference finals','110px'],['wildcard-bubble','Wildcard bubble','110px'],['championship','Championship · Black v Gold','130px']]
+        .map(([f, n, h]) => ({ src: 'specialty/kbi/marks/' + f + '.svg', n, h })) };
+  }
+}
+</script>
+</body>
+</html>

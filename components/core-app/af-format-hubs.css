@@ -578,3 +578,33 @@ html[data-mode='light'] .af-core .afh[data-format='all'] .afh-hero { --afh: #22d
   .af-core .af-ch.afh > .afh-hero,
   .af-core .af-ch.afh > .af-ch-nav { order: 2; }
 }
+
+/*
+ * ── Phone: the overview's queue first; formats the reader has no league in hidden ──
+ *
+ * TOP-LEVEL, appended after every query above: a rule inserted inside a query silently moves
+ * into it.
+ *
+ * The overview put "Needs a commissioner" (the queue, paired with mentions) after the hero and
+ * every league card — 1,770px down on a 375px phone. The one-league hub already leads with its
+ * tasks on a phone (2026-09-16 brief: "what needs you" first); the overview now does the same.
+ * Desktop order is unchanged.
+ *
+ * HubSwitcher marks a format pill `data-empty` when the reader has no league of it (never the
+ * open hub). On a phone those were two rows of dead ends; desktop keeps them, where the row is
+ * how a format is discovered.
+ */
+@media (max-width: 720px) {
+  .af-core .afh--overview > * { order: 3; }
+  .af-core .afh--overview > .afh-switch,
+  .af-core .afh--overview > .afh-head { order: 0; }
+  .af-core .afh--overview > .afh-pair { order: 1; }
+  .af-core .afh--overview > .afh-hero { order: 2; }
+  .af-core .afh-switch a[data-empty='true'] { display: none; }
+  /*
+   * The queue row wraps on a phone, but its text column was `flex: 1 1 0%`, so it shrank to
+   * ~90px beside the button instead of wrapping it — titles ran six lines deep. A basis of the
+   * full row minus the severity mark sends the button to its own line (indented by the rule above).
+   */
+  .af-core .afh-queue-row .afh-row-main { flex-basis: calc(100% - 40px); }
+}

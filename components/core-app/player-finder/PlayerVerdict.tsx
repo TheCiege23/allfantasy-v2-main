@@ -1,6 +1,11 @@
+'use client'
+
 import type { LeagueImpact } from '@/lib/core-app/playerImpact'
 import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
 import { fixesTotal, formatDelta, type PlayerMove } from '@/lib/core-app/playerMoves'
+import { moveText, slotText } from '@/lib/core-app/playerMovesCopy'
+import { platformsPhraseText } from '@/lib/core-app/shellCopy'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 
 /**
  * The "Ask Chimmy" verdict card — computed, not generated.
@@ -24,6 +29,11 @@ import { fixesTotal, formatDelta, type PlayerMove } from '@/lib/core-app/playerM
  * ⚠ SLOT TRUTH BEATS PROJECTION — the handoff's rule and this screen's reason to
  * exist. A benched player with a good number is the headline, so the count of
  * leagues where he is misplaced leads.
+ *
+ * Spanish (2026-10-04): every headline is written in both languages here, from the same counts; the
+ * one-league headline names the move through `moveText` (lib/core-app/playerMovesCopy.ts), so the
+ * move reads the same on this card as on its own. The provider starts at English on server and
+ * client alike, so the first paint agrees.
  */
 
 function fmt(n: number): string {
@@ -46,6 +56,8 @@ export function PlayerVerdict({
    */
   scope?: 'all' | 'league'
 }) {
+  const { language } = useOptionalLanguage()
+  const es = language === 'es'
   if (impact.length === 0) return null
 
   const benched = impact.filter((i) => !i.isStarting)
@@ -54,6 +66,7 @@ export function PlayerVerdict({
   const total = fixesTotal(fixes)
   const n = impact.length
   const leagues = n === 1 ? 'league' : 'leagues'
+  const ligas = n === 1 ? 'liga' : 'ligas'
 
   /*
    * Only leagues where we could actually price him under that league's scoring.
@@ -67,7 +80,32 @@ export function PlayerVerdict({
   const best = pricedBenched[0] ?? null
 
   let headline: string
-  if (scope === 'league') {
+  if (es) {
+    if (scope === 'league') {
+      if (fixes.length > 0) {
+        headline = `${moveText(fixes[0], 'es').title}${total != null ? `: ${formatDelta(total)} con la puntuación de esta liga` : ''}.`
+      } else if (benched.length === 0) {
+        headline = 'Aquí es titular. Nada que hacer.'
+      } else if (benched.every((b) => b.startOver != null)) {
+        headline = 'Aquí está en tu banca, y es lo correcto con la puntuación de esta liga.'
+      } else if (best) {
+        headline = `Aquí está en tu banca: vale ${fmt(best.points)} con la puntuación de esta liga.`
+      } else {
+        headline = 'Aquí está en tu banca.'
+      }
+    } else if (fixes.length > 0) {
+      const count = fixes.length === 1 ? 'Una corrección' : `${fixes.length} correcciones`
+      headline = `Está mal ubicado en ${fixes.length} de ${n} ${ligas}. ${count}${total != null ? ` por ${formatDelta(total)}` : ''}.`
+    } else if (benched.length === 0) {
+      headline = `Está en tu alineación en ${starting.length === 1 ? 'la única liga' : `las ${starting.length} ligas`} donde lo tienes.`
+    } else if (benched.every((b) => b.startOver != null)) {
+      headline = `Está en tu banca en ${benched.length} de ${n} ${ligas}, y es lo correcto con la puntuación de cada liga.`
+    } else if (best) {
+      headline = `Está en tu banca en ${benched.length} de ${n} ${ligas}: vale ${fmt(best.points)} en ${best.league.leagueName}.`
+    } else {
+      headline = `Está en tu banca en ${benched.length} de ${n} ${ligas}.`
+    }
+  } else if (scope === 'league') {
     // One league: say the move, not the count.
     if (fixes.length > 0) {
       headline = `${fixes[0].title}${total != null ? ` — ${formatDelta(total)} under this league's scoring` : ''}.`
@@ -107,12 +145,12 @@ export function PlayerVerdict({
   for (const m of fixes) {
     if (!m.link) continue
     if (opens.some((o) => o.href === m.link!.href)) continue
-    opens.push({ href: m.link.href, label: m.link.label, external: m.link.external })
+    opens.push({ href: m.link.href, label: es ? `Abrir en ${m.link.platformLabel}` : m.link.label, external: m.link.external })
     if (opens.length === 3) break
   }
 
   return (
-    <section className="af-card af-pf-verdict" aria-label="Chimmy verdict">
+    <section className="af-card af-pf-verdict" aria-label={es ? 'Veredicto de Chimmy' : 'Chimmy verdict'}>
       <header className="af-pf-verdict-head">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
@@ -125,9 +163,15 @@ export function PlayerVerdict({
         <span className="af-pf-verdict-id">
           {/* The handoff's screenshot says CHIMMY INTELLIGENCE; its own open item
               says ship it as ASK CHIMMY to match the rest of the product. */}
-          <span className="af-label">Ask Chimmy</span>
+          <span className="af-label">{es ? 'Preguntar a Chimmy' : 'Ask Chimmy'}</span>
           <span className="af-pf-verdict-scope af-num">
-            {scope === 'league' ? 'Verdict · this league' : `Verdict · ${n} ${n === 1 ? 'league' : 'leagues'}`}
+            {es
+              ? scope === 'league'
+                ? 'Veredicto · esta liga'
+                : `Veredicto · ${n} ${ligas}`
+              : scope === 'league'
+                ? 'Verdict · this league'
+                : `Verdict · ${n} ${n === 1 ? 'league' : 'leagues'}`}
           </span>
         </span>
         {total != null ? (
@@ -148,7 +192,7 @@ export function PlayerVerdict({
         {impact.map((i) => (
           <li key={i.leagueId} className="af-pf-verdict-row" data-starting={i.isStarting}>
             <span className="af-pf-verdict-league">{i.leagueName}</span>
-            <span className="af-pf-verdict-slot af-num">{i.exactSlot ?? i.slot}</span>
+            <span className="af-pf-verdict-slot af-num">{slotText(i.exactSlot ?? i.slot, language)}</span>
             <span className="af-pf-verdict-pts af-num">
               {i.afPoints.available ? fmt(i.afPoints.data.points) : '—'}
             </span>
@@ -175,10 +219,17 @@ export function PlayerVerdict({
         The read-only promise is stated, not implied — the handoff is explicit
         that this is a promise rather than a footnote.
       */}
-      <p className="af-pf-verdict-readonly">
-        AllFantasy is read-only. Every change happens on {availableImportPlatformsPhrase()} —
-        we show you which league and which screen.
-      </p>
+      {es ? (
+        <p className="af-pf-verdict-readonly">
+          AllFantasy es de solo lectura. Cada cambio se hace en {platformsPhraseText(availableImportPlatformsPhrase(), 'es')}: te
+          mostramos qué liga y qué pantalla.
+        </p>
+      ) : (
+        <p className="af-pf-verdict-readonly">
+          AllFantasy is read-only. Every change happens on {availableImportPlatformsPhrase()} —
+          we show you which league and which screen.
+        </p>
+      )}
 
       {/*
         The paid click (Guap, 2026-09-02). It lands in the chat, not on the
@@ -187,9 +238,11 @@ export function PlayerVerdict({
       */}
       <a
         className="af-btn af-pf-verdict-cta"
-        href={`/chimmy/chat?prompt=${encodeURIComponent(`What should I do with ${playerName} this week?`)}`}
+        href={`/chimmy/chat?prompt=${encodeURIComponent(
+          es ? `¿Qué debería hacer con ${playerName} esta semana?` : `What should I do with ${playerName} this week?`,
+        )}`}
       >
-        Ask Chimmy about {playerName.split(' ').slice(-1)[0]}
+        {es ? 'Preguntar a Chimmy sobre' : 'Ask Chimmy about'} {playerName.split(' ').slice(-1)[0]}
       </a>
     </section>
   )

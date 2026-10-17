@@ -1,6 +1,8 @@
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
 
+import { foldInjuryTeam, matchInjuryRowsToPlayers } from '@/lib/injuries/matchInjuryRows'
+import { buildNameIndex, normalizeMatchName, resolveVerifiedMatch } from '@/lib/player-match/verifiedNameMatch'
 import { getInsightBundle, type InsightType } from '@/lib/ai-simulation-integration'
 import {
   CHIMMY_DEFAULT_UPGRADE_PATH,
@@ -1106,37 +1108,41 @@ function extractMentionedPlayerNames(
   return [...candidates].slice(0, 6)
 }
 
-async function resolvePlayerRecordId(playerName: string, sport: SupportedSport): Promise<string | null> {
-  const exactSeasonRow = await prisma.playerSeasonStats.findFirst({
-    where: {
-      sport,
-      playerName: { equals: playerName, mode: 'insensitive' },
-    },
-    orderBy: [{ season: 'desc' }],
-    select: { playerId: true },
+/**
+ * The id `playerGameFact` / `playerMetaTrend` are keyed by for this player: the Sleeper id in NFL
+ * (the NFL game-stat import is Sleeper's week-stats feed), `PlayerIdentityMap.id` elsewhere (the
+ * Rolling Insights game-log writer stores the identity id).
+ *
+ * 🛑 THIS USED TO RETURN WHATEVER ID A NAME SEARCH HIT FIRST — a `playerSeasonStats.playerId`
+ * (Rolling Insights, TheSportsDB or API-Sports space), by exact name, then by SUBSTRING, then a
+ * `sportsInjury.playerId` (ESPN / RI / API-Sports) — and used it against tables in a different
+ * space. So Chimmy's "last 3 games" were another player's, or nothing: RI 8394 is Rome Odunze,
+ * Sleeper 8394 is Percy Butler. Now: the identity row by exact name, verified by team/position when
+ * the name is shared, and the id in the space the fact tables actually use. No match → null.
+ */
+async function resolvePlayerRecordId(
+  playerName: string,
+  sport: SupportedSport,
+  hint: { team?: string | null; position?: string | null } = {},
+): Promise<string | null> {
+  const rows = await prisma.playerIdentityMap.findMany({
+    where: { sport, canonicalName: { equals: playerName, mode: 'insensitive' } },
+    select: { id: true, sleeperId: true, canonicalName: true, currentTeam: true, position: true },
+    take: 20,
   })
-  if (exactSeasonRow?.playerId) return exactSeasonRow.playerId
-
-  const fuzzySeasonRow = await prisma.playerSeasonStats.findFirst({
-    where: {
-      sport,
-      playerName: { contains: playerName, mode: 'insensitive' },
-    },
-    orderBy: [{ season: 'desc' }],
-    select: { playerId: true },
-  })
-  if (fuzzySeasonRow?.playerId) return fuzzySeasonRow.playerId
-
-  const injuryRow = await prisma.sportsInjury.findFirst({
-    where: {
-      sport,
-      playerName: { contains: playerName, mode: 'insensitive' },
-    },
-    orderBy: [{ updatedAt: 'desc' }],
-    select: { playerId: true },
-  })
-
-  return injuryRow?.playerId ?? null
+  const keyOf = (r: (typeof rows)[number]) => (sport === 'NFL' ? r.sleeperId : r.id)
+  // Several identity rows can describe ONE athlete; collapse them by the id we would return.
+  const byKey = new Map<string, (typeof rows)[number]>()
+  for (const r of rows) {
+    const k = keyOf(r)
+    if (k && !byKey.has(k)) byKey.set(k, r)
+  }
+  if (byKey.size <= 1) return [...byKey.keys()][0] ?? null
+  const index = buildNameIndex(
+    [...byKey.values()].map((r) => ({ name: r.canonicalName, team: foldInjuryTeam(r.currentTeam, sport), position: r.position, row: r })),
+  )
+  const res = resolveVerifiedMatch(index, { name: playerName, team: foldInjuryTeam(hint.team, sport), position: hint.position })
+  return res.match ? keyOf(res.match.row) : null
 }
 
 function summarizeScheduleDifficulty(score: number | null): string | null {
@@ -1212,6 +1218,20 @@ function buildLeagueGroundingRequiredResponse(intent: IntentType): AgentResponse
   }
 }
 
+/**
+ * 🛑 THE CURRENT STATUS COMES ONLY FROM A ROW A FEED STILL CARRIES (2026-10-11). The fallback was the
+ * newest row of the player's injury HISTORY, expired or not — and the primary status is null exactly
+ * when the player has healed and dropped off the reports, so the model was told his last expired
+ * "Out" as current. `history` is claim-ordered (newest first); expired rows stay in it as history.
+ */
+export function currentInjuryStatusForContext(
+  primary: string | null | undefined,
+  history: ReadonlyArray<{ status: string | null; expiresAt: Date }>,
+  now: Date = new Date(),
+): string {
+  return primary ?? history.find((row) => row.expiresAt.getTime() > now.getTime())?.status ?? 'unknown'
+}
+
 async function buildPlayerContextMap(
   playerNames: string[],
   sport: SupportedSport,
@@ -1225,21 +1245,43 @@ async function buildPlayerContextMap(
       }).catch(() => null)
       if (!playerStats) return null
 
-      const playerId = await resolvePlayerRecordId(playerName, sport).catch(() => null)
+      const playerId = await resolvePlayerRecordId(playerStats.name, sport, { team: playerStats.team, position: playerStats.position }).catch(() => null)
       const [injuryHistory, last3Games, trendRow, newsRows] = await Promise.all([
-        prisma.sportsInjury.findMany({
-          where: {
-            sport,
-            playerName: { contains: playerName, mode: 'insensitive' },
-          },
-          orderBy: [{ updatedAt: 'desc' }],
-          take: 3,
-          select: {
-            status: true,
-            type: true,
-            updatedAt: true,
-          },
-        }),
+        /*
+         * Substring-matched, then BOUND to the resolved player: "Jefferson" pulls every Jefferson,
+         * and a shared name (WR vs LB Justin Jefferson) pulls both athletes. `matchInjuryRows`
+         * keeps only the rows of the player `resolvePlayerStats` resolved, by name verified with
+         * his team and position, and none when it cannot tell — never the other player's history.
+         */
+        prisma.sportsInjury
+          .findMany({
+            where: {
+              sport,
+              playerName: { contains: playerName, mode: 'insensitive' },
+            },
+            orderBy: [{ updatedAt: 'desc' }],
+            take: 40,
+            select: {
+              playerName: true,
+              team: true,
+              position: true,
+              status: true,
+              type: true,
+              updatedAt: true,
+              date: true,
+              fetchedAt: true,
+              expiresAt: true,
+            },
+          })
+          .then((rows) =>
+            (
+              matchInjuryRowsToPlayers(
+                rows,
+                [{ name: playerStats.name, team: playerStats.team, position: playerStats.position }],
+                sport,
+              ).byPlayer.get(normalizeMatchName(playerStats.name)) ?? []
+            ),
+          ),
         playerId
           ? prisma.playerGameFact.findMany({
               where: {
@@ -1285,16 +1327,13 @@ async function buildPlayerContextMap(
         }),
       ])
 
-      const injuryStatus =
-        playerStats.injury.status ??
-        injuryHistory[0]?.status ??
-        'unknown'
+      const injuryStatus = currentInjuryStatusForContext(playerStats.injury.status, injuryHistory)
 
       return [
         playerName,
         compactRecord({
           injuryStatus,
-          injuryHistory: injuryHistory.map((row) =>
+          injuryHistory: injuryHistory.slice(0, 3).map((row) =>
             compactRecord({
               status: row.status,
               type: row.type,

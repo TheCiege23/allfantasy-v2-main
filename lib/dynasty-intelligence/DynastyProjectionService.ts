@@ -253,7 +253,7 @@ function inferBaseValue(args: {
   }
 
   const baseline = POSITION_BASE_VALUES_BY_SPORT[args.sport]?.[args.position] ?? 4200
-  const tier = args.displayName ? findPlayerTier(args.displayName) : null
+  const tier = args.displayName ? findPlayerTier(args.displayName, args.position) : null
   if (tier) {
     return roundTo(TIER_BASE_VALUES[tier.tier] * 8, 0)
   }

@@ -5,6 +5,8 @@ import '@/components/core-app/af-war-room.css'
 import DraftMusicWidget from '@/components/core-app/draft-music/DraftMusicWidget'
 import type { BoardCell, BoardColumn, DraftBoardData } from '@/lib/core-app/draftBoard'
 import { draftAfText, draftAfTitle } from '@/lib/core-app/draftAfLabel'
+import { buildDraftBoard, cellForSlot } from '@/lib/draft-board/draftBoardGrid'
+import { TopicTip } from '@/components/core-app/TopicTip'
 
 /**
  * The per-league draft board, clock and queue.
@@ -64,9 +66,17 @@ function Clock({ endsAt, paused }: { endsAt: Date | null; paused: number | null 
   )
 }
 
-function Board({ columns, cells }: { columns: BoardColumn[]; cells: BoardCell[] }) {
-  const byKey = new Map(cells.map((c) => [`${c.round}:${c.rosterId}`, c]))
-  const rounds = Math.max(...cells.map((c) => c.round), 1)
+export function Board({ columns, cells, rounds, draftType, thirdRoundReversal }: {
+  columns: BoardColumn[]; cells: BoardCell[]; rounds: number; draftType: string; thirdRoundReversal: boolean
+}) {
+  const byOverall = new Map(cells.map((c) => [c.overall, c]))
+  if (!['snake', 'linear'].includes(draftType.toLowerCase())) {
+    return <ol>{cells.map((cell) => <li key={cell.overall}>
+      {cell.label} · {cell.playerName} · {cell.ownerName ?? cell.rosterId}
+    </li>)}</ol>
+  }
+  const teamCount = Math.max(0, ...columns.map((column) => column.slot))
+  const rows = buildDraftBoard({ rounds, teamCount, kind: draftType.toLowerCase() as 'snake' | 'linear', thirdRoundReversal })
 
   return (
     <div className="af-wr-board-scroll">
@@ -82,13 +92,14 @@ function Board({ columns, cells }: { columns: BoardColumn[]; cells: BoardCell[] 
           </tr>
         </thead>
         <tbody>
-          {Array.from({ length: rounds }, (_, i) => i + 1).map((round) => (
-            <tr key={round}>
+          {rows.map((row) => (
+            <tr key={row.round}>
               <th className="af-wr-board-round af-num" scope="row">
-                R{round}
+                R{row.round}
               </th>
               {columns.map((col) => {
-                const cell = byKey.get(`${round}:${col.rosterId}`)
+                const slotCell = cellForSlot(row, col.slot)
+                const cell = slotCell ? byOverall.get(slotCell.overall) : undefined
                 return (
                   <td
                     key={col.rosterId}
@@ -109,10 +120,13 @@ function Board({ columns, cells }: { columns: BoardColumn[]; cells: BoardCell[] 
                             {draftAfText(cell.af)}
                           </span>
                         ) : null}
+                        {cell.rosterId !== col.rosterId ? (
+                          <span className="af-wr-cell-pos">Traded · {cell.ownerName ?? cell.rosterId}</span>
+                        ) : null}
                       </>
                     ) : (
-                      <span className="af-wr-cell-empty" aria-hidden>
-                        —
+                      <span className="af-wr-cell-empty">
+                        {slotCell?.label ?? '—'}
                       </span>
                     )}
                   </td>
@@ -139,7 +153,8 @@ export function DraftBoard({ data }: DraftBoardProps) {
               {data.session.data.picksMade} of {data.session.data.totalPicks} picks made
               {data.session.data.currentRound != null
                 ? ` · next is round ${data.session.data.currentRound}`
-                : ' · complete'}
+                : ['completed', 'complete', 'post_draft'].includes(data.session.data.status)
+                  ? ' · complete' : ' · next pick unavailable'}
             </p>
           ) : (
             <Unavailable reason={data.session.reason} />
@@ -153,7 +168,7 @@ export function DraftBoard({ data }: DraftBoardProps) {
                 className="af-label af-wr-clock-label"
                 data-yours={data.clock.data.yoursOnClock}
               >
-                {data.clock.data.yoursOnClock ? "You're on the clock" : 'On the clock'}
+                {data.clock.data.yoursOnClock ? "You're on the clock" : 'On the clock'} <TopicTip topic="onTheClock" />
               </span>
               <Clock
                 endsAt={data.clock.data.endsAt ? new Date(data.clock.data.endsAt) : null}
@@ -177,14 +192,14 @@ export function DraftBoard({ data }: DraftBoardProps) {
       {/* ── Board ───────────────────────────────────────────────────── */}
       <section className="af-frame af-wr-section">
         <header className="af-wr-section-head">
-          <h3 className="af-label">The board</h3>
+          <h3 className="af-label">The board <TopicTip topic="draftBoardOrder" /></h3>
           <span className="af-wr-legend">
             <span className="af-wr-legend-swatch" data-kind="yours" /> your picks
           </span>
         </header>
 
         {data.board.available ? (
-          <Board columns={data.board.data.columns} cells={data.board.data.cells} />
+          <Board {...data.board.data} />
         ) : (
           <Unavailable reason={data.board.reason} />
         )}

@@ -22,6 +22,9 @@ export async function POST(req: NextRequest) {
     deviceId,
   })
   if (!result.ok) {
+    // The division gate refused an open join: hand back the structured refusal, so the page can offer
+    // "ask the commissioner" instead of a bare message (lib/league-join/classRequests.ts).
+    if (result.divisionGate) return NextResponse.json(result.divisionGate, { status: 403 })
     const statusByError: Record<string, number> = {
       'Invite expired': 410,
       'Invite limit reached': 409,

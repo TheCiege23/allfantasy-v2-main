@@ -38,6 +38,14 @@ function defaultEntryName(user: SessionUser): string {
 export function getPlayoffSportTitle(sport: PlayoffSport | "fifa"): string {
   if (sport === "nba") return "NBA Playoff Pool"
   if (sport === "nhl") return "NHL Playoff Pool"
+  /*
+   * ⚠ MLB WAS MISSING AND FELL THROUGH TO "FIFA World Cup Pool" — so an MLB pool
+   * created with a blank or one-letter name was titled after the World Cup.
+   * Found 2026-10-01 while adding the CFP. Every PlayoffSport is named explicitly
+   * now; only the literal "fifa" reaches the last line.
+   */
+  if (sport === "mlb") return "MLB Postseason Pool"
+  if (sport === "ncaaf") return "College Football Playoff Pool"
   return "FIFA World Cup Pool"
 }
 

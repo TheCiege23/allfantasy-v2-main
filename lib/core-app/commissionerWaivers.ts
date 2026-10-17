@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { ourIdOrSleeperIdWhere, playerRowKeys } from '@/lib/player-identity/externalIdNamespace'
 import { computeNextWaiverRunAtUtc } from '@/lib/waiver-wire/next-waiver-run'
 import { formatWaiverOutcomeLabel, outcomeCodeFromMetadata } from '@/lib/waiver-wire/waiver-outcome-labels'
+import { pickLanguage } from './commissioner/pickLanguage'
 
 /**
  * Waiver Oversight — the section added to the Commissioner Hub in the 2026-09-13
@@ -92,6 +93,31 @@ const WAIVER_TYPE_LABEL: Record<string, string> = {
   standard: 'Standard priority',
   off: 'No waivers',
 }
+const WAIVER_TYPE_LABEL_ES: Record<string, string> = {
+  faab: 'FAAB',
+  rolling: 'Prioridad rotativa',
+  reverse_standings: 'Prioridad por clasificación inversa',
+  fcfs: 'Por orden de llegada',
+  standard: 'Prioridad estándar',
+  off: 'Sin agentes libres en espera',
+}
+
+/*
+ * The shared outcome labels (`waiver-outcome-labels`) serve the waivers history, notifications and
+ * exports in English. The hub's panel words the same codes in the reader's language here, so that
+ * module's other callers are untouched. A code with no entry keeps the shared English label.
+ */
+const OUTCOME_LABEL_ES: Record<string, string> = {
+  won: 'Concedida',
+  lost_priority: 'Perdida: prioridad',
+  lost_tiebreaker: 'Perdida: desempate',
+  insufficient_faab: 'No concedida: FAAB',
+  invalid_due_to_roster: 'Bloqueada: plantilla',
+  player_no_longer_available: 'No concedida: jugador ya fichado',
+  blocked_by_lineup_lock: 'Bloqueada: alineación cerrada',
+  blocked_by_ir_taxi_devy_violation: 'Bloqueada: IR / taxi / devy',
+  failed: 'No concedida',
+}
 
 function initialsOf(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean)
@@ -112,23 +138,32 @@ export function faabTone(remaining: number, budget: number): WaiverTone {
  * `player_no_longer_available` with `competingRosterId` set. That extra key is what
  * separates "someone out-bid or out-prioritised you" from "he was already rostered".
  */
-export function classifyResult(resultType: string, metadata: unknown, fallbackMessage: string | null): { result: WaiverRunResult; label: string } {
-  if (resultType === 'awarded') return { result: 'won', label: 'Won' }
+export function classifyResult(
+  resultType: string,
+  metadata: unknown,
+  fallbackMessage: string | null,
+  language = 'en',
+): { result: WaiverRunResult; label: string } {
+  const L = pickLanguage(language)
+  // In Spanish a known code gets its own label; the claim's free-text message is English server prose.
+  const outcome = (c: string | undefined) =>
+    language === 'es' && c && OUTCOME_LABEL_ES[c] ? OUTCOME_LABEL_ES[c]! : formatWaiverOutcomeLabel(c, fallbackMessage)
+  if (resultType === 'awarded') return { result: 'won', label: L('Won', 'Ganada') }
   const code = outcomeCodeFromMetadata(metadata)
   const meta = metadata && typeof metadata === 'object' && !Array.isArray(metadata) ? (metadata as Record<string, unknown>) : {}
   if (code === 'lost_priority' || code === 'lost_tiebreaker' || (code === 'player_no_longer_available' && typeof meta.competingRosterId === 'string')) {
-    return { result: 'outbid', label: 'Outbid' }
+    return { result: 'outbid', label: L('Outbid', 'Superada') }
   }
-  if (code === 'insufficient_faab') return { result: 'short', label: 'Short on FAAB' }
+  if (code === 'insufficient_faab') return { result: 'short', label: L('Short on FAAB', 'Sin FAAB suficiente') }
   if (code === 'invalid_due_to_roster' || (code ?? '').startsWith('blocked_')) {
-    return { result: 'blocked', label: formatWaiverOutcomeLabel(code, fallbackMessage) }
+    return { result: 'blocked', label: outcome(code) }
   }
-  return { result: 'not_awarded', label: formatWaiverOutcomeLabel(code, fallbackMessage) }
+  return { result: 'not_awarded', label: outcome(code) }
 }
 
-function formatRunSlot(iso: string): string {
+function formatRunSlot(iso: string, language = 'en'): string {
   const d = new Date(iso)
-  const parts = new Intl.DateTimeFormat('en-US', {
+  const parts = new Intl.DateTimeFormat(language === 'es' ? 'es-US' : 'en-US', {
     weekday: 'short',
     hour: 'numeric',
     minute: '2-digit',
@@ -142,8 +177,13 @@ export async function getCommissionerWaiverOversight(input: {
   platform: string
   role: 'commissioner' | 'co_commissioner'
   now?: Date
+  /** The reader's language for the panel's reasons, labels and run times; default English. */
+  language?: string
 }): Promise<WaiverOversight> {
   const { leagueId, role } = input
+  const language = input.language ?? 'en'
+  const L = pickLanguage(language)
+  const A_MANAGER = L('A manager', 'Un mánager')
   const now = input.now ?? new Date()
   const platform = String(input.platform ?? '').toLowerCase()
 
@@ -188,8 +228,14 @@ export async function getCommissionerWaiverOversight(input: {
     return {
       available: false,
       reason: imported
-        ? `This league's waivers run on ${platform.charAt(0).toUpperCase()}${platform.slice(1)}. Bids and claim results aren't shared with AllFantasy, so there is nothing to oversee here — manage them on the platform.`
-        : 'No waiver settings or runs yet. Once the first run processes, budgets and results appear here.',
+        ? L(
+            `This league's waivers run on ${platform.charAt(0).toUpperCase()}${platform.slice(1)}. Bids and claim results aren't shared with AllFantasy, so there is nothing to oversee here — manage them on the platform.`,
+            `Los reclamos de esta liga se procesan en ${platform.charAt(0).toUpperCase()}${platform.slice(1)}. Las ofertas y los resultados de los reclamos no se comparten con AllFantasy, así que aquí no hay nada que supervisar: gestiónalos en la plataforma.`,
+          )
+        : L(
+            'No waiver settings or runs yet. Once the first run processes, budgets and results appear here.',
+            'Aún no hay configuración ni procesamientos de reclamos. Cuando se procese el primero, aquí aparecerán los presupuestos y los resultados.',
+          ),
     }
   }
 
@@ -215,21 +261,21 @@ export async function getCommissionerWaiverOversight(input: {
   const teamName = new Map(teams.map((t) => [t.externalId, t.ownerName?.trim() || t.teamName?.trim() || '']))
   const userName = new Map(users.map((u) => [u.id, u.displayName?.trim() || (u.username ? `@${u.username}` : '')]))
   const handleByRoster = new Map(
-    rosters.map((r) => [r.id, teamName.get(r.platformUserId) || userName.get(r.platformUserId) || 'A manager']),
+    rosters.map((r) => [r.id, teamName.get(r.platformUserId) || userName.get(r.platformUserId) || A_MANAGER]),
   )
 
   let budgets: WaiverBudgetRow[] = []
   let budgetsReason: string | null = null
   if (waiverType !== 'faab') {
-    budgetsReason = 'This league does not use FAAB, so there are no budgets to track.'
+    budgetsReason = L('This league does not use FAAB, so there are no budgets to track.', 'Esta liga no usa FAAB, así que no hay presupuestos que seguir.')
   } else if (faabBudget == null || faabBudget <= 0) {
-    budgetsReason = 'No season FAAB budget is set for this league.'
+    budgetsReason = L('No season FAAB budget is set for this league.', 'Esta liga no tiene un presupuesto FAAB de temporada.')
   } else {
     budgets = rosters
       .filter((r) => typeof r.faabRemaining === 'number')
       .map((r) => {
         const remaining = Math.max(0, r.faabRemaining as number)
-        const handle = handleByRoster.get(r.id) ?? 'A manager'
+        const handle = handleByRoster.get(r.id) ?? A_MANAGER
         return {
           rosterId: r.id,
           handle,
@@ -241,7 +287,7 @@ export async function getCommissionerWaiverOversight(input: {
         }
       })
       .sort((a, b) => b.remaining - a.remaining)
-    if (budgets.length === 0) budgetsReason = 'No roster has a FAAB balance recorded yet.'
+    if (budgets.length === 0) budgetsReason = L('No roster has a FAAB balance recorded yet.', 'Ninguna plantilla tiene todavía un saldo de FAAB registrado.')
   }
 
   let runOut: Extract<WaiverOversight, { available: true }>['lastRun'] = null
@@ -273,11 +319,11 @@ export async function getCommissionerWaiverOversight(input: {
       runType: lastRun.runType,
       stuck: lastRun.status === 'running' && now.getTime() - lastRun.runAt.getTime() > STUCK_AFTER_MS,
       rows: lastRun.results.map((r) => {
-        const { result, label } = classifyResult(r.resultType, r.metadata, r.claim?.resultMessage ?? null)
+        const { result, label } = classifyResult(r.resultType, r.metadata, r.claim?.resultMessage ?? null, language)
         return {
           id: r.id,
-          player: playerName.get(r.addPlayerId) ?? 'Unrecognised player',
-          manager: handleByRoster.get(r.rosterId) ?? 'A manager',
+          player: playerName.get(r.addPlayerId) ?? L('Unrecognised player', 'Jugador no reconocido'),
+          manager: handleByRoster.get(r.rosterId) ?? A_MANAGER,
           bid: r.claim?.faabBid ?? null,
           result,
           label,
@@ -298,11 +344,11 @@ export async function getCommissionerWaiverOversight(input: {
   return {
     available: true,
     leagueId,
-    waiverTypeLabel: WAIVER_TYPE_LABEL[waiverType] ?? (waiverType || 'Waivers'),
+    waiverTypeLabel: (language === 'es' ? WAIVER_TYPE_LABEL_ES : WAIVER_TYPE_LABEL)[waiverType] ?? (waiverType || L('Waivers', 'Agentes libres')),
     faabBudget,
     budgets,
     budgetsReason,
-    nextRun: next ? formatRunSlot(next) : null,
+    nextRun: next ? formatRunSlot(next, language) : null,
     lastRun: runOut,
     pendingCount,
     canRunNow: role === 'commissioner',

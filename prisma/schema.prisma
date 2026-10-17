@@ -67,6 +67,13 @@ model PlayerValueSnapshot {
 
   capturedAt DateTime @default(now())
 
+  /// Market axes and observation time, added by 20260909130000_decision_os_market_observations.
+  /// Historic rows are NULL — their axes were never recorded. Modelled so that `migrate dev`
+  /// does not propose dropping live columns (see __tests__/prisma/migration-tables-have-models).
+  marketNumTeams Int?
+  marketPpr      Float?
+  observedAt     DateTime? @db.Timestamptz(3)
+
   @@unique([sleeperId, source, format, qbFormat, capturedAt])
   @@index([sleeperId, capturedAt])
   @@index([source, capturedAt])
@@ -1865,6 +1872,24 @@ model PlayerFollow {
   @@map("player_follows")
 }
 
+/// Follow a real-world team (owner's call, 2026-10-03): news and injury alerts for the team and its
+/// players, not the whole league. Keyed on the canonical abbreviation from `sports_core_teams`; news
+/// strings are mapped onto it by lib/follows/teamResolver. Read and written by lib/follows/teamFollows.
+model TeamFollow {
+  id        String   @id
+  userId    String   @map("user_id")
+  sport     String   @db.VarChar(16)
+  /// Canonical abbreviation (sports_core_teams.abbreviation), e.g. "GB", "LSU".
+  teamAbbr  String   @map("team_abbr") @db.VarChar(16)
+  /// Display name at follow time, so a list renders without a join.
+  teamName  String   @map("team_name")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([userId, sport, teamAbbr], map: "team_follows_user_id_sport_team_abbr_key")
+  @@index([sport, teamAbbr], map: "team_follows_sport_team_abbr_idx")
+  @@map("team_follows")
+}
+
 model AIUserFeedback {
   id            String   @id @default(uuid())
   userId        String
@@ -2170,7 +2195,7 @@ model YahooConnection {
   /// stores can ever be written in production; this one was demoted rather than made
   /// to hold a second copy of a token. Applied to production 2026-09-04 and recorded
   /// in `_prisma_migrations` at 16:22:59Z — SQL in
-  /// `prisma/migrations-pending/20260902020000_yahoo_connection_identity`.
+  /// `prisma/migrations/20260902020000_yahoo_connection_identity`.
   accessToken    String?
   refreshToken   String?
   tokenExpiresAt DateTime?
@@ -2453,6 +2478,18 @@ model TradeAnalysisSnapshot {
   @@index([sleeperUsername, createdAt])
   @@index([expiresAt])
   @@map("trade_analysis_snapshots")
+}
+
+model GenericTradeComparison {
+  id        String   @id @default(cuid())
+  userId    String
+  sourceId  String
+  snapshot  Json
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([userId, sourceId])
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("generic_trade_comparisons")
 }
 
 model ShareReward {
@@ -4006,6 +4043,8 @@ model AppUser {
   householdExceptionsAsA                   HouseholdException[]                   @relation("HouseholdExceptionUserA")
   householdExceptionsAsB                   HouseholdException[]                   @relation("HouseholdExceptionUserB")
   deletedLeagueTombstones                  DeletedLeagueTombstone[]
+  legalAcceptances                         LegalAcceptance[]
+  coreBracketPicks                         CoreBracketPick[]
 
   @@map("app_users")
 }
@@ -6281,6 +6320,14 @@ model League {
   createdAt                             DateTime                               @default(now())
   updatedAt                             DateTime                               @updatedAt
   leagueVariant                         String?                                @db.VarChar(32)
+  survivorGuillotineLeague               SurvivorGuillotineLeague?
+  survivorGuillotinePowers               SurvivorGuillotinePower[]
+  survivorGuillotineChops                SurvivorGuillotineChop[]
+  survivorGuillotineCaptainVotes         SurvivorGuillotineCaptainVote[]
+  survivorGuillotineChoiceVotes          SurvivorGuillotineChoiceVote[]
+  survivorGuillotineTribeChoices         SurvivorGuillotineTribeChoice[]
+  survivorGuillotineDailyLineups         SurvivorGuillotineDailyLineup[]
+  survivorGuillotineAuctionBids          SurvivorGuillotineAuctionBid[]
   importBatchId                         String?                                @db.VarChar(64)
   importedAt                            DateTime?
   /// League logo (AllFantasy commissioner upload; separate from imported avatarUrl when set).
@@ -6476,6 +6523,7 @@ model League {
   devyRights                            DevyRights[]
   discordLeagueChannels                 DiscordLeagueChannel[]
   draftPickAuditLogs                    DraftPickAuditLog[]
+  commissionerNetworkMembers            CommissionerNetworkMember[]
   draftIntroViews                       DraftIntroView[]
   draftRecaps                           DraftRecap[]
   /// Every draft this league has run, oldest to newest. Was `DraftSession?` (one-to-one) until
@@ -11970,7 +12018,7 @@ model StatIngestionJob {
 /// Player Trend Detection Engine: platform-wide trend metrics per player/sport
 model PlayerMetaTrend {
   id                 String   @id @default(cuid())
-  playerId           String   @db.VarChar(32)
+  playerId           String   @db.VarChar(128)
   sport              String   @db.VarChar(12)
   trendScore         Float    @default(0)
   addRate            Float    @default(0)
@@ -11994,7 +12042,7 @@ model PlayerMetaTrend {
 /// Raw trend signal events (waiver add/drop, trade, draft, lineup start)
 model TrendSignalEvent {
   id         String   @id @default(cuid())
-  playerId   String   @db.VarChar(32)
+  playerId   String   @db.VarChar(128)
   sport      String   @db.VarChar(12)
   signalType String   @db.VarChar(24)
   value      Float    @default(1)
@@ -13920,7 +13968,7 @@ model DraftFact {
   ///
   /// ⚠ DECLARED HERE BECAUSE THE COLUMN IS ALREADY LIVE, NOT TO CREATE IT. Applied by
   /// hand to production and recorded in `_prisma_migrations` on 2026-09-05 01:41:00Z;
-  /// the SQL is `prisma/migrations-pending/20260902000000_draft_fact_metadata`. Until
+  /// the SQL is `prisma/migrations/20260902000000_draft_fact_metadata`. Until
   /// this line existed, `schema.prisma` and production disagreed — harmless for
   /// `migrate deploy`, which does not drift-check, but `prisma migrate dev` or
   /// `db push` reads that disagreement as drift and offers to DROP the column.
@@ -15539,6 +15587,153 @@ model GuillotineSeason {
 
   @@index([leagueId])
   @@map("guillotine_seasons")
+}
+
+/// Native Survivor Guillotine season. Public competition state is separate from sealed powers.
+model SurvivorGuillotineLeague {
+  id             String   @id @default(cuid())
+  leagueId       String   @unique
+  config         Json
+  tribes         Json     @default("[]")
+  tribeDraftState Json    @default("{}")
+  periodState    Json     @default("{}")
+  scoreHistory   Json     @default("{}")
+  periodHistory  Json     @default("{}")
+  rewardPeriods  Json     @default("[]")
+  periodCalendar Json     @default("{}")
+  captainElectionDeadlineAt DateTime?
+  currentPeriod  Int      @default(0)
+  status         String   @default("setup")
+  revision       Int      @default(1)
+  lastCorrectionCheckAt DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  league         League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  @@map("survivor_guillotine_leagues")
+}
+
+/// Sealed owner and type never travel through the public season endpoint.
+model SurvivorGuillotinePower {
+  id                 String    @id @default(cuid())
+  leagueId           String
+  kind               String
+  binding            String
+  playerId           String?
+  ownerUserId        String?
+  awardPeriod        Int?
+  activationPeriod   Int?
+  expiresAfterPeriod Int
+  status             String    @default("held")
+  source             String    @default("draft")
+  targetRosterId     String?
+  revealedAt         DateTime?
+  activatedAt        DateTime?
+  createdAt          DateTime  @default(now())
+  league             League    @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  @@index([leagueId, ownerUserId, status])
+  @@index([leagueId, playerId, status])
+  @@unique([leagueId, awardPeriod])
+  @@map("survivor_guillotine_powers")
+}
+
+model SurvivorGuillotineCaptainVote {
+  id                String   @id @default(cuid())
+  leagueId          String
+  period            Int
+  tribeId           String
+  voterRosterId     String
+  candidateRosterId String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  league            League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  @@unique([leagueId, period, voterRosterId])
+  @@index([leagueId, period, tribeId])
+  @@map("survivor_guillotine_captain_votes")
+}
+
+model SurvivorGuillotineChoiceVote {
+  id            String   @id @default(cuid())
+  leagueId      String
+  period        Int
+  slotKey       String
+  tribeId       String
+  voterRosterId String
+  choice        Json
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  league        League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  @@unique([leagueId, period, slotKey, voterRosterId])
+  @@index([leagueId, period, slotKey])
+  @@map("survivor_guillotine_choice_votes")
+}
+
+model SurvivorGuillotineTribeChoice {
+  id        String   @id @default(cuid())
+  leagueId  String
+  rosterId  String
+  tribeId   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  league    League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  @@unique([leagueId, rosterId])
+  @@index([leagueId, tribeId])
+  @@map("survivor_guillotine_tribe_choices")
+}
+
+model SurvivorGuillotineDailyLineup {
+  id        String   @id @default(cuid())
+  leagueId  String
+  period    Int
+  rosterId  String
+  gameDay   DateTime @db.Date
+  playerIds Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  league    League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  @@unique([leagueId, period, rosterId, gameDay])
+  @@index([leagueId, period, gameDay])
+  @@map("survivor_guillotine_daily_lineups")
+}
+
+model SurvivorGuillotineAuctionBid {
+  id        String   @id @default(cuid())
+  leagueId  String
+  period    Int
+  rosterId  String
+  amount    Int
+  status    String   @default("sealed")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  league    League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  @@unique([leagueId, period, rosterId])
+  @@index([leagueId, period, status])
+  @@map("survivor_guillotine_auction_bids")
+}
+
+/// Durable chop attempts; reversed rows remain for audit, while active rows drive eligibility.
+model SurvivorGuillotineChop {
+  id          String   @id @default(cuid())
+  leagueId    String
+  period      Int
+  rosterId    String
+  score       Float
+  tribeId     String?
+  releaseSnapshot Json?
+  reversedAt  DateTime?
+  reversalReason String?
+  createdAt   DateTime @default(now())
+  league      League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  @@index([leagueId, period, rosterId])
+  @@index([leagueId, period])
+  @@map("survivor_guillotine_chops")
 }
 
 model GuillotineElimination {
@@ -17941,6 +18136,52 @@ model DecisionOsBehavioralSnapshot {
   @@map("decision_os_behavioral_snapshot")
 }
 
+/// Owner-scoped Decision OS strategy state, one row per (user, league, season). Created by
+/// 20260909140000_decision_os_strategy_state, which was applied to production on 2026-09-09 but
+/// only committed on 2026-10-01 — modelled then from that migration so `migrate dev` stops
+/// proposing to drop a live table.
+///
+/// ⚠ The migration also carries CHECK constraints (`active` in balanced/win-now/rebuild,
+/// `revision` >= 0, `lastObservedWeek` >= 1) and ENABLES ROW LEVEL SECURITY with no policies.
+/// Prisma cannot express either; they live in SQL only.
+model DecisionStrategyState {
+  id               String   @id
+  userId           String
+  leagueId         String
+  season           Int
+  active           String   @default("balanced") @db.VarChar(16)
+  revision         Int      @default(0)
+  pending          Json?
+  lastObservedWeek Int?
+  createdAt        DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([userId, leagueId, season])
+  @@map("decision_strategy_states")
+}
+
+/// Append-only ledger of DecisionStrategyState changes, one row per revision. Same migration,
+/// same CHECK (`action` in observe/confirm) and RLS caveat as above. `stateId` deliberately
+/// carries NO relation: production has no FK on it, and declaring one would make the schema
+/// propose adding it.
+model DecisionStrategyEvent {
+  id         String   @id
+  stateId    String
+  userId     String
+  leagueId   String
+  season     Int
+  revision   Int
+  action     String   @db.VarChar(16)
+  evidenceId String?
+  before     Json
+  after      Json
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+
+  @@unique([stateId, revision])
+  @@index([userId, leagueId, season, createdAt])
+  @@map("decision_strategy_events")
+}
+
 /// Fantasy OS Suite — Phase OS-A1. Decision OS's provider-agnostic BELIEF about whether real money
 /// is involved in a league, and how confident that belief is. Deliberately separate from
 /// `LeagueFinance` (AF-native Stripe/PayPal treasury processing for leagues that opt into AllFantasy's
@@ -18594,6 +18835,35 @@ model RecentPlayerSearch {
   @@map("recent_player_searches")
 }
 
+/// One commissioner-owned group of leagues, independent of player franchises.
+model CommissionerNetwork {
+  id          String                      @id @default(cuid())
+  ownerUserId String
+  name        String
+  createdAt   DateTime                    @default(now())
+  updatedAt   DateTime                    @updatedAt
+  members     CommissionerNetworkMember[]
+
+  @@index([ownerUserId])
+  @@map("commissioner_networks")
+}
+
+/// An owned league in a commissioner network. The owner is rechecked at read and write time.
+model CommissionerNetworkMember {
+  id        String              @id @default(cuid())
+  networkId String
+  leagueId  String
+  role      String              @default("member")
+  label     String?
+  createdAt DateTime            @default(now())
+  network   CommissionerNetwork @relation(fields: [networkId], references: [id], onDelete: Cascade)
+  league    League              @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  @@unique([networkId, leagueId])
+  @@unique([leagueId])
+  @@map("commissioner_network_members")
+}
+
 /// Commissioner Workspace's persisted task store — see
 /// prisma/migrations/20260908120000_commissioner_workspace_tasks for why it exists
 /// and what each column means. The short version: Workspace deliberately shipped
@@ -18911,4 +19181,133 @@ model ChimmyRequestReceipt {
   @@index([userId, createdAt], map: "chimmy_receipts_user_created")
   @@index([status, expiresAt], map: "chimmy_receipts_recovery")
   @@map("chimmy_request_receipts")
+}
+
+/// A manager's Class rating — the ONE sanctioned derivation of manager quality from
+/// `dw_matchup_facts` (ADR F2.10a). All-play Glicko-2, back-tested 2026-10-01.
+///
+/// ⚠ THE SUBJECT IS A PLATFORM PERSON, NOT AN AF ACCOUNT. `subjectKey` is
+/// `${platform}:${LeagueTeam.platformUserId}` — every league-mate is rated, and only a
+/// few are AllFantasy users (32 of 2,455 at back-test). `userId` is filled when an AF
+/// account has claimed a team held by this person, and is the only link to one.
+///
+/// ⚠ DERIVED AND REBUILDABLE. The writer replays the whole matchup history per
+/// `modelVersion`, so a row is never hand-edited; changing the math means a new
+/// `modelVersion`, never an in-place rewrite of an old one.
+model ManagerRating {
+  id                String    @id @default(cuid())
+  subjectKey        String    @db.VarChar(160)
+  platform          String    @db.VarChar(16)
+  platformUserId    String    @db.VarChar(128)
+  /// The AF account that has claimed a team held by this person, when one has.
+  userId            String?   @db.VarChar(64)
+  sport             String    @default("NFL") @db.VarChar(12)
+  modelVersion      String    @db.VarChar(32)
+  /// Glicko-2 on the 1500 display scale.
+  rating            Float
+  /// Rating deviation — the uncertainty. Always shown beside the rating (ADR F2.10a).
+  rd                Float
+  volatility        Float
+  /// Rated league-weeks (one all-play observation each).
+  games             Int
+  /// `rd` at or under the model's establishment threshold. Only established
+  /// ratings define the Class percentiles, and only they are gated by division.
+  established       Boolean   @default(false)
+  /// Share of established ratings below this one, 0–1. Null while provisional.
+  percentile        Float?
+  /// Class 1–25 by percentile. Null while provisional.
+  classLevel        Int?
+  /// Matchmaking division 1–5 (Classes 1–5, 6–10 …). Null while provisional.
+  division          Int?
+  /// Last rating period folded in, as season * 100 + week.
+  lastPeriod        Int?
+  computedAt        DateTime
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@unique([subjectKey, sport, modelVersion])
+  @@index([userId, sport, modelVersion])
+  @@index([sport, modelVersion, established, rating])
+  @@map("manager_ratings")
+}
+
+/// One league-week in a rated person's game log: what they scored, how they did
+/// against the whole league (all-play) and their head-to-head opponent, and what it
+/// did to their rating.
+///
+/// ⚠ A RATING PERIOD IS A WEEK, NOT A GAME. Glicko-2 folds every league a person
+/// played in that week into one update, so `ratingBefore`/`ratingAfter` are the
+/// week's, shared by all of that week's rows. `ratingDelta` is THIS league's share
+/// of the change and the shares sum to the week's move — that is what lets the game
+/// log say "+9 from League A, −3 from League B".
+model ManagerRatingEvent {
+  id                String    @id @default(cuid())
+  subjectKey        String    @db.VarChar(160)
+  sport             String    @default("NFL") @db.VarChar(12)
+  modelVersion      String    @db.VarChar(32)
+  /// Our `League.id` — the canonical row kept when one platform league was imported
+  /// under several AF rows.
+  leagueId          String    @db.VarChar(64)
+  season            Int
+  week              Int
+  pointsFor         Float
+  /// Teams beaten / tied this week across the whole league, and how many there were.
+  allPlayWins       Float
+  allPlayGames      Int
+  /// The head-to-head game, when the week had one for this person.
+  opponentKey       String?   @db.VarChar(160)
+  pointsAgainst     Float?
+  /// 'W' | 'L' | 'T'; null when there was no head-to-head game.
+  result            String?   @db.VarChar(1)
+  ratingBefore      Float
+  ratingAfter       Float
+  rdAfter           Float
+  ratingDelta       Float
+  createdAt         DateTime  @default(now())
+
+  @@unique([subjectKey, sport, modelVersion, leagueId, season, week])
+  @@index([subjectKey, sport, modelVersion, season, week])
+  @@index([leagueId, season, week])
+  @@map("manager_rating_events")
+}
+
+/// One row per document a user agreed to, at the version they saw (lib/legal/legalVersions).
+/// Append-only: re-accepting a revised document adds a row, it never rewrites the old one —
+/// the history of what was agreed, when, is the point. Written by lib/legal/recordLegalAcceptance.
+model LegalAcceptance {
+  id              String   @id @default(uuid())
+  userId          String
+  /// "terms" | "disclaimer" | "privacy"
+  document        String   @db.VarChar(32)
+  /// The page's last-updated stamp at the moment of acceptance, e.g. "September 2026".
+  documentVersion String   @db.VarChar(64)
+  /// Where it was accepted: "signup" | "age_prompt"
+  source          String   @db.VarChar(32)
+  acceptedAt      DateTime @default(now())
+  user            AppUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, document])
+  @@map("legal_acceptances")
+}
+
+/// /core Bracket Challenge picks (components/core-app/screens/BracketChallenge.tsx): one row per
+/// account per sport per season — the champion and the final's series length. Written and read only
+/// by /api/core/bracket-picks (lib/core-app/bracketPicksStore). NOT a pool entry: pool picks live in
+/// PlayoffBracketEntry / PlayoffBracketPick, keyed by entry + series, with no series-length column.
+model CoreBracketPick {
+  id             String   @id @default(uuid())
+  userId         String
+  /// A SportKey from lib/brackets/sportShell, e.g. "mlb".
+  sport          String   @db.VarChar(16)
+  seasonYear     Int
+  /// SportsTeam.id of the picked champion; null while only a series length is picked.
+  championTeamId String?
+  /// Games in the final series (one of the shell's finalLength options); null when not picked.
+  finalLength    Int?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  user           AppUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, sport, seasonYear])
+  @@map("core_bracket_picks")
 }

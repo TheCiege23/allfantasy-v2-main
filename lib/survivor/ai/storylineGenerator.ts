@@ -19,7 +19,7 @@ export async function generateEpisodeRecap(
   if (typeof gate !== 'string') return gate
   return {
     title: `AllFantasy Survivor — Week ${week}`,
-    body: 'Episode recap will be generated from tribe results, challenges, and Tribal Council once events are logged.',
+    body: 'Episode recap will be generated from tribe results, challenges, and Elimination Council once events are logged.',
     week,
   }
 }

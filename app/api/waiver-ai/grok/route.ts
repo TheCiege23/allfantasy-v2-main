@@ -394,7 +394,7 @@ export async function POST(req: NextRequest) {
       sport: resolvedSportKey,
       format: resolvedIsDynasty ? 'dynasty' : 'redraft',
     })
-    const systemPrompt = `You are the #1 Waiver Wire AI for 2026 fantasy ${sportLabel}.
+    const systemPrompt = `You are the #1 Waiver Wire AI for fantasy ${sportLabel}.
 ${playerValuesCtx ? `${playerValuesCtx}\n\nUse these player values when making recommendations, comparisons, and rankings. Prefer these values over your general training knowledge when they conflict.\n\n` : ''}
 Analyze the user's roster, contention window, FAAB budget, and league context to surface the highest-impact waiver targets.
 

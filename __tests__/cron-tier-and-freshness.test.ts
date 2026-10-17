@@ -11,6 +11,7 @@ import {
   SLOW_TIER_EXCLUSIONS,
 } from '../scripts/cron-tier.mjs'
 import {
+  allowanceFor,
   classifyFreshness,
   HEALTHY_STATES,
   heartbeatState,
@@ -258,6 +259,43 @@ describe('cron-slow-tier.yml stays in sync with vercel.json', () => {
  * because its only four rows were retired unsent by operator decision. Same counts, opposite
  * causes.
  */
+describe('allowanceFor — a probe may only RAISE its own allowance', () => {
+  it('derives it from the cadence when the probe declares nothing', () => {
+    expect(allowanceFor(15 * MINUTE)).toBe(45 * MINUTE)
+    expect(allowanceFor(6 * HOUR, { table: 'x' })).toBe(12 * HOUR)
+    expect(allowanceFor(2 * MINUTE)).toBe(20 * MINUTE) // the global floor still holds
+  })
+
+  it('uses minAllowanceMs when it is larger, and ignores it when it is smaller', () => {
+    expect(allowanceFor(15 * MINUTE, { minAllowanceMs: 3 * HOUR })).toBe(3 * HOUR)
+    expect(allowanceFor(DAY, { minAllowanceMs: 3 * HOUR })).toBe(2 * DAY)
+  })
+
+  it('import-news tolerates its measured early-morning quiet period (2.0h max) but not a stalled feed', () => {
+    const probe = PROBES['/api/cron/import-news']
+    expect(probe).toMatchObject({ table: 'player_news', column: 'created_at' })
+    expect(probe).not.toHaveProperty('heartbeat') // must stay a TABLE probe
+    const allow = allowanceFor(maxGapMs('*/15 * * * *'), probe)
+    expect(classifyFreshness({ rowCount: 1, timestampCount: 1, ageMs: 2 * HOUR, allowanceMs: allow })).toBe('OK')
+    expect(classifyFreshness({ rowCount: 1, timestampCount: 1, ageMs: 3.5 * HOUR, allowanceMs: allow })).toBe('STALE')
+  })
+
+  it('the live check passes the probe in, so a declared minimum is actually applied', () => {
+    // The probe loop talks to Postgres and is not unit-tested, so pin its one line here. Without
+    // the probe argument, minAllowanceMs is declared, tested above, and never used.
+    const src = readFileSync(join(__dirname, '..', 'scripts', 'cron-freshness-check.mjs'), 'utf8')
+    expect(src).toContain('const allowanceMs = allowanceFor(gap, probe)')
+    expect(src.match(/\* toleranceForGap\(/g) ?? []).toHaveLength(1) // only inside allowanceFor
+  })
+
+  it('no other probe declares minAllowanceMs without it being noticed here', () => {
+    const raised = Object.entries(PROBES)
+      .filter(([, p]) => (p as { minAllowanceMs?: number }).minAllowanceMs != null)
+      .map(([path]) => path)
+    expect(raised).toEqual(['/api/cron/import-news'])
+  })
+})
+
 describe('classifyFreshness', () => {
   const ALLOW = 60_000
 

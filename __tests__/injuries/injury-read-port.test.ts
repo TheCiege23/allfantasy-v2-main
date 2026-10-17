@@ -20,6 +20,7 @@ import {
   listInjuryFacts,
   resolveInjuryFacts,
 } from '@/lib/injuries/injuryReadPort'
+import { WEEKLY_SPORT_INJURY_STALE_AFTER_HOURS } from '@/lib/injuries/injuryRecency'
 
 const NOW = new Date('2026-08-10T12:00:00Z')
 const hoursAgo = (h: number) => new Date(NOW.getTime() - h * 3_600_000)
@@ -76,7 +77,7 @@ describe('resolveInjuryFacts', () => {
   })
 
   it('marks a stale row as stale instead of hiding or silently serving it', async () => {
-    mocks.findMany.mockResolvedValue([row({ fetchedAt: hoursAgo(INJURY_STALE_AFTER_HOURS + 5) })])
+    mocks.findMany.mockResolvedValue([row({ fetchedAt: hoursAgo(WEEKLY_SPORT_INJURY_STALE_AFTER_HOURS + 5) })])
     const res = await resolveInjuryFacts({ sport: 'NFL', players: [{ name: 'Ty Johnson' }], now: NOW })
     const fact = res.byPlayer.get('ty johnson')
     // Still returned — the caller decides how to caveat — but flagged, because
@@ -84,6 +85,21 @@ describe('resolveInjuryFacts', () => {
     expect(fact).toBeDefined()
     expect(fact?.stale).toBe(true)
     expect(res.feedStale).toBe(true)
+  })
+
+  /*
+   * 🛑 NFL REPORTS ONCE PER GAME WEEK (2026-10-11). A Friday "Out" was flagged stale by Sunday under
+   * the 36h horizon, and a stale "Out" is read as last week's news — Chimmy counted those starters as
+   * playing on game day. NFL/NCAAF use a week; daily sports keep 36h.
+   */
+  it("a Friday NFL 'Out' is current on Sunday; the same age is stale for a daily sport", async () => {
+    const friday = hoursAgo(45)
+    mocks.findMany.mockResolvedValue([row({ status: 'Out', date: friday, fetchedAt: hoursAgo(0.5) })])
+    const nfl = await resolveInjuryFacts({ sport: 'NFL', players: [{ name: 'Ty Johnson' }], now: NOW })
+    expect(nfl.byPlayer.get('ty johnson')?.stale).toBe(false)
+    const nba = await resolveInjuryFacts({ sport: 'NBA', players: [{ name: 'Ty Johnson' }], now: NOW })
+    expect(nba.byPlayer.get('ty johnson')?.stale).toBe(true)
+    expect(INJURY_STALE_AFTER_HOURS).toBeLessThan(45)
   })
 
   it('REFUSES an ambiguous name rather than binding the wrong athlete', async () => {
@@ -110,6 +126,22 @@ describe('resolveInjuryFacts', () => {
       now: NOW,
     })
     expect(res.byPlayer.get('josh allen')?.status).toBe('Out')
+    expect(res.ambiguous).toEqual([])
+  })
+
+  /*
+   * 🛑 THE FEEDS WRITE FULL TEAM NAMES AND ROSTERS SAY CODES (2026-10-11). Compared verbatim, "MIN"
+   * never matched "Minnesota Vikings", so team narrowing never fired against live rows and every
+   * shared name was refused even when the caller knew the team — the Vikings WR Justin Jefferson's
+   * Questionable went missing beside a Browns LB's Active. NFL teams are now folded on both sides.
+   */
+  it('splits a collision when the feed writes the full team name and the caller a code', async () => {
+    mocks.findMany.mockResolvedValue([
+      row({ playerName: 'Justin Jefferson', team: 'Cleveland Browns', position: 'LB', status: 'Active' }),
+      row({ playerName: 'Justin Jefferson', team: 'Minnesota Vikings', status: 'Questionable', date: hoursAgo(2) }),
+    ])
+    const res = await resolveInjuryFacts({ sport: 'NFL', players: [{ name: 'Justin Jefferson', team: 'MIN' }], now: NOW })
+    expect(res.byPlayer.get('justin jefferson')?.status).toBe('Questionable')
     expect(res.ambiguous).toEqual([])
   })
 
@@ -171,7 +203,7 @@ describe('listInjuryFacts (Slice 18 follow-on — list-shaped surfaces)', () => 
   })
 
   it('returns stale rows FLAGGED, never hidden, and reports feedStale', async () => {
-    mocks.findMany.mockResolvedValue([row({ id: 'a', fetchedAt: hoursAgo(INJURY_STALE_AFTER_HOURS + 10) })])
+    mocks.findMany.mockResolvedValue([row({ id: 'a', fetchedAt: hoursAgo(WEEKLY_SPORT_INJURY_STALE_AFTER_HOURS + 10) })])
     const res = await listInjuryFacts({ sport: 'NFL', now: NOW })
     expect(res.facts[0]?.stale).toBe(true)
     expect(res.feedStale).toBe(true)

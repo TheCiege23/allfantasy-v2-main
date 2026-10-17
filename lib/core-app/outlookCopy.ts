@@ -28,10 +28,10 @@ export function describeTeamOutlook(team: TeamOutlookInput, weeksRemaining: numb
   if (team.status === 'clinched') return weeksRemaining > 0 ? 'Clinched — playing for seeding' : 'In the field'
   if (team.status === 'eliminated') return 'Eliminated — cannot reach the field'
   if (weeksRemaining === 0) {
-    return team.playoffPct >= 99 ? 'In the field' : 'Season over, missed out'
+    return 'Schedule complete in the model — verify final standings'
   }
-  if (team.playoffPct >= 99) return 'Clinched — playing for seeding'
-  if (team.playoffPct <= 1) return 'Eliminated in all but a rounding error'
+  if (team.playoffPct >= 99) return 'Very likely in — not mathematically clinched'
+  if (team.playoffPct <= 1) return 'Long shot — probability is not elimination'
   if (team.playoffPct >= 85) return `In barring a collapse over the last ${weeksRemaining}`
   if (team.playoffPct >= 60) {
     const need = Math.max(1, Math.ceil(weeksRemaining / 3))

@@ -14,6 +14,7 @@
 import { useEffect, useState } from 'react'
 import type { TradeFinderPayload } from '@/lib/trade-intel/tradeFinderService'
 import { sleeperAvatarThumb, sleeperPlayerHeadshot } from '@/lib/sports-data/headshots'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import './broadcast-deck.css'
 
 type ApiResponse =
@@ -36,6 +37,7 @@ function PlayerChip({
   adp: number
   marketValue?: number | null
 }) {
+  const { t } = useOptionalLanguage()
   const src = sleeperPlayerHeadshot(playerId)
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
@@ -53,7 +55,7 @@ function PlayerChip({
       <span style={{ color: 'var(--bdx-ink-ghost)', fontSize: 11 }}>
         {position ?? ''}
         {team ? ` · ${team}` : ''}
-        {marketValue != null ? ` · val ${marketValue.toLocaleString()}` : ''} · ADP {adp.toFixed(1)}
+        {marketValue != null ? t('decide.finder.val').replace('{{value}}', marketValue.toLocaleString()) : ''} · ADP {adp.toFixed(1)}
       </span>
     </span>
   )
@@ -66,6 +68,7 @@ export function TradeFinder({
   leagueId: string
   onOpenTab: (tabId: string) => void
 }) {
+  const { t } = useOptionalLanguage()
   const [data, setData] = useState<ApiResponse | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -99,11 +102,11 @@ export function TradeFinder({
   return (
     <div data-testid="trade-finder" style={{ marginTop: 18 }}>
       <div className="bdx-kick">
-        <h2 className="bdx-disp">Trade finder</h2>
+        <h2 className="bdx-disp">{t('decide.finder.title')}</h2>
         <span className="bdx-sub">
           {finder
-            ? `${finder.proposals.length} suggestion${finder.proposals.length === 1 ? '' : 's'} · both sides must gain`
-            : 'offers built from real rosters + your format’s market'}
+            ? t(finder.proposals.length === 1 ? 'decide.finder.countOne' : 'decide.finder.countMany').replace('{{count}}', String(finder.proposals.length))
+            : t('decide.finder.tagline')}
         </span>
       </div>
 
@@ -111,29 +114,26 @@ export function TradeFinder({
         <div className="bdx-skel" />
       ) : data && data.supported && 'linked' in data && data.linked === false ? (
         <div className="bdx-empty">
-          <div className="t">Link your Sleeper account to get trade suggestions</div>
-          <div className="m">
-            The finder matches YOUR roster&apos;s gaps against every other manager&apos;s tradeable
-            depth — it needs to know which team is yours first.
-          </div>
+          <div className="t">{t('decide.finder.linkTitle')}</div>
+          <div className="m">{t('decide.finder.linkMsg')}</div>
         </div>
       ) : !finder ? (
         <div className="bdx-empty">
-          <div className="t">Trade finder temporarily unavailable</div>
-          <div className="m">The roster or market feed didn&apos;t answer — try again shortly.</div>
+          <div className="t">{t('decide.finder.unavailableTitle')}</div>
+          <div className="m">{t('decide.finder.unavailableMsg')}</div>
         </div>
       ) : !finder.viewer.inLeague ? (
         <div className="bdx-empty">
-          <div className="t">Your Sleeper account isn&apos;t on a roster in this league</div>
-          <div className="m">Suggestions need a roster to build from.</div>
+          <div className="t">{t('decide.finder.notInLeagueTitle')}</div>
+          <div className="m">{t('decide.finder.notInLeagueMsg')}</div>
         </div>
       ) : finder.proposals.length === 0 ? (
         <div className="bdx-empty">
-          <div className="t">No fair complementary trades found right now</div>
+          <div className="t">{t('decide.finder.noneTitle')}</div>
           <div className="m">
             {finder.viewer.openSlots.length > 0 || finder.viewer.weakSlots.length > 0
-              ? `You have needs (${[...finder.viewer.openSlots, ...finder.viewer.weakSlots.map((w) => w.slot)].join(', ')}), but no league-mate currently has matching tradeable depth inside the fairness band — the engine won't invent a lopsided offer to fill the space.`
-              : 'Every starter slot on your roster is covered by market-relevant players — nothing needs forcing.'}
+              ? t('decide.finder.needsMsg').replace('{{needs}}', [...finder.viewer.openSlots, ...finder.viewer.weakSlots.map((w) => w.slot)].join(', '))
+              : t('decide.finder.coveredMsg')}
           </div>
         </div>
       ) : (
@@ -144,7 +144,7 @@ export function TradeFinder({
               <div className="bdx-card c-info" style={{ marginBottom: 10 }} key={`${p.partner.ownerId}-${p.get.playerId}-${i}`}>
                 <div className="bdx-head">
                   <span className="bdx-kind">
-                    Offer idea · to{' '}
+                    {t('decide.finder.offerTo')}{' '}
                     {partnerAvatar ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
@@ -156,18 +156,18 @@ export function TradeFinder({
                     {p.partner.name}
                   </span>
                   {p.partner.completedTrades > 0 ? (
-                    <span className="bdx-sev ok">↔ {p.partner.completedTrades} career trades</span>
+                    <span className="bdx-sev ok">{t('decide.finder.careerTrades').replace('{{count}}', String(p.partner.completedTrades))}</span>
                   ) : null}
                   <span className="bdx-when">
                     {p.valueGapPct != null
-                      ? `value gap ${p.valueGapPct.toFixed(1)}%`
-                      : `ADP gap ${p.adpGap.toFixed(1)}`}
+                      ? t('decide.finder.valueGap').replace('{{pct}}', p.valueGapPct.toFixed(1))
+                      : t('decide.finder.adpGap').replace('{{gap}}', p.adpGap.toFixed(1))}
                   </span>
                 </div>
                 <div className="bdx-line" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                  <span style={{ color: 'var(--bdx-ink-faint)' }}>You send</span>
+                  <span style={{ color: 'var(--bdx-ink-faint)' }}>{t('decide.youSend')}</span>
                   <PlayerChip {...p.give} />
-                  <span style={{ color: 'var(--bdx-ink-faint)' }}>⇄ you get</span>
+                  <span style={{ color: 'var(--bdx-ink-faint)' }}>{t('decide.finder.youGet')}</span>
                   <PlayerChip {...p.get} />
                 </div>
                 <ul className="bdx-why" style={{ marginTop: 8 }}>
@@ -177,7 +177,7 @@ export function TradeFinder({
                 </ul>
                 <div className="bdx-acts">
                   <button type="button" className="bdx-btn pri" onClick={() => onOpenTab('trades')}>
-                    Build it in Trade Center
+                    {t('decide.finder.build')}
                   </button>
                 </div>
               </div>
@@ -185,7 +185,7 @@ export function TradeFinder({
           })}
           <div className="bdx-empty" style={{ marginTop: 4 }}>
             <div className="m">
-              <b>Method:</b> {finder.method}
+              <b>{t('decide.finder.method')}</b> {finder.method}
               {finder.contextNotes.map((n) => (
                 <span key={n}>
                   <br />
@@ -194,7 +194,7 @@ export function TradeFinder({
               ))}
               {finder.missing.length > 0 ? (
                 <>
-                  <br />couldn&apos;t sync: {finder.missing.join(', ')}
+                  <br />{t('decide.finder.couldntSync').replace('{{list}}', finder.missing.join(', '))}
                 </>
               ) : null}
             </div>

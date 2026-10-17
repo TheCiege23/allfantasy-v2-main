@@ -20,6 +20,7 @@ import {
   buildNflRedraftLiveScoringContextFromWire,
   type NflRedraftLiveScoringContext,
 } from '@/lib/player-data/nflRedraftLiveScoringContext'
+import { rosterBadgeStatus } from '@/lib/injuries/injuryStatusDisplay'
 
 export type RosterSectionKey = 'starters' | 'bench' | 'ir' | 'taxi' | 'devy'
 
@@ -70,8 +71,17 @@ function enrichOne(p: RosterPlayerMergeable, byId: Map<string, UnifiedPlayerWire
   const gameContext = buildNflRedraftGameContextFromWire(u)
   const liveScoringContext = buildNflRedraftLiveScoringContextFromWire(u)
   const liveGameStatus = liveScoringContext?.gameStatus !== 'unknown' ? liveScoringContext?.gameStatus ?? null : null
+  const providerInjuryLabel =
+    intelligence?.injury.injuryStatus ?? canonical?.injury.designation ?? u.injuryStatus ?? null
   return {
     ...p,
+    /*
+     * The badge follows the unified roster's injury label, not the status frozen into the roster's
+     * stored JSON when it was last saved. A null label from an enriched player means the feed states
+     * no current designation, so the badge is healthy — a weeks-old "IR" in the snapshot must not
+     * outlive the player's return. Players the unified roster did not match keep their stored status.
+     */
+    status: rosterBadgeStatus(providerInjuryLabel),
     name: metadata?.displayName ?? canonical?.displayName ?? p.name,
     team: metadata?.teamAbbr ?? canonical?.teamAbbr ?? p.team,
     position: metadata?.position ?? canonical?.fantasyPosition ?? p.position,
@@ -80,7 +90,7 @@ function enrichOne(p: RosterPlayerMergeable, byId: Map<string, UnifiedPlayerWire
     opponent: gameContext?.isByeWeek ? 'BYE' : gameContext?.opponent.teamAbbr ?? p.opponent,
     gameTime: gameContext?.kickoffTimeIso ?? p.gameTime,
     actual: liveScoringContext?.actualFantasyPoints ?? liveScoringContext?.fantasyPoints ?? p.actual,
-    providerInjuryLabel: intelligence?.injury.injuryStatus ?? canonical?.injury.designation ?? u.injuryStatus ?? null,
+    providerInjuryLabel,
     unifiedProjectedPoints:
       liveScoringContext?.projectedFantasyPoints != null &&
       Number.isFinite(Number(liveScoringContext.projectedFantasyPoints))

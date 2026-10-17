@@ -1,6 +1,7 @@
 import type { IExternalRosterMapper } from '../../mappers/ExternalRosterMapper'
 import type { NormalizedRoster } from '../../types'
 import type { SleeperImportPayload } from './types'
+import { sleeperPointsAgainst } from './SleeperPointsAgainst'
 
 export const SleeperRosterMapper: IExternalRosterMapper<SleeperImportPayload> = {
   map(source) {
@@ -69,7 +70,7 @@ export const SleeperRosterMapper: IExternalRosterMapper<SleeperImportPayload> = 
         losses: roster.settings?.losses ?? 0,
         ties: roster.settings?.ties ?? 0,
         points_for: fpts,
-        points_against: undefined,
+        points_against: sleeperPointsAgainst(roster.settings),
         player_ids: roster.players ?? [],
         starter_ids: roster.starters?.filter((s) => s && s !== '0') ?? [],
         reserve_ids: roster.reserve,

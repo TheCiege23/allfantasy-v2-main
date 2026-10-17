@@ -20,6 +20,7 @@ import {
 import { isAppRouterRedirectError } from '@/lib/next/is-app-router-redirect-error'
 import { resolveBracketPoolRedirectUrl } from '@/lib/league/bracketPoolGuard'
 import { LeagueShellClient } from './LeagueShellClient'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export const dynamic = 'force-dynamic'
 
@@ -55,11 +56,8 @@ export async function generateMetadata(
   }
 }
 
-// LeagueShellClient is imported directly — it owns the dynamic() call inside a client component.
-// This keeps next/dynamic with ssr:false inside a proper 'use client' boundary.
-const _unused = {
-  ssr: false,  // reminder: ssr:false is applied inside LeagueShellClient.tsx
-}
+// LeagueShellClient is the 'use client' boundary; since 925110077 (2026-07-01) it renders LeagueShell
+// directly rather than through next/dynamic with ssr:false, so the shell server-renders.
 
 function firstSearchParam(value: string | string[] | undefined): string | null {
   if (typeof value === 'string') return value
@@ -175,6 +173,7 @@ export default async function LeaguePage(
                     where: { id: leagueId },
                     include: {
                                 teams: { orderBy: { externalId: 'asc' } },
+                                leagueSettings: { select: { draftDateUtc: true } },
                                 rosters: {
                                               select: { platformUserId: true, faabRemaining: true, waiverPriority: true },
                                 },
@@ -260,6 +259,7 @@ export default async function LeaguePage(
 
       let draftDateIso: string | null = null
         const draftDateCandidate =
+                league.leagueSettings?.draftDateUtc?.toISOString() ??
                 leagueSettings.draftDate ??
                 leagueSettings.draft_date ??
                 leagueSettings.draft_at ??
@@ -363,6 +363,12 @@ export default async function LeaguePage(
           }
                       : null
 
+      const draftSetupSession = await prisma.draftSession.findFirst({
+        where: { leagueId },
+        orderBy: CURRENT_DRAFT_SESSION_ORDER,
+        select: { rounds: true, timerSeconds: true },
+      }).catch(() => null)
+
       return (
         <div className="flex min-h-0 flex-1 flex-col" data-league-id={leagueId}>
           <LeagueShellClient
@@ -376,6 +382,7 @@ export default async function LeaguePage(
             userName={session.user.name ?? session.user.email ?? 'Manager'}
             userImage={userImage}
             draftDateIso={draftDateIso}
+            draftSetupSession={draftSetupSession}
             sleeperCommissionerId={sleeperCommissionerId}
             sleeperUsersByPlatformId={sleeperUsersByPlatformId}
             currentSleeperUserId={currentSleeperUserId}

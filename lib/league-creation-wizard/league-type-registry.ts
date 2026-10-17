@@ -19,6 +19,7 @@ import {
   listLeagueFormats,
 } from '@/lib/league/format-engine'
 import type { LeagueTypeId, DraftTypeId } from './types'
+import { isSurvivorCreationSportAvailable, SURVIVOR_CREATION_SPORTS } from '@/lib/survivor/survivorCreationAvailability'
 
 export const LEAGUE_TYPE_IDS: LeagueTypeId[] = listLeagueFormats().map((format) => format.id) as LeagueTypeId[]
 
@@ -101,11 +102,14 @@ export function isLiveDraftType(draftType: DraftTypeId): boolean {
 }
 
 export function getAllowedLeagueTypesForSport(sport: LeagueSport | string): LeagueTypeId[] {
-  return getFormatsForSport(sport).map((format) => format.id) as LeagueTypeId[]
+  return getFormatsForSport(sport)
+    .filter((format) => format.id !== 'survivor' || isSurvivorCreationSportAvailable(sport))
+    .map((format) => format.id) as LeagueTypeId[]
 }
 
 /** Reverse lookup: which sports does a given league type support? */
 export function getAllowedSportsForLeagueType(leagueType: LeagueTypeId): LeagueSport[] {
+  if (leagueType === 'survivor') return [...SURVIVOR_CREATION_SPORTS] as LeagueSport[]
   const format = listLeagueFormats().find((f) => f.id === leagueType)
   return format ? (format.supportedSports as LeagueSport[]) : [...SUPPORTED_SPORTS]
 }
@@ -125,7 +129,8 @@ export function getAllowedDraftTypesForLeagueType(
  * Validate league type for sport.
  */
 export function isLeagueTypeAllowedForSport(leagueType: LeagueTypeId, sport: LeagueSport | string): boolean {
-  return isLeagueFormatAllowedForSport(sport, leagueType)
+  return (leagueType !== 'survivor' || isSurvivorCreationSportAvailable(sport)) &&
+    isLeagueFormatAllowedForSport(sport, leagueType)
 }
 
 /**
