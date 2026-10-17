@@ -2497,6 +2497,21 @@ select, option {
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
+/* Zombie reskin motion (design handoff zbIn / zbFloat). Motion only when the viewer allows it: under
+   prefers-reduced-motion the elements simply appear, with no transform or opacity animation. */
+@keyframes zombie-enter {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes zombie-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .zombie-enter { animation: zombie-enter 0.35s ease-out both; }
+  .zombie-float { animation: zombie-float 3.2s ease-in-out infinite; }
+}
+
 .zombie-hero-shell {
   position: relative;
   isolation: isolate;
