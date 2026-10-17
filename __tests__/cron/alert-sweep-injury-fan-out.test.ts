@@ -166,7 +166,9 @@ describe('alert sweep — game-day digest', () => {
 
       expect(h.dispatch).toHaveBeenCalledTimes(2)
       const [first, second] = h.dispatch.mock.calls.map((c) => c[0])
-      expect(first.skipChannels).toEqual({ email: false, sms: true, push: true })
+      // Both are inside the lock window, so the first row carries the ONE shared text (2026-10-17).
+      expect(first.skipChannels).toEqual({ email: false, sms: false, push: true })
+      expect(first.smsBody).toMatch(/^Final call: 2 of your starters are out/)
       expect(first.emailOverride.html).toContain('Travis Kelce')
       expect(second.skipChannels).toEqual({ email: true, sms: true, push: true })
       expect(second.emailOverride).toBeUndefined()
@@ -245,4 +247,69 @@ it.each([[0,'success'],[1,'partial']])('persists Team sweep counters and marks %
   expect(h.outcome).toHaveBeenCalledWith(expect.objectContaining({status,metadata:{teamWorkspace:{nativeLeagues:2,swaps:1,alertsEvaluated:3,errors,budgetStopped:true,deliveryReceiptsChecked:4}}}))
   expect(JSON.stringify(h.outcome.mock.calls)).not.toContain('private-user')
  }finally{vi.unstubAllEnvs()}
+})
+
+describe('alert sweep — the near-lock text (2026-10-17)', () => {
+  const smsOf = (n: number) => h.dispatch.mock.calls[n]![0] as { title: string; skipChannels: { sms?: boolean; email?: boolean }; smsBody?: string; meta: Record<string, unknown>; dedupePrefix: string }
+
+  it('first told inside the lock window: the regular row carries ONE shared text and is stamped texted', async () => {
+    h.detect.mockReturnValue([alert('L1', 'Tank Dell', 90), alert('L2', 'Jayden Reed', 88)])
+    await call('userId=u1')
+    expect(h.dispatch).toHaveBeenCalledTimes(2)
+    expect(smsOf(0).skipChannels.sms).toBe(false)
+    expect(smsOf(0).smsBody).toMatch(/^Final call: 2 of your starters/)
+    expect(smsOf(1).skipChannels.sms).toBe(true)
+    expect(smsOf(0).meta.texted).toBe(true)
+    expect(smsOf(1).meta.texted).toBe(true)
+  })
+
+  it('far from lock: no text', async () => {
+    h.detect.mockReturnValue([alert('L1', 'Tank Dell', 60)])
+    await call('userId=u1')
+    expect(smsOf(0).skipChannels.sms).toBe(true)
+    expect(smsOf(0).smsBody).toBeUndefined()
+  })
+
+  it('told this morning, still starting near lock: a FINAL CALL row with the text, once', async () => {
+    h.detect.mockReturnValue([alert('L1', 'Tank Dell', 90)])
+    h.findFirst.mockImplementation(async ({ where }: { where: { sourceKey: string } }) =>
+      where.sourceKey.includes(':final:') ? null : { id: 'morning', meta: {} },
+    )
+    await call('userId=u1')
+    expect(h.dispatch).toHaveBeenCalledTimes(1)
+    expect(smsOf(0).title).toMatch(/^Final call: /)
+    expect(smsOf(0).dedupePrefix).toMatch(/:final$/)
+    expect(smsOf(0).skipChannels).toEqual({ email: true, sms: false })
+    expect(smsOf(0).smsBody).toMatch(/^Final call: Tank Dell/)
+
+    vi.clearAllMocks()
+    h.findFirst.mockResolvedValue({ id: 'said', meta: {} })
+    h.detect.mockReturnValue([alert('L1', 'Tank Dell', 90)])
+    await call('userId=u1')
+    expect(h.dispatch).not.toHaveBeenCalled()
+  })
+
+  it('the morning row already carried the text: no final call', async () => {
+    h.detect.mockReturnValue([alert('L1', 'Tank Dell', 90)])
+    h.findFirst.mockImplementation(async ({ where }: { where: { sourceKey: string } }) =>
+      where.sourceKey.includes(':final:') ? null : { id: 'texted-row', meta: { texted: true } },
+    )
+    await call('userId=u1')
+    expect(h.dispatch).not.toHaveBeenCalled()
+  })
+
+  it('INJURY_ALERTS_SMS=off: no text and no final call, the regular alert unchanged', async () => {
+    const before = process.env.INJURY_ALERTS_SMS
+    process.env.INJURY_ALERTS_SMS = 'off'
+    try {
+      h.detect.mockReturnValue([alert('L1', 'Tank Dell', 90)])
+      await call('userId=u1')
+      expect(smsOf(0).skipChannels.sms).toBe(true)
+      expect(smsOf(0).smsBody).toBeUndefined()
+      expect(smsOf(0).meta.texted).toBeUndefined()
+    } finally {
+      if (before === undefined) delete process.env.INJURY_ALERTS_SMS
+      else process.env.INJURY_ALERTS_SMS = before
+    }
+  })
 })
