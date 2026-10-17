@@ -412,7 +412,7 @@ export async function createLeagueTradeGrader(args: {
     league: { id: args.leagueId, settings: leagueRow.settings, leagueType: leagueType.type, leagueSize: leagueRow.leagueSize ?? null },
   })
   /*
-   * An NFL guillotine league: points over the free agent for the same lineup slot, over the weeks a team
+   * An NFL or NBA guillotine league: points over the free agent for the same lineup slot, over the weeks a team
    * can expect to survive, and FAAB at its purchasing power (`./guillotineGrader.ts`, Guap 2026-10-11).
    * Its view is final — the market chart priced a 4 FLEX + 1 SUPER_FLEX lineup on the 2-QB board and FAAB
    * as a flat share of the budget.
@@ -451,8 +451,9 @@ export async function createLeagueTradeGrader(args: {
     try {
       const collegeView = college ? await college.grade(give, get) : null
       if (collegeView) return collegeView
-      if (sportPoints) return await sportPoints.grade(give, get)
+      // Guillotine first: an NBA guillotine league has a points grader too, on the whole-season basis.
       if (guillotine) return await guillotine.grade(give, get)
+      if (sportPoints) return await sportPoints.grade(give, get)
       const pickWhy = assets.pickRefusal([...give, ...get])
       if (pickWhy) return { graded: false, reason: pickWhy, basis: null }
       const dataGaps: string[] = []

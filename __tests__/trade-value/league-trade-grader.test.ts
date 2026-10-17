@@ -11,6 +11,8 @@ const h = vi.hoisted(() => ({
   leagueType: 'dynasty',
   needFactor: 1,
   rosterNeedCalls: [] as unknown[],
+  sport: 'NFL',
+  guillotineLoads: [] as unknown[],
 }))
 
 vi.mock('server-only', () => ({}))
@@ -20,7 +22,7 @@ vi.mock('@/lib/trade-value-console/league-loader', () => ({
     id: 'L1',
     platformLeagueId: null,
     name: 'Dynasty for life',
-    sport: 'NFL',
+    sport: h.sport,
     leagueSize: 12,
     isDynasty: true,
     leagueType: h.leagueType,
@@ -36,13 +38,13 @@ vi.mock('@/lib/trade-value-console/league-loader', () => ({
 vi.mock('@/lib/league-context-engine', () => ({ resolveNormalizedLeagueContext: async () => ({ ok: false }) }))
 // A guillotine league is graded on its own context (`guillotineContext.ts`), never the market chart.
 vi.mock('@/lib/decision-os/trade/guillotineContext', () => ({
-  loadGuillotineContext: async () => ({
+  loadGuillotineContext: async (league: unknown) => (h.guillotineLoads.push(league), {
     ok: true,
     ctx: {
       board: [{ id: 'puka', name: 'Puka Nacua', position: 'WR', perGame: 20, sampleGames: 5, aliases: ['p1'] }],
       seats: [{ slot: 'FLEX', eligible: ['RB', 'WR', 'TE'] }, { slot: 'SUPER_FLEX', eligible: ['QB', 'RB', 'WR', 'TE'] }],
       replacementBySlot: new Map([['FLEX', { name: 'Free', perGame: 12 }], ['SUPER_FLEX', { name: 'Free', perGame: 13 }]]),
-      teamsAlive: 3, startingTeams: 12, nflWeeksLeft: 13, survival: [1, 1 / 3, 0],
+      teamsAlive: 3, startingTeams: 12, weeksLeft: 13, survival: [1, 1 / 3, 0],
       liveFaab: 300, wireValue: 30, releaseValue: 30, lineupLabel: '1 FLEX, 1 SUPER_FLEX',
     },
   }),
@@ -115,6 +117,8 @@ beforeEach(() => {
   h.pricePickCalls = 0
   h.needFactor = 1
   h.rosterNeedCalls = []
+  h.sport = 'NFL'
+  h.guillotineLoads = []
 })
 
 const graded = <T extends { graded: boolean }>(v: T) => {
@@ -351,6 +355,15 @@ describe('P0 package and team-direction regression through the shared league gra
     ])
     expect(view.basis).toMatch(/^Guillotine value/)
     expect(view.leagueType).toMatchObject({ type: 'guillotine' })
+  })
+
+  it('grades an NBA guillotine league on the guillotine basis too — ahead of the NBA whole-season points grade', async () => {
+    h.leagueType = 'guillotine'
+    h.sport = 'NBA'
+    const grader = await createLeagueTradeGrader({ leagueId: 'L1', userId: 'u1' })
+    const view = graded(await grader!.grade({ give: [{ kind: 'player', name: 'Puka Nacua' }], get: [{ kind: 'faab', amount: 50 }], viewerSide: false }))
+    expect(view.lines.map((l) => l.valueSource)).toEqual(['guillotine_points', 'guillotine_faab'])
+    expect(h.guillotineLoads).toEqual([expect.objectContaining({ id: 'L1', sport: 'NBA' })])
   })
 
   it('leaves every other league on the market chart', async () => {
