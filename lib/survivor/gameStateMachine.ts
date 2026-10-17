@@ -116,8 +116,15 @@ export async function advancePhase(
   await logPhaseTransition(leagueId, fromPhase, toPhase, gs.currentWeek, triggeredBy, triggeredByUserId, opts.notes)
 
   if (toPhase === 'pre_merge' || toPhase === 'drafting') {
-    await assignPlayersToTribes(leagueId, 'auto').catch(() => {})
-    await seedIdolsAfterDraft(leagueId, 'random').catch(() => {})
+    // Native leagues set up tribes and player-bound idols when the draft completes
+    // (survivorPhase2Init). The legacy helpers would reshuffle tribes and seed
+    // placeholder idols on top, so a forced phase change must not rerun them.
+    const setup = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+    const nativeSetup = (setup?.settings as Record<string, unknown> | null)?.survivorFoundationSettingsVersion === 1
+    if (!nativeSetup) {
+      await assignPlayersToTribes(leagueId, 'auto').catch(() => {})
+      await seedIdolsAfterDraft(leagueId, 'random').catch(() => {})
+    }
     const active = await prisma.survivorPlayer.count({ where: { leagueId, playerState: 'active' } })
     const tribeRows = await prisma.survivorTribe.count({
       where: { leagueId, isActive: true },
