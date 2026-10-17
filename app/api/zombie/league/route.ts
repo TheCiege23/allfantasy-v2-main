@@ -10,6 +10,7 @@ import { getRandomZombieTheme } from '@/lib/zombie/zombieBackgroundThemes'
 import { getZombieHordeSitOutStateForWeek } from '@/lib/zombie/ZombieHordeSitOutEngine'
 import { resolveWhispererViewer } from '@/lib/zombie/whispererViewer'
 import { redactWhispererRecord, redactZombieEvent, redactZombieTeam } from '@/lib/zombie/whispererRedaction'
+import { withWhispererDisplayName } from '@/lib/zombie/zombieTeamNames'
 import { loadNativeSeasonRecords } from '@/lib/zombie/ZombieInfectionEngine'
 
 export const dynamic = 'force-dynamic'
@@ -281,7 +282,9 @@ export async function GET(req: Request) {
     league: {
       ...z,
       teams: z.teams.map(team),
-      whispererRecord: viewer.canSee ? z.whispererRecord : redactWhispererRecord(z.whispererRecord),
+      whispererRecord: viewer.canSee
+        ? await withWhispererDisplayName(z.whispererRecord)
+        : redactWhispererRecord(z.whispererRecord),
       counts: {
         ...counts,
         horde: horde,
