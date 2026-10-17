@@ -6,7 +6,7 @@ import type { OutlookLeague, SwingMatchup } from '@/lib/core-app/seasonOutlook'
 import type { FreshnessMeta } from '@/lib/sports-os/freshness'
 import type { StandingsLineups } from '@/lib/core-app/standingsLineups'
 import { WeekLineupsTable } from '@/components/core-app/standings/WeekLineupsTable'
-import { describeTeamOutlook, ordinal, pct, rangeLabel, signedPts, band } from '@/lib/core-app/outlookCopy'
+import { describeTeamOutlook, pct, rangeLabel, signedPts, band } from '@/lib/core-app/outlookCopy'
 import { FreshnessChip } from '@/components/sports-os/FreshnessChip'
 import {
   AssumptionsPanel,
@@ -21,7 +21,9 @@ import {
 import { OutlookScenarioPanel } from '@/components/core-app/outlook/OutlookScenarioPanel'
 import { TopicTip } from '@/components/core-app/TopicTip'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
-import { outlookText, ordinalEs, seasonOutlookSentence } from '@/lib/core-app/outlookSpanish'
+import { useMessages } from '@/components/i18n/useMessages'
+import { outlookText, seasonOutlookSentence } from '@/lib/core-app/outlookSpanish'
+import { seasonOutlookLeagueMessages } from '@/lib/core-app/messages/seasonOutlookLeague'
 import '@/components/core-app/af-season-outlook-league.css'
 import '@/components/core-app/af-outlook.css'
 
@@ -43,7 +45,8 @@ import '@/components/core-app/af-outlook.css'
  * frequently NOT the one whose loss helps you most.
  *
  * ── LANGUAGE ──────────────────────────────────────────────────────────────────
- * A live Spanish sweep (2026-10-05) found this whole screen English. Fixed copy is inline es/en; the
+ * A live Spanish sweep (2026-10-05) found this whole screen English. Fixed copy lives in
+ * `lib/core-app/messages/seasonOutlookLeague.ts`; the
  * loader's sentences go through `outlookText` (drivers, moves, flags, notes) and then the cross-league
  * page's own `seasonOutlookSentence` (what decides it, the attention reasons, the basis), so one
  * sentence is never translated two different ways on two screens.
@@ -51,12 +54,11 @@ import '@/components/core-app/af-outlook.css'
 
 function useOutlookLanguage() {
   const { language } = useOptionalLanguage()
-  const es = language === 'es'
   const say = (english: string) => {
     const t = outlookText(english, language)
     return t !== english ? t : seasonOutlookSentence(english, language)
   }
-  return { es, say }
+  return { say }
 }
 
 export type SeasonOutlookLeagueProps = {
@@ -77,13 +79,13 @@ export type SeasonOutlookLeagueProps = {
 }
 
 const TABS = [
-  { key: 'path', label: 'Path to playoffs', es: 'Camino a playoffs' },
-  { key: 'whatif', label: 'What-if', es: 'Escenarios' },
-  { key: 'moves', label: 'Moves & drivers', es: 'Movimientos y factores' },
-  { key: 'schedule', label: 'Schedule', es: 'Calendario' },
-  { key: 'roster', label: 'Roster risk', es: 'Riesgo de plantilla' },
-  { key: 'standings', label: 'Standings', es: 'Clasificación' },
-  { key: 'basis', label: 'Assumptions', es: 'Supuestos' },
+  { key: 'path', label: 'tabPath' },
+  { key: 'whatif', label: 'tabWhatif' },
+  { key: 'moves', label: 'tabMoves' },
+  { key: 'schedule', label: 'tabSchedule' },
+  { key: 'roster', label: 'tabRoster' },
+  { key: 'standings', label: 'tabStandings' },
+  { key: 'basis', label: 'tabBasis' },
 ] as const
 
 type TabKey = (typeof TABS)[number]['key']
@@ -97,7 +99,8 @@ function readTab(): TabKey | null {
 }
 
 export function SeasonOutlookLeague({ league, swing, basis, priorities = [], freshness = null, lineups = null }: SeasonOutlookLeagueProps) {
-  const { es, say } = useOutlookLanguage()
+  const { say } = useOutlookLanguage()
+  const m = useMessages(seasonOutlookLeagueMessages)
   const you = league.you
   const focus = league.focus
   const [tab, setTab] = useState<TabKey>('path')
@@ -145,11 +148,9 @@ export function SeasonOutlookLeague({ league, swing, basis, priorities = [], fre
       <div className="af-sol af-olk">
         <Header league={league} freshness={freshness} />
         <div className="af-sol-empty">
-          <p className="af-sol-empty-t">{es ? 'No sabemos cuál es tu equipo en esta liga.' : 'We cannot tell which team is yours in this league.'}</p>
+          <p className="af-sol-empty-t">{m.noTeamTitle}</p>
           <p className="af-sol-empty-b">
-            {es
-              ? 'Cada número de esta pantalla trata de tu posición en la liga, así que nada puede mostrarse hasta que la plantilla se empareje con tu cuenta. La clasificación de la liga sigue abajo.'
-              : "Every number on this screen is about your position in the field, so none of it can be shown until the roster is matched to your account. The league's own standings are still below."}
+            {m.noTeamBody}
           </p>
         </div>
         <Standings league={league} lineups={lineups} />
@@ -169,7 +170,7 @@ export function SeasonOutlookLeague({ league, swing, basis, priorities = [], fre
       <section className="af-olk-hero" aria-labelledby="so-forecast">
         <header className="af-olk-hero-head">
           <h2 id="so-forecast" className="af-label">
-            {es ? `Tu pronóstico · ${ordinalEs(you.seed)} puesto` : `Your forecast · ${ordinal(you.seed)} seed`}, {you.wins}–{you.losses}
+            {m.forecastHeading(you.seed)}, {you.wins}–{you.losses}
             {you.ties ? `–${you.ties}` : ''}
           </h2>
           {/* Beside the heading, not in it: the section is labelled by it. */}
@@ -179,13 +180,13 @@ export function SeasonOutlookLeague({ league, swing, basis, priorities = [], fre
             {gamesFromCut == null
               ? ''
               : gamesFromCut > 0
-                ? es ? `${gamesFromCut} por encima del corte · ` : `${gamesFromCut} clear of the cut · `
+                ? m.clearOfCut(gamesFromCut)
                 : gamesFromCut === 0
-                  ? es ? 'igualado con el corte · ' : 'level with the cut · '
-                  : es ? `${Math.abs(gamesFromCut)} por debajo del corte · ` : `${Math.abs(gamesFromCut)} back of the cut · `}
+                  ? m.levelWithCut
+                  : m.backOfCut(Math.abs(gamesFromCut))}
             {league.weeksRemaining === 0
-              ? es ? 'temporada regular terminada' : 'regular season over'
-              : es ? `${league.weeksRemaining} por jugar` : `${league.weeksRemaining} to play`}
+              ? m.regularSeasonOver
+              : m.toPlay(league.weeksRemaining)}
           </span>
         </header>
 
@@ -194,33 +195,29 @@ export function SeasonOutlookLeague({ league, swing, basis, priorities = [], fre
             label="Playoffs"
             value={you.playoffPct}
             range={you.range?.playoff ?? null}
-            sub={es ? `los ${league.playoffTeams} primeros de ${league.teams.length}` : `top ${league.playoffTeams} of ${league.teams.length}`}
+            sub={m.playoffsSub(league.playoffTeams, league.teams.length)}
           />
           {league.byeTeams > 0 ? (
             <OddsTile
-              label={es ? 'Descanso en primera ronda' : 'First-round bye'}
+              label={m.byeLabel}
               value={you.byePct}
               range={you.range?.bye ?? null}
-              sub={
-                es
-                  ? league.byeTeams === 1 ? 'el primer puesto' : `los ${league.byeTeams} primeros puestos`
-                  : `top ${league.byeTeams} seed${league.byeTeams === 1 ? '' : 's'}`
-              }
+              sub={m.byeSub(league.byeTeams)}
               tone="neutral"
             />
           ) : null}
           <OddsTile
-            label={es ? 'Título' : 'Title'}
+            label={m.title}
             value={you.titlePct}
             range={you.range?.title ?? null}
-            sub={es ? 'ganar el cuadro' : 'win the bracket'}
+            sub={m.titleSub}
             tone="neutral"
           />
           <OddsTile
-            label={you.status === 'eliminated' ? (es ? 'Eliminado' : 'Eliminated') : es ? 'Quedar fuera de playoffs' : 'Miss the playoffs'}
+            label={you.status === 'eliminated' ? m.eliminated : m.missPlayoffs}
             value={you.missPct}
             range={you.range ? { lo: 100 - you.range.playoff.hi, hi: 100 - you.range.playoff.lo } : null}
-            sub={es ? 'la temporada termina sin plaza' : 'season ends without a berth'}
+            sub={m.missSub}
             tone="invert"
           />
         </div>
@@ -229,70 +226,66 @@ export function SeasonOutlookLeague({ league, swing, basis, priorities = [], fre
 
         <div className="af-olk-hero-grid">
           <div className="af-olk-next">
-            <h3 className="af-label">{es ? 'Siguiente acción' : 'Next action'}</h3>
+            <h3 className="af-label">{m.nextAction}</h3>
             {topMove ? (
               <>
                 <p className="af-olk-next-t">{say(topMove.title)}</p>
                 <p className="af-olk-next-d">
                   {say(topMove.detail)}{' '}
                   <b className="af-num">
-                    {signedPts(topMove.playoffDelta)} {es ? 'pts de playoffs' : 'playoff pts'}
+                    {signedPts(topMove.playoffDelta)} {m.playoffPts}
                   </b>
                 </p>
                 <Link className="af-btn af-olk-next-cta" href={topMove.href}>
-                  {topMove.kind === 'lineup' ? (es ? 'Ajusta tu alineación' : 'Set your lineup') : es ? 'Abrir agentes libres' : 'Open waivers'}
+                  {topMove.kind === 'lineup' ? m.setLineup : m.openWaivers}
                 </Link>
               </>
             ) : swing ? (
               <>
                 <p className="af-olk-next-t">
-                  {es ? `Gana la semana ${swing.week}` : `Win week ${swing.week}`}
-                  {swing.opponentName ? (es ? ` contra ${swing.opponentName}` : ` against ${swing.opponentName}`) : ''}
+                  {m.winWeek(swing.week)}
+                  {swing.opponentName ? m.againstOpponent(swing.opponentName) : ''}
                 </p>
                 <p className="af-olk-next-d">
-                  {es ? 'Vale ' : 'It is worth '}
+                  {m.worthPrefix}
                   <b className="af-num">
-                    {swing.swing.toFixed(0)} {es ? 'puntos' : 'points'}
+                    {swing.swing.toFixed(0)} {m.points}
                   </b>
-                  {es
-                    ? ` de probabilidad de playoffs: ${pct(swing.ifWin)}% si ganas, ${pct(swing.ifLose)}% si pierdes.`
-                    : ` of playoff odds — ${pct(swing.ifWin)}% with a win, ${pct(swing.ifLose)}% with a loss.`}
+                  {m.swingOdds(pct(swing.ifWin), pct(swing.ifLose))}
                 </p>
                 <Link className="af-btn af-olk-next-cta" href={`/core/matchup?league=${encodeURIComponent(league.leagueId)}`}>
-                  {es ? 'Abrir ese enfrentamiento' : 'Open that matchup'}
+                  {m.openThatMatchup}
                 </Link>
               </>
             ) : elsewhere[0] ? (
               <>
                 <p className="af-olk-next-t">
-                  {es ? `Aquí no hace falta nada; en ${elsewhere[0].leagueName}, sí.` : `Nothing here needs you — ${elsewhere[0].leagueName} does.`}
+                  {m.nothingHereElsewhere(elsewhere[0].leagueName)}
                 </p>
                 <p className="af-olk-next-d">{say(elsewhere[0].reason)}</p>
                 <Link className="af-btn af-olk-next-cta" href={elsewhere[0].href}>
-                  {es ? 'Abrir' : 'Open'} {elsewhere[0].leagueName}
+                  {m.open} {elsewhere[0].leagueName}
                 </Link>
               </>
             ) : (
               <p className="af-olk-next-d">
-                {es ? 'Nada en esta liga necesita una decisión ahora mismo.' : 'Nothing in this league needs a decision right now.'}
+                {m.nothingNeedsDecision}
               </p>
             )}
           </div>
 
           <div className="af-olk-drivebox">
-            <h3 className="af-label">{es ? 'Lo que más mueve tu temporada' : 'What moves your season most'}</h3>
+            <h3 className="af-label">{m.whatMovesSeason}</h3>
             {focus ? (
               <DriverList drivers={focus.drivers} limit={3} />
             ) : (
               <p className="af-olk-empty">
-                {es ? 'Los factores se calculan cuando esta liga se abre por separado.' : 'Drivers are worked out when this league is open on its own.'}
+                {m.driversLater}
               </p>
             )}
             {focus && focus.drivers.length > 0 ? (
               <p className="af-olk-note">
-                {es
-                  ? 'Puntos de probabilidad de playoffs, frente a una versión promedio de la liga de cada factor.'
-                  : 'Points of playoff probability, against a league-average version of each factor.'}
+                {m.driversNote}
               </p>
             ) : null}
           </div>
@@ -300,7 +293,7 @@ export function SeasonOutlookLeague({ league, swing, basis, priorities = [], fre
       </section>
 
       {/* ── The working ──────────────────────────────────────────────── */}
-      <div className="af-olk-tabs" role="tablist" aria-label={es ? 'Detalle de la proyección de temporada' : 'Season Outlook detail'}>
+      <div className="af-olk-tabs" role="tablist" aria-label={m.tabsAria}>
         {TABS.map((t, i) => (
           <button
             key={t.key}
@@ -317,7 +310,7 @@ export function SeasonOutlookLeague({ league, swing, basis, priorities = [], fre
             onClick={() => choose(t.key)}
             onKeyDown={(e) => onTabKey(e, i)}
           >
-            {es ? t.es : t.label}
+            {m[t.label]}
           </button>
         ))}
       </div>
@@ -330,7 +323,7 @@ export function SeasonOutlookLeague({ league, swing, basis, priorities = [], fre
               <MilestonePanel m={league.milestones} playoffTeams={league.playoffTeams} />
             ) : (
               <p className="af-olk-empty">
-                {es ? 'Tu equipo tiene muy pocas semanas completas para proyectar un récord.' : 'Your team has too few completed weeks to project a record.'}
+                {m.tooFewWeeks}
               </p>
             )}
           </>
@@ -339,31 +332,25 @@ export function SeasonOutlookLeague({ league, swing, basis, priorities = [], fre
             <OutlookScenarioPanel model={focus.scenario} />
           ) : (
             <p className="af-olk-empty">
-              {es ? 'No se pudieron preparar escenarios para esta liga ahora mismo.' : 'What-ifs could not be prepared for this league just now.'}
+              {m.whatIfsUnavailable}
             </p>
           )
         ) : tab === 'moves' ? (
           <>
             <h3 className="af-label">
-              {es ? 'Movimientos recomendados' : 'Recommended moves'} <TopicTip topic="playoffPts" />
+              {m.recommendedMoves} <TopicTip topic="playoffPts" />
             </h3>
             {focus ? (
               <MoveList moves={focus.moves} />
             ) : (
               <p className="af-olk-empty">
-                {es ? 'No se pudieron preparar movimientos para esta liga ahora mismo.' : 'Moves could not be prepared for this league just now.'}
+                {m.movesUnavailable}
               </p>
             )}
             <p className="af-olk-note">
-              {es
-                ? `Cada movimiento se simula con y sin él sobre la misma temporada${
-                    focus ? `, ${focus.branchIterations.toLocaleString('es-ES')} veces cada uno` : ''
-                  }. Aquí no se sugieren intercambios: prueba uno en Escenarios.`
-                : `Each move is simulated against the same season with and without it${
-                    focus ? `, ${focus.branchIterations.toLocaleString('en-US')} times each` : ''
-                  }. Trades are not suggested here — try one in What-if.`}
+              {m.movesNote(focus ? focus.branchIterations : null)}
             </p>
-            <h3 className="af-label">{es ? 'Todos los factores que medimos' : 'Every factor we measured'}</h3>
+            <h3 className="af-label">{m.everyFactor}</h3>
             {focus ? <DriverList drivers={focus.drivers} /> : null}
           </>
         ) : tab === 'schedule' ? (
@@ -375,7 +362,7 @@ export function SeasonOutlookLeague({ league, swing, basis, priorities = [], fre
             <p className="af-olk-empty">
               {focus?.scenario.refusal ?? focus?.notes[0]
                 ? say((focus?.scenario.refusal ?? focus?.notes[0])!)
-                : es ? 'No se pudo leer el riesgo de plantilla de esta liga.' : 'Roster risk could not be read for this league.'}
+                : m.rosterRiskUnavailable}
             </p>
           )
         ) : tab === 'standings' ? (
@@ -399,8 +386,8 @@ export function SeasonOutlookLeague({ league, swing, basis, priorities = [], fre
       {elsewhere.length > 0 ? (
         <section className="af-sol-attention">
           <header className="af-sol-attention-head">
-            <h2 className="af-label">{es ? 'Dónde poner tu atención' : 'Where to spend your attention'}</h2>
-            <span className="af-sol-attention-note">{es ? 'tus otras ligas, primero la más urgente' : 'your other leagues, most urgent first'}</span>
+            <h2 className="af-label">{m.whereAttention}</h2>
+            <span className="af-sol-attention-note">{m.attentionNote}</span>
           </header>
           <ul className="af-sol-attention-rows">
             {elsewhere.map((p) => (
@@ -425,39 +412,33 @@ function Header({
   league: OutlookLeague
   freshness: SeasonOutlookLeagueProps['freshness']
 }) {
-  const { es } = useOutlookLanguage()
+  const m = useMessages(seasonOutlookLeagueMessages)
   return (
     <header className="af-sol-head">
       <p className="af-label af-sol-eyebrow">{league.leagueName}</p>
       <div className="af-olk-titlerow">
-        <h1 className="af-display af-sol-title">{es ? 'Proyección de temporada' : 'Season Outlook'}</h1>
+        <h1 className="af-display af-sol-title">{m.seasonOutlookTitle}</h1>
         {freshness ? (
           <FreshnessChip meta={freshness.meta} initialLabel={freshness.initialLabel} initialWarn={freshness.initialWarn} />
         ) : null}
       </div>
       <p className="af-sol-sub">
-        {es
-          ? 'Probabilidades de playoffs, descanso y título, simuladas con el calendario, la puntuación y las plazas de playoffs de esta liga, no con un modelo genérico.'
-          : "Playoff, bye and title odds, simulated against this league's own schedule, scoring and playoff field — not a generic model."}
+        {m.seasonOutlookSub}
       </p>
     </header>
   )
 }
 
 function Clinch({ league, swing }: { league: OutlookLeague; swing: SwingMatchup | null }) {
-  const { es } = useOutlookLanguage()
+  const m = useMessages(seasonOutlookLeagueMessages)
   if (!swing) {
     return (
       <section className="af-sol-clinch" data-empty="true">
-        <h3 className="af-label">{es ? 'Cómo clasificas' : 'How you clinch'}</h3>
+        <h3 className="af-label">{m.howYouClinch}</h3>
         <p className="af-sol-clinch-why">
           {league.weeksRemaining === 0
-            ? es
-              ? 'La temporada regular terminó en esta liga: no queda nada por asegurar.'
-              : 'The regular season is over in this league — there is nothing left to clinch.'
-            : es
-              ? 'No encontramos tu próximo partido sin jugar en esta liga, así que no hay un único resultado del que partir.'
-              : 'We could not find your next unplayed game in this league, so there is no single result to branch on.'}
+            ? m.seasonOverClinch
+            : m.noNextGame}
         </p>
       </section>
     )
@@ -466,97 +447,88 @@ function Clinch({ league, swing }: { league: OutlookLeague; swing: SwingMatchup 
     <section className="af-sol-clinch">
       <header className="af-sol-clinch-head">
         <h3 className="af-label">
-          {es ? 'Cómo clasificas' : 'How you clinch'} <TopicTip topic="swingGame" />
+          {m.howYouClinch} <TopicTip topic="swingGame" />
         </h3>
         <span className="af-sol-clinch-note">
-          {es ? 'Semana' : 'Week'} {swing.week}
+          {m.week} {swing.week}
           {swing.opponentName ? ` · vs ${swing.opponentName}` : ''}
         </span>
       </header>
 
       <div className="af-sol-branches">
         <div className="af-sol-branch" data-tone="good">
-          <span className="af-label">{es ? 'Si ganas' : 'If you win'}</span>
+          <span className="af-label">{m.ifYouWin}</span>
           <span className="af-sol-branch-v af-num">{pct(swing.ifWin)}%</span>
           <p className="af-sol-branch-b">
             {swing.clinchOnWin
-              ? es ? 'Estás dentro. Gana esto y lo demás es cuestión de posición.' : 'You are in. Win this and the rest is about seeding.'
-              : es
-                ? 'Aún no está decidido, pero es el movimiento más grande que tienes a tu alcance.'
-                : 'Still not decided, but this is the single biggest move available to you.'}
+              ? m.clinchOnWin
+              : m.notDecided}
           </p>
         </div>
 
         <div className="af-sol-branch" data-tone="bad">
           <span className="af-label">
-            {es ? 'Si pierdes' : 'If you lose'} <TopicTip topic="clinchHelp" />
+            {m.ifYouLose} <TopicTip topic="clinchHelp" />
           </span>
           <span className="af-sol-branch-v af-num">{pct(swing.ifLose)}%</span>
           <p className="af-sol-branch-b">
             {/* An empty help list is a real finding — no one other result moves your odds enough. */}
             {swing.helpIfLose.length === 0
-              ? es
-                ? 'Ningún otro resultado por sí solo te rescata: necesitarías que varios partidos salieran a tu favor, no uno.'
-                : 'No single other result rescues this — you would need the run of play to go your way across several games, not one.'
+              ? m.noSingleRescue
               : swing.helpIfLose.length === 1
-                ? es
-                  ? `Necesitarías que ${swing.helpIfLose[0]} también se quedara fuera. Esa ausencia sube tus probabilidades más que cualquier otro resultado.`
-                  : `You would need ${swing.helpIfLose[0]} to miss out too. That one absence lifts your odds more than any other result on the board.`
-                : es
-                  ? `Necesitarías que ${swing.helpIfLose[0]} o ${swing.helpIfLose[1]} también se quedaran fuera: esas dos ausencias mueven tu número más que cualquier otra cosa que no controlas.`
-                  : `You would need ${swing.helpIfLose[0]} or ${swing.helpIfLose[1]} to miss out too — those two absences move your number more than anything else you do not control.`}
+                ? m.needOne(swing.helpIfLose[0])
+                : m.needTwo(swing.helpIfLose[0], swing.helpIfLose[1])}
           </p>
         </div>
 
         <div className="af-sol-branch" data-tone="accent">
-          <span className="af-label">{es ? 'Diferencia' : 'Swing'}</span>
+          <span className="af-label">{m.swing}</span>
           <span className="af-sol-branch-v af-num">{swing.swing.toFixed(0)} pts</span>
           <p className="af-sol-branch-b">
-            {es ? 'de probabilidad de playoffs dependen de este resultado.' : 'of playoff probability rest on this one result.'}
+            {m.swingNote}
           </p>
         </div>
       </div>
 
       <Link href={`/core/matchup?league=${encodeURIComponent(league.leagueId)}`} className="af-btn af-sol-clinch-cta">
-        {es ? 'Abrir ese enfrentamiento' : 'Open that matchup'}
+        {m.openThatMatchup}
       </Link>
     </section>
   )
 }
 
 function Standings({ league, lineups }: { league: OutlookLeague; lineups: StandingsLineups | null }) {
-  const { es, say } = useOutlookLanguage()
+  const { say } = useOutlookLanguage()
+  const m = useMessages(seasonOutlookLeagueMessages)
   const showBye = league.byeTeams > 0
   return (
     <div className="af-sol-tablewrap">
       <table className="af-sol-table">
         <caption className="af-sol-caption">
-          {es
-            ? `Todos los equipos de ${league.leagueName}, ordenados por su posición actual. La línea marca el corte de playoffs. Pasa el cursor por un porcentaje de playoffs para ver su rango.`
-            : `Every team in ${league.leagueName}, ordered by current seed. The line marks the playoff cut. Hover a playoff figure for its range.`}
+          {m.standingsCaption(league.leagueName)}
         </caption>
         <thead>
           <tr>
-            <th scope="col">{es ? 'Equipo' : 'Team'}</th>
+            <th scope="col">{m.team}</th>
             <th scope="col" className="af-sol-n">
-              {es ? 'Récord' : 'Record'}
+              {m.record}
             </th>
             <th scope="col" className="af-sol-n">
-              {es ? 'Puntos a favor' : 'Points for'}
+              {m.pointsFor}
             </th>
             <th scope="col" className="af-sol-n">
               Playoffs <TopicTip topic="outlookPlayoffOdds" />
             </th>
             {showBye ? (
               <th scope="col" className="af-sol-n">
-                {es ? 'Descanso' : 'Bye'}
+                {m.bye}
               </th>
             ) : null}
             <th scope="col" className="af-sol-n">
-              {es ? 'Título' : 'Title'}
+              {m.title}
             </th>
             <th scope="col">
-              {es ? 'Qué lo decide' : 'What decides it'} <TopicTip topic="whatDecidesIt" />
+              {m.whatDecides} <TopicTip topic="whatDecidesIt" />
             </th>
           </tr>
         </thead>
@@ -565,8 +537,8 @@ function Standings({ league, lineups }: { league: OutlookLeague; lineups: Standi
             <tr key={t.rosterId} data-you={t.isYou} data-cut={t.seed === league.playoffTeams}>
               <th scope="row">
                 <span className="af-sol-seed af-num">{t.seed}</span>
-                <span className="af-sol-name">{t.name ?? (es ? 'Equipo sin nombre' : 'Unnamed team')}</span>
-                {t.isYou ? <span className="af-sol-you af-label">{es ? 'Tú' : 'You'}</span> : null}
+                <span className="af-sol-name">{t.name ?? m.unnamedTeam}</span>
+                {t.isYou ? <span className="af-sol-you af-label">{m.you}</span> : null}
               </th>
               <td className="af-sol-n af-num">
                 {t.wins}—{t.losses}{t.ties ? `—${t.ties}` : ''}
@@ -578,7 +550,7 @@ function Standings({ league, lineups }: { league: OutlookLeague; lineups: Standi
                   <span
                     className="af-sol-pct"
                     data-band={band(t.playoffPct)}
-                    title={t.range ? `${es ? 'Rango' : 'Range'} ${rangeLabel(t.range.playoff)}` : undefined}
+                    title={t.range ? `${m.range} ${rangeLabel(t.range.playoff)}` : undefined}
                   >
                     {pct(t.playoffPct)}%
                   </span>
