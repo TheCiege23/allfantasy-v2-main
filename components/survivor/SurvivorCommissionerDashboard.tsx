@@ -416,7 +416,7 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
               {data.operations.tribeRedraw && ['recommended', 'postponed'].includes(data.operations.tribeRedraw.status) && (
                 <WarRoomPanel title="Tribe redraw" subtitle="A tribe is down to 40% of its original size.">
                   <p className="text-sm text-white/75">
-                    You can redraw every remaining manager into new tribes at random. This happens once per season and can't be undone.
+                    You can redraw every remaining manager into new tribes at random. This happens once per season and cannot be undone.
                     {data.operations.tribeRedraw.status === 'postponed' ? ' You postponed it earlier; it stays available until the merge.' : ''}
                   </p>
                   <div className="mt-4 flex flex-wrap gap-2">

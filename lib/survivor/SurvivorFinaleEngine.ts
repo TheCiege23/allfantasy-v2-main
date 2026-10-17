@@ -289,8 +289,43 @@ export async function submitJuryVote(args: {
       tieBreakSeasonPoints: updatedState.tieBreakSeasonPoints,
       crownedAt: new Date().toISOString(),
     })
-    return { ok: true, state: await getFinaleState(leagueId, week) }
+    const crowned = await getFinaleState(leagueId, week)
+    await recordCrownedWinner(leagueId, crowned)
+    return { ok: true, state: crowned }
   }
 
   return { ok: true, state: updatedState }
+}
+
+/**
+ * This engine is the only place a winner is decided. Mirror the result onto the jury session and
+ * cast that the season pages, snapshots and phase machine read, and announce it once.
+ */
+export async function recordCrownedWinner(leagueId: string, state: SurvivorFinaleState): Promise<{ winnerUserId: string | null }> {
+  if (!state.closed || !state.winnerRosterId) return { winnerUserId: null }
+  const rosters = await prisma.roster.findMany({
+    where: { leagueId, id: { in: [...state.finalists, ...state.juryRosterIds] } },
+    select: { id: true, platformUserId: true },
+  })
+  const userFor = new Map(rosters.map(row => [row.id, row.platformUserId]))
+  const winnerUserId = userFor.get(state.winnerRosterId) ?? null
+  if (!winnerUserId) return { winnerUserId: null }
+  const existing = await prisma.jurySession.findUnique({ where: { leagueId }, select: { winnerId: true } })
+  if (existing?.winnerId === winnerUserId) return { winnerUserId }
+  const winner = await prisma.survivorPlayer.findUnique({ where: { leagueId_userId: { leagueId, userId: winnerUserId } }, select: { displayName: true } })
+  const winnerName = winner?.displayName ?? 'The winner'
+  const session = {
+    status: 'winner_revealed',
+    finalistUserIds: state.finalists.map(id => userFor.get(id)).filter((id): id is string => Boolean(id)),
+    jurorUserIds: state.juryRosterIds.map(id => userFor.get(id)).filter((id): id is string => Boolean(id)),
+    winnerId: winnerUserId,
+    winnerName,
+    revealedAt: state.crownedAt ? new Date(state.crownedAt) : new Date(),
+  }
+  await prisma.jurySession.upsert({ where: { leagueId }, create: { leagueId, ...session }, update: session })
+  await prisma.survivorPlayer.updateMany({ where: { leagueId, userId: winnerUserId }, data: { playerState: 'survivor_winner' } })
+  const channel = await prisma.survivorChatChannel.findFirst({ where: { leagueId, channelType: 'league', isArchived: false }, select: { id: true } })
+  if (channel) await prisma.survivorChatMessage.create({ data: { leagueId, channelId: channel.id, channelType: 'league', senderUserId: 'survivor-host-chimmy', senderName: 'Chimmy', senderIsHost: true, isSystemMessage: true,
+    contentType: 'host_announcement', content: `The jury has spoken. ${winnerName} is the Sole Survivor.` } })
+  return { winnerUserId }
 }
