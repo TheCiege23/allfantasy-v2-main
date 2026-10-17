@@ -10,6 +10,8 @@ const db = vi.hoisted(() => ({
   survivorPlayer: { findMany: vi.fn() },
 }))
 vi.mock('@/lib/prisma', () => ({ prisma: db }))
+const dispatch = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/notifications/NotificationDispatcher', () => ({ dispatchNotification: dispatch }))
 
 import { processDueSurvivorNotifications, processNotificationQueue } from '@/lib/survivor/notificationEngine'
 
@@ -48,7 +50,11 @@ describe('Survivor notification delivery', () => {
   it('delivers due rows across leagues from the scheduled tick', async () => {
     rows.push(row('a'), row('b', { leagueId: 'league-2', recipientUserId: 'user-2' }), row('later', { scheduledFor: new Date(now.getTime() + 3_600_000) }))
     expect(await processDueSurvivorNotifications(now)).toEqual({ leagues: 2, sent: 2, failed: 0 })
-    expect(db.platformNotification.create).toHaveBeenCalledTimes(2)
+    expect(dispatch).toHaveBeenCalledTimes(2)
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      userIds: ['user-1'], category: 'league_announcements', type: 'survivor:vote_reminder', title: 'Votes close soon',
+      leagueId: 'league-1', severity: 'medium', dedupePrefix: 'survivor:a',
+    }))
     expect(rows.find(r => r.id === 'later')?.status).toBe('pending')
   })
 
@@ -56,7 +62,7 @@ describe('Survivor notification delivery', () => {
     rows.push(row('stale', { scheduledFor: new Date(now.getTime() - 25 * 3_600_000) }))
     await processNotificationQueue('league-1')
     expect(rows[0].status).toBe('expired')
-    expect(db.platformNotification.create).not.toHaveBeenCalled()
+    expect(dispatch).not.toHaveBeenCalled()
   })
 
   it('does not deliver a row another tick already claimed', async () => {
@@ -67,6 +73,11 @@ describe('Survivor notification delivery', () => {
       return snapshot
     })
     expect(await processNotificationQueue('league-1')).toEqual({ sent: 0, failed: 0 })
-    expect(db.platformNotification.create).not.toHaveBeenCalled()
+    expect(dispatch).not.toHaveBeenCalled()
+  })
+  it('files commissioner-only notices under commissioner alerts', async () => {
+    rows.push(row('c', { type: 'draft_cast_incomplete', recipientUserId: 'commish' }))
+    await processNotificationQueue('league-1')
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({ userIds: ['commish'], category: 'commissioner_alerts' }))
   })
 })

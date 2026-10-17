@@ -104,6 +104,9 @@ export async function resolveElimination(leagueId: string, councilId: string, ac
       await tx.survivorAuditEntry.create({ data: { leagueId, week: council.week, category: 'exile', action: 'exile_enrolled', targetUserId: userId,
         relatedEntityId: roster.id, relatedEntityType: 'roster', data: { returnWeek: settings.exileReturnWeek, tokensRequired: settings.exileReturnTokens }, isVisibleToCommissioner: true, isVisibleToPublic: true } })
     }
+    // Push and email stay spoiler-safe; the Torch Ceremony in league chat carries the name.
+    if (!resumeRelease) await tx.survivorNotification.create({ data: { leagueId, type: 'elimination', recipientRole: 'all', title: 'The tribe has spoken',
+      body: `Week ${council.week}: a manager was voted out at Tribal Council.`, deepLinkPath: `/survivor/${leagueId}/tribal`, urgency: 'high', isSpoilerSafe: false, scheduledFor: now, status: 'pending' } })
     return { ok: true, alreadyResolved: false, outcome, eliminatedUserId: userId, removedFromChats, pendingRelease: false, pendingExile: false, releasedPlayerCount }
   }, { timeout: 30_000, maxWait: 10_000 })
 }

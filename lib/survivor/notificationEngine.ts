@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 
 export type EnqueueNotificationInput = {
   recipientUserId?: string
@@ -109,23 +110,20 @@ export async function processNotificationQueue(leagueId: string): Promise<{ sent
       const body =
         !n.isSpoilerSafe ? 'Open the app to find out.' : n.body
 
-      for (const uid of userIds) {
-        await prisma.platformNotification.create({
-          data: {
-            userId: uid,
-            type: `survivor:${n.type}`,
-            title,
-            body,
-            severity: n.urgency === 'critical' ? 'high' : n.urgency === 'high' ? 'medium' : 'low',
-            productType: 'sports',
-            meta: {
-              leagueId,
-              survivorNotificationId: n.id,
-              deepLinkPath: n.deepLinkPath,
-            } as object,
-          },
-        })
-      }
+      // In-app plus email and push, each gated by the recipient's own notification settings.
+      await dispatchNotification({
+        userIds,
+        category: n.recipientRole === 'commissioner' || COMMISSIONER_TYPES.has(n.type) ? 'commissioner_alerts' : 'league_announcements',
+        type: `survivor:${n.type}`,
+        title,
+        body,
+        actionHref: n.deepLinkPath ?? `/survivor/${leagueId}`,
+        actionLabel: 'Open Survivor',
+        leagueId,
+        severity: n.urgency === 'critical' ? 'high' : n.urgency === 'high' ? 'medium' : 'low',
+        dedupePrefix: `survivor:${n.id}`,
+        meta: { leagueId, survivorNotificationId: n.id, deepLinkPath: n.deepLinkPath },
+      })
 
       await prisma.survivorNotification.update({
         where: { id: n.id },
@@ -148,6 +146,7 @@ export async function processNotificationQueue(leagueId: string): Promise<{ sent
 }
 
 const STALE_NOTIFICATION_MS = 24 * 60 * 60 * 1000
+const COMMISSIONER_TYPES = new Set(['draft_cast_incomplete', 'tribe_shuffle_recommendation'])
 
 /** Runs inside the score-sync cron slot: delivers due Survivor notifications for every league. */
 export async function processDueSurvivorNotifications(now = new Date()): Promise<{ leagues: number; sent: number; failed: number }> {

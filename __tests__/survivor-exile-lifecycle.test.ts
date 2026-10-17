@@ -11,7 +11,7 @@ const m = vi.hoisted(() => {
     redraftRosterMoveHistory: { create: vi.fn() }, waiverClaim: { updateMany: vi.fn() },
     survivorTribe: { findFirst: vi.fn() }, survivorTribeMember: { upsert: vi.fn(), deleteMany: vi.fn() },
     survivorJuryMember: { deleteMany: vi.fn(), upsert: vi.fn() }, survivorChatChannel: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
-    survivorChatMessage: { create: vi.fn() }, survivorTribalCouncil: { findFirst: vi.fn(), update: vi.fn() },
+    survivorChatMessage: { create: vi.fn() }, survivorNotification: { create: vi.fn() }, survivorTribalCouncil: { findFirst: vi.fn(), update: vi.fn() },
     survivorExileLeague: { findUnique: vi.fn() }, exileIsland: { upsert: vi.fn(), findUnique: vi.fn(), update: vi.fn() }, exileWeeklyEntry: { findMany: vi.fn(), update: vi.fn() },
   }
   return { db, transaction: vi.fn() }
@@ -90,6 +90,10 @@ describe('voted-out manager moves to Exile', () => {
     expect(m.db.redraftRosterPlayer.updateMany).toHaveBeenCalledOnce()
     expect(m.db.survivorPlayer.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ playerState: 'exile', canAccessExileChat: true, canAccessTribeChat: false }) }))
     expect(m.db.exileIsland.upsert).toHaveBeenCalledOnce()
+  })
+  it('queues one spoiler-safe elimination alert for the league', async () => {
+    await resolveElimination('league', 'council')
+    expect(m.db.survivorNotification.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ type: 'elimination', recipientRole: 'all', isSpoilerSafe: false }) }))
   })
   it('does not move anyone based on an unrevealed vote tally', async () => {
     m.db.survivorTribalCouncil.findFirst.mockResolvedValue({ isRevealed: false })
