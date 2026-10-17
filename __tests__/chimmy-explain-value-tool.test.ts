@@ -177,3 +177,46 @@ describe('🛑 the limit that most changes the answer is stated', () => {
     expect(h.boardFind.mock.calls[0][0].where).toEqual({ published: true, sport: 'NCAAF' })
   })
 })
+
+/*
+ * 🛑 NAMESAKES (2026-10-11): 12 NFL namesake groups in the AF projections that day. The tool used
+ * to take `proj.rows[0]` and `board[0]` independently, so one man's projection could be derived
+ * beside the other man's published value and reported as a single player.
+ */
+describe('🛑 two players behind one name are never merged', () => {
+  const lb = () => projRow({ playerId: 'p-lb', playerName: 'Justin Jefferson', position: 'LB', rosProjection: 90 })
+  const wr = () => projRow({ playerId: 'p-wr', playerName: 'Justin Jefferson', position: 'WR', rosProjection: 240 })
+  const block = (out: string, pos: string) =>
+    out.split('Derivation for ').find((b) => b.startsWith(`Justin Jefferson (${pos})`)) ?? ''
+
+  it('warns, and gives each namesake his own derivation', async () => {
+    h.findProj.mockResolvedValue({ rows: [lb(), wr()], season: 2025 })
+    const out = await buildExplainValueContext({ playerName: 'Justin Jefferson' })
+    expect(out).toMatch(/2 different players match "Justin Jefferson"/)
+    expect(out).toMatch(/ask the user which one they mean rather than picking/)
+    expect(block(out, 'LB')).toMatch(/Result: /)
+    expect(block(out, 'WR')).toMatch(/Result: /)
+  })
+
+  it('the receiver’s published value never lands in the linebacker’s derivation', async () => {
+    h.findProj.mockResolvedValue({ rows: [lb(), wr()], season: 2025 })
+    h.boardFind.mockResolvedValue([
+      { playerName: 'Justin Jefferson', position: 'WR', marketValue: 9000, leagueConcept: 'dynasty' },
+    ])
+    const out = await buildExplainValueContext({ playerName: 'Justin Jefferson' })
+    expect(block(out, 'LB')).not.toMatch(/9,000/)
+    expect(block(out, 'WR')).toMatch(/PUBLISHED market value for him is 9,000/)
+  })
+
+  it('a board row at another position is another player, not this one’s market value', async () => {
+    // Only the LB is projected; the board carries only the WR. They must not be paired.
+    h.findProj.mockResolvedValue({ rows: [lb()], season: 2025 })
+    h.boardFind.mockResolvedValue([
+      { playerName: 'Justin Jefferson', position: 'WR', marketValue: 9000, leagueConcept: 'dynasty' },
+    ])
+    const out = await buildExplainValueContext({ playerName: 'Justin Jefferson' })
+    expect(out).toMatch(/2 different players match/)
+    expect(block(out, 'LB')).toMatch(/priced from projection/)
+    expect(block(out, 'LB')).not.toMatch(/9,000/)
+  })
+})

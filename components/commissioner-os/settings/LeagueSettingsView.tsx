@@ -7,6 +7,17 @@ import { PreviewDataBanner } from '@/components/commissioner-os/PreviewDataBanne
 import { ErrorState } from '@/components/commissioner-os/states'
 import type { CommissionerDataMode } from '@/lib/commissioner-ui/demo-mode/constants'
 import type { LeagueSettingsSnapshot } from '@/lib/commissioner-ui/settings/decision-os-client'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import {
+  readOnlyText,
+  rulesCapturedText,
+  scoringRuleText,
+  settingsProvenanceText,
+  settingsText,
+  showAllRulesText,
+  toolsText,
+  weekNoteText,
+} from '@/lib/commissioner-os/i18n/toolsCopy'
 
 export interface LeagueSettingsViewProps {
   snapshot: LeagueSettingsSnapshot | null
@@ -25,29 +36,31 @@ const SCORING_PREVIEW_COUNT = 12
  * basis for. The contract carries `value: string | null` the whole way here precisely so this
  * component is the only place that decides how absence looks.
  */
-function SettingValue({ value, note }: { value: string | null; note?: string }) {
+function SettingValue({ value, note, language }: { value: string | null; note?: string; language: string }) {
   if (value === null) {
     return (
-      <span className="text-xs" style={{ color: 'var(--muted2, var(--muted))' }} title="Not captured from this league's platform">
-        — not captured
+      <span className="text-xs" style={{ color: 'var(--muted2, var(--muted))' }} title={toolsText("Not captured from this league's platform", language)}>
+        {toolsText('— not captured', language)}
       </span>
     )
   }
   return (
     <span className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
-      {note ? `${note} ${value}` : value}
+      {note ? weekNoteText(note, value, language) : settingsText(value, language)}
     </span>
   )
 }
 
 export function LeagueSettingsView({ snapshot, dataMode, errorMessage }: LeagueSettingsViewProps) {
   const [showAllRules, setShowAllRules] = useState(false)
+  const { language } = useOptionalLanguage()
+  const t = (english: string) => toolsText(english, language)
 
   if (!snapshot) {
     return (
       <div>
         <PreviewDataBanner mode={dataMode} />
-        <ErrorState message={errorMessage ?? "Couldn't load this league's settings right now."} />
+        <ErrorState message={t(errorMessage ?? "Couldn't load this league's settings right now.")} />
       </div>
     )
   }
@@ -64,13 +77,10 @@ export function LeagueSettingsView({ snapshot, dataMode, errorMessage }: LeagueS
       <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-lg font-semibold" style={{ color: 'var(--text)' }}>
-            {snapshot.leagueName ?? 'This league'}
+            {snapshot.leagueName ?? t('This league')}
           </h1>
           <p className="text-xs" style={{ color: 'var(--muted)' }}>
-            {provenance.source
-              ? `Rules as imported from ${provenance.source}${provenance.externalLeagueId ? ` · ${provenance.externalLeagueId}` : ''}`
-              : 'Rules as stored for this league'}
-            {snapshot.seasonLabel ? ` · ${snapshot.seasonLabel} season` : ''}
+            {settingsProvenanceText(provenance.source, provenance.externalLeagueId, snapshot.seasonLabel, language)}
           </p>
         </div>
 
@@ -85,9 +95,7 @@ export function LeagueSettingsView({ snapshot, dataMode, errorMessage }: LeagueS
             style={{ borderColor: 'var(--border)', background: 'var(--panel2)', color: 'var(--muted)' }}
           >
             <Lock size={13} aria-hidden />
-            <span>
-              Read-only here{provenance.source ? ` — change these on ${provenance.source}` : ''}
-            </span>
+            <span>{readOnlyText(provenance.source, language)}</span>
           </div>
         ) : null}
       </div>
@@ -95,17 +103,21 @@ export function LeagueSettingsView({ snapshot, dataMode, errorMessage }: LeagueS
       {/* The five settings groups. */}
       <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2">
         {snapshot.groups.map((group) => (
-          <InfoCard key={group.id} title={group.label}>
+          <InfoCard key={group.id} title={settingsText(group.label, language)}>
             <p className="mb-3 text-xs" style={{ color: 'var(--muted)' }}>
-              {group.description}
+              {settingsText(group.description, language)}
             </p>
             <dl className="space-y-2">
               {group.entries.map((entry) => (
                 <div key={entry.label} className="flex flex-col gap-0.5">
                   <div className="flex items-baseline justify-between gap-3">
-                    <dt className="text-xs">{entry.label}</dt>
+                    <dt className="text-xs">{settingsText(entry.label, language)}</dt>
                     <dd className="text-right">
-                      <SettingValue value={entry.value} note={entry.label === 'Playoffs start' || entry.label === 'Trade deadline' ? entry.note : undefined} />
+                      <SettingValue
+                        value={entry.value}
+                        note={entry.label === 'Playoffs start' || entry.label === 'Trade deadline' ? entry.note : undefined}
+                        language={language}
+                      />
                     </dd>
                   </div>
                   {/*
@@ -127,26 +139,27 @@ export function LeagueSettingsView({ snapshot, dataMode, errorMessage }: LeagueS
       </div>
 
       {/* Scoring, which is the one group too large for a definition list. */}
-      <InfoCard title="Scoring">
+      <InfoCard title={t('Scoring')}>
         <div className="mb-3 flex flex-wrap items-baseline gap-x-6 gap-y-1">
           <span className="text-xs" style={{ color: 'var(--muted)' }}>
-            Format <span style={{ color: 'var(--text)' }}>{scoring.format ?? '— not captured'}</span>
+            {t('Format')}{' '}
+            <span style={{ color: 'var(--text)' }}>{scoring.format ? settingsText(scoring.format, language) : t('— not captured')}</span>
           </span>
           {scoring.templateId ? (
             <span className="text-xs" style={{ color: 'var(--muted)' }}>
-              Template <span className="font-mono" style={{ color: 'var(--text)' }}>{scoring.templateId}</span>
+              {t('Template')} <span className="font-mono" style={{ color: 'var(--text)' }}>{scoring.templateId}</span>
             </span>
           ) : null}
           <span className="text-xs" style={{ color: 'var(--muted)' }}>
-            <span style={{ color: 'var(--text)' }}>{scoring.ruleCount}</span> rule
-            {scoring.ruleCount === 1 ? '' : 's'} captured
+            <span style={{ color: 'var(--text)' }}>{scoring.ruleCount}</span> {rulesCapturedText(scoring.ruleCount, language)}
           </span>
         </div>
 
         {scoring.rules.length === 0 ? (
           <p className="text-xs" style={{ color: 'var(--muted)' }}>
-            No scoring rules were captured for this league, so every projection and score on other
-            pages is using league-default scoring rather than yours.
+            {t(
+              'No scoring rules were captured for this league, so every projection and score on other pages is using league-default scoring rather than yours.'
+            )}
           </p>
         ) : (
           <>
@@ -162,7 +175,7 @@ export function LeagueSettingsView({ snapshot, dataMode, errorMessage }: LeagueS
               {visibleRules.map((rule) => (
                 <div key={rule.stat} className="flex items-baseline justify-between gap-3 border-b py-1" style={{ borderColor: 'var(--border)' }}>
                   <span className="text-xs" title={rule.stat}>
-                    {rule.label}
+                    {scoringRuleText(rule.label, language)}
                   </span>
                   <span
                     className="text-metric text-xs font-semibold"
@@ -182,7 +195,7 @@ export function LeagueSettingsView({ snapshot, dataMode, errorMessage }: LeagueS
                 className="focus-ring mt-3 rounded-[var(--radius-standard)] px-2 py-1 text-xs font-semibold"
                 style={{ color: 'var(--accent-cyan-strong, var(--text))' }}
               >
-                Show all {scoring.ruleCount} rules
+                {showAllRulesText(scoring.ruleCount, language)}
               </button>
             ) : null}
           </>
@@ -192,9 +205,9 @@ export function LeagueSettingsView({ snapshot, dataMode, errorMessage }: LeagueS
       <p className="mt-4 flex items-start gap-2 text-xs" style={{ color: 'var(--muted)' }}>
         <SettingsIcon size={13} aria-hidden className="mt-0.5 shrink-0" />
         <span>
-          Every value here was captured from this league rather than assumed. Anything marked “not
-          captured” was absent from what the import returned — it is not a default, and no page in
-          Commissioner OS is treating it as one.
+          {t(
+            'Every value here was captured from this league rather than assumed. Anything marked “not captured” was absent from what the import returned — it is not a default, and no page in Commissioner OS is treating it as one.'
+          )}
         </span>
       </p>
     </div>

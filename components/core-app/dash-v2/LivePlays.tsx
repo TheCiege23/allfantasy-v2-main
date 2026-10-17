@@ -1,4 +1,5 @@
 import type { LiveEvent } from '@/lib/live/eventDetector'
+import { FallbackImg } from '@/components/core-app/FallbackImg'
 
 /**
  * The live play feed — what just happened, with the player it happened to.
@@ -26,6 +27,7 @@ const TYPE_LABEL: Record<string, string> = {
   FIELD_GOAL: 'FG',
   DEFENSIVE_SCORE: 'DEF TD',
   SPECIAL_TEAMS_SCORE: 'ST TD',
+  TWO_POINT_CONVERSION: '2PT',
 }
 
 /** Tone follows the semantic contract: a score is good, a turnover costs you. */
@@ -77,8 +79,7 @@ export function LivePlays({
             <li key={ev.idempotencyKey} className="af-d2-play" data-tone={toneOf(ev.type)}>
               <span className="af-d2-play-img" aria-hidden>
                 {img ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={img} alt="" loading="lazy" />
+                  <FallbackImg src={img} alt="" loading="lazy" fallback={initials(ev.playerName)} />
                 ) : (
                   initials(ev.playerName)
                 )}

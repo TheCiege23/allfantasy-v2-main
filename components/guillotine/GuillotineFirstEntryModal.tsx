@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { firstEntryIntroStorageKey } from '@/lib/league/post-create-welcome'
 
-const STORAGE_KEY_PREFIX = 'guillotine_intro_seen_'
 const VIDEO_SRC = '/guillotine/Guillotine.mp4'
 
 export interface GuillotineFirstEntryModalProps {
@@ -26,7 +26,7 @@ export function GuillotineFirstEntryModal({
   const markSeen = useCallback(() => {
     if (typeof window !== 'undefined' && leagueId) {
       try {
-        window.localStorage.setItem(`${STORAGE_KEY_PREFIX}${leagueId}`, '1')
+        window.localStorage.setItem(firstEntryIntroStorageKey('guillotine', leagueId, ''), '1')
       } catch {}
     }
   }, [leagueId])
@@ -57,7 +57,7 @@ export function GuillotineFirstEntryModal({
       return
     }
     try {
-      const seen = typeof window !== 'undefined' && window.localStorage.getItem(`${STORAGE_KEY_PREFIX}${leagueId}`)
+      const seen = typeof window !== 'undefined' && window.localStorage.getItem(firstEntryIntroStorageKey('guillotine', leagueId, ''))
       setVisible(!seen)
     } catch {
       setVisible(true)

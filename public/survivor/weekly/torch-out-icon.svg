@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Torch snuffed">
+
+<path d="M33,26 C29,20 36,16 32,10 C29,6 33,3 35,1" fill="none" stroke="#9aa3b5" stroke-width="2.5" stroke-linecap="round" opacity=".8"/><circle cx="32" cy="31" r="2" fill="#ff7a2a" opacity=".8"/>
+<path d="M20,32 L44,32 L40,40 L24,40 Z" fill="#2a2420" stroke="#1a0f06" stroke-width="2"/>
+<rect x="29" y="40" width="6" height="22" rx="2" fill="#6b5a4a" stroke="#1a0f06" stroke-width="2"/>
+<path d="M29,46 h6 M29,53 h6" stroke="#1a0f06" stroke-width="1.5"/>
+</svg>

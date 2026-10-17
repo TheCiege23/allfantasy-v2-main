@@ -346,7 +346,22 @@ test.describe('@prestige Prompt43 integration click audit', () => {
      */
     await signInAs(page, { id: 'e2e-prestige-user' })
 
+    /*
+     * ⚠ BOTH HALL-OF-FAME PAGES FETCH THEIR DATA CLIENT-SIDE AFTER HYDRATION, AND THE
+     * 5s expect WINDOW WAS RACING THAT. `page.goto` resolves on domcontentloaded; the
+     * link and the "Legacy context" block only exist once the route's client chunk has
+     * loaded, React has hydrated, the effect has fetched the (mocked) API and the data
+     * has rendered. Measured locally 2026-10-01 on a warm `next dev` route, goto → mocked
+     * response: 0.8s to 6.9s across runs, while mocked response → element was 35–60ms
+     * every time. So the variable part is hydration-to-fetch, and the thing to wait on
+     * is the data response, not the clock. The response wait is registered BEFORE the
+     * navigation so a fast fetch cannot slip past it. Sentinel ledger #1786.
+     */
+    const entryLoaded = page.waitForResponse((r) =>
+      r.url().includes(`/api/leagues/${leagueId}/hall-of-fame/entries/entry-1`)
+    )
     await gotoWithRetry(page, `/app/league/${leagueId}/hall-of-fame/entries/entry-1`)
+    await entryLoaded
     await expect(page.getByText(/legacy context/i)).toBeVisible()
     await expect(page.getByRole('link', { name: /view legacy score/i })).toHaveAttribute(
       'href',
@@ -386,7 +401,11 @@ test.describe('@prestige Prompt43 integration click audit', () => {
         }),
       })
     })
+    const momentLoaded = page.waitForResponse((r) =>
+      r.url().includes(`/api/leagues/${leagueId}/hall-of-fame/moments/moment-1`)
+    )
     await gotoWithRetry(page, `/app/league/${leagueId}/hall-of-fame/moments/moment-1`)
+    await momentLoaded
     await expect(page.getByRole('link', { name: /mgr_alpha — legacy/i })).toHaveAttribute(
       'href',
       new RegExp(`/legacy/breakdown\\?entityType=MANAGER&entityId=mgr_alpha&sport=NFL`)

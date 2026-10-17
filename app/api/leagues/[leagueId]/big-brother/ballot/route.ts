@@ -41,7 +41,7 @@ export async function GET(
   })
   if (!roster) return NextResponse.json({ ballot: null, error: 'Not a league member' })
 
-  const eligible = await getEligibleVoterRosterIds(leagueId, current.id, config.hohVotesOnlyInTie)
+  const eligible = await getEligibleVoterRosterIds(leagueId, current.id, config.hohVotesOnlyInTie, config.evictionTieBreakMode === 'hoh_vote')
   const canVote = eligible.includes(roster.id)
   const finalNominees = await getFinalNomineeRosterIds(current.id)
 
@@ -56,10 +56,10 @@ export async function GET(
       week: current.week,
       phase: current.phase,
       finalNomineeRosterIds: finalNominees,
-      canVote,
+      canVote: canVote && current.phase === 'VOTING_OPEN' && !cycle?.closedAt && (!cycle?.voteOpenedAt || cycle.voteOpenedAt <= new Date()) && (!cycle?.voteDeadlineAt || cycle.voteDeadlineAt > new Date()),
       voteDeadlineAt: cycle?.voteDeadlineAt?.toISOString() ?? null,
       voteOpenedAt: cycle?.voteOpenedAt?.toISOString() ?? null,
-      closed: !!cycle?.closedAt,
+      closed: !!cycle?.closedAt || current.phase === 'VOTING_LOCKED' || !!cycle?.voteDeadlineAt && cycle.voteDeadlineAt <= new Date(),
     },
   })
 }

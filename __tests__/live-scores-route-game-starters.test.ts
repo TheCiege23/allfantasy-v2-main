@@ -38,7 +38,8 @@ describe('GET view=game', () => {
     const body = await res.json()
     expect(body.starters).toEqual(STARTERS)
     expect(body.detail).toEqual(DETAIL)
-    expect(h.starters).toHaveBeenCalledWith({ userId: 'u1', sport: 'NFL', gameId: '401872925', homeAbbrev: 'CIN', awayAbbrev: 'TB' })
+    // `upcoming` is false here: this fixture carries no pre-game status (the game view prices only before kickoff).
+    expect(h.starters).toHaveBeenCalledWith({ userId: 'u1', sport: 'NFL', gameId: '401872925', homeAbbrev: 'CIN', awayAbbrev: 'TB', upcoming: false })
     expect(res.headers.get('cache-control')).toBe('private, no-store')
   })
 

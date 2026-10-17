@@ -84,6 +84,14 @@ describe('IntegrityFlagCard — collusion', () => {
     expect(screen.getByText('value 15.6')).toBeTruthy()
   })
 
+  it('names each side for the team that RECEIVED it, value and all', () => {
+    const { container } = render(<IntegrityFlagCard flag={flag({ evidenceJson: COLLUSION_EVIDENCE })} />)
+    const sides = [...container.querySelectorAll('.af-cm-side')].map((s) => s.textContent)
+    // @lex gave Bowers + a 1st (42.1) and got Shaheed (15.6); @pav is the side that came out ahead.
+    expect(sides[0]).toBe('@lex receivedR. Shaheedvalue 15.6')
+    expect(sides[1]).toBe('@pav receivedB. Bowers, 2027 1stvalue 42.1')
+  })
+
   it('states that both managers are eliminated when the evidence says so', () => {
     render(<IntegrityFlagCard flag={flag({ evidenceJson: COLLUSION_EVIDENCE })} />)
     expect(screen.getByText('Both managers are eliminated from playoff contention.')).toBeTruthy()

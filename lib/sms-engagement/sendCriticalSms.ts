@@ -8,6 +8,7 @@ import { resolveNotificationPreferences } from "@/lib/notification-settings/Noti
 import { getDeliveryMethodAvailability } from "@/lib/notification-settings/DeliveryMethodResolver"
 import type { NotificationCategoryId, NotificationPreferences } from "@/lib/notification-settings/types"
 import { sendSms } from "@/lib/twilio-client"
+import { hasSmsConsent } from "@/lib/sms/smsConsent"
 import type { SmsSendResult } from "./types"
 
 const SMS_MAX_LENGTH = 320
@@ -43,6 +44,7 @@ export async function sendCriticalSms(
   const availability = getDeliveryMethodAvailability({
     hasEmail: !!profile.email,
     phoneVerified: !!profile.phoneVerifiedAt,
+    smsConsented: hasSmsConsent(profile.notificationPreferences, profile.phone),
   })
   if (!availability.sms) {
     return { ok: false, userId, error: "SMS not available" }

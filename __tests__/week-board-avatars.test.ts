@@ -85,12 +85,13 @@ function team(
   claimedByUserId: string | null = null,
 ): Row {
   return {
+    leagueId: pid === 'P1' ? 'L-sl' : 'L-es',
     externalId,
     teamName,
     ownerName: `${teamName} owner`,
     avatarUrl,
     claimedByUserId,
-    league: { platformLeagueId: pid, platform },
+    league: { id: pid === 'P1' ? 'L-sl' : 'L-es', platformLeagueId: pid, platform },
   }
 }
 
@@ -131,14 +132,12 @@ beforeEach(() => {
   )
   mocks.teamFindMany.mockImplementation(
     async (args: {
-      where: { league: { platformLeagueId: { in: string[] } }; claimedByUserId?: string }
+      where: { leagueId: { in: string[] }; claimedByUserId?: string }
       select: Row
     }) =>
       teamRows
         .filter((t) =>
-          args.where.league.platformLeagueId.in.includes(
-            (t.league as { platformLeagueId: string }).platformLeagueId,
-          ),
+          args.where.leagueId.in.includes(t.leagueId as string),
         )
         .filter((t) => args.where.claimedByUserId == null || t.claimedByUserId === args.where.claimedByUserId)
         .map((t) => pick(t, args.select as Record<string, unknown>)),

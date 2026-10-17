@@ -61,6 +61,7 @@ vi.mock('@/lib/live-draft-engine/PickValidation', () => ({
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
+    league: { findUnique: vi.fn(async () => ({ settings: {} })) },
     $transaction: hm.transaction,
   },
 }))
@@ -483,7 +484,7 @@ describe('commissionerPickEdit', () => {
     expect(hm.resetTimer).toHaveBeenCalledWith('league-1')
   })
 
-  it('REMOVE past pick does not reset timer', async () => {
+  it('REMOVE past pick resets the timer for the rewound board', async () => {
     hm.txFindUnique.mockResolvedValue(
       pausedSession([
         basePick({ overall: 1, id: 'pick-1' }),
@@ -502,10 +503,10 @@ describe('commissionerPickEdit', () => {
       overallPickNumber: 1,
     })
     expect(out.ok).toBe(true)
-    expect(hm.resetTimer).not.toHaveBeenCalled()
+    expect(hm.resetTimer).toHaveBeenCalledWith('league-1')
   })
 
-  it('REMOVE future pick does not reset timer', async () => {
+  it('REMOVE future pick resets the timer for the rewound board', async () => {
     hm.txFindUnique.mockResolvedValue(
       pausedSession([
         basePick({ overall: 1, id: 'pick-1' }),
@@ -525,7 +526,7 @@ describe('commissionerPickEdit', () => {
       overallPickNumber: 3,
     })
     expect(out.ok).toBe(true)
-    expect(hm.resetTimer).not.toHaveBeenCalled()
+    expect(hm.resetTimer).toHaveBeenCalledWith('league-1')
   })
 
   it('ASSIGN current on-clock pick resets timer', async () => {

@@ -5,8 +5,10 @@
 # that introduced it instead.
 #
 #   1. the project exactly as committed (what every default TestFlight build archives)
-#   2. the same project with the "Your career" widget target added by
-#      scripts/add-career-widget-target.rb (what a `career_widget` TestFlight build archives)
+#   2. the same project with BOTH build-time extensions added — the "Your career" widget
+#      (scripts/add-career-widget-target.rb, a `career_widget` build) and the notification image
+#      extension (scripts/add-notification-service-target.rb, a `notification_images` build).
+#      Built together because a release may tick both, and the two scripts share one embed phase.
 #
 # Unsigned (CODE_SIGNING_ALLOWED=NO), like the release archive step, so it needs no secrets and
 # no registered device. Entitlements and provisioning are the release workflow's job.
@@ -80,12 +82,15 @@ jobs:
           grep -E "error:|warning: .*CareerWidget|\*\* BUILD" "$RUNNER_TEMP/build-default.log" | tail -60
           exit $status
 
-      - name: Add the career widget target
+      - name: Add the career widget and notification image extension targets
         run: |
           gem list -i xcodeproj >/dev/null || gem install xcodeproj --no-document
           ruby scripts/add-career-widget-target.rb
+          ruby scripts/add-notification-service-target.rb
+          # Idempotence is part of the contract: a second run must leave one target, not two.
+          ruby scripts/add-notification-service-target.rb | grep -q "already present"
 
-      - name: Build the app with the career widget
+      - name: Build the app with both extensions
         run: |
           set +e
           xcodebuild build \
@@ -97,11 +102,13 @@ jobs:
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
             > "$RUNNER_TEMP/build-widget.log" 2>&1
           status=$?
-          grep -E "error:|warning: .*CareerWidget|\*\* BUILD" "$RUNNER_TEMP/build-widget.log" | tail -60
+          grep -E "error:|warning: .*(CareerWidget|NotificationService)|\*\* BUILD" "$RUNNER_TEMP/build-widget.log" | tail -60
           [ "$status" = "0" ] || exit "$status"
-          appex=$(find "$RUNNER_TEMP/dd-widget/Build/Products" -path '*App.app/PlugIns/CareerWidget.appex' -maxdepth 4 | head -1)
-          if [ -z "$appex" ]; then
-            echo "::error::Build succeeded but CareerWidget.appex is not embedded in App.app/PlugIns"
-            exit 1
-          fi
-          echo "Embedded: $appex"
+          for ext in CareerWidget NotificationService; do
+            appex=$(find "$RUNNER_TEMP/dd-widget/Build/Products" -path "*App.app/PlugIns/$ext.appex" -maxdepth 4 | head -1)
+            if [ -z "$appex" ]; then
+              echo "::error::Build succeeded but $ext.appex is not embedded in App.app/PlugIns"
+              exit 1
+            fi
+            echo "Embedded: $appex"
+          done

@@ -5,7 +5,7 @@ import { authOptions } from "@/lib/auth"
 import {
   WaiverRequestSchema,
   WaiverResponseSchema,
-  WAIVER_AI_SYSTEM_PROMPT,
+  buildWaiverAiSystemPrompt,
   buildWaiverUserPrompt,
 } from "@/lib/waiver-ai-prompt"
 import { consumeRateLimit, getClientIp } from "@/lib/rate-limit"
@@ -636,7 +636,7 @@ export const POST = withApiUsage({
       strategyMode: leagueMeta.strategyMode,
     })
     const mandatorySuffix = getMandatorySystemPromptSuffix(envelope)
-    const systemPrompt = [WAIVER_AI_SYSTEM_PROMPT, mandatorySuffix].filter(Boolean).join('\n\n')
+    const systemPrompt = [buildWaiverAiSystemPrompt({ sport: leagueMeta.sport }), mandatorySuffix].filter(Boolean).join('\n\n')
 
     const completion = await openaiChatJson({
       messages: [

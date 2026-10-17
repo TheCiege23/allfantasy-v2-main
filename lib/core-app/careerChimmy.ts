@@ -1,7 +1,7 @@
 import type { CareerAward } from './careerAwards'
 import { TIER_LABEL } from './careerAwards'
 import { isUnfiltered, type CareerData } from './careerModel'
-import type { LeagueCareerData } from './leagueCareer'
+import type { LeagueCareerData, LeagueWeeklyCareerData } from './leagueCareer'
 
 /**
  * Career ↔ Chimmy, both directions.
@@ -144,6 +144,50 @@ export function leagueCareerChimmyPrompts(data: LeagueCareerData): CareerChimmyP
       key: 'best-season',
       label: `Repeat my ${best.season}`,
       ask: `My best season in ${name} was ${best.season} (${best.wins}-${best.losses}). What worked that year?`,
+    })
+  }
+
+  return out.slice(0, MAX_PROMPTS)
+}
+
+/**
+ * Prompts for a league with no head-to-head history (`leagueWeeklyCareer.ts`). Every number quoted
+ * is one the screen shows — a finish against the field, never a win-loss record the league never had.
+ */
+export function leagueWeeklyCareerChimmyPrompts(data: LeagueWeeklyCareerData): CareerChimmyPrompt[] {
+  const name = data.league.name
+  const { weekly } = data
+  const current = weekly.seasons[weekly.seasons.length - 1]
+  const weeks = (n: number) => `${n} ${n === 1 ? 'week' : 'weeks'}`
+  const out: CareerChimmyPrompt[] = []
+
+  if (weekly.format === 'elimination' && current && current.choppedAfterWeek == null) {
+    out.push({
+      key: 'survive',
+      label: 'How do I avoid the chop?',
+      ask: `In ${name} (a guillotine league) I have survived ${weeks(current.weeks)} this season, finishing ${current.averageFinish.toFixed(1)} of ${current.fieldSize} on average. How do I stay out of the bottom spot this week?`,
+    })
+  } else {
+    out.push({
+      key: 'win-here',
+      label: `How do I win ${name}?`,
+      ask: `Based on my weekly scores in ${name}, what do I need to do differently to finish at the top?`,
+    })
+  }
+
+  if (current) {
+    out.push({
+      key: 'finish',
+      label: 'Why am I finishing here?',
+      ask: `In ${name} my average weekly finish is ${current.averageFinish.toFixed(1)} of ${current.fieldSize} across ${weeks(current.weeks)}, with ${current.topScores} top ${current.topScores === 1 ? 'score' : 'scores'}. What is holding my weekly score back?`,
+    })
+  }
+
+  if (data.tradeGrade.available) {
+    out.push({
+      key: 'trade-grade',
+      label: `Why a ${data.tradeGrade.data.letter} trade grade?`,
+      ask: `My career trade grade in ${name} is ${data.tradeGrade.data.letter} (${data.tradeGrade.data.sample}). What is dragging it down, and how do I trade better here?`,
     })
   }
 

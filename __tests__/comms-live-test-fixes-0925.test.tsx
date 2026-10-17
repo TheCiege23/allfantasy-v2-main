@@ -143,13 +143,40 @@ describe('3. when Chimmy cannot answer', () => {
     expect(screen.getByRole('button', { name: /Try again/ })).toBeTruthy()
   })
 
-  it('a gate keeps its own sentence and offers no retry — asking again cannot pass it', async () => {
-    chimmyPost.mockResolvedValueOnce(json({ code: 'VERIFICATION_REQUIRED', error: 'VERIFICATION_REQUIRED' }, 403))
+  it('a gate offers no blind retry — asking again cannot pass it', async () => {
+    chimmyPost.mockResolvedValueOnce(json({ code: 'AGE_REQUIRED', error: 'AGE_REQUIRED' }, 403))
     openDrawer('chimmy')
     ask()
-    expect(await screen.findByText(/Verify your email to use Chimmy/)).toBeTruthy()
+    expect(await screen.findByText(/Confirm your date of birth/)).toBeTruthy()
     expect(screen.queryByRole('button', { name: /Try again/ })).toBeNull()
     expect(screen.queryByText('Your question is back in the box.')).toBeNull()
+  })
+
+  /*
+   * 2026-10-11: VERIFICATION_REQUIRED was a sentence pointing at Settings. It is now the verify card
+   * /import uses — send the link here, then ask the SAME question — never a blind "Try again".
+   */
+  it('unverified: the verify card instead of a red line, and Continue asks the same question', async () => {
+    chimmyPost.mockResolvedValueOnce(json({ code: 'VERIFICATION_REQUIRED', error: 'VERIFICATION_REQUIRED' }, 403))
+    const base = fetchMock.getMockImplementation()!
+    fetchMock.mockImplementation(async (url: unknown, init?: { method?: string }) =>
+      String(url) === '/api/auth/verify-email/send' ? json({ ok: true }) : base(url, init),
+    )
+    openDrawer('chimmy')
+    ask()
+    const card = await screen.findByTestId('import-verify-gate')
+    expect(card.textContent).toContain('Confirm your email to ask Chimmy')
+    expect(document.querySelector('.af-cm-error')).toBeNull()
+    expect(screen.queryByRole('button', { name: /Try again/ })).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Email me the link' }))
+    await waitFor(() => expect(fetchMock.mock.calls.some((c) => c[0] === '/api/auth/verify-email/send')).toBe(true))
+
+    fireEvent.click(await screen.findByRole('button', { name: 'I’ve confirmed — continue' }))
+    expect(await screen.findByText('Sunday Squad. Your flex is on bye.')).toBeTruthy()
+    expect(chimmyPost).toHaveBeenCalledTimes(2)
+    expect(((chimmyPost.mock.calls[1][1] as { body: FormData }).body).get('message')).toBe(Q)
+    await waitFor(() => expect(screen.queryByTestId('import-verify-gate')).toBeNull())
   })
 })
 

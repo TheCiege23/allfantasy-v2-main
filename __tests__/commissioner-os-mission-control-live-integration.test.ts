@@ -138,7 +138,10 @@ describe("Mission Control live.ts — active-league resolution (shared by all 3 
       [`/api/v1/intelligence/league/trend?leagueId=${encodeURIComponent("lg live/one")}`]: { data: null, error: null },
     })
     await liveDecisionOSClient.getLeagueHealthSummary()
-    expect(prismaMock.league.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { userId: "user-1" } }))
+    expect(prismaMock.league.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { OR: [
+      { userId: "user-1" },
+      { teams: { some: { claimedByUserId: "user-1", role: { not: "viewer" }, OR: [{ isCommissioner: true }, { isCoCommissioner: true }] } } },
+    ] } }))
     expect(callDecisionOSMock).toHaveBeenCalledWith("mission-control", `/api/v1/intelligence/league?leagueId=${encodeURIComponent("lg live/one")}`)
     expect(callDecisionOSMock).toHaveBeenCalledWith("mission-control", `/api/v1/intelligence/league/trend?leagueId=${encodeURIComponent("lg live/one")}`)
   })

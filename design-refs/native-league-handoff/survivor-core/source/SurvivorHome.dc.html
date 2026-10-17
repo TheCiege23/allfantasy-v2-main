@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Survivor league home</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./exile/exile.css">
+<link rel="stylesheet" href="./kit/kit.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Cinzel:wght@600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080d}
+.sh-mem{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:9px;background:#10131c;border:1px solid rgba(255,255,255,.05)}
+.sh-race{height:14px;border-radius:99px;overflow:hidden;display:flex;background:#151926}
+.sh-feed{display:flex;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+.sh-feed:last-child{border-bottom:0}
+.sh-feed img{width:34px;height:34px}
+</style>
+</helmet>
+<div class="ex" style="min-height: 100vh; display: flex; flex-direction: column">
+  <section class="k-hero" style="margin: 20px 28px 0; min-height: 250px">
+    <img class="k-bg" src="survivor/bg/dusk-football.svg" alt="">
+    <div class="k-veil"></div>
+    <div class="k-in" style="display: flex; flex-wrap: wrap; align-items: center; gap: 28px; padding: 28px 32px; min-height: 250px">
+      <div style="flex: 1 1 520px; display: flex; flex-direction: column; gap: 10px">
+        <div class="k-row"><span class="ex-chip">NFL</span><span class="ex-chip">2026</span><span class="ex-chip">Survivor</span><span class="ex-chip">12 managers · 9 left</span></div>
+        <span style="font: 700 40px/1.05 'Cinzel', serif; color: #f1d58a">Blah Survivor</span>
+        <span class="ex-t2" style="font-size: 15px">Week 6 · Tribe Vela goes to Tribal Council tonight. Koa won the tribe race.</span>
+        <div class="k-row" style="flex-wrap: wrap; gap: 10px; margin-top: 4px">
+          <a class="ex-btn ex-btn-gold" href="VoteCast.dc.html" style="min-height: 46px; padding: 0 22px">Cast your vote</a>
+          <a class="ex-btn" href="SeasonTimeline.dc.html" style="min-height: 46px">Season story</a>
+          <a class="ex-btn" href="SurvivorSettings.dc.html" style="min-height: 46px">Settings</a>
+        </div>
+      </div>
+      <div style="flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 18px 26px; border-radius: 14px; background: rgba(7,8,13,.6); border: 1px solid rgba(255,255,255,.1)">
+        <span class="ex-lbl" style="color: #ff9a3c">Votes close in</span>
+        <span class="ex-num" style="font-size: 40px; font-weight: 700; color: #ffd0b0">{{clock}}</span>
+        <span class="ex-t3" style="font-size: 12px">Tuesday 8:00 PM ET · 2 of 4 voted</span>
+      </div>
+    </div>
+  </section>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 20px; padding: 20px 28px 32px; align-items: flex-start">
+    <section style="flex: 1 1 520px; display: flex; flex-direction: column; gap: 16px; min-width: 0">
+      <div class="ex-card" style="padding: 18px 20px; display: flex; flex-direction: column; gap: 12px">
+        <div class="k-row"><span class="ex-lbl k-sp">Tribe race · week 6</span><span class="ex-t3" style="font-size: 12px">Lowest tribe total goes to Tribal Council</span></div>
+        <div class="k-row" style="justify-content: space-between"><span style="font: 700 15px 'Cinzel', serif; color: #b8a8ff">Vela <span class="ex-num" style="font-family: 'JetBrains Mono'; color: #e8eaf2">498.9</span></span><span style="font: 700 15px 'Cinzel', serif; color: #7fd3de"><span class="ex-num" style="font-family: 'JetBrains Mono'; color: #e8eaf2">655.0</span> Koa</span></div>
+        <div class="sh-race"><span style="width: 43%; background: linear-gradient(90deg,#5a4aa8,#8b7be0)"></span><span style="flex: 1; background: linear-gradient(90deg,#2f8f9e,#3fa7b5)"></span></div>
+        <span class="ex-t2" style="font-size: 12.5px">Koa wins by 156.1. Vela heads to Tribal Council. Open Team 5 has immunity.</span>
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px">
+        <sc-for list="{{tribes}}" as="t" hint-placeholder-count="2">
+          <div class="ex-card" style="padding: 16px; display: flex; flex-direction: column; gap: 10px; border-color: {{t.line}}">
+            <div class="k-row"><img src="{{t.crest}}" alt="" style="width: 46px"><div style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font: 700 18px 'Cinzel', serif; letter-spacing: .08em; color: {{t.c}}">{{t.name}}</span><span class="ex-t3" style="font-size: 12px">{{t.sub}}</span></div><img src="{{t.buff}}" alt="" style="width: 64px"></div>
+            <sc-for list="{{t.mem}}" as="m" hint-placeholder-count="5">
+              <div class="sh-mem" style="opacity: {{m.op}}; border-color: {{m.line}}">
+                <span class="k-av" style="background: {{m.c}}; box-shadow: 0 0 0 2px #10131c, 0 0 0 3.5px {{m.ring}}; filter: {{m.f}}">{{m.ini}}<sc-if value="{{m.imm}}" hint-placeholder-val="{{ false }}"><img src="weekly/immunity-necklace-icon.svg" alt="" style="position: absolute; right: -8px; bottom: -8px; width: 20px"></sc-if></span>
+                <span style="flex: 1; font-weight: 600; text-decoration: {{m.td}}">{{m.name}}</span>
+                <span class="ex-num" style="font-size: 12.5px; color: #a3a9c2">{{m.pts}}</span>
+                <img src="{{m.torch}}" alt="{{m.st}}" style="width: 22px">
+              </div>
+            </sc-for>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+
+    <aside style="flex: 0 1 400px; display: flex; flex-direction: column; gap: 16px">
+      <div class="ex-card2" style="padding: 16px; display: flex; gap: 14px; align-items: center; border-color: rgba(242,201,76,.35)">
+        <img src="survivor/idols/immunity.svg" alt="" style="height: 80px">
+        <div style="flex: 1; display: flex; flex-direction: column; gap: 4px"><span class="ex-lbl ex-gold">Your idols · private</span><span style="font-weight: 700">Immunity idol</span><span class="ex-t2" style="font-size: 12.5px">Playable until votes close tonight.</span></div>
+        <a class="ex-btn" href="IdolVault.dc.html">Vault</a>
+      </div>
+      <div class="ex-card" style="padding: 16px; display: flex; flex-direction: column; gap: 10px">
+        <div class="k-row"><img src="exile/token-icon.svg" alt="" style="width: 26px"><span class="ex-lbl k-sp">Exile Island · 3 managers</span><a href="ExileTokens.dc.html" style="color: #d9b45a; font-size: 12px; font-weight: 600; text-decoration: none">Open ›</a></div>
+        <sc-for list="{{exile}}" as="e" hint-placeholder-count="3"><div class="k-row" style="font-size: 13px"><span class="k-sp ex-t2">{{e.name}}</span><span style="display: flex; gap: 3px"><sc-for list="{{e.coins}}" as="c" hint-placeholder-count="2"><img src="exile/token-icon.svg" alt="" style="width: 16px"></sc-for></span><span class="ex-num ex-t3" style="width: 36px; text-align: right">{{e.n}}/3</span></div></sc-for>
+      </div>
+      <div class="ex-card" style="padding: 14px 16px; display: flex; flex-direction: column">
+        <span class="ex-lbl" style="margin-bottom: 4px">Latest</span>
+        <sc-for list="{{feed}}" as="f" hint-placeholder-count="4"><div class="sh-feed"><img src="{{f.icon}}" alt=""><div style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 600; font-size: 13px">{{f.t}}</span><span class="ex-t3" style="font-size: 11.5px">{{f.s}}</span></div></div></sc-for>
+      </div>
+    </aside>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1150}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { t: 4 * 3600 + 12 * 60 + 9 }; }
+  componentDidMount() { this.iv = setInterval(() => this.setState({ t: Math.max(0, this.state.t - 1) }), 1000); }
+  componentWillUnmount() { clearInterval(this.iv); }
+  renderVals() {
+    const t = this.state.t, h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), s = t % 60, p = n => String(n).padStart(2, '0');
+    const lit = 'weekly/torch-lit-icon.svg', out = 'weekly/torch-out-icon.svg';
+    const mk = (name, ini, c, pts, st, imm) => ({ name, ini, c, pts, st, imm: !!imm, torch: st === 'out' ? out : lit, op: st === 'out' ? '.55' : '1', td: st === 'out' ? 'line-through' : 'none',
+      f: st === 'out' ? 'grayscale(1) brightness(.7)' : 'none', ring: imm ? '#f2c94c' : st === 'out' ? '#4a4f5c' : '#9b8ae0', line: imm ? 'rgba(242,201,76,.35)' : 'rgba(255,255,255,.05)' });
+    return { clock: p(h) + ':' + p(m) + ':' + p(s),
+      tribes: [
+        { name: 'Vela', c: '#b8a8ff', crest: 'tribes/nfl/manta.svg', buff: 'late/buff-vela.svg', sub: 'Going to Tribal Council', line: 'rgba(255,154,60,.4)',
+          mem: [mk('TheCiege26', 'TC', '#22314f', '118.0'), mk('Open Team 5', 'O5', '#12352a', '142.6', 'in', true), mk('Open Team 4', 'O4', '#1f2a4d', '104.8'), mk('Open Team 8', 'O8', '#3a2410', '96.2'), mk('Open Team 12', 'O12', '#2a2a2a', '—', 'out')] },
+        { name: 'Koa', c: '#7fd3de', crest: 'tribes/nfl/shark.svg', buff: 'late/buff-koa.svg', sub: 'Safe this week', line: 'rgba(63,167,181,.35)',
+          mem: [mk('Open Team 2', 'O2', '#4a1f2c', '131.4'), mk('Open Team 6', 'O6', '#2c2a4a', '127.9'), mk('Open Team 7', 'O7', '#1d3a3a', '139.2'), mk('Open Team 9', 'O9', '#3a3418', '124.5'), mk('Open Team 10', 'O10', '#2a2a2a', '—', 'out')] }],
+      exile: [['Open Team 11', 2], ['Open Team 3', 1], ['Open Team 10', 0]].map(([name, n]) => ({ name, n, coins: Array.from({ length: n }, () => 1) })),
+      feed: [['weekly/immunity-necklace-icon.svg', 'Open Team 5 won immunity', '142.6, top of Vela · 2h ago'], ['late/buff-vela.svg', 'Tribe swap complete', 'Week 5 · 4 managers moved'],
+             ['exile/token-icon.svg', 'Open Team 11 earned a token', 'Exile Island · 2 of 3'], ['weekly/torch-out-icon.svg', 'Open Team 12’s torch is out', 'Week 5 · 3–2 vote']].map(([icon, t, s]) => ({ icon, t, s })) };
+  }
+}
+</script>
+</body>
+</html>

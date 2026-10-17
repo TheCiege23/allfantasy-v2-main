@@ -90,6 +90,13 @@ describe('league calendar', () => {
     expect(cal.events[0]?.kind).toBe('renewal')
   })
 
+  it('a platform whose renewal AllFantasy follows says so; any other still asks for a re-import', () => {
+    const followed = buildLeagueCalendar(input({ status: 'complete', followsRenewal: true })).events[0]
+    expect(followed?.detail).toBe('This season is finished. Renew it on Sleeper — AllFantasy picks up the new season on its own within a few hours.')
+    const other = buildLeagueCalendar(input({ status: 'complete', platformLabel: 'ESPN' })).events[0]
+    expect(other?.detail).toMatch(/then re-import/)
+  })
+
   it('next deadline is the soonest dated or week-keyed event still ahead', () => {
     const cal = buildLeagueCalendar(input({ polls: [{ id: 'm1', question: 'Q', closesAt: null }] }))
     expect(nextDeadline(cal)?.kind).toBe('trade_deadline')

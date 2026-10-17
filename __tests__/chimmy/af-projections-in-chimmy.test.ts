@@ -60,7 +60,7 @@ describe('player-projection tool — AF and API, labelled', () => {
   it('names the engine as AF and, in a league, gives the provider (API) and AF under its rules', async () => {
     const out = await buildPlayerProjectionContext({ playerName: 'Test Back', leagueId: 'lg-1' })
     expect(out).toContain("AF (AllFantasy's own projection engine): 9.2 points PER GAME")
-    expect(out).toContain("API (the provider's, Sleeper, projection): 10.0 points in KBFL for week 4")
+    expect(out).toContain('Sleeper projection: 10.0 points in KBFL for week 4')
     // 9.6 engine x (10 league / 8 generic) = 12.0 — the same carry every /core surface uses.
     expect(out).toContain('AF in KBFL for week 4: 12.0 points')
     expect(out).toContain('do not average them')
@@ -70,14 +70,29 @@ describe('player-projection tool — AF and API, labelled', () => {
   it('leaves out the AF league line when the engine has no row, keeping the provider line', async () => {
     h.engine.mockResolvedValue(new Map())
     const out = await buildPlayerProjectionContext({ playerName: 'Test Back', leagueId: 'lg-1' })
-    expect(out).toContain('API (the provider')
+    expect(out).toContain('Sleeper projection:')
     expect(out).not.toContain('AF in KBFL')
+  })
+
+  it('credits a DEFENDER in an IDP league to AllFantasy’s IDP model, not to Sleeper', async () => {
+    /* The lookup passes IDP enrichment, and Sleeper has no defensive line — so this number is ours. */
+    h.find.mockResolvedValue({ rows: [{ ...row, position: 'LB' }], season: 2026 })
+    h.league.mockResolvedValue({ name: 'KBFL', settings: { scoring_settings: { rec: 2, idp_tkl: 1 } } })
+    const out = await buildPlayerProjectionContext({ playerName: 'Test Back', leagueId: 'lg-1' })
+    expect(out).toContain('AllFantasy IDP model (Sleeper publishes no defensive projection): 10.0 points in KBFL for week 4')
+    expect(out).not.toContain('Sleeper projection:')
+  })
+
+  it('still says Sleeper for the same defender in a league that does not score IDP', async () => {
+    h.find.mockResolvedValue({ rows: [{ ...row, position: 'LB' }], season: 2026 })
+    const out = await buildPlayerProjectionContext({ playerName: 'Test Back', leagueId: 'lg-1' })
+    expect(out).toContain('Sleeper projection: 10.0 points in KBFL for week 4')
   })
 
   it('a failed AF read drops only the AF line', async () => {
     h.engine.mockRejectedValue(new Error('db down'))
     const out = await buildPlayerProjectionContext({ playerName: 'Test Back', leagueId: 'lg-1' })
-    expect(out).toContain('API (the provider')
+    expect(out).toContain('Sleeper projection:')
     expect(out).not.toContain('AF in KBFL')
     expect(out).not.toContain('could not be read just now')
   })

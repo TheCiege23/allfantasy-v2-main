@@ -1,0 +1,82 @@
+name: Railway deploy (batched)
+
+# Deploys `main` to Railway's `allfantasy-v2-main` ONE BUILD AT A TIME, always the newest commit.
+# Owner's decision, 2026-10-06, to cut deploys that took 20-30+ minutes.
+#
+# WHY. Measured on 2026-10-06 over 4 hours: 30 deploys, about one every 8 minutes, and every one
+# built on the SAME Railway builder machine. A lone deploy takes ~15 min push-to-live (compile ~6
+# min). When merges land minutes apart their builds overlap, share that machine's CPU, and all slow
+# down: one compile went from ~6 min to 21.6, and that deploy took 33.6 min. Every overlapping build
+# is billed too. Since `main` became PR-only (2026-10-03) merges happen on GitHub, so the local
+# pre-push "a build is in flight" guard never runs — nothing spaced deploys out.
+#
+# HOW. One run at a time, and a running one is NEVER cancelled (same reasoning as deploy-verify.yml).
+# GitHub keeps at most one PENDING run per concurrency group and replaces it with the newest, so a
+# burst of N merges becomes at most two builds, and nothing can starve: a run that has started
+# always finishes. Each run (scripts/railway-batched-deploy.mjs):
+#   1. waits a short quiet window for more merges,
+#   2. waits until no build of this service is in flight,
+#   3. deploys the NEWEST commit on main (read then, not the commit that triggered the run),
+#   4. follows that deployment to the end — so a failed build is a red run here.
+#
+# 🛑 THIS FILE IS HALF THE CHANGE, AND IT IS INERT UNTIL BOTH HALVES ARE DONE. It runs only when the
+# repository variable RAILWAY_BATCHED_DEPLOY is `on`. Turn it on in the SAME sitting as switching
+# off Railway's own deploy-on-push (service allfantasy-v2-main → Settings → Source → Disable
+# automatic deployments). With both on, every merge builds twice; with both off, nothing deploys.
+#   - secret   RAILWAY_DEPLOY_TOKEN — a Railway PROJECT token scoped to the production environment
+#                                     (project settings → Tokens). Least privilege: one environment.
+#   - variable RAILWAY_BATCHED_DEPLOY = on
+#
+# Docs-only and test-only changes do not deploy (paths-ignore); they ride along with the next real one.
+# To deploy right now: Actions → "Railway deploy (batched)" → Run workflow (quiet window 0).
+# The worker (`allfantasy-v2-worker`) is NOT deployed here — it tracks `worker-release`, see
+# worker-release.yml. `allfantasy-cron` keeps its own watch paths.
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+      - "__tests__/**"
+      - "e2e/**"
+      - "agent-tester/**"
+  workflow_dispatch:
+    inputs:
+      quiet_seconds:
+        description: "Seconds to wait for more merges before deploying"
+        required: false
+        default: "0"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: railway-deploy-allfantasy-v2-main
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy newest main
+    if: vars.RAILWAY_BATCHED_DEPLOY == 'on'
+    runs-on: ubuntu-latest
+    # Quiet window (3) + waiting out a build already in flight (≤45) + this build (≤45), with margin.
+    timeout-minutes: 100
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts/railway-batched-deploy.mjs
+          sparse-checkout-cone-mode: false
+      # No dependencies: the script uses only global fetch and git.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+      - name: Deploy
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_DEPLOY_TOKEN }}
+          PROJECT_ID: b13be9a3-b7ca-41c6-90cc-51cdf7cac3cf
+          ENVIRONMENT_ID: 2e0aba38-9e21-4df0-9957-484a346da227
+          SERVICE_ID: 26e55ff8-c945-4526-8523-f6bfa723357e
+          REPO_URL: https://github.com/${{ github.repository }}.git
+          QUIET_SECONDS: ${{ github.event_name == 'workflow_dispatch' && inputs.quiet_seconds || '180' }}
+        run: node scripts/railway-batched-deploy.mjs

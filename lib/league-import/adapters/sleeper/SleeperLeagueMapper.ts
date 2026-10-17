@@ -98,6 +98,16 @@ export const SleeperLeagueMapper: IExternalLeagueMapper<SleeperImportPayload> = 
     const reserveAllowDnr = toBoolFromNumeric(settings.reserve_allow_dnr)
     const reserveAllowDoubtful = toBoolFromNumeric(settings.reserve_allow_doubtful)
 
+    const rawSchedule = {
+      waiver_day_of_week: toIntOrUndef(settings.waiver_day_of_week),
+      daily_waivers: toIntOrUndef(settings.daily_waivers),
+      daily_waivers_hour: toIntOrUndef(settings.daily_waivers_hour),
+      waiver_clear_days: toIntOrUndef(settings.waiver_clear_days),
+    }
+    const sleeperWaiverSchedule = Object.values(rawSchedule).some((v) => v !== undefined)
+      ? Object.fromEntries(Object.entries(rawSchedule).filter(([, v]) => v !== undefined))
+      : null
+
     // Sleeper regular season = weeks before playoff_week_start. Previously hardcoded
     // to 14 which broke every league whose playoffs didn't start on week 15.
     const regularSeasonLength =
@@ -146,6 +156,20 @@ export const SleeperLeagueMapper: IExternalLeagueMapper<SleeperImportPayload> = 
       max_keepers: maxKeepers,
       // See the `isKeeper` note above: max_keepers is a Sleeper default, this is the real flag.
       is_keeper: isKeeper,
+      /*
+       * 🛑 SLEEPER'S WAIVER SCHEDULE FIELDS, STORED RAW — AND ONLY ONE OF THEM IS INTERPRETED.
+       *
+       * Dropped at import until 2026-10-02 (`lib/chimmy-alerts/waiverCheck.ts` measured no league
+       * carrying `waiver_day_of_week`). Compared on 2026-10-03 against the schedule OBSERVED from
+       * when each league's claims processed (lib/waivers/observedWaiverSchedule.ts):
+       * - `daily_waivers_hour` IS the Pacific run hour (246 of 249 leagues, ~20 distinct hours —
+       *   contracts/sleeper/GAPS.md S-06). lib/waivers/sleeperWaiverSchedule.ts uses it where
+       *   nothing has been observed.
+       * - `waiver_day_of_week`: which weekday it names is unresolved in general (S-05). ONE value is
+       *   measured — `2` is Wednesday — and sleeperWaiverSchedule.ts reads that value and no other.
+       *   Never render the number as a weekday by arithmetic.
+       */
+      ...(sleeperWaiverSchedule ? { sleeper_waiver_schedule: sleeperWaiverSchedule } : {}),
       reserve_allow_cov: reserveAllowCov,
       reserve_allow_sus: reserveAllowSus,
       reserve_allow_out: reserveAllowOut,

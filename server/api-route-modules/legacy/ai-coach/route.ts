@@ -5,6 +5,7 @@ import { requireLegacySleeperIdentity } from "@/lib/legacy/requireLegacySleeperI
 import { getDecisionLogsForCoach, getDecisionSummary } from "@/lib/decision-log";
 import { getCachedDNA, formatDNAForPrompt } from "@/lib/manager-dna";
 import { isAiSpendEnabled } from "@/lib/ai/aiSpendGuard";
+import { legacyPromptSeason, nflDraftClassReminder } from "@/lib/legacy/promptSeason";
 
 type CoachInput = {
   sleeper_username: string;
@@ -184,6 +185,10 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/ai-coach", tool: "Lega
     // decision log not available, continue without it
   }
 
+  // Seasons come from the clock (`lib/legacy/promptSeason.ts`); this prompt used to hard-code 2025/2026.
+  const now = new Date();
+  const season = legacyPromptSeason(now);
+
   const prompt = {
     role: "user",
     content: [
@@ -195,13 +200,13 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/ai-coach", tool: "Lega
       `- "I know it's tempting… don't do it."`,
       `- "This is how rebuilds get delayed."`,
       `- "Your next move should be selling [Player] before the rookie draft."`,
-      `- "Ignore RBs this offseason. Your window is 2026."`,
+      `- "Ignore RBs this offseason. Your window is ${season + 1}."`,
       `- "Stop hoarding picks. You have enough. Start spending."`,
       ``,
       `## OFFSEASON WINDOW STATUS`,
       `Classify them based on OFFSEASON factors (not record):`,
-      `- 🏆 READY_TO_COMPETE: Window OPEN for 2025. Buy proven talent, win now!`,
-      `- 🔨 REBUILDING: Building for 2026+. Sell aging RBs, acquire picks and youth.`,
+      `- 🏆 READY_TO_COMPETE: Window OPEN for ${season}. Buy proven talent, win now!`,
+      `- 🔨 REBUILDING: Building for ${season + 1}+. Sell aging RBs, acquire picks and youth.`,
       `- ⚠️ OVEREXTENDED: Fragile contender. Shore up depth or sell before crater.`,
       `- 📉 AGING_CORE: Window closing fast. Aggressively sell for picks NOW.`,
       `- 🧱 DIRECTION_NEEDED: Stuck in middle. Pick a lane or die slowly.`,
@@ -240,7 +245,7 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/ai-coach", tool: "Lega
       `  - rookie_draft (array of 2 strings - draft strategy)`,
       `  - free_agency (array of 2 strings - FA targets)`,
       `  - training_camp (array of 1 string - final moves)`,
-      `- dont_do_this (array of 2 strings - common mistakes to avoid for their situation, written like "I know it's tempting to trade for an RB1, but don't do it. Your window is 2026.")`,
+      `- dont_do_this (array of 2 strings - common mistakes to avoid for their situation, written like "I know it's tempting to trade for an RB1, but don't do it. Your window is ${season + 1}.")`,
       `- coaching_quote (string - a motivational/honest closing line like "Rebuilds are won by patience. Trust the process." or "Championships are won by making the hard trades. Stop being sentimental.")`,
       `- retrospective_insights (array of strings, optional - if decision history is available, include 1-3 retrospective observations like "You ignored my advice to sell Player X three weeks ago — and his value dropped 15%. Trust the process next time." or "You followed my waiver pickup suggestion and it paid off — nice work.")`,
     ].join("\n"),
@@ -263,7 +268,7 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/ai-coach", tool: "Lega
             content:
               `You are THE ELITE AllFantasy AI Head Coach - you tell managers exactly what to do next. You're conversational, direct, and entertaining. You speak TO them like a real coach: 'Your next move should be...' 'I know it's tempting, but don't do it.' 'This is how rebuilds get delayed.' Synthesize all their data into a clear GAME PLAN organized by offseason timing (pre-draft, rookie draft, free agency, training camp). Be honest about mistakes. Name specific players and picks.
 
-CRITICAL: Today's date is ${new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}. The 2024 NFL Draft class (Marvin Harrison Jr, Malik Nabers, Jayden Daniels, Caleb Williams, Omarion Hampton, Brock Bowers, etc.) have ALREADY completed their rookie seasons and are now active NFL players with game tape - do NOT refer to them as prospects.
+CRITICAL: Today's date is ${now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}. The current fantasy season is ${season}. ${nflDraftClassReminder(now)}
 
 Always respond with valid JSON only.`,
           },

@@ -98,6 +98,11 @@ export type ChimmyToolLoopResult = {
   provider?: ChimmyToolLoopProvider
   /** The model id the answering provider ran. */
   model?: string
+  /**
+   * The tool results the answer was written from, in order. Read only by the route's observe-only
+   * hallucination check (`toolLoopGuardObservation.ts`); never sent to the client or stored.
+   */
+  evidence?: string
 }
 
 function hasXaiKey(): boolean {
@@ -185,6 +190,11 @@ type ChimmyToolLoopArgs = {
   context: ChimmyToolContext
   enabled: boolean
   model?: string
+  /**
+   * Wall-clock budget for the whole loop (Claude). Absent: the panel's 75s. A chat reply holds the
+   * sender's message until it arrives, so `@chimmy` in a chat thread passes less.
+   */
+  budgetMs?: number
 }
 
 export async function runChimmyToolLoop(args: ChimmyToolLoopArgs): Promise<ChimmyToolLoopResult | null> {
@@ -225,7 +235,8 @@ async function runClaudeToolLoop(args: ChimmyToolLoopArgs): Promise<ChimmyToolLo
     { role: 'user', content: 'CURRENT USER REQUEST:\n' + args.question },
   ]
   const toolsUsed: string[] = []
-  const deadline = Date.now() + CLAUDE_LOOP_BUDGET_MS
+  const evidence: string[] = []
+  const deadline = Date.now() + Math.min(CLAUDE_LOOP_BUDGET_MS, Math.max(5_000, args.budgetMs ?? CLAUDE_LOOP_BUDGET_MS))
   let useFallbacks = true
 
   const call = async (final: boolean): Promise<Anthropic.Message> => {
@@ -313,7 +324,7 @@ async function runClaudeToolLoop(args: ChimmyToolLoopArgs): Promise<ChimmyToolLo
           .map((b) => b.text)
           .join('')
           .trim()
-        return text ? { text, toolsUsed, turns: turn, provider: 'claude', model: response.model || model } : null
+        return text ? { text, toolsUsed, turns: turn, provider: 'claude', model: response.model || model, evidence: evidence.join('\n\n') } : null
       }
 
       // See the Grok loop: the last turn must not end on a tool call.
@@ -328,6 +339,7 @@ async function runClaudeToolLoop(args: ChimmyToolLoopArgs): Promise<ChimmyToolLo
       for (const use of toolUses) {
         const result = await executeChimmyTool(use.name, use.input ?? {}, args.context)
         toolsUsed.push(use.name)
+        evidence.push(result)
         results.push({ type: 'tool_result', tool_use_id: use.id, content: result })
       }
       messages.push({ role: 'user', content: results })
@@ -353,6 +365,7 @@ async function runGrokToolLoop(args: ChimmyToolLoopArgs): Promise<ChimmyToolLoop
   ]
 
   const toolsUsed: string[] = []
+  const evidence: string[] = []
 
   try {
     for (let turn = 1; turn <= MAX_TOOL_TURNS; turn += 1) {
@@ -393,7 +406,7 @@ async function runGrokToolLoop(args: ChimmyToolLoopArgs): Promise<ChimmyToolLoop
       const calls = message.tool_calls ?? []
       if (calls.length === 0) {
         const text = typeof message.content === 'string' ? message.content.trim() : ''
-        return text ? { text, toolsUsed, turns: turn, provider: 'grok', model } : null
+        return text ? { text, toolsUsed, turns: turn, provider: 'grok', model, evidence: evidence.join('\n\n') } : null
       }
 
       /*
@@ -417,6 +430,7 @@ async function runGrokToolLoop(args: ChimmyToolLoopArgs): Promise<ChimmyToolLoop
 
         const result = await executeChimmyTool(name, parsed, args.context)
         toolsUsed.push(name)
+        evidence.push(result)
 
         messages.push({
           role: 'tool',

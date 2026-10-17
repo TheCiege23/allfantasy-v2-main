@@ -3,11 +3,9 @@
  * Used by the credentials provider to support one unified login field.
  */
 import { prisma } from "@/lib/prisma"
+import { normalizePhoneE164 } from "@/lib/phone/e164"
 
-function normalizePhone(input: string): string {
-  const s = input.trim().replace(/[\s()-]/g, "")
-  return s.startsWith("+") ? s : "+1" + s
-}
+const normalizePhone = normalizePhoneE164
 
 export function isPhoneLoginCandidate(input: string): boolean {
   const trimmed = input.trim()

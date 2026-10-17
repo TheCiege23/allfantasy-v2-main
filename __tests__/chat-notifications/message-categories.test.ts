@@ -10,6 +10,7 @@ import {
   NOTIFICATION_CATEGORY_IDS,
   NOTIFICATION_CATEGORY_LABELS,
   OPT_IN_NOTIFICATION_CATEGORY_IDS,
+  EMAIL_DEFAULT_OFF_CATEGORY_IDS,
 } from '@/lib/notification-settings/types'
 import {
   getDefaultCategoryPreferences,
@@ -86,8 +87,12 @@ describe('league_chat — opt-in', () => {
   it('every other category keeps its on-by-default (only the opt-in list changed)', () => {
     for (const id of NOTIFICATION_CATEGORY_IDS) {
       if (OPT_IN_NOTIFICATION_CATEGORY_IDS.includes(id)) continue
-      expect(getDefaultCategoryPreferences(id)).toMatchObject({ enabled: true, inApp: true, email: true, sms: false })
+      // Live game moments start with EMAIL off (stale by the time an inbox is read) — the one other
+      // default exception, listed in EMAIL_DEFAULT_OFF_CATEGORY_IDS.
+      const email = !EMAIL_DEFAULT_OFF_CATEGORY_IDS.includes(id)
+      expect(getDefaultCategoryPreferences(id)).toMatchObject({ enabled: true, inApp: true, email, sms: false })
     }
+    expect(EMAIL_DEFAULT_OFF_CATEGORY_IDS).toEqual(['live_game_alerts'])
   })
 
   it('the settings fingerprint sees a league_chat change', () => {

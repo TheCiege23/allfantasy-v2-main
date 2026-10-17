@@ -154,7 +154,10 @@ export type LeagueActivityItem = {
   managerName: string
   badge: string
   badgeTone: 'neutral' | 'teal' | 'green'
+  /** Display string. Not sortable — use `occurredAt`. */
   timestamp: string
+  /** ISO time the move happened, so callers can merge this list with other activity in order. */
+  occurredAt?: string | null
   amountLabel?: string | null
   summary?: string | null
   lines: LeagueActivityLine[]
@@ -172,6 +175,7 @@ export type LeagueTradeAsset = {
 }
 
 export type LeagueTradeHistoryItem = {
+  impactRef?: import('@/components/core-app/screens/ImpactNowReview').ImpactNowRef
   id: string
   /**
    * The saved `evaluateTrade()` receipt for the letter this row shows NOW (Trade OS, design step 5). Null
@@ -193,7 +197,13 @@ export type LeagueTradeHistoryItem = {
     name: string
     avatarUrl: string | null
     isViewer: boolean
+    /** What this manager SENT (items leaving their roster). */
     assets: LeagueTradeAsset[]
+    /**
+     * What this manager RECEIVED (items arriving on their roster) — what a trade card lists under
+     * their name and letter. Optional only for rows built before it existed.
+     */
+    received?: LeagueTradeAsset[]
     grade: string | null
     reason: string | null
   }>

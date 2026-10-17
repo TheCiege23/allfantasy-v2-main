@@ -1,10 +1,13 @@
 'use client'
 
 import Link from 'next/link'
+import { FormatWeekCards } from '@/components/core-app/FormatWeekCards'
+import { WeekDateRange } from '@/components/core-app/WeekDateRange'
 import type { WeekBoard, WeekMatchup } from '@/lib/core-app/weekBoard'
 import type { WeekLineups } from '@/lib/core-app/weekLineups'
 import { WeekLineupLine } from '@/components/core-app/screens/WeekLineupLine'
 import { kickoffDayLabel } from '@/lib/core-app/kickoffLabel'
+import { kickoffText } from '@/lib/core-app/kickoffText'
 // Client-safe: eliminationSettle.ts has no runtime imports (its one import is a type).
 import { settleBadge } from '@/lib/core-app/eliminationSettle'
 /*
@@ -14,9 +17,11 @@ import { settleBadge } from '@/lib/core-app/eliminationSettle'
  * client bundle and 500'd every screen on the /core route. See the header of
  * lib/core-app/weekBoardRules.ts.
  */
-import { COIN_FLIP_POINTS } from '@/lib/core-app/weekBoardRules'
 import { rosterLabel } from '@/lib/core-app/managerName'
 import '@/components/core-app/af-week.css'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
+import { TopicTip } from '@/components/core-app/TopicTip'
 
 /**
  * 24a — "Your Week, every matchup".
@@ -70,27 +75,30 @@ function OpponentName({ matchup }: { matchup: WeekMatchup }) {
 
 /** Large card — the coin-flip tier. */
 function CoinFlipCard({ matchup, lineups }: { matchup: WeekMatchup; lineups?: WeekLineups | null }) {
+  const { language } = useOptionalLanguage()
+  const copy = (english: string) => coreUiCopy(english, language)
   const p = matchup.projection!
-  const gap = Math.abs(p.margin)
-  const favoured = p.margin >= 0
+  const score = matchup.live ?? p
+  const gap = Math.abs(score.margin)
+  const favoured = score.margin >= 0
   return (
     <Link href={matchup.href} className="af-wk-flip">
       <div className="af-wk-flip-head">
-        <span className="af-wk-league" data-platform={matchup.platform}>
-          {matchup.leagueName}
+        <span className="af-wk-league" style={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }} data-platform={matchup.platform}>
+          {matchup.leagueName} · {matchup.season} · {language === 'es' ? 'Período' : 'Period'} {matchup.week}
         </span>
-        <span className="af-wk-gap af-num">{gap.toFixed(1)} pt gap</span>
+        <span className="af-wk-gap af-num">{language === 'es' ? `${gap.toFixed(1)} pts de diferencia` : `${gap.toFixed(1)} pt gap`}</span>
       </div>
 
       <div className="af-wk-flip-prob">
         <span className="af-wk-prob af-num" data-favoured={favoured}>
-          {pct(p.winProbability)}
+          {matchup.live ? matchup.live.final ? matchup.live.margin > 0 ? language === 'es' ? 'Victoria' : 'Won' : matchup.live.margin < 0 ? language === 'es' ? 'Derrota' : 'Lost' : language === 'es' ? 'Empate' : 'Tied' : language === 'es' ? 'En juego' : 'Live' : pct(p.winProbability)}
         </span>
-        <span className="af-wk-prob-label">to win</span>
+        <span className="af-wk-prob-label">{matchup.live ? copy('current score') : language === 'es' ? 'según el historial' : 'from history'}</span>
       </div>
 
       <div className="af-wk-flip-line">
-        <span className="af-wk-vs">vs</span>
+        <span className="af-wk-vs">{copy('vs')}</span>
         {/* Resolved by the loader via `managerArtUrl`; no avatar means no image, the name carries it. */}
         {matchup.opponent.avatarUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -109,10 +117,10 @@ function CoinFlipCard({ matchup, lineups }: { matchup: WeekMatchup; lineups?: We
       </div>
 
       <div className="af-wk-flip-score af-num">
-        <b>{p.you.toFixed(1)}</b>
+        <b>{score.you.toFixed(1)}</b>
         <i>–</i>
-        <b>{p.them.toFixed(1)}</b>
-        <span className="af-wk-projtag">projected</span>
+        <b>{score.them.toFixed(1)}</b>
+        <span className="af-wk-projtag">{matchup.live ? language === 'es' ? 'marcador' : 'scoreboard' : language === 'es' ? 'estimación histórica' : 'historical estimate'}</span>
       </div>
       <WeekLineupLine lineups={lineups} leagueId={matchup.leagueId} season={matchup.season} week={matchup.week} />
     </Link>
@@ -121,18 +129,20 @@ function CoinFlipCard({ matchup, lineups }: { matchup: WeekMatchup; lineups?: We
 
 /** Compact card — the leaning tier. */
 function LeaningCard({ matchup, lineups }: { matchup: WeekMatchup; lineups?: WeekLineups | null }) {
+  const { language } = useOptionalLanguage()
   const p = matchup.projection!
-  const favoured = p.margin >= 0
+  const score = matchup.live ?? p
+  const favoured = score.margin >= 0
   return (
     <Link href={matchup.href} className="af-wk-lean">
-      <span className="af-wk-lean-league" data-platform={matchup.platform}>
-        {matchup.leagueName}
+      <span className="af-wk-lean-league" style={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }} data-platform={matchup.platform}>
+        {matchup.leagueName} · {matchup.season} · {language === 'es' ? 'Período' : 'Period'} {matchup.week}
       </span>
       <span className="af-wk-lean-prob af-num" data-favoured={favoured}>
-        {pct(p.winProbability)}
+        {matchup.live ? matchup.live.final ? matchup.live.margin > 0 ? language === 'es' ? 'Victoria' : 'Won' : matchup.live.margin < 0 ? language === 'es' ? 'Derrota' : 'Lost' : language === 'es' ? 'Empate' : 'Tied' : language === 'es' ? 'En juego' : 'Live' : pct(p.winProbability)}
       </span>
       <span className="af-wk-lean-score af-num">
-        {p.you.toFixed(1)}–{p.them.toFixed(1)}
+        {score.you.toFixed(1)}–{score.them.toFixed(1)}
       </span>
       <WeekLineupLine lineups={lineups} leagueId={matchup.leagueId} season={matchup.season} week={matchup.week} />
     </Link>
@@ -140,6 +150,8 @@ function LeaningCard({ matchup, lineups }: { matchup: WeekMatchup; lineups?: Wee
 }
 
 export function YourWeek({ data, rivalriesHref, lineups }: YourWeekProps) {
+  const { language } = useOptionalLanguage()
+  const copy = (english: string) => coreUiCopy(english, language)
   /*
    * ⚠ ELIMINATION WEEKS COUNT TOWARD THE TOTAL. They are matchups in every sense the
    * header means — leaving them out would render the section and then announce "No
@@ -149,7 +161,7 @@ export function YourWeek({ data, rivalriesHref, lineups }: YourWeekProps) {
     data.coinFlips.length +
     data.leaning.length +
     data.unprojected.length +
-    data.eliminationWeeks.length
+    data.eliminationWeeks.length + (data.formatWeeks?.length ?? 0)
   /*
    * Phase-aware empty state — before the first stated regular-season kickoff,
    * "import or re-sync" is the wrong advice. Null when no source states a
@@ -157,7 +169,8 @@ export function YourWeek({ data, rivalriesHref, lineups }: YourWeekProps) {
    */
   const preseasonKickoffLabel =
     data.firstKickoffAt && new Date(data.firstKickoffAt).getTime() > Date.now()
-      ? kickoffDayLabel(data.firstKickoffAt)
+      ? /* Pinned en-US so it hydrates; translated at render — "Oct 4" → «4 oct». */
+        kickoffText(kickoffDayLabel(data.firstKickoffAt), language)
       : null
 
   return (
@@ -165,19 +178,21 @@ export function YourWeek({ data, rivalriesHref, lineups }: YourWeekProps) {
       <header className="af-wk-head">
         <div>
           <p className="af-wk-eyebrow af-label">
-            {data.season && data.week ? `${data.season} · Week ${data.week}` : 'Your week'}
+            <WeekDateRange />
           </p>
-          <h1 className="af-display af-wk-title">Your week, every matchup</h1>
+          <h1 className="af-display af-wk-title">{copy('Your week, every matchup')}</h1>
           <p className="af-wk-sub">
             {total > 0
-              ? `${total} ${total === 1 ? 'matchup' : 'matchups'}, ordered by what actually needs a decision — not alphabetically.`
-              : 'No matchups are on file for this week.'}
+              ? language === 'es'
+                ? `${total} ${total === 1 ? 'enfrentamiento' : 'enfrentamientos'}, ordenados por lo que requiere una decisión.`
+                : `${total} ${total === 1 ? 'matchup' : 'matchups'}, ordered by what actually needs a decision — not alphabetically.`
+              : copy('No matchups are on file for this week.')}
           </p>
         </div>
 
         <div className="af-wk-headactions">
           <Link href={rivalriesHref} className="af-btn af-wk-btn">
-            Rivalry Radar
+            {copy('Rivalry Radar')}
           </Link>
           {/*
             "Open all 9" from the handoff. It opens the matchup screen for every
@@ -200,10 +215,13 @@ export function YourWeek({ data, rivalriesHref, lineups }: YourWeekProps) {
       {data.coinFlips.length > 0 ? (
         <section className="af-wk-section">
           <div className="af-wk-sectionhead">
-            <h2 className="af-wk-sectiontitle">Coin flips</h2>
+            <h2 className="af-wk-sectiontitle">
+              {copy('Coin flips')} <TopicTip topic="weekWinProbability" />
+            </h2>
             <p className="af-wk-sectionnote">
-              Projected within {COIN_FLIP_POINTS} points. These are the ones a lineup decision
-              actually swings.
+              {language === 'es'
+                ? 'Probabilidad histórica de ganar entre el 40% y el 60%; no es un pronóstico de la alineación actual.'
+                : 'History-based win probability between 40% and 60%; this is not a current lineup forecast.'}
             </p>
           </div>
           <div className="af-wk-flips">
@@ -217,9 +235,11 @@ export function YourWeek({ data, rivalriesHref, lineups }: YourWeekProps) {
       {data.leaning.length > 0 ? (
         <section className="af-wk-section">
           <div className="af-wk-sectionhead">
-            <h2 className="af-wk-sectiontitle">The rest</h2>
+            <h2 className="af-wk-sectiontitle">{copy('The rest')}</h2>
             <p className="af-wk-sectionnote">
-              Already leaning one way by more than {COIN_FLIP_POINTS} projected points.
+              {language === 'es'
+                ? 'El historial favorece más a un equipo. Revisa tu alineación actual por separado.'
+                : 'History favors one side more strongly. Review your current lineup separately.'}
             </p>
           </div>
           <div className="af-wk-leans">
@@ -238,12 +258,11 @@ export function YourWeek({ data, rivalriesHref, lineups }: YourWeekProps) {
       {data.unprojected.length > 0 ? (
         <section className="af-wk-section">
           <div className="af-wk-sectionhead">
-            <h2 className="af-wk-sectiontitle">Not enough history to call</h2>
+            <h2 className="af-wk-sectiontitle">
+              {copy('Not enough history to call')} <TopicTip topic="formGap" />
+            </h2>
             <p className="af-wk-sectionnote">
-              These are on the schedule, but one or both teams have fewer than three completed
-              weeks on file, so a win probability here would be invented rather than computed.
-              Where both sides have scored at least once, the weekly scoring gap so far is shown
-              instead — that is form, not a call.
+              {copy('These are on the schedule, but one or both teams have fewer than three completed weeks on file, so a win probability here would be invented rather than computed. Where both sides have scored at least once, the weekly scoring gap so far is shown instead — that is form, not a call.')}
             </p>
           </div>
           <div className="af-wk-leans">
@@ -254,8 +273,8 @@ export function YourWeek({ data, rivalriesHref, lineups }: YourWeekProps) {
                 className="af-wk-lean"
                 data-unprojected="true"
               >
-                <span className="af-wk-lean-league" data-platform={m.platform}>
-                  {m.leagueName}
+                <span className="af-wk-lean-league" style={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }} data-platform={m.platform}>
+                  {m.leagueName} · {m.season} · {language === 'es' ? 'Período' : 'Period'} {m.week}
                 </span>
                 {/*
                   ⚠ THE DASH IS THE FALLBACK NOW, NOT THE DEFAULT. This section
@@ -274,21 +293,18 @@ export function YourWeek({ data, rivalriesHref, lineups }: YourWeekProps) {
                   <span
                     className="af-wk-lean-prob af-wk-lean-prob--form"
                     data-tone={m.form.margin >= 0 ? 'up' : 'down'}
-                    title={`You have averaged ${m.form.you.toFixed(1)} points a week to their ${m.form.them.toFixed(1)}, over ${m.form.weeks} scored ${
-                      m.form.weeks === 1 ? 'week' : 'weeks'
-                    }`}
                   >
-                    {m.form.margin >= 0 ? '+' : '−'}
+                    {Math.abs(m.form.margin).toFixed(1) === '0.0' ? '' : m.form.margin >= 0 ? '+' : '−'}
                     {Math.abs(m.form.margin).toFixed(1)}
-                    <span className="af-wk-lean-prob-sub">so far</span>
+                    <span className="af-wk-lean-prob-sub">{copy('so far')}</span>
                   </span>
                 ) : (
                   <span className="af-wk-lean-prob af-wk-lean-prob--none">—</span>
                 )}
                 <span className="af-wk-lean-score">
-                  vs <OpponentName matchup={m} />
+                  {copy('vs')} <OpponentName matchup={m} />
                   {m.form
-                    ? ` · ${m.form.you.toFixed(1)} to ${m.form.them.toFixed(1)} per week`
+                    ? language === 'es' ? ` · ${m.form.you.toFixed(1)} a ${m.form.them.toFixed(1)} por semana` : ` · ${m.form.you.toFixed(1)} to ${m.form.them.toFixed(1)} per week`
                     : ''}
                 </span>
                 {/* Too little history for the week model — but this week's lineups can still be projected. */}
@@ -315,11 +331,11 @@ export function YourWeek({ data, rivalriesHref, lineups }: YourWeekProps) {
       {data.eliminationWeeks.length > 0 ? (
         <section className="af-wk-section">
           <div className="af-wk-sectionhead">
-            <h2 className="af-wk-sectiontitle">No opponent — lowest score is out</h2>
+            <h2 className="af-wk-sectiontitle">
+              {copy('No opponent — lowest score is out')} <TopicTip topic="eliminationCut" />
+            </h2>
             <p className="af-wk-sectionnote">
-              Guillotine and survivor leagues eliminate the week&apos;s lowest score instead of
-              pairing teams off, so these show your points clear of the cut line rather than a win
-              probability. The field is the rosters that have scored this week.
+              {copy('Guillotine and survivor leagues eliminate the week’s lowest score instead of pairing teams off, so these show your points clear of the cut line rather than a win probability. The field is the rosters that have scored this week.')}
             </p>
           </div>
           <div className="af-wk-leans">
@@ -331,8 +347,8 @@ export function YourWeek({ data, rivalriesHref, lineups }: YourWeekProps) {
                 data-elimination="true"
                 data-on-the-block={e.onTheBlock ? 'true' : undefined}
               >
-                <span className="af-wk-lean-league" data-platform={e.platform}>
-                  {e.leagueName}
+                <span className="af-wk-lean-league" style={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }} data-platform={e.platform}>
+                  {e.leagueName} · {e.season} · {language === 'es' ? 'Período' : 'Period'} {e.week}
                 </span>
 
                 {/*
@@ -349,19 +365,30 @@ export function YourWeek({ data, rivalriesHref, lineups }: YourWeekProps) {
                     still to play, rather than a bare margin for a race that has stopped.
                   */
                   const badge = settleBadge(e.settle)
+                  const settle = e.settle
+                  const spanishBadge = language === 'es' && settle ? (() => {
+                    switch (settle.verdict) {
+                      case 'safe': return { sub: 'decidido' }
+                      case 'chopped': return { sub: 'decidido' }
+                      case 'no_chop': return { sub: 'sin eliminación esta semana' }
+                      case 'open': {
+                        const pending = settle.yourUpcoming + settle.yourLive
+                        if (pending > 0) return { sub: `${pending} por jugar` }
+                        if (settle.cutLinePending) return { sub: 'el último equipo sigue jugando' }
+                        return null
+                      }
+                    }
+                  })() : null
                   const margin = e.margin ?? 0 // non-null on this branch; closures lose the narrowing
-                  const title = e.onTheBlock
-                    ? `Your ${e.yourScore?.toFixed(1)} is the lowest score in a field of ${e.fieldSize}`
-                    : `Your ${e.yourScore?.toFixed(1)} against a cut line of ${e.cutLine?.toFixed(1)}`
+                  /* The cut line and the settle rule are explained once, by the section's "?" — a per-card `title` never shows on a phone. */
                   return (
                     <span
                       className="af-wk-lean-prob af-wk-lean-prob--form"
                       data-tone={badge?.tone ?? (e.onTheBlock ? 'down' : 'up')}
                       data-settled={badge?.sub === 'decided' ? 'true' : undefined}
-                      title={badge ? `${title}. ${badge.aria}` : title}
                     >
-                      {badge?.label ?? (e.onTheBlock ? 'OUT' : `+${margin.toFixed(1)}`)}
-                      <span className="af-wk-lean-prob-sub">{badge?.sub ?? (e.onTheBlock ? 'on the block' : 'clear')}</span>
+                      {badge?.label ? copy(badge.label) : e.onTheBlock ? copy('OUT') : `+${margin.toFixed(1)}`}
+                      <span className="af-wk-lean-prob-sub">{spanishBadge?.sub ?? copy(badge?.sub ?? (e.onTheBlock ? 'on the block' : 'clear'))}</span>
                     </span>
                   )
                 })()}
@@ -369,11 +396,11 @@ export function YourWeek({ data, rivalriesHref, lineups }: YourWeekProps) {
                 <span className="af-wk-lean-score">
                   {e.fieldSize > 0 ? (
                     <>
-                      {e.rank != null ? `${ordinal(e.rank)} of ${e.fieldSize}` : `${e.fieldSize} scored`}
-                      {e.cutLine != null ? ` · cut line ${e.cutLine.toFixed(1)}` : ''}
+                      {e.rank != null ? language === 'es' ? `${e.rank}.º de ${e.fieldSize}` : `${ordinal(e.rank)} of ${e.fieldSize}` : language === 'es' ? `${e.fieldSize} con puntos` : `${e.fieldSize} scored`}
+                      {e.cutLine != null ? language === 'es' ? ` · corte ${e.cutLine.toFixed(1)}` : ` · cut line ${e.cutLine.toFixed(1)}` : ''}
                     </>
                   ) : (
-                    'No scores in yet this week'
+                    copy('No scores in yet this week')
                   )}
                 </span>
               </Link>
@@ -385,42 +412,42 @@ export function YourWeek({ data, rivalriesHref, lineups }: YourWeekProps) {
       {total === 0 ? (
         preseasonKickoffLabel ? (
           <div className="af-wk-empty">
-            <p className="af-wk-empty-t">The season has not started yet.</p>
+            <p className="af-wk-empty-t">{copy('The season has not started yet.')}</p>
             <p className="af-wk-empty-b">
-              Matchups fill in as weeks are scored — first kickoff {preseasonKickoffLabel}. There
-              is nothing to rank before then.
+              {language === 'es'
+                ? `Los enfrentamientos aparecerán al avanzar la temporada. El primer partido comienza el ${preseasonKickoffLabel}; antes no hay nada que clasificar.`
+                : `Matchups fill in as weeks are scored — first kickoff ${preseasonKickoffLabel}. There is nothing to rank before then.`}
             </p>
           </div>
         ) : (
           <div className="af-wk-empty">
-            <p className="af-wk-empty-t">No schedule is on file for this week.</p>
+            <p className="af-wk-empty-t">{copy('No schedule is on file for this week.')}</p>
             <p className="af-wk-empty-b">
-              This screen is built from synced matchups. Nothing has been read for your leagues yet,
-              so there is nothing to rank — that is a gap in what we have, not a week with no games.
+              {copy('This screen is built from synced matchups. Nothing has been read for your leagues yet, so there is nothing to rank — that is a gap in what we have, not a week with no games.')}
             </p>
             <Link href="/import" className="af-btn af-wk-btn">
-              Import or re-sync a league
+              {copy('Import or re-sync a league')}
             </Link>
           </div>
         )
       ) : null}
 
       {/* The model basis. Always rendered when any probability was shown. */}
+      <FormatWeekCards weeks={data.formatWeeks ?? []} />
       {data.coinFlips.length + data.leaning.length > 0 ? (
         <footer className="af-wk-foot">
           <p>
-            <b>How these are worked out.</b> {data.model.basis} Fitted on{' '}
-            <span className="af-num">n={data.model.sampleSize}</span> completed roster-weeks across
-            your leagues.
+            <b>{copy('How these are worked out.')}</b> <TopicTip topic="lineupProjection" /> {copy(data.model.basis)} {copy('Fitted on')}{' '}
+            <span className="af-num">n={data.model.sampleSize}</span> {copy('completed roster-weeks across your leagues.')}
           </p>
           <p>
-            Win probability is a pre-game model output, not an outcome. Once games start it sits
-            alongside live points rather than replacing them.
+            {copy('Win probability is a pre-game model output, not an outcome. Once games start it sits alongside live points rather than replacing them.')}
           </p>
           {data.withoutSchedule > 0 ? (
             <p>
-              <span className="af-num">{data.withoutSchedule}</span> of your leagues carry no
-              schedule for this week at all and are not counted above.
+              {language === 'es'
+                ? `${data.withoutSchedule} de tus ligas no tienen calendario esta semana y no están incluidas arriba.`
+                : <><span className="af-num">{data.withoutSchedule}</span> of your leagues carry no schedule for this week at all and are not counted above.</>}
             </p>
           ) : null}
         </footer>
@@ -436,6 +463,7 @@ export function YourWeek({ data, rivalriesHref, lineups }: YourWeekProps) {
  * opens real, existing matchup routes; nothing here is a placeholder.
  */
 function OpenAll({ matchups }: { matchups: Array<{ href: string }> }) {
+  const { language } = useOptionalLanguage()
   return (
     <button
       type="button"
@@ -444,7 +472,7 @@ function OpenAll({ matchups }: { matchups: Array<{ href: string }> }) {
         for (const m of matchups) window.open(m.href, '_blank', 'noopener,noreferrer')
       }}
     >
-      Open all {matchups.length}
+      {language === 'es' ? `Abrir ${matchups.length} ${matchups.length === 1 ? 'enfrentamiento' : 'enfrentamientos'}` : `Open all ${matchups.length}`}
     </button>
   )
 }

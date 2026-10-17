@@ -13,8 +13,9 @@ import {
 } from '@/lib/category-scoring/NbaCategoryRegistry'
 
 describe('NbaCategoryRegistry', () => {
-  it('8-cat excludes 3PM, 9-cat includes it', () => {
-    expect(NBA_EIGHT_CAT.map((c) => c.id)).not.toContain('nba_3pm')
+  it('standard 8-cat excludes turnovers and includes 3PM', () => {
+    expect(NBA_EIGHT_CAT.map((c) => c.id)).not.toContain('nba_to')
+    expect(NBA_EIGHT_CAT.map((c) => c.id)).toContain('nba_3pm')
     expect(NBA_NINE_CAT.map((c) => c.id)).toContain('nba_3pm')
   })
 

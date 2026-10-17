@@ -121,6 +121,13 @@ export function getSurvivorThemeById(themeId: string | null | undefined, leagueI
   return SURVIVOR_BACKGROUND_THEMES[resolved]
 }
 
+/** Only whitelisted filenames from the supplied sport/theme artwork reach CSS URLs. */
+export function survivorSceneArtwork(sport: string | null | undefined, themeId: SurvivorBackgroundThemeId, phase: 'island' | 'exile' = 'island'): string {
+  const sportName = ({ NFL: 'football', NBA: 'basketball', NHL: 'hockey', MLB: 'baseball', SOCCER: 'soccer' } as Record<string, string>)[String(sport ?? '').toUpperCase()] ?? 'football'
+  const mood = phase === 'exile' ? 'exile' : themeId === 'moonlit-lagoon' || themeId === 'mangrove-night' || themeId === 'storm-beach' ? 'night' : themeId === 'volcanic-tribal' || themeId === 'ember-camp' || themeId === 'canyon-fire' ? 'dusk' : 'day'
+  return `/survivor/backgrounds/${mood}-${sportName}.svg`
+}
+
 export function extractLeadingTribeIcon(name: string | null | undefined): string | null {
   const safe = (name ?? '').trim()
   if (!safe) return null

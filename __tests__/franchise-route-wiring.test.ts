@@ -177,6 +177,7 @@ describe('the connect-a-league flow', () => {
   it('measures the sport instead of assuming one', () => {
     expect(SERVICE_IMPORT).toContain("getFantraxPlayerIds('CFB')")
     expect(SERVICE_IMPORT).toContain("getFantraxPlayerIds('NFL')")
+    expect(SERVICE_IMPORT).toContain("getFantraxPlayerIds('MLB')")
     expect(SERVICE_IMPORT).toContain('map names more players IS the sport')
     // The winner drives what gets stored, rather than a literal.
     expect(SERVICE_IMPORT).toMatch(/sport: best\.sport/)
@@ -187,14 +188,14 @@ describe('the connect-a-league flow', () => {
    * ⚠ One map being unavailable must not fail the import — a league is one
    * sport, so the other map's outage is irrelevant to it.
    */
-  it('needs only one of the two player maps to load', () => {
-    expect(SERVICE_IMPORT).toMatch(/if \(!cfb\.ok && !nfl\.ok\)/)
+  it('needs only one of the three player maps to load', () => {
+    expect(SERVICE_IMPORT).toMatch(/if \(!cfb\.ok && !nfl\.ok && !mlb\.ok\)/)
   })
 
   it('aborts when almost nothing resolves, rather than storing anonymous ids', () => {
     expect(SERVICE_IMPORT).toMatch(/named \/ total < 0\.5|< 0\.5/)
-    // Now that both maps are tried, reaching the guard means NEITHER fits.
-    expect(SERVICE_IMPORT).toMatch(/against either the college or the NFL player map/)
+    // All supported maps are tried; reaching the guard means none fits.
+    expect(SERVICE_IMPORT).toMatch(/against the college, NFL or MLB player maps/)
   })
 })
 

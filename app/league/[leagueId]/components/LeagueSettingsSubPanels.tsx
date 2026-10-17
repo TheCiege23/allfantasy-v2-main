@@ -23,7 +23,8 @@ import { toast } from 'sonner'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useAfSubGate } from '@/hooks/useAfSubGate'
 import { LEAGUE_SETTINGS_AI_PANEL_FEATURE } from '@/lib/monetization/entitlements'
-import { QRCodeSVG } from 'qrcode.react'
+import { LeagueInviteShare } from '@/components/league/invite/LeagueInviteShare'
+import { leagueJoinUrl } from '@/lib/league/league-invite-link'
 import type { League, LeagueInvite, LeagueTeam } from '@prisma/client'
 import type { UserLeague } from '@/app/dashboard/types'
 import { DiscordLeagueSyncPanel } from './DiscordLeagueSyncPanel'
@@ -40,7 +41,7 @@ import {
   initialsFromName,
   leagueAvatarSrc,
   sleeperAvatarUrl,
-  waiverTypeLabel,
+  waiverTypeText,
 } from './league-settings-modal-utils'
 import { IDPRosterPanel } from '@/app/idp/components/settings/IDPRosterPanel'
 import { IDPScoringPanel } from '@/app/idp/components/settings/IDPScoringPanel'
@@ -48,6 +49,10 @@ import { IDPDisplayPanel } from '@/app/idp/components/settings/IDPDisplayPanel'
 import { IDPAIPanel } from '@/app/idp/components/settings/IDPAIPanel'
 import { DeleteLeagueFromAfPanel } from './DeleteLeagueFromAfPanel'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
+import { checkTeamName, MAX_TEAM_NAME_LENGTH } from '@/lib/league/myTeamEdit'
+import { importedPlatformLabel } from '@/lib/dashboard/platform-label'
+import { useRouter } from 'next/navigation'
+import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { NflScoringSettingsPanel } from '@/components/league-settings/NflScoringSettingsPanel'
 import { NbaScoringSettingsPanel } from '@/components/league-settings/NbaScoringSettingsPanel'
 import { NcaabScoringSettingsPanel } from '@/components/league-settings/NcaabScoringSettingsPanel'
@@ -68,6 +73,9 @@ export type LeagueSettingsModalLeague = League & {
 }
 
 export type SleeperMemberMap = Record<string, { display_name: string; avatar: string | null }>
+
+/** The language provider's `t` — panels translate at render (keys in lib/i18n, `lsPanel.*`). */
+type Tr = (key: string) => string
 
 export type SubPanelContext = {
   league: LeagueSettingsModalLeague
@@ -149,40 +157,25 @@ function slotDotClass(slot: string): string {
   return SLOT_DOT[slot] ?? 'bg-white/30'
 }
 
-function formatSlotLabel(slot: string): string {
-  const names: Record<string, string> = {
-    QB: 'Quarterback (QB)',
-    RB: 'Running Back (RB)',
-    WR: 'Wide Receiver (WR)',
-    TE: 'Tight End (TE)',
-    FLEX: 'Flex (W/R/T)',
-    REC_FLEX: 'Flex (REC)',
-    WRRB_FLEX: 'Flex (W/R)',
-    WRT_FLEX: 'Flex (W/T)',
-    SUPER_FLEX: 'Super Flex (Q/W/R/T)',
-    K: 'Kicker (K)',
-    DEF: 'Defense (DEF)',
-    DL: 'Defensive Linemen (DL)',
-    LB: 'Linebacker (LB)',
-    DB: 'Defensive Back (DB)',
-    IDP_FLEX: 'IDP Flex',
-    BN: 'Bench (BN)',
-  }
-  return names[slot] ?? `${slot.replace(/_/g, ' ')} (${slot})`
+const NAMED_SLOTS = new Set(['QB', 'RB', 'WR', 'TE', 'FLEX', 'REC_FLEX', 'WRRB_FLEX', 'WRT_FLEX', 'SUPER_FLEX', 'K', 'DEF', 'DL', 'LB', 'DB', 'IDP_FLEX', 'BN'])
+
+function formatSlotLabel(slot: string, tr: Tr): string {
+  return NAMED_SLOTS.has(slot) ? tr(`lsPanel.slot.${slot}`) : `${slot.replace(/_/g, ' ')} (${slot})`
 }
 
 const IDP_SLOTS = new Set(['DL', 'LB', 'DB', 'IDP_FLEX'])
 
 function DivisionSettingsPanel({ ctx }: { ctx: SubPanelContext }) {
+  const { t } = useLanguage()
   const count = useMemo(() => getDivisionCount(ctx.league.settings), [ctx.league.settings])
   const sleeperSettingsHref = ctx.sleeperLeagueId
     ? `https://sleeper.com/leagues/${ctx.sleeperLeagueId}/settings`
     : null
-  const label = count != null ? `${count} Division${count === 1 ? '' : 's'}` : '—'
+  const label = count != null ? t(count === 1 ? 'lsPanel.div.one' : 'lsPanel.div.many').replace('{{n}}', String(count)) : '—'
 
   return (
     <div className="space-y-3">
-      <p className="text-[11px] font-bold uppercase tracking-wide text-sky-200/50">Number of divisions</p>
+      <p className="text-[11px] font-bold uppercase tracking-wide text-sky-200/50">{t('lsPanel.div.count')}</p>
       {sleeperSettingsHref ? (
         <a
           href={sleeperSettingsHref}
@@ -192,19 +185,20 @@ function DivisionSettingsPanel({ ctx }: { ctx: SubPanelContext }) {
           data-testid="division-settings-count-row"
         >
           <span className="text-[15px] font-semibold text-white">{label}</span>
-          <span className="text-[13px] font-semibold text-[#ff3d81]">Edit</span>
+          <span className="text-[13px] font-semibold text-[#ff3d81]">{t('lsPanel.edit')}</span>
         </a>
       ) : (
         <div className="rounded-xl border border-white/[0.06] bg-[#0a1228]/80 px-3 py-3 text-[14px] text-white/85">{label}</div>
       )}
       <p className="text-[12px] leading-relaxed text-white/45">
-        Division structure is edited in your host app. AllFantasy shows a read-only snapshot from sync.
+        {t('lsPanel.div.note')}
       </p>
     </div>
   )
 }
 
 function RosterSettingsReadonlyPanel({ ctx }: { ctx: SubPanelContext }) {
+  const { t } = useLanguage()
   const bundle = useMemo(() => getSleeperLikeBundle(ctx.league.settings), [ctx.league.settings])
   const settings = useMemo(() => getSettingsRecord(ctx.league.settings), [ctx.league.settings])
   const rosterPositions = (bundle.roster_positions as string[] | undefined) ?? []
@@ -235,7 +229,7 @@ function RosterSettingsReadonlyPanel({ ctx }: { ctx: SubPanelContext }) {
           }`}
           data-testid="roster-tab-spots"
         >
-          Roster spots
+          {t('lsPanel.roster.spots')}
         </button>
         <button
           type="button"
@@ -245,28 +239,28 @@ function RosterSettingsReadonlyPanel({ ctx }: { ctx: SubPanelContext }) {
           }`}
           data-testid="roster-tab-limits"
         >
-          Position limits
+          {t('lsPanel.roster.limits')}
         </button>
       </div>
 
       {tab === 'spots' ? (
         <>
           <p className="text-[11px] font-bold uppercase tracking-wide text-white/45">
-            Roster spots{totalSlots > 0 ? `: ${totalSlots}` : ''}
+            {t('lsPanel.roster.spots')}{totalSlots > 0 ? `: ${totalSlots}` : ''}
           </p>
           {groups.length === 0 ? (
-            <p className="text-[12px] text-white/45">No roster_positions in synced settings.</p>
+            <p className="text-[12px] text-white/45">{t('lsPanel.roster.noPositions')}</p>
           ) : (
             <div className="divide-y divide-white/[0.06] rounded-xl border border-white/[0.06] bg-[#0a1228]/80">
               {main.map(({ slot, count }) => (
                 <div key={slot} className="flex items-center justify-between gap-2 px-3 py-2.5">
                   <div className="flex min-w-0 items-center gap-2">
                     <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${slotDotClass(slot)}`} aria-hidden />
-                    <span className="truncate text-[13px] font-medium text-white/90">{formatSlotLabel(slot)}</span>
+                    <span className="truncate text-[13px] font-medium text-white/90">{formatSlotLabel(slot, t)}</span>
                   </div>
                   <span
                     className="shrink-0 rounded-lg border border-white/[0.12] bg-white/[0.06] px-3 py-1 text-[13px] font-semibold tabular-nums text-white/90"
-                    aria-label={`${formatSlotLabel(slot)}: ${count}`}
+                    aria-label={`${formatSlotLabel(slot, t)}: ${count}`}
                   >
                     {count}
                   </span>
@@ -275,17 +269,17 @@ function RosterSettingsReadonlyPanel({ ctx }: { ctx: SubPanelContext }) {
               {idp.length > 0 ? (
                 <>
                   <p className="bg-[#060c18] px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-sky-200/55">
-                    IDP roster spots
+                    {t('lsPanel.roster.idpSpots')}
                   </p>
                   {idp.map(({ slot, count }) => (
                     <div key={slot} className="flex items-center justify-between gap-2 px-3 py-2.5">
                       <div className="flex min-w-0 items-center gap-2">
                         <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${slotDotClass(slot)}`} aria-hidden />
-                        <span className="truncate text-[13px] font-medium text-white/90">{formatSlotLabel(slot)}</span>
+                        <span className="truncate text-[13px] font-medium text-white/90">{formatSlotLabel(slot, t)}</span>
                       </div>
                       <span
                         className="shrink-0 rounded-lg border border-white/[0.12] bg-white/[0.06] px-3 py-1 text-[13px] font-semibold tabular-nums text-white/90"
-                        aria-label={`${formatSlotLabel(slot)}: ${count}`}
+                        aria-label={`${formatSlotLabel(slot, t)}: ${count}`}
                       >
                         {count}
                       </span>
@@ -298,27 +292,27 @@ function RosterSettingsReadonlyPanel({ ctx }: { ctx: SubPanelContext }) {
         </>
       ) : (
         <>
-          <p className="text-[11px] font-bold uppercase tracking-wide text-white/45">Position limits</p>
+          <p className="text-[11px] font-bold uppercase tracking-wide text-white/45">{t('lsPanel.roster.limits')}</p>
           {groups.length === 0 ? (
-            <p className="text-[12px] text-white/45">No positions to show.</p>
+            <p className="text-[12px] text-white/45">{t('lsPanel.roster.nothing')}</p>
           ) : (
             <div className="divide-y divide-white/[0.06] rounded-xl border border-white/[0.06] bg-[#0a1228]/80">
               {groups.map(({ slot }) => (
                 <div key={`lim-${slot}`} className="flex items-center justify-between gap-2 px-3 py-2.5">
                   <div className="flex min-w-0 items-center gap-2">
                     <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${slotDotClass(slot)}`} aria-hidden />
-                    <span className="truncate text-[13px] font-medium text-white/90">{formatSlotLabel(slot)}</span>
+                    <span className="truncate text-[13px] font-medium text-white/90">{formatSlotLabel(slot, t)}</span>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
-                    <span className="text-[11px] font-semibold uppercase tracking-wide text-white/38">No limit</span>
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-white/38">{t('lsPanel.roster.noLimit')}</span>
                     {sleeperSettingsHref ? (
                       <a
                         href={sleeperSettingsHref}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/[0.1] bg-white/[0.06] text-[#ff9ec0]/90 hover:border-[#ff3d81]/30"
-                        title="Edit position limits in Sleeper"
-                        aria-label={`Edit position limits for ${formatSlotLabel(slot)} in Sleeper`}
+                        title={t('lsPanel.roster.editLimits')}
+                        aria-label={t('lsPanel.roster.editLimitsFor').replace('{{slot}}', formatSlotLabel(slot, t))}
                       >
                         <Pencil className="h-3.5 w-3.5" />
                       </a>
@@ -332,48 +326,49 @@ function RosterSettingsReadonlyPanel({ ctx }: { ctx: SubPanelContext }) {
               ))}
             </div>
           )}
-          <p className="text-[11px] text-white/38">Per-position caps are managed in your host commissioner tools.</p>
+          <p className="text-[11px] text-white/38">{t('lsPanel.roster.capsNote')}</p>
         </>
       )}
 
       <div className="overflow-hidden rounded-xl border border-white/[0.06] bg-[#0a1228]/60">
-        <Row label="IR slots" value={reserveSlots != null ? String(reserveSlots) : '—'} />
-        <Row label="Taxi slots" value={taxiSlots != null ? String(taxiSlots) : '—'} />
+        <Row label={t('lsPanel.roster.irSlots')} value={reserveSlots != null ? String(reserveSlots) : '—'} />
+        <Row label={t('lsPanel.roster.taxiSlots')} value={taxiSlots != null ? String(taxiSlots) : '—'} />
       </div>
       {sleeperSettingsHref ? (
-        <SleeperLink href={sleeperSettingsHref}>Open roster settings in Sleeper →</SleeperLink>
+        <SleeperLink href={sleeperSettingsHref}>{t('lsPanel.roster.openInSleeper')}</SleeperLink>
       ) : null}
     </div>
   )
 }
 
-function playoffRoundTypeLabel(v: unknown): string {
-  if (v === 0 || v === '0') return 'One week per round'
-  if (v === 1 || v === '1') return 'Two week championship'
-  if (v === 2 || v === '2') return 'Two weeks per round'
+function playoffRoundTypeLabel(v: unknown, tr: Tr): string {
+  if (v === 0 || v === '0') return tr('lsPanel.po.oneWeek')
+  if (v === 1 || v === '1') return tr('lsPanel.po.twoWeekFinal')
+  if (v === 2 || v === '2') return tr('lsPanel.po.twoWeeks')
   return v != null && String(v).trim() ? String(v) : '—'
 }
 
-function playoffSeedTypeLabel(v: unknown): string {
-  if (v === 0 || v === '0') return 'Default bracket side'
-  if (v === 1 || v === '1') return 'Re-seed each round'
+function playoffSeedTypeLabel(v: unknown, tr: Tr): string {
+  if (v === 0 || v === '0') return tr('lsPanel.po.defaultSide')
+  if (v === 1 || v === '1') return tr('lsPanel.po.reseed')
   return v != null && String(v).trim() ? String(v) : '—'
 }
 
-function lowerBracketLabel(toilet: unknown, s: Record<string, unknown>): string {
-  const t = toilet ?? s.toilet_bowl
-  if (t === true || t === 1 || t === '1') return 'Toilet bowl'
-  if (t === false || t === 0 || t === '0') return 'Consolation style'
+function lowerBracketLabel(toilet: unknown, s: Record<string, unknown>, tr: Tr): string {
+  const v = toilet ?? s.toilet_bowl
+  if (v === true || v === 1 || v === '1') return tr('lsPanel.po.toiletBowl')
+  if (v === false || v === 0 || v === '0') return tr('lsPanel.po.consolationStyle')
   return '—'
 }
 
-function yn(v: unknown): string {
-  if (v === true || v === 1 || v === '1') return 'On'
-  if (v === false || v === 0 || v === '0') return 'Off'
+function yn(v: unknown, tr: Tr): string {
+  if (v === true || v === 1 || v === '1') return tr('lsPanel.on')
+  if (v === false || v === 0 || v === '0') return tr('lsPanel.off')
   return '—'
 }
 
 function PlayoffSettingsReadonlyPanel({ ctx }: { ctx: SubPanelContext }) {
+  const { t } = useLanguage()
   const bundle = useMemo(() => getSleeperLikeBundle(ctx.league.settings), [ctx.league.settings])
   const settings = useMemo(() => getSettingsRecord(ctx.league.settings), [ctx.league.settings])
   const sleeperSettingsHref = ctx.sleeperLeagueId
@@ -390,19 +385,18 @@ function PlayoffSettingsReadonlyPanel({ ctx }: { ctx: SubPanelContext }) {
   return (
     <div className="space-y-4">
       <p className="text-[12px] leading-relaxed text-white/50">
-        Playoff settings usually lock after the regular season ends. Below is a read-only snapshot from synced host
-        settings — open Sleeper to change brackets or seeding.
+        {t('lsPanel.po.note')}
       </p>
       <div className="overflow-hidden rounded-xl border border-white/[0.06] bg-[#0a1228]/80">
-        <Row label="Playoffs start week" value={playoffStart != null ? `Week ${playoffStart}` : '—'} />
-        <Row label="Playoff teams" value={playoffTeams != null ? String(playoffTeams) : '—'} />
-        <Row label="Playoff rounds" value={playoffRoundTypeLabel(roundType)} />
-        <Row label="Seeding rules" value={playoffSeedTypeLabel(seedType)} />
-        <Row label="Lower bracket" value={lowerBracketLabel(toilet, settings)} />
-        <Row label="Consolation bracket" value={yn(consolation)} />
+        <Row label={t('lsPanel.po.startWeek')} value={playoffStart != null ? t('lsPanel.weekN').replace('{{n}}', String(playoffStart)) : '—'} />
+        <Row label={t('lsPanel.playoffTeams')} value={playoffTeams != null ? String(playoffTeams) : '—'} />
+        <Row label={t('lsPanel.po.rounds')} value={playoffRoundTypeLabel(roundType, t)} />
+        <Row label={t('lsPanel.po.seeding')} value={playoffSeedTypeLabel(seedType, t)} />
+        <Row label={t('lsPanel.po.lower')} value={lowerBracketLabel(toilet, settings, t)} />
+        <Row label={t('lsPanel.po.consolation')} value={yn(consolation, t)} />
       </div>
       {sleeperSettingsHref ? (
-        <SleeperLink href={sleeperSettingsHref}>Edit playoff settings in Sleeper →</SleeperLink>
+        <SleeperLink href={sleeperSettingsHref}>{t('lsPanel.po.openInSleeper')}</SleeperLink>
       ) : null}
     </div>
   )
@@ -415,45 +409,45 @@ type SeasonDraftRow = {
   draft: Record<string, unknown> | null
 }
 
-function draftStatusBadge(status: string): { label: string; className: string } {
+function draftStatusBadge(status: string, tr: Tr): { label: string; className: string } {
   const s = status.toLowerCase()
   if (s === 'complete' || s === 'completed')
-    return { label: 'COMPLETE', className: 'border border-white/15 bg-zinc-900 text-white' }
+    return { label: tr('lsPanel.draft.complete'), className: 'border border-white/15 bg-zinc-900 text-white' }
   if (s === 'drafting' || s === 'in_progress')
-    return { label: 'LIVE', className: 'border border-emerald-500/30 bg-emerald-500/15 text-emerald-100' }
+    return { label: tr('lsPanel.draft.live'), className: 'border border-emerald-500/30 bg-emerald-500/15 text-emerald-100' }
   if (s === 'pre_draft' || s === 'scheduled' || s === 'not_started')
-    return { label: 'PRE-DRAFT', className: 'border border-sky-500/25 bg-sky-500/15 text-sky-100' }
+    return { label: tr('lsPanel.draft.preDraft'), className: 'border border-sky-500/25 bg-sky-500/15 text-sky-100' }
   if (s === 'missing' || s === 'no draft')
-    return { label: 'NO DATA', className: 'border border-white/10 bg-white/[0.06] text-white/45' }
+    return { label: tr('lsPanel.draft.noData'), className: 'border border-white/10 bg-white/[0.06] text-white/45' }
   return {
     label: s.replace(/_/g, ' ').toUpperCase() || '—',
     className: 'border border-white/10 bg-white/[0.08] text-white/80',
   }
 }
 
-function draftTypeDisplay(type: unknown): string {
-  const t = String(type ?? '').toLowerCase()
-  if (t === 'snake') return 'Snake Draft'
-  if (t === 'linear') return 'Linear Draft'
-  if (t === 'auction') return 'Auction Draft'
-  return t ? t.replace(/_/g, ' ') : '—'
+function draftTypeDisplay(type: unknown, tr: Tr): string {
+  const v = String(type ?? '').toLowerCase()
+  if (v === 'snake') return tr('lsPanel.draft.snake')
+  if (v === 'linear') return tr('lsPanel.draft.linear')
+  if (v === 'auction') return tr('lsPanel.draft.auction')
+  return v ? v.replace(/_/g, ' ') : '—'
 }
 
-function formatPickTimerSeconds(sec: unknown): string {
+function formatPickTimerSeconds(sec: unknown, tr: Tr): string {
   if (typeof sec !== 'number' || !Number.isFinite(sec) || sec <= 0) return '—'
   if (sec >= 3600) {
     const h = sec / 3600
-    return `${h % 1 === 0 ? String(h) : h.toFixed(1)} Hours`
+    return tr('lsPanel.draft.hours').replace('{{n}}', h % 1 === 0 ? String(h) : h.toFixed(1))
   }
-  if (sec >= 60) return `${Math.round(sec / 60)} Mins`
-  return `${sec} Secs`
+  if (sec >= 60) return tr('lsPanel.draft.mins').replace('{{n}}', String(Math.round(sec / 60)))
+  return tr('lsPanel.draft.secs').replace('{{n}}', String(sec))
 }
 
-function formatPlayerPool(settings: Record<string, unknown>, meta: Record<string, unknown>): string {
+function formatPlayerPool(settings: Record<string, unknown>, meta: Record<string, unknown>, tr: Tr): string {
   const v = settings.player_pool ?? settings.player_type ?? meta.player_type
-  if (v === 0 || v === '0' || v === 'all' || v === 'ALL') return 'All Players'
-  if (v === 1 || v === '1' || v === 'rookies' || v === 'ROOKIES') return 'Rookies Only'
-  if (v === 2 || v === '2' || v === 'vets' || v === 'VETS') return 'Vets Only'
+  if (v === 0 || v === '0' || v === 'all' || v === 'ALL') return tr('lsPanel.draft.allPlayers')
+  if (v === 1 || v === '1' || v === 'rookies' || v === 'ROOKIES') return tr('lsPanel.draft.rookies')
+  if (v === 2 || v === '2' || v === 'vets' || v === 'VETS') return tr('lsPanel.draft.vets')
   if (typeof v === 'string' && v.trim())
     return v
       .replace(/_/g, ' ')
@@ -461,7 +455,7 @@ function formatPlayerPool(settings: Record<string, unknown>, meta: Record<string
   return '—'
 }
 
-function parseDraftDetail(draft: Record<string, unknown> | null) {
+function parseDraftDetail(draft: Record<string, unknown> | null, tr: Tr) {
   if (!draft) return null
   const settings = (draft.settings as Record<string, unknown> | undefined) ?? {}
   const meta = (draft.metadata as Record<string, unknown> | undefined) ?? {}
@@ -470,19 +464,20 @@ function parseDraftDetail(draft: Record<string, unknown> | null) {
   const cpu = settings.cpu_autopick ?? settings.autopick_enabled
   const cpuOn = cpu === true || cpu === 1 || cpu === '1'
   return {
-    typeLabel: draftTypeDisplay(draft.type),
-    roundsLabel: typeof rounds === 'number' && Number.isFinite(rounds) ? `${rounds} Rounds` : '—',
-    poolLabel: formatPlayerPool(settings, meta),
-    timerLabel: formatPickTimerSeconds(pickTimer),
-    cpuLabel: cpuOn ? 'CPU Autopick' : 'CPU off',
+    typeLabel: draftTypeDisplay(draft.type, tr),
+    roundsLabel: typeof rounds === 'number' && Number.isFinite(rounds) ? tr('lsPanel.draft.roundsN').replace('{{n}}', String(rounds)) : '—',
+    poolLabel: formatPlayerPool(settings, meta, tr),
+    timerLabel: formatPickTimerSeconds(pickTimer, tr),
+    cpuLabel: cpuOn ? tr('lsPanel.draft.cpuOn') : tr('lsPanel.draft.cpuOff'),
   }
 }
 
 function DraftSeasonCard({ row }: { row: SeasonDraftRow }) {
+  const { t } = useLanguage()
   const d = row.draft
   const statusRaw = d ? String(d.status ?? 'pre_draft') : row.draftId ? 'missing' : 'no draft'
-  const badge = draftStatusBadge(statusRaw)
-  const detail = parseDraftDetail(d)
+  const badge = draftStatusBadge(statusRaw, t)
+  const detail = parseDraftDetail(d, t)
 
   if (!row.draftId) {
     return (
@@ -490,7 +485,7 @@ function DraftSeasonCard({ row }: { row: SeasonDraftRow }) {
         <div className="flex items-center justify-between gap-2">
           <span className="text-[17px] font-bold text-white">{row.season}</span>
           <span className="rounded-md border border-white/15 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white/45">
-            No draft
+            {t('lsPanel.draft.none')}
           </span>
         </div>
       </li>
@@ -508,7 +503,7 @@ function DraftSeasonCard({ row }: { row: SeasonDraftRow }) {
             {badge.label}
           </span>
         </div>
-        <p className="mt-2 text-[12px] text-white/45">Draft metadata unavailable from host.</p>
+        <p className="mt-2 text-[12px] text-white/45">{t('lsPanel.draft.metaUnavailable')}</p>
       </li>
     )
   }
@@ -530,35 +525,35 @@ function DraftSeasonCard({ row }: { row: SeasonDraftRow }) {
             <Link2 className="mt-0.5 h-4 w-4 shrink-0 text-orange-400" aria-hidden />
             <div>
               <p className="font-semibold text-orange-200/95">{detail.typeLabel}</p>
-              <p className="text-[11px] text-white/38">Type</p>
+              <p className="text-[11px] text-white/38">{t('lsPanel.draft.type')}</p>
             </div>
           </div>
           <div className="flex items-start gap-2">
             <LayoutGrid className="mt-0.5 h-4 w-4 shrink-0 text-pink-400" aria-hidden />
             <div>
               <p className="font-semibold text-pink-200/95">{detail.roundsLabel}</p>
-              <p className="text-[11px] text-white/38">Rounds</p>
+              <p className="text-[11px] text-white/38">{t('lsPanel.draft.rounds')}</p>
             </div>
           </div>
           <div className="flex items-start gap-2">
             <Shield className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" aria-hidden />
             <div>
               <p className="font-semibold text-emerald-200/95">{detail.poolLabel}</p>
-              <p className="text-[11px] text-white/38">Player pool</p>
+              <p className="text-[11px] text-white/38">{t('lsPanel.draft.pool')}</p>
             </div>
           </div>
           <div className="flex items-start gap-2">
             <Clock className="mt-0.5 h-4 w-4 shrink-0 text-violet-400" aria-hidden />
             <div>
               <p className="font-semibold text-violet-200/95">{detail.timerLabel}</p>
-              <p className="text-[11px] text-white/38">Time / pick</p>
+              <p className="text-[11px] text-white/38">{t('lsPanel.draft.timePerPick')}</p>
             </div>
           </div>
           <div className="col-span-2 flex items-start gap-2">
             <Cpu className="mt-0.5 h-4 w-4 shrink-0 text-sky-400" aria-hidden />
             <div>
               <p className="font-semibold text-sky-200/95">{detail.cpuLabel}</p>
-              <p className="text-[11px] text-white/38">Autopick</p>
+              <p className="text-[11px] text-white/38">{t('lsPanel.draft.autopick')}</p>
             </div>
           </div>
         </div>
@@ -568,6 +563,7 @@ function DraftSeasonCard({ row }: { row: SeasonDraftRow }) {
 }
 
 function DraftResultsPanel({ ctx, isCommish }: { ctx: SubPanelContext; isCommish: boolean }) {
+  const { t } = useLanguage()
   const afLeagueId = ctx.league.id
   const currentDraftId = getDraftIdFromSettings(ctx.league.settings)
   const [seasonDrafts, setSeasonDrafts] = useState<SeasonDraftRow[]>([])
@@ -595,14 +591,14 @@ function DraftResultsPanel({ ctx, isCommish }: { ctx: SubPanelContext; isCommish
         const json = (await res.json().catch(() => ({}))) as { rows?: SeasonDraftRow[]; error?: string }
         if (cancelled) return
         if (!res.ok) {
-          setErr(json.error ?? 'Could not load draft history.')
+          setErr(json.error ?? t('lsPanel.draft.historyFailed'))
           setSeasonDrafts([])
           return
         }
         setSeasonDrafts(Array.isArray(json.rows) ? json.rows : [])
       } catch {
         if (!cancelled) {
-          setErr('Could not load draft history.')
+          setErr(t('lsPanel.draft.historyFailed'))
           setSeasonDrafts([])
         }
       } finally {
@@ -642,20 +638,20 @@ function DraftResultsPanel({ ctx, isCommish }: { ctx: SubPanelContext; isCommish
   }, [currentDraftId, afLeagueId])
 
   if (!afLeagueId) {
-    return <p className="text-[13px] text-white/45">League unavailable — draft history unavailable.</p>
+    return <p className="text-[13px] text-white/45">{t('lsPanel.draft.leagueUnavailable')}</p>
   }
-  if (loading) return <p className="text-[13px] text-white/45">Loading drafts…</p>
+  if (loading) return <p className="text-[13px] text-white/45">{t('lsPanel.draft.loading')}</p>
   if (err) return <p className="text-[13px] text-rose-300">{err}</p>
 
   return (
     <div className="space-y-4">
       <p className="text-[11px] leading-relaxed text-white/40">
-        Per-season drafts from the Sleeper league chain (current season first).{' '}
-        {isCommish ? 'Edits stay on the host.' : ''}
+        {t('lsPanel.draft.chainNote')}{' '}
+        {isCommish ? t('lsPanel.draft.editsOnHost') : ''}
       </p>
-      <p className="text-[11px] font-bold uppercase tracking-wide text-white/38">Drafts</p>
+      <p className="text-[11px] font-bold uppercase tracking-wide text-white/38">{t('lsPanel.draft.drafts')}</p>
       {seasonDrafts.length === 0 ? (
-        <p className="text-[13px] text-white/45">No seasons found for this league chain.</p>
+        <p className="text-[13px] text-white/45">{t('lsPanel.draft.noSeasons')}</p>
       ) : (
         <ul className="space-y-3">
           {seasonDrafts.map((row) => (
@@ -664,11 +660,11 @@ function DraftResultsPanel({ ctx, isCommish }: { ctx: SubPanelContext; isCommish
         </ul>
       )}
       <div className="space-y-2 border-t border-white/[0.06] pt-3">
-        <p className="text-[11px] font-bold uppercase tracking-wide text-white/38">Picks (synced draft id)</p>
+        <p className="text-[11px] font-bold uppercase tracking-wide text-white/38">{t('lsPanel.draft.picksTitle')}</p>
         {!currentDraftId ? (
-          <p className="text-[12px] text-white/45">No draft_id on synced league settings.</p>
+          <p className="text-[12px] text-white/45">{t('lsPanel.draft.noDraftId')}</p>
         ) : picksLoading ? (
-          <p className="text-[12px] text-white/45">Loading picks…</p>
+          <p className="text-[12px] text-white/45">{t('lsPanel.draft.loadingPicks')}</p>
         ) : (
           <>
             <div className="max-h-56 space-y-1 overflow-y-auto rounded-xl border border-white/[0.06] bg-[#0d1117] p-2">
@@ -692,7 +688,7 @@ function DraftResultsPanel({ ctx, isCommish }: { ctx: SubPanelContext; isCommish
                 void navigator.clipboard.writeText(csv)
               }}
             >
-              Export picks as CSV (clipboard)
+              {t('lsPanel.draft.exportCsv')}
             </button>
           </>
         )}
@@ -708,6 +704,7 @@ export function SettingsSubPanelBody({
   panelId: string
   ctx: SubPanelContext
 }) {
+  const { t } = useLanguage()
   const bundle = useMemo(() => getSleeperLikeBundle(ctx.league.settings), [ctx.league.settings])
   const settings = useMemo(() => getSettingsRecord(ctx.league.settings), [ctx.league.settings])
   const scoring = useMemo(() => getScoringSettings(ctx.league.settings), [ctx.league.settings])
@@ -735,9 +732,7 @@ export function SettingsSubPanelBody({
     ctx.league.invites?.find((invite) => invite.isActive)?.token ||
     ''
   const inviteUrl = isNativePlatform(ctx.league.platform)
-    ? nativeInviteCode
-      ? `${typeof window !== 'undefined' ? window.location.origin : 'https://allfantasy.ai'}/join?code=${encodeURIComponent(nativeInviteCode)}`
-      : ''
+    ? leagueJoinUrl(nativeInviteCode)
     : ctx.platformLeagueId.length > 0
       ? `https://sleeper.com/leagues/${ctx.platformLeagueId}`
       : 'https://sleeper.com/'
@@ -750,19 +745,19 @@ export function SettingsSubPanelBody({
     case 'general-info':
       return (
         <div className="space-y-1">
-          <SectionTitle>League snapshot</SectionTitle>
-          <Row label="League name" value={ctx.displayLeague.name} />
-          <Row label="Teams" value={String(numTeams)} />
-          <Row label="Sport" value={sport} />
-          <Row label="Season" value={season} />
-          <Row label="Scoring" value={flavor} />
-          <Row label="Waiver type" value={waiverTypeLabel(waiverRaw)} />
-          <Row label="FAAB budget" value={waiverBudget != null ? String(waiverBudget) : '—'} />
-          <Row label="Playoff teams" value={playoffTeams != null ? String(playoffTeams) : '—'} />
-          <Row label="Playoff start week" value={playoffStart != null ? String(playoffStart) : '—'} />
-          <Row label="Trade deadline week" value={tradeDl != null ? String(tradeDl) : '—'} />
+          <SectionTitle>{t('lsPanel.gen.snapshot')}</SectionTitle>
+          <Row label={t('lsPanel.leagueName')} value={ctx.displayLeague.name} />
+          <Row label={t('lsPanel.teams')} value={String(numTeams)} />
+          <Row label={t('lsPanel.gen.sport')} value={sport} />
+          <Row label={t('lsPanel.season')} value={season} />
+          <Row label={t('lsPanel.scoring')} value={flavor} />
+          <Row label={t('lsPanel.waiverType')} value={waiverTypeText(waiverRaw, t)} />
+          <Row label={t('lsPanel.gen.faabBudget')} value={waiverBudget != null ? String(waiverBudget) : '—'} />
+          <Row label={t('lsPanel.playoffTeams')} value={playoffTeams != null ? String(playoffTeams) : '—'} />
+          <Row label={t('lsPanel.gen.playoffStartWeek')} value={playoffStart != null ? String(playoffStart) : '—'} />
+          <Row label={t('lsPanel.gen.tradeDeadlineWeek')} value={tradeDl != null ? String(tradeDl) : '—'} />
           {sleeperSettingsHref ? (
-            <SleeperLink href={sleeperSettingsHref}>Open full settings in Sleeper →</SleeperLink>
+            <SleeperLink href={sleeperSettingsHref}>{t('lsPanel.gen.openInSleeper')}</SleeperLink>
           ) : null}
         </div>
       )
@@ -852,11 +847,12 @@ export function SettingsSubPanelBody({
         </div>
       )
     case 'notifications':
-      return <NotificationsPanel />
+      return <NotificationsPanel leagueId={ctx.league.id} />
     case 'invite':
       return (
         <InvitePanel
           inviteUrl={inviteUrl}
+          leagueName={ctx.displayLeague.name}
           // Count only slots a real manager has claimed — `teams.length` includes
           // auto-materialized placeholder slots and reported the league as "full"
           // before anyone but the commissioner had joined.
@@ -901,11 +897,8 @@ export function SettingsSubPanelBody({
           data-testid="settings-audit-log-panel"
           className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-5 text-[13px] leading-relaxed text-white/65"
         >
-          <p className="mb-2 text-[14px] font-semibold text-white/85">Audit Log</p>
-          <p>
-            Audit logging is ready to be wired. Commissioner actions will appear
-            here once backend logging is enabled.
-          </p>
+          <p className="mb-2 text-[14px] font-semibold text-white/85">{t('lsModal.card.auditLog')}</p>
+          <p>{t('lsPanel.audit.body')}</p>
         </div>
       )
     case 'league-dues':
@@ -934,62 +927,150 @@ export function SettingsSubPanelBody({
         />
       )
     default:
-      return <p className="text-[13px] text-white/45">Unknown panel.</p>
+      return <p className="text-[13px] text-white/45">{t('lsPanel.unknownPanel')}</p>
   }
 }
 
+/**
+ * Edit your own team — name and avatar.
+ *
+ * Until 2026-10-02 this panel's Save had no handler and its avatar went to `/api/chat/upload` and
+ * was attached to nothing; the copy blamed a disabled Supabase table. It now posts to
+ * `POST /api/leagues/[leagueId]/my-team`, which writes the claimed team (and the current redraft
+ * season's roster) and stores the avatar in the public profile-image store.
+ *
+ * Imported leagues are read-only: the host platform owns the name and the next sync would undo a
+ * local rename, so the panel says where to change it instead of offering a Save that reverts.
+ */
 function MyTeamPanel({ ctx }: { ctx: SubPanelContext }) {
-  const [teamName, setTeamName] = useState(ctx.userTeam?.teamName ?? '')
-  const [uploading, setUploading] = useState(false)
-  const onAvatar = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setUploading(true)
+  const router = useRouter()
+  const { t } = useLanguage()
+  const native = isNativePlatform(ctx.league.platform)
+  const savedName = ctx.userTeam?.teamName ?? ''
+  const [teamName, setTeamName] = useState(savedName)
+  const [file, setFile] = useState<File | null>(null)
+  const [preview, setPreview] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  // The staged image's object URL, released when it is replaced or the panel closes.
+  useEffect(() => {
+    if (!file) {
+      setPreview(null)
+      return
+    }
+    const url = URL.createObjectURL(file)
+    setPreview(url)
+    return () => URL.revokeObjectURL(url)
+  }, [file])
+
+  const nameCheck = checkTeamName(teamName)
+  const nameChanged = teamName.trim() !== savedName.trim()
+  const dirty = Boolean(file) || nameChanged
+  const avatarSrc = preview ?? (ctx.userTeam?.avatarUrl ? sleeperAvatarUrl(ctx.userTeam.avatarUrl) : null)
+
+  if (!ctx.userTeam) {
+    return <p className="text-[13px] text-white/55">{t('lsPanel.team.none')}</p>
+  }
+
+  const save = async () => {
+    if (!dirty || saving) return
+    if (nameChanged && !nameCheck.ok) {
+      setError(nameCheck.message)
+      return
+    }
+    setSaving(true)
+    setError(null)
     try {
       const fd = new FormData()
-      fd.set('file', file)
-      fd.set('type', 'image')
-      fd.set('leagueId', ctx.league.id)
-      const res = await fetch('/api/chat/upload', { method: 'POST', body: fd })
-      await res.json().catch(() => ({}))
+      if (nameChanged && nameCheck.ok) fd.set('teamName', nameCheck.teamName)
+      if (file) fd.set('file', file)
+      const res = await fetch(`/api/leagues/${encodeURIComponent(ctx.league.id)}/my-team`, { method: 'POST', body: fd })
+      const data = (await res.json().catch(() => ({}))) as { error?: string; message?: string }
+      if (!res.ok) {
+        setError(data.message ?? data.error ?? t('lsPanel.team.saveFailed'))
+        return
+      }
+      setFile(null)
+      toast.success(t('lsPanel.team.updated'))
+      // `userTeam` is read on the server; refresh so the shell, standings and this panel all agree.
+      router.refresh()
+    } catch {
+      setError(t('lsPanel.team.offline'))
     } finally {
-      setUploading(false)
+      setSaving(false)
     }
   }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
         <div className="relative h-16 w-16 overflow-hidden rounded-full border border-white/15 bg-white/10">
-          {ctx.userTeam?.avatarUrl ? (
-            <img src={sleeperAvatarUrl(ctx.userTeam.avatarUrl) ?? ''} alt="" className="h-full w-full object-cover" />
+          {avatarSrc ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={avatarSrc} alt="" className="h-full w-full object-cover" />
           ) : (
             <span className="flex h-full w-full items-center justify-center text-sm font-bold text-white/70">
-              {initialsFromName(teamName || ctx.userTeam?.ownerName || 'TM')}
+              {initialsFromName(teamName || ctx.userTeam.ownerName || 'TM')}
             </span>
           )}
         </div>
-        <label className="cursor-pointer rounded-lg border border-[#ff3d81]/35 bg-[#ff3d81]/10 px-3 py-1.5 text-[12px] font-semibold text-[#ffb8d1] hover:bg-[#ff3d81]/20">
-          {uploading ? 'Uploading…' : 'Upload avatar'}
-          <input type="file" accept="image/*" className="hidden" onChange={onAvatar} />
-        </label>
+        {native ? (
+          <label className="inline-flex min-h-[44px] cursor-pointer items-center rounded-lg border border-[#ff3d81]/35 bg-[#ff3d81]/10 px-3 text-[12px] font-semibold text-[#ffb8d1] hover:bg-[#ff3d81]/20">
+            {file ? t('lsPanel.team.changeImage') : t('lsPanel.team.uploadAvatar')}
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/gif,image/webp"
+              className="sr-only"
+              onChange={(e) => {
+                setError(null)
+                setFile(e.target.files?.[0] ?? null)
+                e.target.value = ''
+              }}
+            />
+          </label>
+        ) : null}
       </div>
+
       <div>
-        <label className="text-[11px] font-semibold text-white/45">Team name</label>
+        <label htmlFor="my-team-name" className="text-[11px] font-semibold text-white/45">
+          {t('lsPanel.team.name')}
+        </label>
         <input
+          id="my-team-name"
           value={teamName}
-          onChange={(e) => setTeamName(e.target.value)}
-          className="mt-1 w-full rounded-xl border border-white/10 bg-[#1a1f3a] px-3 py-2 text-[13px] text-white outline-none focus:border-[#ff3d81]/40"
+          maxLength={MAX_TEAM_NAME_LENGTH}
+          readOnly={!native}
+          aria-describedby="my-team-name-hint"
+          onChange={(e) => {
+            setError(null)
+            setTeamName(e.target.value)
+          }}
+          className="mt-1 w-full rounded-xl border border-white/10 bg-[#1a1f3a] px-3 py-2 text-[16px] text-white outline-none focus:border-[#ff3d81]/40 read-only:opacity-70 sm:text-[13px]"
         />
+        <p id="my-team-name-hint" className="mt-1 text-[11px] text-white/40">
+          {native
+            ? t('lsPanel.team.nameHint').replace('{{count}}', String(teamName.trim().length)).replace('{{max}}', String(MAX_TEAM_NAME_LENGTH))
+            : t('lsPanel.team.importedHint').replace('{{platform}}', importedPlatformLabel(ctx.league.platform) ?? t('lsPanel.team.itsPlatform'))}
+        </p>
       </div>
-      <p className="text-[11px] text-white/40">
-        Player nicknames and persisted team settings use Supabase when `user_team_settings` is enabled.
-      </p>
-      <button
-        type="button"
-        className="w-full rounded-xl bg-[#ff3d81]/20 py-2.5 text-[13px] font-bold text-[#ffd7e5] hover:bg-[#ff3d81]/30"
-      >
-        Save
-      </button>
+
+      {error ? (
+        <p role="alert" className="text-[12px] text-[#fda4af]">
+          {error}
+        </p>
+      ) : null}
+
+      {native ? (
+        <button
+          type="button"
+          onClick={() => void save()}
+          disabled={!dirty || saving}
+          className="min-h-[44px] w-full rounded-xl bg-[#ff3d81]/20 py-2.5 text-[13px] font-bold text-[#ffd7e5] hover:bg-[#ff3d81]/30 disabled:cursor-default disabled:opacity-50"
+        >
+          {saving ? t('lsPanel.saving') : t('lsPanel.save')}
+        </button>
+      ) : null}
     </div>
   )
 }
@@ -1007,20 +1088,21 @@ function DraftSubPanel({
   draftId: string | null
   onGoToDraftTab: () => void
 }) {
+  const { t } = useLanguage()
   const status = String(bundle.status ?? '—')
   const start = draftDateIso ? new Date(draftDateIso).toLocaleString() : '—'
   return (
     <div className="space-y-3">
-      <Row label="Draft ID" value={draftId ?? '—'} />
-      <Row label="Status" value={status} />
-      <Row label="Scheduled" value={start} />
+      <Row label={t('lsPanel.draft.draftId')} value={draftId ?? '—'} />
+      <Row label={t('lsPanel.draft.status')} value={status} />
+      <Row label={t('lsPanel.draft.scheduled')} value={start} />
       <div className="flex flex-col gap-2 pt-2">
         <button
           type="button"
           onClick={onGoToDraftTab}
           className="rounded-xl border border-white/12 bg-white/[0.06] py-2.5 text-[13px] font-semibold text-white hover:bg-white/[0.1]"
         >
-          View Draft Board
+          {t('lsPanel.draft.viewBoard')}
         </button>
         {mockDraftHref ? (
           <a
@@ -1029,7 +1111,7 @@ function DraftSubPanel({
             rel="noopener noreferrer"
             className="rounded-xl border border-[#ff3d81]/30 bg-[#ff3d81]/10 py-2.5 text-center text-[13px] font-semibold text-[#ffd7e5]"
           >
-            Mock Draft
+            {t('lsPanel.draft.mock')}
           </a>
         ) : null}
       </div>
@@ -1046,6 +1128,7 @@ function ScoringSubPanel({
   flavor: string
   sleeperSettingsHref: string | null
 }) {
+  const { t } = useLanguage()
   const keys = ['pass_td', 'pass_yd', 'pass_int', 'rush_td', 'rush_yd', 'rec_td', 'rec_yd', 'rec']
   return (
     <div className="space-y-2">
@@ -1058,13 +1141,14 @@ function ScoringSubPanel({
         ))}
       </div>
       {sleeperSettingsHref ? (
-        <SleeperLink href={sleeperSettingsHref}>Open scoring settings in Sleeper →</SleeperLink>
+        <SleeperLink href={sleeperSettingsHref}>{t('lsPanel.scoring.openInSleeper')}</SleeperLink>
       ) : null}
     </div>
   )
 }
 
-function NotificationsPanel() {
+function NotificationsPanel({ leagueId }: { leagueId: string }) {
+  const { t } = useLanguage()
   /*
    * ⚠ THE FAKE PANEL IS GONE ON PURPOSE. This rendered eight toggles and a
    * primary "Save preferences" button whose onClick was empty — every click a
@@ -1074,67 +1158,47 @@ function NotificationsPanel() {
    */
   return (
     <div className="space-y-3">
+      {/* Not "account-wide" any more: Settings › Notifications has per-league mutes (2026-09). */}
       <p className="text-[12px] text-white/60">
-        Notification preferences are account-wide and live in your settings.
+        {t('lsPanel.notif.body')}
       </p>
       <a
-        href="/settings?tab=notifications"
+        href={`/settings?tab=notifications&returnTo=${encodeURIComponent(`/league/${leagueId}`)}`}
         className="block w-full rounded-xl bg-[#ff3d81]/20 py-2.5 text-center text-[13px] font-bold text-[#ffd7e5]"
       >
-        Open notification settings
+        {t('lsPanel.notif.open')}
       </a>
     </div>
   )
 }
 
-function InvitePanel({ inviteUrl, filled, total }: { inviteUrl: string; filled: number; total: number }) {
-  const [copied, setCopied] = useState(false)
-  const copy = () => {
-    void navigator.clipboard.writeText(inviteUrl)
-    setCopied(true)
-    window.setTimeout(() => setCopied(false), 2000)
-  }
+function InvitePanel({ inviteUrl, filled, total, leagueName }: { inviteUrl: string; filled: number; total: number; leagueName?: string | null }) {
+  const { t } = useLanguage()
+  const membersValue = t('lsPanel.invite.filled').replace('{{filled}}', String(filled)).replace('{{total}}', String(total))
   if (!inviteUrl) {
     return (
       <div className="space-y-4">
-        <Row label="Members" value={`${filled} / ${total} teams`} />
+        <Row label={t('lsPanel.members')} value={membersValue} />
         <p className="text-[12px] text-white/60">
-          This league has no invite link yet. Open the commissioner invite settings to create one.
+          {t('lsPanel.invite.noLink')}
         </p>
       </div>
     )
   }
   return (
     <div className="space-y-4">
-      <Row label="Members" value={`${filled} / ${total} teams`} />
-      <div className="flex justify-center rounded-xl border border-white/10 bg-white p-3">
-        <QRCodeSVG value={inviteUrl} size={160} level="M" />
-      </div>
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={copy}
-          className="flex-1 rounded-xl border border-white/12 bg-white/[0.06] py-2 text-[12px] font-semibold text-white"
-        >
-          {copied ? 'Copied' : 'Copy link'}
-        </button>
-        <a
-          href={`https://wa.me/?text=${encodeURIComponent(inviteUrl)}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex-1 rounded-xl border border-emerald-500/30 bg-emerald-500/10 py-2 text-center text-[12px] font-semibold text-emerald-200"
-        >
-          WhatsApp
-        </a>
-      </div>
+      <Row label={t('lsPanel.members')} value={membersValue} />
+      {/* One invite component for every surface: QR, share sheet, text, WhatsApp, copy that can fail. */}
+      <LeagueInviteShare url={inviteUrl} leagueName={leagueName} testIdPrefix="settings-invite" />
       {inviteUrl.includes('sleeper.com') ? (
-        <p className="text-[11px] text-white/35">Invite metadata from Sleeper may include invite_code when synced.</p>
+        <p className="text-[11px] text-white/35">{t('lsPanel.invite.sleeperNote')}</p>
       ) : null}
     </div>
   )
 }
 
 function CoOwnersPanel({ ctx }: { ctx: SubPanelContext }) {
+  const { t } = useLanguage()
   const [q, setQ] = useState('')
   const sleeperSettingsHref = ctx.sleeperLeagueId
     ? `https://sleeper.com/leagues/${ctx.sleeperLeagueId}/settings`
@@ -1154,21 +1218,21 @@ function CoOwnersPanel({ ctx }: { ctx: SubPanelContext }) {
   return (
     <div className="space-y-3">
       <label className="relative block">
-        <span className="sr-only">Search usernames</span>
+        <span className="sr-only">{t('lsPanel.co.search')}</span>
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/35" aria-hidden />
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Search usernames"
+          placeholder={t('lsPanel.co.search')}
           className="w-full rounded-full border border-white/[0.08] bg-white/[0.06] py-2.5 pl-9 pr-3 text-[13px] text-white placeholder:text-white/35 outline-none focus:border-[#ff3d81]/35"
           data-testid="co-owners-search"
         />
       </label>
       <div>
-        <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-sky-200/45">Co-owners</p>
+        <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-sky-200/45">{t('lsPanel.co.title')}</p>
         {filtered.length === 0 ? (
           <p className="rounded-xl border border-white/[0.06] bg-[#0a1228]/60 px-3 py-6 text-center text-[13px] text-white/45">
-            No teams match this search.
+            {t('lsPanel.co.noMatch')}
           </p>
         ) : (
           <ul className="space-y-1.5">
@@ -1198,10 +1262,10 @@ function CoOwnersPanel({ ctx }: { ctx: SubPanelContext }) {
         )}
       </div>
       <p className="text-[11px] leading-relaxed text-white/40">
-        Co-owner invites and permissions are managed in your host app. This list is a read-only roster view for search.
+        {t('lsPanel.co.note')}
       </p>
       {sleeperSettingsHref ? (
-        <SleeperLink href={sleeperSettingsHref}>Manage co-owners in Sleeper →</SleeperLink>
+        <SleeperLink href={sleeperSettingsHref}>{t('lsPanel.co.openInSleeper')}</SleeperLink>
       ) : null}
     </div>
   )
@@ -1216,6 +1280,7 @@ function LeagueHistoryPanel({
   isCommish: boolean
   isHeadCommissioner: boolean
 }) {
+  const { t } = useLanguage()
   const [rows, setRows] = useState<{ season: string; name: string; leagueId: string }[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -1243,11 +1308,11 @@ function LeagueHistoryPanel({
     }
   }, [platformLeagueId])
 
-  if (loading) return <p className="text-[13px] text-white/45">Loading history chain…</p>
+  if (loading) return <p className="text-[13px] text-white/45">{t('lsPanel.hist.loading')}</p>
 
   return (
     <div className="space-y-3">
-      <p className="text-[11px] font-bold uppercase tracking-wide text-sky-200/45">Previous leagues</p>
+      <p className="text-[11px] font-bold uppercase tracking-wide text-sky-200/45">{t('lsPanel.hist.previous')}</p>
       <ul className="divide-y divide-white/[0.06] overflow-hidden rounded-xl border border-white/[0.06] bg-[#0a1228]/80">
         {rows.map((r, i) => (
           <li key={`${r.season}-${r.leagueId}-${i}`}>
@@ -1260,14 +1325,14 @@ function LeagueHistoryPanel({
             >
               <span className="text-[16px] font-bold text-white">{r.season}</span>
               <span className="text-[12px] text-white/45">{r.name}</span>
-              <span className="text-[11px] font-medium text-[#ff3d81]/90">Open in Sleeper →</span>
+              <span className="text-[11px] font-medium text-[#ff3d81]/90">{t('lsPanel.hist.openInSleeper')}</span>
             </a>
           </li>
         ))}
       </ul>
       {isCommish && isHeadCommissioner ? (
         <p className="text-[11px] text-white/38">
-          Add trophies, high scores, and season edits in your host app when available.
+          {t('lsPanel.hist.commishNote')}
         </p>
       ) : null}
     </div>
@@ -1281,24 +1346,25 @@ function CommishGeneralPanel({
   leagueName: string
   sleeperSettingsHref: string | null
 }) {
+  const { t } = useLanguage()
   const [name, setName] = useState(leagueName)
   return (
     <div className="space-y-3">
       <div>
-        <label className="text-[11px] text-white/45">League name</label>
+        <label className="text-[11px] text-white/45">{t('lsPanel.leagueName')}</label>
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
           className="mt-1 w-full rounded-xl border border-white/10 bg-[#1a1f3a] px-3 py-2 text-[13px] text-white"
         />
-        <p className="mt-1 text-[11px] text-white/35">Updates AllFantasy + mirror changes in Sleeper.</p>
+        <p className="mt-1 text-[11px] text-white/35">{t('lsPanel.cg.mirrorNote')}</p>
       </div>
       <label className="flex items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-[#1a1f3a] px-3 py-2">
-        <span className="text-[12px] text-white/85">Public league</span>
+        <span className="text-[12px] text-white/85">{t('lsPanel.cg.public')}</span>
         <input type="checkbox" className="h-4 w-4 accent-[#ff3d81]" />
       </label>
       {sleeperSettingsHref ? (
-        <SleeperLink href={sleeperSettingsHref}>Open in Sleeper Commissioner Tools →</SleeperLink>
+        <SleeperLink href={sleeperSettingsHref}>{t('lsPanel.cg.openInSleeper')}</SleeperLink>
       ) : null}
     </div>
   )
@@ -1346,6 +1412,7 @@ function MembersCommishPanel({ ctx }: { ctx: SubPanelContext }) {
 }
 
 function CommishNotePanel({ ctx }: { ctx: SubPanelContext }) {
+  const { t } = useLanguage()
   const [body, setBody] = useState('')
   const [week, setWeek] = useState('')
   const [loading, setLoading] = useState(false)
@@ -1377,12 +1444,12 @@ function CommishNotePanel({ ctx }: { ctx: SubPanelContext }) {
           setResult(null)
           return
         }
-        throw new Error(data.error ?? 'Generate failed')
+        throw new Error(data.error ?? t('lsPanel.note.generateFailed'))
       }
       setResult({ title: data.title, body: data.body })
       if (data.body) setBody(data.body)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed')
+      setError(e instanceof Error ? e.message : t('lsPanel.failed'))
       setResult(null)
     } finally {
       setLoading(false)
@@ -1390,20 +1457,20 @@ function CommishNotePanel({ ctx }: { ctx: SubPanelContext }) {
   }
 
   if (!ctx.isCommissioner) {
-    return <p className="text-[13px] text-white/45">Only the commissioner can generate league notes.</p>
+    return <p className="text-[13px] text-white/45">{t('lsPanel.note.commishOnly')}</p>
   }
 
   return (
     <div className="space-y-3">
       <div>
-        <label className="text-[11px] text-white/45">Week focus (optional)</label>
+        <label className="text-[11px] text-white/45">{t('lsPanel.note.weekFocus')}</label>
         <input
           type="number"
           min={1}
           max={24}
           value={week}
           onChange={(e) => setWeek(e.target.value)}
-          placeholder="e.g. 12"
+          placeholder={t('lsPanel.note.weekPlaceholder')}
           className="mt-1 w-full rounded-xl border border-white/10 bg-[#1a1f3a] px-3 py-2 text-[13px] text-white placeholder:text-white/25"
         />
       </div>
@@ -1411,7 +1478,7 @@ function CommishNotePanel({ ctx }: { ctx: SubPanelContext }) {
         value={body}
         onChange={(e) => setBody(e.target.value)}
         rows={6}
-        placeholder="Extra context for Chimmy (optional)…"
+        placeholder={t('lsPanel.note.contextPlaceholder')}
         className="w-full rounded-xl border border-white/10 bg-[#1a1f3a] px-3 py-2 text-[13px] text-white placeholder:text-white/25"
         data-testid="commish-note-context"
       />
@@ -1422,7 +1489,7 @@ function CommishNotePanel({ ctx }: { ctx: SubPanelContext }) {
         className="w-full rounded-xl bg-gradient-to-r from-violet-600/40 to-fuchsia-600/40 py-2.5 text-[13px] font-bold text-white disabled:opacity-50"
         data-testid="commish-note-generate"
       >
-        {loading ? 'Generating…' : '✨ Generate with Chimmy'}
+        {loading ? t('lsPanel.note.generating') : t('lsPanel.note.generate')}
       </button>
       {refusal ? (
         <PlanRefusalNotice refusal={refusal} />
@@ -1433,7 +1500,7 @@ function CommishNotePanel({ ctx }: { ctx: SubPanelContext }) {
         <p className="text-[12px] font-semibold text-[#ffb8d1]">{result.title}</p>
       ) : null}
       <button type="button" className="w-full rounded-xl bg-[#ff3d81]/20 py-2.5 text-[13px] font-bold text-[#ffd7e5]">
-        Post / Update
+        {t('lsPanel.note.post')}
       </button>
     </div>
   )
@@ -1448,13 +1515,13 @@ const COMMISH_TEAM_LIST_TOOL_IDS = new Set([
   'roster-draft-picks',
 ])
 
+/** Dictionary keys, resolved at render. */
 const COMMISH_TOOL_EXTRA_HINT: Partial<Record<string, string>> = {
-  'edit-scores':
-    'Host apps only allow score changes for completed weeks. If the season has not started, you may see an empty state there.',
-  'edit-lineups': 'Choose a team below, then complete lineup edits in your host commissioner tools.',
-  'edit-waiver': 'Use the host to edit FAAB and waiver priority per team after you jump in.',
-  'lock-roster': 'Per-team lock toggles are applied in the host app.',
-  'roster-draft-picks': 'Roster and pick overrides are completed in the host app.',
+  'edit-scores': 'lsPanel.tools.hint.editScores',
+  'edit-lineups': 'lsPanel.tools.hint.editLineups',
+  'edit-waiver': 'lsPanel.tools.hint.editWaiver',
+  'lock-roster': 'lsPanel.tools.hint.lockRoster',
+  'roster-draft-picks': 'lsPanel.tools.hint.rosterPicks',
 }
 
 function CommishTeamPickerList({
@@ -1464,13 +1531,14 @@ function CommishTeamPickerList({
   ctx: SubPanelContext
   hostSettingsHref: string | null
 }) {
+  const { t } = useLanguage()
   const teams = useMemo(
     () => [...ctx.league.teams].sort((a, b) => a.teamName.localeCompare(b.teamName)),
     [ctx.league.teams],
   )
 
   if (teams.length === 0) {
-    return <p className="text-[13px] text-white/45">No teams synced for this league yet.</p>
+    return <p className="text-[13px] text-white/45">{t('lsPanel.tools.noTeams')}</p>
   }
 
   return (
@@ -1478,10 +1546,10 @@ function CommishTeamPickerList({
       className="divide-y divide-white/[0.06] overflow-hidden rounded-xl border border-white/[0.06] bg-[#0a1228]/80"
       data-testid="commish-team-picker-list"
     >
-      {teams.map((t, i) => {
-        const su = t.platformUserId ? ctx.sleeperMemberMap[t.platformUserId] : null
+      {teams.map((team, i) => {
+        const su = team.platformUserId ? ctx.sleeperMemberMap[team.platformUserId] : null
         const av = su?.avatar ? sleeperAvatarUrl(su.avatar) : null
-        const primary = su?.display_name?.trim() || t.ownerName || 'Owner'
+        const primary = su?.display_name?.trim() || team.ownerName || t('lsPanel.tools.owner')
         const rowInner = (
           <>
             <div className="h-9 w-9 shrink-0 overflow-hidden rounded-full border border-white/[0.08] bg-white/10">
@@ -1494,14 +1562,14 @@ function CommishTeamPickerList({
             </div>
             <div className="min-w-0 flex-1">
               <p className="truncate text-[14px] font-semibold text-white">{primary}</p>
-              <p className="truncate text-[12px] text-white/40">{t.teamName}</p>
+              <p className="truncate text-[12px] text-white/40">{team.teamName}</p>
             </div>
             <ChevronRight className="h-4 w-4 shrink-0 text-white/30" aria-hidden />
           </>
         )
         if (hostSettingsHref) {
           return (
-            <li key={t.id}>
+            <li key={team.id}>
               <a
                 href={hostSettingsHref}
                 target="_blank"
@@ -1515,7 +1583,7 @@ function CommishTeamPickerList({
           )
         }
         return (
-          <li key={t.id} className="flex items-center gap-3 px-3 py-2.5 opacity-50">
+          <li key={team.id} className="flex items-center gap-3 px-3 py-2.5 opacity-50">
             {rowInner}
           </li>
         )
@@ -1525,6 +1593,7 @@ function CommishTeamPickerList({
 }
 
 function CommishControlsPanel({ ctx }: { ctx: SubPanelContext }) {
+  const { t } = useLanguage()
   const href = ctx.sleeperLeagueId ? `https://sleeper.com/leagues/${ctx.sleeperLeagueId}/settings` : null
   const [activeTool, setActiveTool] = useState<string | null>(null)
 
@@ -1539,63 +1608,64 @@ function CommishControlsPanel({ ctx }: { ctx: SubPanelContext }) {
 
   const tiles: {
     id: string
-    title: string
-    description: string
+    titleKey: string
+    descKey: string
     icon: typeof Zap
   }[] = [
     {
       id: 'playoff-bracket',
-      title: 'Edit Playoff Bracket',
-      description: 'Adjust seeds, rounds, and placement games in the host bracket editor.',
+      titleKey: 'lsPanel.tools.playoffBracket',
+      descKey: 'lsPanel.tools.playoffBracketDesc',
       icon: Zap,
     },
     {
       id: 'update-commish',
-      title: 'Update Commissioner',
-      description: 'Transfer or add head commissioners and co-commissioners.',
+      titleKey: 'lsPanel.tools.updateCommish',
+      descKey: 'lsPanel.tools.updateCommishDesc',
       icon: UserCog,
     },
     {
       id: 'roster-draft-picks',
-      title: 'Roster & draft picks',
-      description: 'Force add, drop, trade picks, or fix roster issues.',
+      titleKey: 'lsPanel.tools.rosterPicks',
+      descKey: 'lsPanel.tools.rosterPicksDesc',
       icon: MonitorPlay,
     },
     {
       id: 'lock-roster',
-      title: 'Lock roster',
-      description: 'Prevent a team from making roster moves until unlocked.',
+      titleKey: 'lsPanel.tools.lockRoster',
+      descKey: 'lsPanel.tools.lockRosterDesc',
       icon: Lock,
     },
     {
       id: 'edit-scores',
-      title: 'Edit matchup scores',
-      description: 'Adjust past-week scores and recalc standings on the host.',
+      titleKey: 'lsPanel.tools.editScores',
+      descKey: 'lsPanel.tools.editScoresDesc',
       icon: Swords,
     },
     {
       id: 'edit-waiver',
-      title: 'Edit waiver',
-      description: 'Override FAAB budget and waiver priority per team.',
+      titleKey: 'lsPanel.tools.editWaiver',
+      descKey: 'lsPanel.tools.editWaiverDesc',
       icon: Wallet,
     },
     {
       id: 'edit-lineups',
-      title: 'Edit lineups',
-      description: 'Set weekly lineups for any team (past weeks on host).',
+      titleKey: 'lsPanel.tools.editLineups',
+      descKey: 'lsPanel.tools.editLineupsDesc',
       icon: Swords,
     },
     {
       id: 'schedule-matchups',
-      title: 'Schedule matchups',
-      description: 'Change weekly pairings when the host allows it.',
+      titleKey: 'lsPanel.tools.schedule',
+      descKey: 'lsPanel.tools.scheduleDesc',
       icon: CalendarDays,
     },
   ]
 
   const selected = activeTool ? tiles.find((x) => x.id === activeTool) : null
   const showTeamList = activeTool != null && COMMISH_TEAM_LIST_TOOL_IDS.has(activeTool)
-  const extraHint = activeTool ? COMMISH_TOOL_EXTRA_HINT[activeTool] : undefined
+  const extraHintKey = activeTool ? COMMISH_TOOL_EXTRA_HINT[activeTool] : undefined
+  const extraHint = extraHintKey ? t(extraHintKey) : undefined
 
   const currentWeek = ctx.displayLeague.currentWeek
   /** Hosts typically allow editing past-week scores only after at least one week is in the books. */
@@ -1615,16 +1685,16 @@ function CommishControlsPanel({ ctx }: { ctx: SubPanelContext }) {
           data-testid="commish-tool-back"
         >
           <ArrowLeft className="h-4 w-4" aria-hidden />
-          Back
+          {t('lsPanel.back')}
         </button>
-        <span className="sr-only">Press Escape to return to the commissioner tools grid.</span>
+        <span className="sr-only">{t('lsPanel.tools.escapeHint')}</span>
         <div className="flex items-start gap-3">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/[0.06] text-[#ff9ec0]/95">
             <Icon className="h-5 w-5" strokeWidth={2} aria-hidden />
           </div>
           <div>
-            <h3 className="text-[16px] font-bold text-white">{selected.title}</h3>
-            <p className="mt-1 text-[12px] leading-relaxed text-white/45">{selected.description}</p>
+            <h3 className="text-[16px] font-bold text-white">{t(selected.titleKey)}</h3>
+            <p className="mt-1 text-[12px] leading-relaxed text-white/45">{t(selected.descKey)}</p>
           </div>
         </div>
         {scoresNotReadyYet ? (
@@ -1632,14 +1702,12 @@ function CommishControlsPanel({ ctx }: { ctx: SubPanelContext }) {
             className="rounded-lg border border-amber-500/25 bg-amber-950/25 px-3 py-2 text-[12px] leading-relaxed text-amber-100/95"
             data-testid="commish-edit-scores-prewrite"
           >
-            Only past weeks can be updated on the host. If the season has not started or week 1 is still in progress,
-            you may need to check back after week 1.
+            {t('lsPanel.tools.scoresPrewrite')}
           </p>
         ) : null}
         {lineupsEarlyNote ? (
           <p className="rounded-lg border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-[11px] leading-relaxed text-white/55">
-            Weekly lineup edits for past slates follow the host’s schedule — some tools unlock after the season
-            begins.
+            {t('lsPanel.tools.lineupsEarly')}
           </p>
         ) : null}
         {extraHint && !scoresNotReadyYet ? (
@@ -1649,18 +1717,18 @@ function CommishControlsPanel({ ctx }: { ctx: SubPanelContext }) {
         ) : null}
         {showTeamList ? (
           <>
-            <p className="text-[11px] font-bold uppercase tracking-wide text-white/38">Teams</p>
+            <p className="text-[11px] font-bold uppercase tracking-wide text-white/38">{t('lsPanel.teams')}</p>
             <CommishTeamPickerList ctx={ctx} hostSettingsHref={href} />
           </>
         ) : (
           <p className="text-[13px] leading-relaxed text-white/50">
-            This flow is completed in your host commissioner experience (bracket, co-commissioners, schedule, etc.).
+            {t('lsPanel.tools.hostFlow')}
           </p>
         )}
         {href ? (
-          <SleeperLink href={href}>Open {showTeamList ? 'commissioner tools' : 'host settings'} in Sleeper →</SleeperLink>
+          <SleeperLink href={href}>{showTeamList ? t('lsPanel.tools.openCommishTools') : t('lsPanel.tools.openHostSettings')}</SleeperLink>
         ) : (
-          <p className="text-[12px] text-white/45">Connect a Sleeper league to open host tools.</p>
+          <p className="text-[12px] text-white/45">{t('lsPanel.tools.connectSleeper')}</p>
         )}
       </div>
     )
@@ -1669,28 +1737,27 @@ function CommishControlsPanel({ ctx }: { ctx: SubPanelContext }) {
   return (
     <div className="space-y-5">
       <p className="text-[12px] leading-relaxed text-white/50">
-        These tools live on your fantasy host (e.g. Sleeper). Tap a tile for a team list (where it applies), then finish
-        in the host app. All seven supported sports use the same host pattern when integrated.
+        {t('lsPanel.tools.intro')}
       </p>
 
       <div className="grid grid-cols-2 gap-2">
-        {tiles.map((t) => {
-          const Icon = t.icon
+        {tiles.map((tile) => {
+          const Icon = tile.icon
           const inner = (
             <>
               <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-lg bg-white/[0.06] text-[#ff9ec0]/95">
                 <Icon className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
               </div>
-              <h3 className="text-[12px] font-bold leading-snug text-white">{t.title}</h3>
-              <p className="mt-1 text-[11px] leading-relaxed text-white/40">{t.description}</p>
+              <h3 className="text-[12px] font-bold leading-snug text-white">{t(tile.titleKey)}</h3>
+              <p className="mt-1 text-[11px] leading-relaxed text-white/40">{t(tile.descKey)}</p>
             </>
           )
           return (
             <button
-              key={t.id}
+              key={tile.id}
               type="button"
-              onClick={() => setActiveTool(t.id)}
-              data-testid={`commish-tile-${t.id}`}
+              onClick={() => setActiveTool(tile.id)}
+              data-testid={`commish-tile-${tile.id}`}
               className="rounded-xl border border-white/[0.08] bg-[#0a1228]/90 p-3 text-left transition hover:border-[#ff3d81]/25 hover:bg-[#0c1220]"
             >
               {inner}
@@ -1700,7 +1767,7 @@ function CommishControlsPanel({ ctx }: { ctx: SubPanelContext }) {
       </div>
 
       <div className="border-t border-white/[0.08] pt-4">
-        <p className="mb-3 text-[11px] font-bold uppercase tracking-wide text-white/35">Danger zone</p>
+        <p className="mb-3 text-[11px] font-bold uppercase tracking-wide text-white/35">{t('lsPanel.tools.danger')}</p>
         <div className="space-y-3">
           {href ? (
             <a
@@ -1711,24 +1778,23 @@ function CommishControlsPanel({ ctx }: { ctx: SubPanelContext }) {
               data-testid="commish-reset-league-host"
             >
               <div>
-                <p className="text-[14px] font-semibold text-amber-200">Reset league</p>
+                <p className="text-[14px] font-semibold text-amber-200">{t('lsPanel.tools.resetLeague')}</p>
                 <p className="mt-0.5 text-[11px] leading-relaxed text-white/45">
-                  Clear rosters while keeping settings — performed in the host app.
+                  {t('lsPanel.tools.resetLeagueDesc')}
                 </p>
               </div>
               <RefreshCw className="h-5 w-5 shrink-0 text-amber-300/80" aria-hidden />
             </a>
           ) : (
             <div className="rounded-xl border border-white/[0.06] bg-[#0a1228]/60 px-3 py-3 text-[12px] text-white/45">
-              Connect a league with a platform id to link host commissioner tools.
+              {t('lsPanel.tools.connectPlatform')}
             </div>
           )}
 
           <div className="rounded-xl border border-rose-500/20 bg-rose-950/15 px-3 py-3">
-            <p className="mb-2 text-[14px] font-semibold text-rose-200">Delete / remove</p>
+            <p className="mb-2 text-[14px] font-semibold text-rose-200">{t('lsPanel.tools.deleteRemove')}</p>
             <p className="mb-3 text-[11px] leading-relaxed text-white/45">
-              Nuke on the host is done in Sleeper (or your platform). Removing from AllFantasy only drops your import
-              here.
+              {t('lsPanel.tools.deleteNote')}
             </p>
             <DeleteLeagueFromAfPanel
               leagueId={ctx.league.id}
@@ -1743,6 +1809,7 @@ function CommishControlsPanel({ ctx }: { ctx: SubPanelContext }) {
 }
 
 function LeagueDuesTrackerPanel({ ctx }: { ctx: SubPanelContext }) {
+  const { t } = useLanguage()
   const storageKey = `af-league-dues-track-${ctx.league.id}`
   const [track, setTrack] = useState(false)
   const [loaded, setLoaded] = useState(false)
@@ -1760,20 +1827,20 @@ function LeagueDuesTrackerPanel({ ctx }: { ctx: SubPanelContext }) {
   const save = () => {
     try {
       window.localStorage.setItem(storageKey, track ? '1' : '0')
-      toast.success('Saved on this device')
+      toast.success(t('lsPanel.dues.savedDevice'))
     } catch {
-      toast.error('Could not save preference')
+      toast.error(t('lsPanel.dues.saveFailed'))
     }
   }
 
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-[15px] font-bold text-white">League Dues Tracker</h3>
-        <p className="mt-1 text-[12px] text-sky-200/55">Track league payments status</p>
+        <h3 className="text-[15px] font-bold text-white">{t('lsModal.card.leagueDues')}</h3>
+        <p className="mt-1 text-[12px] text-sky-200/55">{t('lsPanel.dues.subtitle')}</p>
       </div>
       <label className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.08] bg-[#0a1228]/80 px-3 py-3">
-        <span className="text-[13px] font-medium text-white/90">Track dues</span>
+        <span className="text-[13px] font-medium text-white/90">{t('lsPanel.dues.track')}</span>
         <input
           type="checkbox"
           className="h-5 w-5 accent-[#ff3d81]"
@@ -1784,7 +1851,7 @@ function LeagueDuesTrackerPanel({ ctx }: { ctx: SubPanelContext }) {
         />
       </label>
       <p className="text-[11px] leading-relaxed text-sky-200/45">
-        For tracking only. All money exchanges should be handled outside AllFantasy.
+        {t('lsPanel.dues.note')}
       </p>
       <button
         type="button"
@@ -1793,10 +1860,10 @@ function LeagueDuesTrackerPanel({ ctx }: { ctx: SubPanelContext }) {
         className="w-full rounded-xl border border-[#ff3d81]/35 bg-[#ff3d81]/15 py-2.5 text-[13px] font-bold text-[#ffd7e5] hover:bg-[#ff3d81]/25 disabled:cursor-not-allowed disabled:opacity-40"
         data-testid="league-dues-save"
       >
-        Save
+        {t('lsPanel.save')}
       </button>
       <p className="text-[11px] text-white/35">
-        Preference is stored locally until a server API is available for your league.
+        {t('lsPanel.dues.localNote')}
       </p>
     </div>
   )
@@ -1811,16 +1878,18 @@ function parseNameList(raw: string): { name: string }[] {
 }
 
 function AiFeaturePanel({ panelId, ctx }: { panelId: string; ctx: SubPanelContext }) {
+  const { t } = useLanguage()
   const { handleApiResponse } = useAfSubGate('commissioner_ai_tools')
+  /** Dictionary keys, resolved at render. */
   const titles: Record<string, string> = {
-    'ai-chimmy-setup': 'League helper setup',
-    'ai-power-rankings': 'League health rankings',
-    'ai-trade': 'Trade health review',
-    'ai-waiver': 'Waiver watchlist',
-    'ai-recap': 'Weekly League Report',
-    'ai-draft-help': 'Draft guide',
-    'ai-matchup': 'Matchup prep',
-    'ai-trash': 'Rivalry prompt',
+    'ai-chimmy-setup': 'lsPanel.ai.chimmySetup',
+    'ai-power-rankings': 'lsPanel.ai.powerRankings',
+    'ai-trade': 'lsPanel.ai.trade',
+    'ai-waiver': 'lsPanel.ai.waiver',
+    'ai-recap': 'lsPanel.ai.recap',
+    'ai-draft-help': 'lsPanel.ai.draftHelp',
+    'ai-matchup': 'lsPanel.ai.matchup',
+    'ai-trash': 'lsPanel.ai.trash',
   }
 
   const [loading, setLoading] = useState(false)
@@ -1854,7 +1923,7 @@ function AiFeaturePanel({ panelId, ctx }: { panelId: string; ctx: SubPanelContex
           const give = parseNameList(giveText)
           const get = parseNameList(getText)
           if (give.length === 0 && get.length === 0) {
-            throw new Error('Add at least one player on the give or get side (comma-separated names).')
+            throw new Error(t('lsPanel.ai.needPlayers'))
           }
           endpoint = '/api/ai/trade-analysis'
           payload = { leagueId, give, get }
@@ -1881,7 +1950,7 @@ function AiFeaturePanel({ panelId, ctx }: { panelId: string; ctx: SubPanelContex
         }
         case 'ai-trash':
           endpoint = '/api/ai/trash-talk'
-          if (!targetName.trim()) throw new Error('Enter a target display name.')
+          if (!targetName.trim()) throw new Error(t('lsPanel.ai.needTarget'))
           payload = {
             targetDisplayName: targetName.trim(),
             recentPerformance: recentPerf.trim() || undefined,
@@ -1889,7 +1958,7 @@ function AiFeaturePanel({ panelId, ctx }: { panelId: string; ctx: SubPanelContex
           }
           break
         default:
-          throw new Error('Unknown AI tool panel')
+          throw new Error(t('lsPanel.ai.unknown'))
       }
 
       const res = await fetch(endpoint, {
@@ -1900,10 +1969,10 @@ function AiFeaturePanel({ panelId, ctx }: { panelId: string; ctx: SubPanelContex
       const fk = LEAGUE_SETTINGS_AI_PANEL_FEATURE[panelId] ?? 'commissioner_ai_tools'
       if (!(await handleApiResponse(res, fk))) return
       const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error((data as { error?: string }).error ?? 'Request failed')
+      if (!res.ok) throw new Error((data as { error?: string }).error ?? t('lsPanel.requestFailed'))
       setResult(data)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed')
+      setError(e instanceof Error ? e.message : t('lsPanel.failed'))
     } finally {
       setLoading(false)
     }
@@ -1913,22 +1982,22 @@ function AiFeaturePanel({ panelId, ctx }: { panelId: string; ctx: SubPanelContex
 
   return (
     <div className="space-y-3">
-      <p className="text-[13px] text-white/70">{titles[panelId] ?? 'AI tool'}</p>
+      <p className="text-[13px] text-white/70">{t(titles[panelId] ?? 'lsPanel.ai.tool')}</p>
 
       {panelId === 'ai-trade' ? (
         <div className="space-y-2">
           <div>
-            <label className="text-[11px] text-white/45">Players you give (comma-separated)</label>
+            <label className="text-[11px] text-white/45">{t('lsPanel.ai.give')}</label>
             <textarea
               value={giveText}
               onChange={(e) => setGiveText(e.target.value)}
               rows={2}
               className="mt-1 w-full rounded-xl border border-white/10 bg-[#1a1f3a] px-3 py-2 text-[12px] text-white"
-              placeholder="e.g. Josh Allen, Travis Kelce"
+              placeholder={t('lsPanel.ai.givePlaceholder')}
             />
           </div>
           <div>
-            <label className="text-[11px] text-white/45">Players you get</label>
+            <label className="text-[11px] text-white/45">{t('lsPanel.ai.get')}</label>
             <textarea
               value={getText}
               onChange={(e) => setGetText(e.target.value)}
@@ -1941,7 +2010,7 @@ function AiFeaturePanel({ panelId, ctx }: { panelId: string; ctx: SubPanelContex
 
       {panelId === 'ai-recap' || panelId === 'ai-matchup' ? (
         <div>
-          <label className="text-[11px] text-white/45">Week (optional — defaults to current)</label>
+          <label className="text-[11px] text-white/45">{t('lsPanel.ai.week')}</label>
           <input
             type="number"
             min={1}
@@ -1956,7 +2025,7 @@ function AiFeaturePanel({ panelId, ctx }: { panelId: string; ctx: SubPanelContex
       {panelId === 'ai-trash' ? (
         <div className="space-y-2">
           <div>
-            <label className="text-[11px] text-white/45">Target display name</label>
+            <label className="text-[11px] text-white/45">{t('lsPanel.ai.target')}</label>
             <input
               value={targetName}
               onChange={(e) => setTargetName(e.target.value)}
@@ -1964,25 +2033,25 @@ function AiFeaturePanel({ panelId, ctx }: { panelId: string; ctx: SubPanelContex
             />
           </div>
           <div>
-            <label className="text-[11px] text-white/45">Recent performance (optional)</label>
+            <label className="text-[11px] text-white/45">{t('lsPanel.ai.recent')}</label>
             <textarea
               value={recentPerf}
               onChange={(e) => setRecentPerf(e.target.value)}
               rows={2}
               className="mt-1 w-full rounded-xl border border-white/10 bg-[#1a1f3a] px-3 py-2 text-[12px] text-white"
-              placeholder="e.g. Lost 3 straight, lowest PF in league"
+              placeholder={t('lsPanel.ai.recentPlaceholder')}
             />
           </div>
           <div>
-            <label className="text-[11px] text-white/45">Intensity</label>
+            <label className="text-[11px] text-white/45">{t('lsPanel.ai.intensity')}</label>
             <select
               value={intensity}
               onChange={(e) => setIntensity(e.target.value as 'mild' | 'medium' | 'savage')}
               className="mt-1 w-full rounded-xl border border-white/10 bg-[#1a1f3a] px-3 py-2 text-[13px] text-white"
             >
-              <option value="mild">Mild</option>
-              <option value="medium">Medium</option>
-              <option value="savage">Savage</option>
+              <option value="mild">{t('lsPanel.ai.mild')}</option>
+              <option value="medium">{t('lsPanel.ai.medium')}</option>
+              <option value="savage">{t('lsPanel.ai.savage')}</option>
             </select>
           </div>
         </div>
@@ -1995,7 +2064,7 @@ function AiFeaturePanel({ panelId, ctx }: { panelId: string; ctx: SubPanelContex
         className="w-full rounded-xl bg-gradient-to-r from-violet-600/50 to-fuchsia-600/45 py-2.5 text-[13px] font-bold text-white shadow-lg shadow-violet-900/20 disabled:opacity-50"
         data-testid={testId}
       >
-        {loading ? 'Running…' : 'Run'}
+        {loading ? t('lsPanel.ai.running') : t('lsPanel.ai.run')}
       </button>
       {error ? <p className="text-[12px] text-rose-300">{error}</p> : null}
       {result != null ? (

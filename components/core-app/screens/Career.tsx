@@ -1,10 +1,15 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect } from 'react'
+import { createContext, useContext, useEffect } from 'react'
+import { DecisionRecordCard } from '@/components/core-app/career/DecisionRecordCard'
+import type { DecisionRecord } from '@/lib/core-app/decisionRecordModel'
+
+type DecisionRecordData = DecisionRecord & { season: number }
 import { buildCareerWidgetSnapshot } from '@/lib/core-app/careerWidgetSnapshot'
+import { publishRailCareerLines, railCareerLines } from '@/lib/core-app/railCareer'
 import { syncCareerWidget } from '@/lib/platform/careerWidgetBridge'
-import { careerHref, type CareerData, type PrestigeComponent } from '@/lib/core-app/careerModel'
+import { careerHref, isUnfiltered, type CareerData, type PrestigeComponent } from '@/lib/core-app/careerModel'
 import type { ShareCardData } from '@/lib/core-app/shareCard'
 import type { CareerAward } from '@/lib/core-app/careerAwards'
 import type { CareerScreenData } from '@/lib/core-app/careerScreen'
@@ -33,9 +38,12 @@ import { careerChimmyPrompts } from '@/lib/core-app/careerChimmy'
 import { buildLegacyStakes } from '@/lib/core-app/careerMilestones'
 import type { CareerWireData } from '@/lib/core-app/careerWireModel'
 import { CareerWire } from '@/components/core-app/career/CareerWire'
+import { WeeklyStory } from '@/components/core-app/career/WeeklyStory'
+import type { WeeklyStory as WeeklyStoryData } from '@/lib/core-app/weeklyStoryModel'
 import { CareerCompareView } from '@/components/core-app/career/CareerCompareView'
 import { HallLayoutToggle, TrophyWall } from '@/components/core-app/career/TrophyWall'
 import { buildTrophyWall } from '@/lib/core-app/trophyWall'
+import { TopicTip } from '@/components/core-app/TopicTip'
 import '@/components/core-app/af-career.css'
 import '@/components/core-app/af-career-brief.css'
 import '@/components/core-app/af-career-live.css'
@@ -97,14 +105,6 @@ const LEGACY_COLORS: Record<string, string> = {
 
 function nf(n: number): string {
   return n.toLocaleString('en-US')
-}
-
-function HelpDot({ body, left }: { body: string; left?: boolean }) {
-  return (
-    <span className="af-cr-help" data-left={left ? '' : undefined} tabIndex={0} role="note">
-      ?<span className="af-cr-helpbody">{body}</span>
-    </span>
-  )
 }
 
 /** Radial prestige gauge. Geometry is the handoff's: r=52 on a 128 viewBox. */
@@ -205,10 +205,12 @@ function MobileArc({ data }: { data: CareerData }) {
 function CareerMobile({
   screen,
   wire,
+  story,
   nowIso,
 }: {
   screen: CareerScreenData
   wire: CareerWireData | null
+  story: WeeklyStoryData | null
   nowIso?: string
 }) {
   const data = screen.data
@@ -238,15 +240,24 @@ function CareerMobile({
               {data.levelName ? ` · ${data.levelName.toUpperCase()}` : ''}
             </span>
           ) : null}
-          <span className="af-crm-chip af-crm-chip--ro">READ-ONLY</span>
+          {/*
+            No "READ-ONLY" chip on a phone (peer review 2026-10-01: jargon to a user, and the
+            header's narrowest row). The desktop frame keeps its marker, where there is room for it.
+          */}
         </div>
       </header>
 
       <CareerTabs view="overview" filter={data.filter} />
 
       <div className="af-crm-body">
-        {/* Phase 3: every platform first — the question someone opens the app with. */}
-        {wire && nowIso ? <CareerWire data={wire} nowIso={nowIso} /> : null}
+        {/* Last week as a story — the thing to tap first on a phone. */}
+        {story ? <WeeklyStory story={story} /> : null}
+        {/*
+          The feed first, but COMPACT on a phone: two items, with every platform's sync state and the
+          season board folded behind one tap. Measured at 375px before this: the Wire was 1,529px and
+          pushed the career itself more than two screens down.
+        */}
+        {wire && nowIso ? <CareerWire data={wire} nowIso={nowIso} compact /> : null}
         <CareerFilterBar data={data} view="overview" />
         {data.isEmpty ? (
           <>
@@ -289,9 +300,10 @@ function CareerMobile({
                 <span className="af-crm-tile-v">{data.seasonsPlayed}</span>
               </div>
             </div>
-            <p className="af-crx-muted af-crx-mnote" title={acc.finalsNote}>
+            <p className="af-crx-muted af-crx-mnote">
               Finals:{' '}
-              {acc.finals == null ? 'not recorded yet' : `${acc.finals} (${acc.championships} won · ${acc.finalsLost} lost)`}
+              {acc.finals == null ? 'not recorded yet' : `${acc.finals} (${acc.championships} won · ${acc.finalsLost} lost)`}{' '}
+              <TopicTip topic="careerFinals" />
             </p>
 
             <CareerLive data={data} awards={screen.awards} />
@@ -357,6 +369,7 @@ function CareerMobile({
                       <span className="af-crm-scoreval af-crm-scoreval--accent">{data.prestige.total.toFixed(1)}</span>
                       <span className="af-crm-scoreof">/ 100</span>
                       <span className="af-crm-scorelabel">GM PRESTIGE</span>
+                      <TopicTip topic="careerPrestige" />
                     </div>
                     <div className="af-crm-bar">
                       <i style={{ width: `${data.prestige.total}%`, background: 'var(--accent)' }} />
@@ -369,6 +382,7 @@ function CareerMobile({
                       <span className="af-crm-scoreval af-crm-scoreval--warn">{data.legacy.total}</span>
                       <span className="af-crm-scoreof">/ 100</span>
                       <span className="af-crm-scorelabel">LEGACY</span>
+                      <TopicTip topic="careerLegacy" />
                     </div>
                     <div className="af-crm-bar">
                       {data.legacy.dimensions.map((d) => (
@@ -414,16 +428,31 @@ function CareerMobile({
   )
 }
 
+/**
+ * The decision record, handed down to `CareerLive` without threading a prop through every layout
+ * that renders it (phone and desktop, empty and full). Three states, and they mean different things:
+ *   undefined  not read here (another view, a league selected) or the read failed — no card at all
+ *   null       read, nothing resolved yet — the card that says how to start one
+ *   a record   the record
+ */
+const DecisionRecordContext = createContext<DecisionRecordData | null | undefined>(undefined)
+
 export function Career({
   screen,
   share,
   wire = null,
+  story = null,
+  decisionRecord,
   nowIso,
 }: {
   screen: CareerScreenData
   share?: ShareCardData | null
   /** Career Wire — read on the overview only; null elsewhere or when the read failed. */
   wire?: CareerWireData | null
+  /** Last week's story — overview only; null before a week is played or when the read failed. */
+  story?: WeeklyStoryData | null
+  /** This season's Chimmy and AutoCoach calls (`lib/core-app/decisionRecord.ts`) — see `DecisionRecordContext`. */
+  decisionRecord?: DecisionRecordData | null
   nowIso?: string
 }) {
   /*
@@ -445,11 +474,20 @@ export function Career({
     void syncCareerWidget(buildCareerWidgetSnapshot(screen.data, screen.awards, snapshotAt ? new Date(snapshotAt) : new Date()))
   }, [screen.data, screen.awards, snapshotAt])
 
+  /*
+   * Your record in each league, shown under its name in the shell's rail while you are here
+   * (`lib/core-app/railCareer.ts`). Cleared on the way out, so no other screen inherits it.
+   */
+  useEffect(() => {
+    publishRailCareerLines(railCareerLines(screen.data))
+    return () => publishRailCareerLines(null)
+  }, [screen.data])
+
   return (
-    <>
-      <CareerDesktop screen={screen} share={share ?? null} showOnMobile={!overview} wire={wire} nowIso={nowIso} />
-      {overview ? <CareerMobile screen={screen} wire={wire} nowIso={nowIso} /> : null}
-    </>
+    <DecisionRecordContext.Provider value={decisionRecord}>
+      <CareerDesktop screen={screen} share={share ?? null} showOnMobile={!overview} wire={wire} story={story} nowIso={nowIso} />
+      {overview ? <CareerMobile screen={screen} wire={wire} story={story} nowIso={nowIso} /> : null}
+    </DecisionRecordContext.Provider>
   )
 }
 
@@ -541,12 +579,14 @@ function CareerDesktop({
   share,
   showOnMobile,
   wire,
+  story,
   nowIso,
 }: {
   screen: CareerScreenData
   share: ShareCardData | null
   showOnMobile: boolean
   wire: CareerWireData | null
+  story: WeeklyStoryData | null
   nowIso?: string
 }) {
   const { data, view } = screen
@@ -573,7 +613,9 @@ function CareerDesktop({
         <div className="af-crx-navside">
           <div className="af-cr-tabstats">
             <span className="af-cr-tabstat">{nf(data.distinctLeagues)} leagues</span>
-            <span className="af-cr-tabstat">{nf(data.leaguesPlayed)} league-seasons</span>
+            <span className="af-cr-tabstat">
+              {nf(data.leaguesPlayed)} league-seasons <TopicTip topic="leagueSeason" />
+            </span>
             {data.sports.length > 0 ? <span className="af-cr-tabstat">{data.sports.join(' · ')}</span> : null}
           </div>
           <div className="af-cr-actions">
@@ -592,6 +634,8 @@ function CareerDesktop({
         league going, what moved since the last visit. Above the filter bar because it is
         account-wide: a platform or era filter does not narrow which platforms need a sync.
       */}
+      {/* Last week's story sits above the Wire: one tap for the whole week, before the detail. */}
+      {view === 'overview' && story ? <WeeklyStory story={story} /> : null}
       {view === 'overview' && wire && nowIso ? <CareerWire data={wire} nowIso={nowIso} /> : null}
 
       {/* Compare's sides carry their own filters (`ca`/`cb`), so the page filter would only mislead. */}
@@ -698,10 +742,17 @@ function EmptyCareer({ data }: { data: CareerData }) {
  * AF user has live stakes long before they have a finished season).
  */
 function CareerLive({ data, awards }: { data: CareerData; awards: CareerAward[] }) {
+  /*
+   * The decision record sits with the live half: what is in play, what Chimmy can tell you, and how
+   * taking its calls has gone. Whole-season and whole-account, so not under a Career filter — it
+   * would read as "your record in this league" when it is not filtered by league at all.
+   */
+  const record = useContext(DecisionRecordContext)
   return (
     <div className="af-crl-pair">
       <LegacyStakes data={buildLegacyStakes(data, awards)} />
       <CareerAskChimmy prompts={careerChimmyPrompts(data)} />
+      {record !== undefined && isUnfiltered(data.filter) ? <DecisionRecordCard record={record} /> : null}
     </div>
   )
 }
@@ -759,7 +810,7 @@ function CareerOverview({ data, awards }: { data: CareerData; awards: CareerAwar
               <p className="af-c13-head">
                 GM prestige
                 <span className="sp" />
-                <HelpDot body="Championships 30%, win rate 20%, tenure 20%, leagues 15%, playoff appearances 15%. Each is capped, so one huge number cannot carry the score." />
+                <TopicTip topic="careerPrestige" />
               </p>
               <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 12 }}>
                 <Gauge value={prestige.total} />
@@ -827,10 +878,7 @@ function CareerOverview({ data, awards }: { data: CareerData; awards: CareerAwar
                 <span className="af-c13-big warn" style={{ fontSize: 26 }}>
                   {legacy.total}
                 </span>
-                <HelpDot
-                  left
-                  body="Each dimension is scored 0-100 from recorded results, then multiplied by its weight. Weights are re-normalised across the dimensions that can actually be scored, so an unmeasurable one does not silently drag the total down."
-                />
+                <TopicTip topic="careerLegacy" />
               </p>
               <div className="af-cr-stack">
                 {legacy.dimensions.map((d) => (
@@ -941,7 +989,7 @@ function CareerOverview({ data, awards }: { data: CareerData; awards: CareerAwar
         <div className="af-c13-col">
           <section className="af-c13-card">
             <p className="af-c13-head">
-              AF rank
+              AF rank <TopicTip topic="careerXp" />
               {data.level != null ? <span className="sp">LEVEL {data.level} OF 25</span> : null}
             </p>
             {data.level != null ? (

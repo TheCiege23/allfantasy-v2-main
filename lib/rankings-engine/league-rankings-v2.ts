@@ -13,6 +13,8 @@ import {
 import { FantasyCalcPlayer, FantasyCalcSettings } from '../fantasycalc'
 import { getFantasyCalcValuesDbFirst, getFantasyCalcCacheAgeMs } from '@/lib/fantasycalc-db'
 import { prisma } from '../prisma'
+import { matchInjuryRowsToPlayers, type InjuryPlayerLookup } from '@/lib/injuries/matchInjuryRows'
+import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 import { getWeekStatsFromCache } from './sleeper-matchup-cache'
 import { buildIdpKickerValueMap, detectIdpLeague, detectKickerLeague } from '../idp-kicker-values'
 import { loadLeagueIdpVorp } from '@/lib/idp-projections/leagueIdpVorp'
@@ -1189,9 +1191,10 @@ function computeRosterInjuryImpact(
  * `getLeagueRosters`/`getAllPlayers` above), so NFL is the honest default
  * rather than an assumption smuggled into an unscoped query.
  */
-async function fetchDbInjuryMap(playerNames: string[], sport = 'NFL'): Promise<Map<string, { severity: string | null; date: Date | null; type: string | null; description: string | null }>> {
+async function fetchDbInjuryMap(players: InjuryPlayerLookup[], sport = 'NFL'): Promise<Map<string, { severity: string | null; date: Date | null; type: string | null; description: string | null }>> {
   const result = new Map<string, { severity: string | null; date: Date | null; type: string | null; description: string | null }>()
-  if (playerNames.length === 0) return result
+  if (players.length === 0) return result
+  const playerNames = [...new Set(players.map(p => p.name))]
 
   try {
     const cutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
@@ -1200,20 +1203,34 @@ async function fetchDbInjuryMap(playerNames: string[], sport = 'NFL'): Promise<M
         sport,
         playerName: { in: playerNames },
         fetchedAt: { gte: cutoff },
+        // Only rows a feed still carries: the feeds stop listing a healed player, they do not clear him.
+        expiresAt: { gt: new Date() },
       },
       orderBy: { fetchedAt: 'desc' },
-      distinct: ['playerName'],
+      /*
+       * ⚠ NO `distinct: ['playerName']` ANY MORE: it kept the newest row per NAME, so two athletes
+       * sharing one (WR vs LB Justin Jefferson) collapsed into whichever was fetched last. Every
+       * row comes back and `matchInjuryRowsToPlayers` binds the right athlete by team/position,
+       * or none when it cannot tell — the newest row of the matched athlete is then taken.
+       */
       select: {
         playerName: true,
         status: true,
         date: true,
+        fetchedAt: true,
         type: true,
         description: true,
+        team: true,
+        position: true,
       },
     })
 
-    for (const inj of injuries) {
-      result.set(inj.playerName.toLowerCase(), {
+    const { byPlayer } = matchInjuryRowsToPlayers(injuries, players, sport)
+    for (const p of players) {
+      const inj = byPlayer.get(normalizeMatchName(p.name))?.[0]
+      const key = p.name.toLowerCase()
+      if (!inj || result.has(key)) continue
+      result.set(key, {
         severity: inj.status,
         date: inj.date,
         type: inj.type,
@@ -2947,11 +2964,17 @@ export async function computeLeagueRankingsV2(
   const valueMap = buildPlayerValueMap(fcPlayers)
 
   const allPlayerNames: string[] = []
+  // Team and position ride along so the injury map can tell same-name athletes apart.
+  const injuryLookups: InjuryPlayerLookup[] = []
   for (const roster of rosters) {
     for (const pid of roster.players || []) {
       const pVal = valueMap.get(pid) as any
       const name = pVal?.name || pVal?.player
-      if (name) allPlayerNames.push(name)
+      if (name) {
+        allPlayerNames.push(name)
+        const sp = (sleeperPlayersRaw as Record<string, { team?: string | null; position?: string | null }> | null)?.[pid]
+        injuryLookups.push({ name, team: sp?.team ?? null, position: pVal?.position ?? sp?.position ?? null })
+      }
     }
   }
   let analyticsMap: Map<string, any> | undefined
@@ -2959,7 +2982,7 @@ export async function computeLeagueRankingsV2(
   try {
     const [analytics, injuries] = await Promise.all([
       getPlayerAnalyticsBatch(allPlayerNames).catch(() => new Map()),
-      fetchDbInjuryMap(allPlayerNames).catch(() => new Map()),
+      fetchDbInjuryMap(injuryLookups).catch(() => new Map()),
     ])
     analyticsMap = analytics.size > 0 ? analytics : undefined
     dbInjuryMap = injuries.size > 0 ? injuries : undefined

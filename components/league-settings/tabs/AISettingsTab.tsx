@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Lock } from 'lucide-react'
+import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { useLeagueSettingsSectionAutosave } from '@/hooks/useLeagueSettingsSectionAutosave'
 import type { LeagueSettingsTabProps } from '../league-settings-tabs-types'
 
@@ -45,6 +46,7 @@ function Row({
 }
 
 export function AISettingsTab({ ctx, canEdit, hasAfCommissionerSub }: LeagueSettingsTabProps) {
+  const { t } = useLanguage()
   const leagueId = ctx.league.id
   const { queuePatch, saving } = useLeagueSettingsSectionAutosave(leagueId, 'ai', { enabled: canEdit })
 
@@ -72,15 +74,14 @@ export function AISettingsTab({ ctx, canEdit, hasAfCommissionerSub }: LeagueSett
 
   return (
     <div className="space-y-4">
-      {saving ? <p className="text-[11px] font-semibold text-cyan-300/80">Saving…</p> : null}
+      {saving ? <p className="text-[11px] font-semibold text-cyan-300/80">{t('lsHub.saving')}</p> : null}
       <p className="text-[12px] text-white/45">
-        Control League Helper settings. Premium controls require AF Commissioner or AF
-        Supreme.
+        {t('lsHub.ai.intro')}
       </p>
 
       <Row
-        label="League helper"
-        hint="In-chat setup, rule help, and league-aware guidance."
+        label={t('lsHub.ai.helper')}
+        hint={t('lsHub.ai.helperHint')}
         checked={chimmy}
         disabled={!canEdit}
         onChange={(v) => {
@@ -89,8 +90,8 @@ export function AISettingsTab({ ctx, canEdit, hasAfCommissionerSub }: LeagueSett
         }}
       />
       <Row
-        label="Waiver watchlist"
-        hint="Surfaces add/drop ideas grounded in league context."
+        label={t('lsHub.ai.waiver')}
+        hint={t('lsHub.ai.waiverHint')}
         checked={waiver}
         disabled={!canEdit}
         locked={premiumLocked}
@@ -100,8 +101,8 @@ export function AISettingsTab({ ctx, canEdit, hasAfCommissionerSub }: LeagueSett
         }}
       />
       <Row
-        label="Trade health"
-        hint="Deterministic-first trade review with clear explanations."
+        label={t('lsHub.ai.trade')}
+        hint={t('lsHub.ai.tradeHint')}
         checked={trade}
         disabled={!canEdit}
         locked={premiumLocked}
@@ -111,8 +112,8 @@ export function AISettingsTab({ ctx, canEdit, hasAfCommissionerSub }: LeagueSett
         }}
       />
       <Row
-        label="Manager engagement"
-        hint="Start/sit style guidance and weekly participation signals."
+        label={t('lsHub.ai.engagement')}
+        hint={t('lsHub.ai.engagementHint')}
         checked={lineup}
         disabled={!canEdit}
         locked={premiumLocked}
@@ -122,8 +123,8 @@ export function AISettingsTab({ ctx, canEdit, hasAfCommissionerSub }: LeagueSett
         }}
       />
       <Row
-        label="Draft readiness"
-        hint="Queue, board, and setup suggestions during drafts."
+        label={t('lsHub.ai.draft')}
+        hint={t('lsHub.ai.draftHint')}
         checked={draftRecs}
         disabled={!canEdit}
         locked={premiumLocked}

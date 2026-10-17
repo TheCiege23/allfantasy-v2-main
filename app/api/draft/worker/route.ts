@@ -6,6 +6,7 @@ import { parseSessionKey } from '@/lib/draft/session-key'
 import { slotIndexForOverallPick } from '@/lib/draft/snake'
 import { executeDraftPick } from '@/lib/draft/execute-pick'
 import { draftAiText } from '@/lib/draft/ai-claude'
+import { loadSleeperAdpBoard, MAX_BOARD_SIZE, pickFromBoard } from '@/lib/draft/sleeperDraftBoard'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,41 +23,27 @@ async function nextAutopickPlayer(
   const q = await prisma.draftRoomUserQueue.findUnique({
     where: { userId_sessionKey: { userId: forUserId, sessionKey: sessionId } },
   })
-  const ids = (q?.playerIds as string[]) ?? []
-  for (const pid of ids) {
-    if (!takenIds.has(pid)) {
-      const pl = await prisma.sportsPlayer.findFirst({
-        where: { sport: 'NFL', externalId: pid },
-        select: { externalId: true, name: true, position: true, team: true },
-      })
-      if (pl) {
-        return {
-          playerId: pl.externalId,
-          playerName: pl.name,
-          position: pl.position ?? 'UNK',
-          team: pl.team ?? null,
-        }
-      }
-    }
-  }
+  const queued: unknown = q?.playerIds
+  const ids = Array.isArray(queued) ? queued.map((id) => String(id ?? '')) : []
 
-  const pool = await prisma.sportsPlayer.findMany({
-    where: { sport: 'NFL' },
-    select: { externalId: true, name: true, position: true, team: true },
-    take: 100,
-    orderBy: { name: 'asc' },
-  })
-  for (const p of pool) {
-    if (!takenIds.has(p.externalId)) {
-      return {
-        playerId: p.externalId,
-        playerName: p.name,
-        position: p.position ?? 'UNK',
-        team: p.team ?? null,
-      }
-    }
+  /*
+   * 🛑 QUEUED IDS AND THE FALLBACK BOTH RESOLVE AGAINST THE SLEEPER-ID BOARD (2026-10-11).
+   *
+   * This used to look a queued id up with `sportsPlayer.findFirst({ sport: 'NFL', externalId: pid })`
+   * — no `source`, so a queued `2135` drafted Josh Allen (backfill) or Josh Hines-Allen (Rolling
+   * Insights) depending on row order — and to fall back to the first 100 `SportsPlayer` rows by
+   * NAME A→Z, so every auto pick took whoever sorted first. The board is the one place an id is
+   * known to mean the player it was queued as; best available is by consensus ADP.
+   */
+  const board = (await loadSleeperAdpBoard({ sport: 'NFL', take: MAX_BOARD_SIZE }).catch(() => null)) ?? []
+  const p = pickFromBoard(board, takenIds, ids)
+  if (!p) return null
+  return {
+    playerId: p.id,
+    playerName: p.name,
+    position: p.position || 'UNK',
+    team: p.team || null,
   }
-  return null
 }
 
 export async function POST(req: Request) {
@@ -107,12 +94,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, message: 'No autopick' })
   }
 
-  let player = await nextAutopickPlayer(
-    onClock,
-    sessionId,
-    parsed.mode === 'mock' ? parsed.id : null,
-    parsed.mode === 'live' ? parsed.id : null,
-  )
+  let player: { playerId: string | null; playerName: string; position: string; team: string | null } | null =
+    await nextAutopickPlayer(
+      onClock,
+      sessionId,
+      parsed.mode === 'mock' ? parsed.id : null,
+      parsed.mode === 'live' ? parsed.id : null,
+    )
 
   if (!player && !isCpu) {
     try {
@@ -124,7 +112,12 @@ export async function POST(req: Request) {
       const j = JSON.parse(text.replace(/```json\n?|\n?```/g, '').trim()) as Record<string, unknown>
       if (typeof j.playerName === 'string') {
         player = {
-          playerId: typeof j.playerId === 'string' ? j.playerId : 'ai',
+          /*
+           * Never the model's `playerId`: an id a language model wrote names nobody we can verify,
+           * and in this room a bare number is a Sleeper id — someone real, probably someone else.
+           * The pick keeps the suggested name and no id.
+           */
+          playerId: null,
           playerName: j.playerName,
           position: typeof j.position === 'string' ? j.position : '',
           team: typeof j.team === 'string' ? j.team : null,

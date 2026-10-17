@@ -50,7 +50,7 @@ export type ImportedFuturePicks = {
   readFailed: boolean
 }
 
-export async function loadImportedFuturePicks(args: {
+type InventoryArgs = {
   leagueId: string
   platform: string | null | undefined
   isDynasty: boolean
@@ -64,19 +64,18 @@ export async function loadImportedFuturePicks(args: {
     claimedByUserId: string | null
     teamName: string | null
   }>
-  rosters: ReadonlyArray<{ id: string; platformUserId: string; playerData: unknown }>
-}): Promise<ImportedFuturePicks> {
-  const empty: ImportedFuturePicks = {
-    picksByRosterId: new Map(),
-    coverage: 'none',
-    rosterIdByTeamId: new Map(),
-    readFailed: false,
-  }
-  if (!hasSyncedProviderPicks(args.platform) || !args.leagueSeason || args.teams.length === 0) return empty
+}
 
+/**
+ * The league's whole pick inventory in provider-team-id space — the part both loaders below share.
+ * `'none'` when this league's picks are not read here; `'failed'` when the table could not be read.
+ */
+async function importedInventory(
+  args: InventoryArgs,
+): Promise<{ inventory: InventoryPick[]; rounds: number | null } | 'none' | 'failed'> {
+  if (!hasSyncedProviderPicks(args.platform) || !args.leagueSeason || args.teams.length === 0) return 'none'
   const seasons = upcomingDraftSeasons({ leagueSeason: args.leagueSeason, status: args.status })
   const teamIds = [...new Set(args.teams.map((t) => t.externalId).filter((x) => x.length > 0))]
-
   const [stored, history] = await Promise.all([
     prisma.futureDraftPick
       .findMany({
@@ -96,17 +95,51 @@ export async function loadImportedFuturePicks(args: {
           .catch(() => null)
       : Promise.resolve(null),
   ])
-  if (stored == null) return { ...empty, readFailed: true }
-
+  if (stored == null) return 'failed'
   const rounds = history
     ? rookieRoundsFromDraftHistory(
         history.map((h) => ({ season: h.season ?? 0, maxRound: h._max.round ?? 0, picks: h._count._all })),
         teamIds.length,
       )
     : null
-  if (rounds == null && stored.length === 0) return empty
+  if (rounds == null && stored.length === 0) return 'none'
+  return { inventory: futurePickInventory({ teamIds, seasons, rounds, stored }), rounds }
+}
 
-  const inventory = futurePickInventory({ teamIds, seasons, rounds, stored })
+/**
+ * ONE team's future picks — what My Team's dynasty card shows. Same inventory, same coverage rule
+ * as `loadImportedFuturePicks`, without reading every roster in the league to map picks onto
+ * roster ids it does not need.
+ */
+export async function loadTeamFuturePicks(
+  args: InventoryArgs & { teamExternalId: string },
+): Promise<{ picks: RosterFuturePick[]; coverage: FuturePickCoverage; readFailed: boolean }> {
+  const inv = await importedInventory(args)
+  if (inv === 'failed') return { picks: [], coverage: 'none', readFailed: true }
+  if (inv === 'none') return { picks: [], coverage: 'none', readFailed: false }
+  const teamNameByExternal = new Map(args.teams.map((t) => [t.externalId, t.teamName]))
+  const picks = inv.inventory
+    .filter((p) => p.ownerTeamId === args.teamExternalId)
+    .map((p) => ({
+      ...p,
+      fromTeamName: p.originalTeamId === p.ownerTeamId ? null : teamNameByExternal.get(p.originalTeamId) ?? null,
+    }))
+  return { picks, coverage: inv.rounds != null ? 'complete' : 'traded_only', readFailed: false }
+}
+
+export async function loadImportedFuturePicks(args: InventoryArgs & {
+  rosters: ReadonlyArray<{ id: string; platformUserId: string; playerData: unknown }>
+}): Promise<ImportedFuturePicks> {
+  const empty: ImportedFuturePicks = {
+    picksByRosterId: new Map(),
+    coverage: 'none',
+    rosterIdByTeamId: new Map(),
+    readFailed: false,
+  }
+  const inv = await importedInventory(args)
+  if (inv === 'failed') return { ...empty, readFailed: true }
+  if (inv === 'none') return empty
+  const { inventory, rounds } = inv
   const teamNameByExternal = new Map(args.teams.map((t) => [t.externalId, t.teamName]))
   const teamById = new Map(args.teams.map((t) => [t.id, t]))
   const rosterIdByExternal = new Map<string, string>()

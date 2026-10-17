@@ -131,9 +131,11 @@ export type TradeRecord = {
     gradeNote?: string
   }>
   /**
-   * THE grade (`oneGradeForCompletedTrade`) — today's league values, no roster need — from
-   * `players[0]`'s side: `give` is what players[0] sent. Absent when no AF league was in hand to
-   * grade on; a withheld view (`graded: false`) carries its reason and never a letter.
+   * THE grade (`oneGradeForCompletedTrade`) — the FROZEN ORIGINAL taken the first time AllFantasy
+   * graded the deal, on this league's values, no roster need, with today's re-grade beside it as
+   * `current` (`frozenCompletedGrade.ts`; say when with `gradeMoment`) — from `players[0]`'s side:
+   * `give` is what players[0] sent. Absent when no AF league was in hand to grade on; a withheld
+   * view (`graded: false`) carries its reason and never a letter.
    *
    * ⚠ NOT THE SAME FACT AS `players[].grade`. That is the realized-points / market-projection
    * letter from the grade ledger; this is the one letter every other trade surface shows.
@@ -683,12 +685,42 @@ export async function getTradesData(
     prisma.leagueTeam.count({ where: { leagueId } }),
     lc.claimedTeam(),
   ])
-  const grades = await resolveGrades(
-    league.id,
-    league.platformLeagueId ?? null,
-    myTeam?.platformUserId?.trim() || null,
-    userId,
-  )
+  const sleeperHistory = String(league.platform ?? '').toLowerCase() === 'sleeper' && league.platformLeagueId
+
+  /*
+   * ⚠ THE SECTIONS RUN SIDE BY SIDE — EXCEPT GRADES BEFORE HISTORY (2026-10-03). These were four
+   * awaits in a row: grades (1–9s cold), the live pending-offer scan (0.7–7s), the agent ideas, then
+   * the Sleeper history (19–30s cold), measured read-only against production. Offers and ideas share
+   * nothing with the other two, so they now run alongside them.
+   *
+   * 🛑 GRADES AND HISTORY STAY IN THAT ORDER ON PURPOSE. Both freeze each trade's ORIGINAL grade into
+   * `trade_analysis_snapshots`, append-only and earliest-wins on read (`frozenCompletedGrade.ts`), and
+   * they grade from different sources — the stored `LeagueTrade` rows versus Sleeper's payload. Run
+   * together, which surface's letter becomes a trade's permanent original would be a race. In order,
+   * the grade list freezes first and the history reuses it, exactly as before.
+   */
+  const gradesThenHistory = (async () => {
+    const grades = await resolveGrades(
+      league.id,
+      league.platformLeagueId ?? null,
+      myTeam?.platformUserId?.trim() || null,
+      userId,
+    )
+    const current = sleeperHistory
+      ? await getSleeperTradeHistory(
+          league.platformLeagueId!,
+          myTeam?.platformUserId?.trim() || null,
+          // The viewer's own copy: another importer's row can carry other settings and another letter.
+          { afLeagueId: league.id },
+        ).catch(() => null)
+      : null
+    return { grades, current }
+  })()
+  const [{ grades, current }, pendingOffers, agentIdeas] = await Promise.all([
+    gradesThenHistory,
+    resolvePendingOffers(league, userId, lc),
+    resolveAgentIdeas(league.id, userId),
+  ])
 
   const base = {
     league: {
@@ -722,19 +754,13 @@ export async function getTradesData(
      * written to a table, and should not be. A pending offer is answered on the
      * platform, and a cached copy would go stale the moment it was accepted.
      */
-    ...(await resolvePendingOffers(league, userId, lc)),
+    ...pendingOffers,
     grades,
     deadline: resolveDeadline(league.settings),
-    ...(await resolveAgentIdeas(league.id, userId)),
+    ...agentIdeas,
   }
 
-  if (String(league.platform ?? '').toLowerCase() === 'sleeper' && league.platformLeagueId) {
-    const current = await getSleeperTradeHistory(
-      league.platformLeagueId,
-      myTeam?.platformUserId?.trim() || null,
-      // The viewer's own copy: another importer's row can carry other settings and another letter.
-      { afLeagueId: league.id },
-    ).catch(() => null)
+  if (sleeperHistory) {
     return {
       ...base,
       canonicalHistory: true,

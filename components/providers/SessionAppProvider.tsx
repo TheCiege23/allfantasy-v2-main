@@ -4,6 +4,7 @@ import type { ReactNode } from 'react'
 import type { Session } from 'next-auth'
 import { usePathname } from 'next/navigation'
 import { SessionProvider } from 'next-auth/react'
+import { ClientSyncAccountProvider } from './ClientSyncAccountProvider'
 
 export default function SessionAppProvider({
   children,
@@ -26,5 +27,5 @@ export default function SessionAppProvider({
       </SessionProvider>
     )
   }
-  return <SessionProvider session={session}>{children}</SessionProvider>
+  return <SessionProvider session={session}><ClientSyncAccountProvider>{children}</ClientSyncAccountProvider></SessionProvider>
 }

@@ -1,5 +1,5 @@
 /**
- * Day-level regular-season start dates for the DAILY sports (NBA, NHL).
+ * Day-level regular-season start dates for the DAILY sports.
  *
  * ── Why this file exists rather than a table ────────────────────────────────
  *
@@ -47,17 +47,22 @@ const REGULAR_SEASON_START_UTC: Readonly<Record<string, Readonly<Record<number, 
   NBA: {
     2026: '2026-10-20T00:00:00.000Z',
   },
-  // The first 2026-27 NCAAB game in SportsGame (espn_live; measured 2026-09-24). Opening day is
-  // the first Monday of November. Weeks run Monday-to-Sunday from here.
-  NCAAB: {
-    2026: '2026-11-02T00:00:00.000Z',
+  // MLB's published 2026 Opening Night was March 25 (US Eastern). Production SportsGame has
+  // one game on that Eastern day, followed by the March 26 slate. The March 25–31 player stats
+  // were backfilled in production. MLB announced March 24 as 2027 Opening Night; the matchup
+  // is still TBD, so the current game feed starts March 25. Anchor on the announced opener so
+  // the eventual Opening Night game lands in week 1 when the feed publishes it.
+  MLB: {
+    2026: '2026-03-25T00:00:00.000Z',
+    2027: '2027-03-24T00:00:00.000Z',
   },
-  /*
-   * MLB: NOTHING RECORDED ON PURPOSE. MLB's season is keyed by its own calendar year (2027 = the
-   * 2027 season). Add the 2027 regular-season opener here once MLB publishes it, checked against
-   * the schedule rows the same two-source way as the dates above — never guessed. Until then every
-   * MLB week declines with `season_start_unknown`, which is the safe failure.
-   */
+  // The 2026-27 regular season opens in Rome on November 1 (Notre Dame v Villanova),
+  // one day before the domestic slate. The official announcement and current RI cache agree.
+  // Evidence: docs/readiness/multisport-blockers-2026-10-05.md. Shared seven-day windows
+  // must include that opener; starting November 2 silently excluded it from scoring.
+  NCAAB: {
+    2026: '2026-11-01T00:00:00.000Z',
+  },
   // SOCCER (EPL + La Liga + Serie A, one pool): the Friday of the first weekend — La Liga opened Sat
   // 15 Aug 2026, the Premier League Fri 21 Aug, Serie A Sat 22 Aug (Rolling Insights season schedules,
   // fixtures/schedule-season.SOCCER.*.json; TheSportsDB's EPL rows in SportsGame agree on the 21st).
@@ -97,6 +102,20 @@ const GAMEWEEK_STARTS: Readonly<Record<string, Readonly<Record<number, readonly 
 
 const DAY_MS = 86_400_000
 
+// NBA fantasy periods follow Eastern calendar days. A fixed seven-day UTC offset
+// moves the boundary by an hour when daylight saving time changes in November.
+function nbaEasternWeekDay(season: number, week: number): Date | null {
+  const opener = REGULAR_SEASON_START_UTC.NBA[season]
+  if (!opener) return null
+  const day = new Date(Date.parse(opener) + (week - 1) * 7 * DAY_MS)
+  const noon = new Date(Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate(), 12))
+  const zone = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', timeZoneName: 'shortOffset' })
+    .formatToParts(noon).find(part => part.type === 'timeZoneName')?.value ?? ''
+  const offsetHours = Number(zone.match(/^GMT([+-]\d+)$/)?.[1])
+  if (!Number.isFinite(offsetHours)) return null
+  return new Date(Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate()) - offsetHours * 3_600_000)
+}
+
 function gameweekStarts(sport: string | null | undefined, season: number | null | undefined): readonly string[] | null {
   const key = String(sport ?? '').trim().toUpperCase()
   const year = Number(season)
@@ -115,6 +134,9 @@ export function resolveDailySportWeekWindow(
   week: number,
 ): { start: Date; end: Date } | null {
   if (!Number.isInteger(week) || week < 1) return null
+  // These bounds are UTC-midnight DATE keys for game_date and easternCalendarDay,
+  // not instants. The inverse below uses actual Eastern-midnight instants to
+  // classify a kickoff, including the daylight-saving transition.
   const starts = gameweekStarts(sport, season)
   if (starts) {
     const day = starts[week - 1]
@@ -136,6 +158,21 @@ export function dailySportWeekForInstant(
 ): number | null {
   const t = instant.getTime()
   if (Number.isNaN(t)) return null
+  if (String(sport ?? '').toUpperCase() === 'NBA' && Number.isInteger(Number(season))) {
+    const anchor = nbaEasternWeekDay(Number(season), 1)
+    if (anchor) {
+      if (t < anchor.getTime()) return null
+      const approximate = Math.floor((t - anchor.getTime()) / (7 * DAY_MS)) + 1
+      // DST can move the true edge an hour relative to elapsed UTC time.
+      for (const week of [approximate - 1, approximate, approximate + 1]) {
+        if (week < 1) continue
+        const start = nbaEasternWeekDay(Number(season), week)
+        const end = nbaEasternWeekDay(Number(season), week + 1)
+        if (start && end && t >= start.getTime() && t < end.getTime()) return week
+      }
+      return null
+    }
+  }
   const starts = gameweekStarts(sport, season)
   if (starts) {
     for (let i = 0; i < starts.length; i++) {

@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Season timeline and history</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./exile/exile.css">
+<link rel="stylesheet" href="./kit/kit.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Cinzel:wght@600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080d}
+.st-node{background:none;border:0;padding:0;cursor:pointer;color:inherit;font:inherit}
+.st-node[aria-pressed="true"] .k-tl-dot{border-color:#d9b45a;box-shadow:0 0 0 4px rgba(217,180,90,.18)}
+.st-trophy{display:flex;flex-direction:column;align-items:center;gap:10px;padding:20px;border-radius:14px;background:linear-gradient(180deg,#151926,#0b0d14);border:1px solid rgba(255,255,255,.07);text-align:center}
+.st-shelf{height:14px;margin:-6px -20px 0;border-radius:3px;background:linear-gradient(#6b3f1c,#3e220c);box-shadow:0 6px 12px rgba(0,0,0,.5)}
+</style>
+</helmet>
+<div class="ex" style="min-height: 100vh; display: flex; flex-direction: column">
+  <header style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 18px 28px; border-bottom: 1px solid rgba(255,255,255,.06)">
+    <a class="ex-btn" href="SurvivorHome.dc.html" aria-label="Back" style="padding: 0 12px">‹</a>
+    <div style="flex: 1 1 320px; display: flex; flex-direction: column; gap: 3px">
+      <h1 class="ex-h1">Season story</h1>
+      <span class="ex-t2">Blah Survivor · every week of the 2026 season, plus the league's history</span>
+    </div>
+    <div class="ex-seg" style="width: 280px"><sc-for list="{{seasons}}" as="s" hint-placeholder-count="3"><button class="ex-sg {{s.cls}}" onClick="{{s.pick}}">{{s.label}}</button></sc-for></div>
+  </header>
+
+  <section style="padding: 24px 28px 8px; display: flex; flex-direction: column; gap: 14px">
+    <div class="k-tl">
+      <sc-for list="{{nodes}}" as="n" hint-placeholder-count="14">
+        <button class="st-node k-tl-w" aria-pressed="{{n.on}}" onClick="{{n.pick}}" aria-label="{{n.aria}}">
+          <span class="k-tl-dot" style="background: {{n.bg}}; border-color: {{n.line}}"><img src="{{n.icon}}" alt=""></span>
+          <b>{{n.wk}}</b><span>{{n.short}}</span>
+        </button>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="padding: 8px 28px 24px">
+    <div class="k-hero" style="min-height: 280px">
+      <img class="k-bg" src="{{cur.bg}}" alt="">
+      <div class="k-veil"></div>
+      <div class="k-in" style="display: flex; align-items: center; gap: 36px; padding: 30px 36px; flex-wrap: wrap; min-height: 280px">
+        <div style="flex: 1 1 520px; display: flex; flex-direction: column; gap: 12px">
+          <span class="ex-lbl" style="color: {{cur.c}}">{{cur.kick}}</span>
+          <span style="font: 700 36px/1.1 'Cinzel', serif; color: #f3ead6">{{cur.head}}</span>
+          <span class="ex-t2" style="font-size: 15px; max-width: 620px">{{cur.body}}</span>
+          <div class="k-row" style="flex-wrap: wrap; gap: 8px"><sc-for list="{{cur.chips}}" as="c" hint-placeholder-count="3"><span class="k-pill" style="height: 28px">{{c}}</span></sc-for></div>
+        </div>
+        <img src="{{cur.hero}}" alt="" style="flex: none; height: 220px; filter: drop-shadow(0 20px 30px rgba(0,0,0,.6))">
+      </div>
+    </div>
+  </section>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 20px; padding: 0 28px 32px">
+    <section style="flex: 1 1 760px; display: flex; flex-direction: column; gap: 12px">
+      <span class="ex-lbl">Trophy case</span>
+      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px">
+        <sc-for list="{{trophies}}" as="t" hint-placeholder-count="3">
+          <div class="st-trophy">
+            <img src="late/champion-trophy.svg" alt="" style="height: 150px; filter: {{t.f}}">
+            <div class="st-shelf" style="width: calc(100% + 40px)"></div>
+            <span class="ex-lbl" style="margin-top: 8px">{{t.year}} · {{t.sport}}</span>
+            <span style="font: 700 18px 'Cinzel', serif; color: #f1d58a">{{t.name}}</span>
+            <span class="ex-t2" style="font-size: 12.5px">{{t.how}}</span>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+    <aside style="flex: 1 1 360px; display: flex; flex-direction: column; gap: 12px">
+      <span class="ex-lbl">League records</span>
+      <div class="ex-card2" style="padding: 6px 16px">
+        <table class="k-tbl"><tbody>
+          <sc-for list="{{records}}" as="r" hint-placeholder-count="6">
+            <tr><td style="width: 34px"><img src="{{r.icon}}" alt="" style="width: 26px"></td><td><span style="display: block; color: #e8eaf2; font-weight: 600">{{r.label}}</span><span class="ex-t3" style="font-size: 11.5px">{{r.who}}</span></td><td class="n">{{r.v}}</td></tr>
+          </sc-for>
+        </tbody></table>
+      </div>
+    </aside>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1300}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { sel: 8, season: '2026' }; }
+  renderVals() {
+    const st = this.state; const lit = 'weekly/torch-out-icon.svg';
+    const night = 'survivor/bg/night-football.svg', dusk = 'survivor/bg/dusk-football.svg', day = 'survivor/bg/day-football.svg';
+    const W = [
+      ['Draft', 'Idols hidden', 'survivor/idols/immunity-icon.svg', 'Draft night', 'Seven idols hidden in the pool', 'Twelve managers drafted. Seven players secretly carried idols, and their drafters found out by DM when the last pick was in.', 'survivor/idols/immunity.svg', night, '#7fe0c0', ['12 managers', '7 idols', '2 tribes']],
+      ['1', 'O3 out', lit, 'Week 1 · Tribe Koa', 'Open Team 3 is the first one out', 'Koa lost the tribe score race and sent Open Team 3 home 4–1.', 'weekly/torch-out.svg', night, '#ff9a3c', ['4–1 vote', 'Exile Island opens']],
+      ['2', 'O12 out', lit, 'Week 2 · Tribe Vela', 'Open Team 12 voted out', 'A 3–2 split, decided by a single vote.', 'weekly/torch-out.svg', night, '#ff9a3c', ['3–2 vote']],
+      ['3', 'O10 out', lit, 'Week 3 · Tribe Koa', 'Open Team 10 voted out', 'Koa again. The tribe is down to four.', 'weekly/torch-out.svg', night, '#ff9a3c', ['3–1 vote']],
+      ['4', 'Idol!', 'survivor/idols/immunity-icon.svg', 'Week 4 · Tribe Vela', 'TheCiege26 plays an idol', 'Three votes against TheCiege26 didn’t count. Open Team 2 went home instead.', 'survivor/idols/immunity.svg', night, '#7fe0c0', ['3 votes cancelled', 'Blindside']],
+      ['5', 'Swap', 'late/buff-vela.svg', 'Week 5 · Tribe swap', 'Buffs dropped', 'Four managers changed tribes. TheCiege26 and Open Team 5 crossed to Koa.', 'late/buff-koa.svg', dusk, '#b8a8ff', ['4 moved', 'Idols traveled']],
+      ['6', 'O8 out', lit, 'Week 6 · Tribe Vela', 'Open Team 8’s torch is out', 'Voted out 2–1 after Open Team 4 played an idol.', 'weekly/torch-out.svg', night, '#ff9a3c', ['2–1 vote', 'Idol played']],
+      ['7', 'Return', 'exile/token-icon.svg', 'Week 7 · Exile Island', 'Open Team 11 returns', 'Three tokens earned on Exile Island. Rejoined Tribe Vela.', 'exile/token-coin-earned.svg', 'survivor/bg/exile-football.svg', '#f2c94c', ['3 tokens', 'Back in the game']],
+      ['8', 'Merge', 'late/buff-merge.svg', 'Week 8 · The merge', 'Welcome to Mahina', 'Vela and Koa merged into one tribe of seven. From here on, everyone voted out joins the jury.', 'late/merge-banner.svg', dusk, '#f2c94c', ['7 managers', 'Jury begins']],
+      ['9', 'Juror 1', 'late/jury-icon.svg', 'Week 9 · Mahina', 'Open Team 2 joins the jury', 'First juror seated.', 'late/jury-bench.svg', night, '#d9b45a', ['4–2 vote']],
+      ['10', 'Juror 2', 'late/jury-icon.svg', 'Week 10 · Mahina', 'Open Team 6 joins the jury', 'Open Team 5 wins a third straight immunity.', 'weekly/immunity-necklace.svg', night, '#d9b45a', ['Immunity streak']],
+      ['11', 'Juror 3', 'late/jury-icon.svg', 'Week 11 · Mahina', 'Open Team 7 joins the jury', 'Down to five.', 'late/jury-bench.svg', night, '#d9b45a', ['3–1 vote']],
+      ['12', 'Juror 4', 'late/jury-icon.svg', 'Week 12 · Final four', 'Open Team 9 joins the jury', 'The final three are set.', 'late/jury-bench.svg', night, '#d9b45a', ['Final three set']],
+      ['13', 'Champion', 'late/champion-icon.svg', 'Week 13 · Final Tribal Council', 'TheCiege26 is the last one standing', 'The jury voted 3–1–1. From the first idol in week 4 to the crown.', 'late/champion-trophy.svg', day, '#f2c94c', ['3–1–1 jury', '1,412.6 points', '3 immunity wins']]
+    ];
+    const nodes = W.map((w, i) => ({ wk: i === 0 ? 'DRAFT' : 'WK ' + w[0], short: w[1], icon: w[2], aria: w[3] + ': ' + w[4], on: st.sel === i ? 'true' : 'false',
+      bg: st.sel === i ? '#151926' : '#10131c', line: st.sel === i ? '#d9b45a' : (i === 5 || i === 8 || i === 13 ? 'rgba(217,180,90,.45)' : '#2a2f40'), pick: () => this.setState({ sel: i }) }));
+    const w = W[st.sel];
+    return { nodes, cur: { kick: w[3], head: w[4], body: w[5], hero: w[6], bg: w[7], c: w[8], chips: w[9] },
+      seasons: ['2026', '2025', '2024'].map(y => ({ label: y, cls: st.season === y ? 'ex-sg-on' : '', pick: () => this.setState({ season: y }) })),
+      trophies: [{ year: '2026', sport: 'NFL', name: 'TheCiege26', how: 'Jury 3–1–1 · returned from nowhere', f: 'none' },
+                 { year: '2025', sport: 'NFL', name: 'Open Team 5', how: 'Jury 4–1 · 5 immunity wins', f: 'saturate(.8)' },
+                 { year: '2024', sport: 'NFL', name: 'Sunday Scaries', how: 'Jury 3–2 · played 3 idols', f: 'saturate(.6)' }],
+      records: [['weekly/immunity-necklace-icon.svg', 'Most immunity wins, one season', 'Open Team 5 · 2025', '5'], ['survivor/idols/immunity-icon.svg', 'Most idols played, career', 'Sunday Scaries', '6'],
+                ['late/champion-icon.svg', 'Most titles', 'One each · 3 champions', '1'], ['exile/token-icon.svg', 'Longest stay on Exile Island', 'Open Team 11 · 2026', '4 wks'],
+                ['weekly/urn.svg', 'Most votes survived, one season', 'TheCiege26 · 2026', '9'], ['late/jury-icon.svg', 'Biggest jury win', 'Open Team 5 · 2025', '4–1']]
+        .map(([icon, label, who, v]) => ({ icon, label, who, v })) };
+  }
+}
+</script>
+</body>
+</html>

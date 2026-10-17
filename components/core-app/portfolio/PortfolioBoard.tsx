@@ -38,6 +38,7 @@ import {
 } from '@/lib/core-app/portfolioView'
 import type { ImpactSlot, PlayerLeagueImpact } from '@/lib/core-app/playerLeagueImpact'
 import { impactText, SLOT_LABEL } from '@/components/core-app/screens/ExposureImpact'
+import { TopicTip } from '@/components/core-app/TopicTip'
 import {
   BarList,
   ChartScroll,
@@ -166,6 +167,12 @@ function bucketLabel(dimension: DistributionDimension, key: string): string {
 }
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
+
+/**
+ * A card heading and its "?" on one line. The tip is a SIBLING of the <h2>, never inside it: each
+ * card is `aria-labelledby` that heading, and a button inside would become part of the card's name.
+ */
+const HEADING_WITH_TIP = { display: 'flex', alignItems: 'center' } as const
 const pct = (x: number) => `${Math.round(x * 100)}%`
 
 /** "Sep 3" from a capture day. UTC, because the key is a UTC midnight — Eastern would print Sep 2. */
@@ -420,7 +427,9 @@ export function PortfolioBoard({
       {/* ── filters: one row above everything they scope ── */}
       <div className="af-pfb-filters" role="group" aria-label="Filter your leagues">
         <div className="af-pfb-chiprow">
-          <span className="af-pfb-group">Status</span>
+          <span className="af-pfb-group">
+            Status <TopicTip topic="competitiveStatus" />
+          </span>
           {chip('status', 'contender', 'Contender', countWhere((l) => l.status === 'contender'))}
           {chip('status', 'middle', 'Middle', countWhere((l) => l.status === 'middle'))}
           {chip('status', 'rebuild', 'Rebuild', countWhere((l) => l.status === 'rebuild'))}
@@ -545,9 +554,12 @@ export function PortfolioBoard({
             <header className="af-pfb-card-head">
               <div>
                 <p className="af-pf-kicker">Do these first</p>
-                <h2 id="af-pfb-actions" className="af-pfb-h2">
-                  Leagues that need you
-                </h2>
+                <div style={HEADING_WITH_TIP}>
+                  <h2 id="af-pfb-actions" className="af-pfb-h2">
+                    Leagues that need you
+                  </h2>
+                  <TopicTip topic="portfolioActions" />
+                </div>
               </div>
               {lineup == null ? <span className="af-pfb-muted">Lineup counts unavailable just now</span> : null}
             </header>
@@ -600,7 +612,15 @@ export function PortfolioBoard({
                 const buckets = distribution(insights, indexes, d.key)
                 return (
                   <div key={d.key} className="af-pfb-dist">
-                    <h3 className="af-pfb-h3">{d.label}</h3>
+                    <h3 className="af-pfb-h3">
+                      {d.label}
+                      {d.key === 'scoring' ? (
+                        <>
+                          {' '}
+                          <TopicTip topic="ppr" />
+                        </>
+                      ) : null}
+                    </h3>
                     <BarList
                       ariaLabel={`Leagues by ${d.label.toLowerCase()}`}
                       max={indexes.length}
@@ -672,9 +692,12 @@ export function PortfolioBoard({
             <header className="af-pfb-card-head">
               <div>
                 <p className="af-pf-kicker">Diversification</p>
-                <h2 id="af-pfb-div" className="af-pfb-h2">
-                  One bad Sunday, several teams
-                </h2>
+                <div style={HEADING_WITH_TIP}>
+                  <h2 id="af-pfb-div" className="af-pfb-h2">
+                    One bad Sunday, several teams
+                  </h2>
+                  <TopicTip topic="diversification" />
+                </div>
               </div>
               <span className="af-pfb-muted">
                 {plural(div.lineups, 'lineup')} · {plural(div.starterSlots, 'starting slot')}
@@ -788,9 +811,12 @@ export function PortfolioBoard({
             <header className="af-pfb-card-head">
               <div>
                 <p className="af-pf-kicker">Player exposure</p>
-                <h2 id="af-pfb-exp" className="af-pfb-h2">
-                  How often each player appears
-                </h2>
+                <div style={HEADING_WITH_TIP}>
+                  <h2 id="af-pfb-exp" className="af-pfb-h2">
+                    How often each player appears
+                  </h2>
+                  <TopicTip topic="playerValueBook" />
+                </div>
               </div>
               <span className="af-pfb-muted">Values: {insights.playerValueBook}</span>
             </header>
@@ -883,9 +909,12 @@ export function PortfolioBoard({
           <header className="af-pfb-card-head">
             <div>
               <p className="af-pf-kicker">Risk heatmap</p>
-              <h2 id="af-pfb-risk" className="af-pfb-h2">
-                Injuries, byes, thin spots and stacks
-              </h2>
+              <div style={HEADING_WITH_TIP}>
+                <h2 id="af-pfb-risk" className="af-pfb-h2">
+                  Injuries, byes, thin spots and stacks
+                </h2>
+                <TopicTip topic="riskLevels" />
+              </div>
             </div>
             <Legend
               items={[

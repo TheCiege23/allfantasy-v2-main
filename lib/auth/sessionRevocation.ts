@@ -117,10 +117,19 @@ export async function revokeSessionForSignOut(token: Token, nowS = Math.floor(Da
   if (userId) await revokeAllSessionsForUser(userId, nowS)
 }
 
-/** Account deletion (or a compromise): every session of this user issued up to now is refused. */
-export async function revokeAllSessionsForUser(userId: string, nowS = Math.floor(Date.now() / 1000)): Promise<void> {
+/**
+ * Account deletion, a password reset, or "Sign out everywhere": every session of this user issued
+ * up to now is refused.
+ *
+ * Returns whether Redis RECORDED it. Most callers revoke as a side effect and ignore that; the
+ * user-facing "Sign out everywhere" must not, because this module fails open — an unrecorded
+ * revocation leaves every other device signed in, and telling the user otherwise is the one
+ * outcome worse than the outage.
+ */
+export async function revokeAllSessionsForUser(userId: string, nowS = Math.floor(Date.now() / 1000)): Promise<boolean> {
   validUntil.clear()
-  await redis(["SET", USER_KEY(userId), String(nowS), "EX", SESSION_MAX_AGE_S])
+  const result = await redis(["SET", USER_KEY(userId), String(nowS), "EX", SESSION_MAX_AGE_S])
+  return result === "OK"
 }
 
 /**

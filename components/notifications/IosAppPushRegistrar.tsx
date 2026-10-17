@@ -7,7 +7,12 @@ import { iosAppPushBridge, notificationTapHref } from '@/lib/push-notifications/
 import { useIosAppPush } from '@/lib/push-notifications/useIosAppPush'
 
 /**
- * Mounted once in the /core shell, renders nothing. Two jobs, both iOS-app-only:
+ * Mounted once in the ROOT layout, renders nothing. Two jobs, both iOS-app-only:
+ *
+ * 🛑 It used to live in the /core shell, and a notification tapped while the app was on any
+ * other page (a league, a player, Settings) was simply dropped: no listener, so the app reopened
+ * where it was. Keep it at the root, and keep it to ONE mount — two listeners push the route
+ * twice and re-store the token twice.
  *
  *  1. When notifications are already allowed, re-send this phone's token for the signed-in
  *     user (`useIosAppPush` does it on mount). Signing out deletes the token for that login,

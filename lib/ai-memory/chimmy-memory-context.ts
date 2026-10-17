@@ -103,9 +103,11 @@ Use this to personalize responses and avoid repeating yourself.
     const warning = spansLeagues
       ? 'This transcript spans more than one league. Lines marked [another league] are about a DIFFERENT league — use them for continuity and tone only, never as facts about the league being asked about.\n'
       : ''
+    // Earlier messages carry the figures of the day they were sent — see EARLIER_FIGURES_RULE.
+    const snapshot = 'These are earlier messages. Any figure in them — odds, scores, values, or a brief or card the user pasted — is as of when it was sent, not current; never present it as the user\'s current card or odds.\n'
     sections.push(`
 ## RECENT CHAT (for context)
-${warning}${recentChat
+${snapshot}${warning}${recentChat
       .map(
         (m) =>
           `${m.role} [${scopeOf(m.leagueId)}]: ${m.content.slice(0, 400)}${m.content.length > 400 ? '...' : ''}`,

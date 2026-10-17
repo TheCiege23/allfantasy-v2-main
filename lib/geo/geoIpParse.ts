@@ -26,6 +26,8 @@ export interface ParsedIpGeo {
   vpnKind?: AnonymizerKind | null
   /** The call returned a payload but carried no field we could read a country from. */
   shapeUnrecognised: boolean
+  /** The vendor's network name — the field `vpnHint` is read from. For the block log only. */
+  org?: string | null
 }
 
 export const UNREADABLE_IP_GEO: ParsedIpGeo = {
@@ -127,10 +129,10 @@ export function parseIpApiPayload(data: Record<string, unknown> | null): ParsedI
 
   if (!country) {
     warnShapeOnce(Object.keys(data))
-    return { country: null, regionCode: null, vpnHint, vpnKind, shapeUnrecognised: true }
+    return { country: null, regionCode: null, vpnHint, vpnKind, shapeUnrecognised: true, org: orgLabel(data.org) }
   }
 
-  return { country, regionCode, vpnHint, vpnKind, shapeUnrecognised: false }
+  return { country, regionCode, vpnHint, vpnKind, shapeUnrecognised: false, org: orgLabel(data.org) }
 }
 
 /**
@@ -168,6 +170,14 @@ export interface ProxycheckVerdict {
   kind?: AnonymizerKind | null
   /** Top-level `status: "denied"` — quota exhausted or key refused. Every answer is "unknown" while it holds. */
   denied: boolean
+  /**
+   * The vendor's own words behind the verdict — `type`, `proxy` and the network name — kept for the
+   * block log (`describeAnonymizerBlock`) so a false positive can be pinned to the field that caused
+   * it. Absent when the vendor did not answer.
+   */
+  vendorType?: string | null
+  vendorProxy?: string | null
+  network?: string | null
 }
 
 const PROXYCHECK_UNANSWERED: ProxycheckVerdict = { answered: false, anonymized: false, denied: false }
@@ -230,7 +240,15 @@ export function parseProxycheckPayload(data: Record<string, unknown> | null, ip:
           : proxy === "yes"
             ? "proxy"
             : null
-  return { answered: true, anonymized: kind !== null, kind, denied: false }
+  return {
+    answered: true,
+    anonymized: kind !== null,
+    kind,
+    denied: false,
+    vendorType: orgLabel(entry.type),
+    vendorProxy: orgLabel(entry.proxy),
+    network: orgLabel(entry.provider ?? entry.organisation),
+  }
 }
 
 /**
@@ -257,14 +275,98 @@ export interface AnonymizerDetail {
   anonymized: boolean | null
   /** Set only when `anonymized` is true. */
   kind: AnonymizerKind | null
+  /** Which signal decided a block. Set only when `anonymized` is true. */
+  decidedBy?: AnonymizerSource | null
 }
+
+/** The three things that can call a connection anonymized. */
+export type AnonymizerSource = "tor" | "proxycheck" | "ipapi"
 
 /** `combineAnonymizerSignals`, plus which signal decided it. One rule, two shapes. */
 export function combineAnonymizerDetail(s: AnonymizerSignals): AnonymizerDetail {
-  if (s.tor) return { anonymized: true, kind: "tor" }
-  if (s.proxycheck?.anonymized) return { anonymized: true, kind: s.proxycheck.kind ?? "proxy" }
-  if (s.ipapi?.vpnHint) return { anonymized: true, kind: s.ipapi.vpnKind ?? "vpn" }
+  if (s.tor) return { anonymized: true, kind: "tor", decidedBy: "tor" }
+  if (s.proxycheck?.anonymized) return { anonymized: true, kind: s.proxycheck.kind ?? "proxy", decidedBy: "proxycheck" }
+  if (s.ipapi?.vpnHint) return { anonymized: true, kind: s.ipapi.vpnKind ?? "vpn", decidedBy: "ipapi" }
   if (s.proxycheck?.answered) return { anonymized: false, kind: null }
   if (s.ipapi && (s.ipapi.country !== null || s.ipapi.shapeUnrecognised)) return { anonymized: false, kind: null }
   return { anonymized: null, kind: null }
+}
+
+/**
+ * A vendor field, as a short printable label. Network names and type words are not personal data,
+ * but they are vendor text — capped, and stripped of anything that could break a log line.
+ */
+function orgLabel(value: unknown): string | null {
+  if (value === null || value === undefined) return null
+  const text = String(value).replace(/[^ -~]/g, "").trim()
+  return text ? text.slice(0, 80) : null
+}
+
+/**
+ * One log line saying WHICH service flagged a connection, and with what words.
+ *
+ * Added 2026-10-02 after a residential Optimum line in New Jersey was refused as a "proxy" for
+ * about three minutes and then cleared on a re-check. Both vendors are asked with paid keys, and
+ * nothing recorded which one had said yes — so a false positive could not be attributed, only
+ * re-tested after the fact.
+ *
+ * 🛑 NO IP ADDRESS, EVER. The point is to blame a vendor field, not to log who was blocked; the
+ * network name and the vendor's type word are enough to tell "a residential ISP was called a proxy"
+ * from "a data centre was called hosting". `path` names which gate asked.
+ *
+ * "Flagged", not "blocked": on the middleware path this prints before the Private Relay
+ * placement, which can still let a relay user through — the line names the vendor's verdict, not
+ * the gate's final answer.
+ */
+export function describeAnonymizerBlock(
+  path: string,
+  detail: AnonymizerDetail,
+  signals: Pick<AnonymizerSignals, "proxycheck" | "ipapi">,
+): string {
+  const pc = signals.proxycheck
+  const parts = [
+    `[geo] anonymizer flagged`,
+    `path=${path}`,
+    `decidedBy=${detail.decidedBy ?? "unknown"}`,
+    `kind=${detail.kind ?? "unknown"}`,
+    pc
+      ? `proxycheck={answered:${pc.answered},type:${pc.vendorType ?? "-"},proxy:${pc.vendorProxy ?? "-"},network:${pc.network ?? "-"}}`
+      : `proxycheck=not-asked`,
+    signals.ipapi
+      ? `ipapi={hint:${signals.ipapi.vpnKind ?? "none"},org:${signals.ipapi.org ?? "-"}}`
+      : `ipapi=not-asked`,
+  ]
+  return parts.join(" ")
+}
+
+const BLOCK_LOG_REPEAT_MS = 10 * 60 * 1000
+const BLOCK_LOG_MAX_KEYS = 500
+const lastBlockLog = new Map<string, number>()
+
+/**
+ * Print `describeAnonymizerBlock`, at most once per identical line per 10 minutes per process.
+ *
+ * ⚠ `detectUserState` is uncached and `/api/geo/check` is polled by pages, so one VPN visitor would
+ * otherwise print the same line on every load. The line carries no address, so identical lines from
+ * different people collapse too — which is the right unit: "proxycheck called Optimum a proxy" is
+ * one finding however many people it hit. Returns whether it printed (a test seam).
+ */
+export function logAnonymizerBlock(
+  path: string,
+  detail: AnonymizerDetail,
+  signals: Pick<AnonymizerSignals, "proxycheck" | "ipapi">,
+  now: number = Date.now(),
+): boolean {
+  const line = describeAnonymizerBlock(path, detail, signals)
+  const last = lastBlockLog.get(line)
+  if (last !== undefined && now - last < BLOCK_LOG_REPEAT_MS) return false
+  if (lastBlockLog.size >= BLOCK_LOG_MAX_KEYS) lastBlockLog.clear()
+  lastBlockLog.set(line, now)
+  console.warn(line)
+  return true
+}
+
+/** Test seam. */
+export function __resetAnonymizerBlockLog(): void {
+  lastBlockLog.clear()
 }

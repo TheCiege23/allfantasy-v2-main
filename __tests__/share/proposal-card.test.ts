@@ -51,6 +51,8 @@ describe('proposal card input', () => {
     expect(ProposalCardInput.safeParse({ ...CARD, give: Array(9).fill(CARD.give[0]) }).success).toBe(false)
     expect(ProposalCardInput.safeParse({ ...CARD, myLetter: 'Z' }).success).toBe(false)
     expect(ProposalCardInput.safeParse({ ...CARD, score: 101 }).success).toBe(false)
+    expect(ProposalCardInput.safeParse({ ...CARD, basis: 'Dynasty · Superflex', asOf: '2026-10-03T10:00:00.000Z', uncertainty: 'Some assets unpriced' }).success).toBe(true)
+    expect(ProposalCardInput.safeParse({ ...CARD, asOf: 'yesterday' }).success).toBe(false)
   })
 
   it('a side with an unpriced asset has no total, not a smaller one', () => {
@@ -64,6 +66,18 @@ describe('POST /api/share/proposal-card', () => {
     vi.clearAllMocks()
     getServerSession.mockResolvedValue({ user: { id: `u-${Math.random()}` } })
     findFirst.mockResolvedValue({ name: 'AFC Dreaming!' })
+  })
+
+  it('draws Spanish image text without translating manager or player identities', async () => {
+    const result=await post({...CARD,language:'es',basis:'Dynasty · Superflex',uncertainty:'Some assets unpriced'})
+    const words=texts((result as unknown as {node:unknown}).node).join(' | ')
+    expect(words).toContain('ANÁLISIS DEL INTERCAMBIO')
+    expect(words).toContain('RECIBE')
+    expect(words).toContain('Intercambio propuesto')
+    expect(words).toContain('Dinastía · Superflex')
+    expect(words).toContain('Braelon Allen')
+    expect(words).toContain('TheCiege26')
+    expect(words).not.toContain('TRADE CHECK')
   })
 
   it('401 signed out, 400 on a bad body, 404 for a league the user is not in', async () => {

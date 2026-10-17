@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { render, screen, waitFor } from '@testing-library/react'
-import { TradeLeagueStrip } from '@/components/core-app/screens/TradeLeagueStrip'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { TradeLeagueStrip, stateOf } from '@/components/core-app/screens/TradeLeagueStrip'
 import { __resetTradesPanelShare } from '@/components/core-app/screens/tradesPanelFetch'
 import React from 'react'
 
@@ -23,14 +23,16 @@ function text(ui: React.ReactElement): string {
 }
 
 describe('Trade Center renders and is reachable', () => {
-  it('shows the league context and the full asset vocabulary', () => {
+  it('shows the league context and only asset kinds the builder can add', () => {
     const t = text(<TradeCenter league={LEAGUE} />)
     expect(t).toContain('Trade Center')
     expect(t).toContain('Last League Left')
-    /* The legend documents every asset class regardless of this deal's contents. */
-    expect(t).toContain('Idol · Survivor')
-    expect(t).toContain('Weapon · Zombie')
-    expect(t).toContain('Serum · Zombie')
+    expect(t).toContain('Player · any position, incl. IDP')
+    expect(t).toContain('Pick')
+    expect(t).toContain('FAAB')
+    expect(t).not.toContain('Idol · Survivor')
+    expect(t).not.toContain('Weapon · Zombie')
+    expect(t).not.toContain('Serum · Zombie')
   })
 
   it('⚠ is wired into /core/trades and does not replace the history', () => {
@@ -445,35 +447,37 @@ describe('core visual upgrade — design-refs/trade-center-handoff', () => {
     'utf8',
   ).replace(/\r\n/g, '\n')
 
-  it('scopes the asset legend to what this league can trade, once the type is known', () => {
+  it('scopes the supported asset legend to the known format', () => {
     /*
      * A redraft league has no future draft to send a pick into — the format
      * banner refuses one — so the legend must not advertise it. Keyed on the
      * resolved type key, never on a display string.
      */
     const redraft = text(<TradeCenter league={LEAGUE} leagueType="redraft" />)
-    expect(redraft).toContain('Asset types in this league')
+    expect(redraft).toContain('Available in this builder for this format')
     expect(redraft).toContain('FAAB')
+    expect(redraft).not.toContain('DPick')
     expect(redraft).not.toContain('Idol · Survivor')
     expect(redraft).not.toContain('Weapon · Zombie')
 
     const zombie = text(<TradeCenter league={LEAGUE} leagueType="redraft" leagueVariant="zombie" />)
-    expect(zombie).toContain('Weapon · Zombie')
-    expect(zombie).toContain('Serum · Zombie')
+    expect(zombie).not.toContain('Weapon · Zombie')
+    expect(zombie).not.toContain('Serum · Zombie')
     expect(zombie).not.toContain('Idol · Survivor')
   })
 
-  it('⚠ keeps the full vocabulary when the league type is unknown', () => {
-    // "We do not know" must not read as "this league forbids picks".
+  it('shows builder-supported types without claiming unknown league rules', () => {
     const t = text(<TradeCenter league={LEAGUE} />)
-    expect(t).toContain('Asset types supported')
-    expect(t).toContain('Idol · Survivor')
+    expect(t).toContain('Supported by this builder')
+    expect(t).toContain('DPick')
+    expect(t).not.toContain('Idol · Survivor')
   })
 
   it('⚠ the cross-league strip never renders "nothing waiting" for a league it did not read', () => {
     // The same rule TradeInbox carries, for the same reason.
     expect(STRIP).toContain('NOT SCANNED IS CHECKED BEFORE EMPTY')
-    expect(STRIP).toContain("if (panel.pending && !panel.pending.scanned)")
+    expect(stateOf({ pending: { scanned: false, reason: 'Source unavailable', platform: 'espn' } }))
+      .toMatchObject({ kind: 'unread', reason: 'Source unavailable' })
     /*
      * ⚠ ASSERTS THAT IT READS THE PANEL, NOT WHERE THE URL LITERAL LIVES. This used to pin
      * '/api/league/trades-panel?leagueId=' in this file; the literal moved into the shared
@@ -486,6 +490,36 @@ describe('core visual upgrade — design-refs/trade-center-handoff', () => {
   it('caps how many leagues it reads at once', () => {
     // Each read may sweep a provider's pending transactions.
     expect(STRIP).toContain('MAX_LEAGUES_READ')
+  })
+
+  it('lets a manager inspect leagues beyond the first eight on demand', () => {
+    render(<TradeLeagueStrip leagues={Array.from({ length: 10 }, (_, index) => ({
+      id: `league-${index + 1}`, name: `League ${index + 1}`, platform: 'espn', mark: 'E',
+    }))} activeLeagueId={null} />)
+    expect(screen.queryByText('League 9')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Show 2 more leagues' }))
+    expect(screen.getByText('League 9')).toBeTruthy()
+    expect(screen.getByText('League 10')).toBeTruthy()
+  })
+
+  it('takes a native incoming offer to the league response controls', async () => {
+    const original = globalThis.fetch
+    globalThis.fetch = vi.fn(() => Promise.resolve({
+      ok: true,
+      json: async () => ({
+        pending: { scanned: true }, pendingOffers: [],
+        activeTrades: [{ direction: 'incoming', partnerName: 'Manager B', status: 'pending' }],
+      }),
+    } as Response)) as unknown as typeof fetch
+    try {
+      render(<TradeLeagueStrip leagues={[{ id: 'league-1', name: 'League 1', platform: 'af', mark: 'A' }]} activeLeagueId={null} />)
+      await screen.findByText(/1 offer waiting/)
+      const link = screen.getByText('League 1').closest('a')
+      expect(link?.getAttribute('href')).toBe('/league/league-1?view=trades')
+      expect(link?.textContent).toContain('Respond in league')
+    } finally {
+      globalThis.fetch = original
+    }
   })
 
   /*
@@ -710,9 +744,13 @@ describe('🛑 a trade line shows the player, not just his name', () => {
   it('🛑 reuses the picker’s logo resolver instead of adding a sixth', () => {
     /*
      * This repo already carries five team-logo functions. The logo beside a player in the builder
-     * must be the same asset as the logo beside him in the list he was picked from.
+     * must be the same asset as the logo beside him in the list he was picked from — and both read
+     * the safe helper, which returns null for a club it does not know. `resolveTeamLogoUrlSync`
+     * guessed a path for anything, so every free agent ("FA") drew a broken image.
      */
-    expect(code).toContain('resolveTeamLogoUrlSync')
+    expect(code).toContain("from '@/lib/core-app/teamLogo'")
+    expect(code).not.toContain('resolveTeamLogoUrlSync')
+    expect(readFileSync(resolve(process.cwd(), 'components/core-app/screens/TradeAssetPicker.tsx'), 'utf8')).toContain("from '@/lib/core-app/teamLogo'")
     expect(code).not.toMatch(/function\s+\w*[tT]eamLogo\w*\s*\(/)
   })
 

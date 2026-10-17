@@ -1,7 +1,7 @@
 import type { LeagueImpact } from './playerImpact'
 import type { RecommendedMove } from './playerFinder'
 import { isHealthyDesignation, isRuledOut } from './injuryStatus'
-import { claimLink, lineupLink, movePath, type PlatformLink } from './platformLinks'
+import { claimLink, lineupLink, movePath, platformLabel, type PlatformLink } from './platformLinks'
 import { moveLegality, swapLegality, type Kickoffs } from './swapLegality'
 
 /**
@@ -48,6 +48,32 @@ export type PlayerMove = {
    * place in the list and loses its button.
    */
   locked: string | null
+  /**
+   * What `title`, `path` and `note` were built from, so the cards can say them in the reader's
+   * language (2026-10-04). The English fields above stay byte-identical; Spanish is rebuilt from
+   * these at render by lib/core-app/playerMovesCopy.ts. `locked` is not repeated here: it is
+   * swapLegality's English reason, translated by `coreUiCopy`'s lock patterns.
+   */
+  parts?: PlayerMoveParts
+}
+
+/** The three screens a move lands on, as `movePath` names them. */
+export type MoveScreen = 'Roster' | 'Lineup' | 'Waivers'
+
+export type PlayerMoveParts = {
+  /** `movePath`'s pieces: the platform label, the league's name (null → "League"), the screen. */
+  path: { platform: string; league: string | null; screen: MoveScreen }
+} & (
+  /** "Move Kincaid off IR — he's active": `status` is the designation, or null when he is active. */
+  | { kind: 'ir'; last: string; status: string | null }
+  /** "Swap Ferguson out for Kincaid at TE"; `slotUnconfirmed` adds the note's caveat. */
+  | { kind: 'swap'; outLast: string; last: string; slot: string | null; slotUnconfirmed: boolean }
+  /** "Claim Isaiah Likely over Kincaid"; the note carries his position and the projection week. */
+  | { kind: 'claim'; name: string; last: string; position: string | null; week: number | null }
+)
+
+function pathParts(league: { platform: string | null | undefined; name?: string | null }, screen: MoveScreen): PlayerMoveParts['path'] {
+  return { platform: platformLabel(league.platform), league: (league.name ?? '').trim() || null, screen }
 }
 
 /**
@@ -134,6 +160,12 @@ export function composePlayerMoves(args: {
         scoring: 'league',
         link: lineupLink(league),
         locked,
+        parts: {
+          kind: 'ir',
+          last,
+          status: isHealthyDesignation(injuryStatus) ? null : injuryStatus.trim(),
+          path: pathParts(league, 'Roster'),
+        },
       })
       continue
     }
@@ -154,6 +186,14 @@ export function composePlayerMoves(args: {
         scoring: 'league',
         link: lineupLink(league),
         locked,
+        parts: {
+          kind: 'swap',
+          outLast: lastName(so.name),
+          last,
+          slot: so.slot ? so.slot.replace(/_/g, ' ') : null,
+          slotUnconfirmed: !im.slotConfirmed,
+          path: pathParts(league, 'Lineup'),
+        },
       })
     }
   }
@@ -192,6 +232,14 @@ export function composePlayerMoves(args: {
       scoring: 'standard',
       link,
       locked,
+      parts: {
+        kind: 'claim',
+        name: fa.name,
+        last,
+        position: fa.position || null,
+        week: mv.projectionWeek ?? null,
+        path: pathParts(league, 'Waivers'),
+      },
     })
   }
 

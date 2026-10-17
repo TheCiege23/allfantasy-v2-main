@@ -50,4 +50,12 @@ export const AVATAR_PRESET_LABELS: Record<AvatarPresetId, string> = {
   champion: "Champion",
 }
 
+/**
+ * i18n keys beside `AVATAR_PRESET_LABELS`. Display only — the preset id is what gets stored in
+ * `UserProfile.avatarPreset`; the English label stays the fallback.
+ */
+export const AVATAR_PRESET_LABEL_KEYS = Object.fromEntries(
+  AVATAR_PRESETS.map((id) => [id, `settings.profile.avatarPreset.${id}`]),
+) as Record<AvatarPresetId, string>
+
 export const DEFAULT_AVATAR_PRESET: AvatarPresetId = "crest"

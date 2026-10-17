@@ -20,6 +20,38 @@ interface TradePlayer {
   position: string;
 }
 
+/**
+ * 🛑 `LeagueTrade.playersGiven/Received` ARE ARRAYS OF BARE SLEEPER-ID STRINGS, NOT OBJECTS.
+ * Measured in production 2026-09-30 across every season 2019–2026: 20,043 rows shaped
+ * `["8150", "11635"]` (lib/dynasty-import/normalize-historical.ts writes the keys of a Sleeper
+ * transaction's adds/drops), 5,937 with no players at all (pick-only), and ZERO shaped
+ * `{ id, name, position }`. This module read `player.id` off a string — undefined — so every
+ * trade with a player in it was refused as "unmatched", and the only trades ever valued were
+ * pick-only ones. The first two scheduled passes valued 189 and refused 811, all NFL.
+ *
+ * So both shapes are accepted here. A bare string is the Sleeper id; the name and position come
+ * from FantasyCalc once matched. An object keeps what it carries and is matched by id first,
+ * then by name. Nothing is guessed: an entry that matches neither still refuses the trade.
+ */
+function normalizeTradePlayers(raw: unknown): TradePlayer[] {
+  if (!Array.isArray(raw)) return [];
+  const out: TradePlayer[] = [];
+  for (const entry of raw) {
+    if (typeof entry === 'string' || typeof entry === 'number') {
+      const id = String(entry).trim();
+      if (id) out.push({ id, name: '', position: '' });
+      continue;
+    }
+    if (entry && typeof entry === 'object') {
+      const e = entry as { id?: unknown; sleeperId?: unknown; name?: unknown; position?: unknown };
+      const id = String(e.id ?? e.sleeperId ?? '').trim();
+      const name = String(e.name ?? '').trim();
+      if (id || name) out.push({ id, name, position: String(e.position ?? '').trim() });
+    }
+  }
+  return out;
+}
+
 interface TradePick {
   season: number;
   round: number;
@@ -81,9 +113,9 @@ export async function collectTradeMarketFacts(
   }
 ): Promise<EnhancedTradeAnalysis | null> {
   try {
-    const playersGiven = (trade.playersGiven as TradePlayer[]) || [];
+    const playersGiven = normalizeTradePlayers(trade.playersGiven);
     const picksGiven = (trade.picksGiven as TradePick[]) || [];
-    const playersReceived = (trade.playersReceived as TradePlayer[]) || [];
+    const playersReceived = normalizeTradePlayers(trade.playersReceived);
     const picksReceived = (trade.picksReceived as TradePick[]) || [];
 
     if (playersGiven.length === 0 && picksGiven.length === 0) return null;
@@ -101,15 +133,16 @@ export async function collectTradeMarketFacts(
     const valueOf = new Map<TradePlayer, number>();
 
     for (const player of [...playersGiven, ...playersReceived]) {
-      const fcPlayer = findPlayerBySleeperId(fantasyCalcPlayers, player.id) ||
-                       findPlayerByName(fantasyCalcPlayers, player.name);
+      const fcPlayer = (player.id ? findPlayerBySleeperId(fantasyCalcPlayers, player.id) : null) ||
+                       (player.name ? findPlayerByName(fantasyCalcPlayers, player.name) : null);
       // No market value is not a value of 200. Refuse the whole trade rather than price it by a guess.
       if (!fcPlayer || !(fcPlayer.value > 0)) return null;
 
       valueOf.set(player, fcPlayer.value);
       playersWithEnrichment.push({
-        name: player.name,
-        position: player.position,
+        // A bare-id row carries no name; FantasyCalc's is the name the insight text will use.
+        name: player.name || fcPlayer.player.name,
+        position: player.position || fcPlayer.player.position,
         fantasyCalcValue: fcPlayer.value,
         overallRank: Number.isFinite(fcPlayer.overallRank) ? fcPlayer.overallRank : null,
         age: getPlayerAge(fcPlayer),

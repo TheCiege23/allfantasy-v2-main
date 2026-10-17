@@ -132,11 +132,12 @@ test.describe('@db Redraft waiver walkthrough (Step 3B)', () => {
     expect(noDrop.status()).toBe(400)
     expect((await noDrop.json()).code).toBe('DROP_REQUIRED')
 
-    // Pick a rostered player to drop, then the add/drop completes.
-    const dropId = (await rosterPlayerIds(page, leagueId))[0]
+    // The fixture places starters first and bench players last. Drop a bench
+    // player so the new addition does not overflow the full bench.
+    const dropId = (await rosterPlayerIds(page, leagueId)).at(-1)
     expect(dropId).toBeTruthy()
     const withDrop = await page.request.post(`/api/waiver-wire/leagues/${leagueId}/add-drop`, { data: { addPlayerId: addId, dropPlayerId: dropId } })
-    expect(withDrop.status()).toBe(200)
+    expect(withDrop.status(), await withDrop.text()).toBe(200)
     const body = await withDrop.json()
     expect(body.ok).toBe(true)
     expect(body.transaction.dropPlayerId).toBe(dropId)

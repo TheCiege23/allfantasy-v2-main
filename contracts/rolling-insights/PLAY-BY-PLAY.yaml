@@ -245,6 +245,9 @@ nba:
   role_enum: [shooter, assister, blocker, rebounder, stealer, fouler, fouled,
               turnover_player, jump_ball_player, jump_ball_receiver]
   note: "NBA has `points` and a running `score` object. NFL has NEITHER."
+  measured_nba_fixture: "fixtures/play-by-play.NBA.json, game 20260315-1-13, 437 plays"
+  measured_discipline: "One technical_foul_committed play is delay of game with players: []; no flagrant example. Never assign a missing fouler to a fantasy player or interpret a one-game absence as feed coverage."
+  measured_player_ids: "Captured foul participants use numeric-string players[].id, not the NFL integer type above."
 
 mlb:
   play_keys: [sequence, inning, event, out, outCount, players, details, description]

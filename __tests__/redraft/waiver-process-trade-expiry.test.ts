@@ -13,6 +13,7 @@ const h = vi.hoisted(() => ({
   withSyncJobRun: vi.fn(async (_config: { jobName: string }, fn: () => Promise<unknown>) => fn()),
   processWaiverWindow: vi.fn(async () => []),
   seasonsFindMany: vi.fn(async () => [{ id: 'season-1', leagueId: 'league-1' }]),
+  exileRollover: vi.fn(async () => ({ processed: 1, released: 2, scored: 0, pending: 1, errors: [] })),
   expireDue: vi.fn(async () => ({ due: 2, expired: 2, skipped: 0, failures: [] })),
 }))
 
@@ -22,6 +23,7 @@ vi.mock('@/lib/production-health/syncJobRunTelemetry', () => ({ withSyncJobRun: 
 vi.mock('@/lib/redraft/waiverEngine', () => ({ processWaiverWindow: h.processWaiverWindow }))
 vi.mock('@/lib/redraft/seasonStatus', () => ({ engineSeasonScope: () => ({}), SCORING_SEASON_STATUSES: ['active', 'playoffs'] }))
 vi.mock('@/lib/prisma', () => ({ prisma: { redraftSeason: { findMany: h.seasonsFindMany } } }))
+vi.mock('@/lib/survivor/survivorExileRollover', () => ({ runExileRosterRollover: h.exileRollover }))
 vi.mock('@/lib/redraft/tradeProposalExpiry', () => ({ expireDueRedraftTradeProposals: h.expireDue }))
 
 const get = async () => {
@@ -43,6 +45,8 @@ describe('/api/redraft/waiver-process schedules redraft trade expiry', () => {
     const jobNames = h.withSyncJobRun.mock.calls.map(([config]) => config.jobName)
     expect(jobNames).toContain('cron-redraft-trade-proposal-expiry')
     expect(jobNames).toContain('cron-redraft-waiver-process')
+    expect(jobNames).toContain('cron-survivor-exile-rosters')
+    expect(h.exileRollover).toHaveBeenCalledOnce()
     await expect(res.json()).resolves.toMatchObject({ tradeExpiry: { due: 2, expired: 2 } })
   })
 
@@ -59,12 +63,21 @@ describe('/api/redraft/waiver-process schedules redraft trade expiry', () => {
     })
   })
 
+  it('an Exile rollover failure does not cost the league its waiver processing', async () => {
+    h.exileRollover.mockRejectedValueOnce(new Error('Exile snapshot pending'))
+    const res = await get()
+    expect(h.processWaiverWindow).toHaveBeenCalledWith('league-1', 'season-1')
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ exileRollover: { error: 'Exile snapshot pending' } })
+  })
+
   it('runs nothing for an unauthorized request', async () => {
     h.requireCronAuth.mockReturnValue(false)
 
     const res = await get()
 
     expect(res.status).toBe(401)
+    expect(h.exileRollover).not.toHaveBeenCalled()
     expect(h.expireDue).not.toHaveBeenCalled()
     expect(h.processWaiverWindow).not.toHaveBeenCalled()
   })

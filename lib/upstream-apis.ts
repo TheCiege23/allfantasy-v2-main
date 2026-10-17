@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma'
 import type { FantasyCalcPlayer, FantasyCalcSettings } from './fantasycalc'
 import { readCache, writeCache } from './enrichment-cache'
 import { ESPN_SITE_API_BASE } from '@/lib/providers/espnUrls'
+import { isInjuryDesignation, latestInjuryClaims } from '@/lib/injuries/matchInjuryRows'
 
 type PrismaLike = typeof prisma
 type CacheScope = 'news_context' | 'rolling_insights'
@@ -562,15 +563,21 @@ export async function fetchNewsContext(
       injuryOr.push({ team: { in: teamAbbrevs } })
     }
 
-    const injuries = (await deps.prisma.sportsInjury.findMany({
+    /*
+     * 🛑 NO `status <> 'Active'` IN SQL, AND ONLY ROWS A FEED STILL CARRIES (2026-10-11). Dropping
+     * Active before picking the newest left Rolling Insights' Friday "Questionable" standing for a
+     * starter ESPN cleared on Sunday, and with no `expiresAt` a healed player's last "Out" stayed
+     * for the whole window. Newest claim per athlete first, then drop the ones that are not hurt.
+     */
+    const injuryRows = (await deps.prisma.sportsInjury.findMany({
       where: {
         sport,
-        status: { not: 'Active' },
         updatedAt: { gte: since },
+        expiresAt: { gt: new Date() },
         ...(injuryOr.length > 0 ? { OR: injuryOr } : {}),
       },
       orderBy: { updatedAt: 'desc' },
-      take: Math.min(limit, 15),
+      take: 200,
       select: {
         id: true,
         playerName: true,
@@ -578,8 +585,13 @@ export async function fetchNewsContext(
         status: true,
         type: true,
         updatedAt: true,
+        date: true,
+        fetchedAt: true,
       },
-    })) as DbInjuryRow[]
+    })) as Array<DbInjuryRow & { date: Date | null; fetchedAt: Date }>
+    const injuries = latestInjuryClaims(injuryRows, sport)
+      .filter((row) => isInjuryDesignation(row.status))
+      .slice(0, Math.min(limit, 15))
 
     for (const injury of injuries) {
       const isDirectHit = playerNames.some(
@@ -1033,6 +1045,9 @@ export async function fetchCrossSportSignals(
     try {
       const injuryHistory = await deps.prisma.sportsInjury.findMany({
         where: {
+          // Scoped to the entity's sport: unscoped, a same-name athlete in another sport's
+          // history counted toward this one's "recurring injury" signal.
+          sport: (entity.sport || DEFAULT_SPORT).toUpperCase(),
           playerName: { equals: entity.name, mode: 'insensitive' },
         },
         orderBy: { updatedAt: 'desc' },

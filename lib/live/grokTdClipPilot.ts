@@ -2,7 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { readPlayByPlayFeed } from '@/lib/live/playByPlayFeed'
-import { getPlayFeed } from '@/lib/live/playFeedPresentation'
+import { getPlayFeed, PLAY_FEED_SPORT } from '@/lib/live/playFeedPresentation'
 import { ownersByPlayerId } from '@/lib/live/bigPlayNotifier'
 import { extractAnnotations, parseTextFromXaiResponse, xaiResponsesJson } from '@/lib/xai-client'
 import { isAiSpendDisabledError } from '@/lib/ai/aiSpendGuard'
@@ -223,7 +223,11 @@ export async function runGrokTdClipPilot(opts: { now?: Date; deadline?: number }
   if (due.length === 0) return { ...result, skipped: 'none-due' }
 
   // Starters only: the clips a fantasy surface would show are of players someone starts.
-  const owners = await ownersByPlayerId([...new Set(due.map((e) => e.playerId))], { startersOnly: true }).catch(
+  // The feed is NFL by construction; the RI ids are only unique within that sport.
+  const owners = await ownersByPlayerId([...new Set(due.map((e) => e.playerId))], {
+    startersOnly: true,
+    sport: PLAY_FEED_SPORT,
+  }).catch(
     () => new Map<string, string[]>(),
   )
   const started = due.filter((e) => (owners.get(e.playerId)?.length ?? 0) > 0)

@@ -1,0 +1,44 @@
+.page { --sg-ink: #f1f5f9; --sg-muted: #a7b6b5; max-width: 1440px; margin: 0 auto; padding: 40px 24px 80px; background: #0b1416; color: var(--sg-ink); min-height: 100vh; }
+.header { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 12px 0 20px; }
+.header h1 { margin: 10px 0; font-size: clamp(2rem, 5vw, 3.2rem); letter-spacing: -.04em; font-weight: 800; }
+.emblem { display: inline-block; vertical-align: middle; margin-right: 12px; }
+.header p, .inset p { color: var(--sg-muted); line-height: 1.6; }
+.eyebrow { color: #f4c472; font-size: 11px; letter-spacing: .13em; font-weight: 700; }
+.badge { border: 1px solid #526b65; color: #bde5cf; border-radius: 999px; padding: 6px 12px; font-size: 12px; white-space: nowrap; }
+.preview { padding: 14px 18px; border: 1px solid #3b5653; border-radius: 12px; background: #142526; color: #d3e3df; line-height: 1.6; font-size: 14px; }
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin: 24px 0; }
+.stats article { padding: 20px; border: 1px solid #2a3c3d; border-radius: 14px; background: #121f21; }
+.stats strong { display: block; font-size: 28px; color: #f4c472; }
+.stats span { color: var(--sg-muted); font-size: 12px; }
+.columns { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); align-items: start; gap: 24px; }
+.card { border: 1px solid #2a3c3d; border-radius: 16px; background: #121f21; padding: 24px; margin-bottom: 20px; min-width: 0; }
+.card h2 { font-size: 20px; margin: 0 0 18px; font-weight: 700; letter-spacing: -.02em; }
+.card h3 { font-size: 15px; margin: 0 0 8px; font-weight: 700; }
+.fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.field { display: flex; flex-direction: column; gap: 7px; font-size: 12px; color: #d4dfdc; }
+.page input:not([type=checkbox]), .page select { width: 100%; color: #f1f5f9; border: 1px solid #45605b; background: #0b1618; border-radius: 8px; padding: 10px; min-height: 42px; font-size: 13px; }
+.page option { background: #0b1618; }
+.page input:focus-visible, .page select:focus-visible, .page button:focus-visible { outline: 3px solid #f4c472; outline-offset: 3px; }
+.hint { font-size: 13px; line-height: 1.7; color: var(--sg-muted); margin: 14px 0; }
+.inset { background: #0c181a; border: 1px solid #304442; border-radius: 12px; padding: 18px; margin-top: 20px; font-size: 13px; }
+.inset ol { padding-left: 22px; line-height: 1.9; color: #c9d9d4; }
+.check { display: flex; align-items: center; gap: 10px; font-size: 13px; margin: 13px 0; min-height: 30px; }
+.check input { accent-color: #f4c472; width: 18px; height: 18px; }
+.powers { padding: 4px 0 14px; }
+.scheduleHeading { display: flex; justify-content: space-between; align-items: start; gap: 12px; }
+.scheduleHeading h2 { margin-top: 8px; }
+.valid { border: 1px solid #39705b; background: #153529; color: #b9f0d3; padding: 12px; border-radius: 8px; font-size: 13px; }
+.errors { border: 1px solid #9c6546; background: #34261c; color: #ffd1ad; padding: 14px; border-radius: 8px; font-size: 13px; line-height: 1.6; }
+.errors ul { padding-left: 20px; margin-bottom: 0; }
+.tableWrap { overflow-x: auto; margin-top: 16px; }
+.page table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.page th, .page td { text-align: left; border-bottom: 1px solid #2a3c3d; padding: 10px 6px; }
+.page thead th { color: var(--sg-muted); font-size: 11px; text-transform: uppercase; }
+.page td select { min-width: 160px; padding: 7px; }
+.primary, .secondary { width: 100%; border-radius: 9px; padding: 13px; min-height: 44px; cursor: pointer; font-weight: 700; margin-top: 16px; }
+.primary { background: #f4c472; color: #1f1b13; border: 1px solid #f4c472; }
+.primary:disabled { opacity: .45; cursor: not-allowed; }
+.secondary { color: #d1e2da; background: transparent; border: 1px solid #45605b; }
+.srOnly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+@media (max-width: 900px) { .columns { grid-template-columns: 1fr; } }
+@media (max-width: 520px) { .page { padding: 20px 12px 60px; } .header { align-items: start; } .stats { grid-template-columns: repeat(2, 1fr); } .fields { grid-template-columns: 1fr; } .card { padding: 18px; } }

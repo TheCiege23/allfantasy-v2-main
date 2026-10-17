@@ -238,6 +238,18 @@ export type StandingsContextSlice = {
 
 export type RankingContextSlice = {
   snapshot: RankingSnapshot | null
+  /**
+   * The manager's standing as the Rankings tab shows it (2026-10-01). FLAT ON
+   * PURPOSE: the grounding serializer renders one level of keys, so a nested
+   * object reaches the model as "present" and an object array as "N items".
+   * Strings and string arrays are printed in full.
+   */
+  /** Experience level, 1–25 (the XP ladder). EXPERIENCE ONLY — league joins are never matched on it. */
+  managerLevel?: number | null
+  /** The Class division this manager is matched in and the band public leagues allow (ADR F2.10a). */
+  classRange?: string | null
+  /** The Class rating line, e.g. "NFL Class 17 (Division 4), rating 1572 ±61, top 31% …". */
+  skillLines?: string[]
 }
 
 export type LeagueDifficultyContextSlice = {

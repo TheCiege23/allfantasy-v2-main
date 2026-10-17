@@ -13,7 +13,7 @@ import type { ChimmyAlertUserPreferences } from './types'
  * Chimmy tells each manager the best pickup on each of their wires — when it is worth a claim.
  *
  * The numbers are the /core Waivers board's (`getWaiversBoard`), not new maths: the best player
- * nobody in the league rosters, against the weakest bench player we can price, both scored under
+ * nobody in the league rosters who adds the most to your starting lineup (`waiverSwap.ts`), with a priced drop, scored under
  * that league's own rules for the coming week. No model call, so it costs nothing to run for every
  * manager, and every figure in the message is one that screen would show.
  *
@@ -219,7 +219,7 @@ export function renderWaiverCheck(
     eyebrow: `Chimmy · Week ${week} waiver check`,
     title: picks.length === 1 ? 'One pickup worth a claim' : `${picks.length} pickups worth a claim`,
     sub:
-      "The best player nobody rosters in each league, against your weakest bench player we can price — both scored under that league's rules for the week ahead. Rosters as of the last sync, and unrostered isn't always claimable: if he's gone, ask me for the next one.",
+      "The player nobody rosters in each league who would add the most to your starting lineup, with the bench player to cut for him — scored under that league's rules for the week ahead. Rosters as of the last sync, and unrostered isn't always claimable: if he's gone, ask me for the next one.",
     bodyHtml: blocks + pushSetupEmailLine(escapeHtml(base)),
     cta: { href: `${base}${waiverCheckHref(top, 'waiver_check_email')}`, label: 'Ask Chimmy' },
     baseUrl: opts.baseUrl ?? null,

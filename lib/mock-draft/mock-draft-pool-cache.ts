@@ -8,7 +8,7 @@ import { findMultiADP, type ADPFormat } from '@/lib/multi-platform-adp'
 import { normalizePlayerName } from '@/lib/team-abbrev'
 import { loadSportAwareDraftPlayerPool } from '@/lib/mock-draft/sport-player-pool'
 import { prisma } from '@/lib/prisma'
-import { resolveSleeperIds } from '@/lib/sleeper/players-cache'
+import { resolveSleeperIdsBatch } from '@/lib/sleeper/players-cache'
 import { DEFAULT_SPORT, normalizeToSupportedSport } from '@/lib/sport-scope'
 
 type MockDraftPoolType = 'dynasty' | 'redraft'
@@ -253,21 +253,32 @@ async function buildMockPoolPayload(params: MockDraftPoolRequest): Promise<MockD
     entries = await getLiveADP(type, limit)
   }
 
-  let sleeperIdMap: Record<string, string> = {}
+  /*
+   * Position-verified, aligned by index (see `resolveSleeperIdsBatch`). A name-only bind put QB
+   * Josh Allen's board row on a free-agent guard's id and headshot. Devy/rookie teams are college
+   * programmes, which fold onto NFL clubs ("Tennessee" -> TEN), so they are not passed as a team.
+   */
+  let sleeperIds: Array<string | null> = []
   try {
-    sleeperIdMap = await resolveSleeperIds(entries.map((entry) => entry.name))
+    sleeperIds = await resolveSleeperIdsBatch(
+      entries.map((entry) => ({
+        name: entry.name,
+        position: entry.position,
+        team: entry.source === 'devy' || entry.source === 'rookie-db' ? null : entry.team,
+      })),
+    )
   } catch {
-    sleeperIdMap = {}
+    sleeperIds = []
   }
 
   const adpFormat: ADPFormat = type === 'dynasty' ? 'dynasty' : 'redraft'
-  const rawNormalized = entries.map((entry) => ({
+  const rawNormalized = entries.map((entry, index) => ({
     name: entry.name,
     position: entry.position,
     team: entry.team,
     adp: entry.adp,
     byeWeek: entry.bye ?? null,
-    playerId: sleeperIdMap[entry.name] || null,
+    playerId: sleeperIds[index] ?? null,
   }))
   const normalized = normalizePlayerList(rawNormalized, sport)
 
@@ -313,7 +324,7 @@ async function buildMockPoolPayload(params: MockDraftPoolRequest): Promise<MockD
         adpFormatted: entry.adpFormatted,
         adpTrend: entry.adpTrend,
         value: entry.value,
-        sleeperId: sleeperIdMap[entry.name] || null,
+        sleeperId: sleeperIds[index] ?? null,
         ffcPlayerId: entry.ffcPlayerId,
         timesDrafted: entry.timesDrafted,
         adpHigh: entry.adpHigh,
@@ -321,7 +332,7 @@ async function buildMockPoolPayload(params: MockDraftPoolRequest): Promise<MockD
         adpStdev: entry.adpStdev,
         bye: entry.bye,
         isRookie,
-        playerId: sleeperIdMap[entry.name] || null,
+        playerId: sleeperIds[index] ?? null,
         byeWeek: normalized[index]?.byeWeek ?? entry.bye ?? null,
         injuryStatus: injuryStatus != null ? String(injuryStatus) : null,
         display,

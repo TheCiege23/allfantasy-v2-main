@@ -1,5 +1,6 @@
 import type { PrismaClient } from '@prisma/client'
 import { REFERENCE_NFL_BUCKETS } from '@/lib/sports-data-gateway/canonical/canonicalPosition'
+import { authoritativeRowsBySleeperId, rowsDescribeSamePlayer } from '@/lib/player-match/authoritativePlayerRow'
 
 /**
  * ADP, resolved into Sleeper-id space.
@@ -213,19 +214,47 @@ export async function loadAdpBySleeperId(args: LoadAdpArgs): Promise<Map<string,
   const rows = await args.prisma.sportsPlayer
     .findMany({
       where: { sport: args.sport, sleeperId: { in: wanted } },
-      select: { id: true, sleeperId: true, name: true, position: true, team: true, updatedAt: true },
+      select: {
+        id: true,
+        sleeperId: true,
+        name: true,
+        position: true,
+        team: true,
+        source: true,
+        fetchedAt: true,
+        updatedAt: true,
+      },
       orderBy: { updatedAt: 'desc' },
     })
     .catch(() => [])
 
-  /* `SportsPlayer` carries duplicates per Sleeper id; prefer a row that actually has a position. */
-  const player = new Map<string, { id: string; name: string; position: string | null; team: string | null }>()
+  /*
+   * 🛑 `SportsPlayer` HOLDS ONE ROW PER SOURCE PER SLEEPER ID, AND THE VENDOR ROWS GOT THAT ID FROM A
+   * NAME MATCH. This took the newest row and backfilled `team` from any other, so on production
+   * Sleeper 11304 (TE E.J. Jenkins, PHI) resolved as the newer TheSportsDB row "Elgton Jenkins" G
+   * CLE — and ADP was then looked up by a guard's name, slug and position. The Sleeper row speaks
+   * for its own id; others may only fill gaps, never `team` (see authoritativePlayerRow).
+   *
+   * ⚠ BUT THE OTHER ROWS' UUIDS STILL KEY ADP. `adp_data.player_id` points at a Rolling Insights
+   * `SportsPlayer` row for 387 NFL players and at a Sleeper row for 14 (production, 2026-10-12),
+   * so every row that DESCRIBES THE SAME MAN keeps its uuid as an exact key. A row that does not —
+   * the guard above — contributes nothing.
+   */
+  const player = new Map<
+    string,
+    { ids: string[]; name: string; position: string | null; team: string | null }
+  >()
+  const rowsById = new Map<string, typeof rows>()
   for (const r of rows) {
+    const key = r.sleeperId?.trim().toLowerCase()
+    if (key) rowsById.set(key, [...(rowsById.get(key) ?? []), r])
+  }
+  for (const [key, r] of authoritativeRowsBySleeperId(rows)) {
     if (!r.sleeperId) continue
-    const cur = player.get(r.sleeperId)
-    if (!cur || (!cur.position && r.position) || (!cur.team && r.team)) {
-      player.set(r.sleeperId, { id: r.id, name: r.name, position: r.position, team: r.team })
-    }
+    const ids = (rowsById.get(key) ?? [])
+      .filter((o) => o.id === r.id || rowsDescribeSamePlayer(r, o))
+      .map((o) => o.id)
+    player.set(r.sleeperId, { ids, name: r.name, position: r.position, team: r.team })
   }
   if (player.size === 0) return out
 
@@ -236,7 +265,7 @@ export async function loadAdpBySleeperId(args: LoadAdpArgs): Promise<Map<string,
   const names: string[] = []
 
   for (const [sleeperId, p] of player) {
-    bySportsPlayerId.set(p.id, sleeperId)
+    for (const id of p.ids) bySportsPlayerId.set(id, sleeperId)
     const slug = adpSlug(args.sport, p.name, p.position, p.team)
     if (slug) bySlug.set(slug, sleeperId)
 

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, type ReactNode } from 'react'
+import { weekdayEs } from '@/lib/core-app/kickoffText'
 
 /**
  * The two pieces of Dashboard 34a that cannot be rendered on the server.
@@ -135,32 +136,38 @@ function formatAgo(ms: number): string {
  *
  * Same two-pass rule: UTC on the server and on the first client paint, local
  * afterwards.
+ *
+ * `language` (2026-10-04): the /core home passes the reader's, so a Spanish reader
+ * gets "dom 13:00". It defaults to the browser's own locale, exactly as before, and
+ * the language provider starts at English on both passes, so hydration agrees.
  */
-export function Dash34When({ iso }: { iso: string }) {
-  const utc = utcDayLabel(iso)
+export function Dash34When({ iso, language }: { iso: string; language?: string }) {
+  const es = language === 'es'
+  const utc = utcDayLabel(iso, es)
   const [label, setLabel] = useState(utc)
 
   useEffect(() => {
     const d = new Date(iso)
     if (Number.isNaN(d.getTime())) return
     setLabel(
-      d.toLocaleString(undefined, {
+      d.toLocaleString(es ? 'es' : undefined, {
         weekday: 'short',
         hour: 'numeric',
         minute: '2-digit',
       }),
     )
-  }, [iso])
+  }, [iso, es])
 
   return <>{label}</>
 }
 
 const UTC_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
-function utcDayLabel(iso: string): string {
+function utcDayLabel(iso: string, es = false): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return ''
-  return `${UTC_DAYS[d.getUTCDay()]} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())} UTC`
+  const day = UTC_DAYS[d.getUTCDay()]!
+  return `${es ? weekdayEs(day) : day} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())} UTC`
 }
 
 /**

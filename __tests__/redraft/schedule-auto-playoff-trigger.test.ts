@@ -181,3 +181,16 @@ describe('advanceNflRedraftScheduleWeek — auto playoff bracket trigger', () =>
     })
   })
 })
+
+// These native-season fixtures have no imported source history.
+vi.mock('@/lib/redraft/fantraxNativePresentation', () => ({ loadFantraxNativePresentation: vi.fn().mockResolvedValue(null) }))
+
+it('refuses native advancement when the resolved Fantrax schedule is read-only, even without a generic season year', async () => {
+  const { loadFantraxNativePresentation } = await import('@/lib/redraft/fantraxNativePresentation')
+  vi.mocked(loadFantraxNativePresentation).mockResolvedValueOnce({ currentWeek: 17, matchups: [], readOnly: true } as any)
+  mockState('active')
+  const result = await advanceNflRedraftScheduleWeek({ seasonId: 'season-1', action: 'advance_week' })
+  expect(result).toMatchObject({ ok: false, code: 'IMPORTED_SOURCE_READ_ONLY' })
+  expect(planCanonicalScheduleWeekTransition).not.toHaveBeenCalled()
+  expect(updateRedraftSeason).not.toHaveBeenCalled()
+})

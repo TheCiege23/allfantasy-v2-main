@@ -1,3 +1,5 @@
+import { readSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
+import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/survivorSettings'
 /**
  * Runs all sport-specific bootstrap steps after league creation so the league
  * has correct roster, scoring, waiver, settings, and context for its sport.
@@ -25,7 +27,11 @@ import { receptionPointsForScoringPresetId } from '@/lib/league-creation-preset/
  * `rec`, and nothing wrote it at create. College football has no store the scorer reads, so every
  * NCAAF league scored full PPR, including the half-PPR default.
  */
-async function seedFootballReceptionPreset(leagueId: string, receptionPoints: number | null): Promise<void> {
+async function seedFootballReceptionPreset(
+  leagueId: string,
+  receptionPoints: number | null,
+  options: { enableTEPremium?: boolean } = {},
+): Promise<void> {
   if (receptionPoints == null) return
   const scoringPreset = receptionPoints === 1 ? 'PPR' : receptionPoints === 0 ? 'STANDARD' : 'HALF_PPR'
   const row = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
@@ -36,7 +42,9 @@ async function seedFootballReceptionPreset(leagueId: string, receptionPoints: nu
       : {}
   await prisma.league.update({
     where: { id: leagueId },
-    data: { settings: { ...current, sportConfig: { ...sportConfig, scoringPreset } } as Prisma.InputJsonValue },
+    // TE premium is scored only when the engine's TE_PREMIUM toggle is on (`enableTEPremium`); the
+    // per-catch amount itself lives in `nfl_scoring_config.rules.te_premium`.
+    data: { settings: { ...current, sportConfig: { ...sportConfig, scoringPreset, ...(options.enableTEPremium ? { enableTEPremium: true } : {}) } } as Prisma.InputJsonValue },
   })
 }
 
@@ -140,7 +148,7 @@ export async function runLeagueBootstrap(
       await applyDefaultNbaScoringOnCreate(leagueId)
     } catch { /* non-fatal */ }
   }
-  if (leagueSport === 'MLB') {
+  if (leagueSport === 'MLB' && !settings.importCarryover) {
     try {
       const { applyDefaultMlbScoringOnCreate } = await import('@/lib/mlb-scoring')
       await applyDefaultMlbScoringOnCreate(leagueId)
@@ -152,10 +160,14 @@ export async function runLeagueBootstrap(
       await applyDefaultNhlScoringOnCreate(leagueId)
     } catch { /* non-fatal */ }
   }
+  let nflTePremium = false
   if (leagueSport === 'NFL') {
     try {
-      const { applyDefaultNflScoringOnCreate, nflScoringPresetKeyForReceptionPoints } = await import('@/lib/nfl-scoring')
-      await applyDefaultNflScoringOnCreate(leagueId, nflScoringPresetKeyForReceptionPoints(receptionPoints))
+      // ESPN / Sleeper presets seed that site's own rules; TE premium adds its per-catch amount.
+      const { applyDefaultNflScoringOnCreate, nflScoringSeedForCreate } = await import('@/lib/nfl-scoring')
+      const seed = nflScoringSeedForCreate({ scoringPresetId: leagueRow?.scoringPresetId, tePremiumPoints: settings.te_premium_points })
+      await applyDefaultNflScoringOnCreate(leagueId, seed.presetKey, seed.rules)
+      nflTePremium = seed.enableTEPremium
     } catch { /* non-fatal */ }
   }
   if (leagueSport === 'NCAAF') {
@@ -179,14 +191,14 @@ export async function runLeagueBootstrap(
 
   if (leagueSport === 'NFL' || leagueSport === 'NCAAF') {
     try {
-      await seedFootballReceptionPreset(leagueId, receptionPoints)
+      await seedFootballReceptionPreset(leagueId, receptionPoints, { enableTEPremium: nflTePremium })
     } catch { /* non-fatal */ }
   }
 
   // Apply unified roster defaults (one-league one-config) through the shared roster engine.
   const leagueType = (settings.league_type as string) ?? (settings.leagueType as string) ?? 'redraft'
   const rosterRegistry = getRosterEngineRegistry()
-  if (rosterRegistry.isSupported(String(leagueSport))) {
+  if (rosterRegistry.isSupported(String(leagueSport)) && !(leagueSport === 'MLB' && settings.importCarryover)) {
     try {
       await createDefaultLeagueRosterConfig(leagueId, leagueSport as SupportedRosterSport, leagueType)
     } catch {
@@ -235,18 +247,27 @@ export async function runLeagueBootstrap(
           : 4)
       const tribeSize = Math.max(1, Math.ceil(teamCount / tribeCount))
       const mode = String(sw.mode ?? 'redraft').toLowerCase() === 'bestball' ? 'bestball' : 'redraft'
+      const foundation = normalizeSurvivorFoundationSettings({ ...sw, defaultTeamCount: teamCount, tribeCount })
       await upsertSurvivorConfig(leagueId, {
         mode,
         tribeCount,
         tribeSize,
         tribeFormation: String(sw.tribeFormation ?? 'random'),
+        mergeTrigger: foundation.mergeTriggerType === 'active_player_count' ? 'player_count' : 'week',
+        mergeWeek: foundation.mergeWeek,
+        mergePlayerCount: foundation.mergeActivePlayerCount,
+        exileReturnEnabled: foundation.exileIslandEnabled,
+        exileReturnTokens: foundation.exileReturnTokens,
+        idolCount: foundation.idolCount,
+        selfVoteDisallowed: !foundation.selfVotesAllowed,
         seasonThemeLabel:
           typeof sw.survivor_season_theme_label === 'string' && sw.survivor_season_theme_label.trim().length > 0
             ? String(sw.survivor_season_theme_label).trim()
             : null,
         challengesSystemRun: sw.survivor_challenges_system_run !== false,
+        regularSeasonEndWeek: readSurvivorFullSeasonPlan(sw)?.endWeek ?? null,
       })
-      await getOrCreateExileLeague(leagueId).catch(() => {})
+      if (foundation.exileIslandEnabled) await getOrCreateExileLeague(leagueId).catch(() => {})
       await runSurvivorLeagueBootstrap(leagueId).catch(() => {})
     } catch {
       // non-fatal; legacy wizard path will fill in if used

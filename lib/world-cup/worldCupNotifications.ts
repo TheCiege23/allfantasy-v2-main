@@ -3,6 +3,7 @@ import { createPlatformNotification } from "@/lib/platform/notification-service"
 import { prisma } from "@/lib/prisma"
 import { sendSms } from "@/lib/twilio-client"
 import { reserveSmsToday } from "@/lib/notifications/smsDailyCap"
+import { quietHoursSuppression } from "@/lib/notifications/quietHours"
 import {
   getWorldCupNotificationPreferenceResolution,
   isWorldCupNotificationTypeEnabled,
@@ -92,6 +93,7 @@ async function dispatchWorldCupNotification(
       typeEnabled &&
         prefs.smsEnabled &&
         resolution.phoneVerified &&
+        resolution.smsConsented &&
         resolution.phone &&
         configured
     )
@@ -126,7 +128,15 @@ async function dispatchWorldCupNotification(
     }
 
     // Same per-recipient daily text budget as NotificationDispatcher (lib/notifications/smsDailyCap).
-    if (smsEligible && resolution.phone) {
+    /*
+     * Quiet hours, as NotificationDispatcher applies them: these texts ignored the user's night,
+     * so a pool reminder could buzz at 3am while every other text waited.
+     */
+    const quietSms = quietHoursSuppression(resolution.quietHours, new Date(), input.severity ?? "low", resolution.timezone).sms
+    if (smsEligible && resolution.phone && quietSms && !skippedReason) {
+      skippedReason = "sms_quiet_hours"
+    }
+    if (smsEligible && resolution.phone && !quietSms) {
       if (await reserveSmsToday(userId)) {
         smsSent = await sendSms(resolution.phone, truncateText(input.smsBody, 320))
       } else if (!skippedReason) {
@@ -189,7 +199,8 @@ export async function notifyWorldCupAllMention(input: {
     type: "allMention",
     title: `World Cup @all in ${poolName}`,
     body: `${input.senderName}: ${truncateText(input.body, 180)}`,
-    smsBody: `World Cup @all in ${poolName}: ${truncateText(input.body, 180)}`,
+    // The sender's words stay in-app: user-written text is not sent over the A2P campaign.
+    smsBody: `New @all post in World Cup pool ${poolName}. Open AllFantasy to read it.`,
     sourceKeyPrefix: `world-cup-chat-all:${input.messageId}`,
     messageId: input.messageId,
     severity: "medium",
@@ -212,7 +223,8 @@ export async function notifyWorldCupCommissionerAnnouncement(input: {
     type: "commissionerAnnouncement",
     title: `Commissioner announcement in ${poolName}`,
     body: truncateText(input.announcement, 240),
-    smsBody: `Commissioner announcement in ${poolName}: ${truncateText(input.announcement, 160)}`,
+    // The announcement's words stay in-app: user-written text is not sent over the A2P campaign.
+    smsBody: `New commissioner announcement in World Cup pool ${poolName}. Open AllFantasy to read it.`,
     sourceKeyPrefix: `world-cup-commissioner-announcement:${input.sourceId}`,
     severity: "medium",
   })

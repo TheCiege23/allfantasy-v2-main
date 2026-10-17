@@ -1,6 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
 import {
   TRADE_CANONICAL_VISIBLE_FLAG,
   tradeCanonicalVisible,
@@ -147,29 +145,8 @@ describe('describeTradeCanonicalOpinion — the three honesty states', () => {
   })
 })
 
-/**
- * ⚠ The modal is the thing that was wrong, so assert against the modal SOURCE too. Reading its
- * subject with no existsSync guard on purpose: if the file moves this must fail loudly rather than
- * scan nothing and pass.
- *
- * 🛑 SUPERSEDED BY TRADE OS (2026-09-27): the modal no longer renders the canonical opinion at all.
- * Its "Decision OS" second opinion was a letter on a scale of its own, beside a modal that printed no
- * letter of the one grade. It now prints the one grade; `describeTradeCanonicalOpinion` above stays
- * tested for any surface that still resolves an opinion.
+/*
+ * The source assertions against `components/ai-tools/modals/TradeValueModal.tsx` that lived here were
+ * removed with that modal (2026-10-06): nothing had mounted it since 2026-07-06.
+ * `describeTradeCanonicalOpinion` above stays tested for any surface that still resolves an opinion.
  */
-describe('TradeValueModal renders no canonical second opinion', () => {
-  const src = readFileSync(
-    join(process.cwd(), 'components/ai-tools/modals/TradeValueModal.tsx'),
-    'utf8',
-  )
-
-  it('neither resolves nor prints the canonical opinion', () => {
-    expect(src).not.toMatch(/describeTradeCanonicalOpinion\(/)
-    expect(src).not.toMatch(/decisionOsState/)
-    expect(src).not.toMatch(/\{decisionOs\.grade/)
-  })
-
-  it('prints the one grade instead', () => {
-    expect(src).toMatch(/Your grade \{proposalGrade\.letter\}/)
-  })
-})

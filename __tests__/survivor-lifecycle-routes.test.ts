@@ -55,6 +55,9 @@ const {
   },
 }))
 
+const { hostGuardMock } = vi.hoisted(() => ({ hostGuardMock: vi.fn(async () => null as Response | null) }))
+vi.mock('@/lib/survivor/survivorHostGuard', () => ({ survivorHostGuard: hostGuardMock }))
+
 vi.mock('next-auth', () => ({
   getServerSession: getServerSessionMock,
 }))
@@ -195,6 +198,18 @@ describe('Survivor tribal eliminate route behavior', () => {
         eliminatedRosterId: 'roster-y',
       }),
     )
+  })
+})
+
+describe('playing commissioner manual action restrictions', () => {
+  it('blocks council elimination before executing a manual control', async () => {
+    getServerSessionMock.mockResolvedValue({ user: { id: 'playing-owner' } })
+    hostGuardMock.mockResolvedValueOnce(new Response(JSON.stringify({ error: 'Host required' }), { status: 403 }))
+    lockVotingMock.mockClear()
+    const { POST } = await import('@/app/api/survivor/tribal/route')
+    const response = await POST(new Request('http://localhost/api/survivor/tribal', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ leagueId: 'league-1', action: 'eliminate', councilId: 'c-1' }) }))
+    expect(response.status).toBe(403)
+    expect(lockVotingMock).not.toHaveBeenCalled()
   })
 })
 

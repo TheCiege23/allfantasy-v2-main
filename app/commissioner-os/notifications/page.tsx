@@ -5,6 +5,8 @@ import { Bell } from 'lucide-react'
 import { CommissionerPageContainer } from '@/components/commissioner-os/shell/CommissionerPageContainer'
 import { Button } from '@/components/ui/button'
 import { useCommissionerPlatform } from '@/components/commissioner-os/providers/CommissionerPlatformProvider'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { toolsText } from '@/lib/commissioner-os/i18n/toolsCopy'
 
 /**
  * Notification Center is a platform service, reached primarily via the
@@ -17,6 +19,8 @@ import { useCommissionerPlatform } from '@/components/commissioner-os/providers/
  */
 export default function NotificationsPage() {
   const { openService } = useCommissionerPlatform()
+  const { language } = useOptionalLanguage()
+  const t = (english: string) => toolsText(english, language)
 
   useEffect(() => {
     openService('notifications')
@@ -32,12 +36,14 @@ export default function NotificationsPage() {
           <Bell size={28} aria-hidden />
         </div>
         <h1 className="text-lg font-semibold" style={{ color: 'var(--text)' }}>
-          Notifications
+          {t('Notifications')}
         </h1>
         <p className="max-w-md text-sm" style={{ color: 'var(--muted)' }}>
-          Notification Center is a platform service, not a module — the inbox for what needs a commissioner's attention across League Health, Recommendations, Automations, Reports, and more, reached from the header's bell icon anywhere in Commissioner OS.
+          {t(
+            "Notification Center is a platform service, not a module — the inbox for what needs a commissioner's attention across League Health, Recommendations, Automations, Reports, and more, reached from the header's bell icon anywhere in Commissioner OS."
+          )}
         </p>
-        <Button onClick={() => openService('notifications')}>Open Notifications</Button>
+        <Button onClick={() => openService('notifications')}>{t('Open Notifications')}</Button>
       </div>
     </CommissionerPageContainer>
   )

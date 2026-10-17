@@ -210,8 +210,17 @@ export async function POST(req: Request, ctx: { params: Promise<{ leagueId: stri
   try {
     const display = await resolveStartVsDisplayMedia({
       sport: engine.sport,
-      playerA: { name: engine.comparison.playerA.name, team: engine.comparison.playerA.team },
-      playerB: { name: engine.comparison.playerB.name, team: engine.comparison.playerB.team },
+      // Position is what tells QB Josh Allen from retired G Josh Allen (resolve-start-vs-display.ts).
+      playerA: {
+        name: engine.comparison.playerA.name,
+        team: engine.comparison.playerA.team,
+        position: engine.comparison.playerA.position,
+      },
+      playerB: {
+        name: engine.comparison.playerB.name,
+        team: engine.comparison.playerB.team,
+        position: engine.comparison.playerB.position,
+      },
     })
     payload = { ...payload, display }
   } catch {

@@ -95,7 +95,7 @@ async function fillRequiredCreateFields(page: Page, teamCount: number, name: str
   await page.getByTestId('g30-privacy-private').click()
 
   await page.getByTestId('g30-step-draft').click()
-  await page.getByTestId('g30-draft-type').selectOption('snake')
+  await page.getByTestId('g31-draft-type-snake').click()
   await page.getByTestId('g30-draft-date').fill('2026-08-30')
   await page.getByTestId('g30-draft-time').fill('20:00')
   await page.getByTestId('g30-timezone').selectOption('America/New_York')
@@ -172,14 +172,14 @@ test('shows import provider states without broken unsupported actions', async ({
   }
 
   await expect(
-    page.getByTestId('g30-import-provider-yahoo').getByText(/cannot be launched from this flow yet/i)
+    page.getByTestId('g30-import-provider-yahoo').getByText(/not available yet/i)
   ).toBeVisible()
 })
 
 test('locks advanced setup for non-commissioner and enables it for AF Commissioner', async ({ page }) => {
   await stubEntitlements(page, false)
   await openCreate(page)
-  await page.getByTestId('g30-step-summary').click()
+  await page.getByTestId('g30-step-review').click()
   await expect(page.getByTestId('g30-commissioner-upsell')).toBeVisible()
   await expect(page.getByTestId('g30-advanced-aiCommissionerTools').locator('input')).toBeDisabled()
   // League formats are free and are no longer in the paid checklist at all.
@@ -188,7 +188,7 @@ test('locks advanced setup for non-commissioner and enables it for AF Commission
   await page.unroute('**/api/subscription/entitlements**')
   await stubEntitlements(page, true)
   await openCreate(page)
-  await page.getByTestId('g30-step-summary').click()
+  await page.getByTestId('g30-step-review').click()
   await expect(page.getByTestId('g30-commissioner-upsell')).toHaveCount(0)
   await expect(page.getByTestId('g30-advanced-aiCommissionerTools').locator('input')).toBeEnabled()
   await page.getByTestId('g30-advanced-aiCommissionerTools').locator('input').check()

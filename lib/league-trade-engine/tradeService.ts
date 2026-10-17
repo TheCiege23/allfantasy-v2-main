@@ -43,6 +43,8 @@ async function fanout(leagueId: string, input: {
   actorUserId?: string | null
   meta?: Record<string, unknown>
   dedupeKey?: string
+  /** Feed row + realtime only — no bell, push or email to the whole league. */
+  skipNotifications?: boolean
 }) {
   const { publishLeagueFanoutEvent } = await import('@/lib/league-events/publisher')
   await publishLeagueFanoutEvent({
@@ -55,6 +57,7 @@ async function fanout(leagueId: string, input: {
     actorUserId: input.actorUserId,
     meta: input.meta,
     dedupeKey: input.dedupeKey,
+    skipNotifications: input.skipNotifications,
   }).catch(() => {})
 }
 
@@ -204,7 +207,7 @@ function syncTradeDm(label: string, run: (modules: TradeDmModules) => Promise<un
 
 function announceTradeStatusInDm(input: {
   tradeId: string
-  status: 'accepted' | 'rejected' | 'cancelled' | 'countered'
+  status: 'accepted' | 'rejected' | 'cancelled' | 'countered' | 'vetoed'
   actorUserId?: string | null
   actorName?: string | null
   detail?: string | null
@@ -298,19 +301,36 @@ async function notifyOnTradeCreated(input: {
     const line = gradeNoticeLine(input.gradeByUserId?.get(userId), 'offer')
     return line ? { title: `${title}${line.titleSuffix}`, body: `${body} ${line.bodyLine}` } : { title, body }
   }
+  // Who sent it, by name and face — "Someone in your league" was all the push ever said.
+  const actor = await managerFace(input.actorUserId)
 
   if (input.counteredProposerUserId) {
     planned.push({
       userId: input.counteredProposerUserId,
       type: 'trade_countered',
-      ...withGrade(input.counteredProposerUserId, 'Your trade offer was countered', 'They sent one back — open it to accept, counter again, or decline.'),
+      ...withGrade(
+        input.counteredProposerUserId,
+        'Your trade offer was countered',
+        actor.name
+          ? `${actor.name} sent one back — open it to accept, counter again, or decline.`
+          : 'They sent one back — open it to accept, counter again, or decline.',
+      ),
     })
   }
-  for (const receiverUserId of input.receiverUserIds) {
+  for (const rawReceiverId of input.receiverUserIds) {
+    /*
+     * `Roster.platformUserId` is the provider's id in an imported league, which the dispatcher
+     * cannot find and skips in silence. Resolve it to the AllFantasy account; the grade map stays
+     * keyed by the raw id it was built with.
+     */
     planned.push({
-      userId: receiverUserId,
+      userId: await deliverableUserId(rawReceiverId),
       type: 'trade_proposed',
-      ...withGrade(receiverUserId, 'New trade offer', 'Someone in your league sent you a trade offer.'),
+      ...withGrade(
+        rawReceiverId,
+        actor.name ? `New trade offer from ${actor.name}` : 'New trade offer',
+        actor.name ? `${actor.name} sent you a trade offer.` : 'Someone in your league sent you a trade offer.',
+      ),
     })
   }
 
@@ -343,8 +363,35 @@ async function notifyOnTradeCreated(input: {
         tradeId: input.newTradeId,
         title: notice.title,
         body: notice.body,
+        iconUrl: actor.avatarUrl,
       }),
     ).catch(() => {})
+  }
+}
+
+/** A manager's display name and avatar for a notice. Never throws; nulls when unknown. */
+async function managerFace(userId: string | null | undefined): Promise<{ name: string | null; avatarUrl: string | null }> {
+  if (!userId) return { name: null, avatarUrl: null }
+  try {
+    const u = await prisma.appUser.findUnique({
+      where: { id: userId },
+      select: { displayName: true, username: true, avatarUrl: true },
+    })
+    const name = (u?.displayName || u?.username || '').replace(/\s+/g, ' ').trim().slice(0, 40)
+    return { name: name || null, avatarUrl: typeof u?.avatarUrl === 'string' ? u.avatarUrl : null }
+  } catch {
+    return { name: null, avatarUrl: null }
+  }
+}
+
+/** A roster owner id (ours on a native league, the provider's on an imported one) → our account id. */
+async function deliverableUserId(rawId: string): Promise<string> {
+  try {
+    const { resolveRecipients } = await import('@/lib/notifications/resolveAppUserIds')
+    const { userIds } = await resolveRecipients([rawId])
+    return userIds[0] ?? rawId
+  } catch {
+    return rawId
   }
 }
 
@@ -663,12 +710,19 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
     actorUserId: input.proposedByUserId,
     meta: { tradeId: trade.id },
     dedupeKey: `af_trade:${trade.id}:created`,
+    /*
+     * A pending offer is private to the managers in it. This line used to be dispatched
+     * to every member (push + email on by default), so the whole league was buzzed about
+     * an offer between two people, the proposer was buzzed about their own offer, and the
+     * receiver got it twice. The addressed notices below are the only delivery now; the
+     * feed row and the realtime hint stay so open screens still refresh.
+     */
+    skipNotifications: true,
   })
 
   /*
-   * The fanout above is `league_announcements` / `all_members` — every manager gets
-   * the same unaddressed line. These are the addressed notices: they name a person
-   * and land in the trade categories that person's settings actually govern.
+   * These are the addressed notices: they name a person and land in the trade
+   * categories that person's settings actually govern.
    *
    * `parent` is non-null exactly when this creation countered something: a set
    * `parentTradeId` that does not resolve throws above, so there is no third state.
@@ -1286,6 +1340,39 @@ export async function castAfTradeVetoVote(input: {
       reason: 'veto_threshold',
     })
     await captureLiveTradeOutcome({ tradeId: trade.id, leagueId: input.leagueId, status: 'vetoed' })
+    /*
+     * A veto used to tell nobody: the trade simply stopped being pending. Everyone in it
+     * hears it from us, and the offer card in their DM stops saying "Pending".
+     */
+    await notifyTradePartiesOfVeto({ leagueId: input.leagueId, tradeId: trade.id, partyRosterIds: [...tradingParties] })
+    announceTradeStatusInDm({ tradeId: trade.id, status: 'vetoed', actorName: 'The league' })
+  }
+}
+
+async function notifyTradePartiesOfVeto(input: { leagueId: string; tradeId: string; partyRosterIds: string[] }) {
+  try {
+    const rosters = await prisma.roster.findMany({
+      where: { id: { in: input.partyRosterIds }, leagueId: input.leagueId },
+      select: { platformUserId: true },
+    })
+    const raw = rosters
+      .map((r) => r.platformUserId)
+      .filter((id): id is string => typeof id === 'string' && id.length > 0 && !id.startsWith('orphan-'))
+    const userIds = [...new Set(await Promise.all(raw.map(deliverableUserId)))]
+    if (userIds.length === 0) return
+    const { ingest, tradeEvent } = await import('@/lib/notification-engine')
+    await ingest(
+      tradeEvent({
+        userIds,
+        leagueId: input.leagueId,
+        type: 'trade_rejected',
+        tradeId: input.tradeId,
+        title: 'Your trade was vetoed',
+        body: 'Enough managers in your league voted to veto it, so it will not go through.',
+      }),
+    )
+  } catch {
+    /* a notice failure never reaches the vote */
   }
 }
 

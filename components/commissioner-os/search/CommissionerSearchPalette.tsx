@@ -9,6 +9,8 @@ import { useCommissionerPlatform } from '@/components/commissioner-os/providers/
 import { useRecentSearches } from './useRecentSearches'
 import { SEARCH_CATEGORY_ICONS, SEARCH_CATEGORY_LABELS, SEARCH_CATEGORY_ORDER } from './searchLabels'
 import type { CommissionerSearchResultContract, CommissionerSearchResultCategory } from '@/lib/commissioner-ui/contracts'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { searchResultTitleText, toolsText } from '@/lib/commissioner-os/i18n/toolsCopy'
 
 export interface CommissionerSearchPaletteProps {
   /** The full cross-module index, fetched once by the layout via adapter.search.getIndex(). Matching against the typed query is cmdk's own job (shouldFilter), not logic duplicated here. */
@@ -39,6 +41,8 @@ export function CommissionerSearchPalette({ index, errorMessage }: CommissionerS
   const { recent, addRecent } = useRecentSearches()
   const [query, setQuery] = useState('')
   const open = openServiceId === 'search'
+  const { language } = useOptionalLanguage()
+  const t = (english: string) => toolsText(english, language)
 
   useEffect(() => {
     if (!open) setQuery('')
@@ -81,13 +85,13 @@ export function CommissionerSearchPalette({ index, errorMessage }: CommissionerS
         className="max-w-xl gap-0 overflow-hidden p-0"
         style={{ background: 'var(--panel)', borderColor: 'var(--border)' }}
       >
-        <DialogTitle className="sr-only">Search Commissioner OS</DialogTitle>
+        <DialogTitle className="sr-only">{t('Search Commissioner OS')}</DialogTitle>
         <DialogDescription className="sr-only">
-          Search recommendations, managers, tasks, reports, automations, settings, help articles, and pages.
+          {t('Search recommendations, managers, tasks, reports, automations, settings, help articles, and pages.')}
         </DialogDescription>
         {errorMessage ? (
           <div className="p-4">
-            <ErrorState message={errorMessage} />
+            <ErrorState message={t(errorMessage)} />
           </div>
         ) : (
           <>
@@ -95,17 +99,17 @@ export function CommissionerSearchPalette({ index, errorMessage }: CommissionerS
               <CommandInput
                 value={query}
                 onValueChange={setQuery}
-                placeholder="Search Commissioner OS..."
-                aria-label="Search Commissioner OS"
+                placeholder={t('Search Commissioner OS...')}
+                aria-label={t('Search Commissioner OS')}
                 className="text-[var(--text)] placeholder:text-[var(--muted2)]"
               />
               <CommandList>
-                <CommandEmpty className="text-[var(--muted)]">No results found.</CommandEmpty>
+                <CommandEmpty className="text-[var(--muted)]">{t('No results found.')}</CommandEmpty>
 
                 {query.length === 0 && recent.length > 0 && (
-                  <CommandGroup heading="Recent" className="[&_[cmdk-group-heading]]:text-[var(--muted2)]">
+                  <CommandGroup heading={t('Recent')} className="[&_[cmdk-group-heading]]:text-[var(--muted2)]">
                     {recent.map((result) => (
-                      <ResultItem key={`recent-${result.id}`} result={result} onSelect={handleSelect} />
+                      <ResultItem key={`recent-${result.id}`} result={result} language={language} onSelect={handleSelect} />
                     ))}
                   </CommandGroup>
                 )}
@@ -116,11 +120,11 @@ export function CommissionerSearchPalette({ index, errorMessage }: CommissionerS
                   return (
                     <CommandGroup
                       key={category}
-                      heading={SEARCH_CATEGORY_LABELS[category]}
+                      heading={t(SEARCH_CATEGORY_LABELS[category])}
                       className="[&_[cmdk-group-heading]]:text-[var(--muted2)]"
                     >
                       {results.map((result) => (
-                        <ResultItem key={result.id} result={result} onSelect={handleSelect} />
+                        <ResultItem key={result.id} result={result} language={language} onSelect={handleSelect} />
                       ))}
                     </CommandGroup>
                   )
@@ -131,7 +135,7 @@ export function CommissionerSearchPalette({ index, errorMessage }: CommissionerS
               className="border-t px-3 py-2 text-xs"
               style={{ borderColor: 'var(--border)', color: 'var(--muted2)' }}
             >
-              &uarr;&darr; to navigate &middot; Enter to select &middot; Esc to close
+              {t('↑↓ to navigate · Enter to select · Esc to close')}
             </div>
           </>
         )}
@@ -142,20 +146,29 @@ export function CommissionerSearchPalette({ index, errorMessage }: CommissionerS
 
 function ResultItem({
   result,
+  language,
   onSelect,
 }: {
   result: CommissionerSearchResultContract
+  language: string
   onSelect: (result: CommissionerSearchResultContract) => void
 }) {
   const Icon = SEARCH_CATEGORY_ICONS[result.category]
+  const title = searchResultTitleText(result, language)
   return (
+    /*
+     * cmdk matches the typed query against `value`, so it carries the title the reader sees; the
+     * English title rides along as a keyword, so a commissioner who types the English name of a page
+     * still finds it.
+     */
     <CommandItem
-      value={result.title}
+      value={title}
+      keywords={title === result.title ? undefined : [result.title]}
       onSelect={() => onSelect(result)}
       className="text-[var(--muted)] data-[selected=true]:bg-[var(--panel2)] data-[selected=true]:text-[var(--text)]"
     >
       <Icon size={16} aria-hidden />
-      <span>{result.title}</span>
+      <span>{title}</span>
     </CommandItem>
   )
 }

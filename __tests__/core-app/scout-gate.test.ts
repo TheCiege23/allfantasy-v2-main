@@ -1,25 +1,22 @@
 /**
- * Scout applies the manager-psychology gate.
+ * Scout: the membership gate, and facts in place of labels.
  *
- * ── 🛑 WHY THIS EXISTS SEPARATELY FROM `opponent-gate.test.ts` ──────────────
+ * ── 🛑 WHY THIS FILE EXISTS ─────────────────────────────────────────────────
  *
- * That file asserts the FEATURE CHECK discriminates — Pro yes, Commissioner no,
- * lapsed no. This file asserts a CONSUMER actually calls it. Those are different
- * failures, and the second is the one that has actually happened here: the first
- * version of `lib/core-app/scout.ts` read `lib/decision-os/psychology-os`
- * directly, which is a clean cached feed that performs no entitlement check at
- * all, and handed every opponent's labels, scores and trajectory to every caller.
+ * The first version of `lib/core-app/scout.ts` read `lib/decision-os/psychology-os` directly — a
+ * clean cached feed with no entitlement or membership check — and handed every opponent's labels,
+ * scores and trajectory to every caller. Milestone 32 then withheld characterisation from everyone,
+ * and the 2026-09-30 ruling retired every psychology leftover. Scout now shows standings FACTS.
  *
- * A perfect gate that a new surface routes around is not a gate. `ProfileAccess`
- * exists because all five psych API routes were once completely unauthenticated;
- * reading the OS feed reopens that from a new direction, and NOTHING else catches
- * it — the repo's tsconfig excludes every test and spec pattern, so no test file
- * here is ever typechecked, and a paywall bypass raises no error anywhere.
+ * Two properties survive every one of those changes and are pinned here:
+ *   1. A NON-MEMBER GETS NOTHING. `leagueId` arrives from the URL; a loader that trusts the page to
+ *      have gated it would hand a stranger every manager's name and record.
+ *   2. NO CHARACTERISATION, FROM ANY SOURCE. The profile feed is mocked with a loud fake profile; if
+ *      a refactor ever reads it again, the label text shows up in the serialized payload.
  *
- * ⚠ EVERY ASSERTION BELOW IS WRITTEN TO BE ABLE TO FAIL. The load-bearing ones
- * check for the ABSENCE of labels/scores/trajectory on a locked card — delete the
- * gate in `scout.ts` and they go red immediately, which is the property an
- * assertion needs before it counts as coverage.
+ * ⚠ EVERY ASSERTION BELOW IS WRITTEN TO BE ABLE TO FAIL — see the positive controls (the member
+ * cases assert names and records ARE present, so the absence checks are not passing on an empty
+ * payload).
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -30,8 +27,8 @@ const h = vi.hoisted(() => ({
   leagueFindUnique: vi.fn(),
   teamFindMany: vi.fn(),
   matchupFindMany: vi.fn(),
-  matchupFindFirst: vi.fn(),
-  resolveAccess: vi.fn(),
+  membership: vi.fn(),
+  standings: vi.fn(),
   loadProfiles: vi.fn(),
 }))
 
@@ -39,25 +36,17 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     league: { findUnique: h.leagueFindUnique },
     leagueTeam: { findMany: h.teamFindMany },
-    weeklyMatchup: { findMany: h.matchupFindMany, findFirst: h.matchupFindFirst },
+    weeklyMatchup: { findMany: h.matchupFindMany },
   },
 }))
-
-vi.mock('@/lib/psychological-profiles/ProfileAccess', () => ({
-  resolveProfileAccessForUser: h.resolveAccess,
-}))
-
+vi.mock('@/lib/league-access', () => ({ resolveLeagueMembership: h.membership }))
+vi.mock('@/lib/core-app/leagueStandings', () => ({ getLeagueStandings: h.standings }))
+// Mocked so that a regression which reads the feed again is VISIBLE, not so that Scout can use it.
 vi.mock('@/lib/decision-os/psychology-os', () => ({
   createPsychologyOsLoaders: () => ({ loadProfiles: h.loadProfiles, drainOutcomes: () => ({}) }),
 }))
-
-/*
- * The opponent lookup is not what this file tests, and a real `currentWeek` would
- * reach for a database the vitest db-guard has pinned to 127.0.0.1:1. Mocked to
- * null so every case below exercises the gate and nothing else.
- */
 vi.mock('@/lib/core-app/currentWeek', () => ({
-  resolveCurrentWeekForLeague: vi.fn(async () => null),
+  resolveCurrentWeekForLeague: vi.fn(async () => ({ seasonYear: 2026, week: 4 })),
   resolveCurrentWeek: vi.fn(async () => null),
 }))
 
@@ -65,248 +54,147 @@ import { getScoutData } from '@/lib/core-app/scout'
 
 const ME = 'user-1'
 
-/** A profile with enough on it that a leak would be unmistakable. */
-const fact = (managerId: string) => ({
-  managerId,
-  sport: 'NFL',
-  labels: ['Win-now', 'Aggressive trader'],
-  scores: {
-    aggressionScore: 81,
-    activityScore: 64,
-    tradeFrequencyScore: 77,
-    waiverFocusScore: 40,
-    riskToleranceScore: 70,
-  },
-  evidenceCount: 44,
-  unmeasuredDimensions: [],
-  anySufficient: true,
-  updatedAt: '2026-09-01T00:00:00.000Z',
-  trajectory: { hasTrajectory: true, summary: 'Rebuilder in 2023, win-now since 2024.', seasonsRecorded: 3 },
-})
-
 const team = (externalId: string, over: Record<string, unknown> = {}) => ({
   id: `row-${externalId}`,
   externalId,
   ownerName: `Owner ${externalId}`,
   teamName: `Team ${externalId}`,
   avatarUrl: null,
-  wins: 1,
-  losses: 0,
-  ties: 0,
   claimedByUserId: null,
   ...over,
 })
 
+const boardTeam = (rosterId: string, seed: number, wins: number, losses: number) => ({
+  rosterId,
+  seed,
+  record: { wins, losses, ties: 0 },
+  pointsFor: 400 - seed * 10,
+  pointsAgainst: 380,
+  form: ['W', 'L', 'W'],
+  zone: seed <= 2 ? 'playoff' : 'out',
+  gamesBack: seed <= 2 ? -1 : 1,
+  powerRank: seed,
+})
+
+const standings = () => ({
+  available: true,
+  seasonComplete: false,
+  board: {
+    season: 2026,
+    throughWeek: 3,
+    orderBasis: 'Order is winning percentage, then points for, then head-to-head.',
+    hasHeadToHead: true,
+    teams: [boardTeam('rival', 1, 3, 0), boardTeam('mine', 2, 2, 1), boardTeam('third', 3, 0, 3)],
+    h2h: { mine: { rival: { wins: 0, losses: 1, ties: 0 } } },
+  },
+})
+
 beforeEach(() => {
   vi.resetAllMocks()
-  h.leagueFindUnique.mockResolvedValue({
-    id: 'lg1',
-    name: 'The Gauntlet',
-    sport: 'NFL',
-    platformLeagueId: 'plat1',
-  })
-  h.teamFindMany.mockResolvedValue([
-    team('mine', { claimedByUserId: ME }),
-    team('rival'),
+  h.leagueFindUnique.mockResolvedValue({ id: 'lg1', name: 'The Gauntlet', sport: 'NFL', platformLeagueId: 'plat1', season: 2026, status: 'in_season' })
+  h.teamFindMany.mockResolvedValue([team('mine', { claimedByUserId: ME }), team('rival'), team('third')])
+  h.matchupFindMany.mockResolvedValue([
+    { rosterId: 'mine', matchupId: 1 },
+    { rosterId: 'rival', matchupId: 1 },
+    { rosterId: 'third', matchupId: 2 },
   ])
-  h.matchupFindMany.mockResolvedValue([])
-  h.loadProfiles.mockResolvedValue([fact('mine'), fact('rival')])
+  h.standings.mockResolvedValue(standings())
+  h.loadProfiles.mockResolvedValue([
+    { managerId: 'rival', labels: ['Aggressive trader', 'Win-now'], evidenceCount: 44, trajectory: { summary: 'Rebuilder in 2023' } },
+  ])
 })
 
-/** Pull one manager out of a successful result. */
-async function scoutFor(access: unknown) {
-  h.resolveAccess.mockResolvedValue(access)
-  const data = await getScoutData('lg1', ME)
-  if (!data) throw new Error('expected scout data')
-  return data
-}
-
-const granted = (over: Record<string, unknown> = {}) => ({
-  ok: true,
-  userId: ME,
-  ownManagerIds: new Set(['mine', 'row-mine']),
-  canSeeOpponents: false,
-  ...over,
-})
+const member = { ok: true, access: { leagueId: 'lg1', leagueSport: 'NFL', isCommissioner: false, isMember: true, isOwner: false, via: 'claim' } }
 
 describe('Scout refuses a non-member outright', () => {
-  it('names no manager at all when membership is denied', async () => {
-    const data = await scoutFor({ ok: false, status: 403, reason: 'not a member' })
-
-    expect(data.managers.available).toBe(false)
-    expect(data.coverage.profiledCount).toBe(0)
-
-    /*
-     * The strongest assertion in the file: the whole payload must not contain a
-     * profiled manager's name or label anywhere. `leagueId` arrives from the URL,
-     * so a loader that trusts the page to have gated it leaks a character read on
-     * a named person in a league the caller is not in.
-     */
+  it('names no manager, no record and no standing', async () => {
+    h.membership.mockResolvedValue({ ok: false, reason: 'not_member', status: 403 })
+    const data = await getScoutData('lg1', ME)
+    expect(data?.managers.available).toBe(false)
     const serialized = JSON.stringify(data)
     expect(serialized).not.toContain('rival')
-    expect(serialized).not.toContain('Aggressive trader')
+    expect(serialized).not.toContain('Owner')
+    expect(h.teamFindMany).not.toHaveBeenCalled()
+    expect(h.standings).not.toHaveBeenCalled()
   })
 
-  it('does not even read the profiles', async () => {
-    await scoutFor({ ok: false, status: 401, reason: 'signed out' })
+  it('says a failed membership check failed, rather than calling the viewer a non-member', async () => {
+    h.membership.mockRejectedValue(new Error('db down'))
+    const data = await getScoutData('lg1', ME)
+    expect(data?.managers.available).toBe(false)
+    if (data && !data.managers.available) {
+      expect(data.managers.reason).toMatch(/could not be checked/)
+      expect(data.managers.reason).not.toMatch(/not a member/)
+    }
+  })
+})
+
+describe('Scout shows facts, never a characterisation', () => {
+  it('a member gets every manager with their seed, record and form (the positive control)', async () => {
+    h.membership.mockResolvedValue(member)
+    const data = await getScoutData('lg1', ME)
+    if (!data?.managers.available) throw new Error('expected managers')
+    const rival = data.managers.data.find((m) => m.managerId === 'rival')
+    expect(rival?.standing).toMatchObject({ seed: 1, record: { wins: 3, losses: 0, ties: 0 }, form: ['W', 'L', 'W'] })
+    expect(JSON.stringify(data)).toContain('Owner rival')
+  })
+
+  it('never reads the profile feed, and no label reaches the payload', async () => {
+    h.membership.mockResolvedValue(member)
+    const data = await getScoutData('lg1', ME)
     expect(h.loadProfiles).not.toHaveBeenCalled()
-  })
-})
-
-describe('Scout locks every characterisation, entitlement or not', () => {
-  /**
-   * 🛑 THIS BLOCK USED TO ASSERT "gives you your own profile free". Milestone 32 removed the
-   * `isSelf || access.canSeeOpponents` branch from `lib/core-app/scout.ts` entirely — its own
-   * comment says "no caller reaches the characterisation here, the manager themselves included",
-   * because an entitlement "decides who PAYS, not what a raw dossier is".
-   *
-   * ⚠ SO A SELF-READ IS NOW LOCKED TOO, AND THAT IS THE CHANGE RATHER THAN A REGRESSION. Restoring
-   * `available: true` for `isYou` would re-open the exact exposure the milestone closes, on the one
-   * path people most readily assume is safe.
-   */
-  it('locks your OWN profile too — self is not a carve-out', async () => {
-    const data = await scoutFor(granted())
-    const mine = (data.managers.available ? data.managers.data : []).find((m) => m.isYou)
-
-    expect(mine?.profile.available).toBe(false)
-    if (mine && !mine.profile.available) expect(mine.profile.locked).toBe(true)
-
-    /*
-     * ⚠ ON THE SERIALIZED PAYLOAD, for the same reason the opponent case does it: a refactor that
-     * reintroduced the characterisation under another key would pass a property check and still
-     * ship the leak. Your own labels and scores must not cross either.
-     */
-    const serialized = JSON.stringify(mine)
-    expect(serialized).not.toContain('Win-now')
-    expect(serialized).not.toContain('81')
-  })
-
-  it('locks the opponent without revealing anything that characterises them', async () => {
-    const data = await scoutFor(granted())
-    const rival = (data.managers.available ? data.managers.data : []).find((m) => !m.isYou)
-
-    expect(rival?.profile.available).toBe(false)
-    if (rival && !rival.profile.available) {
-      expect(rival.profile.locked).toBe(true)
-
-      /*
-       * Coverage survives the lock and characterisation does not — the same split
-       * `redactForLock` makes. "44 observations" says nothing about the person.
-       */
-      if (rival.profile.locked) expect(rival.profile.evidenceCount).toBe(44)
+    const serialized = JSON.stringify(data)
+    for (const leak of ['Aggressive trader', 'Win-now', 'Rebuilder in 2023', 'evidenceCount', 'observations']) {
+      expect(serialized).not.toContain(leak)
     }
-
-    /*
-     * ⚠ ASSERTED ON THE SERIALIZED PAYLOAD, NOT ON THE SHAPE. A future refactor
-     * that adds the labels back under a different key would satisfy a
-     * property-by-property check and still ship the leak.
-     */
-    const serialized = JSON.stringify(rival)
-    expect(serialized).not.toContain('Aggressive trader')
-    expect(serialized).not.toContain('Win-now')
-    expect(serialized).not.toContain('Rebuilder in 2023')
-    expect(serialized).not.toContain('81')
   })
 
-  it('counts a locked profile as PROFILED, not as a coverage gap', async () => {
-    const data = await scoutFor(granted())
-
-    /*
-     * Coverage is unchanged in meaning and changed in number: both managers are still PROFILED —
-     * a lock is not a gap, or a paywall would make a working profiler look broken — but both are
-     * now locked rather than one, because self is no longer a carve-out.
-     */
-    expect(data.coverage.profiledCount).toBe(2)
-    expect(data.coverage.teamCount).toBe(2)
-    expect(data.coverage.lockedCount).toBe(2)
-  })
-})
-
-describe('Scout does NOT open up for an entitled member', () => {
-  /**
-   * 🛑 THE INVERSION THAT MATTERS MOST IN THIS FILE. This test was called "returns the opponent in
-   * full" and asserted that `canSeeOpponents` unlocked the characterisation. Under Milestone 32 an
-   * entitlement no longer buys a raw dossier — `scout.ts` dropped the branch entirely.
-   *
-   * ⚠ AN ENTITLED CALLER IS THE STRONGEST CASE TO PIN, because it is the one a well-meaning change
-   * would "restore" first: the paying user appears to be owed the data. Asserting the lock HOLDS
-   * under entitlement is what stops the exposure being reopened as a bug fix.
-   */
-  it('keeps the opponent locked even WITH canSeeOpponents — an entitlement is not an exception', async () => {
-    const data = await scoutFor(granted({ canSeeOpponents: true }))
-    const rival = (data.managers.available ? data.managers.data : []).find((m) => !m.isYou)
-
-    expect(rival?.profile.available).toBe(false)
-    if (rival && !rival.profile.available) expect(rival.profile.locked).toBe(true)
-
-    const serialized = JSON.stringify(rival)
-    expect(serialized).not.toContain('Aggressive trader')
-    expect(serialized).not.toContain('Rebuilder in 2023')
-
-    expect(data.coverage.lockedCount).toBe(2)
-  })
-})
-
-describe('Scout separates "not profiled" from "locked"', () => {
-  it('reports an unprofiled manager as our gap, unlocked', async () => {
-    // The rival has no profile at all; the caller is unentitled either way.
-    h.loadProfiles.mockResolvedValue([fact('mine')])
-    const data = await scoutFor(granted())
-    const rival = (data.managers.available ? data.managers.data : []).find((m) => !m.isYou)
-
-    expect(rival?.profile.available).toBe(false)
-    if (rival && !rival.profile.available) {
-      /*
-       * NOT locked. Our missing data reported as a paywall would sell a capability
-       * we cannot currently deliver; a paywall reported as missing data makes a
-       * working profiler look broken. They are different sentences on the screen.
-       */
-      expect(rival.profile.locked).toBe(false)
-      expect(rival.profile.reason).toMatch(/no profile yet/i)
-    }
-    /*
-     * ⚠ `lockedCount` is 1, not 0 — YOUR OWN profile is the locked one now. The distinction this
-     * test exists to protect is untouched: the rival is an honest coverage GAP (unlocked, "no
-     * profile yet"), while a lock is a refusal. Both still count as profiled/unprofiled correctly;
-     * only self's lock is new.
-     */
-    expect(data.coverage.profiledCount).toBe(1)
-    expect(data.coverage.lockedCount).toBe(1)
-  })
-
-  it('says the league is uncovered when the feed holds nothing', async () => {
-    h.loadProfiles.mockResolvedValue(null)
-    const data = await scoutFor(granted())
-    const any = (data.managers.available ? data.managers.data : [])[0]
-
-    expect(any?.profile.available).toBe(false)
-    if (any && !any.profile.available) {
-      expect(any.profile.reason).toMatch(/runs on a schedule/i)
-    }
-    expect(data.coverage.profiledCount).toBe(0)
-    expect(data.coverage.lastRefreshedAt).toBeNull()
-  })
-})
-
-describe('Scout dates the profiles, not the league', () => {
-  /**
-   * The line read "last updated <newest profile>", and was taken for the league's sync time. The
-   * range makes the oldest profile visible: a rotation that rebuilt one manager today and the rest a
-   * week ago no longer reads as "updated today".
-   */
-  it('reports both the oldest and the newest profile rebuild', async () => {
-    h.loadProfiles.mockResolvedValue([
-      { ...fact('mine'), updatedAt: '2026-09-19T12:00:00.000Z' },
-      { ...fact('rival'), updatedAt: '2026-09-12T08:00:00.000Z' },
+  it('pins this week’s opponent first, then follows the table’s own order', async () => {
+    h.membership.mockResolvedValue(member)
+    h.matchupFindMany.mockResolvedValue([
+      { rosterId: 'mine', matchupId: 1 },
+      { rosterId: 'third', matchupId: 1 },
+      { rosterId: 'rival', matchupId: 2 },
     ])
-    const data = await scoutFor(granted())
-    expect(data.coverage.lastRefreshedAt).toBe('2026-09-19T12:00:00.000Z')
-    expect(data.coverage.oldestRefreshedAt).toBe('2026-09-12T08:00:00.000Z')
+    const data = await getScoutData('lg1', ME)
+    if (!data?.managers.available) throw new Error('expected managers')
+    expect(data.managers.data.map((m) => m.managerId)).toEqual(['third', 'rival', 'mine'])
   })
 
-  it('has no oldest date when nothing is profiled', async () => {
-    h.loadProfiles.mockResolvedValue([])
-    const data = await scoutFor(granted())
-    expect(data.coverage.oldestRefreshedAt).toBeNull()
+  it('carries your head-to-head record against this week’s opponent', async () => {
+    h.membership.mockResolvedValue(member)
+    const data = await getScoutData('lg1', ME)
+    expect(data?.opponent).toEqual({ managerId: 'rival', teamName: 'Team rival', headToHead: { wins: 0, losses: 1, ties: 0 } })
+    expect(data?.you?.standing?.seed).toBe(2)
+  })
+
+  it('reports no head-to-head when you have not played them, rather than a 0-0 record', async () => {
+    h.membership.mockResolvedValue(member)
+    const s = standings()
+    s.board.h2h = { mine: { rival: { wins: 0, losses: 0, ties: 0 } } }
+    h.standings.mockResolvedValue(s)
+    const data = await getScoutData('lg1', ME)
+    expect(data?.opponent?.headToHead).toBeNull()
+  })
+
+  it('states the basis, and the Standings loader’s own reason when there is no table', async () => {
+    h.membership.mockResolvedValue(member)
+    const ok = await getScoutData('lg1', ME)
+    expect(ok?.basis).toEqual({ available: true, data: expect.objectContaining({ season: 2026, throughWeek: 3, seasonComplete: false }) })
+
+    h.standings.mockResolvedValue({ available: false, reason: 'nothing has been scored in 2026 yet.', leagueName: 'x', history: [] })
+    const none = await getScoutData('lg1', ME)
+    expect(none?.basis).toEqual({ available: false, reason: 'nothing has been scored in 2026 yet.' })
+    // Managers are still listed — an empty table is not an empty league.
+    expect(none?.managers.available && none.managers.data.length).toBe(3)
+    if (none?.managers.available) expect(none.managers.data.every((m) => m.standing === null)).toBe(true)
+  })
+
+  it('a failed teams read says so, rather than claiming nothing was imported', async () => {
+    h.membership.mockResolvedValue(member)
+    h.teamFindMany.mockRejectedValue(new Error('timeout'))
+    const data = await getScoutData('lg1', ME)
+    if (data && !data.managers.available) expect(data.managers.reason).toMatch(/could not be read/)
+    else throw new Error('expected an unavailable list')
   })
 })

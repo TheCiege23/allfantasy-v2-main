@@ -14,7 +14,7 @@
   "enableNotifications": true,
   "startUrl": "/core",
   "iconUrl": "https://allfantasy.ai/icons/icon-512.png",
-  "maskableIconUrl": "https://allfantasy.ai/icons/icon-512.png",
+  "maskableIconUrl": "https://allfantasy.ai/icons/icon-maskable-512.png",
   "splashScreenFadeOutDuration": 300,
   "signingKey": {
     "path": "./android.keystore",

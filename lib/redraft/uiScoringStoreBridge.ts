@@ -85,6 +85,8 @@ export const UI_SCORING_STORES: Readonly<Record<string, Store>> = {
       three_point_made: 'threes',
       field_goals_made: 'fgm',
       free_throws_made: 'ftm',
+      field_goals_attempted: 'fga',
+      free_throws_attempted: 'fta',
       double_double: 'dbl_dbl',
       triple_double: 'trpl_dbl',
     },
@@ -129,20 +131,33 @@ export const UI_SCORING_STORES: Readonly<Record<string, Store>> = {
   NCAAF: {
     settingsKey: 'ncaaf_scoring_config',
     receptionFromPresetUntilSaved: true,
-    // The engine has one two-point category; when the panel's three differ, the last present
-    // (receiving) wins — the same collapse the NFL bridge makes.
     keyMap: {
       passing_yards: 'pass_yds',
       passing_td: 'pass_td',
       interception_thrown: 'pass_int',
-      passing_2pt: 'two_pt',
+      passing_2pt: 'pass_2pt',
       rushing_yards: 'rush_yds',
       rushing_td: 'rush_td',
-      rushing_2pt: 'two_pt',
+      rushing_2pt: 'rush_2pt',
       reception: 'rec',
       receiving_yards: 'rec_yds',
       receiving_td: 'rec_td',
-      receiving_2pt: 'two_pt',
+      receiving_2pt: 'rec_2pt',
+      te_premium: 'te_premium',
+      return_td: 'kr_td', // One panel bucket supplies both distinct athlete return categories.
+      off_fumble_recovery_td: 'fumble_td',
+      idp_solo_tackle: 'idp_solo',
+      idp_tackle: 'idp_tackle',
+      idp_sack: 'idp_sack',
+      idp_pass_defended: 'idp_pd',
+      idp_tackle_for_loss: 'idp_tfl',
+      idp_td: 'idp_td',
+      idp_interception: 'idp_int',
+      idp_int_return_yards: 'idp_int_return_yards',
+      fg_made: 'fg_made',
+      pat_made: 'xp_made',
+      fg_missed: 'fg_miss',
+      pat_missed: 'xp_miss',
       fumble_lost: 'fum_lost',
       dst_td: 'def_td',
       dst_interception: 'def_int',
@@ -213,6 +228,11 @@ export function bridgeUiRulesForSport(sport: string, rules: Record<string, unkno
   for (const [uiKey, engineKey] of Object.entries(store.keyMap)) {
     const value = Number(rules[uiKey])
     if (rules[uiKey] != null && Number.isFinite(value)) out[engineKey] = value
+  }
+  if (sport === 'NCAAF') {
+    if (out.kr_td !== undefined) out.pr_td = out.kr_td
+    // Legacy aggregate counts have no role; retain a weight only when both scoring roles agree.
+    if (out.rush_2pt !== undefined && out.rush_2pt === out.rec_2pt) out.two_pt = out.rush_2pt
   }
   return out
 }

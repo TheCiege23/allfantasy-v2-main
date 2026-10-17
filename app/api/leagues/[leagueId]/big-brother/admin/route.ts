@@ -49,6 +49,7 @@ export async function POST(
     'reopen_veto',
     'extend_vote_window',
     'rerun_vote_tally',
+    'resolve_eviction_tie',
     'force_waiver_release',
     'resolve_veto_state',
     'replace_inactive_hoh',

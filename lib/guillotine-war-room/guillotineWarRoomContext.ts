@@ -22,6 +22,7 @@ import { getEffectiveLeagueRosterTemplate } from '@/lib/league/getEffectiveLeagu
 import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidation'
 import { buildPlayerKey } from '@/lib/adp/computeAllFantasyAdp'
 import { getGuillotineConfig } from '@/lib/guillotine/GuillotineLeagueConfig'
+import { resolveGuillotineWeekState } from '@/lib/guillotine/guillotineCurrentWeek'
 import { getDangerTiers } from '@/lib/guillotine/GuillotineDangerEngine'
 import { fetchAdpByPlayerKey } from '@/lib/redraft-war-room/redraftFreeAgentPool'
 import { fetchRedraftInjuryNews, injuryNameKey } from '@/lib/redraft-war-room/redraftInjuryNews'
@@ -93,11 +94,8 @@ export async function buildGuillotineWarRoomContext(
   const config = await getGuillotineConfig(leagueId)
   const configState: DataState = config ? 'available' : 'missing'
 
-  // Current period = latest GuillotinePeriodScore week, else config start, else 1.
-  const latestScore = await prisma.guillotinePeriodScore
-    .findFirst({ where: { leagueId }, orderBy: { weekOrPeriod: 'desc' }, select: { weekOrPeriod: true, createdAt: true } })
-    .catch(() => null)
-  const currentWeek = latestScore?.weekOrPeriod ?? config?.eliminationStartWeek ?? 1
+  // Current period = latest GuillotinePeriodScore week, else config start, else 1 (shared rule).
+  const { week: currentWeek, latestScoredAt } = await resolveGuillotineWeekState(leagueId, config)
 
   // --- roster template → required starters ---
   const requiredByPosition: Record<string, number> = {}
@@ -332,7 +330,7 @@ export async function buildGuillotineWarRoomContext(
     availability,
     freshness: {
       generatedAt: new Date().toISOString(),
-      scoresAsOf: latestScore?.createdAt ? latestScore.createdAt.toISOString() : null,
+      scoresAsOf: latestScoredAt ? latestScoredAt.toISOString() : null,
       injuriesAsOf: injuryNews.injuriesAsOf ? injuryNews.injuriesAsOf.toISOString() : null,
     },
     missingDataFlags,

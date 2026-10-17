@@ -12,6 +12,14 @@ import { fetchSleeperStatuses } from '@/lib/autocoach/status-sources/SleeperStat
 import { searchXForInjuryNews } from '@/lib/autocoach/status-sources/XGrokAdapter'
 import type { NormalizedStatusHit } from '@/lib/autocoach/status-sources/types'
 import { sleeperIdWhere } from '@/lib/player-identity/externalIdNamespace'
+import { selectRowForExternalRef } from '@/lib/player-match/authoritativePlayerRow'
+
+/**
+ * A hit plus the `SportsPlayer.source` of the row its `externalId` was resolved against.
+ * `source` on the hit is the SIGNAL (sleeper_api, x_grok…); `rowSource` is the FEED that
+ * minted the id, and the write needs it because an id is only unique per (sport, source).
+ */
+type StatusHit = NormalizedStatusHit & { rowSource?: string | null }
 
 export type AggregatedPlayerStatus = {
   externalId: string
@@ -44,21 +52,32 @@ function levenshtein(a: string, b: string): number {
 
 async function resolveExternalId(
   sport: string,
-  hit: NormalizedStatusHit
-): Promise<{ externalId: string; playerName: string; teamAbbrev: string | null } | null> {
+  hit: StatusHit
+): Promise<{ externalId: string; playerName: string; teamAbbrev: string | null; rowSource: string | null } | null> {
   const sk = sport.toUpperCase()
   if (hit.externalId) {
-    const row = await prisma.sportsPlayer.findFirst({
+    /*
+     * 🛑 NOT `findFirst` ON THE ID: an id names a row only with its source. Measured
+     * 2026-10-12, NFL `2135` is a backfill "Josh Allen QB BUF" row AND rolling_insights'
+     * Josh Hines-Allen (11 NFL and 110 SOCCER ids collide across sources). The hit's own row
+     * source wins when it has one; otherwise the rows must all describe one man, or the hit
+     * is dropped — a status we cannot pin to one player is not written to any.
+     */
+    const rows = await prisma.sportsPlayer.findMany({
       where: { sport: sk, externalId: hit.externalId },
-      select: { externalId: true, name: true, team: true },
+      select: { externalId: true, name: true, team: true, position: true, source: true, sleeperId: true, fetchedAt: true },
+      take: 20,
     })
-    if (row) {
-      return { externalId: row.externalId, playerName: row.name, teamAbbrev: row.team }
+    if (rows.length > 0) {
+      const row = selectRowForExternalRef(rows, hit.rowSource)
+      if (!row) return null
+      return { externalId: row.externalId, playerName: row.name, teamAbbrev: row.team, rowSource: row.source }
     }
     return {
       externalId: hit.externalId,
       playerName: hit.playerName || hit.externalId,
       teamAbbrev: hit.teamAbbrev ?? null,
+      rowSource: null,
     }
   }
 
@@ -77,12 +96,12 @@ async function resolveExternalId(
       ],
     },
     take: 25,
-    select: { externalId: true, name: true, team: true },
+    select: { externalId: true, name: true, team: true, source: true },
   })
 
   const lower = name.toLowerCase()
   const exact = rows.find((r) => r.name.toLowerCase() === lower)
-  if (exact) return { externalId: exact.externalId, playerName: exact.name, teamAbbrev: exact.team }
+  if (exact) return { externalId: exact.externalId, playerName: exact.name, teamAbbrev: exact.team, rowSource: exact.source }
 
   let best = rows[0] ?? null
   let bestD = 999
@@ -94,7 +113,7 @@ async function resolveExternalId(
     }
   }
   if (best && bestD <= 2) {
-    return { externalId: best.externalId, playerName: best.name, teamAbbrev: best.team }
+    return { externalId: best.externalId, playerName: best.name, teamAbbrev: best.team, rowSource: best.source }
   }
   return null
 }
@@ -130,7 +149,7 @@ export async function aggregatePlayerStatuses(sport: string, gameDate: string): 
     fetchBleacherReportInjuries(sk, gameDate),
   ])
 
-  const hits: NormalizedStatusHit[] = []
+  const hits: StatusHit[] = []
 
   if (settled[0]?.status === 'fulfilled') {
     hits.push(...mapOfficialRows(settled[0].value))
@@ -165,7 +184,7 @@ export async function aggregatePlayerStatuses(sport: string, gameDate: string): 
       ids.length > 0
         ? await prisma.sportsPlayer.findMany({
             where: sleeperIdWhere(ids, sk),
-            select: { externalId: true, sleeperId: true, name: true, team: true },
+            select: { externalId: true, sleeperId: true, name: true, team: true, source: true },
           })
         : []
     const meta = new Map(
@@ -191,6 +210,7 @@ export async function aggregatePlayerStatuses(sport: string, gameDate: string): 
         status,
         teamAbbrev: m.team ?? null,
         source: 'sleeper_api',
+        rowSource: m.source,
         confidence: 0.95,
         rawText: status,
         gameDate,
@@ -223,7 +243,7 @@ export async function aggregatePlayerStatuses(sport: string, gameDate: string): 
     console.warn('[PlayerStatusAggregator] bleacher_report failed:', settled[4].reason)
   }
 
-  const resolved: NormalizedStatusHit[] = []
+  const resolved: StatusHit[] = []
   for (const h of hits) {
     if (!isSwapEligibleStatus(h.status)) continue
     const r = await resolveExternalId(sk, h)
@@ -231,6 +251,7 @@ export async function aggregatePlayerStatuses(sport: string, gameDate: string): 
     resolved.push({
       ...h,
       externalId: r.externalId,
+      rowSource: r.rowSource,
       playerName: r.playerName,
       teamAbbrev: h.teamAbbrev ?? r.teamAbbrev,
     })
@@ -239,8 +260,9 @@ export async function aggregatePlayerStatuses(sport: string, gameDate: string): 
   const groupMap = new Map<
     string,
     {
-      hits: NormalizedStatusHit[]
+      hits: StatusHit[]
       externalId: string
+      rowSource: string | null
       playerName: string
       teamAbbrev: string | null
       canonical: string
@@ -249,12 +271,13 @@ export async function aggregatePlayerStatuses(sport: string, gameDate: string): 
 
   for (const h of resolved) {
     const canonical = normalizeStatusToken(h.status)
-    const key = `${h.externalId}|${canonical}`
+    const key = `${h.externalId}|${h.rowSource ?? ''}|${canonical}`
     const g = groupMap.get(key)
     if (!g) {
       groupMap.set(key, {
         hits: [h],
         externalId: h.externalId!,
+        rowSource: h.rowSource ?? null,
         playerName: h.playerName,
         teamAbbrev: h.teamAbbrev ?? null,
         canonical,
@@ -280,11 +303,13 @@ export async function aggregatePlayerStatuses(sport: string, gameDate: string): 
     const sources = Array.from(new Set(g.hits.map((x) => x.source)))
     const avgConf = g.hits.reduce((s, x) => s + x.confidence, 0) / Math.max(1, g.hits.length)
 
-    const prevRows = await prisma.sportsPlayer.findMany({
-      where: { sport: sk, externalId: g.externalId },
-      select: { status: true },
-      take: 1,
-    })
+    const prevRows = g.rowSource
+      ? await prisma.sportsPlayer.findMany({
+          where: { sport: sk, externalId: g.externalId, source: g.rowSource },
+          select: { status: true },
+          take: 1,
+        })
+      : []
     const previousStatus = prevRows[0]?.status ?? null
 
     const event = await prisma.playerStatusEvent.create({
@@ -311,11 +336,17 @@ export async function aggregatePlayerStatuses(sport: string, gameDate: string): 
      * source that supplies ids in another space, resolve it there too — do not widen this
      * `where`. A wrong match here does not mislabel a screen, it persists an injury status onto
      * another player.
+     *
+     * 🛑 AND SCOPED TO THE ROW'S SOURCE. `externalId` alone matched every feed's row with that
+     * id, so Josh Hines-Allen's status landed on the backfill Josh Allen row too (NFL `2135`).
+     * No source means no row was resolved, and then there is no row to write.
      */
-    await prisma.sportsPlayer.updateMany({
-      where: { sport: sk, externalId: g.externalId },
-      data: { status: g.canonical },
-    })
+    if (g.rowSource) {
+      await prisma.sportsPlayer.updateMany({
+        where: { sport: sk, externalId: g.externalId, source: g.rowSource },
+        data: { status: g.canonical },
+      })
+    }
 
     results.push({
       externalId: g.externalId,

@@ -34,6 +34,7 @@ import { getApiSportsKey, syncAPISportsInjuriesToDb } from "@/lib/api-sports"
 import { recordInjurySyncDeferred, recordInjurySyncRun } from "@/lib/injuries/injurySyncState"
 import { SUPPORTED_SPORTS } from "@/lib/sport-scope"
 import { inNflInjuryGameWindow } from "@/lib/injuries/injuryGameWindow"
+import { withSyncJobRun } from "@/lib/production-health/syncJobRunTelemetry"
 
 /**
  * PROVIDER MIGRATED 2026-08-10: API-Sports -> Rolling Insights.
@@ -372,6 +373,9 @@ async function runOneSport(url: URL, sport: Sport, apiSportsOn: boolean) {
   }
 }
 
+/** The heartbeat job name for the five-minute game-window mode — PROBES in scripts/cron-freshness-check.mjs keys on it. */
+const GAME_WINDOW_JOB = "cron-import-injuries-gamewindow"
+
 function isGameWindowRun(url: URL): boolean {
   return ["1", "true", "yes"].includes((url.searchParams.get("gameWindow") ?? "").trim().toLowerCase())
 }
@@ -390,9 +394,32 @@ async function handle(req: NextRequest) {
     if ((explicit ?? "").trim().toUpperCase() !== "NFL") {
       return NextResponse.json({ ok: false, error: "gameWindow runs NFL only; pass sport=NFL" }, { status: 400 })
     }
-    if (!(await inNflInjuryGameWindow())) {
+    /*
+     * ⚠ A HEARTBEAT ON EVERY FIRE, IN OR OUT OF A WINDOW. This mode writes the same SportsInjury
+     * rows as the half-hourly run, so a table probe on it would be satisfied by its sibling and it
+     * could die silently (the shared-probe false green, scripts/cron-freshness-check.mjs); and it
+     * correctly writes NOTHING for most of the week, so an output probe would be red when it works.
+     * The heartbeat records that the tick FIRED, which is the one thing a monitor can check.
+     */
+    const outcome = await withSyncJobRun(
+      { jobName: GAME_WINDOW_JOB, sport: "NFL", trigger: "cron" },
+      async () =>
+        (await inNflInjuryGameWindow())
+          ? { inWindow: true as const, run: await runOneSport(url, "NFL", apiSportsEnabled(url)) }
+          : { inWindow: false as const },
+      (r) =>
+        r.inWindow
+          ? {
+              rowsWritten: Number((r.run.body as { synced?: number }).synced ?? 0),
+              status: r.run.failed ? "failed" : "success",
+              metadata: { inWindow: true },
+            }
+          : { rowsWritten: 0, status: "success", metadata: { inWindow: false } },
+    )
+    if (!outcome.inWindow) {
       return NextResponse.json({ ok: true, sport: "NFL", skipped: "outside an NFL game window", timestamp: new Date().toISOString() })
     }
+    return NextResponse.json(outcome.run.body, { status: outcome.run.failed ? 500 : 200 })
   }
 
   /*

@@ -71,7 +71,7 @@ const section = (sport: string, rows: WaiverBoardRow[], over: Partial<WaiverSpor
   season: 2026,
   rows,
   considered: rows.length,
-  withheld: { noRoster: 0, idSpace: 0, noScoring: 0, noCandidate: 0 },
+  withheld: { noRoster: 0, idSpace: 0, noScoring: 0, noCandidate: 0, noUpgrade: 0 },
   ...over,
 })
 
@@ -145,8 +145,9 @@ describe('in season', () => {
     expect(sportAlertSeason(rule('NBA'), new Date('2027-05-01T16:00:00Z'))).toBeNull()
   })
 
-  it('MLB stays dormant until an opener is recorded; NCAAF is the Eastern year', () => {
-    expect(sportAlertSeason(rule('MLB'), new Date('2027-05-01T16:00:00Z'))).toBeNull()
+  it('MLB activates from its recorded opener; NCAAF is the Eastern year', () => {
+    expect(sportAlertSeason(rule('MLB'), new Date('2027-03-23T16:00:00Z'))).toBeNull()
+    expect(sportAlertSeason(rule('MLB'), new Date('2027-05-01T16:00:00Z'))).toBe(2027)
     expect(sportAlertSeason(rule('NCAAF'), new Date('2026-09-29T16:00:00Z'))).toBe(2026)
   })
 })

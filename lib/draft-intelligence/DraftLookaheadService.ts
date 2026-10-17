@@ -140,7 +140,11 @@ async function getAppUserIdForRosterId(rosterId: string): Promise<string | null>
   if (!roster?.platformUserId || String(roster.platformUserId).startsWith('orphan-')) {
     return null
   }
-  return String(roster.platformUserId)
+  // Unclaimed draft seats can carry placeholder/legacy owner IDs. Chimmy's platform DM
+  // requires an AppUser FK; only queue one when that account actually exists.
+  const user = await prisma.appUser.findUnique({ where: { id: String(roster.platformUserId) },
+    select: { id: true } })
+  return user?.id ?? null
 }
 
 async function buildAvailablePlayers(

@@ -18,6 +18,7 @@ const asset = z.object({ name, value: z.number().finite().min(0).max(1_000_000).
 const letter = z.string().trim().regex(/^[A-F][+-]?$/).nullable()
 
 export const ProposalCardInput = z.object({
+  language: z.enum(['en','es']).default('en'),
   leagueId: z.string().trim().min(1).max(64),
   myLabel: name,
   theirLabel: name,
@@ -27,6 +28,9 @@ export const ProposalCardInput = z.object({
   theirLetter: letter,
   score: z.number().finite().min(0).max(100).nullable(),
   verdict: z.string().trim().min(1).max(60),
+  basis: z.string().trim().min(1).max(100).optional(),
+  asOf: z.string().datetime().optional(),
+  uncertainty: z.string().trim().min(1).max(100).optional(),
 })
 
 export type ProposalCardInput = z.infer<typeof ProposalCardInput>

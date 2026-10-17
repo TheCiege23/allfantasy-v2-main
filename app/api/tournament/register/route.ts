@@ -77,6 +77,8 @@ export async function DELETE(req: NextRequest) {
   const shell = await prisma.tournamentShell.findUnique({ where: { id: tournamentId } })
   if (!shell) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
+  if (['blueprint', 'rules_published'].includes(shell.status)) return NextResponse.json({ error: 'Use the season tournament registration controls.' }, { status: 409 })
+
   const isCommissioner = shell.commissionerId === userId
   if (p.userId !== userId && !isCommissioner) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })

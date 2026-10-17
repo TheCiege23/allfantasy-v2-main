@@ -59,7 +59,11 @@ export function addPlayerToRosterData(playerData: unknown, playerId: string): un
 export function removePlayerFromRosterData(playerData: unknown, playerId: string): unknown {
   const ids = getRosterPlayerIds(playerData).filter((id) => id !== playerId)
   if (Array.isArray(playerData)) return ids
-  const next = { ...(playerData as object), players: ids }
+  const source = (playerData && typeof playerData === 'object' ? playerData : {}) as Record<string, unknown>
+  const starters = Array.isArray(source.starters)
+    ? source.starters.filter((row: unknown) => (typeof row === 'string' ? row : (row as { id?: string; player_id?: string } | null)?.id ?? (row as { player_id?: string } | null)?.player_id) !== playerId)
+    : source.starters
+  const next = { ...source, players: ids, ...(Array.isArray(source.starters) ? { starters } : {}) }
   return syncLineupSections(next, { removePlayerId: playerId })
 }
 

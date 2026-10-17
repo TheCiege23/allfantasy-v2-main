@@ -68,7 +68,7 @@ export async function checkAndAwardWeapons(leagueId: string, week: number, zombi
       if (side.score >= rules.weaponAmbushThreshold) {
         await ensureTeamItem(leagueId, rr.ownerId, zombieLeagueId, 'weapon_bow', '🏹 Bow')
       }
-      if (side.won && Math.abs(hs - as) >= 20) {
+      if (side.won && Math.abs(hs - as) >= rules.weaponAxeMargin) {
         await ensureTeamItem(leagueId, rr.ownerId, zombieLeagueId, 'weapon_axe', '🪓 Axe')
       }
     }

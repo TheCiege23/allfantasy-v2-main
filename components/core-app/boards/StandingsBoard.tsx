@@ -106,6 +106,115 @@ function stakesLine(league: Ranked, swing: SwingMatchup | null): string | null {
   return parts.length > 0 ? parts.join(' · ') : null
 }
 
+/**
+ * Where the seed sits in the field, drawn: a track the width of the league, the
+ * playoff cutoff marked on it, and your seed as a dot.
+ *
+ * ⚠ DECORATION OF A NUMBER ALREADY PRINTED, so it is `aria-hidden`. "#3 of 12"
+ * beside it is the fact; the bar only makes a #7 of 8 and a #7 of 14 look as
+ * different as they are.
+ */
+function SeedMeter({
+  seed,
+  field,
+  playoffTeams,
+  sev,
+}: {
+  seed: number
+  field: number
+  playoffTeams: number
+  sev: 'good' | 'warn' | 'bad'
+}) {
+  if (field < 2) return null
+  const at = Math.min(100, Math.max(0, ((seed - 0.5) / field) * 100))
+  const cut = (Math.min(playoffTeams, field) / field) * 100
+  return (
+    <span className="af-bd-seedbar" aria-hidden>
+      <span className="af-bd-seedbar-in" style={{ width: `${cut.toFixed(1)}%` }} />
+      <span className="af-bd-seedbar-dot" data-sev={sev} style={{ left: `${at.toFixed(1)}%` }} />
+    </span>
+  )
+}
+
+/**
+ * The account at a glance — the counts Season Outlook already computes, which
+ * this board used to throw away.
+ *
+ * ⚠ THE DENOMINATOR IS THE RANKED LEAGUES, NOT THE ACCOUNT. `summary` is built
+ * from leagues where your team was identified, which is exactly `ranked` here;
+ * dividing by every league on the account would count leagues we never modelled
+ * as leagues you are missing the playoffs in.
+ */
+function SeasonPulse({ summary, ranked }: { summary: SeasonOutlook['summary']; ranked: number }) {
+  return (
+    <section className="af-bd-pulse" aria-label="Your playoff picture across leagues">
+      <p className="af-bd-pulse-lead">
+        On playoff pace in <span className="af-num">{summary.makingPlayoffs}</span> of{' '}
+        <span className="af-num">{ranked}</span> {ranked === 1 ? 'league' : 'leagues'}
+      </p>
+      <div className="af-bd-pulse-tiles">
+        <div className="af-bd-pulse-tile" data-sev="good">
+          <span className="af-bd-pulse-v">{summary.clinched}</span>
+          <span className="af-bd-pulse-k">Clinched</span>
+        </div>
+        <div className="af-bd-pulse-tile" data-sev="warn">
+          <span className="af-bd-pulse-v">{summary.onTheBubble}</span>
+          <span className="af-bd-pulse-k">On the bubble</span>
+        </div>
+        {summary.bestTitle ? (
+          <div className="af-bd-pulse-tile" title={summary.bestTitle.leagueName}>
+            <span className="af-bd-pulse-v">{Math.round(summary.bestTitle.pct)}%</span>
+            <span className="af-bd-pulse-k">Best title shot</span>
+            <span className="af-bd-pulse-s">{summary.bestTitle.leagueName}</span>
+          </div>
+        ) : null}
+      </div>
+      <p className="af-bd-pulse-note">
+        Pace is 50%+ playoff odds; the bubble is 25–75%.
+      </p>
+    </section>
+  )
+}
+
+/**
+ * The one game this week that moves your playoff odds the most, anywhere.
+ *
+ * ⚠ IT IS ALSO ON ITS LEAGUE'S ROW, AND THAT IS NOT A DUPLICATE. The row says
+ * what is at stake in that league; this says which league to watch first. Only
+ * drawn for a league on this board, so its link always resolves.
+ */
+function MustWin({ swing, league }: { swing: SwingMatchup; league: Ranked }) {
+  const top = swing.rooting?.[0]
+  const root = top ? (top.rootFor === top.a ? top.aName : top.bName) : null
+  return (
+    <Link className="af-bd-mustwin" href={league.href}>
+      <span className="af-bd-mustwin-k">Biggest game this week</span>
+      <span className="af-bd-mustwin-title">
+        Wk {swing.week}
+        {swing.opponentName ? ` vs ${swing.opponentName}` : ''}
+      </span>
+      <span className="af-bd-mustwin-league">{league.leagueName}</span>
+      <span className="af-bd-mustwin-branches">
+        <span data-sev="good">
+          <span className="af-bd-mustwin-bk">Win</span>
+          <span className="af-num">{Math.round(swing.ifWin)}%</span>
+        </span>
+        <span data-sev="bad">
+          <span className="af-bd-mustwin-bk">Lose</span>
+          <span className="af-num">{Math.round(swing.ifLose)}%</span>
+        </span>
+      </span>
+      {swing.clinchOnWin || root ? (
+        <span className="af-bd-mustwin-note">
+          {swing.clinchOnWin ? 'Win and you are in.' : null}
+          {swing.clinchOnWin && root ? ' ' : null}
+          {root ? `Root for ${root}.` : null}
+        </span>
+      ) : null}
+    </Link>
+  )
+}
+
 function Row({ league, swing }: { league: Ranked; swing: SwingMatchup | null }) {
   const you = league.you
   const pct = Math.round(you.playoffPct)
@@ -156,6 +265,7 @@ function Row({ league, swing }: { league: Ranked; swing: SwingMatchup | null }) 
           <span>
             #{you.seed} of {league.teams.length}
           </span>
+          <SeedMeter seed={you.seed} field={league.teams.length} playoffTeams={league.playoffTeams} sev={sev} />
           <span className="af-bd-val-sub af-bd-val-sub--status" data-sev={sev}>
             {inField ? 'In' : 'Out'}
           </span>
@@ -221,6 +331,8 @@ export function StandingsBoard({ outlook, allHref, totalLeagues }: StandingsBoar
 
   const shown = strongest.length + bubble.length
   const anyUnmodelled = [...strongest, ...bubble].some((l) => !l.you.modelled)
+  const swing = outlook.weekThatMatters
+  const swingLeague = swing ? (ranked.find((l) => l.leagueId === swing.leagueId) ?? null) : null
 
   return (
     <div className="af-bd">
@@ -232,6 +344,10 @@ export function StandingsBoard({ outlook, allHref, totalLeagues }: StandingsBoar
 
       {ranked.length > 0 ? (
         <>
+          <div className="af-bd-pulse-row">
+            <SeasonPulse summary={outlook.summary} ranked={ranked.length} />
+            {swing && swingLeague ? <MustWin swing={swing} league={swingLeague} /> : null}
+          </div>
           <div
             className="af-bd-split"
             data-stack={columnsTooUneven(strongest.length, bubble.length) || undefined}

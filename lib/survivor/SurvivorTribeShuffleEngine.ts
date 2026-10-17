@@ -3,6 +3,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { randomInt } from 'node:crypto'
 import { getSurvivorConfig } from './SurvivorLeagueConfig'
 import { getTribesWithMembers } from './SurvivorTribeService'
 import { appendSurvivorAudit } from './SurvivorAuditLog'
@@ -76,7 +77,7 @@ export async function runShuffle(
   const allRosterIds = tribes.flatMap((t) => t.members.map((m) => m.rosterId))
   if (allRosterIds.length === 0) return { ok: false, error: 'No members' }
 
-  const seed = options?.seed ?? Date.now()
+  const seed = options?.seed ?? randomInt(0, 2 ** 32)
   let s = seed
   const shuffle = <T>(arr: T[]): T[] => {
     const out = [...arr]
@@ -89,16 +90,13 @@ export async function runShuffle(
   }
   const shuffled = shuffle(allRosterIds)
   const tribeCount = tribes.length
-  const targetPerTribe = Math.ceil(shuffled.length / tribeCount)
 
   await prisma.$transaction(async (tx) => {
     for (const m of tribes.flatMap((t) => t.members)) {
       await (tx as any).survivorTribeMember.delete({ where: { id: m.id } })
     }
     for (let slot = 0; slot < tribeCount; slot++) {
-      const start = slot * targetPerTribe
-      const end = Math.min(start + targetPerTribe, shuffled.length)
-      const rosterIds = shuffled.slice(start, end)
+      const rosterIds = shuffled.filter((_, index) => index % tribeCount === slot)
       const tribe = tribes[slot]
       for (let i = 0; i < rosterIds.length; i++) {
         await (tx as any).survivorTribeMember.create({

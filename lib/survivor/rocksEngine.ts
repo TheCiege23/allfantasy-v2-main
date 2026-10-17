@@ -1,7 +1,7 @@
 /**
  * Go to Rocks engine for Survivor League tiebreaker resolution.
  *
- * When a Tribal Council vote results in a tie and the configured tie rule
+ * When a Elimination Council vote results in a tie and the configured tie rule
  * includes "rocks", eligible non-tied, non-immune players draw rocks.
  * One player is randomly eliminated via seeded RNG for auditability.
  */

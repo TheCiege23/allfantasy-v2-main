@@ -5,6 +5,8 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { getBigBrotherConfig } from './BigBrotherLeagueConfig'
+import { resolveBigBrotherDeadlines } from './schedule'
 import { appendBigBrotherAudit } from './BigBrotherAuditLog'
 import type { BigBrotherWeekPhase } from './types'
 
@@ -59,13 +61,13 @@ export async function getCyclePhase(cycleId: string): Promise<BigBrotherWeekPhas
   return isValidPhase(cycle.phase) ? (cycle.phase as BigBrotherWeekPhase) : 'HOH_OPEN'
 }
 
-export async function getCurrentCycleForLeague(leagueId: string): Promise<{ id: string; week: number; phase: string } | null> {
+export async function getCurrentCycleForLeague(leagueId: string): Promise<{ id: string; week: number; phase: string; createdAt: Date; voteDeadlineAt: Date | null; voteOpenedAt: Date | null } | null> {
   const cycle = await prisma.bigBrotherCycle.findFirst({
     where: { leagueId },
     orderBy: { week: 'desc' },
-    select: { id: true, week: true, phase: true },
+    select: { id: true, week: true, phase: true, createdAt: true, voteDeadlineAt: true, voteOpenedAt: true },
   })
-  return cycle ? { id: cycle.id, week: cycle.week, phase: cycle.phase } : null
+  return cycle
 }
 
 /**
@@ -78,7 +80,7 @@ export async function transitionPhase(
 ): Promise<{ ok: boolean; error?: string }> {
   const cycle = await prisma.bigBrotherCycle.findUnique({
     where: { id: cycleId },
-    select: { leagueId: true, configId: true, week: true, phase: true },
+    select: { leagueId: true, configId: true, week: true, phase: true, createdAt: true, voteOpenedAt: true, voteDeadlineAt: true },
   })
   if (!cycle) return { ok: false, error: 'Cycle not found' }
 
@@ -87,10 +89,15 @@ export async function transitionPhase(
     return { ok: false, error: `Invalid transition from ${from} to ${toPhase}` }
   }
 
-  await prisma.bigBrotherCycle.update({
-    where: { id: cycleId },
-    data: { phase: toPhase },
+  const now = new Date()
+  const config = toPhase === 'VOTING_OPEN' ? await getBigBrotherConfig(cycle.leagueId) : null
+  const dates = config ? resolveBigBrotherDeadlines(config, cycle) : null
+  const voteOpenedAt = dates?.voting_open && dates.voting_open > now ? dates.voting_open : now
+  const changed = await prisma.bigBrotherCycle.updateMany({
+    where: { id: cycleId, phase: from },
+    data: { phase: toPhase, ...(toPhase === 'VOTING_OPEN' ? { voteOpenedAt, voteDeadlineAt: cycle.voteDeadlineAt ?? dates?.eviction ?? null } : {}) },
   })
+  if (changed.count !== 1) return { ok: false, error: 'Cycle changed; refresh and retry' }
 
   await appendBigBrotherAudit(cycle.leagueId, cycle.configId, 'phase_transition', {
     cycleId,

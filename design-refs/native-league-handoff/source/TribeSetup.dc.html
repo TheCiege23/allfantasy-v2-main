@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Commissioner — Survivor tribes</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./af-shell.css">
+<link rel="stylesheet" href="./draft-sleek.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500;700;800&amp;display=swap" rel="stylesheet">
+<style>body{margin:0;background:#07080d}a{color:#22d3ee}
+.mem{display:flex;align-items:center;gap:8px;min-height:40px;padding:0 6px 0 10px;border-radius:10px;background:#0b0d14;border:1px solid rgba(255,255,255,.07)}
+.mv{height:28px;padding:0 8px;border-radius:8px;border:1px solid rgba(255,255,255,.13);background:transparent;color:#c3c9e6;font:800 10px/1 'Archivo',sans-serif;cursor:pointer}
+.sw{width:26px;height:26px;border-radius:8px;border:2px solid transparent;cursor:pointer}
+.tog{display:flex;align-items:center;gap:10px;font-size:13px;color:#c3c9e6}</style>
+</helmet>
+<div class="af" style="flex-direction: column">
+  <header class="topb" style="background: #0b0d14">
+    <a class="btn btn-g btn-sm" href="Commissioner.dc.html">‹ Commissioner</a>
+    <span style="display: flex; flex-direction: column; gap: 4px"><span style="font-weight: 700; font-size: 17px; letter-spacing: -0.03em">Survivor tribes</span><span class="lbl">Blah Survivor · 16 managers</span></span>
+    <div style="flex: 1"></div>
+    <span class="{{lockCls}}">{{lockLabel}}</span>
+  </header>
+
+  <div class="wrap" style="display: flex; flex-direction: column; gap: 18px">
+    <section class="card" style="padding: 18px; display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-end">
+      <div style="display: flex; flex-direction: column; gap: 8px"><span class="lbl">Number of tribes</span><div class="seg"><sc-for list="{{counts}}" as="c" hint-placeholder-count="5"><button class="{{c.cls}}" onClick="{{c.pick}}">{{c.n}}</button></sc-for></div></div>
+      <div style="display: flex; flex-direction: column; gap: 8px"><span class="lbl">Assign by</span><div class="seg"><sc-for list="{{methods}}" as="m" hint-placeholder-count="3"><button class="{{m.cls}}" onClick="{{m.pick}}">{{m.label}}</button></sc-for></div></div>
+      <div style="display: flex; flex-direction: column; gap: 8px">
+        <label class="tog"><input type="checkbox" checked style="accent-color: #22d3ee; width: 16px; height: 16px">Show tribes on the draft board</label>
+        <label class="tog"><input type="checkbox" checked style="accent-color: #22d3ee; width: 16px; height: 16px">Tribe chat open during the draft</label>
+        <label class="tog"><input type="checkbox" checked style="accent-color: #22d3ee; width: 16px; height: 16px">Announce tribes in league chat when locked</label>
+      </div>
+      <div style="flex: 1"></div>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap">
+        <button class="btn btn-g" onClick="{{shuffle}}">Randomize</button>
+        <button class="btn btn-g" onClick="{{balance}}">Balance with AF</button>
+        <button class="btn btn-p" onClick="{{lock}}" disabled="{{invalid}}">{{lockBtn}}</button>
+      </div>
+    </section>
+
+    <div style="padding: 10px 14px; border-radius: 12px; background: {{vBg}}; border: 1px solid {{vLine}}; font-size: 13px; color: #c3c9e6">{{vText}}</div>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 14px">
+      <sc-for list="{{tribes}}" as="t" hint-placeholder-count="4">
+        <section class="card" style="padding: 16px; display: flex; flex-direction: column; gap: 10px; border-color: {{t.line}}">
+          <div style="display: flex; align-items: center; gap: 10px">
+            <span style="width: 14px; height: 14px; border-radius: 4px; background: {{t.c}}"></span>
+            <label style="flex: 1"><span style="position: absolute; left: -9999px">Tribe name</span><input type="text" value="{{t.name}}" aria-label="Tribe name" style="width: 100%; height: 36px; padding: 0 10px; border-radius: 9px; border: 1px solid rgba(255,255,255,.13); background: #0b0d14; color: #eef0fa; font: 600 15px 'Archivo', sans-serif"></label>
+            <span class="num" style="font-size: 12px; font-weight: 600; color: {{t.countC}}">{{t.count}}</span>
+          </div>
+          <div style="display: flex; gap: 6px"><sc-for list="{{t.swatches}}" as="s" hint-placeholder-count="6"><button class="sw" aria-label="Tribe colour {{s.c}}" style="background: {{s.c}}; border-color: {{s.ring}}"></button></sc-for></div>
+          <div style="display: flex; flex-direction: column; gap: 6px">
+            <sc-for list="{{t.members}}" as="m" hint-placeholder-count="4">
+              <div class="mem">
+                <span class="av" style="width: 26px; height: 26px; font-size: 9px; border-radius: 999px; background: #1c2342; color: #c3c9e6">{{m.ini}}</span>
+                <span style="flex: 1; font-size: 13px; font-weight: 700">{{m.name}}</span>
+                <span class="num" style="font-size: 10px; color: #989fc2">AF {{m.power}}</span>
+                <button class="mv" onClick="{{m.move}}" aria-label="Move {{m.name}} to the next tribe">Move ▸</button>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 5px">
+            <span style="display: flex; justify-content: space-between"><span class="lbl">AF tribe strength</span><span class="num" style="font-size: 11px; color: #c3c9e6">{{t.avg}}</span></span>
+            <div class="bar" style="height: 6px"><div style="width: {{t.pct}}; background: {{t.c}}"></div></div>
+          </div>
+        </section>
+      </sc-for>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1100}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { k: 4, method: 'random', seed: 3, moves: {}, locked: false }; }
+  renderVals() {
+    const st = this.state;
+    const M = [['TheCiege26',88],['Open Team 9',94],['Open Team 5',79],['Open Team 2',71],['Open Team 11',75],['Open Team 3',62],['Sunday Scaries',66],['Open Team 8',48],['Open Team 12',51],['Open Team 10',39],['Open Team 6',41],['Open Team 4',22],['Open Team 13',58],['Open Team 14',64],['Open Team 15',45],['Open Team 16',53]];
+    const NAMES = ['Koa','Rumo','Vela','Tika','Moana','Sefa'];
+    const COLORS = ['#2dd4bf','#fb923c','#a78bfa','#fb7185','#60a5fa','#facc15'];
+    const k = st.k;
+    // order members: random (seeded) or balanced snake by AF power
+    let order = M.map((m, i) => i);
+    if (st.method === 'balanced') { order.sort((a, b) => M[b][1] - M[a][1]); }
+    else { let s = st.seed; order = order.map(i => [i, (Math.sin(i * 12.9898 + s * 78.233) * 43758.5453) % 1]).sort((a, b) => a[1] - b[1]).map(x => x[0]); }
+    const assign = {};
+    order.forEach((mi, idx) => { const r = Math.floor(idx / k), c = idx % k; assign[mi] = st.method === 'balanced' ? (r % 2 === 0 ? c : k - 1 - c) : c; });
+    Object.entries(st.moves).forEach(([mi, t]) => { assign[mi] = t % k; });
+    const tribes = Array.from({ length: k }, (_, t) => {
+      const mem = Object.keys(assign).filter(mi => assign[mi] === t).map(Number);
+      const count = mem.length, ok = count >= 4 && count <= 6;
+      const avg = count ? Math.round(mem.reduce((a, mi) => a + M[mi][1], 0) / count) : 0;
+      return { name: 'Tribe ' + NAMES[t], c: COLORS[t], line: ok ? COLORS[t] + '66' : 'rgba(251,91,120,.6)',
+        count: count + (ok ? ' managers' : ' · needs 4–6'), countC: ok ? '#989fc2' : '#fb5b78', avg: 'avg ' + avg, pct: avg + '%',
+        swatches: COLORS.map((c, i) => ({ c, ring: i === t ? '#eef0fa' : 'transparent' })),
+        members: mem.map(mi => ({ name: M[mi][0], power: M[mi][1], ini: mi === 0 ? 'TC' : M[mi][0] === 'Sunday Scaries' ? 'SS' : M[mi][0].replace('Open Team ', 'O'),
+          move: () => this.setState({ moves: { ...st.moves, [mi]: (assign[mi] + 1) % k }, method: 'manual', locked: false }) })) };
+    });
+    const sizes = tribes.map(t => t.members.length);
+    const invalid = sizes.some(n => n < 4 || n > 6);
+    const avgs = tribes.map(t => Number(t.avg.replace('avg ', '')));
+    const spread = Math.max(...avgs) - Math.min(...avgs);
+    const counts = [2,3,4,5,6].map(n => ({ n, cls: 'sg' + (k === n ? ' sg-on' : ''), pick: () => this.setState({ k: n, moves: {}, locked: false }) }));
+    const methods = [['random','Random'],['balanced','Balanced by AF'],['manual','Manual']].map(([id, label]) => ({ label, cls: 'sg' + (st.method === id ? ' sg-on' : ''), pick: () => this.setState({ method: id, moves: id === 'manual' ? st.moves : {}, locked: false }) }));
+    return { tribes, counts, methods, invalid,
+      vText: invalid ? '16 managers in ' + k + ' tribes leaves a tribe outside 4–6. Change the number of tribes or move managers.' : '16 managers → ' + k + ' tribes of ' + sizes.join(' / ') + ' · AF strength spread ' + spread + ' points' + (spread > 12 ? ' · try Balance with AF' : ' · looks fair'),
+      vBg: invalid ? 'rgba(251,91,120,.08)' : 'rgba(52,211,153,.08)', vLine: invalid ? 'rgba(251,91,120,.35)' : 'rgba(52,211,153,.35)',
+      shuffle: () => this.setState({ method: 'random', seed: st.seed + 1, moves: {}, locked: false }),
+      balance: () => this.setState({ method: 'balanced', moves: {}, locked: false }),
+      lock: () => this.setState({ locked: true }),
+      lockBtn: st.locked ? 'Locked ✓' : 'Lock tribes & announce',
+      lockLabel: st.locked ? 'Locked · posted to league chat' : 'Draft order stays random · tribes lock before the draft', lockCls: st.locked ? 'chip chip-good' : 'chip chip-gold' };
+  }
+}
+</script>
+</body>
+</html>

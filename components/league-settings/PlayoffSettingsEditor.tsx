@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Lock, Trophy, ChevronRight, AlertTriangle, Check } from 'lucide-react'
 import { SubscriptionGateModal } from '@/components/subscription/SubscriptionGateModal'
+import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 
 interface PlayoffStageOption {
   id: string
@@ -42,6 +43,7 @@ interface ScheduleAdjustment {
 }
 
 export function PlayoffSettingsEditor({ leagueId }: { leagueId: string }) {
+  const { t } = useLanguage()
   const [stages, setStages] = useState<PlayoffStageOption[]>([])
   const [config, setConfig] = useState<PlayoffConfig | null>(null)
   const [isPremium, setIsPremium] = useState(false)
@@ -67,7 +69,7 @@ export function PlayoffSettingsEditor({ leagueId }: { leagueId: string }) {
         setSport(data.sport ?? '')
         setPendingStages(new Set(data.config?.includedStages ?? []))
       })
-      .catch(() => { if (active) setError('Failed to load') })
+      .catch(() => { if (active) setError(t('lsEd.loadFailed')) })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
   }, [leagueId])
@@ -118,15 +120,15 @@ export function PlayoffSettingsEditor({ leagueId }: { leagueId: string }) {
       })
       const data = await res.json()
       if (data.error === 'premiumRequired') { setGateOpen(true); return }
-      if (!res.ok) { setError(data.error ?? 'Save failed'); return }
+      if (!res.ok) { setError(data.error ?? t('lsEd.saveFailed')); return }
       setConfig(data.config)
       setPreview(null)
       setSuccess(true)
-    } catch { setError('Request failed') }
+    } catch { setError(t('lsEd.requestFailed')) }
     finally { setSaving(false) }
   }, [leagueId, pendingStages])
 
-  if (loading) return <div className="py-8 text-center text-sm text-white/50">Loading playoff settings...</div>
+  if (loading) return <div className="py-8 text-center text-sm text-white/50">{t('lsEd.po.loading')}</div>
 
   const hasChanges = config && JSON.stringify([...pendingStages].sort()) !== JSON.stringify([...config.includedStages].sort())
 
@@ -135,19 +137,18 @@ export function PlayoffSettingsEditor({ leagueId }: { leagueId: string }) {
       <div>
         <h3 className="flex items-center gap-2 text-base font-semibold text-white">
           <Trophy className="h-5 w-5 text-amber-400" />
-          Playoff Format — {sport}
+          {t('lsEd.po.format').replace('{{sport}}', sport)}
         </h3>
         <p className="mt-1 text-xs text-white/50">
-          Configure which real-world postseason stages are included in your fantasy playoffs.
-          Advanced options require AF Commissioner Subscription.
+          {t('lsEd.po.intro')}
         </p>
       </div>
 
       {/* Default info */}
       {config && (
         <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3 text-xs text-white/60">
-          Current: {config.includedStages.length === 0 ? 'Default playoff format (no postseason stages)' : `${config.includedStages.length} stage(s) enabled`}
-          {config.adjustedPlayoffStartWeek && <span className="ml-2">· Playoffs start Week {config.adjustedPlayoffStartWeek}</span>}
+          {t('lsEd.po.current').replace('{{value}}', config.includedStages.length === 0 ? t('lsEd.po.default') : t('lsEd.po.stagesEnabled').replace('{{n}}', String(config.includedStages.length)))}
+          {config.adjustedPlayoffStartWeek && <span className="ml-2">{t('lsEd.po.startsWeek').replace('{{n}}', String(config.adjustedPlayoffStartWeek))}</span>}
         </div>
       )}
 
@@ -183,15 +184,15 @@ export function PlayoffSettingsEditor({ leagueId }: { leagueId: string }) {
                   <span className="text-sm font-medium text-white/90">{stage.label}</span>
                   {stage.premium && (
                     <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[11px] font-bold uppercase text-amber-300">
-                      Premium
+                      {t('lsEd.po.premium')}
                     </span>
                   )}
                   {stage.additionalWeeks > 0 && (
-                    <span className="text-[11px] text-white/40">+{stage.additionalWeeks} week{stage.additionalWeeks !== 1 ? 's' : ''}</span>
+                    <span className="text-[11px] text-white/40">{t(stage.additionalWeeks === 1 ? 'lsEd.po.weekOne' : 'lsEd.po.weekMany').replace('{{n}}', String(stage.additionalWeeks))}</span>
                   )}
                 </div>
                 <p className="mt-0.5 text-[11px] text-white/50">{stage.description}</p>
-                {stage.timing && <p className="text-[11px] text-white/30">Timing: {stage.timing}</p>}
+                {stage.timing && <p className="text-[11px] text-white/30">{t('lsEd.po.timing').replace('{{timing}}', stage.timing)}</p>}
                 {stage.warning && enabled && (
                   <p className="mt-1 flex items-center gap-1 text-[11px] text-amber-300/80">
                     <AlertTriangle className="h-3 w-3" /> {stage.warning}
@@ -199,7 +200,7 @@ export function PlayoffSettingsEditor({ leagueId }: { leagueId: string }) {
                 )}
                 {locked && (
                   <p className="mt-1 text-[11px] text-amber-300/60">
-                    Available with AF Commissioner Subscription <ChevronRight className="inline h-3 w-3" />
+                    {t('lsEd.po.locked')} <ChevronRight className="inline h-3 w-3" />
                   </p>
                 )}
               </div>
@@ -211,7 +212,7 @@ export function PlayoffSettingsEditor({ leagueId }: { leagueId: string }) {
       {/* Schedule adjustment preview */}
       {preview && preview.changes.length > 0 && (
         <div className="rounded-xl border border-cyan-500/20 bg-cyan-950/10 p-3">
-          <p className="mb-2 text-xs font-medium text-cyan-200">Schedule impact preview</p>
+          <p className="mb-2 text-xs font-medium text-cyan-200">{t('lsEd.po.impact')}</p>
           <ul className="space-y-1 text-[11px] text-white/60">
             {preview.changes.map((c, i) => (
               <li key={i} className="flex gap-1.5">
@@ -222,15 +223,15 @@ export function PlayoffSettingsEditor({ leagueId }: { leagueId: string }) {
           <div className="mt-2 grid grid-cols-3 gap-2 text-center text-[11px]">
             <div className="rounded bg-white/5 px-2 py-1">
               <p className="font-mono text-white">{preview.newPlayoffStartWeek}</p>
-              <p className="text-white/40">Playoff start</p>
+              <p className="text-white/40">{t('lsEd.po.playoffStart')}</p>
             </div>
             <div className="rounded bg-white/5 px-2 py-1">
               <p className="font-mono text-white">{preview.newPlayoffWeeks}</p>
-              <p className="text-white/40">Playoff weeks</p>
+              <p className="text-white/40">{t('lsEd.po.playoffWeeks')}</p>
             </div>
             <div className="rounded bg-white/5 px-2 py-1">
               <p className="font-mono text-white">{preview.newChampionshipWeek}</p>
-              <p className="text-white/40">Championship</p>
+              <p className="text-white/40">{t('lsEd.po.championship')}</p>
             </div>
           </div>
         </div>
@@ -238,7 +239,7 @@ export function PlayoffSettingsEditor({ leagueId }: { leagueId: string }) {
 
       {/* Save */}
       {error && <div className="rounded-lg border border-red-500/20 bg-red-950/20 px-3 py-2 text-xs text-red-300">{error}</div>}
-      {success && <div className="rounded-lg border border-emerald-500/20 bg-emerald-950/20 px-3 py-2 text-xs text-emerald-300">Playoff settings saved. Schedule updated.</div>}
+      {success && <div className="rounded-lg border border-emerald-500/20 bg-emerald-950/20 px-3 py-2 text-xs text-emerald-300">{t('lsEd.po.saved')}</div>}
 
       {hasChanges && (
         <button
@@ -247,7 +248,7 @@ export function PlayoffSettingsEditor({ leagueId }: { leagueId: string }) {
           onClick={save}
           className="rounded-lg border border-amber-500/30 bg-amber-600/20 px-4 py-2 text-sm font-medium text-amber-200 hover:bg-amber-600/30 disabled:opacity-50"
         >
-          {saving ? 'Saving...' : 'Save playoff settings'}
+          {saving ? t('lsEd.saving') : t('lsEd.po.save')}
         </button>
       )}
 
@@ -256,7 +257,7 @@ export function PlayoffSettingsEditor({ leagueId }: { leagueId: string }) {
         isOpen={gateOpen}
         onClose={() => setGateOpen(false)}
         featureId="advanced_playoff_setup"
-        featureLabel="Advanced Playoff Controls"
+        featureLabel={t('lsEd.po.gateLabel')}
       />
     </div>
   )

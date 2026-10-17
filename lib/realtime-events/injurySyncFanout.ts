@@ -5,6 +5,8 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
+import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { emitPlayerInjuryOrNewsFanout } from '@/lib/realtime-events/realtimeEventService'
 import {
   injuryFanoutSortPriority,
@@ -23,29 +25,44 @@ function hourBucket(): number {
   return Math.floor(Date.now() / (60 * 60 * 1000))
 }
 
-async function findLeagueIdsForRosteredPlayer(playerName: string, sport: string): Promise<string[]> {
-  const name = playerName.trim()
-  if (!name) return []
+/*
+ * 🛑 THE NAME FINDS CANDIDATES; THE CLUB DECIDES (2026-10-12). This bound roster rows by name
+ * equality, fell back to `contains`, and never looked at the team — so "DeVonta Smith Out" (WR, PHI)
+ * would post to every league rostering CB DeVonta Smith (CAR) as well, and a `contains` hit could be
+ * any longer name. 216 NFL names are held by 2+ Sleeper ids. Neither injury writer carries a Sleeper
+ * id (ESPN athlete ids, API-Sports ids), so a roster row binds only when its normalized name equals
+ * the injury's AND its team is the injury's team; an injury with no team posts nowhere.
+ */
+async function findLeagueIdsForRosteredPlayer(inj: InjurySyncFanoutRow, sport: string): Promise<string[]> {
+  const name = inj.playerName.trim()
+  const key = normalizeMatchName(name)
+  const club = normalizeTeamAbbrev(inj.team)
+  if (!key || !club) return []
   const sportU = sport.toUpperCase()
 
+  const select = { playerName: true, team: true, roster: { select: { leagueId: true } } } as const
   const exact = await prisma.redraftRosterPlayer.findMany({
     where: {
       droppedAt: null,
       sport: sportU,
       playerName: { equals: name, mode: 'insensitive' },
     },
-    select: {
-      roster: { select: { leagueId: true } },
-    },
+    select,
     take: 500,
   })
 
   const ids = new Set<string>()
-  for (const row of exact) {
-    const lid = row.roster?.leagueId
-    if (lid) ids.add(lid)
+  const collect = (rows: typeof exact) => {
+    for (const row of rows) {
+      if (normalizeMatchName(row.playerName) !== key) continue
+      if (normalizeTeamAbbrev(row.team) !== club) continue
+      const lid = row.roster?.leagueId
+      if (lid) ids.add(lid)
+    }
   }
+  collect(exact)
 
+  // Spelling variants ("Jr." vs none) only — the normalized-name check above rejects a longer name.
   if (ids.size === 0 && name.length >= 6) {
     const fuzzy = await prisma.redraftRosterPlayer.findMany({
       where: {
@@ -53,15 +70,10 @@ async function findLeagueIdsForRosteredPlayer(playerName: string, sport: string)
         sport: sportU,
         playerName: { contains: name, mode: 'insensitive' },
       },
-      select: {
-        roster: { select: { leagueId: true } },
-      },
+      select,
       take: 200,
     })
-    for (const row of fuzzy) {
-      const lid = row.roster?.leagueId
-      if (lid) ids.add(lid)
-    }
+    collect(fuzzy)
   }
 
   return [...ids]
@@ -79,8 +91,10 @@ export async function fanoutInjurySyncBatch(params: {
   const byPlayer = new Map<string, InjurySyncFanoutRow>()
   for (const inj of params.injuries) {
     if (!shouldIncludeInjuryInFanoutBatch(inj.status)) continue
-    const k = inj.playerName.trim().toLowerCase()
-    if (!k) continue
+    // Name AND club: two namesakes on the report are two players, not one row to dedupe.
+    const nameKey = normalizeMatchName(inj.playerName)
+    if (!nameKey) continue
+    const k = `${nameKey}|${normalizeTeamAbbrev(inj.team) ?? ''}`
     const prev = byPlayer.get(k)
     if (!prev || injuryFanoutSortPriority(inj.status) < injuryFanoutSortPriority(prev.status)) {
       byPlayer.set(k, inj)
@@ -102,7 +116,7 @@ export async function fanoutInjurySyncBatch(params: {
       continue
     }
 
-    const leagueIds = await findLeagueIdsForRosteredPlayer(inj.playerName, sport)
+    const leagueIds = await findLeagueIdsForRosteredPlayer(inj, sport)
     if (leagueIds.length === 0) continue
 
     const title = `Injury: ${inj.playerName} (${inj.status})`
@@ -130,7 +144,7 @@ export async function fanoutInjurySyncBatch(params: {
             type: inj.type ?? null,
             source: 'injury_sync',
           },
-          dedupeKey: `inj-sync:${sport}:${leagueId}:${inj.playerName.toLowerCase()}:${hb}`,
+          dedupeKey: `inj-sync:${sport}:${leagueId}:${inj.playerName.toLowerCase()}:${normalizeTeamAbbrev(inj.team) ?? ''}:${hb}`,
           skipNotifications: true,
         })
         emitted += 1

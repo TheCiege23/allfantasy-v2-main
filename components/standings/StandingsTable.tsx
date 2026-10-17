@@ -84,7 +84,7 @@ export default function StandingsTable({
   viewerRosterId = null,
   playoffCut = null,
 }: Props) {
-  const showCategories = scoringMode === 'h2h_category' || scoringMode === 'roto'
+  const showCategories = scoringMode === 'h2h_category'
   const gridCols = showCategories
     ? 'grid-cols-[40px_minmax(0,1fr)_repeat(6,minmax(0,84px))]'
     : 'grid-cols-[40px_minmax(0,1fr)_repeat(5,minmax(0,84px))]'
@@ -110,7 +110,7 @@ export default function StandingsTable({
             CAT
           </div>
         ) : null}
-        <div className="text-right">PF</div>
+        <div className="text-right">{scoringMode === 'roto' ? 'Rank pts' : 'PF'}</div>
         <div className="text-right">PA</div>
         <div className="text-right">Strk</div>
         <div className="text-right" title="Record against every other team, every week">
@@ -156,7 +156,7 @@ export default function StandingsTable({
                   </span>
                 </span>
                 <span className="text-right font-mono tabular-nums text-white/85">
-                  {formatRecord(r.wins, r.losses, r.ties)}
+                  {scoringMode === 'roto' ? '—' : formatRecord(r.wins, r.losses, r.ties)}
                 </span>
                 {showCategories ? (
                   <span

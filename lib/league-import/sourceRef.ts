@@ -66,6 +66,14 @@ export function buildProviderSourceRef(input: ProviderSourceRefInput): string {
   const provider = String(input.provider ?? '').toLowerCase()
   const season = normalizeSeason(input.season)
 
+  // Persisted ESPN MLB ids carry sport but not year. Reapply the connection's
+  // season so a historical league cannot refresh the current calendar year.
+  if (provider === 'espn' && season != null) {
+    const mlbId = raw.match(/^MLB:(\d+)$/i)?.[1]
+      ?? (String(input.sport ?? '').toUpperCase() === 'MLB' && isBareNumericId(raw) ? raw : null)
+    if (mlbId) return `MLB:${season}:${mlbId}`
+  }
+
   if (SPORT_AND_SEASON_SCOPED_PROVIDERS.has(provider)) {
     /*
      * Already scoped (`NBA:206154` / `NBA:206154:2024`) — the caller was explicit and

@@ -2,6 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { draftOrder, draftPickOwner, draftNextPick } from './draftHqState'
 import { leagueDisplayName, type SectionState, type UnavailableSection } from './leagueHome'
 import { leagueContextFor, type LeagueContext } from './leagueContext'
 import { loadDraftAfProjections, type DraftAfProjection } from './draftAfProjections'
@@ -35,6 +36,8 @@ import { loadDraftAfProjections, type DraftAfProjection } from './draftAfProject
  */
 
 export type BoardCell = {
+  originalSlot: number
+  ownerName: string | null
   round: number
   pickInRound: number
   overall: number
@@ -68,7 +71,7 @@ export type DraftBoardData = {
     currentPickOverall: number | null
   }>
   clock: SectionState<{ endsAt: Date | null; pausedSecondsRemaining: number | null; yoursOnClock: boolean }>
-  board: SectionState<{ columns: BoardColumn[]; cells: BoardCell[] }>
+  board: SectionState<{ columns: BoardColumn[]; cells: BoardCell[]; rounds: number; draftType: string; thirdRoundReversal: boolean }>
   bestAvailable: UnavailableSection
   queue: UnavailableSection
   advice: UnavailableSection
@@ -100,7 +103,7 @@ export async function getDraftBoardData(
     },
     queue: {
       available: false as const,
-      reason: 'no draft queue is stored for this league — build it on your platform and it drives the autopick there',
+      reason: 'the saved queue is not connected to this Draft HQ view; check the draft host for the queue that controls autopick',
     },
     advice: {
       available: false as const,
@@ -120,6 +123,9 @@ export async function getDraftBoardData(
       slotOrder: true,
       timerEndAt: true,
       pausedRemainingSeconds: true,
+      nextOverallPick: true,
+      thirdRoundReversal: true,
+      tradedPicks: true,
     },
   })
 
@@ -131,14 +137,12 @@ export async function getDraftBoardData(
   const myTeam = await lc.claimedTeam()
   const myRosterId = myTeam?.externalId != null ? String(myTeam.externalId) : null
 
-  const order = Array.isArray(session.slotOrder)
-    ? (session.slotOrder as Array<{ slot?: number; rosterId?: string; displayName?: string }>)
-    : []
+  const order = draftOrder(session.slotOrder)
 
   const picks = await prisma.draftPick.findMany({
     where: { sessionId: session.id },
     orderBy: { overall: 'asc' },
-    select: { overall: true, round: true, rosterId: true, playerName: true, position: true, playerId: true },
+    select: { overall: true, round: true, slot: true, displayName: true, rosterId: true, playerName: true, position: true, playerId: true },
   })
   /* AllFantasy's own projection for every drafted player — one read for the board. */
   const afs = await loadDraftAfProjections({
@@ -149,7 +153,7 @@ export async function getDraftBoardData(
 
   const totalPicks = session.rounds * session.teamCount
   const picksMade = picks.length
-  const nextOverall = picksMade < totalPicks ? picksMade + 1 : null
+  const nextOverall = draftNextPick(session.status, session.nextOverallPick, totalPicks)
   const currentRound =
     nextOverall != null ? Math.ceil(nextOverall / session.teamCount) : null
 
@@ -172,11 +176,9 @@ export async function getDraftBoardData(
   const isRunning = session.status === 'in_progress' || session.status === 'paused'
   const onClockRosterId = (() => {
     if (!isRunning || nextOverall == null || order.length === 0) return null
-    const roundIdx = Math.ceil(nextOverall / session.teamCount)
-    const posInRound = nextOverall - (roundIdx - 1) * session.teamCount
-    const reversed = session.draftType.toLowerCase() === 'snake' && roundIdx % 2 === 0
-    const slot = reversed ? session.teamCount - posInRound + 1 : posInRound
-    return order.find((o) => o.slot === slot)?.rosterId ?? null
+    return draftPickOwner({ overall: nextOverall, teamCount: session.teamCount,
+      draftType: session.draftType, thirdRoundReversal: session.thirdRoundReversal,
+      slotOrder: order, tradedPicks: session.tradedPicks })?.rosterId ?? null
   })()
 
   const clock: DraftBoardData['clock'] = !isRunning
@@ -190,7 +192,7 @@ export async function getDraftBoardData(
     : {
         available: true,
         data: {
-          endsAt: session.timerEndAt,
+          endsAt: session.status === 'paused' ? null : session.timerEndAt,
           pausedSecondsRemaining: session.pausedRemainingSeconds ?? null,
           yoursOnClock: myRosterId != null && onClockRosterId === myRosterId,
         },
@@ -208,7 +210,11 @@ export async function getDraftBoardData(
 
   const cells: BoardCell[] = picks.map((p) => {
     const pickInRound = p.overall - (p.round - 1) * session.teamCount
+    const original = draftPickOwner({ overall: p.overall, teamCount: session.teamCount,
+      draftType: session.draftType, thirdRoundReversal: session.thirdRoundReversal, slotOrder: order })
     return {
+      originalSlot: original?.slot ?? p.slot,
+      ownerName: p.displayName || order.find((o) => o.rosterId === String(p.rosterId))?.displayName || null,
       round: p.round,
       pickInRound,
       overall: p.overall,
@@ -225,9 +231,8 @@ export async function getDraftBoardData(
   const board: DraftBoardData['board'] =
     columns.length === 0
       ? { available: false, reason: 'this draft has no order set, so the board cannot be laid out' }
-      : picks.length === 0
-        ? { available: false, reason: 'no picks have been made yet — the board is empty' }
-        : { available: true, data: { columns, cells } }
+      : { available: true, data: { columns, cells, rounds: session.rounds, draftType: session.draftType,
+          thirdRoundReversal: session.thirdRoundReversal } }
 
   return { ...base, session: sessionState, clock, board }
 }

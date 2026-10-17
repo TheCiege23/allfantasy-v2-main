@@ -1,0 +1,7 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Fantrax Score Connector</title><link rel="stylesheet" href="popup.css"></head><body>
+<h1>Fantrax scores</h1><p>Keep AllFantasy and Fantrax signed in. This imports actual scores for all teams using your existing browser session.</p>
+<label>AllFantasy league ID<input id="league" placeholder="League UUID" autocomplete="off"></label>
+<button id="load">Load completed weeks</button><label>Weeks<select id="weeks" disabled><option value="latest">Latest two completed weeks</option><option value="all">All supported completed weeks</option></select></label>
+<button id="preview" disabled>Download and verify scores</button><button id="apply" disabled>Import verified scores</button>
+<p id="status" role="status">No scores imported.</p><small>No login cookies are copied or stored. Keep this popup open until the import finishes. Available for the verified 2026 college season, from September 1.</small>
+<script src="popup.js" type="module"></script></body></html>

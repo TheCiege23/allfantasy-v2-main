@@ -159,7 +159,20 @@ describe('the iOS workflows keep the widget gated', () => {
     expect(check).toMatch(/paths:\s*\n\s*- 'ios-app\/\*\*'/)
     expect(check).toContain('- name: Build the app as committed')
     expect(check).toContain('ruby scripts/add-career-widget-target.rb')
-    expect(check).toContain('- name: Build the app with the career widget')
+    // The second build carries BOTH build-time extensions (widget + notification images), and
+    // asserts each one is embedded — a release may tick both inputs.
+    expect(check).toContain('ruby scripts/add-notification-service-target.rb')
+    expect(check).toContain('- name: Build the app with both extensions')
+    expect(check).toContain('for ext in CareerWidget NotificationService; do')
     expect(check).not.toMatch(/secrets\./)
+  })
+
+  it('adds the notification image extension only when notification_images is ticked', () => {
+    expect(release).toMatch(/notification_images:\s*\n\s*description:[^\n]*\n\s*type: boolean[\s\S]*?default: false/)
+    expect(release).toMatch(
+      /- name: Add the notification image extension target\s*\n\s*if: \$\{\{ inputs\.notification_images \}\}/,
+    )
+    // The committed project has no extension target; the script adds it at build time.
+    expect(readFileSync('ios-app/ios/App/App.xcodeproj/project.pbxproj', 'utf8')).not.toContain('NotificationService.appex')
   })
 })

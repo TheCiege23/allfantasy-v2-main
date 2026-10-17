@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Create a Survivor league</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./exile/exile.css">
+<link rel="stylesheet" href="./kit/kit.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Cinzel:wght@600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080d}
+.ob-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.ob-ic{width:44px;height:44px;border-radius:11px;display:grid;place-items:center;background:#151926;border:1px solid rgba(255,255,255,.08);font:800 13px 'Archivo';color:#a3a9c2}
+.ob-ic img{width:30px;height:30px}
+.ob-chip{min-height:40px;padding:0 16px;border-radius:99px;border:1px solid rgba(255,255,255,.12);background:#10131c;color:#a3a9c2;font:600 13px 'Archivo';cursor:pointer}
+.ob-chip[aria-pressed="true"]{border-color:#d9b45a;color:#f1d58a;background:#151926}
+@keyframes obIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.ob-step{animation:obIn .3s ease-out both}
+</style>
+</helmet>
+<div class="ex" style="min-height: 100vh; display: flex; flex-direction: column">
+  <header style="display: flex; align-items: center; gap: 20px; padding: 18px 28px; border-bottom: 1px solid rgba(255,255,255,.06)">
+    <a class="ex-btn" href="Main.dc.html" aria-label="Close" style="padding: 0 12px">✕</a>
+    <h1 class="ex-h1" style="font-size: 22px">Create a league</h1>
+    <div class="k-stepper k-sp" style="max-width: 820px; margin-left: auto">
+      <sc-for list="{{steps}}" as="s" hint-placeholder-count="5"><div class="{{s.cls}}"><i>{{s.n}}</i>{{s.label}}</div><sc-if value="{{s.bar}}" hint-placeholder-val="{{ true }}"><hr></sc-if></sc-for>
+    </div>
+  </header>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 26px; padding: 26px 28px 32px; align-items: flex-start">
+    <main style="flex: 1 1 760px; display: flex; flex-direction: column; gap: 18px; min-width: 0">
+      <div style="display: flex; flex-direction: column; gap: 4px"><span class="ex-lbl ex-gold">Step {{stepN}} of 5</span><span style="font: 700 26px 'Archivo'; letter-spacing: -.02em">{{title}}</span><span class="ex-t2">{{sub}}</span></div>
+
+      <sc-if value="{{s1}}" hint-placeholder-val="{{ true }}">
+        <div class="ob-grid">
+          <sc-for list="{{formats}}" as="f" hint-placeholder-count="9">
+            <button class="k-opt" aria-pressed="{{f.on}}" onClick="{{f.pick}}"><span class="ob-ic">{{f.ini}}<sc-if value="{{f.hasIcon}}" hint-placeholder-val="{{ false }}"><img src="{{f.icon}}" alt=""></sc-if></span><span style="font-weight: 700; font-size: 15px">{{f.name}}</span><span class="ex-t3" style="font-size: 12.5px">{{f.desc}}</span></button>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{s2}}" hint-placeholder-val="{{ false }}">
+        <div class="ex-card" style="padding: 20px; display: flex; flex-direction: column; gap: 16px">
+          <span class="ex-lbl">Sport</span>
+          <div class="k-row" style="flex-wrap: wrap; gap: 8px"><sc-for list="{{sports}}" as="s" hint-placeholder-count="7"><button class="ob-chip" aria-pressed="{{s.on}}" onClick="{{s.pick}}">{{s.label}}</button></sc-for></div>
+          <div class="k-field"><div class="k-field-l"><b>Managers</b><span>Survivor works best with 10–16.</span></div><div class="k-step"><button onClick="{{teamDn}}" aria-label="Fewer">−</button><span>{{teams}}</span><button onClick="{{teamUp}}" aria-label="More">+</button></div></div>
+          <div class="k-field"><div class="k-field-l"><b>League name</b><span>Shown on share cards and the moment pages.</span></div><input value="Blah Survivor" aria-label="League name" style="min-height: 38px; width: 260px; padding: 0 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,.12); background: #151926; color: #e8eaf2; font: 600 14px 'Archivo'"></div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{s3}}" hint-placeholder-val="{{ false }}">
+        <div class="ex-card" style="padding: 20px; display: flex; flex-direction: column; gap: 16px">
+          <div class="k-field"><div class="k-field-l"><b>Tribes</b><span>{{tribeSub}}</span></div><div class="k-step"><button onClick="{{triDn}}" aria-label="Fewer tribes">−</button><span>{{tribes}}</span><button onClick="{{triUp}}" aria-label="More tribes">+</button></div></div>
+          <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px">
+            <sc-for list="{{crests}}" as="c" hint-placeholder-count="4"><div style="display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px; border-radius: 12px; background: #10131c; border: 1px solid rgba(255,255,255,.06); opacity: {{c.op}}"><img src="{{c.src}}" alt="" style="width: 110px"><span style="font: 700 15px 'Cinzel', serif; letter-spacing: .08em; color: {{c.col}}">{{c.name}}</span></div></sc-for>
+          </div>
+          <button class="ex-btn" onClick="{{shuffle}}" style="align-self: flex-start">Shuffle crests</button>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{s4}}" hint-placeholder-val="{{ false }}">
+        <div class="ex-card" style="padding: 8px 20px">
+          <sc-for list="{{twists}}" as="t" hint-placeholder-count="4">
+            <div class="k-field"><img src="{{t.icon}}" alt="" style="width: 40px"><div class="k-field-l"><b>{{t.name}}</b><span>{{t.desc}}</span></div><button class="k-tg" role="switch" aria-checked="{{t.on}}" onClick="{{t.flip}}" aria-label="{{t.name}}"></button></div>
+          </sc-for>
+        </div>
+        <span class="ex-t3" style="font-size: 12.5px">Everything here can be fine-tuned later in Survivor settings until the draft starts.</span>
+      </sc-if>
+
+      <sc-if value="{{s5}}" hint-placeholder-val="{{ false }}">
+        <div class="ex-card" style="padding: 20px; display: flex; flex-direction: column; gap: 14px">
+          <span class="ex-lbl">Invite link</span>
+          <div class="k-row"><span class="ex-num" style="flex: 1; padding: 12px 14px; border-radius: 8px; background: #151926; border: 1px solid rgba(255,255,255,.1); color: #e8eaf2">allfantasy.ai/join/blah-survivor-7kq2</span><button class="ex-btn ex-btn-gold" onClick="{{copy}}">{{copyLbl}}</button><button class="ex-btn">Share</button></div>
+          <div class="k-row"><span class="ex-lbl k-sp">Who's in · {{joined}} of {{teams}}</span><span class="ex-t3" style="font-size: 12px">Draft can't start until the league is full</span></div>
+          <div style="height: 8px; border-radius: 99px; background: #151926; overflow: hidden"><div style="height: 100%; width: {{pct}}; background: linear-gradient(90deg,#a77c26,#f1d58a)"></div></div>
+          <div class="k-row" style="flex-wrap: wrap; gap: 8px"><sc-for list="{{members}}" as="m" hint-placeholder-count="4"><span class="k-pill" style="height: 32px; padding-left: 4px"><span class="k-av" style="width: 24px; height: 24px; font-size: 10px; background: {{m.c}}">{{m.ini}}</span>{{m.name}}</span></sc-for></div>
+        </div>
+      </sc-if>
+
+      <div class="k-row" style="margin-top: 4px">
+        <sc-if value="{{canBack}}" hint-placeholder-val="{{ false }}"><button class="ex-btn" onClick="{{back}}" style="min-height: 46px">Back</button></sc-if>
+        <span class="k-sp"></span>
+        <button class="ex-btn ex-btn-gold" onClick="{{next}}" style="min-height: 46px; padding: 0 26px">{{nextLbl}}</button>
+      </div>
+    </main>
+
+    <aside style="flex: 0 1 380px; display: flex; flex-direction: column; gap: 14px">
+      <span class="ex-lbl">Preview</span>
+      <div class="k-hero" style="min-height: 230px">
+        <img class="k-bg" src="{{bg}}" alt="">
+        <div style="position: absolute; inset: 0; background: linear-gradient(180deg, rgba(7,8,13,.2), rgba(7,8,13,.92))"></div>
+        <div class="k-in" style="display: flex; flex-direction: column; justify-content: flex-end; gap: 8px; padding: 18px; min-height: 230px">
+          <div class="k-row" style="gap: 6px"><sc-for list="{{chips}}" as="c" hint-placeholder-count="3"><span class="ex-chip" style="background: rgba(7,8,13,.6)">{{c}}</span></sc-for></div>
+          <span style="font: 700 26px 'Cinzel', serif; color: #f1d58a">Blah Survivor</span>
+          <div class="k-row" style="gap: 6px"><sc-for list="{{crestsSmall}}" as="c" hint-placeholder-count="2"><img src="{{c}}" alt="" style="width: 36px"></sc-for></div>
+        </div>
+      </div>
+      <div class="ex-card2" style="padding: 16px; display: flex; flex-direction: column; gap: 8px">
+        <sc-for list="{{recap}}" as="r" hint-placeholder-count="5"><div class="k-row" style="font-size: 13px"><span class="ex-t3 k-sp">{{r.k}}</span><span style="font-weight: 600">{{r.v}}</span></div></sc-for>
+      </div>
+    </aside>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1050}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { step: 1, fmt: 'survivor', sport: 'NFL', teams: 12, tribes: 2, shuf: 0, idols: true, exile: true, swap: true, merge: true, copied: false }; }
+  renderVals() {
+    const st = this.state;
+    const L = ['Format', 'Sport and size', 'Tribes', 'Twists', 'Invite'];
+    const F = [['redraft', 'Redraft', 'One season, then start over', 'RD'], ['dynasty', 'Dynasty', 'Keep your roster forever', 'DY'], ['survivor', 'Survivor', 'Tribes, idols and votes', '', 'survivor/idols/immunity-icon.svg'],
+               ['guillotine', 'Guillotine', 'Lowest score is chopped weekly', 'GU'], ['bigbrother', 'Big Brother', 'HOH, nominations and evictions', 'BB'], ['survguil', 'Survivor Guillotine', 'Tribes plus the weekly chop', 'SG'],
+               ['zombie', 'Zombie', 'Lose to a zombie and you turn', 'ZB'], ['salary', 'Salary cap', 'Contracts, cap and dead money', 'SC'], ['koth', 'King of the Hill', 'Take the crown and hold it', 'KH']];
+    const NAMES = [['Vela', 'manta', '#b8a8ff'], ['Koa', 'shark', '#7fd3de'], ['Kaniva', 'crab', '#ff9a7a'], ['Honoa', 'turtle', '#8fd6a0'], ['Akala', 'macaw', '#ff8a8a'], ['Rimau', 'tiger', '#ffb26b'], ['Orakai', 'orca', '#9fb1d6'], ['Moko', 'gecko', '#a6e07a']];
+    const crests = [0, 1, 2, 3].map(i => { const n = NAMES[(i + st.shuf * 2) % NAMES.length]; return { name: n[0], src: 'tribes/nfl/' + n[1] + '.svg', col: n[2], op: i < st.tribes ? '1' : '.18' }; });
+    const tw = [['idols', 'Hidden idols', '6–8 idols hidden on players before the draft.', 'survivor/idols/immunity-icon.svg'], ['exile', 'Exile Island', 'Voted-out managers earn tokens to come back.', 'exile/token-icon.svg'],
+                ['swap', 'Tribe swap', 'Reshuffle the tribes once, mid-season.', 'late/buff-vela.svg'], ['merge', 'Merge and jury', 'Tribes merge; the voted-out pick the champion.', 'late/jury-icon.svg']];
+    const bgs = { NFL: 'football', NCAAF: 'football', NBA: 'basketball', NCAAB: 'basketball', MLB: 'baseball', NHL: 'hockey', Soccer: 'soccer' };
+    const joined = st.copied ? 4 : 3;
+    const titles = [['Pick a league format', 'You can change most settings later. The format can’t change after the draft.'], ['Sport and size', 'Survivor works with every sport AllFantasy supports.'], ['Set up the tribes', 'Tribes are drawn after the draft unless you assign them.'], ['Choose the twists', 'Turn on the parts of Survivor your league wants.'], ['Invite your league', 'Share the link. People join from any device.']];
+    return {
+      step: String(st.step), stepN: st.step, title: titles[st.step - 1][0], sub: titles[st.step - 1][1],
+      steps: L.map((label, i) => ({ label, n: i + 1 < st.step ? '✓' : i + 1, cls: i + 1 === st.step ? 'on' : i + 1 < st.step ? 'done' : '', bar: i < L.length - 1 })),
+      s1: st.step === 1, s2: st.step === 2, s3: st.step === 3, s4: st.step === 4, s5: st.step === 5, canBack: st.step > 1,
+      next: () => this.setState({ step: Math.min(5, st.step + 1) }), back: () => this.setState({ step: Math.max(1, st.step - 1) }), nextLbl: st.step === 5 ? 'Go to league' : 'Continue',
+      formats: F.map(([id, name, desc, ini, icon]) => ({ name, desc, ini: icon ? '' : ini, icon: icon || '', hasIcon: !!icon, on: st.fmt === id ? 'true' : 'false', pick: () => this.setState({ fmt: id }) })),
+      sports: ['NFL', 'NBA', 'MLB', 'NHL', 'NCAAF', 'NCAAB', 'Soccer'].map(s => ({ label: s, on: st.sport === s ? 'true' : 'false', pick: () => this.setState({ sport: s }) })),
+      teams: st.teams, teamDn: () => this.setState({ teams: Math.max(8, st.teams - 1) }), teamUp: () => this.setState({ teams: Math.min(20, st.teams + 1) }),
+      tribes: st.tribes, tribeSub: Math.floor(st.teams / st.tribes) + ' managers per tribe', triDn: () => this.setState({ tribes: Math.max(2, st.tribes - 1) }), triUp: () => this.setState({ tribes: Math.min(4, st.tribes + 1) }),
+      crests, shuffle: () => this.setState({ shuf: st.shuf + 1 }), crestsSmall: crests.slice(0, st.tribes).map(c => c.src),
+      twists: tw.map(([k, name, desc, icon]) => ({ name, desc, icon, on: st[k] ? 'true' : 'false', flip: () => this.setState({ [k]: !st[k] }) })),
+      copy: () => this.setState({ copied: true }), copyLbl: st.copied ? 'Copied' : 'Copy link', joined, pct: (joined / st.teams * 100).toFixed(0) + '%',
+      members: [['You', 'TC', '#22314f'], ['Open Team 4', 'O4', '#1f2a4d'], ['Open Team 5', 'O5', '#12352a'], ['Open Team 8', 'O8', '#3a2410']].slice(0, joined).map(([name, ini, c]) => ({ name, ini, c })),
+      bg: 'survivor/bg/dusk-' + bgs[st.sport] + '.svg', chips: [st.sport, st.teams + ' managers', F.find(f => f[0] === st.fmt)[1]],
+      recap: [['Format', F.find(f => f[0] === st.fmt)[1]], ['Sport', st.sport], ['Tribes', st.tribes + ' × ' + Math.floor(st.teams / st.tribes)], ['Twists', tw.filter(t => st[t[0]]).length + ' of 4 on'], ['Draft', 'Snake · set date after invites']].map(([k, v]) => ({ k, v }))
+    };
+  }
+}
+</script>
+</body>
+</html>

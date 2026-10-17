@@ -1,6 +1,8 @@
 'use client'
 
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { cardsCopy } from '@/lib/commissioner-os/i18n/cardsCopy'
 
 export interface AllTimeRecord {
   teamName: string
@@ -31,6 +33,7 @@ export interface AllTimeRecordChartProps {
  * tooltip instead, where a small integer is legible.
  */
 export function AllTimeRecordChart({ records, height, ariaLabel }: AllTimeRecordChartProps) {
+  const { language } = useOptionalLanguage()
   if (records.length === 0) return null
   // Height follows the row count so bars keep a constant thickness whatever the league size —
   // twelve teams in a fixed frame gives slivers, four gives slabs.
@@ -86,12 +89,13 @@ export function AllTimeRecordChart({ records, height, ariaLabel }: AllTimeRecord
               const row = data.find((d) => d.label === label)
               if (!row) return String(label)
               const titles = row.titles === 1 ? '1 title' : `${row.titles} titles`
-              return `${row.teamName} — ${row.seasons} season${row.seasons === 1 ? '' : 's'}, ${titles}`
+              // Built in English and translated whole, so the team name inside it is kept as written.
+              return cardsCopy(`${row.teamName} — ${row.seasons} season${row.seasons === 1 ? '' : 's'}, ${titles}`, language)
             }}
           />
           <Legend wrapperStyle={{ fontSize: 12, color: 'var(--muted)' }} />
-          <Bar dataKey="wins" name="Wins" stackId="record" fill="var(--accent-emerald-strong)" radius={[4, 0, 0, 4]} isAnimationActive={false} />
-          <Bar dataKey="losses" name="Losses" stackId="record" fill="var(--accent-red-strong)" radius={[0, 4, 4, 0]} isAnimationActive={false} />
+          <Bar dataKey="wins" name={cardsCopy('Wins', language)} stackId="record" fill="var(--accent-emerald-strong)" radius={[4, 0, 0, 4]} isAnimationActive={false} />
+          <Bar dataKey="losses" name={cardsCopy('Losses', language)} stackId="record" fill="var(--accent-red-strong)" radius={[0, 4, 4, 0]} isAnimationActive={false} />
         </BarChart>
       </ResponsiveContainer>
     </div>

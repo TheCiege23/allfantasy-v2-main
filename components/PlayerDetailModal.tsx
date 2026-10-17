@@ -1,10 +1,14 @@
 "use client"
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { X, ChevronDown, ChevronUp } from 'lucide-react'
 import { headshotUrl as buildHeadshot, teamLogoUrl as buildTeamLogo } from '@/lib/media-url'
 import PlayerCardAnalytics from '@/components/player-card/PlayerCardAnalytics'
 import { useUserTimezone } from '@/hooks/useUserTimezone'
+import { currentFantasySeason } from '@/lib/core-app/connectLeague'
+
+/** How many seasons the game-log picker offers: the current one plus this many - 1 before it. */
+const GAME_LOG_SEASON_COUNT = 4
 
 const DEPTH_CHART_POSITION_MAP: Record<string, string> = {
   'RWR': 'WR',
@@ -96,7 +100,13 @@ export default function PlayerDetailModal({
   const [gameLogs, setGameLogs] = useState<GameLog[]>([])
   const [gameLogsLoading, setGameLogsLoading] = useState(false)
   const [gameLogsExpanded, setGameLogsExpanded] = useState(false)
-  const [gameLogsSeason, setGameLogsSeason] = useState('2025')
+  // The current NFL season is DERIVED, never hard-coded: a literal '2025' left the 2026 season
+  // unselectable once it started.
+  const gameLogSeasons = useMemo(() => {
+    const current = currentFantasySeason(new Date())
+    return Array.from({ length: GAME_LOG_SEASON_COUNT }, (_, i) => String(current - i))
+  }, [])
+  const [gameLogsSeason, setGameLogsSeason] = useState(() => gameLogSeasons[0]!)
   const [gameLogsError, setGameLogsError] = useState('')
 
   const fetchProfile = useCallback(async () => {
@@ -106,7 +116,8 @@ export default function PlayerDetailModal({
       const res = await fetch('/api/legacy/player-profile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ player_name: playerName, player_id: playerId }),
+        // position/team let the server verify a name-only lookup instead of taking the first namesake.
+        body: JSON.stringify({ player_name: playerName, player_id: playerId, position, team }),
       })
       const data = await res.json()
       if (data.ok) {
@@ -120,7 +131,7 @@ export default function PlayerDetailModal({
     } finally {
       setLoading(false)
     }
-  }, [playerName, playerId])
+  }, [playerName, playerId, position, team])
 
   const fetchGameLogs = useCallback(async (season: string) => {
     if (!playerId) return
@@ -383,7 +394,7 @@ export default function PlayerDetailModal({
                 {gameLogsExpanded && (
                   <div>
                     <div className="flex gap-1.5 mb-3">
-                      {['2025', '2024', '2023', '2022'].map(yr => (
+                      {gameLogSeasons.map(yr => (
                         <button
                           key={yr}
                           onClick={() => setGameLogsSeason(yr)}

@@ -252,6 +252,73 @@ async function mockCpuAiDrafterApis(
   await page.route(`**/api/leagues/${leagueId}/ai-adp`, async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, entries: [] }) })
   })
+  /*
+   * ⚠ EVERY ROUTE THE ROOM CALLS MUST BE MOCKED, OR THE COMMISSIONER MODAL NEVER ARRIVES
+   * ON A COLD SHARD.
+   *
+   * The catch-all below falls back to the real server for every `/api/leagues/<id>/`
+   * path, so the five routes the room polls that nothing here fulfils (roster-config,
+   * draft/live-sync, draft/<session>/intro-status, draft/assistant-context, claim-roster)
+   * reach `next dev`, where each compiles on first request and the compiles are
+   * serialised. On a cold shard those compiles queue in front of the
+   * CommissionerControlCenterModal chunk, a `dynamic()` import fetched on the gear
+   * click, and `expect(modal).toBeVisible()` only has the default 5 s. Measured for the
+   * slow-draft spec (#1772): the chunk request stayed pending for the whole 60 s cold,
+   * and arrived in 57 ms once the routes were mocked. The mocks mirror
+   * draft-room-click-audit.spec.ts; none of them is asserted on here. Sentinel ledger
+   * #1825.
+   */
+  await page.route(`**/api/leagues/${leagueId}/roster-config**`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        starterSlots: { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, K: 1, DST: 1 },
+        benchSlots: 6,
+        taxiSlots: 0,
+        devySlots: 0,
+        orderedSlotLabels: ['QB', 'RB', 'RB', 'WR', 'WR', 'TE', 'FLEX', 'K', 'DST', 'BN', 'BN', 'BN', 'BN', 'BN', 'BN', 'BN'],
+      }),
+    })
+  })
+  await page.route(`**/api/leagues/${leagueId}/draft/live-sync**`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        leagueId,
+        updated: false,
+        updatedAt: state.updatedAt,
+        session: buildSession(),
+      }),
+    })
+  })
+  await page.route(`**/api/leagues/${leagueId}/draft/*/intro-status`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ seen: true, videoUrl: null, draftTypeKey: null }),
+    })
+  })
+  await page.route(`**/api/leagues/${leagueId}/draft/assistant-context**`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        sport: 'NFL',
+        headlines: [],
+        injuries: [],
+        sportsFeed: { available: false, updatedAt: null, sourceKeys: [], digest: null },
+      }),
+    })
+  })
+  await page.route(`**/api/leagues/${leagueId}/claim-roster**`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ alreadyClaimed: true, rosters: [] }),
+    })
+  })
   await page.route('**/api/draft/recommend', async (route) => {
     await route.fulfill({
       status: 200,

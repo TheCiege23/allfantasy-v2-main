@@ -1,4 +1,5 @@
 import { prisma } from "../prisma"
+import { currentFantasySeason } from "@/lib/core-app/connectLeague"
 
 interface PlayerProjection {
   playerId: string
@@ -44,7 +45,14 @@ interface TeamContext {
 }
 
 export class ProjectionEngine {
-  private currentSeason: number = 2025
+  /**
+   * Read from the clock on each use. Was the literal 2025, so through the 2026 season every
+   * `team_rankings` lookup asked for last year's row (fixed 2026-10-12). The class has no callers
+   * today (see lib/af-projections/types.ts); this only stops it being wrong if one appears.
+   */
+  private get currentSeason(): number {
+    return currentFantasySeason(new Date())
+  }
   
   /**
    * Calculate rookie projection from college stats + team context

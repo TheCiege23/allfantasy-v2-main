@@ -5,6 +5,9 @@ import { useEffect, useState, type ReactNode } from 'react'
 import type { CoreIssue } from '@/lib/core-app/outstandingIssues'
 import { splitDecisionQueue, TOP_DECISION_LIMIT } from '@/lib/core-app/decisionQueue'
 import { usePersistentDisclosure } from '@/components/core-app/home/homeViewState'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { scopeLabelText } from '@/lib/core-app/shellCopy'
+import { issueText } from '@/lib/core-app/decisionQueueCopy'
 import '@/components/core-app/af-dash-3a.css'
 import '@/components/core-app/home/af-core-home.css'
 
@@ -20,6 +23,10 @@ import '@/components/core-app/home/af-core-home.css'
  * ⚠ EVERY ROW IS A DECISION WITH SOMEWHERE TO GO, OR IT SAYS WHY NOT. Rows whose action leaves
  * AllFantasy open the provider in a new tab — this product is read-only, so the change happens
  * there.
+ *
+ * Spanish (2026-10-04): the rows are written on the server in English; each carries `parts`, and
+ * `issueText` (lib/core-app/decisionQueueCopy.ts) rebuilds it in the reader's language here. The
+ * provider starts at English on server and client alike, so the first paint agrees.
  */
 
 const SEV_CLASS: Record<CoreIssue['severity'], string> = {
@@ -41,19 +48,29 @@ function deadlineLabel(deadline: Date | string | null, nowMs: number): string | 
   return `${Math.floor(hrs / 24)}D`
 }
 
-function ActionLink({ action, severity }: { action: NonNullable<CoreIssue['action']>; severity: CoreIssue['severity'] }) {
+function ActionLink({
+  action,
+  label,
+  severity,
+  es,
+}: {
+  action: NonNullable<CoreIssue['action']>
+  label: string
+  severity: CoreIssue['severity']
+  es: boolean
+}) {
   const className = `af3a-btn ${severity === 'info' ? '' : 'af3a-btn-accent'}`
   if (action.external) {
     return (
       <a className={className} href={action.href} target="_blank" rel="noopener noreferrer">
-        {action.label}
-        <span className="af-sr-only"> (opens the league&rsquo;s platform in a new tab)</span>
+        {label}
+        <span className="af-sr-only">{es ? ' (abre la plataforma de la liga en una pestaña nueva)' : <> (opens the league&rsquo;s platform in a new tab)</>}</span>
       </a>
     )
   }
   return (
     <Link className={className} href={action.href}>
-      {action.label}
+      {label}
     </Link>
   )
 }
@@ -91,15 +108,18 @@ export function DecisionQueue({
   const [showAll, setShowAll] = usePersistentDisclosure('decisions', scopeKey)
   const { top, rest, total } = splitDecisionQueue(issues)
   const restId = 'af-decisions-rest'
+  const { language } = useOptionalLanguage()
+  const es = language === 'es'
+  const scopeText = scopeLabelText(scopeLabel, language)
 
   return (
     <section className="af3a-sec af-decisions" aria-labelledby="af-decisions-title">
       <header className="af3a-sechead">
-        <h2 id="af-decisions-title">Top decisions</h2>
+        <h2 id="af-decisions-title">{es ? 'Decisiones principales' : 'Top decisions'}</h2>
         {help}
-        {total > 0 ? <span className="af3a-open">{total} OPEN</span> : null}
+        {total > 0 ? <span className="af3a-open">{es ? `${total} ${total === 1 ? 'ABIERTA' : 'ABIERTAS'}` : `${total} OPEN`}</span> : null}
         <span className="af3a-note">
-          Most urgent first · <b>{scopeLabel}</b>
+          {es ? 'Lo más urgente primero' : 'Most urgent first'} · <b>{scopeText}</b>
         </span>
       </header>
 
@@ -109,22 +129,41 @@ export function DecisionQueue({
          * "all good" to a user we cannot see anything for. The connect card above says what to do.
          */
         <div className="af3a-card af3a-empty">
-          <h3>Nothing to decide yet.</h3>
-          <p>Connect a league and this fills with what needs you: empty slots, injured starters, drafts and trades.</p>
+          <h3>{es ? 'Todavía no hay nada que decidir.' : 'Nothing to decide yet.'}</h3>
+          <p>
+            {es
+              ? 'Conecta una liga y esto se llena con lo que te necesita: puestos vacíos, titulares lesionados, drafts e intercambios.'
+              : 'Connect a league and this fills with what needs you: empty slots, injured starters, drafts and trades.'}
+          </p>
         </div>
       ) : total === 0 ? (
         <div className="af3a-card af3a-empty">
-          <h3>Nothing is waiting on you.</h3>
-          <p>
-            No empty slots, injured starters, drafts or stale leagues
-            {scopeLabel === 'All leagues' ? ' in any league' : <> in your <b>{scopeLabel}</b></>} that we can read.
-          </p>
+          <h3>{es ? 'Nada te está esperando.' : 'Nothing is waiting on you.'}</h3>
+          {es ? (
+            <p>
+              Sin puestos vacíos, titulares lesionados, drafts ni ligas desactualizadas
+              {scopeLabel === 'All leagues' ? ' en ninguna liga' : <> en tus <b>{scopeText}</b></>} que podamos leer.
+            </p>
+          ) : (
+            <p>
+              No empty slots, injured starters, drafts or stale leagues
+              {scopeLabel === 'All leagues' ? ' in any league' : <> in your <b>{scopeLabel}</b></>} that we can read.
+            </p>
+          )}
         </div>
       ) : (
         <>
-          <ol className="af-decisions-top" aria-label={`The ${Math.min(total, TOP_DECISION_LIMIT)} most urgent`}>
+          <ol
+            className="af-decisions-top"
+            aria-label={
+              es
+                ? `Las ${Math.min(total, TOP_DECISION_LIMIT)} más urgentes`
+                : `The ${Math.min(total, TOP_DECISION_LIMIT)} most urgent`
+            }
+          >
             {top.map((issue) => {
               const when = deadlineLabel(issue.deadline, nowMs)
+              const text = issueText(issue, language)
               return (
                 <li key={issue.id} className={`af3a-urgent af-decision ${SEV_CLASS[issue.severity]}`}>
                   <span className="af3a-glyph" aria-hidden="true">
@@ -132,18 +171,26 @@ export function DecisionQueue({
                   </span>
                   <div className="af3a-urgent-body">
                     <h3>
-                      {issue.title}
-                      {issue.leagueName && !issue.title.includes(issue.leagueName) ? (
+                      {text.title}
+                      {issue.leagueName && !text.title.includes(issue.leagueName) ? (
                         <span className="af3a-dash"> — {issue.leagueName}</span>
                       ) : null}
                     </h3>
                     <p className="af-decision-meta">
                       {/* The trailing space: on a phone the chip runs inline and read "IN 6DSleeper ›". */}
-                      {when ? <><b className="af3a-mono af-decision-when">{when === 'now' ? 'NOW' : `IN ${when}`}</b>{' '}</> : null}
-                      {issue.meta}
+                      {when ? (
+                        <>
+                          <b className="af3a-mono af-decision-when">
+                            {when === 'now' ? (es ? 'AHORA' : 'NOW') : `${es ? 'EN' : 'IN'} ${when}`}
+                          </b>{' '}
+                        </>
+                      ) : null}
+                      {text.meta}
                     </p>
                   </div>
-                  {issue.action ? <ActionLink action={issue.action} severity={issue.severity} /> : null}
+                  {issue.action ? (
+                    <ActionLink action={issue.action} label={text.actionLabel ?? issue.action.label} severity={issue.severity} es={es} />
+                  ) : null}
                 </li>
               )
             })}
@@ -158,29 +205,32 @@ export function DecisionQueue({
                 aria-controls={restId}
                 onClick={() => setShowAll(!showAll)}
               >
-                {showAll ? 'Show fewer' : `Show ${rest.length} more`}
+                {showAll ? (es ? 'Mostrar menos' : 'Show fewer') : es ? `Mostrar ${rest.length} más` : `Show ${rest.length} more`}
               </button>
               <ol id={restId} className="af3a-card af3a-rows af-decisions-rest" hidden={!showAll} start={top.length + 1}>
-                {rest.map((issue) => (
-                  <li key={issue.id} className="af3a-row">
-                    <span className={`af3a-dot ${SEV_CLASS[issue.severity]}`} aria-hidden="true" />
-                    <span className="af3a-row-title">
-                      {issue.action ? (
-                        issue.action.external ? (
-                          <a href={issue.action.href} target="_blank" rel="noopener noreferrer">
-                            {issue.title}
-                          </a>
+                {rest.map((issue) => {
+                  const title = issueText(issue, language).title
+                  return (
+                    <li key={issue.id} className="af3a-row">
+                      <span className={`af3a-dot ${SEV_CLASS[issue.severity]}`} aria-hidden="true" />
+                      <span className="af3a-row-title">
+                        {issue.action ? (
+                          issue.action.external ? (
+                            <a href={issue.action.href} target="_blank" rel="noopener noreferrer">
+                              {title}
+                            </a>
+                          ) : (
+                            <Link href={issue.action.href}>{title}</Link>
+                          )
                         ) : (
-                          <Link href={issue.action.href}>{issue.title}</Link>
-                        )
-                      ) : (
-                        issue.title
-                      )}
-                    </span>
-                    <span className="af3a-row-league">{issue.leagueName ?? 'Across your leagues'}</span>
-                    <span className="af3a-row-when af3a-mono">{deadlineLabel(issue.deadline, nowMs) ?? '—'}</span>
-                  </li>
-                ))}
+                          title
+                        )}
+                      </span>
+                      <span className="af3a-row-league">{issue.leagueName ?? (es ? 'En todas tus ligas' : 'Across your leagues')}</span>
+                      <span className="af3a-row-when af3a-mono">{deadlineLabel(issue.deadline, nowMs) ?? '—'}</span>
+                    </li>
+                  )
+                })}
               </ol>
             </>
           ) : null}

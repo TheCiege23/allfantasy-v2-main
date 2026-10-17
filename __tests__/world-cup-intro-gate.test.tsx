@@ -264,11 +264,14 @@ describe('WorldCupIntroGate — static analysis', () => {
     expect(src).toContain("sessionStorage.removeItem")
   })
 
-  it('brackets hub page CTA hrefs go through /brackets/world-cup (gated by layout)', () => {
+  it('brackets hub page has no World Cup CTAs, so none can bypass the intro gate', () => {
+    // This used to assert the hub's WC CTAs pointed at /brackets/world-cup, the
+    // gated layout. On 2026-10-01 the owner switched the World Cup off as a hub
+    // destination (the tournament ended in July), so the hub now links into NO
+    // World Cup route at all — the stronger form of "nothing skips the gate".
+    // brackets-hub-restore.test.ts pins the same decision from the hub's side.
     const src = readFileSync(resolve(process.cwd(), 'app/brackets/page.tsx'), 'utf-8')
-    // All WC CTAs point to /brackets/world-cup which is now gated by the layout
-    expect(src).toContain('"/brackets/world-cup"')
-    expect(src).toContain('"/brackets/world-cup/create"')
+    expect(src).not.toMatch(/href(=|:\s*)"\/brackets\/world-cup/)
   })
 
   it('video path in WorldCupIntroExperience is /videos/brackets/world-cup/af-world-cup-hero.mp4', () => {

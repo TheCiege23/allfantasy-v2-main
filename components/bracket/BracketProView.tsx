@@ -523,7 +523,7 @@ export function BracketProView({ tournamentId, leagueId, entryId, nodes, initial
             pointerEvents: 'none',
           }}>
             <Trophy style={{ width: 22, height: 22, color: 'rgba(251,146,60,0.6)' }} />
-            <img src="/af-crest.png" alt="AF" style={{ width: 24, height: 24, objectFit: 'contain', opacity: 0.5 }} />
+            <img src="/af-crest.svg" alt="AF" style={{ width: 24, height: 24, objectFit: 'contain', opacity: 0.5 }} />
           </div>
         </div>
 

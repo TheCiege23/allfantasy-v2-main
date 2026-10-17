@@ -20,6 +20,7 @@ const h = vi.hoisted(() => ({
   push: vi.fn(),
   email: vi.fn(),
   profilePrefs: null as unknown,
+  profileUpdate: vi.fn(),
 }))
 
 vi.mock('server-only', () => ({}))
@@ -65,6 +66,11 @@ vi.mock('@/lib/prisma', () => {
       appUser: { findUnique: async () => ({ displayName: 'Dana', username: 'dana' }) },
       platformBlockedUser: { findMany: async () => [] },
       emailPreference: { findFirst: async () => null },
+      // recordSmsOptOut (on Twilio 21610) finds the profiles holding the number and revokes consent.
+      userProfile: {
+        findMany: async () => [{ userId: 'bob', notificationPreferences: h.profilePrefs }],
+        update: h.profileUpdate,
+      },
       sportsDataCache: {
         // A fresh throttle per test: every test uses its own message and thread state.
         findUnique: async () => null,
@@ -83,8 +89,12 @@ import { notifyDirectMessageRecipients } from '@/lib/chat-notifications/chatMess
 const TWILIO_ENV = ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'TWILIO_API_KEY', 'TWILIO_API_SECRET', 'TWILIO_PHONE_NUMBER'] as const
 let saved: Record<string, string | undefined> = {}
 
+/** The opt-in record /api/verify/phone/start writes when the consent box is ticked. */
+const CONSENT = { consentedAt: '2026-09-01T00:00:00Z', phone: '+13615550199' }
+
 const SMS_ON = {
   categories: { direct_messages: { enabled: true, inApp: true, email: true, sms: true, push: true } },
+  smsConsent: CONSENT,
 }
 
 function configureTwilio() {
@@ -137,8 +147,11 @@ describe('🛑 DM texts: working code now, live the moment Twilio is configured'
     const sms = h.messagesCreate.mock.calls[0][0] as { from: string; to: string; body: string }
     expect(sms.to).toBe('+13615550199')
     expect(sms.from).toBe('+13615550100')
-    expect(sms.body).toContain('Dana')
-    expect(sms.body).toContain('Trade deadline is tonight')
+    // The text says THAT there is a message. The sender's name and words are user-written and
+    // stay in-app/push/email — not sent over the A2P campaign.
+    expect(sms.body).toMatch(/new direct message/i)
+    expect(sms.body).not.toContain('Dana')
+    expect(sms.body).not.toContain('Trade deadline')
     expect(sms.body).toMatch(/reply stop/i)
 
     // The other channels go out alongside it.
@@ -168,5 +181,46 @@ describe('🛑 DM texts: working code now, live the moment Twilio is configured'
     expect(h.messagesCreate).not.toHaveBeenCalled()
     expect(h.bell).toHaveBeenCalledTimes(1)
     expect(h.push).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('🛑 a verified phone is not consent — the stored opt-in is', () => {
+  it('sends nothing to a verified phone with the SMS switch on but no consent record', async () => {
+    configureTwilio()
+    h.profilePrefs = { categories: SMS_ON.categories }
+    await sendDm()
+    expect(h.messagesCreate).not.toHaveBeenCalled()
+    expect(h.bell).toHaveBeenCalledTimes(1)
+  })
+
+  it('sends nothing when the consent was given for a number the user has since replaced', async () => {
+    configureTwilio()
+    h.profilePrefs = { ...SMS_ON, smsConsent: { ...CONSENT, phone: '+12015550123' } }
+    await sendDm()
+    expect(h.messagesCreate).not.toHaveBeenCalled()
+  })
+
+  it('sends nothing once the consent is revoked by a STOP', async () => {
+    configureTwilio()
+    h.profilePrefs = { ...SMS_ON, smsConsent: { ...CONSENT, revokedAt: '2026-09-20T00:00:00Z' } }
+    await sendDm()
+    expect(h.messagesCreate).not.toHaveBeenCalled()
+  })
+
+  it('records a STOP: a 21610 from Twilio revokes the stored consent', async () => {
+    configureTwilio()
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    h.profileUpdate.mockReset()
+    h.profileUpdate.mockResolvedValue({})
+    h.messagesCreate.mockRejectedValue(Object.assign(new Error('Attempt to send to unsubscribed recipient +13615550199'), { code: 21610 }))
+    await sendDm()
+    expect(h.profileUpdate).toHaveBeenCalledTimes(1)
+    const written = h.profileUpdate.mock.calls[0][0] as { where: { userId: string }; data: { notificationPreferences: { smsConsent: Record<string, string> } } }
+    expect(written.where.userId).toBe('bob')
+    expect(written.data.notificationPreferences.smsConsent.revokedAt).toBeTruthy()
+    expect(written.data.notificationPreferences.smsConsent.consentedAt).toBe(CONSENT.consentedAt)
+    // and the logged Twilio error does not carry the number
+    expect(JSON.stringify(errors.mock.calls)).not.toContain('5550199')
+    errors.mockRestore()
   })
 })

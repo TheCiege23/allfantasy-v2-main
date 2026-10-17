@@ -1,6 +1,7 @@
 'use client'
 
 import { isShadowLeague, sourcePlatformLabel } from '@/lib/league/write-authority'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 
 export type ShadowLeagueBannerProps = {
   /** `League.platform`. Native/absent values render nothing. */
@@ -22,8 +23,9 @@ export type ShadowLeagueBannerProps = {
  * either, with no edit to this file.
  */
 export function ShadowLeagueBanner({ platform, className }: ShadowLeagueBannerProps) {
+  const { t } = useOptionalLanguage()
   if (!isShadowLeague(platform)) return null
-  const source = sourcePlatformLabel(platform) ?? 'your host platform'
+  const source = sourcePlatformLabel(platform) ?? t('decide.shadow.fallbackSource')
 
   return (
     <div
@@ -36,11 +38,10 @@ export function ShadowLeagueBanner({ platform, className }: ShadowLeagueBannerPr
         .join(' ')}
     >
       <span className="rounded border border-sky-500/40 bg-sky-500/15 px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-sky-300">
-        Shadow League
+        {t('decide.shadow.badge')}
       </span>
       <span className="text-[11px] text-sky-100/85">
-        Imported from {source}. Edit lineups, trades and waivers freely — changes stay inside
-        AllFantasy and never reach {source}, which remains your league&apos;s system of record.
+        {t('decide.shadow.body').split('{{source}}').join(source)}
       </span>
     </div>
   )

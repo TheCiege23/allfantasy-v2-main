@@ -13,17 +13,20 @@ import {
   SleeperRoster,
 } from '@/lib/sleeper-client'
 import { getUniversalAIContext } from '@/lib/ai-player-context'
+import { legacyPromptSeason } from '@/lib/legacy/promptSeason'
 
 const openai = getOpenAIRouteClient()
 
-const currentDate = new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+/**
+ * 🛑 THIS WAS A MODULE CONSTANT THAT FROZE "CURRENT DATE" AT PROCESS START AND TOLD THE MODEL "THE 2024
+ * NFL DRAFT CLASS … HAVE COMPLETED THEIR ROOKIE SEASONS" (fixed 2026-10-12, when that class had played
+ * two and a 2025 class existed). Built per call; the date, season and draft-class sentence all come
+ * from `getUniversalAIContext(now)`.
+ */
+function compareSystemPrompt(now: Date = new Date()): string {
+  return `You are THE ELITE AllFantasy Manager Comparison AI — the ultimate fantasy football analyst.
 
-const COMPARE_SYSTEM_PROMPT = `You are THE ELITE AllFantasy Manager Comparison AI — the ultimate fantasy football analyst.
-
-## CURRENT DATE: ${currentDate}
-The 2024 NFL Draft class (Marvin Harrison Jr, Malik Nabers, Jayden Daniels, etc.) have completed their rookie seasons - they are active NFL players with production, not prospects.
-
-${getUniversalAIContext()}
+${getUniversalAIContext(now)}
 
 Your job is to compare two fantasy managers FAIRLY by league type and determine who is the better manager.
 
@@ -118,6 +121,7 @@ Return JSON:
   },
   "trash_talk": string (one playful line about the loser's RECORD — the numbers, never the person; if incomparable, rib both records equally)
 }`
+}
 
 interface LeagueStats {
   type: string
@@ -150,7 +154,10 @@ async function fetchUserDataFromSleeper(username: string): Promise<{
   const sleeperUser = await getSleeperUser(username)
   if (!sleeperUser) return null
 
-  const seasons = ['2024', '2023', '2022', '2021', '2020']
+  // The five most recent seasons, current first. Was the literal 2020–2024, so from 2025 on the
+  // compare graded neither manager's current or previous season (fixed 2026-10-12).
+  const latest = legacyPromptSeason()
+  const seasons = Array.from({ length: 5 }, (_, i) => String(latest - i))
   const allLeagues: FetchedLeague[] = []
 
   for (const season of seasons) {
@@ -557,7 +564,7 @@ IMPORTANT:
       const completion = await openai.chat.completions.create({
         model: 'gpt-4o',
         messages: [
-          { role: 'system', content: COMPARE_SYSTEM_PROMPT },
+          { role: 'system', content: compareSystemPrompt() },
           { role: 'user', content: userPrompt },
         ],
         temperature: 0.7,

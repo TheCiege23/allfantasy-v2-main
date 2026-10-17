@@ -105,7 +105,7 @@ export function buildVerificationEmailHtml(opts: {
                the default in most clients on first open. -->
           <tr>
             <td style="padding:28px 32px 8px;">
-              <img src="https://www.allfantasy.ai/af-crest.png" width="28" height="28" alt="AllFantasy.ai" style="vertical-align:middle;border:0;display:inline-block;width:28px;height:28px;">
+              <img src="https://www.allfantasy.ai/af-crest-transparent.png" width="28" height="28" alt="AllFantasy.ai" style="vertical-align:middle;border:0;display:inline-block;width:28px;height:28px;">
               <span style="vertical-align:middle;padding-left:10px;font-size:19px;font-weight:700;color:#0b1020;letter-spacing:-0.3px;">AllFantasy.ai</span>
             </td>
           </tr>

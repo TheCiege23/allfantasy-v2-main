@@ -138,6 +138,12 @@ export interface CreateLeagueV2State {
   creationMode: CreateMode
   /** Null until the user explicitly picks a league concept (concept-first). */
   leagueType: LeagueTypeId | null
+  /**
+   * The manager picked a format themselves. Until they do, changing sport moves the format to that
+   * sport's default (Survivor, else Guillotine, else Big Brother); after they do, a sport change
+   * keeps their pick whenever the new sport allows it.
+   */
+  leagueTypeTouched: boolean
   /** IDP is a modifier, not a format. When true, leagueType stays 'redraft' and we pass leagueVariant: 'IDP'. */
   idpSelected: boolean
   sport: SupportedSport
@@ -150,6 +156,8 @@ export interface CreateLeagueV2State {
   tournamentPoolSize: number
   /** Survivor-only: number of tribes. Ignored for other league types. */
   survivorTribeCount: number
+  /** Whether the creator occupies one of the Survivor cast seats. */
+  survivorCommissionerParticipationMode: 'participating_player' | 'non_participating_host'
   draftType: WizardDraftType
   /** Third-round reversal — snake drafts only. */
   thirdRoundReversal: boolean
@@ -162,6 +170,12 @@ export interface CreateLeagueV2State {
   medianGame: boolean
   draftDate: string
   draftTime: string
+  /**
+   * The manager chose to set the draft date after creating the league. The date and time are
+   * then optional here and are NOT sent: the league is created with `draftDateUtc` null and the
+   * commissioner sets it in League → Commissioner settings → Draft (DraftSettingsPanel).
+   */
+  draftScheduleLater: boolean
   timezone: string
   language: string
   scoringSource: ScoringSource
@@ -177,6 +191,8 @@ export interface CreateLeagueV2State {
   superflex: boolean
   tePremium: boolean
   tePremiumMultiplier: number
+  /** NFL TE premium: extra points per tight-end catch (TE_PREMIUM_POINT_OPTIONS), null until chosen. */
+  tePremiumPoints: number | null
   pprMode: PprMode
 }
 
@@ -322,6 +338,7 @@ export function resolveBestBallSetupForWizard(state: CreateLeagueV2State): BestB
 export const DEFAULT_V2_STATE: CreateLeagueV2State = {
   creationMode: 'quick',
   leagueType: null,
+  leagueTypeTouched: false,
   idpSelected: false,
   sport: 'NFL',
   soccerPipeline: null,
@@ -329,6 +346,7 @@ export const DEFAULT_V2_STATE: CreateLeagueV2State = {
   teamCount: 12,
   tournamentPoolSize: 32,
   survivorTribeCount: 4,
+  survivorCommissionerParticipationMode: 'non_participating_host',
   draftType: 'snake',
   thirdRoundReversal: false,
   name: '',
@@ -338,6 +356,7 @@ export const DEFAULT_V2_STATE: CreateLeagueV2State = {
   medianGame: false,
   draftDate: '',
   draftTime: '',
+  draftScheduleLater: false,
   timezone: 'America/New_York',
   language: 'en',
   scoringSource: 'af',
@@ -352,6 +371,7 @@ export const DEFAULT_V2_STATE: CreateLeagueV2State = {
   superflex: false,
   tePremium: false,
   tePremiumMultiplier: 1.5,
+  tePremiumPoints: null,
   pprMode: 'half',
 }
 

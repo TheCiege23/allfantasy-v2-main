@@ -1,3 +1,4 @@
+import { survivorHostGuard } from '@/lib/survivor/survivorHostGuard'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -36,6 +37,12 @@ export async function POST(req: NextRequest) {
   }
 
   if (!body.leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
+
+  if (body.intent !== 'jury_vote') {
+  const hostDenied = await survivorHostGuard(body.leagueId, userId)
+  if (hostDenied) return hostDenied
+
+  }
 
   if (body.intent === 'open_jury') {
     const gate = await assertLeagueCommissioner(body.leagueId, userId)

@@ -2,23 +2,28 @@
 
 import { useState } from 'react'
 import { shareCardImage } from '@/components/decide/shareCard'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 
 /**
  * Share a moment as an image (shareable moments, 2026-09-14): fetches the auth-gated card PNG and
  * hands it to the native share sheet, or downloads it. The IMAGE is shared — the card URL never
  * leaves the signed-in session. Same states and copy as the rivalry card's button.
+ *
+ * Spanish (2026-10-04): the states and the default label follow the reader's language. A `label` the
+ * caller passes is the caller's to translate.
  */
 export function ShareMomentButton({
   url,
   filename,
   title,
-  label = 'Share',
+  label,
 }: {
   url: string
   filename: string
   title: string
   label?: string
 }) {
+  const es = useOptionalLanguage().language === 'es'
   const [state, setState] = useState<'idle' | 'working' | 'shared' | 'downloaded' | 'failed'>('idle')
   return (
     <button
@@ -31,14 +36,14 @@ export function ShareMomentButton({
       }}
     >
       {state === 'working'
-        ? 'Building card…'
+        ? es ? 'Creando tarjeta…' : 'Building card…'
         : state === 'downloaded'
-          ? 'Card saved ✓'
+          ? es ? 'Tarjeta guardada ✓' : 'Card saved ✓'
           : state === 'shared'
-            ? 'Shared ✓'
+            ? es ? 'Compartida ✓' : 'Shared ✓'
             : state === 'failed'
-              ? 'Retry share'
-              : label}
+              ? es ? 'Reintentar' : 'Retry share'
+              : label ?? (es ? 'Compartir' : 'Share')}
     </button>
   )
 }

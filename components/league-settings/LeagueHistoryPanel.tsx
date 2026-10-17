@@ -83,7 +83,7 @@ export function LeagueHistoryPanel({ leagueId }: Props) {
             timer = setTimeout(load, 5000)
           }
         })
-        .catch(() => { if (active) setError('Failed to load league history') })
+        .catch(() => { if (active) setError(t('history.loadFailed')) })
         .finally(() => { if (active) setLoading(false) })
     }
     load()
@@ -109,12 +109,12 @@ export function LeagueHistoryPanel({ leagueId }: Props) {
     <div className="space-y-4">
       {backfill?.status === 'pending' && (
         <div className="rounded-lg border border-sky-500/30 bg-sky-500/[0.06] px-3 py-2 text-[12px] text-sky-100">
-          Importing historical seasons in the background — years will appear as they finish.
+          {t('history.backfillPending')}
         </div>
       )}
       {backfill?.status === 'failed' && backfill.error && (
         <div className="rounded-lg border border-rose-500/30 bg-rose-500/[0.06] px-3 py-2 text-[12px] text-rose-100">
-          <p>Historical backfill hit a snag: {backfill.error}</p>
+          <p>{t('history.backfillFailed')} {backfill.error}</p>
           <button
             type="button"
             onClick={async () => {
@@ -126,7 +126,7 @@ export function LeagueHistoryPanel({ leagueId }: Props) {
             }}
             className="mt-2 inline-flex items-center gap-1 rounded-full border border-rose-400/40 bg-rose-400/10 px-3 py-1 text-[11px] font-semibold text-rose-100 hover:bg-rose-400/20"
           >
-            Retry backfill
+            {t('history.retryBackfill')}
           </button>
         </div>
       )}

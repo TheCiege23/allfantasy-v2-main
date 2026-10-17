@@ -40,6 +40,25 @@ describe('valuesOnTheGrade', () => {
     expect(valuesOnTheGrade([player('b', 999)], g, 'give').map((a) => a.value)).toEqual([4100])
   })
 
+  /*
+   * The letter is often the FROZEN original, whose lines are in the order of whichever surface froze
+   * it. By place alone the 1st's value printed beside the 2nd (HailShiva, 2026-10-01).
+   */
+  it('a grade frozen in another order still puts each pick’s value beside that pick', () => {
+    const roundPick = (round: number, ordinal: string): TradeAsset =>
+      ({ id: `pk${round}`, kind: 'pick', name: `2027 ${ordinal}`, value: 1, pickSeason: 2027, pickRound: round }) as unknown as TradeAsset
+    const g = {
+      graded: true, letter: 'A', partnerLetter: 'F', percentDiff: 51,
+      lines: [
+        { side: 'get', name: 'Malik Willis', marketValue: 2020, leagueValue: 2020 },
+        { side: 'get', name: '2027 1st', marketValue: 3034, leagueValue: 3034 },
+        { side: 'get', name: '2027 2nd', marketValue: 1559, leagueValue: 1559 },
+      ],
+    } as unknown as TradeGradeView
+    const out = valuesOnTheGrade([player('Malik Willis', 1), roundPick(2, '2nd'), roundPick(1, '1st')], g, 'get')
+    expect(out.map((a) => [a.name, a.value])).toEqual([['Malik Willis', 2020], ['2027 2nd', 1559], ['2027 1st', 3034]])
+  })
+
   it('a count mismatch keeps the book price rather than shifting values onto the wrong asset', () => {
     const g = graded([{ side: 'get', leagueValue: 3000 }])
     expect(valuesOnTheGrade([player('a', 11), player('b', 22)], g, 'get').map((a) => a.value)).toEqual([11, 22])

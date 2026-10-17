@@ -26,7 +26,7 @@ const DEFAULT_APPLY_OPTIONS: ApplyOptions = {
 
 const PROVIDER_HELP: Partial<Record<ImportProvider, string>> = {
   sleeper: 'Sleeper league ID (from league URL or settings)',
-  espn: 'ESPN league ID, season:id, or ESPN league URL',
+  espn: 'ESPN NFL ID, baseball URL, or MLB:2026:leagueId',
   yahoo: 'Yahoo league key (e.g. 461.l.12345) or numeric league id',
   fantrax: 'Fantrax source id (or legacy resolver source)',
   mfl: 'MyFantasyLeague id (or season:id)',

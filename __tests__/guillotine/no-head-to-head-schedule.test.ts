@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  */
 
 const db = vi.hoisted(() => ({
+  league: { findUnique: vi.fn() },
   redraftMatchup: { count: vi.fn(), createMany: vi.fn() },
   redraftRoster: { findMany: vi.fn() },
 }))
@@ -21,6 +22,7 @@ const params = { seasonId: 's1', leagueId: 'L1', sport: 'NFL', totalWeeks: 17, p
 
 beforeEach(() => {
   vi.clearAllMocks()
+  db.league.findUnique.mockResolvedValue({ survivorMode: false })
   db.redraftMatchup.count.mockResolvedValue(0)
   db.redraftRoster.findMany.mockResolvedValue([{ id: 'a' }, { id: 'b' }])
   m.generateSchedule.mockReturnValue([{ week: 1, home: 'a', away: 'b', type: 'regular' }])
@@ -30,6 +32,14 @@ beforeEach(() => {
 describe('ensureScheduleForNewSeason', () => {
   it('writes no head-to-head schedule for a guillotine league', async () => {
     m.isGuillotineLeague.mockResolvedValue(true)
+    await ensureScheduleForNewSeason(params)
+    expect(db.redraftMatchup.createMany).not.toHaveBeenCalled()
+    expect(m.generateSchedule).not.toHaveBeenCalled()
+  })
+
+  it('writes no head-to-head schedule for a Survivor league', async () => {
+    m.isGuillotineLeague.mockResolvedValue(false)
+    db.league.findUnique.mockResolvedValue({ survivorMode: true })
     await ensureScheduleForNewSeason(params)
     expect(db.redraftMatchup.createMany).not.toHaveBeenCalled()
     expect(m.generateSchedule).not.toHaveBeenCalled()

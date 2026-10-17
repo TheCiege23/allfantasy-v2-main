@@ -9,6 +9,7 @@ import { Prisma, VerificationMethod } from "@prisma/client"
 import bcrypt from "bcryptjs"
 import { sha256Hex, makeToken, isStrongPassword } from "@/lib/tokens"
 import { getClientIp, rateLimit } from "@/lib/rate-limit"
+import { normalizePhoneE164 } from "@/lib/phone/e164"
 import { attributeSignup } from "@/lib/referral"
 import { attributeSignupFromLandingInviteToken } from "@/lib/dashboard/attributeSignupFromLandingInvite"
 import { recordAttribution } from "@/lib/viral-loop"
@@ -54,6 +55,7 @@ import { detectUserState } from "@/lib/geo/detectUserState"
 import { isFullyBlocked, isPaidBlocked } from "@/lib/geo/restrictedStates"
 import { buildMetaEventPayload } from "@/lib/meta-events"
 import { trackMetaServerEvent } from "@/lib/meta-capi"
+import { recordLegalAcceptances } from "@/lib/legal/recordLegalAcceptance"
 
 export const runtime = "nodejs"
 
@@ -66,10 +68,7 @@ function normalizeEmail(e: string) {
 }
 
 function normalizePhone(p?: string | null) {
-  const s = (p ?? "").trim().replace(/[\s()-]/g, "")
-  if (!s.length) return null
-  if (s.startsWith("+")) return s
-  return `+1${s}`
+  return normalizePhoneE164(p ?? "") || null
 }
 
 function getUniqueConstraintTarget(err: Prisma.PrismaClientKnownRequestError): string {
@@ -708,6 +707,10 @@ export async function POST(req: Request) {
         console.warn("[register] avatar upload persistence failed (non-blocking):", avatarErr)
       }
     }
+
+    // The Terms and Disclaimer boxes were required above (validateAgreementAcceptance); record
+    // WHAT was agreed and at which version. Best-effort — never blocks the account (see the module).
+    await recordLegalAcceptances(user.id, ["terms", "disclaimer"], "signup")
 
     // PostHog server-side: capture registration event. Best-effort — never throws.
     try {

@@ -8,6 +8,8 @@ import {
   normalizeDataMode,
   type CommissionerDataMode,
 } from '@/lib/commissioner-ui/demo-mode/constants'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { shellText } from '@/lib/commissioner-os/i18n/shellCopy'
 
 function readCookieDataMode(): CommissionerDataMode {
   if (typeof document === 'undefined') return DEFAULT_DATA_MODE
@@ -44,6 +46,7 @@ export interface DataModeIndicatorProps {
  */
 export function DataModeIndicator({ available = [] }: DataModeIndicatorProps) {
   const [mode, setMode] = useState<CommissionerDataMode>(DEFAULT_DATA_MODE)
+  const { language } = useOptionalLanguage()
 
   useEffect(() => {
     setMode(readCookieDataMode())
@@ -65,16 +68,16 @@ export function DataModeIndicator({ available = [] }: DataModeIndicatorProps) {
         border: '1px solid var(--status-opportunity-border)',
       }}
     >
-      <span className="sr-only">Data mode</span>
+      <span className="sr-only">{shellText('Data mode', language)}</span>
       <select
         value={mode}
         onChange={(event) => handleChange(normalizeDataMode(event.target.value))}
         className="bg-transparent focus:outline-none"
-        aria-label="Data mode"
+        aria-label={shellText('Data mode', language)}
       >
         {available.map((m) => (
           <option key={m} value={m}>
-            {DATA_MODE_LABELS[m]}
+            {shellText(DATA_MODE_LABELS[m], language)}
           </option>
         ))}
       </select>

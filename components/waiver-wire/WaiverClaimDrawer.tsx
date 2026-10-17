@@ -80,13 +80,13 @@ export default function WaiverClaimDrawer({
   }
 
   const content = (
-    <div className="w-full max-w-md rounded-t-2xl border border-white/15 bg-black/95 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl sm:h-full sm:max-w-md sm:rounded-none sm:border-l sm:p-5">
+    <div className="af-core af-league-transactions af-claim-panel w-full max-w-md rounded-t-2xl border border-[var(--line2)] bg-[var(--surface2)] p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl sm:h-full sm:max-w-md sm:rounded-none sm:border-l sm:p-5">
       <div className="flex items-center justify-between gap-2">
         <div>
-          <p className="text-xs uppercase tracking-wide text-white/50">Waiver claim</p>
-          <h2 className="text-sm font-semibold text-white">
+          <p className="text-xs uppercase tracking-wide text-[var(--muted)]">Waiver claim</p>
+          <h2 className="text-sm font-semibold text-[var(--text)]">
             Add {player.name}{" "}
-            <span className="text-xs text-white/60">
+            <span className="text-xs text-[var(--muted)]">
               {player.position} · {player.team || "FA"}
             </span>
           </h2>
@@ -94,23 +94,24 @@ export default function WaiverClaimDrawer({
         <button
           type="button"
           onClick={onClose}
-          className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/20 text-white/60 hover:bg-white/10"
+          aria-label="Close waiver claim"
+          className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[var(--line2)] text-[var(--muted)] hover:bg-white/10"
         >
           <X className="h-3.5 w-3.5" />
         </button>
       </div>
 
-      <div className="mt-3 space-y-3 text-xs text-white/80">
+      <div className="mt-3 space-y-3 text-xs text-[var(--muted)]">
         <div>
-          <label className="mb-1 block text-[11px] text-white/60">Drop player (optional)</label>
+          <label className="mb-1 block text-[11px] text-[var(--muted)]">Drop player (optional)</label>
           <div className="flex items-center gap-2">
-            <ArrowDownCircle className="h-3.5 w-3.5 text-white/40" />
+            <ArrowDownCircle className="h-3.5 w-3.5 text-[var(--muted)]" />
             <select
               value={dropId}
               onChange={(e) => setDropId(e.target.value)}
               aria-label="Drop player selector"
               data-testid="waiver-drop-player-selector"
-              className="flex-1 rounded-lg border border-white/20 bg-black/40 px-2 py-1.5 text-xs text-white outline-none"
+              className="flex-1 rounded-lg border border-[var(--line2)] bg-[var(--surface2)] px-2 py-1.5 text-xs text-[var(--text)] outline-none"
             >
               <option value="">No drop (requires open roster spot)</option>
               {dropOptions.map((opt) => (
@@ -124,9 +125,9 @@ export default function WaiverClaimDrawer({
 
         {faabMode && (
           <div>
-            <label className="mb-1 block text-[11px] text-white/60">FAAB bid</label>
+            <label className="mb-1 block text-[11px] text-[var(--muted)]">FAAB bid</label>
             <div className="flex items-center gap-2">
-              <DollarSign className="h-3.5 w-3.5 text-[#ff9ec0]" />
+              <DollarSign className="h-3.5 w-3.5 text-[var(--accent)]" />
               <input
                 type="number"
                 min={0}
@@ -135,17 +136,17 @@ export default function WaiverClaimDrawer({
                 onChange={(e) => setBid(e.target.value)}
                 aria-label="FAAB bid input"
                 data-testid="waiver-faab-bid-input"
-                className="w-24 rounded-lg border border-white/20 bg-black/40 px-2 py-1.5 text-xs text-white outline-none"
+                className="w-24 rounded-lg border border-[var(--line2)] bg-[var(--surface2)] px-2 py-1.5 text-xs text-[var(--text)] outline-none"
               />
               {faabRemaining != null && (
-                <span className="text-[11px] text-[#ffb8d1]">Remaining: {faabRemaining}</span>
+                <span className="text-[11px] text-[var(--accent)]">Remaining: {faabRemaining}</span>
               )}
             </div>
           </div>
         )}
 
         <div>
-          <label className="mb-1 block text-[11px] text-white/60">Claim priority (optional)</label>
+          <label className="mb-1 block text-[11px] text-[var(--muted)]">Claim priority (optional)</label>
           <input
             type="number"
             min={0}
@@ -153,12 +154,12 @@ export default function WaiverClaimDrawer({
             onChange={(e) => setPriority(e.target.value)}
             aria-label="Claim priority input"
             data-testid="waiver-claim-priority-input"
-            className="w-28 rounded-lg border border-white/20 bg-black/40 px-2 py-1.5 text-xs text-white outline-none"
+            className="w-28 rounded-lg border border-[var(--line2)] bg-[var(--surface2)] px-2 py-1.5 text-xs text-[var(--text)] outline-none"
           />
         </div>
 
-        <div className="rounded-lg border border-white/10 bg-black/30 px-2.5 py-2 text-[11px] text-white/70">
-          <span className="text-white/50">Claim summary:</span>{" "}
+        <div className="rounded-lg border border-[var(--line2)] bg-[var(--surface2)] px-2.5 py-2 text-[11px] text-[var(--muted)]">
+          <span className="text-[var(--muted)]">Claim summary:</span>{" "}
           <span data-testid="waiver-claim-summary">{claimSummary}</span>
         </div>
         {!claimValidation.valid && (
@@ -166,7 +167,7 @@ export default function WaiverClaimDrawer({
             {claimValidation.reason}
           </p>
         )}
-        <p className="mt-1 text-[11px] text-white/50">
+        <p className="mt-1 text-[11px] text-[var(--muted)]">
           Claims will be processed according to your league&apos;s waiver settings. AI suggestions are advisory only and do
           not guarantee that a claim will succeed.
         </p>
@@ -177,7 +178,7 @@ export default function WaiverClaimDrawer({
           type="button"
           onClick={onClose}
           data-testid="waiver-claim-cancel"
-          className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-white/70 hover:bg-white/10"
+          className="rounded-lg border border-[var(--line2)] px-3 py-1.5 text-xs text-[var(--muted)] hover:bg-white/10"
         >
           Cancel
         </button>
@@ -186,7 +187,7 @@ export default function WaiverClaimDrawer({
           onClick={handleSubmit}
           disabled={submitting || !claimValidation.valid}
           data-testid="waiver-claim-submit"
-          className="inline-flex items-center gap-1.5 rounded-lg bg-[#ff3d81] px-3 py-1.5 text-xs font-semibold text-black hover:bg-[#ff3d81] disabled:opacity-60"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--accent)] px-3 py-1.5 text-xs font-semibold text-[var(--bg)] hover:bg-[var(--accent)] disabled:opacity-60"
         >
           {submitting && (
             <span className="h-3 w-3 animate-spin rounded-full border border-black/10 border-t-black" />

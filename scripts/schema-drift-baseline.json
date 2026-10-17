@@ -39,9 +39,6 @@
     "ALTER INDEX \"world_cup_official_group_standings_season_year_tournament_key_i\" RENAME TO \"world_cup_official_group_standings_season_year_tournament_k_idx\"",
     "ALTER INDEX \"world_cup_players_captain_idx\" RENAME TO \"world_cup_players_is_captain_idx\"",
     "ALTER INDEX \"world_cup_players_team_position_idx\" RENAME TO \"world_cup_players_team_id_position_code_idx\"",
-    "ALTER TABLE \"PlayerValueSnapshot\" DROP COLUMN \"marketNumTeams\"",
-    "ALTER TABLE \"PlayerValueSnapshot\" DROP COLUMN \"marketPpr\"",
-    "ALTER TABLE \"PlayerValueSnapshot\" DROP COLUMN \"observedAt\"",
     "ALTER TABLE \"ai_interaction_logs\" ALTER COLUMN \"allowedClaims\" DROP DEFAULT",
     "ALTER TABLE \"ai_interaction_logs\" ALTER COLUMN \"missingData\" DROP DEFAULT",
     "ALTER TABLE \"allfantasy_market_player_values\" ALTER COLUMN \"updatedAt\" DROP DEFAULT",
@@ -237,8 +234,6 @@
     "DROP INDEX \"SportsPlayer_name_trgm_idx\"",
     "DROP INDEX \"TenantWebhook_events_gin_idx\"",
     "DROP INDEX \"draft_sessions_leagueId_seasonYear_key\"",
-    "DROP INDEX \"dw_transaction_facts_league_tx_key\"",
-    "DROP TABLE \"decision_strategy_events\"",
-    "DROP TABLE \"decision_strategy_states\""
+    "DROP INDEX \"dw_transaction_facts_league_tx_key\""
   ]
 }

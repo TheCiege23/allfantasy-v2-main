@@ -13,6 +13,7 @@ export type RedraftPlanningRibbonProps = {
   viewerRosterMissing?: boolean
   /** Mounts ribbon before Start so board stack height matches live draft (layout parity). */
   preDraft?: boolean
+  survivor?: boolean
 }
 
 export function RedraftPlanningRibbon({
@@ -23,6 +24,7 @@ export function RedraftPlanningRibbon({
   backToBackSoon,
   viewerRosterMissing = false,
   preDraft = false,
+  survivor = false,
 }: RedraftPlanningRibbonProps) {
   const untilLabel =
     picksUntilUser == null
@@ -44,7 +46,9 @@ export function RedraftPlanningRibbon({
         <Clock className="h-3.5 w-3.5 shrink-0 text-cyan-300/90" aria-hidden />
         {preDraft ? (
           <span className="font-medium text-white/90">
-            Pre-draft — same board below; only status and timers change when the commissioner starts.
+            {survivor
+              ? 'Survivor draft preview — empty cells fill as picks are made. Every Open Team seat must be claimed before the draft can start.'
+              : 'Pre-draft — same board below; only status and timers change when the commissioner starts.'}
           </span>
         ) : userOnClock ? (
           <span className="font-semibold text-cyan-100">You are on the clock</span>

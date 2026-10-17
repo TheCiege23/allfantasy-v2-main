@@ -46,8 +46,8 @@ describe('normalizeMlbGameStats — against the captured Rolling Insights respon
     expect([...unmapped]).toEqual([])
   })
 
-  it('every emitted key is a real MLB engine category — nothing is scored under a name the engine ignores', () => {
-    for (const l of LINES) for (const k of Object.keys(normalizeMlbGameStats(stored(l)).stats)) expect(MLB_CATEGORY_KEYS.has(k)).toBe(true)
+  it('every emitted key is an MLB points category or a rate-category component', () => {
+    for (const l of LINES) for (const k of Object.keys(normalizeMlbGameStats(stored(l)).stats)) expect(MLB_CATEGORY_KEYS.has(k) || ['h','ab'].includes(k)).toBe(true)
   })
 
   it('🛑 the group decides the key: a pitcher’s hits and walks ALLOWED never land on batting keys', () => {
@@ -86,11 +86,11 @@ describe('normalizeMlbGameStats — against the captured Rolling Insights respon
     expect(normalizeMlbGameStats({ stats: { H: 2 } })).toEqual({ stats: {}, unmappedKeys: ['group:(missing)'] })
   })
 
-  it('MLB is a daily sport now, with a week window — and no opener is invented for 2027', () => {
+  it('MLB is a daily sport with a recorded 2027 Opening Night', () => {
     expect(isDailyStatSport('MLB')).toBe(true)
     expect(getDailySportNormalizer('MLB')).toBe(normalizeMlbGameStats)
     expect(DATE_WINDOWED_SPORTS).toContain('MLB')
-    expect(resolveDailySportSeasonStart('MLB', 2027)).toBeNull()
+    expect(resolveDailySportSeasonStart('MLB', 2027)).toBe('2027-03-24T00:00:00.000Z')
   })
 })
 

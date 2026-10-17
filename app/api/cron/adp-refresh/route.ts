@@ -70,8 +70,13 @@ async function recordAdpHeartbeat(
       rowsRead: result.providerRowsRead,
       rowsWritten: result.imported,
       rowsSkipped: Math.max(0, result.providerRowsRead - result.providerRowsWritten),
-      errors: result.providerRowsRead > 0 ? [] : ["ADP import read 0 provider rows"],
-      metadata: { week: result.week, season: result.season },
+      errors: [
+        ...(result.providerRowsRead > 0 ? [] : ["ADP import read 0 provider rows"]),
+        // A failed NBA feed must be visible here: the rest of the run still writes NFL rows, so the
+        // row counts alone would read healthy while NBA boards quietly went back to name order.
+        ...(result.fantraxNba && !result.fantraxNba.ok ? [`Fantrax NBA ADP: ${result.fantraxNba.reason}`] : []),
+      ],
+      metadata: { week: result.week, season: result.season, fantraxNba: result.fantraxNba },
     },
     durationMs,
   )
@@ -143,7 +148,8 @@ async function handle(req: NextRequest) {
       })
     }
 
-    const result = await runAdpImporter({ sports })
+    // The scheduled run is the only caller allowed to reach Fantrax for NBA — see `allowProviderFetch`.
+    const result = await runAdpImporter({ sports, allowProviderFetch: true })
     heartbeat = await recordAdpHeartbeat(sports, result, Date.now() - startedAt)
 
     /*

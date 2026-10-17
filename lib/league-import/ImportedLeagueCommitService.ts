@@ -1,3 +1,4 @@
+import { IMPORTED_POINTS_AGAINST_KEY, importedPointsAgainstSnapshot } from './importedPointsAgainst'
 import { randomUUID } from 'crypto'
 import { Prisma } from '@prisma/client'
 import { waitUntil } from '@vercel/functions'
@@ -336,6 +337,7 @@ export function buildImportedLeagueSettings(normalized: NormalizedImportResult):
     scoring_settings: (normalized.league as Record<string, unknown>).scoring_settings,
     sport_type: sportType,
     league_variant: leagueVariant,
+    [IMPORTED_POINTS_AGAINST_KEY]: importedPointsAgainstSnapshot(normalized),
     source_tracking: {
       ...normalized.source,
     },
@@ -931,6 +933,13 @@ export async function persistImportedLeagueFromNormalization(
 
   /* Collected across every post-create step and returned; see `runBootstrapStep`. */
   const incompleteSteps: ImportWarningRecord[] = []
+  if (provider === 'espn' && normalized.league.sport === 'MLB') {
+    await runBootstrapStep('BOOTSTRAP_PLAYER_IDENTITIES_FAILED', 'Baseball player identities need review before native conversion', 'error', incompleteSteps, async () => {
+      const { ingestMlbEspnImportIdentities } = await import('@/lib/player-identity/ingestMlbEspnImportIdentities')
+      await ingestMlbEspnImportIdentities(normalized.player_map ?? {})
+    })
+  }
+
 
   /*
    * ⚠ THE ONE THAT MATTERS MOST. This writes every LeagueTeam and Roster row. When it threw,

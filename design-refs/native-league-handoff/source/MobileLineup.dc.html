@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Blah — Lineup (phone)</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./af-shell.css">
+<link rel="stylesheet" href="./draft-sleek.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500;700;800&amp;display=swap" rel="stylesheet">
+<style>body{margin:0;background:#07080d}</style>
+</helmet>
+<div class="af ph" style="min-height: 0">
+  <div class="ph-scroll">
+    <div style="display: flex; align-items: center; gap: 8px; padding: 10px 12px">
+      <a href="MobileSwitcher.dc.html" class="viewing" style="flex: 1; height: 44px; color: #eef0fa">
+        <span class="av" style="width: 28px; height: 28px; font-size: 12px; border-radius: 999px; background: #10131c; color: #22d3ee; box-shadow: 0 0 0 2px #10131c, 0 0 0 3px #34d399">B</span>
+        <span style="flex: 1">Blah</span><span class="chip chip-af" style="height: 20px">AF</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+      </a>
+      <button class="btn btn-p" style="min-height: 44px; padding: 0 12px">Optimize</button>
+    </div>
+    <div style="padding: 0 16px 10px; display: flex; flex-direction: column; gap: 6px">
+      <h1 style="margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.03em">TheCiege26's Team</h1>
+      <span class="num" style="font-size: 11px; color: #989fc2">3–1 · 2nd · proj {{projTotal}}</span>
+    </div>
+    <div style="margin: 0 12px 10px; padding: 10px 12px; border-radius: 12px; background: rgba(251,191,36,.08); border: 1px solid rgba(251,191,36,.25); font-size: 12px; color: #c3c9e6; display: flex; gap: 8px; align-items: center"><span class="chip chip-warn">Lock 2h 33m</span><span>{{hint}}</span></div>
+
+    <section style="margin: 0 12px 12px; border-radius: 14px; border: 1px solid rgba(255,255,255,.07); background: #10131c">
+      <sc-for list="{{starters}}" as="s" hint-placeholder-count="9">
+        <button onClick="{{s.pick}}" disabled="{{s.locked}}" style="width: 100%; display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 0; border-top: 1px solid rgba(255,255,255,.05); background: {{s.bg}}; color: #eef0fa; text-align: left; cursor: pointer; min-height: 56px; opacity: {{s.op}}">
+          <span class="pos p-{{s.pos}}">{{s.slot}}</span>
+          <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px"><span style="font: 700 14px/1.2 'Archivo', sans-serif">{{s.name}}{{s.injTxt}}</span><span class="num" style="font-size: 10px; color: #989fc2">{{s.team}} · {{s.game}}</span></span>
+          <span class="num" style="font-size: 14px; font-weight: 600">{{s.proj}}</span>
+        </button>
+      </sc-for>
+    </section>
+    <span class="lbl" style="padding: 4px 18px 8px">Bench</span>
+    <section style="margin: 0 12px 16px; border-radius: 14px; border: 1px solid rgba(255,255,255,.07); background: #10131c">
+      <sc-for list="{{bench}}" as="b" hint-placeholder-count="6">
+        <div style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-top: 1px solid rgba(255,255,255,.05); opacity: {{b.op}}; min-height: 56px">
+          <span class="pos p-BN">{{b.pos}}</span>
+          <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px"><span style="font-weight: 700; font-size: 14px">{{b.name}}</span><span class="num" style="font-size: 10px; color: #989fc2">{{b.team}} · {{b.game}}</span></span>
+          <span class="num" style="font-size: 14px; font-weight: 600; color: #c3c9e6">{{b.proj}}</span>
+          <sc-if value="{{b.can}}" hint-placeholder-val="{{ false }}"><button class="btn btn-p btn-sm" onClick="{{b.pick}}">Swap</button></sc-if>
+        </div>
+      </sc-for>
+    </section>
+  </div>
+  <nav class="bnav" aria-label="Primary">
+    <a class="bb" href="Mobile.dc.html"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>League</a>
+    <a class="bb" href="MobileMatchup.dc.html"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 4h6v16H4zM14 4h6v16h-6z"/></svg>Matchup</a>
+    <a class="bb bb-on" href="MobileLineup.dc.html"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>Team</a>
+    <a class="bb" href="MobileWaivers.dc.html"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>Players</a>
+    <a class="bb" href="MobileChat.dc.html"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Chat</a>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(p) {
+    super(p);
+    this.state = { sel: null,
+      st: [
+        ['QB','QB',['Jalen Hurts','QB','PHI','vs NYG · 1:00 PM','22.4',null,false]],
+        ['RB','RB',['Bijan Robinson','RB','ATL','Thu · Final','19.2',null,true]],
+        ['RB','RB',['Kyren Williams','RB','LAR','vs SF · 8:20 PM','15.1',null,false]],
+        ['WR','WR',["Ja'Marr Chase",'WR','CIN','vs CLE · 1:00 PM','18.7',null,false]],
+        ['WR','WR',['Puka Nacua','WR','LAR','vs SF · 8:20 PM','16.3','Q',false]],
+        ['TE','TE',['Sam LaPorta','TE','DET','@ GB · 4:25 PM','10.9',null,false]],
+        ['FLX','FLEX',['Jahmyr Gibbs','RB','DET','@ GB · 4:25 PM','17.6',null,false]],
+        ['K','K',['Brandon Aubrey','K','DAL','vs PIT · 4:05 PM','8.6',null,false]],
+        ['DEF','DEF',['Ravens D/ST','DEF','BAL','@ HOU · 1:00 PM','7.2',null,false]]
+      ],
+      bn: [
+        ['Rashid Shaheed','WR','NO','vs CAR · 1:00 PM','12.4'],
+        ['Jaylen Warren','RB','PIT','@ DAL · 4:05 PM','10.1'],
+        ['Tyjae Spears','RB','TEN','vs IND · 1:00 PM','8.8'],
+        ['Rome Odunze','WR','CHI','vs LV · 1:00 PM','11.0'],
+        ['Dallas Goedert','TE','PHI','vs NYG · 1:00 PM','8.9'],
+        ['Jordan Love','QB','GB','vs DET · 4:25 PM','17.9']
+      ] };
+  }
+  renderVals() {
+    const st = this.state;
+    const fits = (slotPos, p) => slotPos === 'FLEX' ? ['RB','WR','TE'].includes(p) : slotPos === p;
+    const starters = st.st.map(([slot, pos, pl], i) => {
+      const [name, ppos, team, game, proj, inj, locked] = pl;
+      const on = st.sel === i;
+      return { slot, pos, name, team, game, proj, locked, injTxt: inj ? '  · ' + inj : '',
+        bg: on ? 'rgba(34,211,238,.10)' : 'transparent', op: locked ? .5 : 1,
+        pick: () => this.setState({ sel: on ? null : i }) };
+    });
+    const selSlot = st.sel === null ? null : st.st[st.sel][1];
+    const bench = st.bn.map((b, j) => {
+      const [name, pos, team, game, proj] = b;
+      const can = selSlot !== null && fits(selSlot, pos);
+      return { name, pos, team, game, proj, can, op: selSlot === null || can ? 1 : .4,
+        pick: () => {
+          const s = st.st.map(r => r.slice()); const bn = st.bn.map(r => r.slice());
+          const out = s[st.sel][2];
+          s[st.sel][2] = [name, pos, team, game, proj, null, false];
+          bn[j] = [out[0], out[1], out[2], out[3], out[4]];
+          this.setState({ st: s, bn, sel: null });
+        } };
+    });
+    const projTotal = st.st.reduce((t, r) => t + Number(r[2][4]), 0).toFixed(1);
+    const hint = selSlot ? 'Pick a bench player for ' + selSlot : 'Tap a starter to swap';
+    return { starters, bench, projTotal, hint };
+  }
+}
+</script>
+</body>
+</html>

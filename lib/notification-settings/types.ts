@@ -22,9 +22,13 @@ export type NotificationCategoryId =
   | "draft_intel_alerts"
   | "autocoach"
   | "followed_players"
+  | "followed_teams"
+  | "followed_team_scores"
   | "direct_messages"
   | "league_chat"
   | "career_milestones"
+  | "breaking_news"
+  | "live_game_alerts"
 
 export interface NotificationChannelPrefs {
   enabled: boolean
@@ -103,9 +107,13 @@ export const NOTIFICATION_CATEGORY_IDS: NotificationCategoryId[] = [
   "draft_intel_alerts",
   "autocoach",
   "followed_players",
+  "followed_teams",
+  "followed_team_scores",
   "direct_messages",
   "league_chat",
   "career_milestones",
+  "breaking_news",
+  "live_game_alerts",
 ]
 
 export const NOTIFICATION_CATEGORY_LABELS: Record<NotificationCategoryId, string> = {
@@ -136,6 +144,13 @@ export const NOTIFICATION_CATEGORY_LABELS: Record<NotificationCategoryId, string
   // them, including players on none of your rosters. Its own switch so a follow can stay in the
   // bell and off the phone, or be silenced without touching roster injury alerts.
   followed_players: "Players you follow — injuries & news",
+  // Teams followed from the "follow your teams" prompt or Settings (2026-10-03): news and injuries
+  // for that team and its players, not the whole league. Its own switch, so team chatter can stay in
+  // the bell and off the phone without touching roster or player-follow alerts.
+  followed_teams: "Teams you follow — news & injuries",
+  // Halftime and final scores for followed teams (phase 2, 2026-10-03; NFL + college football). Its
+  // own switch, so someone can keep the news and mute the scores, or the other way round.
+  followed_team_scores: "Teams you follow — scores",
   // A DM or huddle message from someone (2026-09-25). Sent by the server when the message is saved
   // (lib/chat-notifications/chatMessageNotifier.ts); at most one alert per conversation per 10 minutes
   // while it is unread, and at most one email per conversation an hour.
@@ -147,7 +162,24 @@ export const NOTIFICATION_CATEGORY_LABELS: Record<NotificationCategoryId, string
   // tier, a career-wins mark — each at most once ever, and only for a season that just finished,
   // never for history an import backfilled.
   career_milestones: "Career milestones — titles, awards & records",
+  // Real-world breaking news (2026-10-15, lib/news/breakingNewsAlerts.ts): trades, signings, firings,
+  // suspensions and season-ending injuries, from trusted outlets only, for the sports you play or the
+  // teams you follow. Capped per person per day at the sender.
+  breaking_news: "Breaking news — trades, signings & major injuries",
+  // Live game moments (2026-10-15, lib/live/gameMomentAlerts.ts): close finishes, overtime, and the
+  // big playoff checkpoints (halftime, 7th inning, end of a period, final) for the sports you play.
+  // Teams you follow get every moment under "Teams you follow — scores" instead.
+  live_game_alerts: "Live game moments — close games, OT & playoff updates",
 }
+
+/**
+ * i18n keys for `NOTIFICATION_CATEGORY_LABELS`, one per id. Display only — render with
+ * `tOr(t, NOTIFICATION_CATEGORY_LABEL_KEYS[id], NOTIFICATION_CATEGORY_LABELS[id])`. The English
+ * labels above stay the fallback and are what non-React code (and tests) read.
+ */
+export const NOTIFICATION_CATEGORY_LABEL_KEYS = Object.fromEntries(
+  Object.keys(NOTIFICATION_CATEGORY_LABELS).map((id) => [id, `settings.notifications.category.${id}`]),
+) as Record<NotificationCategoryId, string>
 
 /**
  * Categories that start OFF on every channel. Everything else defaults on (in-app, push, email;
@@ -158,3 +190,35 @@ export const NOTIFICATION_CATEGORY_LABELS: Record<NotificationCategoryId, string
  * subscribe me to every league chat message" — see NotificationsSettingsSection.
  */
 export const OPT_IN_NOTIFICATION_CATEGORY_IDS: readonly NotificationCategoryId[] = ["league_chat"]
+
+/**
+ * Categories whose EMAIL channel starts off (in-app and push stay on). A live game moment is stale
+ * by the time an inbox is read — "close game, 2:00 left" an hour later is noise, and a busy NBA
+ * night is a dozen of them. The person can still switch email on.
+ */
+export const EMAIL_DEFAULT_OFF_CATEGORY_IDS: readonly NotificationCategoryId[] = ["live_game_alerts"]
+
+/**
+ * Categories whose SMS channel defaults ON once the user has agreed to texts (owner's call,
+ * 2026-10-03: "texts on by default after consent"). Without a live consent record SMS stays off
+ * everywhere — texting without agreement is the line the A2P campaign and the TCPA draw.
+ *
+ * Deliberately the TIME-SENSITIVE alerts only: a text is a phone buzz and a Twilio charge, and the
+ * chatty categories (mentions, DMs, league chat, drama, AI tips, milestones) are what make people
+ * reply STOP. The daily cap (smsDailyCap, 15/user) is a backstop, not the design.
+ *
+ * A row the user saved with an explicit `sms` value keeps it; this only changes the DEFAULT.
+ */
+export const SMS_DEFAULT_ON_AFTER_CONSENT_CATEGORY_IDS: readonly NotificationCategoryId[] = [
+  "lineup_reminders",
+  "lineup_alerts",
+  "injury_alerts",
+  "followed_players",
+  "trade_proposals",
+  "trade_accept_reject",
+  "waiver_processing",
+  "draft_alerts",
+  "commissioner_alerts",
+  "matchup_results",
+  "system_account",
+]

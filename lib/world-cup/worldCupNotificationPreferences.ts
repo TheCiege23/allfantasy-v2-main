@@ -1,5 +1,9 @@
 import "server-only"
 import { getSettingsProfile, updateUserProfile } from "@/lib/user-settings"
+import { hasSmsConsent } from "@/lib/sms/smsConsent"
+import { resolveNotificationPreferences } from "@/lib/notification-settings/NotificationPreferenceResolver"
+import type { NotificationPreferences } from "@/lib/notification-settings/types"
+import type { QuietHoursPreference } from "@/lib/notifications/quietHours"
 
 export type WorldCupNotificationType =
   | "usernameMention"
@@ -34,6 +38,11 @@ export type WorldCupNotificationPreferenceResolution = {
   preferences: WorldCupNotificationPreferences
   phone: string | null
   phoneVerified: boolean
+  /** A live SMS opt-in for `phone` — see lib/sms/smsConsent. */
+  smsConsented: boolean
+  /** The account-level quiet hours and timezone, so World Cup texts keep the same night as every other text. */
+  quietHours: QuietHoursPreference | null
+  timezone: string | null
 }
 
 export const DEFAULT_WORLD_CUP_NOTIFICATION_PREFERENCES: WorldCupNotificationPreferences = {
@@ -152,6 +161,10 @@ export async function getWorldCupNotificationPreferenceResolution(
     preferences,
     phone: profile?.phone ?? null,
     phoneVerified: Boolean(profile?.phoneVerifiedAt),
+    smsConsented: hasSmsConsent(profile?.notificationPreferences, profile?.phone),
+    quietHours:
+      resolveNotificationPreferences(profile?.notificationPreferences as NotificationPreferences | null).quietHours ?? null,
+    timezone: profile?.timezone ?? null,
   }
 }
 

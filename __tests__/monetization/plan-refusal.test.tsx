@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 
-import { act, cleanup, render, renderHook, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, render, renderHook, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
@@ -24,8 +24,6 @@ vi.mock('next/image', () => ({ __esModule: true, default: () => null }))
 
 import { PlanRefusalError, readPlanRefusal, refusalOf } from '@/lib/monetization/planRefusal'
 import { PlanRefusalNotice } from '@/components/monetization/PlanRefusalNotice'
-import { AIToolModalShell } from '@/components/ai-tools/AIToolModalShell'
-import { StartSitModal } from '@/components/ai-tools/modals/StartSitModal'
 import { MatchupAiAnalysisPanel } from '@/components/matchup-center/MatchupAiAnalysisPanel'
 import { useLeagueMatchupAi } from '@/hooks/useLeagueMatchupAi'
 import { resolveCheckoutUrl } from '@/lib/monetization/checkout-client'
@@ -102,38 +100,6 @@ describe('what the screens show', () => {
     expect(screen.getByRole('link', { name: 'See AF Pro' }).getAttribute('href')).toBe(LOCKED.upgradePath)
   })
 
-  it('a tool modal shows the refusal INSTEAD of its error line', () => {
-    render(
-      <AIToolModalShell open onClose={() => {}} title="Start/Sit" error="Premium feature" refusal={readPlanRefusal(403, LOCKED)}>
-        <div>body</div>
-      </AIToolModalShell>,
-    )
-    expect(screen.getByText(LOCKED.message)).toBeTruthy()
-    expect(screen.queryByText('Premium feature')).toBeNull()
-    expect(screen.getByRole('link', { name: 'See AF Pro' })).toBeTruthy()
-  })
-
-  it('and still shows an ordinary error as before', () => {
-    render(
-      <AIToolModalShell open onClose={() => {}} title="Start/Sit" error="Network error.">
-        <div>body</div>
-      </AIToolModalShell>,
-    )
-    expect(screen.getByText('Network error.')).toBeTruthy()
-    expect(screen.queryByTestId('plan-refusal')).toBeNull()
-  })
-
-  it('Start/Sit end to end: a locked answer from the server becomes the upgrade button', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (url: string) => (String(url).includes('/start-sit/analyze') ? json(403, LOCKED) : json(200, { teams: [] }))),
-    )
-    render(<StartSitModal open onClose={() => {}} leagueId="lg1" leagueName="KBFL" leagues={[{ id: 'lg1', name: 'KBFL', sport: 'NFL' } as never]} />)
-    await waitFor(() => expect(screen.getByRole('link', { name: 'See AF Pro' })).toBeTruthy())
-    expect(screen.getByRole('link', { name: 'See AF Pro' }).getAttribute('href')).toBe(LOCKED.upgradePath)
-    expect(screen.queryByText('Premium feature')).toBeNull()
-  })
-
   it('the matchup panel shows the refusal instead of its error line', () => {
     render(
       <MatchupAiAnalysisPanel sport="NFL" loading={false} result={null} error={LOCKED.message} refusal={readPlanRefusal(403, LOCKED)} onRun={() => {}} />,
@@ -183,24 +149,7 @@ describe('checkout while signed out', () => {
  * show the notice. Anchored to statement starts, so a comment mentioning the helper cannot pass it.
  */
 describe('every Chimmy tool screen is wired', () => {
-  const modals = [
-    'AFWarRoomModal',
-    'InjuryImpactModal',
-    'LongTermCoachingModal',
-    'MatchupPrepModal',
-    'PowerRankingsModal',
-    'StartSitModal',
-    'TrendingPlayersModal',
-    'WaiverWireModal',
-  ]
-  it.each(modals)('%s hands refusals to the modal shell', (name) => {
-    const src = readFileSync(path.join(process.cwd(), `components/ai-tools/modals/${name}.tsx`), 'utf8')
-    expect(src).toMatch(/^\s*setRefusal\(readPlanRefusal\((r|res)\.status, (json|j), \{ returnTo: currentPathForReturn\(\) \}\)\)/m)
-    expect(src).toMatch(/^\s*refusal=\{refusal\}/m)
-  })
-
   it.each([
-    ['components/ai-tools/modals/TradeValueModal.tsx', /^\s*<PlanRefusalNotice refusal=\{refusal\}/m],
     ['components/TradeFinderV2.tsx', /^\s*<PlanRefusalNotice refusal=\{refusal\} \/>/m],
     ['components/TradeFinderV2.tsx', /^\s*<PlanRefusalNotice refusal=\{mmRefusal\} \/>/m],
     ['components/matchup-center/MatchupTabContainer.tsx', /^\s*refusal=\{ssRefusal\}/m],

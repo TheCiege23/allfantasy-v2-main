@@ -1,8 +1,14 @@
+'use client'
+
 import Link from 'next/link'
+import TeamPortfolioWorkspace from './TeamPortfolioWorkspace'
 
 import { formatLockLabel } from '@/lib/core-app/lockLabel'
+import { kickoffClock } from '@/lib/core-app/lineupLock'
+import { kickoffDayLabel } from '@/lib/core-app/kickoffLabel'
+import { kickoffText } from '@/lib/core-app/kickoffText'
 import { lineupLink } from '@/lib/core-app/platformLinks'
-import type { MyTeamPulse, MyTeamRow } from '@/lib/core-app/myTeamPulse'
+import type { CrossLeagueFlag, MyTeamPulse, MyTeamRow } from '@/lib/core-app/myTeamPulse'
 import { FOREIGN_IDS_UNREADABLE_CLAUSE } from '@/lib/core-app/foreignIdSpaceCopy'
 import { MyTeamLockClock } from '@/components/core-app/MyTeamLockClock'
 import { LineupIntelligenceActions } from '@/components/core-app/LineupIntelligenceActions'
@@ -17,6 +23,91 @@ import {
   type Sev,
 } from '@/components/core-app/boards/BoardKit'
 import '@/components/core-app/af-core-boards.css'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
+import { relativeAge } from '@/lib/core-app/cardFreshness'
+import { ageText } from '@/lib/core-app/shellCopy'
+import type { WeekLineups } from '@/lib/core-app/weekLineups'
+import { rowScoreOf, summariseWeekScores, type RowScore, type WeekScoreSummary } from '@/lib/core-app/myTeamScoreboard'
+import { boardFilterHref } from '@/lib/core-app/myTeamBoardFilter'
+import type { LineupReminderStatus } from '@/lib/core-app/lineupReminderStatus'
+import { InfoTip } from '@/components/core-app/InfoTip'
+
+const REMINDER_SETTINGS_HREF = `/settings?tab=notifications&returnTo=${encodeURIComponent('/core/my-team')}`
+
+/**
+ * How to read a row — the one "?" on this board, beside the list's heading, never on each row.
+ *
+ * ⚠ EVERY SENTENCE HERE RESTATES A RULE THE LOADER OR A ROW ALREADY FOLLOWS, so it must change with
+ * them: the order is `needs`' comparator in `myTeamPulse.ts` (fixable problems, most first, then the
+ * clock — `actionableSeverity`), the clock is `lockAt` (a FLAGGED starter's kickoff first), the tones
+ * are `tagsOf` above, and "synced" is `SyncStamp`. Each of those was a hover `title` or nothing.
+ * The score sentence only appears when a row can carry a score.
+ */
+function BoardReadingTip({ es, scores }: { es: boolean; scores: boolean }) {
+  return (
+    <InfoTip
+      label={es ? 'Cómo leer esta lista' : 'How to read this list'}
+      title={es ? 'Cómo leer esta lista' : 'How to read this list'}
+    >
+      <span className="af-info-para">
+        {es
+          ? 'Primero las alineaciones con problemas que aún puedes arreglar —una posición vacía, un titular descartado o en descanso—, las que más pierden primero, y luego por el inicio más cercano. T4 significa empatado en el 4.º lugar.'
+          : 'Lineups with problems you can still fix come first — an empty slot, a starter ruled out or on bye — the most first, then the soonest kickoff. T4 means tied for 4th.'}
+      </span>
+      <span className="af-info-para">
+        {es
+          ? 'Los números en rojo son puntos que perderás si no actúas. Un número «en duda» en ámbar es un riesgo, no una pérdida: probablemente juega, así que nunca sube una liga en la lista. «Sin identificar» es un titular que no pudimos buscar: una carencia nuestra, no tuya. SET significa que lo revisamos y no falta nada.'
+          : 'Red counts are points you will lose unless you act. An amber “questionable” count is a risk, not a loss: he probably plays, so it never moves a league up. “Unidentified” is a starter we could not look up — our gap, not yours. SET means we checked and nothing is missing.'}
+      </span>
+      <span className="af-info-para">
+        {es
+          ? 'El reloj cuenta hasta el inicio del próximo titular con un problema —si no hay, del próximo titular—, en hora del Este. Cada jugador se bloquea en su propio partido: confirma los cierres y cambios automáticos en tu plataforma.'
+          : 'The clock counts to the kickoff of the next starter with a problem — otherwise the next starter — in Eastern time. Each player locks at his own kickoff; confirm locks and AutoSubs on your platform.'}
+      </span>
+      <span className="af-info-para">
+        {es
+          ? '«Sincronizada hace 3 h»: cada fila lee tu plantilla guardada en la última sincronización. Al abrir una liga se revisa su alineación en vivo.'
+          : '“synced 3h ago”: each row reads your roster as stored at the last sync. Opening a league checks its live lineup.'}
+      </span>
+      {scores ? (
+        <span className="af-info-para">
+          {es
+            ? '«Ganando 88.4–71.2» es el marcador de esta semana; en una liga de eliminación es tu distancia al corte.'
+            : '“ahead 88.4–71.2” is this week’s score so far; in an elimination league it is your distance from the cut.'}
+        </span>
+      ) : null}
+    </InfoTip>
+  )
+}
+
+/**
+ * Whether Chimmy's pre-lock check will reach you — see `lineupReminderStatus.ts`. Said once, under
+ * the rows: it is how this board's warnings reach a manager who is not looking at it.
+ */
+function ReminderLine({ status, es }: { status: LineupReminderStatus; es: boolean }) {
+  const when = es
+    ? `una vez por semana, entre ${status.opensHoursBefore} y ${status.closesHoursBefore} horas antes del bloque principal de la NFL`
+    : `once a week, ${status.closesHoursBefore}–${status.opensHoursBefore} hours before the main NFL slate`
+  return (
+    <p className="af-bd-note af-bd-note--plain af-bd-note--reminder" data-state={status.state}>
+      {status.state === 'on'
+        ? es
+          ? `Recordatorio de alineación activado: ${when}, Chimmy revisa cada alineación y te escribe solo si alguna necesita arreglo. `
+          : `Lineup reminder is on: ${when}, Chimmy checks every lineup and messages you only if one needs fixing. `
+        : status.state === 'muted'
+          ? es
+            ? 'Las alertas de alineación de Chimmy están silenciadas, así que nadie revisará estas alineaciones antes del inicio. '
+            : 'Chimmy’s lineup alerts are muted, so nothing will check these lineups for you before kickoff. '
+          : es
+            ? `Recordatorio de alineación desactivado. Actívalo y Chimmy revisará cada alineación ${when}, y te escribirá solo si alguna necesita arreglo. `
+            : `Lineup reminder is off. Turn it on and Chimmy checks every lineup ${when}, messaging you only if one needs fixing. `}
+      <Link href={REMINDER_SETTINGS_HREF}>
+        {status.state === 'on' ? (es ? 'Gestionar' : 'Manage') : es ? 'Activarlo' : 'Turn it on'}
+      </Link>
+    </p>
+  )
+}
 
 /**
  * `/core/my-team` with no league held — the cross-league lineup board.
@@ -66,13 +157,22 @@ export type MyTeamBoardProps = {
   now?: number
   /** Where the footer's "View all" goes — the full picker. */
   allHref: string
+  /**
+   * The rail's matchups for this render (`ctx.weekLineups`) — already loaded for the shell, so the
+   * score on each row and the week's record cost no query. Absent or null: no scores are drawn.
+   */
+  lineups?: WeekLineups | null
+  /** The board's own route — what a filter chip appends `?format=…` to, and "All" returns to. */
+  baseHref?: string
+  /** Chimmy's pre-lock check for this user. Null or absent: the line is omitted. */
+  lineupReminder?: LineupReminderStatus | null
 }
 
 /** "Ghosts of Gridiron · 9 starters" — each clause dropped rather than faked. */
-function detailOf(row: MyTeamRow): string {
+function detailOf(row: MyTeamRow, language: string): string {
   const parts: string[] = []
   if (row.teamName) parts.push(row.teamName)
-  parts.push(`${row.starters} ${row.starters === 1 ? 'starter' : 'starters'}`)
+  parts.push(`${row.starters} ${coreUiCopy(row.starters === 1 ? 'starter' : 'starters', language)}`)
   return parts.join(' · ')
 }
 
@@ -82,36 +182,39 @@ function detailOf(row: MyTeamRow): string {
  * Empty first because it is the only one with no excuse — nobody is in the slot
  * — then the two that need a replacement found, then the risk, then our own gap.
  */
-function tagsOf(row: MyTeamRow): Array<{ key: string; tag: string; detail: string; sev: Sev }> {
-  if (row.bestBall) return [{ key: 'auto', tag: 'AUTO', detail: 'Best Ball lineup', sev: 'info' }]
+function tagsOf(row: MyTeamRow, language = 'en'): Array<{ key: string; tag: string; detail: string; sev: Sev }> {
+  const copy = (english: string) => coreUiCopy(english, language)
+  if (row.bestBall) return [{ key: 'auto', tag: 'AUTO', detail: copy('Best Ball lineup'), sev: 'info' }]
   const out: Array<{ key: string; tag: string; detail: string; sev: Sev }> = []
   if (row.empty > 0) {
     out.push({
       key: 'empty',
       tag: String(row.empty),
-      detail: row.empty === 1 ? 'slot empty' : 'slots empty',
+      detail: copy(row.empty === 1 ? 'slot empty' : 'slots empty'),
       sev: 'bad',
     })
   }
-  if (row.out > 0) out.push({ key: 'out', tag: String(row.out), detail: 'ruled out', sev: 'bad' })
+  if (row.out > 0) out.push({ key: 'out', tag: String(row.out), detail: copy('ruled out'), sev: 'bad' })
   if (row.bye != null && row.bye > 0) {
-    out.push({ key: 'bye', tag: String(row.bye), detail: 'on bye', sev: 'bad' })
+    out.push({ key: 'bye', tag: String(row.bye), detail: copy('on bye'), sev: 'bad' })
   }
   if (row.questionable > 0) {
-    out.push({ key: 'q', tag: String(row.questionable), detail: 'questionable', sev: 'warn' })
+    out.push({ key: 'q', tag: String(row.questionable), detail: copy('questionable'), sev: 'warn' })
   }
   /*
    * Not a lineup problem and never toned as one — a starter we could not look
    * up is OUR gap. Shown so a short count is explained rather than quietly wrong.
    */
   if (row.unresolved > 0) {
-    out.push({ key: 'unresolved', tag: String(row.unresolved), detail: 'unidentified', sev: 'info' })
+    out.push({ key: 'unresolved', tag: String(row.unresolved), detail: copy('unidentified'), sev: 'info' })
   }
   return out
 }
 
 function Lock({ row, now }: { row: MyTeamRow; now: number }) {
-  if (row.bestBall) return <span className="af-bd-stat">Automatic</span>
+  const { language } = useOptionalLanguage()
+  const copy = (english: string) => coreUiCopy(english, language)
+  if (row.bestBall) return <span className="af-bd-stat">{copy('Automatic')}</span>
   /*
    * ⚠ THE EM DASH NEEDS AN ACCESSIBLE NAME OR IT IS SILENCE. `title` alone is
    * not reliably announced and "—" read aloud is nothing at all, so the reason
@@ -119,9 +222,9 @@ function Lock({ row, now }: { row: MyTeamRow; now: number }) {
    */
   if (row.lockAt == null) {
     if ((row.started ?? 0) > 0) {
-      return <span className="af-bd-stat" title="Some games have started. Check individual locks on your platform.">Games started{row.unknownKickoffs ? ' · schedule incomplete' : ''}</span>
+      return <span className="af-bd-stat" title={copy('Some games have started. Check individual locks on your platform.')}>{copy('Games started')}{row.unknownKickoffs ? ` · ${copy('schedule incomplete')}` : ''}</span>
     }
-    const why = 'Lock time unknown — no kickoff on file for any of these starters.'
+    const why = copy('Lock time unknown — no kickoff on file for any of these starters.')
     return (
       <span className="af-bd-stat" title={why} aria-label={why}>
         &mdash;
@@ -131,7 +234,9 @@ function Lock({ row, now }: { row: MyTeamRow; now: number }) {
 
   const atMs = new Date(row.lockAt).getTime()
   const label = formatLockLabel(atMs, now)
-  const kickoff = `${new Date(atMs).toUTCString().slice(0, 22)} UTC`
+  /* Eastern, like every other kickoff on /core — UTC moved night games to the next day. Pinned, so it hydrates. */
+  /* …and translated at render, after the pin: "Sun 1:00p ET (Oct 4)" → «dom 1:00p ET (4 oct)». */
+  const kickoff = kickoffText(`${kickoffClock(row.lockAt)} (${kickoffDayLabel(row.lockAt) ?? ''})`, language)
 
   /*
    * ⚠ A DATE, NOT A COUNTDOWN, PAST `DISTANT_LOCK_DAYS`. The next kickoff we
@@ -142,12 +247,12 @@ function Lock({ row, now }: { row: MyTeamRow; now: number }) {
    * redraw a date that changes once a day.
    */
   if (label.distant) {
-    const why =
-      `The next kickoff we hold for these starters is ${kickoff}, further out than a lineup ` +
-      'lock should be — this week’s schedule has probably not been ingested yet.'
+    const why = language === 'es'
+      ? `El próximo partido registrado para estos titulares es ${kickoff}, demasiado lejano para ser el cierre de alineación; probablemente aún falta el calendario de esta semana.`
+      : `The next kickoff we hold for these starters is ${kickoff}, further out than a lineup lock should be — this week’s schedule has probably not been ingested yet.`
     return (
       <span className="af-bd-stat" title={why} aria-label={why}>
-        {label.text}
+        {kickoffText(label.text, language)}
       </span>
     )
   }
@@ -156,11 +261,116 @@ function Lock({ row, now }: { row: MyTeamRow; now: number }) {
     <span
       className="af-bd-stat"
       data-sev={label.locked ? 'bad' : label.urgent ? 'bad' : 'warn'}
-      title={`Next starter kickoff ${kickoff}. Individual locks and AutoSubs must be checked on your platform.`}
+      title={language === 'es'
+        ? `Próximo inicio de un titular: ${kickoff}. Confirma los cierres individuales y cambios automáticos en tu plataforma.`
+        : `Next starter kickoff ${kickoff}. Individual locks and AutoSubs must be checked on your platform.`}
     >
-      {label.locked ? 'Check player locks' : <MyTeamLockClock atMs={atMs} initial={label.text} elapsedLabel="Check player locks" />}
+      {label.locked ? copy('Check player locks') : <MyTeamLockClock atMs={atMs} initial={label.text} elapsedLabel={copy('Check player locks')} />}
     </span>
   )
+}
+
+/**
+ * `rankTiers` output, written the way a standings table writes a tie.
+ *
+ * ⚠ THE BULLET READ AS A MISSING NUMBER. A tier's first row carried a numeral
+ * and the rows tied with it carried `•`, so a live board read "01, 02, •, 04,
+ * •, •, •…" — which looks like a list that lost its numbering, not one that
+ * says "same as above". Every row in a shared tier now carries the tier's rank
+ * with a T ("T4, T4, T4"); a row alone in its tier keeps its plain numeral.
+ * The all-null case (nothing separated anything) passes through untouched, so
+ * the board still drops the gutter entirely.
+ */
+function tiedRankLabels(ranks: Array<string | null>): Array<string | null> {
+  if (ranks.every((r) => r === null)) return ranks
+  const out: Array<string | null> = []
+  let tierStart = 0
+  for (let i = 0; i < ranks.length; i += 1) {
+    if (ranks[i] !== null) tierStart = i
+    const tied = ranks[i] === null || ranks[i + 1] === null
+    out.push(tied ? `T${tierStart + 1}` : ranks[i])
+  }
+  return out
+}
+
+/** A row synced longer ago than this is called out: lineups move daily in season. */
+export const STALE_SYNC_MS = 24 * 3600_000
+
+/**
+ * How old this row's counts are. The board reads the STORED roster, while a league's own page
+ * reads the provider live — so the two can disagree, and the row should say which moment it
+ * describes. A failed last sync is worse than an old one: say it.
+ *
+ * `suppressHydrationWarning` because "3h ago" is computed against a clock that differs by a few
+ * seconds between server and client render; the words only change at a minute boundary.
+ */
+function SyncStamp({ row, now }: { row: MyTeamRow; now: number }) {
+  const { language } = useOptionalLanguage()
+  const es = language === 'es'
+  if (row.syncFailed) {
+    return <span className="af-bd-sync" data-stale="true"> · {es ? 'la última sincronización falló' : 'last sync failed'}</span>
+  }
+  if (!row.syncedAt) return null
+  const at = Date.parse(row.syncedAt)
+  if (Number.isNaN(at)) return null
+  const age = relativeAge(at, now)
+  return (
+    <span className="af-bd-sync" data-stale={now - at > STALE_SYNC_MS} suppressHydrationWarning>
+      {' · '}
+      {/*
+        The age through the shell's `ageText`, so the board and the shell's sync chip word one age
+        one way. The hand-built form it replaced left half-English on the months and years
+        `relativeAge` writes for a long-unsynced league («hace 2mo»). "sincronizada" agrees with
+        liga — each row is one.
+      */}
+      {es ? `sincronizada ${ageText(age, 'es')}` : `synced ${age}`}
+    </span>
+  )
+}
+
+const pts = (n: number) => n.toFixed(1)
+
+/** " · ahead 88.4–71.2", or the distance to the cut in an elimination week. */
+function ScoreStamp({ score }: { score: RowScore | null }) {
+  const { language } = useOptionalLanguage()
+  const es = language === 'es'
+  if (!score) return null
+  if (score.kind === 'cut') {
+    const place = es ? `${score.rank}.º de ${score.outOf}` : `${score.rank} of ${score.outOf}`
+    return (
+      <span className="af-bd-score" data-lead={score.overCut == null ? 'behind' : 'ahead'}>
+        {' · '}
+        {score.overCut == null
+          ? es ? `puntuación más baja: en el corte (${place})` : `lowest score: on the cut (${place})`
+          : es ? `${pts(score.overCut)} sobre el corte (${place})` : `${pts(score.overCut)} over the cut (${place})`}
+      </span>
+    )
+  }
+  const word = es
+    ? { ahead: 'ganando', behind: 'perdiendo', level: 'empatado' }[score.lead]
+    : score.lead
+  return (
+    <span className="af-bd-score" data-lead={score.lead}>
+      {' · '}
+      {word} {pts(score.you)}–{pts(score.them)}
+    </span>
+  )
+}
+
+/** "This week so far: ahead in 3, behind in 2 · on the cut in 1 · no points yet in 4." */
+function weekRecordLine(s: WeekScoreSummary, es: boolean): string {
+  const h2h = es
+    ? [s.ahead && `ganando en ${s.ahead}`, s.behind && `perdiendo en ${s.behind}`, s.level && `empatado en ${s.level}`]
+    : [s.ahead && `ahead in ${s.ahead}`, s.behind && `behind in ${s.behind}`, s.level && `level in ${s.level}`]
+  const cut = es
+    ? [s.aboveCut && `sobre el corte en ${s.aboveCut}`, s.onCut && `en el corte en ${s.onCut}`]
+    : [s.aboveCut && `above the cut in ${s.aboveCut}`, s.onCut && `on the cut in ${s.onCut}`]
+  const parts = [
+    h2h.filter(Boolean).join(', '),
+    cut.filter(Boolean).join(', '),
+    s.noPointsYet ? (es ? `sin puntos aún en ${s.noPointsYet}` : `no points yet in ${s.noPointsYet}`) : '',
+  ].filter(Boolean)
+  return `${es ? 'Esta semana hasta ahora' : 'This week so far'}: ${parts.join(' · ')}.`
 }
 
 function Row({
@@ -168,14 +378,25 @@ function Row({
   rank,
   showRank,
   now,
+  score = null,
 }: {
   row: MyTeamRow
   rank: string | null
   /** False when NOTHING on the board is ordered — then there is no gutter at all. */
   showRank: boolean
   now: number
+  score?: RowScore | null
 }) {
-  const tags = tagsOf(row)
+  const { language } = useOptionalLanguage()
+  const copy = (english: string) => coreUiCopy(english, language)
+  const tags = tagsOf(row, language)
+  /*
+   * ⚠ THE LABEL CARRIES ITS OWN VALUE. "Next player deadline" used to stand
+   * alone on this line, with the countdown it referred to a row above and a
+   * column away — so every row read as a label with its value missing.
+   * Eastern and pinned, like every kickoff on /core, so it hydrates.
+   */
+  const nextDeadline = row.lockAt && Date.parse(row.lockAt) > now ? kickoffText(kickoffClock(row.lockAt), language) || null : null
   /*
    * ⚠ THE CTA GOES TO THE PLATFORM, NOT INTO AllFantasy. AllFantasy is
    * read-only; the lineup is changed on Sleeper. `lineupLink` falls back to the
@@ -192,7 +413,8 @@ function Row({
   })
 
   return (
-    <li>
+    /* `af-mt-board-row` scopes this board's phone layout — `.af-bd-row` is shared by every board. */
+    <li className="af-mt-board-row">
       <div className="af-bd-row">
         {/*
           🛑 NO GUTTER AT ALL WHEN NOTHING IS ORDERED. This drew a column of ten
@@ -202,14 +424,14 @@ function Row({
           place. It has not: the section label already says the rows are in no
           particular order, and that sentence carries the whole meaning.
 
-          ⚠ A BULLET, NOT A BLANK, IN THE MIXED CASE. There the column is real —
-          numerals mark where each new lock time starts — so a row that ties with
-          the one above needs a mark saying "same as above". An empty cell
-          between numerals reads as data that failed to load.
+          ⚠ A TIE MARK, NOT A BLANK, IN THE MIXED CASE. There the column is real,
+          so a row that ties another needs to say so. An empty cell between
+          numerals reads as data that failed to load, and a bullet read as a
+          missing number — see `tiedRankLabels`.
         */}
         {showRank ? (
-          <span className="af-bd-rank" data-untiered={rank == null ? '' : undefined} aria-hidden>
-            {rank ?? '•'}
+          <span className="af-bd-rank" data-tied={rank?.startsWith('T') ? '' : undefined} aria-hidden>
+            {rank}
           </span>
         ) : null}
         <LeagueCrest
@@ -230,7 +452,7 @@ function Row({
               {row.platform.toUpperCase()}
             </span>
             {' · '}
-            {detailOf(row)}
+            {detailOf(row, language)}
           </span>
         </Link>
         <span className="af-bd-mid">
@@ -244,7 +466,7 @@ function Row({
              * not check", which is a much weaker claim than "we checked and
              * there is nothing wrong".
              */
-            <RowTag tag="SET" detail="nothing missing" sev="good" />
+            <RowTag tag="SET" detail={copy('nothing missing')} sev="good" />
           )}
         </span>
         <Lock row={row} now={now} />
@@ -254,21 +476,81 @@ function Row({
             href={fix.href}
             {...(fix.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
           >
-            {fix.label.replace(/^Open in /, 'Open in ')} {fix.external ? '↗' : '→'}
+            {language === 'es' ? fix.label.replace(/^Open in /, 'Abrir en ') : fix.label} {fix.external ? '↗' : '→'}
           </a>
         ) : (
           <span className="af-bd-cta" />
         )}
       </div>
       <div className="af-mt-board-actions">
-        <span>{row.bestBall ? 'Provider selects the scoring lineup · review roster depth' : <>{row.started ? `${row.started} ${row.started === 1 ? 'starter' : 'starters'} past kickoff · ` : ''}{row.lockAt ? 'Next player deadline' : 'Check individual locks'}{row.unknownKickoffs ? ` · ${row.unknownKickoffs} without a kickoff` : ''}</>}</span>
+        <span>{row.bestBall ? copy('Provider selects the scoring lineup · review roster depth') : <>{row.started ? language === 'es' ? `${row.started} ${copy(row.started === 1 ? 'starter' : 'starters')} con partido iniciado · ` : `${row.started} ${row.started === 1 ? 'starter' : 'starters'} past kickoff · ` : ''}{nextDeadline ? `${copy('Next player deadline')} ${nextDeadline}` : copy(row.lockAt ? 'Next player deadline' : 'Check individual locks')}{row.unknownKickoffs ? language === 'es' ? ` · ${row.unknownKickoffs} sin hora de inicio` : ` · ${row.unknownKickoffs} without a kickoff` : ''}</>}<ScoreStamp score={score} /><SyncStamp row={row} now={now} /></span>
         <LineupIntelligenceActions leagueId={row.leagueId} leagueName={row.leagueName} bestBall={row.bestBall} />
       </div>
     </li>
   )
 }
 
-export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
+/**
+ * One player hurting several of your lineups at once — the fact no single row can show.
+ *
+ * The rows already carry "1 ruled out" each; what they cannot say is that it is the SAME player in
+ * three leagues, which is one piece of news with three places to act. Each league links straight
+ * to his row on that league's page. Built from the same status the rows counted (myTeamPulse.ts),
+ * so a player here is always also counted on his rows.
+ */
+/**
+ * League links shown per player before "+N more". Measured on the live board at 375px
+ * (2026-10-03): six questionable players listing every league made the strip 739px tall and put
+ * the first lineup at 1,190px — one player alone carried twelve links. The rest stay in the DOM
+ * inside a `<details>`, so nothing is unreachable and every link is still one tap away.
+ */
+const XL_LEAGUES_SHOWN = 3
+
+function CrossLeagueStrip({ flags }: { flags: CrossLeagueFlag[] }) {
+  const { language } = useOptionalLanguage()
+  const es = language === 'es'
+  return (
+    <div className="af-bd-xl" role="region" aria-label={es ? 'Jugadores en varias alineaciones' : 'Players in more than one lineup'}>
+      <span className="af-bd-xl-label">{es ? 'Afecta a más de una alineación' : 'Hurting more than one lineup'}</span>
+      <ul className="af-bd-xl-list">
+        {flags.map((f) => (
+          <li key={f.id} data-status={f.status}>
+            <RowTag tag={f.status === 'out' ? 'OUT' : 'Q'} sev={f.status === 'out' ? 'bad' : 'warn'} />
+            <span className="af-bd-xl-name">{f.name}</span>
+            <span className="af-bd-xl-count">
+              {es ? `en ${f.leagues.length} alineaciones:` : `in ${f.leagues.length} lineups:`}
+            </span>
+            <span className="af-bd-xl-leagues">
+              {f.leagues.slice(0, XL_LEAGUES_SHOWN).map((l, i) => (
+                <span key={l.leagueId}>
+                  {i > 0 ? ', ' : ''}
+                  <Link href={l.href} prefetch={false}>{l.leagueName}</Link>
+                </span>
+              ))}
+              {f.leagues.length > XL_LEAGUES_SHOWN ? (
+                <details className="af-bd-xl-more">
+                  <summary>
+                    {es ? `+${f.leagues.length - XL_LEAGUES_SHOWN} más` : `+${f.leagues.length - XL_LEAGUES_SHOWN} more`}
+                  </summary>
+                  {f.leagues.slice(XL_LEAGUES_SHOWN).map((l, i) => (
+                    <span key={l.leagueId}>
+                      {i > 0 ? ', ' : ''}
+                      <Link href={l.href} prefetch={false}>{l.leagueName}</Link>
+                    </span>
+                  ))}
+                </details>
+              ) : null}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+export function MyTeamBoard({ pulse, now, allHref, lineups = null, baseHref = '/core/my-team', lineupReminder = null }: MyTeamBoardProps) {
+  const { language } = useOptionalLanguage()
+  const copy = (english: string) => coreUiCopy(english, language)
   const nowMs = now ?? Date.now()
   /*
    * 🛑 BOTH COLUMNS, NOT JUST THE BROKEN ONE. This read `pulse.needs` alone and
@@ -285,21 +567,44 @@ export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
    * hole is a loss you can still prevent — that is the rule, and it falls out of
    * the order rather than being computed here.
    */
-  const rows = [...pulse.needs, ...pulse.set].slice(0, BOARD_ROWS)
+  /*
+   * ⚠ ALREADY FILTERED, BY THE LOADER. `needs`/`set` arrive capped at ten, so filtering them here
+   * would only ever search the rows already on screen — `myTeamBoardFilter.ts` has the account.
+   */
+  const needsView = pulse.needs
+  const actionNeeds = needsView.filter((row) => !row.bestBall)
+  const setView = pulse.set
+  const filterOptions = pulse.filters ?? []
+  const activeFilter = pulse.filter ?? null
+  /* Readable rows the chip hides. Subtracted from the footer's hidden count, which is about the top ten. */
+  const filteredOut = pulse.filteredOut ?? 0
+  const readableTotal = pulse.needsTotal + pulse.setTotal + filteredOut
+  const rows = [...needsView, ...setView].slice(0, BOARD_ROWS)
   const total = pulse.considered
   const activeTotal = Math.max(0, total - (pulse.paused ?? 0) - (pulse.notChecked.inactive ?? 0))
 
   /*
-   * ⚠ THE TIER KEY MIRRORS THE LOADER'S COMPARATOR, FIELD FOR FIELD, AND NOT
-   * THE RENDERED LOCK. `needs` sorts on (locked, severity, lockAt) and `set` on
-   * lockAt alone with severity pinned at 0, so this one key returns "tied"
-   * exactly when the comparator would have returned 0 in either column. Reading
-   * the DISPLAYED time instead would merge rows an hour apart, because
-   * `formatLockLabel` rounds to the hour past a day.
+   * ⚠ THE TIER KEY MIRRORS THE LOADER'S COMPARATORS, FIELD FOR FIELD, AND NOT
+   * THE RENDERED LOCK. `needs` sorts on (locked, severity, lockAt, questionable)
+   * and `set` on (questionable, lockAt), so each key returns "tied" exactly when
+   * its column's comparator would have returned 0. The N/S prefix keeps the two
+   * columns apart: the last `needs` row and the first `set` row are ordered by
+   * the concatenation itself, so they never tie. Reading the DISPLAYED time
+   * instead would merge rows an hour apart, because `formatLockLabel` rounds to
+   * the hour past a day.
    */
-  const ranks = rankTiers(rows.map((r) => `${(r.actionableSeverity ?? r.severity) === 0 ? 1 : 0}|${r.actionableSeverity ?? r.severity}|${r.lockAt ?? ''}`))
+  const needsShown = Math.min(needsView.length, BOARD_ROWS)
+  const ranks = tiedRankLabels(rankTiers(rows.map((r, i) => {
+    const sev = r.actionableSeverity ?? r.severity
+    return i < needsShown
+      ? `N|${sev === 0 ? 1 : 0}|${sev}|${r.lockAt ?? ''}|${r.questionable}`
+      : `S|${r.questionable}|${r.lockAt ?? ''}`
+  })))
+  const questionableFirst = needsView.length === 0 && rows.some((r) => r.questionable > 0)
   /* Nothing separated any row from any other, so the board is a set, not a ranking. */
   const unordered = ranks.length > 0 && ranks.every((r) => r === null)
+  /* Over every league in view, not the ten shown — the record is the whole weekend (of this chip). */
+  const weekRecord = summariseWeekScores(lineups, pulse.inViewLeagueIds ?? [...needsView, ...setView].map((r) => r.leagueId))
 
   /*
    * ⚠ THREE DIFFERENT SILENCES, THREE DIFFERENT SENTENCES. "Nothing needs you",
@@ -311,13 +616,13 @@ export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
     return (
       <div className="af-bd">
         <BoardHead
-          eyebrow="Core · My team"
-          title="My team"
-          blurb="Your most urgent lineups across every league, ranked by time left before lock."
+          eyebrow={`Core · ${copy('My team')}`}
+          title={copy('My team')}
+          blurb={copy('Your most urgent lineups across every league, ranked by time left before lock.')}
         />
         <p className="af-bd-note">
-          No team in any league is claimed to this account yet, so there is no lineup to
-          check. <Link href="/import">Connect a platform</Link> and this board fills in.
+          {copy('No team in any league is claimed to this account yet, so there is no lineup to check.')}{' '}
+          <Link href="/import">{copy('Connect a platform')}</Link> {copy('and this board fills in.')}
         </p>
       </div>
     )
@@ -325,16 +630,51 @@ export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
 
   const idsUnreadable = pulse.notChecked.idsUnreadable ?? 0
   const unreadable = pulse.notChecked.noRoster + pulse.notChecked.noLineup + idsUnreadable
-  const hidden = Math.max(0, activeTotal - rows.length)
+  /* The footer accounts for leagues past the top ten; a chip's hidden rows have their own line. */
+  const hidden = Math.max(0, activeTotal - rows.length - filteredOut)
   const hiddenNeeds = Math.max(0, pulse.needsTotal - Math.min(pulse.needs.length, BOARD_ROWS))
+  const es = language === 'es'
 
   return (
     <div className="af-bd">
       <BoardHead
-        eyebrow="Core · My team"
-        title="My team"
-        blurb="Review remaining lineup problems across your leagues. Deadlines follow individual players; confirm locks and AutoSubs on your platform."
+        eyebrow={`Core · ${copy('My team')}`}
+        title={copy('My team')}
+        blurb={copy('Review remaining lineup problems across your leagues, as of your last sync — opening a league checks its live lineup. Deadlines follow individual players; confirm locks and AutoSubs on your platform.')}
       />
+
+      {actionNeeds.length > 0 ? (
+        <section className="af-bd-action-queue" aria-labelledby="af-mt-action-queue">
+          <div>
+            <span className="af-label">{copy('Before lock')}</span>
+            <h2 id="af-mt-action-queue">{actionNeeds.length} {actionNeeds.length === 1 ? copy('lineup needs a look') : copy('lineups need a look')}</h2>
+            <p>{copy('Open a team to inspect the issue and confirm player locks on your platform.')}</p>
+          </div>
+          <ol>
+            {actionNeeds.slice(0, 3).map((row) => {
+              const source = lineupLink({
+                id: row.leagueId, platform: row.platform, platformLeagueId: row.platformLeagueId,
+                season: row.leagueSeason, name: row.leagueName, teamId: row.teamId,
+              })
+              return (
+                <li key={row.leagueId}>
+                  <Link href={row.href}>
+                    <strong>{row.leagueName}</strong>
+                    {/* The same counts the row's tags carry, in the reader's language (live Spanish check, 2026-10-03). */}
+                    <span>{[
+                      row.empty ? (es ? `${row.empty} ${row.empty === 1 ? 'vacía' : 'vacías'}` : `${row.empty} empty`) : null,
+                      row.out ? (es ? `${row.out} ${row.out === 1 ? 'descartado' : 'descartados'}` : `${row.out} out`) : null,
+                      row.bye ? (es ? `${row.bye} en descanso` : `${row.bye} on bye`) : null,
+                    ].filter(Boolean).join(' · ') || copy('Lineup risk')} · <Lock row={row} now={nowMs} /></span>
+                    <span aria-hidden>{copy('Review')} →</span>
+                  </Link>
+                  {source?.external ? <a className="af-bd-action-source" href={source.href} target="_blank" rel="noopener noreferrer">{copy('Open in')} {row.platform} ↗</a> : null}
+                </li>
+              )
+            })}
+          </ol>
+        </section>
+      ) : null}
 
       <section className="af-bd-sec" aria-labelledby="af-mt-board">
         <SectionHead
@@ -359,15 +699,53 @@ export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
           */
           label={
             rows.length === 0
-              ? 'Needs you first'
+              ? copy('Needs you first')
               : unordered
-                ? `${rows.length} shown · all lock together, so in no particular order`
-                : pulse.needs.length > 0
-                  ? `Top ${rows.length} · ranked by urgency`
-                  : `Top ${rows.length} · nothing is broken, so ranked by lock time`
+                ? language === 'es' ? `${rows.length} visibles · cierran a la vez, sin orden particular` : `${rows.length} shown · all lock together, so in no particular order`
+                : needsView.length > 0
+                  ? language === 'es' ? `Primeros ${rows.length} · por urgencia` : `Top ${rows.length} · ranked by urgency`
+                  : questionableFirst
+                    ? language === 'es' ? `Primeros ${rows.length} · dudosos primero, luego por hora de cierre` : `Top ${rows.length} · questionable starters first, then lock time`
+                    : language === 'es' ? `Primeros ${rows.length} · sin problemas, ordenados por hora de cierre` : `Top ${rows.length} · nothing is broken, so ranked by lock time`
           }
-          count={`${pulse.checked.toLocaleString()} of ${activeTotal.toLocaleString()} ${pulse.paused ? 'active ' : ''}teams read`}
+          count={language === 'es'
+            ? `${pulse.checked.toLocaleString()} de ${activeTotal.toLocaleString()} equipos ${pulse.paused ? 'activos ' : ''}revisados`
+            : `${pulse.checked.toLocaleString()} of ${activeTotal.toLocaleString()} ${pulse.paused ? 'active ' : ''}teams read`}
+          /* Only over rows: on an empty list there is nothing to read. */
+          info={rows.length > 0 ? <BoardReadingTip es={es} scores={weekRecord != null} /> : undefined}
         />
+        {filterOptions.length > 0 ? (
+          <div className="af-bd-filters" role="group" aria-label={es ? 'Filtrar alineaciones' : 'Filter lineups'}>
+            <Link className="af-bd-chip" href={baseHref} aria-current={activeFilter == null ? 'true' : undefined} scroll={false}>
+              {es ? 'Todas' : 'All'} <span className="af-bd-chip-n">{readableTotal}</span>
+            </Link>
+            {filterOptions.map((o, i) => (
+              <Link
+                key={`${o.dim}:${o.value}`}
+                className="af-bd-chip"
+                href={boardFilterHref(baseHref, o)}
+                scroll={false}
+                data-dim={o.dim}
+                data-group-start={i === 0 || filterOptions[i - 1].dim !== o.dim ? 'true' : undefined}
+                aria-current={activeFilter?.dim === o.dim && activeFilter.value === o.value ? 'true' : undefined}
+              >
+                {o.label} <span className="af-bd-chip-n">{o.count}</span>
+              </Link>
+            ))}
+          </div>
+        ) : null}
+        {activeFilter && filteredOut > 0 ? (
+          <p className="af-bd-note af-bd-note--plain af-bd-note--filter">
+            {es
+              ? `${filteredOut} ${filteredOut === 1 ? 'alineación más está oculta' : 'alineaciones más están ocultas'} por este filtro. `
+              : `${filteredOut} other ${filteredOut === 1 ? 'lineup is' : 'lineups are'} hidden by this filter. `}
+            <Link href={baseHref} scroll={false}>{es ? 'Mostrar todas' : 'Show all'}</Link>
+          </p>
+        ) : null}
+        {weekRecord ? (
+          <p className="af-bd-note af-bd-note--plain af-bd-note--record">{weekRecordLine(weekRecord, language === 'es')}</p>
+        ) : null}
+        {pulse.crossLeague && pulse.crossLeague.length > 0 ? <CrossLeagueStrip flags={pulse.crossLeague} /> : null}
         {rows.length > 0 ? (
           <>
             {/*
@@ -379,9 +757,15 @@ export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
             */}
             {pulse.needs.length === 0 ? (
               <p className="af-bd-note af-bd-note--plain">
-                {pulse.automatic ? 'No manual lineup problems found in the available data. Best Ball scoring lineups are selected automatically; review those leagues for roster injuries and depth.' : <>Every one of the {pulse.checked.toLocaleString()} lineups we could read is set —
-                no empty slots, nobody ruled out
-                {pulse.byeChecked ? ', nobody on a bye' : ''}. These are the ones locking soonest.</>}
+                {pulse.automatic
+                  ? copy('No manual lineup problems found in the available data. Best Ball scoring lineups are selected automatically; review those leagues for roster injuries and depth.')
+                  : language === 'es'
+                    ? `Las ${pulse.checked.toLocaleString()} alineaciones que pudimos leer están listas: sin posiciones vacías ni jugadores descartados${pulse.byeChecked ? ', y nadie descansa' : ''}. ${questionableFirst ? 'Primero las que tienen titulares dudosos, luego las que cierran antes.' : 'Estas son las que cierran primero.'}`
+                    : <>Every one of the {pulse.checked.toLocaleString()} lineups we could read is set —
+                      no empty slots, nobody ruled out
+                      {pulse.byeChecked ? ', nobody on a bye' : ''}. {questionableFirst
+                        ? 'Lineups with questionable starters come first, then the ones locking soonest.'
+                        : 'These are the ones locking soonest.'}</>}
               </p>
             ) : null}
             <ul className="af-bd-rows">
@@ -392,10 +776,26 @@ export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
                   rank={ranks[i]}
                   showRank={!unordered}
                   now={nowMs}
+                  score={rowScoreOf(lineups?.byLeague[r.leagueId])}
                 />
               ))}
             </ul>
           </>
+        ) : pulse.checked === 0 && unreadable === 0 ? (
+          /*
+            ⚠ NOTHING TO READ IS NOT A FAILURE TO READ. Every team here is
+            pre-draft, finished, archived or paused — the off-season, for every
+            user, from January to the draft. The branch below used to catch this
+            too and print "We could not read a single lineup", a data-gap warning
+            over an account with no gap. The counts that say which teams sit out
+            are the notes under this section; this line only says there is
+            nothing to set. It still makes no claim that any lineup is fine.
+          */
+          <p className="af-bd-note af-bd-note--plain">
+            {language === 'es'
+              ? 'No hay alineaciones que ajustar ahora: cada equipo está antes del draft, terminado o en pausa. Las líneas de abajo dicen cuáles.'
+              : 'No lineups to set right now — every team is pre-draft, finished or paused. The lines below say which.'}
+          </p>
         ) : pulse.checked === 0 ? (
           /*
             🛑 THE MOST IMPORTANT BRANCH ON THIS SCREEN, AND THE FIRST VERSION GOT
@@ -406,18 +806,22 @@ export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
             manager with four unfilled lineups that there is nothing to do.
           */
           <p className="af-bd-note">
-            <strong>We could not read a single lineup.</strong> Nothing below is a verdict on your
-            teams — it is a gap in what we hold. The line under this says which.
+            <strong>{copy('We could not read a single lineup.')}</strong>{' '}
+            {copy('Nothing below is a verdict on your teams — it is a gap in what we hold. The line under this says which.')}
           </p>
         ) : (
           <p className="af-bd-note">
-            Every one of the {pulse.checked.toLocaleString()} lineups we could read is set — no
-            empty slots, nobody ruled out
-            {pulse.byeChecked ? ', nobody on a bye' : ''}.
+            {language === 'es'
+              ? `Las ${pulse.checked.toLocaleString()} alineaciones que pudimos leer están listas: sin posiciones vacías ni jugadores descartados${pulse.byeChecked ? ', y nadie descansa' : ''}.`
+              : <>Every one of the {pulse.checked.toLocaleString()} lineups we could read is set — no
+                empty slots, nobody ruled out
+                {pulse.byeChecked ? ', nobody on a bye' : ''}.</>}
           </p>
         )}
       </section>
-      {pulse.paused ? <p className="af-bd-note">{pulse.paused} {pulse.paused === 1 ? 'league is' : 'leagues are'} paused on this account and excluded from lineup urgency. <Link href={allHref}>View all leagues</Link> to review them.</p> : null}
+      {pulse.paused ? <p className="af-bd-note">{language === 'es'
+        ? `${pulse.paused} ${pulse.paused === 1 ? 'liga está pausada' : 'ligas están pausadas'} en esta cuenta y no se incluyen en las prioridades de alineación. `
+        : `${pulse.paused} ${pulse.paused === 1 ? 'league is' : 'leagues are'} paused on this account and excluded from lineup urgency. `}<Link href={allHref}>{copy('View all leagues')}</Link> {copy('to review them.')}</p> : null}
 
       {/*
         ⚠ THE UNREADABLE COUNT IS ITS OWN LINE, NOT FOLDED INTO THE FOOTER. A
@@ -427,38 +831,57 @@ export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
       */}
       {(pulse.automatic ?? 0) > 0 || (pulse.notChecked.inactive ?? 0) > 0 ? (
         <p className="af-bd-note">
-          {(pulse.automatic ?? 0) > 0 ? `${pulse.automatic} Best Ball teams use automatic lineups. ` : null}
-          {(pulse.notChecked.inactive ?? 0) > 0 ? `${pulse.notChecked.inactive} pre-draft, completed, or inactive teams are excluded from manual lineup tasks.` : null}
+          {(pulse.automatic ?? 0) > 0 ? language === 'es' ? `${pulse.automatic} equipos Best Ball usan alineaciones automáticas. ` : `${pulse.automatic} Best Ball teams use automatic lineups. ` : null}
+          {(pulse.notChecked.inactive ?? 0) > 0 ? language === 'es' ? `${pulse.notChecked.inactive} equipos previos al draft, finalizados o inactivos quedan fuera de las tareas manuales de alineación.` : `${pulse.notChecked.inactive} pre-draft, completed, or inactive teams are excluded from manual lineup tasks.` : null}
         </p>
       ) : null}
       {unreadable > 0 ? (
         <p className="af-bd-note">
           <strong>
-            {unreadable} of your {activeTotal.toLocaleString()} {pulse.paused ? 'active ' : ''}claimed{' '}
-            {activeTotal === 1 ? 'team' : 'teams'} could not be checked.
+            {language === 'es'
+              ? `${unreadable} de tus ${activeTotal.toLocaleString()} equipos asignados${pulse.paused ? ' activos' : ''} no se pudieron revisar.`
+              : <>{unreadable} of your {activeTotal.toLocaleString()} {pulse.paused ? 'active ' : ''}claimed{' '}
+                  {activeTotal === 1 ? 'team' : 'teams'} could not be checked.</>}
           </strong>{' '}
           {/* Singular counts read as broken copy on a screen full of real numbers. */}
           {pulse.notChecked.noRoster > 0
-            ? `${pulse.notChecked.noRoster} ${pulse.notChecked.noRoster === 1 ? 'has' : 'have'} no roster imported`
+            ? language === 'es' ? `${pulse.notChecked.noRoster} sin plantilla importada` : `${pulse.notChecked.noRoster} ${pulse.notChecked.noRoster === 1 ? 'has' : 'have'} no roster imported`
             : ''}
-          {pulse.notChecked.noRoster > 0 && pulse.notChecked.noLineup > 0 ? ' and ' : ''}
+          {pulse.notChecked.noRoster > 0 && pulse.notChecked.noLineup > 0 ? language === 'es' ? ' y ' : ' and ' : ''}
           {pulse.notChecked.noLineup > 0
-            ? `${pulse.notChecked.noLineup} ${pulse.notChecked.noLineup === 1 ? 'has' : 'have'} a roster but no starting lineup on file`
+            ? language === 'es' ? `${pulse.notChecked.noLineup} con plantilla pero sin alineación titular registrada` : `${pulse.notChecked.noLineup} ${pulse.notChecked.noLineup === 1 ? 'has' : 'have'} a roster but no starting lineup on file`
             : ''}
           {/* A foreign-id league's lineup is unread, not absent — its own words, never "no lineup". */}
-          {idsUnreadable > 0 && (pulse.notChecked.noRoster > 0 || pulse.notChecked.noLineup > 0) ? ' and ' : ''}
+          {idsUnreadable > 0 && (pulse.notChecked.noRoster > 0 || pulse.notChecked.noLineup > 0) ? language === 'es' ? ' y ' : ' and ' : ''}
           {idsUnreadable > 0
-            ? `${idsUnreadable} ${idsUnreadable === 1 ? 'has' : 'have'} a roster on file, but ${idsUnreadable === 1 ? '' : 'for each league, '}${FOREIGN_IDS_UNREADABLE_CLAUSE}`
+            ? language === 'es' ? `${idsUnreadable} con plantilla registrada cuyos identificadores no podemos vincular al calendario` : `${idsUnreadable} ${idsUnreadable === 1 ? 'has' : 'have'} a roster on file, but ${idsUnreadable === 1 ? '' : 'for each league, '}${FOREIGN_IDS_UNREADABLE_CLAUSE}`
             : ''}
-          . This is a gap in available data, not a verdict on those lineups. {' '}
+          . {copy('This is a gap in available data, not a verdict on those lineups.')} {' '}
           {/* A re-sync cannot make a foreign league's ids matchable, so it is offered only for the gaps it can close. */}
           {pulse.notChecked.noRoster + pulse.notChecked.noLineup > 0 ? (
             <>
-              <Link href={allHref}>Review league setup</Link> or <Link href="/core/sync">re-sync imported leagues</Link>.
+              <Link href={allHref}>{copy('Review league setup')}</Link> {copy('or')} <Link href="/core/sync">{copy('re-sync imported leagues')}</Link>.
             </>
           ) : null}
         </p>
       ) : null}
+
+      {/*
+        ⚠ STALE ROWS SAY SO TOGETHER, NOT ONLY ONE AT A TIME. Each row carries its own "synced 2d ago";
+        this line is the reason to act on them — a re-sync is one click for all of them at once.
+      */}
+      {(() => {
+        const stale = rows.filter((r) => r.syncFailed || (r.syncedAt != null && nowMs - Date.parse(r.syncedAt) > STALE_SYNC_MS))
+        if (stale.length === 0) return null
+        return (
+          <p className="af-bd-note af-bd-note--plain af-bd-note--stale" suppressHydrationWarning>
+            {language === 'es'
+              ? `${stale.length} ${stale.length === 1 ? 'liga mostrada no se sincroniza' : 'ligas mostradas no se sincronizan'} desde hace más de un día o falló su última sincronización, así que sus filas pueden describir una alineación anterior. `
+              : `${stale.length} of the leagues shown ${stale.length === 1 ? 'was' : 'were'} last synced over a day ago or failed to sync, so ${stale.length === 1 ? 'its row' : 'their rows'} may describe an older lineup. `}
+            <Link href="/core/sync">{copy('re-sync imported leagues')}</Link>.
+          </p>
+        )
+      })()}
 
       {!pulse.byeChecked ? (
         /*
@@ -467,26 +890,44 @@ export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
           read, some teams could not be checked — stay boxed on purpose.
         */
         <p className="af-bd-note af-bd-note--plain">
-          The bye check did not run this week — the ingested schedule was too incomplete to
-          tell a bye from a gap in our own data, so no row claims to be bye-clear.
+          {copy('The bye check did not run this week — the ingested schedule was too incomplete to tell a bye from a gap in our own data, so no row claims to be bye-clear.')}
         </p>
       ) : null}
+
+      {/* The check reads NFL lineups only (`loadRegularSeasonGames`); under an NBA chip it would describe nothing on screen. */}
+      {lineupReminder && rows.some((r) => (r.sport ?? 'NFL') === 'NFL') ? <ReminderLine status={lineupReminder} es={es} /> : null}
 
       <FooterSummary
         hidden={hidden}
         total={total}
         href={allHref}
-        emptyText={pulse.paused ? 'Every active league is on this board.' : undefined}
+        emptyText={pulse.paused ? copy('Every active league is on this board.') : undefined}
         quiet={
-          hiddenNeeds > 0
-            ? `include ${hiddenNeeds} more teams needing lineup review — open the full league list.`
-            : unreadable > 0
-              ? 'are either set or could not be read — the line above says which.'
-            : (pulse.automatic ?? 0) > 0 || (pulse.notChecked.inactive ?? 0) > 0
-              ? 'have no remaining manual lineup task.'
-              : 'are set — nothing needs you there.'
+          language === 'es'
+            ? hiddenNeeds > 0
+              ? `${hidden === 1 ? 'incluye' : 'incluyen'} ${hiddenNeeds} equipos más que necesitan revisar su alineación; abre la lista completa.`
+              : unreadable > 0
+                ? `no se muestran: ${Math.max(0, hidden - unreadable)} ${Math.max(0, hidden - unreadable) === 1 ? 'lista' : 'listas'} y ${unreadable} sin poder leer (arriba se explica por qué).`
+                : (pulse.automatic ?? 0) > 0 || (pulse.notChecked.inactive ?? 0) > 0
+                  ? hidden === 1 ? 'no tiene tareas manuales de alineación pendientes.' : 'no tienen tareas manuales de alineación pendientes.'
+                  : hidden === 1 ? 'está lista; no requiere atención.' : 'están listas; no requieren atención.'
+            : hiddenNeeds > 0
+              ? `include ${hiddenNeeds} more teams needing lineup review — open the full league list.`
+              : unreadable > 0
+                /*
+                 * ⚠ SAY THE SPLIT, NOT "EITHER/OR". "45 more leagues are either set or could not be read
+                 * — the line above says which" made the reader do the subtraction (live, 2026-10-02: it
+                 * meant 44 set and 1 unreadable). Every unreadable league is hidden — it never becomes a
+                 * row — so the rest of the hidden ones are the set ones.
+                 */
+                ? `are not shown: ${Math.max(0, hidden - unreadable)} set, ${unreadable} could not be read (the line above says why).`
+                : (pulse.automatic ?? 0) > 0 || (pulse.notChecked.inactive ?? 0) > 0
+                  ? 'have no remaining manual lineup task.'
+                  : 'are set — nothing needs you there.'
         }
+        language={language}
       />
+      <TeamPortfolioWorkspace pulse={pulse} />
     </div>
   )
 }
