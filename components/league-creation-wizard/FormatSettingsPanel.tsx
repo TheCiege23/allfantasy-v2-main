@@ -139,7 +139,7 @@ interface GuillotineSettingsPanelProps {
 
 const SPORT_INFO: Record<string, { weeks: number; chopDay: string; waiverDay: string }> = {
   NFL: { weeks: 18, chopDay: 'Tuesday', waiverDay: 'Wednesday' },
-  NBA: { weeks: 24, chopDay: 'Monday', waiverDay: 'Tuesday' },
+  NBA: { weeks: 24, chopDay: 'Tuesday night', waiverDay: 'Thursday' },
   MLB: { weeks: 26, chopDay: 'Monday', waiverDay: 'Tuesday' },
   NHL: { weeks: 24, chopDay: 'Monday', waiverDay: 'Tuesday' },
   NCAAF: { weeks: 14, chopDay: 'Sunday', waiverDay: 'Monday' },

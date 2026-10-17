@@ -1,4 +1,5 @@
 import { findSportsPlayerByLeagueId } from '@/lib/player-identity/findSportsPlayerByLeagueId'
+import { getLastWaiverTime } from '@/lib/guillotine/sportConfig'
 import { identityWhereForLeagueId } from '@/lib/player-identity/externalIdNamespace'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
@@ -158,15 +159,42 @@ export function compareClaimsWithCurrentRosterPriority(
   )
 }
 
+/**
+ * A guillotine league settles claims once a week, at its sport's scheduled waiver run, so the blind
+ * FAAB bids on a chopped team's players compete together. The cron runs hourly and used to settle
+ * every pending claim each run, which turned the post-chop auction into first-come-first-served.
+ * Returns null (no gate) for every other league.
+ */
+const WEEKLY_WAIVER_GUILLOTINE_SPORTS = new Set(['NBA'])
+
+async function guillotineClaimsCutoff(leagueId: string, now: Date): Promise<Date | null> {
+  let league: { sport: string | null; guillotineMode: boolean | null; leagueVariant: string | null } | null = null
+  try {
+    league = await prisma.league.findUnique({ where: { id: leagueId }, select: { sport: true, guillotineMode: true, leagueVariant: true } })
+  } catch {
+    return null
+  }
+  if (!league) return null
+  const isGuillotine = league.guillotineMode === true || String(league.leagueVariant ?? '').toLowerCase() === 'guillotine'
+  if (!isGuillotine) return null
+  const sport = String(league.sport ?? '').toUpperCase()
+  // NBA only for now: NFL guillotine leagues are mid-season on the settle-every-hour behaviour, and
+  // moving them to a weekly run is the owner's call, not a side effect of the NBA launch.
+  if (!WEEKLY_WAIVER_GUILLOTINE_SPORTS.has(sport)) return null
+  return getLastWaiverTime(sport, now)
+}
+
 export async function processWaiverWindow(
   leagueId: string,
   seasonId: string,
+  now: Date = new Date(),
 ): Promise<ProcessedClaim[]> {
   const season = await prisma.redraftSeason.findFirst({ where: { id: seasonId, leagueId } })
   if (!season) return []
 
+  const claimsCutoff = await guillotineClaimsCutoff(leagueId, now)
   const claims = await prisma.redraftWaiverClaim.findMany({
-    where: { leagueId, seasonId, status: 'pending' },
+    where: { leagueId, seasonId, status: 'pending', ...(claimsCutoff ? { submittedAt: { lt: claimsCutoff } } : {}) },
     // Mirrors compareWaiverClaims: highest bid first (null bids last, treated as
     // 0), then lowest priority number, earliest submission, then stable id.
     orderBy: [
