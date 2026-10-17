@@ -335,6 +335,33 @@ describe('selectWhisperer', () => {
     }
   })
 
+  it("records the Whisperer's name — the person's, else the team's, never their user id", async () => {
+    overrides.set('zombieLeague.findUniqueOrThrow', async () => ({ id: 'z1', leagueId: 'L1', whispererAmbushCount: 3, league: {} }))
+    overrides.set('zombieLeagueTeam.findMany', async () => [{ rosterId: 'R-human' }])
+    overrides.set('roster.findMany', async () => [{ id: 'R-human', platformUserId: 'user-1', playerData: null }])
+    overrides.set('roster.findUnique', async () => ({ platformUserId: 'user-1' }))
+    const upsertName = () =>
+      (calls.filter((c) => c.key === 'whispererRecord.upsert').at(-1)?.args as { create: { displayName: string } }).create.displayName
+
+    // AppUser.displayName is usually null — the case that used to store the uid.
+    overrides.set('appUser.findUnique', async () => ({ displayName: null, username: 'guap' }))
+    await selectWhisperer('z1', 'random')
+    expect(upsertName()).toBe('guap')
+
+    // Nobody resolvable: the team's name.
+    overrides.set('appUser.findUnique', async () => null)
+    overrides.set('leagueTeam.findMany', async () => [
+      { id: 't1', externalId: 'x', platformUserId: 'user-1', claimedByUserId: null, teamName: 'Brain Drain', ownerName: '' },
+    ])
+    await selectWhisperer('z1', 'random')
+    expect(upsertName()).toBe('Brain Drain')
+
+    // Nothing at all: the role.
+    overrides.set('leagueTeam.findMany', async () => [])
+    await selectWhisperer('z1', 'random')
+    expect(upsertName()).toBe('The Whisperer')
+  })
+
   it('tells the chosen manager, and only them, that they are the Whisperer', async () => {
     const { notifyZombiePlayer } = await import('@/lib/zombie/commissionerNotificationService')
     vi.mocked(notifyZombiePlayer).mockClear()
