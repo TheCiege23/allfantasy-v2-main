@@ -332,8 +332,14 @@ test.describe('@ai reliability click audit', () => {
     }
     const drawerErrorState = page.getByTestId('unified-ai-mobile-drawer-error-state')
     const recoveryOutput = mobileDrawer.getByText(/Recovery output after retry/i)
-    const hasDrawerError = await drawerErrorState.isVisible().catch(() => false)
-    if (hasDrawerError) {
+    // The drawer shows the loading state until the mocked failed run answers.
+    await expect
+      .poll(async () => {
+        if (await recoveryOutput.isVisible().catch(() => false)) return true
+        return await drawerErrorState.isVisible().catch(() => false)
+      }, { timeout: 20_000 })
+      .toBeTruthy()
+    if (await drawerErrorState.isVisible().catch(() => false)) {
       for (let attempt = 0; attempt < 2; attempt += 1) {
         if (await recoveryOutput.isVisible().catch(() => false)) break
         const retryButton = drawerErrorState.getByTestId('ai-error-retry-button')
