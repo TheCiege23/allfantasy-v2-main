@@ -26,6 +26,8 @@ import { coverOptions, type CoverCandidate, type CoverOptions } from './lineupCo
 import { lookupProjections } from './playerProjections'
 import { computeLeagueProjectedPoints, extractScoringSettings, hasScoringRules } from '@/lib/projections/leagueScoring'
 import { lineupFixLink } from './platformLinks'
+import { recordAdvice } from '@/lib/chimmy-advice/adviceStore'
+import { AF_TIP_SURFACE } from '@/lib/chimmy-advice/adviceSurfaces'
 import type {
   Dash34Brief,
   Dash34Data,
@@ -1735,6 +1737,35 @@ async function loadDash34Data(
     return typeof pts === 'number' && Number.isFinite(pts) ? Math.round(pts * 10) / 10 : null
   }
 
+  /*
+   * The card's top "swap in X" for a RULED-OUT starter, written as a tip so the Receipts card can
+   * later say how it turned out ("AF tip: start Allgeier over Love · 14.2 vs 0"). Sleeper only —
+   * receipts resolve against Sleeper's weekly scores and lineups. Fire-and-forget and idempotent:
+   * the store upserts one row per (user, league, week, pair), so a re-render refreshes the row
+   * rather than adding one, and a failed write never touches the page. Never for a Questionable
+   * starter — "keep the pivot ready" is not "start X", and a receipt grades only what was said.
+   */
+  function noteTip(row: Dash34LeagueRow, b: BookEntry, pick: { id?: string; name: string } | undefined): void {
+    if (!pick?.id || !b.sleeperId || !isUnavailable(b.status)) return
+    if (String(row.platform ?? '').toLowerCase() !== 'sleeper') return
+    const week = rosterByLeague.get(row.id)?.verification?.week
+    const season = Number(row.season)
+    if (week == null || !Number.isFinite(season)) return
+    void recordAdvice({
+      userId,
+      leagueId: row.id,
+      sport: String(row.sport ?? 'NFL'),
+      season,
+      week,
+      adviceType: 'start_sit',
+      surface: AF_TIP_SURFACE,
+      rec: { key: pick.id, name: pick.name },
+      alt: { key: b.sleeperId, name: b.name },
+      slot: null,
+      confidencePct: null,
+    }).catch(() => undefined)
+  }
+
   const rankOf = (b: BookEntry): number | null =>
     valueBySleeperId.get(b.sleeperId)?.overallRank ?? null
 
@@ -1812,7 +1843,10 @@ async function loadDash34Data(
                       })?.href ?? null
                     : null,
                   ...(!rosterByLeague.get(id)?.bestBall && b.slotByLeague.get(id) === 'starter'
-                    ? (({ direct, chain }) => ({ bench: direct, cover: chain }))(coverFor(id, b.sleeperId, b.position))
+                    ? (({ direct, chain }) => {
+                        noteTip(row, b, direct[0])
+                        return { bench: direct, cover: chain }
+                      })(coverFor(id, b.sleeperId, b.position))
                     : { bench: [], cover: null }),
                 }
               : null

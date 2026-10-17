@@ -739,3 +739,15 @@
 @media (max-width: 560px) {
   .af-connect-actions, .af-connect-go { width: 100%; }
 }
+
+/* Receipts: the triage card's tips and their "AF saved me" share (2026-10-17). */
+.af3a-receipt-share-row { margin-top: -6px; }
+.af3a-receipt-share {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  background: transparent;
+  color: var(--af-good, #3ecf8e);
+  font-size: 12px;
+  cursor: pointer;
+}

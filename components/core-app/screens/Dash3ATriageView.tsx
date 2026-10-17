@@ -232,6 +232,7 @@ export function Dash3ATriageView({
   valueBasis,
   freshness,
   depthAlerts = [],
+  proUpsell = null,
 }: {
   rows: TriageViewRow[]
   overflow: number
@@ -239,6 +240,12 @@ export function Dash3ATriageView({
   /** Present only when a row carries a price — see the band. */
   valueBasis: { format: string; qbFormat: string } | null
   freshness: ReactNode
+  /**
+   * The AF Pro upgrade path when the viewer's plan does NOT include the card's paid parts (the
+   * best-free-agent button, Questionable game-time calls). Null for a Pro viewer, before the paywall
+   * starts, and when the plan could not be read.
+   */
+  proUpsell?: string | null
 }) {
   const { language } = useOptionalLanguage()
   const es = language === 'es'
@@ -248,7 +255,7 @@ export function Dash3ATriageView({
    * board's ids are Sleeper ids), in the order the card shows them. Capped: see TriageBestAdd.
    */
   const bestAddKeys = new Set<string>()
-  for (const p of rows) {
+  for (const p of proUpsell ? [] : rows) {
     if (p.tone !== 'bad' || String(p.sport ?? '').toUpperCase() !== 'NFL' || !p.sleeperId) continue
     for (const l of p.leagues) {
       if (bestAddKeys.size >= BEST_ADD_AUTO_LIMIT) break
@@ -282,6 +289,17 @@ export function Dash3ATriageView({
           </span>
         ) : null}
         {summaryLine ? <span className="af-triage-summary">{summaryLine}</span> : null}
+        {proUpsell && hasStarters ? (
+          <Link
+            className="af-triage-upsell"
+            href={proUpsell}
+            onClick={() => sendProductAnalyticsBeacon('product.triage.pro_upsell_clicked', {})}
+          >
+            {es
+              ? 'AF Pro: el mejor agente libre para cada hueco y alertas de jugadores en duda'
+              : 'AF Pro: the best free agent for every hole, plus Questionable game-time calls'}
+          </Link>
+        ) : null}
       </div>
       {hasStarters ? (
       <ul className="af-triage-list">

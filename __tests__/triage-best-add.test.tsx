@@ -148,3 +148,31 @@ describe('the rest of the card', () => {
     expect(fixAllSummary(rows, false)).toBe('2 lineups to fix · 1 with bench cover · 1 needs a pickup')
   })
 })
+
+describe('AF Pro gate (founder decision 2026-10-17)', () => {
+  const kickoff = new Date(NOW.getTime() + 5 * 3600_000).toISOString()
+  const q = row({ name: 'Q Player', status: 'Questionable', tone: 'warn', nextKickoffAt: kickoff })
+
+  it('without Pro: no best-add lookup, no game-time calls, one upgrade line — swap tips stay free', () => {
+    const fetchMock = okBoard([{ sleeperId: '9493', name: 'Puka Nacua', position: 'WR', gain: 6.1 }])
+    vi.stubGlobal('fetch', fetchMock)
+    const { container } = render(<Dash3ATriage book={[row(), q]} now={NOW} pro={{ unlocked: false, upgradePath: '/upgrade?plan=pro' }} />)
+    expect(boardCalls(fetchMock)).toEqual([])
+    const text = container.textContent ?? ''
+    expect(text).not.toContain('Q Player')
+    expect(text).toContain('swap in Tyler Allgeier (11.2)')
+    expect(container.querySelector('.af-triage-upsell')?.getAttribute('href')).toBe('/upgrade?plan=pro')
+  })
+
+  it('with Pro, or when the plan could not be read, everything shows', async () => {
+    for (const pro of [{ unlocked: true, upgradePath: '/upgrade?plan=pro' }, null]) {
+      const fetchMock = okBoard([{ sleeperId: '9493', name: 'Puka Nacua', position: 'WR', gain: 6.1 }])
+      vi.stubGlobal('fetch', fetchMock)
+      const { container, unmount } = render(<Dash3ATriage book={[row({ leagues: [{ id: `p${pro ? 1 : 2}`, name: 'G', platform: 'sleeper', imageUrl: null, slot: 'starter' }] }), q]} now={NOW} pro={pro} />)
+      await waitFor(() => expect(boardCalls(fetchMock).length).toBe(1))
+      expect(container.textContent).toContain('Q Player')
+      expect(container.querySelector('.af-triage-upsell')).toBeNull()
+      unmount()
+    }
+  })
+})
