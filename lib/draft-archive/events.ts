@@ -78,9 +78,10 @@ export async function recordArchiveEvent(tx: Prisma.TransactionClient, session: 
     const row = await tx.leagueAuditLog.create({ data: { leagueId: session.leagueId, entityType: 'draft_session', entityId: session.id, actionType: ARCHIVE_EVENT, userId: typeof details.actorUserId === 'string' ? details.actorUserId : null, createdAt: at, afterState: json({ sequence, event, clock: advanced.clock, context, ...(snapshot ? { snapshot } : {}), details }) } });
     return { eventId: row.id, selected: advanced.selected, clock: advanced.clock, context };
 }
-export async function updateSessionWithArchive(session: Parameters<typeof recordArchiveEvent>[1], data: Prisma.DraftSessionUpdateInput, event: ClockEvent, details: Record<string, unknown> = {}) {
+/** `expectedVersion` makes the write conditional on the session not having moved since it was read (throws P2025 if it has). */
+export async function updateSessionWithArchive(session: Parameters<typeof recordArchiveEvent>[1], data: Prisma.DraftSessionUpdateInput, event: ClockEvent, details: Record<string, unknown> = {}, expectedVersion?: number) {
     return prisma.$transaction(async (tx) => {
-        const updated = await tx.draftSession.update({ where: { id: session.id }, data });
+        const updated = await tx.draftSession.update({ where: expectedVersion == null ? { id: session.id } : { id: session.id, version: expectedVersion }, data });
         await recordArchiveEvent(tx, updated, event, details, event === 'start' && updated.startedAt ? updated.startedAt : new Date());
         return updated;
     }, { timeout: event === 'start' ? 30_000 : 10_000, maxWait: 10_000 });

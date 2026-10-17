@@ -103,7 +103,7 @@ type DashboardPayload = {
   tribes: { id: string; name: string; emoji?: string | null; members: unknown[] }[]
   tribeRedraw: { id: string; week: number | null; minTribeSize: number | null; maxTribeSize: number | null } | null
   council: unknown
-  privateBallots: { voterName: string; targetName: string; submittedAt: string; doesNotCount: boolean }[]
+  privateBallots: []
   privateIdols: { id: string; ownerName: string; powerLabel: string }[]
   juryCount: number
   merged: boolean
@@ -520,11 +520,7 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
           {tab === 'tribal' && (
             <div className="space-y-4">
               <SurvivorCouncilControl leagueId={leagueId} />
-              {data?.privacy?.canSeePrivateVotes && !data.privacy.blindModeActive ? (
-                <WarRoomPanel title="Private ballot oversight" subtitle="Visible only to a non-playing host until the read.">
-                  {data.privateBallots.length ? <ul className="space-y-2 text-sm text-white/75">{data.privateBallots.map((vote, index) => <li key={`${vote.voterName}-${index}`}><strong>{vote.voterName}</strong> voted for <strong>{vote.targetName}</strong>{vote.doesNotCount ? ' · does not count' : ''}</li>)}</ul> : <p className="text-sm text-white/60">No ballots have been submitted for the current council.</p>}
-                </WarRoomPanel>
-              ) : null}
+
             </div>
           )}
 

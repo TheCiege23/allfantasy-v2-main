@@ -67,6 +67,7 @@ describe('revote eligibility', () => {
 // ── DB-backed tally with mocks ───────────────────────────────────────────────
 const { prisma, loadCouncilContext } = vi.hoisted(() => ({
   prisma: {
+    $transaction: vi.fn(), $queryRaw: vi.fn(),
     survivorVote: { findMany: vi.fn(), findUnique: vi.fn(), upsert: vi.fn() },
     survivorTribalCouncil: { update: vi.fn(), findUnique: vi.fn(), findFirst: vi.fn() },
     survivorAuditEntry: { create: vi.fn(), findMany: vi.fn(), findUnique: vi.fn() },
@@ -330,10 +331,25 @@ describe('tallyCouncil', () => {
 describe('submitVote', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    prisma.$transaction.mockImplementation(async fn => fn(prisma))
+    prisma.survivorGameState.findUnique.mockResolvedValue({ pausedSnapshot: null })
     prisma.survivorAuditEntry.create.mockResolvedValue({})
     prisma.survivorAuditEntry.findUnique.mockResolvedValue(null)
     prisma.survivorVote.upsert.mockResolvedValue({})
     prisma.$transaction.mockImplementation((work: (db: typeof prisma) => Promise<unknown>) => work(prisma))
+  })
+
+  it('cannot submit while the league is paused', async () => {
+    prisma.survivorGameState.findUnique.mockResolvedValue({ pausedSnapshot: { needsTribalLock: true } })
+    expect(await submitVote('league-1', 'a', 'c')).toMatchObject({ ok: false, code: 'league_paused' })
+    expect(prisma.survivorVote.upsert).not.toHaveBeenCalled()
+    expect(prisma.$queryRaw.mock.calls[0][1]).toBe('survivor-setup:league-1')
+  })
+
+  it.each(['closed', 'tie_pending'])('cannot submit after the window becomes %s', async status => {
+    loadCouncilContext.mockResolvedValue(makeCtx({ status }))
+    expect(await submitVote('league-1', 'a', 'c')).toMatchObject({ ok: false, code: 'window_closed' })
+    expect(prisma.survivorVote.upsert).not.toHaveBeenCalled()
   })
 
   it('blocks a self-vote when self-votes are disallowed', async () => {

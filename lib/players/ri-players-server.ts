@@ -144,10 +144,26 @@ function mapRESTPlayer(raw: Record<string, unknown>, sport: string): RIPlayer {
   }
 }
 
+/**
+ * Set-2 (NBA/MLB/NHL/SOCCER/NCAA) REST `RSC_token`. Same fallback order as the secondary
+ * account in `riCredentialsFor` (lib/workers/providers/rollingInsightsRest.ts).
+ */
+function riSet2RscToken(): string | null {
+  return (
+    process.env.ROLLING_INSIGHTS_RSC_TOKEN2?.trim() ||
+    process.env.ROLLING_INSIGHTS_CLIENT_SECRET2?.trim() ||
+    null
+  )
+}
+
 export async function fetchRIPlayersREST(sport: string): Promise<RIPlayer[]> {
   /** REST `RSC_token` is the DataFeeds RSC credential (set 2 secret), not the OAuth client id. */
-  const rscToken = process.env.ROLLING_INSIGHTS_CLIENT_SECRET2?.trim()
-  if (!rscToken) throw new Error('ROLLING_INSIGHTS_CLIENT_SECRET2 is not set (RSC token for REST)')
+  const rscToken = riSet2RscToken()
+  if (!rscToken) {
+    throw new Error(
+      'ROLLING_INSIGHTS_RSC_TOKEN2 / ROLLING_INSIGHTS_CLIENT_SECRET2 is not set (RSC token for REST)',
+    )
+  }
   const authToken: string = rscToken
 
   async function load(key: string): Promise<Record<string, unknown>[]> {
@@ -344,7 +360,7 @@ function extractRestArray(data: unknown): Record<string, unknown>[] {
 }
 
 async function fetchRESTTeams(sport: string): Promise<RITeam[]> {
-  const token = process.env.ROLLING_INSIGHTS_CLIENT_SECRET2?.trim()
+  const token = riSet2RscToken()
   if (!token) return []
 
   const leagueParam = sport === 'SOCCER' ? '&league=EPL' : ''

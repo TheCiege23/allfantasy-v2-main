@@ -121,7 +121,10 @@ export async function buildGuillotineWarRoomContext(
   } catch {
     rosterRulesState = 'missing'
   }
-  if (flexCount > 0) {
+  // The RB/WR/TE flex split only means anything for football; for NBA/MLB/NHL a UTIL slot
+  // takes any position, so it adds no positional requirement rather than fake RB/WR/TE needs.
+  const isFootball = /^(NFL|NCAAF|NCAAFB|CFB)$/i.test(sport)
+  if (flexCount > 0 && isFootball) {
     requiredByPosition.RB = (requiredByPosition.RB ?? 0) + Math.ceil(flexCount * 0.4)
     requiredByPosition.WR = (requiredByPosition.WR ?? 0) + Math.ceil(flexCount * 0.4)
     requiredByPosition.TE = (requiredByPosition.TE ?? 0) + Math.ceil(flexCount * 0.2)

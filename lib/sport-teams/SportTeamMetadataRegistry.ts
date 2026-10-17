@@ -26,6 +26,14 @@ const NFL_LOGO_KEY: Record<string, string> = {
   TEN: 'ten', WAS: 'was',
 }
 
+/**
+ * NBA-standard / provider spellings -> the ESPN code ESPN's CDN path uses. Same mapping as the NBA
+ * row of EXTRA_ALIASES in lib/follows/teamResolver.ts. Without it `GSW` built `nba/500/gsw.png`.
+ */
+const NBA_LOGO_ALIAS: Record<string, string> = {
+  GSW: 'GS', NYK: 'NY', NOP: 'NO', SAS: 'SA', UTA: 'UTAH', PHO: 'PHX', BRK: 'BKN', BK: 'BKN', WAS: 'WSH',
+}
+
 const NBA_ABBREV = ['ATL', 'BOS', 'BKN', 'CHA', 'CHI', 'CLE', 'DAL', 'DEN', 'DET', 'GS', 'HOU', 'IND', 'LAC', 'LAL', 'MEM', 'MIA', 'MIL', 'MIN', 'NO', 'NY', 'OKC', 'ORL', 'PHI', 'PHX', 'POR', 'SAC', 'SA', 'TOR', 'UTAH', 'WAS']
 const MLB_ABBREV = ['ARI', 'ATL', 'BAL', 'BOS', 'CHC', 'CWS', 'CIN', 'CLE', 'COL', 'DET', 'HOU', 'KC', 'LAA', 'LAD', 'MIA', 'MIL', 'MIN', 'NYM', 'NYY', 'OAK', 'PHI', 'PIT', 'SD', 'SF', 'SEA', 'STL', 'TB', 'TEX', 'TOR', 'WSH']
 const NHL_ABBREV = ['ANA', 'ARI', 'BOS', 'BUF', 'CGY', 'CAR', 'CHI', 'COL', 'CBJ', 'DAL', 'DET', 'EDM', 'FLA', 'LA', 'MIN', 'MTL', 'NSH', 'NJ', 'NYI', 'NYR', 'OTT', 'PHI', 'PIT', 'SJ', 'SEA', 'STL', 'TB', 'TOR', 'VAN', 'VGK', 'WPG', 'WSH']
@@ -81,6 +89,10 @@ export function logoUrlForAbbrev(sport: SportType, abbreviation: string): string
   const abbr = abbreviation.toUpperCase()
   if (sport === 'NFL') {
     const key = NFL_LOGO_KEY[abbr] ?? abbr.toLowerCase()
+    return `${base}/${key}.png`
+  }
+  if (sport === 'NBA') {
+    const key = (NBA_LOGO_ALIAS[abbr] ?? abbr).toLowerCase()
     return `${base}/${key}.png`
   }
   const key = abbr.toLowerCase().replace(/\s/g, '')

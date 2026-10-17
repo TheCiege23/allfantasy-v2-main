@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
-import { Prisma } from '@prisma/client'
+import { setCouncilPaused } from '@/lib/survivor/survivorCouncilPause'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { survivorHostGuard } from '@/lib/survivor/survivorHostGuard'
@@ -15,17 +15,14 @@ import { SURVIVOR_IDOL_CATALOG, type SurvivorIdolPowerType } from '@/lib/survivo
 
 export const dynamic = 'force-dynamic'
 
-const PAUSE_ERROR_PREFIX = 'PAUSED:'
-
 /**
  * Wraps requireCommissionerRole (which throws a bare Response) in a
  * NextResponse-friendly async guard. Returns null on success or a
  * NextResponse to return directly on failure.
  */
-async function commissionerGuard(leagueId: string, userId: string, allowBlindOperations = false): Promise<NextResponse | null> {
+async function commissionerGuard(leagueId: string, userId: string): Promise<NextResponse | null> {
   try {
     await requireCommissionerRole(leagueId, userId)
-    if (allowBlindOperations) return null
     return survivorHostGuard(leagueId, userId)
   } catch (err) {
     if (err instanceof Response) {
@@ -37,64 +34,6 @@ async function commissionerGuard(leagueId: string, userId: string, allowBlindOpe
     }
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
-}
-
-type PausedNeedsSnapshot = {
-  needsChallengeLock: boolean
-  needsTribalLock: boolean
-  needsExileScore: boolean
-  needsPhaseAdvance: boolean
-  needsWeeklyRecap: boolean
-}
-
-/**
- * Single source of truth for PausedNeedsSnapshot shape validation.
- * Accepts anything, returns a typed snapshot or null. Every other
- * parse/coerce helper in this file delegates to this.
- */
-function coercePauseSnapshot(value: unknown): PausedNeedsSnapshot | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
-  const snapshot = value as Partial<PausedNeedsSnapshot>
-  if (
-    typeof snapshot.needsChallengeLock !== 'boolean' ||
-    typeof snapshot.needsTribalLock !== 'boolean' ||
-    typeof snapshot.needsExileScore !== 'boolean' ||
-    typeof snapshot.needsPhaseAdvance !== 'boolean' ||
-    typeof snapshot.needsWeeklyRecap !== 'boolean'
-  ) {
-    return null
-  }
-  return {
-    needsChallengeLock: snapshot.needsChallengeLock,
-    needsTribalLock: snapshot.needsTribalLock,
-    needsExileScore: snapshot.needsExileScore,
-    needsPhaseAdvance: snapshot.needsPhaseAdvance,
-    needsWeeklyRecap: snapshot.needsWeeklyRecap,
-  }
-}
-
-function createPauseError(notes: string, snapshot: PausedNeedsSnapshot): string {
-  return `${PAUSE_ERROR_PREFIX}${JSON.stringify({ notes, snapshot })}`
-}
-
-/** Parse the legacy `PAUSED:{json}` prefix out of survivor lastError. */
-function parsePauseSnapshot(lastError: string | null | undefined): PausedNeedsSnapshot | null {
-  if (!lastError?.startsWith(PAUSE_ERROR_PREFIX)) return null
-  const rawValue = lastError.slice(PAUSE_ERROR_PREFIX.length).trim()
-  if (!rawValue.startsWith('{')) return null
-  try {
-    const parsed = JSON.parse(rawValue) as { snapshot?: unknown } | null
-    return coercePauseSnapshot(parsed?.snapshot)
-  } catch {
-    return null
-  }
-}
-
-/** Parse the dedicated pausedSnapshot JSON column. */
-function parsePausedSnapshotColumn(
-  snapshot: Prisma.JsonValue | null | undefined,
-): PausedNeedsSnapshot | null {
-  return coercePauseSnapshot(snapshot)
 }
 
 export async function GET(req: NextRequest) {
@@ -145,7 +84,7 @@ export async function POST(req: NextRequest) {
   if (!leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
   if (!action) return NextResponse.json({ error: 'action required' }, { status: 400 })
 
-  const guard2 = await commissionerGuard(leagueId, userId, action === 'pause_season' || action === 'resume_season')
+  const guard2 = await commissionerGuard(leagueId, userId)
   if (guard2) return guard2
 
   const log = async (
@@ -375,101 +314,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true })
   }
 
-  if (action === 'pause_season') {
-    const notes = typeof body.notes === 'string' ? body.notes : 'Season paused by commissioner'
-    const currentState = await prisma.survivorGameState.findUnique({
-      where: { leagueId },
-      select: {
-        needsChallengeLock: true,
-        needsTribalLock: true,
-        needsExileScore: true,
-        needsPhaseAdvance: true,
-        needsWeeklyRecap: true,
-      },
+  if (action === 'pause_season' || action === 'resume_season') {
+    const paused = action === 'pause_season'
+    const result = await setCouncilPaused(leagueId, userId, paused)
+    if (!result.ok) return NextResponse.json(result, { status: result.status })
+    if (result.changed) await enqueueNotification(leagueId, 'phase_change', {
+      recipientRole: 'all', title: paused ? 'Season Paused' : 'Season Resumed',
+      body: paused ? 'Season paused by commissioner' : 'Season resumed', isSpoilerSafe: true, urgency: paused ? 'high' : 'medium',
     })
-    const pausedSnapshot: PausedNeedsSnapshot = {
-      needsChallengeLock: currentState?.needsChallengeLock ?? false,
-      needsTribalLock: currentState?.needsTribalLock ?? false,
-      needsExileScore: currentState?.needsExileScore ?? false,
-      needsPhaseAdvance: currentState?.needsPhaseAdvance ?? false,
-      needsWeeklyRecap: currentState?.needsWeeklyRecap ?? false,
-    }
-    await prisma.survivorGameState.update({
-      where: { leagueId },
-      data: {
-        needsChallengeLock: false,
-        needsTribalLock: false,
-        needsExileScore: false,
-        needsPhaseAdvance: false,
-        needsWeeklyRecap: false,
-        pausedSnapshot: pausedSnapshot as unknown as Prisma.InputJsonValue,
-        // Keep the legacy string marker as well so older resume paths
-        // that still look at lastError continue to behave, but the
-        // authoritative snapshot now lives in pausedSnapshot.
-        lastError: createPauseError(notes, pausedSnapshot),
-      },
-    })
-    await log('pause_season', notes)
-    await enqueueNotification(leagueId, 'phase_change', {
-      recipientRole: 'all',
-      title: 'Season Paused',
-      body: notes,
-      isSpoilerSafe: true,
-      urgency: 'high',
-    })
-    return NextResponse.json({ ok: true })
-  }
-
-  if (action === 'resume_season') {
-    const notes = typeof body.notes === 'string' ? body.notes : 'Season resumed'
-    const currentState = await prisma.survivorGameState.findUnique({
-      where: { leagueId },
-      select: {
-        lastError: true,
-        pausedSnapshot: true,
-        needsChallengeLock: true,
-        needsTribalLock: true,
-        needsExileScore: true,
-        needsPhaseAdvance: true,
-        needsWeeklyRecap: true,
-      },
-    })
-    // Authoritative source: the dedicated pausedSnapshot JSON column.
-    // Fall back to the legacy lastError-embedded snapshot only if the
-    // new column is empty (older paused seasons).
-    const dbSnapshot = parsePausedSnapshotColumn(currentState?.pausedSnapshot ?? null)
-    const legacySnapshot = parsePauseSnapshot(currentState?.lastError)
-    const pausedSnapshot: PausedNeedsSnapshot | null = dbSnapshot ?? legacySnapshot
-    const isLegacyPausedState = Boolean(
-      !pausedSnapshot &&
-        currentState?.lastError?.startsWith(PAUSE_ERROR_PREFIX),
-    )
-    await prisma.survivorGameState.update({
-      where: { leagueId },
-      data: {
-        needsChallengeLock:
-          pausedSnapshot?.needsChallengeLock ?? (isLegacyPausedState ? true : currentState?.needsChallengeLock ?? false),
-        needsTribalLock:
-          pausedSnapshot?.needsTribalLock ?? (isLegacyPausedState ? true : currentState?.needsTribalLock ?? false),
-        needsExileScore:
-          pausedSnapshot?.needsExileScore ?? (isLegacyPausedState ? true : currentState?.needsExileScore ?? false),
-        needsPhaseAdvance:
-          pausedSnapshot?.needsPhaseAdvance ?? (isLegacyPausedState ? true : currentState?.needsPhaseAdvance ?? false),
-        needsWeeklyRecap:
-          pausedSnapshot?.needsWeeklyRecap ?? (isLegacyPausedState ? false : currentState?.needsWeeklyRecap ?? false),
-        pausedSnapshot: Prisma.JsonNull,
-        lastError: null,
-      },
-    })
-    await log('resume_season', notes)
-    await enqueueNotification(leagueId, 'phase_change', {
-      recipientRole: 'all',
-      title: 'Season Resumed',
-      body: notes,
-      isSpoilerSafe: true,
-      urgency: 'medium',
-    })
-    return NextResponse.json({ ok: true })
+    return NextResponse.json(result)
   }
 
   return NextResponse.json({ error: 'Unknown action' }, { status: 400 })

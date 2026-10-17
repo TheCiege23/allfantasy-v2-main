@@ -392,29 +392,28 @@ async function runEliminationLocked(input: RunEliminationInput): Promise<Guillot
 
   for (const rosterId of choppedRosterIds) {
     /*
-     * Unclaim the visual/team ownership row so eliminated users no longer appear as active owners.
+     * Mark the team ELIMINATED; do NOT unclaim it.
      *
-     * ⚠ THIS MATCHED NOTHING EITHER, AND STILL MIGHT. `LeagueTeam.externalId` holds the platform's
-     * SLOT NUMBER — the real values in these leagues are "1", "10", "11" — while `rosterId` is a
-     * uuid, so the filter compared a uuid against a slot label and updated 0 rows across all 12
-     * leagues. `updateMany` does not throw on no-match, so the old `.catch(() => {})` was not even
-     * the thing hiding it; nothing was ever going to be raised.
+     * 🛑 A chopped manager loses their team, not their league. This used to clear `claimedByUserId`
+     * / `platformUserId` and set `isOrphan`, and `assertLeagueMember` admits a non-owner only through
+     * a claimed team — so in native leagues (where `externalId` IS the roster id and the filter
+     * matches) every chopped manager was 403'd out of standings, season and history pages. Orphaning
+     * also offered the dead seat for adoption. Elimination is the `eliminatedAt` axis
+     * (`lib/decision-os/value-v2/teamLifecycle.ts`); the roster itself is emptied by the release below.
      *
-     * The key is NOT corrected here because nothing in this engine holds a trustworthy slot for a
-     * roster — `getDraftSlotByRoster` returns a DRAFT slot, which is a different number and would
-     * be a guess. The count is captured instead, so a no-match is visible in the result and in the
-     * log rather than being indistinguishable from success.
+     * In imported leagues `externalId` is the platform's slot number, not a roster id, so this
+     * matches nothing there — logged rather than guessed, as before.
      */
-    const unclaimed = await prisma.leagueTeam
+    const marked = await prisma.leagueTeam
       .updateMany({
-        where: { leagueId: input.leagueId, externalId: rosterId },
-        data: { claimedByUserId: null, platformUserId: null, isOrphan: true },
+        where: { leagueId: input.leagueId, externalId: rosterId, eliminatedAt: null },
+        data: { eliminatedAt: new Date(), lifecycleState: 'CURRENT' },
       })
       .catch(() => ({ count: 0 }))
-    if (unclaimed.count === 0) {
+    if (marked.count === 0) {
       console.warn(
-        '[guillotine] leagueTeam unclaim matched no row',
-        JSON.stringify({ leagueId: input.leagueId, rosterId, reason: 'externalId is a slot number, not a roster id' }),
+        '[guillotine] leagueTeam eliminated mark matched no row',
+        JSON.stringify({ leagueId: input.leagueId, rosterId, reason: 'no team with externalId = rosterId (imported league slot number, or already marked)' }),
       )
     }
   }

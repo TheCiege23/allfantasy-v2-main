@@ -90,16 +90,20 @@ const BASE: Record<LeagueSport, GuillotineSportProfile> = {
     defaultTeamCount: 23,     // 24 - 1 = 23 teams (large league!)
     minTeams: 8,
     maxTeams: 23,
-    scoringWindowStartDay: 1, // Monday
-    scoringWindowEndDay: 0,   // Sunday
+    // NBA periods are 7 Eastern days from the Tuesday opener (lib/season-week/dailySportSeasonStarts.ts),
+    // so a week runs Tuesday–Monday. The native chop (lib/guillotine/nativeGuillotineWeek.ts) fires once
+    // the week is sealed (12h after the last tip) AND the 24h correction window has passed: Tuesday
+    // night ET after a Monday slate. These labels said "Monday noon", a day before the week even ended.
+    scoringWindowStartDay: 2, // Tuesday
+    scoringWindowEndDay: 1,   // Monday
     dailyGames: true,
     primaryGameDays: [0, 1, 2, 3, 4, 5, 6],
-    chopDay: 1,               // Monday (start of next window = chop of last window)
-    chopHourUtc: 16,          // Monday noon ET
-    chopLabel: 'Monday 12:00 PM ET',
-    waiverDay: 2,             // Tuesday
-    waiverHourUtc: 12,        // Tuesday 7am ET
-    waiverLabel: 'Tuesday 7:00 AM ET',
+    chopDay: 3,               // Wednesday (UTC) — the chop lands Tuesday night ET
+    chopHourUtc: 11,          // by Wednesday 7am ET
+    chopLabel: 'By Wednesday 7:00 AM ET',
+    waiverDay: 4,             // Thursday — a full day to bid on the chopped team's players
+    waiverHourUtc: 12,        // Thursday 7am ET
+    waiverLabel: 'Thursday 7:00 AM ET',
     correctionWindowHours: 24,
     rosterSize: 13,
     notes: 'NBA: 3-5 games per team per week. Load management and back-to-backs are survival risks. Uneven game counts across teams each week.',
@@ -244,6 +248,23 @@ export function getNextWaiverTime(sport: string, fromDate?: Date): Date {
   result.setUTCDate(result.getUTCDate() + daysUntil)
   result.setUTCHours(config.waiverHourUtc, 0, 0, 0)
   return result
+}
+
+/** How long before each scheduled waiver run claims are held for the blind FAAB auction. */
+export const WAIVER_BLIND_WINDOW_HOURS = 36
+
+/**
+ * When `fromDate` falls inside the blind window before the next scheduled waiver run, the moment that
+ * window opened; otherwise null. The window covers the chop (Tuesday night ET for NFL and NBA), so
+ * every bid on a chopped team's players is settled together at the run, highest bid first. Outside
+ * it, claims settle as they come, which is how managers make mid-week free-agent pickups.
+ */
+export function getWaiverBlindWindowStart(sport: string, fromDate?: Date): Date | null {
+  if (!getGuillotineSportConfig(sport)) return null
+  const now = fromDate ?? new Date()
+  const next = getNextWaiverTime(sport, now)
+  const opensAt = new Date(next.getTime() - WAIVER_BLIND_WINDOW_HOURS * 60 * 60 * 1000)
+  return now >= opensAt ? opensAt : null
 }
 
 /**
