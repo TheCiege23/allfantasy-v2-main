@@ -8,7 +8,7 @@ import { useEffect, useState } from 'react'
 import { useSurvivorUi } from '@/lib/survivor/SurvivorUiContext'
 
 type ExileGet = {
-  island?: { isActive?: boolean; currentWeek?: number; bossName?: string | null; bossWinsEnabled?: boolean } | null
+  island?: { isActive?: boolean; currentWeek?: number; bossName?: string | null; bossWinsEnabled?: boolean; bossTokenResetOnWin?: boolean } | null
   user?: { tokenBalance?: number; playerState?: string } | null
   bossContest?: { status: 'pending' | 'locked' | 'final'; week: number; team?: string; players?: { name: string; position: string; slot: string }[]; score?: number } | null
   returnRules?: { enabled: boolean; week: number; tokensRequired: number; resolved: boolean; slots: number }
@@ -91,7 +91,10 @@ export default function SurvivorExilePage() {
                     ))}
                   </ul>
                 ) : null}
-                <p className="mt-3 text-[12px] text-white/50">The top Exile score above Chimmy earns one token. A Chimmy win or tie resets unprotected Exile tokens.</p>
+                <p className="mt-3 text-[12px] text-white/50">
+                  The top Exile score above Chimmy earns one token.
+                  {island.bossTokenResetOnWin ? ' A Chimmy win or tie resets unprotected Exile tokens.' : ' A Chimmy win or tie awards no token.'}
+                </p>
               </>
             ) : (
               <p className="mt-2 text-[13px] text-white/60">Loading the weekly contest…</p>
