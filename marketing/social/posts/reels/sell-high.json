@@ -1,0 +1,81 @@
+{
+  "name": "sell-high",
+  "accent": "#38E08F",
+  "seconds": 14,
+  "beats": [
+    {
+      "in": 0.2,
+      "out": 2.4,
+      "emoji": "📈",
+      "text": "When to\n[sell high]",
+      "size": "h1",
+      "pop": true,
+      "top": 200
+    },
+    {
+      "in": 0.6,
+      "out": 2.4,
+      "text": "Hot streaks fool people. Cash in before they fade.",
+      "size": "p",
+      "top": 1000
+    },
+    {
+      "in": 2.6,
+      "out": 5.2,
+      "emoji": "🎯",
+      "text": "It was all\n[touchdowns]",
+      "size": "h1",
+      "pop": true,
+      "top": 200
+    },
+    {
+      "in": 3.0,
+      "out": 5.2,
+      "text": "Sign 1. Big scores on few touches rarely last.",
+      "size": "p",
+      "top": 1000
+    },
+    {
+      "in": 5.4,
+      "out": 8.0,
+      "emoji": "🔙",
+      "text": "The starter is\n[coming back]",
+      "size": "h1",
+      "pop": true,
+      "top": 200
+    },
+    {
+      "in": 5.8,
+      "out": 8.0,
+      "text": "Sign 2. Your fill-in's role is about to shrink.",
+      "size": "p",
+      "top": 1000
+    },
+    {
+      "in": 8.2,
+      "out": 10.8,
+      "emoji": "😰",
+      "text": "A buyer is\n[desperate]",
+      "size": "h1",
+      "pop": true,
+      "top": 200
+    },
+    {
+      "in": 8.6,
+      "out": 10.8,
+      "text": "Sign 3. Winless teams pay more than they should.",
+      "size": "p",
+      "top": 1000
+    }
+  ],
+  "end": {
+    "in": 11.0,
+    "line": "Who are you\n[selling?] 👇"
+  },
+  "caption": {
+    "instagram": "When to sell high 📈\n\n1️⃣ The points came from touchdowns, not volume\n2️⃣ The starter he replaced is coming back\n3️⃣ A desperate team is ready to overpay\n\nWho are you selling this week? 👇\n\nRun trades across every league on AllFantasy, link in bio.\n\n#fantasyfootball #fantasyfootballadvice #fantasytrade #dynastyfootball #allfantasy",
+    "tiktok": "3 signs it's time to sell high 📈 Who are you selling? 👇 #fantasyfootball #fantasyfootballtok #fantasytrade #allfantasy",
+    "youtube": "3 signs it's time to sell high in fantasy football: TD spike, starter returning, desperate buyer. #fantasyfootball #shorts",
+    "facebook": "3 signs it's time to sell high: the points came from touchdowns, the starter is coming back, or a desperate team will overpay. Who are you selling? https://allfantasy.ai"
+  }
+}
