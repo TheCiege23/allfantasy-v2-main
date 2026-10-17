@@ -35,7 +35,6 @@ import { ImportProgress, type ImportStep } from '@/components/core-app/import/Im
 import { ImportDone, type ImportDoneStat } from '@/components/core-app/import/ImportDone'
 import LeagueTypeConfirm from '@/components/league/LeagueTypeConfirm'
 import { markOnce, track, type Sport } from '@/lib/analytics/dataLayer'
-import posthog from 'posthog-js'
 import { readBackfillOutcome } from '@/lib/league-import/backfillOutcome'
 import { resolveSourceLink } from '@/lib/league-links/sourceLinkResolver'
 import {
