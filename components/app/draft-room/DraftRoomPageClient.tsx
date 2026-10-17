@@ -2024,12 +2024,10 @@ export function DraftRoomPageClient({
         }
       }
 
-      // Phase 3b — perf: render the draft room as soon as the CRITICAL fetches
-      // resolve. AI-bound fetches and the draft pool are fire-and-forget — panels
-      // branch on `null` / poolFetching until data arrives, then re-render.
-      // fetchDraftPool was moved out of this group because a cold pool build can
-      // take 60–90 s (ADP importer + 30K row fetch). The player panel shows a
-      // skeleton via poolFetching state while the pool loads independently.
+      // Start the pool independently before waiting on queue/settings/chat.
+      // A slow ancillary request must not leave an already-cached player pool
+      // showing its loading skeleton indefinitely.
+      void fetchDraftPool()
       await Promise.allSettled([
         fetchQueue(),
         fetchDraftSettings(),
@@ -2043,7 +2041,6 @@ export function DraftRoomPageClient({
 
       // Deferred — let panels populate after the room is interactive.
       void fetchDraftAssistantContext()
-      void fetchDraftPool()
     }
 
     void bootstrapDraftRoom()

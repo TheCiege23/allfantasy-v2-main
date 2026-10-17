@@ -8,7 +8,7 @@ import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import { buildSGSchedule } from './config'
 import { resolveSGPeriod } from './competition'
 import { loadCappedGameScores } from './capped-scoring'
-import { readSGPeriodState, readSGTribes, seedSGLiveDraftPowers } from './live'
+import { executeSGLiveChop, readSGPeriodState, readSGTribes, seedSGLiveDraftPowers } from './live'
 import { configureSGLivePeriod } from './live'
 import type { SGTribeMember, SGLivePeriod } from './live'
 import type { SGConfig } from './types'
@@ -20,10 +20,14 @@ function easternDay(date: Date): string {
 
 export async function getSGManagerRoster(leagueId: string, userId: string) {
   const team = await prisma.leagueTeam.findFirst({ where: { leagueId, claimedByUserId: userId,
-    eliminatedAt: null, legacyRosterId: { not: null } }, select: { legacyRosterId: true } })
-  if (!team?.legacyRosterId) throw new Error('Claim an active league team before taking this action.')
-  return prisma.roster.findUniqueOrThrow({ where: { id: team.legacyRosterId },
-    select: { id: true, playerData: true, faabRemaining: true, redraftRosterId: true } })
+    eliminatedAt: null }, select: { externalId: true, platformUserId: true } })
+  if (!team) throw new Error('Claim an active league team before taking this action.')
+  const roster = await prisma.roster.findFirst({ where: { leagueId, OR: [
+    { id: team.externalId }, { platformUserId: userId },
+    ...(team.platformUserId ? [{ platformUserId: team.platformUserId }] : []),
+  ] }, select: { id: true, playerData: true, faabRemaining: true, redraftRosterId: true } })
+  if (!roster) throw new Error('The claimed team has no matching active roster.')
+  return roster
 }
 
 /** Draft-completion hook; idempotent and safe to retry after roster finalization. */
@@ -475,6 +479,10 @@ export async function advanceSGPeriod(leagueId: string, now = new Date()) {
   if (!row || season.status === 'completed') return { advanced: false, reason: 'season_complete' }
   const previous = readSGPeriodState(season.periodState)
   if (season.currentPeriod > 0 && !previous?.ceremonyStarted) return { advanced: false, reason: 'previous_ceremony_pending' }
+  const priorHistory = (season.periodHistory as Record<string, { hostedCeremony?: { stage: number } }>)[String(season.currentPeriod)]
+  if (priorHistory?.hostedCeremony && priorHistory.hostedCeremony.stage < 3) {
+    return { advanced: false, reason: 'hosted_ceremony_in_progress' }
+  }
   const calendar = readSGCalendar(season.periodCalendar)[nextPeriod]
   if (!calendar) return { advanced: false, reason: 'calendar_missing' }
   if (calendar.scoringStartsAt && Date.parse(calendar.scoringStartsAt) > now.getTime()) return { advanced: false, reason: 'not_started' }
@@ -568,7 +576,7 @@ export async function settleSGGauntletAuction(leagueId: string, now = new Date()
   let roster: { redraftRosterId: string | null; faabRemaining: number | null } | null = null
   for (const bid of bids) {
     const [candidateOwner, candidateRoster] = await Promise.all([
-      prisma.leagueTeam.findFirst({ where: { leagueId, legacyRosterId: bid.rosterId,
+      prisma.leagueTeam.findFirst({ where: { leagueId, externalId: bid.rosterId,
         eliminatedAt: null }, select: { claimedByUserId: true } }),
       prisma.roster.findUnique({ where: { id: bid.rosterId }, select: { redraftRosterId: true, faabRemaining: true } }),
     ])
@@ -703,6 +711,77 @@ export async function runSGSelectionDeadlines(now = new Date(), limit = 10) {
   return { scanned, due: due.length, results }
 }
 
+/** Persist the host's reveal step so every viewer sees the same ceremony. */
+export async function advanceSGHostedCeremony(leagueId: string, actorUserId: string, period: number) {
+  const season = await prisma.survivorGuillotineLeague.findUniqueOrThrow({ where: { leagueId } })
+  const config = season.config as unknown as SGConfig
+  if (config.ceremonyMode !== 'hosted' || !config.ceremonyPresentation || season.currentPeriod !== period) {
+    throw new Error('There is no active hosted ceremony for this period.')
+  }
+  const state = readSGPeriodState(season.periodState)
+  if (!state?.ceremonyStarted || state.period !== period) throw new Error('Complete Chop Night before revealing stages.')
+  const history = season.periodHistory as Record<string, Record<string, unknown>>
+  const entry = history[String(period)]
+  const hosted = entry?.hostedCeremony as { stage?: number; updatedAt?: string } | null | undefined
+  if (!hosted || !Number.isInteger(hosted.stage) || hosted.stage! < 0 || hosted.stage! >= 3) {
+    throw new Error('The hosted ceremony is already complete or unavailable.')
+  }
+  const stage = hosted.stage! + 1
+  if (stage === 3) {
+    if (entry.pendingCommit !== true) throw new Error('Hosted chop preparation is missing; restart Chop Night.')
+    const result = await executeSGLiveChop(leagueId, period)
+    return { period, stage: 'hostedRestarted' in result ? 0 : 3,
+      ...('hostedRestarted' in result ? { restarted: true } : {}) }
+  }
+  await prisma.$transaction(async tx => {
+    const saved = await tx.survivorGuillotineLeague.updateMany({ where: { leagueId, revision: season.revision },
+      data: { revision: { increment: 1 }, periodHistory: { ...history,
+        [String(period)]: { ...entry, hostedCeremony: { stage, updatedAt: new Date().toISOString() } } } as Prisma.InputJsonValue } })
+    if (saved.count !== 1) throw new Error('The ceremony changed. Reload and try again.')
+    const immuneTribeId = entry.immuneTribeId as string | null
+    const savedTeamIds = Array.isArray(entry.savedTeamIds) ? entry.savedTeamIds as string[] : []
+    const protectedTeamIds = Array.isArray(entry.protectedTeamIds) ? entry.protectedTeamIds as string[] : []
+    const choppedTeamIds = Array.isArray(entry.choppedTeamIds) ? entry.choppedTeamIds as string[] : []
+    const message = stage === 1 ? (immuneTribeId
+      ? `Survivor Guillotine period ${period}: ${immuneTribeId} won tribe immunity.`
+      : `Survivor Guillotine period ${period}: no tribe won immunity.`)
+      : stage === 2 ? (protectedTeamIds.length
+        ? `Survivor Guillotine period ${period}: immunity idols were played for ${protectedTeamIds.join(', ')}. ${savedTeamIds.length ? `Saved: ${savedTeamIds.join(', ')}.` : 'No idol changed the chop.'}`
+        : `Survivor Guillotine period ${period}: no immunity idol was played.`)
+        : `Survivor Guillotine period ${period} chop: ${choppedTeamIds.join(', ')} eliminated. Their players enter waivers.`
+    await tx.leagueChatMessage.create({ data: { leagueId, userId: actorUserId, type: 'system',
+      message,
+      metadata: { survivorGuillotine: true, event: 'hosted_ceremony_advanced', period, stage } } })
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
+  return { period, stage }
+}
+
+/** Clear an uncommitted reveal after corrected scores or a commissioner tie decision. */
+export async function restartSGHostedCeremony(leagueId: string, actorUserId: string, period: number) {
+  const season = await prisma.survivorGuillotineLeague.findUniqueOrThrow({ where: { leagueId } })
+  const state = readSGPeriodState(season.periodState)
+  const history = season.periodHistory as Record<string, Record<string, unknown>>
+  const entry = history[String(period)]
+  if (season.currentPeriod !== period || state?.period !== period || !state.ceremonyStarted ||
+      entry?.pendingCommit !== true ||
+      await prisma.survivorGuillotineChop.count({ where: { leagueId, period, reversedAt: null } })) {
+    throw new Error('Only an uncommitted hosted ceremony can be restarted.')
+  }
+  const nextHistory = { ...history }
+  delete nextHistory[String(period)]
+  const { commissionerTie: _supersededTie, ...resetState } = state
+  await prisma.$transaction(async tx => {
+    const saved = await tx.survivorGuillotineLeague.updateMany({ where: { leagueId, revision: season.revision },
+      data: { revision: { increment: 1 }, periodHistory: nextHistory as Prisma.InputJsonValue,
+        periodState: { ...resetState, ceremonyStarted: false } as unknown as Prisma.InputJsonValue } })
+    if (saved.count !== 1) throw new Error('Ceremony changed; reload and retry.')
+    await tx.leagueChatMessage.create({ data: { leagueId, userId: actorUserId, type: 'system',
+      message: `Survivor Guillotine period ${period} hosted ceremony was restarted. Earlier reveal stages are superseded; no roster was chopped.`,
+      metadata: { survivorGuillotine: true, event: 'hosted_ceremony_restarted', period } } })
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
+  return { period, restarted: true }
+}
+
 /** Earlier-period corrections are reviewed without silently rewriting later drafts, waivers, or chops. */
 export async function auditSGHistoricalCorrections(leagueId: string) {
   const season = await prisma.survivorGuillotineLeague.findUniqueOrThrow({ where: { leagueId } })
@@ -714,7 +793,12 @@ export async function auditSGHistoricalCorrections(leagueId: string) {
     gauntletImmuneTribeId?: string | null; choppedTeamIds?: string[]; placements?: string[] }>
   const calendar = readSGCalendar(season.periodCalendar)
   const schedule = buildSGSchedule(config).periods
-  const changes: { period: number; changedRosterIds: string[]; result: string; proposedChops?: string[] }[] = []
+  const changes: { period: number; changedRosterIds: string[]; result: string; proposedChops?: string[];
+    originalChops?: string[]; correctedScores?: Record<string, number>;
+    review?: { decision: string; reason: string; reviewedAt: string; scoreFingerprint: string;
+      originalScores?: Record<string, number>; originalChops?: string[]; proposedChops?: string[] | null;
+      scoresApplied?: boolean; compensations?: { recipientRosterId: string; kind: string; amount: number;
+        reason: string; awardedAt: string; awardedByUserId: string }[] } | null }[] = []
   for (const [key, entry] of Object.entries(history)) {
     const periodNumber = Number(key)
     if (!Number.isInteger(periodNumber) || periodNumber >= season.currentPeriod || !entry.scores || !entry.teams) continue
@@ -729,8 +813,24 @@ export async function auditSGHistoricalCorrections(leagueId: string) {
       ? await loadCappedGameScores({ leagueId, season: league.season, period: periodNumber,
         rosterIds: ids, cap: config.nbaGameCap, startsAt: row.scoringStartsAt, endsAt: row.scoringEndsAt })
       : new Map(final.map(s => [s.rosterId, s.totalPoints]))
+    const correctedScores = Object.fromEntries([...scores].sort(([a], [b]) => a.localeCompare(b)))
+    const review = (entry as typeof entry & { correctionReview?: { decision: string; reason: string;
+      reviewedAt: string; scoreFingerprint: string; originalScores?: Record<string, number>;
+      originalChops?: string[]; proposedChops?: string[] | null; scoresApplied?: boolean;
+      compensations?: { recipientRosterId: string; kind: string; amount: number; reason: string;
+        awardedAt: string; awardedByUserId: string }[] } }).correctionReview
     const changedRosterIds = ids.filter(id => scores.get(id) !== entry.scores![id])
-    if (!changedRosterIds.length) continue
+    if (!changedRosterIds.length) {
+      const originallyChanged = ids.filter(id => review?.originalScores?.[id] !== undefined &&
+        review.originalScores[id] !== entry.scores![id])
+      if (review?.scoresApplied && originallyChanged.length &&
+          review.scoreFingerprint === JSON.stringify(correctedScores)) changes.push({
+        period: periodNumber, changedRosterIds: originallyChanged, result: 'reviewed_played_result',
+        proposedChops: review.proposedChops ?? undefined, originalChops: review.originalChops ?? entry.choppedTeamIds ?? [],
+        correctedScores, review,
+      })
+      continue
+    }
     const teams = entry.teams.map(team => ({ ...team, points: scores.get(team.id)! }))
     const resolution = resolveSGPeriod({ config, period, teams, matchups: entry.matchups ?? [],
       protectedTeamIds: entry.protectedTeamIds ?? [],
@@ -738,7 +838,117 @@ export async function auditSGHistoricalCorrections(leagueId: string) {
     changes.push({ period: periodNumber, changedRosterIds,
       result: resolution.status === 'resolved' && JSON.stringify([...resolution.choppedTeamIds].sort()) ===
         JSON.stringify([...(entry.choppedTeamIds ?? [])].sort()) ? 'scores_changed_chop_same' : 'commissioner_reconciliation_required',
-      proposedChops: resolution.status === 'resolved' ? resolution.choppedTeamIds : undefined })
+      proposedChops: resolution.status === 'resolved' ? resolution.choppedTeamIds : undefined,
+      originalChops: entry.choppedTeamIds ?? [], correctedScores,
+      review: review?.scoreFingerprint === JSON.stringify(correctedScores) ? review : null })
   }
   return { reviewed: Object.keys(history).length, changes }
+}
+
+/** A previous chop may have downstream claims and drafts. Record a commissioner decision without rewriting those transactions. */
+export async function reviewSGHistoricalCorrection(leagueId: string, actorUserId: string, period: number,
+  decision: 'keep_played_result' | 'manual_followup', reason: string) {
+  if (!Number.isInteger(period) || period < 1 || !['keep_played_result', 'manual_followup'].includes(decision) ||
+      reason.trim().length < 10) throw new Error('Choose an earlier period, decision, and a reason of at least 10 characters.')
+  const audit = await auditSGHistoricalCorrections(leagueId)
+  const change = audit.changes.find(row => row.period === period && row.changedRosterIds.length > 0)
+  if (!change?.correctedScores) throw new Error('No finalized historical correction is available for this period.')
+  if (change.review?.scoresApplied) throw new Error('This correction was already reviewed and applied.')
+  const season = await prisma.survivorGuillotineLeague.findUniqueOrThrow({ where: { leagueId } })
+  const activeState = readSGPeriodState(season.periodState)
+  if (activeState?.ceremonyStarted && activeState.period === period) {
+    throw new Error('Use automatic latest-chop reconciliation before advancing the period.')
+  }
+  const history = season.periodHistory as Record<string, Record<string, unknown>>
+  const review = { decision, reason: reason.trim(), reviewedAt: new Date().toISOString(),
+    reviewedByUserId: actorUserId, scoreFingerprint: JSON.stringify(change.correctedScores),
+    originalChops: change.originalChops ?? [],
+    proposedChops: change.proposedChops ?? null }
+  const entry = history[String(period)]
+  const priorReview = entry.correctionReview as { originalScores?: Record<string, number>;
+    compensations?: unknown[] } | undefined
+  const originalScores = priorReview?.originalScores ?? entry.scores as Record<string, number>
+  const scoreHistory = season.scoreHistory && typeof season.scoreHistory === 'object' && !Array.isArray(season.scoreHistory)
+    ? season.scoreHistory as Record<string, Record<string, number>> : {}
+  const correctedEntry = decision === 'keep_played_result' ? {
+    ...entry, scores: change.correctedScores,
+    teams: (entry.teams as { id: string; points: number }[]).map(team => ({ ...team,
+      points: change.correctedScores![team.id] ?? team.points })),
+    correctionReview: { ...review, originalScores, scoresApplied: true,
+      compensations: priorReview?.compensations ?? [] },
+  } : { ...entry, correctionReview: review }
+  await prisma.$transaction(async tx => {
+    const saved = await tx.survivorGuillotineLeague.updateMany({ where: { leagueId, revision: season.revision },
+      data: { revision: { increment: 1 }, periodHistory: { ...history,
+        [String(period)]: correctedEntry } as Prisma.InputJsonValue,
+      ...(decision === 'keep_played_result' ? { scoreHistory: { ...scoreHistory,
+        [String(period)]: change.correctedScores } as Prisma.InputJsonValue } : {}) } })
+    if (saved.count !== 1) throw new Error('Season changed during correction review; reload and retry.')
+    if (decision === 'keep_played_result') {
+      for (const rosterId of change.originalChops ?? []) {
+        const score = change.correctedScores?.[rosterId]
+        if (score !== undefined) await tx.survivorGuillotineChop.updateMany({ where: {
+          leagueId, period, rosterId, reversedAt: null }, data: { score } })
+      }
+    }
+    await tx.leagueChatMessage.create({ data: { leagueId, userId: actorUserId, type: 'system',
+      message: `The commissioner reviewed a period ${period} stat correction. ${decision === 'keep_played_result'
+        ? 'Corrected scores are official; the played elimination and later transactions remain in place.' : 'Manual follow-up is required.'}`,
+      metadata: { survivorGuillotine: true, event: 'historical_correction_review', period, decision } } })
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
+  return { period, ...review }
+}
+
+/** A reviewed earlier chop stays played; commissioners can record a remedy and optionally credit live FAAB. */
+export async function awardSGHistoricalCompensation(leagueId: string, actorUserId: string, period: number,
+  recipientRosterId: string, amount: number, reason: string) {
+  if (!Number.isInteger(period) || period < 1 || !recipientRosterId || !Number.isInteger(amount) || amount < 0 ||
+      reason.trim().length < 10) throw new Error('Choose a recipient, whole-number FAAB amount, and a reason of at least 10 characters.')
+  const audit = await auditSGHistoricalCorrections(leagueId)
+  const change = audit.changes.find(row => row.period === period)
+  if (change?.review?.decision !== 'keep_played_result' || !change.review.scoresApplied) {
+    throw new Error('Apply the corrected scores and keep the played result before recording compensation.')
+  }
+  const season = await prisma.survivorGuillotineLeague.findUniqueOrThrow({ where: { leagueId } })
+  const config = season.config as unknown as SGConfig
+  if (amount > config.faabBudget) throw new Error('Compensation cannot exceed the league starting FAAB budget.')
+  const history = season.periodHistory as Record<string, Record<string, unknown>>
+  const entry = history[String(period)]
+  const review = entry.correctionReview as NonNullable<typeof change.review>
+  const prior = review.compensations ?? []
+  if (prior.some(item => item.recipientRosterId === recipientRosterId)) {
+    throw new Error('This manager already has a compensation decision for this correction.')
+  }
+  const team = await prisma.leagueTeam.findFirst({ where: { leagueId, externalId: recipientRosterId },
+    select: { eliminatedAt: true, teamName: true, ownerName: true } })
+  if (!team) throw new Error('Recipient is not a member of this league.')
+  if (amount > 0 && team.eliminatedAt) throw new Error('FAAB can only be credited to an active manager; use zero for a recorded external remedy.')
+  const roster = amount > 0 ? await prisma.roster.findFirst({ where: { id: recipientRosterId, leagueId },
+    select: { id: true, redraftRosterId: true, faabRemaining: true, updatedAt: true } }) : null
+  if (amount > 0 && !roster) throw new Error('Active recipient roster is unavailable.')
+  const compensation = { recipientRosterId, kind: amount > 0 ? 'faab' : 'record_only', amount,
+    reason: reason.trim(), awardedAt: new Date().toISOString(), awardedByUserId: actorUserId,
+    ...(amount > 0 ? { balanceBefore: roster!.faabRemaining ?? 0,
+      balanceAfter: (roster!.faabRemaining ?? 0) + amount } : {}) }
+  await prisma.$transaction(async tx => {
+    const saved = await tx.survivorGuillotineLeague.updateMany({ where: { leagueId, revision: season.revision },
+      data: { revision: { increment: 1 }, periodHistory: { ...history, [String(period)]: {
+        ...entry, correctionReview: { ...review, compensations: [...prior, compensation] },
+      } } as Prisma.InputJsonValue } })
+    if (saved.count !== 1) throw new Error('Correction review changed; reload and retry.')
+    if (amount > 0 && roster) {
+      const credited = await tx.roster.updateMany({ where: { id: roster.id, leagueId, updatedAt: roster.updatedAt },
+        data: { faabRemaining: compensation.balanceAfter } })
+      if (credited.count !== 1) throw new Error('Recipient FAAB changed; reload and retry.')
+      if (roster.redraftRosterId) await tx.redraftRoster.update({ where: { id: roster.redraftRosterId },
+        data: { faabBalance: { increment: amount } } })
+    }
+    await tx.leagueChatMessage.create({ data: { leagueId, userId: actorUserId, type: 'system',
+      message: amount > 0
+        ? `The commissioner awarded ${amount} FAAB to ${team.teamName || team.ownerName} for a period ${period} stat correction. Reason: ${reason.trim()}`
+        : `The commissioner recorded a non-FAAB remedy for ${team.teamName || team.ownerName} after the period ${period} stat correction. Reason: ${reason.trim()}`,
+      metadata: { survivorGuillotine: true, event: 'historical_correction_compensation', period,
+        recipientRosterId, amount } } })
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
+  return { period, compensation }
 }

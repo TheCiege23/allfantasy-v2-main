@@ -13,6 +13,7 @@ import { getLastScheduledWeek, getZombieWeekReadiness } from '@/lib/zombie/match
 import { logAuditEntry } from '@/lib/zombie/auditService'
 import { getLeagueMode } from '@/lib/zombie/zombieLeagueMode'
 import { applyZombieHordeSitOutToScoring } from '@/lib/zombie/ZombieHordeSitOutEngine'
+import { settleWeeklyWinnings } from '@/lib/zombie/weeklyWinningsEngine'
 
 export type WeeklyResolutionOptions = {
   /** Re-run infections + recap even if this week already resolved (stat corrections / commissioner). */
@@ -101,6 +102,16 @@ export async function runWeeklyResolution(
   await detectAndProcessBashings(z.leagueId, week, zombieLeagueId)
   await detectAndProcessMaulings(z.leagueId, week, zombieLeagueId)
   await checkAndAwardWeapons(z.leagueId, week, zombieLeagueId)
+  // Bank the week and move what infections, maulings and bashings take. Before this existed nothing
+  // wrote the winnings the sum below reads. See lib/zombie/weeklyWinningsEngine.ts.
+  await settleWeeklyWinnings({
+    zombieLeagueId,
+    leagueId: z.leagueId,
+    season: z.season,
+    sport: z.sport,
+    week,
+    infected: infection.infected ?? [],
+  })
 
   const infectionMoney = await prisma.zombieInfectionEvent.aggregate({
     where: { zombieLeagueId, week },

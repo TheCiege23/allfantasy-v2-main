@@ -1,13 +1,17 @@
 'use client'
 
 import Link from 'next/link'
-import type { ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
 import { ClubLogo } from '@/components/core-app/ClubLogo'
 import { FallbackImg } from '@/components/core-app/FallbackImg'
 import { TopicTip } from '@/components/core-app/TopicTip'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { slotText } from '@/lib/core-app/playerMovesCopy'
+import { coverSlotLabel } from '@/lib/core-app/lineupCover'
+import { BEST_ADD_AUTO_LIMIT, TriageFreeAgentCta } from '@/components/core-app/screens/TriageBestAdd'
+import { platformLabel } from '@/lib/core-app/platformLinks'
+import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
 import { ageText } from '@/lib/core-app/shellCopy'
 import type { TriageSlot } from '@/components/core-app/screens/Dash3ATriage'
 
@@ -26,8 +30,40 @@ export type TriageViewLeague = {
   platform: string
   href: string
   slot: TriageSlot | null
-  /** Same-position cover on your bench here — names only, only where he starts. */
+  /** Bench players who can take his slot here — names only, only where he starts. */
   bench: string[]
+  /** A flex/superflex two-step instead (see lib/core-app/lineupCover.ts); absent when none. */
+  cover?: { move: string; toSlot: string; fromSlot: string; fill: string | null; gain?: number | null } | null
+  /** Where the move is made — the platform's lineup screen; absent when no verified link exists. */
+  fixHref?: string | null
+}
+
+/**
+ * "swap in Allgeier · or move Pollard to RB, start Washington at FLEX". One sentence per league,
+ * the simple move first; null when there is nothing to offer.
+ */
+export function coverText(l: Pick<TriageViewLeague, 'bench' | 'cover'>, es: boolean, questionable = false): string | null {
+  const parts: string[] = []
+  if (l.bench.length > 0) {
+    // A game-time call keeps the pivot ready rather than ordering the swap.
+    if (questionable) parts.push(es ? `relevo seguro: ${l.bench.join(' o ')}` : `safe pivot: ${l.bench.join(' or ')}`)
+    else parts.push(es ? `pon a ${l.bench.join(' o ')}` : `swap in ${l.bench.join(' or ')}`)
+  }
+  const c = l.cover
+  if (c) {
+    const to = coverSlotLabel(c.toSlot)
+    const from = coverSlotLabel(c.fromSlot)
+    const chain = c.fill
+      ? es
+        ? `mueve a ${c.move} a ${to} y pon a ${c.fill} en ${from}`
+        : `move ${c.move} to ${to}, start ${c.fill} at ${from}`
+      : es
+        ? `mueve a ${c.move} a ${to} y añade un agente libre en ${from}`
+        : `move ${c.move} to ${to}, then add a free agent at ${from}`
+    const gain = c.fill && c.gain != null && c.gain > 0 ? ` (+${c.gain.toFixed(1)} pts)` : ''
+    parts.push(`${parts.length > 0 ? (es ? `o ${chain}` : `or ${chain}`) : chain}${gain}`)
+  }
+  return parts.length > 0 ? parts.join(' · ') : null
 }
 
 /** One best ball position worth a glance (lib/core-app/bestBallDepth.ts, built in dash34). */
@@ -51,6 +87,8 @@ export type TriageViewRow = {
   key: string
   name: string
   initials: string
+  /** Sleeper id, for the on-demand best free agent; null when we hold none. */
+  sleeperId?: string | null
   imageUrl: string | null
   playerHref: string
   position: string | null
@@ -94,6 +132,31 @@ function kickoffLabel(mins: number | null, es: boolean): string | null {
   if (mins < 60) return es ? `inicio en ${mins} min` : `kickoff in ${mins}m`
   if (mins < 48 * 60) return es ? `inicio en ${Math.round(mins / 60)} h` : `kickoff in ${Math.round(mins / 60)}h`
   return es ? `inicio en ${Math.round(mins / (60 * 24))} d` : `kickoff in ${Math.round(mins / (60 * 24))}d`
+}
+
+/**
+ * "4 lineups to fix · 3 with bench cover · 1 needs a pickup" — the ruled-out rows' leagues, counted
+ * once each, so the whole job across leagues reads in one line before the rows.
+ */
+export function fixAllSummary(rows: TriageViewRow[], es: boolean): string | null {
+  let toFix = 0
+  let covered = 0
+  for (const p of rows) {
+    if (p.tone !== 'bad') continue
+    for (const l of p.leagues) {
+      if (l.slot !== 'starter') continue
+      toFix++
+      if (l.bench.length > 0 || (l.cover && l.cover.fill)) covered++
+    }
+  }
+  if (toFix === 0) return null
+  const pickup = toFix - covered
+  const parts = [
+    es ? `${toFix} ${toFix === 1 ? 'alineación por corregir' : 'alineaciones por corregir'}` : `${toFix} ${toFix === 1 ? 'lineup' : 'lineups'} to fix`,
+    covered > 0 ? (es ? `${covered} con relevo en tu banca` : `${covered} with bench cover`) : null,
+    pickup > 0 ? (es ? `${pickup} ${pickup === 1 ? 'necesita' : 'necesitan'} un agente libre` : `${pickup} ${pickup === 1 ? 'needs' : 'need'} a pickup`) : null,
+  ]
+  return parts.filter(Boolean).join(' · ')
 }
 
 /** "starting in 3, benched in 5, on IR in 1" — only the counts that are non-zero. */
@@ -169,6 +232,7 @@ export function Dash3ATriageView({
   valueBasis,
   freshness,
   depthAlerts = [],
+  proUpsell = null,
 }: {
   rows: TriageViewRow[]
   overflow: number
@@ -176,10 +240,40 @@ export function Dash3ATriageView({
   /** Present only when a row carries a price — see the band. */
   valueBasis: { format: string; qbFormat: string } | null
   freshness: ReactNode
+  /**
+   * The AF Pro upgrade path when the viewer's plan does NOT include the card's paid parts (the
+   * best-free-agent button, Questionable game-time calls). Null for a Pro viewer, before the paywall
+   * starts, and when the plan could not be read.
+   */
+  proUpsell?: string | null
 }) {
   const { language } = useOptionalLanguage()
   const es = language === 'es'
   const hasStarters = rows.length > 0
+  /*
+   * Which league chips get an on-demand "top add" — the first few where he STARTS, NFL only (the
+   * board's ids are Sleeper ids), in the order the card shows them. Capped: see TriageBestAdd.
+   */
+  const bestAddKeys = new Set<string>()
+  for (const p of proUpsell ? [] : rows) {
+    if (p.tone !== 'bad' || String(p.sport ?? '').toUpperCase() !== 'NFL' || !p.sleeperId) continue
+    for (const l of p.leagues) {
+      if (bestAddKeys.size >= BEST_ADD_AUTO_LIMIT) break
+      if (l.slot === 'starter') bestAddKeys.add(`${p.key}|${l.id}`)
+    }
+  }
+  const summaryLine = fixAllSummary(rows, es)
+  // One "shown" event per mount — the denominator for how often a suggestion is acted on.
+  useEffect(() => {
+    if (!hasStarters) return
+    sendProductAnalyticsBeacon('product.triage.shown', {
+      rows: rows.length,
+      questionable: rows.filter((r) => r.tone === 'warn').length,
+      leagues: rows.reduce((n, r) => n + r.leagues.filter((l) => l.slot === 'starter').length, 0),
+      withChain: rows.reduce((n, r) => n + r.leagues.filter((l) => l.cover).length, 0),
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const title = hasStarters
     ? es ? 'Titulares en duda' : 'Starters in doubt'
     : es ? 'Revisa tu plantilla' : 'Roster check'
@@ -193,6 +287,18 @@ export function Dash3ATriageView({
           <span className="af-triage-sub">
             {es ? 'puede que no jueguen esta semana · los más valiosos primero' : 'may not play this week · most valuable first'}
           </span>
+        ) : null}
+        {summaryLine ? <span className="af-triage-summary">{summaryLine}</span> : null}
+        {proUpsell && hasStarters ? (
+          <Link
+            className="af-triage-upsell"
+            href={proUpsell}
+            onClick={() => sendProductAnalyticsBeacon('product.triage.pro_upsell_clicked', {})}
+          >
+            {es
+              ? 'AF Pro: el mejor agente libre para cada hueco y alertas de jugadores en duda'
+              : 'AF Pro: the best free agent for every hole, plus Questionable game-time calls'}
+          </Link>
         ) : null}
       </div>
       {hasStarters ? (
@@ -271,6 +377,13 @@ export function Dash3ATriageView({
                   ) : null}
                   {kickoff ? <span className="af-triage-kickoff">{kickoff}</span> : null}
                 </div>
+                {p.tone === 'warn' ? (
+                  <p className="af-triage-note af-triage-note--gametime">
+                    {es
+                      ? 'Decisión de último momento: ten el relevo listo y cámbialo antes del inicio si lo descartan.'
+                      : "Game-time call: keep the pivot ready and swap before kickoff if he's ruled out."}
+                  </p>
+                ) : null}
                 {p.description ? (
                   /* The feed's own sentence. Never paraphrased into a timeline —
                      no injury table here holds an expected return. */
@@ -286,8 +399,9 @@ export function Dash3ATriageView({
                             "act here" and "no action needed". Absent when the
                             roster could not be read; never defaulted to bench. */}
                         {l.slot ? (
-                          <span className="af-triage-slot" data-slot={l.slot}>
-                            {slotLabel(l.slot, es)}
+                          <span className="af-triage-slot" data-slot={l.slot} data-handled={p.tone === 'bad' && l.slot === 'bench' ? 'true' : undefined}>
+                            {/* Ruled out and already benched here: handled, and it says so. */}
+                            {p.tone === 'bad' && l.slot === 'bench' ? (es ? 'en la banca ✓' : 'benched ✓') : slotLabel(l.slot, es)}
                           </span>
                         ) : null}
                         {/*
@@ -298,10 +412,10 @@ export function Dash3ATriageView({
                           live behind the CTA below. An empty bench here is not
                           a gap in the data; it is the reason to go look.
                         */}
-                        {l.slot === 'starter' && l.bench.length > 0 ? (
+                        {l.slot === 'starter' && coverText(l, es, p.tone === 'warn') ? (
                           <span className="af-triage-bench">
                             {' '}
-                            {es ? `pon a ${l.bench.join(' o ')}` : `swap in ${l.bench.join(' or ')}`}
+                            {coverText(l, es, p.tone === 'warn')}
                           </span>
                         ) : null}
                       </Link>
@@ -315,11 +429,36 @@ export function Dash3ATriageView({
                 ) : null}
               </div>
               <div className="af-triage-actions">
-                {p.freeAgentLinks.length > 0 ? (
+                {/*
+                  Where the move is made. Sleeper, ESPN and Yahoo accept no lineup write from us, so
+                  this is a precise hand-off to their own lineup screen, never a pretend "apply".
+                */}
+                {p.leagues
+                  .filter((l) => l.slot === 'starter' && l.fixHref)
+                  .slice(0, 3)
+                  .map((l) => (
+                    <a
+                      key={`fix-${l.id}`}
+                      className="af-triage-cta af-triage-cta--fix"
+                      href={l.fixHref!}
+                      target={/^https?:/.test(l.fixHref!) ? '_blank' : undefined}
+                      rel={/^https?:/.test(l.fixHref!) ? 'noopener noreferrer' : undefined}
+                      onClick={() => sendProductAnalyticsBeacon('product.triage.fix_clicked', { platform: l.platform, questionable: p.tone === 'warn' })}
+                    >
+                      {es ? `Corregir alineación en ${platformLabel(l.platform)} · ${l.name}` : `Set lineup in ${platformLabel(l.platform)} · ${l.name}`}
+                    </a>
+                  ))}
+                {p.tone === 'warn' ? null : p.freeAgentLinks.length > 0 ? (
                   p.freeAgentLinks.map((l) => (
-                    <Link key={l.id} className="af-triage-cta" href={l.href}>
-                      {es ? `Buscar agentes libres en ${l.name}` : `Find free agents in ${l.name}`}
-                    </Link>
+                    <TriageFreeAgentCta
+                      key={l.id}
+                      leagueId={l.id}
+                      leagueName={l.name}
+                      baseHref={l.href}
+                      injuredId={String(p.sport ?? '').toUpperCase() === 'NFL' ? p.sleeperId ?? null : null}
+                      auto={bestAddKeys.has(`${p.key}|${l.id}`)}
+                      es={es}
+                    />
                   ))
                 ) : (
                   <Link className="af-triage-cta" href="/core/players">

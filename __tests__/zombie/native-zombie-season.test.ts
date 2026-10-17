@@ -221,6 +221,30 @@ describe('runWeeklyResolution — the league moves on to the next week', () => {
     expect(argsOf('zombieLeague.update')).toHaveLength(0)
     expect(argsOf('zombieWeeklyResolution.upsert')).toHaveLength(0)
   })
+
+  /*
+   * 🛑 Weekly winnings were never written for a native league. A resolved week now banks each team's
+   * score in the ledger — here an NBA 1,000 v 850 win, a bashing (150 ≥ 128), moves 25% of the loser's week.
+   */
+  it('a resolved week banks winnings in the ledger', async () => {
+    overrides.set('zombieLeague.findUnique', async () => ({
+      id: 'z1', leagueId: 'L1', season: 2026, sport: 'NBA', currentWeek: 5, totalWeeks: 19, universeId: null, league: {},
+    }))
+    overrides.set('redraftSeason.findFirst', async () => ({ id: 's1' }))
+    overrides.set('redraftMatchup.findMany', async () => [
+      { id: 'm1', homeRosterId: 'r1', awayRosterId: 'r2', homeScore: 1000, awayScore: 850, status: 'final' },
+    ])
+    overrides.set('redraftMatchup.findFirst', async () => ({ week: 19 }))
+    overrides.set('roster.findMany', async () => [
+      { id: 'R1', platformUserId: 'u1', redraftRosterId: 'r1' },
+      { id: 'R2', platformUserId: 'u2', redraftRosterId: 'r2' },
+    ])
+
+    await runWeeklyResolution('z1', 5)
+
+    const ledger = argsOf('zombieWeeklyWinnings.upsert').map((a) => [a.create.rosterId, a.create.amount])
+    expect(ledger).toEqual([['R1', 1212.5], ['R2', 637.5]])
+  })
 })
 
 describe('native infection results', () => {
@@ -309,5 +333,34 @@ describe('selectWhisperer', () => {
       const r = await selectWhisperer('z1', 'random')
       expect(r.rosterId).toBe('R-human')
     }
+  })
+
+  it('tells the chosen manager, and only them, that they are the Whisperer', async () => {
+    const { notifyZombiePlayer } = await import('@/lib/zombie/commissionerNotificationService')
+    vi.mocked(notifyZombiePlayer).mockClear()
+    overrides.set('zombieLeague.findUniqueOrThrow', async () => ({
+      id: 'z1', leagueId: 'L1', whispererAmbushCount: 3, whispererIsPublic: false, league: { name: 'Tip-Off Outbreak' },
+    }))
+    overrides.set('zombieLeagueTeam.findMany', async () => [{ rosterId: 'R-human' }])
+    overrides.set('roster.findMany', async () => [{ id: 'R-human', platformUserId: 'user-1' }])
+    overrides.set('roster.findUnique', async () => ({ platformUserId: 'user-1' }))
+    await selectWhisperer('z1', 'random')
+    expect(notifyZombiePlayer).toHaveBeenCalledTimes(1)
+    const [userId, type, title, opts] = vi.mocked(notifyZombiePlayer).mock.calls[0]!
+    expect([userId, type, title]).toEqual(['user-1', 'whisperer_selected', "You're the Whisperer"])
+    expect(opts?.body).toContain('Nobody else knows')
+    // The stored title must be the real one: spoiler-safe mode would store "League update".
+    expect(opts?.pushSpoilerSafe).toBeFalsy()
+  })
+
+  it('notifies nobody when the only seat is open', async () => {
+    const { notifyZombiePlayer } = await import('@/lib/zombie/commissionerNotificationService')
+    vi.mocked(notifyZombiePlayer).mockClear()
+    overrides.set('zombieLeague.findUniqueOrThrow', async () => ({ id: 'z1', leagueId: 'L1', whispererAmbushCount: 3, league: {} }))
+    overrides.set('zombieLeagueTeam.findMany', async () => [{ rosterId: 'R-open' }])
+    overrides.set('roster.findMany', async () => [{ id: 'R-open', platformUserId: 'open-slot-L1-1' }])
+    overrides.set('roster.findUnique', async () => ({ platformUserId: 'open-slot-L1-1' }))
+    await selectWhisperer('z1', 'random')
+    expect(notifyZombiePlayer).not.toHaveBeenCalled()
   })
 })

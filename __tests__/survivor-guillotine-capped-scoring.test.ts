@@ -23,6 +23,15 @@ describe('Survivor Guillotine NBA capped games', () => {
     expect(() => calculateCappedGameScores(['a'], [game], 0)).toThrow('positive')
   })
 
+  it('uses the same cap across both halves of an NBA combined scoring period', () => {
+    const games = [
+      { rosterId: 'a', playerId: 'p1', gameId: 'before-break', gameDate: new Date('2027-02-12T00:00:00Z'), points: 4 },
+      { rosterId: 'a', playerId: 'p1', gameId: 'after-break', gameDate: new Date('2027-02-21T00:00:00Z'), points: 8 },
+      { rosterId: 'a', playerId: 'p1', gameId: 'later', gameDate: new Date('2027-02-23T00:00:00Z'), points: 100 },
+    ]
+    expect(calculateCappedGameScores(['a'], games, 2).get('a')).toBe(12)
+  })
+
   it('scores an unscored live box row from league rules, including numeric stat aliases', () => {
     expect(scoreNbaGame({ stats: { pts: 20, reb: 10, ast: 5, text: 'ignored' }, scored: false }, [
       { statKey: 'points', pointsValue: 1, multiplier: 1, enabled: true },

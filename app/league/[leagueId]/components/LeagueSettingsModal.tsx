@@ -504,35 +504,33 @@ export function LeagueSettingsModal(props: LeagueSettingsModalProps) {
                   </div>
                 </div>
 
-                <div className="mt-4 flex flex-wrap justify-center gap-2">
+                {/*
+                  Mode switch. Styled ONLY through `.af-ls-mode-*` classes in league-admin.css,
+                  which read the AF Core theme tokens — no Tailwind white-alpha colour classes,
+                  because league-admin.css remaps those (bg-white/[0.12] → --surface2), which
+                  left the active pill indistinguishable from the idle ones in light mode, and
+                  `transition` animated the colour swap on every theme change (the "flush").
+                */}
+                <div className="af-ls-mode-tabs mt-4" role="group" aria-label={t('lsModal.leagueSettings')}>
                   <button
                     type="button"
                     onClick={() => setMainTab('user')}
                     aria-pressed={mainTab === 'user'}
-                    className={`flex items-center gap-1.5 rounded-full border px-4 py-2 text-[11px] font-bold tracking-wide transition ${
-                      mainTab === 'user'
-                        ? 'border-[#ff3d81]/45 bg-white/[0.12] text-white shadow-[0_0_0_1px_rgba(255,61,129,0.12)]'
-                        : 'border-transparent bg-white/[0.04] text-white/40 hover:bg-white/[0.07] hover:text-white/65'
-                    }`}
+                    data-active={mainTab === 'user' ? 'true' : undefined}
+                    className="af-ls-mode-pill"
                     data-testid="league-settings-tab-user"
                     aria-label={t('lsModal.userSettings')}
                   >
-                    <User
-                      className={`h-3.5 w-3.5 ${mainTab === 'user' ? 'text-[#ff9ec0]' : 'text-white/35'}`}
-                      strokeWidth={2}
-                      aria-hidden
-                    />
+                    <User className="af-ls-mode-icon h-3.5 w-3.5" strokeWidth={2} aria-hidden />
                     {t('lsModal.tabUser')}
                   </button>
                   <button
                     type="button"
                     onClick={() => setMainTab('general')}
                     aria-pressed={mainTab === 'general'}
-                    className={`rounded-full border px-4 py-2 text-[11px] font-bold tracking-wide transition ${
-                      mainTab === 'general'
-                        ? 'border-[#ff3d81]/45 bg-white/[0.12] text-white shadow-[0_0_0_1px_rgba(255,61,129,0.12)]'
-                        : 'border-transparent bg-white/[0.04] text-white/40 hover:bg-white/[0.07] hover:text-white/65'
-                    }`}
+                    data-active={mainTab === 'general' ? 'true' : undefined}
+                    className="af-ls-mode-pill"
+                    data-testid="league-settings-tab-general"
                   >
                     {t('lsModal.tabGeneral')}
                   </button>
@@ -541,11 +539,9 @@ export function LeagueSettingsModal(props: LeagueSettingsModalProps) {
                       type="button"
                       onClick={() => setMainTab('idp')}
                       aria-pressed={mainTab === 'idp'}
-                      className={`rounded-full border px-4 py-2 text-[11px] font-bold tracking-wide transition ${
-                        mainTab === 'idp'
-                          ? 'border-red-500/35 bg-red-950/35 text-red-100 shadow-[0_0_0_1px_rgba(248,113,113,0.15)]'
-                          : 'border-transparent bg-white/[0.04] text-white/40 hover:bg-white/[0.07] hover:text-white/65'
-                      }`}
+                      data-active={mainTab === 'idp' ? 'true' : undefined}
+                      className="af-ls-mode-pill"
+                      data-tone="idp"
                       data-testid="league-settings-tab-idp"
                     >
                       IDP
@@ -555,19 +551,18 @@ export function LeagueSettingsModal(props: LeagueSettingsModalProps) {
                     type="button"
                     onClick={() => setMainTab('ai')}
                     aria-pressed={mainTab === 'ai'}
-                    className={`flex items-center gap-1 rounded-full border px-4 py-2 text-[11px] font-bold tracking-wide transition ${
-                      mainTab === 'ai'
-                        ? 'border-violet-500/45 bg-gradient-to-r from-violet-600/25 to-fuchsia-600/20 text-white shadow-[0_0_0_1px_rgba(139,92,246,0.2)]'
-                        : 'border-transparent bg-white/[0.04] text-white/40 hover:bg-white/[0.07] hover:text-white/65'
-                    }`}
+                    data-active={mainTab === 'ai' ? 'true' : undefined}
+                    className="af-ls-mode-pill"
+                    data-tone="ai"
+                    data-testid="league-settings-tab-ai"
                   >
-                    <Sparkles className="h-3.5 w-3.5 text-violet-300" />
+                    <Sparkles className="af-ls-mode-icon h-3.5 w-3.5" aria-hidden />
                     {t('lsModal.tabAi')}
                   </button>
                 </div>
               </header>
 
-              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-8 pt-4 [scrollbar-gutter:stable]">
+              <div className="af-ls-modal-body min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-3 pb-8 pt-4 [scrollbar-gutter:stable] sm:px-4">
                 {mainTab === 'user' ? (
                   <div className="mx-auto max-w-md space-y-6 py-1">
                     <div>
@@ -669,7 +664,7 @@ export function LeagueSettingsModal(props: LeagueSettingsModalProps) {
                       <X className="h-5 w-5" />
                     </button>
                   </div>
-                  <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 [scrollbar-gutter:stable]">
+                  <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden px-3 py-4 [scrollbar-gutter:stable] sm:px-4">
                     <SettingsSubPanelBody panelId={activePanel} ctx={subCtx} />
                   </div>
                 </motion.aside>

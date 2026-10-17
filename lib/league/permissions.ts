@@ -1,3 +1,4 @@
+import { seasonSetupBlocked } from '@/lib/tournament/seasonNativeContract'
 import { prisma } from '@/lib/prisma'
 
 export type LeagueRole = 'commissioner' | 'co_commissioner' | 'member' | 'viewer' | null
@@ -56,6 +57,8 @@ export function isCommissionerRole(role: LeagueRole): role is 'commissioner' | '
  * of leagueId. Use this at the top of every settings API route.
  */
 export async function requireCommissionerRole(leagueId: string, userId: string): Promise<void> {
+  const league = await prisma.league.findFirst({ where: { id: leagueId }, select: { settings: true } })
+  if (seasonSetupBlocked(league?.settings)) throw new Response(JSON.stringify({ error: 'Tournament settings are frozen while setup is completed.' }), { status: 409, headers: { 'Content-Type': 'application/json' } })
   const role = await getLeagueRole(leagueId, userId)
   if (!isCommissionerRole(role)) {
     throw new Response(

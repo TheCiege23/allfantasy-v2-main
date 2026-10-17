@@ -44,6 +44,7 @@ export interface SurvivorSummaryConfig {
 /** Matches `ScrollRevealStep` from `lib/survivor/votingEngine.ts` (JSON on council). */
 export type SurvivorScrollRevealStep =
   | { type: 'vote'; voterName: string; targetName: string }
+  | { type: 'ballot'; targetName: string; stamp: string }
   | { type: 'pause' }
   | { type: 'does_not_count'; voterName: string }
   | { type: 'elimination'; userName: string }
@@ -101,6 +102,8 @@ export interface SurvivorSummary {
   /** Regular-season week window for main island + exile (no playoffs). */
   seasonCalendar?: SurvivorSeasonCalendar
   currentWeek: number
+  tribeScores?: Record<string, number>
+  scoresFinalized?: boolean
   nbaWeeklyScoringMode?: 'all_games' | 'one_game_per_player'
   tribes: SurvivorSummaryTribe[]
   council: SurvivorSummaryCouncil | null
@@ -113,7 +116,7 @@ export interface SurvivorSummary {
   myRosterId?: string
   myTribeId?: string
   myTribeSource?: string | null
-  myIdols: { id: string; playerId: string; powerType: string }[]
+  myIdols: { id: string; playerId: string; powerType: string; playerName?: string | null; playerImageUrl?: string | null }[]
   myActiveEffects?: {
     rewardType: string
     week: number

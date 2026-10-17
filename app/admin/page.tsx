@@ -316,6 +316,14 @@ function AdminOverviewDeck({
             <span>Reported chat messages (review and remove)</span>
             <span className="text-rose-100/65">Open</span>
           </a>
+          {/* Cyan: read-only. Real stories from trusted outlets, with copy-and-paste posts. */}
+          <a
+            href="/admin/social-newsroom"
+            className="flex items-center justify-between rounded-2xl border border-cyan-300/15 bg-cyan-300/[0.08] px-4 py-3 text-sm font-bold text-cyan-100 transition hover:border-cyan-300/35"
+          >
+            <span>Social newsroom (copy-and-paste posts from real news)</span>
+            <span className="text-cyan-100/65">Open</span>
+          </a>
           <a
             href="/api/admin/status"
             className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm font-bold text-white/78 transition hover:border-white/25"
@@ -1807,6 +1815,13 @@ export default async function AdminPage(
               </a>
               <a className="af-cc-tab" href="#email-center">
                 Email
+              </a>
+              {/*
+                A page, not a section anchor. Its only other link sits in the Fast Paths card,
+                below the verdict, freshness, growth and traffic panels: present, but nobody found it.
+              */}
+              <a className="af-cc-tab" href="/admin/social-newsroom" data-testid="admin-social-newsroom-tab">
+                Social newsroom
               </a>
             </nav>
             {/*

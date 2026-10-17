@@ -170,3 +170,10 @@ it('rejects a plan based on stale names or assignments before it overwrites anot
   expect(out).toMatchObject({ ok: false, status: 409 })
   expect(leagueUpdate).not.toHaveBeenCalled()
 })
+
+it.each(['blueprint', 'rules_published'])('blocks legacy conference changes for %s shells', async status => {
+  shellFindFirst.mockResolvedValue({ id: 't1', status, currentRoundNumber: 1 })
+  const result = await applyConferencePlan({ ...args, conferences: [{ clientId: 'east', name: 'East', active: true, leagueIds: [] }] })
+  expect(result).toMatchObject({ ok: false, status: 409 })
+  expect(shellUpdate).not.toHaveBeenCalled()
+})

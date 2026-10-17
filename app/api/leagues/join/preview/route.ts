@@ -9,6 +9,7 @@ import { validateFantasyInviteCode } from '@/lib/league-invite'
 import { prisma } from '@/lib/prisma'
 import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/normalizeSurvivorSettings'
 import { SURVIVOR_TRIBE_CATALOG, tribeCrestUrl } from '@/lib/survivor/survivorTribeIdentity'
+import { getZombieJoinPreview } from '@/lib/zombie/zombieJoinPreview'
 
 export const dynamic = 'force-dynamic'
 
@@ -59,6 +60,7 @@ export async function GET(req: NextRequest) {
       inviteExpired: result.preview.expired,
       inviteCode: result.preview.inviteCode,
       survivor: await survivorPreview(result.preview.leagueId),
+      zombie: await getZombieJoinPreview(result.preview.leagueId),
     })
   }
 
@@ -90,6 +92,7 @@ export async function GET(req: NextRequest) {
       inviteExpired: result.preview.expired,
       inviteCode: result.preview.inviteCode,
       survivor: await survivorPreview(result.preview.leagueId),
+      zombie: await getZombieJoinPreview(result.preview.leagueId),
     })
   }
 
@@ -106,6 +109,7 @@ export async function GET(req: NextRequest) {
             inviteExpired: result.preview.expired,
             inviteCode: result.preview.inviteCode,
             survivor: await survivorPreview(result.preview.leagueId),
+            zombie: await getZombieJoinPreview(result.preview.leagueId),
           }
         : {}),
     },

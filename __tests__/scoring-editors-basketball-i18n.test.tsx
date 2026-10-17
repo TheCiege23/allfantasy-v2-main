@@ -62,7 +62,7 @@ describe('every chrome key the editors name exists in BOTH languages', () => {
   const keys = [...new Set(['NbaScoringSettingsPanel.tsx', 'NcaabScoringSettingsPanel.tsx'].flatMap((f) =>
     [...readFileSync(resolve(ROOT, f), 'utf8').matchAll(/['"`](lsScore\.[A-Za-z0-9_.]+)['"`]/g)].map((m) => m[1]!)))]
   it('🛑 read from the files', () => {
-    expect(keys.length).toBeGreaterThanOrEqual(26)
+    expect(keys.length).toBeGreaterThanOrEqual(25) // lsScore.presetHeading moved to scoring/ScoringPresetSelect.tsx
     expect(keys).toEqual(expect.arrayContaining(['lsScore.subtitle.nba', 'lsScore.subtitle.ncaab', 'lsScore.premium.advancedMetrics', 'lsScore.savedLeagueWide']))
     expect(keys.filter((k) => !translations.en[k])).toEqual([])
     expect(keys.filter((k) => !translations.es[k])).toEqual([])

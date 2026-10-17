@@ -1,0 +1,18 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "incremental": false,
+    "noEmit": true
+  },
+  "include": [
+    "../lib/tournament/seasonWeeklyProjection.ts",
+    "../__tests__/tournament-season-weekly-projection.test.ts",
+    "../types/**/*.d.ts"
+  ],
+  "exclude": [
+    "../node_modules",
+    "../.next",
+    "../.next-dev-local",
+    "../.worktrees"
+  ]
+}

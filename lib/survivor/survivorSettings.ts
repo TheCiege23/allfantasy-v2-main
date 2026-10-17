@@ -18,6 +18,7 @@ export interface SurvivorFoundationSettings {
   maxTeamCount: number
   tribeAssignmentMode: SurvivorTribeAssignmentMode
   commissionerParticipationMode: SurvivorCommissionerParticipationMode
+  hideIdolsFromCommissioner: boolean
   coCommissionerMode: SurvivorCoCommissionerMode
   mergeTriggerType: SurvivorMergeTriggerType
   mergeWeek: number
@@ -77,6 +78,7 @@ export const SURVIVOR_DEFAULT_FOUNDATION_SETTINGS: SurvivorFoundationSettings = 
   maxTeamCount: 20,
   tribeAssignmentMode: 'random',
   commissionerParticipationMode: 'non_participating_host',
+  hideIdolsFromCommissioner: false,
   coCommissionerMode: 'disabled',
   mergeTriggerType: 'active_player_count',
   mergeWeek: 7,
@@ -241,6 +243,7 @@ export function normalizeSurvivorFoundationSettings(
       ),
       commissionerHint,
     ),
+    hideIdolsFromCommissioner: readBoolean(s, ['hideIdolsFromCommissioner'], base.hideIdolsFromCommissioner),
     coCommissionerMode: normalizeCoCommissionerMode(readString(s, ['coCommissionerMode'], base.coCommissionerMode)),
     mergeTriggerType: normalizeMergeTrigger(
       readString(s, ['mergeTriggerType', 'merge_trigger_type', 'survivorMergeTrigger'], base.mergeTriggerType),
@@ -298,6 +301,7 @@ export function buildSurvivorSettingsSnapshotPatch(
     defaultTeamCount: normalized.defaultTeamCount,
     tribeCount: normalized.tribeCount,
     commissionerParticipationMode: normalized.commissionerParticipationMode,
+    hideIdolsFromCommissioner: normalized.hideIdolsFromCommissioner,
     coCommissionerMode: normalized.coCommissionerMode,
     tribeAssignmentMode: normalized.tribeAssignmentMode,
     mergeTriggerType: normalized.mergeTriggerType,

@@ -61,6 +61,14 @@ export async function GET(
   const weekParam = req.nextUrl.searchParams?.get('week')
   const requestedWeek = weekParam ? Math.max(1, parseInt(weekParam, 10)) || 1 : null
   const currentWeek = await resolveSurvivorCurrentWeek(leagueId, requestedWeek)
+  const weeklyScoreRows = currentWeek > 0 ? await prisma.survivorWeeklyScore.findMany({
+    where: { leagueId, week: currentWeek, countedTowardTribeTotal: true },
+    select: { tribeId: true, finalScore: true, isFinalized: true },
+  }) : []
+  const tribeScores: Record<string, number> = {}
+  for (const score of weeklyScoreRows) {
+    if (score.tribeId) tribeScores[score.tribeId] = (tribeScores[score.tribeId] ?? 0) + score.finalScore
+  }
 
   const [config, tribesRaw, council, challenges, jury, exileLeagueId, tokenStates, audit, merged, myRosterId, eliminatedRosterIds, mainLeagueRosters, finaleState, leagueSettingsRow, sitOutState, tribeBalance] = await Promise.all([
     getSurvivorConfig(leagueId),
@@ -165,7 +173,7 @@ export async function GET(
     rosterDisplayNames[r.id] = teamId ? teamNameById[teamId] ?? r.id : r.id
   }
 
-  let myIdols: { id: string; playerId: string; powerType: string }[] = []
+  let myIdols: { id: string; playerId: string; powerType: string; playerName?: string | null; playerImageUrl?: string | null }[] = []
   let myActiveEffects: {
     rewardType: string
     week: number
@@ -179,6 +187,28 @@ export async function GET(
       getActiveIdolsForRoster(leagueId, myRosterId),
       getActiveEffectsForRoster(leagueId, myRosterId, currentWeek),
     ])
+    if (myIdols.length > 0) {
+      // Resolve only the viewer's idol-bound players; other managers' placements stay sealed.
+      const playerIds = [...new Set(myIdols.map((idol) => idol.playerId))]
+      const [players, drafted] = await Promise.all([
+        prisma.sportsPlayer.findMany({ where: { id: { in: playerIds } }, select: { id: true, name: true, imageUrl: true } }),
+        prisma.draftPick.findMany({
+          where: { session: { leagueId }, playerId: { in: playerIds } },
+          select: { playerId: true, playerName: true, playerImageUrl: true },
+        }),
+      ])
+      const sportsById = new Map(players.map((player) => [player.id, player]))
+      const draftById = new Map(drafted.filter((pick) => pick.playerId).map((pick) => [pick.playerId!, pick]))
+      myIdols = myIdols.map((idol) => {
+        const player = sportsById.get(idol.playerId)
+        const pick = draftById.get(idol.playerId)
+        return {
+          ...idol,
+          playerName: player?.name ?? pick?.playerName ?? null,
+          playerImageUrl: player?.imageUrl ?? pick?.playerImageUrl ?? null,
+        }
+      })
+    }
   }
 
   const myMainRoster = myRosterId ? mainLeagueRosters.find((roster) => roster.id === myRosterId) ?? null : null
@@ -262,6 +292,8 @@ export async function GET(
     },
     seasonCalendar,
     currentWeek,
+    tribeScores,
+    scoresFinalized: weeklyScoreRows.length > 0 && weeklyScoreRows.every(row => row.isFinalized),
     tribes: tribes.map((t) => ({
       id: t.id,
       name: t.name,

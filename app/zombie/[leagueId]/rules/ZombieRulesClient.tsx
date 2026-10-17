@@ -170,7 +170,7 @@ function ThresholdsTab({ cfg, isPaid }: { cfg: ReturnType<typeof getZombieSportC
           </div>
           <div className="flex items-start gap-2">
             <span className="mt-0.5 text-teal-400">●</span>
-            <p>Serum Antidote = reverse infection (one-time use)</p>
+            <p>Collect serums = a Zombie can return as a Survivor</p>
           </div>
         </div>
         <p className="mt-3 text-[11px] text-[var(--zombie-text-dim)]">
@@ -213,7 +213,7 @@ function ItemsTab({ cfg }: { cfg: ReturnType<typeof getZombieSportConfig> }) {
           Weapons — {cfg.label} Thresholds
         </h2>
         <p className="mt-1 text-[12px] text-[var(--zombie-text-mid)]">
-          Score above these thresholds to earn weapons that provide advantages.
+          Earned automatically each week. This season weapons are tracked only — they do not change scores.
         </p>
         <div className="mt-4 space-y-2">
           {cfg.weaponThresholds.map((w) => (
@@ -265,37 +265,18 @@ function ItemsTab({ cfg }: { cfg: ReturnType<typeof getZombieSportConfig> }) {
       {/* Item legend */}
       <section className="rounded-xl border border-[var(--zombie-border)] bg-[var(--zombie-panel)] p-5">
         <h2 className="text-[14px] font-bold text-[var(--zombie-text-full)]">Item Legend</h2>
-        <div className="mt-3 grid grid-cols-2 gap-2 text-[12px]">
-          <div className="flex items-center gap-2">
+        {/* v1: the engine awards items; no item changes a score or a matchup yet, so no effects are promised. */}
+        <div className="mt-3 space-y-2 text-[12px]">
+          <p className="flex items-center gap-2">
             <span>🧪</span>
-            <span className="text-teal-300">Serum Antidote</span>
-            <span className="text-[var(--zombie-text-dim)]">— Reverse infection</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span>🔪</span>
-            <span className="text-white/80">Knife</span>
-            <span className="text-[var(--zombie-text-dim)]">— +5% score boost</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span>🪓</span>
-            <span className="text-white/80">Axe</span>
-            <span className="text-[var(--zombie-text-dim)]">— +8% score boost</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span>🏹</span>
-            <span className="text-white/80">Bow</span>
-            <span className="text-[var(--zombie-text-dim)]">— Steal item from opponent</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span>🔫</span>
-            <span className="text-white/80">Gun</span>
-            <span className="text-[var(--zombie-text-dim)]">— +12% score boost</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span>💣</span>
-            <span className="text-amber-300">Bomb</span>
-            <span className="text-[var(--zombie-text-dim)]">— One-time league reset</span>
-          </div>
+            <span className="text-teal-300">Serums</span>
+            <span className="text-[var(--zombie-text-dim)]">— collect enough and a Zombie returns as a Survivor</span>
+          </p>
+          <p className="flex items-center gap-2">
+            <span>🔪🏹🪓🔫💣</span>
+            <span className="text-white/80">Weapons</span>
+            <span className="text-[var(--zombie-text-dim)]">— earned and tracked this season; they do not change scores</span>
+          </p>
         </div>
       </section>
     </div>

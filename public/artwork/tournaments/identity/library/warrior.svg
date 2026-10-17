@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200" role="img" aria-label="warrior emblem"><defs><linearGradient id="div-library-warrior-M" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="0.45" stop-color="#b9c0cc"/><stop offset="1" stop-color="#4a515e"/></linearGradient></defs><g transform="translate(4,4) scale(.96)"><path d="M70,40 C96,4 158,6 184,42 C170,40 150,44 138,54 C120,44 96,40 70,40 Z" fill="#ff7a2f" stroke="#0e0a08" stroke-width="5" stroke-linejoin="round"/>
+<path d="M78,40 C100,22 150,20 176,40" stroke="#0e0a08" stroke-width="3" fill="none" opacity=".5"/>
+<path d="M52,60 C60,40 96,34 124,40 C154,46 168,72 168,104 L168,170 L132,170 L132,128 L116,110 L116,170 L64,170 C44,150 40,100 52,60 Z" fill="url(#div-library-warrior-M)" stroke="#0e0a08" stroke-width="6" stroke-linejoin="round"/>
+<path d="M60,62 C70,48 98,44 120,48" stroke="#fff" stroke-opacity=".6" stroke-width="4" fill="none"/>
+<path d="M60,98 L118,96 L118,110 L132,128 L132,170 M60,98 C58,120 60,146 66,166" stroke="#0e0a08" stroke-width="4.5" fill="none" stroke-linejoin="round"/>
+<path d="M66,100 L114,100 L114,108 L66,112 Z" fill="#0e0a08"/><path d="M78,103 L106,102" stroke="#ff7a2f" stroke-width="3"/>
+<circle cx="146" cy="78" r="6" fill="#ff7a2f" stroke="#0e0a08" stroke-width="2.5"/></g></svg>

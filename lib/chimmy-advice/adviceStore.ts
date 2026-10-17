@@ -24,10 +24,13 @@ import { isMissingDatabaseObjectError } from '@/lib/canonical/getCanonicalPlayer
  */
 
 export type AdviceType = 'start_sit' | 'add' | 'lineup_swap'
-export type AdviceSurface = 'start_vs_comparison' | 'chimmy_chat_lineup' | 'chimmy_chat_waiver'
+export type AdviceSurface = 'start_vs_comparison' | 'chimmy_chat_lineup' | 'chimmy_chat_waiver' | 'triage_swap'
+
+// `triage_swap` is AllFantasy's triage tip, not Chimmy's — see ./adviceSurfaces.ts.
+export { AF_TIP_SURFACE, isChimmyAdvice } from './adviceSurfaces'
 
 export const ADVICE_TYPES: readonly AdviceType[] = ['start_sit', 'add', 'lineup_swap']
-export const ADVICE_SURFACES: readonly AdviceSurface[] = ['start_vs_comparison', 'chimmy_chat_lineup', 'chimmy_chat_waiver']
+export const ADVICE_SURFACES: readonly AdviceSurface[] = ['start_vs_comparison', 'chimmy_chat_lineup', 'chimmy_chat_waiver', 'triage_swap']
 export const MAX_ADVICE_READ = 200
 
 export type AdviceInput = {

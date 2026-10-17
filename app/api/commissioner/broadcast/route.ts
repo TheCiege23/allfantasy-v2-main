@@ -75,8 +75,19 @@ export async function POST(req: NextRequest) {
     const memberIds = await getLeagueMemberAppUserIds(leagueId)
     const leagueRow = await prisma.league.findUnique({
       where: { id: leagueId },
-      select: { settings: true },
+      select: { settings: true, leagueVariant: true },
     })
+    if (results[results.length - 1]?.sent && leagueRow?.leagueVariant === 'survivor') {
+      await prisma.survivorCommissionerAction.create({
+        data: {
+          leagueId,
+          commissionerId: userId,
+          actionType: 'league_announcement',
+          description: 'Universal league announcement sent',
+          newState: { characterCount: message.length },
+        },
+      })
+    }
     const prefs = parseLeagueNotificationPrefs(leagueRow?.settings)
     if (memberIds.length > 0 && isLeaguePrefEnabled(prefs, 'commissionerBroadcasts')) {
       dispatchNotification({

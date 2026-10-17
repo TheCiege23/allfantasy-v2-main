@@ -14,11 +14,17 @@ import { readSurvivorFullSeasonPlan } from '../lib/survivor/survivorFullSeasonPl
 import { sumRedraftStartersFantasy } from '../lib/survivor/gameStateMachine'
 import { resolveElimination } from '../lib/survivor/survivorEliminationService'
 import { isRosterCurrentlyEliminated } from '../lib/survivor/SurvivorRosterState'
+import { readWeekGames } from '../lib/redraft/weekGames'
+import { resolveDailySportWeekWindow } from '../lib/season-week/dailySportSeasonStarts'
+import { easternCalendarDay } from '../lib/sports-data/easternGameDay'
+import { nbaTeamKey } from '../lib/roster-lineup-engine/lineupLockService'
 
 const prefix = `nss-${randomUUID().slice(0, 8)}`
 const users = [`${prefix}-host`, `${prefix}-member`]
 const leagues: string[] = []
 const scoreIds: string[] = []
+const gameStatIds: string[] = []
+const gameIds: string[] = []
 async function cleanup() {
   for (const leagueId of leagues) {
     await prisma.survivorVote.deleteMany({ where: { leagueId } })
@@ -29,6 +35,8 @@ async function cleanup() {
     await prisma.league.delete({ where: { id: leagueId } })
   }
   await prisma.playerWeeklyScore.deleteMany({ where: { playerId: { in: scoreIds } } })
+  await prisma.playerGameStat.deleteMany({ where: { id: { in: gameStatIds } } })
+  await prisma.sportsGame.deleteMany({ where: { id: { in: gameIds } } })
   await prisma.appUser.deleteMany({ where: { id: { in: users } } })
 }
 
@@ -75,12 +83,36 @@ async function main() {
       const starter = `${prefix}-${sport}-starter`, bench = `${prefix}-${sport}-bench`
       scoreIds.push(starter, bench)
       const position = sport === 'NBA' ? 'PG' : 'C'
-      await prisma.redraftRosterPlayer.createMany({ data: [{ playerId: starter, slotType: 'bench' }, { playerId: bench, slotType: position }].map(p => ({ ...p, rosterId: actual.id, playerName: p.playerId, position, sport })) })
+      const nbaWindow = sport === 'NBA' ? resolveDailySportWeekWindow('NBA', plan.season, plan.startWeek) : null
+      let nbaGame = nbaWindow ? (await readWeekGames(prisma, { sport: 'NBA', season: plan.season, week: plan.startWeek, seasonType: 'regular', dateWindow: nbaWindow }))[0] : null
+      if (nbaWindow && !nbaGame) {
+        const id = `${prefix}-nba-rehearsal-game`
+        gameIds.push(id)
+        await prisma.sportsGame.create({ data: {
+          id, sport: 'NBA', externalId: id, homeTeam: 'Boston Celtics', awayTeam: 'New York Knicks',
+          season: plan.season, week: plan.startWeek, seasonType: 'regular', source: 'thesportsdb', status: 'final',
+          startTime: new Date(nbaWindow.start.getTime() + 18 * 60 * 60 * 1000), expiresAt: new Date(nbaWindow.end.getTime() + 86_400_000),
+        } })
+        nbaGame = (await readWeekGames(prisma, { sport: 'NBA', season: plan.season, week: plan.startWeek, seasonType: 'regular', dateWindow: nbaWindow }))[0] ?? null
+      }
+      if (sport === 'NBA') assert.ok(nbaGame?.startTime, 'NBA rehearsal requires a real scheduled game in the cloned week')
+      const starterTeam = sport === 'NBA' ? nbaTeamKey(nbaGame!.homeTeam) : null
+      await prisma.redraftRosterPlayer.createMany({ data: [{ playerId: starter, slotType: 'bench' }, { playerId: bench, slotType: position }].map(p => ({ ...p, rosterId: actual.id, playerName: p.playerId, position, sport, team: starterTeam })) })
       await prisma.afRosterLineupAssignment.createMany({ data: [{ playerId: starter, section: 'starters' }, { playerId: bench, section: 'ir' }].map(p => ({ ...p, leagueId, rosterId: generic.id, season: plan.season, week: plan.startWeek })) })
       const key = sport === 'NBA' ? 'pts' : 'g'
       const settings = league.settings as Record<string, unknown>
       await prisma.league.update({ where: { id: leagueId }, data: { settings: { ...settings, sportConfig: { categoryPoints: { [key]: 2 } } } } })
       await prisma.playerWeeklyScore.createMany({ data: [{ playerId: starter, stats: { [key]: 7 }, fantasyPts: 999, isFinalized: true }, { playerId: bench, stats: { [key]: 100 }, fantasyPts: 999, isFinalized: true }].map(p => ({ ...p, sport, week: plan.startWeek, season: plan.season })) })
+      if (sport === 'NBA') {
+        const statId = `${prefix}-nba-game-stat`
+        gameStatIds.push(statId)
+        await prisma.playerGameStat.create({ data: {
+          id: statId, playerId: starter, gameId: statId, season: plan.season, weekOrRound: plan.startWeek,
+          statPayload: { pts: 7 }, normalizedStatMap: { pts: 7 }, sportType: 'NBA',
+          team: starterTeam, opponent: nbaTeamKey(nbaGame!.awayTeam), gameDate: easternCalendarDay(nbaGame!.startTime!),
+          source: 'isolated_rehearsal',
+        } })
+      }
       assert.deepEqual(await sumRedraftStartersFantasy(generic.id, plan.startWeek, season), { pts: 14, allFinalized: true }, 'Saved weekly lineup and custom scoring must win over current slots and fantasyPts')
       await prisma.playerWeeklyScore.update({ where: { playerId_week_season_sport: { playerId: starter, sport, week: plan.startWeek, season: plan.season } }, data: { isFinalized: false } })
       assert.equal((await sumRedraftStartersFantasy(generic.id, plan.startWeek, season)).allFinalized, false)
@@ -100,18 +132,13 @@ async function main() {
       assert.equal(await prisma.survivorAuditEntry.count({ where: { leagueId, action: 'roster_released' } }), 1)
       assert.equal(await isRosterCurrentlyEliminated(leagueId, actual.id), true)
       assert.deepEqual((await prisma.roster.findUniqueOrThrow({ where: { id: generic.id } })).playerData, { players: [], starters: [], bench: [], lineup_sections: { starters: [], bench: [] }, foundation: { verified: true } })
-      // Recover the previous release implementation's pending audit without eliminating twice.
-      const oldAudit = await prisma.survivorAuditEntry.findFirstOrThrow({ where: { leagueId, action: 'player_eliminated' } })
-      await prisma.survivorAuditEntry.update({ where: { id: oldAudit.id }, data: { data: { outcome: 'removed_to_waivers', pendingRelease: true } } })
-      await prisma.redraftRosterPlayer.updateMany({ where: { rosterId: actual.id }, data: { droppedAt: null } })
-      const recovered = await resolveElimination(leagueId, council.id, users[0])
-      assert.ok(recovered.ok && !recovered.pendingRelease && !recovered.alreadyResolved)
-      assert.equal(await prisma.redraftRosterPlayer.count({ where: { rosterId: actual.id, droppedAt: null } }), 0)
+      assert.ok(results.every(result => result.ok && result.outcome === 'exile_island'), 'Default Survivor elimination enters Exile after releasing the main roster')
+      assert.equal((await prisma.survivorPlayer.findUniqueOrThrow({ where: { leagueId_userId: { leagueId, userId: users[1] } } })).playerState, 'exile')
+      assert.equal(await prisma.survivorChatChannel.count({ where: { leagueId, channelType: 'exile', memberUserIds: { has: users[1] } } }), 1)
       assert.equal((await prisma.survivorGameState.findUniqueOrThrow({ where: { leagueId } })).activePlayerCount, 0)
-      assert.equal(await prisma.survivorAuditEntry.count({ where: { leagueId, action: 'elimination_release_recovered' } }), 1)
       assert.ok((await resolveElimination(leagueId, council.id)).ok)
-      assert.equal(await prisma.survivorAuditEntry.count({ where: { leagueId, action: 'elimination_release_recovered' } }), 1)
-      console.log(`PASS ${sport}: delayed-draft reconciliation, legacy release recovery, canonical creation, full calendar, host seats, roster bridge, custom weekly scoring, missing-final refusal, concurrent atomic release, waiver cancellation`)
+      assert.equal(await prisma.survivorAuditEntry.count({ where: { leagueId, action: 'roster_released' } }), 1)
+      console.log(`PASS ${sport}: delayed-draft reconciliation, canonical creation, full calendar, host seats, roster bridge, custom weekly scoring, missing-final refusal, atomic Exile entry and roster release, waiver cancellation`)
     }
     const preview = process.argv.indexOf('--preview-manifest')
     if (preview >= 0 && process.argv[preview + 1]) { await writeFile(process.argv[preview + 1], JSON.stringify({ prefix, users, leagues })); retain = true; console.log('Preview fixtures retained for browser checks; clean them after verification.') }

@@ -229,6 +229,17 @@ vi.mock('@/lib/league-events/publisher', () => ({
   publishLeagueFanoutEvent: vi.fn().mockResolvedValue(null),
 }))
 
+// set_timer_seconds: the custom-timer entitlement (AF Commissioner). Off unless a test turns it on.
+const entitlement = vi.hoisted(() => ({ hasAccess: false, calls: [] as string[] }))
+vi.mock('@/lib/subscription/EntitlementResolver', () => ({
+  EntitlementResolver: class {
+    async resolveForUser(_userId: string, feature: string) {
+      entitlement.calls.push(feature)
+      return { hasAccess: entitlement.hasAccess }
+    }
+  },
+}))
+
 import { POST as postDraftControls } from '@/app/api/leagues/[leagueId]/draft/controls/route'
 import { POST as postDraftPick } from '@/app/api/leagues/[leagueId]/draft/pick/route'
 import { PUT as putDraftQueue } from '@/app/api/leagues/[leagueId]/draft/queue/route'
@@ -446,3 +457,60 @@ describe('Phase 4 Slice 3 - permission and guardrail mechanics', () => {
  * that renders the panel with each entitlement and asserts what the user sees, not in a grep.
  * The permission tests above this line are the behavioural ones and are kept.
  */
+
+describe('set_timer_seconds — same 72h / subscriber rule as the settings Draft tab', () => {
+  const call = (seconds: unknown) =>
+    postDraftControls(
+      jsonRequest('http://localhost/api/leagues/league-1/draft/controls', { action: 'set_timer_seconds', seconds }),
+      { params: Promise.resolve({ leagueId: 'league-1' }) },
+    )
+
+  beforeEach(() => {
+    entitlement.hasAccess = false
+    entitlement.calls = []
+    mocks.assertLeagueActionGate.mockResolvedValue({ ok: true })
+    mocks.setTimerSeconds.mockReset()
+    mocks.setTimerSeconds.mockResolvedValue(true)
+    mocks.buildSessionSnapshot.mockResolvedValue({ status: 'in_progress', currentPick: null, picks: [] })
+    mocks.prisma.draftSession.findUnique.mockResolvedValue({ id: 'session-1', picks: [], timerSeconds: 90 })
+  })
+
+  it('a standard value (8h) is open to every commissioner and never asks for the entitlement', async () => {
+    const res = await call(28800)
+    expect(res.status).toBe(200)
+    expect(mocks.setTimerSeconds).toHaveBeenCalledWith('league-1', 28800, expect.anything())
+    expect(entitlement.calls).toEqual([])
+  })
+
+  it('a custom value is refused without the AF Commissioner entitlement', async () => {
+    const res = await call(2700)
+    expect(res.status).toBe(403)
+    expect((await res.json()).code).toBe('COMMISSIONER_TIMER_CUSTOM_REQUIRES_SUBSCRIPTION')
+    expect(mocks.setTimerSeconds).not.toHaveBeenCalled()
+    expect(entitlement.calls).toEqual(['commissioner_ai_tools'])
+  })
+
+  it('a custom value up to 72h is accepted with the entitlement', async () => {
+    entitlement.hasAccess = true
+    const res = await call(72 * 3600)
+    expect(res.status).toBe(200)
+    expect(mocks.setTimerSeconds).toHaveBeenCalledWith('league-1', 259200, expect.anything())
+  })
+
+  it('out of range (over 72h, under 10s) is 400 even with the entitlement', async () => {
+    entitlement.hasAccess = true
+    for (const s of [72 * 3600 + 1, 5]) {
+      const res = await call(s)
+      expect(res.status, String(s)).toBe(400)
+      expect((await res.json()).code).toBe('COMMISSIONER_TIMER_OUT_OF_RANGE')
+    }
+    expect(mocks.setTimerSeconds).not.toHaveBeenCalled()
+  })
+
+  it('re-sending the session’s current off-list value is allowed without the entitlement', async () => {
+    mocks.prisma.draftSession.findUnique.mockResolvedValue({ id: 'session-1', picks: [], timerSeconds: 45 })
+    const res = await call(45)
+    expect(res.status).toBe(200)
+    expect(entitlement.calls).toEqual([])
+  })
+})

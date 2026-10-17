@@ -1447,6 +1447,7 @@ async function buildActivityItems(context: LeagueContext): Promise<LeagueActivit
       badge: row.faabSpent != null ? 'WAIVERED' : 'FREE AGENCY',
       badgeTone: row.faabSpent != null ? 'teal' : 'neutral',
       timestamp: formatDateTime(row.processedAt),
+      occurredAt: row.processedAt ? new Date(row.processedAt).toISOString() : null,
       amountLabel: row.faabSpent != null ? `BID $${row.faabSpent}` : null,
       lines: [
         ...(addPlayer
@@ -1480,6 +1481,7 @@ async function buildActivityItems(context: LeagueContext): Promise<LeagueActivit
         badge: 'TRADE',
         badgeTone: 'teal' as const,
         timestamp: formatDateTime(trade.tradeDate ?? history.updatedAt),
+        occurredAt: new Date(trade.tradeDate ?? history.updatedAt).toISOString(),
         summary: `Trade between ${history.sleeperUsername}${trade.partnerName ? ` and ${trade.partnerName}` : ''}`,
         lines: [{
           type: 'note' as const,
@@ -1488,10 +1490,11 @@ async function buildActivityItems(context: LeagueContext): Promise<LeagueActivit
       }))
     )
 
+  // By the ISO time: `timestamp` is a display string with no year, and parsing it back is wrong.
   return [...waiverItems, ...tradeItems]
     .sort((a, b) => {
-      const timeA = new Date(a.timestamp).getTime()
-      const timeB = new Date(b.timestamp).getTime()
+      const timeA = a.occurredAt ? new Date(a.occurredAt).getTime() : 0
+      const timeB = b.occurredAt ? new Date(b.occurredAt).getTime() : 0
       return timeB - timeA
     })
     .slice(0, 12)

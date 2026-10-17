@@ -1,3 +1,4 @@
+import { seasonSetupBlocked } from '@/lib/tournament/seasonNativeContract'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import type { Prisma } from '@prisma/client'
@@ -137,6 +138,8 @@ export async function POST(req: NextRequest) {
   if (!canActAsCommissioner && memberRoster && targetRosterId !== memberRoster.id) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
+
+  if (seasonSetupBlocked(league.settings)) return NextResponse.json({ error: 'Tournament player moves remain locked until season activation.' }, { status: 409 })
 
   const chopped = await isRosterChopped(leagueId, targetRosterId)
   if (chopped) {

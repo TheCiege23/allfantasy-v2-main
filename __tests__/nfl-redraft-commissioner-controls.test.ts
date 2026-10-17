@@ -16,9 +16,12 @@
  *      `commissionerPauseControlsEnabled` with structured
  *      `COMMISSIONER_PAUSE_DISABLED` code.
  *   5. `set_timer_seconds` enforces explicit bounds at the route layer:
- *      finite check → `[5, 86400]` range. Out-of-range returns 400 with
- *      `COMMISSIONER_TIMER_OUT_OF_RANGE`; non-finite returns 400 with
- *      `COMMISSIONER_TIMER_INVALID`.
+ *      finite check → `[10, 259200]` range (10s..72h, shared with the settings
+ *      Draft tab via lib/draft/draftSettingsPolicy.ts). Out-of-range returns 400
+ *      with `COMMISSIONER_TIMER_OUT_OF_RANGE`; non-finite returns 400 with
+ *      `COMMISSIONER_TIMER_INVALID`; a custom (off-list) value without the AF
+ *      Commissioner entitlement returns 403
+ *      `COMMISSIONER_TIMER_CUSTOM_REQUIRES_SUBSCRIPTION`.
  *   6. `force_autopick` is gated by
  *      `commissionerForceAutoPickEnabled` with structured
  *      `COMMISSIONER_FORCE_AUTOPICK_DISABLED` code.
@@ -150,9 +153,14 @@ describe('set_timer_seconds — bounds enforcement at the route layer', () => {
     )
   })
 
-  it('declares the explicit bounds (5s minimum, 86400s = 24h maximum)', () => {
-    expect(src).toMatch(/const TIMER_MIN_SECONDS = 5/)
-    expect(src).toMatch(/const TIMER_MAX_SECONDS = 86400/)
+  it('declares the explicit bounds from the shared policy (10s minimum, 72h maximum)', () => {
+    expect(src).toMatch(/const TIMER_MIN_SECONDS = CUSTOM_TIMER_MIN_SECONDS/)
+    expect(src).toMatch(/const TIMER_MAX_SECONDS = CUSTOM_TIMER_MAX_SECONDS/)
+  })
+
+  it('applies the settings-tab subscriber rule through decideCommissionerTimerSeconds', () => {
+    expect(src).toMatch(/decideCommissionerTimerSeconds\(\{[\s\S]+?hasCustomEntitlement[\s\S]+?'commissioner_ai_tools'/)
+    expect(src).toMatch(/const allowedSeconds = timerDecision\.seconds[\s\S]+?setTimerSeconds\(leagueId, allowedSeconds/)
   })
 })
 

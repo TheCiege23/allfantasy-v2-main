@@ -9,6 +9,11 @@ function parseSequence(raw: unknown): SurvivorScrollRevealStep[] {
   const out: SurvivorScrollRevealStep[] = []
   for (const item of raw) {
     if (!item || typeof item !== 'object') continue
+    if ('status' in item && 'targetName' in item) {
+      const row = item as { status: string; targetName: string | null }
+      out.push({ type: 'ballot', targetName: row.targetName ?? 'Unnamed target', stamp: row.status === 'counts' ? '' : row.status === 'taken_by_vote_steal' ? 'Taken - Does not count' : 'Does not count' })
+      continue
+    }
     const t = (item as { type?: string }).type
     if (t === 'pause') {
       out.push({ type: 'pause' })
@@ -48,6 +53,8 @@ function parseSequence(raw: unknown): SurvivorScrollRevealStep[] {
 
 function stepLabel(step: SurvivorScrollRevealStep): string {
   switch (step.type) {
+    case 'ballot':
+      return `${step.targetName}${step.stamp ? ` - ${step.stamp}` : ''}`
     case 'vote':
       return `${step.voterName} voted for @${step.targetName}`
     case 'does_not_count':
@@ -128,7 +135,7 @@ export function SurvivorScrollReveal({ councilWeek, revealSequence, autoPlayMs =
           aria-live="polite"
         >
           {current ? (
-            <span className="block animate-in fade-in duration-300">{stepLabel(current)}</span>
+            <span className="block motion-safe:animate-in motion-safe:fade-in motion-safe:duration-300">{stepLabel(current)}</span>
           ) : (
             <span className="text-amber-100/70">End of the scroll.</span>
           )}

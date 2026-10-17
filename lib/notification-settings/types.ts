@@ -27,6 +27,8 @@ export type NotificationCategoryId =
   | "direct_messages"
   | "league_chat"
   | "career_milestones"
+  | "breaking_news"
+  | "live_game_alerts"
 
 export interface NotificationChannelPrefs {
   enabled: boolean
@@ -110,6 +112,8 @@ export const NOTIFICATION_CATEGORY_IDS: NotificationCategoryId[] = [
   "direct_messages",
   "league_chat",
   "career_milestones",
+  "breaking_news",
+  "live_game_alerts",
 ]
 
 export const NOTIFICATION_CATEGORY_LABELS: Record<NotificationCategoryId, string> = {
@@ -158,6 +162,14 @@ export const NOTIFICATION_CATEGORY_LABELS: Record<NotificationCategoryId, string
   // tier, a career-wins mark — each at most once ever, and only for a season that just finished,
   // never for history an import backfilled.
   career_milestones: "Career milestones — titles, awards & records",
+  // Real-world breaking news (2026-10-15, lib/news/breakingNewsAlerts.ts): trades, signings, firings,
+  // suspensions and season-ending injuries, from trusted outlets only, for the sports you play or the
+  // teams you follow. Capped per person per day at the sender.
+  breaking_news: "Breaking news — trades, signings & major injuries",
+  // Live game moments (2026-10-15, lib/live/gameMomentAlerts.ts): close finishes, overtime, and the
+  // big playoff checkpoints (halftime, 7th inning, end of a period, final) for the sports you play.
+  // Teams you follow get every moment under "Teams you follow — scores" instead.
+  live_game_alerts: "Live game moments — close games, OT & playoff updates",
 }
 
 /**
@@ -178,6 +190,13 @@ export const NOTIFICATION_CATEGORY_LABEL_KEYS = Object.fromEntries(
  * subscribe me to every league chat message" — see NotificationsSettingsSection.
  */
 export const OPT_IN_NOTIFICATION_CATEGORY_IDS: readonly NotificationCategoryId[] = ["league_chat"]
+
+/**
+ * Categories whose EMAIL channel starts off (in-app and push stay on). A live game moment is stale
+ * by the time an inbox is read — "close game, 2:00 left" an hour later is noise, and a busy NBA
+ * night is a dozen of them. The person can still switch email on.
+ */
+export const EMAIL_DEFAULT_OFF_CATEGORY_IDS: readonly NotificationCategoryId[] = ["live_game_alerts"]
 
 /**
  * Categories whose SMS channel defaults ON once the user has agreed to texts (owner's call,

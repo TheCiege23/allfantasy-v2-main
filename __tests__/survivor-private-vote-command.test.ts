@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-const m = vi.hoisted(() => ({ context: vi.fn(), vote: vi.fn() }))
+const m = vi.hoisted(() => ({ context: vi.fn(), vote: vi.fn(), additional: vi.fn() }))
 vi.mock('@/lib/survivor/survivorCouncilService', () => ({ loadCouncilContext: m.context }))
+vi.mock('@/lib/survivor/survivorIdolResolutionService', () => ({ submitAdditionalIdolVote: m.additional }))
 vi.mock('@/lib/survivor/survivorVoteService', () => ({ submitVote: m.vote }))
 import { parsePrivateVoteMention, submitPrivateVoteCommand } from '@/lib/survivor/survivorPrivateVoteCommand'
 import { survivorPublicCouncil } from '@/lib/survivor/survivorPublicCouncil'
@@ -44,4 +45,12 @@ describe('unrevealed council allowlist', () => {
     expect(result).toMatchObject({ votes: [], revealSequence: null, eliminatedUserId: null, isTie: false })
     expect(JSON.stringify(result)).not.toMatch(/secret|123/)
   })
+})
+
+it('routes an explicit additional vote privately without replacing the first ballot', async () => {
+  m.context.mockResolvedValue({ scopePlayers: [{ userId: 'bob', displayName: 'Bob' }] })
+  m.vote.mockClear(); m.additional.mockResolvedValue({ ok: true })
+  expect(await submitPrivateVoteCommand('league', 'alice', '@Chimmy extra vote <@bob>')).toEqual({ ok: true })
+  expect(m.additional).toHaveBeenCalledWith('league', 'alice', 'bob')
+  expect(m.vote).not.toHaveBeenCalled()
 })

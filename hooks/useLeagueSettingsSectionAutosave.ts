@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
+import { recordSavedLeagueOverrides } from '@/lib/league-settings/savedLeagueOverrides'
 
 export type LeagueSettingsSectionId =
   | 'general'
@@ -61,6 +62,9 @@ export function useLeagueSettingsSectionAutosave(
         toast.error(msg)
         return
       }
+      // The modal's league comes from page props nothing refreshes; remember what was saved so a
+      // reopened tab does not re-seed the old value (lib/league-settings/savedLeagueOverrides.ts).
+      recordSavedLeagueOverrides(leagueId, updates)
       if (mySeq === seqRef.current) {
         onSuccessRef.current?.(data)
       }
@@ -86,9 +90,17 @@ export function useLeagueSettingsSectionAutosave(
     [enabled, leagueId, flush],
   )
 
+  // Unmount (tab switch, modal close) FLUSHES a pending edit instead of dropping it: on a phone the
+  // last keystroke and the close tap are routinely inside the debounce window.
+  const flushRef = useRef(flush)
+  flushRef.current = flush
   useEffect(() => {
     return () => {
-      if (timerRef.current) clearTimeout(timerRef.current)
+      if (timerRef.current) {
+        clearTimeout(timerRef.current)
+        timerRef.current = null
+        void flushRef.current()
+      }
     }
   }, [])
 

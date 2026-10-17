@@ -218,9 +218,14 @@ export function commissionerLeagueFieldsFromRow(
   }
 }
 
+/**
+ * 🛑 `sport` is deliberately NOT patchable. A league's sport is fixed at creation: rosters, slot
+ * definitions, scoring templates and the player pool all key off it, so flipping it on a live
+ * league leaves an NBA league rendering NFL rosters and scoring. A settings form that defaulted
+ * an unset sport to 'NFL' and auto-saved it is one way that happened.
+ */
 const LEAGUE_PATCH_KEYS: (keyof Prisma.LeagueUpdateInput)[] = [
   'name',
-  'sport',
   'season',
   'language',
   'logoUrl',

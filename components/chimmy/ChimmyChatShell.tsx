@@ -19,6 +19,7 @@ import { loadChimmyConversation } from '@/lib/chimmy-conversation-service'
 import ChimmyMessageBubble, { type ChimmyMessageMeta } from './ChimmyMessageBubble'
 import ChimmyConversationThread from './ChimmyConversationThread'
 import ChimmyIntentChips from './ChimmyIntentChips'
+import ChimmyStrategyCard from './ChimmyStrategyCard'
 import ChimmyToolContext from './ChimmyToolContext'
 import ChimmyProviderIndicator from './ChimmyProviderIndicator'
 import ChimmyVoiceReadyControls from './ChimmyVoiceReadyControls'
@@ -1183,6 +1184,7 @@ export default function ChimmyChatShell({
           />
         )}
 
+        {requestContext.leagueId && <ChimmyStrategyCard leagueId={requestContext.leagueId} />}
         <ChimmyIntentChips
           enabled={chimmyFeatureFlags.intentChips}
           hasUserMessage={hasUserMessage}

@@ -35,13 +35,13 @@ export function buildSurvivorFullSeasonPlan(input: {
   const lastDay = LAST_DAY[sport]?.[input.season]
   if (!opener || !lastDay) throw new Error(`The ${sport} ${input.season} season calendar has not been verified yet.`)
   if (!Number.isInteger(input.castSize) || input.castSize < 16 || input.castSize > 20) throw new Error('Survivor requires 16–20 managers.')
-  const lastWeek = dailySportWeekForInstant(sport, input.season, new Date(`${lastDay}T00:00:00Z`))!
+  const lastWeek = dailySportWeekForInstant(sport, input.season, new Date(`${lastDay}T12:00:00Z`))!
   const endWeek = input.endWeek ?? lastWeek
   if (!Number.isInteger(endWeek) || endWeek < 1 || endWeek > lastWeek) throw new Error(`Choose an end week between 1 and ${lastWeek}.`)
   const instant = input.draftAt && input.draftAt > (input.now ?? new Date()) ? input.draftAt : input.now ?? new Date()
   const day = easternCalendarDay(instant)
   if (!day) throw new Error('The season start date could not be determined.')
-  const current = dailySportWeekForInstant(sport, input.season, day)
+  const current = dailySportWeekForInstant(sport, input.season, instant)
   // Never backdate a draft into games already played. The first period is a readiness/practice week.
   const startWeek = day.getTime() < Date.parse(opener) ? 1 : (current ?? lastWeek) + 1
   const returnWeek = input.exileEnabled ? input.exileReturnWeek ?? 10 : undefined
@@ -68,7 +68,7 @@ export function readSurvivorFullSeasonPlan(settings: unknown): SurvivorFullSeaso
     !resolveDailySportWeekWindow(p.sport, p.season, p.endWeek)) return null
   if ((p.exileReturnSlots !== undefined || p.exileReturnWeek !== undefined) && (p.exileReturnSlots !== 1 || !Number.isInteger(p.exileReturnWeek) || p.exileReturnWeek! <= p.startWeek || p.exileReturnWeek! >= p.endWeek - 1)) return null
   const lastDay = LAST_DAY[p.sport]?.[p.season]
-  const lastWeek = lastDay ? dailySportWeekForInstant(p.sport, p.season, new Date(lastDay + 'T00:00:00Z')) : null
+  const lastWeek = lastDay ? dailySportWeekForInstant(p.sport, p.season, new Date(lastDay + 'T12:00:00Z')) : null
   const expectedRest = Array.from({ length: p.endWeek - p.startWeek }, (_, i) => p.startWeek + i).filter(week => !p.eliminationWeeks.includes(week))
   if (!lastWeek || p.endWeek > lastWeek || p.regularSeasonLastDay !== lastDay || !Array.isArray(p.noEliminationWeeks) ||
     JSON.stringify(p.noEliminationWeeks) !== JSON.stringify(expectedRest)) return null
