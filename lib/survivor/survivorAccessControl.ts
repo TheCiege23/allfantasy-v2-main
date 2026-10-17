@@ -249,8 +249,10 @@ export function canSeeSurvivorChannel(
     channelType?: SurvivorAccessChannelType | null
     tribeId?: string | null
     memberUserIds?: readonly string[] | null
+    isArchived?: boolean | null
   },
 ): boolean {
+  if (channel.isArchived) return false
   const type = String(channel.channelType ?? 'league')
   if (type === 'league') return context.isLeagueMember
   if (type === 'merge') return context.decisions.canSeeHiddenIdolAssignments || context.canAccessMergeChat
