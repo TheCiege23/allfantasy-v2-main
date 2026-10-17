@@ -14,6 +14,7 @@ import { ManagerRoleBadge } from '@/components/ManagerRoleBadge'
 import { ClassGateNotice, isClassGateBlocked, type ClassGateBlocked } from '@/components/league-join/ClassGateNotice'
 import { ENGAGEMENT } from '@/lib/analytics/eventNames'
 import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
+import { ZombieHowItWorks, ZombieJoinHero, type ZombieJoinPreview } from '@/components/zombie/ZombieJoin'
 
 type TeamOption = {
   id: string
@@ -33,6 +34,8 @@ type InvitePayload = {
   sport: string
   teamCount: number | null
   teams: TeamOption[]
+  /** Present for a Zombie league: the page wears its hero and how-it-works around the team picker. */
+  zombie?: ZombieJoinPreview | null
 }
 
 function buildSleeperAvatarUrl(value: string | null) {
@@ -181,10 +184,20 @@ export default function JoinLeagueInvitePage() {
   }, [fetchInvite, invite?.leagueId, router, selectedTeam, token])
 
   const callbackUrl = `/join/${token}`
+  const zombie = !loading && !loadError ? invite?.zombie ?? null : null
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(34,211,238,0.14),_transparent_30%),linear-gradient(180deg,#040915_0%,#07101f_55%,#02060f_100%)] px-4 py-10 text-white sm:px-6 lg:px-8">
-      <div className="mx-auto flex min-h-[80vh] max-w-5xl items-center justify-center">
+    <main
+      className={
+        zombie
+          ? 'min-h-screen bg-[#07080d] text-white'
+          : 'min-h-screen bg-[radial-gradient(circle_at_top,_rgba(34,211,238,0.14),_transparent_30%),linear-gradient(180deg,#040915_0%,#07101f_55%,#02060f_100%)] px-4 py-10 text-white sm:px-6 lg:px-8'
+      }
+    >
+      {zombie && invite ? (
+        <ZombieJoinHero leagueName={invite.leagueName ?? 'Zombie League'} sport={invite.sport} zombie={zombie} />
+      ) : null}
+      <div className={zombie ? 'mx-auto max-w-5xl px-4 pb-8 sm:px-6' : 'mx-auto flex min-h-[80vh] max-w-5xl items-center justify-center'}>
         <div className="w-full rounded-[28px] border border-white/10 bg-white/[0.04] p-6 shadow-[0_30px_120px_rgba(0,0,0,0.45)] backdrop-blur-xl sm:p-8">
           {loading || status === 'loading' ? (
             <div className="flex min-h-[360px] flex-col items-center justify-center gap-4 text-center">
@@ -211,11 +224,15 @@ export default function JoinLeagueInvitePage() {
             </div>
           ) : status === 'unauthenticated' ? (
             <div className="mx-auto max-w-xl text-center">
-              <div className="inline-flex rounded-full border border-cyan-400/25 bg-cyan-400/10 px-3 py-1 text-[11px] font-black uppercase tracking-[0.28em] text-cyan-200">
-                League Invite
-              </div>
-              <h1 className="mt-5 text-3xl font-black text-white sm:text-4xl">{invite.leagueName ?? 'Join this league'}</h1>
-              <p className="mt-3 text-sm text-slate-300">
+              {zombie ? null : (
+                <>
+                  <div className="inline-flex rounded-full border border-cyan-400/25 bg-cyan-400/10 px-3 py-1 text-[11px] font-black uppercase tracking-[0.28em] text-cyan-200">
+                    League Invite
+                  </div>
+                  <h1 className="mt-5 text-3xl font-black text-white sm:text-4xl">{invite.leagueName ?? 'Join this league'}</h1>
+                </>
+              )}
+              <p className={zombie ? 'text-sm text-slate-300' : 'mt-3 text-sm text-slate-300'}>
                 {invite.sport} league with {invite.teamCount ?? invite.teams.length} teams. Sign in or create your account to claim your team.
               </p>
               <div className="mt-8 grid gap-3 sm:grid-cols-2">
@@ -259,7 +276,9 @@ export default function JoinLeagueInvitePage() {
                 <div className="inline-flex rounded-full border border-cyan-400/25 bg-cyan-400/10 px-3 py-1 text-[11px] font-black uppercase tracking-[0.28em] text-cyan-200">
                   Claim your team
                 </div>
-                <h1 className="mt-5 text-3xl font-black text-white sm:text-4xl">{invite.leagueName ?? 'Join this league'}</h1>
+                {zombie ? null : (
+                  <h1 className="mt-5 text-3xl font-black text-white sm:text-4xl">{invite.leagueName ?? 'Join this league'}</h1>
+                )}
                 <p className="mt-3 text-sm text-slate-300">
                   Pick the team that belongs to you in this {invite.sport} league. Imported placeholders are matched against your linked platform identity first.
                 </p>
@@ -341,6 +360,7 @@ export default function JoinLeagueInvitePage() {
           )}
         </div>
       </div>
+      {zombie ? <ZombieHowItWorks zombie={zombie} /> : null}
     </main>
   )
 }
