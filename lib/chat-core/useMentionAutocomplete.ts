@@ -88,7 +88,7 @@ export function useMentionAutocomplete({
         })
       }
 
-      if ((chatType === 'league' || chatType === 'huddle') && 'all'.startsWith(query)) {
+      if ((chatType === 'league' || chatType === 'huddle' || chatType === 'draft') && 'all'.startsWith(query)) {
         results.push({
           type: '@all',
           value: '@all ',
