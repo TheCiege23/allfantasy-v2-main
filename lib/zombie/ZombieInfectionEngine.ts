@@ -61,6 +61,57 @@ export type NativeWeekResult = {
 }
 
 /**
+ * Season roster -> league roster: the stored link, else its manager, else `roster:<id>` (an open seat).
+ * Pure. Shared by the week results and the season records so the two cannot map a team differently.
+ */
+export function seasonRosterToLeagueRoster(
+  seasonRosters: ReadonlyArray<{ id: string; ownerId: string }>,
+  rosters: ReadonlyArray<{ id: string; platformUserId: string | null; redraftRosterId: string | null }>,
+): (redraftRosterId: string) => string | null {
+  return (redraftRosterId) => {
+    const direct = rosters.find((r) => r.redraftRosterId === redraftRosterId)?.id
+    if (direct) return direct
+    const ownerId = seasonRosters.find((r) => r.id === redraftRosterId)?.ownerId
+    if (!ownerId) return null
+    if (ownerId.startsWith('roster:')) {
+      const id = ownerId.slice('roster:'.length)
+      return rosters.some((r) => r.id === id) ? id : null
+    }
+    return rosters.find((r) => r.platformUserId === ownerId)?.id ?? null
+  }
+}
+
+export type NativeSeasonRecord = { wins: number; losses: number; ties: number; pointsFor: number }
+
+/**
+ * Each league roster's season record, from the season roster the redraft standings engine keeps current.
+ * `ZombieLeagueTeam.wins/losses/pointsFor` are written only by the legacy import path, so a native league
+ * read them as 0-0 all season. Null for a league with no season that year.
+ */
+export async function loadNativeSeasonRecords(
+  leagueId: string,
+  season: number,
+): Promise<Map<string, NativeSeasonRecord> | null> {
+  const redraftSeason = await prisma.redraftSeason.findFirst({ where: { leagueId, season }, select: { id: true } })
+  if (!redraftSeason) return null
+  const [seasonRosters, rosters] = await Promise.all([
+    prisma.redraftRoster.findMany({
+      where: { seasonId: redraftSeason.id },
+      select: { id: true, ownerId: true, wins: true, losses: true, ties: true, pointsFor: true },
+    }),
+    prisma.roster.findMany({ where: { leagueId }, select: { id: true, platformUserId: true, redraftRosterId: true } }),
+  ])
+  const toRoster = seasonRosterToLeagueRoster(seasonRosters, rosters)
+  const out = new Map<string, NativeSeasonRecord>()
+  for (const r of seasonRosters) {
+    const rosterId = toRoster(r.id)
+    if (!rosterId) continue
+    out.set(rosterId, { wins: r.wins, losses: r.losses, ties: r.ties, pointsFor: Number(r.pointsFor ?? 0) })
+  }
+  return out
+}
+
+/**
  * Every real (non-bye) matchup of a native week, mapped to league roster ids, with its scores. Infection
  * and weekly winnings both read this, so one week has one result. Null for a league with no season that
  * year (an imported league).
@@ -84,18 +135,7 @@ export async function loadNativeWeekResults(
     prisma.redraftRoster.findMany({ where: { seasonId: redraftSeason.id }, select: { id: true, ownerId: true } }),
     prisma.roster.findMany({ where: { leagueId }, select: { id: true, platformUserId: true, redraftRosterId: true } }),
   ])
-  // Season roster -> league roster: the stored link, else its manager, else `roster:<id>` (an open seat).
-  const toRoster = (redraftRosterId: string): string | null => {
-    const direct = rosters.find((r) => r.redraftRosterId === redraftRosterId)?.id
-    if (direct) return direct
-    const ownerId = seasonRosters.find((r) => r.id === redraftRosterId)?.ownerId
-    if (!ownerId) return null
-    if (ownerId.startsWith('roster:')) {
-      const id = ownerId.slice('roster:'.length)
-      return rosters.some((r) => r.id === id) ? id : null
-    }
-    return rosters.find((r) => r.platformUserId === ownerId)?.id ?? null
-  }
+  const toRoster = seasonRosterToLeagueRoster(seasonRosters, rosters)
 
   const out: NativeWeekResult[] = []
   for (const m of matchups) {

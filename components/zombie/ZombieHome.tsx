@@ -6,6 +6,8 @@ import Link from 'next/link'
 import type { ZombieBoardEntry, ZombieSummary } from './types'
 import { ZombieSceneBackground } from './ZombieSceneBackground'
 import { ZombieStatusChip, zombieChipStatus, type ZombieChipStatus } from './ZombieStatusChip'
+import { ZombieBashingCard, type ZombieBashingRules } from './ZombieBashingCard'
+import { ZombieTurnOverlay } from './ZombieTurnOverlay'
 
 /*
  * The Zombie league's home (the Zombie tab on /league/[id]). Layout from the design handoff's
@@ -138,9 +140,26 @@ export function ZombieHome({ leagueId }: ZombieHomeProps) {
 
   const m = summary.myMatchup
   const items = summary.myResources ?? { serums: 0, weapons: 0, ambush: 0 }
+  const bashRules: ZombieBashingRules | null = rules
+    ? { bashingThreshold: rules.bashingMargin, maulingThreshold: rules.maulingMargin, bashShare: rules.bashShare, maulShare: rules.maulShare }
+    : null
+  const board = summary.weeklyBoard ?? []
+  const turnedThisWeek = board.filter((e): e is Extract<ZombieBoardEntry, { kind: 'infection' }> => e.kind === 'infection')
+  const blowouts = board.filter((e) => e.kind !== 'infection')
+  const infectedPct = total ? Math.round((turned / total) * 100) : 0
 
   return (
     <div className="space-y-5 text-[var(--zombie-text-full)]">
+      <ZombieTurnOverlay
+        leagueId={leagueId}
+        moment={summary.turnMoment}
+        ctx={{
+          reviveSerums,
+          serums: items.serums,
+          lossToZombieInfects,
+          zombieTradeBlocked: summary.config.zombieTradeBlocked,
+        }}
+      />
       {/* Hero */}
       <header className="relative overflow-hidden rounded-3xl border border-white/10 shadow-[0_18px_60px_rgba(0,0,0,0.4)]">
         <ZombieSceneBackground themeId={lg?.backgroundTheme} />
@@ -254,7 +273,11 @@ export function ZombieHome({ leagueId }: ZombieHomeProps) {
           {/* This week's matchup */}
           <section className="rounded-2xl border border-lime-500/25 bg-[linear-gradient(180deg,rgba(20,30,10,0.35),rgba(7,8,13,0.9))] p-4 sm:p-5">
             <h2 className="text-[11px] font-bold uppercase tracking-[0.18em] text-lime-300">Week {summary.week} matchup</h2>
-            {m && myChip ? (
+            {summary.myMatchupView && bashRules ? (
+              <div className="mt-3">
+                <ZombieBashingCard m={summary.myMatchupView} rules={bashRules} revived={revived} />
+              </div>
+            ) : m && myChip ? (
               <>
                 <p className="mt-1 text-lg font-bold text-white">You vs {m.opponentName}</p>
                 <p className="mt-1 text-[13px] text-white/70">
@@ -280,18 +303,63 @@ export function ZombieHome({ leagueId }: ZombieHomeProps) {
             )}
           </section>
 
-          {/* Weekly board */}
-          <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
-            <h2 className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/55">Week {summary.week} board</h2>
-            {(summary.weeklyBoard ?? []).length === 0 ? (
-              <p className="mt-2 text-sm text-white/55">Nothing yet — the board fills once the week&apos;s matchups are final.</p>
+          {/* The Outbreak Report — the week's board */}
+          <section
+            className="rounded-2xl border border-lime-500/20 bg-[linear-gradient(180deg,rgba(20,30,10,0.3),rgba(7,8,13,0.85))] p-4 sm:p-5"
+            data-testid="zombie-outbreak-report"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-xl font-black uppercase tracking-tight text-lime-300 sm:text-2xl">The Outbreak Report</h2>
+                <p className="text-[12px] text-white/55">
+                  Week {summary.week}
+                  {lg?.name ? ` · ${lg.name}` : ''}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="font-mono text-3xl font-black text-lime-300">{infectedPct}%</p>
+                <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-white/50">infected</p>
+              </div>
+            </div>
+            {board.length === 0 ? (
+              <p className="mt-4 text-sm text-white/55">Nothing yet — the report fills once the week&apos;s matchups are final.</p>
             ) : (
-              <ul className="mt-2 divide-y divide-white/[0.06]">
-                {(summary.weeklyBoard ?? []).map((e, i) => (
-                  <BoardRow key={i} entry={e} nameOf={nameOf} />
-                ))}
-              </ul>
+              <>
+                {turnedThisWeek.length ? (
+                  <>
+                    <h3 className="mt-4 text-[11px] font-bold uppercase tracking-[0.18em] text-lime-300">Turned this week</h3>
+                    <ul className="mt-2 grid gap-2 sm:grid-cols-2">
+                      {turnedThisWeek.map((e) => (
+                        <li key={e.victimRosterId} className="flex items-center gap-3 rounded-xl border border-white/10 bg-black/25 p-3">
+                          {/* eslint-disable-next-line @next/next/no-img-element -- local SVG */}
+                          <img src="/zombie/art/status-zombie.svg" alt="" className="h-9 w-9 shrink-0" />
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-bold text-white">{nameOf(e.victimRosterId)}</p>
+                            <p className="text-[12px] text-white/55">
+                              {e.infectorRosterId ? `by ${nameOf(e.infectorRosterId)}` : 'by the infection'}
+                              {e.winnerScore != null && e.loserScore != null ? ` · ${fmt(e.winnerScore)} to ${fmt(e.loserScore)}` : ''}
+                            </p>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                ) : null}
+                {blowouts.length ? (
+                  <>
+                    <h3 className="mt-4 text-[11px] font-bold uppercase tracking-[0.18em] text-lime-300">Bashings and maulings</h3>
+                    <ul className="mt-1 divide-y divide-white/[0.06]">
+                      {blowouts.map((e, i) => (
+                        <BoardRow key={i} entry={e} nameOf={nameOf} />
+                      ))}
+                    </ul>
+                  </>
+                ) : null}
+              </>
             )}
+            <p className="mt-4 text-[11px] text-white/45">
+              Infections run after the week&apos;s last game. A stat correction can replay a week.
+            </p>
           </section>
         </div>
 
@@ -381,7 +449,12 @@ function BoardRow({ entry, nameOf }: { entry: ZombieBoardEntry; nameOf: (id: str
     <li className="flex items-center gap-3 py-2.5">
       {/* eslint-disable-next-line @next/next/no-img-element -- local SVG */}
       <img src={`/zombie/art/${art}.svg`} alt="" className="h-8 w-8 shrink-0" />
-      <p className="text-sm font-semibold text-white/90">{title}</p>
+      <p className="min-w-0 flex-1 text-sm font-semibold text-white/90">{title}</p>
+      {entry.amount != null ? (
+        <span className="shrink-0 font-mono text-sm text-amber-300" title="Outbreak Points moved">
+          +{fmt(entry.amount)}
+        </span>
+      ) : null}
     </li>
   )
 }
