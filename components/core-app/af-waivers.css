@@ -624,3 +624,10 @@
 
 /* An observed Sleeper schedule's provenance — "seen over this league's last 5 runs". */
 .af-core .af-wv-rule-observed { flex-basis: 100%; font-size: 12px; font-weight: 600; color: var(--muted); }
+
+/* Arrived from the home's "Add <player>" button: the add it named, highlighted (2026-10-17). */
+.af-core .af-wlb-row[data-highlight='true'] {
+  outline: 2px solid var(--af-accent, #7c5cff);
+  outline-offset: -2px;
+  border-radius: 8px;
+}

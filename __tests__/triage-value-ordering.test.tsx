@@ -69,7 +69,8 @@ describe('Dash3ATriage — the facts the ordering is built on', () => {
   it('names the slot on each league chip', () => {
     const { container } = render(<Dash3ATriage book={[row()]} now={NOW} valueBasis={BASIS} />)
     const slots = [...container.querySelectorAll('.af-triage-slot')].map((n) => n.textContent)
-    expect(slots).toEqual(['STARTER', 'bench', 'IR'])
+    // He is Out, so the league that already benched him reads as handled (2026-10-17).
+    expect(slots).toEqual(['STARTER', 'benched ✓', 'IR'])
   })
 
   it('shows no slot at all when the roster could not be read', () => {
