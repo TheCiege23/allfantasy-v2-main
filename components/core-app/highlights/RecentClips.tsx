@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useMessages } from '@/components/i18n/useMessages'
+import { recentClipsMessages } from '@/lib/core-app/messages/recentClips'
 import type { XClipsResult } from '@/lib/highlights/x-types'
 import XPostEmbed from './XPostEmbed'
 import { useHighlightMeasurement } from './useHighlightMeasurement'
@@ -21,6 +23,7 @@ export default function RecentClips({ request, title, compact = false }: { reque
 function RecentClipsFeed({ request, title, compact, onRetry }: { request: ClipRequest; title: string; compact: boolean; onRetry: () => void }) {
   const { language } = useOptionalLanguage()
   const es = language === 'es'
+  const m = useMessages(recentClipsMessages)
   const [result, setResult] = useState<XClipsResult | null>(null)
   const [error, setError] = useState(false)
   const [filter, setFilter] = useState<'all' | 'play' | 'discussion'>('all')
@@ -45,31 +48,31 @@ function RecentClipsFeed({ request, title, compact, onRetry }: { request: ClipRe
   if (result?.status === 'disabled') return null
   const clips = result?.clips.filter(c => filter === 'all' || (filter === 'play' ? c.kind === 'play' : c.kind !== 'play')) ?? []
   return <section className={'af-recent-clips' + (compact ? ' af-recent-clips-compact' : '')} aria-label={title}>
-    <header ref={header}><h3>{title}</h3><span>{es ? 'Publicaciones de X' : 'X posts'}</span></header>
-    <p className="af-x-note">{es ? 'Coincidencias por nombre o usuario verificado en el texto; no confirman quién aparece en el video.' : 'Matched by full name or verified handle in the caption; this does not confirm who appears in the video.'}</p>
-    {!compact ? <label className="af-x-filter">{es ? 'Mostrar' : 'Show'} <select value={filter} onChange={event => setFilter(event.target.value as typeof filter)}>
-      <option value="all">{es ? 'Todos los clips' : 'All clips'}</option>
-      <option value="play">{es ? 'Jugadas' : 'Plays'}</option>
-      <option value="discussion">{es ? 'Entrevistas y comentarios' : 'Interviews & commentary'}</option>
+    <header ref={header}><h3>{title}</h3><span>{m.xPosts}</span></header>
+    <p className="af-x-note">{m.matchNote}</p>
+    {!compact ? <label className="af-x-filter">{m.show} <select value={filter} onChange={event => setFilter(event.target.value as typeof filter)}>
+      <option value="all">{m.allClips}</option>
+      <option value="play">{m.plays}</option>
+      <option value="discussion">{m.interviewsCommentary}</option>
     </select></label> : null}
     <div role="status" aria-live="polite">
-      {error ? <p>{es ? 'No se pudieron cargar los clips.' : 'Clips could not be loaded.'} <button type="button" onClick={onRetry}>{es ? 'Reintentar' : 'Retry'}</button></p>
-        : !result ? <p>{es ? 'Buscando clips recientes…' : 'Finding recent clips…'}</p>
-        : result.status === 'unavailable' ? <p>{es ? 'El feed de clips no está disponible temporalmente.' : 'The clip feed is temporarily unavailable.'}</p>
-        : !clips.length ? <p>{es ? 'No hay clips coincidentes de las últimas 24 horas.' : 'No matching clips from the last 24 hours.'}</p> : null}
+      {error ? <p>{m.loadFailed} <button type="button" onClick={onRetry}>{m.retry}</button></p>
+        : !result ? <p>{m.finding}</p>
+        : result.status === 'unavailable' ? <p>{m.unavailable}</p>
+        : !clips.length ? <p>{m.noMatches}</p> : null}
     </div>
     <div className="af-x-grid">{clips.map(clip => <article key={key + ':' + clip.id} className="af-x-card">
       <div className="af-x-badges">
         {clip.leagues.map(league => <a key={league.id} href={'/core?league=' + encodeURIComponent(league.id)}>{league.name}</a>)}
-        <span>{clip.kind === 'play' ? (es ? 'Jugada' : 'Play') : clip.kind === 'interview' ? (es ? 'Entrevista' : 'Interview') : (es ? 'Comentario' : 'Commentary')}</span>
+        <span>{clip.kind === 'play' ? m.kindPlay : clip.kind === 'interview' ? m.kindInterview : m.kindCommentary}</span>
       </div>
       <h4>{clip.players.map(p => p.name).join(' · ')}</h4>
       <p className="af-x-caption">{clip.text}</p>
       <p className="af-x-note">@{clip.account} · <time dateTime={clip.publishedAt}>{new Date(clip.publishedAt).toLocaleString(es ? 'es' : 'en', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</time></p>
       <XPostEmbed post={clip} es={es} onEvent={onPostEvent} />
     </article>)}</div>
-    {result?.checkedAt ? <p className="af-x-note">{es ? 'Feed actualizado' : 'Feed checked'} <time dateTime={result.checkedAt}>{new Date(result.checkedAt).toLocaleTimeString(es ? 'es' : 'en', { hour: 'numeric', minute: '2-digit' })}</time> · {es ? 'Actualización cada hora' : 'Hourly pilot refresh'}</p> : null}
-    <p className="af-x-note">{es ? 'Al cargar una publicación, X recibe datos del navegador. Algunos videos solo se reproducen en X.' : 'Loading a post shares browser data with X. Some videos only play on X.'} <a href="https://help.x.com/en/x-for-websites-ads-info-and-privacy" target="_blank" rel="noopener noreferrer">{es ? 'Privacidad de X' : 'X privacy'}</a></p>
+    {result?.checkedAt ? <p className="af-x-note">{m.feedChecked} <time dateTime={result.checkedAt}>{new Date(result.checkedAt).toLocaleTimeString(es ? 'es' : 'en', { hour: 'numeric', minute: '2-digit' })}</time> · {m.hourlyRefresh}</p> : null}
+    <p className="af-x-note">{m.privacyNote} <a href="https://help.x.com/en/x-for-websites-ads-info-and-privacy" target="_blank" rel="noopener noreferrer">{m.xPrivacy}</a></p>
   </section>
 }
 
