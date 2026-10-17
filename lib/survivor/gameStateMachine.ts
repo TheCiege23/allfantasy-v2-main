@@ -443,7 +443,7 @@ export async function triggerTribalOpen(leagueId: string): Promise<void> {
 
 export async function processTribalDeadline(leagueId: string): Promise<void> {
   const gs = await prisma.survivorGameState.findUnique({ where: { leagueId } })
-  if (!gs?.activeCouncilId) return
+  if (!gs?.activeCouncilId || gs.pausedSnapshot != null) return
   const council = await prisma.survivorTribalCouncil.findUnique({ where: { id: gs.activeCouncilId } })
   if (!council) return
   const dl = council.votingDeadline ?? council.voteDeadlineAt

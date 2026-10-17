@@ -1,5 +1,4 @@
 import 'server-only'
-import { survivorPublicCouncil } from './survivorPublicCouncil'
 
 import { prisma } from '@/lib/prisma'
 import { getLeagueRole, type LeagueRole } from '@/lib/league/permissions'
@@ -61,8 +60,8 @@ export type SurvivorCommissionerDashboardResult =
       week: number
       tribes: Awaited<ReturnType<typeof getTribesWithMembers>>
       tribeRedraw: Awaited<ReturnType<typeof getPendingTribeRedraw>>
-      council: Awaited<ReturnType<typeof getCouncil>>
-      privateBallots: { voterName: string; targetName: string; submittedAt: string; doesNotCount: boolean }[]
+      council: { id: string; week: number; status: string; isRevealed: boolean } | null
+      privateBallots: []
       privateIdols: { id: string; ownerName: string; powerLabel: string }[]
       juryCount: number
       merged: boolean
@@ -176,7 +175,7 @@ export async function buildSurvivorCommissionerDashboard(
   }
 
   const gs = gameState
-  const privateIdolRows = access.isNonParticipatingCommissionerHost
+  const privateIdolRows = access.decisions.canSeeHiddenIdolAssignments
     ? await prisma.survivorIdol.findMany({
         where: { leagueId, status: { in: ['hidden', 'revealed'] }, isUsed: false },
         select: { id: true, currentOwnerUserId: true, powerLabel: true, powerType: true },
@@ -246,15 +245,9 @@ export async function buildSurvivorCommissionerDashboard(
     week,
     tribes,
     tribeRedraw,
-    council: survivorPublicCouncil(council, access.decisions.canSeePrivateVotes),
-    privateBallots: access.isNonParticipatingCommissionerHost
-      ? (council?.votes ?? []).map(vote => ({
-          voterName: vote.voterName ?? vote.voterUserId ?? 'Manager',
-          targetName: vote.targetName ?? vote.targetUserId ?? 'Manager',
-          submittedAt: vote.submittedAt.toISOString(),
-          doesNotCount: vote.doesNotCount,
-        }))
-      : [],
+    // This dashboard embeds Council control. It never transports individual choices.
+    council: council ? { id: council.id, week: council.week, status: !council.isRevealed && council.status === 'tie_pending' ? 'closed' : council.status, isRevealed: council.isRevealed } : null,
+    privateBallots: [],
     privateIdols: privateIdolRows.map(idol => ({
       id: idol.id,
       ownerName: ownerNames.get(idol.currentOwnerUserId ?? '') ?? 'Manager',
@@ -264,13 +257,13 @@ export async function buildSurvivorCommissionerDashboard(
     merged,
     rosterCount,
     eliminatedCount: eliminatedIds.size,
-    auditTail,
+    auditTail: auditTail.map(entry => ({ eventType: entry.eventType, createdAt: entry.createdAt, metadata: {} })),
     privacy: {
       commissionerParticipationMode: access.settings.commissionerParticipationMode,
       blindModeActive: access.isParticipatingCommissioner,
       canSeeHiddenIdolAssignments: access.decisions.canSeeHiddenIdolAssignments,
-      canSeePrivateVotes: access.decisions.canSeePrivateVotes,
-      canSeeVoteTallyBeforeReveal: access.decisions.canSeeVoteTallyBeforeReveal,
+      canSeePrivateVotes: false,
+      canSeeVoteTallyBeforeReveal: false,
       warnings: access.privacyWarnings,
     },
     monetization: {
