@@ -10,7 +10,6 @@ import { processReturnFromExile } from '@/lib/survivor/exileEngine'
 import { rebalanceTribes } from '@/lib/survivor/tribeEngine'
 import { getSurvivorConfig } from '@/lib/survivor/SurvivorLeagueConfig'
 import { enqueueNotification } from '@/lib/survivor/notificationEngine'
-import { decideTribeRedraw } from '@/lib/survivor/survivorTribeRedraw'
 import { voidPendingRedraftTradesForRoster } from '@/lib/redraft/voidPendingTradesForElimination'
 import { SURVIVOR_IDOL_CATALOG, type SurvivorIdolPowerType } from '@/lib/survivor/survivorIdolSeedingEngine'
 
@@ -146,8 +145,7 @@ export async function POST(req: NextRequest) {
   if (!leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
   if (!action) return NextResponse.json({ error: 'action required' }, { status: 400 })
 
-  // Pausing and the random tribe redraw expose nothing private, so a playing commissioner may run them.
-  const guard2 = await commissionerGuard(leagueId, userId, ['pause_season', 'resume_season', 'approve_tribe_redraw', 'postpone_tribe_redraw'].includes(action))
+  const guard2 = await commissionerGuard(leagueId, userId, action === 'pause_season' || action === 'resume_season')
   if (guard2) return guard2
 
   const log = async (
@@ -383,12 +381,6 @@ export async function POST(req: NextRequest) {
     })
 
     return NextResponse.json({ ok: true })
-  }
-
-  if (action === 'approve_tribe_redraw' || action === 'postpone_tribe_redraw') {
-    const result = await decideTribeRedraw(leagueId, userId, action === 'approve_tribe_redraw' ? 'approve' : 'postpone')
-    if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status })
-    return NextResponse.json({ ok: true, tribeSizes: result.tribeSizes })
   }
 
   if (action === 'pause_season') {
