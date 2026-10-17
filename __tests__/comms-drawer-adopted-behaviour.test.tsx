@@ -93,11 +93,12 @@ describe('CommsDrawer — adopted behaviour', () => {
     expect(fetchMock.mock.calls.filter(([url]) => String(url) === '/api/chat/chimmy')).toHaveLength(0)
   })
 
-  it('keeps the public @chimmy mode in league chat', () => {
+  it('keeps the league-scoped @chimmy mode in league chat', () => {
     openChimmy(1)
     fireEvent.click(screen.getByRole('tab', { name: /League/ }))
     fireEvent.change(screen.getByLabelText('League scope'), { target: { value: 'l0' } })
-    // Copy renamed in the brand-voice pass: the assistant is Chimmy, not "the league's AI".
-    expect(screen.getByRole('button', { name: /ask chimmy.*publicly/i })).toBeTruthy()
+    // 🛑 It said "publicly", and nothing ever posted the answer to league chat. It says what is true.
+    expect(screen.getByRole('button', { name: /ask chimmy about this league/i })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /publicly/i })).toBeNull()
   })
 })

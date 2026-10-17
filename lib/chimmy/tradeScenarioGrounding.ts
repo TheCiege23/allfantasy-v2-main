@@ -390,6 +390,7 @@ export async function buildTradeScenario(
           basis: grade.basis,
           withheld: null,
           partnerGrade: receipt.partnerGrade.graded ? receipt.partnerGrade.letter : null,
+          marketGrade: grade.letterBasis === 'your_team' && grade.market ? grade.market.letter : null,
         }
       : {
           given: null,
@@ -513,8 +514,12 @@ export function renderTradeScenarioBlock(scenario: TradeScenario): string {
     s.value.grade
       ? `- League value (${s.value.basis ?? "this league's chart"}): you send ${fmt(s.value.given, 0)}, you receive ${fmt(s.value.received, 0)}` +
         (s.value.delta != null ? ` (${signed(s.value.delta, 0)})` : '') +
-        `; grade ${s.value.grade}${s.value.label ? ` — ${s.value.label}` : ''}` +
-        (s.value.partnerGrade ? ` (${s.partnerTeamName}'s side grades ${s.value.partnerGrade})` : '') +
+        (s.value.marketGrade
+          // A your-team letter: the league values above adjusted for this user's roster need. Both letters are stated so
+          // the model can never present the market letter as the user's grade, or the reverse.
+          ? `; grade ${s.value.grade} for your team${s.value.label ? ` — ${s.value.label}` : ''}, taken on these league values adjusted for your roster's needs; market grade ${s.value.marketGrade} on league value alone`
+          : `; grade ${s.value.grade}${s.value.label ? ` — ${s.value.label}` : ''}`) +
+        (s.value.partnerGrade ? ` (${s.partnerTeamName}'s side grades ${s.value.partnerGrade}${s.value.marketGrade ? ' on the market' : ''})` : '') +
         '. This is the same grade the Trade Center gives this trade. Quote these letters exactly; state no other grade.'
       : `- Grade: NOT GRADED — ${(s.value.withheld ?? "the trade could not be priced on this league's chart").replace(/\.$/, '')}. Do not grade it yourself.`,
     /*

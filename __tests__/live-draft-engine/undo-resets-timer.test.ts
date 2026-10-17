@@ -86,6 +86,7 @@ const ctx = vi.hoisted(() => {
   }
 
   const prisma = {
+    league: { findUnique: vi.fn(async () => ({ settings: {} })) },
     draftSession: {
       // leagueId reads are findFirst now (DraftSession.leagueId is not unique); answer them from findUnique
       findFirst(...a: unknown[]) { return (this as any).findUnique(...a) },

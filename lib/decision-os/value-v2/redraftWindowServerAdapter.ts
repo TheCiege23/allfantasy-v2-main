@@ -2,6 +2,7 @@ import 'server-only'
 
 import type { PrismaClient } from '@prisma/client'
 import { deriveAvailabilityCategory } from '@/lib/decision-os/world/injuryEnrichedWorld'
+import { normalizePlayerName } from '@/lib/player-identity/playerIdentityResolution'
 import { REDRAFT_WINDOW_COEFFICIENTS } from './window'
 import { resolveWindowDecision, unresolvableWindowDecision, type WindowDecision } from './windowDecision'
 import type { RestOfSeasonStrength, WindowFactsScope } from './windowFacts'
@@ -171,11 +172,27 @@ async function stage<T>(gap: string, run: () => Promise<T>): Promise<StageRead<T
  * `sleeperId`, so without it a correct match can still be dragged to 'unknown' by a second vendor
  * row disagreeing about the same player — which is the 0.742 column above.
  *
- * ⚠ AND THE `platform` GATE IS WHY THIS IS SAFE FOR EVERY OTHER PLATFORM. A non-Sleeper league's
- * roster ids are not Sleeper ids, so they keep the previous `externalId` behaviour rather than
- * being silently matched against a column that cannot hold them.
+ * 🛑 AND A NON-SLEEPER LEAGUE'S `externalId` MATCH COUNTS ONLY WHEN THE NAMES AGREE. This said
+ * the `platform` gate made the bare `externalId` read "safe for every other platform". It did not:
+ * those roster ids are in as many id spaces as there are platforms, and the numeric ones collide
+ * with Rolling Insights' the same way Sleeper's did. Measured 2026-10-11 across every live
+ * non-Sleeper redraft roster — every NFL match named someone else, every NHL match was right:
+ *
+ *     manual NFL   (Sleeper ids)       8 matched, 0 right   9509 Bijan Robinson -> "Malachi Fields"
+ *     fleaflicker  (Fleaflicker ids)  21 matched, 0 right   2353 Chargers D/ST  -> "T.J. Watt"
+ *     espn         (ESPN ids)          1 matched, 0 right   8439 Aaron Rodgers  -> "Donovan Jennings"
+ *     manual NHL   (RI / TSDB ids)    72 matched, 72 right
+ *
+ * The roster row carries its own `playerName`, so the check costs no extra read: a row is used
+ * only when `normalizePlayerName` agrees with the roster's name for that id. A rejected match
+ * leaves the player uncovered — which the port counts honestly and refuses on below 50% — rather
+ * than handing him a stranger's status.
  */
-function availabilityLoader(prisma: PrismaClient, platform: string | null) {
+export function availabilityLoader(
+  prisma: PrismaClient,
+  platform: string | null,
+  rosterNameById: ReadonlyMap<string, string>,
+) {
   const isSleeper = (platform ?? '').trim().toLowerCase() === 'sleeper'
   return async (sport: string, ids: string[]): Promise<Map<string, string>> => {
     const out = new Map<string, string>()
@@ -186,9 +203,15 @@ function availabilityLoader(prisma: PrismaClient, platform: string | null) {
           select: { sleeperId: true, status: true },
         })).map(r => ({ key: r.sleeperId, status: r.status }))
       : (await prisma.sportsPlayer.findMany({
+          // externalid-audited: a match is rejected below unless its name agrees with the roster's
           where: { sport, externalId: { in: ids } },
-          select: { externalId: true, status: true },
-        })).map(r => ({ key: r.externalId, status: r.status }))
+          select: { externalId: true, status: true, name: true },
+        }))
+          .filter(r => {
+            const expected = normalizePlayerName(rosterNameById.get(r.externalId))
+            return expected !== '' && normalizePlayerName(r.name) === expected
+          })
+          .map(r => ({ key: r.externalId, status: r.status }))
     const seen = new Map<string, string>()
     for (const row of rows) {
       if (!row.key) continue
@@ -447,13 +470,18 @@ export async function resolveRedraftTeamWindow(req: RedraftWindowRequest): Promi
     // Same reason as the league-wide read: a dropped player is not on this roster, and counting
     // him drags injury COVERAGE and the unavailable SHARE toward whoever churned most.
     prisma.redraftRosterPlayer.findMany({
-      where: { rosterId: proposerRosterId, droppedAt: null }, select: { playerId: true },
+      where: { rosterId: proposerRosterId, droppedAt: null }, select: { playerId: true, playerName: true },
     }),
   )
   if (!rosterRead.ok) return refuse(rosterRead.gap)
   const rosterPlayerIds = [...new Set(
     rosterRead.value.map(r => (typeof r.playerId === 'string' ? r.playerId.trim() : '')).filter(Boolean),
   )]
+  const rosterNameById = new Map(
+    rosterRead.value
+      .filter(r => typeof r.playerId === 'string' && typeof r.playerName === 'string')
+      .map(r => [r.playerId.trim(), r.playerName] as const),
+  )
 
   /*
    * 🛑 COMPUTED ONCE PER REQUEST, NOT ONCE PER LOOKBACK WEEK. `resolveWindowDecision` assembles
@@ -479,7 +507,7 @@ export async function resolveRedraftTeamWindow(req: RedraftWindowRequest): Promi
     platformLeagueId: leagueRead.value.platformLeagueId ?? null,
     sport,
     rosterPlayerIds,
-    loadAvailability: availabilityLoader(prisma, leagueRead.value.platform ?? null),
+    loadAvailability: availabilityLoader(prisma, leagueRead.value.platform ?? null, rosterNameById),
     // Already resolved above; the port hands back the one value rather than re-reading per week.
     loadRestOfSeason: async () => restOfSeason,
   })

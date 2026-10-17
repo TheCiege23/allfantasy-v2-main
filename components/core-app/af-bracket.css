@@ -283,7 +283,7 @@
 
 .af-bk-select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
-/* The picks above live in component state only — this line says so. */
+/* Where the picks above live — the account, or component state only — said in one line. */
 .af-bk-unsaved {
   margin: -4px 0 12px;
   font-size: 11px;
@@ -296,6 +296,29 @@
   color: var(--accent);
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+/* Saved mode: the note is two lines — where the picks live, then the save status. */
+.af-bk-unsaved p { margin: 0; }
+
+.af-bk-unsaved .af-bk-save-status {
+  margin-top: 4px;
+  font-weight: 700;
+  color: var(--text2);
+}
+
+.af-bk-save-status[data-state='saved'] { color: var(--p-green-fg); }
+.af-bk-save-status[data-state='failed'] { color: var(--p-gold-fg); }
+
+.af-bk-save-retry {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
 }
 
 .af-bk-length { text-align: left; }

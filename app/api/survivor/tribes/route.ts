@@ -1,3 +1,4 @@
+import { survivorHostGuard } from '@/lib/survivor/survivorHostGuard'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -22,6 +23,9 @@ export async function POST(req: NextRequest) {
 
   const gate = await assertLeagueCommissioner(body.leagueId, userId)
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+  const hostDenied = await survivorHostGuard(body.leagueId, userId)
+  if (hostDenied) return hostDenied
 
   try {
     switch (body.action) {

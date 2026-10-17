@@ -128,6 +128,9 @@ export default function SeoLandingFooter() {
             <Link href="/data-deletion" className="text-xs transition-colors hover:opacity-100" style={{ color: 'var(--muted)' }}>
               {t('landing.footer.dataDeletion')}
             </Link>
+            <Link href="/privacy/choices" className="text-xs transition-colors hover:opacity-100" style={{ color: 'var(--muted)' }}>
+              {t('landing.footer.privacyChoices')}
+            </Link>
             {signedIn ? null : (
               <Link href={loginUrlWithIntent('/dashboard')} className="text-xs transition-colors hover:opacity-100" style={{ color: 'var(--muted)' }}>
                 {t('common.signIn')}

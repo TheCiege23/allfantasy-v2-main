@@ -1,7 +1,7 @@
 'use client'
 
 import type { LiveImpact } from '@/lib/live/liveScoresPage'
-import { impactTotalLabel } from '@/lib/live/liveImpact'
+import { starterStageDetail } from '@/lib/live/liveImpact'
 
 /**
  * "Your live impact" — the right-hand rail.
@@ -42,12 +42,16 @@ export function LiveImpactPanel({
         <p className="flex items-baseline gap-2">
           <span
             className="live-mono text-[34px] font-extrabold leading-none"
-            style={{ color: rosterFailed ? 'var(--muted)' : 'var(--good)' }}
+            style={{ color: rosterFailed || !hasRosterData ? 'var(--muted)' : 'var(--good)' }}
           >
-            {rosterFailed ? '—' : impact.totalPoints.toFixed(1)}
+            {/* Your starters in action, each counted once — not points summed across leagues, which
+                fell every time a game ended (see `starterStageCounts`). */}
+            {rosterFailed || !hasRosterData ? '—' : impact.livePlayers}
           </span>
           <span className="live-display text-[13px]" style={{ color: 'var(--muted)' }}>
-            {rosterFailed ? 'we could not read your rosters' : impactTotalLabel(impact, false)}
+            {rosterFailed
+              ? 'we could not read your rosters'
+              : `${impact.livePlayers === 1 ? 'starter' : 'starters'} playing now`}
           </span>
         </p>
         <p className="live-display mt-3 text-[13px] leading-relaxed" style={{ color: 'var(--muted)' }}>
@@ -55,9 +59,11 @@ export function LiveImpactPanel({
             ? 'This is a problem on our end, not an empty roster. The scores themselves are fine.'
             : !hasRosterData
             ? 'Connect or claim a team to see which of your players are playing right now.'
-            : impact.livePlayers === 0
-              ? 'None of your players are in a live game right now.'
-              : `${impact.livePlayers} of your players ${impact.livePlayers === 1 ? 'is' : 'are'} live across ${impact.liveGames} ${impact.liveGames === 1 ? 'game' : 'games'}.`}
+            : impact.livePlayers === 0 && !impact.upcomingPlayers && !impact.finishedPlayers
+              ? 'None of your starters are on this slate.'
+              : impact.livePlayers === 0
+                ? `None on the field right now · ${starterStageDetail(impact)}`
+                : starterStageDetail(impact)}
         </p>
       </section>
 
@@ -72,7 +78,7 @@ export function LiveImpactPanel({
                 className="live-mono mb-3 text-[11px] font-bold uppercase tracking-widest"
                 style={{ color: 'var(--muted)' }}
               >
-                Biggest mover
+                Latest for you
               </h3>
               <div className="flex items-start gap-3">
                 <span

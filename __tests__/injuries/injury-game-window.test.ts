@@ -11,12 +11,20 @@ import { NextRequest } from 'next/server'
 const mockGameFindFirst = vi.hoisted(() => vi.fn())
 const mockRi = vi.hoisted(() => vi.fn())
 const mockEspn = vi.hoisted(() => vi.fn())
+const heartbeats = vi.hoisted(() => [] as Array<{ jobName: string; outcome: unknown }>)
 
 vi.mock('@/lib/prisma', () => ({ prisma: { sportsGame: { findFirst: mockGameFindFirst } } }))
 vi.mock('@/app/api/cron/_auth', () => ({ requireCronAuth: () => true }))
 vi.mock('@/lib/injuries/rollingInsightsInjuries', () => ({ syncRollingInsightsInjuriesToDb: mockRi }))
 vi.mock('@/lib/injuries/espnInjuries', () => ({ espnHasInjuryFeed: () => true, syncEspnInjuriesToDb: mockEspn }))
 vi.mock('@/lib/api-sports', () => ({ getApiSportsKey: () => null, syncAPISportsInjuriesToDb: vi.fn() }))
+vi.mock('@/lib/production-health/syncJobRunTelemetry', () => ({
+  withSyncJobRun: async (ctx: { jobName: string }, fn: () => Promise<unknown>, extract?: (r: unknown) => unknown) => {
+    const r = await fn()
+    heartbeats.push({ jobName: ctx.jobName, outcome: extract ? extract(r) : null })
+    return r
+  },
+}))
 vi.mock('@/lib/injuries/injurySyncState', () => ({ recordInjurySyncRun: vi.fn(async () => {}), recordInjurySyncDeferred: vi.fn(async () => {}) }))
 
 import { kickoffRangeForWindow, inNflInjuryGameWindow } from '@/lib/injuries/injuryGameWindow'
@@ -26,6 +34,7 @@ const req = (qs: string) => new NextRequest(`http://localhost/api/cron/import-in
 
 beforeEach(() => {
   vi.clearAllMocks()
+  heartbeats.length = 0
   mockRi.mockResolvedValue({ fetched: 10, written: 10, unparseableStatus: 0, legacyExpired: 0, unsupported: false, notModified: false, errors: [] })
   mockEspn.mockResolvedValue({ sport: 'NFL', fetched: 300, written: 300, skippedNoPlayer: 0, errors: [] })
 })
@@ -61,6 +70,8 @@ describe('import-injuries ?gameWindow=1', () => {
     expect(await res.json()).toMatchObject({ ok: true, skipped: 'outside an NFL game window' })
     expect(mockRi).not.toHaveBeenCalled()
     expect(mockEspn).not.toHaveBeenCalled()
+    // The tick still FIRED, and says so: a heartbeat on every fire is what the freshness monitor probes.
+    expect(heartbeats).toEqual([{ jobName: 'cron-import-injuries-gamewindow', outcome: { rowsWritten: 0, status: 'success', metadata: { inWindow: false } } }])
   })
 
   it('inside a window: ESPN runs and Rolling Insights (twice-daily feed) does not', async () => {
@@ -69,6 +80,7 @@ describe('import-injuries ?gameWindow=1', () => {
     expect(res.status).toBe(200)
     expect(mockEspn).toHaveBeenCalledTimes(1)
     expect(mockRi).not.toHaveBeenCalled()
+    expect(heartbeats).toEqual([{ jobName: 'cron-import-injuries-gamewindow', outcome: { rowsWritten: 300, status: 'success', metadata: { inWindow: true } } }])
   })
 
   it('refuses any sport but NFL — the window is read off the NFL schedule', async () => {
@@ -82,5 +94,15 @@ describe('import-injuries ?gameWindow=1', () => {
     expect(res.status).toBe(200)
     expect(mockRi).toHaveBeenCalledTimes(1)
     expect(mockGameFindFirst).not.toHaveBeenCalled()
+  })
+})
+
+describe('the registry', () => {
+  it('declares the game-window run and has a heartbeat probe for it', async () => {
+    const { readFileSync } = await import('node:fs')
+    const crons = JSON.parse(readFileSync('cron-schedule.json', 'utf8')).crons as Array<{ path: string; schedule: string }>
+    expect(crons).toContainEqual({ path: '/api/cron/import-injuries?sport=NFL&gameWindow=1', schedule: '*/5 * * * *' })
+    const { PROBES } = await import('../../scripts/cron-freshness-check.mjs')
+    expect(PROBES['/api/cron/import-injuries?sport=NFL&gameWindow=1']).toEqual({ heartbeat: 'cron-import-injuries-gamewindow' })
   })
 })

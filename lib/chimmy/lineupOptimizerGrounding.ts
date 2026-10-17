@@ -3,6 +3,7 @@ import 'server-only'
 import { resolveNames } from '@/lib/ai-payload/resolveAiTeamContext'
 import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
 import { isForeignIdSpace } from '@/lib/core-app/rosterIdSpace'
+import { bridgeColumnFor, isUnbridgedId } from '@/lib/core-app/bridgedRosterIds'
 import {
   defaultLeagueWeekPricingDeps,
   isLeagueWeekRefusal,
@@ -120,6 +121,17 @@ export type LineupOptimization =
       unfilledSlots: string[]
       lockedPlayers?: OptimizerPlayer[]
       unverifiedLocks?: OptimizerPlayer[]
+      /**
+       * Bench players the best lineup WOULD use if their game had not already started, and what that
+       * costs. Null when no started bench player would have made it.
+       */
+      lockedOut?: { players: OptimizerPlayer[]; cost: number } | null
+      /**
+       * When the first of the recommended swaps locks: the earliest known kickoff among the players
+       * moved in or out. `early` when that is before the main Sunday slate (see `isEarlyKickoff`).
+       * Null with no swaps, or when no moved player's kickoff is known.
+       */
+      deadline?: { player: OptimizerPlayer; at: string; early: boolean } | null
     }
 
 export interface LineupOptimizerDeps extends LeagueWeekPricingDeps {
@@ -178,10 +190,28 @@ export async function buildLineupOptimization(
   if (!roster) {
     return unresolved('no_viewer_roster', 'Your team in this league is not claimed or has no synced roster.')
   }
-  // The port strips a foreign league's roster ids, so the roster reads empty and every refusal below
-  // ("no player on your roster has a projection") would be a false claim about the team.
-  if (isForeignIdSpace(world.provenance?.provider)) {
-    return unresolved('roster_ids_unreadable', `${FOREIGN_IDS_UNREADABLE}, so your roster cannot be read to build a lineup.`)
+  /*
+   * A foreign league's roster reads empty unless the port could read it through the Fleaflicker /
+   * MFL identity bridge (decision-os/world/port.ts). Empty, every refusal below ("no player on your
+   * roster has a projection") would be a false claim about the team.
+   *
+   * 🛑 BRIDGED, IT MUST STILL BE COMPLETE FOR THIS ROSTER. An unidentified player cannot be priced,
+   * so a "best lineup" would quietly leave him out — and this result drives push alerts telling
+   * someone to bench a player. One unidentified ACTIVE player refuses, with the count.
+   */
+  const provider = world.provenance?.provider
+  if (isForeignIdSpace(provider)) {
+    if (!bridgeColumnFor(provider) || roster.playerIds.length === 0) {
+      return unresolved('roster_ids_unreadable', `${FOREIGN_IDS_UNREADABLE}, so your roster cannot be read to build a lineup.`)
+    }
+    const activeIds = activePlayerIds(roster)
+    const unseen = activeIds.filter((id) => isUnbridgedId(id)).length
+    if (unseen > 0) {
+      return unresolved(
+        'roster_ids_unreadable',
+        `${unseen} of ${activeIds.length} active players on your roster could not be identified, so a best lineup could leave one of them out.`,
+      )
+    }
   }
 
   const slots = world.league.rosterSettings.starterSlots
@@ -214,7 +244,7 @@ export async function buildLineupOptimization(
 
   const currentIds = (roster.starterIds ?? []).filter((id) => !EMPTY_SLOT_IDS.has(String(id)))
   const currentSet = new Set(currentIds)
-  const locks = deps.checkLocks ? await deps.checkLocks({
+  const locks: LockCheck = deps.checkLocks ? await deps.checkLocks({
     sport: world.league.sport, season: Number(basis.week.season), week: basis.week.week,
     players: active.map((id) => ({ playerId: id, name: meta.get(id)?.name ?? id, team: meta.get(id)?.team ?? null, gameTime: null })),
   }).catch(() => ({ started: new Map<string, string>(), unverified: active })) : { started: new Map<string, string>(), unverified: [] }
@@ -230,7 +260,18 @@ export async function buildLineupOptimization(
     fixed.set(index, id)
   }
   const remainingSlots = startingSlots.filter((_, index) => !fixed.has(index))
-  const best = fillLineup(impact.filter((p) => !locks.started.has(p.playerId) && !unavailableForLineup(meta.get(p.playerId)?.injury)), remainingSlots)
+  const playable = (p: { playerId: string }) => !unavailableForLineup(meta.get(p.playerId)?.injury)
+  const best = fillLineup(impact.filter((p) => !locks.started.has(p.playerId) && playable(p)), remainingSlots)
+  /*
+   * 🛑 A STARTED BENCH PLAYER WAS DROPPED IN SILENCE. Production 2026-10-11, HailShiva: Bhayshul Tuten
+   * (12.7) out-projected a starter (Devaughn Vele, 9.7), but Jacksonville kicked off in London at
+   * 9:30 AM ET, so the fill left him out and the only trace was a generic "known started games"
+   * line. The same fill, run once more with started bench players allowed, names who the lock cost.
+   */
+  const fixedIds = new Set(fixed.values())
+  const unlocked = fillLineup(impact.filter((p) => !fixedIds.has(p.playerId) && playable(p)), remainingSlots)
+  const lockedOutIds = unlocked.starterIds.filter((id) => locks.started.has(id) && !currentSet.has(id))
+  const lockedOutCost = round2(unlocked.points - best.points)
   let remainingIndex = 0
   const remainingAssignments = best.assignments.slice()
   best.assignments = startingSlots.flatMap((slot, index) => {
@@ -282,6 +323,21 @@ export async function buildLineupOptimization(
 
   const byPoints = (a: OptimizerPlayer, b: OptimizerPlayer) => (b.points ?? -Infinity) - (a.points ?? -Infinity)
 
+  const startInstead = known ? best.starterIds.filter((id) => !currentSet.has(id)).map(player).sort(byPoints) : []
+  const benchInstead = known ? currentIds.filter((id) => !bestIds.has(id)).map(player).sort(byPoints) : []
+  /*
+   * ⚠ A SWAP IS ONLY AS GOOD AS THE FIRST KICKOFF IT TOUCHES. Production 2026-10-11: Jacksonville
+   * played in London at 9:30 AM ET, three and a half hours before the slate everyone sets a lineup
+   * for. Moving a player in or out of a game that has started is refused, so the earliest kickoff
+   * among the moved players is the deadline for the whole set of changes.
+   */
+  const moved = [...startInstead, ...benchInstead]
+    .map((p) => ({ p, t: locks.kickoffs?.get(p.playerId)?.getTime() }))
+    .filter((x): x is { p: OptimizerPlayer; t: number } => x.t != null && Number.isFinite(x.t))
+    .sort((a, b) => a.t - b.t)
+  const first = moved[0]
+  const deadline = first ? { player: first.p, at: new Date(first.t).toISOString(), early: isEarlyKickoff(new Date(first.t)) } : null
+
   return {
     status: 'ready',
     week: basis.week,
@@ -299,8 +355,8 @@ export async function buildLineupOptimization(
      * ⚠ ONLY WHEN THE PLATFORM SENT A LINEUP. With none there is nothing to swap against, and
      * listing the whole best lineup as "start these" would read as nine changes nobody needs.
      */
-    startInstead: known ? best.starterIds.filter((id) => !currentSet.has(id)).map(player).sort(byPoints) : [],
-    benchInstead: known ? currentIds.filter((id) => !bestIds.has(id)).map(player).sort(byPoints) : [],
+    startInstead,
+    benchInstead,
     gain,
     unpricedStarters,
     injuredStarters: currentStarters.filter((p) => p.injury && p.injury.trim()),
@@ -315,7 +371,44 @@ export async function buildLineupOptimization(
     unfilledSlots: best.unfilledSlots,
     lockedPlayers: active.filter((id) => locks.started.has(id)).map(player),
     unverifiedLocks: locks.unverified.map(player),
+    lockedOut: lockedOutIds.length > 0 && lockedOutCost > 0 ? { players: lockedOutIds.map(player).sort(byPoints), cost: lockedOutCost } : null,
+    deadline,
   }
+}
+
+/* ── Kickoff deadline ─────────────────────────────────────────────────────────────────────────── */
+
+const ET_PARTS = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'America/New_York',
+  weekday: 'short',
+  hour: 'numeric',
+  minute: '2-digit',
+  hourCycle: 'h23',
+})
+const ET_LABEL = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'America/New_York',
+  weekday: 'short',
+  hour: 'numeric',
+  minute: '2-digit',
+})
+
+/** "Sun 9:30 AM ET" — the clock people set a lineup by. */
+export function kickoffLabel(at: Date): string {
+  // ICU puts a narrow no-break space before AM/PM on some Node builds; plain spaces read the same everywhere.
+  return `${ET_LABEL.format(at).replace(/[\s,]+/g, ' ')} ET`
+}
+
+/**
+ * Before the main Sunday slate (1:00 PM ET), in an NFL week that runs Tuesday → Monday: a Thursday or
+ * Saturday game, a Sunday morning London / Germany game. Those are the ones a lineup set "on Sunday"
+ * misses. A late Sunday or Monday kickoff is after it, and needs no extra warning.
+ */
+export function isEarlyKickoff(at: Date): boolean {
+  const parts = Object.fromEntries(ET_PARTS.formatToParts(at).map((x) => [x.type, x.value]))
+  const day = parts.weekday
+  if (day === 'Mon') return false
+  if (day !== 'Sun') return true
+  return Number(parts.hour) * 60 + Number(parts.minute) < 13 * 60
 }
 
 /* ── Prompt block ─────────────────────────────────────────────────────────────────────────────── */
@@ -405,6 +498,22 @@ export function renderLineupOptimizationBlock(result: LineupOptimization): strin
   }
   if (r.unpricedActive > 0) {
     lines.push(`- ${r.unpricedActive} active player(s) have no week ${wk} projection and were left out of the maths.`)
+  }
+  if (r.lockedOut) {
+    lines.push(
+      `- 🔒 ALREADY LOCKED: ${r.lockedOut.players.map((p) => `${who(p)} (${pts(p, wk)})`).join(', ')} would be in the best lineup, but ` +
+        `${r.lockedOut.players.length === 1 ? 'his game has' : 'their games have'} already started, so ${r.lockedOut.players.length === 1 ? 'he' : 'they'} can no longer be moved in ` +
+        `(${fmt(r.lockedOut.cost)} projected pts the lock costs). Say this plainly, and never recommend starting ${r.lockedOut.players.length === 1 ? 'him' : 'them'}.`,
+    )
+  }
+  if (r.deadline && (r.startInstead.length > 0 || r.benchInstead.length > 0)) {
+    const when = kickoffLabel(new Date(r.deadline.at))
+    lines.push(
+      r.deadline.early
+        ? `- ⏰ EARLY KICKOFF: set these changes before ${when} — ${r.deadline.player.name}'s game, the first of them to start. ` +
+            'That is before the main Sunday slate and easy to miss: lead with the time, and say that once his game starts the swap can no longer be made.'
+        : `- ⏰ The first of these changes locks at ${when}, when ${r.deadline.player.name}'s game starts. Mention the time.`,
+    )
   }
   if (r.lockedPlayers?.length) lines.push(`- Known started games: ${r.lockedPlayers.map(who).join(', ')}. Current starters were kept in place and started bench players were excluded.`)
   if (r.unverifiedLocks?.length) lines.push(`- Kickoff locks could not be verified for ${r.unverifiedLocks.map(who).join(', ')}. Confirm them on the provider before acting.`)

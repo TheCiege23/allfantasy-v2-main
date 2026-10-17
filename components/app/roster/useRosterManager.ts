@@ -5,6 +5,7 @@ import { mergeUnifiedIntoRosterState } from "@/lib/player-data/adapters/rosterPl
 import type { UnifiedPlayerWireDto } from "@/lib/player-data/serializeUnifiedPlayerForApi"
 import { getRosterPlayerIds } from "@/lib/waiver-wire/roster-utils"
 import { dispatchStateRefreshEvent } from "@/lib/state-consistency/state-events"
+import { rosterBadgeStatus } from "@/lib/injuries/injuryStatusDisplay"
 
 export type RosterSectionKey = "starters" | "bench" | "ir" | "taxi" | "devy"
 
@@ -96,13 +97,13 @@ function toPlayerId(raw: unknown): string | null {
   return null
 }
 
+/**
+ * The status saved in the roster's stored JSON. Only a fallback: a player enriched from the unified
+ * roster has his badge re-derived from the fresher `providerInjuryLabel` in
+ * `mergeUnifiedIntoRosterState`. The mapping is `rosterBadgeStatus` (case/hyphen-insensitive).
+ */
 function normalizeStatus(raw: unknown): RosterPlayer["status"] {
-  const v = String(raw ?? "").trim().toUpperCase()
-  if (!v) return "healthy"
-  if (["IR", "PUP", "OUT_IR"].includes(v)) return "ir"
-  if (["OUT", "SUSPENDED"].includes(v)) return "out"
-  if (["Q", "QUESTIONABLE", "DOUBTFUL", "DAY_TO_DAY"].includes(v)) return "q"
-  return "healthy"
+  return rosterBadgeStatus(raw)
 }
 
 function normalizeRosterPlayer(raw: unknown, fallbackId: string, slot: RosterSectionKey): RosterPlayer {
@@ -160,7 +161,8 @@ function normalizeRosterState(raw: unknown): RosterState {
   }
 }
 
-function buildRosterStateFromPlayerData(playerData: unknown): RosterState {
+/** Exported for tests: the stored-JSON → board state path (badge fallback for unenriched players). */
+export function buildRosterStateFromPlayerData(playerData: unknown): RosterState {
   if (!playerData) return EMPTY_ROSTER
   if (playerData && typeof playerData === "object" && !Array.isArray(playerData)) {
     const obj = playerData as Record<string, unknown>

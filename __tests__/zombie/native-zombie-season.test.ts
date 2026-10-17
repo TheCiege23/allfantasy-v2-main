@@ -95,6 +95,41 @@ describe('ensureZombieSeasonActivated', () => {
     withWhisperer.mockRestore()
   })
 
+  it('ends the zombie season at the last scheduled week, not at totalWeeks (NBA: 22 weeks, schedule ends at 19)', async () => {
+    overrides.set('redraftSeason.findFirst', async () => ({ season: 2026, totalWeeks: 22 }))
+    // The schedule's last week is 19; its first is 1 (drafted before the season).
+    overrides.set('redraftMatchup.findFirst', async (args: any) => ({ week: args?.orderBy?.week === 'asc' ? 1 : 19 }))
+    const spy = vi.spyOn(await import('@/lib/zombie/whispererEngine'), 'selectWhisperer').mockResolvedValue({ whispererRecordId: 'w', rosterId: 'R1' })
+
+    await ensureZombieSeasonActivated({ leagueId: 'L1', redraftSeasonId: 's1' })
+
+    expect(argsOf('zombieLeague.updateMany')[0].data).toEqual({ status: 'active', season: 2026, totalWeeks: 19, currentWeek: 1 })
+    expect(argsOf('redraftMatchup.findFirst')[0]).toMatchObject({ where: { seasonId: 's1', awayRosterId: { not: null } } })
+    spy.mockRestore()
+  })
+
+  /*
+   * 🛑 A LEAGUE DRAFTED MID-SEASON STARTED AT WEEK 1 AND NEVER LEFT IT. Its schedule now begins at the
+   * sport's current week, and the zombie league must begin there too — week 1 has no matchups.
+   */
+  it('a league drafted mid-season starts on its first scheduled week, not week 1', async () => {
+    overrides.set('redraftSeason.findFirst', async () => ({ season: 2026, totalWeeks: 22 }))
+    overrides.set('redraftMatchup.findFirst', async (args: any) => ({ week: args?.orderBy?.week === 'asc' ? 6 : 19 }))
+    const spy = vi.spyOn(await import('@/lib/zombie/whispererEngine'), 'selectWhisperer').mockResolvedValue({ whispererRecordId: 'w', rosterId: 'R1' })
+
+    await ensureZombieSeasonActivated({ leagueId: 'L1', redraftSeasonId: 's1' })
+
+    expect(argsOf('zombieLeague.updateMany')[0].data).toEqual({ status: 'active', season: 2026, totalWeeks: 19, currentWeek: 6 })
+    spy.mockRestore()
+  })
+
+  it('[control] with no schedule yet it still starts at week 1', async () => {
+    const spy = vi.spyOn(await import('@/lib/zombie/whispererEngine'), 'selectWhisperer').mockResolvedValue({ whispererRecordId: 'w', rosterId: 'R1' })
+    await ensureZombieSeasonActivated({ leagueId: 'L1', redraftSeasonId: 's1' })
+    expect(argsOf('zombieLeague.updateMany')[0].data).toMatchObject({ currentWeek: 1 })
+    spy.mockRestore()
+  })
+
   it('never re-picks a Whisperer (a re-pick resets ambushes and re-rolls the role)', async () => {
     overrides.set('whispererRecord.findUnique', async () => ({ id: 'existing' }))
     const spy = vi.spyOn(await import('@/lib/zombie/whispererEngine'), 'selectWhisperer')
@@ -120,10 +155,16 @@ describe('ensureZombieSeasonActivated', () => {
 })
 
 describe('runWeeklyResolution — the league moves on to the next week', () => {
-  function arrange(currentWeek: number, totalWeeks = 17) {
+  /** A zombie league whose resolving week has every matchup final, scheduled through `lastScheduledWeek`. */
+  function arrange(currentWeek: number, totalWeeks = 17, lastScheduledWeek = totalWeeks) {
     overrides.set('zombieLeague.findUnique', async () => ({
       id: 'z1', leagueId: 'L1', season: 2026, currentWeek, totalWeeks, universeId: null, league: {},
     }))
+    overrides.set('redraftSeason.findFirst', async () => ({ id: 's1' }))
+    overrides.set('redraftMatchup.findMany', async () => [
+      { homeRosterId: 'r1', awayRosterId: 'r2', homeScore: 100, awayScore: 90, status: 'final' },
+    ])
+    overrides.set('redraftMatchup.findFirst', async () => ({ week: lastScheduledWeek }))
   }
   const leagueUpdate = () => argsOf('zombieLeague.update').at(-1)!
 
@@ -148,6 +189,61 @@ describe('runWeeklyResolution — the league moves on to the next week', () => {
     arrange(17)
     await runWeeklyResolution('z1', 17, { force: true })
     expect(leagueUpdate().data).toEqual({ currentWeek: 17, status: 'complete' })
+  })
+
+  /*
+   * 🛑 NBA: `totalWeeks` 22, playoffs from week 20, so the schedule stops at week 19. Ending at
+   * `totalWeeks` parked the league on week 20 — no matchups, never "complete", no winner, forever.
+   */
+  it('the last SCHEDULED week finishes the league, even when totalWeeks runs into the playoffs', async () => {
+    arrange(19, 22, 19)
+    await runWeeklyResolution('z1', 19)
+    expect(leagueUpdate().data).toEqual({ currentWeek: 19, status: 'complete' })
+  })
+
+  it('[control] a mid-season week under the same schedule does not finish it', async () => {
+    arrange(18, 22, 19)
+    await runWeeklyResolution('z1', 18)
+    expect(leagueUpdate().data).toEqual({ currentWeek: 19 })
+  })
+
+  /*
+   * 🛑 `force` used to skip the finished-matchups gate. The infection engine reads only final scores,
+   * so a forced unfinished week resolved nothing, wrote "complete", and moved the league on.
+   */
+  it('a forced run on a week whose matchups are not final is refused, and the league does not move', async () => {
+    arrange(5)
+    overrides.set('redraftMatchup.findMany', async () => [
+      { homeRosterId: 'r1', awayRosterId: 'r2', homeScore: 40, awayScore: 30, status: 'active' },
+    ])
+    const r = await runWeeklyResolution('z1', 5, { force: true })
+    expect(r).toEqual({ resolution: null, skipped: true, reason: 'matchups_incomplete' })
+    expect(argsOf('zombieLeague.update')).toHaveLength(0)
+    expect(argsOf('zombieWeeklyResolution.upsert')).toHaveLength(0)
+  })
+
+  /*
+   * 🛑 Weekly winnings were never written for a native league. A resolved week now banks each team's
+   * score in the ledger — here an NBA 1,000 v 850 win, a bashing (150 ≥ 128), moves 25% of the loser's week.
+   */
+  it('a resolved week banks winnings in the ledger', async () => {
+    overrides.set('zombieLeague.findUnique', async () => ({
+      id: 'z1', leagueId: 'L1', season: 2026, sport: 'NBA', currentWeek: 5, totalWeeks: 19, universeId: null, league: {},
+    }))
+    overrides.set('redraftSeason.findFirst', async () => ({ id: 's1' }))
+    overrides.set('redraftMatchup.findMany', async () => [
+      { id: 'm1', homeRosterId: 'r1', awayRosterId: 'r2', homeScore: 1000, awayScore: 850, status: 'final' },
+    ])
+    overrides.set('redraftMatchup.findFirst', async () => ({ week: 19 }))
+    overrides.set('roster.findMany', async () => [
+      { id: 'R1', platformUserId: 'u1', redraftRosterId: 'r1' },
+      { id: 'R2', platformUserId: 'u2', redraftRosterId: 'r2' },
+    ])
+
+    await runWeeklyResolution('z1', 5)
+
+    const ledger = argsOf('zombieWeeklyWinnings.upsert').map((a) => [a.create.rosterId, a.create.amount])
+    expect(ledger).toEqual([['R1', 1212.5], ['R2', 637.5]])
   })
 })
 
@@ -237,5 +333,34 @@ describe('selectWhisperer', () => {
       const r = await selectWhisperer('z1', 'random')
       expect(r.rosterId).toBe('R-human')
     }
+  })
+
+  it('tells the chosen manager, and only them, that they are the Whisperer', async () => {
+    const { notifyZombiePlayer } = await import('@/lib/zombie/commissionerNotificationService')
+    vi.mocked(notifyZombiePlayer).mockClear()
+    overrides.set('zombieLeague.findUniqueOrThrow', async () => ({
+      id: 'z1', leagueId: 'L1', whispererAmbushCount: 3, whispererIsPublic: false, league: { name: 'Tip-Off Outbreak' },
+    }))
+    overrides.set('zombieLeagueTeam.findMany', async () => [{ rosterId: 'R-human' }])
+    overrides.set('roster.findMany', async () => [{ id: 'R-human', platformUserId: 'user-1' }])
+    overrides.set('roster.findUnique', async () => ({ platformUserId: 'user-1' }))
+    await selectWhisperer('z1', 'random')
+    expect(notifyZombiePlayer).toHaveBeenCalledTimes(1)
+    const [userId, type, title, opts] = vi.mocked(notifyZombiePlayer).mock.calls[0]!
+    expect([userId, type, title]).toEqual(['user-1', 'whisperer_selected', "You're the Whisperer"])
+    expect(opts?.body).toContain('Nobody else knows')
+    // The stored title must be the real one: spoiler-safe mode would store "League update".
+    expect(opts?.pushSpoilerSafe).toBeFalsy()
+  })
+
+  it('notifies nobody when the only seat is open', async () => {
+    const { notifyZombiePlayer } = await import('@/lib/zombie/commissionerNotificationService')
+    vi.mocked(notifyZombiePlayer).mockClear()
+    overrides.set('zombieLeague.findUniqueOrThrow', async () => ({ id: 'z1', leagueId: 'L1', whispererAmbushCount: 3, league: {} }))
+    overrides.set('zombieLeagueTeam.findMany', async () => [{ rosterId: 'R-open' }])
+    overrides.set('roster.findMany', async () => [{ id: 'R-open', platformUserId: 'open-slot-L1-1' }])
+    overrides.set('roster.findUnique', async () => ({ platformUserId: 'open-slot-L1-1' }))
+    await selectWhisperer('z1', 'random')
+    expect(notifyZombiePlayer).not.toHaveBeenCalled()
   })
 })

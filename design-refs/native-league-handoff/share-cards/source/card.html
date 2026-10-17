@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Share card export</title>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Cinzel:wght@600;700&amp;display=swap" rel="stylesheet">
+<link rel="stylesheet" href="share.css">
+<style>html,body{margin:0;background:#07080d}</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+// Reference renderer for the export pipeline: share/card.html?m=<moment>&f=<post|story|link>
+const CARDS = {
+  immunity: { mood: '', bg: '../survivor/bg/dusk-football.svg', hero: '../weekly/immunity-necklace.svg', kick: 'Immunity · Week 6',
+    head: 'Open Team 5 is safe', sub: 'Top score in Tribe Vela. Can’t receive votes this week.', stats: [['142.6', 'Points'], ['1st', 'In tribe'], ['2', 'Wins']] },
+  out: { mood: 'shc-m-out', bg: '../survivor/bg/night-football.svg', hero: '../weekly/torch-out.svg', kick: 'Voted out · Week 6',
+    head: 'Open Team 8’s torch is out', sub: 'Voted out 2–1 at Tribal Council. Heading to Exile Island.', stats: [['2–1', 'Vote'], ['6', 'Weeks'], ['96.2', 'Points']] },
+  idol: { mood: 'shc-m-idol', bg: '../survivor/bg/night-football.svg', hero: '../survivor/idols/immunity.svg', kick: 'Idol played · Week 6',
+    head: 'Open Team 4 played an idol', sub: 'Every vote against them was cancelled. The tribe never saw it coming.', stats: [['3', 'Votes cancelled'], ['0', 'Counted']] },
+  exile: { mood: 'shc-m-exile', bg: '../survivor/bg/exile-football.svg', hero: '../exile/token-coin-earned.svg', kick: 'Back in the game',
+    head: 'Open Team 11 returns from Exile', sub: 'Three tokens earned on Exile Island. Rejoins Tribe Vela in week 7.', stats: [['3', 'Tokens'], ['2', 'Weeks on Exile']] },
+  champ: { mood: 'shc-m-champ', bg: '../survivor/bg/day-football.svg', hero: '../late/champion-trophy.svg', kick: 'Season champion',
+    head: 'TheCiege26 is the last one standing', sub: 'Won the jury vote 3–1–1 after 13 weeks.', stats: [['3–1–1', 'Jury'], ['3', 'Immunity'], ['1,412.6', 'Points']] }
+};
+const q = new URLSearchParams(location.search); const c = CARDS[q.get('m') || 'immunity']; const f = q.get('f') || 'post';
+const stats = (f === 'link' ? c.stats.slice(0, 2) : c.stats).map(([b, s]) => `<div class="shc-stat"><b>${b}</b><span>${s}</span></div>`).join('');
+const topBar = `<div class="shc-top"><div class="shc-brand"><i>AF</i>AllFantasy</div><div class="shc-league"><img src="../tribes/nfl/manta.svg" alt="">Blah Survivor</div></div>`;
+const text = `<div class="shc-text"><span class="shc-kick">${c.kick}</span><h1 class="shc-head">${c.head}</h1><span class="shc-sub">${c.sub}</span><div class="shc-stats">${stats}</div>
+<div class="shc-foot"><span>allfantasy.ai</span><span><b>Survivor</b> · NFL 2026</span></div></div>`;
+const mid = `<div class="shc-mid"><img class="shc-hero" src="${c.hero}" alt=""></div>`;
+document.getElementById('root').innerHTML = `<div class="shc shc-${f} ${c.mood}"><img class="shc-bg" src="${c.bg}" alt=""><div class="shc-veil"></div>` +
+  (f === 'link' ? mid + `<div style="flex:1;display:flex;flex-direction:column;gap:18px;position:relative;z-index:2">${topBar}${text}</div>` : topBar + mid + text) + `</div>`;
+</script>
+</body>
+</html>

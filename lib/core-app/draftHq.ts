@@ -549,7 +549,7 @@ export async function resolvePlayerNames(
             // NFL-only club fold. `imageUrl` is what puts a face on the board.
             select: {
               sleeperId: true, name: true, position: true, team: true,
-              sport: true, imageUrl: true,
+              sport: true, imageUrl: true, source: true, fetchedAt: true,
             },
           })
           .catch(() => [])

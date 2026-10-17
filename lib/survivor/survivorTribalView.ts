@@ -36,9 +36,11 @@ export interface TribalCouncilView {
     voteDoesNotCount: boolean
     eligibleTargets: Array<{ userId: string; displayName: string }>
     playableIdols: Array<{ idolId: string; powerType: string; label: string; alreadyPlayed: boolean }>
+    additionalVotes?: Array<{ idolId: string; targetName: string | null; locked: boolean }>
     isSafeFromVote: boolean
   }
   host: { eligibleVoterCount: number; submittedCount: number; missingVoteCount: number } | null
+  revote: { candidates: Array<{ userId: string; displayName: string; firstRoundVotes: number }>; deadline: string; originalCouncilId: string | null } | null
   reveal: {
     revealSequence: RevealScroll[]
     countsByTargetName: Record<string, number>
@@ -71,6 +73,7 @@ const EMPTY: TribalCouncilView = {
     isSafeFromVote: false,
   },
   host: null,
+  revote: null,
   reveal: null,
 }
 
@@ -107,6 +110,16 @@ export async function buildTribalCouncilView(access: SurvivorAccessContext): Pro
 
   const playableIdols = await getPlayableIdolsForUser(access.leagueId, userId)
 
+  let revote: TribalCouncilView['revote'] = null
+  if (council.phase === 'revote') {
+    const original = await prisma.survivorTribalCouncil.findFirst({
+      where: { leagueId: access.leagueId, week: council.week, councilNumber: { lt: (await prisma.survivorTribalCouncil.findUnique({ where: { id: council.id }, select: { councilNumber: true } }))?.councilNumber ?? 1 }, isRevealed: true },
+      orderBy: { councilNumber: 'desc' }, select: { id: true, revealSequence: true },
+    })
+    const firstScroll = Array.isArray(original?.revealSequence) ? original.revealSequence as Array<{ targetUserId?: string; status?: string }> : []
+    revote = { candidates: council.tiePlayerIds.map(candidateId => ({ userId: candidateId, displayName: nameByUser.get(candidateId) ?? 'Manager', firstRoundVotes: firstScroll.filter(scroll => scroll.targetUserId === candidateId && scroll.status === 'counts').length })), deadline: council.voteDeadlineAt.toISOString(), originalCouncilId: original?.id ?? null }
+  }
+
   // Host operational view: missing-vote count only (no ballot contents), full hosts only.
   let host: TribalCouncilView['host'] = null
   if (isHostViewer) {
@@ -115,9 +128,9 @@ export async function buildTribalCouncilView(access: SurvivorAccessContext): Pro
     host = { eligibleVoterCount, submittedCount, missingVoteCount: Math.max(0, eligibleVoterCount - submittedCount) }
   }
 
-  // Reveal payload: public after reveal; full hosts may preview pre-reveal.
+  // The scroll stays sealed for every client until the read, including non-playing hosts.
   let reveal: TribalCouncilView['reveal'] = null
-  if (council.isRevealed || isHostViewer) {
+  if (council.isRevealed) {
     const full = await prisma.survivorTribalCouncil.findUnique({
       where: { id: council.id },
       select: { revealSequence: true, eliminatedName: true, isTie: true, tiePhase: true },
@@ -158,9 +171,11 @@ export async function buildTribalCouncilView(access: SurvivorAccessContext): Pro
       voteDoesNotCount: Boolean(ownVote?.doesNotCount),
       eligibleTargets,
       playableIdols,
+      additionalVotes: council.idolsPlayed.filter(p => p.playerUserId === userId && ['vote_steal', 'extra_vote'].includes(p.powerType)).map(p => ({ idolId: p.idolId, targetName: p.extraTargetUserId ? nameByUser.get(p.extraTargetUserId) ?? null : null, locked: Boolean(p.extraTargetUserId) && access.settings.voteChangePolicy === 'first_valid_locks' })),
       isSafeFromVote,
     },
     host,
+    revote,
     reveal,
   }
 }

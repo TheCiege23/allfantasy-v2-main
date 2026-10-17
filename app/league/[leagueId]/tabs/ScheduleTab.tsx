@@ -1,8 +1,11 @@
 'use client'
 
 import type { UserLeague } from '@/app/dashboard/types'
-import { LeagueTabPlaceholder } from './LeagueTabPlaceholder'
+import { BigBrotherSchedule } from '@/components/big-brother/BigBrotherSchedule'
+import { normalizeBigBrotherShellLeague } from '@/lib/big-brother/shellLeague'
+import { CanonicalRedraftScheduleTab } from './redraft/CanonicalRedraftScheduleTab'
 
 export function ScheduleTab({ league, tabLabel = 'Schedule' }: { league: UserLeague; tabLabel?: string }) {
-  return <LeagueTabPlaceholder league={league} tabLabel={tabLabel} />
+  if (normalizeBigBrotherShellLeague(league).leagueVariant === 'big_brother') return <BigBrotherSchedule key={league.id} leagueId={league.id} />
+  return <CanonicalRedraftScheduleTab key={league.id} leagueId={league.id} />
 }

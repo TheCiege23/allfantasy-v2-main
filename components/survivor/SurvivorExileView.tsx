@@ -1,8 +1,6 @@
 'use client'
 
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { useState, useTransition } from 'react'
 import { Palmtree, Coins, AlertTriangle, ArrowRight } from 'lucide-react'
 import type { SurvivorSummary } from './types'
 import { EXILE_ISLAND_RULES, SURVIVOR_TOKEN_POOL_BLURB } from '@/lib/survivor/survivorIslandContent'
@@ -14,38 +12,13 @@ export interface SurvivorExileViewProps {
 }
 
 /**
- * Exile Island View: token count, current exile roster setup, FAAB/team claim flow, return-to-island progress, commissioner/Boss warning state.
+ * Exile Island View: token count, weekly roster rules, and the system-run return deadline.
  */
 export function SurvivorExileView({ leagueId, summary }: SurvivorExileViewProps) {
-  const router = useRouter()
-  const [isPending, startTransition] = useTransition()
-  const [returnError, setReturnError] = useState<string | null>(null)
-  const [returnMessage, setReturnMessage] = useState<string | null>(null)
   const { exileLeagueId, exileTokens, config, seasonCalendar } = summary
   const returnEnabled = config.exileReturnEnabled
   const tokensNeeded = config.exileReturnTokens ?? 0
   const myExileStatus = summary.myExileStatus ?? null
-
-  function handleReturnToIsland() {
-    setReturnError(null)
-    setReturnMessage(null)
-    startTransition(async () => {
-      try {
-        const response = await fetch(`/api/leagues/${leagueId}/survivor/return`, {
-          method: 'POST',
-        })
-        const payload = (await response.json().catch(() => null)) as { error?: string } | null
-        if (!response.ok) {
-          setReturnError(payload?.error ?? 'Unable to return from Exile Island right now.')
-          return
-        }
-        setReturnMessage('Return to the main Survivor league complete.')
-        router.refresh()
-      } catch (error) {
-        setReturnError(error instanceof Error ? error.message : 'Unable to return from Exile Island right now.')
-      }
-    })
-  }
 
   return (
     <div className="space-y-6">
@@ -61,13 +34,12 @@ export function SurvivorExileView({ leagueId, summary }: SurvivorExileViewProps)
       <section className="rounded-2xl border border-violet-500/15 bg-violet-950/10 p-4 sm:p-6">
         <h2 className="mb-2 text-lg font-semibold text-violet-100">Token Pool</h2>
         <p className="text-sm leading-relaxed text-white/70">{SURVIVOR_TOKEN_POOL_BLURB}</p>
-        <p className="mt-3 text-xs text-white/45">
-          In some formats this runs in parallel with the main island — your commissioner defines how tokens connect to
-          return or FAAB.
-        </p>
+        <p className="mt-3 text-xs text-white/45">The published minimum qualifies you for the single return spot; the highest balance wins it at the deadline.</p>
       </section>
 
-      <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-6">
+      <section className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-6">
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-cover bg-center opacity-20" style={{ backgroundImage: `url(/survivor/backgrounds/exile-${seasonCalendar?.sport === 'NBA' ? 'basketball' : seasonCalendar?.sport === 'NHL' ? 'hockey' : 'football'}.svg)` }} />
+        <div className="relative">
         <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-white">
           <Palmtree className="h-5 w-5 text-cyan-400" />
           {EXILE_ISLAND_RULES.headline}
@@ -102,26 +74,14 @@ export function SurvivorExileView({ leagueId, summary }: SurvivorExileViewProps)
                   You have <strong className="text-white/80">{myExileStatus.tokens}</strong> of{' '}
                   <strong className="text-white/80">{tokensNeeded}</strong> required token(s).
                 </p>
-                {myExileStatus.eligibleToReturn ? (
-                  <button
-                    type="button"
-                    onClick={handleReturnToIsland}
-                    disabled={isPending}
-                    className="mt-3 inline-flex items-center rounded-lg bg-cyan-500 px-3 py-2 text-sm font-medium text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {isPending ? 'Returning...' : 'Return To Main League'}
-                  </button>
-                ) : (
-                  <p className="mt-3 text-sm text-white/50">
-                    {myExileStatus.reason ?? 'You are not eligible to return yet.'}
-                  </p>
-                )}
-                {returnError ? <p className="mt-2 text-sm text-rose-300">{returnError}</p> : null}
-                {returnMessage ? <p className="mt-2 text-sm text-emerald-300">{returnMessage}</p> : null}
+                <p className="mt-3 text-sm text-white/60">
+                  {myExileStatus.eligibleToReturn ? 'You meet the token minimum. Chimmy awards the single return spot to the highest qualifying balance at the deadline.' : myExileStatus.reason ?? 'Keep earning tokens until the return deadline.'}
+                </p>
               </div>
             ) : null}
           </div>
         )}
+        </div>
       </section>
 
       {exileLeagueId && (
@@ -151,10 +111,10 @@ export function SurvivorExileView({ leagueId, summary }: SurvivorExileViewProps)
         <section className="rounded-2xl border border-amber-500/20 bg-amber-950/10 p-4 sm:p-6">
           <h2 className="mb-2 flex items-center gap-2 text-lg font-semibold text-amber-200">
             <AlertTriangle className="h-5 w-5" />
-            Commissioner / Boss
+            Exile operations
           </h2>
           <p className="mb-3 text-sm text-white/60">
-            Exile league commissioner (Boss) can adjust tokens and return rules. FAAB/team claim flow runs in the Exile league.
+            Chimmy scores weekly Exile rosters and applies the published return rules. Open the linked Exile league for rosters and standings.
           </p>
           <Link
             href={`/league/${exileLeagueId}`}

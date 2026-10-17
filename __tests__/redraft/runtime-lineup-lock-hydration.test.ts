@@ -274,6 +274,17 @@ describe('live scoring runtime derives the lineup lock', () => {
     expect(lockOf('mia-wr')).toBe(false)
     expect(h.prisma.sportsGame.findMany).toHaveBeenCalledTimes(1)
   })
+
+  it('🛑 never takes the unified row\'s stored `injuryStatus` snapshot over the roster player\'s own', async () => {
+    const { getNormalizedPlayerData } = await import('@/lib/player-data/getNormalizedPlayerData')
+    vi.mocked(getNormalizedPlayerData).mockResolvedValueOnce([{ id: 'kc-qb', injuryStatus: 'Out' }] as never)
+    const resolved = await resolveNflRedraftLiveScoringRuntime({ seasonId: 'season-1', now: h.NOW })
+    if (!resolved.ok) throw new Error(`live scoring runtime did not resolve: ${resolved.reason}`)
+    const validated = vi.mocked(validateRedraftLineup).mock.calls.flatMap(([args]) => args.players)
+    const kcQb = validated.find((p) => p.playerId === 'kc-qb') as { injuryStatus?: unknown; providerInjuryLabel?: unknown }
+    expect(kcQb.injuryStatus).toBeNull()
+    expect(kcQb.providerInjuryLabel).toBeNull()
+  })
 })
 
 describe('NFL data foundation roster context derives the lineup lock', () => {

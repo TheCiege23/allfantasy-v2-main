@@ -29,7 +29,7 @@ vi.mock('@/lib/core-app/seasonOutlookSims', () => ({
   leagueSimHash: (sim: { tag: string }) => `hash-${sim.tag}`,
 }))
 
-import { runOutlookPrewarm } from '@/lib/core-app/seasonOutlookPrewarm'
+import { rerunLiveOutlooks, runOutlookPrewarm } from '@/lib/core-app/seasonOutlookPrewarm'
 
 const NOW = new Date('2026-09-17T15:00:00Z')
 const at = (iso: string) => new Date(iso)
@@ -41,6 +41,7 @@ function stored(hash: string, checkedAt: string, iterations = 10_000) {
 beforeEach(() => {
   vi.clearAllMocks()
   delete process.env.CORE_OUTLOOK_PREWARM_DISABLED
+  delete process.env.CORE_OUTLOOK_LIVE_RERUN_DISABLED
   h.findFirst.mockImplementation(async ({ where }: { where: { platformLeagueId: string } }) => ({
     id: `af-${where.platformLeagueId}`,
     name: 'L',
@@ -204,5 +205,50 @@ describe('runOutlookPrewarm', () => {
     process.env.CORE_OUTLOOK_PREWARM_DISABLED = 'true'
     expect(await runOutlookPrewarm(NOW)).toMatchObject({ candidates: 0, computed: 0 })
     expect(h.groupBy).not.toHaveBeenCalled()
+  })
+})
+
+/*
+ * Production 2026-10-11: every scheduled fire saw ~400 leagues due and ran 12, so HailShiva's odds
+ * were from 17:13 while its board moved at 17:25 and 17:41. The live points pass now hands over the
+ * leagues it just rewrote.
+ */
+describe('rerunLiveOutlooks', () => {
+  it('re-runs a league whose board moved, and stamps one whose inputs did not', async () => {
+    h.read.mockResolvedValue(new Map([['same', stored('hash-same', '2026-09-17T12:00:00Z')], ['moved', stored('hash-old', '2026-09-17T12:00:00Z')]]))
+    const out = await rerunLiveOutlooks(['moved', 'same'], NOW)
+    expect(out).toMatchObject({ considered: 2, computed: 1, unchanged: 1, deferred: 0, failed: 0 })
+    expect(h.compute).toHaveBeenCalledTimes(1)
+    expect(h.compute.mock.calls[0][2]).toBe(10_000)
+    expect(h.groupBy).not.toHaveBeenCalled()
+  })
+
+  it('takes the stalest stored run first, and stops at its cap and its clock', async () => {
+    h.read.mockResolvedValue(new Map([
+      ['fresh', stored('hash-old', '2026-09-17T14:30:00Z')],
+      ['stale', stored('hash-old', '2026-09-17T09:00:00Z')],
+    ]))
+    const out = await rerunLiveOutlooks(['fresh', 'never', 'stale'], NOW, { maxLeagues: 2 })
+    expect(out).toMatchObject({ computed: 2, deferred: 1 })
+    expect(h.findFirst.mock.calls.map((c) => c[0].where.platformLeagueId)).toEqual(['never', 'stale'])
+
+    vi.clearAllMocks()
+    let t = 0
+    const timed = await rerunLiveOutlooks(['a', 'b', 'c'], NOW, { budgetMs: 10, clock: () => (t += 6) })
+    expect(timed).toMatchObject({ computed: 1, deferred: 2 })
+  })
+
+  it('never throws, keeps a failed league\'s stored run, and can be switched off', async () => {
+    h.read.mockResolvedValue(new Map())
+    h.load.mockImplementationOnce(async () => {
+      throw new Error('boom')
+    })
+    expect(await rerunLiveOutlooks(['bad', 'good'], NOW)).toMatchObject({ failed: 1, computed: 1 })
+    expect(h.write.mock.calls.every((c) => c[0][0][0] !== 'bad')).toBe(true)
+
+    expect(await rerunLiveOutlooks([], NOW)).toMatchObject({ considered: 0, computed: 0 })
+    process.env.CORE_OUTLOOK_LIVE_RERUN_DISABLED = 'true'
+    expect(await rerunLiveOutlooks(['moved'], NOW)).toMatchObject({ considered: 0, computed: 0 })
+    expect(h.load).toHaveBeenCalledTimes(2)
   })
 })

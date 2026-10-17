@@ -16,11 +16,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const prismaMock = vi.hoisted(() => ({
   adminAuditLog: { create: vi.fn() },
-  league: { findFirst: vi.fn() },
+  // `findUnique` is the score sync's platform read (NFL path); unset -> a native (Sleeper-id) league.
+  league: { findFirst: vi.fn(), findUnique: vi.fn() },
+  exileWeeklyEntry: { findMany: vi.fn() },
   playerGameLogCache: { findMany: vi.fn() },
   playerGameStat: { findMany: vi.fn() },
   playerIdentityMap: { findFirst: vi.fn(), findMany: vi.fn() },
-  playerWeeklyScore: { upsert: vi.fn(), findUnique: vi.fn() },
+  playerWeeklyScore: { upsert: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(async () => []) },
   redraftRoster: { findMany: vi.fn() },
   redraftRosterPlayer: { findMany: vi.fn() },
   redraftSeason: { findFirst: vi.fn() },
@@ -61,6 +63,8 @@ describe('daily-sport weekly score sync', () => {
     prismaMock.sportsPlayer.findFirst.mockResolvedValue(null)
     prismaMock.sportsGame.findMany.mockResolvedValue([])
     prismaMock.playerGameLogCache.findMany.mockResolvedValue([])
+    prismaMock.league.findUnique.mockResolvedValue(null)
+    prismaMock.exileWeeklyEntry.findMany.mockResolvedValue([])
     prismaMock.redraftRoster.findMany.mockResolvedValue([{ id: 'roster-1' }])
     prismaMock.playerGameStat.findMany.mockResolvedValue([])
   })
@@ -151,6 +155,25 @@ describe('daily-sport weekly score sync', () => {
     expect(written.create.sport).toBe('NBA')
     expect(written.create.week).toBe(3)
     expect(typeof written.create.fantasyPts).toBe('number')
+  })
+
+  it.each(['NBA', 'NHL'])('ingests a closed %s Exile roster even when no main-island roster holds that player', async sport => {
+    prismaMock.league.findUnique.mockResolvedValue({ platform: 'allfantasy', survivorMode: true })
+    prismaMock.league.findFirst.mockResolvedValue({ sport, settings: {} })
+    prismaMock.redraftSeason.findFirst.mockResolvedValue(seasonFor(sport))
+    prismaMock.redraftRosterPlayer.findMany.mockResolvedValue([])
+    prismaMock.exileWeeklyEntry.findMany.mockResolvedValue([{ submittedLineup: {
+      version: 1, anchorId: 'p-exile', team: 'BOS', closedAt: '2026-10-28T00:00:00Z', lockedAt: null,
+      players: [{ id: 'p-exile', name: 'Exile anchor', position: sport === 'NBA' ? 'PG' : 'G', team: 'BOS', slot: sport === 'NBA' ? 'PG' : 'G' }],
+    } }])
+    prismaMock.playerGameStat.findMany.mockResolvedValue([{ playerId: 'p-exile', normalizedStatMap: { seasonType: 'regular', stats: sport === 'NBA' ? { points: 24 } : { saves: 27 } } }])
+
+    const result = await runSync({ seasonStartUtc: SEASON_START })
+
+    expect(prismaMock.exileWeeklyEntry.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { leagueId: 'league-1', week: 3 } }))
+    expect(result.rosteredPlayers).toBe(1)
+    expect(result.scoresUpserted).toBe(1)
+    expect(prismaMock.playerWeeklyScore.upsert.mock.calls[0][0].where.playerId_week_season_sport.playerId).toBe('p-exile')
   })
 
   it('does not score a PRESEASON game that falls inside the week', async () => {

@@ -22,7 +22,7 @@ import {
   followKeyFor,
   followPlayer,
   isFollowingPlayer,
-  listFollowerIdsForPlayer,
+  listFollowerIdsForPlayerIdentity,
   listPlayerFollows,
   unfollowPlayer,
 } from '@/lib/follows/playerFollows'
@@ -126,20 +126,29 @@ describe('reads', () => {
     expect(valuesOf($queryRaw.mock.calls[0])).toEqual(['u1', 'NFL', '9221'])
   })
 
-  it('🛑 followers of a player are found by sport + case-insensitive name, deduped', async () => {
-    $queryRaw.mockResolvedValue([{ user_id: 'u1' }, { user_id: 'u2' }])
-    expect(await listFollowerIdsForPlayer('nfl', ' Jahmyr Gibbs ')).toEqual(['u1', 'u2'])
+  const GIBBS_ID = { id: 'pim-gibbs', name: 'Jahmyr Gibbs', position: 'RB', team: 'DET', currentTeam: 'DET', sleeperId: '9221' }
+
+  it('🛑 followers of a player are found by his Sleeper id (or his name, to be verified), deduped', async () => {
+    $queryRaw.mockResolvedValue([
+      { user_id: 'u1', sleeper_id: '9221', name: 'Jahmyr Gibbs', position: 'RB', team: 'DET' },
+      { user_id: 'u1', sleeper_id: '9221', name: 'Jahmyr Gibbs', position: 'RB', team: 'DET' },
+      { user_id: 'u2', sleeper_id: null, name: 'jahmyr gibbs', position: 'RB', team: 'Detroit Lions' },
+    ])
+    expect(
+      await listFollowerIdsForPlayerIdentity('nfl', { identity: GIBBS_ID, candidates: [GIBBS_ID], newsName: ' Jahmyr Gibbs ' }),
+    ).toEqual(['u1', 'u2'])
     const call = $queryRaw.mock.calls[0]
-    expect(sqlOf(call)).toMatch(/SELECT DISTINCT "user_id"/)
+    expect(sqlOf(call)).toMatch(/"sleeper_id" = \?/)
     expect(sqlOf(call)).toMatch(/lower\("name"\) = lower\(\?\)/)
-    expect(valuesOf(call).slice(0, 2)).toEqual(['NFL', 'Jahmyr Gibbs'])
+    expect(valuesOf(call).slice(0, 4)).toEqual(['NFL', '9221', 'Jahmyr Gibbs', 'Jahmyr Gibbs'])
   })
 
-  it('🛑 follower lookup: missing table is null (skip), a blank name touches nothing', async () => {
+  it('🛑 follower lookup: missing table is null (skip), a blank identity touches nothing', async () => {
     $queryRaw.mockRejectedValue(MISSING_TABLE)
-    expect(await listFollowerIdsForPlayer('NFL', 'Jahmyr Gibbs')).toBeNull()
+    expect(await listFollowerIdsForPlayerIdentity('NFL', { identity: GIBBS_ID, candidates: [GIBBS_ID] })).toBeNull()
     $queryRaw.mockReset()
-    expect(await listFollowerIdsForPlayer('NFL', '  ')).toEqual([])
+    const blank = { ...GIBBS_ID, name: '  ' }
+    expect(await listFollowerIdsForPlayerIdentity('NFL', { identity: blank, candidates: [blank] })).toEqual([])
     expect($queryRaw).not.toHaveBeenCalled()
   })
 

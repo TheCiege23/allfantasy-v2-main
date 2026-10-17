@@ -6,6 +6,7 @@ import { getServedOrigin } from '@/lib/http/served-origin'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getInviteClaimEligibility, resolveLinkedPlatformUserIds } from '@/lib/league-invite/claimIdentity'
+import { getZombieJoinPreview } from '@/lib/zombie/zombieJoinPreview'
 
 const createInviteSchema = z.object({
   leagueId: z.string().min(1),
@@ -102,15 +103,20 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Invite not found or expired' }, { status: 404 })
   }
 
-  const linkedPlatformUserIds = userId
-    ? await resolveLinkedPlatformUserIds({ userId, platform: invite.league.platform })
-    : new Set<string>()
+  const [linkedPlatformUserIds, zombie] = await Promise.all([
+    userId
+      ? resolveLinkedPlatformUserIds({ userId, platform: invite.league.platform })
+      : Promise.resolve(new Set<string>()),
+    // A Zombie league's invite shows its hero and how-it-works; a failure here must not break the join.
+    getZombieJoinPreview(invite.leagueId).catch(() => null),
+  ])
 
   return NextResponse.json({
     leagueId: invite.leagueId,
     leagueName: invite.league.name,
     sport: invite.league.sport,
     teamCount: invite.league.leagueSize,
+    zombie,
     teams: invite.league.teams.map((team) => ({
       id: team.id,
       externalId: team.externalId,

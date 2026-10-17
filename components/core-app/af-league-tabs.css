@@ -502,3 +502,8 @@
 .af-core .af-lt-more-list { display:flex; flex-wrap:wrap; gap:8px; padding-block:8px; }
 .af-core .af-lt-more[open] { flex:1 1 100%; }
 @media(max-width:720px) { .af-core .af-lt-compact-row { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); width:100%; flex-basis:100%; } .af-core .af-lt-tab { padding:8px 4px; font-size:12px; white-space:normal; text-align:center; } }
+
+/* The operational league workspace is separate from the intelligence dashboard. */
+.af-lt-workspace { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; width: 100%; }
+.af-core .af-lt-workspace-open { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 10px 16px; border: 1px solid var(--line2); border-radius: 8px; background: var(--accent); color: var(--accent-ink); font-size: 13px; font-weight: 750; text-decoration: none; }
+.af-lt-workspace > span { color: var(--muted); font-size: 12px; }

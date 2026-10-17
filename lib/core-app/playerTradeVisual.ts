@@ -295,7 +295,7 @@ export async function readLeagueTradeRows(leagueId: string) {
     prisma.roster
       .findMany({
         where: { leagueId },
-        select: { platformUserId: true, playerData: true, faabRemaining: true, league: { select: { platform: true } } },
+        select: { platformUserId: true, playerData: true, faabRemaining: true, league: { select: { platform: true, sport: true } } },
       })
       /*
        * A foreign league's ids collide with real Sleeper ids: read raw, the holder, "already on your
@@ -303,7 +303,7 @@ export async function readLeagueTradeRows(leagueId: string) {
        * An ESPN roster is translated instead — read raw, its 12483 (Stafford) priced as Jack Bech.
        */
       .then(async (rs) =>
-        (await sleeperReadableRosters(rs, (r) => r.league?.platform)).map(({ league: _league, ...r }) => r),
+        (await sleeperReadableRosters(rs, (r) => r.league?.platform, (r) => r.league?.sport)).map(({ league: _league, ...r }) => r),
       )
       .catch(() => []),
   ])
@@ -683,7 +683,7 @@ export async function getPlayerTradeVisual(
 
   // A foreign league's rosters are stripped (readLeagueTradeRows), so "no holder" there means we cannot
   // read them — not that he is free to claim.
-  if (isForeignIdSpace(league.platform)) {
+  if (isForeignIdSpace(league.platform, league.sport)) {
     return { available: false, reason: `${FOREIGN_IDS_UNREADABLE.toLowerCase()}, so we can't tell who holds him` }
   }
   const holder = rosters.find((r) => contains((r.playerData ?? {}) as Record<string, unknown>, targetSleeperId)) ?? null

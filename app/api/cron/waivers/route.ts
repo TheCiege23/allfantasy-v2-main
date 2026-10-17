@@ -5,6 +5,8 @@ import { toErrorMessage } from "@/lib/automation/errors"
 import { discoverDueWaiverLeagues } from "@/lib/automation/jobs/waivers/discoverDueWaiverLeagues"
 import { processLeagueWaiversJob } from "@/lib/automation/jobs/waivers/processLeagueWaiversJob"
 import { withSyncJobRun } from "@/lib/production-health/syncJobRunTelemetry"
+import { runSGAutomaticChopNight } from "@/lib/survivor-guillotine/live"
+import { runSGDueAuctions, runSGSelectionDeadlines } from "@/lib/survivor-guillotine/operations"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -181,6 +183,26 @@ export async function GET(request: Request) {
    * blowing up, or the platform killing this function at maxDuration (which runs no user code
    * and so can never close the row; the started_at it left behind is still a valid heartbeat).
    */
+  // Release chopped rosters before this heartbeat processes claims. One league's unresolved
+  // score/tie is reported separately and cannot stop waivers for other leagues.
+  const auctions = await runSGDueAuctions(new Date(), 10).catch(error => ({
+    scanned: 0, due: 0, results: [{ leagueId: '', status: 'failed',
+      error: error instanceof Error ? error.message : 'Auction sweep failed' }],
+  }))
+  const auctionFailures = auctions.results.filter(result => result.status === 'failed')
+  if (auctionFailures.length) console.error('[cron/waivers] Survivor Guillotine auction failed:', auctionFailures)
+  const selections = await runSGSelectionDeadlines(new Date(), 10).catch(error => ({
+    scanned: 0, due: 0, results: [{ leagueId: '', status: 'failed',
+      error: error instanceof Error ? error.message : 'Selection fallback failed' }],
+  }))
+  const selectionFailures = selections.results.filter(result => result.status === 'failed')
+  if (selectionFailures.length) console.error('[cron/waivers] Survivor Guillotine selection failed:', selectionFailures)
+  const chopNight = await runSGAutomaticChopNight(new Date(), 10).catch(error => ({
+    scanned: 0, due: 0, results: [{ leagueId: '', status: 'failed',
+      error: error instanceof Error ? error.message : 'Chop Night sweep failed' }],
+  }))
+  const chopFailures = chopNight.results.filter(result => result.status === 'failed')
+  if (chopFailures.length) console.error('[cron/waivers] Survivor Guillotine Chop Night failed:', chopFailures)
   const outcome = await withSyncJobRun(
     { jobName: JOB, trigger: "cron" },
     () => sweepDueWaiverLeagues({ limit, leagueId }),

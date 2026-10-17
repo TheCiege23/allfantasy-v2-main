@@ -16,14 +16,20 @@ vi.mock('@/components/i18n/LanguageProviderClient', () => ({
 }))
 
 describe('league creation concept choices', () => {
-  it('shows every active NFL concept and IDP, while keeping retired Tournament hidden', () => {
-    render(<LeagueBasicsStep state={DEFAULT_V2_STATE} onChange={vi.fn()} fieldErrors={null} />)
+  it('shows eligible NFL concepts and reserves new Survivor creation for NBA', () => {
+    const { rerender } = render(<LeagueBasicsStep state={DEFAULT_V2_STATE} onChange={vi.fn()} fieldErrors={null} />)
 
     const catalog = getClientLeagueCreateOptionsCatalog()
     for (const concept of catalog.concepts) {
-      expect(screen.getByTestId(`g30-league-type-${concept.id}`)).toBeTruthy()
+      const eligible = catalog.allowedSportsByConcept[concept.id]?.includes(DEFAULT_V2_STATE.sport)
+      if (eligible) expect(screen.getByTestId(`g30-league-type-${concept.id}`)).toBeTruthy()
+      else expect(screen.queryByTestId(`g30-league-type-${concept.id}`)).toBeNull()
     }
     expect(screen.queryByTestId('g30-league-type-tournament')).toBeNull()
+    expect(screen.queryByTestId('g30-league-type-survivor')).toBeNull()
+
+    rerender(<LeagueBasicsStep state={{ ...DEFAULT_V2_STATE, sport: 'NBA' }} onChange={vi.fn()} fieldErrors={null} />)
+    expect(screen.getByTestId('g30-league-type-survivor')).toBeTruthy()
   })
 
   it('removes concepts that the server catalog disallows for Soccer', () => {

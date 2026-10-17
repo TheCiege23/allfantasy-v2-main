@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Free-agent bid</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./specialty/sp.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Cinzel:wght@600;700&amp;family=Caveat:wght@600;700&amp;family=Bebas+Neue&amp;family=Pirata+One&amp;family=Creepster&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080d}
+.sc-seg{display:flex;height:26px;border-radius:7px;overflow:hidden;background:#151926;border:1px solid rgba(255,255,255,.08)}
+.sc-seg span{height:100%}
+.sc-yr{display:flex;flex-direction:column;align-items:center;gap:6px;flex:1}
+.sc-col{position:relative;width:100%;height:150px;border-radius:8px;background:#10131c;border:1px solid rgba(255,255,255,.06);display:flex;flex-direction:column;justify-content:flex-end;overflow:hidden}
+.sc-capline{position:absolute;left:0;right:0;border-top:2px dashed #e8c66a}
+.sc-btn{min-width:56px;min-height:40px;border-radius:8px;border:1px solid rgba(255,255,255,.12);background:#151926;color:#e8eaf2;font:700 14px 'Archivo';cursor:pointer}
+.sc-btn[aria-pressed="true"]{border-color:#3aa86a;background:rgba(58,168,106,.16);color:#9be3b8}
+</style>
+</helmet>
+<div class="sp" style="--acc: #3aa86a; --acc2: #9be3b8; --accInk: #04100a; --disp: Archivo; min-height: 100vh; display: flex; flex-direction: column">
+<header style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 18px 28px; border-bottom: 1px solid rgba(255,255,255,.06)">
+  <a class="sp-btn" href="SalaryCapHome.dc.html" aria-label="Back" style="padding: 0 12px">‹</a>
+  <div style="flex: 1 1 320px; display: flex; flex-direction: column; gap: 3px"><h1 class="sp-h1">Free-agent bid</h1><span class="sp-t2">Front Office League · blind bidding closes Wed 3:00 AM ET · 4 bids already in</span></div>
+  
+</header>
+<div style="display: flex; flex-wrap: wrap; gap: 24px; padding: 24px 28px 32px; align-items: flex-start">
+  <section class="sp-card" style="flex: 0 1 360px; padding: 22px; display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; background: radial-gradient(ellipse at 50% 0%, rgba(58,168,106,.18), transparent 60%), #0b0d14">
+    <span class="sp-av" style="width: 96px; height: 96px; font-size: 26px; background: #1e3a2a; box-shadow: 0 0 0 4px #07080d, 0 0 0 7px #3aa86a">RS</span>
+    <span style="font-weight: 800; font-size: 22px">Rashid Shaheed</span>
+    <span class="sp-t2">WR · NO · age 28</span>
+    <div style="display: flex; gap: 8px"><span class="sp-chip">AF value $11.0</span><span class="sp-chip">Last deal $4.0 × 1</span></div>
+    <span class="sp-t3" style="font-size: 12px">AF thinks he goes for $9–13 on 2 years in a 12-team league like yours.</span>
+  </section>
+  <section class="sp-card" style="flex: 1 1 520px; padding: 22px; display: flex; flex-direction: column; gap: 18px">
+    <div style="display: flex; flex-direction: column; gap: 8px"><span class="sp-lbl">Salary per year</span>
+      <div style="display: flex; align-items: center; gap: 12px"><button class="sc-btn" onClick="{{dn}}" aria-label="Lower">−$1</button><span class="sp-num" style="font-size: 44px; font-weight: 700; min-width: 170px; text-align: center; color: #9be3b8">${{sal}}</span><button class="sc-btn" onClick="{{up}}" aria-label="Higher">+$1</button><button class="sc-btn" onClick="{{af}}">AF value</button></div></div>
+    <div style="display: flex; flex-direction: column; gap: 8px"><span class="sp-lbl">Contract length</span>
+      <div style="display: flex; gap: 8px"><sc-for list="{{yrs}}" as="y" hint-placeholder-count="4"><button class="sc-btn" aria-pressed="{{y.on}}" onClick="{{y.pick}}">{{y.label}}</button></sc-for></div></div>
+    <div style="display: flex; flex-direction: column; gap: 10px"><span class="sp-lbl">Cap after this bid</span>
+      <sc-for list="{{impact}}" as="i" hint-placeholder-count="4"><div style="display: flex; align-items: center; gap: 12px"><span class="sp-num" style="width: 44px; font-weight: 700">{{i.yr}}</span><div class="sc-seg" style="flex: 1; height: 18px"><span style="width: {{i.w1}}; background: #1e7a4a"></span><span style="width: {{i.w2}}; background: {{i.c2}}"></span></div><span class="sp-num" style="width: 130px; text-align: right; font-size: 12.5px; color: {{i.tc}}">{{i.txt}}</span></div></sc-for>
+    </div>
+    <div class="sp-card2" style="padding: 12px 14px; display: flex; align-items: center; gap: 10px; border-color: {{vLine}}"><img src="{{vIcon}}" alt="" style="width: 26px"><span style="flex: 1; font-size: 13px; color: {{vC}}">{{valid}}</span><button class="sp-btn sp-btn-p" disabled="{{bad}}" style="min-height: 44px">Place blind bid</button></div>
+  </section>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":680}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { sal: 11, yrs: 2 }; }
+  renderVals() {
+    const st = this.state; const space = [18.4, 66.5, 133.1, 228.4], cap = [250, 262.5, 275.6, 289.4], used = [231.6, 196.0, 142.5, 61.0];
+    const impact = [0, 1, 2, 3].map(i => { const add = i < st.yrs ? st.sal : 0; const left = space[i] - add;
+      return { yr: 2026 + i, w1: (used[i] / cap[i] * 100).toFixed(1) + '%', w2: (Math.min(add, Math.max(0, cap[i] - used[i])) / cap[i] * 100).toFixed(1) + '%', c2: left < 0 ? '#ff6a4a' : '#9be3b8',
+        txt: (left < 0 ? '−$' + Math.abs(left).toFixed(1) + ' over' : '$' + left.toFixed(1) + ' left'), tc: left < 0 ? '#ff9a8a' : left < 5 ? '#ffc46b' : '#9be3b8' }; });
+    const over = impact[0].txt.includes('over'); const tight = !over && space[0] - st.sal < 5;
+    return { sal: st.sal.toFixed(1), up: () => this.setState({ sal: Math.min(40, st.sal + 1) }), dn: () => this.setState({ sal: Math.max(1, st.sal - 1) }), af: () => this.setState({ sal: 11 }),
+      yrs: [1, 2, 3, 4].map(n => ({ label: n + (n === 1 ? ' yr' : ' yrs'), on: st.yrs === n ? 'true' : 'false', pick: () => this.setState({ yrs: n }) })), impact,
+      bad: over, valid: over ? 'This bid puts you over the 2026 cap. Lower the salary or clear space first.' : tight ? 'Fits, but leaves under $5 of space for the rest of 2026.' : 'Fits under the cap every year. Bids are blind until they process.',
+      vC: over ? '#ff9a8a' : tight ? '#ffc46b' : '#9be3b8', vLine: over ? 'rgba(255,106,74,.5)' : 'rgba(255,255,255,.07)', vIcon: over ? 'specialty/salary/icon-dead.svg' : 'specialty/salary/icon-cap.svg' };
+  }
+}
+</script>
+</body>
+</html>

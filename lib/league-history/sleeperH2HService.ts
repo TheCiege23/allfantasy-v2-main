@@ -21,7 +21,8 @@ import { prisma } from '@/lib/prisma'
 
 const SLEEPER = 'https://api.sleeper.app/v1'
 const SEASON_PREFIX = 'h2h:season:v1:'
-const AGG_PREFIX = 'h2h:v2:'
+/** Exported so the weekly recap sweep can tell a league whose history is already cached (cheap) from one that is not. */
+export const AGG_PREFIX = 'h2h:v2:'
 const AGG_TTL_MS = 6 * 60 * 60 * 1000
 const COMPLETE_TTL_MS = 365 * 24 * 60 * 60 * 1000
 const MAX_CHAIN = 12

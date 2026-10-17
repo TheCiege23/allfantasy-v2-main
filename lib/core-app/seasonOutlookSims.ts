@@ -88,7 +88,10 @@ export function leagueSimHash(sim: SimInput, seed: number): string {
         t.profile ? `${fixed(t.profile.mu, 3)}/${fixed(t.profile.sigma, 3)}/${t.profile.n}` : '-',
       ].join(':'),
     )
-  const games = sim.remaining.map((g) => `${g.week}:${g.a}:${g.b}`).sort()
+  // A live board is an input: a run from before the latest score must not be served. Unplayed games hash as before.
+  const live = (g: SimInput['remaining'][number]) =>
+    g.live ? `:L${fixed(g.live.a, 2)}/${fixed(g.live.b, 2)}/${fixed(g.live.restA, 3)}/${fixed(g.live.restB, 3)}` : ''
+  const games = sim.remaining.map((g) => `${g.week}:${g.a}:${g.b}${live(g)}`).sort()
   const body = [
     `m${MODEL_VERSION}`,
     `s${seed}`,

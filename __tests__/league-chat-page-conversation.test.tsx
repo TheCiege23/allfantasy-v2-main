@@ -303,3 +303,44 @@ describe('a Survivor tribe channel stays a tribe channel', () => {
     expect(JSON.parse(String((init as RequestInit).body))).toMatchObject({ body: 'tonight', source: 'tribe_t1' })
   })
 })
+
+describe('instant send (visual pass 2)', () => {
+  it('your message is on screen, marked Sending…, BEFORE the server answers — then it is the real row', async () => {
+    let release: (() => void) | null = null
+    const base = fetchMock.getMockImplementation()!
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (String(url) === '/api/app/leagues/L1/chat' && init?.method === 'POST') {
+        await new Promise<void>((resolve) => { release = resolve })
+        chatBody = { ...chatBody, messages: [...LEAGUE_MESSAGES, { id: 'new1', text: 'on my way', createdAt: T(9), authorId: 'me', authorName: 'Me' }] }
+      }
+      return base(url, init)
+    })
+    await openPanel()
+    fireEvent.change(screen.getByTestId('league-chat-textarea'), { target: { value: 'on my way' } })
+    fireEvent.click(screen.getByTestId('league-chat-send'))
+
+    // The POST is still open, and the message is already there.
+    const pending = await screen.findByText('on my way')
+    const pendingRow = pending.closest('[data-message-id]') as HTMLElement
+    expect(pendingRow.getAttribute('data-pending')).toBe('true')
+    expect(within(pendingRow).getByText('Sending…')).toBeTruthy()
+
+    release!()
+    await waitFor(() => expect(row('new1')).toBeTruthy())
+    expect(document.querySelector('[data-pending="true"]')).toBeNull()
+    expect(screen.getAllByText('on my way')).toHaveLength(1)
+  })
+
+  it('a failed send takes the pending bubble away (the draft goes back to the box instead)', async () => {
+    const base = fetchMock.getMockImplementation()!
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) =>
+      String(url) === '/api/app/leagues/L1/chat' && init?.method === 'POST' ? json({ error: 'nope' }, 500) : base(url, init),
+    )
+    await openPanel()
+    fireEvent.change(screen.getByTestId('league-chat-textarea'), { target: { value: 'lost?' } })
+    fireEvent.click(screen.getByTestId('league-chat-send'))
+    await waitFor(() => expect(screen.getByText(/Message not sent/)).toBeTruthy())
+    expect(document.querySelector('[data-pending="true"]')).toBeNull()
+    expect((screen.getByTestId('league-chat-textarea') as HTMLTextAreaElement).value).toBe('lost?')
+  })
+})

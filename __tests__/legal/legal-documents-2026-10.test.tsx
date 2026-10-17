@@ -66,8 +66,10 @@ describe('2026-10 legal documents', () => {
     expect(sms.filter((id) => terms.has(id))).toEqual([])
   })
 
-  it('all five documents share one version stamp, which acceptances are recorded against', () => {
+  it('YouTube disclosures revise Privacy and Terms without redating the other owner documents', () => {
     const { terms, privacy, disclaimer, smsTerms, copyright } = LEGAL_LAST_UPDATED_BY_PAGE
-    expect(new Set([terms, privacy, disclaimer, smsTerms, copyright]).size).toBe(1)
+    expect(terms).toBe('October 11, 2026')
+    expect(privacy).toBe(terms)
+    expect(new Set([disclaimer, smsTerms, copyright])).toEqual(new Set(['October 6, 2026']))
   })
 })

@@ -6,6 +6,8 @@ import { DATA_TTLS, isFreshDate, triggerBackgroundRefresh } from '@/lib/data/sha
 import { runNewsImporter } from '@/lib/workers/news-importer'
 import { runSportsDataImporter } from '@/lib/workers/sports-data-importer'
 import { requestPlayerImportRefresh } from '@/lib/workers/sports-data-import-coordinator'
+import { COLLEGE_PAGED_SPORTS, SPORTS_PLAYER_TTL_MS } from '@/lib/workers/sports-player-record-freshness'
+import { collapseSamePersonRows, labelPlayerRows } from '@/lib/data/samePersonRows'
 
 /**
  * One player record by id.
@@ -100,7 +102,18 @@ export async function searchPlayers(query: string, sport: string) {
     triggerBackgroundRefresh(`players:${normalizedSport}`, () => runSportsDataImporter({ sports: [normalizedSport] }))
   }
 
-  return rows
+  /*
+   * 🛑 ONE ROW PER ATHLETE, AND EACH ONE SAYS WHO IT IS (2026-10-11). The table holds a player once per
+   * source and per id form the importer has ever used, and this returned every copy: "Josh Allen" gave
+   * the AI context four rows — the QB written that night and three stale copies, one a guard carrying a
+   * QB's stat line and ADP 12.6. Copies of one athlete collapse to his own-id row; a copy the importer
+   * stopped writing while it went on writing that name is dropped (not for paged college sports, whose
+   * older pages are current); real namesakes stay, each labelled "Name (POS, TEAM)".
+   */
+  const current = await collapseSamePersonRows(rows, normalizedSport, {
+    staleAfterMs: COLLEGE_PAGED_SPORTS.has(normalizedSport) ? undefined : SPORTS_PLAYER_TTL_MS,
+  })
+  return labelPlayerRows(current)
 }
 
 export async function getPlayersByTeam(team: string, sport: string) {

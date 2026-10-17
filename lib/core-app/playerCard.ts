@@ -3,7 +3,10 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { memberLeaguePlatformIdsFor } from '@/lib/league-access'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
-import { injuryNameVariants } from './injuryNames'
+import { resolveInjuryFacts } from '@/lib/injuries/injuryReadPort'
+import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
+import { newsRowMatchesPlayer } from '@/lib/legacy/playerNewsMatch'
+import { selectAuthoritativePlayerRow } from '@/lib/player-match/authoritativePlayerRow'
 import { isWatched } from '@/lib/waiver-wire/watchlist-service'
 import { followKeyFor, isFollowingPlayer } from '@/lib/follows/playerFollows'
 import { currentListings, teamForRoster, TRADE_BLOCK_ENTRY_SELECT, tradeBlockSupport } from '@/lib/trade-block/importedTradeBlock'
@@ -61,6 +64,12 @@ import {
 
 export type PlayerCardIdentity = {
   externalId: string
+  /**
+   * The feed that minted `externalId`. An id names a player only together with its source
+   * (SOCCER `1100` is api_football's Haaland AND rolling_insights' James Daly), so anything
+   * that looks the player up again by `externalId` — the highlights button — must send it.
+   */
+  source?: string | null
   sleeperId: string | null
   sport: string
   name: string
@@ -262,7 +271,7 @@ export type PlayerCardInjury = {
  * injury slot's SILENCE checkable.
  *
  * 🛑 THIS EXISTS BECAUSE "NO INJURY" AND "NOBODY LOOKED" LOOK IDENTICAL. The
- * section renders "No injury designation reported in the last 14 days" for the
+ * section renders "No current injury designation on any injury report" for the
  * overwhelming majority of players, and nothing on the card distinguishes a
  * healthy player from a dead feed. Both are silence. Measured 2026-09-08:
  * `api_sports` held 1,444 rows for rostered players and NOT ONE was fresher than
@@ -978,6 +987,9 @@ export async function loadTrades(sleeperId: string | null, scope: TradeScope): P
  */
 const INJURY_WINDOW_DAYS = 14
 
+/** The injury slot's empty state: no feed carries a designation for this player right now. */
+export const NO_CURRENT_DESIGNATION = 'No current injury designation on any injury report.'
+
 /**
  * Statuses that are NOT a designation.
  *
@@ -990,55 +1002,32 @@ const INJURY_WINDOW_DAYS = 14
 const NON_DESIGNATIONS = new Set(['active', 'na', 'healthy', ''])
 
 export async function loadInjury(
-  sleeperId: string | null,
   name: string,
   sport: string,
   team?: string | null,
+  position?: string | null,
 ): Promise<SectionState<PlayerCardInjury>> {
-  const cutoff = new Date(Date.now() - INJURY_WINDOW_DAYS * 86_400_000)
-
-  const rows = await prisma.sportsInjury
-    .findMany({
-      where: {
-        sport: { equals: sport, mode: 'insensitive' },
-        AND: [
-          {
-            /*
-             * ⚠ ID FIRST, NAME SECOND, AND THE NAME ARM IS LOAD-BEARING.
-             * Measured: only 51% of rows carry a `playerId` at all, and the
-             * biggest live source (espn) leaves it null — an id-only match
-             * reaches 6.7% of rostered players against 49.2% with the name.
-             * The name arm is safe HERE in a way it is not for `SportsNews`:
-             * 97.8% of this table's `playerName` values are real NFL players,
-             * against 31.4% for the news table's headline n-grams.
-             */
-            OR: [
-              ...(sleeperId ? [{ playerId: sleeperId }] : []),
-              { playerName: { in: injuryNameVariants(name), mode: 'insensitive' as const } },
-            ],
-          },
-          {
-            // `date` is the report date; fall back to `updatedAt` when absent.
-            OR: [{ date: { gte: cutoff } }, { AND: [{ date: null }, { updatedAt: { gte: cutoff } }] }],
-          },
-        ],
-      },
-      orderBy: [{ date: 'desc' }, { updatedAt: 'desc' }],
-      take: 5,
-      select: { status: true, type: true, description: true, date: true, updatedAt: true, source: true, team: true },
-    })
-    .catch(() => [])
-
-  const club = normalizeTeamAbbrev(team)
-  const hit = rows.find((r) => (!club || !r.team || normalizeTeamAbbrev(r.team) === club)
-    && r.status && !NON_DESIGNATIONS.has(r.status.trim().toLowerCase()))
-  if (!hit || !hit.status) {
-    return unavailable(
-      `No injury designation reported in the last ${INJURY_WINDOW_DAYS} days.`
-    )
+  /*
+   * 🛑 THE CANONICAL READ PORT, NOT A QUERY OF OUR OWN (2026-10-11). This read 14 days of rows
+   * with no `expiresAt`, newest REPORT first, and took the first one that was not "Active". So:
+   *   - a cleared player kept his old designation: ESPN marks him "Active" when he is cleared, that
+   *     row was skipped, and Rolling Insights' older "Questionable"/"Out" beneath it was shown;
+   *   - a healed player who simply dropped off the reports kept his last "Out" for two weeks;
+   *   - its `playerId = sleeperId` arm matched Rolling Insights' OWN numbers (RI 8394 is Rome
+   *     Odunze, Sleeper 8394 is Percy Butler) with no name check.
+   * The port reads only rows a feed still carries, binds the athlete by name verified with team and
+   * position, and takes his newest claim — and when that claim is "Active", there is no designation.
+   */
+  const res = await resolveInjuryFacts({ sport, players: [{ name, team: team ?? null, position: position ?? null }] }).catch(
+    () => null,
+  )
+  if (res && !res.coverage.sourceAvailable && res.coverage.reason) return unavailable(res.coverage.reason)
+  const hit = res?.byPlayer.get(normalizeMatchName(name)) ?? null
+  if (!hit || !hit.status || NON_DESIGNATIONS.has(hit.status.trim().toLowerCase())) {
+    return unavailable(NO_CURRENT_DESIGNATION)
   }
 
-  const reported = hit.date ?? hit.updatedAt ?? null
+  const reported = hit.reportedAt ?? null
   const status = hit.status.trim().toUpperCase()
 
   /*
@@ -1066,7 +1055,38 @@ export async function loadInjury(
 
 /* ── news ────────────────────────────────────────────────────────────────── */
 
-export async function loadNews(name: string, sport: string): Promise<SectionState<PlayerCardNews[]>> {
+export async function loadNews(
+  name: string,
+  sport: string,
+  team?: string | null,
+): Promise<SectionState<PlayerCardNews[]>> {
+  /*
+   * 🛑 A SHARED NAME NEEDS THE ROW TO NAME HIS CLUB (2026-10-12). This matched on the name alone, so
+   * the card for Panthers CB DeVonta Smith (Sleeper 13977) listed "Saquon Barkley, DeVonta Smith
+   * among 5 Eagles ruled out vs. Jags" — the Eagles receiver's news. Measured that day: 216 NFL names
+   * are held by 2+ Sleeper ids, and 503 news rows in 60 days sit on 146 of them. So the same split
+   * `playerFinder` draws for injuries and stats: a unique name IS the player and keeps every row; a
+   * shared name keeps only rows whose `team` ∪ `teams` includes his club (the scalar `team` can be the
+   * OPPONENT — see `newsRowMatchesPlayer`), and with no club to check against, nothing.
+   */
+  const nameSharers = await prisma.sportsPlayer
+    .findMany({
+      where: {
+        sport: { equals: sport, mode: 'insensitive' },
+        name: { equals: name, mode: 'insensitive' },
+        sleeperId: { not: null },
+      },
+      select: { sleeperId: true },
+      distinct: ['sleeperId'],
+      take: 2,
+    })
+    .catch(() => [] as Array<{ sleeperId: string | null }>)
+  const nameIsAmbiguous = nameSharers.length > 1
+  const club = normalizeTeamAbbrev(team)
+  if (nameIsAmbiguous && !club) {
+    return unavailable(`More than one player is named ${name}, and without his team we cannot tell whose news it is.`)
+  }
+
   const rows = await prisma.sportsNews
     .findMany({
       where: {
@@ -1074,17 +1094,37 @@ export async function loadNews(name: string, sport: string): Promise<SectionStat
         OR: [{ playerName: { equals: name, mode: 'insensitive' } }, { playerNames: { has: name } }],
       },
       orderBy: { publishedAt: 'desc' },
-      // Enough candidates for the merge below to have something to choose from.
-      take: MERGED_NEWS_COUNT,
-      select: { title: true, source: true, sourceUrl: true, publishedAt: true },
+      // Enough candidates for the merge below to have something to choose from — and, for a shared
+      // name, for the club filter to still leave some once the namesake's rows are dropped.
+      take: nameIsAmbiguous ? MERGED_NEWS_COUNT * 6 : MERGED_NEWS_COUNT,
+      select: {
+        title: true,
+        source: true,
+        sourceUrl: true,
+        publishedAt: true,
+        playerName: true,
+        playerNames: true,
+        team: true,
+        teams: true,
+      },
     })
     .catch(() => [])
 
-  if (rows.length === 0) return unavailable('No recent item mentions this player.')
+  const kept = nameIsAmbiguous
+    ? rows
+        .filter((r) => {
+          // A row that names no club makes no claim — which, for a shared name, proves nothing.
+          const rowTeams = [r.team, ...(r.teams ?? [])].filter((t) => Boolean(t?.trim()))
+          return rowTeams.length > 0 && newsRowMatchesPlayer(r, { name, team: club })
+        })
+        .slice(0, MERGED_NEWS_COUNT)
+    : rows
+
+  if (kept.length === 0) return unavailable('No recent item mentions this player.')
 
   return {
     available: true,
-    data: rows.map((r) => ({
+    data: kept.map((r) => ({
       title: r.title,
       source: r.source,
       url: r.sourceUrl,
@@ -1107,37 +1147,36 @@ export async function loadNews(name: string, sport: string): Promise<SectionStat
  * this supplements `loadNews` rather than replacing it.
  */
 export async function loadPlayerBlurbs(
-  sleeperId: string | null,
   name: string,
-  sport: string
+  sport: string,
+  team?: string | null,
 ): Promise<PlayerCardNews[]> {
   const cutoff = new Date(Date.now() - INJURY_WINDOW_DAYS * 86_400_000)
 
+  /*
+   * 🛑 BY NAME, AND NEVER ANOTHER CLUB'S NAMESAKE (2026-10-11). This also matched `playerId =
+   * sleeperId`, and `SportsInjury.playerId` is each provider's OWN number — Rolling Insights 8394 is
+   * Rome Odunze, Sleeper 8394 is Percy Butler — so one player's injury notes could land on another's
+   * card. A row naming a different club is a namesake (WR vs LB Justin Jefferson) and is skipped.
+   */
+  const club = normalizeTeamAbbrev(team)
   const rows = await prisma.sportsInjury
     .findMany({
       where: {
         sport: { equals: sport, mode: 'insensitive' },
-        AND: [
-          {
-            OR: [
-              ...(sleeperId ? [{ playerId: sleeperId }] : []),
-              { playerName: { equals: name, mode: 'insensitive' as const } },
-            ],
-          },
-          {
-            OR: [{ date: { gte: cutoff } }, { AND: [{ date: null }, { updatedAt: { gte: cutoff } }] }],
-          },
-        ],
+        playerName: { equals: name, mode: 'insensitive' },
+        OR: [{ date: { gte: cutoff } }, { AND: [{ date: null }, { updatedAt: { gte: cutoff } }] }],
       },
       orderBy: [{ date: 'desc' }, { updatedAt: 'desc' }],
       take: NEWS_COUNT * 4,
-      select: { description: true, status: true, date: true, updatedAt: true, source: true },
+      select: { description: true, status: true, date: true, updatedAt: true, source: true, team: true },
     })
     .catch(() => [])
 
   const seen = new Set<string>()
   const out: PlayerCardNews[] = []
   for (const r of rows) {
+    if (club && r.team && normalizeTeamAbbrev(r.team) !== club) continue
     const text = r.description?.trim()
     /*
      * ⚠ TWO THINGS THAT LOOK LIKE NEWS AND ARE NOT: a description that only
@@ -1338,7 +1377,7 @@ async function loadLeague(
   const league = await prisma.league
     .findUnique({
       where: { id: leagueId },
-      select: { id: true, name: true, platform: true, settings: true, leagueType: true, platformLeagueId: true },
+      select: { id: true, name: true, platform: true, sport: true, settings: true, leagueType: true, platformLeagueId: true },
     })
     .catch(() => null)
   if (!league) return null
@@ -1349,7 +1388,7 @@ async function loadLeague(
       // A foreign league's ids collide with real Sleeper ids: read raw, a stranger's holder, slot and
       // position-mates would be named as his. ESPN is translated (ESPN 12483 is Stafford; read raw
       // as Sleeper 12483 the card showed Jack Bech rostered and Stafford "NOT ROSTERED").
-      .then((rs) => sleeperReadableRosters(rs, league.platform))
+      .then((rs) => sleeperReadableRosters(rs, league.platform, league.sport))
       .catch(() => []),
     prisma.leagueTeam
       .findMany({
@@ -1366,7 +1405,7 @@ async function loadLeague(
    * is who actually holds whom.
    */
   /* A foreign league's rosters were stripped above, so "not found" there is "not read". */
-  let slot = isForeignIdSpace(league.platform) ? 'UNREADABLE' : 'NOT ROSTERED'
+  let slot = isForeignIdSpace(league.platform, league.sport) ? 'UNREADABLE' : 'NOT ROSTERED'
   let holder: (typeof rosters)[number] | null = null
   if (sleeperId) {
     for (const r of rosters) {
@@ -1590,7 +1629,24 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
   if (!sport) return null
   if (!req.externalId && !req.sleeperId) return null
 
-  const player = await prisma.sportsPlayer
+  const select = {
+    source: true,
+    fetchedAt: true,
+    externalId: true,
+    sleeperId: true,
+    sport: true,
+    name: true,
+    position: true,
+    team: true,
+    number: true,
+    imageUrl: true,
+    age: true,
+    height: true,
+    weight: true,
+    yearsExp: true,
+    college: true,
+  } as const
+  const anchor = await prisma.sportsPlayer
     .findFirst({
       where: {
         sport: { equals: sport, mode: 'insensitive' },
@@ -1598,30 +1654,39 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
           ? { externalId: req.externalId }
           : { sleeperId: { equals: req.sleeperId!, mode: 'insensitive' } }),
       },
-      // Newest row wins: the same player arrives from several providers.
       orderBy: [{ fetchedAt: 'desc' }],
-      select: {
-        externalId: true,
-        sleeperId: true,
-        sport: true,
-        name: true,
-        position: true,
-        team: true,
-        number: true,
-        imageUrl: true,
-        age: true,
-        height: true,
-        weight: true,
-        yearsExp: true,
-        college: true,
-      },
+      select,
     })
     .catch(() => null)
 
-  if (!player) return null
+  if (!anchor) return null
+
+  /*
+   * 🛑 THE SLEEPER ROW SPEAKS FOR A SLEEPER ID, NOT THE NEWEST ROW (2026-10-12). One athlete has a
+   * row per ingest source, and the non-Sleeper rows took the id by a NAME match — so "newest row
+   * wins" meant whichever feed ran last. On production that day Sleeper 5864 is CB Byron Murphy (MIN)
+   * on the Sleeper row and DT Byron Murphy (SEA) on a fresher TheSportsDB row, and the card printed
+   * the Seahawks tackle. `selectAuthoritativePlayerRow` takes the Sleeper row and fills only its gaps
+   * from rows that agree with it. A row asked for by its OWN externalId that contradicts the Sleeper
+   * row is a different man and is shown as asked, never swapped for a namesake.
+   */
+  const siblings = anchor.sleeperId
+    ? await prisma.sportsPlayer
+        .findMany({
+          where: { sport: { equals: sport, mode: 'insensitive' }, sleeperId: { equals: anchor.sleeperId, mode: 'insensitive' } },
+          select,
+        })
+        .catch(() => [] as Array<typeof anchor>)
+    : []
+  const picked = selectAuthoritativePlayerRow([
+    anchor,
+    ...siblings.filter((s) => !(s.source === anchor.source && s.externalId === anchor.externalId)),
+  ])
+  const player = !picked || (req.externalId && picked.ignored.includes(anchor)) ? anchor : picked.row
 
   const identity: PlayerCardIdentity = {
     externalId: player.externalId,
+    source: player.source,
     sleeperId: player.sleeperId,
     sport: player.sport,
     name: player.name,
@@ -1660,9 +1725,9 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
     player.sleeperId && projWeek
       ? lookupProjections([player.sleeperId], projWeek, null, player.sport).catch(() => new Map())
       : Promise.resolve(new Map()),
-    loadNews(player.name, player.sport),
-    loadPlayerBlurbs(player.sleeperId, player.name, player.sport),
-    loadInjury(player.sleeperId, player.name, player.sport, player.team),
+    loadNews(player.name, player.sport, player.team),
+    loadPlayerBlurbs(player.name, player.sport, player.team),
+    loadInjury(player.name, player.sport, player.team, player.position),
     /*
      * ⚠ NOT INSIDE `loadInjury`. The stamp annotates the injury slot in BOTH
      * states, including the unavailable one — and `SectionState`'s unavailable

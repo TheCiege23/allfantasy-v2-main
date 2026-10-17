@@ -18,7 +18,7 @@ export function rivalryNarrative(data: WeeklyBlueprint, es = false, firstPerson 
     : `In imported meetings before this period, ${firstPerson ? 'I' : 'you'} beat ${r.opponent} ${r.winningStreak} straight times.${r.final ? '' : ` Let’s make it ${r.winningStreak + 1}!`}`) + record
   if (r.losingStreak > 0 && !r.final) return es
     ? `En el historial importado, ${r.opponent} ganó los últimos ${r.losingStreak} encuentros anteriores. Esta semana es una oportunidad para cambiar la historia.${record}`
-    : `In imported history, ${r.opponent} won the last ${r.losingStreak} meetings before this period. This week is a chance to change the story.${record}`
+    : `In imported history, ${r.opponent} won the last ${r.losingStreak} ${r.losingStreak === 1 ? 'meeting' : 'meetings'} before this period. This week is a chance to change the story.${record}`
   return es ? `Historial importado contra ${r.opponent}: ${r.wins}-${r.losses}-${r.ties} (victorias-derrotas-empates).`
     : `Imported series against ${r.opponent}: ${r.wins}-${r.losses}-${r.ties} (wins-losses-ties).`
 }
@@ -114,6 +114,7 @@ export function drawWeeklyShareCard(canvas: HTMLCanvasElement, data: WeeklyBluep
   if (scenario) {
     y = 908; wrap(`${es ? 'Si gano' : 'If I win'}: ${formatPct1(scenario.ifWin)}%`,'bold 34px sans-serif','#66e5c1',42,1,92,420)
     y = 908; wrap(`${es ? 'Si pierdo' : 'If I lose'}: ${formatPct1(scenario.ifLose)}%`,'bold 34px sans-serif','#f6bf87',42,1,552,420)
+    for (const [x,value,color] of [[92,scenario.ifWin,'#66e5c1'],[552,scenario.ifLose,'#f6bf87']] as const) { ctx.fillStyle='#30475c';ctx.fillRect(x,930,420,12);ctx.fillStyle=color;ctx.fillRect(x,930,420*value/100,12) }
   } else {
     y = 900; wrap(es ? 'Compara tus opciones y comprueba los plazos de tu liga.' : 'Compare your options and check your league’s deadlines.','30px sans-serif','#d8e2f1',38,2,92,880)
   }

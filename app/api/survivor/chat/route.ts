@@ -1,3 +1,4 @@
+import { canSeeSurvivorChannel, resolveSurvivorAccessContext } from '@/lib/survivor/survivorAccessControl'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -32,9 +33,8 @@ export async function GET(req: NextRequest) {
   const gate = await assertLeagueMember(channel.leagueId, userId)
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
 
-  if (!channel.memberUserIds.includes(userId) && !channel.readOnlyUserIds.includes(userId)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+  const access = await resolveSurvivorAccessContext(channel.leagueId, userId)
+  if (!access?.isLeagueMember || !canSeeSurvivorChannel(access, channel)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const where: {
     channelId: string
@@ -109,6 +109,9 @@ export async function POST(req: NextRequest) {
     if (!msg) return NextResponse.json({ error: 'Not found' }, { status: 404 })
     const comm = await assertLeagueCommissioner(msg.leagueId, userId)
     if (!comm.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    const channel = await prisma.survivorChatChannel.findFirst({ where: { id: msg.channelId, leagueId: msg.leagueId } })
+    const access = await resolveSurvivorAccessContext(msg.leagueId, userId)
+    if (!channel || !access?.isLeagueMember || !canSeeSurvivorChannel(access, channel)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     const updated = await prisma.survivorChatMessage.update({
       where: { id: messageId },
       data: { isPinned: true, pinnedAt: new Date(), pinnedBy: userId },
@@ -143,6 +146,9 @@ export async function POST(req: NextRequest) {
   const gate = await assertLeagueMember(channel.leagueId, userId)
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
 
+  const access = await resolveSurvivorAccessContext(channel.leagueId, userId)
+  if (!access?.isLeagueMember || !canSeeSurvivorChannel(access, channel)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
   if (contentType === 'host_announcement') {
     const comm = await assertLeagueCommissioner(channel.leagueId, userId)
     if (!comm.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
@@ -150,6 +156,10 @@ export async function POST(req: NextRequest) {
 
   const perm = await canSendToChannel(channel.leagueId, userId, channelId)
   if (!perm.allowed) return NextResponse.json({ error: perm.reason ?? 'forbidden' }, { status: 403 })
+
+  if (/^(?:@chimmy\s+)?(?:i\s+)?vote\b/i.test(content.trim())) {
+    return NextResponse.json({ error: 'Send votes privately in your @Chimmy room.' }, { status: 422 })
+  }
 
   const senderName = await getUserDisplayName(userId)
   const created = await prisma.survivorChatMessage.create({
@@ -204,6 +214,9 @@ export async function PATCH(req: NextRequest) {
   const msg = await prisma.survivorChatMessage.findFirst({ where: { id: messageId } })
   if (!msg) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
+  const channel = await prisma.survivorChatChannel.findFirst({ where: { id: msg.channelId, leagueId: msg.leagueId } })
+  const access = await resolveSurvivorAccessContext(msg.leagueId, userId)
+  if (!channel || !access?.isLeagueMember || !canSeeSurvivorChannel(access, channel)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const comm = await assertLeagueCommissioner(msg.leagueId, userId)
   if (msg.senderUserId !== userId && !comm.ok) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
@@ -234,6 +247,9 @@ export async function DELETE(req: NextRequest) {
   const msg = await prisma.survivorChatMessage.findFirst({ where: { id: messageId } })
   if (!msg) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
+  const channel = await prisma.survivorChatChannel.findFirst({ where: { id: msg.channelId, leagueId: msg.leagueId } })
+  const access = await resolveSurvivorAccessContext(msg.leagueId, userId)
+  if (!channel || !access?.isLeagueMember || !canSeeSurvivorChannel(access, channel)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const comm = await assertLeagueCommissioner(msg.leagueId, userId)
   if (msg.senderUserId !== userId && !comm.ok) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })

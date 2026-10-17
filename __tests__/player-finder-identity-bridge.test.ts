@@ -154,3 +154,18 @@ describe('applyBridge / bridgeCoverageReadable', () => {
     expect(bridgeCoverageReadable(0, 0)).toBe(false)
   })
 })
+
+describe('applyBridgeKeepingSlots — the roster shape a lineup reader needs', () => {
+  it('keeps empty slots and unbridged players IN PLACE, so starter slot order survives', async () => {
+    const { applyBridgeKeepingSlots, isUnbridgedId } = await import('@/lib/core-app/bridgedRosterIds')
+    const out = applyBridgeKeepingSlots(
+      { starters: ['11', '0', '22', '33'], players: ['11', '22', '33'], settings: { keep: true } },
+      new Map([['11', 's11'], ['33', 's33']]),
+    )
+    expect(out.starters).toEqual(['s11', '0', 'unbridged:22', 's33'])
+    expect(out.players).toEqual(['s11', 'unbridged:22', 's33'])
+    expect(out.settings).toEqual({ keep: true })
+    expect(isUnbridgedId('unbridged:22')).toBe(true)
+    expect(isUnbridgedId('22')).toBe(false)
+  })
+})

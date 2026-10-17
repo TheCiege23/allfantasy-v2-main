@@ -7,16 +7,34 @@ export const UNIVERSAL_CREATE_TEAM_COUNTS: readonly number[] = Array.from(
   (_, index) => index + 2,
 )
 
-export const CREATE_LEAGUE_TIMEZONES: readonly string[] = [
-  'America/New_York',
-  'America/Chicago',
-  'America/Denver',
-  'America/Los_Angeles',
-  'America/Phoenix',
-  'America/Anchorage',
-  'Pacific/Honolulu',
-  'UTC',
-]
+/**
+ * The timezones the create wizard lists, US first, each with a name a manager recognises —
+ * "Eastern Time (ET)", not "America/New_York". The value sent to the server is always the IANA
+ * id, which `validateCreatePayload` checks. A device zone that is not here is still offered
+ * (see `timezoneOptions`).
+ */
+export const CREATE_LEAGUE_TIMEZONE_LABELS: Readonly<Record<string, string>> = {
+  'America/New_York': 'Eastern Time (ET)',
+  'America/Chicago': 'Central Time (CT)',
+  'America/Denver': 'Mountain Time (MT)',
+  'America/Los_Angeles': 'Pacific Time (PT)',
+  'America/Phoenix': 'Arizona Time (MT, no daylight saving)',
+  'America/Anchorage': 'Alaska Time (AKT)',
+  'Pacific/Honolulu': 'Hawaii Time (HT)',
+  'America/Halifax': 'Atlantic Time (AT)',
+  'America/St_Johns': 'Newfoundland Time (NT)',
+  UTC: 'Coordinated Universal Time (UTC)',
+  'Europe/London': 'UK Time (GMT / BST)',
+  'Europe/Paris': 'Central European Time (CET)',
+  'Europe/Athens': 'Eastern European Time (EET)',
+  'America/Mexico_City': 'Mexico City Time (CST)',
+  'America/Sao_Paulo': 'Brasília Time (BRT)',
+  'Asia/Kolkata': 'India Standard Time (IST)',
+  'Asia/Tokyo': 'Japan Standard Time (JST)',
+  'Australia/Sydney': 'Australian Eastern Time (AET)',
+}
+
+export const CREATE_LEAGUE_TIMEZONES: readonly string[] = Object.keys(CREATE_LEAGUE_TIMEZONE_LABELS)
 
 export type ImportProviderState = 'available' | 'limited_beta' | 'coming_soon'
 
@@ -61,7 +79,7 @@ export type PremiumAdvancedCreateKey = (typeof PREMIUM_ADVANCED_CREATE_KEYS)[num
 export type PremiumAdvancedCreateState = Partial<Record<PremiumAdvancedCreateKey, boolean>>
 
 export const PREMIUM_ADVANCED_CREATE_LABELS: Record<PremiumAdvancedCreateKey, string> = {
-  aiCommissionerTools: 'AI Commissioner tools',
+  aiCommissionerTools: 'Commissioner Intelligence tools',
   tradeApprovalAutomation: 'Trade approval automation',
   leagueHealthMonitoring: 'League health monitoring',
 }
@@ -85,8 +103,8 @@ export function validateSimpleCreateState(state: CreateLeagueV2State): string[] 
   if (!isUniversalTeamCount(state.teamCount)) issues.push('Team count must be from 2 through 32.')
   if (state.privacy !== 'public' && state.privacy !== 'private') issues.push('Choose public or private.')
   if (!state.draftType) issues.push('Choose a draft type.')
-  if (!state.draftDate.trim()) issues.push('Choose a draft date.')
-  if (!state.draftTime.trim()) issues.push('Choose a draft time.')
+  if (state.draftScheduleLater !== true && !state.draftDate.trim()) issues.push('Choose a draft date.')
+  if (state.draftScheduleLater !== true && !state.draftTime.trim()) issues.push('Choose a draft time.')
   if (!state.timezone.trim()) issues.push('Choose a timezone.')
   if (!state.scoringPresetId.trim()) issues.push('Choose a scoring preset.')
   return issues

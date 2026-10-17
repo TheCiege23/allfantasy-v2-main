@@ -7,7 +7,6 @@ import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db';
 import {
   calculateDynastyScore,
   findPlayerTier,
-  ALL_TIERED_PLAYERS,
   AssetTier,
 } from './dynasty-tiers';
 import { resolveNflAges, ageOf } from './player-age';
@@ -266,7 +265,7 @@ export async function fetchRealWorldTeamContext(
 For each team:
 1. Current situation (rebuilding/contending/middle)
 2. Coach style (offense-first/defense-first/balanced)
-3. 2025 outlook
+3. Outlook for the current ${sport.toUpperCase()} season and the next
 
 Return JSON array:
 [{
@@ -344,7 +343,7 @@ export async function getUserSimilarPastTrades(
     const givenPositions = (trade.playersGiven as Array<{ position: string }>)?.map(p => p.position) || [];
     const receivedPositions = (trade.playersReceived as Array<{ position: string }>)?.map(p => p.position) || [];
     const currentPositions = playersInTrade.map(p => {
-      const tiered = ALL_TIERED_PLAYERS.find(tp => tp.name.toLowerCase() === p.toLowerCase());
+      const tiered = findPlayerTier(p);
       return tiered?.position || '';
     });
     const hasMatchingPosition = currentPositions.some(pos => 
@@ -482,7 +481,8 @@ export async function getManagerProfiles(
         /* 🛑 Real ages, hoisted above the loop — the tier list's are a 2024 snapshot, so a
          * 27-year-old reads as 25 and is counted as "youth". See lib/player-age.ts. */
         const historyAges = await resolveNflAges(
-          recentTrades.flatMap(t => ((t.playersReceived as Array<{ name: string }>) || []).map(p => p.name)),
+          recentTrades.flatMap(t => ((t.playersReceived as Array<{ name: string; position?: string }>) || [])
+            .map(p => ({ name: p.name, position: p.position }))),
         );
 
         for (const trade of recentTrades) {
@@ -490,8 +490,8 @@ export async function getManagerProfiles(
           const given = (trade.playersGiven as Array<{ name: string; position: string }>) || [];
 
           for (const p of received) {
-            const tiered = ALL_TIERED_PLAYERS.find(tp => tp.name.toLowerCase() === p.name.toLowerCase());
-            const pAge = ageOf(historyAges, p.name) ?? tiered?.age;
+            const tiered = findPlayerTier(p.name, p.position);
+            const pAge = ageOf(historyAges, { name: p.name, position: p.position }) ?? tiered?.age;
             if (pAge && pAge < 26) youthScore++;
             positionCounts.set(p.position, (positionCounts.get(p.position) || 0) + 1);
           }
@@ -561,7 +561,7 @@ export async function buildComprehensiveTradeContext(
   const allTeams = new Set<string>();
   const allPlayersWithTeams = [...userParty.players, ...otherParties.flatMap(op => op.players)];
   for (const player of allPlayersWithTeams) {
-    const fcPlayer = findPlayerByName(fcValues, player.name);
+    const fcPlayer = findPlayerByName(fcValues, player.name, { position: player.position });
     if (fcPlayer?.player?.maybeTeam) {
       allTeams.add(fcPlayer.player.maybeTeam);
     }
@@ -580,18 +580,19 @@ export async function buildComprehensiveTradeContext(
     getUserSimilarPastTrades(sleeperUsername, allPlayerNames),
     getManagerProfiles(leagueId, otherParties.map(op => op.managerId)),
     getComprehensiveLearningContext(),
-    resolveNflAges(allPlayerNames),
+    // Sleeper ids (the route builds parties from them) bind the age to ONE player; see player-age.ts.
+    resolveNflAges(allPlayersWithTeams.map(p => ({ name: p.name, position: p.position, sleeperId: p.id }))),
   ]);
 
-  const enrichPlayer = (player: { name: string; position: string }) => {
-    const fcPlayer = findPlayerByName(fcValues, player.name);
-    const tiered = findPlayerTier(player.name);
+  const enrichPlayer = (player: { id?: string; name: string; position: string }) => {
+    const fcPlayer = findPlayerByName(fcValues, player.name, { position: player.position });
+    const tiered = findPlayerTier(player.name, player.position);
     /*
      * 🛑 THE TIER LIST'S `age` IS A 2024 SNAPSHOT — 0 of 64 correct, median +2 years. It feeds
      * the whole dynasty adjustment, so it is preferred FROM THE DATABASE and only falls back to
      * the hardcoded value when we genuinely hold no age. See lib/player-age.ts.
      */
-    const age = ageOf(realAges, player.name) ?? tiered?.age;
+    const age = ageOf(realAges, { name: player.name, position: player.position, sleeperId: player.id }) ?? tiered?.age;
     const baseValue = fcPlayer?.value || 0;
     const dynastyResult = calculateDynastyScore(
       baseValue,
@@ -654,7 +655,8 @@ export async function buildComprehensiveTradeContext(
 
       /* Real ages for the whole history, resolved once — see the note at the other youth count. */
       const tradeAges = await resolveNflAges(
-        allTrades.flatMap(t => ((t.playersReceived as Array<{ name: string }>) || []).map(p => p.name)),
+        allTrades.flatMap(t => ((t.playersReceived as Array<{ name: string; position?: string }>) || [])
+          .map(p => ({ name: p.name, position: p.position }))),
       );
 
       for (const trade of allTrades) {
@@ -667,8 +669,8 @@ export async function buildComprehensiveTradeContext(
         const picksGiven = (trade.picksGiven as Array<unknown>) || [];
 
         for (const p of received) {
-          const tiered = ALL_TIERED_PLAYERS.find(tp => tp.name.toLowerCase() === p.name.toLowerCase());
-          const pAge = ageOf(tradeAges, p.name) ?? tiered?.age;
+          const tiered = findPlayerTier(p.name, p.position);
+          const pAge = ageOf(tradeAges, { name: p.name, position: p.position }) ?? tiered?.age;
           if (pAge && pAge < 26) youthScore++;
           positionStats.set(p.position, (positionStats.get(p.position) || 0) + 1);
         }

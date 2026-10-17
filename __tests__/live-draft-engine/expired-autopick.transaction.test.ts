@@ -286,6 +286,8 @@ vi.mock('@/lib/live-draft-engine/DraftSessionService', async (importOriginal) =>
 
 vi.mock('@/lib/player-trend/signal-integration', () => ({
   recordTrendSignalByPlayerId: (...args: unknown[]) => recordTrendSignalMock(...args),
+  // The name fallback (no playerId) binds through this; mirrors the old player.findFirst -> null.
+  resolveTrendPlayerIds: async (lookups: unknown[]) => lookups.map(() => null),
 }))
 
 vi.mock('@/lib/salary-cap/SalaryCapLeagueConfig', () => ({

@@ -68,3 +68,21 @@ it('shows negative historical cap space and explains mismatched coverage',()=>{
  expect(screen.getByText('Incomplete contract coverage')).toBeInTheDocument();
  expect(screen.getByRole('button',{name:'Historical cap and contract coverage'})).toBeInTheDocument();
 });
+
+it('shows results-only teams in rank comparison without requiring draft-day components',()=>{
+ const observed={...detail,resultsReport:{state:'ready',provisional:false,coverage:'Final weeks',teams:[{rosterId:'a',name:'Results-only team',rank:1,points:10,starterPoints:10,starts:1,weeks:[1],coveredPicks:1}]}} as ArchiveDetail;
+ render(<DraftPhase4 detail={observed}/>);
+ const region=screen.getByRole('region',{name:'Draft rank comparison'});
+ expect(region).toHaveTextContent('Results-only team');expect(region).toHaveTextContent('1');
+ expect(screen.getByText(/Team components require complete draft-time/)).toBeInTheDocument();
+});
+it('shows explanatory empty states and does not assign a rank to partial results',()=>{
+ const observed={...detail,resultsReport:{state:'partial',provisional:true,coverage:'Incomplete',teams:[{rosterId:'a',name:'Partial team',rank:1,points:10,starterPoints:10,starts:1,weeks:[1],coveredPicks:1}]}} as ArchiveDetail;
+ render(<DraftPhase4 detail={observed}/>);
+ const region=screen.getByRole('region',{name:'Draft rank comparison'});
+ expect(region).toHaveTextContent('Partial team');expect(region).not.toHaveTextContent('1');
+});
+it('explains missing ranking evidence in Spanish',()=>{
+ language.language='es';render(<DraftPhase4 detail={detail}/>);
+ expect(screen.getByText('No hay evidencia verificada de puestos por equipo para este draft.')).toBeInTheDocument();
+});

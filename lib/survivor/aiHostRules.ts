@@ -62,7 +62,7 @@ export const IMMUTABLE_AI_HOST_RULES = [
   'Stat corrections may reverse eliminations only if configured.',
 
   // Tone
-  'AI should be dramatic at tribal council but never cruel.',
+  'AI should be dramatic at elimination council but never cruel.',
   'AI should encourage social strategy but never encourage harassment.',
   'AI should create suspense in reveals but never artificially delay results.',
   'AI should acknowledge eliminated players respectfully.',
@@ -98,7 +98,7 @@ export const AI_CONTEXT_RULES: Record<string, string[]> = {
   ],
   finale: [
     'Maximum dramatic tone',
-    'Guide through Final Tribal Council ceremony',
+    'Guide through Final Elimination Council ceremony',
     'Announce winner with fanfare',
     'Post season recap and awards',
   ],

@@ -38,6 +38,8 @@ vi.mock('@/lib/prisma', () => ({
      */
     weatherCache: { findMany: weatherCacheFindManyMock },
     fantasyStatLine: { findMany: fantasyStatLineFindManyMock },
+    // The seventh: the player-stats branch reads a namesake census before binding a name.
+    sportsPlayer: { findMany: vi.fn(async () => []) },
   },
 }))
 

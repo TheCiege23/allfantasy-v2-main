@@ -33,10 +33,10 @@
  * Decision OS F2.2/F2.3 read-only world layers (`resolveScheduleContext`,
  * `resolveInjuryContext`) rather than the raw `InjuryReportRecord.playerId`
  * join `userOsContext.ts` uses — that join keys on an API-Sports id space
- * documented (`ADR_F2_3_INJURY_STATUS.md`) to NOT match roster player ids;
- * the Decision OS layer already exists specifically to route around that
- * mismatch via `SportsPlayer.status`, keyed by either `externalId` or
- * `sleeperId`.
+ * documented (`ADR_F2_3_INJURY_STATUS.md`) to NOT match roster player ids.
+ * `resolveInjuryContext` resolves a Sleeper id to the player's identity and
+ * asks the injury FEED for his current designation (2026-10-11) — it no
+ * longer reads `SportsPlayer.status`, which is a roster status.
  */
 import { prisma } from '@/lib/prisma'
 import { OVEREXPOSED_THRESHOLD } from './exposureThreshold'
@@ -58,6 +58,7 @@ import {
   type LeagueWaiverWorldState,
   type UserRosterWaiverInfo,
 } from './waiverWorldState'
+import { isOutDesignation, isRuledOut } from '@/lib/core-app/injuryStatus'
 
 /**
  * Week/bye schedule model (scheduleBye.ts) — weekly sports. Slice 9 adds
@@ -116,8 +117,13 @@ const DESIGNATION_TO_INJURY_STATUS: Record<string, InjuryStatus> = {
   day_to_day: 'day_to_day',
   dtd: 'day_to_day',
   sus: 'suspended',
+  susp: 'suspended',
   suspended: 'suspended',
   suspension: 'suspended',
+  // ESPN spellings `isRuledOut` does not read as absences (2026-10-12: 3 and 5 rows). Reserve/Retired
+  // is a player who will not play again; "injury reserve" is ESPN's misspelling of the IR list.
+  'reserve-ret': 'ir',
+  'injury reserve': 'ir',
 }
 
 /**
@@ -125,10 +131,22 @@ const DESIGNATION_TO_INJURY_STATUS: Record<string, InjuryStatus> = {
  * designation out of the prose — "no designation stated", NOT healthy (see
  * `parseInjuryDesignation`). The row itself is still real news, so it surfaces
  * as 'unknown' rather than being hidden or coerced.
+ *
+ * ⚠ THE FEED IS NOT ONLY RI'S VOCABULARY. The read port also serves ESPN rows, and the exact-key
+ * table above turned every baseball/hockey list placement into 'unknown' — no urgency, no
+ * injured-starter alert. Fresh rows measured 2026-10-12: "60-day IL" 171, "15-day IL" 43,
+ * "10-day IL" 27, "7-day IL" 4. Anything the table misses goes through the shared absence rule
+ * (`isRuledOut`: IR/IL/I.L./PUP/NFI/Injured Reserve/suspension): a game-day Out is 'out', every
+ * season-scale placement is 'ir'.
  */
 function designationToInjuryStatus(status: string | null): InjuryStatus {
   if (status == null) return 'unknown'
-  return DESIGNATION_TO_INJURY_STATUS[status.trim().toLowerCase()] ?? 'unknown'
+  const exact = DESIGNATION_TO_INJURY_STATUS[status.trim().toLowerCase()]
+  if (exact) return exact
+  if (!isRuledOut(status)) return 'unknown'
+  if (isOutDesignation(status)) return 'out'
+  // The same suspension words `isRuledOut` accepts ("Suspended (4 games)", "Susp.").
+  return /\bsus(p|pen[a-z]*)?\b/i.test(status) ? 'suspended' : 'ir'
 }
 
 /**
@@ -147,7 +165,10 @@ function designationToInjuryStatus(status: string | null): InjuryStatus {
  */
 const FALLBACK_GENUINE_INJURY_TOKENS: Record<string, InjuryStatus> = {
   ir: 'ir',
+  // Sleeper's own season-scale roster absence, the one roster status `resolveInjuryContext` passes on.
+  'injured reserve': 'ir',
   pup: 'ir',
+  nfi: 'ir',
   o: 'out',
   out: 'out',
   sus: 'suspended',
@@ -346,6 +367,11 @@ export async function assembleCrossLeaguePlayerPortfolio(args: {
   sport?: string
   provider?: LeagueHubProvider
   season?: number
+  /**
+   * A per-league keep rule, applied with the filters above. The injured-starter sweep uses it to
+   * read every sport but only the leagues being played now (lib/chimmy-alerts/gameDayScope.ts).
+   */
+  leagueFilter?: (league: { sport: string; season: number; platform: string; lastSyncedAt: Date | null }) => boolean
   requestTime?: Date
 }): Promise<CrossLeaguePlayerPortfolioResult> {
   const emptyInjuryPort = { ambiguousPlayers: [], feedStale: true, newestFetchedAt: null }
@@ -389,6 +415,7 @@ export async function assembleCrossLeaguePlayerPortfolio(args: {
     if (args.sport && r.league.sport !== args.sport) return false
     if (args.provider && toProvider(r.league.platform) !== args.provider) return false
     if (args.season && r.league.season !== args.season) return false
+    if (args.leagueFilter && !args.leagueFilter(r.league)) return false
     return true
   })
 
@@ -441,10 +468,16 @@ export async function assembleCrossLeaguePlayerPortfolio(args: {
   })
 
   // Part 6 — injury enrichment. Batched by sport, since resolveInjuryContext is sport-scoped.
+  /*
+   * 🛑 ONLY IDS IN THE SPACE THE READER ASKS (2026-10-11). `resolveInjuryContext` looks an id up as a
+   * Sleeper id first, and `row.playerId` is the PLATFORM's own id: an ESPN, Yahoo or MFL league's
+   * 4–5 digit number reached it untranslated and named whoever holds that number on Sleeper (ESPN
+   * 12483 is Matthew Stafford). Those leagues' rows are left to the name-verified read port below.
+   */
   const idsBySport = new Map<string, Set<string>>()
   for (const acc of byCanonicalId.values()) {
     const set = idsBySport.get(acc.sport) ?? new Set<string>()
-    for (const row of acc.rows) set.add(row.playerId)
+    for (const row of acc.rows) if (row.provider === 'sleeper' || row.provider === 'allfantasy') set.add(row.playerId)
     idsBySport.set(acc.sport, set)
   }
   const injuryBySport = new Map<string, Map<string, InjuryContext>>()
@@ -456,8 +489,8 @@ export async function assembleCrossLeaguePlayerPortfolio(args: {
   }
 
   // Slice 18 — the canonical injury read port is the PRIMARY injury source.
-  // `SportsPlayerRecord.injuryStatus` (what `resolveInjuryContext` reads) was
-  // measured in prod to be ~92% roster designation: the entire NFL carried ONE
+  // `SportsPlayerRecord.injuryStatus` (what `resolveInjuryContext` read until
+  // 2026-10-11) was measured in prod to be ~92% roster designation: the entire NFL carried ONE
   // 'Out' while Rolling Insights reported 311 live injuries, so urgency was
   // effectively blind. Position/team are passed for disambiguation only —
   // ambiguous name collisions are refused by the port and reported on the
@@ -630,7 +663,12 @@ export async function assembleCrossLeaguePlayerPortfolio(args: {
     // an ESPN id in another) — try each real row's id in order until one resolves, rather than only
     // ever checking the first row's id.
     const injuryLookup = injuryBySport.get(acc.sport)
-    const injuryContext = injuryLookup ? acc.rows.map((r) => injuryLookup.get(r.playerId)).find((ctx): ctx is InjuryContext => Boolean(ctx?.resolved)) : undefined
+    const injuryContext = injuryLookup
+      ? acc.rows
+          .filter((r) => r.provider === 'sleeper' || r.provider === 'allfantasy')
+          .map((r) => injuryLookup.get(r.playerId))
+          .find((ctx): ctx is InjuryContext => Boolean(ctx?.resolved))
+      : undefined
     const scheduleResult = scheduleBySport.get(acc.sport)
     const teamSchedule = acc.professionalTeam ? scheduleResult?.byTeam.get(acc.professionalTeam) : undefined
     const nextGameResult = nextGameBySport.get(acc.sport)

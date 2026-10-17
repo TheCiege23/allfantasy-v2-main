@@ -836,7 +836,7 @@ export function DraftRoomPageClient({
 
   const getAssistantRoomContext = useCallback(
     (player: PlayerEntry): DraftAssistantRoomContext | null => {
-      const snap = getAssistantFeedForPlayer(assistantFeedByName, player.name)
+      const snap = getAssistantFeedForPlayer(assistantFeedByName, player.name, player.team)
       const digestRaw = draftAssistantContext?.sportsFeed?.digest?.trim()
       const digestPreview =
         digestRaw && digestRaw.length > 280 ? `${digestRaw.slice(0, 277)}…` : digestRaw ?? null
@@ -2024,12 +2024,10 @@ export function DraftRoomPageClient({
         }
       }
 
-      // Phase 3b — perf: render the draft room as soon as the CRITICAL fetches
-      // resolve. AI-bound fetches and the draft pool are fire-and-forget — panels
-      // branch on `null` / poolFetching until data arrives, then re-render.
-      // fetchDraftPool was moved out of this group because a cold pool build can
-      // take 60–90 s (ADP importer + 30K row fetch). The player panel shows a
-      // skeleton via poolFetching state while the pool loads independently.
+      // Start the pool independently before waiting on queue/settings/chat.
+      // A slow ancillary request must not leave an already-cached player pool
+      // showing its loading skeleton indefinitely.
+      void fetchDraftPool()
       await Promise.allSettled([
         fetchQueue(),
         fetchDraftSettings(),
@@ -2043,7 +2041,6 @@ export function DraftRoomPageClient({
 
       // Deferred — let panels populate after the room is interactive.
       void fetchDraftAssistantContext()
-      void fetchDraftPool()
     }
 
     void bootstrapDraftRoom()
@@ -3143,7 +3140,7 @@ export function DraftRoomPageClient({
             p.name.trim().toLowerCase() === rec.player.name.trim().toLowerCase() &&
             p.position.trim().toLowerCase() === rec.player.position.trim().toLowerCase(),
         )
-        const feedSnap = getAssistantFeedForPlayer(assistantFeedByName, rec.player.name)
+        const feedSnap = getAssistantFeedForPlayer(assistantFeedByName, rec.player.name, poolRow?.team)
         const playerContext = poolRow
           ? buildDraftChatPlayerContextFromDisplay(poolRow, {
               headlineSnippet: feedSnap?.headlineTitle ?? null,
@@ -3182,7 +3179,7 @@ export function DraftRoomPageClient({
             p.name.trim().toLowerCase() === w.name.trim().toLowerCase() &&
             p.position.trim().toLowerCase() === w.position.trim().toLowerCase(),
         )
-        const feedSnap = getAssistantFeedForPlayer(assistantFeedByName, w.name)
+        const feedSnap = getAssistantFeedForPlayer(assistantFeedByName, w.name, poolRow?.team)
         const playerContext = poolRow
           ? buildDraftChatPlayerContextFromDisplay(poolRow, {
               headlineSnippet: feedSnap?.headlineTitle ?? null,
@@ -3210,7 +3207,7 @@ export function DraftRoomPageClient({
             players.find(
               (p) => normalizeDraftedPlayerName(p.name) === normalizeDraftedPlayerName(top.playerName),
             ) ?? null
-          const feedSnap = poolRow ? getAssistantFeedForPlayer(assistantFeedByName, poolRow.name) : null
+          const feedSnap = poolRow ? getAssistantFeedForPlayer(assistantFeedByName, poolRow.name, poolRow.team) : null
           const playerContext = poolRow
             ? buildDraftChatPlayerContextFromDisplay(poolRow, {
                 headlineSnippet: feedSnap?.headlineTitle ?? null,
@@ -5054,6 +5051,7 @@ export function DraftRoomPageClient({
             <div className="w-full shrink-0">
               <RedraftPlanningRibbon
                 preDraft={session.status === 'pre_draft'}
+                survivor={formatType === 'SURVIVOR'}
                 picksUntilUser={ribbonPicksUntilUser}
                 userOnClock={isCurrentUserOnClock}
                 onDeck={redraftRibbonOnDeck}

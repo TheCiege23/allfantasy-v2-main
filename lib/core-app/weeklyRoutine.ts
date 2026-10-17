@@ -314,7 +314,7 @@ async function topStarterFor(
   const who = composePlayerIdentities(
     await prisma.sportsPlayer.findMany({
       where: { sleeperId: top.playerId },
-      select: { sleeperId: true, name: true, position: true, team: true, sport: true, imageUrl: true },
+      select: { sleeperId: true, name: true, position: true, team: true, sport: true, imageUrl: true, source: true, fetchedAt: true },
     }),
   ).get(top.playerId)
   // An unnamed top scorer is left out rather than replaced by the next NAMED one, which would not be the top.

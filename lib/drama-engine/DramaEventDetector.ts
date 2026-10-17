@@ -9,6 +9,7 @@ import { listRivalries } from '@/lib/rivalry-engine/RivalryQueryService'
 import { listProfilesByLeague } from '@/lib/psychological-profiles/ManagerBehaviorQueryService'
 import { getDramaCentralTeams } from '@/lib/league-intelligence-graph/GraphQueryService'
 import { getDramaCadenceConfig, normalizeSportForDrama } from './SportDramaResolver'
+import { realTeamName, teamDisplayName } from '@/lib/core-app/commissioner/activity'
 
 export interface DramaCandidate {
   dramaType: DramaType
@@ -49,12 +50,20 @@ export function rivalSideNamer(teams: ReadonlyArray<TeamRef>): (id: string) => {
   for (const t of teams) {
     byAnyId.set(t.id, t)
     byAnyId.set(t.externalId, t)
-    if (t.ownerName?.trim()) byOwner.set(t.ownerName.trim(), t)
+    const owner = realTeamName({ ownerName: t.ownerName })
+    if (owner) byOwner.set(owner, t)
   }
   return (id: string) => {
     const team = byAnyId.get(id) ?? byOwner.get(id.trim())
-    const name = team?.teamName?.trim() || team?.ownerName?.trim()
+    /*
+     * An importer's "Unknown" is no name (`realTeamName`), so it does not resolve a side: measured
+     * 2026-10-07, one headline read "Unknown vs Unknown: Emerging rivalry". A team with no name is
+     * printed as the hub prints it ("Team 10") but stays unresolved, so the rename pass in
+     * `LeagueDramaEngine` still waits for a real name rather than freezing in the stand-in.
+     */
+    const name = team ? realTeamName(team) : null
     if (name) return { name, resolved: true }
+    if (team) return { name: teamDisplayName(team), resolved: false }
     // An unresolved bare number is a roster slot, not a name; anything else already is a name.
     return /^\d+$/.test(id.trim()) ? { name: `Team ${id.trim()}`, resolved: false } : { name: id, resolved: true }
   }
@@ -127,6 +136,12 @@ export async function detectDramaEvents(input: DetectDramaInput): Promise<DramaC
   }
   const nameSide = rivalSideNamer(teams)
   const rivalSideName = (id: string): string => nameSide(id).name
+  /**
+   * Every other headline's team name, by the Commissioner Hub's rule. 🛑 Not `team.teamName`: an open
+   * slot's is the importer's literal "Unknown", which put "Collapse warning: Unknown has dropped 4
+   * straight" on a hub that names that same team "Team 9" two cards away (7 rows, 2026-10-07).
+   */
+  const nameOf = (team: TeamRef | null | undefined, id: string): string => (team ? teamDisplayName(team) : rivalSideName(id))
 
   const [platformLeagueIds, prevSeasonChampions] = await Promise.all([
     getPlatformLeagueIds(leagueId),
@@ -280,8 +295,8 @@ export async function detectDramaEvents(input: DetectDramaInput): Promise<DramaC
     const teamB = teamByAnyId.get(m.teamB)
     pushCandidate({
       dramaType: 'MAJOR_UPSET',
-      headline: `Major upset in week ${m.weekOrPeriod}: ${(teamA?.teamName ?? m.teamA)} vs ${(teamB?.teamName ?? m.teamB)}`,
-      summary: `${teamA?.teamName ?? m.teamA} ${m.scoreA} – ${m.scoreB} ${teamB?.teamName ?? m.teamB}.`,
+      headline: `Major upset in week ${m.weekOrPeriod}: ${nameOf(teamA, m.teamA)} vs ${nameOf(teamB, m.teamB)}`,
+      summary: `${nameOf(teamA, m.teamA)} ${m.scoreA} – ${m.scoreB} ${nameOf(teamB, m.teamB)}.`,
       relatedManagerIds: toManagerIds([teamA?.externalId, teamB?.externalId]),
       relatedTeamIds: toManagerIds([m.teamA, m.teamB]),
       relatedMatchupId: m.matchupId,
@@ -310,7 +325,7 @@ export async function detectDramaEvents(input: DetectDramaInput): Promise<DramaC
     const teamB = teamByAnyId.get(latest.teamB)
     pushCandidate({
       dramaType: 'REVENGE_GAME',
-      headline: `Revenge game completed: ${teamA?.teamName ?? latest.teamA} vs ${teamB?.teamName ?? latest.teamB}`,
+      headline: `Revenge game completed: ${nameOf(teamA, latest.teamA)} vs ${nameOf(teamB, latest.teamB)}`,
       summary: `Winner flipped from the prior meeting, signaling a revenge payoff.`,
       relatedManagerIds: toManagerIds([teamA?.externalId, teamB?.externalId]),
       relatedTeamIds: toManagerIds([latest.teamA, latest.teamB]),
@@ -350,7 +365,7 @@ export async function detectDramaEvents(input: DetectDramaInput): Promise<DramaC
     const team = teamByAnyId.get(longestWin.teamId)
     pushCandidate({
       dramaType: 'WIN_STREAK',
-      headline: `${team?.teamName ?? longestWin.teamId} is on a ${longestWin.streak}-game heater`,
+      headline: `${nameOf(team, longestWin.teamId)} is on a ${longestWin.streak}-game heater`,
       summary: 'Momentum continues to build as playoff pressure rises.',
       relatedManagerIds: toManagerIds([team?.externalId]),
       relatedTeamIds: toManagerIds([longestWin.teamId]),
@@ -362,7 +377,7 @@ export async function detectDramaEvents(input: DetectDramaInput): Promise<DramaC
     const team = teamByAnyId.get(longestLoss.teamId)
     pushCandidate({
       dramaType: 'LOSING_STREAK',
-      headline: `Collapse warning: ${team?.teamName ?? longestLoss.teamId} has dropped ${longestLoss.streak} straight`,
+      headline: `Collapse warning: ${nameOf(team, longestLoss.teamId)} has dropped ${longestLoss.streak} straight`,
       summary: 'Pressure mounts as every week worsens the playoff path.',
       relatedManagerIds: toManagerIds([team?.externalId]),
       relatedTeamIds: toManagerIds([longestLoss.teamId]),
@@ -408,7 +423,7 @@ export async function detectDramaEvents(input: DetectDramaInput): Promise<DramaC
       const team = teamByAnyId.get(returning.teamId)
       pushCandidate({
         dramaType: 'TITLE_DEFENSE',
-        headline: `Title defense alive for ${team?.teamName ?? returning.teamId}`,
+        headline: `Title defense alive for ${nameOf(team, returning.teamId)}`,
         summary: `Last season's champion still projects as a contender.`,
         relatedManagerIds: toManagerIds([team?.externalId]),
         relatedTeamIds: toManagerIds([returning.teamId]),
@@ -479,9 +494,9 @@ export async function detectDramaEvents(input: DetectDramaInput): Promise<DramaC
       const priorTeam = priorChampion ? teamByAnyId.get(priorChampion) : null
       pushCandidate({
         dramaType: 'DYNASTY_SHIFT',
-        headline: `Dynasty shift alert: ${risingTeam?.teamName ?? rising} is surging`,
+        headline: `Dynasty shift alert: ${nameOf(risingTeam, rising)} is surging`,
         summary: priorTeam
-          ? `${priorTeam.teamName} no longer looks untouchable as power shifts.`
+          ? `${teamDisplayName(priorTeam)} no longer looks untouchable as power shifts.`
           : 'A new long-term power center is emerging.',
         relatedManagerIds: toManagerIds([risingTeam?.externalId, priorTeam?.externalId]),
         relatedTeamIds: toManagerIds([rising, priorChampion]),

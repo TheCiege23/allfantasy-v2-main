@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mockFindMany = vi.hoisted(() => vi.fn())
 vi.mock('@/lib/prisma', () => ({ prisma: { sportsPlayer: { findMany: mockFindMany } } }))
 
-import { resolveNflAges, ageOf, __clearPlayerAgeCacheForTest } from '@/lib/player-age'
+import { resolveNflAges, ageOf, pickAgreedAge, __clearPlayerAgeCacheForTest } from '@/lib/player-age'
 
 /*
  * The tier list in `lib/dynasty-tiers.ts` carries ages that were measured 0-of-64 correct on
@@ -14,17 +14,37 @@ import { resolveNflAges, ageOf, __clearPlayerAgeCacheForTest } from '@/lib/playe
  * query made the "unknown player" case pass a populated map back — a double that answers a
  * question the real database would not, which is the mock-that-stops-doubling-anything shape.
  */
-const ROWS = [
-  { name: 'Puka Nacua', age: 25 },
-  { name: "Ja'Marr Chase", age: 26 },
-  { name: 'Josh Allen', age: 30 },
+type Row = { name: string; age: number; position?: string; sleeperId?: string | null }
+const ROWS: Row[] = [
+  { name: 'Puka Nacua', age: 25, position: 'WR', sleeperId: '9493' },
+  { name: "Ja'Marr Chase", age: 26, position: 'WR' },
+  { name: 'Josh Allen', age: 30, position: 'QB', sleeperId: '4984' },
+  /*
+   * 🛑 Production rows, 2026-10-11: two Justin Jeffersons, four years apart. The old resolver
+   * kept whichever came back LAST, so the receiver's age depended on row order.
+   */
+  { name: 'Justin Jefferson', age: 27, position: 'WR', sleeperId: '6794' },
+  { name: 'Justin Jefferson', age: 23, position: 'LB', sleeperId: '13524' },
+  // Same Eagle, two feeds, one DOB — a birthday-stale age one year apart.
+  { name: 'Byron Young', age: 25, position: 'DL', sleeperId: '10925' },
+  { name: 'Byron Young', age: 26, position: 'DT', sleeperId: null },
+  { name: 'Byron Young', age: 28, position: 'LB', sleeperId: '10917' },
+  { name: 'Byron Young', age: 28, position: 'OLB', sleeperId: null },
 ]
 
+type Where = {
+  name?: { in: string[] }
+  OR?: Array<{ name?: { in: string[] }; sleeperId?: { in: string[] } }>
+}
 beforeEach(() => {
   __clearPlayerAgeCacheForTest()
-  mockFindMany.mockReset().mockImplementation(async (args: { where: { name: { in: string[] } } }) => {
-    const want = new Set(args.where.name.in)
-    return ROWS.filter((r) => want.has(r.name))
+  mockFindMany.mockReset().mockImplementation(async (args: { where: Where }) => {
+    const clauses = args.where.OR ?? [{ name: args.where.name }]
+    return ROWS.filter((r) =>
+      clauses.some(
+        (c) => (c.name && c.name.in.includes(r.name)) || (c.sleeperId && !!r.sleeperId && c.sleeperId.in.includes(r.sleeperId)),
+      ),
+    )
   })
 })
 
@@ -78,5 +98,56 @@ describe('resolveNflAges', () => {
   it('skips empty and unusable names rather than querying for them', async () => {
     await resolveNflAges(['', '   ', 'Puka Nacua'])
     expect(mockFindMany.mock.calls[0][0].where.name.in).toEqual(['Puka Nacua'])
+  })
+})
+
+describe('🛑 namesakes: an age belongs to ONE player, never to a name', () => {
+  it('a bare name whose rows disagree resolves to NOTHING (Justin Jefferson 27 WR / 23 LB)', async () => {
+    const ages = await resolveNflAges(['Justin Jefferson'])
+    expect(ageOf(ages, 'Justin Jefferson')).toBeUndefined()
+  })
+
+  it('[control] the old last-row-wins answer is unreachable whatever the row order', async () => {
+    mockFindMany.mockImplementation(async () => [...ROWS].reverse())
+    const ages = await resolveNflAges(['Justin Jefferson'])
+    expect(ageOf(ages, 'Justin Jefferson')).toBeUndefined()
+  })
+
+  it('position binds each namesake to his own age', async () => {
+    const ages = await resolveNflAges([
+      { name: 'Justin Jefferson', position: 'WR' },
+      { name: 'Justin Jefferson', position: 'LB' },
+    ])
+    expect(ageOf(ages, { name: 'Justin Jefferson', position: 'WR' })).toBe(27)
+    expect(ageOf(ages, { name: 'Justin Jefferson', position: 'LB' })).toBe(23)
+  })
+
+  it('a Sleeper id outranks the name and position entirely', async () => {
+    const ages = await resolveNflAges([{ name: 'Justin Jefferson', sleeperId: '13524' }])
+    expect(ageOf(ages, { name: 'Justin Jefferson', sleeperId: '13524' })).toBe(23)
+  })
+
+  it('position GROUPS absorb feed labels (LB/OLB, DL/DT); one-year staleness takes the higher age', async () => {
+    const ages = await resolveNflAges([
+      { name: 'Byron Young', position: 'OLB' },
+      { name: 'Byron Young', position: 'DT' },
+      'Byron Young',
+    ])
+    expect(ageOf(ages, { name: 'Byron Young', position: 'OLB' })).toBe(28)
+    expect(ageOf(ages, { name: 'Byron Young', position: 'DT' })).toBe(26)
+    // Name alone spans 25..28 — two people. Refused.
+    expect(ageOf(ages, 'Byron Young')).toBeUndefined()
+  })
+
+  it('a position no row carries is absence, not the nearest namesake', async () => {
+    const ages = await resolveNflAges([{ name: 'Justin Jefferson', position: 'TE' }])
+    expect(ages.size).toBe(0)
+  })
+})
+
+describe('pickAgreedAge (pure)', () => {
+  it('refuses a two-year spread and accepts a one-year one', () => {
+    expect(pickAgreedAge([{ name: 'A B', age: 25 }, { name: 'A B', age: 27 }], 'A B')).toBeNull()
+    expect(pickAgreedAge([{ name: 'A B', age: 25 }, { name: 'A B', age: 26 }], 'A B')).toBe(26)
   })
 })

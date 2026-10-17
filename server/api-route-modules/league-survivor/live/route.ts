@@ -68,7 +68,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ leagueId: s
         if (closed) return
         const [entries, logs] = await Promise.all([
           prisma.survivorAuditEntry.findMany({
-            where: { leagueId, createdAt: { gte: sinceOk } },
+            where: { leagueId, isVisibleToPublic: true, createdAt: { gte: sinceOk } },
             orderBy: { createdAt: 'asc' },
             take: 40,
             select: {
@@ -79,7 +79,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ leagueId: s
             },
           }),
           prisma.survivorAuditLog.findMany({
-            where: { leagueId, createdAt: { gte: sinceOk } },
+            where: { leagueId, eventType: { in: ['merge', 'winner_crowned'] }, createdAt: { gte: sinceOk } },
             orderBy: { createdAt: 'asc' },
             take: 40,
             select: { id: true, eventType: true, createdAt: true },

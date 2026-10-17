@@ -16,9 +16,13 @@ import {
  */
 
 /** Mike Evans, sleeperId 2216, as each vendor actually writes him. */
+const FETCHED = '2026-10-12T00:00:00.000Z'
+
 const ROLLING_INSIGHTS: PlayerIdentityRow = {
   sleeperId: '2216',
   sport: 'NFL',
+  source: 'rolling_insights',
+  fetchedAt: FETCHED,
   name: 'Mike Evans',
   position: 'WR',
   team: 'San Francisco 49ers',
@@ -27,6 +31,8 @@ const ROLLING_INSIGHTS: PlayerIdentityRow = {
 const THESPORTSDB: PlayerIdentityRow = {
   sleeperId: '2216',
   sport: 'NFL',
+  source: 'thesportsdb',
+  fetchedAt: FETCHED,
   name: 'Mike Evans',
   position: 'Wide Receiver',
   team: 'San Francisco 49ers',
@@ -35,6 +41,8 @@ const THESPORTSDB: PlayerIdentityRow = {
 const SLEEPER: PlayerIdentityRow = {
   sleeperId: '2216',
   sport: 'NFL',
+  source: 'sleeper',
+  fetchedAt: FETCHED,
   name: 'Mike Evans',
   position: 'WR',
   team: 'SF',
@@ -42,9 +50,15 @@ const SLEEPER: PlayerIdentityRow = {
 }
 
 describe('composePlayerIdentities', () => {
+  /*
+   * The headshot is the Sleeper row's when it has one (every NFL Sleeper row did on
+   * 2026-10-12). Without a Sleeper row there is no authority, and the first usable one wins.
+   */
   it('takes the headshot from whichever vendor has one', () => {
-    const got = composePlayerIdentities([ROLLING_INSIGHTS, THESPORTSDB, SLEEPER]).get('2216')
-    expect(got?.imageUrl).toBe(
+    expect(composePlayerIdentities([ROLLING_INSIGHTS, THESPORTSDB, SLEEPER]).get('2216')?.imageUrl).toBe(
+      'https://sleepercdn.com/content/nfl/players/thumb/2216.jpg',
+    )
+    expect(composePlayerIdentities([ROLLING_INSIGHTS, THESPORTSDB]).get('2216')?.imageUrl).toBe(
       'https://r2.thesportsdb.com/images/media/player/cutout/btst77.png',
     )
   })
@@ -101,7 +115,7 @@ describe('composePlayerIdentities', () => {
    */
   it('does not fold a non-NFL club through the NFL table', () => {
     const soccer = composePlayerIdentities([
-      { sleeperId: '9', sport: 'SOCCER', name: 'Someone', position: 'FW', team: 'West Ham United', imageUrl: null },
+      { sleeperId: '9', sport: 'SOCCER', source: 'thesportsdb', fetchedAt: FETCHED, name: 'Someone', position: 'FW', team: 'West Ham United', imageUrl: null },
     ]).get('9')
     expect(soccer?.team).toBe('West Ham United')
   })
@@ -114,7 +128,7 @@ describe('composePlayerIdentities', () => {
    */
   it('leaves an NBA club unfolded even when its code collides with an NFL one', () => {
     const got = composePlayerIdentities([
-      { sleeperId: '77', sport: 'NBA', name: 'Some Forward', position: 'PF', team: 'Atlanta Hawks', imageUrl: null },
+      { sleeperId: '77', sport: 'NBA', source: 'thesportsdb', fetchedAt: FETCHED, name: 'Some Forward', position: 'PF', team: 'Atlanta Hawks', imageUrl: null },
     ]).get('77')
     expect(got?.team).toBe('Atlanta Hawks')
     expect(got?.sport).toBe('NBA')
@@ -122,7 +136,7 @@ describe('composePlayerIdentities', () => {
 
   it('still folds an NFL club spelled out in full', () => {
     const got = composePlayerIdentities([
-      { sleeperId: '78', sport: 'NFL', name: 'Some Back', position: 'RB', team: 'Atlanta Falcons', imageUrl: null },
+      { sleeperId: '78', sport: 'NFL', source: 'sleeper', fetchedAt: FETCHED, name: 'Some Back', position: 'RB', team: 'Atlanta Falcons', imageUrl: null },
     ]).get('78')
     expect(got?.team).toBe('ATL')
   })
@@ -136,6 +150,8 @@ describe('composePlayerIdentities', () => {
     const tsdbNoPosition: PlayerIdentityRow = {
       sleeperId: '13301',
       sport: 'NFL',
+      source: 'thesportsdb',
+      fetchedAt: FETCHED,
       name: 'Antonio Williams',
       position: null,
       team: 'Washington Commanders',
@@ -144,6 +160,8 @@ describe('composePlayerIdentities', () => {
     const sleeperRow: PlayerIdentityRow = {
       sleeperId: '13301',
       sport: 'NFL',
+      source: 'sleeper',
+      fetchedAt: FETCHED,
       name: 'Antonio Williams',
       position: 'WR',
       team: 'WAS',
@@ -162,7 +180,7 @@ describe('composePlayerIdentities', () => {
   /* Rows with no Sleeper id cannot be addressed by any caller, so they are dropped. */
   it('drops rows carrying no sleeper id', () => {
     const map = composePlayerIdentities([
-      { sleeperId: null, sport: 'NFL', name: 'Nobody', position: 'QB', team: 'BAL', imageUrl: null },
+      { sleeperId: null, sport: 'NFL', source: 'sleeper', fetchedAt: FETCHED, name: 'Nobody', position: 'QB', team: 'BAL', imageUrl: null },
       SLEEPER,
     ])
     expect(map.size).toBe(1)
@@ -173,10 +191,76 @@ describe('composePlayerIdentities', () => {
   it('never merges across sleeper ids', () => {
     const map = composePlayerIdentities([
       SLEEPER,
-      { sleeperId: '4881', sport: 'NFL', name: 'Lamar Jackson', position: 'QB', team: 'BAL', imageUrl: null },
+      { sleeperId: '4881', sport: 'NFL', source: 'sleeper', fetchedAt: FETCHED, name: 'Lamar Jackson', position: 'QB', team: 'BAL', imageUrl: null },
     ])
     expect(map.get('2216')?.name).toBe('Mike Evans')
     expect(map.get('4881')?.name).toBe('Lamar Jackson')
     expect(map.get('4881')?.imageUrl).toBeNull()
+  })
+})
+
+/*
+ * 🛑 THE SLEEPER ROW IS THE IDENTITY (lib/player-match/authoritativePlayerRow.ts). The vendor rows
+ * got their Sleeper id from a NAME match, and a free agent's vendor row keeps his LAST club. Row
+ * shapes below are production's, measured on redraft rosters 2026-10-12.
+ */
+describe('composePlayerIdentities — the Sleeper row is authoritative', () => {
+  const row = (r: Partial<PlayerIdentityRow> & { sleeperId: string; source: string }): PlayerIdentityRow => ({
+    sport: 'NFL',
+    fetchedAt: FETCHED,
+    name: null,
+    position: null,
+    team: null,
+    imageUrl: null,
+    ...r,
+  })
+  const both = (a: PlayerIdentityRow, b: PlayerIdentityRow) => [
+    [a, b],
+    [b, a],
+  ]
+
+  it('a Sleeper free agent keeps a null club, whatever club the vendor row remembers', () => {
+    const sleeper = row({ sleeperId: '3321', source: 'sleeper', name: 'Tyreek Hill', position: 'WR', imageUrl: 'https://sleepercdn.com/content/nfl/players/thumb/3321.jpg' })
+    const vendor = row({ sleeperId: '3321', source: 'rolling_insights', name: 'Tyreek Hill', position: 'WR', team: 'MIA' })
+    for (const rows of both(sleeper, vendor)) {
+      const got = composePlayerIdentities(rows).get('3321')
+      expect(got?.team).toBeNull()
+      expect(got?.position).toBe('WR')
+    }
+  })
+
+  it('a namesake in another position group lends nothing — not position, club, name or face', () => {
+    const sleeper = row({ sleeperId: '5864', source: 'sleeper', name: 'Byron Murphy', position: 'CB', team: 'MIN', imageUrl: 'https://sleepercdn.com/content/nfl/players/thumb/5864.jpg' })
+    const tsdb = row({ sleeperId: '5864', source: 'thesportsdb', name: 'Byron Murphy', position: 'DT', team: 'Seattle Seahawks', imageUrl: 'https://img.example/tsdb/murphy-dt.png' })
+    for (const rows of both(sleeper, tsdb)) {
+      expect(composePlayerIdentities(rows).get('5864')).toEqual({
+        name: 'Byron Murphy',
+        position: 'CB',
+        sport: 'NFL',
+        team: 'MIN',
+        imageUrl: 'https://sleepercdn.com/content/nfl/players/thumb/5864.jpg',
+      })
+    }
+    const ty = row({ sleeperId: '6039', source: 'sleeper', name: 'Ty Johnson', position: 'RB', team: 'BUF' })
+    const tyler = row({ sleeperId: '6039', source: 'thesportsdb', name: 'Tyler Johnson', position: 'WR', team: 'DAL', imageUrl: 'https://img.example/tsdb/tyler.png' })
+    for (const rows of both(ty, tyler)) {
+      expect(composePlayerIdentities(rows).get('6039')).toMatchObject({ name: 'Ty Johnson', position: 'RB', team: 'BUF', imageUrl: null })
+    }
+  })
+
+  it('an AGREEING row still fills a gap the Sleeper row has — a bare filename counts as a gap', () => {
+    const sleeper = row({ sleeperId: '2216', source: 'sleeper', name: 'Mike Evans', position: 'WR', team: 'SF', imageUrl: 'bbba4082.png' })
+    const tsdb = row({ sleeperId: '2216', source: 'thesportsdb', name: 'Mike Evans', position: 'WR', team: 'SF', imageUrl: 'https://img.example/tsdb/evans.png' })
+    for (const rows of both(sleeper, tsdb)) {
+      expect(composePlayerIdentities(rows).get('2216')?.imageUrl).toBe('https://img.example/tsdb/evans.png')
+    }
+  })
+
+  it('an agreeing row may re-case the name, never replace it', () => {
+    const sleeper = row({ sleeperId: '8151', source: 'sleeper', name: 'kenneth walker', position: 'RB', team: 'SEA' })
+    const vendor = row({ sleeperId: '8151', source: 'rolling_insights', name: 'Kenneth Walker', position: 'RB', team: 'SEA' })
+    for (const rows of both(sleeper, vendor)) {
+      expect(composePlayerIdentities(rows).get('8151')?.name).toBe('Kenneth Walker')
+    }
   })
 })

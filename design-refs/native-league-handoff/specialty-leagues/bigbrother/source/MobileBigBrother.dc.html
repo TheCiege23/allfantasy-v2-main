@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Big Brother nominations (phone)</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./specialty/sp.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Cinzel:wght@600;700&amp;family=Caveat:wght@600;700&amp;family=Bebas+Neue&amp;family=Pirata+One&amp;family=Creepster&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080d}
+
+</style>
+</helmet>
+<div class="sp" style="--acc: #3b82f6; --acc2: #9fd0ff; --accInk: #fff; --disp: Archivo; height: 844px; position: relative; overflow: hidden; display: flex; flex-direction: column">
+<div style="position: relative; height: 210px; flex: none; overflow: hidden"><img src="specialty/bigbrother/banner.svg" alt="" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover"><div style="position: absolute; inset: 0; background: linear-gradient(180deg, rgba(7,8,13,.2), #07080d)"></div>
+  <div style="position: absolute; left: 16px; right: 16px; bottom: 12px; display: flex; align-items: center; gap: 12px"><img src="specialty/bigbrother/icon-hoh.svg" alt="" style="width: 54px"><div style="display: flex; flex-direction: column"><span class="sp-lbl" style="color: #f2c94c">You’re Head of Household</span><span style="font: 800 22px 'Archivo'">Name two nominees</span></div></div></div>
+<div style="flex: 1; overflow-y: auto; padding: 8px 16px 12px; display: flex; flex-direction: column; gap: 8px">
+  <span class="sp-t2" style="font-size: 12.5px">Pick two houseguests to put on the block. You can’t nominate yourself. Nominations lock Saturday 8:00 PM.</span>
+  <sc-for list="{{hg}}" as="h" hint-placeholder-count="8"><button class="sp-row" onClick="{{h.pick}}" aria-pressed="{{h.on}}" style="width: 100%; text-align: left; color: inherit; font: inherit; cursor: pointer; border-color: {{h.line}}; background: {{h.bg}}; min-height: 52px"><span class="sp-av" style="background: {{h.c}}">{{h.ini}}</span><span style="flex: 1; font-weight: 600">{{h.name}}</span><span class="sp-tag" style="background: {{h.tbg}}; color: #ff9ad8">{{h.tag}}</span></button></sc-for>
+</div>
+<div style="padding: 12px 16px 24px; border-top: 1px solid rgba(255,255,255,.06); background: #0b0d14"><button class="sp-btn sp-btn-p" disabled="{{notReady}}" style="width: 100%; min-height: 50px">{{cta}}</button></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { sel: ['Open Team 9'] }; }
+  renderVals() {
+    const st = this.state; const HG = [['Open Team 7', 'O7', '#1d3a3a'], ['Open Team 2', 'O2', '#4a1f2c'], ['TheCiege26', 'TC', '#22314f'], ['Open Team 6', 'O6', '#2c2a4a'], ['Open Team 9', 'O9', '#3a3418'], ['Open Team 5', 'O5', '#12352a'], ['Open Team 12', 'O12', '#3a1f30'], ['Open Team 4', 'O4', '#1f2a4d'], ['Open Team 11', 'O11', '#2a3a1a'], ['Open Team 1', 'O1', '#38203a'], ['Open Team 3', 'O3', '#2a2a2a'], ['Open Team 8', 'O8', '#2a2a2a'], ['Open Team 10', 'O10', '#2a2a2a'], ['Open Team 13', 'O13', '#2a2a2a']].filter(h => h[0] !== 'Open Team 7' && !['Open Team 3','Open Team 8','Open Team 10','Open Team 13'].includes(h[0]));
+    const tog = n => { let s = st.sel.includes(n) ? st.sel.filter(x => x !== n) : [...st.sel, n]; if (s.length > 2) s = s.slice(1); this.setState({ sel: s }); };
+    return { hg: HG.map(([name, ini, c]) => { const on = st.sel.includes(name); return { name, ini, c, on: on ? 'true' : 'false', pick: () => tog(name), tag: on ? 'On the block' : '', tbg: on ? 'rgba(255,94,200,.16)' : 'transparent', line: on ? '#ff5ec8' : 'rgba(255,255,255,.05)', bg: on ? 'rgba(255,94,200,.08)' : '#10131c' }; }),
+      notReady: st.sel.length < 2, cta: st.sel.length < 2 ? 'Pick ' + (2 - st.sel.length) + ' more' : 'Lock in ' + st.sel.join(' and ') };
+  }
+}
+</script>
+</body>
+</html>

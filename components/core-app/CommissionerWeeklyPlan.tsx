@@ -7,12 +7,14 @@ import type { WeeklyBlueprint } from '@/lib/core-app/weeklyBlueprint'
 import { reviewedPoll, weeklyTaskSuggestions, type ReviewedLeagueDraft } from '@/lib/core-app/commissionerWeeklyPlan'
 import { COMMS_OPEN_EVENT } from './comms/commsEvents'
 import './commissioner-weekly-plan.css'
+import WeeklyTaskFollowthrough from './WeeklyTaskFollowthrough'
 
 type PlanProps = { leagueId: string; data?: WeeklyBlueprint; announcement?: string }
 export default function CommissionerWeeklyPlan(props: PlanProps) { return <CommissionerWeeklyEditor key={props.leagueId} {...props} /> }
 function CommissionerWeeklyEditor({ leagueId, data, announcement = '' }: PlanProps) {
   const { language } = useOptionalLanguage()
   const es = language === 'es', t = (en: string, sp: string) => es ? sp : en
+  const [issueId,setIssueId] = useState<string | null>(null)
   const [title, setTitle] = useState(''), [description, setDescription] = useState(''), [dueAt, setDueAt] = useState('')
   const [text, setText] = useState(announcement), [question, setQuestion] = useState(''), [options, setOptions] = useState(''), [closeAt, setCloseAt] = useState('')
   const [status, setStatus] = useState(''), [busy, setBusy] = useState(false)
@@ -27,7 +29,7 @@ function CommissionerWeeklyEditor({ leagueId, data, announcement = '' }: PlanPro
     const capturedLeague = leagueId
     try {
       // Keep the same id for a retry after an unknown response, preventing duplicate tasks.
-      const body = JSON.stringify({ title, description, dueAt: dueAt ? new Date(dueAt).toISOString() : null })
+      const body = JSON.stringify({ title, description, issueId, dueAt: dueAt ? new Date(dueAt).toISOString() : null })
       if (request.current?.body !== body) request.current = { id: crypto.randomUUID(), body }
       const response = await fetch(`/api/core/commissioner-queue?league=${encodeURIComponent(capturedLeague)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...JSON.parse(body), requestId: request.current.id }) })
       if (!response.ok) throw new Error()
@@ -50,7 +52,7 @@ function CommissionerWeeklyEditor({ leagueId, data, announcement = '' }: PlanPro
     <h2>{t('Turn this week into league action', 'Convierte esta semana en acciones de liga')}</h2>
     <p>{t('Review the evidence, save a task, or prepare an editable league message. Tasks are audited. Drafts open unsent.', 'Revisa los datos, guarda una tarea o prepara un mensaje editable para la liga. Las tareas se registran. Los borradores se abren sin enviar.')}</p>
     <details><summary>{t('Save a reviewed weekly task', 'Guardar una tarea semanal revisada')}</summary>
-      {suggestions.length > 0 && <label>{t('Start from a weekly issue', 'Empezar con un asunto semanal')}<select disabled={busy} defaultValue="" onChange={e => { const s = suggestions.find(s => s.id === e.target.value); if (s) { setTitle(s.title); setDescription(s.description) } }}><option value="">{t('Choose an issue or write your own', 'Elige un asunto o escribe el tuyo')}</option>{suggestions.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}</select></label>}
+      {suggestions.length > 0 && <label>{t('Start from a weekly issue', 'Empezar con un asunto semanal')}<select disabled={busy} defaultValue="" onChange={e => { const s = suggestions.find(s => s.id === e.target.value); setIssueId(s?.id ?? null); if (s) { setTitle(s.title); setDescription(s.description) } }}><option value="">{t('Choose an issue or write your own', 'Elige un asunto o escribe el tuyo')}</option>{suggestions.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}</select></label>}
       <label>{t('Task title', 'Título de tarea')}<input disabled={busy} value={title} maxLength={180} onChange={e => setTitle(e.target.value)} /></label>
       <label>{t('Reviewed details', 'Detalles revisados')}<textarea disabled={busy} value={description} maxLength={4000} rows={4} onChange={e => setDescription(e.target.value)} /></label>
       <label>{t('Due time (your device time zone, optional)', 'Plazo (zona horaria del dispositivo, opcional)')}<input disabled={busy} type="datetime-local" value={dueAt} onChange={e => setDueAt(e.target.value)} /></label>
@@ -64,6 +66,7 @@ function CommissionerWeeklyEditor({ leagueId, data, announcement = '' }: PlanPro
       <button className="af-btn" type="button" onClick={() => openDraft(true)}>{t('Review poll in league chat', 'Revisar encuesta en chat de liga')}</button>
     </details>
     <Link href={`/core/commissioner?league=${encodeURIComponent(leagueId)}`}>{t('Commissioner Hub and task queue', 'Centro del comisionado y cola de tareas')} →</Link>
+    <WeeklyTaskFollowthrough key={leagueId} leagueId={leagueId} es={es} />
     <p role="status">{status}</p>
   </section>
 }

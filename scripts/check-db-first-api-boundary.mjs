@@ -8,6 +8,8 @@ import { parseChangedLineNumbers } from "./db-first-diff-lines.mjs";
 import { listGitVisibleFiles } from "./git-visible-files.mjs";
 
 const DATA_API_HOST_PATTERNS = [
+  // X now supplies recent video-post reads as well as publishing.
+  /^api\.x\.com$/i,
   // Draft market references: only ingestion workers may read this provider.
   /^api\.statsguyfantasy\.com$/i,
   // ⚠ FANTRAX WAS INVISIBLE TO THIS GUARD ENTIRELY, and it is a full data API:
@@ -362,6 +364,10 @@ const SOURCE_EXTENSIONS = new Set([
 ]);
 
 const ALLOWED_PATH_PATTERNS = [
+  // Paid recent-search fetch is called only by refreshXCatalog, reached from
+  // the authenticated import-news cron. Browser routes read the DB catalog;
+  // their xHighlightsEnabled import reads configuration without calling X.
+  /^lib\/highlights\/x-provider\.ts$/,
   /*
    * `audit` joins this list because an audit script's whole purpose is comparing what a provider
    * says against what we stored — it cannot do that without calling the provider, and a script is
@@ -401,7 +407,24 @@ const ALLOWED_PATH_PATTERNS = [
    * makes, including ones nobody has written yet.
    */
   /^scripts\/deploy-verify-wait\.mjs$/,
+  /*
+   * ONE file, by exact path: the Sleeper team-ownership PROOF (lib/league-join/sleeperOwnershipClaim.ts).
+   * It asks "has this person, right now, put the code we gave them into their Sleeper team name?" —
+   * a question only Sleeper can answer, the same footing as an auth exchange. A copy in Postgres would
+   * be precisely the stale answer that lets the wrong person claim a team. Public endpoint, no
+   * credential, read only on a member's explicit Verify tap, capped per code. The file holds that one
+   * read and nothing else, so the exemption covers nothing else.
+   */
+  /^lib\/league-join\/sleeperOwnershipFetch\.ts$/,
   /^lib\/.*(ingest|ingestion|sync)/i,
+  // Explicit commissioner-triggered ingestion only: this builder supplies the
+  // verified download contract to the browser connector; it is not a scoreboard
+  // read path. The extension downloader feeds verified CSVs into Postgres through
+  // the owned-league import API. These two fixture tests assert request shapes
+  // and use mocked fetches, never live provider calls. Keep exemptions exact.
+  /^lib\/import-os\/collector\/fantraxBrowserContext\.ts$/,
+  /^tools\/fantrax-browser-connector\/download\.js$/,
+  /^__tests__\/fantrax-browser-(context|download)\.test\.ts$/,
   /^app\/api\/sports\/news\/sync-helper\.(ts|tsx|js|jsx|mjs|cjs)$/i,
   /^app\/api\/cron\//i,
   /*

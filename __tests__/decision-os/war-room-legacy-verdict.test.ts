@@ -116,8 +116,9 @@ describe('Decision Engine Boundary — no War Room engine exports a verdict', ()
   it('[control] the full scan runs and still lists a known backlog entry', () => {
     // If this stops holding because that entry was fixed, pick another listed one — the point is that
     // an empty War Room result below comes from a scan that could see a violation.
-    // Was pick-valuation.ts analyzeTrade until that dead function was deleted (2026-09-30).
-    expect(scan()).toMatch(/lib\/dynasty-tiers\.ts:\d+ {2}evaluateTrade {2}\[trade\]/)
+    // Was pick-valuation.ts analyzeTrade until that dead function was deleted (2026-09-30), then
+    // dynasty-tiers.ts evaluateTrade until that one was deleted too (2026-10-12).
+    expect(scan()).toMatch(/lib\/ai-commissioner\/TradeFairnessAnalyzer\.ts:\d+ {2}analyzeTradeFairness {2}\[trade\]/)
   })
 
   it('🛑 the full scan lists no file under lib/*-war-room/', () => {

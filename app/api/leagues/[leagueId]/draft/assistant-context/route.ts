@@ -49,7 +49,7 @@ export async function GET(
       // which was orphaned when the cron moved to sports_injuries and froze at
       // 2026-04-28 — so the draft assistant was quoting 108-day-old designations
       // with a reportedAt the UI rendered as current.
-      listInjuryFacts({ sport, limit: 25 }),
+      listInjuryFacts({ sport, limit: 25, designationsOnly: true }),
       buildChimmySportDataDigest({ sport, includeNewsApi: false }),
     ])
 

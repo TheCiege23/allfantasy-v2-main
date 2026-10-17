@@ -578,6 +578,11 @@
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+/* A projection is not a score: muted, so a pre-game row never reads as points banked. */
+.af-live-mine-pts[data-kind='projection'] {
+  color: var(--muted);
+  font-weight: 700;
+}
 /* Drawn with borders, not a ▾ glyph — the mono fallback font renders that as a dot. */
 .af-live-mine-chev {
   width: 7px;
@@ -691,6 +696,10 @@
   color: var(--muted);
 }
 .af-live-mover-leagues {
+  font-size: 11px;
+  color: var(--faint);
+}
+.af-live-mover-age {
   font-size: 11px;
   color: var(--faint);
 }
@@ -2787,10 +2796,30 @@
  * 620px the rest of this file's phone rules use. The burial starts the moment
  * the grid collapses to one column, which is here — a 900px tablet has it too.
  */
+/*
+ * ✅ REPLACED 2026-10-11 — the whole panel no longer moves; ONE SUMMARY DOES. With the panel pulled
+ * above the games, a phone opened on the impact total, contributions, the latest play, the play feed
+ * and Up next before the first scoreboard — the 2026-10-11 audit measured the first game card ~1.5
+ * screens down. The matchups strip now leads the page, which answers "how am I doing" before any of
+ * that, so on a phone only the "Your live impact" summary stays above the games (a second, phone-only
+ * copy rendered before the grid) and the rest of the panel follows the slate in DOM order. One copy
+ * is shown at a time, both hidden with `display: none`, so a screen reader meets exactly one.
+ */
+.af-live-impact[data-placement='inline'] {
+  display: none;
+}
 @media (max-width: 1080px) {
-  .af-live-side {
-    order: -1;
+  .af-live-impact[data-placement='inline'] {
+    display: flex;
+    margin-bottom: 14px;
   }
+  .af-live-side .af-live-impact[data-placement='side'] {
+    display: none;
+  }
+}
+/* The league-scoped view hides the whole panel (see Grid); its phone summary goes with it. */
+.af-live[data-league-scoped='true'] .af-live-impact[data-placement='inline'] {
+  display: none;
 }
 
 /* ── Your matchup strip ─────────────────────────────────────────── */
@@ -2841,7 +2870,9 @@
 }
 
 /* Live workspace: readable metadata and compact phone impact. */
-.af-core .af-live .af-btn,.af-core .af-live button { min-height:48px; }
+/* 48px tap targets for real buttons — but NOT the "?" help dot: it is a 14px circle with its own enlarged
+   ::after tap area (af-core.css), and min-height turned it into a 14x48 oval (reported 2026-10-13). */
+.af-core .af-live .af-btn,.af-core .af-live button:not(.af-info-tip) { min-height:48px; }
 .af-live-refresh-icon { display:none; }
 @media(max-width:720px) { .af-live-refresh-label { display:none; } .af-live-refresh-icon { display:inline; font-size:24px; } .af-core .af-live-refresh { width:48px; padding:8px; } }
 .af-live-contributions summary { min-height:48px; cursor:pointer; font-weight:700; align-content:center; }
@@ -2856,6 +2887,266 @@
  .af-live-sport,.af-live-scope-btn,.af-live-search input { font-size:14px; }
  .af-live-scope-btn,.af-live-search { min-height:48px; }
  .af-live-freshness { font-size:12px; letter-spacing:0; text-transform:none; }
- .af-live-side .af-live-card:has(.af-live-plays) { max-height:180px; overflow:auto; }
  .af-live-grid { gap:16px; }
+}
+
+/* College Top-25 rank before the team name (2026-10-08). Appended after every @media block on purpose. */
+.af-live-team-rank {
+  margin-right: 4px;
+  font-size: 0.78em;
+  font-weight: 800;
+  color: var(--muted);
+}
+
+/* The college Top 25 filter's note above the slate (2026-10-08). */
+.af-live-top25-note {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.af-live-top25-note a,
+.af-live-empty-body a {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* ── Your matchups across leagues (cross-league view) ────────────── */
+.af-live-glance {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.af-live-glance-head {
+  margin: 0;
+  color: var(--muted);
+}
+/* The header is the open/close control; the counts below it always show. */
+.af-live-glance-h {
+  margin: 0;
+  font: inherit;
+}
+.af-core .af-live .af-live-glance-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 40px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 6px;
+}
+.af-live-glance-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.af-live-glance-chev {
+  width: 7px;
+  height: 7px;
+  margin: 0 3px 3px 2px;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  transform: rotate(45deg);
+  transition: transform 0.15s ease;
+  flex: none;
+}
+.af-live-glance-toggle[aria-expanded='true'] .af-live-glance-chev {
+  margin: 3px 3px 0 2px;
+  transform: rotate(225deg);
+}
+/* An explicit choice wins at any width; with none, a phone starts closed (no flash of the open list). */
+.af-live-glance[data-open='false'] .af-live-glance-body {
+  display: none;
+}
+@media (max-width: 1080px) {
+  .af-live-glance[data-open='auto'] .af-live-glance-body {
+    display: none;
+  }
+}
+.af-live-glance-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin: 8px 0 0;
+  font-size: 14px;
+}
+.af-live-glance-count b {
+  font-size: 18px;
+  font-weight: 800;
+}
+.af-live-glance-count[data-tone='good'] b { color: var(--good); }
+.af-live-glance-count[data-tone='bad'] b { color: var(--bad); }
+.af-live-glance-count[data-tone='warn'] b { color: var(--warn); }
+.af-live-glance-list {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.af-live-glance-row {
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line);
+  background: var(--surface);
+}
+.af-live-glance-row[data-tone='good'] { border-left-color: var(--good); }
+.af-live-glance-row[data-tone='bad'] { border-left-color: var(--bad); }
+.af-live-glance-row[data-tone='warn'] { border-left-color: var(--warn); }
+.af-live-glance-link {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 2px 12px;
+  min-height: 44px;
+  padding: 8px 12px;
+  color: inherit;
+  text-decoration: none;
+}
+.af-live-glance-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 10px;
+}
+.af-live-glance-name {
+  min-width: 0;
+  font-weight: 700;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.af-live-glance-line {
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.af-live-glance-calm {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.af-core .af-live .af-live-glance-more,
+.af-core .af-live .af-live-mine-more {
+  min-height: 40px;
+  margin-top: 8px;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* The standing variant of the matchup strip: an elimination week has no opponent. */
+.af-live-matchup[data-state='standing'][data-lead='lead'] .af-live-matchup-score[data-side='you'] { color: var(--good); }
+.af-live-matchup[data-state='standing'][data-lead='tied'] .af-live-matchup-score[data-side='you'] { color: var(--warn); }
+.af-live-matchup[data-state='standing'][data-lead='trail'] .af-live-matchup-score[data-side='you'] { color: var(--bad); }
+.af-live-matchup-team.af-live-matchup-cut {
+  text-align: right;
+}
+
+/* ── Finals, one line each ───────────────────────────────────────── */
+.af-live-finals {
+  margin-top: 6px;
+}
+.af-live-finals-head {
+  margin: 0 0 8px;
+  color: var(--muted);
+}
+.af-live-finals-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.af-live-final {
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.af-core .af-live .af-live-final-toggle {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-areas: 'teams status chev' 'mine mine mine';
+  align-items: center;
+  gap: 4px 12px;
+  width: 100%;
+  padding: 10px 14px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 12px;
+}
+.af-live-final-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.af-live-final-teams {
+  grid-area: teams;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  min-width: 0;
+}
+.af-live-final-team {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-weight: 600;
+}
+.af-live-final-team[data-won='true'] {
+  color: var(--text);
+  font-weight: 800;
+}
+.af-live-final-logo {
+  border-radius: 4px;
+  object-fit: contain;
+}
+.af-live-final-score {
+  font-size: 16px;
+}
+.af-live-final-at {
+  color: var(--faint);
+  font-size: 12px;
+}
+.af-live-final-status {
+  grid-area: status;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.af-live-final .af-live-mine-chev {
+  grid-area: chev;
+}
+.af-live-final[data-open='true'] .af-live-mine-chev {
+  margin: 3px 3px 0 2px;
+  transform: rotate(225deg);
+}
+.af-live-final-mine {
+  grid-area: mine;
+  font-size: 12.5px;
+  color: var(--accent);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.af-live-final-card {
+  padding: 0 8px 8px;
 }

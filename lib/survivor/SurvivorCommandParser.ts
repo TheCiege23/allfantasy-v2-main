@@ -45,6 +45,11 @@ export function parseSurvivorCommand(raw: string): SurvivorParsedCommand {
     ? trimmed.slice(CHIMMY_PREFIX.length).trim()
     : trimmed
 
+  // Exact ballot shorthand: questions with mentions still remain questions.
+  if (trimmed.startsWith(CHIMMY_PREFIX) && /^(?:<@[A-Za-z0-9_-]+>|@[A-Za-z0-9_.-]+(?:\s+[A-Za-z0-9_.-]+){0,3})$/.test(withoutChimmy)) {
+    return { intent: 'vote', targetDisplayName: withoutChimmy, raw }
+  }
+
   for (const pattern of JURY_VOTE_PATTERNS) {
     const m = withoutChimmy.match(pattern)
     if (m) {

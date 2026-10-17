@@ -1,6 +1,7 @@
 import type { SupportedSport } from '@/lib/create-league-v2/state'
-import { SURVIVOR_CAST_SIZE_OPTIONS } from '@/lib/league-creation-wizard/sport-team-limits'
+import { SURVIVOR_CREATE_CAST_SIZES } from '@/lib/league-creation-wizard/sport-team-limits'
 import { getGuillotineSportConfig } from '@/lib/guillotine/sportConfig'
+import { SURVIVOR_CREATION_SPORTS } from '@/lib/survivor/survivorCreationAvailability'
 
 export type CreateMode = 'quick' | 'advanced'
 
@@ -26,7 +27,7 @@ export interface LeagueCreateOptionsCatalog {
 
 const ALL_SPORTS: SupportedSport[] = ['NFL', 'NBA', 'MLB', 'NHL', 'NCAAF', 'NCAAB', 'SOCCER']
 
-const SURVIVOR_ALLOWED_SPORTS: SupportedSport[] = ['NFL', 'NCAAF']
+const SURVIVOR_ALLOWED_SPORTS: SupportedSport[] = [...SURVIVOR_CREATION_SPORTS]
 
 const UNIVERSAL_CREATE_TEAM_COUNTS = Array.from({ length: 31 }, (_, index) => index + 2)
 
@@ -167,9 +168,10 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
     tournament: ['snake', 'linear', 'auction', 'offline', 'auto'],
     big_brother: ['snake', 'offline', 'auto'],
   },
+  // NFL: every concept offering Full PPR also offers ESPN default, Sleeper default and Classic.
   allowedScoringPresetsByConceptSport: {
     redraft: {
-      NFL: ['fb_half_ppr', 'fb_ppr', 'fb_standard'],
+      NFL: ['fb_half_ppr', 'fb_ppr', 'fb_standard', 'fb_espn_ppr', 'fb_sleeper_ppr'],
       NBA: ['nba_points', 'nba_8cat', 'nba_9cat'],
       MLB: ['mlb_points', 'mlb_5x5_each', 'mlb_5x5_most', 'mlb_5x5_roto', 'mlb_6x6_each', 'mlb_6x6_most', 'mlb_6x6_roto'],
       NHL: ['nhl_points'],
@@ -178,7 +180,7 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
       SOCCER: ['soc_points'],
     },
     dynasty: {
-      NFL: ['fb_half_ppr', 'fb_ppr', 'fb_superflex'],
+      NFL: ['fb_half_ppr', 'fb_ppr', 'fb_superflex', 'fb_espn_ppr', 'fb_sleeper_ppr', 'fb_standard'],
       NBA: ['nba_points', 'nba_8cat', 'nba_9cat'],
       MLB: ['mlb_points', 'mlb_5x5_each', 'mlb_5x5_most', 'mlb_5x5_roto', 'mlb_6x6_each', 'mlb_6x6_most', 'mlb_6x6_roto'],
       NHL: ['nhl_points'],
@@ -187,7 +189,7 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
       SOCCER: ['soc_points'],
     },
     keeper: {
-      NFL: ['fb_half_ppr', 'fb_ppr', 'fb_standard'],
+      NFL: ['fb_half_ppr', 'fb_ppr', 'fb_standard', 'fb_espn_ppr', 'fb_sleeper_ppr'],
       NBA: ['nba_points', 'nba_8cat', 'nba_9cat'],
       MLB: ['mlb_points', 'mlb_5x5_each', 'mlb_5x5_most', 'mlb_5x5_roto', 'mlb_6x6_each', 'mlb_6x6_most', 'mlb_6x6_roto'],
       NHL: ['nhl_points'],
@@ -196,7 +198,7 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
       SOCCER: ['soc_points'],
     },
     best_ball: {
-      NFL: ['fb_half_ppr', 'fb_ppr'],
+      NFL: ['fb_half_ppr', 'fb_ppr', 'fb_espn_ppr', 'fb_sleeper_ppr', 'fb_standard'],
       NBA: ['nba_points'],
       MLB: ['mlb_points'],
       NHL: ['nhl_points'],
@@ -209,7 +211,7 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
       NCAAF: ['idp_balanced'],
     },
     salary_cap: {
-      NFL: ['fb_half_ppr', 'fb_ppr'],
+      NFL: ['fb_half_ppr', 'fb_ppr', 'fb_espn_ppr', 'fb_sleeper_ppr', 'fb_standard'],
       NBA: ['nba_points'],
       MLB: ['mlb_points'],
       NHL: ['nhl_points'],
@@ -227,7 +229,7 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
       NCAAB: ['ncaab_points'],
     },
     guillotine: {
-      NFL: ['fb_half_ppr', 'fb_ppr'],
+      NFL: ['fb_half_ppr', 'fb_ppr', 'fb_espn_ppr', 'fb_sleeper_ppr', 'fb_standard'],
       NCAAF: ['ncaaf_half_ppr'],
       NBA: ['nba_points'],
       NHL: ['nhl_points'],
@@ -240,11 +242,13 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
       NHL: ['nhl_points'],
     },
     survivor: {
-      NFL: ['fb_half_ppr', 'fb_ppr'],
+      NFL: ['fb_half_ppr', 'fb_ppr', 'fb_espn_ppr', 'fb_sleeper_ppr', 'fb_standard'],
       NCAAF: ['ncaaf_half_ppr'],
+      NBA: ['nba_points'],
+      NHL: ['nhl_points'],
     },
     tournament: {
-      NFL: ['fb_half_ppr', 'fb_ppr', 'fb_standard'],
+      NFL: ['fb_half_ppr', 'fb_ppr', 'fb_standard', 'fb_espn_ppr', 'fb_sleeper_ppr'],
       NBA: ['nba_points'],
       MLB: ['mlb_points'],
       NHL: ['nhl_points'],
@@ -338,10 +342,12 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
     },
     // `SURVIVOR_CAST_SIZE_OPTIONS` is what `POST /api/league/create` clamps a submitted cast
     // size to, so anything this catalog offers that is not in that list gets silently rewritten
-    // on save. Read it rather than restating it.
+    // on save. New leagues are offered the 16 / 20 subset of it; read it rather than restating it.
     survivor: {
-      NFL: [...SURVIVOR_CAST_SIZE_OPTIONS],
-      NCAAF: [...SURVIVOR_CAST_SIZE_OPTIONS],
+      NFL: [...SURVIVOR_CREATE_CAST_SIZES],
+      NCAAF: [...SURVIVOR_CREATE_CAST_SIZES],
+      NBA: [...SURVIVOR_CREATE_CAST_SIZES],
+      NHL: [...SURVIVOR_CREATE_CAST_SIZES],
     },
     tournament: {
       NFL: [32, 64, 96, 128, 160, 192, 224],

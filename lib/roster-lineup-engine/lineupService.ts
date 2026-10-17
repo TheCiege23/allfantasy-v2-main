@@ -1,3 +1,4 @@
+import { seasonSetupBlocked } from '@/lib/tournament/seasonNativeContract'
 /**
  * Persist lineup changes with validation, normalized sync, history, and optional lock cache.
  */
@@ -13,6 +14,25 @@ import { recordAfRosterMoveHistory } from './rosterMoveHistory'
 import { upsertAfLineupLockState, resolveFullLineupLockContext } from './lineupLockService'
 import type { LineupValidationContext } from './types'
 import { isCommissionerRosterLocked } from '@/lib/league/commissioner-roster-lock'
+import { getNormalizedLineupSections, type RosterSectionKey } from '@/lib/roster/LineupTemplateValidation'
+
+/** Locked starters keep their exact slot; a locked bench/IR player stays in that section. */
+export function movedLockedLineupPlayer(before: unknown, after: unknown, lockedPlayerIds: readonly string[]): string | null {
+  if (lockedPlayerIds.length === 0) return null
+  const locations = (data: unknown) => {
+    const sections = getNormalizedLineupSections(data)
+    const result = new Map<string, string>()
+    for (const section of Object.keys(sections) as RosterSectionKey[]) {
+      sections[section].forEach((row, index) => {
+        result.set(String(row.id), section === 'starters' ? `${section}:${index}` : section)
+      })
+    }
+    return result
+  }
+  const original = locations(before)
+  const proposed = locations(after)
+  return lockedPlayerIds.find((id) => original.get(id) !== proposed.get(id)) ?? null
+}
 
 function weekFromLeagueSettings(settings: unknown): number {
   if (!settings || typeof settings !== 'object' || Array.isArray(settings)) return 1
@@ -55,6 +75,7 @@ export async function persistRosterLineupWithEngine(
     where: { id: input.leagueId },
   })
   if (!league) return { ok: false, error: 'League not found', status: 404 }
+  if (seasonSetupBlocked(league.settings)) return { ok: false, error: 'Tournament lineups remain locked until season activation.', status: 409 }
 
   const roster = await prisma.roster.findFirst({
     where: { id: input.rosterId, leagueId: input.leagueId },
@@ -125,7 +146,8 @@ export async function persistRosterLineupWithEngine(
       leagueWeek,
       editingWeek: input.week,
       season: input.season,
-      playerData: input.nextPlayerData,
+      // A client can edit nextPlayerData, including gameTime. Lock from the saved roster only.
+      playerData: roster.playerData,
       lockAllMoves: league.lockAllMoves,
       lifecycleState: league.lifecycleState,
     })
@@ -135,6 +157,10 @@ export async function persistRosterLineupWithEngine(
         error: lockCtx.reason ?? 'Lineup is locked.',
         status: 403,
       }
+    }
+    const movedLockedPlayer = movedLockedLineupPlayer(roster.playerData, input.nextPlayerData, lockCtx.lockedPlayerIds)
+    if (movedLockedPlayer) {
+      return { ok: false, error: 'That player\'s game has started. Their lineup position is locked for today.', status: 403 }
     }
   }
 

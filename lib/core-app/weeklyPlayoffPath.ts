@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import type { OutlookLeague, SwingMatchup } from './seasonOutlook'
-export type PlayoffPoint = { period: number; probability: number; sampledAt: string }
+export type PlayoffPoint = { period: number; probability: number; sampledAt: string; inputs?: { wins:number; losses:number; ties:number; seed:number; pointsFor:number; weeksRemaining:number; weeklyMean:number | null } }
 export type WeeklyPlayoffPath = { leagueId?: string; league: OutlookLeague | null; swing: SwingMatchup | null; points: PlayoffPoint[]; historyUnavailable: boolean; season: number; period: number }
 export function validPlayoffPoint(value: unknown): value is PlayoffPoint {
   const p = value as Partial<PlayoffPoint> | null
@@ -15,7 +15,8 @@ export async function readWeeklyPlayoffPath(userId: string, league: OutlookLeagu
   const result: WeeklyPlayoffPath = { league: matches ? league : null, swing: matches && swing?.leagueId === league?.leagueId && swing.week >= period ? swing : null, points: [], historyUnavailable: false, season, period }
   if (!matches || !league?.you?.modelled) return result
   const probability = league.you.playoffPct
-  const point = { period, probability, sampledAt: league.assumptions.computedAt }
+  const point: PlayoffPoint = { period, probability, sampledAt: league.assumptions.computedAt, inputs: {wins:league.you.wins,losses:league.you.losses,ties:league.you.ties ?? 0,seed:league.you.seed,pointsFor:league.you.pointsFor,weeksRemaining:league.weeksRemaining,weeklyMean:league.you.weeklyMean} }
+  if (point.inputs && ![point.inputs.wins,point.inputs.losses,point.inputs.seed,point.inputs.pointsFor,point.inputs.weeksRemaining].every(Number.isFinite)) delete point.inputs
   if (!validPlayoffPoint(point)) return result
   const scope = createHash('sha256').update(JSON.stringify([userId, league.leagueId, season, league.you.rosterId])).digest('hex')
   // Older snapshots did not validate the model period and may carry a delayed provider marker.

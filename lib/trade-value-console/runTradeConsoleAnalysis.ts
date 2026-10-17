@@ -45,6 +45,8 @@ import { applyChartTePremium, resolveAssets, resolveLeagueTradeChart } from './l
 import { gradePricedSides } from '@/lib/decision-os/trade/leagueTradeGrader'
 import { createNcaafLeagueGrader } from '@/lib/decision-os/trade/ncaafLeagueGrader'
 import { applyCollegeGrade } from '@/lib/decision-os/trade/ncaafRedraftValue'
+import { createSportPointsGrader } from '@/lib/decision-os/trade/sportPointsGrader'
+import { createGuillotineGrader } from '@/lib/decision-os/trade/guillotineGrader'
 import { createLeagueAssetPolicy } from '@/lib/decision-os/trade/leagueAssetPolicy'
 import { DEVY_BASIS_NOTE } from '@/lib/decision-os/trade/leagueAssetRules'
 import { tradeGradeLabel } from '@/lib/decision-os/trade/tradeGrade'
@@ -261,22 +263,26 @@ export async function runTradeConsoleAnalysis(
   })
   dataGaps.push(...(chart.valuationGaps ?? []))
   // The chart and its request settings now live in `leagueTradePricing.ts`, shared with every grade.
-  const { marketCtx, tePremium, isSuperFlex, waiverBudget, fcPlayers, nflCtx } = chart
+  const { marketCtx, tePremium, isSuperFlex, waiverBudget, fcPlayers, nflCtx, faabState } = chart
 
   let { priced: givePriced, lines: giveLines, unresolved: giveUnresolved } = await resolveAssets(give, {
     effectiveSport,
     nflCtx,
     waiverBudget,
+    faabState,
     dataGaps,
     fcPlayers,
+    pickSlots: chart.pickSlots ?? null,
   })
   mark('assets_give')
   let { priced: getPriced, lines: getLines, unresolved: getUnresolved } = await resolveAssets(get, {
     effectiveSport,
     nflCtx,
     waiverBudget,
+    faabState,
     dataGaps,
     fcPlayers,
+    pickSlots: chart.pickSlots ?? null,
   })
 
   const unresolved = [...giveUnresolved, ...getUnresolved]
@@ -390,14 +396,49 @@ export async function runTradeConsoleAnalysis(
       : null
   const collegeView = collegeGrader ? await collegeGrader.grade(input.sideGive, input.sideGet) : null
   if (collegeView) applyCollegeGrade(leagueGrade, collegeView)
+  /*
+   * NBA, college basketball and NHL take the points-over-replacement grade `createLeagueTradeGrader` gives
+   * them — in a league on its rules and rosters, in the open analyzer on the sport's defaults. Its numbers
+   * replace the console's (which had no value for these sports at all), through the same rewrite the
+   * college grade uses, so the letter and the values beside it are one basis.
+   */
+  const sportPointsGrader = collegeView
+    ? null
+    : createSportPointsGrader({
+        sport: effectiveSport,
+        league:
+          leagueRow && consoleLeagueType && input.leagueId
+            ? { id: input.leagueId.trim(), settings: leagueRow.settings, leagueType: consoleLeagueType.type, leagueSize: leagueRow.leagueSize ?? null }
+            : null,
+        // The open analyzer's scoring choice (points, 9-cat, 8-cat); a league is scored by its own settings.
+        format: input.scoringFormat ?? null,
+      })
+  const sportView = sportPointsGrader ? await sportPointsGrader.grade(input.sideGive, input.sideGet) : null
+  if (sportView) applyCollegeGrade(leagueGrade, sportView)
+  /*
+   * An NFL guillotine league takes the guillotine grade `createLeagueTradeGrader` gives it (points over the
+   * free agent for the same lineup slot, FAAB at its purchasing power — Guap, 2026-10-11), rewritten into
+   * the console's numbers the same way, so the console never shows a market letter the other surfaces do not.
+   */
+  const guillotineGrader =
+    !collegeView && !sportView && leagueRow && consoleLeagueType && input.leagueId
+      ? createGuillotineGrader({
+          sport: effectiveSport,
+          leagueType: consoleLeagueType.type,
+          leagueVariant: leagueRow.leagueVariant ?? null,
+          league: { id: input.leagueId.trim(), settings: leagueRow.settings, leagueSize: leagueRow.leagueSize ?? null },
+        })
+      : null
+  const guillotineView = guillotineGrader ? await guillotineGrader.grade(input.sideGive, input.sideGet) : null
+  if (guillotineView) applyCollegeGrade(leagueGrade, guillotineView)
   /**
    * THE grade — the same object every other trade surface shows for this deal — with the league type
    * it was priced under and how we know it, as `createLeagueTradeGrader` attaches it. Global mode (no
    * league) has no league type to name.
    */
   const grade = consoleLeagueType
-    ? { ...(collegeView ?? graded.grade), leagueType: consoleLeagueType }
-    : graded.grade
+    ? { ...(collegeView ?? sportView ?? guillotineView ?? graded.grade), leagueType: consoleLeagueType }
+    : sportView ?? graded.grade
   giveLines = leagueGrade.giveLines
   getLines = leagueGrade.getLines
   const giveTotal = leagueGrade.totals.giveLeague
@@ -738,8 +779,9 @@ export async function runTradeConsoleAnalysis(
       if (collegeCounter) return collegeCounter
       const counterPickWhy = assetPolicy?.pickRefusal([...counterGive, ...counterGet]) ?? null
       if (counterPickWhy) return { graded: false, reason: counterPickWhy, basis: null }
-      const opts = { effectiveSport, nflCtx: chart.nflCtx, waiverBudget: chart.waiverBudget,
-        dataGaps: [] as string[], fcPlayers: chart.fcPlayers, resolveEnrichmentIds: false }
+      const opts = { effectiveSport, nflCtx: chart.nflCtx, waiverBudget: chart.waiverBudget, faabState: chart.faabState ?? null,
+        dataGaps: [] as string[], fcPlayers: chart.fcPlayers, resolveEnrichmentIds: false,
+        pickSlots: chart.pickSlots ?? null }
       const [g, t] = await Promise.all([resolveAssets(counterGive, opts), resolveAssets(counterGet, opts)])
       if (g.unresolved.length || t.unresolved.length) return { graded: false, reason: 'Counter assets could not be resolved.', basis: null }
       const [gd, td] = assetPolicy
@@ -850,6 +892,7 @@ export async function runTradeConsoleAnalysis(
     fairnessLabel,
     sideAdvantage,
     percentDiff,
+    yourTeamLetter: grade.graded && grade.letterBasis === 'your_team',
     giveTotal,
     getTotal,
     confidenceScore,

@@ -26,6 +26,7 @@ type PendingLike = {
   pickRound?: string
   pickYear?: number
   pickRoundNumber?: number
+  pickOriginalRosterExternalId?: string | null
   faabAmount?: number
 }
 
@@ -36,7 +37,10 @@ export function gradeInputsFromPending(assets: ReadonlyArray<PendingLike>, provi
     if (a.faabAmount != null) {
       out.assets.push({ kind: 'faab', amount: a.faabAmount })
     } else if (a.isPick) {
-      if (a.pickYear && a.pickRoundNumber) out.assets.push({ kind: 'pick', year: a.pickYear, round: a.pickRoundNumber })
+      if (a.pickYear && a.pickRoundNumber) {
+        const original = a.pickOriginalRosterExternalId?.trim()
+        out.assets.push({ kind: 'pick', year: a.pickYear, round: a.pickRoundNumber, ...(original ? { originalRosterId: original } : {}) })
+      }
       else out.unpriceable.push(a.pickRound || a.playerName || 'a draft pick')
     } else if (a.playerName?.trim()) {
       const id = a.playerId?.trim()

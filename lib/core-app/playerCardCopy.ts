@@ -385,6 +385,8 @@ const REASON_ES: Record<string, string> = {
   "Sleeper doesn't share its trade block with outside apps, so this only includes players managers put on the block in AllFantasy.":
     'Sleeper no comparte sus jugadores en venta con apps externas, así que aquí solo aparecen los que los mánagers pusieron en venta en AllFantasy.',
   'League not found.': 'No se encontró la liga.',
+  // loadInjury (NO_CURRENT_DESIGNATION)
+  'No current injury designation on any injury report.': 'Ningún reporte de lesiones le asigna una designación ahora mismo.',
   'Claim your team in this league to use its trade block.': 'Reclama tu equipo en esta liga para poner jugadores en venta.',
   'Only players on your own roster can go on your trade block.': 'Solo puedes poner en venta a jugadores de tu propia plantilla.',
   "This league's roster ids are not on file yet; try again after the next sync.":
@@ -392,8 +394,6 @@ const REASON_ES: Record<string, string> = {
 }
 
 const REASON_PATTERNS_ES: Array<[RegExp, (m: RegExpMatchArray) => string]> = [
-  // loadInjury — the window is a constant (INJURY_WINDOW_DAYS)
-  [/^No injury designation reported in the last (\d+) days\.$/, (m) => `No se reportó ninguna designación de lesión en los últimos ${m[1]} días.`],
   // ownership — too few leagues
   [
     /^Only (\d+) leagues imported — too few for an ownership rate to mean anything yet\.$/,

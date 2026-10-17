@@ -76,7 +76,18 @@ export type SleeperCheckDeps = {
   leagueRosters: (leagueId: string) => Promise<SleeperRosterLike[]>
   playerRows: (
     sleeperIds: string[],
-  ) => Promise<Array<{ sleeperId: string | null; name: string; position: string | null; team: string | null; sport: string | null; imageUrl: string | null }>>
+  ) => Promise<
+    Array<{
+      sleeperId: string | null
+      name: string
+      position: string | null
+      team: string | null
+      sport: string | null
+      imageUrl: string | null
+      source: string | null
+      fetchedAt: Date | string | null
+    }>
+  >
   injuries: (namesById: Map<string, string[]>, teamsById: Map<string, string | null>) => Promise<Map<string, string>>
   /** One unit of the per-minute league-read budget; false when it is spent. */
   takeLeagueRead: () => boolean
@@ -92,7 +103,7 @@ export const defaultSleeperCheckDeps: SleeperCheckDeps = {
     prisma.sportsPlayer.findMany({
       where: { sleeperId: { in: sleeperIds } },
       // `sport` is required by composePlayerIdentities — it gates the NFL club fold.
-      select: { sleeperId: true, name: true, position: true, team: true, sport: true, imageUrl: true },
+      select: { sleeperId: true, name: true, position: true, team: true, sport: true, imageUrl: true, source: true, fetchedAt: true },
     }),
   injuries: (namesById, teamsById) => readInjuryStatusById('NFL', namesById, teamsById),
   takeLeagueRead: () =>

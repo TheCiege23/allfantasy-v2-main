@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Idol blocks the chop</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./specialty/sp.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Cinzel:wght@600;700&amp;family=Caveat:wght@600;700&amp;family=Bebas+Neue&amp;family=Pirata+One&amp;family=Creepster&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080d}
+.sg-c{font-family:'Cinzel',serif;letter-spacing:.06em}
+.sg-row{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;background:#10131c;border:1px solid rgba(255,255,255,.05)}
+.sg-stage{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;padding-top:110px}
+.sg-card{position:relative;display:flex;flex-direction:column;align-items:center;gap:8px;padding:20px 12px;border-radius:14px;background:#10131c;border:1px solid rgba(255,255,255,.08);transition:all .4s}
+.sg-blade{position:absolute;left:50%;top:-108px;width:150px;margin-left:-75px;z-index:3;transition:transform .45s cubic-bezier(.7,0,.9,.4),left .5s ease-in-out}
+.sg-blade svg{display:block;width:100%}
+.sg-shield{position:absolute;left:50%;top:-30px;width:110px;margin-left:-55px;z-index:4;animation:spPop .4s ease-out both}
+@keyframes sgBounce{0%{transform:translateY(70px)}40%{transform:translateY(40px) rotate(-6deg)}100%{transform:translateY(0)}}
+.sg-stampw{position:absolute;inset:0;display:grid;place-items:center}
+.sg-stamp{padding:5px 12px;border:4px solid #e0402e;color:#ff6a5a;font:700 22px 'Cinzel';letter-spacing:.08em;border-radius:6px;background:rgba(7,8,13,.75);rotate:-10deg;animation:spPop .4s ease-out both}
+</style>
+</helmet>
+<div class="sp" style="--acc: #e2672a; --acc2: #ffc08a; --accInk: #1a0a04; --disp: Cinzel; min-height: 100vh; display: flex; flex-direction: column">
+<header style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 18px 28px; border-bottom: 1px solid rgba(255,255,255,.06)">
+  <a class="sp-btn" href="SurvivorGuillotineHome.dc.html" aria-label="Back" style="padding: 0 12px">‹</a>
+  <div style="flex: 1 1 320px; display: flex; flex-direction: column; gap: 3px"><h1 class="sp-h1">The chop · week 6</h1><span class="sp-t2">Blade &amp; Torch · Tribe Vela lost the tribe race 402.1 to 471.6</span></div>
+  <span class="sp-prop">Proposed rules · no spec in the repo yet</span>
+</header>
+<div style="display: flex; flex-wrap: wrap; gap: 24px; padding: 24px 28px 32px; align-items: flex-start">
+  <section class="sp-card" style="flex: 1 1 820px; padding: 24px; display: flex; flex-direction: column; gap: 14px; background: radial-gradient(ellipse at 50% 0%, rgba(226,103,42,.16), transparent 60%), #0b0d14">
+    <div style="display: flex; align-items: center; gap: 12px"><span class="sp-lbl" style="flex: 1">{{stage}}</span>
+      <sc-if value="{{canRun}}" hint-placeholder-val="{{ true }}"><button class="sp-btn sp-btn-p" onClick="{{run}}" style="min-height: 46px; padding: 0 22px">Drop the blade</button></sc-if>
+      <sc-if value="{{done}}" hint-placeholder-val="{{ false }}"><button class="sp-btn" onClick="{{reset}}">Replay</button></sc-if></div>
+    <div class="sg-stage">
+      <sc-for list="{{cards}}" as="c" hint-placeholder-count="4">
+        <div class="sg-card" style="border-color: {{c.line}}; background: {{c.bg}}">
+          <sc-if value="{{c.blade}}" hint-placeholder-val="{{ false }}"><div class="sg-blade" style="transform: {{c.tf}}; animation: {{c.anim}}" aria-hidden="true"><svg viewBox="0 0 200 110"><rect x="2" y="0" width="196" height="18" rx="6" fill="#d6be64" stroke="#000" stroke-width="3"/><path d="M14,18 L186,18 L186,60 L14,104 Z" fill="#cfd5de" stroke="#000" stroke-width="4" stroke-linejoin="round"/><path d="M20,98 L180,58" stroke="#fff" stroke-width="3"/></svg></div></sc-if>
+          <sc-if value="{{c.shield}}" hint-placeholder-val="{{ false }}"><img class="sg-shield" src="specialty/survguil/icon-idolsave.svg" alt="Idol played"></sc-if>
+          <span class="sp-av" style="width: 52px; height: 52px; font-size: 14px; background: {{c.c}}; filter: {{c.f}}">{{c.ini}}</span>
+          <span style="font-weight: 700; text-align: center">{{c.name}}</span>
+          <span class="sp-num" style="font-size: 24px; font-weight: 700">{{c.pts}}</span>
+          <span class="sp-t3" style="font-size: 12px; text-align: center; min-height: 32px">{{c.sub}}</span>
+          <sc-if value="{{c.stamp}}" hint-placeholder-val="{{ false }}"><div class="sg-stampw"><span class="sg-stamp">Chopped</span></div></sc-if>
+        </div>
+      </sc-for>
+    </div>
+    <span style="font-size: 15px; font-weight: 600; text-align: center; color: {{lineC}}">{{line}}</span>
+  </section>
+  <aside style="flex: 1 1 300px; max-width: 360px; display: flex; flex-direction: column; gap: 12px">
+    <div class="sp-card2" style="padding: 16px; display: flex; flex-direction: column; gap: 10px"><span class="sp-lbl">The sequence</span>
+      <div class="sp-rule"><b>1</b><span>The blade drops over the lowest score in the losing tribe.</span></div>
+      <div class="sp-rule"><b>2</b><span>If that manager played an idol before lock, the idol knocks the blade away.</span></div>
+      <div class="sp-rule"><b>3</b><span>The blade slides to the next lowest score and falls.</span></div>
+      <div class="sp-rule"><b>4</b><span>The chopped roster goes to waivers. Idol plays are revealed only here.</span></div></div>
+  </aside>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":760}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { s: 0 }; this.t = []; }
+  renderVals() {
+    const s = this.state.s;   // 0 idle, 1 blade over O8, 2 idol blocks, 3 blade slides to TC, 4 chopped
+    const C = [['Open Team 5','O5','#12352a','118.4'],['Open Team 4','O4','#1f2a4d','104.0'],['TheCiege26','TC','#22314f','94.6'],['Open Team 8','O8','#3a2410','85.1']];
+    const run = () => { this.t.forEach(clearTimeout); this.setState({ s: 1 }); this.t = [[2, 900], [3, 1900], [4, 2700]].map(([v, ms]) => setTimeout(() => this.setState({ s: v }), ms)); };
+    const cards = C.map(([name, ini, c, pts], i) => {
+      const o8 = i === 3, tc = i === 2;
+      const bladeHere = (o8 && s >= 0 && s < 3) || (tc && s >= 3);
+      return { name, ini, c, pts, blade: bladeHere,
+        tf: o8 ? (s === 1 ? 'translateY(70px)' : 'translateY(0)') : (s >= 4 ? 'translateY(70px)' : 'translateY(0)'), anim: o8 && s === 2 ? 'sgBounce .6s ease-out both' : 'none',
+        shield: o8 && s >= 2, stamp: tc && s >= 4, f: tc && s >= 4 ? 'grayscale(1) brightness(.7)' : 'none',
+        sub: o8 ? (s >= 2 ? 'Idol played · safe' : 'Lowest in Vela') : tc ? (s >= 4 ? 'Chopped · roster to waivers' : 'Next lowest') : 'Safe',
+        line: o8 && s >= 2 ? 'rgba(127,224,192,.6)' : tc && s >= 4 ? '#e0402e' : 'rgba(255,255,255,.08)', bg: tc && s >= 4 ? 'rgba(224,64,46,.12)' : o8 && s >= 2 ? 'rgba(127,224,192,.08)' : '#10131c' }; });
+    return { cards, canRun: s === 0, done: s >= 4, run, reset: () => { this.t.forEach(clearTimeout); this.setState({ s: 0 }); },
+      stage: ['Lowest four in Tribe Vela', 'The blade is falling…', 'An idol!', 'The blade moves on…', 'Final'][s],
+      line: s >= 4 ? 'Open Team 8 played an idol. TheCiege26 is chopped with 94.6.' : s >= 2 ? 'Open Team 8 played an immunity idol before lock.' : 'Vela lost the tribe race. Its lowest score goes under the blade.',
+      lineC: s >= 4 ? '#ffc08a' : '#a3a9c2' };
+  }
+}
+</script>
+</body>
+</html>

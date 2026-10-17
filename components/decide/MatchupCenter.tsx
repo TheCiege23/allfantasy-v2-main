@@ -62,7 +62,7 @@ export function MatchupCenter({ leagueId }: { leagueId: string }) {
         <div className="bdx-skel" />
       ) : (
         <>
-          <div className="bdx-support" style={{ gridTemplateColumns: '1fr 1fr' }}>
+          <div className="bdx-support bdx-support--pair">
             {center.matchups.map((m) => {
               const mine = viewerId && (m.a.ownerId === viewerId || m.b.ownerId === viewerId)
               return (

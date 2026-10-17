@@ -135,6 +135,8 @@ export async function resolveNflRedraftCanonicalHeadshot(
     capability: 'headshots',
     playerName: input.name,
     teamAbbr: input.team,
+    // Passed so the headshot adapters can refuse a same-named player at another position.
+    position: input.position,
     allFantasyPlayerId: input.allFantasyPlayerId,
   }, deps)
   const canonical = resolution.canonicalData ?? {}

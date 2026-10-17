@@ -99,7 +99,7 @@ export function redactSurvivorSummaryPayloadForFairPlay<
 }
 
 /** Redacts `/api/survivor/season` payload for fair-play playing commissioners. */
-export function redactSurvivorSeasonPayloadForFairPlay<Payload extends { tribes: unknown[]; players: unknown[] }>(
+export function redactSurvivorSeasonPayloadForFairPlay<Payload extends { tribes: unknown[]; players: unknown[]; weeklyScores?: unknown[] }>(
   payload: Payload,
   userId: string,
   myTribeId: string | null | undefined,
@@ -114,5 +114,7 @@ export function redactSurvivorSeasonPayloadForFairPlay<Payload extends { tribes:
     const n = Array.isArray(t.members) ? t.members.length : 0
     return { ...t, members: [], fairPlayRedacted: n > 0, memberCount: n }
   })
-  return { ...payload, tribes, players, fairPlayMode: true as const }
+  const weeklyScores = (payload.weeklyScores as { userId?: string; tribeId?: string | null }[] | undefined)?.filter(score =>
+    score.userId === userId || (myTribeId != null && score.tribeId === myTribeId))
+  return { ...payload, tribes, players, ...(weeklyScores ? { weeklyScores } : {}), fairPlayMode: true as const }
 }

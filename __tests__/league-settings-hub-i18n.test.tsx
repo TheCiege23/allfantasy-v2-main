@@ -64,7 +64,7 @@ const FILES = [
   'app/league/[leagueId]/components/DeleteLeagueFromAfPanel.tsx',
   ...['GeneralTab', 'WaiversTab', 'AISettingsTab', 'ConceptRulesTab', 'TradesTab', 'PlayoffsTab', 'ScoringTab', 'RostersTab', 'CommissionerTab'].map((f) => `components/league-settings/tabs/${f}.tsx`),
 ]
-const TAB_IDS = ['general', 'draft', 'roster', 'scoring', 'waivers', 'trades', 'playoffs', 'members', 'notifications', 'permissions', 'commissioner', 'conceptRules', 'ai']
+const TAB_IDS = ['general', 'draft', 'roster', 'scoring', 'trades', 'playoffs', 'members', 'notifications', 'permissions', 'commissioner', 'conceptRules', 'ai']
 
 describe('every key the hub names exists in BOTH languages', () => {
   const keys = [...new Set(FILES.flatMap((f) => [...readFileSync(resolve(ROOT, f), 'utf8').matchAll(/['"`]((?:lsHub|lsModal)\.[A-Za-z0-9_.]+)['"`]/g)].map((m) => m[1]!)))]
@@ -128,12 +128,12 @@ describe('🛑 the hub reads Spanish in Spanish', () => {
   afterEach(() => { lang.language = 'en'; vi.unstubAllGlobals(); cleanup() })
 
   it.each([
-    ['general', ['Básicos', 'Guardado automático', 'Nombre de la liga', 'Zona horaria', 'URL del logo']],
-    ['waivers', ['Los cambios se aplican al registro oficial', 'Tipo de reclamos', 'Prioridad de reclamo rotativa', 'Prioridad de reclamo por clasificación inversa', 'Presupuesto FAAB', 'Puja mínima', 'Período de reclamos (h)']],
+    // Waivers is a section of General now (2026-10-14), not its own tab. FAAB fields show only when FAAB is in use.
+    ['general', ['Básicos', 'Guardado automático', 'Nombre de la liga', 'Zona horaria', 'URL del logo', 'Reclamos y agentes libres', 'Tipo de reclamos', 'Prioridad de reclamo rotativa', 'Prioridad de reclamo por clasificación inversa', 'Período de reclamos (h)', 'Calendario diario']],
     ['trades', ['Permitir trades de picks del draft', 'Ventana de revisión (horas)', 'Límite de trades (n.º de semana)']],
     ['playoffs', ['Calendario rápido', 'Equipos en playoffs', 'Inicio de playoffs (semana)', 'Fases y brackets']],
     ['scoring', []],
-    ['roster', ['Los puestos y plantillas de roster se guardan']],
+    ['roster', []],
     ['notifications', ['Las notificaciones básicas de la liga están en los ajustes de la cuenta.']],
     ['commissioner', ['Registro de auditoría', 'El registro de auditoría está listo', 'Quitar de AllFantasy', 'es solo para el comisionado principal.']],
     ['conceptRules', ['Resumen del formato', 'Guillotina: Activado', 'Survivor: Desactivado', 'Best ball: Activado', 'Variante: —', 'Ajustes de Best Ball', 'Notas del comisionado sobre el formato (fusión JSON)']],

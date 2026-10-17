@@ -1,6 +1,9 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import '@/components/core-app/af-core.css'
+import '@/components/league/league-overview.css'
+
+import { useCallback, useEffect, useId, useState } from 'react'
 import {
   advancePlayoffRound,
   fetchRedraftPlayoffRuntime,
@@ -29,6 +32,7 @@ export function StandingsView({
   seasonId: string | null
   isCommissioner?: boolean
 }) {
+  const scrollHintId = useId()
   const [playoffTeams, setPlayoffTeams] = useState<number>(Math.min(6, Math.max(2, rows.length || 6)))
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<string | null>(null)
@@ -146,7 +150,8 @@ export function StandingsView({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="af-core af-league-overview min-w-0 space-y-4">
+      <h2 className="af-overview-title">Standings &amp; playoffs</h2>
       {isCommissioner ? (
         <div
           data-testid="redraft-playoff-commissioner-controls"
@@ -229,24 +234,26 @@ export function StandingsView({
         Rankings and playoff seeds come from the league standings service. Points and records reflect the latest completed recalculation; pending stat corrections may change the order.
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-white/[0.08]" tabIndex={0} aria-label="League standings table">
-        <table className="min-w-[680px] w-full text-left text-[12px] text-white/80">
+      <p id={scrollHintId} className="af-standings-scroll-hint">Scroll the table horizontally to see all statistics.</p>
+      <div className="af-standings-scroll overflow-x-auto rounded-xl border border-white/[0.08]" role="region" tabIndex={0} aria-label="League standings table" aria-describedby={scrollHintId}>
+        <table className="min-w-[600px] w-full text-left text-[12px] text-white/80">
         <caption className="sr-only">Authoritative league standings ordered by the configured tiebreaker rules.</caption>
         <thead className="border-b border-white/[0.08] bg-white/[0.04] text-[11px] uppercase text-white/45">
           <tr>
-            <th className="px-3 py-2">#</th>
-            <th className="px-3 py-2">Team</th>
-            <th className="px-3 py-2">W-L-T</th>
-            <th className="px-3 py-2">PF</th>
-            <th className="px-3 py-2">PA</th>
-            <th className="px-3 py-2">Streak</th>
+            <th scope="col" className="px-3 py-2">#</th>
+            <th scope="col" className="px-3 py-2">Team</th>
+            <th scope="col" className="px-3 py-2">W-L-T</th>
+            <th scope="col" className="px-3 py-2">PF</th>
+            <th scope="col" className="px-3 py-2">PA</th>
+            <th scope="col" className="px-3 py-2">Streak</th>
           </tr>
         </thead>
         <tbody>
+          {rows.length === 0 ? <tr><td colSpan={6} className="p-5 text-center text-[var(--muted)]">No standings have been recorded yet.</td></tr> : null}
           {rows.map((r, i) => (
             <tr key={r.id} className="border-b border-white/[0.05]">
               <td className="px-3 py-2 text-white/45">{r.playoffSeed ?? i + 1}</td>
-              <td className="px-3 py-2">{r.teamName ?? r.ownerName ?? r.id.slice(0, 6)}</td>
+              <th scope="row" className="af-standings-team px-3 py-2">{r.teamName ?? r.ownerName ?? r.id.slice(0, 6)}</th>
               <td className="px-3 py-2">
                 {r.wins}-{r.losses}-{r.ties ?? 0}
               </td>

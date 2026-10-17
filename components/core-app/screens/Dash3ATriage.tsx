@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Dash3ATriageView } from '@/components/core-app/screens/Dash3ATriageView'
+import { Dash3ATriageView, type TriageViewDepthAlert } from '@/components/core-app/screens/Dash3ATriageView'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-dash-triage.css'
 
@@ -27,6 +27,9 @@ import '@/components/core-app/af-dash-triage.css'
 
 export type TriageSlot = 'starter' | 'bench' | 'ir' | 'taxi'
 
+/** Questionable starters the card may add after the ruled-out ones. */
+export const QUESTIONABLE_LIMIT = 2
+
 type TriageLeague = {
   id: string
   name: string
@@ -35,16 +38,27 @@ type TriageLeague = {
   /** Null when the roster could not be read — the chip then shows no slot. */
   slot?: TriageSlot | null
   /**
-   * Same-position players on YOUR bench in this league, best asset first.
+   * Players on YOUR bench who can legally fill his slot in this league (the
+   * league's own slot template) and whose game is not over, best asset first.
    * Only ever populated where he is starting. Empty means the bench holds no
-   * same-position cover — which is itself the answer, and the reason the free
-   * agent link matters there.
+   * cover — which is itself the answer, and the reason the free agent link
+   * matters there.
    */
-  bench?: Array<{ name: string; position: string | null }>
+  bench?: Array<{ name: string; position: string | null; points?: number | null }>
+  /**
+   * A two-step move through a flex or superflex seat (lib/core-app/lineupCover.ts): a starter slides
+   * into his slot and `fill` takes the seat that frees up; `fill` null means only a free agent could.
+   * `gain` is what it adds over the simple swap, when both projections are known.
+   */
+  cover?: { move: string; toSlot: string; fromSlot: string; fill: string | null; fillPoints?: number | null; gain?: number | null } | null
+  /** The platform's lineup screen (or a native league's team tab) — where the move is made. */
+  fixHref?: string | null
 }
 
 export type TriageBookRow = {
   initials: string
+  /** The Sleeper id, for the on-demand best free agent (TriageBestAdd). Absent on older payloads. */
+  sleeperId?: string | null
   name: string
   imageUrl: string | null
   leagues: TriageLeague[]
@@ -61,6 +75,8 @@ export type TriageBookRow = {
   benchIn?: number
   irIn?: number
   taxiIn?: number
+  /** Rostered in a best ball league, where the platform sets the lineup — never "starting". */
+  bestBallIn?: number
   /** What the feed said, e.g. "Ruled out — ankle." Null when none was given. */
   description?: string | null
   /** Market price, or null. Absent means no price on file — never "worthless". */
@@ -84,9 +100,16 @@ export function Dash3ATriage({
   now,
   valueBasis,
   freshness = null,
+  depthAlerts = [],
+  pro = null,
 }: {
   book: TriageBookRow[] | null
   now: Date
+  /**
+   * Best ball positions where the healthy room has thinned (lib/core-app/bestBallDepth.ts). A best
+   * ball league has no starters to be in doubt, so this is what the panel says about one instead.
+   */
+  depthAlerts?: TriageViewDepthAlert[]
   /** The strip's freshness line — rendered only when the strip itself renders. */
   freshness?: ReactNode
   /**
@@ -94,6 +117,12 @@ export function Dash3ATriage({
    * per row, and omitted entirely when no row carries a price.
    */
   valueBasis?: { format: string; qbFormat: string } | null
+  /**
+   * AF Pro access for the card's paid parts — the best-free-agent button and the Questionable
+   * game-time calls (founder decision 2026-10-17; swap tips and "Set lineup" stay free). Null when
+   * the plan could not be read: fails OPEN, like the rest of /core's depth reads.
+   */
+  pro?: { unlocked: boolean; upgradePath: string } | null
 }) {
   /*
    * ⚠ DECISIONS ONLY. The loader's full book (BOOK_LIMIT rows, every
@@ -106,9 +135,25 @@ export function Dash3ATriage({
    * renders nothing at all, and that is the intended resting state.
    */
   const rows = (book ?? []).filter((p) => p.tone === 'bad' && p.startingIn > 0)
-  if (rows.length === 0) return null
-  const visible = rows.slice(0, 6)
-  const overflow = rows.length - visible.length
+  /*
+   * QUESTIONABLE STARTERS, BOUNDED SO THE CARD STAYS A DECISION LIST (2026-10-17, founder-asked). A
+   * game-time call IS a decision — have the pivot ready, swap if he is ruled out — but only while it
+   * can still be made: kickoff ahead and within two days. At most two, always after the ruled-out
+   * rows, and never counted toward the overflow, so the wall-of-headshots problem above cannot return.
+   */
+  const nowMs = now.getTime()
+  const proOpen = pro?.unlocked !== false
+  const gameTimeCalls = (proOpen ? book ?? [] : [])
+    .filter((p) => {
+      if (p.tone !== 'warn' || p.startingIn <= 0 || !p.nextKickoffAt) return false
+      const until = new Date(p.nextKickoffAt).getTime() - nowMs
+      return until > 0 && until <= 48 * 60 * 60_000
+    })
+    .slice(0, QUESTIONABLE_LIMIT)
+  if (rows.length === 0 && gameTimeCalls.length === 0 && depthAlerts.length === 0) return null
+  const outShown = rows.slice(0, 6)
+  const visible = [...outShown, ...gameTimeCalls.slice(0, Math.max(0, 6 - outShown.length))]
+  const overflow = rows.length - outShown.length
 
   /*
    * ⚠ THE WORDS ARE SAID IN THE CLIENT (2026-10-04). This strip keeps the decisions — which rows,
@@ -121,6 +166,7 @@ export function Dash3ATriage({
         key: `${p.name}|${p.team ?? ''}`,
         name: p.name,
         initials: p.initials,
+        sleeperId: p.sleeperId ?? null,
         imageUrl: p.imageUrl,
         playerHref: `/core/players?q=${encodeURIComponent(p.name)}`,
         position: p.position,
@@ -135,6 +181,7 @@ export function Dash3ATriage({
         benchIn: p.benchIn ?? 0,
         irIn: p.irIn ?? 0,
         taxiIn: p.taxiIn ?? 0,
+        bestBallIn: p.bestBallIn ?? 0,
         value: p.value ? { overallRank: p.value.overallRank, positionRank: p.value.positionRank } : null,
         reportedAgo: p.reportedAgo,
         kickoffMins: kickoffMins(p.nextKickoffAt, now),
@@ -145,7 +192,10 @@ export function Dash3ATriage({
           platform: l.platform,
           href: `/core?league=${l.id}`,
           slot: l.slot ?? null,
-          bench: l.slot === 'starter' ? (l.bench ?? []).map((b) => b.name) : [],
+          // "Tyler Allgeier (11.2)" — this week's league-scored projection, when one is on file.
+          bench: l.slot === 'starter' ? (l.bench ?? []).map((b) => (b.points != null ? `${b.name} (${b.points.toFixed(1)})` : b.name)) : [],
+          cover: l.slot === 'starter' ? l.cover ?? null : null,
+          fixHref: l.slot === 'starter' ? l.fixHref ?? null : null,
         })),
         leagueCount: p.leagues.length,
         freeAgentLinks: p.leagues
@@ -153,7 +203,9 @@ export function Dash3ATriage({
           .map((l) => ({ id: l.id, name: l.name, href: `/core/waivers?league=${encodeURIComponent(l.id)}` })),
       }))}
       overflow={overflow}
+      depthAlerts={depthAlerts.slice(0, 4)}
       valueBasis={valueBasis && rows.some((r) => r.value) ? valueBasis : null}
+      proUpsell={proOpen ? null : pro?.upgradePath ?? null}
       freshness={freshness}
     />
   )

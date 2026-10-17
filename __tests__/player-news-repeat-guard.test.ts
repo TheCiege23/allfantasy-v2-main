@@ -8,7 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const h = vi.hoisted(() => ({
   news: [] as Array<Record<string, unknown>>,
-  roster: [] as Array<{ roster: { ownerId: string; leagueId: string } }>,
+  roster: [] as Array<{ playerName: string; team: string; sport: string; roster: { ownerId: string; leagueId: string } }>,
   followers: [] as string[],
   cache: new Map<string, Date>(),
   cacheDown: false,
@@ -19,6 +19,9 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     playerNewsRecord: { findMany: async () => h.news, updateMany: async () => ({ count: 1 }) },
     redraftRosterPlayer: { findMany: async () => h.roster },
+    playerIdentityMap: {
+      findMany: async () => [{ id: 'pim-nacua', canonicalName: 'Puka Nacua', position: 'WR', currentTeam: 'LAR', sleeperId: '9493' }],
+    },
     sportsDataCache: {
       findMany: async ({ where }: { where: { cacheKey: { in: string[] }; expiresAt: { gt: Date } } }) => {
         if (h.cacheDown) throw new Error('db down')
@@ -39,7 +42,7 @@ vi.mock('@/lib/prisma', () => ({
   },
 }))
 vi.mock('@/lib/notifications/NotificationDispatcher', () => ({ dispatchNotification: h.dispatch }))
-vi.mock('@/lib/follows/playerFollows', () => ({ listFollowerIdsForPlayer: async () => h.followers }))
+vi.mock('@/lib/follows/playerFollows', () => ({ listFollowerIdsForPlayerIdentity: async () => h.followers }))
 
 import { dispatchPendingPlayerNewsNotifications } from '@/lib/notifications/PlayerNewsNotificationService'
 import { injuryStatusTag, storyKey, topicKey } from '@/lib/notifications/playerNewsRepeatGuard'
@@ -48,7 +51,7 @@ const MCVAY = "McVay says Nacua's injury not 'long-term' concern, but Rams being
 const row = (id: string, headline: string) => ({
   id, sport: 'NFL', playerName: 'Puka Nacua', team: 'LAR', headline, body: null, impact: 'high',
 })
-const roster = (ownerId: string, leagueId: string) => ({ roster: { ownerId, leagueId } })
+const roster = (ownerId: string, leagueId: string) => ({ playerName: 'Puka Nacua', team: 'LAR', sport: 'NFL', roster: { ownerId, leagueId } })
 const toldUsers = () => h.dispatch.mock.calls.flatMap((c) => (c[0] as { userIds: string[] }).userIds)
 
 async function run(...rows: Array<Record<string, unknown>>) {

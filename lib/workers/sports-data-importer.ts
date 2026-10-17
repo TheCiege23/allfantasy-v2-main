@@ -3,6 +3,9 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { currentSeasonReportWhere } from '@/lib/injuries/injuryRecency'
+import { createInjuryRowMatcher, isInjuryDesignation } from '@/lib/injuries/matchInjuryRows'
+import { isStoredInjuryDesignation, storedInjuryFields } from '@/lib/injuries/storedInjuryDesignation'
+import { rosterDesignation } from '@/lib/injuries/rosterDesignation'
 import { SUPPORTED_SPORTS, normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
 import {
   assertTeamCodeFits,
@@ -12,9 +15,17 @@ import {
   type TeamCodeNormalization,
 } from '@/lib/team-abbrev'
 import { apiChain } from '@/lib/workers/api-chain'
+import {
+  collapseSeedsByIdentity,
+  countNamesakes,
+  createSeedValueBinder,
+  pickLatestSeasonRow,
+} from '@/lib/workers/sports-data-importer-binding'
+import { COLLEGE_PAGED_SPORTS, SPORTS_PLAYER_TTL_MS } from '@/lib/workers/sports-player-record-freshness'
 
-const SPORTS_PLAYER_TTL_MS = 6 * 60 * 60 * 1000
 const UPSERT_BATCH_SIZE = 100
+
+export { isStoredInjuryDesignation }
 
 /**
  * DEFAULT wall-clock budget for the whole import, kept under the route's `maxDuration = 300`.
@@ -86,6 +97,18 @@ async function withTimeout<T>(value: Promise<T>, ms: number, label: string, onTi
   }
 }
 
+/** What `loadCurrentInjuryResolver` needs from a seed. */
+type InjurySeed = { name: string; team?: string | null; position?: string | null; status?: string | null; source?: string | null }
+
+/**
+ * ⚠ `team` AND `position` CARRY PLACEHOLDERS, AND THEY ARE NOT DATA. `SportsPlayerRecord.team` and
+ * `.position` are NOT NULL, so a seed whose source states no team is written `'FA'` and one with no
+ * position `'FLEX'` (an injury-invented seed always is). Kept because the columns require a value and
+ * inventing a real one would be worse — but read them as "unknown": `'FA'` here is indistinguishable
+ * from Sleeper's genuine free-agent `'FA'`, and `'FLEX'` is no football position at all. The value
+ * binder (`sports-data-importer-binding.ts`) treats `'FLEX'` as no position and never accepts `'FA'`
+ * as proof of identity; a reader should do the same.
+ */
 type PlayerSeed = {
   id: string
   name: string
@@ -151,7 +174,7 @@ function resolveTeamCode(ctx: TeamCodeContext, rawTeam: string | null | undefine
  * each run continues where the last one stopped (no rescanning), bounded per run, and wraps
  * to the start once the source is exhausted so later source changes are re-observed.
  */
-const COLLEGE_PAGED_SPORTS = new Set<SupportedSport>(['NCAAF', 'NCAAB'] as SupportedSport[])
+// `COLLEGE_PAGED_SPORTS` is defined in `sports-player-record-freshness.ts` so readers can share it.
 export const DEFAULT_SEED_PAGE_SIZE = 2_500
 export const MAX_SEED_PAGE_SIZE = 25_000
 
@@ -287,21 +310,90 @@ async function fetchProviderPlayerSeeds(sport: SupportedSport, season: number, t
   return seeds
 }
 
-async function loadIdentitySeeds(sport: SupportedSport, teamCtx: TeamCodeContext): Promise<PlayerSeed[]> {
-  const rows = await prisma.playerIdentityMap.findMany({
-    where: { sport },
-    select: {
-      canonicalName: true,
-      currentTeam: true,
-      position: true,
-      sleeperId: true,
-      clearSportsId: true,
-      status: true,
-    },
-    take: 5000,
-  })
+/**
+ * Identity-map seeds are read in pages of this many rows, in `id` order.
+ *
+ * 🛑 THIS WAS ONE `take: 5000` WITH NO `orderBy` (2026-10-11), SO WHICH ATHLETES WERE SEEDED WAS
+ * WHATEVER POSTGRES HANDED BACK FIRST. Measured that day: NFL holds 9,567 identity rows, MLB 7,320,
+ * NCAAB 18,209 and NCAAF 62,751 — so 4,567 NFL and 2,320 MLB athletes were never seeded from the
+ * identity map, and which ones was decided by heap order, not by anything about the player.
+ */
+export const IDENTITY_SEED_PAGE_SIZE = 5_000
 
-  return rows
+/**
+ * Ceiling on identity rows read for ONE non-college sport in one run — a guard, not a window. The
+ * largest such sport is NFL at 9,567 (2026-10-11), two pages. A sport that outgrows it is read up to
+ * the ceiling, in the same order every run, and says so in `identitySeeds` telemetry.
+ */
+export const IDENTITY_SEED_MAX_ROWS = 25_000
+
+/** Cursor key for a college sport's identity rotation inside the run record's `seedCursors`. */
+export function identitySeedCursorKey(sport: string): string {
+  return `identity:${sport}`
+}
+
+/**
+ * The sport's identity-map seeds, in a STABLE order (`id` ascending), paged by `id > cursor`.
+ *
+ *  - Every sport outside `COLLEGE_PAGED_SPORTS` is read COMPLETELY each run (up to
+ *    `IDENTITY_SEED_MAX_ROWS`): NFL 9,567 rows is two reads. Reading all of them matters beyond
+ *    coverage: after a successful upsert, every row of the sport the run did NOT write has its injury
+ *    fields cleared, so an athlete seeded only every other run would lose a live designation every
+ *    other run.
+ *  - NCAAF (62,751) and NCAAB (18,209) cannot be written whole inside a run, so — exactly like their
+ *    `SportsPlayer` source pages — they rotate: ONE page per run from the cursor the last run left,
+ *    wrapping to the start once the end is reached. Same row volume as before, but every athlete now
+ *    comes round instead of the same 5,000 forever.
+ *
+ * `id > cursor` rather than Prisma's `cursor:` option: a deleted cursor row still resumes correctly.
+ */
+async function loadIdentitySeeds(
+  sport: SupportedSport,
+  teamCtx: TeamCodeContext,
+  cursor: string | null,
+): Promise<{ seeds: PlayerSeed[]; telemetry: PagedSeedTelemetry }> {
+  const rotate = COLLEGE_PAGED_SPORTS.has(sport)
+  const rows: Array<{
+    id: string
+    canonicalName: string
+    currentTeam: string | null
+    position: string | null
+    sleeperId: string | null
+    clearSportsId: string | null
+    status: string | null
+  }> = []
+  let after = rotate ? cursor : null
+  let exhausted = false
+  for (;;) {
+    const page = await prisma.playerIdentityMap.findMany({
+      where: { sport, ...(after ? { id: { gt: after } } : {}) },
+      orderBy: { id: 'asc' },
+      take: IDENTITY_SEED_PAGE_SIZE,
+      select: {
+        id: true,
+        canonicalName: true,
+        currentTeam: true,
+        position: true,
+        sleeperId: true,
+        clearSportsId: true,
+        status: true,
+      },
+    })
+    rows.push(...page)
+    if (page.length < IDENTITY_SEED_PAGE_SIZE) {
+      exhausted = true
+      break
+    }
+    after = page[page.length - 1]!.id
+    if (rotate || rows.length >= IDENTITY_SEED_MAX_ROWS) break
+  }
+  if (!rotate && !exhausted) {
+    console.warn(
+      `[sports-data-importer] ${sport} identity seeds stopped at the ${IDENTITY_SEED_MAX_ROWS}-row ceiling — later rows by id were not seeded this run`,
+    )
+  }
+
+  const seeds = rows
     .map((row) => ({
       id: buildPlayerId(sport, row.sleeperId ?? row.clearSportsId ?? null, row.canonicalName, row.currentTeam),
       name: row.canonicalName,
@@ -311,6 +403,16 @@ async function loadIdentitySeeds(sport: SupportedSport, teamCtx: TeamCodeContext
       source: 'manual',
     }))
     .filter((row) => Boolean(row.name))
+  return {
+    seeds,
+    telemetry: {
+      count: seeds.length,
+      cursorStart: rotate ? cursor : null,
+      // Rotating sports resume here next run; a complete read, or the end of a rotation, wraps.
+      cursorEnd: rotate && !exhausted ? after : null,
+      exhausted,
+    },
+  }
 }
 
 export type SleeperIdOwner = { sleeperId: string; name: string; position?: string | null }
@@ -334,6 +436,27 @@ async function loadSleeperIdOwners(sport: SupportedSport): Promise<SleeperIdOwne
     seen.add(row.sleeperId)
     return [{ sleeperId: row.sleeperId, name: row.name, position: normalizePositionForSport(sport, row.position) }]
   })
+}
+
+/**
+ * Rolling Insights id → Sleeper id, from the identity map — the crosswalk that lets a season-stats row
+ * (keyed by RI's id) bind to the seed of the same athlete BY ID rather than by name.
+ *
+ * Measured 2026-10-11: all 2,774 NFL RI ids in `player_season_stats` have an identity row, 2,675 of
+ * them with a Sleeper id. `@@unique([sport, rollingInsightsId])` makes each RI id one row. Every RI
+ * id here is an id in RI's namespace and is only ever compared with a stat row's `playerId` whose
+ * `source` is Rolling Insights — never with a seed id, which is the collision recorded below.
+ */
+async function loadRollingInsightsToSleeperIds(sport: SupportedSport): Promise<Map<string, string>> {
+  const rows = await prisma.playerIdentityMap.findMany({
+    where: { sport, rollingInsightsId: { not: null }, sleeperId: { not: null } },
+    select: { rollingInsightsId: true, sleeperId: true },
+  })
+  const map = new Map<string, string>()
+  for (const row of rows) {
+    if (row.rollingInsightsId && row.sleeperId) map.set(row.rollingInsightsId, row.sleeperId)
+  }
+  return map
 }
 
 /**
@@ -394,26 +517,119 @@ export function keySeedsToSleeperIdentity<T extends { id: string; name: string; 
   })
 }
 
-function buildProjectionMap(rows: Array<Record<string, unknown>>): Map<string, Record<string, unknown>> {
-  const map = new Map<string, Record<string, unknown>>()
-  for (const row of rows) {
-    const name = String(row.name ?? row.playerName ?? row.player ?? '').trim()
-    if (!name) continue
-    map.set(normalizePlayerName(name), row)
+/** Name/team/position of a provider projection or ranking row — the fields its binding is verified by. */
+function describeProviderRow(row: Record<string, unknown>): { name: string; team: string | null; position: string | null } {
+  const text = (value: unknown): string | null => (typeof value === 'string' && value.trim() ? value.trim() : null)
+  return {
+    name: String(row.name ?? row.playerName ?? row.player ?? '').trim(),
+    team: text(row.team ?? row.teamAbbrev ?? row.team_abbr),
+    position: text(row.position ?? row.pos),
   }
-  return map
 }
 
-function buildDynastyValueMap(rows: Array<Record<string, unknown>>): Map<string, number> {
-  const map = new Map<string, number>()
-  rows.forEach((row, index) => {
-    const name = String(row.name ?? row.playerName ?? row.player ?? '').trim()
-    if (!name) return
+/** A provider row's Sleeper id, when it states one — the only id namespace a seed id is known to share. */
+function providerRowSeedId(sport: string, row: Record<string, unknown>): string | null {
+  const sid = String(row.sleeperId ?? row.sleeper_id ?? '').trim()
+  return sid ? boundPlayerId(`${sport}:${sid}`) : null
+}
+
+/**
+ * Each ranking row with its 1–100 dynasty value: the row's own value when it states one, else its
+ * POSITION in the list squeezed to 1–100. Computed per ROW, before binding, so the value a seed gets
+ * is the one its own row earned.
+ */
+function buildDynastyValueRows(rows: Array<Record<string, unknown>>): Array<{ row: Record<string, unknown>; value: number }> {
+  return rows.map((row, index) => {
     const explicit = Number(row.dynasty_value ?? row.dynastyValue ?? row.score ?? row.value)
     const derived = Number.isFinite(explicit) ? explicit : clamp(100 - index, 1, 100)
-    map.set(normalizePlayerName(name), Math.round(clamp(derived, 1, 100)))
+    return { row, value: Math.round(clamp(derived, 1, 100)) }
   })
-  return map
+}
+
+/*
+ * ── KEEPING `injuryStatus` HONEST ON ROWS THIS RUN DID NOT WRITE ─────────────────────────────────
+ *
+ * The write path (`loadCurrentInjuryResolver`) only cleans the rows it rewrites. Measured in
+ * production 2026-10-11, rows not rewritten since that fix deployed still held 80,923 NCAAF, 22,509
+ * NCAAB and 19,409 NFL roster codes (INACT/ACT/Active…) plus 811 NFL designations nobody was
+ * reporting any more (391 "Questionable" last written 2026-09-28). They go untouched two ways:
+ * orphan rows whose id is no longer on any seed, and a sport whose upsert throws, whose catch path
+ * only relabelled `dataSource`. Three cleanups close it, below.
+ *
+ * 🛑 RAW SQL, NOT `updateMany`, BECAUSE `updateMany` BUMPS `lastUpdated` (`@updatedAt`). Readers pick
+ * the newest row per player by `lastUpdated` (lib/data/players.ts, FantasyValueSnapshotService,
+ * trade-pre-analysis…), so clearing an orphan row through Prisma would make that stale orphan the
+ * NEWEST row for its name and let it beat the current one. Raw SQL leaves `last_updated` alone, and
+ * the `IS NOT NULL` filters make every statement touch only rows that actually need clearing.
+ *
+ * ⚠ `last_updated` is TIMESTAMP(3) WITHOUT TIME ZONE holding UTC (Prisma writes it), so the cutoff is
+ * passed as a zone-less UTC string cast to timestamp(3). Passing a `Date` would compare against a
+ * timestamptz and shift by the session's TimeZone — in the direction that could reach rows this run
+ * just wrote.
+ */
+
+/**
+ * Margin subtracted from a sport's write-start before it is used as the "not written this run"
+ * cutoff. `@updatedAt` is stamped by the in-process query engine from the same clock as `Date.now()`,
+ * so written rows are already >= the write-start; the margin is insurance against a clock step, in
+ * the only safe direction (a row touched by another writer inside it merely escapes until next run).
+ */
+const UNWRITTEN_CUTOFF_MARGIN_MS = 60_000
+
+function toPgUtcTimestamp(date: Date): string {
+  // 2026-10-11T17:55:00.123Z -> 2026-10-11 17:55:00.123
+  return date.toISOString().replace('T', ' ').replace('Z', '')
+}
+
+/**
+ * Null `injuryStatus`/`injuryNotes` on every `sport` row last written before `cutoff`.
+ * Returns the number of rows changed. Never touches `last_updated` (see the note above).
+ */
+async function clearInjuryWrittenBefore(sport: string, cutoff: Date): Promise<number> {
+  return prisma.$executeRaw`
+    UPDATE "sports_players"
+       SET "injury_status" = NULL, "injury_notes" = NULL
+     WHERE "sport" = ${sport}
+       AND "last_updated" < ${toPgUtcTimestamp(cutoff)}::timestamp(3)
+       AND ("injury_status" IS NOT NULL OR "injury_notes" IS NOT NULL)
+  `
+}
+
+/**
+ * The sport-independent column guard: clear every `injuryStatus` that is not a designation per
+ * `isStoredInjuryDesignation`, and every `injuryNotes` left with no status beside it.
+ *
+ * The DISTINCT values are read and classified in JS, then cleared by exact value — so the database
+ * guard and the write path apply literally the same predicate rather than a SQL re-implementation of
+ * it. A distinct-value read over `sports_players` is one grouped scan; the column holds a few hundred
+ * distinct values, not one per row.
+ */
+export async function clearNonDesignationInjuryStatuses(): Promise<{ cleared: number; values: string[] }> {
+  const groups = await prisma.sportsPlayerRecord.groupBy({
+    by: ['injuryStatus'],
+    where: { injuryStatus: { not: null } },
+  })
+  const values = groups
+    .map((group) => group.injuryStatus)
+    .filter((value): value is string => typeof value === 'string' && !isStoredInjuryDesignation(value))
+  const cleared = await prisma.$executeRaw`
+    UPDATE "sports_players"
+       SET "injury_status" = NULL, "injury_notes" = NULL
+     WHERE "injury_status" = ANY(${values}::text[])
+        OR ("injury_status" IS NULL AND "injury_notes" IS NOT NULL)
+  `
+  return { cleared, values }
+}
+
+export type StoredInjuryCleanup = {
+  /** Per sport: rows the run did not write whose injury fields were cleared after a successful upsert. */
+  unwrittenCleared: Record<string, number>
+  /** Per sport: rows older than the TTL cleared because that sport's upsert failed. */
+  staleClearedAfterFailure: Record<string, number>
+  /** Rows cleared by the sport-independent non-designation guard, and the values it removed. */
+  nonDesignationCleared: number
+  nonDesignationValues: string[]
+  errors: string[]
 }
 
 export async function runSportsDataImporter(options?: {
@@ -442,7 +658,10 @@ export async function runSportsDataImporter(options?: {
   teamCodeCounts: Record<string, TeamCodeCounts>
   rowsSkippedByGuard: number
   pagedSeeds: Record<string, PagedSeedTelemetry>
+  /** Per sport: identity-map rows read this run, and the college rotation cursor. */
+  identitySeeds: Record<string, PagedSeedTelemetry>
   seedCursors: Record<string, string>
+  injuryCleanup: StoredInjuryCleanup
 }> {
   const targetSports = (options?.sports?.length ? options.sports : SUPPORTED_SPORTS).map((sport) =>
     normalizeToSupportedSport(sport)
@@ -472,7 +691,20 @@ export async function runSportsDataImporter(options?: {
     ? await loadSeedCheckpoints()
     : {}
   const pagedSeeds: Record<string, PagedSeedTelemetry> = {}
+  const identitySeedTelemetry: Record<string, PagedSeedTelemetry> = {}
   const seedCursors: Record<string, string> = { ...seedCheckpoints }
+  const injuryCleanup: StoredInjuryCleanup = {
+    unwrittenCleared: {},
+    staleClearedAfterFailure: {},
+    nonDesignationCleared: 0,
+    nonDesignationValues: [],
+    errors: [],
+  }
+  const recordCleanupError = (step: string, error: unknown) => {
+    const message = `${step}: ${error instanceof Error ? error.message : String(error)}`
+    injuryCleanup.errors.push(message)
+    console.error('[sports-data-importer] injury cleanup failed', { step, error: message })
+  }
 
   for (const sport of uniqueSports) {
     /**
@@ -502,10 +734,11 @@ export async function runSportsDataImporter(options?: {
     }
     teamCodeCounts[sport] = teamCtx.counts
 
-    const [identitySeeds, sleeperIdOwners, providerSeeds, latestStats, latestInjuries, latestNews, latestAdp, metaTrends, projectionsResponse, rankingsResponse] =
+    const [identityPage, sleeperIdOwners, riToSleeperId, providerSeeds, latestStats, latestInjuries, latestNews, latestAdp, metaTrends, projectionsResponse, rankingsResponse] =
       await Promise.all([
-        loadIdentitySeeds(sport, teamCtx),
+        loadIdentitySeeds(sport, teamCtx, seedCheckpoints[identitySeedCursorKey(sport)] ?? null),
         loadSleeperIdOwners(sport),
+        loadRollingInsightsToSleeperIds(sport),
         // The only UNBOUNDED provider read in this block. `projections` and `rankings` below were
         // already wrapped; this one was not, and it is the same apiChain.fetch against the same
         // providers. An unbounded call here is what turns a 239s start into a 300s edge 502.
@@ -518,11 +751,32 @@ export async function runSportsDataImporter(options?: {
           `${sport} player seeds`,
           [] as PlayerSeed[],
         ),
+        /*
+         * NEWEST SEASON FIRST, NOT NEWEST FETCH — and every row a player has, so the newest season per
+         * PLAYER is chosen after binding (`pickLatestSeasonRow`). This read used to be `fetchedAt desc,
+         * take 4000` with no season at all: Rolling Insights re-pulls back seasons, so the 4,000 most
+         * recently FETCHED rows were a mix of seasons. Replayed on production 2026-10-11: of the 2,533
+         * NFL names that cut reached, 492 were written a season other than their newest on file, and
+         * 241 of the 2,774 names were not reached at all.
+         *
+         * `season` is a string — "2025", or "2024-2025" outside football — and both forms order
+         * correctly as strings. The cap is a guard, not a window: production holds 11,869 NFL rows
+         * (~4 MB of stats JSON), the largest sport.
+         */
         prisma.playerSeasonStats.findMany({
           where: { sport },
-          orderBy: { fetchedAt: 'desc' },
-          take: 4000,
-          select: { playerId: true, playerName: true, stats: true },
+          orderBy: [{ season: 'desc' }, { fetchedAt: 'desc' }],
+          take: 15_000,
+          select: {
+            playerId: true,
+            playerName: true,
+            position: true,
+            team: true,
+            season: true,
+            source: true,
+            fetchedAt: true,
+            stats: true,
+          },
         }),
         /*
          * 🛑 BOUNDED TO THE CURRENT SEASON, AND THIS READ IS WHY THE BOUND EXISTS.
@@ -532,8 +786,9 @@ export async function runSportsDataImporter(options?: {
          * MLB and NCAAB were all last written 2026-04-26, 135 days before this was
          * added). Unbounded, this read did two damaging things per non-NFL sport:
          *
-         *   - `injuryStatus`/`injuryNotes` below are written from these rows onto
-         *     SportsPlayerRecord, a column carrying NO DATE. A four-month-old
+         *   - `injuryStatus`/`injuryNotes` were written from these rows onto
+         *     SportsPlayerRecord, a column carrying NO DATE (no longer — they now come
+         *     from live SportsInjury rows, see loadCurrentInjuryResolver). A four-month-old
          *     designation became indistinguishable from one taken this morning, and
          *     FantasyValueSnapshotService reads that column FIRST.
          *   - the seed loop further down INVENTS a player from any injury row it
@@ -585,6 +840,11 @@ export async function runSportsDataImporter(options?: {
     const projectionRows = asArrayRecords(projectionsResponse.data)
     const rankingRows = asArrayRecords(rankingsResponse.data)
 
+    const identitySeeds = identityPage.seeds
+    identitySeedTelemetry[sport] = identityPage.telemetry
+    if (identityPage.telemetry.cursorEnd) seedCursors[identitySeedCursorKey(sport)] = identityPage.telemetry.cursorEnd
+    else delete seedCursors[identitySeedCursorKey(sport)]
+
     // Supplementary paged source read for college sports (see COLLEGE_PAGED_SPORTS note).
     let pagedSportSeeds: PlayerSeed[] = []
     if (COLLEGE_PAGED_SPORTS.has(sport)) {
@@ -595,76 +855,125 @@ export async function runSportsDataImporter(options?: {
       else delete seedCursors[sport]
     }
 
-    const seedMap = new Map<string, PlayerSeed>()
-    for (const seed of [...identitySeeds, ...providerSeeds, ...pagedSportSeeds]) {
-      const key = normalizePlayerName(seed.name)
-      if (!key) continue
-      if (!seedMap.has(key) || seed.source !== 'manual') seedMap.set(key, seed)
-    }
+    const currentInjuryOf = await loadCurrentInjuryResolver(sport)
 
-    for (const row of latestAdp) {
-      const key = normalizePlayerName(row.playerName)
-      if (!seedMap.has(key)) {
-        seedMap.set(key, {
-          id: buildPlayerId(sport, row.playerId, row.playerName, row.team),
-          name: row.playerName,
-          team: resolveTeamCode(teamCtx, row.team),
-          position: normalizePositionForSport(sport, row.position) ?? 'FLEX',
-          source: row.source,
-        })
-      }
-    }
+    /*
+     * 🛑 ONE SEED PER ATHLETE, NOT PER NAME (2026-10-11). This was `Map<normalizePlayerName(name), seed>`,
+     * so of two namesakes one survived each run and the other's row stopped refreshing. Seeds that
+     * carry one Sleeper identity (every unique name) fold exactly as before; a name Sleeper gives to
+     * two or more players keeps one seed per Sleeper id — see `collapseSeedsByIdentity`.
+     */
+    const fallbackSeeds: PlayerSeed[] = [
+      ...latestAdp.map((row) => ({
+        id: buildPlayerId(sport, row.playerId, row.playerName, row.team),
+        name: row.playerName,
+        team: resolveTeamCode(teamCtx, row.team),
+        position: normalizePositionForSport(sport, row.position) ?? 'FLEX',
+        source: row.source,
+      })),
+      ...latestInjuries.map((row) => ({
+        id: buildPlayerId(sport, row.playerId, row.playerName, row.team),
+        name: row.playerName,
+        team: resolveTeamCode(teamCtx, row.team),
+        position: 'FLEX',
+        status: row.status,
+        source: 'cached',
+      })),
+    ]
+    const collapsedSeeds = collapseSeedsByIdentity(
+      sport,
+      [...identitySeeds, ...providerSeeds, ...pagedSportSeeds],
+      fallbackSeeds,
+      sleeperIdOwners,
+    )
 
-    for (const row of latestInjuries) {
-      const key = normalizePlayerName(row.playerName)
-      if (!seedMap.has(key)) {
-        seedMap.set(key, {
-          id: buildPlayerId(sport, row.playerId, row.playerName, row.team),
-          name: row.playerName,
-          team: resolveTeamCode(teamCtx, row.team),
-          position: 'FLEX',
-          status: row.status,
-          source: 'cached',
-        })
-      }
-    }
+    // Two seeds can still land on one id (two name/team fallbacks); write each id once, first wins.
+    const seenSeedIds = new Set<string>()
+    const seeds = keySeedsToSleeperIdentity(sport, collapsedSeeds, sleeperIdOwners).filter((seed) => {
+      if (seenSeedIds.has(seed.id)) return false
+      seenSeedIds.add(seed.id)
+      return true
+    })
 
-    const projectionMap = buildProjectionMap(projectionRows)
-    const dynastyValueMap = buildDynastyValueMap(rankingRows)
-    const statMap = new Map<string, unknown>()
-    const injuryMap = new Map<string, (typeof latestInjuries)[number]>()
-    const adpMap = new Map<string, (typeof latestAdp)[number]>()
-    const newsMap = new Map<string, Array<(typeof latestNews)[number]>>()
+    /*
+     * 🛑 EVERY VALUE BINDS TO A SEED BY ID, ELSE BY A VERIFIED NAME — NEVER BY NAME ALONE (2026-10-11).
+     * These were five `Map<name, row>`s, first row wins, so the surviving namesake took whichever row
+     * came first: LB Justin Jefferson carried the WR's ADP 21.3, guard Josh Allen carried 12.6, DB DJ
+     * Moore the WR's 47.5. See `createSeedValueBinder`; an ambiguous name binds to nobody.
+     */
+    const namesakes = countNamesakes(seeds)
+    // A value row's team, translated by the SAME normalizer the seeds went through (without tallying
+    // it in `teamCodeCounts`). Kept when it came from a table the seeds also use — the NFL canonical
+    // table, or this sport's SportsTeam name → code map — or lands on a code some seed carries.
+    // Anything else is a vocabulary we cannot compare ("Arizona Diamondbacks" with no SportsTeam row
+    // vs a seed's "ARI"), so it says nothing rather than contradicting.
+    const seedTeamCodes = new Set(seeds.map((seed) => seed.team.toUpperCase()))
+    const teamOf = (raw: string | null | undefined): string | null => {
+      const team = normalizeTeamCode({ sport, rawTeam: raw, teamCodeMap: teamCtx.teamCodeMap })
+      const code = team.code?.toUpperCase() ?? null
+      if (!code) return null
+      return team.normalization === 'canonical' || team.normalization === 'mapped' || seedTeamCodes.has(code) ? code : null
+    }
+    // Only the NFL's team codes are one vocabulary on both sides; elsewhere a team verifies but never
+    // refutes (see `teamContradicts` in the binder).
+    const teamContradicts = sport === 'NFL'
+    const statsOf = createSeedValueBinder(
+      sport,
+      latestStats,
+      (row) => ({ name: row.playerName, team: row.team, position: row.position }),
+      {
+        namesakes,
+        teamOf,
+        teamContradicts,
+        seedIds: seenSeedIds,
+        // Only Rolling Insights' ids are crosswalked; they are compared with RI stat rows only.
+        idOf: (row) => {
+          if (row.source !== 'rolling_insights') return null
+          const sleeperId = riToSleeperId.get(row.playerId)
+          return sleeperId ? boundPlayerId(`${sport}:${sleeperId}`) : null
+        },
+      },
+    )
+    const adpOf = createSeedValueBinder(
+      sport,
+      latestAdp,
+      (row) => ({ name: row.playerName, team: row.team, position: row.position }),
+      { namesakes, teamOf, teamContradicts },
+    )
+    const newsOf = createSeedValueBinder(
+      sport,
+      latestNews,
+      (row) => ({ name: row.playerName, team: row.team, position: null }),
+      { namesakes, teamOf, teamContradicts },
+    )
+    const projectionsOf = createSeedValueBinder(sport, projectionRows, describeProviderRow, {
+      namesakes,
+      teamOf,
+      teamContradicts,
+      seedIds: seenSeedIds,
+      idOf: (row) => providerRowSeedId(sport, row),
+    })
+    const dynastyOf = createSeedValueBinder(sport, buildDynastyValueRows(rankingRows), (ranked) => describeProviderRow(ranked.row), {
+      namesakes,
+      teamOf,
+      teamContradicts,
+      seedIds: seenSeedIds,
+      idOf: (ranked) => providerRowSeedId(sport, ranked.row),
+    })
     const trendMap = new Map<string, number>(
       metaTrends.map((row) => [String(row.playerId), Number(row.trendScore ?? 0)])
     )
 
-    for (const row of latestStats) {
-      const key = normalizePlayerName(row.playerName)
-      if (!statMap.has(key)) statMap.set(key, row.stats)
-    }
-    for (const row of latestInjuries) {
-      const key = normalizePlayerName(row.playerName)
-      if (!injuryMap.has(key)) injuryMap.set(key, row)
-    }
-    for (const row of latestAdp) {
-      const key = normalizePlayerName(row.playerName)
-      if (!adpMap.has(key)) adpMap.set(key, row)
-    }
-    for (const row of latestNews) {
-      const key = normalizePlayerName(row.playerName)
-      const current = newsMap.get(key) ?? []
-      if (current.length < 3) current.push(row)
-      newsMap.set(key, current)
-    }
-
-    const rows = keySeedsToSleeperIdentity(sport, Array.from(seedMap.values()), sleeperIdOwners).flatMap((seed) => {
-      const key = normalizePlayerName(seed.name)
-      const injury = injuryMap.get(key)
-      const adp = adpMap.get(key)
+    const rows = seeds.flatMap((seed) => {
+      const injury = currentInjuryOf(seed)
+      const adp = adpOf(seed)[0]
       const trendScore = trendMap.get(adp?.playerId ?? '')
-      const projections = projectionMap.get(key) ?? {}
-      const news = (newsMap.get(key) ?? []).map((item) => ({
+      const projectionRow = projectionsOf(seed)[0]
+      const projections = projectionRow ?? {}
+      const dynastyValue = dynastyOf(seed)[0]?.value
+      const stats = pickLatestSeasonRow(statsOf(seed))?.stats
+      // The matcher appends a name's teamless rows after its team rows, so re-sort before taking three.
+      const news = [...newsOf(seed)].sort((a, b) => b.publishedAt.getTime() - a.publishedAt.getTime()).slice(0, 3).map((item) => ({
         headline: item.headline,
         impact: item.impact,
         source: item.source,
@@ -682,16 +991,16 @@ export async function runSportsDataImporter(options?: {
           name: seed.name.slice(0, 128),
           team: assertTeamCodeFits(seed.team) ?? 'FA',
           position: (seed.position || 'FLEX').slice(0, 32),
-          stats: asRecord(statMap.get(key)) ?? {},
+          stats: asRecord(stats) ?? {},
           projections,
           adp: adp?.adp ?? null,
           dynastyValue:
-            dynastyValueMap.get(key) ??
+            dynastyValue ??
             (typeof trendScore === 'number' ? Math.round(clamp(50 + trendScore, 0, 100)) : null),
-          injuryStatus: injury?.status?.slice(0, 32) ?? seed.status?.slice(0, 32) ?? null,
-          injuryNotes: injury?.notes ?? null,
+          injuryStatus: injury.status?.slice(0, 32) ?? null,
+          injuryNotes: injury.notes,
           news,
-          dataSource: (projectionMap.has(key) ? projectionsResponse.source : seed.source).slice(0, 32),
+          dataSource: (projectionRow ? projectionsResponse.source : seed.source).slice(0, 32),
         }]
       } catch (guardError) {
         rowsSkippedByGuard += 1
@@ -704,6 +1013,14 @@ export async function runSportsDataImporter(options?: {
       }
     })
 
+    /*
+     * Captured ONCE, before the first upsert of this sport: every row this run writes is stamped
+     * (by `@updatedAt`) at or after this instant, so "last_updated < writeStartedAt - margin" can
+     * only ever select rows this run did NOT write — whatever the batch count, and without shipping
+     * tens of thousands of written ids back to the database as a NOT IN.
+     */
+    const writeStartedAt = new Date()
+    let upsertSucceeded = false
     try {
       for (const batch of chunk(rows, UPSERT_BATCH_SIZE)) {
         await prisma.$transaction(
@@ -735,8 +1052,32 @@ export async function runSportsDataImporter(options?: {
         )
       }
       imported += rows.length
+      upsertSucceeded = true
     } catch (error) {
       staleFallbackApplied = true
+      /*
+       * 🛑 THE FAILURE PATH USED TO LEAVE EVERY DESIGNATION STANDING. A sport whose batch throws
+       * refreshes nothing, and the old catch only relabelled `dataSource` — so a "Questionable"
+       * written weeks ago kept being served as current (391 NFL rows last written 2026-09-28).
+       *
+       * Cleared here: injury fields on rows older than the TTL, i.e. rows that have now missed a
+       * refresh. Rows written by the previous successful run (younger than the TTL) keep theirs —
+       * they carry the same few-hours lag every row has between runs, and clearing them would let one
+       * transient failure wipe a whole sport's designations. Rows written earlier in THIS run are
+       * younger than `writeStartedAt`, hence than the TTL, so they cannot match.
+       *
+       * ⚠ RUNS BEFORE the `dataSource` relabel below, whose `updateMany` bumps `lastUpdated` on the
+       * same rows and would otherwise hide them from this predicate. Roster codes on the remaining
+       * rows are cleared by the run-wide guard at the end of the import.
+       */
+      try {
+        injuryCleanup.staleClearedAfterFailure[sport] = await clearInjuryWrittenBefore(
+          sport,
+          new Date(Date.now() - SPORTS_PLAYER_TTL_MS),
+        )
+      } catch (cleanupError) {
+        recordCleanupError(`${sport} stale-after-failure`, cleanupError)
+      }
       await prisma.sportsPlayerRecord.updateMany({
         where: {
           sport,
@@ -753,6 +1094,43 @@ export async function runSportsDataImporter(options?: {
         error: error instanceof Error ? error.message : String(error),
       })
     }
+
+    /*
+     * After a SUCCESSFUL upsert: every row of this sport the run did not write is on no seed this
+     * run produced, so whatever injury it carries was not refreshed — clear it. That covers orphan
+     * ids (e.g. NFL `cached` INACT rows last touched 2026-09-07) and seeds dropped by the schema
+     * guard.
+     *
+     * ⚠ FOR THE PAGED COLLEGE SPORTS THIS INCLUDES ROWS ON LATER PAGES. NCAAF/NCAAB write one page of
+     * the source per run, so a college designation lasts until the next run and then waits for its
+     * page to come round. That is the rule working: a designation nobody refreshed is worse than none.
+     *
+     * Skipped when the sport wrote no rows at all: with nothing written there is no "this run" to
+     * compare against, and clearing the whole sport on an empty seed set is a degraded read, not a
+     * finding. The run-wide guard below still applies.
+     */
+    if (upsertSucceeded && rows.length > 0) {
+      try {
+        injuryCleanup.unwrittenCleared[sport] = await clearInjuryWrittenBefore(
+          sport,
+          new Date(writeStartedAt.getTime() - UNWRITTEN_CUTOFF_MARGIN_MS),
+        )
+      } catch (cleanupError) {
+        recordCleanupError(`${sport} unwritten`, cleanupError)
+      }
+    }
+  }
+
+  /*
+   * Once per run, over ALL sports — including ones skipped for budget or whose upsert failed: no
+   * roster code or free text may sit in the column, whoever wrote it and whenever.
+   */
+  try {
+    const guard = await clearNonDesignationInjuryStatuses()
+    injuryCleanup.nonDesignationCleared = guard.cleared
+    injuryCleanup.nonDesignationValues = guard.values
+  } catch (cleanupError) {
+    recordCleanupError('non-designation guard', cleanupError)
   }
 
   return {
@@ -764,6 +1142,66 @@ export async function runSportsDataImporter(options?: {
     teamCodeCounts,
     rowsSkippedByGuard,
     pagedSeeds,
+    identitySeeds: identitySeedTelemetry,
     seedCursors,
+    injuryCleanup,
+  }
+}
+
+export { rosterDesignation }
+
+
+/**
+ * `SportsPlayerRecord.injuryStatus` for one seed: the athlete's newest claim on a live injury feed,
+ * else his roster designation (IR / PUP / NFI / Suspended), else null.
+ *
+ * 🛑 THIS COLUMN USED TO COME FROM `injury_reports` AND THE SEED'S ROSTER STATUS (2026-10-11), AND
+ * IT WAS WRONG FOR THOUSANDS OF PLAYERS. Measured that day against live `SportsInjury`:
+ *   - `injury_reports` is written for NFL only by the news pass, which can say Out/Questionable but
+ *     never "cleared" — 295 players still carried a "Questionable" no feed reported any more, and 84
+ *     read Questionable while ESPN had them Active (DeForest Buckner, Justice Hill…);
+ *   - the seed fallback wrote Rolling Insights' roster codes as designations — 10,283 "INACT" rows,
+ *     including Malik Nabers while ESPN had him Active — plus Sleeper's "Inactive" for free agents;
+ *   - name-keyed, first row wins, so namesakes swapped statuses.
+ * League rosters, the draft room, value snapshots, trending and Chimmy all read this column. The
+ * live feeds are refreshed every 30 minutes and this importer every 6 hours, so it can lag a live
+ * change by a few hours — but it can no longer assert a designation nobody is reporting.
+ */
+export async function loadCurrentInjuryResolver(
+  sport: string,
+): Promise<(seed: InjurySeed) => { status: string | null; notes: string | null }> {
+  let rows: Array<{ playerName: string; team: string | null; position: string | null; status: string | null; description: string | null; date: Date | null; fetchedAt: Date }> = []
+  try {
+    rows = await prisma.sportsInjury.findMany({
+      where: { sport, expiresAt: { gt: new Date() } },
+      select: { playerName: true, team: true, position: true, status: true, description: true, date: true, fetchedAt: true },
+      orderBy: { fetchedAt: 'desc' },
+      take: 5000,
+    })
+  } catch {
+    rows = []
+  }
+  const match = createInjuryRowMatcher(rows, sport)
+  const resolve = (seed: InjurySeed): { status: string | null; notes: string | null } => {
+    const hit = match({ name: seed.name, team: seed.team ?? null, position: seed.position ?? null })
+    const newest = hit && 'rows' in hit ? hit.rows[0] ?? null : null
+    if (newest) {
+      return isInjuryDesignation(newest.status)
+        ? { status: newest.status, notes: newest.description?.trim() || null }
+        : { status: null, notes: null }
+    }
+    // A seed invented from an injury report has no roster behind it, so it has no roster status either.
+    return { status: seed.source === 'cached' ? null : rosterDesignation(seed.status), notes: null }
+  }
+  /*
+   * Everything this resolver returns is what the importer WRITES, so it passes the same predicate the
+   * column guard applies. `isInjuryDesignation` above only rejects active/healthy/na; a live feed that
+   * publishes anything else verbatim (ESPN keeps unrecognised values) would otherwise land in the
+   * column and be cleared again by the guard six hours later.
+   */
+  return (seed) => {
+    const out = resolve(seed)
+    const stored = storedInjuryFields(out.status, out.notes)
+    return { status: stored.injuryStatus, notes: stored.injuryNotes }
   }
 }

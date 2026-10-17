@@ -7,6 +7,8 @@
  * A deterministic `seed` makes random assignment reproducible for tests/audit.
  */
 
+import { SURVIVOR_TRIBE_CATALOG } from './survivorTribeIdentity'
+
 export type TribeAssignmentMode = 'random' | 'commissioner_manual' | 'draft_pattern'
 
 export interface AssignmentParticipant {
@@ -28,6 +30,7 @@ export interface ComputeTribeAssignmentInput {
   participants: AssignmentParticipant[]
   tribeCount: number
   mode: TribeAssignmentMode
+  capacities?: number[] | null
   /** Deterministic seed for random mode (audit/repro). */
   seed?: number | null
   /** Manual mode: userId -> tribe slotIndex (0-based). */
@@ -63,11 +66,14 @@ function emptyTribes(tribeCount: number): AssignmentTribe[] {
 }
 
 /** Round-robin distribute (over the given order) so tribe sizes differ by at most one. */
-function distributeBalanced(orderedUserIds: string[], tribeCount: number): AssignmentTribe[] {
+function distributeBalanced(orderedUserIds: string[], tribeCount: number, capacities?: number[] | null): AssignmentTribe[] {
   const tribes = emptyTribes(tribeCount)
-  orderedUserIds.forEach((userId, i) => {
-    tribes[i % tribeCount].memberUserIds.push(userId)
-  })
+  let next = 0
+  for (const userId of orderedUserIds) {
+    while (capacities && tribes[next % tribeCount].memberUserIds.length >= capacities[next % tribeCount]) next++
+    tribes[next % tribeCount].memberUserIds.push(userId)
+    next++
+  }
   return tribes
 }
 
@@ -90,6 +96,10 @@ export function computeTribeAssignment(input: ComputeTribeAssignmentInput): Trib
     return { ok: false, code: 'invalid_tribe_count', error: `Only ${participants.length} participants for ${tribeCount} tribes.` }
   }
 
+  const capacities = input.capacities
+  if (capacities && (capacities.length !== tribeCount || capacities.some(n => !Number.isInteger(n) || n < 1) || capacities.reduce((a, b) => a + b, 0) !== participants.length)) {
+    return { ok: false, code: 'manual_invalid', error: 'Tribe capacities must be positive whole numbers totaling the active manager count.' }
+  }
   const userIds = participants.map((p) => p.userId)
 
   if (input.mode === 'commissioner_manual') {
@@ -110,29 +120,29 @@ export function computeTribeAssignment(input: ComputeTribeAssignmentInput): Trib
     }
     // Balance check: sizes within one of each other.
     const sizes = tribes.map((t) => t.memberUserIds.length)
-    if (Math.max(...sizes) - Math.min(...sizes) > 1) {
-      return { ok: false, code: 'manual_invalid', error: 'Manual tribes are unbalanced (sizes differ by more than one).' }
+    if (capacities ? sizes.some((size, i) => size !== capacities[i]) : Math.max(...sizes) - Math.min(...sizes) > 1) {
+      return { ok: false, code: 'manual_invalid', error: 'Manual tribes must match the configured capacities (or be balanced when none are configured).' }
     }
     return { ok: true, mode: 'commissioner_manual', tribes, seed: null }
   }
 
   if (input.mode === 'draft_pattern') {
-    const order = input.draftOrder?.filter((u) => seen.has(u)) ?? []
+    const order = [...new Set(input.draftOrder?.filter((u) => seen.has(u)) ?? [])]
     // Need complete draft coverage of every participant, else this is limited-data (no fake).
     if (order.length === 0 || new Set(order).size < participants.length) {
       return { ok: false, code: 'limited_data', error: 'Draft order/picks unavailable for every participant — cannot build a draft-pattern assignment.' }
     }
-    return { ok: true, mode: 'draft_pattern', tribes: distributeBalanced(order, tribeCount), seed: null }
+    return { ok: true, mode: 'draft_pattern', tribes: distributeBalanced(order, tribeCount, capacities), seed: null }
   }
 
   // random (default)
   const seed = Number.isFinite(input.seed as number) ? (input.seed as number) : Math.floor(Math.random() * 2_147_483_647)
   const shuffled = deterministicShuffle(userIds, seed)
-  return { ok: true, mode: 'random', tribes: distributeBalanced(shuffled, seed % tribeCount === 0 ? tribeCount : tribeCount), seed }
+  return { ok: true, mode: 'random', tribes: distributeBalanced(shuffled, tribeCount, capacities), seed }
 }
 
 /** Default unique tribe names (themed) — caller may override per slot. */
-const DEFAULT_TRIBE_NAMES = ['Komodo', 'Ravu', 'Moto', 'Bayon', 'Galang', 'Tandang', 'Kalabaw', 'Luzon']
+const DEFAULT_TRIBE_NAMES = SURVIVOR_TRIBE_CATALOG.map(tribe => tribe.name)
 const DEFAULT_TRIBE_COLORS = ['#ef4444', '#3b82f6', '#22c55e', '#eab308', '#a855f7', '#ec4899', '#14b8a6', '#f97316']
 
 export function defaultTribeName(slotIndex: number): string {

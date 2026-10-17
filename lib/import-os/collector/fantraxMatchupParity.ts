@@ -1,3 +1,4 @@
+import { reconcileFantraxActuals } from './reconcileFantraxActuals'
 import { syncFantraxNativePresentation } from '@/lib/redraft/fantraxNativePresentation'
 /**
  * Fantasy OS — Fantrax weekly-matchup parity collector.
@@ -54,6 +55,10 @@ export interface FantraxMatchupLeagueResult {
   note?: string
   weeksWritten?: number
   weeksUnchanged?: number
+  actualsCompared?: number
+  scoringDiscrepancies?: number
+  scoringCoverageGaps?: number
+  scoringEvidenceErrors?: number
 }
 
 export interface FantraxMatchupParityResult {
@@ -283,12 +288,25 @@ export async function runFantraxMatchupParity(input?: {
         schedule,
       )
 
+      const evidence = { actualsCompared: 0, scoringDiscrepancies: 0, scoringCoverageGaps: 0, scoringEvidenceErrors: 0 }
+      for (const league of linked) {
+        try {
+          const result = await reconcileFantraxActuals(league.id, info.data, now)
+          evidence.actualsCompared += result.compared
+          evidence.scoringDiscrepancies += result.discrepancies
+          evidence.scoringCoverageGaps += result.gaps
+        } catch {
+          // A sidecar comparison failure does not roll back successfully synced source results.
+          evidence.scoringEvidenceErrors++
+        }
+      }
       summary.synced++
-      summary.results.push({ runKey, status: 'synced', weeksWritten, weeksUnchanged })
+      summary.results.push({ runKey, status: 'synced', weeksWritten, weeksUnchanged, ...evidence })
       await recordSyncState(cacheKey, SYNC_INTERVAL_MS, {
         status: 'synced',
         weeksWritten,
         weeksUnchanged,
+        ...evidence,
         periodsRead: fetched.periodsRead,
         periodsFailed: fetched.periodsFailed,
       })

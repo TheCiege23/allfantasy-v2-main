@@ -1,15 +1,35 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import { useSession } from 'next-auth/react'
+import { inviteSource, joinCallbackUrl, joinLandingHref } from '@/lib/league-join/joinLanding'
+import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
+import { RECAP_SHARE } from '@/lib/analytics/eventNames'
 import { ClassGateNotice, isClassGateBlocked, type ClassGateBlocked } from '@/components/league-join/ClassGateNotice'
+import { SurvivorJoin, type SurvivorJoinPreview } from '@/components/survivor/SurvivorJoin'
+import { ZombieJoin, type ZombieJoinPreview } from '@/components/zombie/ZombieJoin'
+import { SleeperTeamClaim } from '@/components/league-join/SleeperTeamClaim'
 
-type Preview = { leagueId: string; name: string | null; sport: string; requiresPassword: boolean }
+type Preview = { leagueId: string; name: string | null; sport: string; requiresPassword: boolean; survivor?: SurvivorJoinPreview | null; zombie?: ZombieJoinPreview | null }
+
 
 export default function JoinByCodePage() {
   const searchParams = useSearchParams()
   const codeFromUrl = searchParams?.get('code')?.trim()
+  const joinOnArrival = searchParams?.get('go') === '1'
+  /* Where the link came from — `recap` for one shared from Chimmy's weekly recap (RecapShareButton). */
+  const src = inviteSource(searchParams?.get('src'))
+  const { status: authStatus } = useSession()
+  /*
+   * Set when the join itself answers 401. Most people opening a link someone shared from a Sleeper
+   * chat are signed out, and the page used to send that 401 on to the creator-invite join, which
+   * answered with its own error — so the first thing a new leaguemate saw was a failure.
+   */
+  const [needsSignIn, setNeedsSignIn] = useState(false)
+  const autoJoined = useRef(false)
+  const openCounted = useRef(false)
 
   const [code, setCode] = useState(codeFromUrl ?? '')
   const [password, setPassword] = useState('')
@@ -19,6 +39,8 @@ export default function JoinByCodePage() {
   const [status, setStatus] = useState<'idle' | 'joining' | 'success' | 'error'>(codeFromUrl ? 'idle' : 'idle')
   const [message, setMessage] = useState<string>('')
   const [joinedLeagueId, setJoinedLeagueId] = useState<string | null>(null)
+  /** A Sleeper league's member can claim their team here by proving the account, so we stay put. */
+  const [sleeperClaim, setSleeperClaim] = useState(false)
   const [classBlocked, setClassBlocked] = useState<ClassGateBlocked | null>(null)
 
   const effectiveCode = codeFromUrl || code
@@ -36,6 +58,8 @@ export default function JoinByCodePage() {
             name: data.name ?? null,
             sport: data.sport,
             requiresPassword: !!data.requiresPassword,
+            survivor: data.survivor ?? null,
+            zombie: data.zombie ?? null,
           })
           setPreviewError(typeof data.error === 'string' ? data.error : null)
           setPreviewErrorCode(typeof data.errorCode === 'string' ? data.errorCode : null)
@@ -69,18 +93,42 @@ export default function JoinByCodePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
-        .then((res) => res.json())
-        .then((data) => {
+        .then(async (res) => ({ httpStatus: res.status, data: await res.json().catch(() => ({})) }))
+        .then(({ httpStatus, data }) => {
+          if (httpStatus === 401) {
+            setNeedsSignIn(true)
+            setStatus('idle')
+            return null
+          }
           if (data.success) {
             setStatus('success')
             setJoinedLeagueId(data.leagueId)
-            setMessage(data.alreadyMember ? 'You are already in this league.' : 'You joined the league.')
+            sendProductAnalyticsBeacon(RECAP_SHARE.INVITE_JOINED, {
+              leagueId: data.leagueId,
+              src,
+              memberOnly: Boolean(data.memberOnly),
+              alreadyMember: Boolean(data.alreadyMember),
+            })
+            if (data.memberOnly && data.sleeperClaim) {
+              setSleeperClaim(true)
+              setMessage(data.alreadyMember ? 'You are already in this league.' : 'You’re in.')
+              return null
+            }
+            setMessage(
+              data.memberOnly
+                ? data.alreadyMember
+                  ? 'You are already in this league. Opening the league chat…'
+                  : 'You’re in. Opening the league chat…'
+                : data.alreadyMember
+                  ? 'You are already in this league.'
+                  : 'You joined the league.',
+            )
             if (data.leagueId && !data.creatorLeagueId) {
               setTimeout(() => {
-                window.location.href = `/league/${data.leagueId}`
+                window.location.href = joinLandingHref(data)
               }, 1500)
             }
-            return
+            return null
           }
           // Outside the league's division band (ADR F2.10a): say so and offer the request, rather
           // than falling through to the creator-invite lookup, which reports a misleading error.
@@ -114,8 +162,99 @@ export default function JoinByCodePage() {
           setMessage('Something went wrong')
         })
     },
-    [effectiveCode, password]
+    [effectiveCode, password, src]
   )
+
+  /*
+   * One open per visit, once the league is known and we know whether they are signed in. The return
+   * from signing in (`go=1`) counts again as `returning`, so first opens are those without it.
+   */
+  useEffect(() => {
+    if (openCounted.current || !codeFromUrl || !preview?.leagueId || authStatus === 'loading') return
+    openCounted.current = true
+    sendProductAnalyticsBeacon(RECAP_SHARE.INVITE_OPEN, {
+      leagueId: preview.leagueId,
+      src,
+      signedIn: authStatus === 'authenticated',
+      returning: joinOnArrival,
+    })
+  }, [authStatus, codeFromUrl, joinOnArrival, preview?.leagueId, src])
+
+  /* Back from signing in with `go=1`: join at once, once. A password-protected league still asks. */
+  useEffect(() => {
+    if (autoJoined.current || !joinOnArrival || !codeFromUrl) return
+    if (authStatus !== 'authenticated' || !preview || preview.requiresPassword || previewError) return
+    if (status !== 'idle') return
+    autoJoined.current = true
+    join(codeFromUrl, '')
+  }, [authStatus, codeFromUrl, join, joinOnArrival, preview, previewError, status])
+
+  if (codeFromUrl && preview?.zombie && !previewError) {
+    return <ZombieJoin
+      leagueName={preview.name ?? 'Zombie League'}
+      sport={preview.sport}
+      zombie={preview.zombie}
+      authStatus={authStatus}
+      needsSignIn={needsSignIn}
+      callbackUrl={joinCallbackUrl(codeFromUrl, src)}
+      requiresPassword={preview.requiresPassword}
+      password={password}
+      onPasswordChange={setPassword}
+      onJoin={() => join(codeFromUrl, password)}
+      status={status}
+      message={message}
+      joinedLeagueId={joinedLeagueId}
+    />
+  }
+
+  if (codeFromUrl && preview?.survivor && !previewError) {
+    return <SurvivorJoin
+      leagueName={preview.name ?? 'Survivor League'}
+      sport={preview.sport}
+      survivor={preview.survivor}
+      authStatus={authStatus}
+      needsSignIn={needsSignIn}
+      callbackUrl={joinCallbackUrl(codeFromUrl, src)}
+      requiresPassword={preview.requiresPassword}
+      password={password}
+      onPasswordChange={setPassword}
+      onJoin={() => join(codeFromUrl, password)}
+      status={status}
+      message={message}
+      joinedLeagueId={joinedLeagueId}
+    />
+  }
+
+  if (codeFromUrl && preview && !previewError && status === 'idle' && (authStatus === 'unauthenticated' || needsSignIn)) {
+    const callbackUrl = joinCallbackUrl(codeFromUrl, src)
+    return (
+      <div className="min-h-screen flex items-center justify-center mode-surface mode-readable">
+        <div className="max-w-md mx-auto px-4 w-full" data-testid="league-join-signin">
+          <h1 className="text-xl font-bold mb-2" style={{ color: 'var(--text)' }}>
+            {preview.name ? `Join ${preview.name}` : 'Join this league'}
+          </h1>
+          <p className="text-sm mb-4" style={{ color: 'var(--muted)' }}>
+            Sign in or create a free account to join the league chat and get each week’s recap.
+          </p>
+          <div className="grid gap-2">
+            <Link
+              href={`/signup?callbackUrl=${encodeURIComponent(callbackUrl)}`}
+              className="w-full rounded-lg bg-cyan-600 px-4 py-2 text-center text-sm font-medium text-white hover:bg-cyan-500"
+            >
+              Create account &amp; join
+            </Link>
+            <Link
+              href={`/login?callbackUrl=${encodeURIComponent(callbackUrl)}`}
+              className="w-full rounded-lg border px-4 py-2 text-center text-sm font-medium"
+              style={{ borderColor: 'var(--border)', color: 'var(--text)' }}
+            >
+              I have an account — sign in
+            </Link>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
 
   if (codeFromUrl && preview && !preview.requiresPassword && status === 'idle' && !previewError) {
@@ -307,6 +446,28 @@ export default function JoinByCodePage() {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ color: 'var(--muted)' }}>
         Joining…
+      </div>
+    )
+  }
+
+  if (status === 'success' && sleeperClaim && joinedLeagueId) {
+    return (
+      <div className="min-h-screen flex items-center justify-center mode-surface mode-readable">
+        <div className="max-w-md mx-auto px-4 w-full py-8" data-testid="league-join-member">
+          <h1 className="text-xl font-bold mb-1" style={{ color: 'var(--text)' }}>
+            {message}
+          </h1>
+          <p className="text-sm mb-4" style={{ color: 'var(--muted)' }}>
+            {preview?.name ? `${preview.name}'s` : 'The league'} chat and weekly recaps are yours now.
+          </p>
+          <Link
+            href={joinLandingHref({ leagueId: joinedLeagueId, memberOnly: true })}
+            className="block w-full rounded-lg bg-cyan-600 px-4 py-2 text-center text-sm font-medium text-white hover:bg-cyan-500 mb-4"
+          >
+            Open the league chat
+          </Link>
+          <SleeperTeamClaim leagueId={joinedLeagueId} />
+        </div>
       </div>
     )
   }

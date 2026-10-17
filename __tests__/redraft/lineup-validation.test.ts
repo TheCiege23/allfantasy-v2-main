@@ -99,6 +99,17 @@ describe('redraft lineup validation', () => {
     expect(questionableResult.warningCount).toBe(1)
     expect(questionableResult.issues[0]?.code).toBe('starter_injury_risk')
   })
+
+  it('rejects every suspension / injured-list spelling the shared absence rule reads', () => {
+    for (const status of ['Suspension', 'Sus', 'Suspended', '60-day IL', 'I.L.', 'NFI', 'Injured Reserve']) {
+      const result = validateRedraftLineup({
+        sport: 'NFL',
+        week: 4,
+        players: legalNflLineup({ 'wr-1': { injuryStatus: status } }),
+      })
+      expect(result.issues.map((issue) => issue.code), status).toContain('starter_ineligible_injury')
+    }
+  })
 })
 
 describe('redraft roster route lineup enforcement contract', () => {

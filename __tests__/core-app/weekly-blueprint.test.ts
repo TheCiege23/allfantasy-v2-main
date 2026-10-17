@@ -93,3 +93,41 @@ describe('cross-sport closeness', () => {
   })
   it('puts a close deficit ahead of a blowout deficit', () => expect(matchupCloseness({live:{you:90,them:100,margin:-10}})).toBeLessThan(matchupCloseness({live:{you:10,them:100,margin:-90}})))
 })
+
+describe('complete weekly inventory',()=>{it('uses uncapped inventory and skips archived lineups',()=>{const out=buildWeeklyBlueprint({leagues:[{id:'outside',sport:'NHL'},{id:'old',sport:'MLB'}],board,pulse:{needs:[],set:[],inventory:[row('outside',{empty:1,out:0,bye:null,questionable:0}),row('old',{archived:true})]} as unknown as MyTeamPulse,outlook:null,now:new Date('2026-10-07')});expect(out.actions.map(a=>a.leagueId)).toEqual(['outside']);expect(out.actions[0].evidence?.bye).toBeNull();expect(out.sportPlans?.[0].sport).toBe('NHL')})})
+
+describe('verified weekly deadlines',()=>{it('promotes future confirmed deadlines without treating a game as lineup lock',()=>{const events=[{id:'game',leagueId:'A',leagueName:'A',kind:'game',at:'2026-10-08T20:00:00Z',href:'/core/my-team?league=A'},{id:'waivers',leagueId:'A',leagueName:'A',kind:'waivers',at:'2026-10-08T08:00:00Z',href:'/core/waivers?league=A'},{id:'foreign',leagueId:'B',leagueName:'B',kind:'trade',at:'2026-10-08T20:00:00Z',href:'/core/trades?league=B'}];const out=buildWeeklyBlueprint({leagues:[{id:'A',sport:'NBA'}],board,pulse:null,outlook:null,calendar:{events} as any,now:new Date('2026-10-07')});expect(out.actions).toHaveLength(1);expect(out.actions[0]).toMatchObject({kind:'deadline',deadlineKind:'waivers',leagueId:'A',gameAt:'2026-10-08T08:00:00Z'})})})
+
+it('does not turn unchecked inventory into a healthy lineup',()=>{const out=buildWeeklyBlueprint({leagues:[{id:'A',sport:'MLB'}],board,pulse:{needs:[],set:[],inventory:[row('A',{week:null,severity:0,coverageReason:'Roster unavailable'})]} as unknown as MyTeamPulse,outlook:null,now:new Date('2026-10-07')});expect(out.lineupReadFailed).toBe(true);expect(out.actions[0]).toMatchObject({kind:'review',unavailable:true});expect(out.actions[0].evidence).toBeUndefined()})
+
+// The brief is Chimmy's prefill. An unlabelled "Period 4: facing Paid" read as the next game while it was being played.
+describe('the brief labels a board game that already has points', () => {
+  const card = (live: {you:number;them:number;margin:number;final:boolean} | null) => ({leagueId:'H',leagueName:'HailShiva',season:2026,week:4,opponent:{name:'Paid'},live})
+  const brief = (c: ReturnType<typeof card>, es = false) => weeklyBrief(buildWeeklyBlueprint({ leagues:[{id:'H',name:'HailShiva',sport:'NFL'}], board:{...board,leaning:[c]} as unknown as WeekBoard, pulse:null, outlook:null, focusLeagueId:'H', now:new Date('2026-10-05T23:00:00Z') }), es)
+  it('says in progress, final, or nothing before kickoff', () => {
+    expect(brief(card({you:98.1,them:120.4,margin:-22.3,final:false}))).toContain('Period 4 (in progress): facing Paid in HailShiva.')
+    expect(brief(card({you:135.5,them:129.9,margin:5.6,final:true}))).toContain('Period 4 (final): played Paid in HailShiva.')
+    expect(brief(card(null))).toContain('Period 4: facing Paid in HailShiva.')
+    expect(brief(card({you:98.1,them:120.4,margin:-22.3,final:false}),true)).toContain('Período 4 (en juego): frente a Paid en HailShiva.')
+    expect(brief(card({you:135.5,them:129.9,margin:5.6,final:true}),true)).toContain('Período 4 (finalizado): jugó contra Paid en HailShiva.')
+  })
+})
+
+// HailShiva 2026-10-06: the card's 51.9% was simulated before the week-4 win; Chimmy's later run said 65.12%.
+describe('the brief says when its playoff odds predate the live period', () => {
+  const card = (live: {you:number;them:number;margin:number;final:boolean} | null) => ({leagueId:'H',leagueName:'HailShiva',season:2026,week:4,opponent:{name:'Paid'},live})
+  const outlook = (period: number, playoffPct: number, swingWeek?: number) => ({leagues:[{leagueId:'H',leagueName:'HailShiva',season:2026,period,you:{modelled:true,playoffPct}}],
+    swingByLeague: swingWeek ? {H:{leagueId:'H',leagueName:'HailShiva',week:swingWeek,opponentName:'Rittnasty',ifWin:76.4,ifLose:55.55,swing:20.85}} : {}}) as unknown as SeasonOutlook
+  const brief = (c: ReturnType<typeof card>, o: SeasonOutlook, es = false) => weeklyBrief(buildWeeklyBlueprint({ leagues:[{id:'H',name:'HailShiva',sport:'NFL'}], board:{...board,leaning:[c]} as unknown as WeekBoard, pulse:null, outlook:o, focusLeagueId:'H', now:new Date('2026-10-05T23:00:00Z') }), es)
+  it('labels odds beside a period still being played', () => {
+    expect(brief(card({you:98.1,them:120.4,margin:-22.3,final:false}), outlook(4, 51.9))).toContain("Estimated playoff probability in HailShiva: 51.9% (simulated before period 4's result; that game is not counted yet).")
+    expect(brief(card({you:98.1,them:120.4,margin:-22.3,final:false}), outlook(4, 51.9), true)).toContain('51.9% (simulada antes del resultado del período 4; aún no cuenta ese partido).')
+  })
+  it('adds nothing before kickoff, or once the card has moved on to the next game', () => {
+    expect(brief(card(null), outlook(4, 51.9))).toContain('Estimated playoff probability in HailShiva: 51.9%. ')
+    const after = brief(card({you:135.5,them:129.9,margin:5.6,final:true}), outlook(5, 65.12, 5))
+    expect(after).toContain('Period 5: facing Rittnasty in HailShiva.')
+    expect(after).toContain('Estimated playoff probability in HailShiva: 65.1%. ')
+    expect(after).not.toContain('simulated before')
+  })
+})

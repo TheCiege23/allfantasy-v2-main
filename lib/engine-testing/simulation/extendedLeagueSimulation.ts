@@ -6,6 +6,7 @@
 
 import { validateCreatePayload } from '@/lib/league-creation/canonical/validateCreateLeague'
 import { RETIRED_CONCEPT_REASON_CODES } from '@/lib/league-creation/retiredConcepts'
+import { SURVIVOR_CREATION_UNAVAILABLE_MESSAGE } from '@/lib/survivor/survivorCreationAvailability'
 import { resolveLeagueTradeSettings } from '@/lib/league-trade-engine/tradeSettingsResolver'
 import {
   validateTradeAssets,
@@ -94,7 +95,10 @@ export function runExtendedLeagueEngineSimulation(
    */
   const POLICY_GATE_CODES = new Set<string>(Object.values(RETIRED_CONCEPT_REASON_CODES))
   const cpBlockedByLaunchGateOnly =
-    !cp.ok && cp.errors.length > 0 && cp.errors.every((e) => POLICY_GATE_CODES.has(String(e.code)))
+    !cp.ok && cp.errors.length > 0 && cp.errors.every((e) =>
+      POLICY_GATE_CODES.has(String(e.code)) ||
+      (e.path === 'sport' && e.message === SURVIVOR_CREATION_UNAVAILABLE_MESSAGE),
+    )
   const cpStructurallyOk = cp.ok || cpBlockedByLaunchGateOnly
   extendedOnlySteps.push({ kind: 'create_payload', ok: cpStructurallyOk })
 

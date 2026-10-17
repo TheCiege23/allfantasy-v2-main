@@ -192,9 +192,10 @@ describe('DRAFT_COMPLETED event — generic emission contract (G12-2)', () => {
     expect(dsSrc).toMatch(/sessionId: session\.id/)
   })
 
-  it('annotates the survivor bootstrap with G12-3 finding comment', () => {
-    expect(dsSrc).toMatch(/G12-3 FINDING/)
-    expect(dsSrc).toMatch(/runSurvivorPostDraftBootstrap/)
+  it('awaits Survivor setup in the retryable artifact path instead of a detached completion side effect', () => {
+    const artifactSrc = src('lib/live-draft-engine/postDraftFinalizeArtifacts.ts')
+    expect(artifactSrc).toContain('await runSurvivorPostDraftBootstrap(leagueId, { canonicalOnly: true })')
+    expect(dsSrc).not.toMatch(/m\.runSurvivorPostDraftBootstrap/)
   })
 })
 

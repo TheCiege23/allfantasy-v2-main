@@ -40,6 +40,7 @@ const KNOWN_SAFE_TARGETS = [
   { endpoint: "ep-winter-salad-ad34lce8", database: "neondb", label: "staging" },
   { endpoint: "ep-muddy-leaf-adigvvph", database: "neondb", label: "test" },
   { endpoint: "ep-sparkling-mountain-ads99f9t", database: "neondb", label: "redraft-test" },
+  { endpoint: "ep-billowing-dream-b7cf9pxk", database: "tournament_pilot", label: "isolated tournament pilot" },
 ];
 
 const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1", "::1", "0.0.0.0"]);

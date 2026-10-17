@@ -143,18 +143,20 @@ export async function loadGameDayTriage(userId: string | null | undefined, leagu
    *     same collision applies, so those leagues are counted, not read.
    */
   const platformOf = new Map(leagues.map((l) => [l.id, l.platform]))
+  // A native league of another sport holds Rolling Insights ids, never Sleeper ids: counted, not read.
+  const sportOfLeague = new Map(leagues.map((l) => [l.id, l.sport]))
   const bridged = await loadBridgedLeagues(
     leagues.filter((l) => !bestBall.has(l.id) && rosterIdSpaceOf(l.platform) === 'other'),
   )
   const bridgeReadable = (leagueId: string) => bridged.get(leagueId)?.readable === true
   const readable = rawRosters
-    .filter((r) => !bestBall.has(r.leagueId) && (rosterIdSpaceOf(platformOf.get(r.leagueId)) !== 'other' || bridgeReadable(r.leagueId)))
+    .filter((r) => !bestBall.has(r.leagueId) && (rosterIdSpaceOf(platformOf.get(r.leagueId), sportOfLeague.get(r.leagueId)) !== 'other' || bridgeReadable(r.leagueId)))
     .map((r) => (bridgeReadable(r.leagueId) ? { ...r, playerData: applyBridge(r.playerData, bridged.get(r.leagueId)!.map) } : r))
   const espnMap = await loadEspnToSleeperMap(
     collectRosterIds(readable.filter((r) => rosterIdSpaceOf(platformOf.get(r.leagueId)) === 'espn').map((r) => r.playerData)),
   )
   const otherLeagues = new Set(
-    leagues.filter((l) => !bestBall.has(l.id) && rosterIdSpaceOf(l.platform) === 'other' && !bridgeReadable(l.id)).map((l) => l.id),
+    leagues.filter((l) => !bestBall.has(l.id) && rosterIdSpaceOf(l.platform, l.sport) === 'other' && !bridgeReadable(l.id)).map((l) => l.id),
   )
   const teamByLeague = new Map(teams.map((t) => [t.leagueId, t]))
 
@@ -268,9 +270,9 @@ export async function loadGameDayTriage(userId: string | null | undefined, leagu
       const players = await prisma.sportsPlayer
         .findMany({
           where: { sport, sleeperId: { in: [...ids] } },
-          select: { sleeperId: true, sport: true, externalId: true, name: true, position: true, team: true, imageUrl: true },
+          select: { sleeperId: true, sport: true, externalId: true, name: true, position: true, team: true, imageUrl: true, source: true, fetchedAt: true },
         })
-        .catch(() => [] as Array<{ sleeperId: string | null; sport: string; externalId: string; name: string; position: string | null; team: string | null; imageUrl: string | null }>)
+        .catch(() => [] as Array<{ sleeperId: string | null; sport: string; externalId: string; name: string; position: string | null; team: string | null; imageUrl: string | null; source: string; fetchedAt: Date }>)
       // The catalog holds several provider rows per Sleeper id. Compose fields, as My Team and
       // Matchup do; the arbitrary headshot-first row can carry the wrong club or position.
       const identities = composePlayerIdentities(players)
@@ -322,6 +324,8 @@ export async function loadGameDayTriage(userId: string | null | undefined, leagu
             sleeperId: p.sleeperId,
             sport: identity.sport ?? p.sport,
             externalId: p.externalId,
+            // The ref names THIS row, so it carries this row's source (playerRef.ts).
+            source: p.source,
             name: identity.name,
             position: displayPosition(identity.position),
             team: identity.team,

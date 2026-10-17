@@ -31,22 +31,27 @@ async function postToChannel(
   content: string,
   contentType: 'text' | 'card' | 'system' | 'announcement' = 'announcement',
   cardData?: Record<string, unknown>,
+  messageId?: string,
 ): Promise<void> {
-  await (prisma as any).survivorChatMessage.create({
-    data: {
-      leagueId,
-      channelId,
-      channelType,
-      senderUserId: AI_HOST_ID,
-      senderName: AI_HOST_NAME,
-      senderIsHost: true,
-      isSystemMessage: true,
-      content,
-      contentType,
-      cardData: cardData ?? undefined,
-      isPinned: contentType === 'announcement',
-    },
-  })
+  const data = {
+    ...(messageId ? { id: messageId } : {}),
+    leagueId,
+    channelId,
+    channelType,
+    senderUserId: AI_HOST_ID,
+    senderName: AI_HOST_NAME,
+    senderIsHost: true,
+    isSystemMessage: true,
+    content,
+    contentType,
+    cardData: cardData ?? undefined,
+    isPinned: contentType === 'announcement',
+  }
+  if (messageId) {
+    await (prisma as any).survivorChatMessage.upsert({ where: { id: messageId }, create: data, update: {} })
+  } else {
+    await (prisma as any).survivorChatMessage.create({ data })
+  }
 }
 
 async function postToLeagueChat(
@@ -54,11 +59,15 @@ async function postToLeagueChat(
   content: string,
   contentType: 'text' | 'card' | 'system' | 'announcement' = 'announcement',
   cardData?: Record<string, unknown>,
+  messageId?: string,
 ): Promise<void> {
   const channelId = await getLeagueChatChannelId(leagueId)
-  if (!channelId) return
+  if (!channelId) {
+    if (messageId) throw new Error('Survivor league chat is not ready for the weekly recap')
+    return
+  }
 
-  await postToChannel(leagueId, channelId, 'league', content, contentType, cardData)
+  await postToChannel(leagueId, channelId, 'league', content, contentType, cardData, messageId)
 }
 
 export async function postScrollRevealToTribeChat(
@@ -107,7 +116,7 @@ export async function postEliminationAnnouncement(
   tieOccurred: boolean,
 ): Promise<void> {
   let content = `The tribe has spoken. **${eliminatedName}** has been voted out in Week ${week}.`
-  if (idolPlayed) content += ' A hidden idol was played during this Tribal Council.'
+  if (idolPlayed) content += ' A hidden idol was played during this Elimination Council.'
   if (tieOccurred) content += ' A tie occurred before the final result.'
 
   await postToLeagueChat(leagueId, content, 'card', {
@@ -141,7 +150,7 @@ export async function postWeeklyRecap(
   if (recap.challengeWinner) lines.push(`Challenge won by ${recap.challengeWinner}`)
   if (recap.immunityHolder) lines.push(`Immunity: ${recap.immunityHolder}`)
   if (recap.topScorer) lines.push(`Top scorer: ${recap.topScorer} (${recap.topScore?.toFixed(1) ?? '?'} pts)`)
-  if (recap.tribalLoser) lines.push(`Tribal Council: ${recap.tribalLoser}`)
+  if (recap.tribalLoser) lines.push(`Elimination Council: ${recap.tribalLoser}`)
   if (recap.eliminatedPlayer) lines.push(`Voted out: ${recap.eliminatedPlayer}`)
   if (recap.idolsPlayed?.length) lines.push(`Idols played: ${recap.idolsPlayed.join(', ')}`)
   if (recap.twistSummary) lines.push(`Twist: ${recap.twistSummary}`)
@@ -150,7 +159,7 @@ export async function postWeeklyRecap(
     type: 'weekly_recap',
     week,
     ...recap,
-  })
+  }, `survivor-weekly-recap:${leagueId}:${week}`)
 }
 
 /**
@@ -197,7 +206,7 @@ export async function postChallengeAnnouncement(
 }
 
 /**
- * Post tribal council opening to league chat.
+ * Post elimination council opening to league chat.
  */
 export async function postTribalCouncilOpening(
   leagueId: string,
@@ -205,7 +214,7 @@ export async function postTribalCouncilOpening(
   week: number,
   voteDeadline: string,
 ): Promise<void> {
-  const content = `**Tribal Council — Week ${week}**\n${tribeName} must vote someone out.\nVote privately by messaging @Chimmy.\nDeadline: ${new Date(voteDeadline).toLocaleString()}`
+  const content = `**Elimination Council — Week ${week}**\n${tribeName} must vote someone out.\nVote privately by messaging @Chimmy.\nDeadline: ${new Date(voteDeadline).toLocaleString()}`
 
   await postToLeagueChat(leagueId, content, 'card', {
     type: 'tribal_opening',

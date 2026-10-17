@@ -298,11 +298,21 @@ type AfLeagueRow = {
   teams: Array<{ claimedByUserId: string | null; platformUserId: string | null }>
 }
 
-type Recipient = { id: string; email: string }
+/**
+ * `emailAllowed` false: this person is still told — by push, under their own push settings — but
+ * gets no email (opted out of trade email, unsubscribed, no address, undeliverable, or a second
+ * account on an address already being emailed).
+ */
+type Recipient = { id: string; email: string; emailAllowed: boolean }
 
 /**
- * The AF users attached to any AF copy of this Sleeper league, minus opt-outs and undeliverable
- * addresses.
+ * The AF users attached to any AF copy of this Sleeper league. Email opt-outs and undeliverable
+ * addresses decide EMAIL only.
+ *
+ * 🛑 THEY USED TO DECIDE EVERYTHING. A user with `tradeAlerts: false` or a mail unsubscribe was
+ * dropped from this list, and push is sent only to people on it — so turning off trade EMAILS also
+ * killed trade PUSHES, which have their own switch (`decidePushForUser`, trade categories). A switch
+ * that silences a different channel is the bypass in reverse (notification-controls 2026-09-14).
  */
 async function resolveRecipients(afLeagues: AfLeagueRow[]): Promise<Recipient[]> {
   const userIds = [
@@ -339,12 +349,11 @@ async function resolveRecipients(afLeagues: AfLeagueRow[]): Promise<Recipient[]>
   const recipients: Recipient[] = []
   const seenEmails = new Set<string>()
   for (const u of users) {
-    const email = u.email
-    if (!email || seenEmails.has(email)) continue
-    seenEmails.add(email)
-    if (blocked.has(email)) continue
-    if (isUndeliverableEmailDomain(email)) continue
-    recipients.push({ id: u.id, email })
+    const email = u.email?.trim() || ''
+    const emailAllowed =
+      Boolean(email) && !seenEmails.has(email) && !blocked.has(email) && !isUndeliverableEmailDomain(email)
+    if (email) seenEmails.add(email)
+    recipients.push({ id: u.id, email, emailAllowed })
   }
   return recipients
 }
@@ -764,7 +773,8 @@ async function deliverToRecipient(args: {
 }): Promise<{ delivered: boolean; emailed: boolean }> {
   const { sleeperLeagueId, alert, recipient } = args
   const emailKey = sentClaimKey(sleeperLeagueId, alert, 'email', recipient.id)
-  const emailClaim = await claimSend(emailKey)
+  // An email opt-out never claims (or owes) an email — and never stops the push below.
+  const emailClaim: ClaimResult = recipient.emailAllowed ? await claimSend(emailKey) : 'taken'
   const needEmail = emailClaim !== 'taken'
 
   const pushGate = await decidePushForUser(recipient.id, {
