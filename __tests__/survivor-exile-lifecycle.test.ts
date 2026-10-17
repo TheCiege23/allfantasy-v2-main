@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const m = vi.hoisted(() => {
   const db = {
     $queryRaw: vi.fn(), league: { findUnique: vi.fn() },
-    survivorAuditEntry: { findFirst: vi.fn(), create: vi.fn() },
+    survivorAuditEntry: { findFirst: vi.fn(), findMany: vi.fn(), create: vi.fn() },
     survivorGameState: { findUnique: vi.fn(), update: vi.fn(), upsert: vi.fn(), updateMany: vi.fn() },
     survivorPlayer: { findMany: vi.fn(), findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn(), count: vi.fn() },
     roster: { findFirst: vi.fn(), update: vi.fn(), create: vi.fn() },
@@ -30,6 +30,7 @@ beforeEach(() => {
   m.transaction.mockImplementation(fn => fn(m.db))
   m.db.league.findUnique.mockResolvedValue({ platform: 'manual', settings: { exileIslandEnabled: true, exileReturnWeek: 10, exileReturnTokens: 4 } })
   m.db.survivorAuditEntry.findFirst.mockImplementation(async ({ where }) => where.action === 'exile_week_scored' ? { id: 'scored', data: { balances: players } } : null)
+  m.db.survivorAuditEntry.findMany.mockResolvedValue([])
   m.db.survivorGameState.findUnique.mockResolvedValue({ phase: 'merge', mergeTriggeredAt: new Date(), activeCouncilId: null })
   m.db.survivorPlayer.findMany.mockResolvedValue(players)
   m.db.roster.findFirst.mockResolvedValue({ id: 'legacy-b', redraftRosterId: 'actual-b', playerData: ['athlete'] })
@@ -141,6 +142,12 @@ describe('public Torch Ceremony commit', () => {
     expect(await revealCouncil('league', 'council')).toMatchObject({ ok: true, alreadyRevealed: false })
     expect(m.transaction).toHaveBeenCalledOnce()
     expect(m.db.survivorChatMessage.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ senderName: 'Chimmy', content: expect.stringContaining('Ballot 1: Bob.') }) }))
+    expect(m.db.survivorTribalCouncil.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ isRevealed: true }) }))
+  })
+  it('reveals Shot results only in the committed public ceremony', async () => {
+    m.db.survivorAuditEntry.findMany.mockResolvedValue([{ actorUserId: 'a', data: { draw: 1, success: true } }])
+    expect(await revealCouncil('league', 'council')).toMatchObject({ ok: true, alreadyRevealed: false })
+    expect(m.db.survivorChatMessage.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ content: expect.stringContaining('Shot in the Dark: Alice drew Safe') }) }))
     expect(m.db.survivorTribalCouncil.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ isRevealed: true }) }))
   })
   it('does not reveal when league chat cannot receive the ceremony', async () => {

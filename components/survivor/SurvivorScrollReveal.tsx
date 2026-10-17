@@ -11,7 +11,7 @@ function parseSequence(raw: unknown): SurvivorScrollRevealStep[] {
     if (!item || typeof item !== 'object') continue
     if ('status' in item && 'targetName' in item) {
       const row = item as { status: string; targetName: string | null }
-      out.push({ type: 'ballot', targetName: row.targetName ?? 'Unnamed target', stamp: row.status === 'counts' ? '' : row.status === 'taken_by_vote_steal' ? 'Taken - Does not count' : 'Does not count' })
+      out.push({ type: 'ballot', targetName: row.targetName ?? 'Unnamed target', stamp: row.status === 'counts' ? '' : row.status === 'taken_by_vote_steal' ? 'Taken - Does not count' : row.status === 'blocked_by_shot' ? 'Blocked by Shot in the Dark' : row.status === 'forfeited_by_shot' ? 'Forfeited by Shot in the Dark' : 'Does not count' })
       continue
     }
     const t = (item as { type?: string }).type
