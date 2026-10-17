@@ -9,6 +9,7 @@ import { listInjuryFacts } from '@/lib/injuries/injuryReadPort'
 import { classifyAvatarSource } from '@/lib/draft-room/classify-avatar-source'
 import { getPlayerPoolForLeague } from '@/lib/sport-teams/SportPlayerPoolResolver'
 import { normalizePlayerList, type NormalizedDraftEntry } from '@/lib/draft-asset-pipeline'
+import { resolveDraftIdProvenance, type DraftIdProvenance } from './draftIdProvenance'
 import { applyStoredTeamLogos, loadDraftPoolTeamLogoResolver } from '@/lib/draft-room/draftPoolTeamLogos'
 import { getLeagueDraftTemplatePayload } from '@/lib/league/league-draft-template-payload'
 import { isDevyLeague } from '@/lib/devy'
@@ -65,6 +66,9 @@ import {
 import { PlayerMismatchCollector } from '@/lib/player-identity/playerMismatchLogger'
 import { isFreeAgentTeam as isNormalizedFreeAgentTeam } from '@/lib/player-identity/playerIdentityResolution'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { foldInjuryTeam } from '@/lib/injuries/matchInjuryRows'
+import { buildPlayerKey } from '@/lib/adp/computeAllFantasyAdp'
+import { loadNbaSurvivorRosterEligibility, nbaSurvivorPlayerIdMatches, nbaSurvivorPlayerIsEligible, type NbaRosterEligibility } from '@/lib/draft-room/nbaSurvivorRosterEligibility'
 
 const DEFAULT_LIMIT = 300
 const DEVY_POOL_LIMIT = 200
@@ -111,6 +115,7 @@ export type DraftPoolRawRow = {
   imageUrl?: string | null
   age?: number | null
   fantasyPointsPerGame?: number | null
+  nbaDraftStats?: { pointsPerGame: number | null; reboundsPerGame: number | null; minutesPerGame: number | null } | null
   lifetimeValue?: number | null
   nflDraftProjectionSplits?: NflDraftProjectionSplits
   /** D.7 â Sleeper years_exp; 0 = rookie. Only attached for NFL pools. */
@@ -129,6 +134,7 @@ export type DraftPoolRawRow = {
   /** Internal: preserve source IDs before any backfill or reconciliation. */
   sourcePlayerId?: string | null
   sourceSleeperId?: string | null
+  draftIdProvenance?: DraftIdProvenance
 }
 
 export type GetResolvedDraftPoolOptions = {
@@ -174,6 +180,7 @@ type SportPoolRow = {
    * Rolling Insights number that looks identical to a Sleeper one.
    */
   sleeper_id?: string | null
+  metadata?: Record<string, unknown>
   injury_status: string | null
   secondary_positions?: string[]
   image_url?: string | null
@@ -393,7 +400,17 @@ export async function loadLatestAveragedAdpRowsFromDb(
     : ['halfppr', 'fbhalfppr', 'ncaafhalfppr'].includes(token ?? '') ? ['halfPPR', 'half-ppr', 'half_ppr', 'halfppr']
     : ['standard', 'nonppr', 'fbstandard', 'ncaafstandard'].includes(token ?? '') ? ['standard', 'non-ppr', 'nonppr']
     : context?.scoring ? [context.scoring] : null
-  return loadLatestAveragedAdpRowsForScorings(sport, format, aliases ? { in: aliases } : { notIn: QB_HEAVY_ADP_SCORINGS }, context?.season)
+  const scoped = await loadLatestAveragedAdpRowsForScorings(sport, format, aliases ? { in: aliases } : { notIn: QB_HEAVY_ADP_SCORINGS }, context?.season)
+  /*
+   * Outside football the board is one market, not one per scoring system: Fantrax publishes a single
+   * NBA board (stored as `standard`), while a league's `scoring` is its own preset id. Requiring the
+   * two to be equal would leave every NBA league that did not happen to be named `standard` on
+   * alphabetical order. Football keeps the strict match — its PPR and standard boards genuinely differ.
+   */
+  if (scoped.length === 0 && aliases && sport !== 'NFL' && sport !== 'NCAAF') {
+    return loadLatestAveragedAdpRowsForScorings(sport, format, { notIn: QB_HEAVY_ADP_SCORINGS }, context?.season)
+  }
+  return scoped
 }
 
 async function loadLatestAveragedAdpRowsForScorings(
@@ -745,7 +762,7 @@ function suffixlessPersonNameKey(row: DraftPoolRawRow): string {
   return `${suffixlessCanonicalName(name)}|${canonicalPosition(pos)}`
 }
 
-function dedupeEnrichedRawRows(rows: DraftPoolRawRow[]): DraftPoolRawRow[] {
+export function dedupeEnrichedRawRows(rows: DraftPoolRawRow[], sport?: LeagueSport): DraftPoolRawRow[] {
   const bestByKey = new Map<string, DraftPoolRawRow>()
   for (const row of rows) {
     const name = row.name ?? row.playerName ?? row.full_name ?? ''
@@ -757,7 +774,13 @@ function dedupeEnrichedRawRows(rows: DraftPoolRawRow[]): DraftPoolRawRow[] {
      * key is unchanged, suffix and all, so no father is merged into his son.
      */
     const sleeperId = rawRowSleeperId(row)
-    const key = sleeperId ? `sleeper:${sleeperId}` : strictIdentityKey(name, pos)
+    // NBA feeds disagree on a player's primary position (C versus PF, for example).
+    // A name on the same club is one draftable athlete, even when those labels differ.
+    // Keep the club in the key so namesakes on different teams remain separate.
+    const nbaTeam = canonicalTeam(row.team ?? row.teamAbbr ?? null)
+    const key = sport === 'NBA' && nbaTeam && !isFreeAgentTeam(nbaTeam)
+      ? `nba:${canonicalName(name)}|${nbaTeam}`
+      : sleeperId ? `sleeper:${sleeperId}` : strictIdentityKey(name, pos)
     if (!key || key === '|') continue
 
     const current = bestByKey.get(key)
@@ -766,8 +789,22 @@ function dedupeEnrichedRawRows(rows: DraftPoolRawRow[]): DraftPoolRawRow[] {
       continue
     }
 
-    if (scoreDraftPoolRow(row) > scoreDraftPoolRow(current)) {
-      bestByKey.set(key, row)
+    const preferred = scoreDraftPoolRow(row) > scoreDraftPoolRow(current) ? row : current
+    if (sport === 'NBA' && key.startsWith('nba:')) {
+      const other = preferred === row ? current : row
+      bestByKey.set(key, {
+        ...preferred,
+        adp: preferred.adp ?? other.adp,
+        nbaDraftStats: preferred.nbaDraftStats ?? other.nbaDraftStats,
+        imageUrl: preferred.imageUrl ?? other.imageUrl,
+        secondaryPositions: [...new Set([
+          ...(preferred.secondaryPositions ?? []),
+          ...(other.secondaryPositions ?? []),
+          other.position ?? other.pos ?? '',
+        ].filter(Boolean))],
+      })
+    } else {
+      bestByKey.set(key, preferred)
     }
   }
 
@@ -785,6 +822,7 @@ function scoreDraftPoolRow(row: DraftPoolRawRow): number {
   if (!isFreeAgentTeam(team)) score += 120
   if (sleeperId && String(sleeperId).trim().length >= 3) score += 120
   if (adp != null) score += 60
+  if (row.nbaDraftStats && Object.values(row.nbaDraftStats).some((value) => value != null)) score += 45
   if (adp != null && adp <= 400) score += 20
   score += Math.min(String(name).length, 40) // small bias toward fuller display names
   return score
@@ -996,6 +1034,7 @@ export async function getResolvedDraftPoolForLeague(
         keeperSelections: true,
         draftType: true,
         teamCount: true,
+        rounds: true,
         draftModeLabel: true,
         playerPool: true,
       },
@@ -1229,7 +1268,9 @@ export async function getResolvedDraftPoolForLeague(
         injuryByPlayerId.set(injuryRow.playerId, injuryRow)
       }
 
-      const nameTeam = injuryNameTeamKey(injuryRow.playerName, injuryRow.team)
+      // Folded to a code: the feeds write "Minnesota Vikings" and the pool says "MIN", so an unfolded
+      // key never matched and every NFL badge fell through to the name-only tier below.
+      const nameTeam = injuryNameTeamKey(injuryRow.playerName, foldInjuryTeam(injuryRow.team, sport))
       if (nameTeam && !injuryByNameTeam.has(nameTeam)) {
         injuryByNameTeam.set(nameTeam, injuryRow)
       }
@@ -1243,7 +1284,7 @@ export async function getResolvedDraftPoolForLeague(
         const existing = injuryByName.get(nameOnly)
         if (!existing) {
           injuryByName.set(nameOnly, injuryRow)
-        } else if ((existing.team || '') !== (injuryRow.team || '')) {
+        } else if ((foldInjuryTeam(existing.team, sport) ?? '') !== (foldInjuryTeam(injuryRow.team, sport) ?? '')) {
           injuryNameCollisions.add(nameOnly)
         }
       }
@@ -1368,7 +1409,11 @@ export async function getResolvedDraftPoolForLeague(
         seenAfterAdpSeed,
       )
     } else {
-      rawList = poolRows.slice(0, limit).map<DraftPoolRawRow>((p) => ({
+      // An NBA Survivor cast can make hundreds of picks. Without an ADP feed,
+      // the display limit is too small to supply a complete verified draft.
+      const initialPoolRows = sport === 'NBA' && league?.leagueVariant === 'survivor'
+        ? poolRows : poolRows.slice(0, limit)
+      rawList = initialPoolRows.map<DraftPoolRawRow>((p) => ({
         name: p.full_name,
         position: p.position,
         team: p.team_abbreviation,
@@ -1465,6 +1510,19 @@ export async function getResolvedDraftPoolForLeague(
   if (eligiblePositions?.size) {
     rawListFiltered = rawListFiltered.filter((r: RawRow) =>
       draftPoolRowMatchesEligiblePositions(r.position ?? r.pos ?? '', eligiblePositions),
+    )
+  }
+
+  let nbaSurvivorRoster: NbaRosterEligibility | null = null
+  if (sport === 'NBA' && league?.leagueVariant === 'survivor') {
+    const requiredPlayers = (draftSession?.teamCount ?? league?.leagueSize ?? 20) * (draftSession?.rounds ?? 12)
+    nbaSurvivorRoster = await loadNbaSurvivorRosterEligibility(requiredPlayers)
+    if (!nbaSurvivorRoster.ready) throw new Error(nbaSurvivorRoster.reason ?? 'Current NBA roster unavailable')
+    // ADP seed rows have no provider id until the later player-pool enrichment.
+    // Keep verified names here, then require a verified provider id on the final entries.
+    const activeRoster = nbaSurvivorRoster
+    rawListFiltered = rawListFiltered.filter((row) =>
+      nbaSurvivorPlayerIsEligible(activeRoster, row.name ?? row.playerName ?? row.full_name ?? ''),
     )
   }
 
@@ -2099,12 +2157,11 @@ export async function getResolvedDraftPoolForLeague(
         null
     }
 
-    /** D.5 â AI ADP overlay from AllFantasyAdpSnapshot. The map is keyed by
-     * `<normalized name>|<normalized position>` matching the same shape the
-     * recompute script writes (see lib/adp/computeAllFantasyAdp.buildPlayerKey). */
-    const aiAdpHit = aiAdpByPlayerKey.get(
-      `${normalizeDraftPoolNameForDedupe(name ?? '')}|${normalizeKeyPart(position ?? '')}`,
-    )
+    /** D.5 â AI ADP overlay from AllFantasyAdpSnapshot. The board is keyed by
+     * `buildPlayerKey` (loadAdpBoard re-keys stored rows), so the lookup must be too. It used
+     * `canonicalName`, which KEEPS suffixes and so cannot meet a suffix-insensitive key - and it
+     * already missed every dotted stored key (`marvin harrison jr.|wr` vs `marvin harrison jr|wr`). */
+    const aiAdpHit = aiAdpByPlayerKey.get(buildPlayerKey(name ?? '', position ?? ''))
     const averagedAdpHit =
       averagedAdpStrict.get(adpLookupKey(name ?? '', position ?? '', team ?? null)) ??
       averagedAdpLoose.get(adpLookupKeyLoose(name ?? '', position ?? '')) ??
@@ -2169,17 +2226,22 @@ export async function getResolvedDraftPoolForLeague(
     if (!dbInjuryHit) {
       const teamCandidate =
         row.team ?? row.teamAbbr ?? poolMatch?.team_abbreviation ?? null
-      const byNameTeam = injuryByNameTeam.get(injuryNameTeamKey(name, teamCandidate))
+      const byNameTeam = injuryByNameTeam.get(injuryNameTeamKey(name, foldInjuryTeam(teamCandidate, sport)))
       dbInjuryHit = byNameTeam ?? null
     }
     if (!dbInjuryHit) {
       // Name-only is the last resort and is REFUSED when that name is shared by
       // more than one athlete. A missing injury badge is a gap; the wrong
       // player's injury badge on a draft board is a false statement.
+      //
+      // 🛑 AND REFUSED WHEN THE ROW NAMES ANOTHER CLUB (2026-10-11). The collision set only fills
+      // when BOTH namesakes have a row, so with only the Browns' LB Justin Jefferson on the report
+      // the Vikings WR's board badge read the LB's status.
       const nameKey = injuryNameKey(name)
-      dbInjuryHit = nameKey && !injuryNameCollisions.has(nameKey)
-        ? injuryByName.get(nameKey) ?? null
-        : null
+      const hit = nameKey && !injuryNameCollisions.has(nameKey) ? injuryByName.get(nameKey) ?? null : null
+      const theirs = foldInjuryTeam(hit?.team, sport)
+      const ours = foldInjuryTeam(row.team ?? row.teamAbbr ?? poolMatch?.team_abbreviation ?? null, sport)
+      dbInjuryHit = hit && (!theirs || !ours || theirs === ours) ? hit : null
     }
 
     const resolvedRawInjuryStatus =
@@ -2274,8 +2336,10 @@ export async function getResolvedDraftPoolForLeague(
           sourcePlayerId,
           sourceSleeperId,
         }
+    const selectedDraftId = String(base.playerId ?? base.sleeperId ?? base.id ?? '').trim()
     return {
       ...base,
+      draftIdProvenance: resolveDraftIdProvenance(sport, selectedDraftId, poolMatch),
       graduatedToNFL: row.graduatedToNFL ?? (promoted ? true : undefined),
       school: row.school ?? promoted?.school ?? null,
       college: row.college ?? promoted?.school ?? null,
@@ -2285,6 +2349,7 @@ export async function getResolvedDraftPoolForLeague(
         sprSupplementFppg ??
         (row as RawRow).fantasyPointsPerGame ??
         undefined,
+      nbaDraftStats: sport === 'NBA' ? (sprAug?.nbaDraftStats ?? null) : null,
       lifetimeValue:
         resolvedAnalytics?.lifetimeValue ??
         analytics?.lifetimeValue ??
@@ -2414,8 +2479,18 @@ export async function getResolvedDraftPoolForLeague(
     }
   }
 
-  const dedupedEnrichedList = dedupeEnrichedRawRows(enrichedList as DraftPoolRawRow[])
-  let entries = normalizePlayerList(dedupedEnrichedList, sport)
+  const dedupedEnrichedList = dedupeEnrichedRawRows(enrichedList as DraftPoolRawRow[], sport)
+  let entries: NormalizedDraftEntry[] = normalizePlayerList(dedupedEnrichedList, sport).map((entry, index) => ({ ...entry, draftIdProvenance: dedupedEnrichedList[index]?.draftIdProvenance }))
+  if (nbaSurvivorRoster) {
+    const activeRoster = nbaSurvivorRoster
+    entries = entries.filter((entry) =>
+      nbaSurvivorPlayerIdMatches(activeRoster, entry.name, entry.display?.playerId ?? entry.playerId),
+    )
+    const requiredPlayers = (draftSession?.teamCount ?? league?.leagueSize ?? 20) * (draftSession?.rounds ?? 12)
+    if (entries.length < requiredPlayers) {
+      throw new Error('The verified NBA draft pool has fewer players than the scheduled picks. Refresh player data before drafting.')
+    }
+  }
   // Stored crests over the static registry's guesses (see draftPoolTeamLogos.ts).
   entries = applyStoredTeamLogos(entries, await loadDraftPoolTeamLogoResolver(sport))
   entries = filterExcludedDraftEntries(

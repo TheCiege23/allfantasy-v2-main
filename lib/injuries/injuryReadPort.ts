@@ -32,10 +32,12 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { buildNameIndex, normalizeMatchName, resolveVerifiedMatch } from '@/lib/player-match/verifiedNameMatch'
+import { foldInjuryTeam, isInjuryDesignation } from '@/lib/injuries/matchInjuryRows'
 import type { InjuryDesignation } from '@/lib/injuries/rollingInsightsInjuries'
 import {
   INJURY_PRIOR_SEASON_AFTER_HOURS,
   INJURY_STALE_AFTER_HOURS,
+  injuryStaleAfterHours,
 } from '@/lib/injuries/injuryRecency'
 
 /**
@@ -48,8 +50,9 @@ import {
  * Every existing `from '@/lib/injuries/injuryReadPort'` import keeps working.
  *
  * Beyond INJURY_STALE_AFTER_HOURS, a status is treated as a claim we can no
- * longer stand behind. NFL injury reports move daily and hard on game day; 36h
- * spans a normal report cycle without blessing week-old data.
+ * longer stand behind — for daily-schedule sports. NFL and NCAAF report once per
+ * game week and a feed re-dates a row only when its word changes, so they use a
+ * week (`injuryStaleAfterHours`); 36h flagged every Friday "Out" stale by Sunday.
  */
 export { INJURY_STALE_AFTER_HOURS, INJURY_PRIOR_SEASON_AFTER_HOURS }
 
@@ -143,7 +146,8 @@ export interface InjuryFact {
   /** Age of our INGEST in hours. Use for feed health ("has the importer stopped?"). */
   fetchAgeHours: number
   /**
-   * True when this row is older than INJURY_STALE_AFTER_HOURS. Callers should
+   * True when this row's claim is older than the sport's horizon (`injuryStaleAfterHours`: a week
+   * for NFL/NCAAF, INJURY_STALE_AFTER_HOURS otherwise). Callers should
    * suppress or caveat the status rather than render it plainly — a stale
    * injury badge is a confident false statement, which is worse than none.
    */
@@ -217,7 +221,7 @@ function reportedAt(row: InjuryRow): Date {
   return row.date ?? row.fetchedAt
 }
 
-function toFact(row: InjuryRow, now: Date): InjuryFact {
+function toFact(row: InjuryRow, now: Date, staleAfterHours: number = INJURY_STALE_AFTER_HOURS): InjuryFact {
   /*
    * 🛑 AGE IS MEASURED FROM THE REPORT DATE, NOT FROM `fetchedAt`.
    *
@@ -252,7 +256,7 @@ function toFact(row: InjuryRow, now: Date): InjuryFact {
     reportedAt: reportedAt(row),
     ageHours,
     fetchAgeHours,
-    stale: ageHours > INJURY_STALE_AFTER_HOURS,
+    stale: ageHours > staleAfterHours,
   }
 }
 
@@ -353,7 +357,7 @@ export async function resolveInjuryFacts(args: {
   // providers never presents as an ambiguous collision.
   const bestByExact = new Map<string, InjuryRow>()
   for (const r of rows) {
-    const key = `${normalizeMatchName(r.playerName)}|${(r.team ?? '').toUpperCase()}`
+    const key = `${normalizeMatchName(r.playerName)}|${foldInjuryTeam(r.team, sport) ?? ''}`
     const existing = bestByExact.get(key)
     bestByExact.set(key, existing ? preferred(existing, r) : r)
   }
@@ -362,7 +366,10 @@ export async function resolveInjuryFacts(args: {
     [...bestByExact.values()].map((r) => ({
       name: r.playerName,
       position: r.position,
-      team: r.team,
+      // Folded to a code, as is the lookup below: the feeds write "Minnesota Vikings", rosters
+      // say "MIN", and the matcher compares verbatim — so without it team narrowing never fires
+      // and a shared name (WR vs LB Justin Jefferson) is refused even when the caller knew.
+      team: foldInjuryTeam(r.team, sport),
       row: r,
     })),
   )
@@ -373,11 +380,17 @@ export async function resolveInjuryFacts(args: {
   for (const lookup of args.players) {
     const key = normalizeMatchName(lookup.name)
     if (!key) continue
-    const res = resolveVerifiedMatch(index, {
-      name: lookup.name,
-      position: lookup.position ?? null,
-      team: lookup.team ?? null,
-    })
+    const res = resolveVerifiedMatch(
+      index,
+      {
+        name: lookup.name,
+        position: lookup.position ?? null,
+        team: foldInjuryTeam(lookup.team, sport),
+      },
+      // Only athletes WITH a row are indexed, so a lone namesake proves nothing: WR DeVonta Smith's
+      // Out was read as CB DeVonta Smith's whenever the corner had no row of his own.
+      { refuseContradictedSingle: true },
+    )
     if (res.reason === 'ambiguous') {
       // Refusing is the point. RI supplies no position on injury rows, so a
       // genuine same-name collision often CANNOT be split — and a missing
@@ -386,7 +399,7 @@ export async function resolveInjuryFacts(args: {
       continue
     }
     if (!res.match) continue
-    byPlayer.set(key, toFact(res.match.row, now))
+    byPlayer.set(key, toFact(res.match.row, now, injuryStaleAfterHours(sport)))
   }
 
   return {
@@ -441,7 +454,7 @@ export interface InjuryFactList {
 export async function listInjuryFacts(args: {
   sport: string
   now?: Date
-  /** Exact team abbreviation filter (already-normalized by the caller). */
+  /** Team filter, compared after folding both sides to a club code ("Minnesota Vikings" = "MIN"). */
   team?: string | null
   /** Case-insensitive substring match on player name. */
   playerNameContains?: string | null
@@ -453,8 +466,14 @@ export async function listInjuryFacts(args: {
    * accident. Pass null to opt out (historical/backfill readers only).
    */
   maxReportAgeHours?: number | null
-  /** Only these designations (exact match against stored status). */
+  /** Only players whose CURRENT designation is one of these (exact match against stored status). */
   statuses?: readonly string[] | null
+  /**
+   * Only players whose current claim is an injury designation — drops "Active", "Healthy", "NA".
+   * For lists titled "injuries": on game day ESPN's "Active" rows are the newest claims, and
+   * without this they fill a capped list and push real designations past the cut.
+   */
+  designationsOnly?: boolean
   limit?: number
 }): Promise<InjuryFactList> {
   const now = args.now ?? new Date()
@@ -491,7 +510,6 @@ export async function listInjuryFacts(args: {
       where: {
         sport,
         expiresAt: { gt: now },
-        ...(args.team ? { team: args.team } : {}),
         ...(args.playerNameContains
           ? { playerName: { contains: args.playerNameContains, mode: 'insensitive' } }
           : {}),
@@ -510,7 +528,13 @@ export async function listInjuryFacts(args: {
         ...(reportCutoff
           ? { AND: [{ OR: [{ date: null }, { date: { gte: reportCutoff } }] }] }
           : {}),
-        ...(args.statuses && args.statuses.length > 0 ? { status: { in: [...args.statuses] } } : {}),
+        /*
+         * 🛑 NO `status` OR `team` PREDICATE HERE (2026-10-11). Both used to run in SQL, BEFORE the
+         * one-row-per-player collapse below — so a cleared player's newer "Active" was filtered out
+         * first and his older "Questionable" collapsed in as current (the news ticker said so all
+         * Sunday), and a team filter of "MIN" dropped every row a feed spelled "Minnesota Vikings".
+         * Both now apply to each player's CURRENT claim, after the collapse.
+         */
       },
       select: {
         id: true,
@@ -543,7 +567,7 @@ export async function listInjuryFacts(args: {
   // One row per player — same collapse rule as resolveInjuryFacts.
   const bestByExact = new Map<string, InjuryRow & { id: string }>()
   for (const r of rows) {
-    const key = `${normalizeMatchName(r.playerName)}|${(r.team ?? '').toUpperCase()}`
+    const key = `${normalizeMatchName(r.playerName)}|${foldInjuryTeam(r.team, sport) ?? ''}`
     const existing = bestByExact.get(key)
     bestByExact.set(key, existing ? (preferred(existing, r) as InjuryRow & { id: string }) : r)
   }
@@ -558,7 +582,12 @@ export async function listInjuryFacts(args: {
    * happened to yield, which is how a panel of practice notes could hide the
    * designations behind it.
    */
+  const wantTeam = args.team ? foldInjuryTeam(args.team, sport) : null
+  const wantStatuses = args.statuses && args.statuses.length > 0 ? new Set(args.statuses) : null
   const facts = [...bestByExact.values()]
+    .filter((r) => !wantTeam || foldInjuryTeam(r.team, sport) === wantTeam)
+    .filter((r) => !wantStatuses || (r.status != null && wantStatuses.has(r.status)))
+    .filter((r) => !args.designationsOnly || isInjuryDesignation(r.status))
     .sort((a, b) => {
       const byClaim = claimAsOf(b).getTime() - claimAsOf(a).getTime()
       if (byClaim !== 0) return byClaim
@@ -574,7 +603,7 @@ export async function listInjuryFacts(args: {
     })
     .slice(0, limit)
     .map((r) => ({
-      ...toFact(r, now),
+      ...toFact(r, now, injuryStaleAfterHours(sport)),
       id: r.id,
       team: r.team,
       position: r.position,

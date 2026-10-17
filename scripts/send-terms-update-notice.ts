@@ -61,7 +61,7 @@ async function main() {
   if (testTo) {
     const { client, from } = resend()
     const { error } = await client.emails.send({ from, to: testTo, subject: notice.subject, html: notice.html, text: notice.text })
-    console.log(error ? `Test send failed: ${error.name}` : "Test copy sent.")
+    console.log(error ? `Test send failed: ${error.name}: ${error.message}` : "Test copy sent.")
     process.exit(error ? 1 : 0)
   }
 
@@ -113,7 +113,7 @@ async function main() {
       )
       if (error) {
         failed += batch.length
-        console.error(`Batch ${i / BATCH_SIZE + 1} failed: ${error.name}. Its accounts stay unsent; re-run to retry.`)
+        console.error(`Batch ${i / BATCH_SIZE + 1} failed: ${error.name}: ${error.message}. Its accounts stay unsent; re-run to retry.`)
       } else {
         sent += batch.length
         fs.appendFileSync(progressFile, batch.map((u) => JSON.stringify({ id: u.id })).join("\n") + "\n")

@@ -61,6 +61,12 @@ describe('his card', () => {
     const html = plan({ rows: [row('Josh Allen', '2026-09-27T17:00:00.000Z', ['A'])] })
     expect(hrefs(html)).toContain('/core/players?q=Josh%20Allen&player=NFL%3Ax-Josh%20Allen')
   })
+
+  it('carries the row\'s source in the ref, because an externalId is only unique per feed (playerRef.ts)', () => {
+    const r = row('Josh Allen', '2026-09-27T17:00:00.000Z', ['A'])
+    const html = plan({ rows: [{ ...r, player: { ...r.player, externalId: '2135', source: 'backfill' } }] })
+    expect(hrefs(html)).toContain('/core/players?q=Josh%20Allen&player=NFL~backfill%3A2135')
+  })
 })
 
 describe('who to start instead', () => {

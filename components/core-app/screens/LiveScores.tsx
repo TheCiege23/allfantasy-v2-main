@@ -4,6 +4,10 @@ import { TopicTip } from '@/components/core-app/TopicTip'
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { LiveMatchupStrip } from '@/components/core-app/screens/LiveMatchupStrip'
+import { LiveLeaguesGlance } from '@/components/core-app/screens/LiveLeaguesGlance'
+import { buildLeaguesAtAGlance, type LeagueRef } from '@/lib/live/leaguesAtAGlance'
+import type { RailMatchup } from '@/lib/core-app/railMatchups'
+import { gameStage, groupByStage } from '@/lib/live/gameStage'
 import type { MatchupStrip } from '@/lib/live/matchupStrip'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import LocalDateTime from '@/components/core-app/LocalDateTime'
@@ -13,9 +17,15 @@ import PlayerName from '@/components/core-app/player-card/PlayerName'
 import { gameDetailHref } from '@/lib/live/gameDetailLink'
 import type { LiveGameCard, LivePageData } from '@/lib/live/liveScoresPage'
 import { matchesLiveGameQuery } from '@/lib/live/liveGameSearch'
-import { deriveImpact, impactTotalLabel } from '@/lib/live/liveImpact'
+import { playAgeLabel, starterStageDetail } from '@/lib/live/liveImpact'
 import { GameHighlight } from '@/components/live/GameHighlight'
-import { formatStarterPoints, groupStartersByPlayer, type StarterGroup } from '@/lib/live/liveTieInGroups'
+import {
+  formatLeagueProjection,
+  formatStarterPoints,
+  formatStarterProjection,
+  groupStartersByPlayer,
+  type StarterGroup,
+} from '@/lib/live/liveTieInGroups'
 import { buildLockAlerts, type LiveLockAlert } from '@/lib/live/lockAlerts'
 import {
   connectionDetail,
@@ -78,6 +88,8 @@ function upNextTime(value: string): string {
   }).format(date)
 }
 const IDLE_POLL_MS = 120_000
+/** Starters listed under a slate card before "Show all" — see `MyStarters`. */
+const STARTERS_SHOWN = 3
 
 /**
  * Play-feed labels and tone.
@@ -94,6 +106,7 @@ const PLAY_TYPE_LABEL: Record<string, string> = {
   FIELD_GOAL: 'FG',
   DEFENSIVE_SCORE: 'DEF TD',
   SPECIAL_TEAMS_SCORE: 'ST TD',
+  TWO_POINT_CONVERSION: '2PT',
 }
 
 /** A score is good, a turnover costs someone, a big gain is merely notable. */
@@ -110,6 +123,13 @@ export type LiveScoresProps = {
   selectedLeagueId?: string | null
   /** Your matchup in the held league, resolved on the server. Null when no league is held. */
   matchupStrip?: MatchupStrip | null
+  /**
+   * This week's matchup in every league — the shell rail's `getRailMatchups` read, handed down rather
+   * than re-queried — plus the leagues to name. Drives the "your matchups" strip on the cross-league
+   * view and the standing in an elimination league. Null when the rail read failed: the strip then
+   * says nothing rather than claiming a quiet week.
+   */
+  leagueWeek?: { byLeague: Record<string, RailMatchup> | null; leagues: LeagueRef[] } | null
 }
 
 export function scopeLiveGamesToLeague(
@@ -126,7 +146,7 @@ export function scopeLiveGamesToLeague(
     }))
 }
 
-export function LiveScores({ data: initial, selectedLeagueId = null, matchupStrip = null }: LiveScoresProps) {
+export function LiveScores({ data: initial, selectedLeagueId = null, matchupStrip = null, leagueWeek = null }: LiveScoresProps) {
   const router = useRouter()
   const pathname = usePathname()
   const params = useSearchParams()
@@ -188,8 +208,10 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
     const seq = ++seqRef.current
     setRefreshing(true)
     try {
+      // "Show all games" on a college tab is the page's own query (`?t25=off`); every refresh keeps it.
+      const t25 = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('t25') === 'off' ? '&t25=off' : ''
       const res = await fetch(
-        `/api/dashboard/live-scores?view=live&sport=${encodeURIComponent(nextSport)}&scope=${nextScope}`,
+        `/api/dashboard/live-scores?view=live&sport=${encodeURIComponent(nextSport)}&scope=${nextScope}${t25}`,
         {
           cache: 'no-store',
           signal: AbortSignal.timeout(15_000),
@@ -303,7 +325,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
    * below drops it when the view genuinely changes.
    */
   const orderedGames = useMemo(
-    () => applyStableOrder(orderRef.current, scopedGames, (g) => g.gameId),
+    () => groupByStage(applyStableOrder(orderRef.current, scopedGames, (g) => g.gameId)),
     [scopedGames],
   )
 
@@ -311,6 +333,18 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
     () => orderedGames.filter((game) => matchesLiveGameQuery(game, query)),
     [orderedGames, query],
   )
+  /*
+   * The college Top 25 filter emptied this slate, so EmptySlate says so and carries its own "Show all
+   * games". The note above the slate stands down then, rather than offering the same link twice
+   * (seen live 2026-10-08). The same conditions EmptySlate uses to pick its Top 25 branch.
+   */
+  const top25Hidden = data.top25 && !data.top25.showingAll ? data.top25.hidden : 0
+  const top25Empty =
+    visibleGames.length === 0 &&
+    !query.trim() &&
+    !data.loadFailed &&
+    top25Hidden > 0 &&
+    (scope === 'all' || !data.rosterFailed)
 
   /*
    * ⚠ REMEMBERED IN AN EFFECT, NOT DURING RENDER. Writing a ref while rendering
@@ -425,6 +459,13 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
   const activeSportLabel =
     data.counts.find((c) => c.sport === data.sport)?.label ?? data.sport
 
+  const heldWeek = selectedLeagueId ? (leagueWeek?.byLeague?.[selectedLeagueId] ?? null) : null
+  /* Only this tab's sport: an NBA league has nothing to say about the NFL slate under it. */
+  const glance = useMemo(
+    () => (selectedLeagueId ? null : buildLeaguesAtAGlance(leagueWeek?.byLeague, leagueWeek?.leagues ?? [], data.sport)),
+    [selectedLeagueId, leagueWeek, data.sport],
+  )
+
   /*
    * Newest play per game, for the in-card panel.
    *
@@ -489,7 +530,17 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
         </p>
       </header>
 
-      {selectedLeagueId ? <LiveMatchupStrip strip={matchupStrip} leagueId={selectedLeagueId} pollMs={pollIntervalMs} /> : null}
+      {selectedLeagueId ? (
+        <LiveMatchupStrip
+          strip={matchupStrip}
+          leagueId={selectedLeagueId}
+          pollMs={pollIntervalMs}
+          standing={heldWeek?.unpaired ? heldWeek.standing : null}
+          eliminated={heldWeek?.eliminated === true}
+        />
+      ) : (
+        <LiveLeaguesGlance glance={glance} sportLabel={activeSportLabel} />
+      )}
 
       {/* ── Control bar ─────────────────────────────────────────────── */}
       <div className="af-live-bar">
@@ -614,6 +665,16 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
       </div>
 
       {/* ── Slate + impact ──────────────────────────────────────────── */}
+      {/*
+        ⚠ PHONE ONLY (≤1080px, the breakpoint where the grid goes single-column). The side panel used to
+        be pulled ABOVE every game there with `order: -1` (2026-10-06), so a manager saw their own
+        numbers first — at the price of the first game card sitting a whole panel down. Since the
+        matchups strip leads the page, only this one summary stays above the games; the rest of the
+        panel follows them. The side copy is hidden on phones and this one on desktop, both with
+        `display: none`, so a screen reader meets exactly one.
+      */}
+      <ImpactSummary data={data} impact={impact} leagueScoped={leagueFilterId != null} placement="inline" />
+
       <div className="af-live-grid">
         <section
           className="af-live-slate"
@@ -633,9 +694,31 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
           <LockWarning alerts={lockAlerts} now={now} />
 
           <h2 className="af-label af-live-slate-head">
-            {activeSportLabel} · {leagueFilterId ? 'this league' : scope === 'my' ? 'your starters, sorted by leagues affected' : 'all games'}{' '}
+            {activeSportLabel} · {leagueFilterId ? 'this league' : scope === 'my' ? 'your starters · live first, then most leagues affected' : 'all games · live first'}{' '}
             <TopicTip topic="liveGameWinEstimate" />
           </h2>
+
+          {data.top25 && (data.top25.hidden > 0 || data.top25.showingAll) && !top25Empty ? (
+            /*
+             * The college Top 25 filter says what it did (2026-10-08). A hidden game must be one tap
+             * away: the rank book only knows teams it has seen, so early in a season a ranked team can
+             * be missing from it.
+             */
+            <p className="af-live-top25-note">
+              {data.top25.showingAll ? (
+                <>
+                  Showing every game.{' '}
+                  <a href={top25Href(data.sport, scope, false)}>Top 25 and your teams only</a>
+                </>
+              ) : (
+                <>
+                  Top 25 and teams you follow · {data.top25.hidden} other{' '}
+                  {data.top25.hidden === 1 ? 'game' : 'games'} hidden.{' '}
+                  <a href={top25Href(data.sport, scope, true)}>Show all games</a>
+                </>
+              )}
+            </p>
+          ) : null}
 
           {visibleGames.length === 0 ? (
             query.trim() ? (
@@ -651,81 +734,39 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
                 hasRosterData={data.hasRosterData}
                 loadFailed={data.loadFailed}
                 rosterFailed={data.rosterFailed}
+                top25Hidden={top25Hidden}
+                showAllHref={top25Href(data.sport, scope, true)}
               />
             )
           ) : (
-            visibleGames.map((game) => (
-              <GameCard
-                key={game.gameId}
-                game={game}
+            <>
+              {visibleGames
+                .filter((game) => gameStage(game) !== 'final')
+                .map((game) => (
+                  <GameCard
+                    key={game.gameId}
+                    game={game}
+                    scope={scope}
+                    selectedLeagueId={selectedLeagueId}
+                    lastPlay={latestPlayByGame.get(game.gameId) ?? null}
+                    detailHref={gameDetailHref(game, '/core/live', selectedLeagueId)}
+                    scoreChanged={litGames.has(game.gameId)}
+                    starterLimit={STARTERS_SHOWN}
+                  />
+                ))}
+              <FinalGames
+                games={visibleGames.filter((game) => gameStage(game) === 'final')}
                 scope={scope}
                 selectedLeagueId={selectedLeagueId}
-                lastPlay={latestPlayByGame.get(game.gameId) ?? null}
-                detailHref={gameDetailHref(game, '/core/live', selectedLeagueId)}
-                scoreChanged={litGames.has(game.gameId)}
+                lastPlayByGame={latestPlayByGame}
               />
-            ))
+            </>
           )}
         </section>
 
         <aside className="af-live-side" aria-label="Your live impact">
 
-          <div className="af-live-impact">
-            <h2 className="af-label">
-              Your live impact <TopicTip topic="liveImpactTotal" />
-            </h2>
-            {data.rosterFailed ? (
-              /*
-               * ⚠ THE SAME RULE AS THE BRANCH BELOW, FOR A DIFFERENT REASON.
-               * The em dash is right — we have no number we can stand behind —
-               * but "claim your team" is the wrong explanation and an actively
-               * misleading instruction: the team IS claimed, the read failed.
-               * "We could not read it" and "you have not created one" are
-               * different facts, exactly as that branch argues about 0.0.
-               */
-              <>
-                <p className="af-live-impact-total" data-missing="true">
-                  <span className="af-num">—</span>
-                  <span>we could not read your rosters</span>
-                </p>
-                <p className="af-live-impact-sub">
-                  This is a problem on our end, not an empty roster. The scores themselves are
-                  fine.
-                </p>
-              </>
-            ) : data.hasRosterData ? (
-              <>
-                <p className="af-live-impact-total">
-                  <span className="af-num">{impact.totalPoints.toFixed(1)}</span>
-                  <span>{impactTotalLabel(impact, leagueFilterId != null)}</span>
-                </p>
-                <p className="af-live-impact-sub">
-                  {impact.livePlayers === 0
-                    ? 'None of your players are on the field at the moment.'
-                    : `${impact.livePlayers} of your players ${
-                        impact.livePlayers === 1 ? 'is' : 'are'
-                      } live across ${impact.liveGames} ${
-                        impact.liveGames === 1 ? 'game' : 'games'
-                      }.`}
-                </p>
-              </>
-            ) : (
-              /*
-               * ⚠ NOT "0.0 PTS". Nobody has claimed a team, so there is no
-               * roster to score — which is a different fact from scoring
-               * nothing, and the em dash is the house rule for exactly this.
-               */
-              <>
-                <p className="af-live-impact-total" data-missing="true">
-                  <span className="af-num">—</span>
-                  <span>no roster to score against yet</span>
-                </p>
-                <p className="af-live-impact-sub">
-                  Claim your team in one of your leagues and this fills in automatically.
-                </p>
-              </>
-            )}
-          </div>
+          <ImpactSummary data={data} impact={impact} leagueScoped={leagueFilterId != null} placement="side" />
 
           <details className="af-live-card af-live-contributions" open={!!leagueFilterId}>
             <summary>Contributions by league</summary>
@@ -740,8 +781,9 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
 
           {impact.biggestMover ? (
             <div className="af-live-card">
+              {/* Renamed from "Biggest mover" (2026-10-11): it is the newest play, never a ranking. */}
               <h2 className="af-label">
-                Biggest mover <TopicTip topic="biggestMover" />
+                Latest for you <TopicTip topic="biggestMover" />
               </h2>
               <div className="af-live-mover">
                 <MiniPlayerImg
@@ -752,6 +794,9 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
                 <div className="af-live-mover-text">
                   <span className="af-live-mover-name">{impact.biggestMover.playerName}</span>
                   <span className="af-live-mover-line">{impact.biggestMover.headline}</span>
+                  {playAgeLabel(impact.biggestMover.detectedAt, now) ? (
+                    <span className="af-live-mover-age af-num">{playAgeLabel(impact.biggestMover.detectedAt, now)}</span>
+                  ) : null}
                   {impact.biggestMover.leagues.length > 0 ? (
                     <span className="af-live-mover-leagues">
                       {impact.biggestMover.leagues.join(' · ')}
@@ -863,6 +908,87 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
 }
 
 /**
+ * "Your live impact": your starters playing now, still to play, and done. Rendered twice — in the side
+ * panel (desktop) and above the games (phone) — and CSS shows one; see the note where it is placed.
+ */
+function ImpactSummary({
+  data,
+  impact,
+  leagueScoped,
+  placement,
+}: {
+  data: Pick<LivePageData, 'rosterFailed' | 'hasRosterData'>
+  impact: LivePageData['impact']
+  leagueScoped: boolean
+  placement: 'side' | 'inline'
+}) {
+  return (
+    <div className="af-live-impact" data-placement={placement}>
+      <h2 className="af-label">
+        Your live impact <TopicTip topic="liveImpactTotal" />
+      </h2>
+      {data.rosterFailed ? (
+        /*
+         * ⚠ THE SAME RULE AS THE BRANCH BELOW, FOR A DIFFERENT REASON.
+         * The em dash is right — we have no number we can stand behind —
+         * but "claim your team" is the wrong explanation and an actively
+         * misleading instruction: the team IS claimed, the read failed.
+         * "We could not read it" and "you have not created one" are
+         * different facts, exactly as that branch argues about 0.0.
+         */
+        <>
+          <p className="af-live-impact-total" data-missing="true">
+            <span className="af-num">—</span>
+            <span>we could not read your rosters</span>
+          </p>
+          <p className="af-live-impact-sub">
+            This is a problem on our end, not an empty roster. The scores themselves are
+            fine.
+          </p>
+        </>
+      ) : data.hasRosterData ? (
+        <>
+          {/*
+            ⚠ A COUNT OF YOUR STARTERS, NOT SUMMED POINTS — see `starterStageCounts`. The old
+            headline added one player once per league and only counted live games, so it fell
+            when a game ended. Points are per league, in "Contributions by league" below.
+          */}
+          <p className="af-live-impact-total">
+            <span className="af-num">{impact.livePlayers}</span>
+            <span>
+              {impact.livePlayers === 1 ? 'starter' : 'starters'} playing now
+              {leagueScoped ? ' in this league' : ''}
+            </span>
+          </p>
+          <p className="af-live-impact-sub">
+            {impact.livePlayers === 0 && !impact.upcomingPlayers && !impact.finishedPlayers
+              ? 'None of your starters are on this slate.'
+              : impact.livePlayers === 0
+                ? `None on the field right now · ${starterStageDetail(impact)}`
+                : starterStageDetail(impact)}
+          </p>
+        </>
+      ) : (
+        /*
+         * ⚠ NOT "0.0 PTS". Nobody has claimed a team, so there is no
+         * roster to score — which is a different fact from scoring
+         * nothing, and the em dash is the house rule for exactly this.
+         */
+        <>
+          <p className="af-live-impact-total" data-missing="true">
+            <span className="af-num">—</span>
+            <span>no roster to score against yet</span>
+          </p>
+          <p className="af-live-impact-sub">
+            Claim your team in one of your leagues and this fills in automatically.
+          </p>
+        </>
+      )}
+    </div>
+  )
+}
+
+/**
  * One game.
  *
  * ⚠ THE CARD'S STRUCTURE IS FIXED EVEN WHEN ITS DATA IS NOT. Scores, clock and
@@ -883,6 +1009,7 @@ export function GameCard({
   lastPlay,
   detailHref = null,
   scoreChanged = false,
+  starterLimit,
 }: {
   game: LiveGameCard
   /** "My games" adds your starters under the game; "All games" is the game alone. */
@@ -911,6 +1038,8 @@ export function GameCard({
    * offer and must not start claiming scores changed.
    */
   scoreChanged?: boolean
+  /** Show this many of your starters before "Show all". Omitted shows every one (the public page). */
+  starterLimit?: number
 }) {
   const lowDataOn = useLowData().lowData
   const wp = game.winProbability
@@ -1088,9 +1217,137 @@ export function GameCard({
       ) : null}
 
       {starters.length > 0 ? (
-        <MyStarters gameId={game.gameId} sport={game.sport} groups={starters} selectedLeagueId={selectedLeagueId} />
+        <MyStarters
+          gameId={game.gameId}
+          sport={game.sport}
+          groups={starters}
+          selectedLeagueId={selectedLeagueId}
+          limit={starterLimit}
+          upcoming={!game.isLive && !game.completed}
+        />
       ) : null}
     </article>
+  )
+}
+
+/**
+ * Finished games, one line each, under the games still in play.
+ *
+ * ⚠ A FINAL CANNOT MOVE ANY MATCHUP OF YOURS, SO IT DOES NOT GET A FULL CARD BY DEFAULT. On a Sunday
+ * afternoon most of the slate is final, and full cards — box score, leaders, venue, starters — put the
+ * three live games under thousands of pixels of settled results. Each line opens the same `GameCard`
+ * the live games use, so nothing a final showed before is gone; it is one tap away.
+ */
+function FinalGames({
+  games,
+  scope,
+  selectedLeagueId,
+  lastPlayByGame,
+}: {
+  games: LiveGameCard[]
+  scope: 'my' | 'all'
+  selectedLeagueId: string | null
+  lastPlayByGame: Map<string, LivePageData['impact']['plays'][number]>
+}) {
+  if (games.length === 0) return null
+  return (
+    <section className="af-live-finals" aria-label="Final games">
+      <h3 className="af-label af-live-finals-head">
+        Final · {games.length} {games.length === 1 ? 'game' : 'games'}
+      </h3>
+      <ul className="af-live-finals-list">
+        {games.map((game) => (
+          <FinalGameRow
+            key={game.gameId}
+            game={game}
+            scope={scope}
+            selectedLeagueId={selectedLeagueId}
+            lastPlay={lastPlayByGame.get(game.gameId) ?? null}
+          />
+        ))}
+      </ul>
+    </section>
+  )
+}
+
+function FinalGameRow({
+  game,
+  scope,
+  selectedLeagueId,
+  lastPlay,
+}: {
+  game: LiveGameCard
+  scope: 'my' | 'all'
+  selectedLeagueId: string | null
+  lastPlay: LivePageData['impact']['plays'][number] | null
+}) {
+  const lowDataOn = useLowData().lowData
+  const [open, setOpen] = useState(false)
+  const panelId = `af-live-final-${game.gameId}`
+  const starters = scope === 'my' ? groupStartersByPlayer(game.tieIns) : []
+  /* Your best starter in this game, by this league's points when one is held, else the best of any. */
+  const best = starters.reduce<{ group: StarterGroup; pts: number } | null>((top, group) => {
+    const values = group.leagues
+      .filter((l) => selectedLeagueId == null || l.leagueId === selectedLeagueId)
+      .map((l) => l.points)
+      .filter((p): p is number => p != null && Number.isFinite(p))
+    if (values.length === 0) return top
+    const pts = Math.max(...values)
+    return top == null || pts > top.pts ? { group, pts } : top
+  }, null)
+  const team = (side: LiveGameCard['home'], other: LiveGameCard['home']) => (
+    <span className="af-live-final-team" data-won={leads(side.score, other.score) ? 'true' : undefined}>
+      {!lowDataOn && side.logo ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={side.logo} alt="" width={18} height={18} loading="lazy" className="af-live-final-logo" />
+      ) : null}
+      <span className="af-live-final-abbrev">{side.abbrev}</span>
+      <span className="af-num af-live-final-score">{side.score ?? '—'}</span>
+    </span>
+  )
+  return (
+    <li className="af-live-final" data-open={open}>
+      <button
+        type="button"
+        className="af-live-final-toggle"
+        aria-expanded={open}
+        aria-controls={open ? panelId : undefined}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span className="af-live-final-teams">
+          {team(game.away, game.home)}
+          <span className="af-live-final-at" aria-hidden>
+            @
+          </span>
+          {team(game.home, game.away)}
+        </span>
+        <span className="af-live-final-status af-num">{game.statusDetail}</span>
+        {starters.length > 0 ? (
+          <span className="af-live-final-mine">
+            {starters.length} {starters.length === 1 ? 'starter' : 'starters'}
+            {best ? (
+              <>
+                {' · top '}
+                {best.group.playerName} {best.pts.toFixed(1)}
+              </>
+            ) : null}
+          </span>
+        ) : null}
+        <span className="af-live-mine-chev" aria-hidden />
+      </button>
+      {open ? (
+        <div id={panelId} className="af-live-final-card">
+          <GameCard
+            game={game}
+            scope={scope}
+            selectedLeagueId={selectedLeagueId}
+            lastPlay={lastPlay}
+            detailHref={gameDetailHref(game, '/core/live', selectedLeagueId)}
+            starterLimit={STARTERS_SHOWN}
+          />
+        </div>
+      ) : null}
+    </li>
   )
 }
 
@@ -1518,17 +1775,26 @@ export function MyStarters({
   groups,
   selectedLeagueId,
   renderStatLine,
+  limit,
+  upcoming = false,
 }: {
   gameId: string
   sport: string
   groups: StarterGroup[]
   selectedLeagueId: string | null
   /**
+   * Rows shown before "Show all N". The slate passes `STARTERS_SHOWN`; the clicked-game view passes
+   * nothing and lists everyone, because there the list IS the screen.
+   */
+  limit?: number
+  /**
    * The clicked-game view passes each starter's live box-score line here; the
    * slate card passes nothing and renders exactly as before. One list component
    * for both, so the points and the league breakdown cannot drift apart.
    */
   renderStatLine?: (group: StarterGroup) => ReactNode
+  /** The game has not kicked off: rows show this week's projection instead of points. */
+  upcoming?: boolean
 }) {
   /*
    * The whole list collapses (user request, 2026-09-13): on a game you start
@@ -1537,6 +1803,15 @@ export function MyStarters({
    * "My games" exists.
    */
   const [open, setOpen] = useState(true)
+  /*
+   * ⚠ OPEN, BUT CAPPED. A Sunday slate carried 10–20 starters per card, all listed, and the page ran
+   * to ~22,700px on a phone (measured 2026-10-11) — the games themselves were buried under the lists.
+   * The list still opens by default (the 09-13 request stands); it shows the players in the most of
+   * your leagues first (`groupStartersByPlayer`'s order) and the rest are one tap away.
+   */
+  const [showAll, setShowAll] = useState(false)
+  const capped = limit != null && !showAll && groups.length > limit
+  const shownGroups = capped ? groups.slice(0, limit) : groups
   const listId = `af-live-mine-list-${gameId}`
   const leagueCount = new Set(groups.flatMap((g) => g.leagues.map((l) => l.leagueId))).size
   return (
@@ -1556,7 +1831,7 @@ export function MyStarters({
       </button>
       {open ? (
         <ul id={listId} className="af-live-mine">
-          {groups.map((g) => (
+          {shownGroups.map((g) => (
             <StarterRow
               key={g.playerId}
               gameId={gameId}
@@ -1564,9 +1839,21 @@ export function MyStarters({
               group={g}
               selectedLeagueId={selectedLeagueId}
               statLine={renderStatLine ? renderStatLine(g) : null}
+              upcoming={upcoming}
             />
           ))}
         </ul>
+      ) : null}
+      {open && limit != null && groups.length > limit ? (
+        <button
+          type="button"
+          className="af-live-mine-more"
+          aria-expanded={showAll}
+          aria-controls={listId}
+          onClick={() => setShowAll((v) => !v)}
+        >
+          {showAll ? 'Show fewer' : `Show all ${groups.length} starters`}
+        </button>
       ) : null}
     </div>
   )
@@ -1578,12 +1865,14 @@ function StarterRow({
   group,
   selectedLeagueId,
   statLine = null,
+  upcoming = false,
 }: {
   gameId: string
   sport: string
   group: StarterGroup
   selectedLeagueId: string | null
   statLine?: ReactNode
+  upcoming?: boolean
 }) {
   const lowDataOn = useLowData().lowData
   const [open, setOpen] = useState(false)
@@ -1596,7 +1885,12 @@ function StarterRow({
    * shows THAT league's points; across leagues it is a range, and the disclosure
    * lists every league's own number. An em dash when nobody has reported.
    */
-  const points = formatStarterPoints(group, selectedLeagueId)
+  /*
+   * ⚠ BEFORE KICKOFF A ROW SHOWED "0.0 pts" — a real-looking score for a game nobody has played
+   * (17 of them on one card, 2026-10-11). It now shows this week's projection under each league's
+   * own rules, labelled "proj", or a dash when it could not be priced.
+   */
+  const points = upcoming ? formatStarterProjection(group, selectedLeagueId) : formatStarterPoints(group, selectedLeagueId)
 
   return (
     <li className="af-live-mine-row" data-open={open} data-selected={selected != null}>
@@ -1629,7 +1923,17 @@ function StarterRow({
           <span className="af-live-mine-count">
             {n} {n === 1 ? 'league' : 'leagues'}
           </span>
-          <span className="af-live-mine-pts af-num" title={selected ? `Points in ${selected.leagueName}` : undefined}>
+          <span
+            className="af-live-mine-pts af-num"
+            data-kind={upcoming ? 'projection' : undefined}
+            title={
+              upcoming
+                ? `Projection for this week${selected ? ` in ${selected.leagueName}` : ''}, under each league’s own scoring`
+                : selected
+                  ? `Points in ${selected.leagueName}`
+                  : undefined
+            }
+          >
             {points}
           </span>
           <span className="af-live-mine-chev" aria-hidden />
@@ -1642,7 +1946,7 @@ function StarterRow({
             <li key={l.leagueId} data-selected={l.leagueId === selectedLeagueId}>
               <span className="af-live-mine-league">{l.leagueName}</span>
               <span className="af-live-mine-league-pts af-num">
-                {l.points == null ? '—' : `${l.points.toFixed(1)} pts`}
+                {upcoming ? formatLeagueProjection(l) : l.points == null ? '—' : `${l.points.toFixed(1)} pts`}
               </span>
             </li>
           ))}
@@ -1683,6 +1987,8 @@ function Side({
       )}
       <span className="af-live-team-text">
         <span className="af-live-team-name">
+          {/* College Top 25: the poll rank leads the name, the way every scoreboard prints it. */}
+          {side.rank != null ? <span className="af-live-team-rank af-num">{side.rank}</span> : null}
           {side.name}
           {hasBall ? (
             <span className="af-live-possession" role="img" aria-label="has the ball" title="Possession" />
@@ -1720,6 +2026,14 @@ export function liveViewUrl(current: string, sport: string, scope: 'my' | 'all')
   return `${url.pathname}${url.search}${url.hash}`
 }
 
+/** This slate with the college Top 25 filter on or off — a page load, so the server builds it. */
+export function top25Href(sport: string, scope: 'my' | 'all', showAll: boolean): string {
+  const q = new URLSearchParams({ sport })
+  if (scope === 'all') q.set('scope', 'all')
+  if (showAll) q.set('t25', 'off')
+  return `/core/live?${q.toString()}`
+}
+
 function syncViewToUrl(sport: string, scope: 'my' | 'all') {
   try {
     window.history.replaceState(window.history.state, '', liveViewUrl(window.location.href, sport, scope))
@@ -1752,11 +2066,16 @@ function EmptySlate({
   hasRosterData,
   loadFailed,
   rosterFailed,
+  top25Hidden = 0,
+  showAllHref = null,
 }: {
   scope: 'my' | 'all'
   hasRosterData: boolean
   loadFailed: boolean
   rosterFailed: boolean
+  /** Games the college Top 25 filter hid from this slate — the reason it is empty, when > 0. */
+  top25Hidden?: number
+  showAllHref?: string | null
 }) {
   if (loadFailed) {
     return (
@@ -1779,7 +2098,28 @@ function EmptySlate({
    * field. Below loadFailed because a dead slate is the larger fault; above the
    * normal state because that state asserts something we do not know.
    */
-  if (rosterFailed) {
+  /*
+   * ⚠ THE TOP 25 FILTER EMPTIED IT — SAY THAT, NOT A ROSTER FAULT. On "All games" rosters decide
+   * nothing about what shows, so a roster read that failed is not why the panel is empty; the filter
+   * is. Measured 2026-10-08: an all-unranked Thursday slate read "We could not read your rosters.
+   * Switch to All games" — on the All games tab.
+   */
+  if (top25Hidden > 0 && (scope === 'all' || !rosterFailed)) {
+    return (
+      <div className="af-live-empty">
+        <p className="af-live-empty-title">No Top 25 games on this slate.</p>
+        <p className="af-live-empty-body">
+          {top25Hidden} {top25Hidden === 1 ? 'game' : 'games'} between unranked teams{' '}
+          {top25Hidden === 1 ? 'is' : 'are'} hidden.{' '}
+          {showAllHref ? <a href={showAllHref}>Show all games</a> : null}
+          {' · '}
+          <a href="/settings?tab=notifications">Follow a team</a> to always see its games.
+        </p>
+      </div>
+    )
+  }
+
+  if (rosterFailed && scope === 'my') {
     return (
       <div className="af-live-empty" data-tone="bad">
         <p className="af-live-empty-title">We could not read your rosters.</p>

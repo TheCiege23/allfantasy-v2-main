@@ -111,10 +111,11 @@ export async function getRosterGrade(args: {
     await prisma.roster
       .findMany({
         where: { leagueId },
-        select: { platformUserId: true, playerData: true, league: { select: { platform: true } } },
+        select: { platformUserId: true, playerData: true, league: { select: { platform: true, sport: true } } },
       })
       .catch(() => []),
     (r) => r.league?.platform,
+    (r) => r.league?.sport,
   )
 
   // Two teams is not a league to be ranked within.

@@ -22,6 +22,8 @@ type StatePlayerRow = {
 }
 
 type StateTribeRow = {
+  logoUrl: string | null
+  colorHex: string | null
   id: string
   name: string
   slotIndex: number
@@ -96,6 +98,8 @@ export interface SurvivorFoundationState {
     mergeTriggered: boolean
   }
   tribes: Array<{
+    logoUrl: string | null
+    colorHex: string | null
     id: string
     name: string
     slotIndex: number
@@ -173,12 +177,7 @@ export async function buildSurvivorStateForUser(
     ? { leagueId }
     : {
         leagueId,
-        OR: [
-          { currentOwnerUserId: userId },
-          { rosterId: access.rosterId ?? '__none__' },
-          { isPubliclyKnown: true },
-          { status: { in: ['played', 'expired', 'revealed', 'used'] } },
-        ],
+        OR: [{ currentOwnerUserId: userId }, { isPubliclyKnown: true }],
       }
 
   const [
@@ -192,6 +191,7 @@ export async function buildSurvivorStateForUser(
     auditCount,
     voteShieldCount,
     introMessageCount,
+    draftSetupStatus,
   ] = await Promise.all([
     prisma.league.findUnique({
       where: { id: leagueId },
@@ -224,6 +224,8 @@ export async function buildSurvivorStateForUser(
         id: true,
         name: true,
         slotIndex: true,
+        logoUrl: true,
+        colorHex: true,
         isActive: true,
         isMerged: true,
         members: { select: { rosterId: true } },
@@ -284,6 +286,12 @@ export async function buildSurvivorStateForUser(
     }),
     prisma.survivorIdol.count({ where: { leagueId, powerType: 'vote_shield' } }),
     prisma.survivorChatMessage.count({ where: { leagueId, contentType: 'survivor_intro' } }),
+    access.decisions.canPerformAdminAction
+      ? prisma.survivorAuditEntry.findFirst({
+          where: { leagueId, action: { in: ['draft_setup_pending', 'draft_setup_ready'] } },
+          orderBy: { createdAt: 'desc' }, select: { action: true, data: true },
+        })
+      : Promise.resolve(null),
   ])
 
   if (!league || (league.leagueVariant !== 'survivor' && !league.survivorMode)) {
@@ -301,7 +309,7 @@ export async function buildSurvivorStateForUser(
   const ownVoteSubmitted = Boolean(
     councilRow?.votes.some((v) => v.voterUserId === userId || (rosterId && v.voterRosterId === rosterId)),
   )
-  const revealed = Boolean(councilRow?.isRevealed || councilRow?.status === 'complete' || councilRow?.status === 'reveal_in_progress')
+  const revealed = councilRow?.isRevealed === true
   const visibleVotes = revealed || access.decisions.canSeePrivateVotes ? (councilRow?.votes.length ?? 0) : null
   const ownVoteCount = ownVoteSubmitted ? 1 : 0
   const activePlayers = playerRows.filter((p) => p.playerState === 'active').length
@@ -311,7 +319,7 @@ export async function buildSurvivorStateForUser(
   const finalistPlayers = playerRows.filter((p) => p.isFinalist || p.playerState === 'finalist').length
 
   const ownIdols = idolRows
-    .filter((idol) => idol.currentOwnerUserId === userId || (rosterId && idol.rosterId === rosterId))
+    .filter((idol) => idol.currentOwnerUserId === userId)
     .map((idol) => ({
       id: idol.id,
       powerType: idol.powerType,
@@ -321,7 +329,7 @@ export async function buildSurvivorStateForUser(
       isPubliclyKnown: idol.isPubliclyKnown,
     }))
   const publicIdols = idolRows
-    .filter((idol) => idol.isPubliclyKnown || ['played', 'expired', 'revealed', 'used'].includes(idol.status))
+    .filter((idol) => idol.isPubliclyKnown)
     .map((idol) => ({
       id: idol.id,
       powerType: idol.powerType,
@@ -375,6 +383,8 @@ export async function buildSurvivorStateForUser(
       return {
         id: tribe.id,
         name: tribe.name,
+        logoUrl: tribe.logoUrl,
+        colorHex: tribe.colorHex,
         slotIndex: tribe.slotIndex,
         isActive: tribe.isActive,
         isMerged: tribe.isMerged,
@@ -426,7 +436,7 @@ export async function buildSurvivorStateForUser(
         idolsSeeded,
         voteShieldCount: voteShieldCount as number,
         introPosted,
-        phase2Complete: tribesAssigned && chatsProvisioned && idolsSeeded && introPosted,
+        phase2Complete: tribesAssigned && chatsProvisioned && (!access.settings.idolsEnabled || idolsSeeded) && introPosted,
       }
     })(),
     audit: {
@@ -434,7 +444,10 @@ export async function buildSurvivorStateForUser(
     },
     noFakeGameplayState: true,
     pendingFoundationWarnings: [
-      'Phase 1 exposes DB-backed setup and privacy state only; challenge, idol, exile, jury, and reveal engines remain deferred.',
+      'Full-season Survivor gameplay is still in development; setup completion does not certify challenges, Exile, jury, or finale.',
+      ...(draftSetupStatus?.action === 'draft_setup_pending' && draftSetupStatus.data && typeof draftSetupStatus.data === 'object' && !Array.isArray(draftSetupStatus.data)
+        ? (Array.isArray((draftSetupStatus.data as Record<string, unknown>).blockers) ? (draftSetupStatus.data as { blockers: unknown[] }).blockers : []).filter((value): value is string => typeof value === 'string')
+        : []),
       ...access.privacyWarnings,
     ],
   }

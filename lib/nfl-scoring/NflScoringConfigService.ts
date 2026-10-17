@@ -60,6 +60,9 @@ export async function saveLeagueNflScoringConfig(leagueId: string, config: { pre
 export async function applyDefaultNflScoringOnCreate(
   leagueId: string,
   presetKey: NflScoringPresetKey = 'af_default',
+  rules?: Record<string, number>,
 ): Promise<void> {
-  await saveLeagueNflScoringConfig(leagueId, { presetKey, rules: buildFullNflScoringConfig(presetKey), source: 'AF_DEFAULT' })
+  // `rules` carries the wizard's own additions (TE premium) on top of the preset.
+  const source: NflScoringSource = presetKey.startsWith('af_') ? 'AF_DEFAULT' : 'PLATFORM_PRESET'
+  await saveLeagueNflScoringConfig(leagueId, { presetKey, rules: rules ?? buildFullNflScoringConfig(presetKey), source })
 }

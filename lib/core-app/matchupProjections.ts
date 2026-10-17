@@ -209,7 +209,7 @@ export async function loadSideProjections(args: {
   ).catch(() => new Map<string, string>())
 
   const leaguePlatform = String(league?.platform ?? '')
-  const lookupOf = (id: string) => sleeperLookupId(leaguePlatform, id, sleeperIdByRosterId)
+  const lookupOf = (id: string) => sleeperLookupId(leaguePlatform, id, sleeperIdByRosterId, league?.sport)
   const lookupIds = [...new Set(rosterIds.map(lookupOf).filter((x): x is string => x != null))]
   const projections = await prisma.fantasyProjection.findMany({
     // AF mirror rows (source 'allfantasy') carry no component stat line to rescore.
@@ -253,14 +253,22 @@ export async function loadSideProjections(args: {
     try {
       const playerRows = await prisma.sportsPlayer.findMany({
         where: { sleeperId: { in: lookupIds } },
-        select: { sleeperId: true, name: true, team: true, sport: true, position: true },
+        select: { sleeperId: true, name: true, team: true, sport: true, position: true, source: true, fetchedAt: true },
       })
+      const identities = composePlayerIdentities(playerRows)
+      const playerTeams = new Map([...identities].map(([id, p]) => [id, p.team]))
       const [statuses, byes] = await Promise.all([
-        readInjuryStatusById(sport, namesBySleeperId(playerRows)),
+        // Club and position, so a namesake's "Out" (LB vs WR Justin Jefferson) never zeroes a starter.
+        readInjuryStatusById(
+          sport,
+          namesBySleeperId(playerRows),
+          playerTeams,
+          new Map([...identities].map(([id, p]) => [id, p.position ?? null])),
+        ),
         getByeWeeks({
           sport,
           season,
-          playerTeams: new Map([...composePlayerIdentities(playerRows)].map(([id, p]) => [id, p.team])),
+          playerTeams,
           fromWeek: week,
           horizon: 0,
         }).catch(() => null),
@@ -355,7 +363,7 @@ export async function loadSideProjections(args: {
   const positions = bestBall && lookupIds.length > 0
     ? composePlayerIdentities(await prisma.sportsPlayer.findMany({
         where: { sleeperId: { in: lookupIds } },
-        select: { sleeperId: true, name: true, team: true, sport: true, position: true },
+        select: { sleeperId: true, name: true, team: true, sport: true, position: true, source: true, fetchedAt: true },
       }))
     : new Map()
   const candidates = (ids: string[], key: string): BestBallCandidate[] => {

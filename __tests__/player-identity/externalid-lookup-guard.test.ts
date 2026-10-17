@@ -22,7 +22,7 @@
  * reason is required, and it is line-scoped so the rest of the file stays watched. The three in use
  * (2026-09-30): ids already filtered to self-describing tokens (`resolveAiTeamContext`), a round-trip
  * check that must see every row under an externalId because the resolver it mirrors does
- * (`depthChartBackups`), and a match that is rejected unless the names agree (`getPlayerDataForSurface`).
+ * (`sleeperPlayerRefs`, shared by the depth chart and the trending-adds list), and a match that is rejected unless the names agree (`getPlayerDataForSurface`).
  */
 import { execSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
@@ -55,7 +55,17 @@ function unscopedExternalIdReads(src: string): number[] {
       before.lastIndexOf('playerIdentityMap'),
     )
     if (call < 0 || other > call) continue
-    const around = src.slice(Math.max(0, m.index - 300), m.index + 300)
+    /*
+     * ⚠ THE `source:` MUST BE IN THIS CALL. A flat ±300-character window let a NEIGHBOURING call's
+     * `source:` vouch for this one: the alert sweep's live Sleeper fold sat right under a
+     * `sportsInjury.deleteMany({ where: { source: LIVE_STATUS_SOURCE } })`, so its bare
+     * `externalId IN (sleeperIds)` read passed here while it filed Sleeper 8394's Out (Percy Butler)
+     * under Rolling Insights 8394 (Rome Odunze) — 50 of 50 live rows misnamed (2026-10-11). The
+     * window now starts at this `sportsPlayer` and stops at the next `prisma.` / `await`.
+     */
+    const ahead = src.slice(m.index, m.index + 300)
+    const stop = ahead.search(/\bprisma\.|\bawait\b/)
+    const around = before.slice(call) + (stop >= 0 ? ahead.slice(0, stop) : ahead)
     if (/source:\s*['"A-Za-z]/.test(around)) continue
     const lineNo = src.slice(0, m.index).split('\n').length
     const srcLines = src.split('\n')
@@ -91,6 +101,19 @@ describe('externalId lookup guard — the detector', () => {
       `})`,
     ].join('\n')
     expect(unscopedExternalIdReads(far)).toHaveLength(1)
+  })
+
+  it('🛑 a NEIGHBOURING call\'s `source:` does not scope this read (the 2026-10-11 live-fold shape)', () => {
+    const neighbour = [
+      `await prisma.sportsInjury.deleteMany({ where: { sport: 'NFL', source: LIVE_STATUS_SOURCE } })`,
+      `const meta = await prisma.sportsPlayer.findMany({`,
+      `  where: { sport: 'NFL', externalId: { in: urgent.map((u) => u.externalId) } },`,
+      `})`,
+      `await prisma.sportsInjury.findMany({ where: { source: LIVE_STATUS_SOURCE } })`,
+    ].join('\n')
+    expect(unscopedExternalIdReads(neighbour)).toEqual([3])
+    // The same read scoped inside its own call is still quiet.
+    expect(unscopedExternalIdReads(neighbour.replace(`sport: 'NFL', externalId`, `sport: 'NFL', source: 'sleeper', externalId`))).toEqual([])
   })
 
   it('stays quiet when the read is scoped by source, or is not a SportsPlayer read', () => {

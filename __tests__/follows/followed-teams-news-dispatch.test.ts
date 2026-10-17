@@ -23,11 +23,15 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     playerNewsRecord: { findMany: h.newsFind, updateMany: h.newsUpdate },
     redraftRosterPlayer: { findMany: h.rosterFind },
+    // The registry the story is bound to: the team followers hear about is HIS team from here.
+    playerIdentityMap: {
+      findMany: async () => [{ id: 'pim-love', canonicalName: 'Jordan Love', position: 'QB', currentTeam: 'GB', sleeperId: '7083' }],
+    },
   },
 }))
 vi.mock('@/lib/notifications/NotificationDispatcher', () => ({ dispatchNotification: h.dispatch }))
 vi.mock('@/lib/news/player-news-category', () => ({ classifyPlayerNewsCategory: h.classify }))
-vi.mock('@/lib/follows/playerFollows', () => ({ listFollowerIdsForPlayer: h.playerFollowers }))
+vi.mock('@/lib/follows/playerFollows', () => ({ listFollowerIdsForPlayerIdentity: h.playerFollowers }))
 vi.mock('@/lib/follows/teamFollows', () => ({ listFollowerIdsForTeam: h.teamFollowers }))
 vi.mock('@/lib/follows/teamFollowAlerts', () => ({ resolveNewsTeam: h.resolveTeam, withinTeamFollowDailyCap: h.cap }))
 vi.mock('@/lib/notifications/playerNewsRepeatGuard', () => ({
@@ -66,7 +70,9 @@ describe('team followers', () => {
   it('a team follower is told under followed_teams, with no league, keyed to the resolved team', async () => {
     h.teamFollowers.mockResolvedValue(['fan-1'])
     const out = await dispatchPendingPlayerNewsNotifications()
-    expect(h.resolveTeam).toHaveBeenCalledWith('NFL', 'Packers', 'Jordan Love')
+    // Fed the bound player's registry team, never the row's tag ('Packers' here) — see
+    // __tests__/player-news-alert-binding.test.ts for the opponent-tag case this prevents.
+    expect(h.resolveTeam).toHaveBeenCalledWith('NFL', 'GB', null)
     expect(h.teamFollowers).toHaveBeenCalledWith('NFL', 'GB')
     expect(teamCalls()).toHaveLength(1)
     expect(teamCalls()[0]).toMatchObject({
@@ -81,7 +87,7 @@ describe('team followers', () => {
   })
 
   it('🛑 someone who rosters the player, or follows him, is told ONCE — by that path, not again as a team fan', async () => {
-    h.rosterFind.mockResolvedValue([{ roster: { ownerId: 'mgr-1', leagueId: 'lg-1' } }])
+    h.rosterFind.mockResolvedValue([{ playerName: 'Jordan Love', team: null, sport: 'NFL', roster: { ownerId: 'mgr-1', leagueId: 'lg-1' } }])
     h.playerFollowers.mockResolvedValue(['pfan-1'])
     h.teamFollowers.mockResolvedValue(['mgr-1', 'pfan-1', 'tfan-1'])
     await dispatchPendingPlayerNewsNotifications()

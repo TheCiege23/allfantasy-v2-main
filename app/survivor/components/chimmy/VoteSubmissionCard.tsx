@@ -8,16 +8,19 @@ export function VoteSubmissionCard({
   disabled,
 }: {
   targets: { id: string; name: string; immune?: boolean }[]
-  onConfirm?: (id: string) => void
+  onConfirm: (id: string) => Promise<void>
   disabled?: boolean
 }) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [sel, setSel] = useState<string | null>(null)
   const [step, setStep] = useState<'pick' | 'confirm' | 'done'>('pick')
 
   return (
     <div className="rounded-xl border border-violet-500/25 bg-violet-500/[0.07] p-4">
-      <p className="text-[11px] font-bold uppercase tracking-wider text-violet-200">🗳 Tribal Council</p>
+      <p className="text-[11px] font-bold uppercase tracking-wider text-violet-200">🗳 Elimination Council</p>
       <p className="mt-1 text-[13px] text-white/80">Cast a private ballot — nothing is public until the reveal.</p>
+      {error ? <p role="alert" className="mt-2 text-sm text-rose-200">{error}</p> : null}
       {step === 'done' ? (
         <p className="mt-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-[12px] text-emerald-100">
           ✓ Your vote has been recorded. Timestamp logged.
@@ -36,12 +39,16 @@ export function VoteSubmissionCard({
             <button
               type="button"
               className="min-h-[44px] flex-1 rounded-lg bg-sky-500/80 text-[13px] font-semibold text-white"
-              onClick={() => {
-                onConfirm?.(sel)
-                setStep('done')
+              disabled={busy || disabled}
+              onClick={async () => {
+                setBusy(true)
+                setError(null)
+                try { await onConfirm(sel); setStep('done') }
+                catch (err) { setError(err instanceof Error ? err.message : 'Vote was not recorded. Try again.') }
+                finally { setBusy(false) }
               }}
             >
-              Confirm vote
+              {busy ? 'Sending…' : 'Send vote to @Chimmy'}
             </button>
           </div>
         </div>

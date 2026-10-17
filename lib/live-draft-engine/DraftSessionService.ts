@@ -1,3 +1,9 @@
+import { completeSeasonDraft } from '@/lib/tournament/seasonDraftCompletion'
+import { isSeasonTournamentDraft, SEASON_DRAFT_MUTATION_BLOCKED } from '@/lib/tournament/seasonDraftMutationGate'
+import { controlSeasonDraft } from '@/lib/tournament/seasonDraftControls'
+import { loadSeasonDraftContext } from '@/lib/tournament/seasonDraftRuntime'
+import { seasonSetupBlocked } from '@/lib/tournament/seasonNativeContract'
+import { hasSeasonDraftRelease } from '@/lib/tournament/seasonDraftReleaseGate'
 /**
  * Draft session: get or create, build snapshot for client, start/pause/complete.
  */
@@ -48,6 +54,7 @@ import { parseDispersalPoolConfig } from '@/lib/live-draft-engine/SpecialtyDraft
 import { DRAFT_ROSTER_CONFIGURATION_CLIENT_MESSAGE } from '@/lib/league/roster-configuration-gate-error'
 import { getEffectiveLeagueRosterTemplate } from '@/lib/league/getEffectiveLeagueRosterTemplate'
 import { COMPLETED_DRAFT_SESSION_STATUS, CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { CUSTOM_TIMER_MAX_SECONDS } from '@/lib/draft/draftSettingsPolicy'
 
 /**
  * Same rules as session creation: LeagueSettings pick timer wins when present; else draft config + UI slow-draft mode.
@@ -97,6 +104,7 @@ export function computeEffectivePickTimerSeconds(
  * Reconcile overnight freeze: persist frozen pick seconds while inside the window; restore timerEndAt after exit.
  */
 export async function reconcileOvernightDraftTimerForLeague(leagueId: string, now: Date = new Date()): Promise<void> {
+  if (await isSeasonTournamentDraft(leagueId)) return
   const session = await prisma.draftSession.findFirst({
     where: { leagueId },
     orderBy: CURRENT_DRAFT_SESSION_ORDER,
@@ -265,6 +273,7 @@ export async function buildSlotOrderForLeague(leagueId: string): Promise<SlotOrd
 }
 
 async function repairDraftSessionSlotOrderIfNeeded(leagueId: string): Promise<void> {
+  if (await isSeasonTournamentDraft(leagueId)) return
   const session = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER })
   if (!session) return
   const teamCount = session.teamCount
@@ -309,6 +318,7 @@ export async function getOrCreateDraftSession(leagueId: string): Promise<{
     include: { rosters: true, teams: true, leagueSettings: true },
   })
   if (!league) throw new Error('League not found')
+  if (seasonSetupBlocked(league.settings)) throw new Error(SEASON_DRAFT_MUTATION_BLOCKED)
 
   const [config, uiSettings] = await Promise.all([
     getDraftConfigForLeague(leagueId),
@@ -636,9 +646,17 @@ export async function buildSessionSnapshot(
 
 export type StartDraftSessionResult =
   | { ok: true }
-  | { ok: false; reason: 'session_not_ready' | 'ROSTER_CONFIGURATION_INCOMPLETE' }
+  | { ok: false; reason: 'session_not_ready' | 'ROSTER_CONFIGURATION_INCOMPLETE' | 'SURVIVOR_CAST_INCOMPLETE'; error?: string }
 
 export async function startDraftSession(leagueId: string): Promise<StartDraftSessionResult> {
+  const seasonSettings = (await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } }))?.settings
+  if (seasonSetupBlocked(seasonSettings)) {
+    if (!(await hasSeasonDraftRelease(leagueId, seasonSettings))) return { ok: false, reason: 'session_not_ready' }
+    const { loadSeasonDraftContext, readSeasonDraftSnapshot } = await import('@/lib/tournament/seasonDraftRuntime')
+    const context = await loadSeasonDraftContext(leagueId)
+    const snapshot = context && await readSeasonDraftSnapshot(leagueId, context.manifestHash)
+    if (!context || !snapshot || Date.parse(snapshot.expiresAt) <= Date.now()) return { ok: false, reason: 'session_not_ready' }
+  }
   await repairDraftSessionSlotOrderIfNeeded(leagueId)
   const { isLeagueRosterDraftReady } = await import('@/lib/league/league-roster-draft-gate')
   if (!(await isLeagueRosterDraftReady(leagueId))) {
@@ -647,6 +665,10 @@ export async function startDraftSession(leagueId: string): Promise<StartDraftSes
 
   const session = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER })
   if (!session || session.status !== 'pre_draft') return { ok: false, reason: 'session_not_ready' }
+
+  const { getSurvivorDraftStartReadiness } = await import('@/lib/survivor/survivorDraftStartReadiness')
+  const cast = await getSurvivorDraftStartReadiness(leagueId, session)
+  if (!cast.ready) return { ok: false, reason: 'SURVIVOR_CAST_INCOMPLETE', error: cast.error }
 
   const startedAtNow = new Date()
 
@@ -715,6 +737,8 @@ export async function startDraftSession(leagueId: string): Promise<StartDraftSes
 }
 
 export async function pauseDraftSession(leagueId: string, pausedByUserId?: string | null): Promise<boolean> {
+  const tournamentResult = await controlSeasonDraft(leagueId, 'pause', pausedByUserId)
+  if (tournamentResult !== null) return tournamentResult
   const lockResult = await withControlLock(leagueId, async () => {
     const session = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER })
     if (!session || session.status !== 'in_progress') return false
@@ -741,6 +765,8 @@ export async function pauseDraftSession(leagueId: string, pausedByUserId?: strin
 }
 
 export async function resumeDraftSession(leagueId: string): Promise<boolean> {
+  const tournamentResult = await controlSeasonDraft(leagueId, 'resume')
+  if (tournamentResult !== null) return tournamentResult
   const lockResult = await withControlLock(leagueId, async () => {
     const session = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER })
     if (!session || session.status !== 'paused') return false
@@ -793,6 +819,8 @@ export async function resumeDraftSession(leagueId: string): Promise<boolean> {
 }
 
 export async function resetTimer(leagueId: string): Promise<boolean> {
+  const tournamentResult = await controlSeasonDraft(leagueId, 'reset')
+  if (tournamentResult !== null) return tournamentResult
   const lockResult = await withControlLock(leagueId, async () => {
     const session = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER })
     if (!session || (session.status !== 'in_progress' && session.status !== 'paused')) return false
@@ -859,7 +887,9 @@ export async function setTimerSeconds(
 ): Promise<boolean> {
   const session = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER })
   if (!session) return false
-  const sec = Math.max(0, Math.min(86400, Math.round(seconds)))
+  if (await loadSeasonDraftContext(leagueId)) return false // Accepted tournament clocks are immutable.
+  // Same ceiling as the settings Draft tab / draft/controls (72h, lib/draft/draftSettingsPolicy.ts).
+  const sec = Math.max(0, Math.min(CUSTOM_TIMER_MAX_SECONDS, Math.round(seconds)))
   const data: Prisma.DraftSessionUpdateInput = {
     timerSeconds: sec,
     version: { increment: 1 },
@@ -904,6 +934,7 @@ export async function undoLastPick(
   leagueId: string,
   options?: { reason?: string; actorUserId?: string | null },
 ): Promise<boolean> {
+  if (await isSeasonTournamentDraft(leagueId)) return false
   const session = await prisma.draftSession.findFirst({
     where: { leagueId },
     orderBy: CURRENT_DRAFT_SESSION_ORDER,
@@ -987,7 +1018,7 @@ export type SwapDraftManagersResult =
   | { ok: true; fromRosterId: string; toRosterId: string }
   | {
       ok: false
-      code: 'NO_SESSION' | 'INVALID_SWAP_SAME_SLOT' | 'SWAP_SLOT_NOT_FOUND' | 'INVALID_STATUS'
+      code: 'TOURNAMENT_RULES_FROZEN' | 'NO_SESSION' | 'INVALID_SWAP_SAME_SLOT' | 'SWAP_SLOT_NOT_FOUND' | 'INVALID_STATUS'
       error: string
     }
 
@@ -997,6 +1028,7 @@ export async function swapDraftManagers(
   toSlot: number,
   actorUserId: string,
 ): Promise<SwapDraftManagersResult> {
+  if (await isSeasonTournamentDraft(leagueId)) return { ok: false, code: 'TOURNAMENT_RULES_FROZEN', error: SEASON_DRAFT_MUTATION_BLOCKED }
   if (!Number.isInteger(fromSlot) || !Number.isInteger(toSlot)) {
     return { ok: false, code: 'SWAP_SLOT_NOT_FOUND', error: 'fromSlot and toSlot must be integers' }
   }
@@ -1104,6 +1136,8 @@ export async function swapDraftManagers(
 }
 
 export async function completeDraftSession(leagueId: string): Promise<boolean> {
+  const seasonCompleted = await completeSeasonDraft(leagueId)
+  if (seasonCompleted !== null) return seasonCompleted
   const outcome = await prisma.$transaction(async (tx) => {
     const session = await tx.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER })
     if (!session) return { ok: false as const, transitioned: false as const, lifecycle: null }
@@ -1166,6 +1200,16 @@ export async function completeDraftSession(leagueId: string): Promise<boolean> {
     })
   }
 
+  // Idempotent specialty bootstrap runs after drafted players are mirrored into live rosters.
+  try {
+    const { bootstrapSGAfterDraft } = await import('@/lib/survivor-guillotine/operations')
+    await bootstrapSGAfterDraft(leagueId)
+  } catch (err) {
+    console.error('[completeDraftSession] Survivor Guillotine bootstrap failed', {
+      leagueId, error: err instanceof Error ? err.message : String(err),
+    })
+  }
+
   if (outcome.transitioned) {
     // G12: emit DRAFT_COMPLETED for ALL league types. Previously only Redraft leagues
     // emitted this event (from syncCompletedDraftToRedraftSeason). SEASON_ACTIVATED is
@@ -1179,10 +1223,14 @@ export async function completeDraftSession(leagueId: string): Promise<boolean> {
       payload: { draftId },
     }).catch(() => {})
 
-    // G12-3 FINDING: survivor bootstrap is hardcoded here. Self-gates via isSurvivorLeague()
-    // so non-survivor leagues pay only a fast DB read. Future work: subscribe to DRAFT_COMPLETED
-    // on the event bus instead (remove this direct call once subscriber wiring is in place).
-    import('@/lib/survivor/SurvivorDraftBootstrapService').then((m) => m.runSurvivorPostDraftBootstrap(leagueId)).catch(() => {})
+    // Keep legacy bootstrap on the original completion transition only. Canonical
+    // native setup is also awaited/retried by the artifact path above.
+    try {
+      const { runSurvivorPostDraftBootstrap } = await import('@/lib/survivor/SurvivorDraftBootstrapService')
+      await runSurvivorPostDraftBootstrap(leagueId)
+    } catch (error) {
+      console.error('[completeDraftSession] Survivor bootstrap failed', { leagueId, error: error instanceof Error ? error.message : String(error) })
+    }
     prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true } }).then((league) => {
       if (league?.userId) {
         import('@/lib/achievement-system').then((m) => m.awardAchievement(league.userId, 'draft_completed', { leagueId })).catch(() => {})
@@ -1211,6 +1259,7 @@ export async function resetDraftSession(
   leagueId: string,
   options?: { allowCompleted?: boolean },
 ): Promise<boolean> {
+  if (await isSeasonTournamentDraft(leagueId)) return false
   const session = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER })
   if (!session) return false
   if (session.status === COMPLETED_DRAFT_SESSION_STATUS && !options?.allowCompleted) return false

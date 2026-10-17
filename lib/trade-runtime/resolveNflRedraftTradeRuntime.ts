@@ -7,6 +7,7 @@ import { resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
 import { resolveRedraftTradeGovernance } from '@/lib/redraft/tradeGovernance'
 import { applyRedraftFaabDeltasInTransaction } from '@/lib/redraft/faabTransfer'
 import { hydrateRedraftLineupLocksForRosters } from '@/lib/redraft/lineupLock'
+import { resolveCurrentLockTeams } from '@/lib/redraft/lineupLockCurrentTeam'
 import {
   validateRedraftLineup,
   type RedraftLineupPlayer,
@@ -297,7 +298,7 @@ export async function resolveNflRedraftTradeRuntime(input: {
   if (rules.general.sport !== 'NFL' || rules.general.format !== 'redraft') return { ok: false, reason: 'not_nfl_redraft' }
 
   const week = positiveWeek(input.week, season.currentWeek || 1)
-  const league = await prisma.league.findUnique({ where: { id: season.leagueId }, select: { settings: true } })
+  const league = await prisma.league.findUnique({ where: { id: season.leagueId }, select: { settings: true, platform: true } })
   const rosterConfig = resolveRedraftRosterConfig(season.sport, league?.settings ?? null)
   const activeRosterLimit = Math.max(1, rosterConfig.maxRosterSize - rosterConfig.irSlots - rosterConfig.taxiSlots)
   const rosters = await prisma.redraftRoster.findMany({
@@ -317,6 +318,12 @@ export async function resolveNflRedraftTradeRuntime(input: {
     leagueSettings: league?.settings ?? null,
     players: storedRosterPlayers,
     now: input.now,
+    // Lock on each player's current club, not the team stored when he was added (lineupLockCurrentTeam.ts).
+    currentTeamByPlayerId: await resolveCurrentLockTeams(prisma, {
+      sport: season.sport,
+      platform: league?.platform ?? null,
+      playerIds: storedRosterPlayers.map((p) => p.playerId),
+    }),
   })
   const playersByRosterId = new Map<string, typeof rosterPlayers>()
   for (const player of rosterPlayers) {

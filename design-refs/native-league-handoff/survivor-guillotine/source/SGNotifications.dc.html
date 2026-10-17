@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Survivor Guillotine notifications</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./specialty/sp.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Cinzel:wght@600;700&amp;family=Caveat:wght@600;700&amp;family=Bebas+Neue&amp;family=Pirata+One&amp;family=Creepster&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080d}
+.bb-ph{display:flex;align-items:center;gap:0}
+.bb-ph div{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;position:relative}
+.bb-ph div::before{content:"";position:absolute;top:15px;left:-50%;right:50%;height:3px;background:#22305a}
+.bb-ph div:first-child::before{display:none}
+.bb-ph i{position:relative;z-index:1;width:32px;height:32px;border-radius:99px;display:grid;place-items:center;font:700 12px 'JetBrains Mono';font-style:normal;background:#10131c;border:2px solid #22305a;color:#7d84a3}
+.bb-ph span{font:600 11.5px 'Archivo';color:#7d84a3;text-align:center}
+.bb-ph .done i{background:#1d4ed8;border-color:#3b82f6;color:#fff}.bb-ph .done::before{background:#3b82f6}
+.bb-ph .on i{background:#ff5ec8;border-color:#ff9ad8;color:#fff;box-shadow:0 0 0 5px rgba(255,94,200,.18)}.bb-ph .on span{color:#ffb3e3}.bb-ph .on::before{background:#3b82f6}
+.bb-spot{flex:1 1 200px;display:flex;flex-direction:column;align-items:center;gap:8px;padding:16px;border-radius:14px;background:#10131c;border:1px solid rgba(255,255,255,.07);text-align:center}
+.bb-hg{display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 6px;border-radius:12px;background:#10131c;border:1px solid rgba(255,255,255,.06)}.gy-d{font-family:'Bebas Neue',sans-serif;letter-spacing:.03em;line-height:.95}
+.gy-cut{position:relative;height:0;border-top:2px dashed #ff3d2e;margin:9px 0}
+.gy-cut>span{position:absolute;left:50%;top:-12px;transform:translateX(-50%);white-space:nowrap;padding:2px 10px;border-radius:5px;background:#ff3d2e;color:#fff;font:800 10px 'Archivo';letter-spacing:.1em}
+.gy-head{width:34px;height:34px;flex:none}
+.gy-pos{display:inline-grid;place-items:center;height:20px;min-width:26px;padding:0 4px;border-radius:5px;font:900 9.5px 'Archivo';letter-spacing:.02em}
+.gy-gl{display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:22px;padding:0 6px;border-radius:6px;background:#151926;font:700 11px 'JetBrains Mono';color:#e8eaf2}
+.gy-meter{position:relative;height:14px;border-radius:99px;background:linear-gradient(90deg,#7a1410,#ff3d2e 30%,#ffc531 55%,#3abf7a 80%);overflow:visible}
+.gy-meter>i{position:absolute;top:-6px;width:4px;height:26px;border-radius:2px;background:#fff;box-shadow:0 0 0 2px #07080d}
+@keyframes gyBlade{0%{transform:translateY(-120%)}70%{transform:translateY(6%)}85%{transform:translateY(-3%)}100%{transform:translateY(0)}}
+@keyframes gyRoll{0%{transform:translate(-40px,-30px) rotate(-90deg);opacity:0}40%{opacity:1}100%{transform:translate(0,0) rotate(200deg);opacity:1}}
+@keyframes gyShake{0%,100%{transform:translate(0,0)}20%{transform:translate(-6px,3px)}40%{transform:translate(6px,-3px)}60%{transform:translate(-4px,2px)}80%{transform:translate(3px,-1px)}}
+.gy-blade{animation:gyBlade .55s cubic-bezier(.5,0,.75,0) both}
+.gy-roll{animation:gyRoll .9s .45s cubic-bezier(.2,.8,.2,1) both}
+.gy-shake{animation:gyShake .4s .5s both}
+.gy-tomb{position:relative;width:100%;aspect-ratio:200/240}
+.gy-tomb>img{position:absolute;inset:0;width:100%}
+.gy-tomb>div{position:absolute;left:18%;right:18%;top:49%;display:flex;flex-direction:column;align-items:center;gap:1px;text-align:center}
+.gy-tomb>div>b{font:800 12.5px 'Archivo';color:#1a1d24;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gy-tomb>div>span{font:700 10px 'JetBrains Mono';color:#2a2f3a}
+.gy-mode{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px 0 4px;border-radius:99px;background:#151926;border:1px solid rgba(255,255,255,.1);font:700 12px 'Archivo'}
+.gy-mode>img{width:22px}
+.tt-ck{display:flex;align-items:center;gap:14px;padding:14px 16px;border-radius:10px;background:#10131c;border:1px solid rgba(255,255,255,.06)}
+.tt-ck>i{flex:none;width:28px;height:28px;border-radius:99px;display:grid;place-items:center;font:800 13px 'Archivo';font-style:normal}
+.tt-ck>div{flex:1;display:flex;flex-direction:column;gap:2px}
+.tt-ck>div>b{font:600 14px 'Archivo'}
+.tt-ck>div>span{font-size:12px;color:#7d84a3}
+.tt-job{display:flex;align-items:center;gap:10px;font-size:12.5px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+.tt-job:last-child{border-bottom:0}
+.nt-ev{display:flex;align-items:center;gap:12px;width:100%;padding:9px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.07);background:#0b0d14;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.nt-ev>img{width:30px;flex:none}
+.nt-ev>div{flex:1;display:flex;flex-direction:column;gap:1px;min-width:0}
+.nt-ev>div>b{font:700 13px 'Archivo'}
+.nt-ev>div>span{font-size:11px;color:#7d84a3}
+.nt-ev[aria-pressed="true"]{border-color:#ffc531;background:rgba(255,197,49,.08)}
+.nt-phone{position:relative;width:340px;height:700px;flex:none;border-radius:46px;border:10px solid #1b1e29;overflow:hidden;background:radial-gradient(ellipse at 30% 20%,var(--wa),transparent 60%),radial-gradient(ellipse at 80% 90%,var(--wb),transparent 60%),#0a0b12;box-shadow:0 30px 60px rgba(0,0,0,.5)}
+.nt-push{display:flex;gap:10px;padding:11px 12px;border-radius:18px;background:rgba(40,44,60,.72);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);text-align:left}
+.nt-push>img{width:38px;height:38px;flex:none;border-radius:9px;background:#07080d;padding:2px}
+.nt-push>div{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.nt-push>div>small{display:flex;justify-content:space-between;font:600 10.5px 'Archivo';color:#a3a9c2;letter-spacing:.03em}
+.nt-push>div>b{font:700 13px 'Archivo';color:#fff}
+.nt-push>div>span{font-size:12px;color:#d6d9e6;line-height:1.35}
+.nt-push.dim{opacity:.55;transform:scale(.97)}
+.nt-on{display:inline-block;min-width:34px;padding:2px 6px;border-radius:5px;font:700 10px 'Archivo';letter-spacing:.06em;text-transform:uppercase}
+.lu-row{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:10px;background:#10131c;border:1px solid rgba(255,255,255,.05)}
+.lu-row>.s{width:44px;flex:none}
+.lu-row>.n{flex:1;min-width:0;display:flex;flex-direction:column}
+.lu-row>.n>b{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lu-row>.n>span{font-size:11px;color:#7d84a3}
+.lu-flag{display:inline-flex;align-items:center;height:20px;padding:0 7px;border-radius:5px;font:800 9.5px 'Archivo';letter-spacing:.06em;text-transform:uppercase}
+.gy-step{display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;padding:16px 12px;border-radius:14px;background:#10131c;border:1px solid rgba(255,255,255,.06)}
+.gy-step>img{height:84px}
+.gy-step>b{font:800 15px 'Archivo'}
+.gy-step>span{font-size:12.5px;color:#a3a9c2}
+.gy-step>i{font:900 11px 'Archivo';font-style:normal;color:#ffc531;letter-spacing:.12em}
+.gy-tl{display:flex;flex-direction:column;align-items:center;gap:3px;width:62px;flex:none}
+.gy-tl>img{width:40px}
+.gy-tl>b{font:800 9.5px 'Archivo';color:#ffc531;letter-spacing:.06em}
+.gy-tl>span{font:600 9.5px 'Archivo';color:#a3a9c2;max-width:62px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nt-ev[aria-pressed="true"]{border-color:#3b82f6;background:rgba(59,130,246,.1)}
+.gy-step>i{color:#9fd0ff}
+.bt{font-family:'Bebas Neue',sans-serif;letter-spacing:.06em;line-height:1}
+.bb-row{display:flex;align-items:center;gap:12px;padding:9px 12px;border-radius:12px;background:#10131c;border:1px solid rgba(255,255,255,.06)}
+.bb-row>.n{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.bb-row>.n>b{font:700 14px 'Archivo'}
+.bb-row>.n>span{font-size:11.5px;color:#7d84a3}
+.bb-bar{width:220px;height:8px;border-radius:99px;background:#151926;overflow:hidden;flex:none}
+.bb-bar>span{display:block;height:100%;border-radius:99px;transition:width .9s ease-out}
+.bb-pick{display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 6px;border-radius:12px;background:#10131c;border:1px solid rgba(255,255,255,.06);color:inherit;font:inherit;cursor:pointer}
+.bb-pick[aria-pressed="true"]{border-color:#ff5ec8;background:rgba(255,94,200,.08);box-shadow:0 0 0 1px #ff5ec8 inset}
+.bb-pick[disabled]{opacity:.4;cursor:default}
+.bb-slot{display:flex;flex-direction:column;align-items:center;gap:8px;padding:16px 10px;border-radius:14px;background:#0b0d14;border:1px dashed #3a3f55;min-height:150px;justify-content:center;text-align:center}
+.bb-slot.on{border:1px solid #ff5ec8;background:radial-gradient(circle at 50% 30%,rgba(255,94,200,.18),transparent 70%),#0b0d14}
+.bb-slot.blue{border:1px solid #3b82f6;background:radial-gradient(circle at 50% 30%,rgba(59,130,246,.18),transparent 70%),#0b0d14}
+.bb-slot.gold{border:1px solid #f2c94c;background:radial-gradient(circle at 50% 30%,rgba(242,201,76,.16),transparent 70%),#0b0d14}
+.bb-kc{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.bb-kc>div{display:flex;align-items:center;gap:10px;padding:10px;border-radius:12px;background:#10131c;border:1px solid rgba(255,255,255,.06)}
+.bb-kc>div.k{border-color:rgba(242,201,76,.45);background:rgba(242,201,76,.07)}
+.bb-kc>div>img{width:44px;opacity:0}
+.bb-kc>div.k>img{animation:bbKey .55s cubic-bezier(.3,1.5,.5,1) forwards}
+.bb-hl{position:relative;border-radius:18px;overflow:hidden;border:1px solid rgba(255,255,255,.08)}
+.bb-hl>img.b{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:70% 60%}
+.bb-hl::before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(7,8,13,.95),rgba(7,8,13,.86) 50%,rgba(7,8,13,.4) 78%,rgba(7,8,13,.15));z-index:1}
+.bb-hl>.in{position:relative;z-index:2}
+.bb-hl.dk::before{background:linear-gradient(90deg,rgba(7,8,13,.9),rgba(7,8,13,.72))}
+.bb-art{animation:bbPop .7s cubic-bezier(.3,1.4,.5,1) both}
+.bb-glow{animation:bbGlow 2.4s ease-in-out infinite}
+.bb-wall{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:12px}
+.bb-mw{position:relative;display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 6px 12px;border-radius:14px;background:#10131c;border:1px solid rgba(255,255,255,.06);text-align:center}
+.bb-mw>.ph{width:70px;height:70px;border-radius:14px;display:grid;place-items:center;font:800 18px 'Archivo';color:#fff}
+.bb-mw>b{font:700 12.5px 'Archivo'}
+.bb-mw>em{font:800 9.5px 'Archivo';font-style:normal;letter-spacing:.08em;padding:3px 7px;border-radius:5px}
+.bb-mw.out>.ph{filter:grayscale(1) brightness(.6)}
+.bb-mw.out::after{content:"";position:absolute;left:18%;right:18%;top:46px;height:3px;background:#ff5ec8;transform:rotate(-12deg);opacity:.75}
+.bb-tl{display:grid;grid-template-columns:70px repeat(5,1fr);gap:0;border-radius:12px;overflow:hidden;border:1px solid rgba(255,255,255,.06)}
+.bb-tl>div{padding:9px 10px;font-size:12px;border-bottom:1px solid rgba(255,255,255,.05);background:#0d0f17}
+.bb-tl>div.h{font:700 10.5px 'Archivo';letter-spacing:.08em;text-transform:uppercase;color:#7d84a3;background:#10131c}
+.bb-vbtn{flex:1;display:flex;flex-direction:column;align-items:center;gap:10px;padding:22px 14px;border-radius:16px;background:#10131c;border:2px solid rgba(255,255,255,.08);color:inherit;font:inherit;cursor:pointer}
+.bb-vbtn[aria-pressed="true"]{border-color:#ff5ec8;background:radial-gradient(circle at 50% 30%,rgba(255,94,200,.2),transparent 70%),#10131c}
+.bb-seal{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:12px;background:rgba(127,224,166,.08);border:1px solid rgba(127,224,166,.35);color:#c9f5da;font-weight:600;font-size:13px}
+@keyframes bbKey{0%{opacity:0;transform:translateY(-26px) rotate(-30deg)}100%{opacity:1;transform:none}}
+@keyframes bbPop{0%{opacity:0;transform:scale(.7)}100%{opacity:1;transform:none}}
+@keyframes bbGlow{0%,100%{filter:drop-shadow(0 0 0 rgba(242,201,76,0))}50%{filter:drop-shadow(0 0 22px rgba(242,201,76,.55))}}
+@keyframes bbWalk{0%{transform:none;opacity:1}100%{transform:translateX(60px) scale(.8);opacity:0}}
+@media (prefers-reduced-motion: reduce){.bb-art,.bb-glow,.bb-kc>div.k>img{animation:none;opacity:1}}.sg-c{font-family:'Cinzel',serif;letter-spacing:.06em}
+.sg-row{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;background:#10131c;border:1px solid rgba(255,255,255,.05)}
+.nt-ev[aria-pressed="true"]{border-color:#e2672a;background:rgba(226,103,42,.1)}
+.gy-step>i{color:#ffc08a}
+.sg-h{font-family:'Cinzel',serif;font-weight:700;letter-spacing:.04em;line-height:1.05}
+.sg-tribe{flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:10px;padding:16px;border-radius:16px;background:#0b0d14;border:1px solid rgba(255,255,255,.08)}
+.sg-m{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;background:#10131c;border:1px solid rgba(255,255,255,.05)}
+.sg-m>.n{flex:1;min-width:0;display:flex;flex-direction:column}
+.sg-m>.n>b{font:700 13.5px 'Archivo'}
+.sg-m>.n>span{font-size:11px;color:#7d84a3}
+.sg-tier{display:inline-flex;align-items:center;height:22px;padding:0 9px;border-radius:6px;font:800 10px 'Archivo';letter-spacing:.07em;text-transform:uppercase}
+.sg-ladder{display:flex;gap:6px;align-items:stretch}
+.sg-ladder>div{flex:1;display:flex;flex-direction:column;gap:4px;padding:10px;border-radius:10px;background:#10131c;border:1px solid rgba(255,255,255,.06);font-size:11.5px}
+.sg-ladder>div.on{border-color:#e2672a;background:rgba(226,103,42,.1)}
+.sg-ladder>div>b{font:800 10px 'Archivo';letter-spacing:.08em;color:#ffc08a}
+.sg-idol{position:relative;display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 10px;border-radius:14px;background:radial-gradient(circle at 50% 30%,var(--g),transparent 68%),#0b0d14;border:1px solid rgba(255,255,255,.07);text-align:center;color:inherit;font:inherit;cursor:pointer}
+.sg-idol[aria-pressed="true"]{border-color:#e2672a;box-shadow:0 0 0 1px #e2672a inset}
+.sg-idol>img{height:118px}
+.sg-idol>b{font:800 14px 'Archivo'}
+.sg-idol>span{font-size:11.5px;color:#a3a9c2}
+.sg-idol>em{position:absolute;top:10px;right:10px;font:800 10px 'Archivo';font-style:normal;padding:2px 7px;border-radius:99px;background:#151926;color:#ffc08a}
+.sg-idol[data-off="true"]{opacity:.42}
+.sg-c4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.sg-cc{position:relative;display:flex;flex-direction:column;align-items:center;gap:6px;padding:18px 10px 16px;border-radius:14px;background:rgba(10,12,22,.86);border:1px solid rgba(255,255,255,.1);transition:all .35s}
+.sg-cc .bl{position:absolute;top:-58px;left:50%;width:84px;margin-left:-42px;transition:transform .4s}
+.sg-cc .sh{position:absolute;top:-62px;left:50%;width:54px;margin-left:-27px;animation:bbPop .45s cubic-bezier(.3,1.4,.5,1) both}
+@keyframes sgFall{from{transform:translateY(-30px)}to{transform:translateY(22px)}}
+@keyframes sgKnock{0%{transform:translateY(10px)}40%{transform:translateY(-16px) rotate(-10deg)}100%{transform:none}}
+@keyframes sgSnuff{0%{opacity:1}100%{opacity:.25;filter:grayscale(1)}}
+.sg-card{width:270px;height:480px;border-radius:22px;overflow:hidden;position:relative;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding:22px;gap:6px;text-align:center;border:1px solid rgba(255,255,255,.1)}
+.sg-card>img.b{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:70% 50%;opacity:.85}
+.sg-card::before{content:"";position:absolute;inset:0;background:linear-gradient(rgba(7,8,13,.1),rgba(7,8,13,.94) 72%);z-index:1}
+.sg-card>*:not(img.b){position:relative;z-index:2}
+.sg-tl{display:grid;grid-template-columns:repeat(11,minmax(0,1fr));gap:6px}
+.sg-tl>div{display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 4px;border-radius:10px;background:#10131c;border:1px solid rgba(255,255,255,.06);text-align:center}
+.sg-tl>div>b{font:800 10px 'Archivo';letter-spacing:.06em;color:#ffc08a}
+.sg-tl>div>span{font-size:10.5px;color:#a3a9c2}
+.zbg{position:relative;border-radius:14px;overflow:hidden;border:1px solid rgba(255,255,255,.08);background:#0b0d14;cursor:pointer;padding:0;color:inherit;font:inherit;text-align:left}
+.zbg>img{display:block;width:100%;aspect-ratio:8/3;object-fit:cover;object-position:70% 60%}
+.zbg>span{display:block;padding:8px 10px;font:700 12.5px 'Archivo'}
+.zbg[aria-pressed="true"]{border-color:#e2672a;box-shadow:0 0 0 2px #e2672a}
+</style>
+</helmet>
+<div class="sp" style="--acc: #e2672a; --acc2: #ffc08a; --accInk: #1a0a04; --disp: Cinzel; min-height: 100vh; display: flex; flex-direction: column">
+<header style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 18px 28px; border-bottom: 1px solid rgba(255,255,255,.06)">
+  <a class="sp-btn" href="SurvivorGuillotineHome.dc.html" aria-label="Back" style="padding: 0 12px">‹</a>
+  <div style="flex: 1 1 320px; display: flex; flex-direction: column; gap: 3px"><h1 class="sp-h1">Survivor Guillotine notifications</h1><span class="sp-t2">Push, in-app, email and tribe chat for every race, idol and chop</span></div>
+  <img src="specialty/survguil/emblem.svg" alt="" style="height: 54px">
+</header>
+<div style="display: flex; flex-wrap: wrap; gap: 24px; padding: 22px 28px 32px; align-items: flex-start">
+  <section style="flex: 0 1 300px; display: flex; flex-direction: column; gap: 6px">
+    <sc-for list="{{groups}}" as="g" hint-placeholder-count="5">
+      <span class="sp-lbl" style="margin: 8px 0 2px">{{g.t}}</span>
+      <sc-for list="{{g.evs}}" as="e" hint-placeholder-count="4"><button class="nt-ev" aria-pressed="{{e.on}}" onClick="{{e.pick}}"><img src="{{e.icon}}" alt=""><div><b>{{e.name}}</b><span>{{e.when}}</span></div></button></sc-for>
+    </sc-for>
+  </section>
+  <section style="flex: none; display: flex; flex-direction: column; align-items: center; gap: 10px">
+    <div class="nt-phone" style="--wa: {{wa}}; --wb: rgba(139,123,224,.3)">
+      <div style="display: flex; flex-direction: column; align-items: center; padding-top: 54px; gap: 2px"><span style="font: 600 15px 'Archivo'; color: #d6d9e6">{{day}}</span><span style="font: 300 76px/1 'Archivo'; color: #fff; letter-spacing: -.02em">{{time}}</span></div>
+      <div style="position: absolute; left: 12px; right: 12px; top: 230px; display: flex; flex-direction: column; gap: 8px">
+        <sc-for list="{{stack}}" as="p" hint-placeholder-count="3"><div class="nt-push {{p.cls}}"><img src="{{p.icon}}" alt=""><div><small><span>ALLFANTASY · BLADE &amp; TORCH</span><span>{{p.ago}}</span></small><b>{{p.t}}</b><span>{{p.b}}</span></div></div></sc-for>
+      </div>
+    </div>
+    <span class="sp-t3" style="font-size: 11.5px">Lock screen · newest on top</span>
+  </section>
+  <section style="flex: 1 1 420px; min-width: 0; display: flex; flex-direction: column; gap: 16px">
+    <div class="sp-card" style="padding: 12px 14px; display: flex; flex-direction: column; gap: 8px"><span class="sp-lbl">In-app banner</span>
+      <div style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 12px; background: linear-gradient(90deg, {{wa}}, #10131c 70%); border: 1px solid rgba(255,255,255,.1)"><img src="{{icon}}" alt="" style="width: 44px"><div style="flex: 1; display: flex; flex-direction: column"><b style="font-size: 14px">{{t}}</b><span class="sp-t2" style="font-size: 12.5px">{{b}}</span></div><a class="sp-btn sp-btn-p" href="#" style="min-height: 36px">{{cta}}</a></div></div>
+    <div style="display: flex; flex-direction: column; border-radius: 14px; overflow: hidden; border: 1px solid rgba(255,255,255,.08); background: #0d0f17">
+      <div style="padding: 12px 16px; border-bottom: 1px solid rgba(255,255,255,.06); display: flex; flex-direction: column; gap: 2px"><span class="sp-t3" style="font-size: 11.5px">From AllFantasy · to you</span><span style="font-weight: 700">{{t}}</span></div>
+      <div style="position: relative; height: 170px; overflow: hidden"><img src="specialty/survguil/bg/beach-dusk.svg" alt="" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 70% 60%"><div style="position: absolute; inset: 0; background: linear-gradient(90deg, rgba(7,8,13,.94), rgba(7,8,13,.45))"></div>
+        <div style="position: relative; height: 100%; display: flex; align-items: center; gap: 16px; padding: 0 22px"><img src="{{mailArt}}" alt="" style="width: 120px; flex: none"><div style="display: flex; flex-direction: column; gap: 4px"><span class="sp-lbl" style="color: #ffc08a">Survivor Guillotine · {{kick}}</span><span class="sg-h" style="font-size: 34px; color: #fff">{{head}}</span></div></div></div>
+      <div style="padding: 14px 22px 18px; display: flex; flex-direction: column; gap: 12px"><span class="sp-t2" style="font-size: 13.5px; line-height: 1.55">{{mail}}</span><a class="sp-btn sp-btn-p" href="#" style="align-self: flex-start; min-height: 42px; padding: 0 20px">{{cta}}</a><span class="sp-t3" style="font-size: 11px">You get this because you play in Blade &amp; Torch. Manage notifications in Settings.</span></div>
+    </div>
+    <div class="sp-card" style="padding: 14px 16px; display: flex; flex-direction: column; gap: 6px"><span class="sp-lbl">Default channels · managers can turn any off</span>
+      <table class="sp-tbl"><tr><th>Moment</th><th>Push</th><th>In-app</th><th>Email</th><th>Tribe chat</th></tr>
+        <sc-for list="{{mx}}" as="m" hint-placeholder-count="20"><tr style="background: {{m.bg}}"><td style="font-weight: 600; font-size: 12.5px">{{m.n}}</td><sc-for list="{{m.ch}}" as="x" hint-placeholder-count="4"><td style="text-align: center"><span class="nt-on" style="background: {{x.bg}}; color: {{x.c}}">{{x.l}}</span></td></sc-for></tr></sc-for></table></div>
+  </section>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1320}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { ev: 'saved' }; }
+  renderVals() {
+    const P = "specialty/survguil/";
+    const O = 'rgba(226,103,42,.42)', V = 'rgba(139,123,224,.45)', M = 'rgba(127,224,192,.4)', Rd = 'rgba(224,64,46,.42)', G = 'rgba(242,201,76,.38)';
+    const E = [
+      ['Week', 'trailing', 'Your tribe is trailing', 'Sunday, live', 'buff-vela.svg', 'Vela is down 69.5', '2 games left. If it holds, Vela’s lowest score is chopped.', 'See the race', V, 'Sun 4:12 PM', 'Trailing', 'buff-vela.svg', 'Koa leads 471.6 to 402.1 with two games left. You’re 2nd lowest in Vela, 3.8 above the chop zone.', [1, 1, 0, 1]],
+      ['Week', 'lock', 'Idol reminder', '1 hour before lock', 'idol-block.svg', 'Idols lock in 1 hour', 'Your Blade Block isn’t played for week 6.', 'Open vault', M, 'Sun 12:00 PM', 'Last call', 'idol-block.svg', 'Idols must be played before Sunday 1:00 PM ET. You hold a Blade Block and it isn’t played for week 6.', [1, 1, 0, 0]],
+      ['Week', 'danger', 'You’re in the chop zone', 'Live projections', 'icon-zone.svg', 'You’re under the blade', 'Projected lowest in Vela by 1.2. Vela is trailing.', 'Set lineup', Rd, 'Sun 9:30 AM', 'Chop zone', 'guillotine.svg', 'You’re projected lowest in Vela (97.4) and Vela is trailing. Swap a starter or play an idol before 1:00 PM ET.', [1, 1, 0, 0]],
+      ['Week', 'sealed', 'Idol played', 'Your confirmation', 'idol-block.svg', 'Blade Block sealed', 'Revealed only if the blade reaches you. Spent either way.', 'Open vault', M, 'Sun 12:41 PM', 'Sealed', 'idol-block.svg', 'Your Blade Block is played for week 6. Nobody can see it until the chop.', [1, 1, 0, 0]],
+      ['Chop', 'final', 'Tribe race final', 'Wednesday, after corrections', 'icon-chop.svg', 'Koa wins week 6', 'Vela lost by 69.5. The chop is live now.', 'Watch the chop', O, 'Wed 10:00 AM', 'Race final', 'guillotine.svg', 'Koa beat Vela 471.6 to 402.1 after stat corrections. Vela goes to the chop.', [1, 1, 0, 1]],
+      ['Chop', 'saved', 'Your idol saved you', 'At the chop', 'idol-block.svg', 'Your idol blocked the blade', 'The blade slid past you to Open Team 4.', 'Watch it', M, 'Wed 10:01 AM', 'Saved', 'idol-block.svg', 'Open Team 8 played an idol, the blade slid to you, and your Blade Block knocked it away. Open Team 4 was chopped.', [1, 1, 1, 0]],
+      ['Chop', 'chopped', 'You were chopped', 'At the chop', 'guillotine-drop.svg', 'You were chopped', 'Lowest in Vela with 104.0. Your torch is out.', 'See the chop', Rd, 'Wed 10:01 AM', 'Chopped', 'guillotine-drop.svg', 'Vela lost and the blade fell on you with 104.0. Your team is out and your players go to waivers Thursday 3:00 AM ET.', [1, 1, 1, 0]],
+      ['Chop', 'league', 'Someone was chopped', 'Everyone', 'torch-out.svg', 'Open Team 4’s torch is out', 'Two idols played. 7 left.', 'See the chop', O, 'Wed 10:02 AM', 'Torch snuffed', 'torch-out.svg', 'Open Team 4 was chopped after two idols moved the blade. 7 managers are left.', [0, 1, 0, 1]],
+      ['Chop', 'waivers', 'Roster released', 'Next waiver run', 'icon-chop.svg', '15 players hit waivers', 'Open Team 4’s roster clears Thursday 3:00 AM ET.', 'Waivers', G, 'Wed 6:00 PM', 'On the wire', 'icon-chop.svg', 'Open Team 4’s full roster is on waivers. Claims process Thursday at 3:00 AM ET.', [1, 1, 0, 0]],
+      ['Tribe', 'shuffle', 'Tribe shuffle', 'When it happens', 'buff-koa.svg', 'Tribes shuffled', 'You stay in Vela. Two managers swapped each way.', 'See tribes', V, 'Tue 9:00 AM', 'Shuffle', 'buff-koa.svg', 'An idol forced a tribe shuffle. You stay in Vela; Open Team 6 and Open Team 11 join you.', [1, 1, 1, 1]],
+      ['Tribe', 'merge', 'The merge', 'At 6 left', 'merge.svg', 'The tribes have merged', 'One tribe: Ember. The lowest score overall is chopped now.', 'See what changes', O, 'Wed 10:05 AM', 'Merged', 'merge.svg', 'Six managers left, so Vela and Koa become Ember. From week 8, the lowest score overall is chopped.', [1, 1, 1, 1]],
+      ['Tribe', 'necklace', 'Immunity necklace', 'Top score after the merge', 'necklace.svg', 'You won immunity', 'Top score of week 8. You can’t be chopped in week 9.', 'See it', G, 'Wed 10:03 AM', 'Immunity', 'necklace.svg', 'You topped Ember with 141.3 in week 8. You wear the necklace and can’t be chopped in week 9.', [1, 1, 1, 1]],
+      ['Idols', 'given', 'You were given an idol', 'After the draft', 'idol-block.svg', 'You hold a hidden idol', 'Blade Block. Only you know.', 'Open vault', M, 'Sun 11:02 PM', 'Hidden idol', 'idol-block.svg', 'About a third of the league got a hidden idol. Yours is a Blade Block. Nobody else knows you have it.', [1, 1, 1, 0]],
+      ['Idols', 'sniff', 'Idol Sniffer result', 'When you use one', 'idol-sniffer.svg', 'Open Team 8 holds an idol', 'Not which one. They aren’t told you checked.', 'Open vault', 'rgba(126,232,255,.4)', 'Thu 7:12 PM', 'Sniffed', 'idol-sniffer.svg', 'Your Idol Sniffer found that Open Team 8 holds an idol. The sniffer is spent.', [1, 1, 0, 0]],
+      ['Idols', 'expire', 'Idols expiring', 'At 5 left', 'idol-boost.svg', 'Idols expire after this week', '5 left after week 8. Unplayed idols are gone.', 'Open vault', M, 'Mon 9:00 AM', 'Use it or lose it', 'idol-boost.svg', 'Five managers will be left after week 8. Any idol not played by then expires.', [1, 1, 1, 0]],
+      ['Endgame', 'final2', 'Final two', 'Last week', 'guillotine.svg', 'Final two: you vs Open Team 2', 'Lowest score is chopped. Last one standing wins.', 'Set lineup', O, 'Tue 9:00 AM', 'Final two', 'guillotine.svg', 'Week 12 is the last chop. Outscore Open Team 2 and you win Blade & Torch.', [1, 1, 1, 1]],
+      ['Endgame', 'winner', 'Winner', 'End of season', 'winner.svg', 'TheCiege26 is the last one standing', 'Won week 12, 138.4 to 131.9.', 'See the recap', G, 'Wed 10:00 AM', 'Last one standing', 'winner.svg', 'You beat Open Team 2 138.4 to 131.9 in the final chop. 11 chops, 2 idols, 1 winner.', [1, 1, 1, 1]],
+      ['Endgame', 'clock', 'You’re on the clock', 'Draft', 'emblem.svg', 'You’re on the clock · pick 4.03', '90 seconds. Tribes are drawn after the draft.', 'Make pick', O, 'Sun 8:41 PM', 'You’re up', 'emblem.svg', 'Round 4, pick 3. Auto-pick takes the top of your queue at 0:00.', [1, 1, 0, 0]]];
+    const st = this.state, e = E.find(x => x[1] === st.ev), others = E.filter(x => x[1] !== st.ev).slice(0, 2);
+    const ON = { bg: 'rgba(226,103,42,.18)', c: '#ffc08a', l: 'On' }, OFF = { bg: '#151926', c: '#5a6078', l: 'Off' };
+    const grp = [['Week', 'During the week'], ['Chop', 'Chop night'], ['Tribe', 'Tribes and merge'], ['Idols', 'Idols'], ['Endgame', 'Endgame and draft']];
+    const days = { Sun: 'Sunday, October 18', Tue: 'Tuesday, October 13', Wed: 'Wednesday, October 14', Thu: 'Thursday, October 15', Mon: 'Monday, October 12' };
+    return { groups: grp.map(([g, t]) => ({ t, evs: E.filter(x => x[0] === g).map(x => ({ name: x[2], when: x[3], icon: P + x[4], on: x[1] === st.ev ? 'true' : 'false', pick: () => this.setState({ ev: x[1] }) })) })),
+      day: days[e[9].split(' ')[0]], time: e[9].split(' ')[1], wa: e[8],
+      stack: [{ icon: P + e[4], t: e[5], b: e[6], ago: 'now', cls: '' }].concat(others.map((x, k) => ({ icon: P + x[4], t: x[5], b: x[6], ago: k ? 'Sun' : 'Wed', cls: 'dim' }))),
+      icon: P + e[4], t: e[5], b: e[6], cta: e[7], kick: e[2], head: e[10], mailArt: P + e[11], mail: e[12],
+      mx: E.map(x => ({ n: x[2], bg: x[1] === st.ev ? 'rgba(226,103,42,.08)' : 'transparent', ch: x[13].map(v => v ? ON : OFF) })) };
+  }
+}
+</script>
+</body>
+</html>

@@ -61,7 +61,8 @@ export function GuillotineHome({ leagueId, sport, leagueName }: GuillotineHomePr
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [replayChop, setReplayChop] = useState<{ play: boolean; name?: string }>({ play: false })
-  const [week, setWeek] = useState(1)
+  // null = the current week, resolved by the summary route (it used to be a frozen 1).
+  const [week] = useState<number | null>(null)
   const [escapeShare, setEscapeShare] = useState<'idle' | 'working' | 'shared' | 'downloaded' | 'failed'>('idle')
 
   const load = useCallback(async () => {
@@ -69,7 +70,7 @@ export function GuillotineHome({ leagueId, sport, leagueName }: GuillotineHomePr
     setError(null)
     try {
       const res = await fetch(
-        `/api/leagues/${encodeURIComponent(leagueId)}/guillotine/summary?week=${week}`,
+        `/api/leagues/${encodeURIComponent(leagueId)}/guillotine/summary${week != null ? `?week=${week}` : ''}`,
         { cache: 'no-store' }
       )
       if (!res.ok) {
@@ -229,7 +230,7 @@ export function GuillotineHome({ leagueId, sport, leagueName }: GuillotineHomePr
           <Shield className="h-5 w-5 text-cyan-400" />
           Survival Board
         </h2>
-        <p className="mb-3 text-xs text-white/50">Week {summary?.weekOrPeriod ?? week} · Lowest projected = Chop Zone</p>
+        <p className="mb-3 text-xs text-white/50">Week {summary?.weekOrPeriod ?? week ?? '—'} · Lowest projected = Chop Zone</p>
         <button
           type="button"
           onClick={() => load()}
@@ -369,7 +370,7 @@ export function GuillotineHome({ leagueId, sport, leagueName }: GuillotineHomePr
       <div id="guillotine-ai">
       <GuillotineAIPanel
         leagueId={leagueId}
-        weekOrPeriod={summary?.weekOrPeriod ?? week}
+        weekOrPeriod={summary?.weekOrPeriod ?? week ?? 1}
         deterministicSummary={
           summary
             ? {

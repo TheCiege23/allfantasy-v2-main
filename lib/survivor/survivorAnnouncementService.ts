@@ -1,6 +1,8 @@
 import 'server-only'
 
-import { prisma } from '@/lib/prisma'
+import { withSurvivorSetupTransaction } from './survivorSetupTransaction'
+
+import type { Prisma } from '@prisma/client'
 import { normalizeSurvivorFoundationSettings } from './normalizeSurvivorSettings'
 import { buildSurvivorIntroAnnouncement, buildSurvivorIntroSummary, type SurvivorIntroContext } from './survivorPromptTemplates'
 
@@ -40,25 +42,27 @@ function buildIntroContext(leagueName: string, sport: string, settings: ReturnTy
  */
 export async function postSurvivorIntroAnnouncement(
   leagueId: string,
-  opts: { actorUserId?: string } = {},
+  opts: { actorUserId?: string; db?: Prisma.TransactionClient } = {},
 ): Promise<SurvivorAnnouncementOutcome> {
-  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { name: true, sport: true, settings: true } })
+  if (!opts.db) return withSurvivorSetupTransaction(leagueId, (db) => postSurvivorIntroAnnouncement(leagueId, { ...opts, db }))
+  const db = opts.db
+  const league = await db.league.findUnique({ where: { id: leagueId }, select: { name: true, sport: true, settings: true } })
   const settings = normalizeSurvivorFoundationSettings(
     league?.settings && typeof league.settings === 'object' ? (league.settings as Record<string, unknown>) : {},
   )
-  const castSize = await prisma.survivorPlayer.count({ where: { leagueId } })
-  const tribeCount = await prisma.survivorTribe.count({ where: { leagueId } })
+  const castSize = await db.survivorPlayer.count({ where: { leagueId } })
+  const tribeCount = await db.survivorTribe.count({ where: { leagueId } })
   const ctx = buildIntroContext(league?.name ?? 'Survivor', String(league?.sport ?? 'NFL'), settings, castSize || settings.defaultTeamCount, tribeCount || settings.tribeCount)
   const summary = buildSurvivorIntroSummary(ctx)
 
-  const channel = await prisma.survivorChatChannel.findFirst({
+  const channel = await db.survivorChatChannel.findFirst({
     where: { leagueId, channelType: 'league', isArchived: false },
     select: { id: true },
   })
 
   if (!channel) {
     // No chat infra yet → persist a pending announcement event truthfully (no fake message).
-    await prisma.survivorAuditEntry.create({
+    await db.survivorAuditEntry.create({
       data: {
         leagueId,
         category: 'announcement',
@@ -72,7 +76,7 @@ export async function postSurvivorIntroAnnouncement(
     return { ok: true, posted: false, pending: true, channelId: null, messageId: null, summary, detail: 'No league chat channel yet — intro persisted as pending.' }
   }
 
-  const existing = await prisma.survivorChatMessage.findFirst({
+  const existing = await db.survivorChatMessage.findFirst({
     where: { leagueId, channelId: channel.id, contentType: INTRO_CONTENT_TYPE },
     select: { id: true },
   })
@@ -80,7 +84,7 @@ export async function postSurvivorIntroAnnouncement(
     return { ok: true, posted: false, pending: false, channelId: channel.id, messageId: existing.id, summary, detail: 'Intro already posted (idempotent).' }
   }
 
-  const message = await prisma.survivorChatMessage.create({
+  const message = await db.survivorChatMessage.create({
     data: {
       leagueId,
       channelId: channel.id,
@@ -97,7 +101,7 @@ export async function postSurvivorIntroAnnouncement(
     select: { id: true },
   })
 
-  await prisma.survivorAuditEntry.create({
+  await db.survivorAuditEntry.create({
     data: {
       leagueId,
       category: 'announcement',

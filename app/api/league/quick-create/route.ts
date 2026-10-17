@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { openaiChatJson } from '@/lib/openai-client'
+import { isSurvivorCreationSportAvailable, SURVIVOR_CREATION_UNAVAILABLE_MESSAGE } from '@/lib/survivor/survivorCreationAvailability'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -72,6 +73,11 @@ export async function POST(req: Request) {
       } else {
         return NextResponse.json({ error: 'Failed to parse AI response' }, { status: 502 })
       }
+    }
+
+    if (String(settings.leagueType ?? '').toLowerCase() === 'survivor' &&
+        !isSurvivorCreationSportAvailable(String(settings.sport ?? ''))) {
+      return NextResponse.json({ error: SURVIVOR_CREATION_UNAVAILABLE_MESSAGE }, { status: 400 })
     }
 
     return NextResponse.json({ ok: true, settings })

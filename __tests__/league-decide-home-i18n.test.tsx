@@ -132,6 +132,53 @@ describe('every key the Decide home names exists in BOTH languages', () => {
   })
 })
 
+describe('🛑 the Decide home shows no card that cannot fill', () => {
+  afterEach(() => { h.language = 'en'; h.recsReady = true; vi.unstubAllGlobals(); cleanup() })
+
+  it('no recommendations: no "waiting on behavior signals" card — the queue keeps the pulse and the trades', async () => {
+    h.recsReady = false
+    stubFetch()
+    const r = render(<DecideHome league={LEAGUE} teams={TEAMS} userTeamId="t1" isCommissioner onOpenTab={() => {}} />)
+    await waitFor(() => expect(r.container.textContent).toContain('from P1'))
+    const queue = r.container.querySelector('.bdx-queue')!
+    expect(queue.textContent).toContain('League pulse')
+    expect(queue.textContent).not.toMatch(/No grounded recommendations|Recommendations appear|Behavior signals/)
+    expect(queue.querySelector('.bdx-empty')).toBeNull()
+  })
+
+  it('…and real recommendations still render when the route returns them', async () => {
+    stubFetch()
+    const r = render(<DecideHome league={LEAGUE} teams={TEAMS} userTeamId="t1" isCommissioner onOpenTab={() => {}} />)
+    await waitFor(() => expect(r.container.textContent).toContain('Recommended move'))
+  })
+})
+
+describe('points against: 0 is "not known", not a score', () => {
+  afterEach(() => { vi.unstubAllGlobals(); cleanup() })
+  const ZERO_PA = [{ ...(TEAMS as unknown as Array<Record<string, unknown>>)[0], pointsAgainst: 0 }, (TEAMS as unknown as unknown[])[1]] as never
+
+  it('the helper', async () => {
+    const { pointsAgainstText } = await import('@/components/decide/pointsAgainst')
+    expect(pointsAgainstText(600)).toBe('600.0')
+    expect(pointsAgainstText(0)).toBe('—')
+    expect(pointsAgainstText(null)).toBe('—')
+    expect(pointsAgainstText(undefined)).toBe('—')
+  })
+
+  it('🛑 the Your team panel and the rail print — for a 0, the number otherwise (measured live: "736.5 / 0.0")', async () => {
+    stubFetch()
+    let r = render(<DecideHome league={LEAGUE} teams={ZERO_PA} userTeamId="t1" isCommissioner onOpenTab={() => {}} />)
+    const row = [...r.container.querySelectorAll('.bdx-row')].find((x) => x.textContent?.startsWith('Points against'))!
+    expect(row.textContent).toBe('Points against—')
+    cleanup()
+    r = render(<LeagueInfoRail league={LEAGUE} teams={ZERO_PA} userTeamId="t1" isCommissioner onOpenTab={() => {}} />)
+    expect(r.container.textContent).toContain('680.4 / —')
+    cleanup()
+    r = render(<LeagueInfoRail league={LEAGUE} teams={TEAMS} userTeamId="t1" isCommissioner onOpenTab={() => {}} />)
+    expect(r.container.textContent).toContain('680.4 / 600.0')
+  })
+})
+
 describe('🛑 the Decide home reads Spanish in Spanish', () => {
   afterEach(() => {
     h.language = 'en'; h.projected = null; h.recsReady = true; h.finderLinked = true; h.flagged = true
@@ -168,9 +215,12 @@ describe('🛑 the Decide home reads Spanish in Spanish', () => {
     const r = render(<DecideHome league={LEAGUE} teams={TEAMS} userTeamId={null} isCommissioner onOpenTab={() => {}} />)
     await r.findByText('Vincula tu cuenta de Sleeper para recibir sugerencias de trades')
     await r.findByText('Sin alertas de inactividad esta semana')
-    await waitFor(() => expect(r.container.textContent).toContain('Aún no hay recomendaciones fundamentadas'))
+    await waitFor(() => expect(r.container.textContent).toContain('Pulso de la liga'))
     const text = r.container.textContent ?? ''
-    for (const s of ['Sin equipo reclamado', 'Aún no tienes un equipo reclamado en esta liga.', 'Las recomendaciones aparecen cuando',
+    // No recommendations → no card at all (the route has returned none since 2026-09-10; see DecideHome).
+    expect(text).not.toContain('Aún no hay recomendaciones fundamentadas')
+    expect(text).not.toContain('Las recomendaciones aparecen cuando')
+    for (const s of ['Sin equipo reclamado', 'Aún no tienes un equipo reclamado en esta liga.',
       'todas las plantillas se ven activas', 'Todas las plantillas tienen la alineación completa']) {
       expect(text, s).toContain(s)
     }

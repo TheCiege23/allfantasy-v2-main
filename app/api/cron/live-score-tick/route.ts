@@ -216,8 +216,11 @@ export async function GET(request: NextRequest) {
           pointsLeaguesSynced: points?.leaguesSynced ?? 0,
           pointsScoresUpserted: points?.scoresUpserted ?? 0,
           pointsErrors: points?.errors ?? 0,
-          /* Starter swing alerts handed to the notification engine this tick. */
-          pointsSwingAlerts: points?.swingAlerts ?? 0,
+          /* Slate summaries handed to the notification engine this tick (lib/live/slateDigest.ts).
+             Zero on almost every tick: one batch per slate, once it has closed and settled. */
+          pointsSlateDigests: points?.slateDigests ?? 0,
+          /* Season Outlook runs redone because this tick moved their league's board. */
+          pointsOutlooksRerun: points?.outlooksRerun ?? 0,
           pointsSkipped: points?.skipped ?? null,
           /* The Grok clip pilot. 'disabled' is the default and says nothing is
              being spent; the searched/found pair is the pilot's running tally. */

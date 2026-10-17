@@ -19,7 +19,10 @@ export type PlayerIdentity = {
   team: string
   sport: string
   sleeperId: string | null
+  /** `PlayerIdentityMap.status` — a ROSTER code ("ACT"/"INACT"). Never render it as an injury. */
   status: string
+  /** Current designation from the live injury feed; null = none stated. The header badge reads this. */
+  injuryStatus?: string | null
 }
 
 const TABS = [

@@ -35,7 +35,8 @@ const MAX_LEAGUES = 250
 export const SHARES_LIMIT = 20
 
 export type ShareRow = {
-  player: { sport: string; externalId: string; sleeperId: string; name: string; position: string | null; team: string | null; imageUrl: string | null }
+  /** `source` is the feed that minted `externalId`; the finder ref carries it (playerRef.ts). */
+  player: { sport: string; externalId: string; source?: string | null; sleeperId: string; name: string; position: string | null; team: string | null; imageUrl: string | null }
   leagues: number
   starts: number
   ir: number
@@ -81,8 +82,8 @@ export async function loadPlayerShares(
 
   const [leagues, rawRosters] = await Promise.all([
     prisma.league
-      .findMany({ where: { id: { in: claimed } }, select: { id: true, platform: true, season: true, settings: true } })
-      .catch(() => [] as Array<{ id: string; platform: string | null; season: number | null; settings: unknown }>),
+      .findMany({ where: { id: { in: claimed } }, select: { id: true, platform: true, sport: true, season: true, settings: true } })
+      .catch(() => [] as Array<{ id: string; platform: string | null; sport: string | null; season: number | null; settings: unknown }>),
     prisma.roster
       .findMany({ where: { leagueId: { in: claimed }, platformUserId: { in: candidates } }, select: { leagueId: true, platformUserId: true, playerData: true } })
       .catch(() => [] as Array<{ leagueId: string; platformUserId: string | null; playerData: unknown }>),
@@ -92,7 +93,8 @@ export async function loadPlayerShares(
   // an unbridged id is dropped, never read raw. Everything else in another id space stays unsupported.
   const bridged = await loadBridgedLeagues(leagues.filter((l) => rosterIdSpaceOf(l.platform) === 'other'))
   const bridgeMap = (leagueId: string) => (bridged.get(leagueId)?.readable ? bridged.get(leagueId)!.map : null)
-  const unsupported = new Set(leagues.filter((l) => rosterIdSpaceOf(l.platform) === 'other' && !bridgeMap(l.id)).map((l) => l.id))
+  // A native league of another sport is unsupported too: its Rolling Insights ids are NFL strangers by Sleeper id.
+  const unsupported = new Set(leagues.filter((l) => rosterIdSpaceOf(l.platform, l.sport) === 'other' && !bridgeMap(l.id)).map((l) => l.id))
 
   // Yours only: the roster whose platformUserId is one of THIS league's candidate ids, one per league.
   const mine = new Map<string, Record<string, unknown>>()
@@ -124,9 +126,9 @@ export async function loadPlayerShares(
   const players = await prisma.sportsPlayer
     .findMany({
       where: { sleeperId: { in: top.map((c) => c.sleeperId) } },
-      select: { sleeperId: true, sport: true, externalId: true, name: true, position: true, team: true, imageUrl: true },
+      select: { sleeperId: true, sport: true, externalId: true, source: true, name: true, position: true, team: true, imageUrl: true },
     })
-    .catch(() => [] as Array<{ sleeperId: string | null; sport: string; externalId: string; name: string; position: string | null; team: string | null; imageUrl: string | null }>)
+    .catch(() => [] as Array<{ sleeperId: string | null; sport: string; externalId: string; source: string; name: string; position: string | null; team: string | null; imageUrl: string | null }>)
   const bySleeper = new Map<string, (typeof players)[number]>()
   for (const p of players) {
     if (!p.sleeperId) continue
@@ -142,7 +144,7 @@ export async function loadPlayerShares(
     const inj = injuries.get(p.name.trim().toLowerCase()) ?? null
     const ready = readiness(inj?.status ?? null, Boolean(inj))
     return {
-      player: { sport: p.sport, externalId: p.externalId, sleeperId: c.sleeperId, name: p.name, position: p.position, team: p.team, imageUrl: asHeadshotUrl(p.imageUrl) },
+      player: { sport: p.sport, externalId: p.externalId, source: p.source, sleeperId: c.sleeperId, name: p.name, position: p.position, team: p.team, imageUrl: asHeadshotUrl(p.imageUrl) },
       leagues: c.leagues,
       starts: c.starts,
       ir: c.ir,

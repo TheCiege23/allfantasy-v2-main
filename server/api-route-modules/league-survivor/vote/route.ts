@@ -7,7 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { assertLeagueMember } from '@/lib/league/league-access'
-import { submitVote } from '@/lib/survivor/votingEngine'
+import { submitPrivateVoteCommand } from '@/lib/survivor/survivorPrivateVoteCommand'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,27 +23,8 @@ export async function POST(
   const gate = await assertLeagueMember(leagueId, userId)
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status ?? 403 })
 
-  let body: {
-    councilId?: string
-    targetUserId?: string
-    voterRosterId?: string
-    targetRosterId?: string
-  }
+  let body: { message?: unknown }
   try { body = await req.json() } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
-
-  const { councilId, targetUserId, voterRosterId, targetRosterId } = body
-  if (!councilId) return NextResponse.json({ error: 'councilId required' }, { status: 400 })
-  if (!targetUserId) return NextResponse.json({ error: 'targetUserId required' }, { status: 400 })
-  if (!voterRosterId || !targetRosterId) {
-    return NextResponse.json({ error: 'voterRosterId and targetRosterId required' }, { status: 400 })
-  }
-
-  try {
-    await submitVote(councilId, userId, targetUserId, { voterRosterId, targetRosterId })
-    return NextResponse.json({ ok: true })
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Unknown error'
-    const status = msg.startsWith('409') ? 409 : 400
-    return NextResponse.json({ error: msg }, { status })
-  }
+  const result = await submitPrivateVoteCommand(leagueId, userId, typeof body.message === 'string' ? body.message : '')
+  return NextResponse.json(result, { status: result.ok ? 200 : result.status })
 }

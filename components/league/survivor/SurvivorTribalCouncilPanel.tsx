@@ -1,8 +1,10 @@
 'use client'
 
 import { useState } from 'react'
+import { SurvivorIdolPlay } from '@/components/survivor/SurvivorIdolPlay'
+import { idolDefinition } from '@/lib/survivor/survivorIdolCatalog'
 import { SurvivorVoteWindowCard } from './SurvivorVoteWindowCard'
-import { SurvivorIdolPlayPanel, type PlayableIdol } from './SurvivorIdolPlayPanel'
+import { type PlayableIdol } from './SurvivorIdolPlayPanel'
 import { SurvivorVoteRevealScrolls, type RevealScroll } from './SurvivorVoteRevealScrolls'
 
 export type TribalCouncilView = {
@@ -24,6 +26,7 @@ export type TribalCouncilView = {
     voteDoesNotCount: boolean
     eligibleTargets: Array<{ userId: string; displayName: string }>
     playableIdols: PlayableIdol[]
+    additionalVotes?: Array<{ idolId: string; targetName: string | null; locked: boolean }>
     isSafeFromVote: boolean
   }
   host: { eligibleVoterCount: number; submittedCount: number; missingVoteCount: number } | null
@@ -37,7 +40,7 @@ type Access = {
 }
 
 /**
- * Survivor Tribal Council — vote window, private ballot, idol plays, TV-style reveal, and
+ * Survivor Elimination Council — vote window, private ballot, idol plays, TV-style reveal, and
  * commissioner open/close/tally/reveal/resolve controls. Every active button calls a real route;
  * unsupported powers are disabled with truthful copy. Mobile-safe (single column).
  */
@@ -57,6 +60,8 @@ export function SurvivorTribalCouncilPanel({
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState<string | null>(null)
   const [voteTarget, setVoteTarget] = useState('')
+  const [additionalTarget, setAdditionalTarget] = useState('')
+  const [selectedIdol, setSelectedIdol] = useState<PlayableIdol | null>(null)
   const [attendingTribeId, setAttendingTribeId] = useState('')
 
   const windowOpen = council.status === 'voting_open' && !council.isRevealed
@@ -82,22 +87,10 @@ export function SurvivorTribalCouncilPanel({
     }
   }
 
-  function playIdol(action: string, needsTarget: boolean) {
-    if (!action) return
-    if (needsTarget) {
-      if (!voteTarget) {
-        setNote('Choose a target first (the dropdown above), then play Extra Vote.')
-        return
-      }
-      void post(action, { targetUserId: voteTarget })
-    } else {
-      void post(action)
-    }
-  }
 
   return (
     <section className="space-y-3 border-t border-neutral-800 pt-4">
-      <h3 className="text-sm font-semibold text-white">Tribal Council</h3>
+      <h3 className="text-sm font-semibold text-white">Elimination Council</h3>
 
       {access.isCommissionerParticipating ? (
         <div className="rounded border border-amber-500/30 bg-amber-950/30 p-2 text-[11px] text-amber-100">
@@ -106,7 +99,7 @@ export function SurvivorTribalCouncilPanel({
       ) : null}
 
       {!council.active || !council.councilId ? (
-        <p className="text-xs text-neutral-400">No Tribal Council is currently open.</p>
+        <p className="text-xs text-neutral-400">No Elimination Council is currently open.</p>
       ) : (
         <>
           <SurvivorVoteWindowCard
@@ -119,7 +112,7 @@ export function SurvivorTribalCouncilPanel({
 
           {council.you.isSafeFromVote ? (
             <div className="rounded border border-emerald-600/40 bg-emerald-950/30 p-2 text-[11px] text-emerald-200">
-              You played Skip Tribal — you are safe from being voted out at this council.
+              You played Council Pass — you are safe from being voted out at this council.
             </div>
           ) : null}
 
@@ -150,10 +143,10 @@ export function SurvivorTribalCouncilPanel({
                   <button
                     type="button"
                     disabled={busy || !voteTarget}
-                    onClick={() => post('submit-vote', { targetUserId: voteTarget })}
+                    onClick={() => post('submit-vote', { message: `@Chimmy vote <@${voteTarget}>` })}
                     className="rounded bg-orange-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
                   >
-                    {council.you.hasVoted ? 'Change vote' : 'Submit vote'}
+                    {council.you.hasVoted ? 'Send changed vote to @Chimmy' : 'Send vote to @Chimmy'}
                   </button>
                 </div>
               ) : (
@@ -164,8 +157,12 @@ export function SurvivorTribalCouncilPanel({
             </div>
           ) : null}
 
-          {/* Idol plays (owner-only) */}
-          <SurvivorIdolPlayPanel idols={council.you.playableIdols} windowOpen={windowOpen} busy={busy} onPlay={(action, needsTarget) => playIdol(action, needsTarget)} />
+          {(council.you.additionalVotes ?? []).map(ballot => <div key={ballot.idolId} className="rounded border border-amber-700/40 p-3 text-sm">
+            <p>Your additional private vote: {ballot.targetName ?? 'Not cast yet'}{ballot.locked ? ' - Locked' : ''}</p>
+            {windowOpen && !ballot.locked && <><label htmlFor={`additional-${ballot.idolId}`}>Choose your additional vote target</label><select id={`additional-${ballot.idolId}`} value={additionalTarget} onChange={event => setAdditionalTarget(event.target.value)} className="m-2 rounded bg-neutral-900 p-2"><option value="">Choose a manager</option>{council.you.eligibleTargets.map(target => <option key={target.userId} value={target.userId}>{target.displayName}</option>)}</select><button type="button" disabled={busy || !additionalTarget} onClick={() => post('submit-vote', { message: `@Chimmy extra vote <@${additionalTarget}>` })} className="rounded bg-orange-600 p-2 disabled:opacity-50">Send additional vote to @Chimmy</button></>}
+          </div>)}
+          <nav aria-label="Your held council idols" className="flex flex-wrap gap-2">{council.you.playableIdols.filter(idol => !idol.alreadyPlayed).map(idol => <button key={idol.idolId} type="button" aria-pressed={selectedIdol?.idolId === idol.idolId} onClick={() => setSelectedIdol(idol)} className="rounded border border-amber-400/50 p-2 text-sm">{idolDefinition(idol.powerType).name}</button>)}</nav>
+          {selectedIdol && <SurvivorIdolPlay key={selectedIdol.idolId} leagueId={leagueId} idolId={selectedIdol.idolId} powerType={selectedIdol.powerType} onFinished={onRefresh} />}
 
           {/* Host operational missing-vote count */}
           {council.host ? (
@@ -175,16 +172,18 @@ export function SurvivorTribalCouncilPanel({
             </div>
           ) : null}
 
+          {!council.isRevealed && council.status !== 'voting_open' && <div className="text-center"><img src="/survivor/exile/scroll-sealed.svg" alt="Results sealed until the Torch Ceremony" width={180} height={120} className="mx-auto" /><p className="text-xs text-neutral-400">Results remain sealed until the Torch Ceremony is published.</p></div>}
           {/* Reveal */}
           {council.reveal ? (
             <div className="space-y-2">
-              <div className="text-xs font-medium uppercase tracking-wide text-neutral-400">{council.isRevealed ? 'The votes' : 'Host preview (not revealed)'}</div>
+              <div className="text-xs font-medium uppercase tracking-wide text-neutral-400">The votes</div>
               <SurvivorVoteRevealScrolls
                 scrolls={council.reveal.revealSequence}
                 eliminatedName={council.reveal.eliminatedName}
                 isTie={council.reveal.isTie}
                 tiePhase={council.reveal.tiePhase}
                 autoPlay={council.isRevealed}
+                isPublished={council.isRevealed}
               />
             </div>
           ) : null}
@@ -192,7 +191,7 @@ export function SurvivorTribalCouncilPanel({
       )}
 
       {/* Commissioner / host controls */}
-      {access.canPerformAdminAction ? (
+      {access.canPerformAdminAction && !access.isCommissionerParticipating ? (
         <div className="space-y-2 rounded border border-neutral-800 bg-neutral-950 p-3">
           <div className="text-xs font-medium uppercase tracking-wide text-neutral-400">Commissioner controls</div>
           {!council.active || !council.councilId ? (
@@ -206,7 +205,7 @@ export function SurvivorTribalCouncilPanel({
                 ))}
               </select>
               <button type="button" disabled={busy} onClick={() => post('open-tribal', attendingTribeId ? { attendingTribeId } : {})} className="rounded bg-orange-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-50">
-                Open Tribal Council
+                Open Elimination Council
               </button>
             </div>
           ) : (

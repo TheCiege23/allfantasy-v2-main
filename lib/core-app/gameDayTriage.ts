@@ -26,6 +26,8 @@ export type TriageStarter = {
   sleeperId: string
   sport: string
   externalId: string
+  /** The feed that minted `externalId`; the finder ref carries it (playerRef.ts). */
+  source?: string | null
   name: string
   position: string | null
   team: string | null
@@ -53,7 +55,7 @@ export type TriageLeague = {
 export type TriageInjury = { status: string | null; description: string | null; reportedAt: string | null }
 
 export type TriageRow = {
-  player: { sport: string; externalId: string; sleeperId: string; name: string; position: string | null; team: string | null; imageUrl: string | null }
+  player: { sport: string; externalId: string; source?: string | null; sleeperId: string; name: string; position: string | null; team: string | null; imageUrl: string | null }
   /** The readiness chip; null only for a no-game row with no report. */
   status: { label: string; tone: MoveTone } | null
   description: string | null
@@ -187,7 +189,7 @@ export function triageRows(args: {
       continue
     }
     byPlayer.set(s.sleeperId, {
-      player: { sport: s.sport, externalId: s.externalId, sleeperId: s.sleeperId, name: s.name, position: s.position, team: s.team, imageUrl: s.imageUrl },
+      player: { sport: s.sport, externalId: s.externalId, source: s.source ?? null, sleeperId: s.sleeperId, name: s.name, position: s.position, team: s.team, imageUrl: s.imageUrl },
       status: ready,
       description: inj?.description ?? null,
       reportedAt: inj?.reportedAt ?? null,

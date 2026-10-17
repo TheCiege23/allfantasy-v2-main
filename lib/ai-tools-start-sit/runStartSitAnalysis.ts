@@ -1,3 +1,6 @@
+import { findSportsPlayerByLeagueId } from '@/lib/player-identity/findSportsPlayerByLeagueId'
+import { buildNameIndex as buildVerifiedNameIndex, resolveVerifiedMatch } from '@/lib/player-match/verifiedNameMatch'
+import { foldInjuryTeam } from '@/lib/injuries/matchInjuryRows'
 import { findRosterForTeam } from '@/lib/leagues/rosterForTeam'
 import { buildNameIndex } from '@/lib/player-identity/nameIndex'
 import 'server-only'
@@ -76,14 +79,24 @@ function volFromInjury(status: string | null | undefined): number {
 async function resolveRecord(sport: string, rawId: string): Promise<SportsPlayerRecord | null> {
   const direct = await prisma.sportsPlayerRecord.findUnique({ where: { id: rawId } })
   if (direct) return direct
-  const sp = await prisma.sportsPlayer.findFirst({
-    where: { sport, OR: [{ externalId: rawId }, { sleeperId: rawId }, { id: rawId }] },
-    select: { name: true },
-  })
+  /*
+   * 🛑 Not `externalId OR sleeperId OR id`: with `findFirst` that returned Rolling Insights' player
+   * of the same number as often as the rostered one (Sleeper 8394 is Percy Butler; RI 8394 is Rome
+   * Odunze). Our row id, then the Sleeper space, then a provider number only when it cannot be a
+   * Sleeper id — see `findSportsPlayerByLeagueId`.
+   */
+  const sp =
+    (await prisma.sportsPlayer.findFirst({ where: { id: rawId }, select: { name: true, team: true, position: true } })) ??
+    (await findSportsPlayerByLeagueId(sport, rawId))
   if (!sp) return null
-  return prisma.sportsPlayerRecord.findFirst({
+  // The record table is keyed by name; a name two athletes share (WR vs LB Justin Jefferson) binds
+  // only when team or position tells them apart, otherwise no record rather than the other one.
+  const candidates = await prisma.sportsPlayerRecord.findMany({
     where: { sport, name: { equals: sp.name, mode: 'insensitive' } },
   })
+  if (candidates.length <= 1) return candidates[0] ?? null
+  const index = buildVerifiedNameIndex(candidates.map((row) => ({ name: row.name, team: foldInjuryTeam(row.team, sport), position: row.position, row })))
+  return resolveVerifiedMatch(index, { name: sp.name, team: foldInjuryTeam(sp.team, sport), position: sp.position }).match?.row ?? null
 }
 
 function maxPeriodForSport(sport: SupportedSport): number {

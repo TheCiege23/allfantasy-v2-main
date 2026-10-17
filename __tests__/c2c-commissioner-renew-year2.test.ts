@@ -100,6 +100,20 @@ describe('C2C commissioner renew / continue-to-next-year', () => {
     })
   })
 
+  it('🛑 refuses an IMPORTED league: it is renewed on its platform, never by moving this row a season', async () => {
+    // Renewing an imported Sleeper row left it pointing at last season's Sleeper league with season + 1,
+    // and every sync then refused it for a season mismatch.
+    leagueFindUniqueMock.mockResolvedValue({ ...(await leagueFindUniqueMock()), platform: 'sleeper' })
+    const { POST } = await import('@/app/api/commissioner/leagues/[leagueId]/renew/route')
+    const req = new Request('http://localhost/api/commissioner/leagues/league-1/renew', { method: 'POST', body: '{}' })
+    const res = await POST(req as any, { params: Promise.resolve({ leagueId: 'league-1' }) })
+    expect(res.status).toBe(409)
+    const json = await res.json()
+    expect(json.error).toBe('imported_league')
+    expect(json.message).toMatch(/Renew it there — AllFantasy picks up the new season on its own/)
+    expect(leagueUpdateMock).not.toHaveBeenCalled()
+  })
+
   it('advances season and preserves C2C settings when commissioner continues to next year', async () => {
     const { POST } = await import('@/app/api/commissioner/leagues/[leagueId]/renew/route')
 

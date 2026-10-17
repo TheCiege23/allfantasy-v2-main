@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Blah — Players &amp; waivers</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./af-shell.css">
+<link rel="stylesheet" href="./draft-sleek.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500;700;800&amp;display=swap" rel="stylesheet">
+<style>body{margin:0;background:#07080d}a{color:#22d3ee}a:hover{color:#67e8f9}</style>
+</helmet>
+<div class="af">
+  <nav class="rail" aria-label="Your leagues">
+    <a class="rail-home" href="#" aria-label="All leagues home">AF</a>
+    <div class="rail-sep"></div>
+    <sc-for list="{{rail}}" as="l" hint-placeholder-count="7">
+      <button class="{{l.cls}}" onClick="{{l.pick}}" aria-label="{{l.name}}">
+        <span class="rl-pill"></span>
+        <span class="av" style="background: {{l.bg}}; color: {{l.fg}}; box-shadow: 0 0 0 2px #0b0d14, 0 0 0 3.5px {{l.ring}}">{{l.ini}}<span class="av-tag" style="background: {{l.tagBg}}; color: {{l.tagFg}}">{{l.tag}}</span><sc-if value="{{l.unread}}" hint-placeholder-val="{{ false }}"><span class="av-dot">{{l.unread}}</span></sc-if></span>
+        <span class="rl-score" style="color: {{l.ring}}">{{l.mini}}</span>
+        <span class="rl-tip"><span style="font: 600 14px/1.2 'Archivo', sans-serif; color: #eef0fa">{{l.name}}</span><span style="font: 500 11px/1.3 'JetBrains Mono', monospace; color: #989fc2">{{l.meta}}</span><span style="font: 700 11px/1.3 'Archivo', sans-serif; color: {{l.ring}}">{{l.status}}</span></span>
+      </button>
+    </sc-for>
+    <div class="rail-sep"></div>
+    <button class="rail-add" aria-label="Create or import a league"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+  </nav>
+
+  <nav class="snav" aria-label="League sections">
+    <a class="nv" href="#">‹ All leagues</a>
+    <div style="display: flex; align-items: center; gap: 10px; margin: 10px 0 4px; padding: 12px; border-radius: 12px; background: #10131c; border: 1px solid rgba(255,255,255,.07)">
+      <span class="av" style="width: 36px; height: 36px; font-size: 14px; background: #10131c; color: #22d3ee; border: 1px solid rgba(255,255,255,.13)">B</span>
+      <span style="display: flex; flex-direction: column; gap: 5px"><span style="font-weight: 600; font-size: 14px">Blah</span><span class="lbl" style="color: #34d399">Wk 5 · 3–1</span></span>
+    </div>
+    <sc-for list="{{nav}}" as="n" hint-placeholder-count="16">
+      <sc-if value="{{n.head}}" hint-placeholder-val="{{ false }}"><span class="lbl nv-h">{{n.label}}</span></sc-if>
+      <sc-if value="{{n.link}}" hint-placeholder-val="{{ true }}"><a class="{{n.cls}}" href="{{n.href}}" style="{{n.style}}">{{n.label}}<sc-if value="{{n.count}}" hint-placeholder-val="{{ false }}"><span class="nv-c">{{n.count}}</span></sc-if></a></sc-if>
+    </sc-for>
+  </nav>
+
+  <div class="mainc">
+    <header class="topb">
+      <button class="viewing"><span class="lbl">Viewing</span>Blah<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+      <label class="search"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><input type="text" placeholder="Find a player or jump to a league" aria-label="Search"><span class="kbd">⌘K</span></label>
+      <div style="flex: 1"></div>
+      <span class="chip chip-af">● Live on AF</span><span class="num" style="font-size: 11px; color: #989fc2">NFL WK 5</span>
+    </header>
+
+    <div class="wrap" style="display: flex; flex-direction: column; gap: 22px">
+      <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap">
+        <div style="display: flex; flex-direction: column; gap: 8px"><span class="lbl">Blah · Players</span><h1 class="h1">Players &amp; waivers</h1></div>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap">
+          <span class="chip">Waivers run Wed 3:00 AM ET</span><span class="chip chip-af">FAAB $86 left</span><span class="chip">Priority 7 of 12</span>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center">
+        <div class="seg" role="tablist" aria-label="List"><sc-for list="{{lists}}" as="v" hint-placeholder-count="4"><button role="tab" class="{{v.cls}}" onClick="{{v.pick}}">{{v.label}}</button></sc-for></div>
+        <div class="seg" role="radiogroup" aria-label="Position"><sc-for list="{{posf}}" as="v" hint-placeholder-count="7"><button role="radio" aria-checked="{{v.on}}" class="{{v.cls}}" onClick="{{v.pick}}">{{v.label}}</button></sc-for></div>
+        <label class="search" style="max-width: 280px; border-color: rgba(255,255,255,.13)"><input type="text" placeholder="Search players" aria-label="Search players"></label>
+      </div>
+
+      <div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start">
+        <section class="card" style="flex: 999 1 620px; min-width: 0; overflow-x: auto">
+          <table style="width: 100%; min-width: 680px; border-collapse: collapse; font-size: 14px">
+            <thead>
+              <tr class="lbl" style="text-align: left">
+                <th scope="col" style="padding: 16px 20px; font-weight: 700">Player</th>
+                <th scope="col" style="padding: 16px 8px; font-weight: 700; text-align: right">Rost%</th>
+                <th scope="col" style="padding: 16px 8px; font-weight: 700; text-align: right">Wk 5 proj</th>
+                <th scope="col" style="padding: 16px 8px; font-weight: 700; text-align: right">AF trend</th>
+                <th scope="col" style="padding: 16px 8px; font-weight: 700">Status</th>
+                <th scope="col" style="padding: 16px 20px"><span style="position: absolute; left: -9999px">Action</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              <sc-for list="{{players}}" as="p" hint-placeholder-count="10">
+                <tr style="border-top: 1px solid rgba(255,255,255,.05)">
+                  <td style="padding: 10px 20px"><div style="display: flex; align-items: center; gap: 12px"><span class="pos p-{{p.pos}}">{{p.pos}}</span><span style="display: flex; flex-direction: column; gap: 4px"><span style="font-weight: 700">{{p.name}}</span><span class="num" style="font-size: 11px; color: #989fc2">{{p.team}} · {{p.game}}</span></span></div></td>
+                  <td class="num" style="padding: 10px 8px; text-align: right; color: #c3c9e6">{{p.rost}}</td>
+                  <td class="num" style="padding: 10px 8px; text-align: right; font-weight: 600">{{p.proj}}</td>
+                  <td class="num" style="padding: 10px 8px; text-align: right; font-weight: 700; color: {{p.trendColor}}">{{p.trend}}</td>
+                  <td style="padding: 10px 8px"><span class="{{p.stCls}}">{{p.st}}</span></td>
+                  <td style="padding: 10px 20px; text-align: right"><button class="btn btn-sm {{p.btnCls}}" onClick="{{p.pick}}">{{p.btn}}</button></td>
+                </tr>
+              </sc-for>
+            </tbody>
+          </table>
+        </section>
+
+        <aside style="flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 24px">
+          <section class="card" style="padding: 20px; display: flex; flex-direction: column; gap: 12px">
+            <div style="display: flex; justify-content: space-between; align-items: center"><span class="lbl">Your claims</span><span class="num" style="font-size: 12px; color: #989fc2">${{bidTotal}} bid</span></div>
+            <sc-for list="{{claims}}" as="c" hint-placeholder-count="2">
+              <div style="padding: 12px; border-radius: 12px; background: #0b0d14; border: 1px solid rgba(255,255,255,.07); display: flex; flex-direction: column; gap: 10px">
+                <div style="display: flex; align-items: center; gap: 10px">
+                  <span class="num" style="width: 18px; font-weight: 600; color: #22d3ee">{{c.order}}</span>
+                  <span style="flex: 1; display: flex; flex-direction: column; gap: 3px"><span style="font-weight: 600; font-size: 14px">Add {{c.name}}</span><span style="font-size: 12px; color: #989fc2">Drop {{c.drop}}</span></span>
+                  <button class="iconbtn" style="width: 34px; height: 34px" aria-label="Remove claim" onClick="{{c.remove}}">×</button>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px">
+                  <label class="lbl" for="bid-{{c.order}}">Bid</label>
+                  <input id="bid-{{c.order}}" class="num" type="text" value="${{c.bid}}" style="width: 80px; height: 36px; padding: 0 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,.13); background: #07080d; color: #eef0fa; font-size: 13px">
+                  <span style="font-size: 12px; color: #7d84a8">AF suggests ${{c.suggest}}</span>
+                </div>
+              </div>
+            </sc-for>
+            <span style="font-size: 12px; line-height: 1.5; color: #7d84a8">Highest bid wins; ties go to waiver priority. Claims run in the order shown.</span>
+          </section>
+          <section class="card" style="padding: 20px; display: flex; flex-direction: column; gap: 8px">
+            <span class="lbl" style="margin-bottom: 6px">Last waiver run · Wed</span>
+            <div style="font-size: 13px; color: #c3c9e6">Open Team 5 added <strong>Kendre Miller</strong> · $14</div>
+            <div style="font-size: 13px; color: #c3c9e6">You added <strong>Rashid Shaheed</strong> · $9</div>
+          </section>
+        </aside>
+      </div>
+    </div>
+  </div>
+  <button class="fab" aria-label="Ask Chimmy"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></button>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1500}}'>
+class Component extends DCLogic {
+  constructor(p) {
+    super(p);
+    this.state = { league: 'blah', list: 'avail', pos: 'ALL',
+      claims: [['Tank Bigsby','Tyjae Spears',12,11], ['Tucker Kraft','Dallas Goedert',4,6]] };
+  }
+  shell(active) {
+    const G = '#34d399', R = '#fb5b78', C = '#22d3ee';
+    const L = [
+      ['blah','Blah','B','#10131c',C,'AF',G,'3–1','2nd · 2 claims pending','2026 · 12-team redraft · Half PPR',3,true],
+      ['parbur','Parbur','P','#1f2a4d','#9fd4ff','SLP',G,'88–71','Winning · Wk 5','2026 · 12-team redraft · PPR',0],
+      ['horse','Four Horsemen All-Stars 2023','4H','#12352a','#7ff0c4','SLP',R,'62–80','Losing · Wk 5','2026 · 4-team dynasty',0],
+      ['koth','KOTH','K','#3a2410','#f0b46a','SLP',G,'101–93','Winning · Wk 5','2026 · 10-team redraft',16],
+      ['pirate','Pirate League!','PL','#3a1d55','#dcb4ff','SLP',R,'70–74','Losing · Wk 5','2026 · 14-team redraft',13],
+      ['guil','Guillotine League 26','GL','#4a1414','#ffb4b4','SLP',G,'8TH','+35.9 over the cut','2026 · 14-team guillotine',0],
+      ['elim','Elimination Station 2','ES','#123244','#7fd4f0','SLP',G,'8TH','+17.5 over the cut','2026 · 14-team guillotine',0]
+    ];
+    const rail = L.map(([id,name,ini,bg,fg,tag,ring,mini,status,meta,unread,nat]) => ({ id,name,ini,bg,fg,tag,ring,mini,status,meta,unread,
+      tagBg: nat ? C : '#2a2f4a', tagFg: nat ? '#04050c' : '#c3c9e6',
+      cls: 'rl' + (this.state.league === id ? ' rl-on' : ''), pick: () => this.setState({ league: id }) }));
+    const H = label => ({ head: true, link: false, label });
+    const A = (id, label, href, count, style) => ({ head: false, link: true, label, href, count: count || 0, style: style || '', cls: 'nv' + (id === active ? ' nv-on' : '') });
+    const nav = [H('This league'), A('home','League home','Main.dc.html'), A('team','My team','Lineup.dc.html'), A('matchup','Matchup','Matchup.dc.html'),
+      A('players','Players & waivers','Waivers.dc.html', 2), A('trades','Trades','Trades.dc.html', 1), A('draft','Draft HQ','MockSetup.dc.html'), A('stand','Standings & playoffs','Standings.dc.html'),
+      A('chat','League chat','Chat.dc.html', 3), A('commish','Commissioner','Commissioner.dc.html', 0, 'color:#f6c445'),
+      H('This week'), A('war','War Room','#'), A('live','Live scores','#', 12), A('outlook','Season Outlook','#'),
+      H('Your record'), A('career','Your career','#'), A('rank','Rankings','#')];
+    return { rail, nav };
+  }
+  renderVals() {
+    const st = this.state;
+    const lists = [['avail','Available'],['watch','Watchlist'],['trend','Trending'],['claims','My claims']].map(([id,label]) => ({ label,
+      cls: 'sg' + (st.list === id ? ' sg-on' : ''), pick: () => this.setState({ list: id }) }));
+    const posf = ['ALL','QB','RB','WR','TE','K','DEF'].map(p => ({ label: p, on: st.pos === p ? 'true' : 'false',
+      cls: 'sg' + (st.pos === p ? ' sg-on' : ''), pick: () => this.setState({ pos: p }) }));
+    const P = [
+      ['Tank Bigsby','RB','JAX','@ KC · Sun 1:00 PM','38%','11.2','+14',true],
+      ["Wan'Dale Robinson",'WR','NYG','@ PHI · Sun 1:00 PM','41%','10.6','+9',false],
+      ['Tucker Kraft','TE','GB','vs DET · Sun 4:25 PM','46%','9.4','+11',true],
+      ['Jalen McMillan','WR','TB','vs ATL · Thu · Final','22%','8.1','+6',false],
+      ['Bo Nix','QB','DEN','@ LV · Sun 4:05 PM','35%','17.2','+4',false],
+      ['Jaylen Wright','RB','MIA','vs NE · Sun 1:00 PM','19%','7.9','+8',true],
+      ['Xavier Legette','WR','CAR','@ NO · Sun 1:00 PM','27%','8.4','−3',false],
+      ['Chig Okonkwo','TE','TEN','vs IND · Sun 1:00 PM','12%','6.1','+2',false],
+      ['Jason Myers','K','SEA','vs ARI · Sun 4:05 PM','30%','8.0','0',false],
+      ['Commanders D/ST','DEF','WAS','vs CLE · Sun 1:00 PM','33%','7.6','+5',false]
+    ];
+    const claimed = st.claims.map(c => c[0]);
+    const players = P.filter(r => st.pos === 'ALL' || r[1] === st.pos).map(([name,pos,team,game,rost,proj,trend,waiver]) => {
+      const has = claimed.includes(name);
+      return { name, pos, team, game, rost, proj, trend,
+        trendColor: trend.startsWith('+') ? '#34d399' : trend.startsWith('−') ? '#fb5b78' : '#989fc2',
+        st: waiver ? 'Waivers · Wed' : 'Free agent', stCls: waiver ? 'chip chip-warn' : 'chip chip-good',
+        btn: has ? 'Claimed' : waiver ? 'Claim' : 'Add', btnCls: has ? 'btn-g' : 'btn-p',
+        pick: () => { if (!has) this.setState({ claims: [...st.claims, [name, 'Jordan Love', 1, 3]] }); } };
+    });
+    const claims = st.claims.map(([name, drop, bid, suggest], i) => ({ order: i + 1, name, drop, bid, suggest,
+      remove: () => this.setState({ claims: st.claims.filter((_, k) => k !== i) }) }));
+    const bidTotal = st.claims.reduce((t, c) => t + c[2], 0);
+    return { ...this.shell('players'), lists, posf, players, claims, bidTotal };
+  }
+}
+</script>
+</body>
+</html>

@@ -28,9 +28,9 @@ export async function readInjuryClaims(
     .findMany({
       where: { sport, playerName: { in: names } },
       orderBy: { fetchedAt: 'desc' },
-      select: { playerName: true, team: true, status: true, description: true, date: true, fetchedAt: true },
+      select: { playerName: true, team: true, status: true, description: true, date: true, fetchedAt: true, expiresAt: true },
     })
-    .catch(() => [] as Array<{ playerName: string; team: string | null; status: string | null; description: string | null; date: Date | null; fetchedAt: Date }>)
+    .catch(() => [] as Array<{ playerName: string; team: string | null; status: string | null; description: string | null; date: Date | null; fetchedAt: Date; expiresAt: Date | null }>)
 
   const clubByName = new Map<string, string | null>()
   for (const p of players) clubByName.set(p.name.trim().toLowerCase(), normalizeTeamAbbrev(p.team))

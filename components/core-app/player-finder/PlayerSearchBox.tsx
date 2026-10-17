@@ -41,6 +41,8 @@ import { PlayerAvatar, TeamLogo } from '@/components/core-app/player-finder/Play
 export type SearchHit = {
   /** SportsPlayer.externalId, when the API is new enough to send it; the link degrades to a name search without it. */
   externalId?: string | null
+  /** The feed that minted `externalId`; the ref carries it because ids collide across feeds (playerRef.ts). */
+  source?: string | null
   sleeperId: string | null
   name: string
   sport: string
@@ -56,7 +58,7 @@ const MIN_CHARS = 2
 const LIMIT = 8
 
 function hitHref(h: SearchHit, leagueParam: string, compareWith: string | null | undefined, query: string): string {
-  const ref = h.externalId ? playerRef(h.sport, h.externalId) : null
+  const ref = h.externalId ? playerRef(h.sport, h.externalId, h.source) : null
   if (compareWith) {
     // A second name beside the first: the open player stays, the hit becomes `vs`.
     const vs = ref ? `&vs=${encodeURIComponent(ref)}` : ''

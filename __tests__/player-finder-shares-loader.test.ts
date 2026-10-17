@@ -34,7 +34,7 @@ vi.mock('@/lib/core-app/playerDepth', () => ({ loadLeagueValueMap: mockValueMap 
 import { loadPlayerShares } from '@/lib/core-app/playerShares'
 import { loadLeagueShareView } from '@/lib/core-app/playerSharesLeague'
 
-const catalog = (id: string, name: string, team = 'NYG') => ({ sleeperId: id, sport: 'NFL', externalId: `x-${id}`, name, position: 'WR', team, imageUrl: null })
+const catalog = (id: string, name: string, team = 'NYG') => ({ sleeperId: id, sport: 'NFL', externalId: `x-${id}`, source: 'rolling_insights', name, position: 'WR', team, imageUrl: null })
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -84,6 +84,9 @@ describe('loadPlayerShares', () => {
       ['200', 1, 1],
     ])
     expect(out.data.rows.some((r) => r.player.sleeperId === '999' || r.player.sleeperId === '5555')).toBe(false)
+    // The card ref names the row's feed; it is selected, not a second query.
+    expect(out.data.rows[0]!.player.source).toBe('rolling_insights')
+    expect(db.playerFindMany.mock.calls.some(([a]: any[]) => a?.select?.externalId && a.select.source === true)).toBe(true)
   })
 
   it('flags the hurt and stays quiet about the healthy', async () => {

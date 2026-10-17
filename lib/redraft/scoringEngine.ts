@@ -203,6 +203,9 @@ function togglesFromSportConfig(sc: SportConfigBlob): string[] {
   return t
 }
 
+/** A league's own scoring, resolved once: raw stat line (and the player's position) to fantasy points. */
+export type LeagueStatScorer = (rawStats: Record<string, number>, position?: string | null) => number
+
 /**
  * Config-driven fantasy points from raw weekly stats — uses SportConfig + league `settings.sportConfig` overrides.
  */
@@ -218,10 +221,23 @@ export async function calculateScoreFromSportConfig(
     select: { sport: true, settings: true },
   })
   if (!league) return 0
+  const scorer = buildLeagueStatScorer(league)
+  if (!scorer) return calculateFantasyPoints(rawStats, [] as unknown as SportConfig['statCategories'], undefined)
+  return scorer(rawStats, position)
+}
 
+/**
+ * The scoring `calculateScoreFromSportConfig` applies, resolved ONCE for a league so many stat lines can be
+ * scored without re-reading the league per player — a trade grade scores a whole projection board. Null
+ * when the sport has no config. `settings: null` scores on the sport's defaults (no league).
+ *
+ * Moved out of `calculateScoreFromSportConfig` unchanged (2026-10-09): the weekly matchup engine and the
+ * trade grade must score a stat line the same way, so they share this rather than a copy.
+ */
+export function buildLeagueStatScorer(league: { sport: string; settings: unknown }): LeagueStatScorer | null {
   const sport = resolveSportConfigKey(String(league.sport))
   const cfg = tryGetSportConfig(sport)
-  if (!cfg) return calculateFantasyPoints(rawStats, [] as unknown as SportConfig['statCategories'], undefined)
+  if (!cfg) return null
 
   const sc = readSportConfig(league)
   const toggles = togglesFromSportConfig(sc)
@@ -253,8 +269,9 @@ export async function calculateScoreFromSportConfig(
   if (cfg.sport === 'NCAAF' && overrides.te_premium !== undefined && !categories.some(c => c.key === 'te_premium')) {
     categories = [...categories, cfg.scoringCategories.find(c => c.key === 'te_premium')!]
   }
-  const effectiveStats = applyTePremiumStat(categories, rawStats, position)
-  return scoreStatsWithCategories(categories, effectiveStats, overrides)
+  const resolved = categories
+  return (rawStats, position) =>
+    scoreStatsWithCategories(resolved, applyTePremiumStat(resolved, rawStats, position), overrides)
 }
 
 /**

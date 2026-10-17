@@ -11,6 +11,7 @@ import { prisma } from '@/lib/prisma'
 import { recordDashboardActivation } from '@/lib/analytics/recordDashboardActivation'
 import { getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-league-list'
 import { toPlayedLeagues } from '@/lib/core-app/playedLeagues'
+import { archivedLeagueIds, withArchivedHidden } from '@/lib/core-app/archivedLeagues'
 import { tradeDeadlineWeek } from '@/lib/core-app/seasonTimeline'
 import { findPlayedAlias } from '@/lib/core-app/leagueRowAlias'
 import { selectResyncCandidates } from '@/lib/core-app/resyncableLeagues'
@@ -85,9 +86,13 @@ import { getFinderLeaguePicks } from '@/lib/core-app/finderLeaguePicksStore'
 import { getLeaguePreferences } from '@/lib/core-app/leaguePreferencesStore'
 import { hasSmsConsent } from '@/lib/sms/smsConsent'
 import { shouldShowTeamFollowPrompt } from '@/lib/follows/teamFollows'
+import { followKeyFor, isFollowingPlayer } from '@/lib/follows/playerFollows'
+import { loadWeeklyMvp } from '@/lib/core-app/weeklyMvp'
+import { loadTrendingFreeIn } from '@/lib/core-app/trendingFree'
 import { teamFollowPromptSport } from '@/lib/follows/teamFollowPromptSport'
 import { applyLeagueOrder } from '@/lib/core-app/leaguePreferences'
 import { listRecentPlayerSearches, recordRecentPlayerSearch } from '@/lib/core-app/recentPlayerSearches'
+import { loadTrendingAdds } from '@/lib/core-app/trendingAdds'
 import ScreenLoadError from '@/components/core-app/ScreenLoadError'
 import { getMyTeamData } from '@/lib/core-app/myTeam'
 import MyTeamBoard from '@/components/core-app/MyTeamBoard'
@@ -196,6 +201,7 @@ import YourWeekLeague from '@/components/core-app/screens/YourWeekLeague'
 import SeasonOutlook from '@/components/core-app/screens/SeasonOutlook'
 import { getSeasonOutlook } from '@/lib/core-app/seasonOutlook'
 import { buildWeeklyBlueprint } from '@/lib/core-app/weeklyBlueprint'
+import { getWeeklyScheduleForecasts } from '@/lib/core-app/weeklyScheduleForecastLoader'
 import { getWeeklyCalendar } from '@/lib/core-app/weeklyCalendarLoader'
 import { readWeeklyPlayoffPath } from '@/lib/core-app/weeklyPlayoffPath'
 import { WeeklyBlueprint } from '@/components/core-app/WeeklyBlueprint'
@@ -222,6 +228,7 @@ import CommissionerHub from '@/components/core-app/screens/CommissionerHub'
 import { getCommissionerHub } from '@/lib/core-app/commissionerHub'
 import { resolveServerRenderPreferences } from '@/lib/preferences/ServerRenderPreferenceResolver'
 import { resolveCorePaywall } from '@/lib/core-app/corePaywall'
+import { loadDailyStreak } from '@/lib/core-app/dailyStreakStore'
 import type { LaunchOfferView } from '@/lib/monetization/foundingMember'
 import { homeLaunchOfferFor } from '@/components/launch/homeLaunchOffer'
 import { LaunchOfferStrip } from '@/components/launch/LaunchOfferStrip'
@@ -267,7 +274,8 @@ import CoreScreenSkeleton from '@/components/core-app/CoreScreenSkeleton'
 import { CoreScreenArea } from '@/components/core-app/coreNavPending'
 import CoreScreenErrorBoundary from '@/components/core-app/CoreScreenErrorBoundary'
 import { PublishShellSignals, type ShellUrgencyBadges } from '@/components/core-app/shellSignals'
-import { recordCompletedSpan, recordRootDuration } from '@/lib/observability/rootTiming'
+import { recordCompletedSpan, recordRootDuration, recordRootNumber } from '@/lib/observability/rootTiming'
+import { loopBusyPctSince, markLoop } from '@/lib/observability/loopBusy'
 import { CoreHomeCards, emptyHomeLoads, type HomeLoads } from '@/components/core-app/home/HomeCards'
 import { ConnectLeagueCard } from '@/components/core-app/home/ConnectLeagueCard'
 import { traceCard } from '@/lib/observability/cardTelemetry'
@@ -676,6 +684,8 @@ export default async function AfCorePage({
 
   // `af.shell_ms` on the request's root span measures from here to "the shell has everything".
   const shellStartedAt = Date.now()
+  // And `af.loop.busy_shell_pct`: how busy the thread was over that same window (lib/observability/loopBusy.ts).
+  const shellLoopMark = markLoop()
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string; email?: string | null } } | null
   const userId = session?.user?.id
   if (!userId) {
@@ -781,6 +791,13 @@ export default async function AfCorePage({
    * Copying the two lines would have put two implementations of one rule in the tree.
    */
   const playedLeagues = toPlayedLeagues(leagues)
+  /*
+   * Archived leagues leave the rail and the scope switcher but stay in `playedLeagues`, which is the
+   * `?league=` authorization boundary below — so a link to one still opens (lib/core-app/archivedLeagues.ts).
+   */
+  const shellHiddenIds = withArchivedHidden(leaguePrefs.hidden, playedLeagues)
+  // Archived leagues also stay out of both league searches; leagues the account hid stay searchable.
+  const shellArchivedIds = archivedLeagueIds(playedLeagues)
   const selectedLeagueRow = selectedLeagueId
     ? (playedLeagues.find((league) => league.id === selectedLeagueId) ?? null)
     : null
@@ -1475,10 +1492,11 @@ export default async function AfCorePage({
     label: scopeLabel(homeScope, selectedScopeLabel),
     favoriteIds: [...favoriteIds],
     leagues: scopeLeagues,
-    hiddenIds: leaguePrefs.hidden,
+    hiddenIds: shellHiddenIds,
   }
 
   recordRootDuration('af.shell_ms', shellStartedAt)
+  recordRootNumber('af.loop.busy_shell_pct', loopBusyPctSince(shellLoopMark))
   try{const durationMs=Math.max(0,Date.now()-shellStartedAt);if(durationMs>=2500)console.info('[core-shell-timing]',JSON.stringify({durationMs}))}catch{/* Diagnostics cannot fail the shell. */}
 
   /*
@@ -1618,7 +1636,8 @@ export default async function AfCorePage({
       leagueFirst={leagueFirst}
       leagueChatPreview={leagueChatPreview}
       leagues={rail}
-      hiddenLeagueIds={leaguePrefs.hidden}
+      hiddenLeagueIds={shellHiddenIds}
+      archivedLeagueIds={shellArchivedIds}
       syncAge={{ label: syncAge.label, stale: syncAge.stale }}
       syncEligibleCount={syncEligibleCount}
       leagueHasScoredWeek={leagueHasScoredWeek}
@@ -2479,6 +2498,8 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             : null,
         })
       : []
+  // Most added this week — one aggregate for every viewer, cached 15 minutes (trendingAdds.ts).
+  const trendingAdds = activeKey === 'players' ? await loadTrendingAdds().catch(() => null) : null
 
   /*
    * Game-day home (2026-09-06): your flagged starters across every league,
@@ -2495,8 +2516,46 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * (no player open). With a league held, the same players are also read IN that league: who has
    * each one there, his value there (AF Pro), and his season points under its scoring.
    */
-  const playerShares =
-    activeKey === 'players' && userId && !playerDetail ? await loadPlayerShares(userId, finderLeagueIds).catch(() => null) : null
+  /*
+   * "Following" on the finder home (2026-10-08, "My players"): the players you follow — status, next
+   * game, and the leagues of yours where he is unclaimed — read in the same wave as the shares board.
+   * Null when follows are unavailable, which hides the board. The same leagues the finder reads.
+   */
+  const finderLeagueSet = new Set(finderLeagueIds)
+  const finderLeagueRefs = playedLeagues
+    .filter((l) => finderLeagueSet.has(l.id))
+    .map((l) => ({
+      id: l.id,
+      name: l.name,
+      platform: String((l as { platform?: string | null }).platform ?? ''),
+      sport: (l as { sport?: string | null }).sport ?? null,
+    }))
+  /*
+   * Also on the home, in the same wave (2026-10-08): last week's MVP for the share card
+   * (weeklyMvp.ts), and where each "Most added" player is still free in YOUR leagues
+   * (trendingFree.ts) — the rail's "Free in 9 of yours · add" line. Each fails to null, which
+   * hides only its own piece.
+   */
+  const trendingIds = trendingAdds?.rows.map((r) => r.sleeperId) ?? []
+  const [playerShares, playerFollowing, weeklyMvp, trendingFreeIn] =
+    activeKey === 'players' && userId && !playerDetail
+      ? await Promise.all([
+          loadPlayerShares(userId, finderLeagueIds).catch(() => null),
+          getFollowingCard(userId, new Date(), finderLeagueRefs).catch(() => null),
+          loadWeeklyMvp(userId).catch(() => null),
+          trendingIds.length > 0 ? loadTrendingFreeIn(userId, finderLeagueRefs, trendingIds).catch(() => null) : Promise.resolve(null),
+        ])
+      : [null, null, null, null]
+  /*
+   * The open card's "Alert me" state (2026-10-08): is this player followed? `null` = follows are
+   * unavailable (or the read failed), and the button is then not offered — a bell that cannot save
+   * is worse than none.
+   */
+  const openPlayerFollowKey = playerDetail ? followKeyFor(playerDetail.player) : null
+  const followingOpenPlayer =
+    activeKey === 'players' && userId && playerDetail && openPlayerFollowKey
+      ? await isFollowingPlayer(userId, playerDetail.player.sport, openPlayerFollowKey).catch(() => null)
+      : null
   const playerLeagueShares =
     playerShares?.available && selectedLeagueId && userId
       ? await loadLeagueShareView(userId, selectedLeagueId, playerShares.data.rows, {
@@ -3020,6 +3079,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         gameId: liveGame.detail.gameId,
         homeAbbrev: liveGame.detail.home.abbrev,
         awayAbbrev: liveGame.detail.away.abbrev,
+        upcoming: liveGame.detail.status?.state === 'pre',
       })
     : null
 
@@ -3053,6 +3113,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           userId,
           sport: typeof sp.sport === 'string' ? sp.sport : liveDefaultSport,
           scope: sp.scope === 'all' ? 'all' : 'my',
+          top25: sp.t25 === 'off' ? 'off' : 'on',
         }).catch((err) => {
           /*
            * ⚠ LOG IT. A bare `.catch(() => null)` here is what made the
@@ -3343,6 +3404,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
     lineups: ctx.weekLineups, favoriteIds: ctx.favoriteIds, focusLeagueId: selectedLeagueId, now: ctx.now,
     commissionerLeagueIds: playedLeagues.filter(l => l.isCommissioner).map(l => l.id),
   }) : null
+  if(weeklyBlueprint)weeklyBlueprint.scheduleForecasts=await getWeeklyScheduleForecasts(myTeamPulse,weekLeagues.filter(l=>!selectedLeagueId||l.id===selectedLeagueId).map(l=>l.id),ctx.now).catch(()=>[])
   // Snapshots are keyed by period, so they follow the plan's period: keyed on the board's FINISHED
   // week, the Tuesday estimate overwrote the one saved before that week was played.
   const weeklyPathPeriod = weeklyBlueprint?.matchup?.leagueId === selectedLeagueId && weeklyBlueprint?.matchup?.season === weekBoard?.leagueBoard?.season
@@ -3722,10 +3784,6 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
          */
         let tradesFailed = false
         let tradesIncomplete = false
-        // The pending-offers cache write the trade scan fires — see `offersSettled` below.
-        let offersRecorded: Promise<unknown> = Promise.resolve()
-        // Only a Sleeper identity makes the scan report offers at all, and only a report writes the row.
-        const scanWillRecordOffers = Boolean(leagueListPayload?.sleeperUserId)
         const trades = traceCard('trades', () =>
           tradeWeek.then((currentWeek) =>
             getRecentTrades(
@@ -3753,7 +3811,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
                  * 10-minute freshness rule, and recording it must never slow the home.
                  */
                 onPendingOffers: (scanned) => {
-                  offersRecorded = recordPendingOffers(userId, scanned, now).catch(() => undefined)
+                  void recordPendingOffers(userId, scanned, now).catch(() => undefined)
                 },
                 // Every way this read can come back partial — see the flag above, and the loader's
                 // own note on the three permanent bounds it deliberately does NOT report.
@@ -3767,28 +3825,8 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           tradesFailed = true
           return []
         })
-        /*
-         * ⚠ THE TAB BADGES WAIT FOR THIS, NOT FOR THE SUMMARY ALONE. `getUrgencyBadges` and
-         * `recordPendingOffers` each read the one `core-urgency` cache row and write it back WHOLE.
-         * When the badges ran after every home read, the offers write had a head start; running
-         * independently, either could overwrite the other — dropping the new offers, or restoring an
-         * old lineup count. The badges stream, so no card waits for this.
-         *
-         * ⚠ BUT ONLY WHEN A WRITE IS ACTUALLY COMING. Without a Sleeper identity the scan reports
-         * nothing and writes nothing, so waiting on it would put the slowest read on the page in
-         * front of the badges for no reason at all.
-         *
-         * ⚠ AND THERE IS A THIRD WRITER, safe today only by sequencing: lib/core-app/leagueHome.ts
-         * also calls `recordPendingOffers` on the `/core?league=<id>` path. Nothing orders it against
-         * these two except that `leagueHome` is awaited long before this runs. Move either read into
-         * the streaming set and it is the same clobber.
-         *
-         * The real fix is for all three to stop sharing a row they each rewrite whole — a
-         * field-scoped write, so none can clobber another and the badges need not wait.
-         */
-        const offersSettled = scanWillRecordOffers
-          ? trades.then(() => offersRecorded).then(() => undefined)
-          : Promise.resolve()
+        // Lineup counts use their own cache key, so tab badges can stream without
+        // waiting for trade enrichment or the pending-offers write.
 
         // A fresh array per reader, as each had before: neither can see what the other does to its input.
         const routineLeagues = () =>
@@ -4069,9 +4107,27 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
            */
           regularSeason: traceCard('regular-season', () => hasRegularSeasonStarted('NFL')).catch(() => false),
           trades,
+          /*
+           * The trade band's "why this grade" line is the Trade Center's paid depth (trade_depth,
+           * AF Pro) — the letter stays free, the reason is the breakdown. Read only on the home and
+           * never blocking a card: a failed lookup locks the line rather than the band.
+           */
+          /*
+           * The daily check-in streak. Recorded on the same condition as the "since your last visit"
+           * marker — a real, unfiltered home visit — so a prefetch never keeps a streak alive.
+           */
+          streak: traceCard('streak', () =>
+            loadDailyStreak(userId, now, { record: homeRecordVisit && !homeScoped }),
+          ).catch(() => null),
+          tradeDepth: traceCard('trade-depth', () =>
+            resolveCorePaywall(userId, { email: viewerEmail, now }).then((p) => p.trade_depth),
+          ).catch(() => null),
+          // AF Pro on the triage card: the best-free-agent button and Questionable game-time calls.
+          playerDepth: traceCard('player-depth', () =>
+            resolveCorePaywall(userId, { email: viewerEmail, now }).then((p) => p.player_depth),
+          ).catch(() => null),
           brief,
           drafts,
-          offersSettled,
         }
       })()
 
@@ -4248,9 +4304,9 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * shell on their own (`ScreenShellSignals`, below) and the screen renders without them.
    */
   const urgencyBadges = traceCard('urgency-badges', () =>
-    // On the home: after the summary AND the trade scan's pending-offers write — see `offersSettled`.
+    // On the home, reuse the summary without waiting for the trade card.
     (homeLoads
-      ? Promise.all([homeLoads.dash34, homeLoads.offersSettled]).then(([summary]) => summary)
+      ? homeLoads.dash34
       : Promise.resolve(dash34)
     ).then((summary) =>
       getUrgencyBadges({
@@ -4923,6 +4979,10 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           leagueCount={finderScope.count}
           selectedLeagueId={selectedLeagueId}
           shares={playerShares}
+          following={playerFollowing}
+          followingPlayer={followingOpenPlayer}
+          weeklyMvp={weeklyMvp}
+          trendingFreeIn={trendingFreeIn}
           leagueShares={playerLeagueShares}
           pickLeagues={playedLeagues.map((l) => ({ id: l.id, name: String(l.name ?? 'League'), platform: (l as { platform?: string | null }).platform ?? null }))}
           savedPicks={finderScope.picked ? finderLeagueIds : null}
@@ -4934,6 +4994,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           matchupOutlook={matchupOutlook}
           leagueView={playerLeagueView}
           recent={recentPlayerSearches}
+          trendingAdds={trendingAdds}
           tradeVisual={playerTradeVisual}
           presence={playerPresence}
           windows={playerWindows.length > 0 ? playerWindows : null}
@@ -5107,7 +5168,19 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             backHref={`/core/live?sport=${encodeURIComponent(liveGameSport)}${selectedLeagueId ? `&league=${encodeURIComponent(selectedLeagueId)}` : ''}`}
           />
         ) : liveScores ? (
-          <LiveScores data={liveScores} selectedLeagueId={selectedLeagueId} matchupStrip={liveMatchupStrip} />
+          <LiveScores
+            data={liveScores}
+            selectedLeagueId={selectedLeagueId}
+            matchupStrip={liveMatchupStrip}
+            leagueWeek={{
+              byLeague: ctx.weekLineups?.byLeague ?? null,
+              leagues: playedLeagues.map((l) => ({
+                id: l.id,
+                name: String(l.name ?? 'League'),
+                sport: normalizeToLiveSport(String(l.sport ?? 'NFL')),
+              })),
+            }}
+          />
         ) : (
           <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
             <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>

@@ -17,6 +17,7 @@ import type { CoreIssue } from './outstandingIssues'
 import type { CoreDepthAccess } from './coreDepthAccess'
 import { isScored } from './currentWeek'
 import { platformLabel, verifiedHandoff } from './platformLinks'
+import { followsRenewalAutomatically } from '@/lib/league-import/sleeper/followRenewedLeagues'
 import { leagueWeekFromSettings, playoffStartWeek, regularSeasonWeeks, tradeDeadlineWeek } from './seasonTimeline'
 import {
   abandonedTeamsFlag,
@@ -855,6 +856,7 @@ export async function getCommissionerHub(input: {
     leagueId,
     platformLabel: platformName,
     native,
+    followsRenewal: followsRenewalAutomatically(platform),
     status: league.status,
     season: league.season,
     draftAt: draftSettings?.draftDateUtc ?? null,

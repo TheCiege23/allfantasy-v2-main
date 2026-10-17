@@ -137,7 +137,7 @@ describe('the original grade is frozen once and shown everywhere', () => {
     const buzz = await gradeSleeperActivityTrade({ afLeagueId: AF(), tx: TX as never, rosterNames: new Map([[1, 'A'], [2, 'B']]), players: PLAYERS, now: NOW.getTime() })
     expect(buzz).toEqual({
       graded: true, basis: 'first-graded', sides: [{ name: 'A', letter: email.letter }, { name: 'B', letter: email.partnerLetter }],
-      moment: { frozenAt: email.frozenAt, frozenBasis: email.frozenBasis, pricedAsOf: email.pricedAsOf, tradeAt: email.tradeAt },
+      moment: { frozenAt: email.frozenAt, frozenBasis: email.frozenBasis, pricedAsOf: email.pricedAsOf, tradeAt: email.tradeAt, guillotine: false },
     })
 
     // 5 — the band before the ledger has the trade: original letters, and today's named where it moved.

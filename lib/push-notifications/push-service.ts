@@ -11,6 +11,14 @@ import { IOS_ENDPOINT_PREFIX, isIosEndpoint, isValidDeviceToken, sendApns } from
 
 let vapidConfigured = false
 
+/** Conversation alerts: a new one on the same tag should buzz, not silently replace. */
+const CHAT_PUSH_TYPES: ReadonlySet<string> = new Set(["direct_message", "huddle_message", "mention", "league_chat_message"])
+
+/** Whether a web push should alert again when it replaces a notification with the same tag. PURE. */
+export function shouldRenotify(type: string | null | undefined, tag: string | null | undefined): boolean {
+  return Boolean(tag) && CHAT_PUSH_TYPES.has(String(type))
+}
+
 function ensureVapid() {
   if (vapidConfigured) return
   const publicKey = process.env.VAPID_PUBLIC_KEY?.trim()
@@ -123,6 +131,12 @@ async function sendToSubscription(
     href,
     url: href,
     tag: payload.tag ?? undefined,
+    /*
+     * A chat alert reuses its conversation's tag, so the 10-minute re-alert REPLACED the old
+     * notification without a sound or buzz (`renotify` defaults to false in public/sw.js). For a
+     * conversation the new message is the point, so it alerts again.
+     */
+    ...(shouldRenotify(payload.type, payload.tag) ? { renotify: true } : {}),
     type: payload.type ?? "notification",
     leagueId: payload.leagueId ?? null,
     // public/sw.js already passes `payload.image` to showNotification; Android shows it large.

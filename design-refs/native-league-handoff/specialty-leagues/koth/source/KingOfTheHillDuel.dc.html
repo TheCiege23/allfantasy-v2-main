@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>The challenge</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./specialty/sp.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Cinzel:wght@600;700&amp;family=Caveat:wght@600;700&amp;family=Bebas+Neue&amp;family=Pirata+One&amp;family=Creepster&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080d}
+.kh-c{font-family:'Cinzel',serif;letter-spacing:.05em}
+.kh-duel{flex:1 1 260px;display:flex;flex-direction:column;align-items:center;gap:8px;padding:20px;border-radius:16px;background:#10131c;border:1px solid rgba(255,255,255,.08);position:relative}
+.kh-wk{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px}
+.kh-wk span.sp-av{width:38px;height:38px}
+.kh-crown{position:absolute;width:86px;top:-52px;left:50%;margin-left:-43px;z-index:3;transition:transform 1s cubic-bezier(.5,-0.3,.4,1.3);filter:drop-shadow(0 10px 14px rgba(0,0,0,.6))}
+.kh-moved .kh-crown{transform:translateX(var(--dx))}
+.kh-arena{position:relative;display:flex;gap:120px;justify-content:center;padding-top:70px}
+.kh-p{position:relative;width:300px;display:flex;flex-direction:column;align-items:center;gap:10px;padding:26px 18px;border-radius:18px;background:#10131c;border:1px solid rgba(255,255,255,.08);transition:border-color .5s,background .5s}
+</style>
+</helmet>
+<div class="sp" style="--acc: #8b5cf6; --acc2: #f2c94c; --accInk: #fff; --disp: Cinzel; min-height: 100vh; display: flex; flex-direction: column">
+<header style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 18px 28px; border-bottom: 1px solid rgba(255,255,255,.06)">
+  <a class="sp-btn" href="KingOfTheHillHome.dc.html" aria-label="Back" style="padding: 0 12px">‹</a>
+  <div style="flex: 1 1 320px; display: flex; flex-direction: column; gap: 3px"><h1 class="sp-h1">The challenge · week 6</h1><span class="sp-t2">The Hill · final whistle in the Monday night game</span></div>
+  <span class="sp-prop">Proposed rules · no spec in the repo yet</span>
+</header>
+<div class="sp-card {{arenaCls}}" style="margin: 24px 28px 32px; padding: 26px; display: flex; flex-direction: column; gap: 18px; background: radial-gradient(ellipse at 50% 0%, rgba(242,201,76,.14), transparent 60%), radial-gradient(ellipse at 50% 100%, rgba(139,92,246,.14), transparent 60%), #0b0d14">
+  <div style="display: flex; align-items: center; gap: 12px"><span class="sp-lbl" style="flex: 1">{{stage}}</span>
+    <sc-if value="{{canGo}}" hint-placeholder-val="{{ true }}"><button class="sp-btn sp-btn-p" onClick="{{go}}" style="min-height: 46px; padding: 0 22px">Final whistle</button></sc-if>
+    <sc-if value="{{done}}" hint-placeholder-val="{{ false }}"><button class="sp-btn" onClick="{{reset}}">Replay</button></sc-if></div>
+  <div class="kh-arena" style="--dx: 420px">
+    <div class="kh-p" style="border-color: {{kLine}}"><img class="kh-crown" src="specialty/koth/icon-crown.svg" alt="Crown"><span class="sp-lbl" style="color: #f2c94c">{{kLbl}}</span><span class="sp-av" style="width: 84px; height: 84px; font-size: 22px; background: #4a1f2c; filter: {{kF}}">O2</span><span style="font-weight: 800; font-size: 19px">Open Team 2</span><span class="sp-num" style="font-size: 40px; font-weight: 700">{{kPts}}</span></div>
+    <div class="kh-p" style="border-color: {{cLine}}; background: {{cBg}}"><span class="sp-lbl" style="color: #c4b5fd">{{cLbl}}</span><span class="sp-av" style="width: 84px; height: 84px; font-size: 22px; background: #22314f; box-shadow: 0 0 0 4px #07080d, 0 0 0 7px {{cRing}}">TC</span><span style="font-weight: 800; font-size: 19px">TheCiege26</span><span class="sp-num" style="font-size: 40px; font-weight: 700; color: {{cPc}}">{{cPts}}</span></div>
+  </div>
+  <span class="kh-c" style="text-align: center; font-size: 24px; font-weight: 700; color: {{lineC}}">{{line}}</span>
+  <span class="sp-t2" style="text-align: center; font-size: 13px">{{sub}}</span>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":640}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { d: false }; }
+  renderVals() { const d = this.state.d;
+    return { arenaCls: d ? 'kh-moved' : '', canGo: !d, done: d, go: () => this.setState({ d: true }), reset: () => this.setState({ d: false }),
+      stage: d ? 'Final' : 'Monday night · both managers have one player left',
+      kLbl: d ? 'Former King' : 'The King · 3 weeks', kPts: d ? '124.1' : '118.6', kF: d ? 'grayscale(.7) brightness(.8)' : 'none', kLine: d ? 'rgba(255,255,255,.08)' : 'rgba(242,201,76,.55)',
+      cLbl: d ? 'The new King' : 'Challenger', cPts: d ? '131.7' : '121.9', cPc: d ? '#f2c94c' : '#e8eaf2', cRing: d ? '#f2c94c' : '#8b5cf6', cLine: d ? 'rgba(242,201,76,.6)' : 'rgba(139,92,246,.45)', cBg: d ? 'rgba(242,201,76,.08)' : '#10131c',
+      line: d ? 'TheCiege26 takes the Hill' : 'The crown is on the line', lineC: d ? '#f6e3a8' : '#c4b5fd',
+      sub: d ? 'Won the challenge 131.7 to 124.1. You defend next week against whoever posts week 6’s top score.' : 'If the challenger finishes ahead, the crown moves over. Ties go to the King.' };
+  }
+}
+</script>
+</body>
+</html>

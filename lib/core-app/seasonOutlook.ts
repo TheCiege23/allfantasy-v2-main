@@ -23,6 +23,8 @@ import {
   type SimTeam,
 } from './outlookSim'
 import { readPlayoffFormat, type FormatSource } from './outlookFormat'
+import { liveWeeks, withLiveScores } from './outlookLiveShare'
+import { lineupShareKey, loadLineupBoards, type LineupShareTarget } from './outlookLiveWeekLoader'
 import {
   computeLeagueSim,
   leagueSimCost,
@@ -701,7 +703,51 @@ export async function loadOutlookInputs(userId: string, leagues: LeagueInput[], 
     })
   }
 
+  await attachLiveBoards(prepared, sportOf)
   return { prepared, withheld, nameByRoster, myRosters, sportOf }
+}
+
+/**
+ * A week under way enters the simulation as its board: points already scored, plus a draw for each
+ * lineup's share still to play (`withLiveScores`). NFL only — the starter game states come from the
+ * NFL schedule. A league-week that cannot be read keeps the old whole-week draw and says so.
+ *
+ * Here rather than at the page, because the scheduled pre-compute reads through this same function:
+ * the two must never hash different inputs for the same league.
+ */
+async function attachLiveBoards(prepared: Prepared[], sportOf: ReadonlyMap<string, string>): Promise<void> {
+  const targets = new Map<Prepared, LineupShareTarget[]>()
+  for (const p of prepared) {
+    const platformLeagueId = p.league.platformLeagueId
+    if (!platformLeagueId || String(sportOf.get(p.league.id) ?? p.league.sport ?? '').toUpperCase() !== 'NFL') continue
+    /*
+     * The earliest unplayed week is always read too: the live tick writes its per-player points
+     * minutes after kickoff, while its matchup rows can still read zero until the league's matchup
+     * sync next runs. A week nobody has scored in yet reads no board and stays an unplayed draw.
+     */
+    const current = p.sim.remaining.reduce((m, g) => Math.min(m, g.week), Number.POSITIVE_INFINITY)
+    const weeks = [...new Set([...liveWeeks(p.sim.remaining, p.unscored), ...(Number.isFinite(current) ? [current] : [])])]
+    if (weeks.length) targets.set(p, weeks.map((week) => ({ platformLeagueId, season: p.season, week })))
+  }
+  if (targets.size === 0) return
+  const boards = await loadLineupBoards([...targets.values()].flat())
+  for (const [p, list] of targets) {
+    const key = new Map(list.map((t) => [t.week, lineupShareKey(t)]))
+    const board = (week: number, rosterId: string) => boards.get(key.get(week) ?? '')?.get(rosterId)
+    const { games, attached, unread } = withLiveScores(
+      p.sim.remaining,
+      p.unscored,
+      (week, rosterId) => board(week, rosterId)?.share,
+      (week, rosterId) => board(week, rosterId)?.points,
+    )
+    p.sim = { ...p.sim, remaining: games }
+    for (const w of new Set(attached)) {
+      p.missing.push(`Week ${w} is under way: points already scored count, and only the share of each lineup still to play is simulated (a starter whose game cannot be read is judged by whether it has points yet; a lineup mostly unreadable is simulated as unplayed).`)
+    }
+    for (const w of new Set(unread)) {
+      p.missing.push(`Week ${w} has started, but not every lineup could be read starter by starter, so those games are simulated as if unplayed.`)
+    }
+  }
 }
 
 export async function getSeasonOutlook(

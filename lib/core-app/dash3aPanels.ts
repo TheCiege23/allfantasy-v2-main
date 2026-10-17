@@ -180,10 +180,11 @@ export async function getCrossLeagueExposure(
             platformUserId: { in: rosterCandidates(t, userId) },
           })),
         },
-        select: { leagueId: true, playerData: true, league: { select: { platform: true } } },
+        select: { leagueId: true, playerData: true, league: { select: { platform: true, sport: true } } },
       })
       .catch(fellBack),
     (r) => r.league?.platform,
+    (r) => r.league?.sport,
   )
 
   if (rosters.length === 0) {
@@ -204,7 +205,7 @@ export async function getCrossLeagueExposure(
     if (seen.has(r.leagueId)) continue
     seen.add(r.leagueId)
     rostersRead += 1
-    if (isForeignIdSpace(r.league?.platform)) foreignRead += 1
+    if (isForeignIdSpace(r.league?.platform, r.league?.sport)) foreignRead += 1
 
     // A Fleaflicker/MFL/Fantrax/Yahoo id collides with a real Sleeper id; such a roster
     // still counts toward the denominator (so "every roster" stays honest) but names nobody.

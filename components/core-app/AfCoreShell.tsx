@@ -18,6 +18,10 @@ import { AfCrest } from '@/components/core-app/AfCrest'
 import { CoreNavIcon } from '@/components/core-app/CoreNavIcon'
 import { LeagueMark } from '@/components/core-app/LeagueMark'
 import SyncNowButton from '@/components/core-app/SyncNowButton'
+import LeagueSwipe from '@/components/core-app/LeagueSwipe'
+import PullToRefresh from '@/components/core-app/PullToRefresh'
+import { useLineupAutoSync } from '@/components/core-app/useLineupAutoSync'
+import { LEAGUE_SWIPE_SCREENS } from '@/lib/core-app/leagueSwipe'
 import PlayerCardProvider from '@/components/core-app/player-card/PlayerCardProvider'
 import { COMMS_OPEN_EVENT, SUPPORT_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
 import { isCoreSurfaceKey } from '@/lib/core-app/coreSurface'
@@ -281,6 +285,11 @@ export type AfCoreShellProps = {
    * and the selected one still resolves. The open league is never dropped.
    */
   hiddenLeagueIds?: string[]
+  /**
+   * Archived leagues (lib/core-app/archivedLeagues.ts). Unlike `hiddenLeagueIds`, these stay out of
+   * the league SEARCHES too (the top bar and the scope switcher) — except the open league.
+   */
+  archivedLeagueIds?: string[]
   /**
    * This week's matchup per league id, for the expanded rail.
    *
@@ -1304,6 +1313,9 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
   const [publishedSignals, setPublishedSignals] = useState<ShellSignals | null>(null)
   const props = useMemo(() => withPublishedSignals(incoming, publishedSignals), [incoming, publishedSignals])
   const router = useRouter()
+  // A lineup set on the platform reaches these screens without a button press — on opening the
+  // app, coming back to it, and opening a league. See lib/core-app/lineupAutoSync.ts.
+  useLineupAutoSync(props.selectedLeagueId)
   const sections = useMemo(() => navSections(props), [props])
   const mobileItems = useMemo(() => {
     const byKey = new Map(navItems(props).map((i) => [i.key, i]))
@@ -1684,6 +1696,11 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
     [leagues, hiddenLeagueKey, props.selectedLeagueId],
   )
   const hiddenRailCount = leagues.length - railLeagues.length
+  const archivedLeagueKey = (props.archivedLeagueIds ?? []).join('.')
+  const searchLeagues = useMemo(
+    () => withoutHidden(leagues, archivedLeagueKey ? archivedLeagueKey.split('.') : [], props.selectedLeagueId ?? null),
+    [leagues, archivedLeagueKey, props.selectedLeagueId],
+  )
   const railRows = useMemo(() => groupLeagueHubs(railLeagues), [railLeagues])
   const railLabels = useMemo(() => distinctLeagueLabels(railRows.filter((l) => !l.hub)), [railRows])
   const selectedLeague = leagues.find((league) => league.id === props.selectedLeagueId)
@@ -2240,6 +2257,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
               favoriteIds={props.scope.favoriteIds}
               leagueScreen={isLeagueScreen(active)}
               hiddenIds={props.scope.hiddenIds}
+              archivedIds={props.archivedLeagueIds}
             />
           ) : null}
           {props.leagueFirst ? (
@@ -2282,7 +2300,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
               ) : null}
             </Link>
           ) : null}
-          <TopSearch leagues={leagues} />
+          <TopSearch leagues={searchLeagues} />
 
           <div className="af-topbar-right">
             {props.isAdmin ? (
@@ -2381,7 +2399,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             where they land, not where they have to go looking.
           */}
           {active === 'home' ? (
-            <SyncNowButton variant="panel" eligibleCount={syncEligibleCount} />
+            <SyncNowButton variant="panel" eligibleCount={syncEligibleCount} syncAge={syncAge} totalLeagues={leagues.length} />
           ) : null}
           {/*
             The player card pop-up (design handoff 2026-09-07, STATE 6/7), mounted
@@ -2397,6 +2415,22 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             its own league through `PlayerCardLeagueScope`, which is why this
             mount takes no `leagueId` — the shell does not know one.
           */}
+          {/*
+            Swipe between leagues on a phone (2026-10-08): the pager row plus the gesture on this
+            content area. Phone layout only, only with a league selected and somewhere to go, and
+            only on league-scoped screens (LEAGUE_SWIPE_SCREENS) — never a draft room or the desk.
+          */}
+          {/*
+            Pull to refresh on a phone (2026-10-08): reloads this screen's data in place, and starts
+            the league sync too when the shell's own sync age says the leagues are stale.
+          */}
+          {phoneLayout ? <PullToRefresh syncStale={syncAge.stale && syncEligibleCount !== 0} /> : null}
+          {phoneLayout && props.selectedLeagueId && leagues.length > 1 && LEAGUE_SWIPE_SCREENS.has(active) ? (
+            <LeagueSwipe
+              leagues={leagues.map((l) => ({ id: l.id, name: l.name, imageUrl: l.imageUrl ?? null, mark: l.mark }))}
+              selectedLeagueId={props.selectedLeagueId}
+            />
+          ) : null}
           <ShellSignalsContext.Provider value={setPublishedSignals}>
             <CoreNavPendingContext.Provider value={navPending != null}>
               <PlayerCardProvider>{children}</PlayerCardProvider>

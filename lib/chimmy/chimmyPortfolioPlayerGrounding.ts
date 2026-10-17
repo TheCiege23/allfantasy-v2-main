@@ -290,7 +290,7 @@ export async function buildPortfolioPlayerGrounding(args: {
     if (seenPlayers.has(identityKey)) continue
     seenPlayers.add(identityKey)
 
-    const detail = await getPlayerDetail(playerRef(match.sport, match.externalId), userLeagueIds, userId).catch(
+    const detail = await getPlayerDetail(playerRef(match.sport, match.externalId, match.source), userLeagueIds, userId).catch(
       () => null,
     )
     if (!detail) continue

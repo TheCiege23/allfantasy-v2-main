@@ -18,6 +18,7 @@ import { sleeperReadableRosters, rosterIdSpaceOf } from './rosterIdSpace'
 import { isTeamEliminated } from './teamElimination'
 import { getLeagueTypeMedia, resolveLeagueCardTypeKey } from '@/lib/league-media/leagueTypeMedia'
 import { availableFilter, boardFilterOptions, matchesBoardFilter, type BoardFilter, type BoardFilterOption } from './myTeamBoardFilter'
+import { injuryClaimAsOf } from '@/lib/injuries/matchInjuryRows'
 
 /**
  * My team pulse — the cross-league landing at `/core/my-team`.
@@ -115,7 +116,7 @@ export type MyTeamRow = {
   coverageReason?: string | null
   automatic?: boolean
   readAt?: string | null
-  players?: Array<{ id: string; name: string; status: string | null; kickoff: string | null; onBye: boolean; starter: boolean; opponents: number }>
+  players?: Array<{ id: string; name: string; team?: string | null; position?: string | null; status: string | null; kickoff: string | null; onBye: boolean; starter: boolean; opponents: number }>
   leagueId: string
   leagueName: string
   platform: string
@@ -489,14 +490,14 @@ async function loadMyTeamPulse(
   }
 
   // Translate only the selected, eligible owned rosters in one identity-map read.
-  const readable = await timing.read('identities', () => sleeperReadableRosters(selected, r => r.claim.league.platform))
+  const readable = await timing.read('identities', () => sleeperReadableRosters(selected, r => r.claim.league.platform, r => r.claim.league.sport))
   for (const { claim: c, playerData: readablePd } of readable) {
     const l = c.league
     const bestBall = l.bestBallMode === true || l.leagueVariant === 'best_ball' || isBestBallSettings(l.settings)
     const { ids, empty } = startersOf(readablePd)
     if (ids.length === 0 && empty === 0) {
       /* Stripped, not absent: "no starting lineup on file" would be false for a foreign league. */
-      if (rosterIdSpaceOf(l.platform) !== 'sleeper') notChecked.idsUnreadable++
+      if (rosterIdSpaceOf(l.platform, l.sport) !== 'sleeper') notChecked.idsUnreadable++
       else notChecked.noLineup++
       continue
     }
@@ -551,13 +552,14 @@ async function loadMyTeamPulse(
   const players = await timing.read('players', () => prisma.sportsPlayer
     .findMany({
       where: { sleeperId: { in: everyStarter } },
-      select: { sleeperId: true, name: true, team: true, sport: true },
+      select: { sleeperId: true, name: true, team: true, sport: true, position: true, expiresAt: true },
+      orderBy: { fetchedAt: 'desc' },
     }))
 
-  const playerBy = new Map<string, { name: string; team: string | null }>()
+  const playerBy = new Map<string, { name: string; team: string | null; forecastTeam: string | null; position: string | null }>()
   for (const p of players) {
     if (!p.sleeperId || playerBy.has(`${p.sport ?? 'NFL'}:${p.sleeperId}`)) continue
-    playerBy.set(`${p.sport ?? 'NFL'}:${p.sleeperId}`, { name: p.name, team: p.team })
+    playerBy.set(`${p.sport ?? 'NFL'}:${p.sleeperId}`, { name: p.name, team: p.team, forecastTeam: p.expiresAt > now ? p.team : null, position: p.position })
   }
 
   const sports = [...new Set(pending.map((p) => p.sport))]
@@ -574,9 +576,14 @@ async function loadMyTeamPulse(
   const injuriesPromise = timing.read('injuries', async () => names.length
     ? await prisma.sportsInjury
         .findMany({
-          where: { sport: { in: sports }, playerName: { in: names.flatMap(injuryNameVariants), mode: 'insensitive' } },
+          // Only rows a feed still carries: a healed player drops off the reports, he is not cleared.
+          where: {
+            sport: { in: sports },
+            playerName: { in: names.flatMap(injuryNameVariants), mode: 'insensitive' },
+            expiresAt: { gt: new Date() },
+          },
           orderBy: { fetchedAt: 'desc' },
-          select: { sport: true, playerName: true, status: true, team: true },
+          select: { sport: true, playerName: true, status: true, team: true, date: true, fetchedAt: true },
         })
         : [])
 
@@ -630,13 +637,17 @@ async function loadMyTeamPulse(
   })
   const [injuries] = await Promise.all([injuriesPromise, schedulePromise])
 
-  /* Preserve newest-first order across name aliases; resolve club matches per player. */
-  const injuryByName = new Map<string, Array<{ status: string | null; team: string | null }>>()
+  /* Newest CLAIM first across name aliases (not newest fetch: a re-pulled Friday report is not
+     Sunday's news); resolve club matches per player. */
+  const injuryByName = new Map<string, Array<{ status: string | null; team: string | null; date: Date | null; fetchedAt: Date }>>()
   for (const i of injuries) {
     const k = `${i.sport}:${injuryNameKey(i.playerName)}`
     const list = injuryByName.get(k) ?? []
     list.push(i)
     injuryByName.set(k, list)
+  }
+  for (const list of injuryByName.values()) {
+    list.sort((a, b) => injuryClaimAsOf(b).getTime() - injuryClaimAsOf(a).getTime())
   }
 
   /* ── 6. One row per checked lineup. ────────────────────────────────────── */
@@ -710,7 +721,7 @@ async function loadMyTeamPulse(
         const player = playerBy.get(`${p.sport}:${id}`)
         if (!player) return []
         const club = normalizeTeamAbbrev(player.team)
-        return [{ id, name: player.name, status: archived ? null : injuryByName.get(`${p.sport}:${injuryNameKey(player.name)}`)?.find(injury => !club || !injury.team || normalizeTeamAbbrev(injury.team) === club)?.status ?? null, kickoff: archived ? null : (club ? kickoffs.get(club) : null)?.toISOString() ?? null, onBye: archived ? false : byeIds?.has(id) ?? false, starter: p.ids.includes(id), opponents: 0 }]
+        return [{ id, name: player.name, team: player.forecastTeam, position: player.position, status: archived ? null : injuryByName.get(`${p.sport}:${injuryNameKey(player.name)}`)?.find(injury => !club || !injury.team || normalizeTeamAbbrev(injury.team) === club)?.status ?? null, kickoff: archived ? null : (club ? kickoffs.get(club) : null)?.toISOString() ?? null, onBye: archived ? false : byeIds?.has(id) ?? false, starter: p.ids.includes(id), opponents: 0 }]
       }),
       leagueId: p.leagueId,
       leagueName: p.leagueName,

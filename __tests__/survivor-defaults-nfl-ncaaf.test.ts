@@ -16,7 +16,7 @@ describe('isSurvivorEligibleSport', () => {
   it('returns true for NFL', () => expect(isSurvivorEligibleSport('NFL')).toBe(true))
   it('returns true for NCAAF', () => expect(isSurvivorEligibleSport('NCAAF')).toBe(true))
   it('returns true for lowercase nfl', () => expect(isSurvivorEligibleSport('nfl')).toBe(true))
-  it('returns false for NBA', () => expect(isSurvivorEligibleSport('NBA')).toBe(false))
+  it('returns true for NBA', () => expect(isSurvivorEligibleSport('NBA')).toBe(true))
   it('returns false for null', () => expect(isSurvivorEligibleSport(null)).toBe(false))
   it('returns false for empty string', () => expect(isSurvivorEligibleSport('')).toBe(false))
 })
@@ -97,7 +97,7 @@ describe('getSurvivorDefaultContract — NFL', () => {
   })
 
   // Exile settings
-  it('exileSettings: exileEnabled = true', () => expect(contract.survivorStructure.exileSettings.exileEnabled).toBe(true))
+  it('exileSettings: exile is enabled by default', () => expect(contract.survivorStructure.exileSettings.exileEnabled).toBe(true))
   it('exileSettings: automationStatus = pending (Phase 2)', () => {
     expect(contract.survivorStructure.exileSettings.exileAutomationStatus).toBe('pending')
   })
@@ -165,7 +165,7 @@ describe('getSurvivorDefaultContract — NFL', () => {
   })
 
   it('returns null for unsupported sport', () => {
-    expect(getSurvivorDefaultContract({ sport: 'NBA' })).toBeNull()
+    expect(getSurvivorDefaultContract({ sport: 'MLB' })).toBeNull()
   })
 })
 
@@ -229,7 +229,7 @@ describe('buildSurvivorSettingsSnapshot — NFL', () => {
   it('challenge_automation_status = pending', () => expect(snap.challenge_automation_status).toBe('pending'))
   it('tribal_council_enabled = true', () => expect(snap.tribal_council_enabled).toBe(true))
   it('voting_automation_status = pending', () => expect(snap.voting_automation_status).toBe('pending'))
-  it('exile_enabled = true', () => expect(snap.exile_enabled).toBe(true))
+  it('exile_enabled is enabled by default', () => expect(snap.exile_enabled).toBe(true))
   it('exile_automation_status = pending', () => expect(snap.exile_automation_status).toBe('pending'))
   it('idols_enabled = true', () => expect(snap.idols_enabled).toBe(true))
   it('idol_count = 24', () => expect(snap.idol_count).toBe(24))
@@ -240,7 +240,7 @@ describe('buildSurvivorSettingsSnapshot — NFL', () => {
   it('has creationPlan block', () => expect(snap.creationPlan).toBeDefined())
 
   it('returns null for unsupported sport', () => {
-    expect(buildSurvivorSettingsSnapshot({ sport: 'NBA' })).toBeNull()
+    expect(buildSurvivorSettingsSnapshot({ sport: 'MLB' })).toBeNull()
   })
 })
 

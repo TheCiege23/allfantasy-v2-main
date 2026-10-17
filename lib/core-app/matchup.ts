@@ -664,7 +664,7 @@ export async function getMatchupData(
   const lookupIds = [
     ...new Set(
       scoreIds
-        .map((id) => sleeperLookupId(league.platform, id, sleeperIdByRosterId))
+        .map((id) => sleeperLookupId(league.platform, id, sleeperIdByRosterId, sport))
         .filter((x): x is string => x != null),
     ),
   ]
@@ -676,7 +676,7 @@ export async function getMatchupData(
             where: { sleeperId: { in: lookupIds } },
             // `sport` is required by `composePlayerIdentities` — it gates the NFL-only
             // club fold, and omitting it would silently leave every club unfolded.
-            select: { sleeperId: true, name: true, position: true, team: true, sport: true, imageUrl: true },
+            select: { sleeperId: true, name: true, position: true, team: true, sport: true, imageUrl: true, source: true, fetchedAt: true },
           })
           .catch(() => [])
       : Promise.resolve([]),
@@ -709,7 +709,7 @@ export async function getMatchupData(
    */
   const identityBy = new Map<string, ComposedPlayerIdentity>()
   for (const rosterId of scoreIds) {
-    const lookup = sleeperLookupId(league.platform, rosterId, sleeperIdByRosterId)
+    const lookup = sleeperLookupId(league.platform, rosterId, sleeperIdByRosterId, sport)
     const row = lookup ? bySleeperId.get(lookup) : undefined
     if (row) identityBy.set(rosterId, row)
   }
@@ -896,7 +896,7 @@ export async function getMatchupData(
        * folded key below is a real Sleeper id rather than a passed-through
        * roster id.
        */
-      sleeperId: identity ? sleeperLookupId(league.platform, entry.playerId, sleeperIdByRosterId) : null,
+      sleeperId: identity ? sleeperLookupId(league.platform, entry.playerId, sleeperIdByRosterId, sport) : null,
       name: identity?.name ?? null,
       position: displayPosition(identity?.position),
       /*
@@ -917,7 +917,7 @@ export async function getMatchupData(
       gameState: gameStateOf(entry),
       /* Only alongside a player who is still available — "OUT" already says the rest. */
       injury: !entry.unavailable && identity
-        ? atRisk[sleeperLookupId(league.platform, entry.playerId, sleeperIdByRosterId) ?? ''] ?? null
+        ? atRisk[sleeperLookupId(league.platform, entry.playerId, sleeperIdByRosterId, sport) ?? ''] ?? null
         : null,
       ...fixtureOf(normalizeTeamAbbrev(identity?.team)),
     }

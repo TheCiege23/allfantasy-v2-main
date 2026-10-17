@@ -18,4 +18,5 @@ export type {
   SurvivorScreenshotsPolicy,
   SurvivorTribeAssignmentMode,
   SurvivorVoteChangePolicy,
+  SurvivorTieRule,
 } from './survivorSettings'

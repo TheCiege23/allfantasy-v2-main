@@ -10,6 +10,8 @@
  *
  *   trade_date    "at the time of the trade (Sep 14)"
  *   first_graded  "from Sep 30, 2026, 16 days after the trade (no market record from the trade date)"
+ *                 — or, for a guillotine grade, "… (guillotine lineup and FAAB values)": it was never
+ *                 priced on a market, so a missing market record is not why it is first-graded.
  *   (v1 / legacy) "when first graded Sep 30" — an original nothing has yet checked against the
  *                 stored market, so it must not claim there is no record from the trade date.
  *   live          "today"
@@ -24,7 +26,35 @@ export type GradeMomentInput = {
   frozenBasis?: 'trade_date' | 'first_graded' | null
   pricedAsOf?: string | null
   tradeAt?: string | null
+  /** Priced on the guillotine basis — set by `gradeMomentOf`, or read from the grade's own lines. */
+  guillotine?: boolean | null
+  lines?: ReadonlyArray<{ valueSource?: string | null }> | null
 }
+
+/** The fields `gradeMomentOf` keeps — enough for `gradeMoment` to say the same thing later. */
+export type GradeMomentFields = {
+  frozenAt: string | null
+  frozenBasis: 'trade_date' | 'first_graded' | null
+  pricedAsOf: string | null
+  tradeAt: string | null
+  guillotine: boolean
+}
+
+/**
+ * A guillotine grade (lineup points and FAAB's purchasing power, never the market chart) is always
+ * first-graded — no record of a league's rosters and wire on the trade date exists — so "no market
+ * record from the trade date" would describe a market it was never priced on.
+ */
+function onGuillotine(grade: GradeMomentInput | null | undefined): boolean {
+  if (typeof grade?.guillotine === 'boolean') return grade.guillotine
+  const lines = grade?.lines ?? []
+  return lines.length > 0 && lines.every((l) => l.valueSource === 'guillotine_points' || l.valueSource === 'guillotine_faab')
+}
+
+const GUILLOTINE_NOTE_EN = '(guillotine lineup and FAAB values)'
+const GUILLOTINE_NOTE_ES = '(valores de guillotina: alineación y FAAB)'
+const MARKET_NOTE_EN = '(no market record from the trade date)'
+const MARKET_NOTE_ES = '(no hay registro del mercado de la fecha del traspaso)'
 
 const EN_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const
 const ES_MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'] as const
@@ -71,9 +101,10 @@ export function gradeMoment(grade: GradeMomentInput | null | undefined, language
   if (grade?.frozenBasis === 'first_graded' && traded) {
     const priced = dayOf(grade.pricedAsOf) ?? frozen
     const after = afterTrade(Math.max(0, Math.round(serial(priced) - serial(traded))), es)
+    const g = onGuillotine(grade)
     return es
-      ? `del ${fmt(priced, true, true)}, ${after} (no hay registro del mercado de la fecha del traspaso)`
-      : `from ${fmt(priced, false, true)}, ${after} (no market record from the trade date)`
+      ? `del ${fmt(priced, true, true)}, ${after} ${g ? GUILLOTINE_NOTE_ES : MARKET_NOTE_ES}`
+      : `from ${fmt(priced, false, true)}, ${after} ${g ? GUILLOTINE_NOTE_EN : MARKET_NOTE_EN}`
   }
 
   // A v1 original, or one whose trade time is unknown: when it was first graded, and nothing more.
@@ -81,12 +112,13 @@ export function gradeMoment(grade: GradeMomentInput | null | undefined, language
 }
 
 /** The fields `gradeMoment` reads, picked off a grade — for a surface that carries a compact copy. */
-export function gradeMomentOf(grade: GradeMomentInput | null | undefined): Required<GradeMomentInput> {
+export function gradeMomentOf(grade: GradeMomentInput | null | undefined): GradeMomentFields {
   return {
     frozenAt: grade?.frozenAt ?? null,
     frozenBasis: grade?.frozenBasis ?? null,
     pricedAsOf: grade?.pricedAsOf ?? null,
     tradeAt: grade?.tradeAt ?? null,
+    guillotine: onGuillotine(grade),
   }
 }
 
@@ -106,10 +138,11 @@ export function gradeMomentToSpanish(english: string): string | null {
     const d = esDate(atTrade[1]!, atTrade[2]!)
     return d ? `en la fecha del traspaso (${d})` : null
   }
-  const from = /^from ([A-Z][a-z]{2}) (\d{1,2}), (\d{4}), (?:the day of the trade|(\d+) days? after the trade) \(no market record from the trade date\)$/.exec(english)
+  const from = /^from ([A-Z][a-z]{2}) (\d{1,2}), (\d{4}), (?:the day of the trade|(\d+) days? after the trade) \((no market record from the trade date|guillotine lineup and FAAB values)\)$/.exec(english)
   if (from) {
     const d = esDate(from[1]!, from[2]!, from[3]!)
-    return d ? `del ${d}, ${afterTrade(from[4] ? Number(from[4]) : 0, true)} (no hay registro del mercado de la fecha del traspaso)` : null
+    const note = from[5] === 'guillotine lineup and FAAB values' ? GUILLOTINE_NOTE_ES : MARKET_NOTE_ES
+    return d ? `del ${d}, ${afterTrade(from[4] ? Number(from[4]) : 0, true)} ${note}` : null
   }
   const first = /^when first graded ([A-Z][a-z]{2}) (\d{1,2})$/.exec(english)
   if (first) {

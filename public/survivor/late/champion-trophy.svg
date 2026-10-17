@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 340" width="260" height="340" role="img" aria-label="Champion trophy">
+<defs>
+<radialGradient id="tr-glow"><stop offset="0" stop-color="#ffd66b" stop-opacity=".6"/><stop offset="1" stop-color="#ffd66b" stop-opacity="0"/></radialGradient>
+<radialGradient id="tr-f" cx="50%" cy="72%" r="62%"><stop offset="0" stop-color="#fffbe0"/><stop offset=".35" stop-color="#ffd23f"/><stop offset=".75" stop-color="#ff8a1f"/><stop offset="1" stop-color="#d9401a"/></radialGradient>
+<linearGradient id="tr-g" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#6b4a12"/><stop offset=".3" stop-color="#d9b45a"/><stop offset=".5" stop-color="#fff0b8"/><stop offset=".7" stop-color="#d9b45a"/><stop offset="1" stop-color="#6b4a12"/></linearGradient>
+<linearGradient id="tr-w" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#3e220c"/><stop offset=".45" stop-color="#a8683a"/><stop offset="1" stop-color="#3e220c"/></linearGradient>
+<linearGradient id="tr-j" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7fe0c0"/><stop offset="1" stop-color="#175344"/></linearGradient>
+</defs>
+<circle cx="130" cy="96" r="120" fill="url(#tr-glow)"/>
+<ellipse cx="130" cy="326" rx="96" ry="10" fill="#000" opacity=".4"/>
+<!-- flame -->
+<path d="M130,10 C162,40 170,66 156,90 C150,74 142,70 138,58 C136,72 128,76 124,88 C118,78 112,74 108,64 C96,84 100,100 104,108 C86,96 88,60 130,10 Z" fill="url(#tr-f)" stroke="#a8401a" stroke-width="2.5" stroke-linejoin="round"/>
+<path d="M130,52 C142,66 144,82 136,96 C132,88 128,86 126,80 C122,88 118,92 116,98 C110,86 116,70 130,52 Z" fill="#fff6c8" opacity=".85"/>
+<!-- bowl -->
+<path d="M70,104 L190,104 C190,136 166,158 130,160 C94,158 70,136 70,104 Z" fill="url(#tr-g)" stroke="#1a0f06" stroke-width="4"/>
+<path d="M70,104 L190,104" stroke="#1a0f06" stroke-width="4"/>
+<path d="M78,112 h104" stroke="#1a0f06" stroke-width="2" opacity=".4"/>
+<path d="M88,118 l10,12 l10,-12 l10,12 l10,-12 l10,12 l10,-12 l10,12 l10,-12" stroke="#6b4a12" stroke-width="2.5" fill="none"/>
+<path d="M82,108 C84,128 96,144 112,150" stroke="#fff6d0" stroke-width="4" fill="none" opacity=".55" stroke-linecap="round"/>
+<!-- handles: carved hooks -->
+<path d="M70,110 C44,108 40,138 64,142" fill="none" stroke="#1a0f06" stroke-width="10" stroke-linecap="round"/>
+<path d="M70,110 C44,108 40,138 64,142" fill="none" stroke="#d9b45a" stroke-width="5" stroke-linecap="round"/>
+<path d="M190,110 C216,108 220,138 196,142" fill="none" stroke="#1a0f06" stroke-width="10" stroke-linecap="round"/>
+<path d="M190,110 C216,108 220,138 196,142" fill="none" stroke="#d9b45a" stroke-width="5" stroke-linecap="round"/>
+<!-- jade gem -->
+<path d="M130,124 l10,10 l-10,14 l-10,-14 Z" fill="url(#tr-j)" stroke="#1a0f06" stroke-width="2"/>
+<!-- carved totem stem -->
+<rect x="108" y="160" width="44" height="112" rx="6" fill="url(#tr-w)" stroke="#1a0f06" stroke-width="4"/>
+<path d="M108,176 h44" stroke="#1a0f06" stroke-width="2.5"/>
+<circle cx="121" cy="186" r="4" fill="#f2c94c"/><circle cx="139" cy="186" r="4" fill="#f2c94c"/>
+<path d="M118,194 h24 v6 h-24 Z" fill="#2a1a08"/><path d="M122,195 v4 M127,195 v4 M133,195 v4 M138,195 v4" stroke="#f3ead6" stroke-width="1.6"/>
+<path d="M112,200 l18,-8 l18,8" stroke="#f2c94c" stroke-width="2.5" fill="none"/><path d="M112,216 l18,-8 l18,8" stroke="#f2c94c" stroke-width="2.5" fill="none"/><path d="M112,232 l18,-8 l18,8" stroke="#f2c94c" stroke-width="2.5" fill="none"/><path d="M112,248 l18,-8 l18,8" stroke="#f2c94c" stroke-width="2.5" fill="none"/>
+<!-- woven base -->
+<path d="M84,272 L176,272 L192,312 L68,312 Z" fill="url(#tr-g)" stroke="#1a0f06" stroke-width="4"/>
+<path d="M80,284 h100 M76,296 h108" stroke="#6b4a12" stroke-width="2.5" stroke-dasharray="8 4"/>
+<circle cx="88" cy="300" r="5" fill="#f3ead6" stroke="#1a0f06" stroke-width="1.5"/><circle cx="109" cy="300" r="5" fill="#f3ead6" stroke="#1a0f06" stroke-width="1.5"/><circle cx="130" cy="300" r="5" fill="#f3ead6" stroke="#1a0f06" stroke-width="1.5"/><circle cx="151" cy="300" r="5" fill="#f3ead6" stroke="#1a0f06" stroke-width="1.5"/><circle cx="172" cy="300" r="5" fill="#f3ead6" stroke="#1a0f06" stroke-width="1.5"/>
+<rect x="62" y="310" width="136" height="12" rx="3" fill="#3e220c" stroke="#1a0f06" stroke-width="3"/>
+</svg>

@@ -2,7 +2,10 @@ import type { ZombieLeague, ZombieRulesDocument, ZombieRulesTemplate } from '@pr
 import { prisma } from '@/lib/prisma'
 import { getLeagueMode } from '@/lib/zombie/zombieLeagueMode'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
-import { getZombieSportConfig } from '@/lib/zombie/sportRulesConfig'
+import { DEFAULT_ENGINE_WEAPONS, getZombieSportConfig } from '@/lib/zombie/sportRulesConfig'
+import { BASH_TRANSFER_SHARE, MAUL_TRANSFER_SHARE } from '@/lib/zombie/winningsShares'
+
+const pct = (share: number) => `${Math.round(share * 100)}%`
 
 function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
@@ -34,6 +37,12 @@ function buildSections(
   const edge = tpl?.edgeCaseNotes ?? cfg.edgeCases
   const bashThresh = tpl?.bashingThreshold ?? cfg.bashingThreshold
   const maulThresh = tpl?.maulingThreshold ?? cfg.maulingThreshold
+  // The numbers getZombieRulesForSport hands the engine (weaponEngine, serumEngine), so the page and the
+  // engine cannot disagree.
+  const weapons = cfg.engineWeapons ?? DEFAULT_ENGINE_WEAPONS
+  const knifeScore = tpl?.weaponShieldThreshold ?? weapons.knifeScore
+  const bowScore = tpl?.weaponAmbushThreshold ?? weapons.bowScore
+  const reviveSerums = tpl?.reviveThreshold ?? 3
   const rosterSize = tpl?.rosterSize ?? cfg.rosterSize
   const starterCount = tpl?.starterCount ?? cfg.starterCount
   const benchCount = tpl?.benchCount ?? cfg.benchCount
@@ -53,12 +62,12 @@ function buildSections(
     'INFECTION RULES',
     '- A Survivor who loses their weekly matchup to the Whisperer becomes a Zombie.',
     '- A Survivor who loses their weekly matchup to any Zombie becomes a Zombie.',
-    '- Infection is permanent unless a Serum Antidote is used.',
+    `- A Zombie who collects ${reviveSerums} serums can use them to return as a Survivor.`,
     `- ${cfg.infectionTiming}`,
     '',
     mode === 'paid'
-      ? 'PAID: Infection transfers weekly winnings from victim to infector where configured.'
-      : `FREE: Infection transfers ${freeCurrency} from victim to infector (symbolic).`,
+      ? 'PAID: An infected Survivor\'s whole week of winnings goes to the team that infected them.'
+      : `FREE: An infected Survivor's whole week of ${freeCurrency} goes to the team that infected them (symbolic).`,
   ].join('\n')
 
   const sectionScoring = [
@@ -78,18 +87,18 @@ function buildSections(
     'Bashing result: The loser receives a public "Bashed" marker for the week.',
     '',
     mode === 'paid'
-      ? 'PAID: The loser may forfeit an additional slice of their weekly pot (commissioner settings).'
-      : `FREE: The loser may lose additional ${freeCurrency} (symbolic).`,
+      ? `PAID: The loser hands ${pct(BASH_TRANSFER_SHARE)} of their week's winnings to the winner.`
+      : `FREE: The loser hands ${pct(BASH_TRANSFER_SHARE)} of their week's ${freeCurrency} to the winner (symbolic).`,
   ].join('\n')
 
   const sectionMauling = [
     'MAULINGS',
     `A Mauling occurs when the winning team wins by ${maulThresh}+ points.`,
-    'Mauling result: Double loot transfer where enabled; mauling animation triggers.',
+    'Mauling result: The loser receives a public "Mauled" marker for the week.',
     '',
     mode === 'paid'
-      ? 'PAID: Double winnings transferred when the pot engine applies it.'
-      : `FREE: Double ${freeCurrency} transferred (symbolic); badges may be awarded.`,
+      ? `PAID: The loser hands ${pct(MAUL_TRANSFER_SHARE)} of their week's winnings to the winner — double a Bashing.`
+      : `FREE: The loser hands ${pct(MAUL_TRANSFER_SHARE)} of their week's ${freeCurrency} to the winner — double a Bashing (symbolic).`,
   ].join('\n')
 
   let sectionWinnings = ''
@@ -129,14 +138,14 @@ function buildSections(
     '@CHIMMY ACTIONS',
     'You can interact with @Chimmy for timed actions, status checks, inventory, and rules questions.',
     '@Chimmy will not reveal another player\'s private information.',
-    '@Chimmy can help with: status check, item use, ambush targets, serum timing, and rules lookups.',
+    '@Chimmy can help with: status check, inventory, serum revives, and rules lookups.',
   ].join('\n')
 
   const sectionWeeklyTiming = [
     `WEEKLY SCHEDULE — ${cfg.label}`,
     cfg.weeklySchedule,
     `Scoring window: ${scoring}`,
-    `Whisperer ambushes must respect lock rules: ${lock}`,
+    `Lineup lock: ${lock}`,
     `Challenge frequency: ${cfg.challengeFrequency}`,
     '',
     'Status changes finalize after scores are official; stat corrections may re-open a window.',
@@ -152,9 +161,7 @@ function buildSections(
   const sectionWhisperer = [
     'THE WHISPERER',
     'One team is secretly (or publicly) designated as the Whisperer at the start of the season.',
-    'The Whisperer commands the Horde and can deploy ambushes to remap matchups.',
-    'If the Whisperer is voted out or eliminated, a new Whisperer rises from the Horde.',
-    `Ambush count per week: ${z.whispererAmbushCount ?? 1}`,
+    'The Whisperer infects every Survivor it beats, and leads the Horde.',
     `Selection mode: ${z.whispererSelectionMode ?? 'random'}`,
   ].join('\n')
 
@@ -162,24 +169,22 @@ function buildSections(
     'SURVIVORS',
     'Survivors begin the season as the majority. Their goal: survive.',
     'Winning matchups keeps you alive. Losing to a Zombie or Whisperer turns you.',
-    'Serums can reverse infection. Weapons provide score advantages.',
+    'Serums bring a Zombie back. Weapons are earned by big weeks.',
     'The last Survivor(s) standing earn the Ultimate Survivor bonus (if enabled).',
   ].join('\n')
 
   const sectionZombie = [
     'THE HORDE (ZOMBIES)',
-    'Once turned, you join the Horde permanently (unless a Serum is used).',
+    `Once turned, you stay in the Horde until you collect ${reviveSerums} serums and use them.`,
     'Zombies can infect Survivors by beating them in matchups.',
     'The Horde grows each week as more Survivors fall.',
-    'Zombies earn rewards for successful infections and may earn winnings based on commissioner settings.',
+    "An infection takes the victim's whole week to the team that turned them.",
   ].join('\n')
 
   const sectionAmbush = [
     'AMBUSHES',
-    'The Whisperer can deploy ambushes to remap matchups strategically.',
-    `Ambush count per week: ${z.whispererAmbushCount ?? 1}`,
-    'Ambush types: remap (swap matchup pairings), boost (bonus to Horde team), sabotage (debuff to Survivor).',
-    'Ambushes must be set before lineup lock for the affected players.',
+    `The Whisperer starts with ${z.whispererAmbushCount ?? 1} ambushes.`,
+    'This season ambushes are tracked only — they do not change matchups or scores.',
   ].join('\n')
 
   return {
@@ -200,7 +205,11 @@ function buildSections(
           ? cfg.serumAwards.map((a) => a.label).join(', ')
           : 'no default awards configured'
       }. Commissioner can configure additional award triggers.`,
-    sectionWeapons: 'Weapons follow score thresholds and commissioner toggles. Top 2 scorers each week may earn weapons.',
+    sectionWeapons: [
+      `Weapons are earned automatically each week: a Knife for ${knifeScore}+ points, a Bow for ${bowScore}+,`,
+      `an Axe for winning by ${weapons.axeWinMargin}+, a Gun after surviving 3 Zombie attacks, and a Bomb after 5 straight wins.`,
+      'This season weapons are tracked only — they do not change scores.',
+    ].join(' '),
     sectionWinnings,
     sectionUniverseMovement: 'Universe promotion/relegation follows universe commissioner settings when enabled.',
     sectionWeeklyTiming,

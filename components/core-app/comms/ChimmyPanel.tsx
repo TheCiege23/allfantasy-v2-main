@@ -42,6 +42,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { confirmTokenSpend } from '@/lib/tokens/client-confirm'
 import { FREE_CHIMMY_QUESTIONS_PER_DAY } from '@/lib/tokens/freeChimmyQuestions'
 import '@/components/core-app/af-comms.css'
+import { ImportVerifyGate } from '@/components/core-app/import/ImportVerifyGate'
 import type { CoreSurfaceKey } from '@/lib/core-app/coreSurface'
 import ChimmyActionCard from '@/components/chimmy/ChimmyActionCard'
 import { readActionCards, type ChimmyActionCard as ChimmyActionCardData } from '@/lib/chimmy-chat/actionCards'
@@ -97,7 +98,14 @@ export type CommsLeague = {
   }
 }
 
-export const PUBLIC_ANSWER_NOTICE = 'Everyone in the league can see this answer.'
+/*
+ * 🛑 THIS SAID "Everyone in the league can see this answer." AND NOTHING EVER POSTED IT. `publicMode`
+ * only changes the transcript key and this label; no code writes the answer to league chat, so the
+ * asker was told the league saw something nobody else could. Until a deliberate "share to league"
+ * exists, the notice says what is true. (The server still keeps home signals out of this tab, which is
+ * the conservative side of the same line.)
+ */
+export const PUBLIC_ANSWER_NOTICE = 'Only you see this answer. It is about this league and is not posted to its chat.'
 
 /**
  * The only phrasing allowed when Chimmy suggests a roster change.
@@ -321,9 +329,12 @@ export function describeChimmyFailure(status: number | null, code: unknown): { m
 /** A failed ask, carrying whether a retry is worth offering. */
 class ChimmyAskError extends Error {
   readonly retryable: boolean
-  constructor(failure: { message: string; retryable: boolean }) {
+  /** The route's own code, when it sent one — VERIFICATION_REQUIRED opens the verify card. */
+  readonly code: string | null
+  constructor(failure: { message: string; retryable: boolean }, code: unknown = null) {
     super(failure.message)
     this.retryable = failure.retryable
+    this.code = typeof code === 'string' && code ? code : null
   }
 }
 
@@ -489,6 +500,21 @@ function newAnswerId(): string {
   return `a-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
 }
 
+/**
+ * A transcript turn's id — its React key, and what a later update (rating, vote, attached image)
+ * finds the turn by.
+ *
+ * 🛑 IT WAS `you-${t.length}`, AND THE THREAD IS CAPPED AT 80 (`useScopedConversation`). Past the
+ * cap the length stops growing, so every new question was `you-80` and every answer `chimmy-80` —
+ * the same key as the previous exchange still on screen. The server hands back up to 80 turns on
+ * open, so a regular user's thread starts AT the cap. React's own warning for duplicate keys is that
+ * children "may be duplicated and/or omitted", and the report was exactly that: the question
+ * appeared twice (owner, 2026-09-25).
+ */
+export function newTurnId(role: 'you' | 'chimmy'): string {
+  return `${role}-${newAnswerId()}`
+}
+
 export function readAdvice(payload: ChimmyEnvelope): ChimmyAdviceRef | null {
   const a = payload.meta?.advice
   if (!a || a.type !== 'add') return null
@@ -610,6 +636,14 @@ export function ChimmyPanel({
    * resend under a sentence about something else.
    */
   const [retryAsk, setRetryAsk] = useState<{ message: string; question: string } | null>(null)
+  /*
+   * ⚠ AN UNVERIFIED ACCOUNT CANNOT USE CHIMMY AT ALL, AND THIS WAS A SENTENCE. "Verify your email to
+   * use Chimmy — open Settings, or go to /verify" sent the person somewhere else at the moment they
+   * had a question. The same card /import uses (2026-10-11) sends the link here and, once confirmed,
+   * asks the question they typed. Measured that day: email-and-password sign-ups confirm 33 of 71,
+   * and people confirm in the first session or not at all.
+   */
+  const [verifyAsk, setVerifyAsk] = useState<{ question: string } | null>(null)
   /* Out of tokens: a card with ways to keep going, not an error line. See lib/chimmy/outOfAnswers.ts. */
   const [outOfAnswers, setOutOfAnswers] = useState<OutOfAnswers | null>(null)
   /* Fast or Deep, per user. Sent with every question; see ChimmyAnswerMode.tsx. */
@@ -659,14 +693,17 @@ export function ChimmyPanel({
    * message to insert our own is the one way this could cost someone anything.
    */
   const appliedDraftRequest = useRef<string | null>(null)
+  const [pendingScreenQuestion, setPendingScreenQuestion] = useState<{scopeKey:string;userId?:string;text:string}|null>(null)
   useEffect(() => {
-    if (!initialDraft || !conversationReady) return
+    if (!initialDraft) { setPendingScreenQuestion(null); return }
+    if (!conversationReady) return
     if (initialDraftScopeId !== undefined && initialDraftScopeId !== scopeId) return
-    const request = JSON.stringify([userId, draftRequestKey, initialDraftScopeId, initialDraft])
+    const request = JSON.stringify([userId, threadKey(scopeId), draftRequestKey, initialDraftScopeId, initialDraft])
     if (appliedDraftRequest.current === request) return
     appliedDraftRequest.current = request
-    setDraft((d) => (d.trim() ? d : initialDraft))
-  }, [initialDraft, initialDraftScopeId, draftRequestKey, scopeId, userId, conversationReady, setDraft])
+    if (draft.trim() && draft !== initialDraft) setPendingScreenQuestion({scopeKey:threadKey(scopeId),userId,text:initialDraft})
+    else { setPendingScreenQuestion(null); setDraft(initialDraft) }
+  }, [initialDraft, initialDraftScopeId, draftRequestKey, scopeId, userId, conversationReady, draft, setDraft, threadKey])
 
   const send = useCallback(
     async (text: string) => {
@@ -688,7 +725,7 @@ export function ChimmyPanel({
       if (screenshotRef.current) screenshotRef.current.value = ''
       setTurns((t) => [
         ...t,
-        { id: `you-${t.length}`, role: 'you', text: question || `Screenshot: ${attached?.name ?? 'image'}`, imagePreview, imageName: attached?.name },
+        { id: newTurnId('you'), role: 'you', text: question || `Screenshot: ${attached?.name ?? 'image'}`, imagePreview, imageName: attached?.name },
       ])
 
       try {
@@ -830,7 +867,7 @@ export function ChimmyPanel({
             setTurns((t) => [
               ...t,
               {
-                id: `chimmy-${t.length}`,
+                id: newTurnId('chimmy'),
                 role: 'chimmy',
                 text: refusal,
                 isPublic: publicMode,
@@ -843,8 +880,10 @@ export function ChimmyPanel({
             ])
             return
           }
-          throw new ChimmyAskError(describeChimmyFailure(res.status, payload.code ?? payload.error))
+          throw new ChimmyAskError(describeChimmyFailure(res.status, payload.code ?? payload.error), payload.code ?? payload.error)
         }
+        // Answered: any verify card from an earlier refusal has done its job.
+        setVerifyAsk(null)
 
         /*
          * Only meaningful when the user actually picked a league. On a GLOBAL
@@ -854,8 +893,13 @@ export function ChimmyPanel({
          * line that matters.
          */
         const reported = payload.meta?.leagueGrounding ?? null
+        /*
+         * `league_not_read`: a league was selected but the answer never looked inside it (a stats
+         * question, say). It claims nothing about the league, so it shows no line either way.
+         */
         const grounding =
-          reported && !(reported.grounded === false && reported.reason === 'no_league_selected')
+          reported &&
+          !(reported.grounded === false && (reported.reason === 'no_league_selected' || reported.reason === 'league_not_read'))
             ? reported
             : null
 
@@ -891,7 +935,7 @@ export function ChimmyPanel({
         setTurns((t) => [
           ...t,
           {
-            id: `chimmy-${t.length}`,
+            id: newTurnId('chimmy'),
             role: 'chimmy',
             text: answer,
             isPublic: publicMode,
@@ -949,10 +993,16 @@ export function ChimmyPanel({
           const shown = question || `Screenshot: ${attached?.name ?? 'image'}`
           setTurns((t) => (t.length && t[t.length - 1].role === 'you' && t[t.length - 1].text === shown ? t.slice(0, -1) : t))
           setScreenshot(attached)
-          const failure =
-            e instanceof ChimmyAskError ? e : { message: 'Chimmy hit a snag on that one.', retryable: true }
-          setError(failure.message)
-          setRetryAsk(failure.retryable ? { message: failure.message, question } : null)
+          if (e instanceof ChimmyAskError && e.code === 'VERIFICATION_REQUIRED') {
+            setError(null)
+            setRetryAsk(null)
+            setVerifyAsk({ question })
+          } else {
+            const failure =
+              e instanceof ChimmyAskError ? e : { message: 'Chimmy hit a snag on that one.', retryable: true }
+            setError(failure.message)
+            setRetryAsk(failure.retryable ? { message: failure.message, question } : null)
+          }
         }
       } finally {
         setBusy(false)
@@ -1312,6 +1362,19 @@ export function ChimmyPanel({
           * says nothing about charging, which is the honest position when we
           * genuinely do not know.
           */}
+        {verifyAsk ? (
+          /* Asking again spends tokens, so it never re-sends on its own — only on a tap. */
+          <ImportVerifyGate
+            email={null}
+            returnTo={typeof window === 'undefined' ? '/core' : `${window.location.pathname}${window.location.search}`}
+            step="chimmy"
+            autoResume={false}
+            resuming={busy}
+            onResume={() => void send(verifyAsk.question)}
+            title="Confirm your email to ask Chimmy"
+            resumeNote="your question is still in the box, so tap Continue to send it"
+          />
+        ) : null}
         {error ? <p className="af-cm-error">{error}</p> : null}
         {error && retryAsk?.message === error ? (
           <div className="af-cm-retryrow">
@@ -1370,6 +1433,18 @@ export function ChimmyPanel({
           </button>
         </div>
       ) : null}
+      {pendingScreenQuestion && pendingScreenQuestion.scopeKey === threadKey(scopeId) && pendingScreenQuestion.userId === userId && (
+        <aside className="af-cm-hint" role="status" aria-label="Suggested question">
+          <p>Your unsent message is preserved. This screen also supplied a question:</p>
+          <p>{pendingScreenQuestion.text}</p>
+          <button type="button" className="af-cm-quickbtn" disabled={busy} onClick={() => {
+            const question = pendingScreenQuestion.text
+            setDraft(current => current.trim() ? current.trimEnd() + '\n\n' + question : question)
+            setPendingScreenQuestion(null)
+          }}>Add suggested question</button>
+          <button type="button" className="af-cm-quickbtn" onClick={() => setPendingScreenQuestion(null)}>Keep current message</button>
+        </aside>
+      )}
       <form
         className="af-cm-composer"
         onSubmit={(e) => {
@@ -1424,7 +1499,12 @@ export function ChimmyPanel({
           }}
           placeholder={publicMode ? 'Ask the league, or @chimmy…' : 'Ask Chimmy…'}
           aria-label="Message"
-          disabled={busy}
+          /*
+           * NOT disabled while Chimmy answers: disabling the box dropped the phone keyboard on every
+           * question. You can type the next one; `send` already refuses while busy and keeps the draft,
+           * and the send button stays disabled until the answer lands.
+           */
+          aria-busy={busy || undefined}
         />
         <button
           type="submit"

@@ -106,7 +106,7 @@ describe('🛑 the frame reads Spanish in Spanish', () => {
     lang.language = 'es'
     const r = renderModal('sleeper')
     await r.findByText('Cómo funciona esta liga')
-    for (const s of ['Ajustes de la liga', 'USUARIO', 'GENERAL', 'IA ✨', 'Plataforma', 'Temporada', 'Equipos', 'Formato', 'Puntuación', 'Estado',
+    for (const s of ['Ajustes de la liga', 'USUARIO', 'GENERAL', 'CI', 'Plataforma', 'Temporada', 'Equipos', 'Formato', 'Puntuación', 'Estado',
       'en temporada', 'Reclamos', 'Prioridad rotativa', 'Equipos en playoffs', 'Composición de la plantilla', 'Editar en Sleeper →']) {
       expect(r.container.ownerDocument.body.textContent, s).toContain(s)
     }
@@ -141,7 +141,7 @@ describe('🛑 the frame reads Spanish in Spanish', () => {
   it('the AI card grid', async () => {
     lang.language = 'es'
     const r = renderModal('manual')
-    fireEvent.click(await r.findByText('IA ✨'))
+    fireEvent.click(await r.findByText('CI'))
     await r.findByText('Analizador de trades con IA')
     expect(r.container.ownerDocument.body.textContent).toContain('Power Rankings con IA')
     expect(englishIn(r.container.ownerDocument.body)).toEqual([])
@@ -150,7 +150,7 @@ describe('🛑 the frame reads Spanish in Spanish', () => {
   it('…and still reads English in English, byte for byte where it is pinned', async () => {
     const r = renderModal('sleeper')
     await r.findByText('How this league runs')
-    for (const s of ['League Settings', 'USER', 'AI ✨', 'Rolling priority', 'Playoff teams', 'Roster construction', 'Edit on Sleeper →']) {
+    for (const s of ['League Settings', 'USER', 'CI', 'Rolling priority', 'Playoff teams', 'Roster construction', 'Edit on Sleeper →']) {
       expect(r.container.ownerDocument.body.textContent, s).toContain(s)
     }
     expect(r.container.ownerDocument.body.textContent).toContain(

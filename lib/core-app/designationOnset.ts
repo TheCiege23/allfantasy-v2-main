@@ -1,3 +1,5 @@
+import { injuryClaimAsOf } from '@/lib/injuries/matchInjuryRows'
+
 /**
  * One injury claim from several provider rows: the freshest row's word, and
  * the EARLIEST time any row of the same episode said that word.
@@ -14,6 +16,8 @@
  * that no other feed has caught up with. The description comes from the first
  * row of that designation that states one, since the live blob states none.
  *
+ * The word itself is the newest CLAIM among rows still on a feed (`expiresAt`).
+ *
  * Rows re-fetched more than a week before the freshest one belong to an
  * earlier episode (a June "Out" is not this week's) and are ignored. Pure.
  */
@@ -23,6 +27,8 @@ export type InjuryRowLike = {
   description: string | null
   date: Date | null
   fetchedAt: Date
+  /** When the feed's word lapses. A row past it is history: it dates an episode, it is not the word. */
+  expiresAt?: Date | null
 }
 
 export type DesignationOnset = {
@@ -43,10 +49,23 @@ export function designationKey(status: string | null | undefined): string {
     .trim()
 }
 
-export function designationOnset(rows: readonly InjuryRowLike[]): DesignationOnset | null {
+export function designationOnset(rows: readonly InjuryRowLike[], now: Date = new Date()): DesignationOnset | null {
   if (rows.length === 0) return null
-  const sorted = [...rows].sort((a, b) => b.fetchedAt.getTime() - a.fetchedAt.getTime())
-  const top = sorted[0]!
+  /*
+   * 🛑 THE CURRENT WORD IS THE NEWEST *CLAIM* STILL ON A FEED (2026-10-11). This took the freshest
+   * row by `fetchedAt` and never looked at `expiresAt`, so:
+   *   - a player who dropped off every report kept his last "Out" for good — the feeds stop
+   *     listing a healed player, they do not write him a clean row; and
+   *   - Rolling Insights re-pulling Friday's "Questionable" every 30 minutes out-ranked ESPN's
+   *     Sunday "Active", so a cleared starter flipped between the two with every cron run.
+   * Expired rows still date the episode below; they just cannot be the word.
+   */
+  const sorted = [...rows].sort((a, b) => {
+    const byClaim = injuryClaimAsOf(b).getTime() - injuryClaimAsOf(a).getTime()
+    return byClaim !== 0 ? byClaim : b.fetchedAt.getTime() - a.fetchedAt.getTime()
+  })
+  const top = sorted.find((r) => !r.expiresAt || r.expiresAt.getTime() > now.getTime())
+  if (!top) return null
   const key = designationKey(top.status)
   const cutoff = top.fetchedAt.getTime() - SAME_EPISODE_HOURS * 60 * 60 * 1000
   let reportedAt = top.date

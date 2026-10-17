@@ -8,6 +8,7 @@ import { commissionerWeekDraft, drawWeeklyShareCard, rivalryNarrative, weeklySoc
 import { COMMS_OPEN_EVENT } from './comms/commsEvents'
 import { formatPct1 } from '@/lib/core-app/weeklyPercent'
 import CommissionerWeeklyPlan from './CommissionerWeeklyPlan'
+import { WeeklyXPublisher } from './WeeklyXPublisher'
 
 function download(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob); const link = document.createElement('a')
@@ -20,7 +21,18 @@ export function WeeklySharing({ data, path }: { data: WeeklyBlueprint; path?: We
   const [image,setImage] = useState<File | null>(null)
   const [includeStory,setIncludeStory] = useState(true)
   const [previewOpen,setPreviewOpen] = useState(false)
+  const [xConnection,setXConnection] = useState<string | null>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  // Coming back from X's consent screen (?xConnection=connected|failed|denied|sign_in): reopen the
+  // X publisher so the result is visible, then drop the flag so a reload does not repeat it.
+  useEffect(()=>{
+    try {
+      const url = new URL(window.location.href), result = url.searchParams.get('xConnection')
+      if (!result) return
+      setXConnection(result); setPlatform('X'); setPreviewOpen(true)
+      url.searchParams.delete('xConnection'); window.history.replaceState(window.history.state, '', url.toString())
+    } catch {}
+  },[])
   const cardGeneration = useRef(0)
   const shareData = useMemo(()=>includeStory ? data : {...data,rivalry:undefined},[data,includeStory])
   const scenario = weeklyCardScenarios(shareData,path)
@@ -75,7 +87,7 @@ export function WeeklySharing({ data, path }: { data: WeeklyBlueprint; path?: We
   const askCommissioner = () => window.dispatchEvent(new CustomEvent(COMMS_OPEN_EVENT,{detail:{tab:'chimmy',leagueId:commId,prefill:`${announcement}\n${es ? 'Ayúdame a preparar un anuncio. Comprueba las reglas y los plazos; no inventes información privada de otros equipos.' : 'Help me prepare an announcement. Check rules and deadlines; do not invent private information about other teams.'}`}}))
   return <section className="af-wbp-share">
     {story ? <div><h3>{es ? 'Tu historia esta semana' : 'Your story this week'}</h3><p>{story}</p><button type="button" onClick={()=>copy(story)}>{es ? 'Copiar motivación' : 'Copy motivation'}</button><p><small>{es ? 'Basado en encuentros importados; el historial puede estar incompleto.' : 'Based on imported meetings; history may be incomplete.'}</small></p></div> : null}
-    <details onToggle={e=>setPreviewOpen(e.currentTarget.open)}><summary>{es ? 'Compartir y exportar mi semana' : 'Share and export my week'}</summary>
+    <details open={previewOpen} onToggle={e=>setPreviewOpen(e.currentTarget.open)}><summary>{es ? 'Compartir y exportar mi semana' : 'Share and export my week'}</summary>
       <p>{es ? 'Revisa los nombres y las probabilidades antes de compartir. El enlace abre la semana del destinatario; tus datos privados siguen protegidos.' : 'Review names and odds before sharing. The link opens the recipient’s own week; your private page stays protected.'}</p>
       <label>{es ? 'Plataforma' : 'Platform'} <select value={platform} onChange={e=>{setPlatform(e.target.value as WeekSocial);setImage(null)}}>{WEEK_SOCIALS.map(p=><option key={p}>{p}</option>)}</select></label>
       {story ? <label className="af-wbp-check"><input type="checkbox" checked={includeStory} onChange={e=>{setIncludeStory(e.target.checked);setImage(null)}} />{es ? 'Incluir historia del rival' : 'Include opponent story'}</label> : null}
@@ -88,6 +100,7 @@ export function WeeklySharing({ data, path }: { data: WeeklyBlueprint; path?: We
         {image ? <button type="button" onClick={shareImage}>{es ? 'Compartir tarjeta' : 'Share card'}</button> : null}
         <button type="button" disabled={busy} onClick={exportExcel}>{hasCharts ? es ? 'Descargar Excel y gráficos' : 'Download Excel and charts' : es ? 'Descargar Excel' : 'Download Excel'}</button>
       </div></div>{previewOpen ? <figure className="af-wbp-card-preview"><canvas ref={canvasRef} role="img" aria-label={es ? 'Vista previa de tu tarjeta semanal' : 'Preview of your weekly share card'}/><figcaption>{es ? 'Tarjeta 1080 × 1350. ' : '1080 × 1350 card. '}{scenario ? es ? `Período ${scenario.period}: si ganas ${formatPct1(scenario.ifWin)}%; si pierdes ${formatPct1(scenario.ifLose)}%.` : `Period ${scenario.period}: if you win ${formatPct1(scenario.ifWin)}%; if you lose ${formatPct1(scenario.ifLose)}%.` : es ? 'Sin escenarios verificados para este enfrentamiento.' : 'No verified scenarios for this matchup.'}</figcaption></figure> : null}</div><p><small>{es ? 'Instagram, TikTok y YouTube: pega el texto y adjunta la tarjeta descargada. Las aplicaciones disponibles dependen de tu dispositivo.' : 'Instagram, TikTok and YouTube: paste the caption and attach the downloaded card. Available share apps depend on your device.'}</small></p>
+      {previewOpen && platform === 'X' ? <WeeklyXPublisher post={post} leagueId={data.focusLeagueId} es={es} connectionResult={xConnection}/> : null}
       {!hasCharts ? <p><small>{es ? 'Abre una liga con un modelo de playoffs disponible para exportar sus gráficos.' : 'Open a league with an available playoff model to export its charts.'}</small></p> : null}
     </details>
     {commId ? <details><summary>{es ? 'Plan del comisionado' : 'Commissioner weekly plan'}</summary>

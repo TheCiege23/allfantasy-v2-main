@@ -44,6 +44,14 @@ import {
  * The edits themselves live in lib/notification-settings/leagueOverrideEdits.ts.
  */
 
+/**
+ * Rows shown before "Show all". An account here can be in dozens of leagues (measured 2026-10-15:
+ * one account was in 101 league rows) and every row is a full-height card, so listing them all
+ * turned this section into a long scroll to reach the settings below it. Leagues with an override
+ * are always shown, whatever this says, so a mute can never be hidden.
+ */
+export const LEAGUE_OVERRIDES_VISIBLE_DEFAULT = 5
+
 type LeagueRow = {
   id: string
   name?: string
@@ -71,11 +79,19 @@ export function LeagueNotificationOverridesCard({
   const [leagues, setLeagues] = useState<LeagueRow[] | null>(null)
   const [loadFailed, setLoadFailed] = useState(false)
   const [expanded, setExpanded] = useState<string | null>(null)
+  const [query, setQuery] = useState("")
+  const [showAll, setShowAll] = useState(false)
 
   useEffect(() => {
     let cancelled = false
     void (async () => {
-      const data = await fetch("/api/league/list", { cache: "no-store" })
+      /*
+       * `summary=1` drops each league's settings and rosters (~94% of the payload — this card reads
+       * only id and name), and `collapseSeries=1` returns one row per league at its newest season
+       * instead of one per imported season. Notifications are sent for the current season's league,
+       * so that is the row an override has to be keyed on.
+       */
+      const data = await fetch("/api/league/list?summary=1&collapseSeries=1", { cache: "no-store" })
         .then((r) => (r.ok ? r.json() : null))
         .catch(() => null)
       if (cancelled) return
@@ -108,6 +124,26 @@ export function LeagueNotificationOverridesCard({
    * than rebuilding these objects by hand. Read that module before changing any of them —
    * in particular why "no opinion" is `{}` and never a deleted key.
    */
+  /** Customised leagues first (so a mute is never below the fold), then the list's own order. */
+  const ordered = useMemo(() => {
+    if (!leagues) return []
+    const seen = new Set<string>()
+    const unique = leagues.filter((l) => l?.id && !seen.has(l.id) && seen.add(l.id))
+    const isCustomised = (id: string) => {
+      const v = prefs.leagues?.[id]
+      return Boolean(v && (v.enabled === false || (v.mutedCategories?.length ?? 0) > 0))
+    }
+    return [...unique.filter((l) => isCustomised(l.id)), ...unique.filter((l) => !isCustomised(l.id))]
+  }, [leagues, prefs.leagues])
+
+  const needle = query.trim().toLowerCase()
+  const collapsible = ordered.length > LEAGUE_OVERRIDES_VISIBLE_DEFAULT
+  const visible = needle
+    ? ordered.filter((l) => (l.name ?? "").toLowerCase().includes(needle))
+    : showAll || !collapsible
+      ? ordered
+      : ordered.slice(0, Math.max(LEAGUE_OVERRIDES_VISIBLE_DEFAULT, customisedCount))
+
   function onFollowGlobal(leagueId: string) {
     onChange(followGlobal(prefs, leagueId))
   }
@@ -159,8 +195,25 @@ export function LeagueNotificationOverridesCard({
       ) : leagues.length === 0 ? (
         <p className="text-xs text-[var(--muted)]">{t("settings.notifications.leagues.empty")}</p>
       ) : (
+        <>
+        {collapsible ? (
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={t("settings.notifications.leagues.search")}
+            aria-label={t("settings.notifications.leagues.search")}
+            className="w-full rounded-md border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text)]"
+            data-testid="league-overrides-search"
+          />
+        ) : null}
+        {needle && visible.length === 0 ? (
+          <p className="text-xs text-[var(--muted)]" data-testid="league-overrides-no-match">
+            {tInterpolate("settings.notifications.leagues.noMatch", { query: query.trim() })}
+          </p>
+        ) : null}
         <ul className="space-y-2">
-          {leagues.map((league) => {
+          {visible.map((league) => {
             const override = prefs.leagues?.[league.id]
             const muted = override?.enabled === false
             const mutedCats = override?.mutedCategories ?? []
@@ -244,6 +297,19 @@ export function LeagueNotificationOverridesCard({
             )
           })}
         </ul>
+        {collapsible && !needle ? (
+          <button
+            type="button"
+            onClick={() => setShowAll((v) => !v)}
+            className="inline-flex min-h-[44px] items-center text-sm font-medium text-[var(--accent-cyan)]"
+            data-testid="league-overrides-show-all"
+          >
+            {showAll
+              ? t("settings.notifications.leagues.showFewer")
+              : tInterpolate("settings.notifications.leagues.showAll", { count: ordered.length })}
+          </button>
+        ) : null}
+        </>
       )}
     </div>
   )

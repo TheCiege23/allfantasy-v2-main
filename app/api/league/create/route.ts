@@ -47,6 +47,12 @@ import {
   buildSurvivorSettingsSnapshotPatch,
   normalizeSurvivorFoundationSettings,
 } from '@/lib/survivor/normalizeSurvivorSettings';
+import {
+  isSurvivorCreationSportAvailable,
+  SURVIVOR_CREATION_UNAVAILABLE_MESSAGE,
+  SURVIVOR_PAID_CREATION_ENABLED,
+  SURVIVOR_PAID_CREATION_UNAVAILABLE_MESSAGE,
+} from '@/lib/survivor/survivorCreationAvailability';
 
 const createSchema = z.object({
   name: z.string().min(1).max(100).optional(),
@@ -231,6 +237,19 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'sleeperLeagueId is required' }, { status: 400 });
   }
 
+  /*
+   * 🛑 NEVER DEFAULT A NATIVE LEAGUE'S SPORT. This used to read `sportInput ?? 'NFL'`, so any body
+   * without `sport` became an NFL league — and with `league_type: 'big_brother'` it then resolved the
+   * NFL concept preset (fb_half_ppr, QB/RB/WR/TE/K/DST), persisting an NBA manager's league as
+   * "NFL · Half PPR" with nothing red anywhere. Refuse instead. The Sleeper import path is the one
+   * exception: the imported league carries its own sport, and `sport` here only feeds pre-checks.
+   */
+  if (!sportInput && !createFromSleeperImport) {
+    return NextResponse.json(
+      { error: 'sport is required', errors: [{ path: 'sport', message: 'Choose a sport for this league.' }] },
+      { status: 400 }
+    );
+  }
   let sport = sportInput ?? 'NFL';
   const normalizeWizardEnum = (value: string | undefined): string | undefined => {
     if (!value) return undefined;
@@ -360,7 +379,7 @@ export async function POST(req: Request) {
     );
   }
   if (isDevyRequested) {
-    const devySport = (sportInput ?? 'NFL').toString().toUpperCase();
+    const devySport = String(sport).toUpperCase();
     /** Devy is supported for NFL/NCAAF and NBA/NCAAB pipelines only (no MLB/NHL/Soccer). */
     if (!['NFL', 'NBA', 'NCAAF', 'NCAAB'].includes(devySport)) {
       return NextResponse.json(
@@ -373,7 +392,7 @@ export async function POST(req: Request) {
     }
   }
   if (isC2CRequested) {
-    const c2cSport = (sportInput ?? 'NFL').toString().toUpperCase();
+    const c2cSport = String(sport).toUpperCase();
     if (!['NFL', 'NBA', 'NCAAF', 'NCAAB'].includes(c2cSport)) {
       return NextResponse.json(
         {
@@ -390,9 +409,9 @@ export async function POST(req: Request) {
       { status: 400 }
     );
   }
-  if (String(requestedLeagueType ?? '').toLowerCase() === 'survivor' && String(sport).toUpperCase() === 'SOCCER') {
+  if (requestedLeagueType === 'survivor' && !isSurvivorCreationSportAvailable(sport)) {
     return NextResponse.json(
-      { error: 'Survivor leagues are not available for Soccer. Choose another sport.' },
+      { error: SURVIVOR_CREATION_UNAVAILABLE_MESSAGE },
       { status: 400 }
     );
   }
@@ -571,6 +590,9 @@ export async function POST(req: Request) {
           .toLowerCase()
           .trim();
         if (feeMode === 'paid') {
+          if (!SURVIVOR_PAID_CREATION_ENABLED) {
+            return NextResponse.json({ success: false, error: SURVIVOR_PAID_CREATION_UNAVAILABLE_MESSAGE }, { status: 400 });
+          }
           const centsRaw = sw.survivor_entry_fee_amount_cents;
           const cents = typeof centsRaw === 'number' ? centsRaw : Number(centsRaw);
           if (!Number.isFinite(cents) || cents < 1) {
@@ -1047,6 +1069,9 @@ export async function POST(req: Request) {
         .toLowerCase()
         .trim();
       if (feeMode === 'paid') {
+        if (!SURVIVOR_PAID_CREATION_ENABLED) {
+          return NextResponse.json({ error: SURVIVOR_PAID_CREATION_UNAVAILABLE_MESSAGE }, { status: 400 });
+        }
         const centsRaw = (initialSettings as Record<string, unknown>).survivor_entry_fee_amount_cents;
         const cents = typeof centsRaw === 'number' ? centsRaw : Number(centsRaw);
         if (!Number.isFinite(cents) || cents < 1) {

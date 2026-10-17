@@ -25,7 +25,13 @@ function waiverClaimErrorCode(message: string): string {
   const m = message.toLowerCase()
   if (m.includes("already have a pending claim")) return "CLAIM_EXISTS"
   if (m.includes("claim not found")) return "CLAIM_NOT_FOUND"
-  if (m.includes("waiver claims are closed") || m.includes("submission window") || m.includes("waiver submissions are")) {
+  if (
+    m.includes("waiver claims are closed") ||
+    m.includes("submission window") ||
+    m.includes("waiver submissions are") ||
+    // Locked day of the commissioner's per-day schedule (lib/waivers/dailyWaiverSchedule.ts).
+    m.includes("daily waiver schedule")
+  ) {
     return "WAIVER_CLOSED"
   }
   if (m.includes("insufficient faab")) return "INSUFFICIENT_FAAB"
@@ -44,6 +50,15 @@ function waiverClaimError(message: string, status: number) {
   return NextResponse.json({ error: message, code: waiverClaimErrorCode(message) }, { status })
 }
 
+async function resolveClaimRoster(leagueId: string, userId: string) {
+  const direct = await prisma.roster.findFirst({ where: { leagueId, platformUserId: userId } })
+  if (direct) return direct
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { leagueVariant: true } })
+  if (league?.leagueVariant !== 'survivor_guillotine') return null
+  const team = await prisma.leagueTeam.findFirst({ where: { leagueId, claimedByUserId: userId }, select: { externalId: true } })
+  return team ? prisma.roster.findFirst({ where: { id: team.externalId, leagueId } }) : null
+}
+
 export async function GET(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
   const params = await props.params
   const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
@@ -53,7 +68,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
   const leagueId = params.leagueId
   const [leagueAsOwner, rosterAsMember] = await Promise.all([
     (prisma as any).league.findFirst({ where: { id: leagueId, userId } }),
-    (prisma as any).roster.findFirst({ where: { leagueId, platformUserId: userId }, select: { id: true } }),
+    resolveClaimRoster(leagueId, userId),
   ])
   if (!leagueAsOwner && !rosterAsMember) return NextResponse.json({ error: "League not found" }, { status: 404 })
 
@@ -88,9 +103,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
   const leagueId = params.leagueId
-  const roster = await (prisma as any).roster.findFirst({
-    where: { leagueId, platformUserId: userId },
-  })
+  const roster = await resolveClaimRoster(leagueId, userId)
   if (!roster) return NextResponse.json({ error: "Roster not found" }, { status: 404 })
 
   const body = await req.json().catch(() => ({}))

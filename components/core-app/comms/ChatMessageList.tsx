@@ -73,6 +73,11 @@ export type ChatListMessage = {
   parentMessageId?: string | null
   metadata?: Record<string, unknown> | null
   messageType?: string | null
+  /**
+   * Shown the moment the viewer sends, before the server has it: the row says "Sending…" where its
+   * time goes and offers no actions (there is no server id to react to, reply to or edit yet).
+   */
+  pending?: boolean
 }
 
 export type ChatMessageListProps = {
@@ -421,6 +426,7 @@ export function ChatMessageList({
               data-flash={flashId === m.id || undefined}
               data-menu={menuFor === m.id || undefined}
               data-chimmy={chimmy || undefined}
+              data-pending={m.pending || undefined}
             >
               {!mine ? (
                 item.startsRun ? (
@@ -443,14 +449,6 @@ export function ChatMessageList({
                   )
                 ) : null}
                 {tag ? <span className="af-cm-msg-tag">{tag}</span> : null}
-
-                {m.parentMessageId && !deleted ? (
-                  <QuotedMessage
-                    author={parent?.authorName ?? null}
-                    text={parent ? censorProfanity(parent.body) : null}
-                    onJump={parent ? () => void jumpTo(parent.id) : undefined}
-                  />
-                ) : null}
 
                 <div
                   className="af-cm-bubble"
@@ -581,6 +579,18 @@ export function ChatMessageList({
                         message (`metadata.decision.verdict`); the chip reads that, never the text,
                         and only on a Chimmy-marked row.
                       */}
+                      {/*
+                        The message this one answers sits INSIDE the bubble, as in every messenger
+                        people already know — above it, it read as a separate line belonging to
+                        nobody. A tap on it is the quote's (jump to the original), not "show the time".
+                      */}
+                      {m.parentMessageId ? (
+                        <QuotedMessage
+                          author={parent?.authorName ?? null}
+                          text={parent ? censorProfanity(parent.body) : null}
+                          onJump={parent ? () => void jumpTo(parent.id) : undefined}
+                        />
+                      ) : null}
                       {chimmyVerdict ? <ChimmyVerdictChip verdict={chimmyVerdict} /> : null}
                       {shown ? <p className="af-cm-bubble-text">{renderMessageText(censorProfanity(shown))}</p> : null}
                       {rich ? renderRich(m) : null}
@@ -599,13 +609,18 @@ export function ChatMessageList({
                   />
                 ) : null}
 
-                {showTime && time ? (
+                {m.pending ? (
+                  <span className="af-cm-meta af-cm-sending">Sending…</span>
+                ) : showTime && time ? (
                   <span className="af-cm-meta">
                     <time dateTime={toDateTimeAttr(m.createdAt)} title={formatChatMessageTimestampFull(m.createdAt)}>
                       {time}
                     </time>
                     {isEditedMessage(m.metadata) && !deleted ? <span className="af-cm-edited"> · edited</span> : null}
                   </span>
+                ) : isEditedMessage(m.metadata) && !deleted ? (
+                  /* Mid-run there is no time line, and "edited" used to vanish with it. */
+                  <span className="af-cm-meta af-cm-edited">edited</span>
                 ) : null}
               </div>
 

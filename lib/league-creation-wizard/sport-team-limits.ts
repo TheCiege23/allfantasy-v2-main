@@ -20,6 +20,14 @@ const NFL_TEAM_COUNT_OPTIONS = [16, 20, 24] as const
 /** Survivor cast sizes (one manager per team) — same for all sports in this flow. */
 export const SURVIVOR_CAST_SIZE_OPTIONS = [16, 17, 18, 19, 20] as const
 
+/**
+ * The cast sizes a NEW Survivor league is offered (user's call, 2026-10-12): 16 or 20, four tribes
+ * of four or five. A subset of SURVIVOR_CAST_SIZE_OPTIONS, which stays the full range the season
+ * engine accepts so existing 17–19 leagues and the legacy create route are untouched. 24 joins
+ * here once the engine supports it — adding it to this list alone would be clamped to 20 on save.
+ */
+export const SURVIVOR_CREATE_CAST_SIZES = [16, 20] as const
+
 export function clampSurvivorCastSize(raw: number): number {
   const n = Number.isFinite(raw) ? Math.round(raw) : 20
   return SURVIVOR_CAST_SIZE_OPTIONS.reduce((closest, opt) =>

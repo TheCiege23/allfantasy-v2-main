@@ -59,7 +59,10 @@ export function tradeEvidence(lines: readonly TradeGradeLine[], at: string, gaps
 export type TradePackageReview = { givePlayers: number; getPlayers: number; netPlayerSlots: number; note: string }
 
 /** Picks and FAAB do not occupy player roster slots. Never infer an asset's kind from its name. */
-export function tradePackageReview(lines: readonly TradeGradeLine[]): TradePackageReview | null {
+export function tradePackageReview(
+  lines: readonly TradeGradeLine[],
+  opts: { rosterSpotCharged?: boolean } = {},
+): TradePackageReview | null {
   if (lines.length < 3 || lines.some(line => !line.assetKind)) return null
   const givePlayers = lines.filter(line => line.side === 'give' && line.assetKind === 'player').length
   const getPlayers = lines.filter(line => line.side === 'get' && line.assetKind === 'player').length
@@ -70,7 +73,10 @@ export function tradePackageReview(lines: readonly TradeGradeLine[]): TradePacka
     note: `You send ${givePlayers} player${givePlayers === 1 ? '' : 's'} and receive ${getPlayers}. ${netPlayerSlots > 0
       ? `That adds ${netPlayerSlots} player roster slot${netPlayerSlots === 1 ? '' : 's'}; a full roster may require drops.`
       : `That frees ${-netPlayerSlots} player roster slot${netPlayerSlots === -1 ? '' : 's'}; check that outgoing starters are replaced.`
-    } The value grade sums quoted asset prices. Usable starter value and the cost of any drops require a roster review.`,
+    } ${opts.rosterSpotCharged
+      // The grade carries the open-spot credit (`lib/trade-value/rosterSpotCharge.ts`).
+      ? 'The value grade already counts the roster spot at the league’s last-rostered-player price. Which starter a drop displaces still needs a roster review.'
+      : 'The value grade sums quoted asset prices. Usable starter value and the cost of any drops require a roster review.'}`,
   }
 }
 

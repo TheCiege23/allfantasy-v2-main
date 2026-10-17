@@ -525,7 +525,10 @@ describe('Player Finder — the screen’s own words, in Spanish', () => {
       expectSpanish(out, query)
       expect(out).toContain(want)
       expect(out).toContain('Coincidencias · 0')
-      expect(out).toContain('Elige una coincidencia para ver puestos, lesión e historial de temporadas.')
+      // Signed in with no player open, the home leads with "Mis jugadores" instead of the
+      // "pick a match" card (2026-10-08, "My players").
+      expect(out).toContain('Mis jugadores')
+      expect(out).not.toContain('Elige una coincidencia para ver puestos, lesión e historial de temporadas.')
       unmount()
     }
     for (const count of [1, 4]) {
@@ -583,6 +586,16 @@ function expectWholeSpanish(out: string, label: string) {
     const hit = out.match(re)
     expect(hit?.[0] ?? null, `${label}: …${hit ? out.slice(Math.max(0, hit.index! - 70), hit.index! + 70) : ''}…`).toBeNull()
   }
+}
+
+/** "Most added this week" (trendingAdds.ts): one row that links, one whose ref did not round-trip. */
+const TRENDING = {
+  rows: [
+    { sleeperId: '1339', name: 'Zach Ertz', position: 'TE', team: 'PHI', imageUrl: null, ref: 'NFL:E1339', leagues: 66 },
+    { sleeperId: '8150', name: 'Kendre Miller', position: 'RB', team: 'NO', imageUrl: null, ref: null, leagues: 41 },
+  ],
+  activeLeagues: 189,
+  through: '2026-09-28T14:59:00.000Z',
 }
 
 const STARTS = new Date('2026-10-15T04:00:00.000Z')
@@ -846,6 +859,21 @@ describe('Player Finder — the whole page, in Spanish', () => {
     expectWholeSpanish(ownText(container), 'home')
     const league = renderFinder({ detail: null, matches: [], selectedLeagueId: 'L-gang', shares: { available: true, data: SHARES }, leagueShares: LEAGUE_SHARES, depthAccess: PRE_LAUNCH })
     expectWholeSpanish(ownText(league.container), 'home, one league')
+  })
+
+  it('the home: "Most added this week" in the rail — heading, the freshness line and each row’s count', () => {
+    lang.language = 'es'
+    const { container } = renderFinder({ detail: null, matches: [], trendingAdds: TRENDING })
+    expectDrawn(container, ['section.af-pf-trend'], 'trending adds')
+    const card = container.querySelector('section.af-pf-trend') as HTMLElement
+    expectWholeSpanish(ownText(container), 'home, trending adds')
+    expect(card.querySelector('h2')?.textContent).toBe('Los más añadidos esta semana')
+    expect(card.querySelector('.af-pf-trend-sub')?.textContent).toBe('de 189 ligas con altas · hasta el 28 sep')
+    expect([...card.querySelectorAll('.af-pf-trend-count')].map((n) => n.getAttribute('aria-label'))).toEqual(['añadido en 66 ligas', 'añadido en 41 ligas'])
+    // Only the words follow the language: the count, the link and the row that cannot link do not.
+    expect(card.querySelector('a')?.getAttribute('href')).toBe('/core/players?q=Zach%20Ertz&player=NFL%3AE1339')
+    expect(card.querySelectorAll('a')).toHaveLength(1)
+    expect([...card.querySelectorAll('.af-pf-trend-count')].map((n) => n.textContent)).toEqual(['+66', '+41'])
   })
 
   it('a viewer without AF Pro: every lock on the page reads Spanish, and nothing paid is drawn', () => {

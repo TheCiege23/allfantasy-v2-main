@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, Info, Lock, RotateCcw } from 'lucide-react'
 import { SubscriptionGateModal } from '@/components/subscription/SubscriptionGateModal'
+import { ScoringPresetSelect, pickInitialPreset } from '@/components/league-settings/scoring/ScoringPresetSelect'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { translateStat } from '@/lib/i18n/scoring-stats'
 import { SOCCER_STATS_ES } from '@/lib/i18n/scoring-stats/soccer'
@@ -99,6 +100,8 @@ export function SoccerScoringSettingsPanel({
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
   const [gateOpen, setGateOpen] = useState(false)
+  /** Sleeper default staged for a league whose scoring was never saved — Save applies it. */
+  const [defaultStaged, setDefaultStaged] = useState(false)
 
   const [selectedPreset, setSelectedPreset] =
     useState<SoccerScoringPresetKey>('af_default')
@@ -118,11 +121,12 @@ export function SoccerScoringSettingsPanel({
         setPresets(data.presets ?? [])
         setConfig(data.config ?? null)
         setIsPremium(data.isPremium ?? false)
-        setSelectedPreset(
-          (data.config?.presetKey ?? 'af_default') as SoccerScoringPresetKey,
-        )
+        // Soccer has no Sleeper preset, so nothing is staged: open on the saved preset.
+        const initialPreset = pickInitialPreset<SoccerScoringPresetKey>(data.config, data.presets, 'af_default' as SoccerScoringPresetKey, 'af_default' as SoccerScoringPresetKey, false)
+        setSelectedPreset(initialPreset.key)
+        setDefaultStaged(Boolean(initialPreset.stagedRules))
         const defaults = buildSoccerDefaultRulesFromCategories()
-        setEditedRules({ ...defaults, ...(data.config?.rules ?? {}) })
+        setEditedRules({ ...defaults, ...(data.config?.rules ?? {}), ...(initialPreset.stagedRules ?? {}) })
       })
       .catch(() => {
         if (active) setError(t('lsScore.err.loadSoccer'))
@@ -215,6 +219,7 @@ export function SoccerScoringSettingsPanel({
         return
       }
       setConfig(data.config)
+      setDefaultStaged(false)
       setSuccess(true)
       setTimeout(() => setSuccess(false), 3000)
     } catch {
@@ -264,47 +269,18 @@ export function SoccerScoringSettingsPanel({
         {t('lsScore.notice.inThisLeague')}
       </div>
 
-      {/* Preset selector */}
-      <div className="space-y-2">
-        <label className="text-[11px] font-semibold uppercase tracking-wider text-white/40">
-          {t('lsScore.presetHeading')}
-        </label>
-        <div className="flex flex-wrap gap-2">
-          {(
-            [
-              'af_default',
-              'fpl_compatible',
-              'espn_compatible',
-              'yahoo_compatible',
-              'custom',
-            ] as SoccerScoringPresetKey[]
-          ).map((key) => {
-            const isCustomLocked =
-              key === 'custom' && !isPremium && isCommissioner
-            const active = selectedPreset === key
-            return (
-              <button
-                key={key}
-                type="button"
-                disabled={!isCommissioner}
-                onClick={() => handlePresetChange(key)}
-                className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
-                  active
-                    ? 'border-green-500/40 bg-green-500/15 text-green-200'
-                    : isCustomLocked
-                      ? 'cursor-pointer border-white/5 bg-white/[0.02] text-white/30'
-                      : 'border-white/10 bg-white/[0.03] text-white/60 hover:bg-white/[0.06] disabled:cursor-default disabled:opacity-50'
-                }`}
-              >
-                {PRESET_LABEL_KEYS[key] ? t(PRESET_LABEL_KEYS[key]) : key}
-                {isCustomLocked && (
-                  <Lock className="ml-1 inline h-3 w-3 text-white/30" />
-                )}
-              </button>
-            )
-          })}
-        </div>
-      </div>
+      {/* Preset selector — one dropdown of THIS sport's presets, Sleeper-style first (default). */}
+      <ScoringPresetSelect<SoccerScoringPresetKey>
+        presetKeys={['af_default', 'fpl_compatible', 'espn_compatible', 'yahoo_compatible', 'custom'] as SoccerScoringPresetKey[]}
+        value={selectedPreset}
+        onChange={handlePresetChange}
+        labelFor={(key) => (PRESET_LABEL_KEYS[key] ? t(PRESET_LABEL_KEYS[key]) : key)}
+        defaultKey={undefined}
+        isCommissioner={isCommissioner}
+        isPremium={isPremium}
+        hint={defaultStaged ? t('lsScore2.defaultNotSaved') : null}
+        id={`scoring-preset-${leagueId}`}
+      />
 
       {/* Warning banner for external presets */}
       {currentPreset?.warning && (
@@ -339,7 +315,7 @@ export function SoccerScoringSettingsPanel({
               <p className="mb-1 text-[11px] font-bold uppercase tracking-widest text-white/20">
                 {t(labelKey)}
               </p>
-              <div className="scrollbar-none flex gap-1.5 overflow-x-auto pb-0.5">
+              <div className="flex flex-wrap gap-1.5" role="group" aria-label={t('lsScore2.categoriesAria')}>
                 {cats.map((cat: SoccerScoringCategory) => {
                   const active = activeTab === cat.id
                   const colorClass = active
@@ -351,7 +327,7 @@ export function SoccerScoringSettingsPanel({
                       key={cat.id}
                       type="button"
                       onClick={() => setActiveTab(cat.id)}
-                      className={`flex shrink-0 items-center gap-1 rounded-full border px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide transition ${colorClass}`}
+                      className={`flex items-center gap-1 rounded-full border px-2.5 py-1.5 text-[11px] font-bold uppercase tracking-wide transition ${colorClass}`}
                     >
                       {st(cat.label)}
                       {isPremiumGroup && !isPremium && (
@@ -368,7 +344,7 @@ export function SoccerScoringSettingsPanel({
 
       {/* ===== Scoring rows for active tab ===== */}
       {activeCategory && (
-        <div className="max-h-[52vh] space-y-0.5 overflow-y-auto rounded-xl border border-white/10 bg-white/[0.02] p-3">
+        <div className="min-w-0 space-y-0.5 rounded-xl border border-white/10 bg-white/[0.02] p-2 sm:max-h-[52vh] sm:overflow-y-auto sm:p-3">
           {/* Premium lock notice */}
           {activeCategory.id === 'advanced' && !isPremium && (
             <div className="mb-3 flex items-start gap-2 rounded-lg border border-cyan-500/20 bg-cyan-950/20 px-3 py-2.5">
@@ -412,12 +388,12 @@ export function SoccerScoringSettingsPanel({
             return (
               <div
                 key={row.key}
-                className="group flex items-center justify-between gap-3 rounded-lg px-2.5 py-2 hover:bg-white/[0.03]"
+                className="group flex min-w-0 items-center justify-between gap-2 rounded-lg px-2 py-2 hover:bg-white/[0.03]"
               >
                 {/* Label + helper */}
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
-                    <span className="text-[12px] text-white/80">
+                    <span className="break-words text-[12px] text-white/80">
                       {st(row.label)}
                     </span>
                     {row.premium && (
@@ -442,7 +418,7 @@ export function SoccerScoringSettingsPanel({
                       onChange={(e) =>
                         handleRuleChange(row.key, e.target.value)
                       }
-                      className={`w-20 rounded-md border bg-white/5 px-2 py-1.5 text-right font-mono text-[12px] transition focus:border-green-500/50 focus:outline-none focus:ring-1 focus:ring-green-500/30 ${
+                      className={`w-[4.5rem] rounded-md border bg-white/5 px-2 py-1.5 text-right font-mono text-[12px] transition focus:border-green-500/50 focus:outline-none focus:ring-1 focus:ring-green-500/30 ${
                         isNonZero
                           ? 'border-white/15 text-white'
                           : 'border-white/10 text-white/30'
@@ -450,7 +426,7 @@ export function SoccerScoringSettingsPanel({
                     />
                   ) : (
                     <span
-                      className={`inline-block w-20 rounded-md border border-white/10 bg-white/[0.03] px-2 py-1.5 text-right font-mono text-[12px] ${
+                      className={`inline-block w-[4.5rem] rounded-md border border-white/10 bg-white/[0.03] px-2 py-1.5 text-right font-mono text-[12px] ${
                         isNonZero ? 'text-white' : 'text-white/30'
                       }`}
                     >

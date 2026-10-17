@@ -133,6 +133,8 @@ export type LandingCopy = {
     privacy: string
     terms: string
     dataDeletion: string
+    /** "Do Not Sell or Share" — Privacy Policy 5.3; the page is /privacy/choices. */
+    privacyChoices: string
     builtByLabel: string
     compliance: string
   }
@@ -284,6 +286,7 @@ const EN = (prices: MonthlyPriceRange | null): LandingCopy => {
       privacy: 'Privacy',
       terms: 'Terms',
       dataDeletion: 'Data deletion',
+      privacyChoices: 'Do Not Sell or Share My Personal Information',
       builtByLabel: 'Built by',
       compliance:
         'Not available in WA. Paid leagues restricted in HI, ID, MT, NV. 100% fantasy sports — no gambling, no DFS.',
@@ -450,6 +453,7 @@ const ES = (prices: MonthlyPriceRange | null): LandingCopy => {
       privacy: 'Privacidad',
       terms: 'Términos',
       dataDeletion: 'Eliminación de datos',
+      privacyChoices: 'No vender ni compartir mi información personal',
       builtByLabel: 'Hecho por',
       compliance:
         'No disponible en WA. Ligas de pago restringidas en HI, ID, MT y NV. 100% fantasy de temporada — sin apuestas, sin DFS.',

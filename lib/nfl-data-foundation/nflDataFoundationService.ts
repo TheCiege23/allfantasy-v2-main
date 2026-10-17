@@ -1,6 +1,13 @@
 import { prisma } from '@/lib/prisma'
-import { currentSeasonReportWhere } from '@/lib/injuries/injuryRecency'
-import { buildPlayerKey } from '@/lib/adp/computeAllFantasyAdp'
+import { injuryStaleAfterHours } from '@/lib/injuries/injuryRecency'
+import {
+  createInjuryRowMatcher,
+  injuryClaimAsOf,
+  type InjuryPlayerLookup,
+  type InjuryRowLookupResult,
+} from '@/lib/injuries/matchInjuryRows'
+import { currentDesignationFromFact, isRosterAbsence, isRuledOut } from '@/lib/core-app/injuryStatus'
+import { buildPlayerKey, normalizeStoredPlayerKey } from '@/lib/adp/computeAllFantasyAdp'
 import {
   canonicalName,
   canonicalPosition,
@@ -18,6 +25,8 @@ import {
   providerIdWhere,
   sleeperIdWhere,
 } from '@/lib/player-identity/externalIdNamespace'
+import { positionGroupsAgree, selectAuthoritativePlayerRow } from '@/lib/player-match/authoritativePlayerRow'
+import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { getCanonicalNflDataCoverage } from './nflDataCoverage'
 import type {
   CanonicalNflAiContext,
@@ -140,8 +149,104 @@ function scoreSportsPlayer(row: SportsPlayerRow): number {
   return score
 }
 
-function chooseBestSportsPlayer(rows: SportsPlayerRow[]): SportsPlayerRow | null {
-  return [...rows].sort((a, b) => scoreSportsPlayer(b) - scoreSportsPlayer(a))[0] ?? null
+/**
+ * The row a canonical player is built from.
+ *
+ * 🛑 THE SCORE ALONE PUT A FREE AGENT ON HIS OLD CLUB. It ranks `rolling_insights` above
+ * `sleeper` and rewards having a team, so for a Sleeper free agent the vendor row holding his
+ * LAST club always won: Tyreek Hill (FA on Sleeper) came back as MIA and drew Miami bye and
+ * opponent warnings on the redraft roster. And a TheSportsDB namesake stamped with the same
+ * Sleeper id could outrank the real row — Byron Murphy, CB MIN, as the Seahawks' DT.
+ *
+ * So when the winner's Sleeper id has a `sleeper` row here, `selectAuthoritativePlayerRow`
+ * decides what the player IS — name, position, club, number, headshot. The club and
+ * `teamId` are the Sleeper row's own (the helper never fills either); a null there means free
+ * agent and is kept. The score still picks which AGREEING row supplies the provider ids (`id`,
+ * `externalId`, `source`), because season stats are keyed by the Rolling Insights id; a row
+ * that contradicts the Sleeper row is never used for those either, or the namesake's stats
+ * would follow.
+ *
+ * ⚠ THE CLUB IS FOLDED, BECAUSE EVERY NFL SLEEPER ROW SPELLS IT OUT — 3,452 of 3,452 with a
+ * club, 2026-10-12 ("Kansas City Chiefs"). Every consumer here keys on the code: the schedule
+ * join asks `gameSchedule.homeTeam = <team>`, and an unfolded name finds no game in a week that
+ * has games, which reads as a BYE for the whole club.
+ */
+function chooseBestSportsPlayer(
+  rows: SportsPlayerRow[],
+  /**
+   * Which rows may supply the provider ids. Default: any. The snapshot generator passes "was in
+   * the fetched window", so a Sleeper row fetched only to JUDGE the others never becomes the
+   * written `playerId` — see `generateAndPersistCanonicalNflProjections`.
+   */
+  mayCarryIds: (row: SportsPlayerRow) => boolean = () => true,
+): SportsPlayerRow | null {
+  const ranked = [...rows].sort((a, b) => scoreSportsPlayer(b) - scoreSportsPlayer(a))
+  const best = ranked[0] ?? null
+  const sleeperKey = best?.sleeperId?.trim().toLowerCase()
+  if (!best || !sleeperKey) return best
+  const sameId = ranked.filter((r) => r.sleeperId?.trim().toLowerCase() === sleeperKey)
+  const picked = selectAuthoritativePlayerRow(sameId)
+  if (!picked || picked.base.source !== 'sleeper') return best
+  const agreeing = ranked.filter((r) => sameId.includes(r) && !picked.ignored.includes(r))
+  const ids = agreeing.find(mayCarryIds) ?? (mayCarryIds(picked.base) ? picked.base : null)
+  if (!ids) return null
+  return {
+    ...ids,
+    sleeperId: picked.row.sleeperId,
+    name: picked.row.name,
+    position: picked.row.position,
+    team: picked.row.team == null ? null : normalizeTeamAbbrev(picked.row.team),
+    teamId: picked.row.teamId,
+    number: picked.row.number,
+    imageUrl: picked.row.imageUrl,
+  }
+}
+
+/**
+ * One row per Sleeper id, chosen by `chooseBestSportsPlayer` over ALL of that id's rows; rows
+ * without a Sleeper id pass through untouched.
+ *
+ * ⚠ CALL THIS BEFORE GROUPING OR FILTERING BY CLUB. Sleeper's row and a vendor's row for one
+ * free agent never share a club — null against his last one — so any grouping or filter keyed on
+ * the club separates them before the authority rule can see both, and the vendor row then stands
+ * alone and wins: Tyreek Hill as a Dolphin again.
+ */
+function chooseAuthoritativePerSleeperId(
+  rows: readonly SportsPlayerRow[],
+  mayCarryIds?: (row: SportsPlayerRow) => boolean,
+): SportsPlayerRow[] {
+  const bySleeperId = new Map<string, SportsPlayerRow[]>()
+  const out: SportsPlayerRow[] = []
+  for (const row of rows) {
+    const key = row.sleeperId?.trim().toLowerCase()
+    if (!key) {
+      out.push(row)
+      continue
+    }
+    const bucket = bySleeperId.get(key)
+    if (bucket) bucket.push(row)
+    else bySleeperId.set(key, [row])
+  }
+  for (const bucket of bySleeperId.values()) {
+    const chosen = chooseBestSportsPlayer(bucket, mayCarryIds)
+    if (chosen) out.push(chosen)
+  }
+  return out
+}
+
+/**
+ * The `sleeper` rows for every Sleeper id in `rows` whose own rows lack one — a window cut by
+ * `take` or a club filter can hold the vendor row and miss Sleeper's, which is the row that says
+ * "free agent". Returns `rows` plus those.
+ */
+async function withSleeperRows(db: DbClient, rows: SportsPlayerRow[]): Promise<SportsPlayerRow[]> {
+  const have = new Set(rows.filter((r) => r.source === 'sleeper').map((r) => r.sleeperId?.trim().toLowerCase()))
+  const missing = uniq(rows.map((r) => r.sleeperId).filter((id) => id && !have.has(id.trim().toLowerCase())))
+  if (!missing.length) return rows
+  const extra = (await (db as any).sportsPlayer
+    .findMany({ where: { sport: 'NFL', source: 'sleeper', sleeperId: { in: missing } } })
+    .catch(() => [])) as SportsPlayerRow[]
+  return [...rows, ...extra]
 }
 
 export function canonicalNflIdentityKey(input: {
@@ -294,16 +399,25 @@ function reasonCodeFromText(text: string): string {
   return normalized.replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 80) || 'projection_note'
 }
 
+/**
+ * Declared absent — the shared tokenized rule (`isRuledOut`: Out, IR/IL, PUP, NFI, any suspension,
+ * injured reserve/list), plus a game-day "Inactive".
+ *
+ * ⚠ THIS WAS A SUBSTRING SCAN THAT CALLED A SUSPENSION, PUP AND NFI "LOW" RISK. `'suspension'`
+ * contains none of `out`/`ir`/`injured reserve`/`inactive`, and neither do `pup` or `nfi`, so a
+ * suspended starter was priced as a healthy one in the trade evaluator.
+ */
 function injuryUnavailable(status: string | null | undefined): boolean {
-  const s = String(status ?? '').toLowerCase()
-  return s.includes('out') || s.includes('ir') || s.includes('injured reserve') || s.includes('inactive')
+  const s = String(status ?? '').trim()
+  if (!s) return false
+  return isRuledOut(s) || /\binactive\b/i.test(s)
 }
 
 function injuryRisk(status: string | null | undefined): 'low' | 'medium' | 'high' | 'unknown' {
-  const s = String(status ?? '').toLowerCase()
+  const s = String(status ?? '').trim().toLowerCase()
   if (!s) return 'unknown'
-  if (injuryUnavailable(s) || s.includes('doubtful')) return 'high'
-  if (s.includes('questionable') || s.includes('limited')) return 'medium'
+  if (injuryUnavailable(s) || /\bdoubtful\b/.test(s)) return 'high'
+  if (/\bquestionable\b/.test(s) || /\blimited\b/.test(s) || s === 'q') return 'medium'
   return 'low'
 }
 
@@ -497,7 +611,7 @@ async function findSportsPlayerByIds(
       orderBy: [{ updatedAt: 'desc' }],
     })
     .catch(() => [])) as SportsPlayerRow[]
-  return chooseBestSportsPlayer(rows)
+  return chooseBestSportsPlayer(await withSleeperRows(db, rows))
 }
 
 async function findIdentityByNameTeam(
@@ -535,21 +649,47 @@ async function findSportsPlayerByNameTeam(
   if (!nameKey) return null
   const teamKey = canonicalTeam(team)
   const posKey = canonicalPosition(position)
-  const rows = (await (db as any).sportsPlayer
-    .findMany({
-      where: {
-        sport: 'NFL',
-        ...(teamKey ? { team: teamKey } : {}),
-      },
-      take: teamKey ? 500 : 2500,
-      orderBy: [{ updatedAt: 'desc' }],
-    })
-    .catch(() => [])) as SportsPlayerRow[]
+  /*
+   * 🛑 THE CLUB USED TO FILTER THE FETCH, WHICH HID THE ROW THAT SAYS "FREE AGENT". A Sleeper
+   * free agent's own row has a null club, so `team = 'MIA'` returned only the vendor row still
+   * holding his last one, and it won unopposed. (It also never matched a Sleeper row on a club,
+   * because those spell it out — "Miami Dolphins".) So candidates are found by NAME — the old
+   * window plus a surname match — every Sleeper id among them gets all of its rows and is decided
+   * by the authority rule, and only THEN are position and club checked, against what the
+   * authoritative row says.
+   */
+  const surname = nameKey.split(' ').reduce((a, b) => (b.length > a.length ? b : a), '')
+  const [windowRows, nameRows] = await Promise.all([
+    (db as any).sportsPlayer
+      .findMany({
+        where: {
+          sport: 'NFL',
+          ...(teamKey ? { team: teamKey } : {}),
+        },
+        take: teamKey ? 500 : 2500,
+        orderBy: [{ updatedAt: 'desc' }],
+      })
+      .catch(() => []) as Promise<SportsPlayerRow[]>,
+    surname.length >= 3
+      ? ((db as any).sportsPlayer
+          .findMany({
+            where: { sport: 'NFL', name: { contains: surname, mode: 'insensitive' } },
+            take: 500,
+            orderBy: [{ updatedAt: 'desc' }],
+          })
+          .catch(() => []) as Promise<SportsPlayerRow[]>)
+      : Promise.resolve([] as SportsPlayerRow[]),
+  ])
+  const byId = new Map<string, SportsPlayerRow>()
+  for (const row of [...windowRows, ...nameRows]) {
+    if (canonicalName(row.name) === nameKey) byId.set(row.id, row)
+  }
+  const chosen = chooseAuthoritativePerSleeperId(await withSleeperRows(db, [...byId.values()]))
+  const club = teamKey ? normalizeTeamAbbrev(teamKey) : null
   return chooseBestSportsPlayer(
-    rows.filter((row) => {
-      if (canonicalName(row.name) !== nameKey) return false
-      if (posKey && canonicalPosition(row.position) !== posKey) return false
-      if (teamKey && canonicalTeam(row.team) !== teamKey && canonicalTeam(row.teamId) !== teamKey) return false
+    chosen.filter((row) => {
+      if (posKey && canonicalPosition(row.position) !== posKey && !positionGroupsAgree(row.position, posKey)) return false
+      if (club && normalizeTeamAbbrev(row.team) !== club && canonicalTeam(row.teamId) !== teamKey) return false
       return true
     }),
   )
@@ -622,60 +762,91 @@ async function loadSeasonStats(
   }
 }
 
-async function loadInjuryStatus(
-  db: DbClient,
-  player: SportsPlayerRow,
-  ids: CanonicalNflProviderIds,
-  season: number,
-  week: number,
-): Promise<{ status: string | null; fetchedAt: Date | null }> {
-  const candidates = candidateIds(player, ids)
-  const sportsInjury = (await (db as any).sportsInjury
-    .findFirst({
-      where: {
-        sport: 'NFL',
-        OR: [{ playerId: { in: candidates } }, { playerName: player.name }],
-        AND: [
-          { OR: [{ season }, { season: null }] },
-          { OR: [{ week }, { week: null }] },
-        ],
-      },
-      orderBy: { fetchedAt: 'desc' },
-      select: { status: true, fetchedAt: true },
-    })
-    .catch(() => null)) as { status: string | null; fetchedAt: Date | null } | null
-  if (sportsInjury) return sportsInjury
+type NflInjuryRow = {
+  playerName: string
+  team: string | null
+  position: string | null
+  status: string | null
+  date: Date | null
+  fetchedAt: Date
+}
 
-  /*
-   * Bounded to the current season, like every other serving-path read of this
-   * table — see lib/injuries/injuryRecency.ts.
-   *
-   * ⚠ NFL LOOKS SAFE HERE AND IS NOT QUITE. Unlike the other sports this table is
-   * genuinely fresh for NFL (the Grok pass writes it four times a day), which is
-   * why this read was left unbounded. But 573 of its 1,109 NFL rows were still
-   * older than 120 days when measured on 2026-09-09 — last season's reports — and
-   * this is a FALLBACK reached exactly when `sportsInjury` has nothing for the
-   * player. That is precisely the population for which the only surviving row is
-   * an old one.
-   */
-  const injuryReport = (await (db as any).injuryReportRecord
-    .findFirst({
-      where: {
-        sport: 'NFL',
-        ...currentSeasonReportWhere(),
-        AND: [
-          { OR: [{ playerId: { in: candidates } }, { playerName: player.name }] },
-          { OR: [{ week }, { week: null }] },
-        ],
-      },
-      orderBy: { reportDate: 'desc' },
-      select: { status: true, reportDate: true },
-    })
-    .catch(() => null)) as { status: string | null; reportDate: Date | null } | null
+/** A player's newest live injury claim, dated — the shape `currentDesignationFromFact` reads. */
+export type NflInjuryClaim = { status: string | null; stale: boolean; fetchedAt: Date }
+
+/**
+ * ONE load of the live NFL injury feed per request, matched per player by VERIFIED name.
+ *
+ * 🛑 WHAT THIS REPLACED (2026-10-11). `loadInjuryStatus` ran a `findFirst` per player with
+ * `playerId IN <candidate ids> OR playerName = <name>`, no `expiresAt` filter, ordered by `fetchedAt`:
+ *   - `SportsInjury.playerId` is each PROVIDER's own id, and the candidates included the Sleeper id —
+ *     Sleeper 8394 is Percy Butler, Rolling Insights 8394 is Rome Odunze, so one man got the other's
+ *     injury;
+ *   - a bare name binds whichever namesake has a row (WR vs CB DeVonta Smith);
+ *   - expired rows counted, and the newest FETCH won rather than the newest CLAIM — Friday's
+ *     "Questionable" re-pulled every 30 minutes outranked Sunday's "Active";
+ *   - with nothing found it fell back to `injury_reports` by the same id-OR-name, then to
+ *     `SportsPlayer.status` — Rolling Insights' "ACT"/"INACT" or Sleeper's ROSTER status — which the
+ *     projection engine read as risk (×0.88) or as Out (zero this week, ×0.62 rest-of-season).
+ *
+ * The rules now are `injuryReadPort.resolveInjuryFacts`' rules — live rows only, one candidate per
+ * (name, team), the newest claim wins and "Active" counts, a namesake the lookup cannot tell apart is
+ * REFUSED — via the shared `createInjuryRowMatcher`, whose own header names this writer as the case it
+ * exists for: thousands of players against one load. It reads through the injected `db` (this module's
+ * contract) and costs one query per request instead of one per player.
+ */
+export function createNflInjuryIndex(db: DbClient, now: Date = new Date()) {
+  let matcher: Promise<((p: InjuryPlayerLookup) => InjuryRowLookupResult<NflInjuryRow>) | null> | null = null
+  const load = () =>
+    (matcher ??= (async () => {
+      try {
+        const rows = (await (db as any).sportsInjury.findMany({
+          where: { sport: 'NFL', expiresAt: { gt: now } },
+          select: { playerName: true, team: true, position: true, status: true, date: true, fetchedAt: true },
+          orderBy: { fetchedAt: 'desc' },
+          take: 5000,
+        })) as NflInjuryRow[] | null
+        return createInjuryRowMatcher(Array.isArray(rows) ? rows : [], 'NFL')
+      } catch {
+        return null
+      }
+    })())
+  const staleAfterHours = injuryStaleAfterHours('NFL')
   return {
-    status: injuryReport?.status ?? null,
-    fetchedAt: injuryReport?.reportDate ?? null,
+    async lookup(player: { name: string; team?: string | null; position?: string | null }): Promise<NflInjuryClaim | null> {
+      const match = await load()
+      const hit = match ? match({ name: player.name, team: player.team ?? null, position: player.position ?? null }) : null
+      if (!hit || 'ambiguous' in hit) return null
+      const row = hit.rows[0]
+      if (!row) return null
+      const ageHours = (now.getTime() - injuryClaimAsOf(row).getTime()) / 3_600_000
+      return { status: row.status ?? null, stale: ageHours > staleAfterHours, fetchedAt: row.fetchedAt }
+    },
   }
+}
+
+export type NflInjuryIndex = ReturnType<typeof createNflInjuryIndex>
+
+/**
+ * The player's CURRENT designation — or null when the feed supports none.
+ *
+ * A stale game-day word is not a current designation (`currentDesignationFromFact`, the rule
+ * `ruledOutByFact` uses), and "Active" is not a designation at all. The only `SportsPlayer.status` that
+ * counts is Sleeper's own season-scale ROSTER absence ("Injured Reserve", PUP, a suspension — never a
+ * game-day "Out") when no fresh fact says otherwise — the same rule as
+ * `lib/injuries/currentInjuryDesignations.ts` — never Rolling Insights' "ACT"/"INACT", never another
+ * provider's column.
+ */
+async function loadInjuryStatus(
+  injuries: NflInjuryIndex,
+  player: SportsPlayerRow,
+): Promise<{ status: string | null; fetchedAt: Date | null }> {
+  const claim = await injuries.lookup({ name: player.name, team: player.team, position: player.position })
+  const designation = currentDesignationFromFact(claim)
+  if (designation) return { status: designation, fetchedAt: claim?.fetchedAt ?? null }
+  const roster = player.source === 'sleeper' ? player.status?.trim() || null : null
+  if (roster && (!claim || claim.stale) && isRosterAbsence(roster)) return { status: roster, fetchedAt: claim?.fetchedAt ?? null }
+  return { status: null, fetchedAt: claim?.fetchedAt ?? null }
 }
 
 function findDepthRank(players: unknown, player: SportsPlayerRow, ids: CanonicalNflProviderIds): number | null {
@@ -826,22 +997,35 @@ async function loadProjectionRows(
   }
 }
 
-async function loadAdp(db: DbClient, player: SportsPlayerRow, season: number): Promise<number | null> {
+export async function loadAdp(db: DbClient, player: SportsPlayerRow, season: number): Promise<number | null> {
   const key = buildPlayerKey(player.name, player.position ?? '')
-  if (!key) return null
-  const row = (await (db as any).allFantasyAdpSnapshot
-    .findFirst({
-      where: {
-        sport: 'NFL',
-        leagueType: 'redraft',
-        season: String(season),
-        playerKey: key,
-        draftMode: 'real',
-      },
-      orderBy: { lastUpdatedAt: 'desc' },
-      select: { averageOverallPick: true },
-    })
-    .catch(() => null)) as { averageOverallPick: number | null } | null
+  const bar = key.lastIndexOf('|')
+  const name = key.slice(0, bar)
+  if (!name) return null
+  /*
+   * Stored keys predate the suffix-insensitive `buildPlayerKey`, so an equality read on the new key
+   * misses `marvin harrison jr.|wr`. Candidates: the new key, the old trim+lowercase spelling of this
+   * name, and anything starting `<name> ` (the suffixed variants) — then filtered to rows whose
+   * re-keyed key IS this player. Newest row wins, as before.
+   */
+  const legacyKey = `${String(player.name ?? '').trim().toLowerCase()}|${String(player.position ?? '').trim().toLowerCase()}`
+  const rows = (await Promise.resolve()
+    .then(() =>
+      (db as any).allFantasyAdpSnapshot.findMany({
+        where: {
+          sport: 'NFL',
+          leagueType: 'redraft',
+          season: String(season),
+          draftMode: 'real',
+          OR: [{ playerKey: { in: [key, legacyKey] } }, { playerKey: { startsWith: `${name} ` } }],
+        },
+        orderBy: { lastUpdatedAt: 'desc' },
+        select: { playerKey: true, averageOverallPick: true },
+        take: 200,
+      }),
+    )
+    .catch(() => [])) as Array<{ playerKey: string; averageOverallPick: number | null }>
+  const row = rows.find((r) => normalizeStoredPlayerKey(r.playerKey) === key)
   return row?.averageOverallPick ?? null
 }
 
@@ -864,12 +1048,12 @@ async function loadTradeValue(db: DbClient, player: SportsPlayerRow, ids: Canoni
 async function buildCanonicalPlayerFromRow(
   row: SportsPlayerRow,
   identity: IdentityMapRow | null,
-  options: { season: number; week: number; prismaClient: DbClient },
+  options: { season: number; week: number; prismaClient: DbClient; injuries?: NflInjuryIndex },
 ): Promise<CanonicalNflPlayer> {
   const db = options.prismaClient
   const providerIds = providerIdsFor(row, identity)
   const stats = await loadSeasonStats(db, row, providerIds, options.season)
-  const injury = await loadInjuryStatus(db, row, providerIds, options.season, options.week)
+  const injury = await loadInjuryStatus(options.injuries ?? createNflInjuryIndex(db), row)
   const depth = await loadDepthChart(db, row, providerIds, options.season)
   const schedule = await loadScheduleContext(db, row.team, options.season, options.week)
   const adp = await loadAdp(db, row, options.season)
@@ -912,7 +1096,8 @@ async function buildCanonicalPlayerFromRow(
     rollingInsightsGamesPlayed: stats?.gamesPlayed ?? null,
     adp,
     byeWeek: schedule.byeWeek,
-    injuryStatus: injury.status ?? row.status,
+    // The feed's current designation only — never `row.status` (RI "ACT"/"INACT", Sleeper's roster word).
+    injuryStatus: injury.status,
     depthChartRank: depth.rank,
     opponentPointsAgainst: opponentStats.pointsAgainst,
     opponentGamesPlayed: opponentStats.gamesPlayed,
@@ -929,7 +1114,7 @@ async function buildCanonicalPlayerFromRow(
     teamId: row.teamId ?? null,
     jerseyNumber: row.number ?? null,
     status: row.status ?? identity?.status ?? null,
-    injuryStatus: injury.status ?? row.status ?? null,
+    injuryStatus: injury.status,
     headshotUrl: row.imageUrl ?? null,
     byeWeek: schedule.byeWeek,
     opponent: schedule.opponent,
@@ -947,7 +1132,7 @@ async function buildCanonicalPlayerFromRow(
 
 export async function getCanonicalNflPlayerContext(
   playerId: string,
-  options?: { season?: number; week?: number; prismaClient?: DbClient },
+  options?: { season?: number; week?: number; prismaClient?: DbClient; injuries?: NflInjuryIndex },
 ): Promise<CanonicalNflPlayer | null> {
   const db = (options?.prismaClient ?? prisma) as DbClient
   const season = Number(options?.season ?? new Date().getUTCFullYear())
@@ -959,13 +1144,13 @@ export async function getCanonicalNflPlayerContext(
     rollingInsightsIds: [identity?.rollingInsightsId],
   })
   if (!row) return null
-  return buildCanonicalPlayerFromRow(row, identity, { season, week, prismaClient: db })
+  return buildCanonicalPlayerFromRow(row, identity, { season, week, prismaClient: db, injuries: options?.injuries })
 }
 
 export async function getCanonicalNflPlayerByNameTeam(
   name: string,
   team?: string | null,
-  options?: { position?: string | null; season?: number; week?: number; prismaClient?: DbClient },
+  options?: { position?: string | null; season?: number; week?: number; prismaClient?: DbClient; injuries?: NflInjuryIndex },
 ): Promise<CanonicalNflPlayer | null> {
   const db = (options?.prismaClient ?? prisma) as DbClient
   const season = Number(options?.season ?? new Date().getUTCFullYear())
@@ -977,7 +1162,7 @@ export async function getCanonicalNflPlayerByNameTeam(
       : null) ??
     (await findSportsPlayerByNameTeam(db, name, team, options?.position))
   if (!row) return null
-  return buildCanonicalPlayerFromRow(row, identity, { season, week, prismaClient: db })
+  return buildCanonicalPlayerFromRow(row, identity, { season, week, prismaClient: db, injuries: options?.injuries })
 }
 
 export async function getCanonicalNflProjectionContext(
@@ -987,8 +1172,9 @@ export async function getCanonicalNflProjectionContext(
   options?: { prismaClient?: DbClient },
 ): Promise<CanonicalNflProjection[]> {
   const db = (options?.prismaClient ?? prisma) as DbClient
+  const injuries = createNflInjuryIndex(db)
   const players = await Promise.all(
-    uniq(playerIds).map((playerId) => getCanonicalNflPlayerContext(playerId, { week, season, prismaClient: db })),
+    uniq(playerIds).map((playerId) => getCanonicalNflPlayerContext(playerId, { week, season, prismaClient: db, injuries })),
   )
   return players
     .filter((p): p is CanonicalNflPlayer => Boolean(p))
@@ -1128,8 +1314,24 @@ export async function generateAndPersistCanonicalNflProjections(options?: {
       take: limit,
     })
     .catch(() => [])) as SportsPlayerRow[]
+  /*
+   * Per Sleeper id FIRST, then by name/position/club. Grouped by club straight away, a free
+   * agent's Sleeper row (club null) and his vendor row (last club) landed in different groups,
+   * and the vendor's group wrote a snapshot on his old team.
+   *
+   * ⚠ THE WRITTEN `playerId` IS STILL THE ROW MAIN WOULD HAVE PICKED — the top-scored row of the
+   * fetched window — never a Sleeper row fetched only to judge it. The snapshot's own reader in
+   * this file (`playerId IN candidateIds(row)`) keys on the chosen row's `id`, so moving the id
+   * would orphan every snapshot written before. Only the identity fields change. Two ids are no
+   * longer written: a row that CONTRADICTS the Sleeper row (a namesake under his id), and the
+   * Sleeper row's own id when an agreeing vendor row outscores it — main wrote that one only
+   * because Sleeper spells the club out and so landed in a group of its own, and the reader,
+   * which picks by the same score, never asked for it.
+   */
+  const windowIds = new Set(rowsRaw.map((row) => row.id))
+  const perPlayer = chooseAuthoritativePerSleeperId(await withSleeperRows(db, rowsRaw), (row) => windowIds.has(row.id))
   const grouped = new Map<string, SportsPlayerRow[]>()
-  for (const row of rowsRaw) {
+  for (const row of perPlayer) {
     const key = `${canonicalName(row.name)}|${canonicalPosition(row.position)}|${canonicalTeam(row.team)}`
     const group = grouped.get(key) ?? []
     group.push(row)
@@ -1141,9 +1343,10 @@ export async function generateAndPersistCanonicalNflProjections(options?: {
   let persisted = 0
   let rosPersisted = 0
   let skipped = 0
+  const injuries = createNflInjuryIndex(db)
   for (const row of rows) {
     const identity = await findIdentityForRow(db, row).catch(() => null)
-    const player = await buildCanonicalPlayerFromRow(row, identity, { season, week, prismaClient: db })
+    const player = await buildCanonicalPlayerFromRow(row, identity, { season, week, prismaClient: db, injuries })
     if (!player.projection) {
       skipped += 1
       continue
@@ -1205,8 +1408,19 @@ export async function getCanonicalNflRosterContext(
   const season = Number(options?.season ?? roster.season.season)
   const week = Number(options?.week ?? roster.season.currentWeek ?? 1)
   const league = (await (db as any).league
-    .findUnique({ where: { id: roster.leagueId }, select: { settings: true } })
-    .catch(() => null)) as { settings: unknown } | null
+    .findUnique({ where: { id: roster.leagueId }, select: { settings: true, platform: true } })
+    .catch(() => null)) as { settings: unknown; platform?: string | null } | null
+  // Lock on each player's current club, not the team stored when he was added. Imported lazily:
+  // the resolver is server-only, and this module is also loaded by tsx sync scripts.
+  const currentTeamByPlayerId = await import('@/lib/redraft/lineupLockCurrentTeam')
+    .then(({ resolveCurrentLockTeams }) =>
+      resolveCurrentLockTeams(db as any, {
+        sport: roster.season.sport || 'NFL',
+        platform: league?.platform ?? null,
+        playerIds: roster.players.map((p) => p.playerId),
+      }),
+    )
+    .catch(() => undefined)
   // `RedraftRosterPlayer.isLocked` is never stored as true: the lineup lock is derived from the
   // game schedule at read time (lib/redraft/lineupLock.ts). Fail open like the rest of this module,
   // so a schedule read error cannot take the roster context down with it.
@@ -1218,30 +1432,41 @@ export async function getCanonicalNflRosterContext(
     leagueSettings: league?.settings ?? null,
     players: roster.players,
     now: options?.now,
+    currentTeamByPlayerId,
   })
     .then((result) => result.players)
     .catch(() => roster.players)
+  const injuries = createNflInjuryIndex(db, options?.now)
   const players = await Promise.all(
     rosterRows.map(async (row) => {
       const player =
-        (await getCanonicalNflPlayerContext(row.playerId, { season, week, prismaClient: db })) ??
+        (await getCanonicalNflPlayerContext(row.playerId, { season, week, prismaClient: db, injuries })) ??
         (await getCanonicalNflPlayerByNameTeam(row.playerName, row.team, {
           position: row.position,
           season,
           week,
           prismaClient: db,
+          injuries,
         }))
       if (!player) return null
       const warnings: string[] = []
       if (row.isLocked) warnings.push('Player is locked for the current scoring period.')
       if (player.byeWeek === week) warnings.push('Player is on bye this week.')
-      if (injuryUnavailable(row.injuryStatus ?? player.injuryStatus)) warnings.push('Player is unavailable by injury status.')
+      /*
+       * 🛑 THE CANONICAL DESIGNATION ONLY — NEVER `RedraftRosterPlayer.injuryStatus` (2026-10-11).
+       * The stored column is a snapshot written at import/refresh time and stale by construction; it
+       * used to WIN here (`row.injuryStatus ?? player.injuryStatus`), so last week's "Out" kept a
+       * cleared starter flagged unavailable and a stored "Questionable" hid a player the feed now has
+       * Out. `player.injuryStatus` is `loadInjuryStatus`: the live feed's current designation, or
+       * Sleeper's own season-scale roster absence, or null ("no news" — not "healthy").
+       */
+      if (injuryUnavailable(player.injuryStatus)) warnings.push('Player is unavailable by injury status.')
       return {
         ...player,
         rosterId,
         slotType: row.slotType,
         isLocked: row.isLocked,
-        injuryStatus: row.injuryStatus ?? player.injuryStatus,
+        injuryStatus: player.injuryStatus,
         lineupWarnings: warnings,
       } satisfies CanonicalNflRosterPlayer
     }),
@@ -1297,6 +1522,7 @@ export async function enrichCanonicalNflDraftPoolEntries<T extends Record<string
   const db = (options?.prismaClient ?? prisma) as DbClient
   const season = Number(options?.season ?? new Date().getUTCFullYear())
   const week = Math.max(1, Number(options?.week ?? 1))
+  const injuries = createNflInjuryIndex(db)
   const enriched = await Promise.all(
     entries.map(async (entry, index) => {
       const display = entry.display && typeof entry.display === 'object' ? entry.display : null
@@ -1305,8 +1531,8 @@ export async function enrichCanonicalNflDraftPoolEntries<T extends Record<string
       const team = String(entry.team ?? display?.team?.abbreviation ?? '').trim() || null
       const position = String(entry.position ?? display?.metadata?.position ?? '').trim() || null
       const canonical =
-        (playerId ? await getCanonicalNflPlayerContext(playerId, { season, week, prismaClient: db }) : null) ??
-        (name ? await getCanonicalNflPlayerByNameTeam(name, team, { position, season, week, prismaClient: db }) : null)
+        (playerId ? await getCanonicalNflPlayerContext(playerId, { season, week, prismaClient: db, injuries }) : null) ??
+        (name ? await getCanonicalNflPlayerByNameTeam(name, team, { position, season, week, prismaClient: db, injuries }) : null)
       if (!canonical) return entry
       const projection = canonical.projection
       const stats =
@@ -1414,6 +1640,7 @@ export async function getCanonicalNflTradeContext(
   const season = Number(options?.season ?? new Date().getUTCFullYear())
   const week = Math.max(1, Number(options?.week ?? 1))
   const db = (options?.prismaClient ?? prisma) as DbClient
+  const injuries = createNflInjuryIndex(db)
   const assets = await Promise.all(
     proposalAssets.map(async (asset) => {
       if (asset.assetType !== 'player') {
@@ -1430,7 +1657,7 @@ export async function getCanonicalNflTradeContext(
       }
       const canonical =
         (asset.playerId
-          ? await getCanonicalNflPlayerContext(asset.playerId, { season, week, prismaClient: db })
+          ? await getCanonicalNflPlayerContext(asset.playerId, { season, week, prismaClient: db, injuries })
           : null) ??
         (asset.playerName
           ? await getCanonicalNflPlayerByNameTeam(asset.playerName, asset.team, {
@@ -1438,6 +1665,7 @@ export async function getCanonicalNflTradeContext(
               season,
               week,
               prismaClient: db,
+              injuries,
             })
           : null)
       const projected = canonical?.projection?.projectedPoints ?? null
@@ -1447,7 +1675,12 @@ export async function getCanonicalNflTradeContext(
         weeklyProjectionDelta: projected,
         restOfSeasonProjection: canonical?.projection?.restOfSeason ?? null,
         fantasyCalcValue: canonical?.tradeValue ?? null,
-        injuryRisk: injuryRisk(canonical?.injuryStatus ?? null),
+        /*
+         * A resolved player with no current designation is "low", not "unknown": `injuryStatus` is now
+         * the feed's designation only, so a healthy player carries null where he used to carry the
+         * roster word "Active". Unknown stays for a player we could not resolve at all.
+         */
+        injuryRisk: canonical ? (canonical.injuryStatus ? injuryRisk(canonical.injuryStatus) : 'low') : ('unknown' as const),
         starterImpact: projected != null ? round1(projected) : null,
         benchImpact: projected != null ? round1(projected * 0.45) : null,
       }

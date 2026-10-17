@@ -20,10 +20,12 @@ vi.mock('@/lib/dashboard/get-dashboard-league-list', () => ({
 }))
 
 import {
+  buildPortfolioPlayerGrounding,
   extractNameCandidates,
   resolveFromMatches,
   serializePortfolioPlayerGrounding,
 } from '@/lib/chimmy/chimmyPortfolioPlayerGrounding'
+import { getPlayerDetail, searchPlayers } from '@/lib/core-app/playerFinder'
 
 const match = (over: Partial<Record<string, unknown>> = {}) =>
   ({
@@ -170,5 +172,19 @@ describe('serializePortfolioPlayerGrounding', () => {
     )
     expect(out).toContain('Roster status unavailable: identity unresolved')
     expect(out).not.toContain('Not on any of your rosters')
+  })
+})
+
+describe('buildPortfolioPlayerGrounding', () => {
+  /*
+   * An externalId is only unique per (sport, source): SOCCER `1100` is Haaland AND James Daly.
+   * The ref the grounding opens must name the matched row's feed, or the card refuses it as
+   * ambiguous (or, before that rule, opened the newest namesake row).
+   */
+  it("opens the matched row by its own source, not by the bare id", async () => {
+    vi.mocked(searchPlayers).mockResolvedValue([match({ externalId: '1100', source: 'rolling_insights' })])
+    vi.mocked(getPlayerDetail).mockResolvedValue(null)
+    await buildPortfolioPlayerGrounding({ message: 'Should I trade for Rashee Rice?', userId: 'u1', userLeagueIds: ['L1'] })
+    expect(vi.mocked(getPlayerDetail).mock.calls[0]![0]).toBe('NFL~rolling_insights:1100')
   })
 })

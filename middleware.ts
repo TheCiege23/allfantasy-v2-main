@@ -28,6 +28,7 @@ import {
   isIosAppUserAgent,
 } from "@/lib/platform/iosApp"
 import { isSessionRevoked } from "@/lib/auth/sessionRevocation"
+import { CSP_REPORT_ONLY_POLICY } from "@/lib/security/cspReportOnly"
 
 /**
  * Inside the iOS app nothing is sold except through Apple (App Store guideline
@@ -1060,11 +1061,13 @@ export async function middleware(request: NextRequest) {
  * `headers()` because a catch-all source there expands to one rule per route
  * and trips the 2048-rule cap noted beside that config.
  *
- * Deliberately NOT here yet: a script-restricting Content-Security-Policy. Meta
- * Pixel, PostHog, Sentry, GA and Stripe all load scripts, and an enforced CSP
- * that misses one breaks checkout or analytics silently — that needs a
- * Report-Only rollout of its own. `frame-ancestors` alone restricts nothing
- * but framing, so it is safe to enforce now.
+ * The script-restricting Content-Security-Policy is NOT enforced: Meta Pixel,
+ * PostHog, Sentry, GA and Stripe all load scripts, and an enforced CSP that
+ * misses one breaks checkout or analytics silently. It ships as
+ * `Content-Security-Policy-Report-Only` (lib/security/cspReportOnly.ts) so the
+ * real origin set is measured first. `frame-ancestors` alone restricts nothing
+ * but framing, so it is safe to enforce now — and stays in the enforced header,
+ * because the two headers are evaluated independently.
  *
  * HSTS omits includeSubDomains on purpose: it would pin every subdomain to
  * HTTPS for a year, and nothing here inventories what the subdomains serve.
@@ -1073,6 +1076,7 @@ const BASELINE_SECURITY_HEADERS: Record<string, string> = {
   "Strict-Transport-Security": "max-age=31536000",
   "X-Frame-Options": "DENY",
   "Content-Security-Policy": "frame-ancestors 'none'",
+  "Content-Security-Policy-Report-Only": CSP_REPORT_ONLY_POLICY,
   "X-Content-Type-Options": "nosniff",
   "Referrer-Policy": "strict-origin-when-cross-origin",
   // The app uses the microphone (voice input); camera and geolocation are unused.

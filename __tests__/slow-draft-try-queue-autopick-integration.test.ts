@@ -9,6 +9,7 @@ const hm = vi.hoisted(() => ({
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
+    league: { findUnique: vi.fn().mockResolvedValue(null) },
     draftSession: { findUnique: hm.draftSessionFindUnique, findFirst: hm.draftSessionFindUnique },
     roster: { findUnique: hm.rosterFindUnique },
   },

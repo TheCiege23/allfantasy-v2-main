@@ -47,6 +47,8 @@ const tradePrisma = vi.hoisted(() => ({
   $transaction: vi.fn(),
   leagueAuditLog: { findFirst: vi.fn(async () => null), create: vi.fn(async () => ({ id: 'archive-event' })) },
   draftPick: { findMany: vi.fn(async () => []) },
+  league: { findUnique: vi.fn(async () => ({ settings: {} })) },
+
   draftSession: {
     // leagueId reads are findFirst now (DraftSession.leagueId is not unique); answer them from findUnique
     findFirst(...a: unknown[]) { return (this as any).findUnique(...a) },

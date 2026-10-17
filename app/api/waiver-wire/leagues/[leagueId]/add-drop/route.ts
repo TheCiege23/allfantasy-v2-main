@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getEffectiveLeagueWaiverSettings } from "@/lib/waiver-wire"
 import { executeImmediateAddDrop } from "@/lib/waiver-wire/free-agent-service"
+import { dailyScheduleImmediateAddRefusal, loadDailyTransactionPolicy } from "@/lib/waiver-wire/daily-schedule-gate"
 import { mapAddDropErrorCode, addDropErrorStatus, ADD_DROP_ERROR_COPY, type AddDropErrorCode } from "@/lib/waiver-wire/addDropErrors"
 import { assertLeagueActionGate } from "@/server/services/leagueActionGate"
 import { assertRosterTransactionsAllowed } from "@/lib/roster-legality/rosterTransactionGates"
@@ -32,7 +33,14 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
   if (!userId) return errorResponse("UNAUTHORIZED")
 
   const leagueId = params.leagueId
-  const roster = await prisma.roster.findFirst({ where: { leagueId, platformUserId: userId }, select: { id: true } })
+  let roster = await prisma.roster.findFirst({ where: { leagueId, platformUserId: userId }, select: { id: true } })
+  if (!roster) {
+    const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { leagueVariant: true } })
+    if (league?.leagueVariant === 'survivor_guillotine') {
+      const team = await prisma.leagueTeam.findFirst({ where: { leagueId, claimedByUserId: userId }, select: { externalId: true } })
+      if (team) roster = await prisma.roster.findFirst({ where: { leagueId, id: team.externalId }, select: { id: true } })
+    }
+  }
   if (!roster) return errorResponse("UNAUTHORIZED", "You do not have a roster in this league.")
 
   const body = await req.json().catch(() => ({}))
@@ -51,11 +59,21 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
     return errorResponse(mapAddDropErrorCode(legality.error ?? "", { hasDrop: Boolean(dropPlayerId) }), legality.error)
   }
 
-  // Decide immediate-add vs waiver. Immediate only for FCFS or instant-free-agent leagues.
-  const settings = await getEffectiveLeagueWaiverSettings(leagueId)
-  const immediateAllowed = settings.normalizedWaiverType === "fcfs" || settings.instantFaAfterClear === true
-  if (!immediateAllowed) {
-    return errorResponse("WAIVER_REQUIRED", "This player must be claimed through waivers in this league.")
+  // Decide immediate-add vs waiver. A commissioner's per-day schedule (lib/waivers/dailyWaiverSchedule.ts)
+  // decides when one is enabled: Locked day → refused; Free-agents day, or a "Waivers → Free agents"
+  // day after its run cleared → first-come, except a player still in the after-drop waiver period;
+  // any other waiver day → claim through waivers. Otherwise: FCFS or instant-free-agent leagues only.
+  const daily = await loadDailyTransactionPolicy(leagueId).catch(() => null)
+  if (daily) {
+    if (daily.policy.mode === "locked") return errorResponse("LEAGUE_NOT_ACTIVE", daily.policy.immediateRefusal ?? undefined)
+    const refusal = await dailyScheduleImmediateAddRefusal(leagueId, daily, String(addPlayerId))
+    if (refusal) return errorResponse("WAIVER_REQUIRED", refusal)
+  } else {
+    const settings = await getEffectiveLeagueWaiverSettings(leagueId)
+    const immediateAllowed = settings.normalizedWaiverType === "fcfs" || settings.instantFaAfterClear === true
+    if (!immediateAllowed) {
+      return errorResponse("WAIVER_REQUIRED", "This player must be claimed through waivers in this league.")
+    }
   }
 
   try {

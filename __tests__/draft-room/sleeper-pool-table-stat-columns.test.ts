@@ -57,7 +57,7 @@ describe('sleeper pool table layout — headers by sport', () => {
 
   it('NBA exposes points / rebounds / assists / steals / blocks / threes', () => {
     const statCols = buildSleeperPoolTableLayout('NBA').statDefs.map((d) => d.key)
-    expect(statCols).toEqual(['pts', 'reb', 'ast', 'stl', 'blk', 'fg3m', 'nba_proj'])
+    expect(statCols).toEqual(['pts', 'reb', 'mpg', 'ast', 'stl', 'blk', 'fg3m', 'nba_proj'])
   })
 
   it('MLB hitter vs pitcher columns from position hint', () => {

@@ -76,15 +76,14 @@ export function deriveImpact(
    * total by exactly the amount that makes this page worth opening.
    */
   let totalPoints = 0
-  const livePlayerIds = new Set<string>()
   const liveLeagueIds = new Set<string>()
   for (const g of liveGames) {
     for (const t of g.tieIns) {
       if (t.points != null) totalPoints += t.points
-      livePlayerIds.add(t.playerId)
       liveLeagueIds.add(t.leagueId)
     }
   }
+  const counts = starterStageCounts(games)
 
   const gameIds = new Set(games.map((g) => g.gameId))
   const shownPlays = opts.onlyTheseGamesPlays
@@ -121,7 +120,9 @@ export function deriveImpact(
 
   return {
     totalPoints: Math.round(totalPoints * 10) / 10,
-    livePlayers: livePlayerIds.size,
+    livePlayers: counts.live,
+    upcomingPlayers: counts.upcoming,
+    finishedPlayers: counts.finished,
     liveLeagues: liveLeagueIds.size,
     liveGames: liveGames.length,
     biggestMover,
@@ -131,13 +132,60 @@ export function deriveImpact(
 }
 
 /**
- * What the live-impact total is a total OF. The number is summed per (player, league), so one player in
- * three leagues adds three scores; unlabelled it reads as one score. With a league held it is that
- * league's points; otherwise it names how many leagues it spans.
+ * Your starters on this slate, each counted ONCE however many leagues he starts in, by where his game
+ * is: playing now, still to play, or done.
+ *
+ * ⚠ THIS REPLACED THE SUMMED POINTS AS THE PANEL'S HEADLINE (2026-10-11 audit). That number added a
+ * player once per league and counted only games in progress, so it had nothing to be compared against
+ * ("427.2" across 37 leagues) and it FELL every time a game went final. A count of players in action is
+ * what the panel can say honestly across leagues; points stay per league, in "Contributions by league",
+ * where each league's own scoring makes them mean something.
+ *
+ * Bench players are not counted: a bench player's touchdown moves no matchup of yours. A player in a
+ * live game is never also counted as still to play.
  */
-export function impactTotalLabel(impact: { liveLeagues?: number }, leagueScoped: boolean): string {
-  if (leagueScoped) return 'fantasy pts scored live in this league right now'
-  const n = impact.liveLeagues ?? 0
-  if (n > 1) return `fantasy pts scored live across your ${n} leagues right now`
-  return 'fantasy pts scored live right now'
+export function starterStageCounts(
+  games: readonly Pick<LiveGameCard, 'isLive' | 'completed' | 'tieIns'>[],
+): { live: number; upcoming: number; finished: number } {
+  const live = new Set<string>()
+  const upcoming = new Set<string>()
+  const finished = new Set<string>()
+  for (const g of games) {
+    const bucket = g.isLive ? live : g.completed ? finished : upcoming
+    for (const t of g.tieIns) if (t.isStarter !== false) bucket.add(t.playerId)
+  }
+  for (const id of live) {
+    upcoming.delete(id)
+    finished.delete(id)
+  }
+  for (const id of finished) upcoming.delete(id)
+  return { live: live.size, upcoming: upcoming.size, finished: finished.size }
+}
+
+/** "across 3 games · 12 still to play · 140 done" — the line under the starter count. */
+export function starterStageDetail(impact: {
+  livePlayers: number
+  liveGames: number
+  upcomingPlayers?: number
+  finishedPlayers?: number
+}): string {
+  const parts: string[] = []
+  if (impact.livePlayers > 0) parts.push(`across ${impact.liveGames} ${impact.liveGames === 1 ? 'game' : 'games'}`)
+  if (impact.upcomingPlayers) parts.push(`${impact.upcomingPlayers} still to play`)
+  if (impact.finishedPlayers) parts.push(`${impact.finishedPlayers} done`)
+  return parts.join(' · ')
+}
+
+/**
+ * How long ago a play happened: "just now", "4 min ago", "2 hr ago". Null without a clock (before
+ * mount — the server cannot know when the browser paints) or for an unparseable time.
+ */
+export function playAgeLabel(detectedAt: string | null | undefined, now: number | null): string | null {
+  if (now == null || !detectedAt) return null
+  const at = new Date(detectedAt).getTime()
+  if (!Number.isFinite(at)) return null
+  const minutes = Math.floor(Math.max(0, now - at) / 60_000)
+  if (minutes < 1) return 'just now'
+  if (minutes < 60) return `${minutes} min ago`
+  return `${Math.floor(minutes / 60)} hr ago`
 }

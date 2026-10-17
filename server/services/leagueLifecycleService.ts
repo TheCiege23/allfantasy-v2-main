@@ -1,3 +1,5 @@
+import { seasonSetupBlocked } from '@/lib/tournament/seasonNativeContract'
+import { hasSeasonDraftRelease } from '@/lib/tournament/seasonDraftReleaseGate'
 /**
  * League lifecycle state machine: validates actions and safe transitions for canonical leagues.
  * Integrates with settings snapshots, engines, and commissioner overrides (see `commissionerService.ts`).
@@ -91,6 +93,10 @@ const ACTIONS: Record<LeagueLifecycleState, Set<LeagueLifecycleAction>> = {
   drafting: new Set([
     'draft_pick',
     'draft_commissioner_control',
+    // Name, timezone, logo, description. The structural keys a "general" patch could also carry
+    // (sport, season, leagueSize, leagueType, isDynasty) stay locked once a draft has started by
+    // `structuralPatchRefusal`, independently of this gate.
+    'settings_edit_general',
     'settings_edit_draft',
     'settings_edit_commissioner',
     'league_lock_toggle',
@@ -164,6 +170,9 @@ const ACTIONS: Record<LeagueLifecycleState, Set<LeagueLifecycleAction>> = {
   ]),
   completed: new Set([
     'standings_view',
+    // Name, timezone, logo, description. Structural keys stay locked by `structuralPatchRefusal`
+    // once a season exists; changing those is the renewal flow's job.
+    'settings_edit_general',
     'settings_edit_commissioner',
     'league_archive',
     'league_lock_toggle',
@@ -172,6 +181,9 @@ const ACTIONS: Record<LeagueLifecycleState, Set<LeagueLifecycleAction>> = {
   ]),
   offseason: new Set([
     'standings_view',
+    // Name, timezone, logo, description between seasons. Structural keys stay locked by
+    // `structuralPatchRefusal` once a season exists; changing those is the renewal flow's job.
+    'settings_edit_general',
     'settings_edit_commissioner',
     'league_archive',
     'league_lock_toggle',
@@ -181,6 +193,9 @@ const ACTIONS: Record<LeagueLifecycleState, Set<LeagueLifecycleAction>> = {
   ]),
   renewal_pending: new Set([
     'standings_view',
+    // Name, timezone, logo, description. Structural keys stay locked by `structuralPatchRefusal`
+    // once a season exists; changing those is the renewal flow's job.
+    'settings_edit_general',
     'settings_edit_commissioner',
     'league_archive',
     'league_lock_toggle',
@@ -384,6 +399,7 @@ export async function loadLeagueForLifecycle(leagueId: string) {
       locked: true,
       emergencyPaused: true,
       lifecycleMetadata: true,
+      settings: true,
       status: true,
     },
   })
@@ -402,6 +418,10 @@ export async function assertLifecycleActionAllowed(
     return { ok: false, err: { status: 404, error: 'League not found', code: 'NOT_FOUND' } }
   }
 
+  const seasonDraftAction = action === 'draft_start' || action === 'draft_pick' || action === 'draft_commissioner_control'
+  const releasedDraftAction = seasonSetupBlocked(row.settings) && seasonDraftAction && await hasSeasonDraftRelease(leagueId, row.settings)
+  if (seasonSetupBlocked(row.settings) && action !== 'standings_view' && !releasedDraftAction) return { ok: false, err: { status: 409, code: 'SEASON_TOURNAMENT_SETUP_BLOCKED', error: 'Tournament setup is locked while native rule enforcement and launch readiness are completed.' } }
+
   const state = getLeagueLifecycleState(row as Pick<League, 'lifecycleState'>)
   const elevated = Boolean(opts?.isElevatedCommissioner)
 
@@ -419,6 +439,7 @@ export async function assertLifecycleActionAllowed(
   if (
     row.locked &&
     !elevated &&
+    !releasedDraftAction &&
     action !== 'standings_view' &&
     action !== 'settings_edit_commissioner'
   ) {

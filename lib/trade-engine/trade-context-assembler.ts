@@ -1,3 +1,4 @@
+import { fetchVerifiedTradeInjuries } from './fetchVerifiedInjuries'
 import { prisma } from '../prisma'
 import { priceAssets, type PricedAsset, type ValuationContext, type AssetsInput, type PickInput } from '../hybrid-valuation'
 import { getPlayerAnalyticsBatch, type PlayerAnalytics } from '../player-analytics'
@@ -82,37 +83,6 @@ function parsePickFromString(asset: string): PickInput {
     round,
     tier,
   }
-}
-
-async function fetchInjuries(playerNames: string[]): Promise<Map<string, { status: string; type: string | null; description: string | null; date: string | null; fetchedAt: string | null }>> {
-  const result = new Map<string, { status: string; type: string | null; description: string | null; date: string | null; fetchedAt: string | null }>()
-  if (playerNames.length === 0) return result
-
-  try {
-    const injuries = await prisma.sportsInjury.findMany({
-      where: {
-        playerName: { in: playerNames },
-        sport: 'NFL',
-      },
-      orderBy: { fetchedAt: 'desc' },
-    })
-
-    for (const inj of injuries) {
-      if (!result.has(inj.playerName)) {
-        result.set(inj.playerName, {
-          status: inj.status || 'Unknown',
-          type: inj.type,
-          description: inj.description,
-          date: inj.date ? inj.date.toISOString().split('T')[0] : null,
-          fetchedAt: inj.fetchedAt ? inj.fetchedAt.toISOString() : null,
-        })
-      }
-    }
-  } catch (e) {
-    console.warn('[trade-context] Injury fetch failed:', e)
-  }
-
-  return result
 }
 
 type InjuryInfo = { status: string; type: string | null; description: string | null; date: string | null; fetchedAt: string | null }
@@ -440,7 +410,12 @@ export async function assembleTradeDecisionContext(
       warnings.push(`Analytics fetch failed: ${e.message}`)
       return new Map<string, PlayerAnalytics>()
     }),
-    fetchInjuries(allPlayerNames),
+    fetchVerifiedTradeInjuries(
+      // Bare asset labels: no team or position exists yet, so a name shared by two athletes is
+      // left out rather than bound to the wrong one (see matchInjuryRows.ts).
+      allPlayerNames.map((name) => ({ name })),
+      'trade-context',
+    ),
     Promise.all(
       allPlayerNames.slice(0, 20).map(name => getPlayerADP(name).catch(() => null))
     ),

@@ -512,14 +512,14 @@ async function resolvePlayers(
     () => new Map<string, string>(),
   )
   const lookupIds = [
-    ...new Set(ids.map((id) => sleeperLookupId(platform, id, sleeperIdByRosterId)).filter((x): x is string => x != null)),
+    ...new Set(ids.map((id) => sleeperLookupId(platform, id, sleeperIdByRosterId, sport)).filter((x): x is string => x != null)),
   ]
 
   const rows = await prisma.sportsPlayer.findMany({
     where: { sleeperId: { in: lookupIds } },
     // `sport` is required by `composePlayerIdentities` — it gates the NFL-only
     // club fold, and omitting it would silently leave every club unfolded.
-    select: { sleeperId: true, name: true, position: true, team: true, sport: true, imageUrl: true },
+    select: { sleeperId: true, name: true, position: true, team: true, sport: true, imageUrl: true, source: true, fetchedAt: true },
   })
 
   /*
@@ -624,7 +624,12 @@ async function resolvePlayers(
   const nextGameFor = buildNextGameMap(weekGames, rosterTeams)
 
   // The newest status per player across every spelling; shared with the /core/matchup scoreboard.
-  const injuryById = await readInjuryStatusById(sport, namesById, new Map([...identityBy].map(([id, player]) => [id, player.team])))
+  const injuryById = await readInjuryStatusById(
+    sport,
+    namesById,
+    new Map([...identityBy].map(([id, player]) => [id, player.team])),
+    new Map([...identityBy].map(([id, player]) => [id, player.position ?? null])),
+  )
 
   /*
    * ⚠ PROJECTIONS ARE JOINED HERE BECAUSE THIS IS WHERE THE IDS ALREADY ARE, and

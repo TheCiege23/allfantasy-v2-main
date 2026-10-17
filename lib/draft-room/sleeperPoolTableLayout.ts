@@ -108,8 +108,12 @@ export function buildSleeperPoolTableLayout(
     label: def.label,
     width: statColumnWidth(def, sport),
     align: 'right',
-    title: def.label,
-    statLabel: def.label,
+    title: sport === 'NBA' && ['pts', 'reb', 'mpg'].includes(def.key)
+      ? `Cached season ${def.key === 'pts' ? 'points' : def.key === 'reb' ? 'rebounds' : 'minutes'} per game`
+      : def.label,
+    statLabel: sport === 'NBA' && ['pts', 'reb', 'mpg'].includes(def.key)
+      ? `${def.key === 'pts' ? 'points' : def.key === 'reb' ? 'rebounds' : 'minutes'} per game`
+      : def.label,
   }))
 
   const actions: SleeperColumnSpec = {

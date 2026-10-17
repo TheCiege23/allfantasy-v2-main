@@ -179,11 +179,11 @@ export async function applyIdolPower(
       ? await getCouncil(leagueId, councilWeek)
       : null
   const finaleOnlyPower = idol.powerType === 'jury_influence' || idol.powerType === 'finale_advantage'
-  if (!council && !finaleOnlyPower) return { ok: false, error: 'Idols can only be played during an active Tribal Council' }
+  if (!council && !finaleOnlyPower) return { ok: false, error: 'Idols can only be played during an active Elimination Council' }
 
   if (council) {
-    if (council.closedAt) return { ok: false, error: 'This Tribal Council is already closed' }
-    if (new Date() > council.voteDeadlineAt) return { ok: false, error: 'The Tribal Council deadline has passed' }
+    if (council.closedAt) return { ok: false, error: 'This Elimination Council is already closed' }
+    if (new Date() > council.voteDeadlineAt) return { ok: false, error: 'The Elimination Council deadline has passed' }
 
     const eligibleRosterIds = await getEligibleRosterIdsForCouncil(council.id)
     if (!eligibleRosterIds.includes(rosterId)) {

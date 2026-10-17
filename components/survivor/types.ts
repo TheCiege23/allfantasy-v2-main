@@ -44,6 +44,7 @@ export interface SurvivorSummaryConfig {
 /** Matches `ScrollRevealStep` from `lib/survivor/votingEngine.ts` (JSON on council). */
 export type SurvivorScrollRevealStep =
   | { type: 'vote'; voterName: string; targetName: string }
+  | { type: 'ballot'; targetName: string; stamp: string }
   | { type: 'pause' }
   | { type: 'does_not_count'; voterName: string }
   | { type: 'elimination'; userName: string }
@@ -57,6 +58,7 @@ export interface SurvivorSeasonCalendar {
 }
 
 export interface SurvivorSummaryTribe {
+  logoUrl?: string | null
   id: string
   name: string
   emoji?: string | null
@@ -80,17 +82,29 @@ export interface SurvivorSummaryChallenge {
   id: string
   week: number
   challengeType: string
+  title?: string
+  scope?: string
+  submissionMode?: string
+  status?: string
   lockAt: string | null
   configJson?: unknown
   resultJson: unknown
+  winnerTribeId?: string | null
+  winnerUserIds?: string[]
+  winnerUserNames?: string[]
+  resultSummary?: string | null
   submissionCount: number
 }
 
 export interface SurvivorSummary {
+  leagueName?: string
   config: SurvivorSummaryConfig
   /** Regular-season week window for main island + exile (no playoffs). */
   seasonCalendar?: SurvivorSeasonCalendar
   currentWeek: number
+  tribeScores?: Record<string, number>
+  scoresFinalized?: boolean
+  nbaWeeklyScoringMode?: 'all_games' | 'one_game_per_player'
   tribes: SurvivorSummaryTribe[]
   council: SurvivorSummaryCouncil | null
   challenges: SurvivorSummaryChallenge[]
@@ -102,7 +116,7 @@ export interface SurvivorSummary {
   myRosterId?: string
   myTribeId?: string
   myTribeSource?: string | null
-  myIdols: { id: string; playerId: string; powerType: string }[]
+  myIdols: { id: string; playerId: string; powerType: string; playerName?: string | null; playerImageUrl?: string | null }[]
   myActiveEffects?: {
     rewardType: string
     week: number
@@ -119,6 +133,16 @@ export interface SurvivorSummary {
     eligibleToReturn: boolean
     reason: string | null
   } | null
+  tribeBalance?: {
+    requiredSitOuts: Record<string, number>
+    activeCounts: Record<string, number>
+  }
+  sitOuts?: {
+    pending: { id: string; targetTribeId: string | null; targetUserId: string | null }[]
+    accepted: { id: string; targetTribeId: string | null; targetUserId: string | null }[]
+    declined: { id: string; targetTribeId: string | null; targetUserId: string | null }[]
+    myPendingResponse?: { sitOutId: string | null; week: number } | null
+  }
   finale?: {
     open: boolean
     closed: boolean

@@ -89,7 +89,12 @@ export function buildChimmyPlayerCards(args: {
         name: p.playerName,
         position: p.position ?? null,
         team: p.team ?? null,
-        imageUrl: looksLikeSleeperExternalId(p.playerId)
+        /*
+         * Only from a Sleeper id. A native NHL roster's numbers are Rolling Insights ids (1114 is A.J.
+         * Greer, not Sleeper's 1114) and a Fleaflicker roster's are its own; both look like Sleeper
+         * ids, so the roster's id space decides, not the id's shape. No other source here: initials.
+         */
+        imageUrl: roster.idSpace !== 'other' && looksLikeSleeperExternalId(p.playerId)
           ? sleeperHeadshotUrl(p.playerId, sport.toLowerCase() as never)
           : null,
         isStarter,

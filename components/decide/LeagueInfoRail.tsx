@@ -14,6 +14,7 @@ import { useMemo } from 'react'
 import type { LeagueTeamSlot, UserLeague } from '@/app/dashboard/types'
 import { isPreseason, useProjectedStandings } from '@/components/decide/useProjectedStandings'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { pointsAgainstText } from '@/components/decide/pointsAgainst'
 import './broadcast-deck.css'
 
 /** Renders `text` with `token` replaced by `bold` in a <b>, keeping the words around it in order. */
@@ -81,7 +82,7 @@ export function LeagueInfoRail({
           <div className="bdx-rows">
             <div className="bdx-row"><span className="k">{t('decide.team')}</span><span className="x">{myTeam.teamName || '—'}</span></div>
             <div className="bdx-row"><span className="k">{t('decide.record')}</span><span className="x">{record}</span></div>
-            <div className="bdx-row"><span className="k">{t('decide.rail.pfPa')}</span><span className="x">{myTeam.pointsFor.toFixed(1)} / {myTeam.pointsAgainst.toFixed(1)}</span></div>
+            <div className="bdx-row"><span className="k">{t('decide.rail.pfPa')}</span><span className="x">{myTeam.pointsFor.toFixed(1)} / {pointsAgainstText(myTeam.pointsAgainst)}</span></div>
             <div className="bdx-row"><span className="k">FAAB</span><span className="x">{myTeam.faabRemaining != null ? `$${myTeam.faabRemaining}` : '—'}</span></div>
           </div>
         ) : (

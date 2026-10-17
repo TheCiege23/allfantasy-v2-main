@@ -62,6 +62,7 @@ import ConfidenceFreshnessLabel from "@/components/ConfidenceFreshnessLabel"
 import { LegacyDataNotice } from "@/components/legacy/LegacyDataNotice"
 import { mapLegacyAuthError, type LegacyDataStatus } from "@/lib/legacy/dataStatus"
 import { sendProductAnalyticsBeacon } from "@/lib/analytics/client"
+import { legacyPromptSeason } from '@/lib/legacy/promptSeason'
 import { LEGACY_HONESTY } from "@/lib/analytics/eventNames"
 import ActionHandoffButtons, { parseAIHandoffs } from "@/components/ActionHandoffButtons"
 import RankChangeDrivers from "@/components/RankChangeDrivers"
@@ -705,8 +706,8 @@ function LeagueHistoryAccordion({
                                                 </div>
                                               </div>
                                             )}
-                                            {/* Draft Picks - Only show for 2026 season with 3 years of picks */}
-                                            {league.season >= 2025 && roster.draftPicks && roster.draftPicks.length > 0 && (() => {
+                                            {/* Draft Picks - current and last season only, 3 years of picks (was a literal 2025, fixed 2026-10-12) */}
+                                            {league.season >= legacyPromptSeason() - 1 && roster.draftPicks && roster.draftPicks.length > 0 && (() => {
                                               const picksBySeason: Record<number, typeof roster.draftPicks> = {}
                                               for (const pick of roster.draftPicks) {
                                                 if (pick.season >= league.season && pick.season <= league.season + 2) {
@@ -7106,14 +7107,14 @@ function AFLegacyContent() {
                                   </div>
                                   <p className="text-[11px] text-white/60 leading-relaxed">
                                     {(aiReport as any).window_status === 'READY_TO_COMPETE' && 'Championship window OPEN. Buy proven talent, win now!'}
-                                    {(aiReport as any).window_status === 'REBUILDING' && 'Building for 2026+. Stack picks and young WRs/QBs.'}
+                                    {(aiReport as any).window_status === 'REBUILDING' && `Building for ${legacyPromptSeason() + 1}+. Stack picks and young WRs/QBs.`}
                                     {(aiReport as any).window_status === 'OVEREXTENDED' && 'Fragile contender. Shore up depth or sell before value craters.'}
                                     {(aiReport as any).window_status === 'AGING_CORE' && 'Window closing fast. Aggressively sell for picks.'}
                                     {(aiReport as any).window_status === 'DIRECTION_NEEDED' && 'Pick a lane — push in or pivot out!'}
                                   </p>
                                   {(aiReport as any).offseason_label && (
                                     <div className={`mt-2 inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold ${
-                                      (aiReport as any).offseason_label === 'Best 2025 Outlook' ? 'bg-green-500/30 text-green-300' :
+                                      /^Best \d{4} Outlook$/.test(String((aiReport as any).offseason_label)) ? 'bg-green-500/30 text-green-300' :
                                       (aiReport as any).offseason_label === 'Most Fragile Contender' ? 'bg-yellow-500/30 text-yellow-300' :
                                       (aiReport as any).offseason_label === 'Best Rebuild Foundation' ? 'bg-blue-500/30 text-blue-300' :
                                       'bg-red-500/30 text-red-300'

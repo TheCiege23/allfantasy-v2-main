@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Guilly bestball week</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./specialty/sp.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Cinzel:wght@600;700&amp;family=Caveat:wght@600;700&amp;family=Bebas+Neue&amp;family=Pirata+One&amp;family=Creepster&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080d}
+.gy-d{font-family:'Bebas Neue',sans-serif;letter-spacing:.03em;line-height:.95}
+.gy-cut{position:relative;height:0;border-top:2px dashed #ff3d2e;margin:9px 0}
+.gy-cut>span{position:absolute;left:50%;top:-12px;transform:translateX(-50%);white-space:nowrap;padding:2px 10px;border-radius:5px;background:#ff3d2e;color:#fff;font:800 10px 'Archivo';letter-spacing:.1em}
+.gy-head{width:34px;height:34px;flex:none}
+.gy-pos{display:inline-grid;place-items:center;height:20px;min-width:26px;padding:0 4px;border-radius:5px;font:900 9.5px 'Archivo';letter-spacing:.02em}
+.gy-gl{display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:22px;padding:0 6px;border-radius:6px;background:#151926;font:700 11px 'JetBrains Mono';color:#e8eaf2}
+.gy-meter{position:relative;height:14px;border-radius:99px;background:linear-gradient(90deg,#7a1410,#ff3d2e 30%,#ffc531 55%,#3abf7a 80%);overflow:visible}
+.gy-meter>i{position:absolute;top:-6px;width:4px;height:26px;border-radius:2px;background:#fff;box-shadow:0 0 0 2px #07080d}
+@keyframes gyBlade{0%{transform:translateY(-120%)}70%{transform:translateY(6%)}85%{transform:translateY(-3%)}100%{transform:translateY(0)}}
+@keyframes gyRoll{0%{transform:translate(-40px,-30px) rotate(-90deg);opacity:0}40%{opacity:1}100%{transform:translate(0,0) rotate(200deg);opacity:1}}
+@keyframes gyShake{0%,100%{transform:translate(0,0)}20%{transform:translate(-6px,3px)}40%{transform:translate(6px,-3px)}60%{transform:translate(-4px,2px)}80%{transform:translate(3px,-1px)}}
+.gy-blade{animation:gyBlade .55s cubic-bezier(.5,0,.75,0) both}
+.gy-roll{animation:gyRoll .9s .45s cubic-bezier(.2,.8,.2,1) both}
+.gy-shake{animation:gyShake .4s .5s both}
+.gy-tomb{position:relative;width:100%;aspect-ratio:200/240}
+.gy-tomb>img{position:absolute;inset:0;width:100%}
+.gy-tomb>div{position:absolute;left:18%;right:18%;top:49%;display:flex;flex-direction:column;align-items:center;gap:1px;text-align:center}
+.gy-tomb>div>b{font:800 12.5px 'Archivo';color:#1a1d24;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gy-tomb>div>span{font:700 10px 'JetBrains Mono';color:#2a2f3a}
+.gy-mode{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px 0 4px;border-radius:99px;background:#151926;border:1px solid rgba(255,255,255,.1);font:700 12px 'Archivo'}
+.gy-mode>img{width:22px}
+</style>
+</helmet>
+<div class="sp" style="--acc: #ff3d2e; --acc2: #ffc531; --accInk: #fff; --disp: Bebas Neue; min-height: 100vh; display: flex; flex-direction: column">
+<header style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 18px 28px; border-bottom: 1px solid rgba(255,255,255,.06)">
+  <a class="sp-btn" href="GuillyHome.dc.html" aria-label="Back" style="padding: 0 12px">‹</a>
+  <div style="flex: 1 1 320px; display: flex; flex-direction: column; gap: 3px"><h1 class="sp-h1">Bestball · week 8</h1><span class="sp-t2">Guilly bestball · no lineups to set — your best scores count automatically, every day</span></div>
+  <span class="gy-mode"><img src="specialty/guilly/icon-bestball.svg" alt="">Bestball</span>
+</header>
+<div style="display: flex; flex-wrap: wrap; gap: 22px; padding: 22px 28px 32px; align-items: flex-start">
+  <section style="flex: 1 1 760px; min-width: 0; display: flex; flex-direction: column; gap: 16px">
+    <div class="sp-card" style="padding: 16px 18px; display: flex; flex-direction: column; gap: 10px">
+      <span class="sp-lbl">This week by day · counted points</span>
+      <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px"><sc-for list="{{days}}" as="d" hint-placeholder-count="7"><button onClick="{{d.pick}}" style="display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 10px 6px; border-radius: 10px; border: 1px solid {{d.line}}; background: {{d.bg}}; color: inherit; font: inherit; cursor: pointer"><span class="sp-lbl" style="color: {{d.lc}}">{{d.d}}</span><span class="sp-num" style="font-size: 18px; font-weight: 700">{{d.pts}}</span><span class="sp-t3" style="font-size: 10.5px">{{d.g}} games</span></button></sc-for></div>
+    </div>
+    <div class="sp-card" style="padding: 16px 18px; display: flex; flex-direction: column; gap: 6px">
+      <div style="display: flex; align-items: center; gap: 10px"><span class="sp-lbl" style="flex: 1">{{dayTitle}} · the lineup that counted</span><span class="sp-t3" style="font-size: 12px">Chosen after the games, never before</span></div>
+      <sc-for list="{{lineup}}" as="l" hint-placeholder-count="13"><div class="sp-row" style="background: {{l.bg}}; border-color: {{l.line}}"><span class="gy-pos" style="width: 40px; background: {{l.sb}}; color: {{l.sc}}">{{l.slot}}</span><span style="flex: 1; font-weight: 600; color: {{l.tc}}">{{l.n}}</span><span class="sp-t3" style="font-size: 11.5px; width: 150px">{{l.note}}</span><span class="sp-num" style="width: 60px; text-align: right; font-weight: 700; color: {{l.pc}}">{{l.pts}}</span></div></sc-for>
+    </div>
+  </section>
+  <aside style="flex: 0 1 380px; display: flex; flex-direction: column; gap: 16px">
+    <div class="sp-card2" style="padding: 18px; display: flex; flex-direction: column; gap: 10px; border-color: rgba(58,190,120,.4)">
+      <div style="display: flex; align-items: center; gap: 12px"><img src="specialty/guilly/head-calm.svg" alt="" style="width: 60px"><div style="display: flex; flex-direction: column"><span class="sp-lbl" style="color: #7fe0a6">Projected over the blade</span><span class="gy-d" style="font-size: 44px; color: #fff">+108.4</span></div></div>
+      <div class="gy-meter"><i style="left: 76%"></i></div>
+      <span class="sp-t2" style="font-size: 12.5px">Bestball saved you <b class="sp-num" style="color: #7fe0a6">46.2</b> points this week — bench scores that counted because a starter sat.</span>
+    </div>
+    <div class="sp-card" style="padding: 14px 16px; display: flex; flex-direction: column; gap: 10px"><span class="sp-lbl">Bestball Guilly rules</span><div class="sp-rule"><b>1</b><span>Every day, your best eligible players fill your lineup automatically.</span></div><div class="sp-rule"><b>2</b><span>No lineup locks, no benching mistakes, no streaming.</span></div><div class="sp-rule"><b>3</b><span>The chop is still weekly: lowest counted total goes.</span></div><div class="sp-rule"><b>4</b><span>The only roster moves are FAAB bids on chopped rosters.</span></div></div>
+  </aside>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { d: 2 }; }
+  renderVals() {
+    const PL = [["Nikola Jokic", "C"], ["Shai Gilgeous-Alexander", "PG/SG"], ["Victor Wembanyama", "C/PF"], ["Luka Doncic", "PG/SG"], ["Giannis Antetokounmpo", "PF/C"], ["Anthony Davis", "PF/C"], ["Anthony Edwards", "SG/SF"], ["Domantas Sabonis", "C/PF"], ["Karl-Anthony Towns", "C/PF"], ["Cade Cunningham", "PG"], ["Jalen Johnson", "PF/SF"], ["Trae Young", "PG"], ["Tyrese Maxey", "PG"], ["Jalen Williams", "SG/SF"], ["Chet Holmgren", "C/PF"], ["Alperen Sengun", "C"], ["LaMelo Ball", "PG"], ["Donovan Mitchell", "SG"], ["Devin Booker", "SG/PG"], ["Jalen Brunson", "PG"], ["Stephen Curry", "PG"], ["Kevin Durant", "SF/PF"], ["LeBron James", "SF/PF"], ["Bam Adebayo", "C"], ["Joel Embiid", "C"], ["Paolo Banchero", "PF"], ["Franz Wagner", "SF/PF"], ["Scottie Barnes", "SF/PF"], ["Evan Mobley", "PF/C"], ["Pascal Siakam", "PF"], ["Jaren Jackson Jr.", "PF/C"], ["Ja Morant", "PG"], ["Josh Giddey", "PG/SF"], ["De\u2019Aaron Fox", "PG"], ["Jamal Murray", "PG"], ["Zion Williamson", "PF"], ["James Harden", "PG"], ["Kawhi Leonard", "SF"], ["Ivica Zubac", "C"], ["Lauri Markkanen", "PF"], ["Dyson Daniels", "SG/PG"], ["Amen Thompson", "SG/SF"], ["Derrick White", "PG/SG"], ["Desmond Bane", "SG"], ["Austin Reaves", "SG"], ["Darius Garland", "PG"], ["Jarrett Allen", "C"], ["Rudy Gobert", "C"], ["Myles Turner", "C"], ["Nikola Vucevic", "C"], ["Deni Avdija", "SF/PF"], ["Cooper Flagg", "SF/PF"], ["Mikal Bridges", "SF"], ["OG Anunoby", "SF/PF"], ["Josh Hart", "SG/SF"], ["Brandon Miller", "SF"], ["Trey Murphy III", "SF"], ["Jimmy Butler", "SF"], ["Zach LaVine", "SG"], ["DeMar DeRozan", "SF"], ["Coby White", "PG/SG"], ["Jalen Duren", "C"], ["Walker Kessler", "C"], ["Onyeka Okongwu", "C"], ["Nic Claxton", "C"], ["Jakob Poeltl", "C"], ["Mark Williams", "C"], ["Isaiah Hartenstein", "C"], ["Stephon Castle", "PG/SG"], ["Alex Sarr", "C/PF"], ["Tyler Herro", "SG"], ["Norman Powell", "SG/SF"], ["Michael Porter Jr.", "SF"], ["Aaron Gordon", "PF"], ["Julius Randle", "PF"], ["Jalen Green", "SG"], ["Anfernee Simons", "SG"], ["Christian Braun", "SG"], ["Keegan Murray", "PF"], ["Herbert Jones", "SF"], ["Andrew Wiggins", "SF"], ["Miles Bridges", "SF/PF"], ["Kyle Kuzma", "PF"], ["Jerami Grant", "PF"], ["RJ Barrett", "SF"], ["Immanuel Quickley", "PG"], ["Jordan Poole", "SG/PG"], ["CJ McCollum", "SG"], ["Malik Monk", "SG"], ["Mike Conley", "PG"], ["Russell Westbrook", "PG"], ["Collin Sexton", "SG/PG"], ["Jordan Clarkson", "SG"], ["Bennedict Mathurin", "SG/SF"], ["Andrew Nembhard", "PG/SG"], ["Ausar Thompson", "SF"], ["Tobias Harris", "PF"], ["Paul George", "SF/PF"], ["Draymond Green", "PF/C"], ["Jonathan Kuminga", "PF"], ["Brandin Podziemski", "SG"], ["Klay Thompson", "SG"], ["P.J. Washington", "PF"], ["Dereck Lively II", "C"], ["Naz Reid", "C/PF"], ["Rui Hachimura", "PF"], ["Jaden McDaniels", "SF/PF"], ["Donte DiVincenzo", "SG"], ["Bilal Coulibaly", "SF"], ["Tari Eason", "PF"], ["Jabari Smith Jr.", "PF"], ["Kel\u2019el Ware", "C"], ["Shaedon Sharpe", "SG"], ["Scoot Henderson", "PG"], ["Toumani Camara", "SF/PF"], ["Cam Thomas", "SG"], ["Cameron Johnson", "SF"], ["Nickeil Alexander-Walker", "SG"], ["Keldon Johnson", "SF"], ["Devin Vassell", "SG"], ["Jeremy Sochan", "PF"], ["Matas Buzelis", "SF/PF"], ["Ayo Dosunmu", "SG"], ["Payton Pritchard", "PG"], ["Jrue Holiday", "PG/SG"], ["Jaylen Brown", "SG/SF"], ["Al Horford", "C"], ["Kevin Huerter", "SG"], ["Max Strus", "SF"], ["De\u2019Andre Hunter", "SF"], ["Caris LeVert", "SG"], ["Ty Jerome", "PG"], ["Luguentz Dort", "SG"], ["Cason Wallace", "PG/SG"], ["Aaron Nesmith", "SF"], ["Obi Toppin", "PF"], ["Jaime Jaquez Jr.", "SF"], ["Grayson Allen", "SG"], ["Royce O\u2019Neale", "SF"], ["Naji Marshall", "SF"], ["Quentin Grimes", "SG"], ["Jalen Suggs", "PG/SG"], ["Wendell Carter Jr.", "C/PF"], ["Goga Bitadze", "C"], ["Bobby Portis", "PF/C"], ["Gary Trent Jr.", "SG"], ["Nikola Jovic", "PF"], ["Duncan Robinson", "SF"], ["Harrison Barnes", "SF"], ["Keon Ellis", "SG"], ["Isaiah Stewart", "C"], ["Jaden Ivey", "SG/PG"], ["Dennis Schroder", "PG"], ["Terance Mann", "SG"], ["Kris Dunn", "PG/SG"], ["Derrick Jones Jr.", "SF"], ["Brandon Ingram", "SF/PF"], ["Mitchell Robinson", "C"], ["Yves Missi", "C"], ["Tre Jones", "PG"], ["Day\u2019Ron Sharpe", "C"], ["Nick Richards", "C"], ["Moussa Diabate", "C"], ["Guerschon Yabusele", "PF"], ["Daniel Gafford", "C"], ["Brook Lopez", "C"], ["Clint Capela", "C"], ["Jusuf Nurkic", "C"], ["Deandre Ayton", "C"], ["Kristaps Porzingis", "C"], ["Jonas Valanciunas", "C"], ["Zach Edey", "C"], ["Donovan Clingan", "C"], ["Kelly Oubre Jr.", "SF"], ["Chris Paul", "PG"], ["Bradley Beal", "SG"], ["Kevin Porter Jr.", "PG"], ["Spencer Dinwiddie", "PG"]];
+const TM = ["You \u00b7 TheCiege26", "BucketsOnly", "LoadManagement", "BoxOutBandits", "DunkCity", "SplashZone", "TripleDoubleTrouble", "AndOneAddicts", "PostUpPros", "FastBreakFam", "GlassCleaners", "ZoneDefense", "AlleyOops", "PaintBeasts", "BankShotBoys", "FlagrantFoul", "ShotClock", "HeatCheck"];
+const POS = {"QB": ["#e0553f", "#fff"], "RB": ["#3abf7a", "#06200f"], "WR": ["#3d8fe0", "#fff"], "TE": ["#e89a2c", "#1a1004"], "FLEX": ["#8a8fa8", "#0b0d14"], "SFLEX": ["#c04fd0", "#fff"], "K": ["#b48cf0", "#1a0d33"], "DST": ["#8a6a4a", "#fff"], "DL": ["#2fb5a5", "#04201d"], "LB": ["#1f8f86", "#fff"], "DB": ["#5fd0e0", "#05242a"], "IDP": ["#4a7f7a", "#fff"], "PG": ["#3d8fe0", "#fff"], "SG": ["#4fb3d9", "#05242a"], "SF": ["#3abf7a", "#06200f"], "PF": ["#e89a2c", "#1a1004"], "C": ["#e0553f", "#fff"], "G": ["#7aa6ec", "#0b1830"], "F": ["#7fd09c", "#06200f"], "UTIL": ["#8a8fa8", "#0b0d14"], "BN": ["#1d2130", "#a3a9c2"], "IR": ["#2a1418", "#ff9a8a"], "IL": ["#2a1418", "#ff9a8a"]};
+const G = "specialty/guilly/";
+const rng = (seed) => { let s = seed; return () => { s = (s * 9301 + 49297) % 233280; return s / 233280; }; };
+const AVC = ['#3a1418','#22314f','#1d3a3a','#2c2a4a','#3a3418','#12352a','#3a1f30','#1f2a4d','#2a3a1a','#3a2a14'];
+const av = (n) => { const s = n.replace('You · ', ''); let h = 0; for (const ch of s) h = (h * 31 + ch.charCodeAt(0)) % 997; return { ini: s.replace(/[^A-Z0-9]/g, '').slice(0, 2) || s.slice(0, 2).toUpperCase(), c: AVC[h % AVC.length] }; };
+const short = (n) => { const p = n.split(' '); return p.length > 1 ? p[0][0] + '. ' + p.slice(1).join(' ') : n; };
+const pos1 = (p) => p.split('/')[0];
+const chip = (p) => ({ p, bg: POS[pos1(p)][0], c: POS[pos1(p)][1] });
+const fpg = (i) => Math.round((58 - i * 0.215 - (i > 40 ? (i - 40) * 0.04 : 0)) * 10) / 10;
+const price = (i) => Math.max(1, Math.round(74 * Math.exp(-i / 26)));
+const HEAD = { calm: G + 'head-calm.svg', nervous: G + 'head-nervous.svg', ko: G + 'head-ko.svg', crown: G + 'head-crown.svg' };
+// season: 18 teams, chops weeks 1..7 done, week 8 live
+const CHOPPED = [[1,'FlagrantFoul',498.2,'Started three centers who all sat the Sunday back-to-back.'],[2,'ShotClock',611.4,'Two games played all week. The schedule did him in.'],
+  [3,'HeatCheck',640.9,'Load-managed. Twice.'],[4,'BankShotBoys',702.3,'Lost by 0.6 to a late free throw.'],[5,'PaintBeasts',688.0,'Bid $0 on waivers for five straight weeks.'],
+  [6,'AlleyOops',731.5,'Benched a 61-point night. Bestball would have saved him.'],[7,'ZoneDefense',744.8,'Three starters on the injury report by Wednesday.']];
+const ALIVE = TM.filter(t => !CHOPPED.find(c => c[1] === t));
+    const st = this.state;
+    const D = [['Mon', 132.4, 5], ['Tue', 98.0, 3], ['Wed', 241.6, 8], ['Thu', 120.2, 4], ['Fri', 210.9, 7], ['Sat', 88.5, 3], ['Sun', 176.0, 6]];
+    const SL = ['PG', 'SG', 'SF', 'PF', 'C', 'G', 'F', 'UTIL', 'UTIL', 'UTIL'];
+    const mine = [40, 70, 57, 99, 46, 112, 21, 2, 85, 126, 138, 147, 152];
+    const r = rng(st.d * 13 + 5);
+    const lineup = SL.map((s, k) => { const i = mine[k], played = k < D[st.d][2] + 2, pts = played ? Math.round((fpg(i) * (.7 + r() * .7)) * 10) / 10 : 0, bench = (k === 8 || k === 9) && played && st.d === 2;
+      return { slot: s, sb: (POS[s] || POS.UTIL)[0], sc: (POS[s] || POS.UTIL)[1], n: PL[i][0], note: !played ? 'No game' : bench ? 'From your bench — counted' : PL[i][1],
+        pts: played ? pts.toFixed(1) : '—', pc: played ? '#e8eaf2' : '#5a6078', tc: played ? '#e8eaf2' : '#7d84a3', bg: bench ? 'rgba(58,190,120,.08)' : '#10131c', line: bench ? 'rgba(58,190,120,.4)' : 'rgba(255,255,255,.05)' }; })
+      .concat(mine.slice(10).map(i => ({ slot: 'BN', sb: POS.BN[0], sc: POS.BN[1], n: PL[i][0], note: 'Did not count today', pts: (fpg(i) * .6).toFixed(1), pc: '#5a6078', tc: '#7d84a3', bg: '#0b0d14', line: 'rgba(255,255,255,.04)' })));
+    return { days: D.map(([d, pts, g], k) => ({ d, pts: pts.toFixed(1), g, bg: k === st.d ? 'rgba(255,197,49,.1)' : '#10131c', line: k === st.d ? 'rgba(255,197,49,.5)' : 'rgba(255,255,255,.06)', lc: k === st.d ? '#ffc531' : '#7d84a3', pick: () => this.setState({ d: k }) })),
+      dayTitle: D[st.d][0], lineup };
+  }
+}
+</script>
+</body>
+</html>

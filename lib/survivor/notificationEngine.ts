@@ -156,7 +156,7 @@ export async function scheduleTribalReminders(leagueId: string, deadline: Date):
   await scheduleIfFuture(leagueId, 'vote_reminder', {
     recipientRole: 'active',
     title: '🗳 Vote closes in 2 hours',
-    body: 'Tribal Council deadline approaching. Cast your vote via @Chimmy.',
+    body: 'Elimination Council deadline approaching. Cast your vote via @Chimmy.',
     deepLinkPath: `/survivor/${leagueId}/tribal`,
     urgency: 'high',
     isSpoilerSafe: true,
@@ -165,7 +165,7 @@ export async function scheduleTribalReminders(leagueId: string, deadline: Date):
   await scheduleIfFuture(leagueId, 'vote_reminder', {
     recipientRole: 'active',
     title: '⚠️ 30 minutes to vote',
-    body: 'Tribal Council is closing soon. Have you voted?',
+    body: 'Elimination Council is closing soon. Have you voted?',
     deepLinkPath: `/survivor/${leagueId}/tribal`,
     urgency: 'critical',
     isSpoilerSafe: true,

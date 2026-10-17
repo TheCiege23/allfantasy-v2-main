@@ -54,6 +54,10 @@ export interface PlayerStatSnapshotModel {
   byeWeek?: number | null
   /** Prior-season or blended PPG from analytics when attached to pool rows */
   fantasyPointsPerGame?: number | null
+  /** NBA season box-score rates; absent when the cached season lacks a reliable games count. */
+  pointsPerGame?: number | null
+  reboundsPerGame?: number | null
+  minutesPerGame?: number | null
   lifetimeValue?: number | null
   /** Rolling Insights numbers when RI did not replace snapshot PPG (supplemental only). */
   rollingInsightsSupplemental?: {
@@ -119,6 +123,8 @@ export interface NormalizedDraftEntry {
   adp?: number | null
   byeWeek?: number | null
   playerId?: string | null
+  /** Stored pool row that supplied the draft ID; never a verified player match by itself. */
+  draftIdProvenance?: { namespace: 'sleeper' | 'rolling_insights' | 'unknown'; sourceRecordId: string | null }
   /** AI ADP when available */
   aiAdp?: number | null
   aiAdpSampleSize?: number

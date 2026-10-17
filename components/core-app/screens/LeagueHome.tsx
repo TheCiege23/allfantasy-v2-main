@@ -524,6 +524,15 @@ export function LeagueHome({
         </div>
       </header>
 
+      {league.variant === 'survivor_guillotine' && (
+        <section className="af-card" aria-label="Survivor Guillotine league">
+          <span className="af-label">Survivor Guillotine</span>
+          <h2>Enter the island</h2>
+          <p>Your lineup, tribe race, private powers, and Chop Night are ready in the league hub.</p>
+          <Link className="af-btn" href={`/survivor-guillotine/${encodeURIComponent(league.id)}`}>Open league island →</Link>
+        </section>
+      )}
+
       <section className="af-card af-lh-week-summary" aria-labelledby="af-lh-week-summary-title">
         <div className="af-lh-week-summary-head">
           <div><span className="af-label">{copy('Your next steps')}</span><h2 id="af-lh-week-summary-title">{copy('This week')}</h2></div>

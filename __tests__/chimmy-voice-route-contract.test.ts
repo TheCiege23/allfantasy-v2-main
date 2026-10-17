@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createMockNextRequest } from "@/__tests__/helpers/createMockNextRequest"
 const fetchMock = vi.fn()
 const getServerSessionMock = vi.fn()
+const aiCostGateMock = vi.fn()
 
 vi.stubGlobal('fetch', fetchMock)
 
@@ -12,6 +13,13 @@ vi.mock('next-auth', () => ({
 
 vi.mock('@/lib/auth', () => ({
   authOptions: {},
+}))
+
+// The real gate reads the plan from the DB and, from paywall launch, refuses a caller without
+// one, which turned every test below into a 403. This file pins the route's own contract; the
+// gate's decisions are covered by ai-cost-gate-wiring.test.ts.
+vi.mock('@/lib/ai-protection/costGate', () => ({
+  aiCostGate: aiCostGateMock,
 }))
 
 function buildRequest(body: Record<string, unknown>) {
@@ -39,6 +47,8 @@ describe('POST /api/chimmy/voice contract', () => {
     fetchMock.mockReset()
     getServerSessionMock.mockReset()
     getServerSessionMock.mockResolvedValue({ user: { id: 'user-1' } })
+    aiCostGateMock.mockReset()
+    aiCostGateMock.mockResolvedValue(null)
     delete process.env.ELEVENLABS_API_KEY
     delete process.env.ELEVENLABS_VOICE_ID
     delete process.env.ELEVENLABS_MODEL_ID
@@ -68,6 +78,22 @@ describe('POST /api/chimmy/voice contract', () => {
     await expect(response.json()).resolves.toMatchObject({
       error: 'Unauthorized',
     })
+  })
+
+  it('returns the cost gate refusal without calling a voice provider', async () => {
+    process.env.ELEVENLABS_API_KEY = 'test-eleven-key'
+    process.env.ELEVENLABS_VOICE_ID = 'allison-voice-id'
+    aiCostGateMock.mockResolvedValueOnce(
+      Response.json({ error: 'Premium feature', code: 'feature_not_entitled' }, { status: 403 })
+    )
+
+    const { POST } = await import('@/app/api/chimmy/voice/route')
+    const response = await POST(buildRequest({ text: 'Read this aloud.' }) as any)
+
+    expect(aiCostGateMock).toHaveBeenCalledWith(expect.anything(), 'chimmy_voice', 'user-1')
+    expect(response.status).toBe(403)
+    expect(fetchMock).not.toHaveBeenCalled()
+    await expect(response.json()).resolves.toMatchObject({ code: 'feature_not_entitled' })
   })
 
   it('returns 400 for empty text', async () => {

@@ -310,7 +310,7 @@ function Row({ row, nowIso }: { row: TriageRow; nowIso: string }) {
           {/* His card: injury detail, depth chart, who starts him — the Player Finder's own link. */}
           <Link
             className="af-gp-name"
-            href={`/core/players?q=${encodeURIComponent(row.player.name)}&player=${encodeURIComponent(playerRef(row.player.sport, row.player.externalId))}`}
+            href={`/core/players?q=${encodeURIComponent(row.player.name)}&player=${encodeURIComponent(playerRef(row.player.sport, row.player.externalId, row.player.source))}`}
           >
             {row.player.name}
           </Link>
