@@ -30,6 +30,7 @@ import { requireCronAuth } from "@/app/api/cron/_auth"
 import { createRunBudget, rotateForFairness, respondBeforeEdge, CRON_HARD_RESPONSE_MS } from "@/lib/cron/runBudget"
 import { selectRiProfileSports } from "@/lib/cron/riProfileSports"
 import { withSyncJobRun } from "@/lib/production-health/syncJobRunTelemetry"
+import { prisma } from "@/lib/prisma"
 import { syncNFLScheduleToDb } from "@/lib/rolling-insights"
 import {
   syncAPISportsGamesToDb,
@@ -81,6 +82,26 @@ const JOB_RI_PROFILES = "cron-import-schedules-ri-profiles"
  * freshness monitor report CONFIG ("no rows for job_name") forever.
  */
 const JOB_ODDS = "cron-import-schedules-odds"
+
+/**
+ * What the most recent COMPLETED six-sport `?riProfiles=1` fire deferred for budget — read from its
+ * own heartbeat, which already records `metadata.deferredSports`. The NCAAF half and an operator's
+ * single-sport run are excluded by scope, so neither can reset the list. Best-effort: a failed read
+ * means plain rotation, exactly the behaviour before this existed.
+ */
+async function readLastSixSportDeferral(): Promise<string[]> {
+  try {
+    const last = await prisma.syncJobRun.findFirst({
+      where: { jobName: JOB_RI_PROFILES, completedAt: { not: null }, jobScope: { contains: "," } },
+      orderBy: { startedAt: "desc" },
+      select: { metadata: true },
+    })
+    const deferred = (last?.metadata as { deferredSports?: unknown } | null)?.deferredSports
+    return Array.isArray(deferred) ? deferred.filter((s): s is string => typeof s === "string") : []
+  } catch {
+    return []
+  }
+}
 
 /** Every league the TheSportsDB ingest covers. */
 const TSDB_SPORTS: IngestSport[] = ['NFL', 'NCAAF', 'MLB', 'NBA', 'NHL', 'NCAAB', 'SOCCER']
@@ -483,6 +504,7 @@ async function handle(req: NextRequest) {
       const profileSports = selectRiProfileSports({
         allSports: RI_PROFILE_SPORTS,
         explicitSport: url.searchParams.get("sport"),
+        deferredLastRun: await readLastSixSportDeferral(),
       })
 
       /*
