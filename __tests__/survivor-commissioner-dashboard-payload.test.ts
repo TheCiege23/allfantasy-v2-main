@@ -49,6 +49,7 @@ const {
   },
 }))
 
+vi.mock('@/lib/survivor/survivorTribeRedraw', () => ({ getTribeRedrawStatus: vi.fn(async () => ({ status: 'none', recommendedWeek: null })) }))
 vi.mock('@/lib/league/permissions', () => ({
   getLeagueRole,
 }))
@@ -210,6 +211,7 @@ describe('survivor commissioner dashboard payload', () => {
       activeChallenges: 0,
       automationNeedsAttention: false,
       readinessIssues: ['11 manager seats still need to be claimed.'],
+      tribeRedraw: { status: 'none', recommendedWeek: null },
     })
     expect(result.monetization).toEqual({
       afPlan: 'pro',

@@ -19,6 +19,7 @@ import type { AfPlanId } from '@/lib/tournament/af-premium-plans'
 import { extractLeadingTribeIcon } from '@/lib/survivor/survivorVisuals'
 import { resolveSurvivorAccessContext } from '@/lib/survivor/survivorAccessControl'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { getTribeRedrawStatus, type TribeRedrawStatus } from '@/lib/survivor/survivorTribeRedraw'
 
 export type SurvivorCommissionerDashboardResult =
   | {
@@ -44,6 +45,7 @@ export type SurvivorCommissionerDashboardResult =
         activeChallenges: number
         automationNeedsAttention: boolean
         readinessIssues: string[]
+        tribeRedraw: TribeRedrawStatus
       }
       gameState: {
         phase: string
@@ -224,6 +226,7 @@ export async function buildSurvivorCommissionerDashboard(
       activeChallenges,
       automationNeedsAttention: Boolean(gs?.lastError && !gs.lastError.startsWith('PAUSED:')),
       readinessIssues,
+      tribeRedraw: await getTribeRedrawStatus(leagueId),
     },
     gameState: gs
       ? {

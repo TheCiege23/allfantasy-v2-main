@@ -28,6 +28,7 @@ vi.mock('@/lib/survivor/SurvivorFinaleEngine', () => ({ getFinaleState: vi.fn() 
 vi.mock('@/lib/survivor/survivorSetupTransaction', () => ({ withSurvivorSetupTransaction: (_id: string, fn: (tx: typeof db) => unknown) => fn(db) }))
 vi.mock('@/lib/survivor/survivorVerifiedSlateChallenges', () => ({ ensureVerifiedSlateChallenges: vi.fn(), settleVerifiedSlateChallenges: vi.fn() }))
 vi.mock('@/lib/survivor/weeklyRecapGenerator', () => ({ generateAndPostWeeklyRecap: vi.fn() }))
+vi.mock('@/lib/survivor/SurvivorSitOutEngine', async (orig) => ({ ...(await (orig as () => Promise<Record<string, unknown>>)()), maybeTriggerSurvivorTribeShuffleRecommendation: vi.fn() }))
 
 const start = new Date('2026-09-01T12:00:00Z')
 const later = new Date('2027-03-01T12:00:00Z')

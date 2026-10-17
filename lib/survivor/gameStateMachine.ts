@@ -28,6 +28,7 @@ import { resolveElimination } from '@/lib/survivor/survivorEliminationService'
 import { nextTorchCeremonyDeadline } from '@/lib/survivor/survivorCeremonySchedule'
 import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/normalizeSurvivorSettings'
 import { scoreNbaSurvivorAllGamesRoster, scoreNbaSurvivorOneGameRoster } from './survivorNbaWeeklyScoring'
+import { applySurvivorMergeCast } from './survivorMergeCast'
 
 /** SurvivorPlayer.redraftRosterId is the legacy Roster id; resolve its actual season roster. */
 export async function sumRedraftStartersFantasy(
@@ -139,6 +140,8 @@ export async function advancePhase(
     await prisma.survivorGameState.update({ where: { leagueId }, data: { phase: 'post_swap' } })
   } else if (toPhase === 'merging' || toPhase === 'merge') {
     await executeMerge(leagueId, gs.currentWeek).catch(() => {})
+    // The legacy merge only moves member rows; this moves the cast and opens the merge chat.
+    await applySurvivorMergeCast(leagueId, gs.currentWeek)
     await expireIdolsAtMerge(leagueId).catch(() => {})
     await prisma.survivorGameState.update({
       where: { leagueId },
