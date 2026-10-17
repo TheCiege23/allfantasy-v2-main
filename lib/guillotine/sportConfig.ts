@@ -250,14 +250,21 @@ export function getNextWaiverTime(sport: string, fromDate?: Date): Date {
   return result
 }
 
+/** How long before each scheduled waiver run claims are held for the blind FAAB auction. */
+export const WAIVER_BLIND_WINDOW_HOURS = 36
+
 /**
- * The most recent scheduled waiver run at or before `fromDate`. Claims submitted before it are due;
- * claims after it wait for the next run, so blind FAAB bids are settled together.
+ * When `fromDate` falls inside the blind window before the next scheduled waiver run, the moment that
+ * window opened; otherwise null. The window covers the chop (Tuesday night ET for NFL and NBA), so
+ * every bid on a chopped team's players is settled together at the run, highest bid first. Outside
+ * it, claims settle as they come, which is how managers make mid-week free-agent pickups.
  */
-export function getLastWaiverTime(sport: string, fromDate?: Date): Date | null {
+export function getWaiverBlindWindowStart(sport: string, fromDate?: Date): Date | null {
   if (!getGuillotineSportConfig(sport)) return null
-  const next = getNextWaiverTime(sport, fromDate)
-  return new Date(next.getTime() - 7 * 24 * 60 * 60 * 1000)
+  const now = fromDate ?? new Date()
+  const next = getNextWaiverTime(sport, now)
+  const opensAt = new Date(next.getTime() - WAIVER_BLIND_WINDOW_HOURS * 60 * 60 * 1000)
+  return now >= opensAt ? opensAt : null
 }
 
 /**
