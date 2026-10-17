@@ -14,7 +14,7 @@ import { MetaPixelPageViewTracker } from '@/components/meta/MetaPixelPageViewTra
 import { ErrorBoundaryClient } from '@/components/error-handling/ErrorBoundaryClient';
 import { PlayerComparisonUIProvider } from '@/components/player-comparison-ui';
 import { buildSeoMeta } from '@/lib/seo';
-import { resolveEffectiveDataMode } from '@/lib/theme';
+import { resolveServerDataMode, THEME_SYSTEM_RESOLVED_COOKIE_KEY } from '@/lib/theme';
 import { getLanguageTextDirection, resolveLanguage } from '@/lib/i18n/constants';
 import { IOS_APP_HTML_FLAG_SCRIPT, IOS_APP_UA_TEST_JS } from '@/lib/platform/iosApp';
 import { AD_OPT_OUT_TEST_JS } from '@/lib/privacy/adMeasurementOptOut';
@@ -25,6 +25,10 @@ export const viewport = {
   initialScale: 1,
   maximumScale: 5,
   viewportFit: 'cover' as const,
+  // The browser / installed-app status bar. Matches the manifest's
+  // background_color and the dark default theme; it was unset here while the
+  // manifest said cyan, so the installed app wore a cyan bar over a navy app.
+  themeColor: '#020617',
 };
 
 /*
@@ -104,7 +108,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const htmlLang = resolveLanguage(cookieLang);
   const htmlDir = getLanguageTextDirection(htmlLang);
   const cookieMode = cookieStore.get('af_mode')?.value;
-  const htmlMode = resolveEffectiveDataMode(cookieMode);
+  const htmlMode = resolveServerDataMode(cookieMode, cookieStore.get(THEME_SYSTEM_RESOLVED_COOKIE_KEY)?.value);
 
   // Always attempt to preload the session. `getServerSession` only reads the
   // NextAuth JWT from cookies, so it is safe and cheap on auth routes
