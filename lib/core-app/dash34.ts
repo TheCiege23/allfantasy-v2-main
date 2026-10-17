@@ -22,6 +22,7 @@ import { isTop25Sport, pollIsKnown, showCollegeGame } from '@/lib/live/collegeTo
 import { readFollowedTeams, readRankBook } from '@/lib/live/collegeTop25Store'
 import { bestBallDepthAlerts, type DepthAlert } from './bestBallDepth'
 import { clubKey, indexFixturesByWeek, weekVerdict } from './lineupWeekFixtures'
+import { coverOptions, type CoverCandidate, type CoverOptions } from './lineupCover'
 import type {
   Dash34Brief,
   Dash34Data,
@@ -1605,60 +1606,70 @@ async function loadDash34Data(
    * difference, so it is a constant rather than two code paths.
    */
   /**
-   * Who on YOUR OWN BENCH could take the slot, in a given league.
+   * Who on YOUR OWN ROSTER could take the slot, in a given league — see `lineupCover.ts` for the
+   * rules (the league's own slot template, flex and superflex chains, nobody whose game is over).
    *
-   * ⚠ ZERO ADDITIONAL QUERIES, AND THAT IS WHY IT IS BENCH-ONLY. Every roster
-   * is already in memory from the single read above, every position is already
-   * resolved, and the market prices were already fetched for the ordering — so
-   * this is a filter, not a fetch. Free agents are a different matter:
-   * answering "who is available in this league" needs that league's full
-   * player pool plus a rostered-elsewhere exclusion, which is a per-league
-   * scan. Doing that across 61 leagues on a page render is the exact fan-out
-   * that took production Postgres down once already, so it stays behind a
-   * click.
+   * ⚠ ZERO ADDITIONAL QUERIES, AND THAT IS WHY IT IS ROSTER-ONLY. Every roster is already in memory
+   * from the single read above, every position is already resolved, the week's fixtures are already
+   * indexed, and the market prices are fetched in the one values read below — so this is a filter,
+   * not a fetch. Free agents are a different matter: answering "who is available in this league"
+   * needs that league's full player pool plus a rostered-elsewhere exclusion, which is a per-league
+   * scan. Doing that across 61 leagues on a page render is the exact fan-out that took production
+   * Postgres down once already, so it stays behind a click — and a chain that only a free agent can
+   * finish says so rather than naming one.
    *
-   * Same position only. A flex swap depends on the league's slot template,
-   * which this loader does not read, and offering a tight end for a running
-   * back because both are "flex somewhere" would be a guess dressed as advice.
-   *
-   * Ordered by the same market rank the book is ordered by, so the first name
-   * offered is the best asset available rather than the first one iterated.
-   * A bench player who is himself flagged is not a replacement.
+   * 🛑 A PLAYER WHOSE WEEK IS OVER IS NOT COVER. Reported 2026-10-17: "swap in J.K. Dobbins" on a
+   * Friday, with Dobbins's Thursday game already played — his slot was locked and the advice could
+   * not be followed. `starterWeek(...) === 'done'` (already played, in progress, or on bye) removes
+   * him; `unknown` keeps him, the same fail-open the injured-starter alerts use.
    */
-  function benchAlternativesFor(
-    leagueId: string,
-    injuredId: string,
-    position: string | null,
-  ): Array<{ name: string; position: string | null }> {
-    if (!position) return []
+  function coverFor(leagueId: string, injuredId: string, position: string | null): CoverOptions {
+    const none: CoverOptions = { direct: [], chain: null }
     const roster = rosterByLeague.get(leagueId)
-    if (!roster) return []
+    if (!roster) return none
+    const week = roster.verification?.week
+    const injured = playerById.get(injuredId)
+    // His own slot already settled: nothing to swap, whatever the bench holds.
+    if (injured && starterWeek(injured.sport, injured.team, week).verdict === 'done') return none
 
-    const out: Array<{ name: string; position: string | null; rank: number | null }> = []
-    for (const pid of roster.all) {
-      if (pid === injuredId) continue
-      if (roster.starters.has(pid)) continue
-      if (roster.reserve.has(pid) || roster.taxi.has(pid)) continue
+    const candidate = (pid: string, canPlay: (p: { sport: string | null; team: string | null }) => boolean): CoverCandidate | null => {
       const p = playerById.get(pid)
-      if (!p || !p.position) continue
-      if (p.position.toUpperCase() !== position.toUpperCase()) continue
-      if (designationOf(pid)) continue
-      out.push({
+      if (!p || !p.position) return null
+      return {
+        id: pid,
         name: p.name,
         position: p.position,
         rank: valueBySleeperId.get(pid)?.overallRank ?? null,
-      })
+        canPlay: canPlay(p) && starterWeek(p.sport, p.team, week).verdict !== 'done',
+      }
     }
 
-    out.sort((x, y) => {
-      if (x.rank !== y.rank) {
-        if (x.rank == null) return 1
-        if (y.rank == null) return -1
-        return x.rank - y.rank
+    const bench: CoverCandidate[] = []
+    const starters = new Map<string, CoverCandidate>()
+    for (const pid of roster.all) {
+      if (pid === injuredId || roster.reserve.has(pid) || roster.taxi.has(pid)) continue
+      if (roster.starters.has(pid)) {
+        // A starter can slide over unless he is ruled out himself; a mild flag does not pin him.
+        const c = candidate(pid, () => {
+          const d = designationOf(pid)
+          return !(d && isUnavailable(d.status))
+        })
+        if (c) starters.set(pid, c)
+      } else {
+        // A bench player who is himself flagged is not a replacement.
+        const c = candidate(pid, () => !designationOf(pid))
+        if (c) bench.push(c)
       }
-      return x.name.localeCompare(y.name)
+    }
+
+    return coverOptions({
+      slots: roster.verification?.slots ?? null,
+      orderedStarters: roster.orderedStarters,
+      injuredId,
+      injuredPosition: position,
+      bench,
+      starters,
     })
-    return out.slice(0, 2).map((o) => ({ name: o.name, position: o.position }))
   }
 
   const BOOK_LIMIT = 40
@@ -1677,8 +1688,22 @@ async function loadDash34Data(
   const valueFormat: 'DYNASTY' | 'REDRAFT' =
     dynastyCount * 2 >= totalActive ? 'DYNASTY' : 'REDRAFT'
   const bookEntries = [...book.values()]
+  /*
+   * The cover candidates are priced in the SAME read. They were not, and since a flagged player is
+   * never cover, the healthy bench players being ordered were never in the book — so "best asset
+   * first" silently fell back to alphabetical.
+   */
+  const coverIds = new Set<string>()
+  for (const b of bookEntries) {
+    for (const [leagueId, slot] of b.slotByLeague) {
+      if (slot !== 'starter') continue
+      const r = rosterByLeague.get(leagueId)
+      if (!r || r.bestBall) continue
+      for (const pid of r.all) if (!r.starters.has(pid) && !r.reserve.has(pid) && !r.taxi.has(pid)) coverIds.add(pid)
+    }
+  }
   const valueBySleeperId = await timing.read('values', () => readPlayerValues(
-    bookEntries.map((b) => b.sleeperId).filter(Boolean),
+    [...new Set([...bookEntries.map((b) => b.sleeperId), ...coverIds])].filter(Boolean),
     valueFormat,
     'ONE_QB',
     options,
@@ -1743,10 +1768,9 @@ async function loadDash34Data(
                    * needs no replacement, and offering one there is noise on a
                    * card whose whole job is picking out the decisions.
                    */
-                  bench:
-                    !rosterByLeague.get(id)?.bestBall && b.slotByLeague.get(id) === 'starter'
-                      ? benchAlternativesFor(id, b.sleeperId, b.position)
-                      : [],
+                  ...(!rosterByLeague.get(id)?.bestBall && b.slotByLeague.get(id) === 'starter'
+                    ? (({ direct, chain }) => ({ bench: direct, cover: chain }))(coverFor(id, b.sleeperId, b.position))
+                    : { bench: [], cover: null }),
                 }
               : null
           })
@@ -1760,6 +1784,7 @@ async function loadDash34Data(
               imageUrl: string | null
               slot: 'starter' | 'bench' | 'ir' | 'taxi' | null
               bench: Array<{ name: string; position: string | null }>
+              cover: CoverOptions['chain']
             } => x !== null,
           )
           .sort((a, b2) => a.name.localeCompare(b2.name)),

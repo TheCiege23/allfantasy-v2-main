@@ -8,6 +8,7 @@ import { TopicTip } from '@/components/core-app/TopicTip'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { slotText } from '@/lib/core-app/playerMovesCopy'
+import { coverSlotLabel } from '@/lib/core-app/lineupCover'
 import { ageText } from '@/lib/core-app/shellCopy'
 import type { TriageSlot } from '@/components/core-app/screens/Dash3ATriage'
 
@@ -26,8 +27,33 @@ export type TriageViewLeague = {
   platform: string
   href: string
   slot: TriageSlot | null
-  /** Same-position cover on your bench here — names only, only where he starts. */
+  /** Bench players who can take his slot here — names only, only where he starts. */
   bench: string[]
+  /** A flex/superflex two-step instead (see lib/core-app/lineupCover.ts); absent when none. */
+  cover?: { move: string; toSlot: string; fromSlot: string; fill: string | null } | null
+}
+
+/**
+ * "swap in Allgeier · or move Pollard to RB, start Washington at FLEX". One sentence per league,
+ * the simple move first; null when there is nothing to offer.
+ */
+export function coverText(l: Pick<TriageViewLeague, 'bench' | 'cover'>, es: boolean): string | null {
+  const parts: string[] = []
+  if (l.bench.length > 0) parts.push(es ? `pon a ${l.bench.join(' o ')}` : `swap in ${l.bench.join(' or ')}`)
+  const c = l.cover
+  if (c) {
+    const to = coverSlotLabel(c.toSlot)
+    const from = coverSlotLabel(c.fromSlot)
+    const chain = c.fill
+      ? es
+        ? `mueve a ${c.move} a ${to} y pon a ${c.fill} en ${from}`
+        : `move ${c.move} to ${to}, start ${c.fill} at ${from}`
+      : es
+        ? `mueve a ${c.move} a ${to} y añade un agente libre en ${from}`
+        : `move ${c.move} to ${to}, then add a free agent at ${from}`
+    parts.push(parts.length > 0 ? (es ? `o ${chain}` : `or ${chain}`) : chain)
+  }
+  return parts.length > 0 ? parts.join(' · ') : null
 }
 
 /** One best ball position worth a glance (lib/core-app/bestBallDepth.ts, built in dash34). */
@@ -298,10 +324,10 @@ export function Dash3ATriageView({
                           live behind the CTA below. An empty bench here is not
                           a gap in the data; it is the reason to go look.
                         */}
-                        {l.slot === 'starter' && l.bench.length > 0 ? (
+                        {l.slot === 'starter' && coverText(l, es) ? (
                           <span className="af-triage-bench">
                             {' '}
-                            {es ? `pon a ${l.bench.join(' o ')}` : `swap in ${l.bench.join(' or ')}`}
+                            {coverText(l, es)}
                           </span>
                         ) : null}
                       </Link>

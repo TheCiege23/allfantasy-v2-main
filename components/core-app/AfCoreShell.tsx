@@ -20,6 +20,7 @@ import { LeagueMark } from '@/components/core-app/LeagueMark'
 import SyncNowButton from '@/components/core-app/SyncNowButton'
 import LeagueSwipe from '@/components/core-app/LeagueSwipe'
 import PullToRefresh from '@/components/core-app/PullToRefresh'
+import { useLineupAutoSync } from '@/components/core-app/useLineupAutoSync'
 import { LEAGUE_SWIPE_SCREENS } from '@/lib/core-app/leagueSwipe'
 import PlayerCardProvider from '@/components/core-app/player-card/PlayerCardProvider'
 import { COMMS_OPEN_EVENT, SUPPORT_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
@@ -1312,6 +1313,9 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
   const [publishedSignals, setPublishedSignals] = useState<ShellSignals | null>(null)
   const props = useMemo(() => withPublishedSignals(incoming, publishedSignals), [incoming, publishedSignals])
   const router = useRouter()
+  // A lineup set on the platform reaches these screens without a button press — on opening the
+  // app, coming back to it, and opening a league. See lib/core-app/lineupAutoSync.ts.
+  useLineupAutoSync(props.selectedLeagueId)
   const sections = useMemo(() => navSections(props), [props])
   const mobileItems = useMemo(() => {
     const byKey = new Map(navItems(props).map((i) => [i.key, i]))

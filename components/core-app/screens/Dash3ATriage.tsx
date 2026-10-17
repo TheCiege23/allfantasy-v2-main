@@ -35,12 +35,18 @@ type TriageLeague = {
   /** Null when the roster could not be read — the chip then shows no slot. */
   slot?: TriageSlot | null
   /**
-   * Same-position players on YOUR bench in this league, best asset first.
+   * Players on YOUR bench who can legally fill his slot in this league (the
+   * league's own slot template) and whose game is not over, best asset first.
    * Only ever populated where he is starting. Empty means the bench holds no
-   * same-position cover — which is itself the answer, and the reason the free
-   * agent link matters there.
+   * cover — which is itself the answer, and the reason the free agent link
+   * matters there.
    */
   bench?: Array<{ name: string; position: string | null }>
+  /**
+   * A two-step move through a flex or superflex seat (lib/core-app/lineupCover.ts): a starter slides
+   * into his slot and `fill` takes the seat that frees up; `fill` null means only a free agent could.
+   */
+  cover?: { move: string; toSlot: string; fromSlot: string; fill: string | null } | null
 }
 
 export type TriageBookRow = {
@@ -155,6 +161,7 @@ export function Dash3ATriage({
           href: `/core?league=${l.id}`,
           slot: l.slot ?? null,
           bench: l.slot === 'starter' ? (l.bench ?? []).map((b) => b.name) : [],
+          cover: l.slot === 'starter' ? l.cover ?? null : null,
         })),
         leagueCount: p.leagues.length,
         freeAgentLinks: p.leagues
