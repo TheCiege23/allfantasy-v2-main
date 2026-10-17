@@ -1,0 +1,90 @@
+{
+  "name": "chimmy-strategy",
+  "accent": "#3BC4FF",
+  "seconds": 15,
+  "beats": [
+    {
+      "in": 0.2,
+      "out": 2.4,
+      "emoji": "🤔",
+      "text": "Win now or\n[rebuild?]",
+      "size": "h1",
+      "pop": true,
+      "top": 200
+    },
+    {
+      "in": 0.6,
+      "out": 2.4,
+      "text": "Chimmy can now help you decide, and remember it.",
+      "size": "p",
+      "top": 1000
+    },
+    {
+      "in": 2.6,
+      "out": 5.0,
+      "emoji": "📊",
+      "text": "Reads your\n[real results]",
+      "size": "h1",
+      "pop": true,
+      "top": 200
+    },
+    {
+      "in": 3.0,
+      "out": 5.0,
+      "text": "From your NFL Sleeper league's completed weeks.",
+      "size": "p",
+      "top": 1000
+    },
+    {
+      "in": 5.2,
+      "out": 7.6,
+      "emoji": "🧭",
+      "text": "Win-now, balanced\nor [rebuild]",
+      "size": "h1",
+      "pop": true,
+      "top": 200
+    },
+    {
+      "in": 7.8,
+      "out": 10.2,
+      "emoji": "3️⃣",
+      "text": "Only after\n[3 weeks] agree",
+      "size": "h1",
+      "pop": true,
+      "top": 200
+    },
+    {
+      "in": 8.2,
+      "out": 10.2,
+      "text": "No knee-jerk calls after one bad Sunday.",
+      "size": "p",
+      "top": 1000
+    },
+    {
+      "in": 10.4,
+      "out": 12.6,
+      "emoji": "✅",
+      "text": "You [confirm]\nit first",
+      "size": "h1",
+      "pop": true,
+      "top": 200
+    },
+    {
+      "in": 10.8,
+      "out": 12.6,
+      "text": "Then Chimmy's advice follows your plan.",
+      "size": "p",
+      "top": 1000
+    }
+  ],
+  "end": {
+    "in": 12.8,
+    "line": "Ask [Chimmy]"
+  },
+  "caption": {
+    "instagram": "Win now or rebuild? 🤔 Chimmy can now help you decide, and remember it.\n\nIn an NFL Sleeper league, Chimmy reads your completed weekly results and suggests win-now, balanced or rebuild. It only suggests a strategy after three straight weeks point the same way, and nothing changes until you confirm. After that, Chimmy's advice follows your plan.\n\nEvery account gets 2 free Chimmy questions a day. Link in bio.\n\n#fantasyfootball #dynastyfootball #sleeperfantasy #fantasyfootballadvice #allfantasy",
+    "tiktok": "Win now or rebuild? Chimmy now saves a strategy for your Sleeper league, but only after 3 weeks of results agree 🤔 Link in bio. #fantasyfootball #dynasty #sleeperfantasy #allfantasy",
+    "youtube": "Win now or rebuild? Chimmy can now suggest a strategy for your Sleeper league, after 3 straight weeks of results agree. #fantasyfootball #dynasty #shorts",
+    "facebook": "Win now or rebuild? Chimmy can now suggest a strategy for your NFL Sleeper league from your real weekly results, only after three straight weeks agree, and nothing changes until you confirm. 2 free Chimmy questions a day. https://allfantasy.ai"
+  }
+}
