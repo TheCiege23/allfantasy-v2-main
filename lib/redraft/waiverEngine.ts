@@ -1,5 +1,5 @@
 import { findSportsPlayerByLeagueId } from '@/lib/player-identity/findSportsPlayerByLeagueId'
-import { getWaiverBlindWindowStart } from '@/lib/guillotine/sportConfig'
+import { getChopHoldStart, getWaiverBlindWindowStart } from '@/lib/guillotine/sportConfig'
 import { identityWhereForLeagueId } from '@/lib/player-identity/externalIdNamespace'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
@@ -181,7 +181,21 @@ async function guillotineClaimsCutoff(leagueId: string, now: Date): Promise<Date
   // NBA and NFL (owner's decision, 2026-10-17, including NFL leagues already in season). Other sports
   // keep settling every run until their schedules are checked against their engines.
   if (!BLIND_WAIVER_GUILLOTINE_SPORTS.has(sport)) return null
-  return getWaiverBlindWindowStart(sport, now)
+  let lastChop: { choppedAt: Date | null } | null = null
+  try {
+    lastChop = await prisma.guillotineRosterState.findFirst({
+      where: { leagueId, choppedAt: { not: null } },
+      orderBy: { choppedAt: 'desc' },
+      select: { choppedAt: true },
+    })
+  } catch {
+    lastChop = null
+  }
+  // The earlier of the calendar window and a hold anchored on the chop itself (an early or late chop).
+  const starts = [getWaiverBlindWindowStart(sport, now), getChopHoldStart(sport, lastChop?.choppedAt, now)]
+    .filter((d): d is Date => d != null)
+  if (starts.length === 0) return null
+  return new Date(Math.min(...starts.map((d) => d.getTime())))
 }
 
 export async function processWaiverWindow(

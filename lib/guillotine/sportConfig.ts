@@ -267,6 +267,32 @@ export function getWaiverBlindWindowStart(sport: string, fromDate?: Date): Date 
   return now >= opensAt ? opensAt : null
 }
 
+/** A chop this soon after a waiver run belongs to that run's week: it landed late, after its window closed. */
+const LATE_CHOP_HOURS = 72
+/** How long a late chop's released players are held for their own blind round. */
+export const LATE_CHOP_HOLD_HOURS = 24
+
+/**
+ * The blind window is fixed to the calendar, but the chop is not: it fires when the week's stats seal,
+ * so an NBA week with no Monday games chops a day early, and late stats can push a chop past the run.
+ * Either way the chopped team's players would go out first-come-first-served. This anchors a hold on
+ * the chop itself: an early chop holds claims from the chop until the scheduled run; a late chop (one
+ * that landed within LATE_CHOP_HOURS after a run) holds them for LATE_CHOP_HOLD_HOURS. Null when the
+ * latest chop is already settled.
+ */
+export function getChopHoldStart(sport: string, choppedAt: Date | null | undefined, fromDate?: Date): Date | null {
+  if (!choppedAt || !getGuillotineSportConfig(sport)) return null
+  const now = fromDate ?? new Date()
+  if (choppedAt > now) return null
+  const lastRun = new Date(getNextWaiverTime(sport, now).getTime() - 7 * 24 * 60 * 60 * 1000)
+  if (choppedAt <= lastRun) return null
+  const hoursAfterRun = (choppedAt.getTime() - lastRun.getTime()) / (60 * 60 * 1000)
+  if (hoursAfterRun < LATE_CHOP_HOURS) {
+    return now.getTime() < choppedAt.getTime() + LATE_CHOP_HOLD_HOURS * 60 * 60 * 1000 ? choppedAt : null
+  }
+  return choppedAt
+}
+
 /**
  * Get recommended team count for a sport (regularSeasonWeeks - 1).
  */
