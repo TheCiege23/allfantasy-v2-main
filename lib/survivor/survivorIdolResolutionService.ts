@@ -91,6 +91,12 @@ async function playPower(
       }
 
       if (power === 'extra_vote' || power === 'vote_steal') {
+        const shot = await tx.survivorAuditEntry.findUnique({
+          where: { id: `survivor-shot:${leagueId}:${ownerUserId}` }, select: { relatedEntityId: true },
+        })
+        if (shot?.relatedEntityId === council.id) {
+          return { ok: false, status: 409, code: 'shot_forfeited_vote', error: 'Playing Shot in the Dark forfeited your vote at this council.' }
+        }
         if (!isEligibleVoter(eligibility, ownerUserId)) {
           return { ok: false, status: 403, code: 'not_eligible_voter', error: 'Only an eligible voter can play an Extra Vote.' }
         }
@@ -209,6 +215,10 @@ export async function submitAdditionalIdolVote(leagueId: string, userId: string,
     const game = await tx.survivorGameState.findUnique({ where: { leagueId }, select: { pausedSnapshot: true } })
     if (game?.pausedSnapshot != null) return { ok: false as const, status: 409 as const, error: 'The league is paused.' }
     if (!ctx || !idolWindowOpen(ctx.council, 'Before votes close')) return { ok: false as const, status: 409 as const, error: 'The vote window is closed.' }
+    const shot = await tx.survivorAuditEntry.findUnique({
+      where: { id: `survivor-shot:${leagueId}:${userId}` }, select: { relatedEntityId: true },
+    })
+    if (shot?.relatedEntityId === ctx.council.id) return { ok: false as const, status: 409 as const, error: 'Playing Shot in the Dark forfeited your vote at this council.' }
     if (!isEligibleTarget(ctx.eligibility, userId, targetUserId)) return { ok: false as const, status: 422 as const, error: 'Choose an eligible vote target.' }
     const play = ctx.council.idolsPlayed.find(p => p.playerUserId === userId && ['extra_vote', 'vote_steal'].includes(p.powerType) && (!p.extraTargetUserId || ctx.settings.voteChangePolicy === 'allow_until_close'))
     if (!play) return { ok: false as const, status: 409 as const, error: 'No additional ballot is available.' }
