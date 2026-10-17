@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Blah — League Home (phone)</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./af-shell.css">
+<link rel="stylesheet" href="./draft-sleek.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500;700;800&amp;display=swap" rel="stylesheet">
+<style>body{margin:0;background:#07080d}</style>
+</helmet>
+<div class="af ph" style="min-height: 0">
+  <div class="ph-scroll">
+    <!-- League strip: tap to switch (Sleeper-style), AF status rings -->
+    <div style="display: flex; align-items: center; gap: 4px; padding: 10px 12px 0">
+      <a class="iconbtn" href="MobileSwitcher.dc.html" aria-label="All leagues"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg></a>
+      <span class="lbl" style="flex: 1">7 leagues · <span style="color: #34d399">● live</span></span>
+      <button class="iconbtn" aria-label="Search"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></button>
+    </div>
+    <nav class="strip" aria-label="Switch league">
+      <sc-for list="{{rail}}" as="l" hint-placeholder-count="6">
+        <button class="{{l.cls}}" onClick="{{l.pick}}" aria-label="{{l.name}}">
+          <span class="av" style="background: {{l.bg}}; color: {{l.fg}}; box-shadow: 0 0 0 2px #07080d, 0 0 0 3.5px {{l.ring}}">{{l.ini}}<span class="av-tag" style="background: {{l.tagBg}}; color: {{l.tagFg}}; border-color: #07080d">{{l.tag}}</span><sc-if value="{{l.unread}}" hint-placeholder-val="{{ false }}"><span class="av-dot" style="border-color: #07080d">{{l.unread}}</span></sc-if></span>
+          <span class="rl-score" style="color: {{l.ring}}">{{l.mini}}</span>
+          <span style="font: 700 10px/1.1 'Archivo', sans-serif; color: {{l.nameColor}}; max-width: 60px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{l.short}}</span>
+        </button>
+      </sc-for>
+    </nav>
+
+    <header style="padding: 6px 16px 0; display: flex; flex-direction: column; gap: 12px; background: radial-gradient(420px 220px at 20% 0%, rgba(34,211,238,.10), transparent 70%)">
+      <div style="display: flex; align-items: center; gap: 12px">
+        <span class="av" style="width: 48px; height: 48px; border-radius: 14px; font-size: 20px; background: {{cur.bg}}; color: {{cur.fg}}; border: 1px solid rgba(255,255,255,.13)">{{cur.ini}}</span>
+        <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px">
+          <h1 style="margin: 0; font-size: 28px; line-height: 1; font-weight: 700; letter-spacing: -0.03em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{cur.name}}</h1>
+          <span class="num" style="font-size: 11px; color: #989fc2">{{cur.meta}}</span>
+        </div>
+        <a class="iconbtn" href="Commissioner.dc.html" aria-label="League settings"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg></a>
+      </div>
+      <div style="display: flex; gap: 6px; overflow-x: auto"><span class="{{cur.originCls}}">{{cur.origin}}</span><sc-if value="{{cur.commish}}" hint-placeholder-val="{{ true }}"><span class="chip chip-gold">Commish</span></sc-if><span class="chip" style="color: {{cur.ring}}">{{cur.phase}}</span></div>
+      <nav class="tabs" aria-label="League sections" style="gap: 20px">
+        <a class="tab tab-on" href="#">Home</a><a class="tab" href="DraftRoom.dc.html">Draft HQ</a><a class="tab" href="MobileStandings.dc.html">Standings</a><a class="tab" href="MobileTrades.dc.html">Trades</a><a class="tab" href="MobileChat.dc.html">Chat</a><a class="tab" href="Commissioner.dc.html" style="color: #f6c445">Commish</a>
+      </nav>
+    </header>
+
+    <main style="padding: 14px 16px 18px; display: flex; flex-direction: column; gap: 12px">
+      <sc-if value="{{isNative}}" hint-placeholder-val="{{ true }}">
+        <section style="padding: 16px; border-radius: 14px; border: 1px solid rgba(255,255,255,.07); background: #10131c; display: flex; flex-direction: column; gap: 10px">
+          <span class="lbl" style="color: #22d3ee">Next up · Draft HQ</span>
+          <h2 style="margin: 0; font-size: 20px; line-height: 1.15; font-weight: 700; letter-spacing: -0.03em">Draft · Mon, Oct 19 · 4:11 AM</h2>
+          <span style="font-size: 13px; color: #c3c9e6">12-team snake. Room opens 30 min early.</span>
+          <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px"><a class="btn btn-p" href="MobileDraft.dc.html">Draft HQ</a><a class="btn btn-g" href="MobileDraft.dc.html">Mock draft</a></div>
+        </section>
+        <a href="Commissioner.dc.html" style="padding: 14px 16px; border-radius: 14px; border: 1px solid rgba(255,255,255,.07); background: #10131c; display: flex; flex-direction: column; gap: 10px; color: #eef0fa">
+          <div style="display: flex; justify-content: space-between"><span class="lbl">Get the league ready</span><span class="num" style="font-size: 12px; font-weight: 700; color: #c3c9e6">2 of 6</span></div>
+          <div class="bar"><div style="width: 33%; background: #22d3ee"></div></div>
+          <span style="font-size: 14px; font-weight: 700">Next: invite managers ›</span>
+        </a>
+        <section style="padding: 14px 16px; border-radius: 14px; border: 1px solid rgba(255,255,255,.07); background: #10131c; display: flex; flex-direction: column; gap: 8px">
+          <div style="display: flex; justify-content: space-between"><span class="lbl">League chat</span><span class="chip chip-bad">3 new</span></div>
+          <span style="font-size: 13px; color: #c3c9e6"><strong style="color: #eef0fa">TheCiege26</strong> Draft is set for the 19th — get your queues in.</span>
+        </section>
+      </sc-if>
+      <sc-if value="{{isShadow}}" hint-placeholder-val="{{ false }}">
+        <section style="padding: 16px; border-radius: 14px; border: 1px solid rgba(34,211,238,.28); background: #10131c; display: flex; flex-direction: column; gap: 10px">
+          <span class="lbl" style="color: #22d3ee">Synced from Sleeper · read-only</span>
+          <h2 style="margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.03em">{{cur.status}}</h2>
+          <span style="font-size: 13px; line-height: 1.5; color: #c3c9e6">Move {{cur.name}} to AllFantasy to set lineups, trade and run waivers here.</span>
+          <button class="btn btn-p">Make it native</button>
+        </section>
+      </sc-if>
+    </main>
+  </div>
+  <nav class="bnav" aria-label="Primary">
+    <a class="bb bb-on" href="Mobile.dc.html"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>League</a>
+    <a class="bb" href="MobileMatchup.dc.html"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 4h6v16H4zM14 4h6v16h-6z"/></svg>Matchup</a>
+    <a class="bb" href="MobileLineup.dc.html"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>Team</a>
+    <a class="bb" href="MobileWaivers.dc.html"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>Players</a>
+    <a class="bb" href="MobileChat.dc.html"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Chat</a>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { league: 'blah' }; }
+  renderVals() {
+    const G = '#34d399', R = '#fb5b78', A = '#fbbf24', C = '#22d3ee';
+    const L = [
+      ['blah','Blah','Blah','B','#10131c',C,'AF',A,'SETUP','Setup · draft Oct 19','2026 · 12 teams · Half PPR',3,true],
+      ['parbur','Parbur','Parbur','P','#1f2a4d','#9fd4ff','SLP',G,'88–71','Winning 88.1 – 71.4','2026 · 12 teams · PPR',0],
+      ['horse','Four Horsemen All-Stars 2023','4 Horse','4H','#12352a','#7ff0c4','SLP',R,'62–80','Losing 62.0 – 80.3','2026 · 4 teams · Dynasty',0],
+      ['koth','KOTH','KOTH','K','#3a2410','#f0b46a','SLP',G,'101–93','Winning 101.2 – 93.0','2026 · 10 teams · PPR',16],
+      ['pirate','Pirate League!','Pirate','PL','#3a1d55','#dcb4ff','SLP',R,'70–74','Losing 70.6 – 74.1','2026 · 14 teams · PPR',13],
+      ['guil','Guillotine League 26','Guillo 26','GL','#4a1414','#ffb4b4','SLP',G,'8TH','8th · +35.9 over the cut','2026 · 14 teams · Guillotine',0],
+      ['elim','Elimination Station 2','Elim 2','ES','#123244','#7fd4f0','SLP',G,'8TH','8th · +17.5 over the cut','2026 · 14 teams · Guillotine',0]
+    ];
+    const rows = L.map(([id,name,short,ini,bg,fg,tag,ring,mini,status,meta,unread,nat]) => ({ id,name,short,ini,bg,fg,tag,ring,mini,status,meta,unread,native:!!nat }));
+    const c0 = rows.find(r => r.id === this.state.league) || rows[0];
+    const rail = rows.map(r => ({ ...r, tagBg: r.native ? C : '#2a2f4a', tagFg: r.native ? '#04050c' : '#c3c9e6',
+      nameColor: r.id === c0.id ? C : '#989fc2', cls: 'rl' + (r.id === c0.id ? ' ring-on' : ''),
+      pick: () => this.setState({ league: r.id }) }));
+    const cur = { ...c0, commish: c0.native, origin: c0.native ? 'Native on AF' : 'Sleeper sync', originCls: c0.native ? 'chip chip-af' : 'chip',
+      phase: c0.native ? 'Setup' : 'Wk 5' };
+    return { rail, cur, isNative: c0.native, isShadow: !c0.native };
+  }
+}
+</script>
+</body>
+</html>

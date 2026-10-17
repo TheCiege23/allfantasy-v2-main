@@ -2,9 +2,9 @@
  * Regression tests for /league/[leagueId] full-width layout.
  *
  * Guards the dashboard-style league shell. The league page should default to:
- *  - left chat rail visible
- *  - center dashboard visible in the middle
- *  - My Leagues right rail visible
+ *  - left chat rail collapsed with an expand control
+ *  - center workspace gets the available width
+ *  - My Leagues right rail collapsed unless the user saved an expanded preference
  *  - either side can collapse into a slim strip while the center expands
  */
 import { describe, expect, it } from 'vitest'
@@ -19,11 +19,11 @@ const leagueShellSrc = read('app/league/[leagueId]/LeagueShell.tsx')
 const appShellSrc = read('app/components/AppShell.tsx')
 const hookSrc = read('hooks/useMyLeaguesRailCollapse.ts')
 
-// ─── My Leagues right rail: visible by default on league pages ──────────────
+// ─── My Leagues right rail: collapsed by default on league pages ──────────────
 
-describe('My Leagues rail — league page defaults to visible', () => {
-  it('LeagueShell passes defaultCollapsed: false to useMyLeaguesRailCollapse', () => {
-    expect(leagueShellSrc).toContain('defaultCollapsed: false')
+describe('My Leagues rail — league page defaults to collapsed', () => {
+  it('LeagueShell passes defaultCollapsed: true to useMyLeaguesRailCollapse', () => {
+    expect(leagueShellSrc).toContain('defaultCollapsed: true')
   })
 
   it('LeagueShell uses a league-specific storage key (not shared with dashboard)', () => {
@@ -50,9 +50,9 @@ describe('My Leagues rail — league page defaults to visible', () => {
   })
 })
 
-// ─── Left chat rail: visible by default, opens on openChat param ────────────
+// ─── Left chat rail: collapsed by default, opens on openChat param ────────────
 
-describe('Left chat rail — defaults to visible, respects openChat param', () => {
+describe('Left chat rail — defaults to collapsed, respects openChat param', () => {
   it('AppShell accepts leftRailCollapsed prop', () => {
     expect(appShellSrc).toContain('leftRailCollapsed')
   })
@@ -73,10 +73,10 @@ describe('Left chat rail — defaults to visible, respects openChat param', () =
     expect(appShellSrc).toContain('chat-rail-collapse')
   })
 
-  it('LeagueShell initializes desktopChatOpen to true (chat visible by default)', () => {
-    // Chat is shown by default so users can immediately use League/Chimmy/AF Huddle/DMs.
+  it('LeagueShell initializes desktopChatOpen to false to give the workspace more room', () => {
+    // Chat remains available through the expand control or an explicit openChat link.
     expect(leagueShellSrc).toContain('desktopChatOpen')
-    expect(leagueShellSrc).toContain('useState<boolean>(true)')
+    expect(leagueShellSrc).toContain('const [desktopChatOpen, setDesktopChatOpen] = useState<boolean>(false)')
   })
 
   it('LeagueShell syncs desktopChatOpen with openChatQuery via useEffect', () => {

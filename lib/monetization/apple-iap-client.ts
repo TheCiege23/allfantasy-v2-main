@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import { isInIosAppClient } from "@/lib/platform/iosApp"
 
 type AppleResult = {
   requestId: string
@@ -19,9 +20,14 @@ function handler(): AppleHandler | undefined {
     .webkit?.messageHandlers?.["apple-iap"]
 }
 
+/**
+ * Inside the iOS app (ios-app/), any build. True with no bridge too, so a build
+ * without StoreKit gets the "update the app" message instead of Stripe checkout,
+ * which middleware refuses in the app anyway.
+ */
 export function isAppleApp(): boolean {
   if (typeof window === "undefined") return false
-  return Boolean(handler()) || (/\bPWAShell\b/.test(navigator.userAgent) && /iPhone|iPad|iPod/.test(navigator.userAgent))
+  return Boolean(handler()) || isInIosAppClient()
 }
 
 export function useAppleIapPrices() {

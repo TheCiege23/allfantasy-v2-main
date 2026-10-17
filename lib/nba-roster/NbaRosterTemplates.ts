@@ -57,7 +57,7 @@ export const NBA_ROSTER_TEMPLATES: NbaRosterTemplate[] = [
   { key: 'guillotine', label: 'Guillotine', leagueTypes: ['guillotine'], description: 'Lean guillotine roster.',
     slots: { PG: 1, SG: 1, G: 1, SF: 1, PF: 1, F: 1, C: 1, UTIL: 2, BN: 2 } },
   { key: 'survivor', label: 'Survivor', leagueTypes: ['survivor'], description: 'Standard survivor roster.',
-    slots: { PG: 1, SG: 1, G: 1, SF: 1, PF: 1, F: 1, C: 2, UTIL: 2, BN: 4 } },
+    slots: { PG: 1, SG: 1, G: 1, SF: 1, PF: 1, F: 1, C: 1, UTIL: 1, BN: 4 } },
   { key: 'zombie', label: 'Zombie', leagueTypes: ['zombie'], description: 'Lean zombie roster for active churn.',
     slots: { PG: 1, SG: 1, G: 1, SF: 1, PF: 1, F: 1, C: 2, UTIL: 3, BN: 3 } },
   { key: 'tournament', label: 'Tournament', leagueTypes: ['tournament'], description: 'Tournament roster.',

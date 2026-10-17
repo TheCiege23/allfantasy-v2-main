@@ -8,6 +8,8 @@ import { ReferralCTACard } from "./ReferralCTACard"
 import { ReferralLeaderboard } from "./ReferralLeaderboard"
 import { ReferralProgressWidget } from "./ReferralProgressWidget"
 import { ReferralShareBar } from "./ReferralShareBar"
+// Shared with Settings › Referrals: async clipboard first, the legacy copy command as fallback.
+import { copyText } from "@/lib/clipboard/copyText"
 import type { ReferralDashboardData, ReferralRewardView } from "@/lib/referral"
 
 type DashboardTab = "overview" | "rewards" | "leaderboard"
@@ -17,14 +19,6 @@ function resolveTab(input: string | null | undefined): DashboardTab {
   return "overview"
 }
 
-async function copyText(value: string): Promise<boolean> {
-  try {
-    await navigator.clipboard.writeText(value)
-    return true
-  } catch {
-    return false
-  }
-}
 
 function formatRewardValue(reward: ReferralRewardView): string {
   if (reward.rewardKind === "xp") return `${reward.value} XP`

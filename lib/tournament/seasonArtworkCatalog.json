@@ -1,0 +1,616 @@
+{
+  "pairs": [
+    {
+      "a": "rookie",
+      "b": "vet"
+    },
+    {
+      "a": "blue",
+      "b": "red"
+    },
+    {
+      "a": "angelic",
+      "b": "demonic"
+    },
+    {
+      "a": "surf",
+      "b": "turf"
+    },
+    {
+      "a": "black",
+      "b": "gold"
+    },
+    {
+      "a": "fire",
+      "b": "ice"
+    },
+    {
+      "a": "heroes",
+      "b": "villains"
+    },
+    {
+      "a": "day",
+      "b": "night"
+    },
+    {
+      "a": "earth",
+      "b": "sky"
+    },
+    {
+      "a": "oldschool",
+      "b": "newschool"
+    },
+    {
+      "a": "knights",
+      "b": "dragons"
+    },
+    {
+      "a": "hunters",
+      "b": "hunted"
+    },
+    {
+      "a": "order",
+      "b": "chaos"
+    },
+    {
+      "a": "robots",
+      "b": "aliens"
+    },
+    {
+      "a": "pirates",
+      "b": "ninjas"
+    },
+    {
+      "a": "vikings",
+      "b": "spartans"
+    },
+    {
+      "a": "jungle",
+      "b": "desert"
+    },
+    {
+      "a": "gridiron",
+      "b": "hardwood"
+    },
+    {
+      "a": "eastcoast",
+      "b": "westcoast"
+    },
+    {
+      "a": "underdogs",
+      "b": "topdogs"
+    }
+  ],
+  "sides": {
+    "rookie": {
+      "name": "Rookie",
+      "light": "#e9ffd6",
+      "mid": "#7fd44a",
+      "dark": "#2e5a14",
+      "accent": "#c6ff7a",
+      "ink": "#1a1204",
+      "medallion": "medallions/rookie.svg",
+      "ring": "rings/rookie.svg",
+      "frame": "frames/rookie.svg",
+      "icon": "library/sprout.svg"
+    },
+    "vet": {
+      "name": "Vet",
+      "light": "#fff1d0",
+      "mid": "#c9a24a",
+      "dark": "#5a4210",
+      "accent": "#ffd36b",
+      "ink": "#1a1204",
+      "medallion": "medallions/vet.svg",
+      "ring": "rings/vet.svg",
+      "frame": "frames/vet.svg",
+      "icon": "library/vet.svg"
+    },
+    "blue": {
+      "name": "Blue",
+      "light": "#dcecff",
+      "mid": "#3d7dff",
+      "dark": "#12306e",
+      "accent": "#9fd0ff",
+      "ink": "#1a1204",
+      "medallion": "medallions/blue.svg",
+      "ring": "rings/blue.svg",
+      "frame": "frames/blue.svg",
+      "icon": "library/shieldstar.svg"
+    },
+    "red": {
+      "name": "Red",
+      "light": "#ffe0dc",
+      "mid": "#e0334f",
+      "dark": "#5e0f1c",
+      "accent": "#ffd0d6",
+      "ink": "#ffffff",
+      "medallion": "medallions/red.svg",
+      "ring": "rings/red.svg",
+      "frame": "frames/red.svg",
+      "icon": "library/shieldstar.svg"
+    },
+    "angelic": {
+      "name": "Angelic",
+      "light": "#ffffff",
+      "mid": "#e6e1c6",
+      "dark": "#8e8452",
+      "accent": "#fff1a0",
+      "ink": "#1a1204",
+      "medallion": "medallions/angelic.svg",
+      "ring": "rings/angelic.svg",
+      "frame": "frames/angelic.svg",
+      "icon": "library/angel.svg"
+    },
+    "demonic": {
+      "name": "Demonic",
+      "light": "#ffd0c8",
+      "mid": "#c81e1e",
+      "dark": "#3a0606",
+      "accent": "#ff7a3a",
+      "ink": "#ffffff",
+      "medallion": "medallions/demonic.svg",
+      "ring": "rings/demonic.svg",
+      "frame": "frames/demonic.svg",
+      "icon": "library/demon.svg"
+    },
+    "surf": {
+      "name": "Surf",
+      "light": "#dffbff",
+      "mid": "#2fc4e0",
+      "dark": "#0b4a5e",
+      "accent": "#9ff4ff",
+      "ink": "#1a1204",
+      "medallion": "medallions/surf.svg",
+      "ring": "rings/surf.svg",
+      "frame": "frames/surf.svg",
+      "icon": "library/wave.svg"
+    },
+    "turf": {
+      "name": "Turf",
+      "light": "#e6ffd8",
+      "mid": "#3aa84a",
+      "dark": "#0f3a14",
+      "accent": "#a8ff7a",
+      "ink": "#1a1204",
+      "medallion": "medallions/turf.svg",
+      "ring": "rings/turf.svg",
+      "frame": "frames/turf.svg",
+      "icon": "library/turf.svg"
+    },
+    "black": {
+      "name": "Black",
+      "light": "#ffffff",
+      "mid": "#b9c0cc",
+      "dark": "#4a515e",
+      "accent": "#ff5a3a",
+      "ink": "#1a1204",
+      "medallion": "medallions/black.svg",
+      "ring": "rings/black.svg",
+      "frame": "frames/black.svg",
+      "icon": "library/buffalo.svg"
+    },
+    "gold": {
+      "name": "Gold",
+      "light": "#fff3c4",
+      "mid": "#e8b84a",
+      "dark": "#7a5214",
+      "accent": "#ff5a3a",
+      "ink": "#1a1204",
+      "medallion": "medallions/gold.svg",
+      "ring": "rings/gold.svg",
+      "frame": "frames/gold.svg",
+      "icon": "library/buffalo.svg"
+    },
+    "fire": {
+      "name": "Fire",
+      "light": "#fff0c8",
+      "mid": "#ff7a2f",
+      "dark": "#6e1a06",
+      "accent": "#ffd23f",
+      "ink": "#1a1204",
+      "medallion": "medallions/fire.svg",
+      "ring": "rings/fire.svg",
+      "frame": "frames/fire.svg",
+      "icon": "library/flame.svg"
+    },
+    "ice": {
+      "name": "Ice",
+      "light": "#f2fbff",
+      "mid": "#8fd8ff",
+      "dark": "#1e4a6e",
+      "accent": "#ffffff",
+      "ink": "#1a1204",
+      "medallion": "medallions/ice.svg",
+      "ring": "rings/ice.svg",
+      "frame": "frames/ice.svg",
+      "icon": "library/snow.svg"
+    },
+    "heroes": {
+      "name": "Heroes",
+      "light": "#e0ecff",
+      "mid": "#2f6bff",
+      "dark": "#0e2466",
+      "accent": "#ffd23f",
+      "ink": "#ffffff",
+      "medallion": "medallions/heroes.svg",
+      "ring": "rings/heroes.svg",
+      "frame": "frames/heroes.svg",
+      "icon": "library/hero.svg"
+    },
+    "villains": {
+      "name": "Villains",
+      "light": "#efe0ff",
+      "mid": "#7a2ad8",
+      "dark": "#24063e",
+      "accent": "#7fff6a",
+      "ink": "#ffffff",
+      "medallion": "medallions/villains.svg",
+      "ring": "rings/villains.svg",
+      "frame": "frames/villains.svg",
+      "icon": "library/villain.svg"
+    },
+    "day": {
+      "name": "Day",
+      "light": "#fff8d6",
+      "mid": "#ffc23a",
+      "dark": "#8a5a06",
+      "accent": "#ffffff",
+      "ink": "#1a1204",
+      "medallion": "medallions/day.svg",
+      "ring": "rings/day.svg",
+      "frame": "frames/day.svg",
+      "icon": "library/sun.svg"
+    },
+    "night": {
+      "name": "Night",
+      "light": "#e8ecff",
+      "mid": "#5a6ad8",
+      "dark": "#141a4a",
+      "accent": "#fff3a0",
+      "ink": "#ffffff",
+      "medallion": "medallions/night.svg",
+      "ring": "rings/night.svg",
+      "frame": "frames/night.svg",
+      "icon": "library/moon.svg"
+    },
+    "earth": {
+      "name": "Earth",
+      "light": "#f2e6d6",
+      "mid": "#a8743a",
+      "dark": "#3e2410",
+      "accent": "#7fd44a",
+      "ink": "#1a1204",
+      "medallion": "medallions/earth.svg",
+      "ring": "rings/earth.svg",
+      "frame": "frames/earth.svg",
+      "icon": "library/mountain.svg"
+    },
+    "sky": {
+      "name": "Sky",
+      "light": "#eef8ff",
+      "mid": "#7fbfff",
+      "dark": "#1e3e6e",
+      "accent": "#ffffff",
+      "ink": "#1a1204",
+      "medallion": "medallions/sky.svg",
+      "ring": "rings/sky.svg",
+      "frame": "frames/sky.svg",
+      "icon": "library/sky.svg"
+    },
+    "oldschool": {
+      "name": "Old School",
+      "light": "#fbe8cf",
+      "mid": "#c8823a",
+      "dark": "#4a2a10",
+      "accent": "#ff6a3a",
+      "ink": "#1a1204",
+      "medallion": "medallions/oldschool.svg",
+      "ring": "rings/oldschool.svg",
+      "frame": "frames/oldschool.svg",
+      "icon": "library/cassette.svg"
+    },
+    "newschool": {
+      "name": "New School",
+      "light": "#e0fff8",
+      "mid": "#2ae0c0",
+      "dark": "#06463e",
+      "accent": "#a0fff0",
+      "ink": "#1a1204",
+      "medallion": "medallions/newschool.svg",
+      "ring": "rings/newschool.svg",
+      "frame": "frames/newschool.svg",
+      "icon": "library/chip.svg"
+    },
+    "knights": {
+      "name": "Knights",
+      "light": "#eef1f6",
+      "mid": "#9aa6b8",
+      "dark": "#2e3644",
+      "accent": "#e0334f",
+      "ink": "#1a1204",
+      "medallion": "medallions/knights.svg",
+      "ring": "rings/knights.svg",
+      "frame": "frames/knights.svg",
+      "icon": "library/knight.svg"
+    },
+    "dragons": {
+      "name": "Dragons",
+      "light": "#ffe6c8",
+      "mid": "#d84a1e",
+      "dark": "#3e0e04",
+      "accent": "#ffd23f",
+      "ink": "#ffffff",
+      "medallion": "medallions/dragons.svg",
+      "ring": "rings/dragons.svg",
+      "frame": "frames/dragons.svg",
+      "icon": "library/dragon.svg"
+    },
+    "hunters": {
+      "name": "Hunters",
+      "light": "#f0f0e0",
+      "mid": "#8a9a5a",
+      "dark": "#2e3418",
+      "accent": "#ff6a3a",
+      "ink": "#1a1204",
+      "medallion": "medallions/hunters.svg",
+      "ring": "rings/hunters.svg",
+      "frame": "frames/hunters.svg",
+      "icon": "library/crosshair.svg"
+    },
+    "hunted": {
+      "name": "Hunted",
+      "light": "#f6e8d8",
+      "mid": "#b8804a",
+      "dark": "#4a2a14",
+      "accent": "#ffd8a0",
+      "ink": "#1a1204",
+      "medallion": "medallions/hunted.svg",
+      "ring": "rings/hunted.svg",
+      "frame": "frames/hunted.svg",
+      "icon": "library/antler.svg"
+    },
+    "order": {
+      "name": "Order",
+      "light": "#eef4ff",
+      "mid": "#8aa8d8",
+      "dark": "#1e2e4e",
+      "accent": "#ffffff",
+      "ink": "#1a1204",
+      "medallion": "medallions/order.svg",
+      "ring": "rings/order.svg",
+      "frame": "frames/order.svg",
+      "icon": "library/scales.svg"
+    },
+    "chaos": {
+      "name": "Chaos",
+      "light": "#ffe0f4",
+      "mid": "#e02a8a",
+      "dark": "#46062a",
+      "accent": "#ff9ad6",
+      "ink": "#ffffff",
+      "medallion": "medallions/chaos.svg",
+      "ring": "rings/chaos.svg",
+      "frame": "frames/chaos.svg",
+      "icon": "library/spiral.svg"
+    },
+    "robots": {
+      "name": "Robots",
+      "light": "#eef1f6",
+      "mid": "#8a94a6",
+      "dark": "#262b36",
+      "accent": "#ffb02e",
+      "ink": "#1a1204",
+      "medallion": "medallions/robots.svg",
+      "ring": "rings/robots.svg",
+      "frame": "frames/robots.svg",
+      "icon": "library/robot.svg"
+    },
+    "aliens": {
+      "name": "Aliens",
+      "light": "#e8ffe0",
+      "mid": "#6ae04a",
+      "dark": "#14460a",
+      "accent": "#c8ff3a",
+      "ink": "#1a1204",
+      "medallion": "medallions/aliens.svg",
+      "ring": "rings/aliens.svg",
+      "frame": "frames/aliens.svg",
+      "icon": "library/alien.svg"
+    },
+    "pirates": {
+      "name": "Pirates",
+      "light": "#f6ecd8",
+      "mid": "#c8a46a",
+      "dark": "#3a2a14",
+      "accent": "#e0334f",
+      "ink": "#1a1204",
+      "medallion": "medallions/pirates.svg",
+      "ring": "rings/pirates.svg",
+      "frame": "frames/pirates.svg",
+      "icon": "library/skull.svg"
+    },
+    "ninjas": {
+      "name": "Ninjas",
+      "light": "#e8e8f0",
+      "mid": "#6a6a8a",
+      "dark": "#14141e",
+      "accent": "#e0334f",
+      "ink": "#ffffff",
+      "medallion": "medallions/ninjas.svg",
+      "ring": "rings/ninjas.svg",
+      "frame": "frames/ninjas.svg",
+      "icon": "library/shuriken.svg"
+    },
+    "vikings": {
+      "name": "Vikings",
+      "light": "#eef1f6",
+      "mid": "#8a9aa8",
+      "dark": "#2a323c",
+      "accent": "#c8823a",
+      "ink": "#1a1204",
+      "medallion": "medallions/vikings.svg",
+      "ring": "rings/vikings.svg",
+      "frame": "frames/vikings.svg",
+      "icon": "library/viking.svg"
+    },
+    "spartans": {
+      "name": "Spartans",
+      "light": "#ffe6d0",
+      "mid": "#c84a1e",
+      "dark": "#3e1004",
+      "accent": "#ffd23f",
+      "ink": "#ffffff",
+      "medallion": "medallions/spartans.svg",
+      "ring": "rings/spartans.svg",
+      "frame": "frames/spartans.svg",
+      "icon": "library/spartan.svg"
+    },
+    "jungle": {
+      "name": "Jungle",
+      "light": "#e6ffd8",
+      "mid": "#2fa84a",
+      "dark": "#0a3a14",
+      "accent": "#ffd23f",
+      "ink": "#1a1204",
+      "medallion": "medallions/jungle.svg",
+      "ring": "rings/jungle.svg",
+      "frame": "frames/jungle.svg",
+      "icon": "library/leaf.svg"
+    },
+    "desert": {
+      "name": "Desert",
+      "light": "#fff0d6",
+      "mid": "#e0a24a",
+      "dark": "#5a3410",
+      "accent": "#ff7a2f",
+      "ink": "#1a1204",
+      "medallion": "medallions/desert.svg",
+      "ring": "rings/desert.svg",
+      "frame": "frames/desert.svg",
+      "icon": "library/cactus.svg"
+    },
+    "gridiron": {
+      "name": "Gridiron",
+      "light": "#ffe6d0",
+      "mid": "#a8582a",
+      "dark": "#3a1a08",
+      "accent": "#ffffff",
+      "ink": "#ffffff",
+      "medallion": "medallions/gridiron.svg",
+      "ring": "rings/gridiron.svg",
+      "frame": "frames/gridiron.svg",
+      "icon": "library/football.svg"
+    },
+    "hardwood": {
+      "name": "Hardwood",
+      "light": "#ffe6c8",
+      "mid": "#ff8a2a",
+      "dark": "#5a2408",
+      "accent": "#ffffff",
+      "ink": "#1a1204",
+      "medallion": "medallions/hardwood.svg",
+      "ring": "rings/hardwood.svg",
+      "frame": "frames/hardwood.svg",
+      "icon": "library/basketball.svg"
+    },
+    "eastcoast": {
+      "name": "East Coast",
+      "light": "#e0f0ff",
+      "mid": "#3a7ad8",
+      "dark": "#0e2a4e",
+      "accent": "#ffd23f",
+      "ink": "#1a1204",
+      "medallion": "medallions/eastcoast.svg",
+      "ring": "rings/eastcoast.svg",
+      "frame": "frames/eastcoast.svg",
+      "icon": "library/lighthouse.svg"
+    },
+    "westcoast": {
+      "name": "West Coast",
+      "light": "#fff0e0",
+      "mid": "#ff7a5a",
+      "dark": "#5a1e2a",
+      "accent": "#ffd23f",
+      "ink": "#1a1204",
+      "medallion": "medallions/westcoast.svg",
+      "ring": "rings/westcoast.svg",
+      "frame": "frames/westcoast.svg",
+      "icon": "library/palm.svg"
+    },
+    "underdogs": {
+      "name": "Underdogs",
+      "light": "#f0e8e0",
+      "mid": "#a08a7a",
+      "dark": "#3a2e26",
+      "accent": "#ffb08a",
+      "ink": "#1a1204",
+      "medallion": "medallions/underdogs.svg",
+      "ring": "rings/underdogs.svg",
+      "frame": "frames/underdogs.svg",
+      "icon": "library/paw.svg"
+    },
+    "topdogs": {
+      "name": "Top Dogs",
+      "light": "#fff3c4",
+      "mid": "#e8b84a",
+      "dark": "#7a5214",
+      "accent": "#ffffff",
+      "ink": "#1a1204",
+      "medallion": "medallions/topdogs.svg",
+      "ring": "rings/topdogs.svg",
+      "frame": "frames/topdogs.svg",
+      "icon": "library/topdog.svg"
+    }
+  },
+  "library": [
+    "library/alien.svg",
+    "library/angel.svg",
+    "library/antler.svg",
+    "library/basketball.svg",
+    "library/beast.svg",
+    "library/buffalo.svg",
+    "library/cactus.svg",
+    "library/cassette.svg",
+    "library/chip.svg",
+    "library/crosshair.svg",
+    "library/demon.svg",
+    "library/dragon.svg",
+    "library/flame.svg",
+    "library/football.svg",
+    "library/goat.svg",
+    "library/grizz.svg",
+    "library/hero.svg",
+    "library/kings.svg",
+    "library/knight.svg",
+    "library/leaf.svg",
+    "library/lighthouse.svg",
+    "library/moon.svg",
+    "library/mountain.svg",
+    "library/palm.svg",
+    "library/paw.svg",
+    "library/rebels.svg",
+    "library/robot.svg",
+    "library/scales.svg",
+    "library/shieldstar.svg",
+    "library/shuriken.svg",
+    "library/skull.svg",
+    "library/sky.svg",
+    "library/smoke.svg",
+    "library/snow.svg",
+    "library/spartan.svg",
+    "library/spiral.svg",
+    "library/sprout.svg",
+    "library/stealth.svg",
+    "library/sun.svg",
+    "library/swamp.svg",
+    "library/thunder.svg",
+    "library/topdog.svg",
+    "library/turf.svg",
+    "library/vet.svg",
+    "library/viking.svg",
+    "library/villain.svg",
+    "library/warrior.svg",
+    "library/wave.svg"
+  ]
+}

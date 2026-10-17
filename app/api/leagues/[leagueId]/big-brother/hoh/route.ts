@@ -11,9 +11,8 @@ import { prisma } from '@/lib/prisma'
 import { isBigBrotherLeague, getBigBrotherConfig } from '@/lib/big-brother/BigBrotherLeagueConfig'
 import { getCurrentCycleForLeague, transitionPhase } from '@/lib/big-brother/BigBrotherPhaseStateMachine'
 import { assignHOH, getEligibleHOHRosterIds } from '@/lib/big-brother/BigBrotherHOHEngine'
-import { resolveChallengeByScore, resolveChallengeBySeededRandom } from '@/lib/big-brother/BigBrotherChallengeEngine'
-import { applyHaveNotChallengeScorePenalty, applyHaveNotWaiverPenalties } from '@/lib/big-brother/BigBrotherHaveNotPenaltyService'
-import { resolveHaveNotRosterIdsForCycle } from '@/lib/big-brother/BigBrotherChatChannels'
+import { runAutomation } from '@/lib/big-brother/BigBrotherAutomationService'
+import { applyHaveNotWaiverPenalties } from '@/lib/big-brother/BigBrotherHaveNotPenaltyService'
 import { announceHOHWinner } from '@/lib/big-brother/BigBrotherChatAnnouncements'
 import { getRosterDisplayNamesForLeague } from '@/lib/big-brother/ai/getRosterDisplayNames'
 import { appendBigBrotherAudit } from '@/lib/big-brother/BigBrotherAuditLog'
@@ -90,64 +89,22 @@ export async function POST(
   }
 
   const body = await req.json().catch(() => ({}))
-  let winnerId: string | null = null
-
-  // If commissioner manually picks (e.g., for commissioner-decided or external challenge)
-  if (body.winnerRosterId && typeof body.winnerRosterId === 'string') {
-    if (!eligible.includes(body.winnerRosterId)) {
-      return NextResponse.json({ error: 'Selected roster is not eligible for HOH' }, { status: 400 })
+  if (config.weekProgressionPaused) return NextResponse.json({ error: 'Week progression is paused' }, { status: 409 })
+  const manualWinnerId = typeof body.winnerRosterId === 'string' ? body.winnerRosterId : null
+  if (!manualWinnerId) {
+    // Both commissioner buttons and scheduled challenges use finalized provider scores.
+    const result = await runAutomation({ leagueId, action: 'auto_hoh', systemUserId: userId })
+    if (!result.ok || result.actionTaken?.startsWith('skipped_')) {
+      return NextResponse.json({ error: result.error ?? (result.actionTaken === 'skipped_paused' ? 'Week progression is paused' : 'Waiting for finalized scores for every eligible competitor') }, { status: 409 })
     }
-    winnerId = body.winnerRosterId
-  } else if (config.challengeMode === 'deterministic_score') {
-    // Score-based: use weekly fantasy scores or provided scores.
-    // Apply Have-Not challenge penalty before winner resolution.
-    const rawScores = body.scores as Record<string, number> | undefined
-    if (rawScores && Object.keys(rawScores).length > 0) {
-      const haveNotIds = await resolveHaveNotRosterIdsForCycle(leagueId, current.id)
-      const penalisedScores = applyHaveNotChallengeScorePenalty(rawScores, haveNotIds)
-      winnerId = await resolveChallengeByScore({
-        leagueId,
-        configId: config.configId,
-        week: current.week,
-        participantRosterIds: eligible,
-        challengeType: 'hoh',
-        scores: penalisedScores,
-      })
-    } else {
-      // Auto-resolve using season points as proxy
-      winnerId = await resolveChallengeByScore({
-        leagueId,
-        configId: config.configId,
-        week: current.week,
-        participantRosterIds: eligible,
-        challengeType: 'hoh',
-        scores: Object.fromEntries(eligible.map((id, i) => [id, 0])), // fallback to seeded random
-      })
-      // If all scores are 0, fall through to seeded random
-      if (!winnerId) {
-        winnerId = resolveChallengeBySeededRandom({
-          leagueId,
-          configId: config.configId,
-          week: current.week,
-          participantRosterIds: eligible,
-          challengeType: 'hoh',
-        })
-      }
-    }
-  } else {
-    // Seeded random (ai_theme or hybrid mode — AI themes the challenge but outcome is random)
-    winnerId = resolveChallengeBySeededRandom({
-      leagueId,
-      configId: config.configId,
-      week: current.week,
-      participantRosterIds: eligible,
-      challengeType: 'hoh',
-    })
+    const advanced = await runAutomation({ leagueId, action: 'tick', systemUserId: userId })
+    if (!advanced.ok) return NextResponse.json({ error: advanced.error ?? 'Could not open nominations' }, { status: 409 })
+    const cycle = await prisma.bigBrotherCycle.findUnique({ where: { id: current.id }, select: { hohRosterId: true, phase: true } })
+    const names = await getRosterDisplayNamesForLeague(leagueId, cycle?.hohRosterId ? [cycle.hohRosterId] : [])
+    return NextResponse.json({ ok: true, hohRosterId: cycle?.hohRosterId, hohDisplayName: cycle?.hohRosterId ? names[cycle.hohRosterId] ?? cycle.hohRosterId : null, week: current.week, phase: cycle?.phase })
   }
-
-  if (!winnerId) {
-    return NextResponse.json({ error: 'Could not determine HOH winner' }, { status: 500 })
-  }
+  if (!eligible.includes(manualWinnerId)) return NextResponse.json({ error: 'Selected roster is not eligible for HOH' }, { status: 400 })
+  const winnerId = manualWinnerId
 
   // Assign HOH
   const assignResult = await assignHOH(leagueId, config.configId, current.id, winnerId)
@@ -176,7 +133,7 @@ export async function POST(
     cycleId: current.id,
     week: current.week,
     winnerId,
-    challengeMode: config.challengeMode,
+    challengeMode: 'manual',
     eligibleCount: eligible.length,
   })
 

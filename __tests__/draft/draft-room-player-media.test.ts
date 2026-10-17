@@ -15,7 +15,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/lib/prisma', () => ({ prisma: {} }))
 
-import { buildHeadshotUrl } from '@/lib/player-media-urls'
+import { buildHeadshotUrl, sleeperHeadshotUrl } from '@/lib/player-media-urls'
 import { resolveHeadshotUrl } from '@/lib/draft-sports-models/player-asset-resolver'
 import { getPlayerImage } from '@/lib/players/getPlayerImage'
 import { normalizeDraftPlayer } from '@/lib/draft-sports-models/normalize-draft-player'
@@ -38,6 +38,17 @@ describe('headshots are built from an id only where the id is a Sleeper id', () 
       expect(getPlayerImage({ id: '4984', name: 'X', imageUrl: null }, sport)).toBeNull()
     }
     expect(getPlayerImage({ id: '4984', name: 'X', imageUrl: null }, 'NFL')).toContain('/nfl/players/thumb/')
+  })
+
+  /*
+   * `sleeperHeadshotUrl` is for an id the CALLER knows is Sleeper's, in any sport Sleeper serves — the
+   * legacy trade analyzer's NBA mode passes real Sleeper NBA ids straight from Sleeper's API. Callers
+   * holding another namespace (a native NHL roster's Rolling Insights ids) must not reach it; see
+   * chimmy-player-cards.test.ts.
+   */
+  it('sleeperHeadshotUrl still builds the Sleeper NBA URL for a Sleeper NBA id', () => {
+    expect(sleeperHeadshotUrl('4984', 'nfl')).toBe('https://sleepercdn.com/content/nfl/players/thumb/4984.jpg')
+    expect(sleeperHeadshotUrl('1308', 'nba')).toBe('https://sleepercdn.com/content/nba/players/1308.jpg')
   })
 
   it('an NBA pool row with a numeric id and no photo shows the placeholder, not a Sleeper face', () => {
@@ -112,6 +123,41 @@ describe('stored team crests', () => {
   it('returns nothing for a team it cannot place, rather than a guessed URL', () => {
     expect(resolve('Unknown Tech Institute')).toBeNull()
     expect(resolve('999')).toBeNull()
+  })
+})
+
+describe('college crests under another feed’s spelling', () => {
+  // Spellings as stored on the test DB 2026-10-01: TheSportsDB for basketball, CFBD for football.
+  const basketball = buildTeamLogoResolver([
+    { externalId: 'b1', name: 'UNC Greensboro', shortName: null, city: 'Greensboro, North Carolina', logo: 'https://x/uncg.png', source: 'thesportsdb' },
+    { externalId: 'b2', name: 'Tennessee-Martin', shortName: null, city: 'Martin, Tennessee', logo: 'https://x/utm.png', source: 'thesportsdb' },
+    { externalId: 'b3', name: 'Holy Cross', shortName: null, city: 'Worcester, Massachusetts', logo: 'https://x/hc.png', source: 'thesportsdb' },
+    { externalId: 'b4', name: 'Southern Mississippi', shortName: null, city: 'Hattiesburg, Mississippi', logo: 'https://x/usm.png', source: 'thesportsdb' },
+  ])
+  const football = buildTeamLogoResolver([
+    { externalId: 'f1', name: 'UT Martin', shortName: 'UTM', city: null, logo: 'https://x/utm-fb.png', source: 'cfbd' },
+    { externalId: 'f2', name: 'Louisiana', shortName: 'Ragin Cajuns', city: null, logo: 'https://x/ull.png', source: 'thesportsdb' },
+    { externalId: 'f3', name: 'Louisiana-Lafayette', shortName: null, city: null, logo: 'https://x/wrong.png', source: 'api_sports' },
+  ])
+
+  it('reaches a basketball row through its logo-only spelling', () => {
+    expect(basketball('University of North Carolina at Greensboro')).toBe('https://x/uncg.png')
+    expect(basketball('University of Southern Mississippi')).toBe('https://x/usm.png')
+  })
+
+  it('reaches a football row through CFBD’s spelling, and the basketball row through its own', () => {
+    expect(football('University of Tennessee at Martin')).toBe('https://x/utm-fb.png')
+    expect(basketball('University of Tennessee at Martin')).toBe('https://x/utm.png')
+  })
+
+  it('never moves a crest the first name already found', () => {
+    // "Louisiana" hits first; the logo-only "Louisiana-Lafayette" would reach a different row.
+    expect(football('University of Louisiana at Lafayette')).toBe('https://x/ull.png')
+  })
+
+  it('does not give Holy Cross College (Indiana) the Worcester crest', () => {
+    expect(basketball('College of the Holy Cross')).toBe('https://x/hc.png')
+    expect(basketball('Holy Cross College (IN)')).toBeNull()
   })
 })
 

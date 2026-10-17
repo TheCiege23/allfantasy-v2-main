@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   getDashboardLeagueListForUser: vi.fn(),
   resolveManagerCommandCenterSnapshot: vi.fn(),
   leagueSettingsCount: vi.fn(),
+  loadCareerDecisionInput: vi.fn(),
 }))
 
 vi.mock('next-auth', () => ({ getServerSession: mocks.getServerSession }))
@@ -18,6 +19,11 @@ vi.mock('@/lib/decision-os/managerCommandCenter', async () => {
   )
   return { ...actual, resolveManagerCommandCenterSnapshot: mocks.resolveManagerCommandCenterSnapshot }
 })
+// Live-career plan, phase 4: the route starts the career read beside the snapshot and hands the
+// promise over. Mocked so this contract test never reaches the career profile or Prisma.
+vi.mock('@/lib/core-app/careerDecisionInput', () => ({
+  loadCareerDecisionInput: mocks.loadCareerDecisionInput,
+}))
 vi.mock('@/lib/prisma', () => ({
   prisma: { leagueSettings: { count: mocks.leagueSettingsCount } },
 }))
@@ -42,6 +48,7 @@ describe('GET /api/decision-os/manager-command-center', () => {
     vi.resetModules()
     vi.clearAllMocks()
     mocks.leagueSettingsCount.mockResolvedValue(0)
+    mocks.loadCareerDecisionInput.mockResolvedValue(null)
   })
 
   it('denies an unauthenticated caller with 401, never resolving any league data', async () => {
@@ -75,6 +82,14 @@ describe('GET /api/decision-os/manager-command-center', () => {
       'user-1',
       ['league-1', 'league-2', 'league-3'],
       expect.any(Date),
+      expect.any(Promise),
+    )
+    // The career read gets the SAME rows the league ids came from — no second list read.
+    expect(mocks.loadCareerDecisionInput).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 'user-1',
+        leagueRows: expect.arrayContaining([expect.objectContaining({ id: 'league-2' })]),
+      }),
     )
     expect(body.totalLeagues).toBe(3)
   })
@@ -127,6 +142,6 @@ describe('GET /api/decision-os/manager-command-center', () => {
     expect(res.status).toBe(200)
     expect(body.totalLeagues).toBe(0)
     expect(body.draftsApproachingCount).toBe(0)
-    expect(mocks.resolveManagerCommandCenterSnapshot).toHaveBeenCalledWith('user-1', [], expect.any(Date))
+    expect(mocks.resolveManagerCommandCenterSnapshot).toHaveBeenCalledWith('user-1', [], expect.any(Date), expect.any(Promise))
   })
 })

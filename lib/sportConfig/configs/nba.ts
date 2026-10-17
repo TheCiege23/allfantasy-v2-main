@@ -18,6 +18,8 @@ export const NBA_CONFIG: SportConfigFull = {
     { key: 'threes', label: '3-Pointers Made', defaultPoints: 0.5, isToggleable: true, group: 'offense', sport: 'NBA' },
     { key: 'fgm', label: 'FG Made', defaultPoints: 0, isToggleable: true, group: 'shooting', sport: 'NBA' },
     { key: 'ftm', label: 'FT Made', defaultPoints: 0, isToggleable: true, group: 'shooting', sport: 'NBA' },
+    { key: 'fga', label: 'Field Goals Attempted', defaultPoints: 0, isToggleable: true, group: 'shooting', sport: 'NBA' },
+    { key: 'fta', label: 'Free Throws Attempted', defaultPoints: 0, isToggleable: true, group: 'shooting', sport: 'NBA' },
     { key: 'dbl_dbl', label: 'Double-Double Bonus', defaultPoints: 1.5, isToggleable: true, group: 'bonus', sport: 'NBA', unit: 'bonus' },
     { key: 'trpl_dbl', label: 'Triple-Double Bonus', defaultPoints: 3, isToggleable: true, group: 'bonus', sport: 'NBA', unit: 'bonus' },
   ],

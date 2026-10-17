@@ -1,5 +1,6 @@
 import "server-only"
 import { prisma } from "@/lib/prisma"
+import { cfpSeedMapByHalf, readCfpSeeds } from "./cfpSeeds"
 import type { PlayoffSport } from "./types"
 
 /**
@@ -35,7 +36,8 @@ const CONFERENCE_FROM_GROUP: Array<{ match: RegExp; conference: string }> = [
  * the official-bracket sync matched, or a test pool's fixture clubs — is left
  * alone, which is what makes this safe to run on every cron fire.
  */
-const SEED_PLACEHOLDER = /^(AL|NL|EAST|WEST)(\d+)$/i
+// `CFP<n>` is the College Football Playoff's national seed slot (buildCfpTemplate).
+const SEED_PLACEHOLDER = /^(AL|NL|EAST|WEST|CFP)(\d+)$/i
 
 export type PlayoffSeedField = {
   sport: PlayoffSport
@@ -139,6 +141,27 @@ export async function resolvePlayoffSeedField(
   createdAt?: Date | null,
 ): Promise<PlayoffSeedField> {
   const warnings: string[] = []
+
+  /*
+   * The College Football Playoff is seeded by the SELECTION COMMITTEE, not by
+   * standings, and an admin enters those seeds (lib/playoffs/cfpSeeds.ts). The
+   * field is final exactly when all twelve have been saved — before that,
+   * nothing is written, the same "unseeded beats wrong" rule as below.
+   */
+  if (sport === "ncaaf") {
+    const season = Number(seasonYear)
+    const record = await readCfpSeeds(season)
+    if (!record) warnings.push(`no CFP seeds saved for ${season} — enter them at /admin/cfp-seeding`)
+    return {
+      sport,
+      season: String(season),
+      seeds: record ? cfpSeedMapByHalf(record.seeds) : new Map(),
+      rowsRead: record ? record.seeds.length : 0,
+      isFinal: Boolean(record),
+      minGamesPlayed: null,
+      warnings,
+    }
+  }
 
   // NBA/NHL are keyed by season START year; see splitYearSeasonStart for why it is derived.
   const season =
@@ -405,6 +428,24 @@ export async function applyPlayoffSeedsToChallenge(input: {
     }
   }
 
+  /*
+   * 🛑 PICKS ARE MIGRATED ACROSS THE WHOLE CHALLENGE, NOT JUST THE SLOT'S SERIES.
+   *
+   * A pick CARRIES FORWARD: picking `CFP8` in the first round puts `CFP8` into
+   * #1's quarterfinal (buildProjectedPlayoffSeries), and a pick made there also
+   * reads `CFP8`. This used to rename picks only in the series holding the
+   * slot, so the carried pick was stranded as `CFP8` — matching neither team,
+   * unscoreable forever. Same for `AL4` carried into a Division Series. Found
+   * 2026-10-01 by the CFP seeding end-to-end test.
+   *
+   * The old comment justified the narrow scope with "an `AL1` slot exists once
+   * per round" — it does not. Every seed placeholder appears in exactly ONE
+   * series per template (seeds only enter in their first round; later rounds
+   * hold `Winner S<n>`), pinned by playoff-cfp-seeding.test.ts for all four
+   * sports. So within a challenge a placeholder names one seed, and every pick
+   * of it means that seed's club.
+   */
+  const challengeSeriesIds = (series as Array<{ id: string }>).map((row) => row.id)
   const picksMigrated = await prisma.$transaction(async (tx) => {
     let migrated = 0
     for (const rename of renames) {
@@ -412,13 +453,8 @@ export async function applyPlayoffSeedsToChallenge(input: {
         where: { id: rename.seriesId },
         data: { [rename.column]: rename.to },
       })
-      /*
-       * Scoped to the SERIES, not the challenge: the same placeholder string
-       * can legitimately appear in more than one series (an `AL1` slot exists
-       * once per round), and a pick only ever refers to its own series.
-       */
       const updated = await (tx as any).playoffBracketPick.updateMany({
-        where: { seriesId: rename.seriesId, pickTeamName: rename.from },
+        where: { seriesId: { in: challengeSeriesIds }, pickTeamName: rename.from },
         data: { pickTeamName: rename.to },
       })
       migrated += updated.count ?? 0

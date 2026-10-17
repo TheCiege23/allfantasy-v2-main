@@ -511,15 +511,29 @@ describe('stylesheet', () => {
   const CSS = readFileSync(resolve(process.cwd(), 'components/core-app/af-trade-center.css'), 'utf8').replace(/\r\n/g, '\n')
   const tail = CSS.slice(CSS.indexOf('Phone builder: step bar, review, asset sheet'))
 
-  /** The body of the LAST top-level `@media (max-width: 720px)` block, balanced on braces. */
+  /**
+   * The top-level `@media (max-width: 720px)` block that carries the step bar, balanced on braces.
+   *
+   * ⚠ FOUND BY WHAT IT HOLDS, NOT BY BEING LAST. This used to take the LAST 720px block in the
+   * file, which held only while nobody followed the stylesheet's own convention of appending new
+   * phone rules as a sibling block at the end — the 2026-10-01 phone audit did, and all three
+   * stylesheet checks went red over a file whose step bar had not changed.
+   */
   function lastPhoneBlock(src: string): string {
-    const start = src.lastIndexOf('@media (max-width: 720px) {')
-    let depth = 0
-    for (let i = src.indexOf('{', start); i < src.length; i++) {
-      if (src[i] === '{') depth++
-      else if (src[i] === '}' && --depth === 0) return src.slice(start, i + 1)
+    const opener = '@media (max-width: 720px) {'
+    let found = ''
+    for (let start = src.indexOf(opener); start !== -1; start = src.indexOf(opener, start + 1)) {
+      let depth = 0
+      for (let i = src.indexOf('{', start); i < src.length; i++) {
+        if (src[i] === '{') depth++
+        else if (src[i] === '}' && --depth === 0) {
+          const block = src.slice(start, i + 1)
+          if (block.includes('.af-tc-stepbar {')) found = block
+          break
+        }
+      }
     }
-    return ''
+    return found
   }
 
   it('[control] the scan found the new section and a balanced phone block', () => {

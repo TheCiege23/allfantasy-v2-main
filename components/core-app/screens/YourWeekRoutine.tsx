@@ -1,7 +1,12 @@
+'use client'
+
 import type { ReactNode } from 'react'
 import Link from 'next/link'
 import type { WeeklyRoutineData } from '@/lib/core-app/weeklyRoutine'
 import { ShareMomentButton } from '@/components/core-app/screens/ShareMomentButton'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { weekdayEs } from '@/lib/core-app/kickoffText'
+import { awardLabelText, routineStepTitle, routineSummaryText, routineTodayLabel } from '@/lib/core-app/dashboard3aCopy'
 
 /**
  * "Your week" — the weekly routine card on the /core home (retention item 7, user decisions
@@ -10,8 +15,15 @@ import { ShareMomentButton } from '@/components/core-app/screens/ShareMomentButt
  * ⚠ A CHECK MARK IS A FACT. `done` is only ever set from data (see lib/core-app/weeklyRoutine.ts);
  * `unknown` renders no mark and no invented summary. On Monday the recap block expands with last
  * week's details, and says plainly that Monday night games may still count.
+ *
+ * Spanish (2026-10-04): the step summaries are built on the server in English and carry
+ * `summaryParts`; lib/core-app/dashboard3aCopy.ts rebuilds them at render, and the recap, awards and
+ * upsets are written here from their numbers. The provider starts at English on server and client
+ * alike, so the first paint agrees.
  */
 export function YourWeekRoutine({ data, help }: { data: WeeklyRoutineData | null; help?: ReactNode }) {
+  const { language } = useOptionalLanguage()
+  const es = language === 'es'
   if (!data) return null
   const todayStep = data.steps.find((s) => s.today)
   const recap = data.today === 'recap' ? data.recap : null
@@ -19,17 +31,19 @@ export function YourWeekRoutine({ data, help }: { data: WeeklyRoutineData | null
   const upsets = data.upsets ?? []
 
   return (
-    <section className="af3a-sec af3a-routine" aria-label="Your week">
+    <section className="af3a-sec af3a-routine" aria-label={es ? 'Tu semana' : 'Your week'}>
       <header className="af3a-sechead">
-        <h2>Your week</h2>
+        <h2>{es ? 'Tu semana' : 'Your week'}</h2>
         {help}
         <span className="af3a-note">
-          {data.todayLabel}
-          {todayStep ? ` · ${todayStep.title}` : ''}
+          {routineTodayLabel(data.todayLabel, language)}
+          {todayStep ? ` · ${routineStepTitle(todayStep, language)}` : ''}
         </span>
       </header>
       <ol className="af3a-card af3a-routine-list">
-        {data.steps.map((s) => (
+        {data.steps.map((s) => {
+          const summary = routineSummaryText(s, language)
+          return (
           <li
             key={s.key}
             className="af3a-routine-step"
@@ -38,20 +52,47 @@ export function YourWeekRoutine({ data, help }: { data: WeeklyRoutineData | null
             data-state={s.state}
             aria-current={s.today ? 'step' : undefined}
           >
-            <span className="af3a-routine-day af3a-mono">{s.day}</span>
+            <span className="af3a-routine-day af3a-mono">{es ? weekdayEs(s.day) : s.day}</span>
             <Link className="af3a-routine-title" href={s.href}>
-              {s.title}
+              {routineStepTitle(s, language)}
             </Link>
             {s.state === 'done' ? (
-              <span className="af3a-routine-check" aria-label="Done">
+              <span className="af3a-routine-check" aria-label={es ? 'Hecho' : 'Done'}>
                 ✓
               </span>
             ) : null}
-            {s.summary ? <span className="af3a-routine-summary">{s.summary}</span> : null}
+            {summary ? <span className="af3a-routine-summary">{summary}</span> : null}
           </li>
-        ))}
+          )
+        })}
       </ol>
-      {recap ? (
+      {recap && es ? (
+        <div className="af3a-card af3a-routine-recap">
+          <b>
+            Resumen de la semana {recap.week} de {recap.season}: {recap.wins}-{recap.losses}
+          </b>
+          <ul>
+            {recap.biggestWin ? (
+              <li>
+                Mayor victoria: {recap.biggestWin.leagueName} por {recap.biggestWin.margin.toFixed(1)}
+              </li>
+            ) : null}
+            {recap.closestLoss ? (
+              <li>
+                Derrota más ajustada: {recap.closestLoss.leagueName} por {recap.closestLoss.margin.toFixed(1)}
+              </li>
+            ) : null}
+            {recap.topScorer ? (
+              <li>
+                Máximo anotador: {recap.topScorer.name} {recap.topScorer.points.toFixed(1)} ({recap.topScorer.leagueName})
+              </li>
+            ) : null}
+          </ul>
+          {recap.pending ? (
+            <p className="af3a-receipt-note">Los partidos del lunes por la noche aún pueden cambiar esto.</p>
+          ) : null}
+        </div>
+      ) : recap ? (
         <div className="af3a-card af3a-routine-recap">
           <b>
             {recap.season} week {recap.week} recap: {recap.wins}-{recap.losses}
@@ -82,21 +123,25 @@ export function YourWeekRoutine({ data, help }: { data: WeeklyRoutineData | null
       */}
       {awards.length > 0 ? (
         <div className="af3a-card af3a-routine-awards">
-          <b>Week {awards[0]!.week} awards</b>
+          <b>{es ? `Premios de la semana ${awards[0]!.week}` : <>Week {awards[0]!.week} awards</>}</b>
           <ul>
             {awards.map((a) => (
               <li key={`${a.leagueId}:${a.kind}`} className="af3a-routine-award" data-award={a.kind}>
                 <span>
-                  {a.label} · {a.leagueName} ·{' '}
+                  {awardLabelText(a, language)} · {a.leagueName} ·{' '}
                   <b className="af3a-mono">
                     {a.value.toFixed(1)}
-                    {a.unit === 'pts' ? ' pts' : ' pt margin'}
+                    {a.unit === 'pts' ? ' pts' : es ? ' pts de diferencia' : ' pt margin'}
                   </b>
                 </span>
                 <ShareMomentButton
                   url={`/api/share/rivalry-card?kind=award&leagueId=${encodeURIComponent(a.leagueId)}&award=${a.kind}`}
                   filename={`award-${a.kind}-week-${a.week}.png`}
-                  title={`${a.label} — ${a.leagueName}, week ${a.week}`}
+                  title={
+                    es
+                      ? `${awardLabelText(a, language)} — ${a.leagueName}, semana ${a.week}`
+                      : `${a.label} — ${a.leagueName}, week ${a.week}`
+                  }
                 />
               </li>
             ))}
@@ -109,21 +154,25 @@ export function YourWeekRoutine({ data, help }: { data: WeeklyRoutineData | null
       */}
       {upsets.length > 0 ? (
         <div className="af3a-card af3a-routine-awards af3a-routine-upsets">
-          <b>Week {upsets[0]!.week} upsets</b>
+          <b>{es ? `Sorpresas de la semana ${upsets[0]!.week}` : <>Week {upsets[0]!.week} upsets</>}</b>
           <ul>
             {upsets.map((u) => (
               <li key={u.leagueId} className="af3a-routine-award" data-upset={u.leagueId}>
                 <span>
-                  {u.leagueName} · won{' '}
+                  {u.leagueName} · {es ? 'ganaste' : 'won'}{' '}
                   <b className="af3a-mono">
                     {u.pointsFor.toFixed(1)}–{u.pointsAgainst.toFixed(1)}
                   </b>{' '}
-                  · pre-game win chance {u.winChance}
+                  · {es ? 'probabilidad de ganar antes del partido' : 'pre-game win chance'} {u.winChance}
                 </span>
                 <ShareMomentButton
                   url={`/api/share/rivalry-card?kind=upset&leagueId=${encodeURIComponent(u.leagueId)}&season=${u.season}&week=${u.week}`}
                   filename={`upset-week-${u.week}.png`}
-                  title={`Upset win — ${u.leagueName}, week ${u.week}`}
+                  title={
+                    es
+                      ? `Victoria sorpresa — ${u.leagueName}, semana ${u.week}`
+                      : `Upset win — ${u.leagueName}, week ${u.week}`
+                  }
                 />
               </li>
             ))}

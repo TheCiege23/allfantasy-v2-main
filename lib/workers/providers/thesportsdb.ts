@@ -1,6 +1,8 @@
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { apiChainSportToDbSport, toApiChainSport, type ApiFetchParams, type ApiProvider } from '@/lib/workers/api-config'
 import { getTheSportsDbApiKeyOrFallback } from '@/lib/env/sports-media-keys'
+import { pickHeadshotCandidate } from '@/lib/player-assets/headshotCandidateMatch'
+import { normalizeTheSportsDbImageUrl } from '@/lib/player-assets/imageUrlHygiene'
 
 const THESPORTSDB_LEAGUE_IDS = {
   NFL: '4391',
@@ -24,6 +26,33 @@ function leagueIdForSport(sport: string): string {
   }
   const key = chain ? apiChainSportToDbSport(chain) : sport.toUpperCase()
   return THESPORTSDB_LEAGUE_IDS[key as keyof typeof THESPORTSDB_LEAGUE_IDS] || ''
+}
+
+/**
+ * TheSportsDB's `strSport` value for one of our sport codes. The values are the vendor's
+ * documented sport enum (contracts/thesportsdb/ENDPOINTS.yaml, `strStatus_by_sport`);
+ * "American Football" is also confirmed by the committed fixtures. NCAA codes share the pro
+ * sport's value — searchplayers.php has no league field to separate them.
+ */
+export function theSportsDbSportName(sport: string): string | null {
+  const chain = toApiChainSport(sport)
+  if (!chain) return null
+  switch (apiChainSportToDbSport(chain)) {
+    case 'NFL':
+    case 'NCAAF':
+      return 'American Football'
+    case 'NBA':
+    case 'NCAAB':
+      return 'Basketball'
+    case 'MLB':
+      return 'Baseball'
+    case 'NHL':
+      return 'Ice Hockey'
+    case 'SOCCER':
+      return 'Soccer'
+    default:
+      return null
+  }
 }
 
 function toSearch(value: unknown): string {
@@ -53,6 +82,15 @@ function asRows<T = Record<string, unknown>>(data: Record<string, unknown> | nul
   return Array.isArray(rows) ? (rows as T[]) : []
 }
 
+function playerRows(data: Record<string, unknown> | null): Record<string, unknown>[] {
+  const singular = asRows(data, 'player')
+  return singular.length ? singular : asRows(data, 'players')
+}
+
+function leagueNameForSport(sport: string): string | null {
+  return ({ NFL: 'NFL', NBA: 'NBA', NHL: 'NHL', MLB: 'MLB' } as Record<string, string>)[sport.toUpperCase()] ?? null
+}
+
 function resolvePlayerImage(row: Record<string, unknown>): string | null {
   const options = [
     row.strCutout,
@@ -61,7 +99,7 @@ function resolvePlayerImage(row: Record<string, unknown>): string | null {
     row.strFanart1,
   ]
   for (const candidate of options) {
-    if (typeof candidate === 'string' && candidate.trim()) return candidate.trim()
+    if (typeof candidate === 'string' && candidate.trim()) return normalizeTheSportsDbImageUrl(candidate)
   }
   return null
 }
@@ -74,7 +112,7 @@ function resolveTeamLogo(row: Record<string, unknown>): string | null {
     row.strLogo,
   ]
   for (const candidate of options) {
-    if (typeof candidate === 'string' && candidate.trim()) return candidate.trim()
+    if (typeof candidate === 'string' && candidate.trim()) return normalizeTheSportsDbImageUrl(candidate)
   }
   return null
 }
@@ -105,7 +143,7 @@ export const theSportsDbProvider: ApiProvider = {
       case 'teams': {
         if (!leagueId) return null
         // Use documented search_all_teams.php?l={leagueName} first, fall back to lookup by ID
-        const leagueName = sport === 'NFL' ? 'NFL' : sport === 'NBA' ? 'NBA' : sport === 'NHL' ? 'NHL' : sport === 'MLB' ? 'MLB' : null
+        const leagueName = leagueNameForSport(sport)
         const data = leagueName
           ? await fetchTheSportsDb('search_all_teams.php', { l: leagueName })
           : await fetchTheSportsDb('lookup_all_teams.php', { id: leagueId })
@@ -126,9 +164,10 @@ export const theSportsDbProvider: ApiProvider = {
         if (teamName) playerSearchParams.t = teamName
         else if (teamCode) playerSearchParams.t = teamCode
         const data = await fetchTheSportsDb('searchplayers.php', playerSearchParams)
-        const rows = asRows<Record<string, unknown>>(data, 'player')
+        const rows = playerRows(data)
+        const wantedSport = theSportsDbSportName(sport)
         return rows
-          .filter((player) => namesEqual(String(player.strSport ?? sport), sport) || sport === 'SOCCER')
+          .filter((player) => !!wantedSport && namesEqual(String(player.strSport ?? ''), wantedSport))
           .map((player) => ({
             id: String(player.idPlayer ?? ''),
             name: String(player.strPlayer ?? ''),
@@ -148,7 +187,7 @@ export const theSportsDbProvider: ApiProvider = {
         const teamId = toSearch(query.teamId ?? query.id)
         if (!teamId) return null
         const data = await fetchTheSportsDb('lookup_all_players.php', { id: teamId })
-        const rows = asRows<Record<string, unknown>>(data, 'player')
+        const rows = playerRows(data)
         return rows.map((player) => ({
           id: String(player.idPlayer ?? ''),
           name: String(player.strPlayer ?? ''),
@@ -180,15 +219,23 @@ export const theSportsDbProvider: ApiProvider = {
       }
       case 'player_headshots': {
         if (!search) return null
+        // searchplayers.php spans every sport TheSportsDB covers, so a basketball player's
+        // name search can return a footballer. Unknown sport → no pick rather than a guess.
+        const wantedSport = theSportsDbSportName(sport)
+        if (!wantedSport) return null
         const data = await fetchTheSportsDb('searchplayers.php', { p: search })
-        const rows = asRows<Record<string, unknown>>(data, 'player')
-        const matched = rows.find((player) => {
-          const sameName = namesEqual(String(player.strPlayer ?? ''), search)
-          const sameTeam =
-            !teamCode ||
-            normalizeTeamAbbrev(String(player.strTeamShort ?? player.strTeam ?? '')) === teamCode
-          return sameName && sameTeam
-        }) ?? rows[0]
+        const rows = playerRows(data).filter((player) =>
+          namesEqual(String(player.strSport ?? ''), wantedSport),
+        )
+        // No `?? rows[0]`: when no row is this player, the answer is "no headshot", never the
+        // first search result's photo. See lib/player-assets/headshotCandidateMatch.ts.
+        const matched = pickHeadshotCandidate(rows, {
+          search,
+          nameOf: (player) => String(player.strPlayer ?? ''),
+          teamCodeOf: (player) =>
+            normalizeTeamAbbrev(String(player.strTeamShort ?? player.strTeam ?? '')),
+          teamCode,
+        })
         const imageUrl = matched ? resolvePlayerImage(matched) : null
         if (!imageUrl) return null
         return {
@@ -202,23 +249,17 @@ export const theSportsDbProvider: ApiProvider = {
         }
       }
       case 'team_logos': {
-        const rows =
-          teamName
-            ? asRows<Record<string, unknown>>(
-                await fetchTheSportsDb('searchteams.php', { t: teamName }),
-                'teams'
-              )
-            : asRows<Record<string, unknown>>(
-                leagueId ? await fetchTheSportsDb('lookup_all_teams.php', { id: leagueId }) : null,
-                'teams'
-              )
-        const matched = rows.find((team) => {
+        const leagueName = leagueNameForSport(sport)
+        const rows = leagueName ? asRows<Record<string, unknown>>(await fetchTheSportsDb('search_all_teams.php', { l: leagueName }), 'teams') : []
+        const matches = (team: Record<string, unknown>) => {
           const shortName = resolveTeamCode(team)
           return (
             (!!teamCode && shortName === teamCode) ||
             (!!teamName && namesEqual(String(team.strTeam ?? ''), teamName))
           )
-        }) ?? rows[0]
+        }
+        let matched = rows.find(matches)
+        if (!matched && teamName) matched = asRows<Record<string, unknown>>(await fetchTheSportsDb('searchteams.php', { t: teamName }), 'teams').find(matches)
         const logoUrl = matched ? resolveTeamLogo(matched) : null
         if (!logoUrl) return null
         return {

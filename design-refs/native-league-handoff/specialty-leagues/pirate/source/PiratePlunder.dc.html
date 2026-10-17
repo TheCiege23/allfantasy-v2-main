@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Plunder</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./specialty/sp.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Cinzel:wght@600;700&amp;family=Caveat:wght@600;700&amp;family=Bebas+Neue&amp;family=Pirata+One&amp;family=Creepster&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080d}
+.pr-t{font-family:'Pirata One',serif;letter-spacing:.02em}
+.pr-ship{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;background:#10131c;border:1px solid rgba(255,255,255,.05)}
+.pr-pl{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;background:#10131c;border:1px solid rgba(255,255,255,.06);width:100%;color:inherit;font:inherit;text-align:left}
+.pr-anchor{display:inline-flex;align-items:center;gap:4px;height:20px;padding:0 7px;border-radius:99px;font:700 10px 'Archivo';letter-spacing:.05em;text-transform:uppercase;background:rgba(127,183,232,.14);color:#9fd0ff}
+.pr-pl[disabled]{opacity:.5;cursor:default}
+button.pr-pl{cursor:pointer;min-height:54px}
+@keyframes prSail{0%{transform:translateX(0) rotate(0)}50%{transform:translateX(30px) rotate(4deg)}100%{transform:translateX(0) rotate(0)}}
+</style>
+</helmet>
+<div class="sp" style="--acc: #d4a017; --acc2: #ffe08a; --accInk: #1a1204; --disp: Pirata One; min-height: 100vh; display: flex; flex-direction: column">
+<header style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 18px 28px; border-bottom: 1px solid rgba(255,255,255,.06)">
+  <a class="sp-btn" href="PirateHome.dc.html" aria-label="Back" style="padding: 0 12px">‹</a>
+  <div style="flex: 1 1 320px; display: flex; flex-direction: column; gap: 3px"><h1 class="sp-h1">Plunder</h1><span class="sp-t2">Pirate League! · you won the raid 117.3 to 96.0 · pick one player from Bilge Rat’s hold</span></div>
+  <span class="sp-prop">Proposed rules · no spec in the repo yet</span>
+</header>
+<div style="display: flex; flex-wrap: wrap; gap: 24px; padding: 24px 28px 32px; align-items: flex-start">
+  <section class="sp-card" style="flex: 1 1 620px; padding: 20px; display: flex; flex-direction: column; gap: 8px">
+    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px"><span class="sp-av" style="background: #1f2a4d">O4</span><span class="pr-t" style="font-size: 24px; color: #ffe08a; flex: 1">Bilge Rat’s hold</span><span class="sp-t3" style="font-size: 12px">Anchored players are locked</span></div>
+    <sc-for list="{{hold}}" as="p" hint-placeholder-count="8">
+      <button class="pr-pl" onClick="{{p.pick}}" disabled="{{p.anch}}" aria-pressed="{{p.on}}" style="border-color: {{p.line}}; background: {{p.bg}}">
+        <span class="sp-tag" style="background: #151926; color: #a3a9c2; width: 36px; justify-content: center">{{p.pos}}</span>
+        <span style="flex: 1; font-weight: 600">{{p.name}}</span>
+        <span class="sp-t3 sp-num" style="font-size: 12px">AF {{p.val}}</span>
+        <span class="{{p.tagCls}}">{{p.tag}}</span>
+      </button>
+    </sc-for>
+  </section>
+  <aside style="flex: 1 1 380px; max-width: 440px; display: flex; flex-direction: column; gap: 14px">
+    <div class="sp-card" style="padding: 22px; display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; border-color: {{cLine}}; background: radial-gradient(ellipse at 50% 0%, rgba(212,160,23,.18), transparent 60%), #0b0d14">
+      <img src="{{cIcon}}" alt="" style="width: 86px; animation: {{anim}}">
+      <span class="pr-t" style="font-size: 30px; color: #ffe08a">{{cHead}}</span>
+      <span class="sp-t2" style="font-size: 13px">{{cSub}}</span>
+      <div style="display: flex; align-items: center; gap: 8px"><img src="specialty/pirate/icon-doubloon.svg" alt="" style="width: 26px"><span class="sp-num" style="font-weight: 700">+5 doubloons</span><span class="sp-t3" style="font-size: 12px">from Bilge Rat · you’ll have 57</span></div>
+      <sc-if value="{{canTake}}" hint-placeholder-val="{{ true }}"><button class="sp-btn sp-btn-p" onClick="{{take}}" disabled="{{none}}" style="width: 100%; min-height: 48px">{{cta}}</button></sc-if>
+      <sc-if value="{{taken}}" hint-placeholder-val="{{ false }}"><button class="sp-btn" onClick="{{reset}}" style="width: 100%">Replay</button></sc-if>
+    </div>
+    <div class="sp-card2" style="padding: 14px 16px; font-size: 12.5px; color: #a3a9c2">Your hold is full, so you’ll drop someone after taking a player. The plunder window closes Tuesday 11:00 AM ET; if you don’t pick, AF takes the highest-value unanchored player for you.</div>
+  </aside>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":720}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { sel: 'Garrett Wilson', taken: false }; }
+  renderVals() {
+    const st = this.state;
+    const H = [['WR','Tyreek Hill','$29',true],['RB','Josh Jacobs','$31',true],['QB','Dak Prescott','$18',true],['WR','Garrett Wilson','$33',false],['RB','Rhamondre Stevenson','$17',false],['WR','Jordan Addison','$21',false],['TE','Dallas Goedert','$9',false],['RB','Jaylen Warren','$12',false]];
+    return { hold: H.map(([pos, name, val, anch]) => { const on = st.sel === name;
+        return { pos, name, val, anch, on: on ? 'true' : 'false', pick: () => !st.taken && this.setState({ sel: name }), tag: anch ? 'Anchored' : on ? 'Plunder' : '', tagCls: anch ? 'pr-anchor' : on ? 'sp-tag' : '',
+          line: on ? '#d4a017' : 'rgba(255,255,255,.06)', bg: on ? 'rgba(212,160,23,.12)' : '#10131c' }; }),
+      canTake: !st.taken, taken: st.taken, none: !st.sel, take: () => this.setState({ taken: true }), reset: () => this.setState({ taken: false }),
+      cta: 'Take ' + st.sel + ' aboard', cIcon: st.taken ? 'specialty/pirate/icon-doubloon.svg' : 'specialty/pirate/icon-plunder.svg', anim: st.taken ? 'prSail 1s ease-in-out' : 'none',
+      cHead: st.taken ? st.sel + ' is yours' : 'Your plunder', cSub: st.taken ? 'He joins Salt & Fury’s hold. Bilge Rat gets a notification and 5 fewer doubloons.' : st.sel + ' · AF thinks he’s the best unanchored player in their hold.',
+      cLine: st.taken ? 'rgba(212,160,23,.6)' : 'rgba(255,255,255,.07)' };
+  }
+}
+</script>
+</body>
+</html>

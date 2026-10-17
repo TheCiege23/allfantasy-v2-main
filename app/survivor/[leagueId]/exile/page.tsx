@@ -1,14 +1,16 @@
 'use client'
 
 import Link from 'next/link'
+import { ExileRosterWaivers } from '@/components/league/survivor/ExileRosterWaivers'
+import { ExileTokenWallet } from '@/components/league/survivor/ExileTokenWallet'
 import { useParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { useSurvivorUi } from '@/lib/survivor/SurvivorUiContext'
-import { ChallengePickCard } from '@/app/survivor/components/chimmy/ChallengePickCard'
 
 type ExileGet = {
   island?: { isActive?: boolean; currentWeek?: number; bossName?: string | null } | null
   user?: { tokenBalance?: number; playerState?: string } | null
+  returnRules?: { enabled: boolean; week: number; tokensRequired: number; resolved: boolean; slots: number }
   error?: string
 }
 
@@ -30,7 +32,7 @@ export default function SurvivorExilePage() {
   const island = data?.island
   const exiledCount = (ctx.season?.players ?? []).filter((p) => p.playerState === 'exile').length
   const isExile = ctx.playerState === 'exile'
-  const viewerSummary = !isExile && !ctx.isCommissioner
+  const viewerSummary = !isExile && (!ctx.isCommissioner || ctx.survivorFairPlayActive)
 
   return (
     <div
@@ -64,43 +66,16 @@ export default function SurvivorExilePage() {
 
       {isExile ? (
         <>
-          <section className="relative mt-6 rounded-2xl border border-violet-500/30 bg-violet-950/30 p-5">
-            <p className="text-[11px] font-bold uppercase text-violet-200">Your exile status</p>
-            <div className="mt-3 flex items-center gap-3">
-              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-violet-600/30 text-lg font-bold ring-2 ring-violet-400/40">
-                {(ctx.season?.userState?.displayName ?? 'You').slice(0, 1)}
-              </div>
-              <div>
-                <p className="font-semibold text-white">{ctx.season?.userState?.displayName}</p>
-                <p className="font-mono text-2xl text-violet-100">{data?.user?.tokenBalance ?? ctx.tokenBalance ?? 0} 🪙</p>
-              </div>
-            </div>
-            <p className="mt-3 text-[12px] text-white/55">
-              Return path: commissioner rules · {island?.bossName ? `Boss: ${island.bossName}` : 'Boss optional'}
-            </p>
-            <Link href={`${base}/exile/tokens`} className="mt-3 inline-block text-[13px] font-semibold text-violet-200">
-              Token pool →
-            </Link>
-          </section>
+          <div className="relative mt-6"><ExileTokenWallet leagueId={leagueId} /></div>
+          <ExileRosterWaivers leagueId={leagueId} />
 
           <section className="relative mt-6 rounded-2xl border border-violet-500/25 bg-black/30 p-4">
-            <p className="text-[11px] font-bold uppercase text-violet-200">This week&apos;s exile challenge</p>
-            <p className="mt-2 text-[12px] text-white/55">Purple-styled mirror of the challenge module.</p>
-            {ctx.canSubmitChallenge ? (
-              <div className="mt-4">
-                <ChallengePickCard
-                  title="Exile challenge"
-                  instructions="Submit your exile lineup or pick — commissioner rules apply."
-                  onLock={() => {}}
-                >
-                  <span className="text-[11px] text-white/40">Uses the same exile POST intent when wired.</span>
-                </ChallengePickCard>
-              </div>
-            ) : null}
+            <p className="text-[11px] font-bold uppercase text-violet-200">Exile challenges</p>
+            <p className="mt-2 text-[12px] text-white/55">Chimmy announces available challenges and their deadlines in Exile Chat. Your main-island roster has been released; Exile continues your season with its own competition.</p>
           </section>
 
           <section className="relative mt-6 survivor-panel p-4">
-            <p className="text-[11px] font-bold uppercase text-white/45">Exile roster</p>
+            <p className="text-[11px] font-bold uppercase text-white/45">Exile managers</p>
             <div className="mt-3 flex flex-wrap gap-2">
               {(ctx.season?.players ?? [])
                 .filter((p) => p.playerState === 'exile')

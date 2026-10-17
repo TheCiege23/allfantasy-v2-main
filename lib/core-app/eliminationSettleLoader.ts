@@ -48,7 +48,7 @@ export async function loadEliminationSettle(args: {
       ids.length
         ? prisma.sportsPlayer.findMany({
             where: { sleeperId: { in: ids } },
-            select: { sleeperId: true, name: true, position: true, team: true, sport: true, imageUrl: true },
+            select: { sleeperId: true, name: true, position: true, team: true, sport: true, imageUrl: true, source: true, fetchedAt: true },
           })
         : Promise.resolve([]),
       prisma.sportsGame.findMany({

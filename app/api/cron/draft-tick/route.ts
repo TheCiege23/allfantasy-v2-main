@@ -26,6 +26,7 @@ import { requireCronAuth } from '@/app/api/cron/_auth'
 import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 import { processExpiredDraftPicks } from '@/lib/live-draft-engine/expired-picks/processExpiredDraftPicks'
 import { mirrorActiveSleeperDrafts } from '@/lib/draft/mirrorActiveSleeperDrafts'
+import { startScheduledSurvivorDrafts } from '@/lib/survivor/startScheduledSurvivorDrafts'
 
 export const dynamic = 'force-dynamic'
 
@@ -93,10 +94,17 @@ export async function GET(request: NextRequest) {
           mirror = { error: message.slice(0, 200) }
         }
 
-        // Autopick is inert until deliberately enabled — see SAFETY above.
-        if (!isEnabled()) return { disabled: true as const, mirror, summary: null }
+        // A scheduled Survivor draft is an explicit league setting. Start it on
+        // the server even when browser-driven autopick is disabled.
+        const survivorStarts = await startScheduledSurvivorDrafts().catch((error) => ({
+          scanned: 0, started: 0, skipped: 0,
+          errors: [{ leagueId: '', error: error instanceof Error ? error.message : String(error) }],
+        }))
 
-        return { disabled: false as const, mirror, summary: await processExpiredDraftPicks({ maxLeagues }) }
+        // Autopick is inert until deliberately enabled — see SAFETY above.
+        if (!isEnabled()) return { disabled: true as const, mirror, survivorStarts, summary: null }
+
+        return { disabled: false as const, mirror, survivorStarts, summary: await processExpiredDraftPicks({ maxLeagues }) }
       },
       (r) =>
         r.summary
@@ -106,18 +114,20 @@ export async function GET(request: NextRequest) {
               rowsSkipped: r.summary.skipped,
               // A per-league autopick failure must not fail the whole tick — the next
               // tick retries that league. Surface it as a degraded run instead.
-              status: r.summary.errors.length > 0 ? 'partial' : 'success',
+              status: r.summary.errors.length > 0 || r.survivorStarts.errors.length > 0 ? 'partial' : 'success',
               metadata: {
                 scanned: r.summary.scanned,
                 processed: r.summary.processed,
                 skipped: r.summary.skipped,
                 errorCount: r.summary.errors.length,
                 errors: r.summary.errors.slice(0, 10),
+                survivorStarts: r.survivorStarts,
               },
             }
           : // Deliberately inert, not broken. `success` keeps the run out of the failure
             // telemetry while the heartbeat still proves the scheduler fired.
-            { status: 'success', metadata: { autopickDisabled: true } },
+            { status: r.survivorStarts.errors.length > 0 ? 'partial' : 'success',
+              metadata: { autopickDisabled: true, survivorStarts: r.survivorStarts } },
     )
 
     if (tick.disabled) {
@@ -126,11 +136,12 @@ export async function GET(request: NextRequest) {
         disabled: true,
         reason: 'DRAFT_TICK_CRON_ENABLED is not "true" — autopick skipped, mirror still ran',
         mirror: tick.mirror,
+        survivorStarts: tick.survivorStarts,
         ranAt: new Date().toISOString(),
       })
     }
 
-    return NextResponse.json({ ok: true, ...tick.summary, mirror: tick.mirror, ranAt: new Date().toISOString() })
+    return NextResponse.json({ ok: true, ...tick.summary, mirror: tick.mirror, survivorStarts: tick.survivorStarts, ranAt: new Date().toISOString() })
   } catch (err) {
     return NextResponse.json(
       { ok: false, error: err instanceof Error ? err.message : 'draft-tick failed' },

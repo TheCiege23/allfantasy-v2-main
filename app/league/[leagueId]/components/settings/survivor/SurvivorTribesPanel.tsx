@@ -1,53 +1,33 @@
 'use client'
-
-import { useState } from 'react'
-import { SettingsSection, SettingsRow, Toggle, Select, Input } from '../../../tabs/settings/components'
+import { useEffect, useState } from 'react'
 import type { SurvivorSettingsPanelProps } from './types'
-
-export function SurvivorTribesPanel({ canEdit }: SurvivorSettingsPanelProps) {
-  const [naming, setNaming] = useState('auto')
-  const [swap, setSwap] = useState(false)
-  const [rebalance, setRebalance] = useState(true)
-  const [swapType, setSwapType] = useState('random')
-  const d = !canEdit
-
-  return (
-    <div className="space-y-5 px-6 py-6 text-[13px] text-white/85">
-      <p className="text-[11px] text-amber-200/80">Tribe identity and swap rules — UI only until API wiring lands.</p>
-      <SettingsSection id="sv-tribe-names" title="Tribe names & logos">
-        <SettingsRow
-          label="Naming mode"
-          control={
-            <Select value={naming} onChange={setNaming} disabled={d}>
-              <option value="auto">Auto</option>
-              <option value="manual">Manual</option>
-              <option value="ai">AI-generated</option>
-            </Select>
-          }
-        />
-        <SettingsRow label="Manage tribes" description="Open tribe editor when manual." control={<Input placeholder="Tribe list" disabled={d} />} />
-      </SettingsSection>
-      <SettingsSection id="sv-rebalance" title="Rebalancing">
-        <SettingsRow label="Auto-rebalance" control={<Toggle checked={rebalance} onChange={setRebalance} disabled={d} />} />
-        <SettingsRow
-          label="Min tribe size before rebalance"
-          control={<Input type="number" defaultValue={4} disabled={d} className="w-20" />}
-        />
-      </SettingsSection>
-      <SettingsSection id="sv-swap" title="Tribe swaps">
-        <SettingsRow label="Swap enabled" control={<Toggle checked={swap} onChange={setSwap} disabled={d} />} />
-        <SettingsRow label="Swap week" control={<Input type="number" defaultValue={4} disabled={d} className="w-20" />} />
-        <SettingsRow
-          label="Swap type"
-          control={
-            <Select value={swapType} onChange={setSwapType} disabled={d}>
-              <option value="random">Random</option>
-              <option value="schoolyard">Schoolyard pick</option>
-              <option value="commissioner">Commissioner</option>
-            </Select>
-          }
-        />
-      </SettingsSection>
-    </div>
-  )
+import { SurvivorTribePicker } from '@/components/league/survivor/SurvivorTribePicker'
+import { defaultTribeSlots, validateTribeSlots, type SurvivorTribeSlot } from '@/lib/survivor/survivorTribeIdentity'
+type Setup = { sport: string; managers: number; tribeCount: number; slots: SurvivorTribeSlot[]; locked: boolean; canEdit: boolean }
+export function SurvivorTribesPanel({ leagueId, canEdit }: SurvivorSettingsPanelProps) {
+  const [data, setData] = useState<Setup | null>(null)
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+  useEffect(() => { let active = true; setData(null)
+    fetch(`/api/leagues/${encodeURIComponent(leagueId)}/survivor-tribe-setup`, { credentials: 'include' }).then(async r => { const json = await r.json(); if (!r.ok) throw new Error(json.error); if (active) setData(json) }).catch(e => { if (active) setNote(e.message) })
+    return () => { active = false }
+  }, [leagueId])
+  async function save() {
+    if (!data) return
+    setBusy(true); setNote('')
+    try { const r = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/survivor-tribe-setup`, { method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tribeCount: data.tribeCount, slots: data.slots }) }); const json = await r.json(); if (!r.ok) throw new Error(json.error); setNote('Tribe choices saved. The system will use these capacities when the draft finishes.') }
+    catch (e) { setNote(e instanceof Error ? e.message : 'Save failed') } finally { setBusy(false) }
+  }
+  const disabled = !canEdit || !data?.canEdit || data.locked || busy
+  return <div className="space-y-5 p-4 text-white">
+    <h2 className="text-lg font-semibold">Tribe identities and capacities</h2>
+    {!data && !note && <p role="status">Loading tribe setup…</p>}
+    {data && <><p className="text-sm text-white/60">League size: {data.managers} managers. Choose league size during creation.</p>
+      {data.locked && <p className="rounded border border-amber-400/30 p-3 text-sm text-amber-200">Tribe setup is locked because drafting or assignment has started.</p>}
+      <label className="flex items-center gap-3 text-sm">Number of tribes<select value={data.tribeCount} disabled={disabled} onChange={e => { const count = Number(e.target.value); setData({ ...data, tribeCount: count, slots: defaultTribeSlots(data.managers, count) }) }} className="min-h-11 rounded border border-white/20 bg-neutral-950 px-3">{[2,3,4,5].map(n => <option key={n} value={n}>{n}</option>)}</select></label>
+      <SurvivorTribePicker sport={data.sport} managers={data.managers} tribeCount={data.tribeCount} value={data.slots} onChange={slots => setData({ ...data, slots })} disabled={disabled} />
+      <button type="button" disabled={disabled || !!validateTribeSlots(data.slots, data.managers, data.tribeCount)} onClick={save} className="min-h-11 rounded bg-amber-300 px-4 font-semibold text-black disabled:opacity-40">{busy ? 'Saving…' : 'Save tribe setup'}</button>
+    </>}
+    {note && <p role="status" className="text-sm text-amber-200">{note}</p>}
+  </div>
 }

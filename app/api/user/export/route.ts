@@ -1,62 +1,57 @@
 import { NextResponse } from "next/server"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+import { requireAuth } from "@/lib/auth-guard"
 import { prisma } from "@/lib/prisma"
+import { buildRateLimit429, consumeRateLimit } from "@/lib/rate-limit"
+import { buildUserDataExport, serializeUserDataExport } from "@/lib/user-data-export/buildUserDataExport"
 
 export const dynamic = "force-dynamic"
 
 /**
- * GET /api/user/export
- * Returns a JSON snapshot of basic account data (GDPR-style stub).
+ * GET /api/user/export — "Download my data" (Settings › Account).
+ *
+ * Returns everything AllFantasy holds about the signed-in account as a JSON file download. What is
+ * in it, what is deliberately left out and why, and the secret-safety rule (every read names its
+ * fields) all live in lib/user-data-export/buildUserDataExport.ts.
+ *
+ * The gate is a session only — an account must be able to get its own data out without first
+ * confirming its age or verifying an email.
  */
 export async function GET() {
-  const session = (await getServerSession(authOptions as any)) as {
-    user?: { id?: string }
-  } | null
+  const auth = await requireAuth()
+  if (!auth.ok) return auth.response
 
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  }
-
-  const user = await prisma.appUser.findUnique({
-    where: { id: session.user.id },
-    select: {
-      id: true,
-      email: true,
-      username: true,
-      displayName: true,
-      avatarUrl: true,
-      createdAt: true,
-      updatedAt: true,
-      profile: {
-        select: {
-          bio: true,
-          timezone: true,
-          preferredLanguage: true,
-          themePreference: true,
-          sleeperUsername: true,
-          notificationPreferences: true,
-        },
-      },
-    },
+  // ~30 table reads per call: generous for a person, useless for a scraper.
+  const rl = consumeRateLimit({
+    scope: "user",
+    action: "data_export",
+    sleeperUsername: auth.userId,
+    maxRequests: 5,
+    windowMs: 60 * 60_000,
   })
-
-  if (!user) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 })
+  if (!rl.success) {
+    return NextResponse.json(
+      buildRateLimit429({ message: "You've downloaded your data a few times recently — try again in an hour.", rl }),
+      { status: 429, headers: { "Retry-After": String(rl.retryAfterSec) } },
+    )
   }
 
-  return NextResponse.json({
-    exportedAt: new Date().toISOString(),
-    version: 1,
-    user: {
-      id: user.id,
-      email: user.email,
-      username: user.username,
-      displayName: user.displayName,
-      avatarUrl: user.avatarUrl,
-      createdAt: user.createdAt.toISOString(),
-      updatedAt: user.updatedAt.toISOString(),
-      profile: user.profile,
+  const now = new Date()
+  const data = await buildUserDataExport(prisma, auth.userId, now)
+  if (!data.account) {
+    const failed = data.unavailableSections.includes("account")
+    return NextResponse.json(
+      { error: failed ? "Your data could not be gathered. Please try again." : "Not found" },
+      { status: failed ? 503 : 404 },
+    )
+  }
+
+  const day = now.toISOString().slice(0, 10)
+  return new NextResponse(serializeUserDataExport(data), {
+    status: 200,
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      "Content-Disposition": `attachment; filename="allfantasy-data-${day}.json"`,
+      "Cache-Control": "private, no-store, max-age=0",
     },
   })
 }

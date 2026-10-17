@@ -81,7 +81,7 @@ export function RedraftTab({ leagueId, idpLeagueUi = false }: { leagueId: string
         const [rows, weeklyMatchups, scoring] = await Promise.all([
           fetchRedraftStandings(seasonId),
           fetchRedraftMatchups(seasonId, currentWeek),
-          fetchRedraftLiveScoring({ leagueId, seasonId, week: currentWeek }),
+          season?.source === 'fantrax' ? Promise.resolve(null) : fetchRedraftLiveScoring({ leagueId, seasonId, week: currentWeek }).catch(() => null),
         ])
         if (!cancelled) {
           setStandings(rows)
@@ -99,7 +99,7 @@ export function RedraftTab({ leagueId, idpLeagueUi = false }: { leagueId: string
     return () => {
       cancelled = true
     }
-  }, [leagueId, seasonId, currentWeek])
+  }, [leagueId, seasonId, currentWeek, season?.source])
 
   useEffect(() => {
     if (!seasonId) {

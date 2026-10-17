@@ -1,5 +1,9 @@
+import { seasonSetupBlocked } from '@/lib/tournament/seasonNativeContract'
+import { reconcileSurvivorDraftPlan } from '@/lib/survivor/reconcileSurvivorDraftPlan'
+import { withSurvivorSetupTransaction } from '@/lib/survivor/survivorSetupTransaction'
+import { readSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
 import { isNativeTournamentLeague } from '@/lib/bestball/tournamentCalendar'
-﻿import { resolveCreatedSeasonWeeks } from './createdSeasonLength'
+import { resolveCreatedSeasonWeeks } from './createdSeasonLength'
 import { prisma } from '@/lib/prisma'
 import { isDraftPickRowEmpty, isDraftPickSkipped } from '@/lib/live-draft-engine/draftPickEmpty'
 import { buildRedraftOwnerIdCandidates } from '@/lib/redraft/redraftRosterIdentity'
@@ -182,7 +186,7 @@ async function ensureRedraftSeason(leagueId: string) {
   // It used to be the sport default always, while the bracket read the league setting — so the
   // regular season and the playoffs could overlap or leave a gap.
   const leaguePlayoffStart = Number(league.playoffStartWeek)
-  const playoffStartWeek = isNativeTournamentLeague(league) ? totalWeeks + 1 :
+  const playoffStartWeek = readSurvivorFullSeasonPlan(league.settings) || isNativeTournamentLeague(league) || (league.settings as Record<string,unknown> | null)?.scoring_mode === 'roto' ? totalWeeks + 1 :
     Number.isInteger(leaguePlayoffStart) && leaguePlayoffStart >= 2 && leaguePlayoffStart <= totalWeeks
       ? leaguePlayoffStart
       : cfg?.defaultPlayoffStartWeek ?? 15
@@ -195,7 +199,7 @@ async function ensureRedraftSeason(leagueId: string) {
       status: 'active',
       totalWeeks,
       playoffStartWeek,
-      currentWeek: 1,
+      currentWeek: readSurvivorFullSeasonPlan(league.settings)?.startWeek ?? 1,
       medianGame: Boolean(league.medianGame ?? false),
     },
   })
@@ -212,6 +216,7 @@ async function ensureRedraftRosterForGenericRoster(params: {
     where: { id: params.genericRosterId, leagueId: params.leagueId },
     select: {
       id: true,
+      redraftRosterId: true,
       platformUserId: true,
       playerData: true,
       faabRemaining: true,
@@ -316,9 +321,16 @@ async function ensureRedraftRosterForGenericRoster(params: {
 
 /**
  * The week a FRESH season (no matchups yet) starts on: its sport's next unplayed week for a
- * standard weekly format, else 1. See lib/redraft/seasonStartWeek.ts.
+ * standard weekly format or zombie, else 1. See lib/redraft/seasonStartWeek.ts.
+ *
+ * 🛑 ZOMBIE WAS PINNED TO WEEK 1, SO A LEAGUE DRAFTED MID-SEASON NEVER LEFT IT. Its schedule began at
+ * week 1 — weeks already played before anyone drafted — and the finalizer looks back only a few
+ * weeks, so week 1 never sealed, the zombie week never resolved, and the league sat at week 1 for
+ * good. Zombie plays a head-to-head schedule like the standard formats, so it starts the same way.
+ * It is deliberately NOT added to `STANDARD_WEEKLY_SEASON_FORMATS`: that set also hands a league to
+ * the round-robin roller and playoff runtime, which would fight zombie's own week engine.
  */
-async function resolveStartWeekForFreshSeason(
+export async function resolveStartWeekForFreshSeason(
   leagueId: string,
   season: { id: string; sport: string; season: number; totalWeeks: number; playoffStartWeek: number },
 ): Promise<number> {
@@ -327,8 +339,11 @@ async function resolveStartWeekForFreshSeason(
     where: { id: leagueId },
     select: { leagueType: true, bbContestId: true, bestBallMode: true, settings: true },
   })
+  const survivorPlan = readSurvivorFullSeasonPlan(league?.settings)
+  if (survivorPlan) return survivorPlan.startWeek
   const format = String(league?.leagueType ?? 'redraft').trim().toLowerCase() || 'redraft'
-  if (!STANDARD_WEEKLY_SEASON_FORMATS.has(format) || isNativeTournamentLeague(league)) return 1
+  const startsOnCurrentWeek = STANDARD_WEEKLY_SEASON_FORMATS.has(format) || format === 'zombie'
+  if (!startsOnCurrentWeek || isNativeTournamentLeague(league)) return 1
   const regularSeasonEnd = Math.min(season.totalWeeks, Math.max(1, season.playoffStartWeek - 1))
   const start = await resolveSeasonStartWeek({ sport: season.sport, seasonYear: season.season, regularSeasonEnd })
   if (start.startWeek > 1) {
@@ -358,6 +373,8 @@ export async function ensureScheduleForNewSeason(params: {
    * been chopped and emptied, and those matchups could never go final.
    */
   if (await isGuillotineLeague(params.leagueId).catch(() => false)) return
+  const format = await prisma.league.findUnique({ where: { id: params.leagueId }, select: { survivorMode: true } })
+  if (format?.survivorMode) return
 
   // RedraftRoster has no createdAt column; order by id (cuid, roughly
   // creation-ordered) for a deterministic, schema-valid roster sequence so the
@@ -417,10 +434,11 @@ export async function syncCompletedDraftToRedraftSeason(
 ): Promise<RedraftDraftFinalizationSummary> {
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { id: true },
+    select: { id: true, survivorMode: true, settings: true },
   })
 
   if (!league) return { ...EMPTY_SUMMARY, reason: 'league_not_found' }
+  if (seasonSetupBlocked(league.settings)) return { ...EMPTY_SUMMARY, reason: 'season_tournament_managed' }
 
   /*
    * 🛑 THIS GATE READ `leagueType === 'redraft' || isDynasty === false`, WHICH IS NOT A
@@ -464,6 +482,7 @@ export async function syncCompletedDraftToRedraftSeason(
   if (!session) return { ...EMPTY_SUMMARY, reason: 'draft_session_not_found' }
   if (session.status !== 'completed') return { ...EMPTY_SUMMARY, reason: 'draft_not_completed' }
 
+  if (league.survivorMode) await withSurvivorSetupTransaction(leagueId, db => reconcileSurvivorDraftPlan(db, leagueId, session.id))
   const { season } = await ensureRedraftSeason(leagueId)
 
   /*
@@ -524,6 +543,28 @@ export async function syncCompletedDraftToRedraftSeason(
     if (!mapping.redraftRoster) {
       skippedPicks += 1
       continue
+    }
+
+    // Survivor idols are bound to DraftPick.rosterId (the generic roster). Trades and
+    // waivers move RedraftRosterPlayer rows, so retain an unambiguous bridge.
+    if (league.survivorMode && mapping.genericRoster) {
+      const linkedId = mapping.genericRoster.redraftRosterId
+      if (linkedId && linkedId !== mapping.redraftRoster.id) {
+        throw new Error(`Survivor draft roster ${pick.rosterId} is linked to a different season roster`)
+      }
+      if (!linkedId) {
+        const linked = await prisma.roster.updateMany({
+          where: { id: pick.rosterId, leagueId, redraftRosterId: null },
+          data: { redraftRosterId: mapping.redraftRoster.id },
+        })
+        if (linked.count !== 1) {
+          const current = await prisma.roster.findUnique({ where: { id: pick.rosterId }, select: { redraftRosterId: true } })
+          if (current?.redraftRosterId !== mapping.redraftRoster.id) {
+            throw new Error(`Survivor draft roster ${pick.rosterId} changed its season link during finalization`)
+          }
+        }
+        mapping.genericRoster.redraftRosterId = mapping.redraftRoster.id
+      }
     }
 
     const playerId = stablePlayerId(session.id, pick)

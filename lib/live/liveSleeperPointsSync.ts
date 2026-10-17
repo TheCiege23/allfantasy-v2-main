@@ -1,8 +1,8 @@
 import { prisma } from '@/lib/prisma'
 import { ingestSleeperPlayerScoresForWeek } from '@/lib/sleeper/sync/ingestSleeperPlayerScores'
 import { sleeperScoreTargetWeeks } from '@/lib/sleeper/sync/sleeperScoreTargetWeeks'
-import { inProgressRiGameIds } from '@/lib/live/playByPlayFeed'
-import { notifyStarterSwingsForLeagueWeek, snapshotLeagueWeekScores } from '@/lib/live/starterSwings'
+import { pointsRefreshGameIds } from '@/lib/live/pointsRefreshGames'
+import { sendSlateDigests } from '@/lib/live/slateDigest'
 
 /**
  * Keep "Your starters" points current WHILE NFL games are being played.
@@ -20,7 +20,7 @@ import { notifyStarterSwingsForLeagueWeek, snapshotLeagueWeekScores } from '@/li
  * user has claimed. Other platforms have no per-player weekly writer yet.
  *
  * Bounded three ways so a Sunday cannot run away with the tick:
- *   - only while an NFL game is in progress (a quiet Tuesday costs one query);
+ *   - live games and finals within eight hours of kickoff (quiet days cost one query);
  *   - a rotating slice of leagues per pass, so a large league set is covered
  *     over several passes rather than blowing one;
  *   - a wall-clock budget per pass, checked between leagues.
@@ -40,8 +40,10 @@ export type LivePointsResult = {
   leaguesSynced: number
   scoresUpserted: number
   errors: number
-  /** Starter swing alerts handed to the notification engine this pass. */
-  swingAlerts: number
+  /** Slate summaries handed to the notification engine this pass (lib/live/slateDigest.ts). */
+  slateDigests: number
+  /** Season Outlook runs redone because this pass moved their league's board (seasonOutlookPrewarm.ts). */
+  outlooksRerun: number
   skipped: 'no-live-games' | 'no-leagues' | null
 }
 
@@ -74,11 +76,12 @@ export async function refreshLiveSleeperPoints(
   deps: {
     liveGameIds: (now: Date) => Promise<string[]>
     clock: () => number
-    /** Injectable for tests; production reads the league-week's rows. */
-    snapshotScores?: typeof snapshotLeagueWeekScores
-    notifySwings?: typeof notifyStarterSwingsForLeagueWeek
+    /** Injectable for tests; production sends the slate summary once a slate has closed. */
+    slateDigests?: (input: { now: Date; season: number }) => Promise<number>
+    /** Injectable for tests; production re-runs the outlook of each league whose points it just wrote. */
+    outlooks?: (input: { now: Date; leagueIds: string[] }) => Promise<number>
   } = {
-    liveGameIds: inProgressRiGameIds,
+    liveGameIds: pointsRefreshGameIds,
     clock: () => Date.now(),
   },
 ): Promise<LivePointsResult> {
@@ -87,11 +90,17 @@ export async function refreshLiveSleeperPoints(
     leaguesSynced: 0,
     scoresUpserted: 0,
     errors: 0,
-    swingAlerts: 0,
+    slateDigests: 0,
+    outlooksRerun: 0,
     skipped: null,
   }
-  const snapshotScores = deps.snapshotScores ?? snapshotLeagueWeekScores
-  const notifySwings = deps.notifySwings ?? notifyStarterSwingsForLeagueWeek
+  const outlooks =
+    deps.outlooks ??
+    (async (input: { now: Date; leagueIds: string[] }) => {
+      const { rerunLiveOutlooks } = await import('@/lib/core-app/seasonOutlookPrewarm')
+      return (await rerunLiveOutlooks(input.leagueIds, input.now)).computed
+    })
+  const slateDigests = deps.slateDigests ?? ((input: { now: Date; season: number }) => sendSlateDigests(input))
 
   const live = await deps.liveGameIds(now).catch(() => [] as string[])
   if (live.length === 0) return { ...result, skipped: 'no-live-games' }
@@ -121,6 +130,8 @@ export async function refreshLiveSleeperPoints(
   const deadline = deps.clock() + PASS_BUDGET_MS
   let next = 0
   let attempted = 0
+  /** Leagues whose points this pass wrote — their board moved, so their odds may have. */
+  const written: string[] = []
   const worker = async () => {
     while (next < batch.length && deps.clock() < deadline) {
       const leagueId = batch[next++]!
@@ -128,22 +139,14 @@ export async function refreshLiveSleeperPoints(
       try {
         const weeks = await sleeperScoreTargetWeeks(leagueId, season)
         let failed = false
+        let wrote = 0
         for (const week of weeks) {
-          /*
-           * ⚠ READ BEFORE THE WRITER, OR THERE IS NO "BEFORE". The writer rewrites
-           * every row and reports no diff, so a starter swing only exists relative to
-           * the rows as they stood immediately before this refresh. See starterSwings.
-           */
-          const beforeRows = await snapshotScores(leagueId, season, week).catch(() => null)
           const r = await ingestSleeperPlayerScoresForWeek(leagueId, season, week)
           result.scoresUpserted += r.scoresUpserted
+          wrote += r.scoresUpserted
           if (r.error) failed = true
-          // Only a refresh that actually wrote scores can have moved anyone.
-          if (beforeRows && r.scoresUpserted > 0 && !r.error) {
-            result.swingAlerts += await notifySwings({ platformLeagueId: leagueId, season, week, beforeRows })
-              .catch(() => 0)
-          }
         }
+        if (wrote > 0) written.push(leagueId)
         if (failed) result.errors += 1
         else result.leaguesSynced += 1
       } catch {
@@ -156,5 +159,22 @@ export async function refreshLiveSleeperPoints(
 
   // Resume after the leagues this pass actually reached, so a budget cut-off is not skipped next time.
   await writeCursor((start + attempted) % ids.length)
+
+  /*
+   * The game-day summary rides this pass because this pass is what keeps the points it reads
+   * current, and it only runs while a slate is live or within its correction window. It does
+   * nothing until a slate has closed and settled, and sends each manager one summary per slate
+   * however many passes ask. It replaced an alert on every lead change (owner's decision,
+   * 2026-10-11 — see slateDigest.ts). Its own budget; a failure never costs the points.
+   */
+  result.slateDigests = await slateDigests({ now, season }).catch(() => 0)
+
+  /*
+   * The odds follow the board. The outlook simulates a week under way from the live points these rows
+   * carry, so a league this pass rewrote is re-run here rather than waiting for the scheduled
+   * pre-compute, which on a Sunday reaches a given league about once every 17 hours. Re-run only when
+   * the inputs actually changed, stalest first, with its own budget; a failure never costs the points.
+   */
+  result.outlooksRerun = await outlooks({ now, leagueIds: written }).catch(() => 0)
   return result
 }

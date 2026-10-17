@@ -56,6 +56,11 @@ export type LiveEventType =
   | 'FIELD_GOAL'
   | 'DEFENSIVE_SCORE'
   | 'SPECIAL_TEAMS_SCORE'
+  /**
+   * A successful offensive two-point try. Play-by-play only (`rollingInsightsPlayByPlay`): the box
+   * score carries team two-point counts, not a player's. Never a TOUCHDOWN — see sequence 123 there.
+   */
+  | 'TWO_POINT_CONVERSION'
 
 export type LiveEvent = {
   gameId: string
@@ -323,6 +328,7 @@ const TYPE_PRIORITY: Record<LiveEventType, number> = {
   SPECIAL_TEAMS_SCORE: 1,
   TURNOVER: 2,
   FIELD_GOAL: 3,
+  TWO_POINT_CONVERSION: 3,
   BIG_PLAY: 4,
 }
 

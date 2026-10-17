@@ -1,3 +1,4 @@
+import { snapshotImportedPlayerMetadata } from '@/lib/league-import/importedPlayerMetadata'
 /**
  * After creating a League from any normalized import, populates LeagueTeam, Roster,
  * and TeamPerformance from NormalizedImportResult. Uses imported data directly.
@@ -314,6 +315,7 @@ export async function bootstrapLeagueFromNormalizedImport(
 
     const playerData = {
       players: r.player_ids,
+      player_metadata: snapshotImportedPlayerMetadata(r.player_ids, normalized.player_map),
       starters: r.starter_ids,
       reserve: r.reserve_ids ?? [],
       taxi: r.taxi_ids ?? [],

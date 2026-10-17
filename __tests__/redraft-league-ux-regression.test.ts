@@ -29,8 +29,9 @@ describe('post-merge redraft league UX contracts', () => {
     expect(leagueShell).toContain("case 'league':")
   })
 
-  it('defaults the league homepage to the 40/35/25 dashboard shell with collapsible rails', () => {
-    expect(leagueShell).toContain('defaultCollapsed: false')
+  it('defaults the league homepage to a wider workspace with expandable rails', () => {
+    expect(leagueShell).toContain('defaultCollapsed: true')
+    expect(leagueShell).toContain('const [desktopChatOpen, setDesktopChatOpen] = useState<boolean>(false)')
     expect(leagueShell).toContain('leftRailCollapsed={!desktopChatOpen}')
     expect(leagueShell).toContain('rightRailCollapsed={myLeaguesRail.collapsed}')
     expect(appShell).toContain('minmax(280px,40fr)_minmax(0,35fr)_minmax(240px,25fr)')
@@ -61,7 +62,8 @@ describe('post-merge redraft league UX contracts', () => {
   })
 
   it('settings modals have close button, overlay, Escape, and scroll-lock cleanup paths', () => {
-    expect(leagueSettingsModal).toContain('aria-label="Close settings"')
+    // The label is a dictionary key since 2026-10-04 (the frame reads Spanish too) — same close button.
+    expect(leagueSettingsModal).toContain("aria-label={t('lsModal.closeSettings')}")
     expect(leagueSettingsModal).toContain("if (e.key !== 'Escape') return")
     expect(leagueSettingsModal).toContain('const handleCloseAll = useCallback')
     expect(leagueSettingsModal).toContain("document.body.style.overflow = 'hidden'")

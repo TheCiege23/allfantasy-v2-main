@@ -34,6 +34,11 @@ export type TradeAssetInput =
       round: number
       tier?: 'early' | 'mid' | 'late'
       label?: string
+      /**
+       * The provider roster id of the team the pick ORIGINALLY belonged to (`LeagueTeam.externalId`), when
+       * known — its landing spot follows that team's finish (`loadPickSlotProjection`).
+       */
+      originalRosterId?: string
     }
   | { kind: 'faab'; amount: number }
 
@@ -55,6 +60,11 @@ export type TradeConsoleAnalyzeInput = {
   allowMultisportFairness?: boolean
   /** League team `externalId` — opponent roster for lineup / rebalance context. */
   opponentTeamExternalId?: string | null
+  /**
+   * With no league: how a daily-sport deal is scored — fantasy points, or a standard category preset
+   * (`lib/decision-os/trade/sportPointsContext.ts`). Ignored in a league, which uses its own settings.
+   */
+  scoringFormat?: 'points' | 'nba_9cat' | 'nba_8cat_standard' | 'mlb_5x5' | 'mlb_6x6' | null
 }
 
 export type TradeConsoleLeagueSnapshot = {
@@ -223,6 +233,7 @@ export type TradeIntelligence = {
 }
 
 export type TradeConsoleAnalyzeResult = {
+  visualImpact?: import('@/lib/decision-os/trade/loadVisualImpact').VisualImpactResult | null
   evaluationReceipt?: ({ status: 'saved' } & import('@/lib/decision-os/trade/evaluationReceipt').SavedTradeEvaluation) | { status: 'unavailable' } | null
   ok: true
   /** `league` = roster + scoring from a league row; `global` = sport/asset analysis without league. */

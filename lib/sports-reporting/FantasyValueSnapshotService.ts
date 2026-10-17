@@ -1,6 +1,8 @@
 import "server-only"
 
 import { prisma } from "@/lib/prisma"
+import { findSportsPlayerByLeagueId } from "@/lib/player-identity/findSportsPlayerByLeagueId"
+import { identityWhereForLeagueId } from "@/lib/player-identity/externalIdNamespace"
 import { currentSeasonReportWhere } from "@/lib/injuries/injuryRecency"
 
 export type FantasyValueSnapshot = {
@@ -328,7 +330,7 @@ export async function getFantasyValueSnapshot(
   const playerName = clean(request.playerName ?? null)
   const playerId = clean(request.playerId ?? null)
   const identityWhere = playerId
-    ? { sport, OR: [{ sleeperId: playerId }, { fantasyCalcId: playerId }, { rollingInsightsId: playerId }, { apiSportsId: playerId }, { espnId: playerId }, { clearSportsId: playerId }] }
+    ? { sport, ...identityWhereForLeagueId(playerId, sport) }
     : playerName
       ? { sport, normalizedName: playerName.toLowerCase().replace(/[^a-z0-9]+/g, "") }
       : { sport, id: "__missing__" }
@@ -340,12 +342,19 @@ export async function getFantasyValueSnapshot(
         : { sport, name: { equals: playerName ?? "", mode: "insensitive" } },
       orderBy: { lastUpdated: "desc" },
     }),
-    safeFindFirst("sportsPlayer", {
-      where: playerId
-        ? { sport, OR: [{ id: playerId }, { externalId: playerId }, { sleeperId: playerId }] }
-        : { sport, name: { equals: playerName ?? "", mode: "insensitive" } },
-      orderBy: { updatedAt: "desc" },
-    }),
+    /*
+     * 🛑 By our id, then the Sleeper space, then a provider number only when it cannot be a Sleeper
+     * id. `id OR externalId OR sleeperId` returned Rolling Insights' player of the same number for a
+     * Sleeper id (Sleeper 8394 is Percy Butler; RI 8394 is Rome Odunze).
+     */
+    playerId
+      ? (async () =>
+          (await safeFindFirst("sportsPlayer", { where: { sport, id: playerId } })) ??
+          ((await findSportsPlayerByLeagueId(sport, playerId).catch(() => null)) as Record<string, unknown> | null))()
+      : safeFindFirst("sportsPlayer", {
+          where: { sport, name: { equals: playerName ?? "", mode: "insensitive" } },
+          orderBy: { updatedAt: "desc" },
+        }),
     safeFindFirst("playerIdentityMap", { where: identityWhere, orderBy: { updatedAt: "desc" } }),
   ])
 

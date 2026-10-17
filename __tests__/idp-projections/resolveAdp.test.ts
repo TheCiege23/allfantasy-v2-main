@@ -126,6 +126,47 @@ describe('loadAdpBySleeperId — translation', () => {
     expect(res.get('111')?.via).toBe('sports_player_id')
   })
 
+  /*
+   * 🛑 ONE ROW PER SOURCE PER SLEEPER ID, AND THE NEWEST IS OFTEN A NAMESAKE. Production 11304:
+   * sleeper "E.J. Jenkins" TE PHI, thesportsdb "Elgton Jenkins" G CLE (the newer row). Newest-wins
+   * looked ADP up under the guard's name, slug and position.
+   */
+  const jenkinsRows = () =>
+    [
+      { id: 'uuid-tsdb', sleeperId: '11304', name: 'Elgton Jenkins', position: 'G', team: 'CLE', source: 'thesportsdb', fetchedAt: new Date('2026-10-11') },
+      { id: 'uuid-ri', sleeperId: '11304', name: 'E.J. Jenkins', position: 'TE', team: 'PHI', source: 'rolling_insights', fetchedAt: new Date('2026-10-10') },
+      { id: 'uuid-s', sleeperId: '11304', name: 'E.J. Jenkins', position: 'TE', team: 'PHI', source: 'sleeper', fetchedAt: new Date('2026-10-01') },
+    ] as never as Parameters<typeof fakePrisma>[0]
+
+  it('speaks for a Sleeper id with the Sleeper row, not the newest vendor namesake', async () => {
+    const res = await loadAdpBySleeperId({
+      prisma: fakePrisma(jenkinsRows(), [
+        row({ playerId: 'NFL:elgton-jenkins:G:CLE', playerName: 'Elgton Jenkins', position: 'G', adp: 210 }),
+        row({ playerId: 'NFL:ej-jenkins:TE:PHI', playerName: 'E.J. Jenkins', position: 'TE', adp: 380 }),
+      ]),
+      sport: 'NFL',
+      sleeperIds: ['11304'],
+    })
+    expect(res.get('11304')?.adp).toBe(380)
+    expect(res.get('11304')?.via).toBe('slug')
+  })
+
+  it("keeps an agreeing vendor row's uuid as an exact key, and drops a contradicting one's", async () => {
+    // adp_data keys 387 NFL players by a Rolling Insights SportsPlayer uuid; that must still hit.
+    const agreeing = await loadAdpBySleeperId({
+      prisma: fakePrisma(jenkinsRows(), [row({ playerId: 'uuid-ri', playerName: 'x', position: 'TE', adp: 380 })]),
+      sport: 'NFL',
+      sleeperIds: ['11304'],
+    })
+    expect(agreeing.get('11304')?.via).toBe('sports_player_id')
+    const namesake = await loadAdpBySleeperId({
+      prisma: fakePrisma(jenkinsRows(), [row({ playerId: 'uuid-tsdb', playerName: 'x', position: 'G', adp: 210 })]),
+      sport: 'NFL',
+      sleeperIds: ['11304'],
+    })
+    expect(namesake.size).toBe(0)
+  })
+
   it('collapses specific defensive positions onto the group the board ranks', async () => {
     // Our side says CB; the ADP board says DB. Without the collapse no corner ever matches.
     const res = await loadAdpBySleeperId({

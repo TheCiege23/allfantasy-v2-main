@@ -10,7 +10,9 @@
  *
  * Two passes, both bounded by `limit` and a wall-clock budget:
  *   A. **fill**    — players with no image yet; resolve and persist.
- *   B. **refresh** — players whose cached image is past its TTL (team changes, new photos).
+ *   B. **refresh** — players whose cached image is past its TTL (team changes, new photos), or
+ *      was written by the pre-2026-10-11 resolver (unstamped). Unstamped images that are
+ *      detectably another person's run first, BEFORE pass A.
  *
  * Resolution goes through `resolvePlayerHeadshot`, which is the same code path a live
  * request uses, so the cron and the request path cannot drift. That call persists into
@@ -30,7 +32,14 @@ import { NextResponse } from "next/server";
 import { requireCronAuth } from "@/app/api/cron/_auth";
 import { prisma } from "@/lib/prisma";
 import { createBatchPlayerHeadshotResolver } from "@/lib/player-assets/resolvePlayerHeadshot";
-import { PLAYER_IMAGE_TYPE_HEADSHOT } from "@/lib/player-assets/playerImageStore";
+import {
+  PLAYER_IMAGE_TYPE_HEADSHOT,
+  UNSTAMPED_RESOLVER_IMAGE_WHERE,
+  isTrustedPlayerImageRow,
+  listDetectablyWrongPlayerImageIds,
+  sleeperIdFromThumbUrl,
+} from "@/lib/player-assets/playerImageStore";
+import { pickSleeperHeadshotPlayer } from "@/lib/player-assets/headshotCandidateMatch";
 import {
   TEAM_IMAGE_TYPE_LOGO,
   writePrimaryTeamImage,
@@ -166,6 +175,79 @@ async function mirrorToLegacy(
 }
 
 /**
+ * Whether a resolution may be copied into `Player.imageUrl` and `SportsPlayer.imageUrl`.
+ *
+ * A fresh resolution the fixed resolver persisted (and stamped) may. A cache hit or stale fallback
+ * may only when the `PlayerImage` row it came from is trusted: an unstamped pre-fix row can be
+ * another person's photo, and copying those is how OT Trent Brown's `Player.imageUrl` came to hold
+ * CB Tre' Brown III's photo and NFL DL Cam Jackson's Rolling Insights row NCAAB Cameron Jackson's —
+ * copies the PlayerImage suppression could not reach. (Unstamped rows are re-resolved by the
+ * refresh pass, after which the hit is trusted.) Not "fresh writes only": live requests write
+ * stamped rows without touching `Player.imageUrl`, and refusing those hits would keep such players
+ * at the front of the fill pass (`imageUrl: null`, oldest first) on every run.
+ */
+async function isVerifiedResolution(
+  player: CanonicalPlayerRow,
+  result: { imageUrl: string | null; cacheHit?: boolean; persisted?: boolean },
+): Promise<boolean> {
+  if (!result.imageUrl) return false;
+  if (!(await sleeperThumbBelongsTo(player, result.imageUrl))) return false;
+  if (!result.cacheHit) return Boolean(result.persisted);
+  const row = await prisma.playerImage.findFirst({
+    where: { playerId: player.id, imageType: PLAYER_IMAGE_TYPE_HEADSHOT, isPrimary: true, url: result.imageUrl },
+    select: { provider: true, rawPayload: true },
+  });
+  return Boolean(row && isTrustedPlayerImageRow(row));
+}
+
+/** The player's own Sleeper id from `providerIds.sleeper` (`"sleeper:1321"`, `"sleeper_8532"`, `"1321"`). */
+function ownSleeperId(player: CanonicalPlayerRow): string | null {
+  const raw = ((player.providerIds ?? {}) as Record<string, unknown>).sleeper;
+  const id = typeof raw === "string" ? raw.trim().replace(/^sleeper[:_]/i, "") : "";
+  return /^\d+$/.test(id) ? id : null;
+}
+
+/**
+ * Whether a Sleeper thumbnail is this player's, by the same rule the Sleeper tier now binds with
+ * (`pickSleeperHeadshotPlayer`). Any other URL passes — this checks only what a thumbnail claims.
+ *
+ * 🛑 A TRUSTED (v2-STAMPED) ROW IS NOT EVIDENCE BY ITSELF. Rows the Sleeper tier wrote before it was
+ * hardened carry the stamp too: measured 2026-10-13, S Mike Brown (TEN) held a stamped primary of
+ * `thumb/1321` — a free-agent WR — and every cache hit copied it into `Player.imageUrl` and, through
+ * `providerIds.rolling_insights`, onto the DB Mike Brown's Rolling Insights row. Read from the local
+ * `source = 'sleeper'` rows: the thumbnail's owner plus every Sleeper player with this name.
+ */
+async function sleeperThumbBelongsTo(player: CanonicalPlayerRow, url: string): Promise<boolean> {
+  const thumbId = sleeperIdFromThumbUrl(url);
+  if (!thumbId) return true;
+  const own = ownSleeperId(player);
+  if (own) return own === thumbId;
+  try {
+    const rows = await prisma.sportsPlayer.findMany({
+      where: {
+        sport: "NFL",
+        source: "sleeper",
+        OR: [
+          { sleeperId: thumbId },
+          { externalId: `sleeper:${thumbId}` },
+          { name: { equals: player.name, mode: "insensitive" } },
+        ],
+      },
+      select: { sleeperId: true, externalId: true, name: true, position: true, team: true },
+      take: 50,
+    });
+    // 64 Sleeper rows store `sleeper_<id>` in `externalId` (2026-10-13); `sleeperId` is the id itself.
+    const candidates = rows.map((r) => ({
+      ...r,
+      id: (r.sleeperId ?? String(r.externalId).replace(/^sleeper[:_]/, "")).trim(),
+    }));
+    return pickSleeperHeadshotPlayer(candidates, player)?.id === thumbId;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Resolve headshots for a batch of canonical players. `resolve()` performs the canonical
  * `PlayerImage` write-through internally, now keyed by `Player.id`.
  */
@@ -198,15 +280,20 @@ async function resolveBatch(
         team: player.team,
         position: player.position,
         playerId: player.id, // canonical Player.id
+        // Lets the Sleeper tier bind his own thumbnail instead of matching a name.
+        externalIds: { sleeperId: ownSleeperId(player) },
         skipCache: opts.skipCache,
       });
 
       if (result.imageUrl) {
-        await prisma.player.update({
-          where: { id: player.id },
-          data: { imageUrl: result.imageUrl, lastSeenAt: new Date() },
-        });
-        await mirrorToLegacy(player, result.imageUrl);
+        // Copied into the denormalised columns only when verified — see `isVerifiedResolution`.
+        if (await isVerifiedResolution(player, result)) {
+          await prisma.player.update({
+            where: { id: player.id },
+            data: { imageUrl: result.imageUrl, lastSeenAt: new Date() },
+          });
+          await mirrorToLegacy(player, result.imageUrl);
+        }
         summary.resolved++;
       } else {
         summary.failed++;
@@ -496,27 +583,46 @@ async function handle(req: NextRequest) {
 
         const missing = [...priority, ...backfill];
 
-        // ── Pass B: players whose canonical image has aged out ──
+        /*
+         * ── Pass B: re-resolve images that are aged out, or written by the pre-2026-10-11
+         * resolver (unstamped) ──
+         *
+         * Unstamped rows are still SERVED (stale-while-revalidate; see HEADSHOT_RESOLVER_VERSION),
+         * except the ones that are detectably another person's photo — those readers suppress.
+         * So the suppressed ones go first, and they run BEFORE Pass A below: Pass A's backlog is
+         * tens of thousands of unresolvable college players in some sports and routinely spends
+         * the whole budget, which would leave a blanked face waiting behind it indefinitely.
+         */
+        const wrongIds = (await listDetectablyWrongPlayerImageIds(sport)).slice(0, limit);
         const stale = await prisma.playerImage.findMany({
           where: {
             sportKey: sport,
             imageType: PLAYER_IMAGE_TYPE_HEADSHOT,
             isPrimary: true,
-            expiresAt: { lt: new Date() },
+            OR: [{ expiresAt: { lt: new Date() } }, UNSTAMPED_RESOLVER_IMAGE_WHERE],
+            ...(wrongIds.length ? { playerId: { notIn: wrongIds } } : {}),
           },
-          take: limit,
+          take: Math.max(limit - wrongIds.length, 0),
           orderBy: { expiresAt: "asc" },
           select: { playerId: true },
         });
         const staleIds = stale
           .map((row) => row.playerId)
           .filter((id): id is string => Boolean(id));
-        const stalePlayers = staleIds.length
-          ? await prisma.player.findMany({
-              where: { id: { in: staleIds } },
-              select: canonicalSelect,
-            })
+        const refreshIds = [...wrongIds, ...staleIds];
+        const refreshOrder = new Map(refreshIds.map((id, index) => [id, index]));
+        // `findMany({ id: { in } })` returns table order, so restore wrong-first explicitly.
+        const refreshPlayers = refreshIds.length
+          ? (
+              await prisma.player.findMany({
+                where: { id: { in: refreshIds } },
+                select: canonicalSelect,
+              })
+            ).sort((a, b) => (refreshOrder.get(a.id) ?? 0) - (refreshOrder.get(b.id) ?? 0))
           : [];
+        const wrongSet = new Set(wrongIds);
+        const wrongPlayers = refreshPlayers.filter((p) => wrongSet.has(p.id));
+        const stalePlayers = refreshPlayers.filter((p) => !wrongSet.has(p.id));
 
         if (dryRun) {
           fill = {
@@ -526,18 +632,27 @@ async function handle(req: NextRequest) {
             timedOut: false,
           };
           refresh = {
-            considered: stalePlayers.length,
+            considered: refreshPlayers.length,
             resolved: 0,
             failed: 0,
             timedOut: false,
           };
         } else {
+          const wrongFirst = await resolveBatch(wrongPlayers, sport, deadline, {
+            skipCache: true,
+          });
           fill = await resolveBatch(missing, sport, deadline, {
             skipCache: false,
           });
-          refresh = await resolveBatch(stalePlayers, sport, deadline, {
+          const rest = await resolveBatch(stalePlayers, sport, deadline, {
             skipCache: true,
           });
+          refresh = {
+            considered: wrongFirst.considered + rest.considered,
+            resolved: wrongFirst.resolved + rest.resolved,
+            failed: wrongFirst.failed + rest.failed,
+            timedOut: wrongFirst.timedOut || rest.timedOut,
+          };
         }
       }
 

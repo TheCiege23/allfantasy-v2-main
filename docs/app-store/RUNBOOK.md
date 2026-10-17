@@ -54,10 +54,12 @@ all three are done, nothing in the app mentions notifications.
    certificate needed; ignore the "Configure" button.)
 2. **APNs key.** Keys → **+** → name it `AllFantasy Push` → tick **Apple Push
    Notifications service (APNs)** → Continue → Register → **Download** the `.p8`
-   (once only) and note its **Key ID**. Then set these on the Railway service
-   `allfantasy-v2-main` **in one save** (each variable write is a deploy):
-   `APNS_KEY_ID` (the Key ID), `APNS_TEAM_ID` (your 10-character Team ID) and
-   `APNS_PRIVATE_KEY` (the full `.p8` contents, including the BEGIN/END lines).
+   (once only) and note its **Key ID**. Then set these on **both** Railway
+   services, `allfantasy-v2-main` and `allfantasy-v2-worker`, **in one save each**
+   (each variable write is a deploy): `APNS_KEY_ID` (the Key ID), `APNS_TEAM_ID`
+   (your 10-character Team ID) and `APNS_PRIVATE_KEY` (the full `.p8` contents,
+   including the BEGIN/END lines). The worker matters as much as the web service:
+   the crons run there, and they send the trade, injury and game-day alerts.
    Same rules as the App Store Connect key: never in the repo, a chat or a log.
 3. **Build.** Run **ios-testflight** with **push_notifications** ticked. The
    workflow exports the signed app first and refuses to upload if the
@@ -70,16 +72,75 @@ permission only when the user taps it. The web code checks that the installed
 binary contains the push plugin (`iosAppPushBridge`), so builds from before this
 change never see the card.
 
+## Pictures on notifications (optional, ~5 min, after push)
+
+Alerts can carry a picture — a player's headshot on a touchdown or injury, the trade card on an
+offer. iOS shows a remote picture only through a **notification service extension**, which lives
+in `ios-app/ios/App/NotificationService/` and, like the widget, is added to the Xcode project at
+build time only (`ios-app/scripts/add-notification-service-target.rb`). Without it the same alerts
+arrive as text — nothing breaks, they just have no picture.
+
+1. Identifiers → **+** → App IDs → App → Bundle ID `ai.allfantasy.app.NotificationService`
+   (explicit). Tick nothing: the extension uses no capability. (Automatic signing may create this
+   ID itself; creating it by hand removes the guess.)
+2. Run **ios-testflight** with **push_notifications** and **notification_images** ticked (plus
+   `career_widget` if you ship that too — the two extensions build together). The export refuses to
+   upload if the signed build has no valid `NotificationService.appex`.
+
+How it works: the server sets `mutable-content: 1` and an `imageUrl` only on alerts that have a
+picture (`lib/push-notifications/apns.ts`), so only those reach the extension. It downloads the
+image (https only, 2 MB cap, ~20 s), types it by its bytes — Sleeper serves PNGs from `.jpg` URLs —
+and attaches it. On any failure, or when iOS's time runs out, the alert shows as it arrived.
+
+## Career widget and haptics (optional, ~15 min)
+
+Haptics need nothing from you: `@capacitor/haptics` is in `ios-app/package.json`, so the next
+TestFlight build has it and the website uses it (`lib/platform/haptics.ts`). An older binary simply
+gets no haptic.
+
+The **"Your career" home-screen widget** is a WidgetKit extension. It is NOT in the committed Xcode
+project, so default builds are unchanged; `ios-app/scripts/add-career-widget-target.rb` adds it at
+build time when the `career_widget` input is ticked. It reads only what the app last wrote to a
+shared App Group, so it needs that group set up first:
+
+1. Apple Developer → Certificates, Identifiers & Profiles → **Identifiers** → **+** → **App Groups**
+   → identifier `group.ai.allfantasy.app`.
+2. Identifiers → `ai.allfantasy.app` → tick **App Groups** → Configure → select
+   `group.ai.allfantasy.app` → Save.
+3. Identifiers → **+** → App IDs → App → Bundle ID `ai.allfantasy.app.CareerWidget` (explicit),
+   tick **App Groups** and select the same group. (Automatic signing may create this ID itself;
+   creating it by hand removes the guess.)
+4. Run **ios-testflight** with `career_widget` ticked. The export refuses to upload if either the
+   app or the widget comes back without the App Group, and names which.
+
+Every push that touches `ios-app/` also runs **ios-build-check**, which compiles the app as
+committed and again with both build-time extensions (the widget and the notification image
+extension; unsigned, no secrets), so a Swift error shows up on the push that caused it rather than
+during a release.
+
+What the widget shows: titles, level, record, the top live title stake and the nearest milestone,
+plus "Updated … ago". It is refreshed whenever the person opens Career in the app; with nothing
+stored yet it asks them to open the app. Tapping it opens `/core/career`.
+
 ## What the website does inside the app
 
-The app appends `AllFantasyiOS/1.0` to its User-Agent, and
-`lib/platform/iosApp.ts` keys off that marker:
+The app appends `AllFantasyiOS/1.1 AFIAP/1` to its User-Agent (1.0 builds sent
+`AllFantasyiOS/1.0`), and `lib/platform/iosApp.ts` keys off those markers:
 
-- **Guideline 3.1.1, no purchases.** Purchase pages redirect to
-  `/ios-app/plans`, checkout APIs answer 403 `not_available_in_ios_app`, and
-  links to purchase pages are hidden (`html[data-ios-app]` in `globals.css`).
-  Anything an account has already bought still works. Adding a new purchase
-  page or checkout route means adding it to the lists in `iosApp.ts`.
+- **Guideline 3.1.1, purchases through Apple only.** Builds carrying `AFIAP`
+  sell plans and token packs with Apple In-App Purchase
+  (`ios-app/ios/App/App/AppleIAPHandler.swift`; setup in
+  `docs/APPLE_IN_APP_PURCHASE_SETUP.md`): `/upgrade`, `/pricing`,
+  `/commissioner-upgrade` and `/tokens` open and check out through StoreKit.
+  Everything else that takes money — Stripe checkout APIs (403
+  `not_available_in_ios_app`), the Stripe billing portal, donations, the
+  marketplace, league dues, the Survivor exile shop — stays closed in every
+  build, and a build without `AFIAP` keeps the old rule: every purchase page
+  redirects to `/ios-app/plans` and its links are hidden. Adding a new purchase
+  page or checkout route means adding it to the lists in `iosApp.ts`; adding a
+  page that should sell through Apple means adding it to
+  `IOS_APP_IAP_PAGE_PREFIXES` AND making it check out through
+  `lib/monetization/checkout-client.ts`.
 - **Guideline 4.8, sign-in.** Sign in with Apple is not live, so the
   Google/Facebook/X/Discord/Spotify buttons are hidden and email sign-in
   remains. Google also refuses sign-in inside embedded WebViews, so its button
@@ -108,10 +169,12 @@ The app appends `AllFantasyiOS/1.0` to its User-Agent, and
   SIGN-IN: use the demo account above (email and password). The demo account
   already has imported leagues, so every tab has real data.
 
-  PURCHASES: nothing is sold in the app. Subscriptions and tokens are sold only
-  on our website; an account that already bought them there keeps that access in
-  the app (guideline 3.1.3(b)). Purchase pages and checkout are unavailable
-  inside the app.
+  PURCHASES: subscriptions (AF Pro, AF Commissioner, AF Supreme, AF Legacy)
+  and token packs are sold in the app with Apple In-App Purchase: Tools >
+  Account > Plans, or Tools > Account > Tokens. Prices shown are Apple's. The
+  same products are sold on our website through Stripe; either purchase unlocks
+  the same signed-in account (guideline 3.1.3(b)). Restore Purchases and Manage
+  Subscriptions are on the Plans screen.
 
   ACCOUNT DELETION: More (bottom bar) > Settings > Account > "Start account
   deletion". Deletion is immediate and permanent after typing DELETE to confirm.

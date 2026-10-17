@@ -297,15 +297,17 @@ export async function syncTradeCardsForLeague(leagueId: string): Promise<TradeCa
 
       const summary = `${manager} traded ${describeSide(gave, row.picksGiven, nameOf)} for ${describeSide(got, row.picksReceived, nameOf)}`
       /*
-       * THE grade, from this row's side — what `manager` received against what they gave, on the
-       * league's values today (the League Buzz read). Bounded by MAX_CARDS_PER_RUN per scan, and the
-       * grader is memoised per league. Graded: the message is worded from the letters and the market
-       * take below is skipped. Withheld: the card says why, and the text stays what it was.
+       * THE grade, from this row's side — what `manager` received against what they gave: the
+       * trade's frozen original, as League Buzz and /core Trades show it, players priced by the
+       * Sleeper id the row keys them by. Bounded by MAX_CARDS_PER_RUN per scan, and the grader is
+       * memoised per league. Graded: the message is worded from the letters and the market take below
+       * is skipped. Withheld: the card says why, and the text stays what it was.
        */
       const grade = await gradeImportedTradeCard({
         leagueId,
-        received: got.map((id) => nameOf.get(id) ?? null),
-        gave: gave.map((id) => nameOf.get(id) ?? null),
+        tradeId: row.transactionId,
+        received: got.map((id) => ({ name: nameOf.get(id) ?? null, sleeperId: id })),
+        gave: gave.map((id) => ({ name: nameOf.get(id) ?? null, sleeperId: id })),
         picksReceived: row.picksReceived,
         picksGiven: row.picksGiven,
         teams: sides.length,

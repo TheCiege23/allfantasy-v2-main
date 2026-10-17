@@ -37,7 +37,7 @@ export interface StrategyClassificationResult {
 
 const MIN_WEEKS_FOR_EVIDENCE = 3
 
-export function classifyStrategy(context: UserOsContext): StrategyClassificationResult | null {
+export function classifyStrategy(context: Pick<UserOsContext, 'viewerTeam' | 'standings' | 'currentWeek' | 'isDynasty'>): StrategyClassificationResult | null {
   if (!context.viewerTeam || context.standings.length < 2) return null
 
   if (context.currentWeek < MIN_WEEKS_FOR_EVIDENCE) {

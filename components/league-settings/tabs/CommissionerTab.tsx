@@ -8,8 +8,10 @@ import { LeagueDuesTrackerPanel } from '@/components/league-settings/LeagueDuesT
 import { LeagueHistoryPanel } from '@/components/league-settings/LeagueHistoryPanel'
 import { DeleteLeagueFromAfPanel } from '@/app/league/[leagueId]/components/DeleteLeagueFromAfPanel'
 import type { LeagueSettingsTabProps } from '../league-settings-tabs-types'
+import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 
 export function CommissionerTab({ ctx }: LeagueSettingsTabProps) {
+  const { t } = useLanguage()
   return (
     <div className="space-y-10">
       <CommissionerControlPanel leagueId={ctx.league.id} />
@@ -23,11 +25,8 @@ export function CommissionerTab({ ctx }: LeagueSettingsTabProps) {
         data-testid="settings-audit-log-panel"
         className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-5 text-[13px] leading-relaxed text-white/65"
       >
-        <p className="mb-2 text-[14px] font-semibold text-white/85">Audit Log</p>
-        <p>
-          Audit logging is ready to be wired. Commissioner actions will appear
-          here once backend logging is enabled.
-        </p>
+        <p className="mb-2 text-[14px] font-semibold text-white/85">{t('lsModal.card.auditLog')}</p>
+        <p>{t('lsHub.audit.body')}</p>
       </section>
 
       {ctx.isHeadCommissioner ? (
@@ -41,8 +40,7 @@ export function CommissionerTab({ ctx }: LeagueSettingsTabProps) {
           className="rounded-xl border border-white/[0.08] bg-black/25 px-4 py-3 text-[12px] leading-relaxed text-white/55"
           data-testid="delete-league-co-comm-notice"
         >
-          <strong className="text-white/75">Remove from AllFantasy</strong> is limited to the head commissioner.
-          Co-commissioners can manage members and settings but cannot start league removal here.
+          <strong className="text-white/75">{t('lsHub.removeTitle')}</strong> {t('lsHub.coCommNotice')}
         </div>
       )}
     </div>

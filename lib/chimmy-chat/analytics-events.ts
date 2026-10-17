@@ -11,6 +11,12 @@ export const CHIMMY_AI_EVENT_NAMES = [
   'response_rendered',
   'formatter_fallback_used',
   'contract_validation_failed',
+  /**
+   * The hallucination guard run in observe-only mode on a tool-loop answer (see
+   * `lib/chimmy/toolLoopGuardObservation.ts`). Deliberately NOT `contract_validation_failed`: nothing
+   * was replaced or annotated, and the KPI rollup counts that name as a failure the user saw.
+   */
+  'guard_observed',
 ] as const
 
 export const CHIMMY_AI_SURFACES = [

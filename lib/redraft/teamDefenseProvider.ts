@@ -18,6 +18,9 @@
 import type { PrismaClient } from '@prisma/client'
 import { createTtlMemo } from '@/lib/ttl-memo'
 import { normalizeNflTeam } from './lineupLock'
+import { canonicalTeamDefenseId, findCachedWeekPayload } from '@/lib/scoring-runtime/nflStatNormalization'
+import type { SportWeekResolution } from '@/lib/season-week/types'
+import { nflTeamCodeOf } from '@/lib/core-app/teamDefenseCrosswalk'
 import { ingestNflTeamDefenseBoxScores, type IngestTeamDefenseResult } from './teamDefenseStatsIngest'
 
 /** Returns Sleeper's `grouping=week` payload for one team's season, or null on failure. */
@@ -216,16 +219,121 @@ export async function resolveRosteredDefenseTeams(
     const rosterIds = rosters.map((r) => r.id)
     if (rosterIds.length) {
       const defPlayers = await prisma.redraftRosterPlayer.findMany({
-        where: { rosterId: { in: rosterIds }, droppedAt: null, position: { in: ['DEF', 'DST', 'def', 'dst'] } },
-        select: { playerId: true, team: true },
+        // `D/ST` is how ESPN and Fleaflicker rosters spell it (136 production slots, 2026-10-13).
+        where: { rosterId: { in: rosterIds }, droppedAt: null, position: { in: ['DEF', 'DST', 'D/ST', 'def', 'dst', 'd/st'] } },
+        select: { playerId: true, position: true, team: true },
       })
       for (const p of defPlayers) {
-        const fromId = /^nfl:def:(.+)$/i.exec(p.playerId)?.[1]
-        const abbr = normalizeNflTeam(fromId ?? p.team ?? '')
-        if (abbr) bucket.teams.add(abbr)
+        /*
+         * The club from the id when the id names one (`nfl:def:KC`, Sleeper's bare `KC`), else from the
+         * team label — through `nflTeamCodeOf`, because a Sleeper DEF row's team can read "Arizona
+         * Cardinals" and a Fleaflicker one "Chiefs": upper-cased raw, each was a "team" the box-score fetch
+         * asked the provider for and could never match. A label that names no club adds nothing.
+         */
+        const fromId = canonicalTeamDefenseId(p.playerId, p.position)?.slice('nfl:def:'.length)
+        const abbr = fromId ?? nflTeamCodeOf(p.team)
+        if (abbr) bucket.teams.add(normalizeNflTeam(abbr))
       }
     }
     buckets.set(key, bucket)
   }
   return buckets
+}
+
+/** Earlier weeks one cron run may fill, newest first. The daily run has a 60 s ceiling. */
+export const TEAM_DEFENSE_BACKFILL_WEEKS_PER_RUN = 3
+
+export type TeamDefenseImportBucket = {
+  season: number
+  week: number
+  teams: string[]
+  reason: 'current' | 'backfill'
+}
+
+/**
+ * Which (season, week, clubs) the defence box-score cron should fetch this run.
+ *
+ * 🛑 THE CRON FETCHED `RedraftSeason.currentWeek`, AND NOTHING KEEPS THAT ON THE NFL'S WEEK. A
+ * native season advances only when every matchup is finalized; an import is written at 1 and never
+ * moves. So the cache held whichever week each season happened to be parked on: on production
+ * 2026-10-13 all 8 defence cache rows carried weeks 1 and 3 only, while weeks 1-5 had final scores.
+ * The week now comes from the committed NFL schedule (`resolveSportWeek`, the resolver the score
+ * jobs use), falling back to the stored week — the old behaviour — only when the schedule declines.
+ *
+ * Earlier weeks of the season are filled too: any week with finished regular-season games in which a
+ * rostered club played and has no cached line — newest first, at most
+ * `TEAM_DEFENSE_BACKFILL_WEEKS_PER_RUN` weeks, only the clubs missing. ⚠ THIS COSTS NO EXTRA PROVIDER
+ * CALLS ON A GOOD RUN: Sleeper answers with the club's whole season and `fetchSleeperTeamDefenseSeason`
+ * memoises it, so every bucket after the first reads the same payload. Only a failed fetch (never
+ * memoised) is retried per bucket, which the per-run cap bounds.
+ */
+export async function planTeamDefenseImport(
+  prisma: PrismaClient,
+  seasons: { id: string; season: number; currentWeek: number | null }[],
+  deps: { resolveWeek?: (season: number) => Promise<SportWeekResolution>; maxBackfillWeeks?: number } = {},
+): Promise<{ buckets: TeamDefenseImportBucket[]; warnings: string[] }> {
+  const maxBackfill = Math.max(0, deps.maxBackfillWeeks ?? TEAM_DEFENSE_BACKFILL_WEEKS_PER_RUN)
+  const resolveWeek =
+    deps.resolveWeek ??
+    (async (season: number) => {
+      const { resolveSportWeek } = await import('@/lib/season-week/seasonWeekService')
+      return resolveSportWeek('NFL', season, { prisma })
+    })
+
+  // Rostered clubs per season YEAR — the box score belongs to the NFL week, not to any one league.
+  const rostered = await resolveRosteredDefenseTeams(prisma, seasons)
+  const byYear = new Map<number, { teams: Set<string>; storedWeek: number }>()
+  for (const bucket of rostered.values()) {
+    const entry = byYear.get(bucket.season) ?? { teams: new Set<string>(), storedWeek: bucket.week }
+    for (const team of bucket.teams) entry.teams.add(team)
+    entry.storedWeek = Math.max(entry.storedWeek, bucket.week)
+    byYear.set(bucket.season, entry)
+  }
+
+  const buckets: TeamDefenseImportBucket[] = []
+  const warnings: string[] = []
+  for (const [season, { teams, storedWeek }] of byYear) {
+    if (teams.size === 0) continue
+    const resolved = await resolveWeek(season).catch(() => null)
+    const fromSchedule = resolved?.ok === true && resolved.seasonType === 'regular' ? resolved.sportWeek : null
+    if (fromSchedule == null) {
+      warnings.push(`NFL ${season}: the schedule named no regular-season week; using the stored week ${storedWeek}.`)
+    }
+    const currentWeek = Math.max(1, fromSchedule ?? storedWeek)
+    const clubs = [...teams].sort()
+    buckets.push({ season, week: currentWeek, teams: clubs, reason: 'current' })
+
+    if (maxBackfill === 0 || currentWeek <= 1) continue
+    const games = await prisma.sportsGame.findMany({
+      where: { sport: { in: ['NFL', 'nfl'] }, season, seasonType: 'regular', week: { gte: 1, lt: currentWeek }, homeScore: { not: null } },
+      select: { week: true, homeTeam: true, awayTeam: true },
+    })
+    const playedByWeek = new Map<number, Set<string>>()
+    for (const g of games as Array<{ week: number | null; homeTeam: string | null; awayTeam: string | null }>) {
+      if (g.week == null) continue
+      const played = playedByWeek.get(g.week) ?? new Set<string>()
+      for (const side of [g.homeTeam, g.awayTeam]) {
+        const club = normalizeNflTeam(side)
+        if (club) played.add(club)
+      }
+      playedByWeek.set(g.week, played)
+    }
+    const cacheRows = await prisma.playerGameLogCache.findMany({
+      where: { playerId: { in: clubs.map((club) => `nfl:def:${club}`) }, season: String(season), seasonType: 'regular' },
+      select: { playerId: true, payload: true },
+    })
+    const payloadByClub = new Map(
+      (cacheRows as Array<{ playerId: string; payload: unknown }>).map((row) => [row.playerId.slice('nfl:def:'.length).toUpperCase(), row.payload]),
+    )
+    let filled = 0
+    for (let week = currentWeek - 1; week >= 1 && filled < maxBackfill; week -= 1) {
+      const played = playedByWeek.get(week)
+      if (!played) continue
+      const missing = clubs.filter((club) => played.has(club) && findCachedWeekPayload(payloadByClub.get(club), week) == null)
+      if (missing.length === 0) continue
+      buckets.push({ season, week, teams: missing, reason: 'backfill' })
+      filled += 1
+    }
+  }
+  return { buckets, warnings }
 }

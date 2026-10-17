@@ -146,15 +146,25 @@ export function buildInjuredStarterSignals(portfolio: {
  */
 export async function hydrateInjuredStarters(args: {
   appUserId: string
-  sport?: string
+  /**
+   * One sport, or `null` for EVERY sport (the game-day sweep, 2026-10-08). Every sport reads NFL
+   * leagues exactly as before and other sports' leagues only when they are being played now
+   * (gameDayScope.ts `isCurrentSeasonLeague`). Omitted = 'NFL', the historical default.
+   */
+  sport?: string | null
   requestTime?: Date
 }): Promise<HydrateInjuredStartersResult> {
-  const { assembleCrossLeaguePlayerPortfolio } = await import(
-    '@/lib/shared-services/league-hub/crossLeaguePlayerPortfolio'
-  )
+  const [{ assembleCrossLeaguePlayerPortfolio }, { isCurrentSeasonLeague }] = await Promise.all([
+    import('@/lib/shared-services/league-hub/crossLeaguePlayerPortfolio'),
+    import('./gameDayScope'),
+  ])
+  const now = args.requestTime ?? new Date()
+  const allSports = args.sport === null
   const portfolio = await assembleCrossLeaguePlayerPortfolio({
     appUserId: args.appUserId,
-    sport: args.sport ?? 'NFL',
+    ...(allSports
+      ? { leagueFilter: (l: { sport: string; season: number }) => String(l.sport).toUpperCase() === 'NFL' || isCurrentSeasonLeague(l.sport, l.season, now) }
+      : { sport: args.sport ?? 'NFL' }),
     requestTime: args.requestTime,
   })
   const verified = await verifySleeperLineupAssignments(portfolio as never, args.appUserId)

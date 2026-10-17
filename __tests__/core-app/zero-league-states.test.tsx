@@ -25,7 +25,7 @@ import { Dash3AChimmy, connectedLeagueCount } from '@/components/core-app/screen
 
 const trades = { pending: [], windows: [], considered: 0, deadlineUnknown: 0, currentWeek: null } as never
 const waivers = {
-  rows: [], considered: 0, withheld: { noRoster: 0, idSpace: 0, noScoring: 0, noCandidate: 0 }, marketLeagues: 0, at: null,
+  rows: [], considered: 0, withheld: { noRoster: 0, idSpace: 0, noScoring: 0, noCandidate: 0, noUpgrade: 0 }, marketLeagues: 0, at: null,
 } as never
 const drafts = { rows: [], counts: { live: 0, upcoming: 0, done: 0, unknown: 0 }, withoutDraft: 0 } as never
 const week = {
@@ -37,7 +37,7 @@ const BOARDS = [
   ['Trades', (n: number) => <TradesBoard data={trades} allHref="/core/trades?all=1" totalLeagues={n} />, 'No team of yours is claimed'],
   ['Waivers', (n: number) => <WaiversBoard data={waivers} allHref="/core/waivers?all=1" totalLeagues={n} />, 'no wire to read'],
   ['Draft HQ', (n: number) => <DraftHqBoard data={drafts} allHref="/core/draft-hq?all=1" totalLeagues={n} picks={null as never} />, 'No draft to show yet'],
-  ['Week', (n: number) => <WeekBoard board={week} outlook={null} rivalriesHref="/core/week?view=rivalries" allHref="/core/week?all=1" totalLeagues={n} />, 'not projected ahead in any league'],
+  ['Week', (n: number) => <WeekBoard board={week} outlook={null} rivalriesHref="/core/week?view=rivalries" allHref="/core/week?all=1" totalLeagues={n} />, 'No league is ahead on its available scoreboard or historical estimate.'],
 ] as const
 
 const hrefs = (c: HTMLElement) => [...c.querySelectorAll('[data-testid="board-no-leagues"] a')].map((a) => a.getAttribute('href'))

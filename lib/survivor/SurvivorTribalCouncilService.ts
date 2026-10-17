@@ -1,5 +1,5 @@
 /**
- * Survivor Tribal Council: create council, close vote, eliminate, route to Exile (PROMPT 346). Deterministic.
+ * Survivor Elimination Council: create council, close vote, eliminate, route to Exile (PROMPT 346). Deterministic.
  */
 
 import { prisma } from '@/lib/prisma'
@@ -21,7 +21,7 @@ import { buildScrollRevealSequence } from '@/lib/survivor/votingEngine'
 import { postLeagueRevealFollowUp, postScrollRevealToTribeChat } from '@/lib/survivor/leagueChatPoster'
 
 /**
- * Create a Tribal Council for the week. Pre-merge: pass attendingTribeId. Merge: no tribe.
+ * Create a Elimination Council for the week. Pre-merge: pass attendingTribeId. Merge: no tribe.
  */
 export async function createCouncil(
   leagueId: string,
@@ -41,7 +41,7 @@ export async function createCouncil(
   if (phase === 'pre_merge' && attendingTribeId) {
     const weeklyEffects = await getWeeklyEffectState(leagueId, week)
     if (weeklyEffects.immuneTribeIds.has(attendingTribeId)) {
-      return { ok: false, error: 'This tribe has challenge immunity and cannot attend Tribal Council this week' }
+      return { ok: false, error: 'This tribe has challenge immunity and cannot attend Elimination Council this week' }
     }
   }
 

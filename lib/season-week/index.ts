@@ -11,6 +11,7 @@
 
 export { resolveSportWeek, resolveSeasonWeekForRedraftSeason } from './seasonWeekService'
 export type { SeasonWeekDeps } from './seasonWeekService'
+export { resolveEffectiveRedraftWeek } from './effectiveRedraftWeek'
 
 export {
   resolveSportWeekFromSchedule,

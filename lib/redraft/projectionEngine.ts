@@ -1,3 +1,7 @@
+import { isHealthyDesignation, isRuledOut } from '@/lib/core-app/injuryStatus'
+import { isRosterStatusCode } from '@/lib/injuries/injuryStatusDisplay'
+import { rosterDesignation } from '@/lib/injuries/rosterDesignation'
+
 export type AllFantasyProjectionSource =
   | 'allfantasy_snapshot'
   | 'provider_projection'
@@ -232,6 +236,27 @@ function pickCandidate(input: AllFantasyProjectionInput): Candidate | null {
   return null
 }
 
+/**
+ * The words of a status, so a designation is matched as a WORD and never as a letter run inside one.
+ *
+ * ⚠ THIS WAS A SUBSTRING SCAN, AND TWO OF ITS NEEDLES ARE INSIDE ORDINARY WORDS (2026-10-11).
+ * `includes('ir')` zeroed any status containing those two letters ("Virus", "Chair", "Dirt") and
+ * `includes('out')` any containing "out" ("Without", "Workout"), so a Questionable player whose note
+ * happened to spell one was projected as Out: zero this week, x0.62 rest of season. Absence is now
+ * `isRuledOut` — the shared, tokenized rule (Out, IR/IL, PUP, NFI, suspension, injured reserve/list)
+ * — and "no designation" is `isHealthyDesignation` (Active, ACT, NA, ...), so this engine and every
+ * other availability reader agree on who is out.
+ */
+function statusWords(status: string): string[] {
+  return status
+    .toLowerCase()
+    .replace(/\./g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .split(' ')
+    .filter(Boolean)
+}
+
 function injuryProfile(status: string | null | undefined): {
   weeklyMultiplier: number
   rosMultiplier: number
@@ -239,16 +264,14 @@ function injuryProfile(status: string | null | undefined): {
   reason: string | null
 } {
   const normalized = String(status ?? '').trim().toLowerCase()
-  if (!normalized || normalized === 'healthy' || normalized === 'active' || normalized === 'ok') {
+  if (!normalized || normalized === 'ok' || isHealthyDesignation(normalized)) {
     return { weeklyMultiplier: 1, rosMultiplier: 1, confidencePenalty: 0, reason: null }
   }
-  if (
-    normalized.includes('out') ||
-    normalized.includes('ir') ||
-    normalized.includes('injured reserve') ||
-    normalized.includes('inactive') ||
-    normalized.includes('susp')
-  ) {
+  const words = statusWords(normalized)
+  // Absence: the shared tokenized rule (incl. "Sus"/"Susp"), the season-scale roster spellings
+  // `rosterDesignation` reads ("Physically Unable to Perform", "Non-Football Injury"), and a game-day
+  // "Inactive" (the NFL's 90-minute list), matched as a word.
+  if (isRuledOut(status) || rosterDesignation(status) != null || words.includes('inactive')) {
     return {
       weeklyMultiplier: 0,
       rosMultiplier: 0.62,
@@ -256,7 +279,15 @@ function injuryProfile(status: string | null | undefined): {
       reason: `Listed ${status}; weekly projection reduced to zero.`,
     }
   }
-  if (normalized.includes('doubtful')) {
+  /*
+   * A ROSTER code is not a designation, so it carries no discount: Rolling Insights' "ACT"/"INACT",
+   * "Practice Squad", "FA", "RET". "INACT" used to fall through to the 0.88 "status risk" bucket below,
+   * discounting a healthy player for a word that only says which roster he is on.
+   */
+  if (isRosterStatusCode(status)) {
+    return { weeklyMultiplier: 1, rosMultiplier: 1, confidencePenalty: 0, reason: null }
+  }
+  if (words.includes('doubtful') || normalized === 'd') {
     return {
       weeklyMultiplier: 0.35,
       rosMultiplier: 0.8,
@@ -264,7 +295,7 @@ function injuryProfile(status: string | null | undefined): {
       reason: `Listed ${status}; availability risk sharply lowers this week.`,
     }
   }
-  if (normalized.includes('questionable') || normalized === 'q') {
+  if (words.includes('questionable') || normalized === 'q') {
     return {
       weeklyMultiplier: 0.78,
       rosMultiplier: 0.92,
@@ -272,7 +303,7 @@ function injuryProfile(status: string | null | undefined): {
       reason: `Listed ${status}; projection carries injury uncertainty.`,
     }
   }
-  if (normalized.includes('probable')) {
+  if (words.includes('probable')) {
     return {
       weeklyMultiplier: 0.94,
       rosMultiplier: 0.98,

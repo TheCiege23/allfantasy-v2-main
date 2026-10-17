@@ -25,6 +25,9 @@ export async function POST(req: NextRequest) {
         if (started.reason === 'ROSTER_CONFIGURATION_INCOMPLETE') {
           return NextResponse.json(rosterConfigurationIncompleteBody({ leagueId }), { status: 409 })
         }
+        if (started.reason === 'SURVIVOR_CAST_INCOMPLETE') {
+          return NextResponse.json({ code: started.reason, error: started.error }, { status: 409 })
+        }
         return NextResponse.json({ error: 'Could not start draft' }, { status: 400 })
       }
     }

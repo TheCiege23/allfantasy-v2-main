@@ -1,97 +1,50 @@
-/**
- * [UPDATED] lib/big-brother/automation/statCorrection.ts
- * Stat correction handler: when fantasy scores change after a cycle closes,
- * log the correction and notify the commissioner. Does NOT replay HOH/Veto
- * outcomes (those are final once resolved) — only audits the discrepancy.
- */
-
+import { createHash } from 'node:crypto'
 import { prisma } from '@/lib/prisma'
-import { appendBigBrotherAudit } from '../BigBrotherAuditLog'
 import { createLeagueChatMessage } from '@/lib/league-chat/LeagueChatMessageService'
 import type { BbStatCorrectionInput, BbStatCorrectionResult } from './types'
 
-const SYSTEM_USER_ID = 'system'
-
-export async function handleBbStatCorrectionSignal(
-  input: BbStatCorrectionInput = {},
-): Promise<BbStatCorrectionResult> {
-  const dryRun = input.dryRun === true
+/** Snapshot finalized totals; only changed revisions produce a notice. Published game outcomes stay final. */
+export async function handleBbStatCorrectionSignal(input: BbStatCorrectionInput = {}): Promise<BbStatCorrectionResult> {
   const errors: string[] = []
   let leaguesNoted = 0
-
-  // Find BB leagues that might be affected
-  const where = input.leagueId
-    ? { leagueId: input.leagueId }
-    : {}
-  const configs = await prisma.bigBrotherLeagueConfig.findMany({
-    where,
-    select: { leagueId: true, id: true },
-  })
-
+  let scopedLeagueId = input.leagueId
+  if (input.redraftSeasonId) {
+    const season = await prisma.redraftSeason.findUnique({ where: { id: input.redraftSeasonId }, select: { leagueId: true } })
+    if (!season || (scopedLeagueId && scopedLeagueId !== season.leagueId)) return { ok: false, leaguesNoted: 0, errors: ['Season/league mismatch'], message: 'No leagues processed.' }
+    scopedLeagueId = season.leagueId
+  }
+  const configs = await prisma.bigBrotherLeagueConfig.findMany({ where: scopedLeagueId ? { leagueId: scopedLeagueId } : {}, select: { leagueId: true, id: true } })
   for (const config of configs) {
-    // Find cycles that are already resolved for the affected week
-    const weekFilter = input.week != null ? { week: input.week } : {}
-    const resolvedCycles = await prisma.bigBrotherCycle.findMany({
-      where: {
-        leagueId: config.leagueId,
-        closedAt: { not: null },
-        ...weekFilter,
-      },
-      select: { id: true, week: true, hohRosterId: true, evictedRosterId: true },
-      orderBy: { week: 'desc' },
-      take: 3,
-    })
-
-    if (resolvedCycles.length === 0) continue
-
-    if (dryRun) {
-      leaguesNoted++
-      continue
-    }
-
-    // Log the stat correction event for commissioner review
-    for (const cycle of resolvedCycles) {
-      await appendBigBrotherAudit(config.leagueId, config.id, 'phase_transition', {
-        cycleId: cycle.id,
-        week: cycle.week,
-        hohRosterId: cycle.hohRosterId,
-        evictedRosterId: cycle.evictedRosterId,
-        event: 'stat_correction_noted',
-        note: 'Fantasy scores changed after cycle resolved. HOH/Veto/Eviction outcomes are final and not replayed. Commissioner may review if the correction materially affected the result.',
-      })
-    }
-
-    // Notify commissioner in league chat
     try {
-      const league = await prisma.league.findUnique({
-        where: { id: config.leagueId },
-        select: { userId: true },
-      })
-      const weeks = resolvedCycles.map((c) => c.week).join(', ')
-      await createLeagueChatMessage(
-        config.leagueId,
-        league?.userId ?? SYSTEM_USER_ID,
-        `Stat correction detected for week(s) ${weeks}. Game outcomes (HOH, Veto, eviction) are final. Commissioner: review the audit log if the correction is significant.`,
-        {
-          type: 'text',
-          source: 'bb_automation',
-          messageSubtype: 'bb_stat_correction',
-          metadata: { weeks, cycleIds: resolvedCycles.map((c) => c.id) },
+      const league = await prisma.league.findUnique({ where: { id: config.leagueId }, select: { season: true, userId: true } })
+      if (!league) continue
+      const cycles = await prisma.bigBrotherCycle.findMany({ where: { leagueId: config.leagueId, configId: config.id, closedAt: { not: null }, ...(input.week ? { week: input.week } : {}) }, select: { id: true, week: true }, orderBy: { week: 'desc' } })
+      let noted = false
+      for (const cycle of cycles) {
+        const scores = await prisma.teamWeekResult.findMany({ where: { leagueId: config.leagueId, season: league.season, week: cycle.week, status: 'final' }, select: { rosterId: true, totalPoints: true }, orderBy: { rosterId: 'asc' } })
+        if (!scores.length) continue
+        const fingerprint = createHash('sha256').update(JSON.stringify(scores)).digest('hex')
+        const prior = await prisma.bigBrotherAuditLog.findFirst({ where: { leagueId: config.leagueId, configId: config.id, eventType: 'phase_transition', metadata: { path: ['scoreSnapshotCycleId'], equals: cycle.id } }, orderBy: { createdAt: 'desc' }, select: { id: true, metadata: true } })
+        const priorMeta = prior?.metadata as { fingerprint?: string } | null
+        if (priorMeta?.fingerprint === fingerprint) continue
+        const changed = priorMeta?.fingerprint != null || (input.previousScores && scores.some(row => Object.hasOwn(input.previousScores!, row.rosterId) && input.previousScores![row.rosterId] !== row.totalPoints))
+        if (input.dryRun) { if (changed) noted = true; continue }
+        const revision = createHash('sha256').update(`${cycle.id}:${prior?.id ?? 'baseline'}:${fingerprint}`).digest('hex')
+        if (changed) {
+          if (!league.userId) throw new Error('League announcer unavailable')
+          await createLeagueChatMessage(config.leagueId, league.userId,
+            `Week ${cycle.week} finalized fantasy totals changed. Standings now use the updated totals. Published HOH, Veto, and eviction outcomes remain final; the commissioner can review the scoring audit.`, {
+              idempotencyKey: `bb-correction-${revision}`, source: 'bb_automation', messageSubtype: 'bb_stat_correction',
+              metadata: { chimmy: true, bigBrother: true, week: cycle.week, cycleId: cycle.id, fingerprint },
+            })
+          noted = true
         }
-      )
-    } catch {
-      // Chat posting non-fatal
-    }
-
-    leaguesNoted++
+        await prisma.bigBrotherAuditLog.create({ data: { id: `bb-score-${revision}`, leagueId: config.leagueId, configId: config.id, eventType: 'phase_transition', metadata: { event: changed ? 'stat_correction_noted' : 'score_snapshot_baseline', scoreSnapshotCycleId: cycle.id, week: cycle.week, fingerprint } } }).catch((error: unknown) => {
+          if ((error as { code?: string })?.code !== 'P2002') throw error
+        })
+      }
+      if (noted) leaguesNoted++
+    } catch (error) { errors.push(`${config.leagueId}: ${error instanceof Error ? error.message : 'Correction check failed'}`) }
   }
-
-  return {
-    ok: errors.length === 0,
-    leaguesNoted,
-    errors,
-    message: dryRun
-      ? `[dryRun] BB stat correction: ${leaguesNoted} league(s) would be noted.`
-      : `BB stat correction: ${leaguesNoted} league(s) noted and audited.`,
-  }
+  return { ok: errors.length === 0, leaguesNoted, errors, message: `${input.dryRun ? '[dryRun] ' : ''}BB stat corrections: ${leaguesNoted} league(s) ${input.dryRun ? 'would be notified' : 'notified'}.` }
 }

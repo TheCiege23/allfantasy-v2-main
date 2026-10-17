@@ -1,13 +1,11 @@
 'use client'
 
+import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
-import { SettingsSection, SettingsRow, Toggle, Select } from '../../../tabs/settings/components'
+import { SettingsSection, SettingsRow, Toggle } from '../../../tabs/settings/components'
 import type { SurvivorSettingsPanelProps } from './types'
 
 export function SurvivorChallengesPanel({ leagueId, canEdit }: SurvivorSettingsPanelProps) {
-  const [lockKickoff, setLockKickoff] = useState(true)
-  const [submit, setSubmit] = useState('both')
-  const [sportGen, setSportGen] = useState('league')
   const d = !canEdit
 
   const [loading, setLoading] = useState(true)
@@ -20,7 +18,7 @@ export function SurvivorChallengesPanel({ leagueId, canEdit }: SurvivorSettingsP
     setError(null)
     try {
       const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/survivor/config`, { credentials: 'include' })
-      if (!res.ok) return
+      if (!res.ok) throw new Error('Could not load challenge settings')
       const data = (await res.json()) as { config?: { challengesSystemRun?: boolean } | null }
       if (data.config?.challengesSystemRun != null) {
         setChallengesSystemRun(data.config.challengesSystemRun !== false)
@@ -91,28 +89,9 @@ export function SurvivorChallengesPanel({ leagueId, canEdit }: SurvivorSettingsP
             {saving ? 'Saving…' : 'Save challenge mode'}
           </button>
         </div>
-        <SettingsRow
-          label="Auto-generate for sport"
-          control={
-            <Select value={sportGen} onChange={setSportGen} disabled={d}>
-              <option value="league">Same as league sport</option>
-            </Select>
-          }
-        />
       </SettingsSection>
-      <SettingsSection id="sv-ch-time" title="Challenge timing">
-        <SettingsRow label="Lock at kickoff" control={<Toggle checked={lockKickoff} onChange={setLockKickoff} disabled={d} />} />
-        <SettingsRow
-          label="Submission method"
-          control={
-            <Select value={submit} onChange={setSubmit} disabled={d}>
-              <option value="tribe_chat">Tribe chat</option>
-              <option value="private_chimmy">Private @Chimmy</option>
-              <option value="both">Both</option>
-            </Select>
-          }
-        />
-      </SettingsSection>
+      <p className="text-xs text-white/50">Challenge locks and submission methods are set by the active challenge. Review each challenge before its game window.</p>
+      <Link href={`/survivor/${encodeURIComponent(leagueId)}/challenges`} className="inline-flex text-sm text-cyan-300 hover:text-cyan-200">Open challenges →</Link>
     </div>
   )
 }

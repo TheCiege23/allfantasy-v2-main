@@ -48,9 +48,9 @@ export async function assignHOH(
 
   const cycle = await prisma.bigBrotherCycle.findUnique({
     where: { id: cycleId },
-    select: { id: true, week: true },
+    select: { id: true, week: true, leagueId: true, configId: true },
   })
-  if (!cycle) return { ok: false, error: 'Cycle not found' }
+  if (!cycle || cycle.leagueId !== leagueId || cycle.configId !== configId) return { ok: false, error: 'Cycle not found in this league' }
 
   const eligible = await getEligibleHOHRosterIds(
     leagueId,

@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import type { ADPEntry } from '@/lib/adp-data'
 import { ESPN_SITE_API_BASE } from '@/lib/providers/espnUrls'
+import { getTeamInfo } from '@/lib/team-abbrev'
 
 const ESPN_NEWS_TTL_MS = 45 * 60 * 1000
 
@@ -114,7 +115,7 @@ async function fetchRecentSportsSignals() {
     },
     orderBy: { publishedAt: 'desc' },
     take: 150,
-    select: { playerName: true, title: true, content: true, source: true },
+    select: { playerName: true, title: true, content: true, source: true, team: true, teams: true },
   }).catch(() => [])
 
   const espnNews = await getCachedEspnNewsRows()
@@ -122,16 +123,23 @@ async function fetchRecentSportsSignals() {
   return [...dbNews, ...espnNews]
 }
 
-function computeNewsDelta(text: string): { delta: number; reasons: string[] } {
+/*
+ * 🛑 BOTH RISK PATTERNS NEED WORD BOUNDARIES. Without them `out` matched "without", "outside" and
+ * "breakout", and `ir` matched "their", "first", "Kirk" and "retirement" — so ordinary copy added
+ * +10 ADP labelled "Negative injury/availability signal". Measured on production 2026-10-12: of the
+ * 122 player-named rows among the newest 150 NFL news rows, 26 hit the unbounded pattern and 8 the
+ * bounded one. `limited` / `setback` are whole words too ("unlimited", "setbacks" are not risk).
+ */
+export function computeNewsDelta(text: string): { delta: number; reasons: string[] } {
   const t = text.toLowerCase()
   let delta = 0
   const reasons: string[] = []
 
-  if (/(out|ir|injured reserve|season-ending|torn|suspension)/.test(t)) {
+  if (/\b(out|ir|injured reserve|season-ending|torn|suspension)\b/.test(t)) {
     delta += 10
     reasons.push('Negative injury/availability signal')
   }
-  if (/(questionable|doubtful|limited|setback)/.test(t)) {
+  if (/\b(questionable|doubtful|limited|setback)\b/.test(t)) {
     delta += 4
     reasons.push('Short-term risk signal')
   }
@@ -147,6 +155,76 @@ function computeNewsDelta(text: string): { delta: number; reasons: string[] } {
   return { delta, reasons }
 }
 
+export type NewsSignalRow = {
+  playerName?: string | null
+  title?: string | null
+  content?: string | null
+  team?: string | null
+  teams?: string[] | null
+}
+
+function foldTeam(team: string | null | undefined): string | null {
+  return getTeamInfo(team)?.canonical ?? null
+}
+
+/**
+ * Attach each named news row to AT MOST ONE pool entry, returning deltas keyed by entry index.
+ *
+ * 🛑 A NAME IS NOT AN IDENTITY. This was keyed by name alone, so a story about the Browns LB
+ * Justin Jefferson would move the Vikings WR's ADP (lib/injuries/matchInjuryRows.ts records 15
+ * names shared by 2+ active NFL players). `SportsNews.playerId` exists but is never populated (0 of
+ * 1,935 NFL rows in the 7-day window, 2026-10-12), so the binding uses the row's team instead:
+ *
+ *   - the row names teams (`team` / `teams`) and the entry has one: the entry's team must be among
+ *     them. Exactly one name-matching entry must pass, or the row binds to nothing.
+ *   - otherwise: bind only when the pool holds exactly one player by that name.
+ *
+ * A refused row costs one adjustment; a mis-bound one moves the wrong player's ADP.
+ */
+export function bindNewsToEntries(
+  news: readonly NewsSignalRow[],
+  entries: readonly Pick<ADPEntry, 'name' | 'team'>[],
+): Map<number, { delta: number; reasons: string[] }> {
+  const indexesByName = new Map<string, number[]>()
+  entries.forEach((e, i) => {
+    const k = normalizeName(e.name)
+    if (!k) return
+    const list = indexesByName.get(k) ?? []
+    list.push(i)
+    indexesByName.set(k, list)
+  })
+
+  const out = new Map<number, { delta: number; reasons: string[] }>()
+  for (const n of news) {
+    const hint = n.playerName ? normalizeName(n.playerName) : ''
+    if (!hint) continue
+    const candidates = indexesByName.get(hint)
+    if (!candidates?.length) continue
+
+    const newsTeams = new Set(
+      [n.team, ...(n.teams ?? [])].map(foldTeam).filter((t): t is string => t != null),
+    )
+    let bound: number | null = null
+    if (newsTeams.size > 0) {
+      const verifiable = candidates.filter((i) => foldTeam(entries[i]!.team) != null)
+      const matched = verifiable.filter((i) => newsTeams.has(foldTeam(entries[i]!.team)!))
+      if (matched.length === 1) bound = matched[0]!
+      // No entry carries a team to check against: fall back to the unique-name rule.
+      else if (verifiable.length === 0 && candidates.length === 1) bound = candidates[0]!
+    } else if (candidates.length === 1) {
+      bound = candidates[0]!
+    }
+    if (bound == null) continue
+
+    const parsed = computeNewsDelta(`${n.title || ''} ${n.content || ''}`)
+    const existing = out.get(bound) ?? { delta: 0, reasons: [] }
+    existing.delta += parsed.delta
+    existing.reasons.push(...parsed.reasons)
+    out.set(bound, existing)
+  }
+  return out
+}
+
 export async function applyRealtimeAdpAdjustments(entries: ADPEntry[], opts?: { isDynasty?: boolean }) {
   const news = await fetchRecentSportsSignals()
   const rookieRanks = await (prisma as any).rookieRanking.findMany({
@@ -159,31 +237,17 @@ export async function applyRealtimeAdpAdjustments(entries: ADPEntry[], opts?: { 
   const rookieRankMap = new Map<string, number>()
   for (const r of rookieRanks) rookieRankMap.set(normalizeName(r.name), Number(r.rank || 999))
 
-  const newsByPlayer = new Map<string, { delta: number; reasons: string[] }>()
-
-  for (const n of news) {
-    const playerHint = n.playerName ? normalizeName(n.playerName) : ''
-    const text = `${n.title || ''} ${n.content || ''}`
-    const parsed = computeNewsDelta(text)
-
-    if (playerHint) {
-      const existing = newsByPlayer.get(playerHint) || { delta: 0, reasons: [] }
-      existing.delta += parsed.delta
-      existing.reasons.push(...parsed.reasons)
-      newsByPlayer.set(playerHint, existing)
-      continue
-    }
-  }
+  const newsByEntry = bindNewsToEntries(news, entries)
 
   const adjusted: ADPEntry[] = []
   const adjustments: AdpAdjustment[] = []
 
-  for (const e of entries) {
+  for (const [index, e] of entries.entries()) {
     const key = normalizeName(e.name)
     let adpDelta = 0
     const reasons: string[] = []
 
-    const fromNews = newsByPlayer.get(key)
+    const fromNews = newsByEntry.get(index)
     if (fromNews) {
       adpDelta += fromNews.delta
       reasons.push(...fromNews.reasons)

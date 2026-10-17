@@ -47,7 +47,11 @@ export async function POST(req: Request) {
 
   const { zombieUniverseTier, leagueCreatePayload } = parsed.data
   const sportRaw = leagueCreatePayload.sport
-  const sport = typeof sportRaw === 'string' ? sportRaw.toUpperCase() : 'NFL'
+  // No silent NFL default: every league below is created with this sport, so a missing one is refused.
+  if (typeof sportRaw !== 'string' || !sportRaw.trim()) {
+    return NextResponse.json({ error: 'sport is required for a Zombie universe.' }, { status: 400 })
+  }
+  const sport = sportRaw.trim().toUpperCase()
   if (!isZombieEligibleLeagueSport(sport)) {
     return NextResponse.json({ error: `Sport "${sportRaw}" is not eligible for Zombie universes.` }, { status: 400 })
   }

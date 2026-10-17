@@ -96,6 +96,19 @@ export interface NormalizedLeagueSettings {
    */
   is_keeper?: boolean
   /**
+   * Sleeper's own waiver-schedule settings, exactly as Sleeper sent them — present only for a
+   * Sleeper import that carried at least one. `daily_waivers_hour` is the Pacific run hour
+   * (measured, contracts/sleeper/GAPS.md S-06); ⚠ `waiver_day_of_week`'s weekday is UNRESOLVED
+   * (S-05) except the measured `2` = Wednesday — never convert it by arithmetic. Read `lib/waivers/sleeperWaiverSchedule.ts` for a schedule a screen
+   * can show.
+   */
+  sleeper_waiver_schedule?: {
+    waiver_day_of_week?: number
+    daily_waivers?: number
+    daily_waivers_hour?: number
+    waiver_clear_days?: number
+  }
+  /**
    * The provider's own best-ball flag (Sleeper `settings.best_ball`). The Sleeper mapper writes
    * 1 or 0 (#1371); read it with `lineupMode.isBestBallSettings`, never by truthiness of a name.
    *

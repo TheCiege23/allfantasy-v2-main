@@ -158,8 +158,19 @@ export function leagueCall(args: {
   return { ...base, kind: 'hold', tone: 'none', headline: 'Bench is right', why: readinessTone === 'bad' ? 'He is ruled out.' : 'He does not out-project a starter here.', swap: null }
 }
 
-/** The prefilled question for "Ask Chimmy" — names the league, the player and the call, so the answer starts where the card left off. */
-export function chimmyAsk(call: LeagueCall, playerName: string): string {
+/**
+ * The prefilled question for "Ask Chimmy" — names the league, the player and the call, so the answer starts where the card left off.
+ * In the reader's language: it lands in the composer, where he reads it before sending.
+ */
+export function chimmyAsk(call: LeagueCall, playerName: string, language: string = 'en'): string {
+  if (language === 'es') {
+    if (call.kind === 'hold' && call.swap) {
+      return `En ${call.leagueName}: ${playerName} es dudoso. ¿Lo mantengo o alineo a ${call.swap.startName}?`
+    }
+    return call.swap
+      ? `En ${call.leagueName}: ¿debería ${call.kind === 'start' ? `alinear a ${playerName} por delante de ${call.swap.benchName}` : `sentar a ${playerName} y alinear a ${call.swap.startName}`} esta semana?`
+      : `En ${call.leagueName}: ¿qué debería hacer con ${playerName} esta semana?`
+  }
   if (call.kind === 'hold' && call.swap) {
     return `In ${call.leagueName}: ${playerName} is questionable — should I keep him in or start ${call.swap.startName}?`
   }

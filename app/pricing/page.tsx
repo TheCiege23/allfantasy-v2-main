@@ -33,7 +33,7 @@ export const metadata: Metadata = buildSeoMeta({
   openGraphTitle: "AllFantasy Pricing — Unlock fantasy tools for your league",
   openGraphDescription:
     "Subscribe for full access, or buy tokens and pay only for what you use. Clear plans, Stripe checkout.",
-  imagePath: "/af-crest.png",
+  imagePath: "/og-image.jpg",
   keywords: [
     "AllFantasy pricing",
     "fantasy sports subscription",

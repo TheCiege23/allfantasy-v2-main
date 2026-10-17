@@ -46,7 +46,7 @@ export class DraftValidationOrchestrator {
     const checks = [
       () => this.checkTeamsFilled(leagueId),
       () => this.checkDraftOrderExists(leagueId, draftId),
-      () => this.checkRosterSlotsConfigured(leagueId),
+      () => this.checkRosterSlotsConfigured(leagueId, draftId),
       () => this.checkScoringSettingsPresent(leagueId),
       () => this.checkNoDuplicateUsers(leagueId),
       () => this.checkDraftTypeConfigured(leagueId, draftId),
@@ -159,10 +159,10 @@ export class DraftValidationOrchestrator {
    * Check 3: Roster shape is configured — aligned with {@link getEffectiveLeagueRosterTemplate}
    * (`LeagueRosterConfig`, `League.starters`, `settings.rosterPositions`, sport-specific `*_roster_config`).
    */
-  private static async checkRosterSlotsConfigured(leagueId: string): Promise<ValidationResult> {
+  private static async checkRosterSlotsConfigured(leagueId: string, draftId: string): Promise<ValidationResult> {
     const league = await prisma.league.findUnique({
       where: { id: leagueId },
-      select: { id: true },
+      select: { id: true, sport: true, leagueVariant: true },
     })
 
     if (!league) {
@@ -186,6 +186,22 @@ export class DraftValidationOrchestrator {
           (Number(s.devyCount) || 0),
         0,
       )
+
+      if (league.sport === 'NBA' && league.leagueVariant === 'survivor') {
+        const session = await prisma.draftSession.findUnique({ where: { id: draftId }, select: { rounds: true } })
+        const draftableSlots = eff.template.slots.reduce(
+          (sum, s) => sum + (Number(s.starterCount) || 0) + (Number(s.benchCount) || 0), 0,
+        )
+        if (session && draftableSlots !== session.rounds) {
+          return {
+            key: 'roster_slots',
+            label: `Roster Configuration (${draftableSlots} spots, ${session.rounds} rounds)`,
+            status: 'fail',
+            message: 'Draft rounds must equal starter and bench spots for every NBA Survivor team.',
+            fixAction: 'configure_roster',
+          }
+        }
+      }
 
       if (eff.hasPersistedRosterSchema && totalSlots > 0) {
         return {

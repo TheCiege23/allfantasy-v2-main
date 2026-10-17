@@ -15,6 +15,7 @@ import {
   getVolatilityProfile,
 } from '@/lib/trade-engine/sport-tuning-registry'
 import { computePlayerAdjustments, type RawNewsItem, scoreNewsItems } from '@/lib/trade-engine/news-impact-engine'
+import { resolveCurrentInjuryDesignations } from '@/lib/injuries/currentInjuryDesignations'
 import { computePlayerOutlookScores } from './player-outlook-engine'
 import { buildOutlookUserPrompt, PLAYER_OUTLOOK_SYSTEM_PROMPT } from './player-outlook-prompt'
 import type {
@@ -30,6 +31,9 @@ export interface GetPlayerOutlookParams {
   playerName?: string
   playerId?: string
   sport?: string
+  /** The caller's own position/team for this player, used to tell namesakes apart (FantasyCalc). */
+  position?: string | null
+  team?: string | null
   includeNarrative?: boolean
 }
 
@@ -64,15 +68,26 @@ function pLimit(concurrency: number) {
 async function gatherDataBundle(
   playerName: string,
   sport: string,
+  hints: { position?: string | null; team?: string | null } = {},
 ): Promise<OutlookDataBundle> {
   const normalized = normalizeName(playerName)
 
+  /*
+   * 🛑 FANTASYCALC IS AN NFL VALUE LIST, AND NEWS IS PER SPORT. Both used to be matched by name alone
+   * whatever `sport` said. Measured on production 2026-10-12: 154 distinct NBA/NHL/MLB/SOCCER names in
+   * `PlayerIdentityMap` equal the normalizedName of a Sleeper-keyed NFL row (NHL Cam Ward among them),
+   * and each would wear that NFL player's dynasty value and headlines. Another sport gets no FantasyCalc
+   * value at all — a gap, not someone else's number.
+   */
+  const isNfl = sport === 'NFL'
+
   // Parallel data fetch — all sources are optional
   const [fcValuesResult, analyticsResult, newsResult] = await Promise.allSettled([
-    getFantasyCalcValuesDbFirst({ isDynasty: true, numQbs: 1, numTeams: 12, ppr: 1 }),
+    isNfl ? getFantasyCalcValuesDbFirst({ isDynasty: true, numQbs: 1, numTeams: 12, ppr: 1 }) : Promise.resolve([]),
     getPlayerAnalytics(playerName).catch(() => null),
     prisma.sportsNews.findMany({
       where: {
+        sport,
         OR: [
           { title: { contains: playerName, mode: 'insensitive' } },
           { playerNames: { has: normalized } },
@@ -85,7 +100,7 @@ async function gatherDataBundle(
 
   // Extract FantasyCalc player
   const fcPlayers = fcValuesResult.status === 'fulfilled' ? fcValuesResult.value : []
-  const fc = findPlayerByName(fcPlayers, playerName)
+  const fc = isNfl ? findPlayerByName(fcPlayers, playerName, hints) : null
 
   // Extract analytics
   const analytics = analyticsResult.status === 'fulfilled' ? analyticsResult.value : null
@@ -126,12 +141,32 @@ async function gatherDataBundle(
   // Build age from analytics rawData or FantasyCalc when available
   const age = (analytics?.rawData as Record<string, unknown> | null)?.age ?? (fc as any)?.age ?? null
 
+  const team = (fc as any)?.team ?? analytics?.currentTeam ?? null
+
+  /*
+   * 🛑 INJURY STATUS COMES FROM THE LIVE FEED, NOT `analytics.status`. `PlayerAnalyticsSnapshot` is a
+   * one-off CSV import matched by name only, so its status is neither current nor necessarily this
+   * player's — and the engine states it as fact ("Currently Out"), scores risk on it, and feeds it to
+   * the AI narrative. No live designation (healthy, stale, namesake refused) → null, which drops the
+   * sentence rather than inventing one.
+   */
+  let injuryStatus: string | null = null
+  try {
+    const designations = await resolveCurrentInjuryDesignations({
+      sport,
+      players: [{ key: 'player', name: playerName, team, position: position === 'UNKNOWN' ? null : position }],
+    })
+    injuryStatus = designations.get('player')?.status ?? null
+  } catch {
+    injuryStatus = null
+  }
+
   return {
     playerName,
     playerId: null,
     sport,
     position,
-    team: (fc as any)?.team ?? analytics?.currentTeam ?? null,
+    team,
     age,
     fantasyCalc: fc ?? null,
     analytics,
@@ -144,7 +179,7 @@ async function gatherDataBundle(
     seasonStats: null,
     trend30Day: fc?.trend30Day ?? null,
     trendType: null,
-    injuryStatus: analytics?.status ?? null,
+    injuryStatus,
     weeklyVolatility: analytics?.weeklyVolatility ?? null,
     newsVolatilityIncrease,
     breakoutAge: (analytics as any)?.college?.breakoutAge ?? (analytics as any)?.breakoutAge ?? null,
@@ -169,7 +204,14 @@ export async function getPlayerOutlook(
   }
 
   // Step 1: Cache check
-  const cacheParams = { sport, name: normalizeName(playerName) }
+  const hints = { position: params.position?.trim() || null, team: params.team?.trim() || null }
+  // Hints change which namesake is valued, so they are part of the key when given.
+  const cacheParams = {
+    sport,
+    name: normalizeName(playerName),
+    ...(hints.position ? { position: hints.position.toUpperCase() } : {}),
+    ...(hints.team ? { team: hints.team.toUpperCase() } : {}),
+  }
   const cached = await readCache<PlayerOutlook>(prisma, 'player_outlook', cacheParams).catch(() => null)
   if (cached) {
     const age = Math.round((Date.now() - new Date(cached.fetchedAt).getTime()) / 1000)
@@ -177,7 +219,7 @@ export async function getPlayerOutlook(
   }
 
   // Step 2: Gather data
-  const bundle = await gatherDataBundle(playerName, sport)
+  const bundle = await gatherDataBundle(playerName, sport, hints)
 
   // Step 3: Deterministic scoring
   const scoring = computePlayerOutlookScores(bundle)

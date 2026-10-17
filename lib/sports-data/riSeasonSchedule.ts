@@ -132,6 +132,28 @@ export async function syncRiSeasonSchedule(opts: {
     result.error = 'schedule-season returned 200 with no parseable games — refusing to replace a stored schedule with nothing'
     return result
   }
+  // MLB schedules 162 games for each of 30 clubs: 2,430 distinct regular-season games.
+  // A partial vendor response could otherwise seal a fantasy week before its missing games
+  // finish. Keep the previous complete cache (or no cache) until the whole slate is published.
+  if (sport === 'MLB') {
+    const regularIds = new Set(games.filter((g) => g.seasonType === 'regular' &&
+      !g.replacedBy && !['postponed', 'replaced'].includes(String(g.status ?? '').toLowerCase())).map((g) => g.gameId))
+    if (regularIds.size < 2430) {
+      result.error = `MLB schedule-season has ${regularIds.size} distinct regular games; expected at least 2430 — refusing a partial slate`
+      return result
+    }
+  }
+  if (sport === 'NCAAB' || sport === 'NCAABB') {
+    // A season endpoint returning last season, or only an opening-month preview,
+    // cannot be used as the complete slate that authorizes week finalization.
+    const regularDays = games.filter(g => g.seasonType === 'regular').map(g => g.day).sort()
+    const first = regularDays[0], last = regularDays[regularDays.length - 1]
+    if (!first || first < `${opts.season}-10-01` || first > `${opts.season}-11-30` ||
+        !last || last < `${opts.season + 1}-03-01` || last > `${opts.season + 1}-04-30`) {
+      result.error = `NCAAB schedule-season lacks the requested autumn-to-March regular season (${first ?? 'missing'} to ${last ?? 'missing'}) — refusing a partial or wrong-season slate`
+      return result
+    }
+  }
   result.fetched = true
   result.games = games.length
 

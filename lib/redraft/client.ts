@@ -19,6 +19,7 @@ export type RedraftRosterRow = {
 }
 
 export type RedraftSeasonClient = {
+  source?: string
   id: string
   leagueId: string
   sport: string
@@ -91,8 +92,11 @@ export type RedraftMatchupClient = {
   id: string
   week: number
   status: string
-  homeScore: number
-  awayScore: number
+  homeScore: number | null
+  awayScore: number | null
+  source?: string
+  readOnly?: boolean
+  scoringEvidence?: { teamScores: string; individualSourceScores: string; message: string }
   homeRosterId: string
   awayRosterId: string | null
   homeRoster: RedraftRosterRow

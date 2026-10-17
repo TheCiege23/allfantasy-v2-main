@@ -130,7 +130,7 @@ describe('suggestPlayers', () => {
     // league platform, so a foreign-id roster can be left out of the count.
     expect(mockRosterFindMany).toHaveBeenCalledTimes(1)
     expect(mockRosterFindMany.mock.calls[0][0]).toEqual({
-      select: { playerData: true, league: { select: { platform: true } } },
+      select: { playerData: true, league: { select: { platform: true, sport: true } } },
     })
   })
 

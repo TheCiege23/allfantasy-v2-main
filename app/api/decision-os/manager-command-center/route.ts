@@ -21,6 +21,7 @@ import { getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-lea
 import { isSportsDataEnabled } from '@/lib/sports-evidence/gates'
 import { CertifiedIntelligenceIntegrationService } from '@/lib/sports-evidence/intelligenceIntegration'
 import { resolveManagerCommandCenterSnapshot } from '@/lib/decision-os/managerCommandCenter'
+import { loadCareerDecisionInput } from '@/lib/core-app/careerDecisionInput'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,12 +29,28 @@ const DRAFT_APPROACHING_WINDOW_DAYS = 14
 
 interface DashboardLeagueRow {
   id?: unknown
+  navigationLeagueId?: unknown
 }
 
-async function resolveMemberLeagueIds(userId: string): Promise<string[]> {
+/**
+ * Dashboard-row id → the league id a `/league/[id]` link can open. The snapshot's items carry the
+ * ROW id, which for an imported or legacy row is not a navigable league; `navigationLeagueId` is the
+ * one Imported Leagues' "Open" already uses. Additive field, so Settings can link each item.
+ */
+function leagueLinkMap(rows: unknown[]): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const row of rows as DashboardLeagueRow[]) {
+    if (typeof row.id === 'string' && typeof row.navigationLeagueId === 'string' && row.navigationLeagueId) {
+      out[row.id] = row.navigationLeagueId
+    }
+  }
+  return out
+}
+
+async function resolveMemberLeagues(userId: string): Promise<{ ids: string[]; rows: unknown[] }> {
   const payload = await getDashboardLeagueListForUser(userId).catch(() => null)
   const leagues = (payload?.leagues ?? []) as DashboardLeagueRow[]
-  return leagues.filter((l) => typeof l.id === 'string').map((l) => l.id as string)
+  return { ids: leagues.filter((l) => typeof l.id === 'string').map((l) => l.id as string), rows: leagues }
 }
 
 async function countDraftsApproaching(leagueIds: string[], now: Date): Promise<number> {
@@ -61,10 +78,15 @@ export async function GET() {
   }
 
   const now = new Date()
-  const leagueIds = await resolveMemberLeagueIds(userId)
+  const { ids: leagueIds, rows: leagueRows } = await resolveMemberLeagues(userId)
+
+  // Live-career plan, phase 4: sync-trouble and title-stake signals plus the Daily Brief's legacy
+  // line. Read once here from the same rows; null (never a throw) when the career read fails.
+  // Started, not awaited: the snapshot awaits it only after its own per-league reads.
+  const career = loadCareerDecisionInput({ userId, leagueRows, now })
 
   const [snapshot, draftsApproachingCount] = await Promise.all([
-    resolveManagerCommandCenterSnapshot(userId, leagueIds, now),
+    resolveManagerCommandCenterSnapshot(userId, leagueIds, now, career),
     countDraftsApproaching(leagueIds, now),
   ])
 
@@ -79,5 +101,10 @@ export async function GET() {
     }
   }
 
-  return NextResponse.json({ ...snapshot, draftsApproachingCount, ...(sportsContext ? { sportsContext } : {}) })
+  return NextResponse.json({
+    ...snapshot,
+    draftsApproachingCount,
+    leagueLinks: leagueLinkMap(leagueRows),
+    ...(sportsContext ? { sportsContext } : {}),
+  })
 }

@@ -1,4 +1,5 @@
 import 'server-only'
+import { readImportedPlayerMetadata, fantraxSnapshotPlayerMap } from '@/lib/league-import/importedPlayerMetadata'
 
 import { prisma } from '@/lib/prisma'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
@@ -111,7 +112,7 @@ export async function materializeRedraftRosterPlayersForLeague(
 
   const result: MaterializeResult = { ...EMPTY, rostersConsidered: rosters.length }
   const league = await prisma.league
-    .findUnique({ where: { id: leagueId }, select: { sport: true, platform: true, season: true } })
+    .findUnique({ where: { id: leagueId }, select: { sport: true, platform: true, season: true, platformLeagueId: true } })
     .catch(() => null)
   const sport = String(opts?.sport ?? league?.sport ?? 'NFL')
   const platform = String(league?.platform ?? '').toLowerCase()
@@ -179,6 +180,10 @@ export async function materializeRedraftRosterPlayersForLeague(
       () => new Map<string, RosterPlayerMetadata>(),
     )
   }
+
+  const snapshotMetadata: ReturnType<typeof fantraxSnapshotPlayerMap> = platformOwnsRoster && platform === 'fantrax' && league?.platformLeagueId
+    ? fantraxSnapshotPlayerMap((await prisma.fantraxLeague.findUnique({ where: { id: league.platformLeagueId }, select: { roster: true } }).catch(() => null))?.roster)
+    : {}
 
   for (const r of rosters) {
     if (!r.redraftRosterId) {
@@ -262,7 +267,9 @@ export async function materializeRedraftRosterPlayersForLeague(
     }
 
     for (const playerId of playerIds) {
-      const dto = byPlatformId.get(playerId)
+      const imported = platformOwnsRoster ? (readImportedPlayerMetadata(r.playerData, platform, playerId) ?? snapshotMetadata[playerId] ?? null) : null
+      const canonical = byPlatformId.get(playerId)
+      const dto = imported ? { name: imported.name, position: imported.position ?? canonical?.position ?? null, team: imported.team ?? canonical?.team ?? null, sport } : canonical
       const extra = byUnifiedId.get(playerId)
 
       if (have.has(playerId)) {

@@ -83,6 +83,23 @@ function sleeperBirthday(p: FeedPlayer): string | undefined {
   return raw && parseBirthday(raw) ? raw : undefined
 }
 
+/**
+ * The team to write on an UPDATE.
+ *
+ * 🛑 A FREE AGENT IS `null`, NOT "LEAVE IT". Sleeper reports a released player as `team: null`, and
+ * `teamDisplayNameForSport` maps null/blank to null. This was `?? undefined`, which Prisma reads as
+ * "skip the column" — so the authoritative `source='sleeper'` row of a cut player kept his old club
+ * on every pass, forever, while the create path below already wrote `?? null`.
+ *
+ * An unrecognised non-empty code is NOT a wipe: `teamDisplayNameForSport` returns it as given
+ * (never null), so it is written through exactly as before. Only a feed row that omits the key
+ * altogether is left alone — absence is not evidence of free agency.
+ */
+function sleeperTeamForUpdate(sport: string, p: FeedPlayer): string | null | undefined {
+  if (p.team === undefined) return undefined
+  return teamDisplayNameForSport(sport, p.team) ?? null
+}
+
 /** Matches the seed service's parse: a non-finite value becomes null, never 0. */
 function toFiniteNumber(value: unknown): number | null {
   const n = typeof value === 'string' ? Number(value) : value
@@ -184,7 +201,7 @@ export async function refreshSleeperPlayerRows(args: {
            * caller (see the note in app/api/cron/import-players/route.ts), while THIS runs every
            * 6 hours at 1,500 players a pass and would re-introduce codes within one lap.
            */
-          team: teamDisplayNameForSport(sport, p.team) ?? undefined,
+          team: sleeperTeamForUpdate(sport, p),
           age: toFiniteNumber(p.age),
           yearsExp: toFiniteNumber(p.years_exp),
           height: p.height?.trim() || null,

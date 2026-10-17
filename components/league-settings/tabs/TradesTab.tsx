@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from 'react'
 import { useLeagueSettingsSectionAutosave } from '@/hooks/useLeagueSettingsSectionAutosave'
+import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import type { LeagueSettingsTabProps } from '../league-settings-tabs-types'
 
 export function TradesTab({ ctx, canEdit }: LeagueSettingsTabProps) {
+  const { t } = useLanguage()
   const leagueId = ctx.league.id
   const { queuePatch, saving } = useLeagueSettingsSectionAutosave(leagueId, 'trades', { enabled: canEdit })
 
@@ -20,10 +22,10 @@ export function TradesTab({ ctx, canEdit }: LeagueSettingsTabProps) {
 
   return (
     <div className="space-y-5">
-      {saving ? <p className="text-[11px] font-semibold text-cyan-300/80">Saving…</p> : null}
+      {saving ? <p className="text-[11px] font-semibold text-cyan-300/80">{t('lsHub.saving')}</p> : null}
 
       <label className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-white/[0.08] bg-black/20 px-3 py-3">
-        <span className="text-[13px] text-white/85">Allow draft pick trading</span>
+        <span className="text-[13px] text-white/85">{t('lsHub.tr.pickTrading')}</span>
         <input
           type="checkbox"
           className="h-4 w-4 accent-cyan-400"
@@ -40,7 +42,7 @@ export function TradesTab({ ctx, canEdit }: LeagueSettingsTabProps) {
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="block">
           <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-white/40">
-            Review window (hours)
+            {t('lsHub.tr.review')}
           </span>
           <input
             type="number"
@@ -58,7 +60,7 @@ export function TradesTab({ ctx, canEdit }: LeagueSettingsTabProps) {
         </label>
         <label className="block">
           <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-white/40">
-            Trade deadline (week #)
+            {t('lsHub.tr.deadline')}
           </span>
           <input
             type="number"

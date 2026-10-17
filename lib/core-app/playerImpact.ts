@@ -1,4 +1,5 @@
 import 'server-only'
+import { injuryStatusLookup } from '@/lib/injuries/matchInjuryRows'
 
 import { prisma } from '@/lib/prisma'
 import { computeLeagueProjectedPoints, extractScoringSettings } from '@/lib/projections/leagueScoring'
@@ -199,7 +200,7 @@ export async function getPlayerImpact(
       platformUserId: true,
       externalId: true,
       league: {
-        select: { id: true, name: true, platform: true, settings: true, platformLeagueId: true, season: true },
+        select: { id: true, name: true, platform: true, sport: true, settings: true, platformLeagueId: true, season: true },
       },
     },
   })
@@ -219,8 +220,10 @@ export async function getPlayerImpact(
      * chain as the rest of the finder; the other platforms are skipped, as the triage skips them.
      */
     const platform = t.league?.platform
+    // A native league of another sport holds Rolling Insights ids, never Sleeper ids (rosterIdSpace.ts).
+    const sport = t.league?.sport
     const bridged = bridgedLeagues.get(t.leagueId)
-    if (isForeignIdSpace(platform) && !bridged?.readable) continue
+    if (isForeignIdSpace(platform, sport) && !bridged?.readable) continue
     const candidates = [t.platformUserId, t.externalId, userId].filter(Boolean) as string[]
     const found = await prisma.roster.findFirst({
       where: { leagueId: t.leagueId, platformUserId: { in: candidates } },
@@ -230,7 +233,7 @@ export async function getPlayerImpact(
     // A bridged roster drops its unbridged ids; ESPN keeps its own translator's rules.
     const [roster] = bridged?.readable
       ? [{ playerData: applyBridge(found.playerData, bridged.map) }]
-      : (await translateRostersToSleeperIds(platform, [found])).rosters
+      : (await translateRostersToSleeperIds(platform, [found], sport)).rosters
 
     const pd = (roster?.playerData ?? {}) as Record<string, unknown>
     const placed = slotOf(pd, playerSleeperId)
@@ -279,23 +282,21 @@ export async function getPlayerImpact(
        */
       prisma.sportsInjury
         .findMany({
-          where: { sport: 'NFL' },
+          // Live rows only: `expiresAt` is each writer's own freshness contract.
+          where: { sport: 'NFL', expiresAt: { gt: new Date() } },
           orderBy: { fetchedAt: 'desc' },
-          select: { playerName: true, status: true },
+          select: { playerName: true, status: true, team: true, position: true },
           take: 4000,
         })
         .catch(() => []),
     ])
 
-    const injuryByName = new Map<string, string>()
-    for (const i of injuries) {
-      const k = i.playerName.trim().toLowerCase()
-      // `status` is nullable — a row with no designation carries no information
-      // and must not overwrite a real one, nor be rendered as a blank badge.
-      if (!i.status) continue
-      // First wins — the list is newest-first, so this keeps the latest report.
-      if (!injuryByName.has(k)) injuryByName.set(k, i.status)
-    }
+    /*
+     * Newest designation per ATHLETE (name verified by team/position), not per name: keyed by name,
+     * a replacement option could wear a same-named player's badge (WR vs LB Justin Jefferson).
+     * Rows with no status carry no information and are skipped (matchInjuryRows).
+     */
+    const injuryStatusOf = injuryStatusLookup(injuries, 'NFL')
 
     const playerById = new Map<string, PlayerRow>(
       players.filter((p) => p.sleeperId).map((p) => [p.sleeperId as string, p as PlayerRow])
@@ -421,7 +422,7 @@ export async function getPlayerImpact(
         team: row.team,
         afPoints: priced?.points ?? null,
         delta: priced && mine ? Math.round((priced.points - mine.points) * 100) / 100 : null,
-        injuryStatus: injuryByName.get(row.name.trim().toLowerCase()) ?? null,
+        injuryStatus: injuryStatusOf({ name: row.name, team: row.team, position: row.position }),
         from,
       })
     }

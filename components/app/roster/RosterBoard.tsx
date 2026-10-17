@@ -1,13 +1,13 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import Image from "next/image"
 import { ChevronsDown, Users, Activity, Info, ArrowRightLeft } from "lucide-react"
 import { useRosterManager, type RosterPlayer, type RosterSectionKey } from "./useRosterManager"
 import LineupLockBanner from "./LineupLockBanner"
 import { teamLogoUrl } from "@/lib/media-url"
 import PlayerCardAnalytics from "@/components/player-card/PlayerCardAnalytics"
 import { useUserTimezone } from "@/hooks/useUserTimezone"
+import { FallbackImg } from '@/components/core-app/FallbackImg'
 
 type RosterBoardProps = {
   leagueId?: string
@@ -537,13 +537,18 @@ function PlayerCard({
     >
       <div className="flex flex-1 items-center gap-1.5 min-w-0">
         {player.headshotUrl && /^https?:\/\//i.test(player.headshotUrl) ? (
-          <Image
+          <FallbackImg
             src={player.headshotUrl}
             alt=""
             width={24}
             height={24}
+            loading="lazy"
             className="h-6 w-6 shrink-0 rounded-full object-cover ring-1 ring-white/10"
-            unoptimized
+            fallback={
+              <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#111a31] text-[11px] font-semibold text-white/90">
+                {player.position}
+              </div>
+            }
           />
         ) : (
           <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#111a31] text-[11px] font-semibold text-white/90">
@@ -553,12 +558,13 @@ function PlayerCard({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1">
             {logo ? (
-              <img
+              <FallbackImg
                 src={logo}
                 alt={`${player.team} logo`}
                 data-testid={`roster-player-team-logo-${player.id}`}
                 className="h-3.5 w-3.5 rounded object-contain"
                 loading="lazy"
+                fallback={null}
               />
             ) : null}
             <p className="truncate text-[11px] sm:text-[11px] font-semibold text-white/95">{player.name}</p>

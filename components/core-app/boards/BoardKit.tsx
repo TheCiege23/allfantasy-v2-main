@@ -85,6 +85,7 @@ export function SectionHead({
   count,
   id,
   tone,
+  info,
 }: {
   label: string
   count?: string | null
@@ -94,12 +95,21 @@ export function SectionHead({
    * ON THE BUBBLE amber (handoff 2026-09-13). Omit for a neutral section.
    */
   tone?: 'good' | 'bad' | 'warn'
+  /**
+   * An `InfoTip` explaining how to read the section — one for the whole list, never one per row.
+   *
+   * ⚠ BESIDE THE HEADING, NOT INSIDE IT. Sections are `aria-labelledby` this `<h2>`, so a button
+   * inside it would join every section's accessible name ("Top 10 · ranked by urgency How to read
+   * this list").
+   */
+  info?: ReactNode
 }) {
   return (
     <div className="af-bd-sec-head">
       <h2 className="af-bd-sec-label" id={id} data-tone={tone}>
         {label}
       </h2>
+      {info ? <span className="af-bd-sec-info">{info}</span> : null}
       <span className="af-bd-sec-rule" aria-hidden />
       {count ? <span className="af-bd-sec-count">{count}</span> : null}
     </div>
@@ -122,6 +132,7 @@ export function FooterSummary({
   href,
   quiet,
   emptyText = 'Every league you hold is on this board.',
+  language = 'en',
 }: {
   hidden: number
   total: number
@@ -129,16 +140,21 @@ export function FooterSummary({
   /** What the hidden leagues are doing. Screen-specific; state a fact, not a mood. */
   quiet: string
   emptyText?: string
+  language?: string
 }) {
   return (
     <div className="af-bd-foot">
       <p className="af-bd-foot-text">
         {hidden > 0
-          ? `${hidden.toLocaleString()} more ${hidden === 1 ? 'league' : 'leagues'} ${quiet}`
-          : emptyText}
+          ? language === 'es'
+            ? `${hidden.toLocaleString()} ${hidden === 1 ? 'liga más' : 'ligas más'} ${quiet}`
+            : `${hidden.toLocaleString()} more ${hidden === 1 ? 'league' : 'leagues'} ${quiet}`
+          : language === 'es' && emptyText === 'Every league you hold is on this board.'
+            ? 'Todas tus ligas aparecen en esta lista.'
+            : emptyText}
       </p>
       <Link className="af-bd-foot-cta" href={href}>
-        View all {total.toLocaleString()} &rarr;
+        {language === 'es' ? `Ver ${total.toLocaleString()} ${total === 1 ? 'liga' : 'ligas'}` : `View all ${total.toLocaleString()}`} &rarr;
       </Link>
     </div>
   )
@@ -174,16 +190,17 @@ export const NO_LEAGUE_ACTIONS = [
   { href: '/trade-evaluator', label: 'Grade a trade', primary: false },
 ] as const
 
-export function NoLeaguesYet({ what }: { what: string }) {
+export function NoLeaguesYet({ what, language = 'en' }: { what: string; language?: string }) {
+  const es = language === 'es'
   return (
-    <section className="af-bd-noleagues" data-testid="board-no-leagues" aria-label="No leagues connected yet">
+    <section className="af-bd-noleagues" data-testid="board-no-leagues" aria-label={es ? 'Aún no hay ligas conectadas' : 'No leagues connected yet'}>
       <p className="af-bd-noleagues-lead">
-        <strong>No leagues connected yet.</strong> {what}
+        <strong>{es ? 'Aún no hay ligas conectadas.' : 'No leagues connected yet.'}</strong> {what}
       </p>
       <div className="af-bd-noleagues-actions">
         {NO_LEAGUE_ACTIONS.map((a) => (
           <Link key={a.href} href={a.href} className={a.primary ? 'af-btn' : 'af-btn af-btn--ghost'}>
-            {a.label}
+            {es ? ({ 'Connect a league': 'Conectar una liga', 'Try a mock draft': 'Probar un draft simulado', 'Grade a trade': 'Evaluar un intercambio' } as Record<string, string>)[a.label] ?? a.label : a.label}
           </Link>
         ))}
       </div>

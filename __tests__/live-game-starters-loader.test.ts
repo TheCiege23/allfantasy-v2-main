@@ -22,6 +22,11 @@ vi.mock('@/lib/prisma', () => ({
   },
 }))
 vi.mock('@/lib/live/playFeedPresentation', () => ({ getPlayFeed: vi.fn(async () => []) }))
+const proj = vi.hoisted(() => ({ load: vi.fn() }))
+vi.mock('@/lib/live/starterProjections', () => ({
+  PROJECTED_SPORTS: new Set(['NFL']),
+  loadStarterProjections: proj.load,
+}))
 
 import { getGameStarters } from '@/lib/live/liveScoresPage'
 
@@ -88,5 +93,29 @@ describe('getGameStarters', () => {
     m.weeklyScoreFindMany.mockRejectedValue(Object.assign(new Error('P2021'), { code: 'P2021' }))
     const r = await getGameStarters({ ...GAME, userId: 'u1' })
     expect(r).toEqual({ tieIns: [], hasRosterData: false, rosterFailed: true })
+  })
+})
+
+describe('getGameStarters — projections before kickoff (the clicked-game view)', () => {
+  beforeEach(() => {
+    proj.load.mockResolvedValue(new Map([['p1:home', { projected: 17.5, out: false }], ['p1:away', { projected: 0, out: true }]]))
+  })
+
+  it('prices the starters in this game when it has not kicked off — this game only, starters only', async () => {
+    const r = await getGameStarters({ ...GAME, userId: 'u1', upcoming: true })
+    expect(proj.load).toHaveBeenCalledTimes(1)
+    const [{ leagues }] = proj.load.mock.calls[0]!
+    expect(leagues).toEqual([expect.objectContaining({ key: 'p1', season: 2026, week: 3 })])
+    expect([...leagues[0].playerIds].sort()).toEqual(['away', 'home'])
+    expect(r?.tieIns.map((t) => [t.playerId, t.projected, t.projectedOut])).toEqual([
+      ['home', 17.5, false],
+      ['away', 0, true],
+    ])
+  })
+
+  it('control: a game in progress or over reads no projections', async () => {
+    await getGameStarters({ ...GAME, userId: 'u1' })
+    await getGameStarters({ ...GAME, userId: 'u1', upcoming: false })
+    expect(proj.load).not.toHaveBeenCalled()
   })
 })

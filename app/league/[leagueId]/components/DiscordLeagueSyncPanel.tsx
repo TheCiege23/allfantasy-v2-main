@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { DiscordIcon } from '@/app/components/icons/DiscordIcon'
+import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import type { SubPanelContext } from './LeagueSettingsSubPanels'
 
 type LeagueStatus = {
@@ -34,6 +35,7 @@ type LeagueStatus = {
  * One guided screen, with honest privacy copy, beats two that disagree.
  */
 export function DiscordLeagueSyncPanel({ ctx }: { ctx: SubPanelContext }) {
+  const { t } = useLanguage()
   const [status, setStatus] = useState<LeagueStatus | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -61,11 +63,11 @@ export function DiscordLeagueSyncPanel({ ctx }: { ctx: SubPanelContext }) {
   /** AllFantasy league owner (imported league) — not Sleeper-only `isCommissioner` */
   const isLeagueOwner = ctx.league.userId === ctx.userId
   if (!isLeagueOwner) {
-    return <p className="text-[12px] text-white/45">Only the league owner can set up Discord.</p>
+    return <p className="text-[12px] text-white/45">{t('lsPanel.discord.ownerOnly')}</p>
   }
 
   if (loading) {
-    return <p className="text-[12px] text-white/45">Loading…</p>
+    return <p className="text-[12px] text-white/45">{t('lsPanel.loading')}</p>
   }
 
   const channel = status?.channel ?? null
@@ -75,42 +77,41 @@ export function DiscordLeagueSyncPanel({ ctx }: { ctx: SubPanelContext }) {
     <div className="space-y-4">
       <div className="flex items-center gap-2">
         <DiscordIcon size={18} className="text-[#5865F2]" />
-        <p className="text-[13px] font-semibold text-white/90">Your league’s Discord</p>
+        <p className="text-[13px] font-semibold text-white/90">{t('lsPanel.discord.title')}</p>
       </div>
 
       {channel ? (
         <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-3 text-[11px] text-white/70">
           <p className="mb-1 font-medium text-white/85">
-            #{channel.channelName ?? 'league-channel'} {channel.guildName ? `in ${channel.guildName}` : ''}
+            #{channel.channelName ?? 'league-channel'} {channel.guildName ? t('lsPanel.discord.inGuild').replace('{{guild}}', channel.guildName) : ''}
           </p>
           <p className="mb-2 text-white/55">
-            {copying ? 'League chat is being copied into this channel.' : 'League chat copying is off.'}
+            {copying ? t('lsPanel.discord.copying') : t('lsPanel.discord.notCopying')}
           </p>
           <a href={channel.channelUrl} target="_blank" rel="noopener noreferrer" className="text-[#ff3d81] underline">
-            Open in Discord ↗
+            {t('lsPanel.discord.open')}
           </a>
         </div>
       ) : (
         <p className="text-[12px] leading-relaxed text-white/55">
-          Give your league its own Discord server — your league, your space. Chats there stay in
-          Discord, and AllFantasy only posts in the channel you set up when you switch it on.
+          {t('lsPanel.discord.intro')}
         </p>
       )}
 
       {channel && status?.missingPermissions && status.missingPermissions.length > 0 ? (
         <div className="rounded-xl border border-amber-400/30 bg-amber-400/[0.07] p-3 text-[11px]">
-          <p className="font-semibold text-amber-200">Discord is missing permissions</p>
+          <p className="font-semibold text-amber-200">{t('lsPanel.discord.missingTitle')}</p>
           <p className="mt-1 text-amber-100/75">
-            This server never gave AllFantasy{' '}
-            <strong className="text-amber-100">{status.missingPermissions.join(', ')}</strong>. Add
-            AllFantasy to the server again and keep every box ticked.
+            {t('lsPanel.discord.missingBefore')}{' '}
+            <strong className="text-amber-100">{status.missingPermissions.join(', ')}</strong>
+            {t('lsPanel.discord.missingAfter')}
           </p>
           <a
             href={`/api/discord/bot-install?leagueId=${encodeURIComponent(leagueId)}`}
             className="mt-2 inline-flex items-center gap-2 rounded-lg bg-amber-400/20 px-3 py-1.5 font-semibold text-amber-100 hover:bg-amber-400/30"
           >
             <DiscordIcon size={14} />
-            Add AllFantasy again
+            {t('lsPanel.discord.addAgain')}
           </a>
         </div>
       ) : null}
@@ -120,7 +121,7 @@ export function DiscordLeagueSyncPanel({ ctx }: { ctx: SubPanelContext }) {
         className="inline-flex items-center gap-2 rounded-xl bg-[#5865F2]/20 px-3 py-2 text-[11px] font-semibold text-[#93a7ff] hover:bg-[#5865F2]/30"
       >
         <DiscordIcon size={14} />
-        {channel ? 'Manage Discord →' : 'Set up Discord →'}
+        {channel ? t('lsPanel.discord.manage') : t('lsPanel.discord.setup')}
       </Link>
     </div>
   )

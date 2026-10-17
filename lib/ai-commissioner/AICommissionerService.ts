@@ -418,9 +418,14 @@ export async function getAICommissionerInsights(input: {
 function buildDeterministicCommissionerAnswer(input: {
   question: string
   insights: LeagueInsightReport
+  networkContext?: { name: string; leagues: Array<{ id: string; name: string }> } | null
 }): string {
   const q = input.question.trim().toLowerCase()
   const { insights } = input
+
+  if (q.includes('network') && input.networkContext) {
+    return `${input.networkContext.name} links ${input.networkContext.leagues.map((league) => league.name).join(', ')}. This answer has detailed insight for the selected league only; open each league for its own evidence.`
+  }
 
   if (q.includes('rule')) {
     return [
@@ -482,6 +487,7 @@ export async function answerAICommissionerQuestion(input: {
   question: string
   sport?: string | null
   season?: number | null
+  networkContext?: { name: string; leagues: Array<{ id: string; name: string }> } | null
 }): Promise<{ answer: string; source: 'ai' | 'template'; insights: LeagueInsightReport }> {
   const insights = await getAICommissionerInsights({
     leagueId: input.leagueId,
@@ -491,6 +497,7 @@ export async function answerAICommissionerQuestion(input: {
   const fallback = buildDeterministicCommissionerAnswer({
     question: input.question,
     insights,
+    networkContext: input.networkContext,
   })
 
   // ── AiResult cache gate ───────────────────────────────────────────────────
@@ -499,6 +506,7 @@ export async function answerAICommissionerQuestion(input: {
     question: input.question.trim().toLowerCase(),
     sport: insights.sport ?? null,
     season: insights.season ?? null,
+    networkContext: input.networkContext ?? null,
   }
   const { resultKey, inputHash } = buildAiCacheKey('commissioner-question', cacheInputs)
   const cached = await readAiResultCache(resultKey)
@@ -512,13 +520,14 @@ export async function answerAICommissionerQuestion(input: {
       {
         role: 'system',
         content:
-          'You are the AllFantasy AI League Commissioner assistant. Use only supplied league context. Keep answers concise and actionable. Cover rule explanations, matchup recap, trade fairness concerns, waiver outcomes, and draft commentary without inventing facts.',
+          'You are the AllFantasy AI League Commissioner assistant. Use only supplied league context. Network context establishes membership names only, not facts about other leagues. Keep answers concise and actionable. Do not invent facts or perform commissioner actions.',
       },
       {
         role: 'user',
         content: JSON.stringify({
           question: input.question,
           leagueId: input.leagueId,
+          networkContext: input.networkContext ?? null,
           sport: insights.sport,
           season: insights.season,
           recap: insights.weeklyRecapPost,

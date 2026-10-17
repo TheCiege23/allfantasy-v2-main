@@ -92,6 +92,17 @@ describe('Settings (updateUserProfile) — the path that had no check at all', (
     expect(h.profileUpsert).not.toHaveBeenCalled()
   })
 
+  it('refuses a display name longer than the cap, and writes nothing', async () => {
+    const res = await updateUserProfile('u1', { displayName: 'x'.repeat(51) } as never)
+    expect(res.ok).toBe(false)
+    expect(h.appUserUpdate).not.toHaveBeenCalled()
+    expect(h.profileUpsert).not.toHaveBeenCalled()
+  })
+
+  it('accepts a display name at exactly the cap (control)', async () => {
+    expect((await updateUserProfile('u1', { displayName: 'x'.repeat(50) } as never)).ok).toBe(true)
+  })
+
   it('still saves a clean username (control)', async () => {
     await updateUserProfile('u1', { username: 'gridiron_guru' })
     expect(h.appUserUpdate).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { username: 'gridiron_guru' } })

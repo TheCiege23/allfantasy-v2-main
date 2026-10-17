@@ -431,6 +431,30 @@ function mapRoster(data: any[], team: string): CFBPlayer[] {
       })
 }
 
+/**
+ * Every FBS roster for a season in ONE call — `/roster?year=Y&classification=fbs` — where the
+ * per-team variant above costs one call per school. Each player keeps the `team` CFBD gave it,
+ * unlike `mapRoster`, which stamps the requested team onto every row.
+ *
+ * Result variant only, for the reason above: a refused request must not arrive as `[]`.
+ */
+export async function getCFBFbsRosterResult(year: number): Promise<CfbdResult<CFBPlayer[]>> {
+  const path = `/roster?year=${year}&classification=fbs`
+  const res = await cfbdGet<unknown>(path, getCfbdApiKey())
+  if (!res.ok) return res
+  if (!Array.isArray(res.data)) {
+    return {
+      ok: false,
+      failure: { kind: 'http', status: null, message: 'CFBD roster was not an array', path },
+    }
+  }
+  const players = res.data.flatMap((p: any) => {
+    const school = typeof p?.team === 'string' ? p.team.trim() : ''
+    return school ? mapRoster([p], school) : []
+  })
+  return { ok: true, data: players }
+}
+
 export async function getCFBTeamRoster(team: string, year?: number): Promise<CFBPlayer[]> {
   const res = await getCFBTeamRosterResult(team, year)
   if (!res.ok) {

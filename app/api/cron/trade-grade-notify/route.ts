@@ -14,6 +14,8 @@ import {
   processDueScheduledTrades,
   type ScheduledTradeSweepResult,
 } from '@/lib/automation/jobs/trades/processDueScheduledTrades'
+import { remindPendingTrades } from '@/lib/automation/jobs/trades/remindPendingTrades'
+import { notifyProviderLeagueTrades } from '@/lib/provider-trades/notifyProviderLeagueTrades'
 import {
   sweepProviderTradeOffers,
   type OfferSweepResult,
@@ -81,6 +83,34 @@ export async function GET(req: NextRequest) {
       console.error('[cron/trade-grade-notify] scheduled trade sweep failed', e)
       scheduledTrades = { due: 0, processed: 0, failures: [], error }
     }
+
+    // A small database-only pass gives native offers a single day-later or expiry reminder.
+    // It reuses this scheduled route and never blocks provider offer detection on failure.
+    const pendingReminders = await withSyncJobRun(
+      { jobName: 'cron-pending-trade-reminders', trigger: 'cron' },
+      () => remindPendingTrades(),
+      (r) => ({ rowsRead: r.checked, rowsWritten: r.sent }),
+    ).catch((e) => {
+      console.error('[cron/trade-grade-notify] pending reminder sweep failed', e)
+      return { checked: 0, sent: 0, error: e instanceof Error ? e.message : String(e) }
+    })
+
+    /*
+     * NEW TRADES IN NON-SLEEPER LEAGUES (2026-10-08) — another passenger, for the same reasons:
+     * no new route, and this is the sweep that already pushes Sleeper trades. It reads only
+     * `LeagueTrade` rows the live collector wrote (no provider call), and pushes each new trade to
+     * the league's AF members under the same `trade_accept_reject` switch. Guarded and separately
+     * identified so a failure here never costs a Sleeper league its alerts.
+     * See lib/provider-trades/notifyProviderLeagueTrades.ts.
+     */
+    const providerTradeAlerts = await withSyncJobRun(
+      { jobName: 'cron-provider-trade-alerts', trigger: 'cron' },
+      () => notifyProviderLeagueTrades(),
+      (r) => ({ rowsRead: r.rows, rowsWritten: r.sent, errors: r.errors }),
+    ).catch((e) => {
+      console.error('[cron/trade-grade-notify] provider trade alerts failed', e)
+      return { error: e instanceof Error ? e.message : String(e) }
+    })
 
     /*
      * PROVIDER TRADE-OFFER LEDGER — the second passenger on this route, for the reason the first
@@ -239,6 +269,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       mode: 'cron' as const,
       scheduledTrades,
+      pendingReminders,
+      providerTradeAlerts,
       offerSweep,
       rotation: rotationDue ? ('ran' as const) : ('not due' as const),
       offerLedger,

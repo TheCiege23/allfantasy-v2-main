@@ -15,7 +15,8 @@
  * - Current-season and historical samples never blend; prior-season-only data carries
  *   `season_mismatch`.
  * - NEVER derived: opponent strength, SoS, win/playoff probability, momentum, manager quality,
- *   projection accuracy, playoff classification.
+ *   projection accuracy, playoff classification. (ADR F2.10a sanctions ONE manager-quality
+ *   derivation — the Class rating — and it lives in its own engine, never in this view.)
  * - Resolver never throws; port failure degrades to `matchup_port_error` uncertainty.
  */
 

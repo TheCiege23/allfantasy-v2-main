@@ -16,6 +16,8 @@ import {
   ACTIVE_VIEWER_WINDOW_MS,
   DM_ALERT_WINDOW_MS,
   DM_EMAIL_WINDOW_MS,
+  OWN_SEND_STAMP_TOLERANCE_MS,
+  SENT_THEN_LEFT_WINDOW_MS,
   decideChatAlert,
   nextChatAlertState,
   readChatAlertState,
@@ -111,6 +113,44 @@ describe('decideChatAlert', () => {
   it('reading the conversation right now (fresh read stamp): no alert', () => {
     const lastReadAt = new Date(now.getTime() - ACTIVE_VIEWER_WINDOW_MS / 2)
     expect(decideChatAlert({ now, messageAt: now, lastReadAt, state: null })).toEqual({ alert: false, reason: 'viewing' })
+  })
+
+  describe('🛑 your own send stamps your read marker — that is not "reading right now"', () => {
+    const secondsAgo = (s: number) => new Date(now.getTime() - s * 1000)
+
+    it('you texted 20s ago, locked the phone, they replied: ALERT (was silenced as "viewing")', () => {
+      // The send stamped lastReadAt; the post-send reload re-stamped it 0.6s later; then nothing.
+      const sent = secondsAgo(20)
+      const lastReadAt = new Date(sent.getTime() + 600)
+      expect(decideChatAlert({ now, messageAt: now, lastReadAt, state: null })).toMatchObject({ alert: false, reason: 'viewing' })
+      expect(decideChatAlert({ now, messageAt: now, lastReadAt, lastOwnMessageAt: sent, state: null })).toMatchObject({ alert: true })
+    })
+
+    it('after an earlier alert, your reply counts as reading — their answer is news again', () => {
+      const state = nextChatAlertState(null, minutesAgo(2), true)
+      const sent = secondsAgo(25)
+      expect(
+        decideChatAlert({ now, messageAt: now, lastReadAt: new Date(sent.getTime() + 300), lastOwnMessageAt: sent, state }),
+      ).toMatchObject({ alert: true })
+    })
+
+    it(`still quiet inside ${SENT_THEN_LEFT_WINDOW_MS / 1000}s of your own send — the live back-and-forth`, () => {
+      const sent = secondsAgo(3)
+      expect(
+        decideChatAlert({ now, messageAt: now, lastReadAt: new Date(sent.getTime() + 400), lastOwnMessageAt: sent, state: null }),
+      ).toEqual({ alert: false, reason: 'viewing' })
+    })
+
+    it('an open screen keeps polling, so a stamp well after your send is a real view: still quiet', () => {
+      const sent = secondsAgo(25)
+      // A poll at -5s: more than OWN_SEND_STAMP_TOLERANCE_MS after the send, inside the 30s window.
+      const lastReadAt = secondsAgo(5)
+      expect(lastReadAt.getTime() - sent.getTime()).toBeGreaterThan(OWN_SEND_STAMP_TOLERANCE_MS)
+      expect(decideChatAlert({ now, messageAt: now, lastReadAt, lastOwnMessageAt: sent, state: null })).toEqual({
+        alert: false,
+        reason: 'viewing',
+      })
+    })
   })
 
   it('league chat (no read tracking) is a plain 10-minute window', () => {

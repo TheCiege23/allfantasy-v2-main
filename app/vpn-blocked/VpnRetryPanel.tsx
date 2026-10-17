@@ -26,16 +26,35 @@ type Check =
  * It also re-checks when the page comes back into view or the network returns:
  * an installed iPhone app resumes this page after the person visits Settings.
  * The href stays on the anchor so the button still works without JavaScript.
+ *
+ * And it re-checks ON ITS OWN, on the schedule below, so someone who turns the
+ * VPN off goes straight in without touching the button (owner's request,
+ * 2026-09-28). ⚠ EVERY CHECK CAN COST A VENDOR LOOKUP, so the schedule backs off
+ * and then STOPS — nine checks over about five minutes — rather than polling
+ * forever for someone who has walked away with the VPN still on. A hidden tab
+ * skips its checks (coming back into view re-checks anyway), and tapping the
+ * button starts the schedule over.
  */
+
+/** Seconds before each automatic re-check, in order; after the last one it stops. */
+export const AUTO_RECHECK_DELAYS_S: readonly number[] = [5, 10, 15, 20, 30, 30, 45, 60, 60]
+
+type Mode = "manual" | "quiet" | "auto"
+
+function clockTime(): string {
+  return new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })
+}
 export function VpnRetryPanel({ href, paidScope = false }: { href: string; paidScope?: boolean }) {
   const [check, setCheck] = useState<Check>({ state: "idle" })
+  const [autoStep, setAutoStep] = useState(0)
+  const [autoCheckedAt, setAutoCheckedAt] = useState<string | null>(null)
   const busy = useRef(false)
 
   const recheck = useCallback(
-    async (quiet: boolean) => {
+    async (mode: Mode) => {
       if (busy.current) return
       busy.current = true
-      if (!quiet) setCheck({ state: "checking" })
+      if (mode === "manual") setCheck({ state: "checking" })
       try {
         const res = await fetch(`/api/geo/vpn-status?recheck=1${paidScope ? "&scope=paid" : ""}`, {
           cache: "no-store",
@@ -46,13 +65,18 @@ export function VpnRetryPanel({ href, paidScope = false }: { href: string; paidS
           window.location.replace(href)
           return
         }
-        setCheck({
-          state: "still_blocked",
-          copy: vpnKindCopy(body.kind),
-          at: new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" }),
-        })
+        // An automatic check that finds nothing new stays quiet: the warning box is
+        // the answer to someone who acted, not a banner that pops up while they read.
+        if (mode === "auto") {
+          setAutoCheckedAt(clockTime())
+          return
+        }
+        setCheck({ state: "still_blocked", copy: vpnKindCopy(body.kind), at: clockTime() })
       } catch {
-        window.location.replace(href)
+        // A failed automatic check is not a reason to navigate: that would reload
+        // the page on every network blip. The button and the other triggers still
+        // fall back to letting the middleware decide.
+        if (mode !== "auto") window.location.replace(href)
       } finally {
         busy.current = false
       }
@@ -61,15 +85,29 @@ export function VpnRetryPanel({ href, paidScope = false }: { href: string; paidS
   )
 
   useEffect(() => {
+    if (autoStep >= AUTO_RECHECK_DELAYS_S.length) return
+    const timer = window.setTimeout(() => {
+      if (document.visibilityState === "hidden") {
+        setAutoStep((step) => step + 1)
+        return
+      }
+      void recheck("auto").finally(() => setAutoStep((step) => step + 1))
+    }, AUTO_RECHECK_DELAYS_S[autoStep] * 1000)
+    return () => window.clearTimeout(timer)
+  }, [autoStep, recheck])
+
+  const autoChecking = autoStep < AUTO_RECHECK_DELAYS_S.length
+
+  useEffect(() => {
     let wasHidden = document.visibilityState === "hidden"
     const onVisibility = () => {
       if (document.visibilityState === "hidden") wasHidden = true
       else if (wasHidden) {
         wasHidden = false
-        void recheck(true)
+        void recheck("quiet")
       }
     }
-    const onOnline = () => void recheck(true)
+    const onOnline = () => void recheck("quiet")
     document.addEventListener("visibilitychange", onVisibility)
     window.addEventListener("online", onOnline)
     return () => {
@@ -105,7 +143,8 @@ export function VpnRetryPanel({ href, paidScope = false }: { href: string; paidS
           href={href}
           onClick={(e) => {
             e.preventDefault()
-            void recheck(false)
+            setAutoStep(0)
+            void recheck("manual")
           }}
           aria-busy={check.state === "checking"}
           className="inline-flex rounded-xl bg-cyan-500/90 px-5 py-2.5 text-sm font-semibold text-slate-950"
@@ -116,6 +155,12 @@ export function VpnRetryPanel({ href, paidScope = false }: { href: string; paidS
           Contact Support
         </a>
       </div>
+      <p data-testid="vpn-auto-recheck" className="mt-3 text-xs text-slate-400">
+        {autoChecking
+          ? "We're checking again automatically — once it's off, you'll go straight in."
+          : "Stopped checking automatically. Tap the button once it's off."}
+        {autoCheckedAt ? ` Last checked ${autoCheckedAt}.` : null}
+      </p>
     </div>
   )
 }

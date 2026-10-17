@@ -1,8 +1,9 @@
 'use client'
 
 import type { ComponentType, ReactNode } from 'react'
-import { useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { safeInternalPathOr } from '@/lib/auth/auth-intent-resolver'
 import {
   AlertTriangle,
   Archive,
@@ -69,6 +70,19 @@ const NAV_DEFS: NavDef[] = [
 /** Tab definitions (id + icon). Labels come from `settings.nav.*` via `useLanguage`. */
 export const SETTINGS_NAV = NAV_DEFS
 
+/** `settingsNavBadges` returns the literal 'OFF'; it is translated here, at render. */
+function badgeText(text: string, t: (key: string) => string): string {
+  return text === 'OFF' ? t('settings.hub.badgeOff') : text
+}
+
+/** Plan-card status copy, same keys as BillingSettingsSection's status chip. */
+const HUB_STATUS_KEYS: Record<string, string> = {
+  active: 'settings.billing.statusActive',
+  grace: 'settings.billing.statusGrace',
+  past_due: 'settings.billing.statusPastDue',
+  expired: 'settings.billing.statusExpired',
+}
+
 export function isSettingsTabId(value: string | null | undefined): value is SettingsTabId {
   return NAV_DEFS.some((n) => n.id === value)
 }
@@ -122,6 +136,7 @@ function firstMissingField(profile: SettingsProfile): CompletionField | null {
 /** The plan name the chrome shows — shared by the sidebar card and the hub, so they cannot disagree. */
 function usePlanText(planLabel: string | null) {
   const ent = useEntitlements()
+  const { t } = useLanguage()
   // Same tier-priority order as BillingSettingsSection.tsx: supreme inherits every lower tier, so
   // it must win the label even though hasCommissioner/hasPro/hasWarRoom are all also true for it.
   // A fetch error must never be conflated with a verified free plan — the hook's own catch path
@@ -130,7 +145,7 @@ function usePlanText(planLabel: string | null) {
   const derivedPlanText = ent.loading
     ? null
     : ent.error
-      ? 'Unable to verify'
+      ? t('settings.billing.unableToVerify')
       : ent.hasSupreme
         ? 'AF Supreme'
         : ent.hasCommissioner
@@ -139,7 +154,7 @@ function usePlanText(planLabel: string | null) {
             ? 'AF Pro'
             : ent.hasWarRoom
               ? 'AF Legacy'
-              : 'Free'
+              : t('settings.billing.statusFree')
   return { ent, isPro: ent.hasAnyPaid, planText: planLabel ?? derivedPlanText ?? '...' }
 }
 
@@ -150,9 +165,10 @@ function SidebarProfileCard({
   profile: SettingsProfile
   planLabel: string | null
 }) {
+  const { t, tInterpolate } = useLanguage()
   const { ent, isPro, planText } = usePlanText(planLabel)
 
-  const name = profile?.displayName || profile?.username || 'Your profile'
+  const name = profile?.displayName || profile?.username || t('settings.hub.yourProfile')
   const username = profile?.username
   const level = profile?.xpLevel
   const tier = profile?.rankTier
@@ -186,15 +202,15 @@ function SidebarProfileCard({
       <div className="ns-pc-meta">
         {level != null && tier ? (
           <span className="ns-rank">
-            Lv.{level} · {tier}
+            {tInterpolate('settings.hub.levelShort', { level })} · {tier}
           </span>
         ) : level != null ? (
-          <span className="ns-rank">Lv.{level}</span>
+          <span className="ns-rank">{tInterpolate('settings.hub.levelShort', { level })}</span>
         ) : null}
         <span className={`ns-plan ${isPro ? 'is-pro' : 'is-free'}`}>{planText}</span>
         {ent.isAdminBypassAccount && (
-          <span className="ns-rank" title="Admin bypass — not a real Stripe subscription" data-testid="sidebar-plan-bypass-notice">
-            (bypass)
+          <span className="ns-rank" title={t('settings.hub.bypassTitle')} data-testid="sidebar-plan-bypass-notice">
+            ({t('settings.hub.bypassTag')})
           </span>
         )}
       </div>
@@ -211,7 +227,7 @@ function SidebarProfileCard({
 
       <div className="ns-completion">
         <div className="ns-completion-row">
-          <span>Profile completion</span>
+          <span>{t('settings.hub.completion')}</span>
           <b>{pct}%</b>
         </div>
         <div className="ns-meter" aria-hidden="true">
@@ -240,6 +256,18 @@ const HUB_ORDER: SettingsTabId[] = [
   'command',
   'referral',
   'account',
+]
+
+/**
+ * The hub's four groups, in reading order. Twelve flat cards were ~1,300px of scrolling on a phone
+ * with nothing to scan by; grouped, a person looking for "password" or "billing" reads four headings
+ * first. Every tab in HUB_ORDER appears in exactly one group — the hub test pins that.
+ */
+const HUB_GROUPS: ReadonlyArray<{ id: 'account' | 'app' | 'leagues' | 'plan'; tabs: SettingsTabId[] }> = [
+  { id: 'account', tabs: ['profile', 'security', 'account'] },
+  { id: 'app', tabs: ['preferences', 'notifications', 'command'] },
+  { id: 'leagues', tabs: ['connected', 'legacy', 'rank'] },
+  { id: 'plan', tabs: ['billing', 'referral', 'legal'] },
 ]
 
 type HubCta = 'edit' | 'manage' | 'review' | 'view' | 'import'
@@ -290,10 +318,10 @@ function SettingsHub({
   onOpen: (id: SettingsTabId) => void
   notice?: ReactNode
 }) {
-  const { t } = useLanguage()
+  const { t, tInterpolate } = useLanguage()
   const { ent, isPro, planText } = usePlanText(planLabel)
 
-  const name = profile?.displayName || profile?.username || 'Your profile'
+  const name = profile?.displayName || profile?.username || t('settings.hub.yourProfile')
   const username = profile?.username
   const level = profile?.xpLevel
   const tier = profile?.rankTier
@@ -325,7 +353,9 @@ function SettingsHub({
       ? t('settings.hub.planFreeDetail')
       : periodEnd
         ? `${status === 'active' ? t('settings.billing.renews') : t('settings.billing.accessUntil')} ${periodEnd}`
-        : status.replace(/_/g, ' ')
+        : HUB_STATUS_KEYS[status]
+          ? t(HUB_STATUS_KEYS[status])
+          : status.replace(/_/g, ' ')
   /* Same gate as BillingSettingsSection: an admin bypass has no Stripe customer to open. */
   const portal = ent.hasAnyPaid && !ent.isAdminBypassAccount
 
@@ -353,7 +383,7 @@ function SettingsHub({
           <div className="ns-hub-chips">
             {level != null ? (
               <span className="ns-hub-chip">
-                Lv.{level}
+                {tInterpolate('settings.hub.levelShort', { level })}
                 {tier ? ` · ${tier}` : ''}
               </span>
             ) : null}
@@ -361,8 +391,8 @@ function SettingsHub({
               {planText}
             </span>
             {ent.isAdminBypassAccount ? (
-              <span className="ns-hub-chip" title="Admin bypass — not a real Stripe subscription">
-                bypass
+              <span className="ns-hub-chip" title={t('settings.hub.bypassTitle')}>
+                {t('settings.hub.bypassTag')}
               </span>
             ) : null}
           </div>
@@ -381,40 +411,55 @@ function SettingsHub({
         </div>
       </section>
 
-      <ul className="ns-hub-grid" aria-label={t('settings.aria.sections')}>
-        {cards.map((c) => {
-          const Icon = NAV_ICON[c.id]
-          const badge = badges[c.id]
-          return (
-            <li key={c.id}>
-              <button
-                type="button"
-                className="ns-hub-card"
-                data-tone={badge?.tone === 'warn' ? 'warn' : undefined}
-                data-testid={`settings-hub-card-${c.id}`}
-                onClick={() => onOpen(c.id)}
-              >
-                <span className="ns-hub-card-head">
-                  <span className="ns-hub-icon" aria-hidden="true">
-                    <Icon />
-                  </span>
-                  <span className="ns-hub-card-title">{c.title}</span>
-                  {badge ? (
-                    <span className="ns-nav-badge" data-tone={badge.tone}>
-                      {badge.text}
-                    </span>
-                  ) : null}
-                </span>
-                <span className="ns-hub-card-desc">{c.desc}</span>
-                <span className="ns-hub-cta" aria-hidden="true">
-                  {t(`settings.hub.cta.${HUB_CTA[c.id]}`)} →
-                </span>
-              </button>
-            </li>
-          )
-        })}
-      </ul>
-      {cards.length === 0 ? <p className="ns-hub-empty">No settings match “{query}”.</p> : null}
+      {/* Grouped, and a group with no match drops out while searching. */}
+      {HUB_GROUPS.map((group) => {
+        const groupCards = cards.filter((c) => group.tabs.includes(c.id))
+        if (groupCards.length === 0) return null
+        const headingId = `settings-hub-group-${group.id}`
+        return (
+          <section key={group.id} className="ns-hub-group" aria-labelledby={headingId}>
+            <h2 id={headingId} className="ns-hub-group-title">
+              {t(`settings.hub.group.${group.id}`)}
+            </h2>
+            <ul className="ns-hub-grid" aria-labelledby={headingId}>
+              {groupCards.map((c) => {
+                const Icon = NAV_ICON[c.id]
+                const badge = badges[c.id]
+                return (
+                  <li key={c.id}>
+                    <button
+                      type="button"
+                      className="ns-hub-card"
+                      data-tone={badge?.tone === 'warn' ? 'warn' : undefined}
+                      data-testid={`settings-hub-card-${c.id}`}
+                      onClick={() => onOpen(c.id)}
+                    >
+                      <span className="ns-hub-card-head">
+                        <span className="ns-hub-icon" aria-hidden="true">
+                          <Icon />
+                        </span>
+                        <span className="ns-hub-card-title">{c.title}</span>
+                        {badge ? (
+                          <span className="ns-nav-badge" data-tone={badge.tone}>
+                            {badgeText(badge.text, t)}
+                          </span>
+                        ) : null}
+                      </span>
+                      <span className="ns-hub-card-desc">{c.desc}</span>
+                      <span className="ns-hub-cta" aria-hidden="true">
+                        {t(`settings.hub.cta.${HUB_CTA[c.id]}`)} →
+                      </span>
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          </section>
+        )
+      })}
+      {cards.length === 0 ? (
+        <p className="ns-hub-empty">{tInterpolate('settings.hub.noMatch', { query })}</p>
+      ) : null}
 
       <section className="ns-hub-plan" aria-label={t('settings.billing.currentPlan')}>
         <div className="ns-hub-plan-copy">
@@ -454,7 +499,7 @@ export function SettingsChrome({
   children: ReactNode
 }) {
   const router = useRouter()
-  const { t } = useLanguage()
+  const { t, tInterpolate } = useLanguage()
   const [query, setQuery] = useState('')
 
   /*
@@ -464,10 +509,36 @@ export function SettingsChrome({
    */
   const badges = useMemo(() => settingsNavBadges(profile), [profile])
 
+  /*
+   * Below 860px the nav is one horizontally scrolling row (nocturne-settings.css). Opened
+   * on a tab near the end — Account, Legal — the row still started at Profile, so the
+   * active tab was off-screen. Centre it in the row; only the row scrolls, never the page.
+   */
+  const navRef = useRef<HTMLElement>(null)
+  useEffect(() => {
+    const nav = navRef.current
+    if (!nav || nav.scrollWidth <= nav.clientWidth) return
+    const item = nav.querySelector<HTMLElement>('.ns-nav-item.is-active')
+    if (!item) return
+    nav.scrollLeft = item.offsetLeft - (nav.clientWidth - item.offsetWidth) / 2
+  }, [activeTab])
+
+  /*
+   * Where Settings was opened from. Home always went to /core, so a member who opened Settings from
+   * a league's gear was dropped on the dashboard. A caller passes `?returnTo=<path>` (the app's
+   * existing convention, see ImportV4); it is validated as an on-site path (open-redirect safe) and
+   * survives tab switches because handleTabSelect keeps the query string.
+   */
+  const searchParams = useSearchParams()
+  const rawReturnTo = searchParams?.get('returnTo')
+  const returnTo = rawReturnTo ? safeInternalPathOr(rawReturnTo, '') : ''
+  const backTo = returnTo && !returnTo.startsWith('/settings') ? returnTo : null
+
   const filteredNav = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return NAV_DEFS
-    return NAV_DEFS.filter((n) => t(`settings.nav.${n.id}`).toLowerCase().includes(q))
+    // Same rule as the hub's search: a description counts, so "password" finds Security here too.
+    return NAV_DEFS.filter((n) => `${t(`settings.nav.${n.id}`)} ${t(`settings.hub.desc.${n.id}`)}`.toLowerCase().includes(q))
   }, [query, t])
 
   return (
@@ -494,11 +565,11 @@ export function SettingsChrome({
         <button
           type="button"
           className="ns-home"
-          onClick={() => router.push('/core')}
+          onClick={() => router.push(backTo ?? '/core')}
           data-testid="settings-home"
         >
-          <Home strokeWidth={2} />
-          {t('settings.home')}
+          {backTo ? <ArrowLeft strokeWidth={2} /> : <Home strokeWidth={2} />}
+          {backTo ? t('settings.back') : t('settings.home')}
         </button>
       </header>
 
@@ -522,7 +593,7 @@ export function SettingsChrome({
           ) : null}
           <SidebarProfileCard profile={profile} planLabel={planLabel} />
 
-          <nav className="ns-nav" aria-label={t('settings.aria.sections')}>
+          <nav ref={navRef} className="ns-nav" aria-label={t('settings.aria.sections')}>
             {filteredNav.map((tab) => {
               const Icon = tab.icon
               const active = activeTab === tab.id
@@ -538,14 +609,14 @@ export function SettingsChrome({
                   <span className="ns-nav-label">{t(`settings.nav.${tab.id}`)}</span>
                   {badges[tab.id] ? (
                     <span className="ns-nav-badge" data-tone={badges[tab.id]!.tone}>
-                      {badges[tab.id]!.text}
+                      {badgeText(badges[tab.id]!.text, t)}
                     </span>
                   ) : null}
                 </button>
               )
             })}
             {filteredNav.length === 0 ? (
-              <p className="ns-nav-empty">No settings match “{query}”.</p>
+              <p className="ns-nav-empty">{tInterpolate('settings.hub.noMatch', { query })}</p>
             ) : null}
           </nav>
         </aside>

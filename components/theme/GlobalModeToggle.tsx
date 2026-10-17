@@ -37,6 +37,12 @@ export function GlobalModeToggle() {
    *  old page's shortcut popup (hands-on test, 2026-09-25). Same call as /core above. */
   if (pathname === "/chimmy/chat" || pathname.startsWith("/chimmy/chat/")) return null
 
+  /** /settings is always dark (nocturne-settings.css scopes its own palette), so this switch changes
+   *  nothing on screen there, and Settings › Preferences already carries the real theme control. On a
+   *  phone it also floated over the settings cards' right-hand controls (measured at 375x812,
+   *  2026-10-02). Same call as /core and /chimmy/chat above. */
+  if (pathname === "/settings" || pathname.startsWith("/settings/")) return null
+
   /** Canonical `/create-league`; legacy `/leagues/create` and `/create-league/v2` redirect but may flash on client. */
   const createLeagueRoute =
     pathname.startsWith('/create-league') || pathname === '/leagues/create'

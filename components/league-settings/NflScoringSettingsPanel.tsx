@@ -11,6 +11,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Lock, AlertTriangle, Info, RotateCcw } from 'lucide-react'
 import { SubscriptionGateModal } from '@/components/subscription/SubscriptionGateModal'
+import { ScoringPresetSelect, pickInitialPreset } from '@/components/league-settings/scoring/ScoringPresetSelect'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { translateStat } from '@/lib/i18n/scoring-stats'
+import { FOOTBALL_STATS_ES } from '@/lib/i18n/scoring-stats/football'
 import {
   NFL_SCORING_CATEGORIES,
   NFL_PREMIUM_SCORING,
@@ -58,15 +62,16 @@ const TAB_COLORS: Record<string, string> = {
   premium:       'border-cyan-500/40 bg-cyan-500/15 text-cyan-200',
 }
 
-const PRESET_LABELS: Record<string, string> = {
-  af_default: 'AllFantasy Half PPR',
-  af_ppr: 'AllFantasy PPR',
-  af_standard: 'AllFantasy Standard',
-  sleeper_default: 'Sleeper',
-  espn_standard: 'ESPN Std',
-  espn_ppr: 'ESPN PPR',
-  yahoo_default: 'Yahoo',
-  custom: 'Custom',
+/** Preset chip labels, as dictionary keys resolved at render. */
+const PRESET_LABEL_KEYS: Record<string, string> = {
+  af_default: 'lsScore.preset.afHalfPpr',
+  af_ppr: 'lsScore.preset.afPpr',
+  af_standard: 'lsScore.preset.afStandard',
+  sleeper_default: 'lsScore.preset.sleeper',
+  espn_standard: 'lsScore.preset.espnStd',
+  espn_ppr: 'lsScore.preset.espnPpr',
+  yahoo_default: 'lsScore.preset.yahoo',
+  custom: 'lsScore.preset.custom',
 }
 
 // ---------------------------------------------------------------------------
@@ -80,6 +85,8 @@ interface Props {
 }
 
 export function NflScoringSettingsPanel({ leagueId, isCommissioner = false }: Props) {
+  const { t, language } = useOptionalLanguage()
+  const st = (s: string) => translateStat(s, language, FOOTBALL_STATS_ES)
   // ----- state -----
   const [presets, setPresets] = useState<NflScoringPreset[]>([])
   const [config, setConfig] = useState<NflScoringConfig | null>(null)
@@ -89,6 +96,8 @@ export function NflScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
   const [gateOpen, setGateOpen] = useState(false)
+  /** Sleeper default staged for a league whose scoring was never saved — Save applies it. */
+  const [defaultStaged, setDefaultStaged] = useState(false)
 
   const [selectedPreset, setSelectedPreset] = useState<PresetKey>('af_default')
   const [editedRules, setEditedRules] = useState<Record<string, number>>({})
@@ -110,13 +119,15 @@ export function NflScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
         setPresets(data.presets ?? [])
         setConfig(data.config ?? null)
         setIsPremium(data.isPremium ?? false)
-        setSelectedPreset(data.config?.presetKey ?? 'af_default')
+        const initialPreset = pickInitialPreset<PresetKey>(data.config, data.presets, 'sleeper_default' as PresetKey, 'af_default' as PresetKey, isCommissioner)
+        setSelectedPreset(initialPreset.key)
+        setDefaultStaged(Boolean(initialPreset.stagedRules))
         // Merge loaded rules with defaults so every key has a value
         const defaults: Record<string, number> = {}
         for (const cat of allCategories) for (const r of cat.rows) defaults[r.key] = r.defaultValue
-        setEditedRules({ ...defaults, ...(data.config?.rules ?? {}) })
+        setEditedRules({ ...defaults, ...(data.config?.rules ?? {}), ...(initialPreset.stagedRules ?? {}) })
       })
-      .catch(() => { if (active) setError('Failed to load scoring settings') })
+      .catch(() => { if (active) setError(t('lsScore.err.load')) })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
   }, [leagueId, allCategories])
@@ -175,11 +186,12 @@ export function NflScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
       })
       const data = await res.json()
       if (data.error === 'premiumRequired') { setGateOpen(true); return }
-      if (!res.ok) { setError(data.error ?? 'Save failed'); return }
+      if (!res.ok) { setError(data.error ?? t('lsScore.err.save')); return }
       setConfig(data.config)
+      setDefaultStaged(false)
       setSuccess(true)
       setTimeout(() => setSuccess(false), 3000)
-    } catch { setError('Request failed') }
+    } catch { setError(t('lsScore.err.request')) }
     finally { setSaving(false) }
   }, [leagueId, selectedPreset, editedRules])
 
@@ -194,7 +206,7 @@ export function NflScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
   if (loading) {
     return (
       <div className="py-10 text-center text-sm text-white/50">
-        Loading NFL scoring settings...
+        {t('lsScore.loading').replace('{{sport}}', 'NFL')}
       </div>
     )
   }
@@ -204,52 +216,34 @@ export function NflScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
     <div className="space-y-5">
       {/* Header */}
       <div>
-        <h3 className="text-base font-semibold text-white">NFL Scoring Settings</h3>
+        <h3 className="text-base font-semibold text-white">{t('lsScore.title').replace('{{sport}}', 'NFL')}</h3>
         <p className="mt-0.5 text-xs text-white/50">
           {isCommissioner
-            ? 'Customize scoring values for your league. Changes apply league-wide.'
-            : 'Scoring values for this league (read-only).'}
+            ? t('lsScore.subtitle.commish')
+            : t('lsScore.subtitle.readOnly')}
         </p>
       </div>
 
-      {/* Preset selector */}
-      <div className="space-y-2">
-        <label className="text-[11px] font-semibold uppercase tracking-wider text-white/40">Scoring Preset</label>
-        <div className="flex flex-wrap gap-2">
-          {(['af_default', 'af_ppr', 'af_standard', 'sleeper_default', 'espn_standard', 'espn_ppr', 'yahoo_default', 'custom'] as PresetKey[]).map(
-            (key) => {
-              const isCustomLocked = key === 'custom' && !isPremium && isCommissioner
-              const active = selectedPreset === key
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  disabled={!isCommissioner}
-                  onClick={() => handlePresetChange(key)}
-                  className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
-                    active
-                      ? 'border-cyan-500/40 bg-cyan-500/15 text-cyan-200'
-                      : isCustomLocked
-                        ? 'border-white/5 bg-white/[0.02] text-white/30 cursor-pointer'
-                        : 'border-white/10 bg-white/[0.03] text-white/60 hover:bg-white/[0.06] disabled:cursor-default disabled:opacity-50'
-                  }`}
-                >
-                  {PRESET_LABELS[key]}
-                  {isCustomLocked && <Lock className="ml-1 inline h-3 w-3 text-white/30" />}
-                </button>
-              )
-            },
-          )}
-        </div>
-      </div>
+      {/* Preset selector — one dropdown of THIS sport's presets, Sleeper-style first (default). */}
+      <ScoringPresetSelect<PresetKey>
+        presetKeys={['af_default', 'af_ppr', 'af_standard', 'sleeper_default', 'espn_standard', 'espn_ppr', 'yahoo_default', 'custom'] as PresetKey[]}
+        value={selectedPreset}
+        onChange={handlePresetChange}
+        labelFor={(key) => (PRESET_LABEL_KEYS[key] ? t(PRESET_LABEL_KEYS[key]) : key)}
+        defaultKey={'sleeper_default' as PresetKey}
+        isCommissioner={isCommissioner}
+        isPremium={isPremium}
+        hint={defaultStaged && isCommissioner && selectedPreset === 'sleeper_default' ? t('lsScore2.defaultNotSaved') : null}
+        id={`scoring-preset-${leagueId}`}
+      />
 
       {/* Warning banner for external presets */}
       {currentPreset?.warning && (
         <div className="flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-950/15 px-3 py-2.5">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
           <div className="text-[11px] text-amber-200/80">
-            <p>{currentPreset.warning}</p>
-            <p className="mt-1 text-amber-200/60">AllFantasy specialty leagues are optimized for AF scoring templates.</p>
+            <p>{st(currentPreset.warning)}</p>
+            <p className="mt-1 text-amber-200/60">{t('lsScore.specialtyNote')}</p>
           </div>
         </div>
       )}
@@ -257,12 +251,12 @@ export function NflScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
       {/* Non-commissioner read-only banner */}
       {!isCommissioner && (
         <div className="rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 text-[11px] text-white/40">
-          Only the commissioner can edit scoring settings.
+          {t('lsScore.commishOnly')}
         </div>
       )}
 
       {/* ===== Category tab pills ===== */}
-      <div className="scrollbar-none -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
+      <div className="flex flex-wrap gap-1.5" role="group" aria-label={t('lsScore2.categoriesAria')}>
         {allCategories.map((cat) => {
           const active = activeTab === cat.id
           const isPremiumTab = cat.id === 'premium'
@@ -275,9 +269,9 @@ export function NflScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
               key={cat.id}
               type="button"
               onClick={() => setActiveTab(cat.id)}
-              className={`flex shrink-0 items-center gap-1 rounded-full border px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide transition ${colorClass}`}
+              className={`flex items-center gap-1 rounded-full border px-2.5 py-1.5 text-[11px] font-bold uppercase tracking-wide transition ${colorClass}`}
             >
-              {cat.label}
+              {st(cat.label)}
               {isPremiumTab && !isPremium && <Lock className="h-3 w-3 opacity-60" />}
             </button>
           )
@@ -286,20 +280,20 @@ export function NflScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
 
       {/* ===== Scoring rows for active tab ===== */}
       {activeCategory && (
-        <div className="max-h-[52vh] space-y-0.5 overflow-y-auto rounded-xl border border-white/10 bg-white/[0.02] p-3">
+        <div className="min-w-0 space-y-0.5 rounded-xl border border-white/10 bg-white/[0.02] p-2 sm:max-h-[52vh] sm:overflow-y-auto sm:p-3">
           {/* Premium lock overlay */}
           {activeCategory.id === 'premium' && !isPremium && (
             <div className="mb-3 flex items-start gap-2 rounded-lg border border-cyan-500/20 bg-cyan-950/20 px-3 py-2.5">
               <Lock className="mt-0.5 h-4 w-4 shrink-0 text-cyan-400" />
               <div className="text-[11px] text-cyan-200/80">
-                <p className="font-medium">Premium Feature</p>
-                <p className="mt-0.5 text-cyan-200/60">Air Yards scoring requires a premium subscription.</p>
+                <p className="font-medium">{t('lsScore.premiumFeature')}</p>
+                <p className="mt-0.5 text-cyan-200/60">{t('lsScore.premium.nflAirYards')}</p>
                 <button
                   type="button"
                   onClick={() => setGateOpen(true)}
                   className="mt-1.5 rounded-md bg-cyan-600/60 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-cyan-600/80"
                 >
-                  Upgrade
+                  {t('lsScore.upgrade')}
                 </button>
               </div>
             </div>
@@ -308,10 +302,10 @@ export function NflScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
           {/* Category stat count */}
           <div className="mb-2 flex items-center justify-between">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-white/30">
-              {activeCategory.label} ({activeCategory.rows.length} stats)
+              {t('lsScore.statCount').replace('{{label}}', st(activeCategory.label)).replace('{{count}}', String(activeCategory.rows.length))}
             </span>
             {isCommissioner && activeCategory.id !== 'premium' && (
-              <span className="text-[11px] text-white/25">Click value to edit</span>
+              <span className="text-[11px] text-white/25">{t('lsScore.clickToEdit')}</span>
             )}
           </div>
 
@@ -326,16 +320,16 @@ export function NflScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
             return (
               <div
                 key={row.key}
-                className="group flex items-center justify-between gap-3 rounded-lg px-2.5 py-2 hover:bg-white/[0.03]"
+                className="group flex min-w-0 items-center justify-between gap-2 rounded-lg px-2 py-2 hover:bg-white/[0.03]"
               >
                 {/* Label + helper */}
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
-                    <span className="text-[12px] text-white/80">{row.label}</span>
+                    <span className="break-words text-[12px] text-white/80">{st(row.label)}</span>
                     {row.premium && <Lock className="h-3 w-3 text-cyan-400/60" />}
                   </div>
                   {row.helper && (
-                    <p className="mt-0.5 text-[11px] text-white/30">{row.helper}</p>
+                    <p className="mt-0.5 text-[11px] text-white/30">{st(row.helper)}</p>
                   )}
                 </div>
 
@@ -347,7 +341,7 @@ export function NflScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
                       step="any"
                       value={value}
                       onChange={(e) => handleRuleChange(row.key, parseFloat(e.target.value) || 0)}
-                      className={`w-20 rounded-md border bg-white/5 px-2 py-1.5 text-right font-mono text-[12px] transition focus:border-cyan-500/50 focus:outline-none focus:ring-1 focus:ring-cyan-500/30 ${
+                      className={`w-[4.5rem] rounded-md border bg-white/5 px-2 py-1.5 text-right font-mono text-[12px] transition focus:border-cyan-500/50 focus:outline-none focus:ring-1 focus:ring-cyan-500/30 ${
                         isNonZero
                           ? 'border-white/15 text-white'
                           : 'border-white/10 text-white/30'
@@ -355,7 +349,7 @@ export function NflScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
                     />
                   ) : (
                     <span
-                      className={`inline-block w-20 rounded-md border border-white/10 bg-white/[0.03] px-2 py-1.5 text-right font-mono text-[12px] ${
+                      className={`inline-block w-[4.5rem] rounded-md border border-white/10 bg-white/[0.03] px-2 py-1.5 text-right font-mono text-[12px] ${
                         isNonZero ? 'text-white' : 'text-white/30'
                       }`}
                     >
@@ -373,7 +367,7 @@ export function NflScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
       {currentPreset?.description && (
         <div className="flex items-start gap-2 rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2">
           <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-white/30" />
-          <p className="text-[11px] text-white/40">{currentPreset.description}</p>
+          <p className="text-[11px] text-white/40">{st(currentPreset.description)}</p>
         </div>
       )}
 
@@ -387,7 +381,7 @@ export function NflScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
           )}
           {success && (
             <div className="rounded-lg border border-emerald-500/20 bg-emerald-950/20 px-3 py-2 text-xs text-emerald-300">
-              Scoring settings saved successfully.
+              {t('lsScore.saved')}
             </div>
           )}
           <div className="flex gap-2">
@@ -397,7 +391,7 @@ export function NflScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
               onClick={save}
               className="flex-1 rounded-lg bg-cyan-600/80 px-4 py-2.5 text-sm font-medium text-white hover:bg-cyan-600 disabled:opacity-50 transition"
             >
-              {saving ? 'Saving...' : 'Save Scoring'}
+              {saving ? t('lsScore.saving') : t('lsScore.save')}
             </button>
             {hasChanges && (
               <button
@@ -406,7 +400,7 @@ export function NflScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
                 className="flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-xs text-white/60 hover:bg-white/10 transition"
               >
                 <RotateCcw className="h-3.5 w-3.5" />
-                Reset
+                {t('lsScore.reset')}
               </button>
             )}
           </div>
@@ -417,7 +411,7 @@ export function NflScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
         isOpen={gateOpen}
         onClose={() => setGateOpen(false)}
         featureId="advanced_scoring"
-        featureLabel="Advanced NFL Scoring Customization"
+        featureLabel={t('lsScore.gateLabel').replace('{{sport}}', 'NFL')}
       />
     </div>
   )

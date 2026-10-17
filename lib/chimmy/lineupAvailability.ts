@@ -2,6 +2,7 @@ import 'server-only'
 
 import { readInjuryStatusById } from '@/lib/core-app/injuryStatusById'
 import { isHealthyDesignation, isRuledOut } from '@/lib/core-app/injuryStatus'
+import { rosterDesignation } from '@/lib/injuries/rosterDesignation'
 
 export type LineupMetadata = {
   name: string | null
@@ -26,8 +27,15 @@ export async function enrichLineupAvailability(
 ): Promise<Map<string, LineupMetadata>> {
   const names = new Map([...metadata].flatMap(([id, player]) => player.name ? [[id, [player.name]] as const] : []))
   const teams = new Map([...metadata].map(([id, player]) => [id, player.team ?? null]))
-  const injury = await readInjuryStatusById(sport, names, teams)
+  const positions = new Map([...metadata].map(([id, player]) => [id, player.position ?? null]))
+  const injury = await readInjuryStatusById(sport, names, teams, positions)
+  /*
+   * 🛑 NO LIVE REPORT IS NOT A REASON TO REVIVE A STORED "OUT" (2026-10-11). The stored value is the
+   * record's injury column or Sleeper's roster status, and a player with no live row is usually one
+   * who healed and dropped off the reports — exactly when his last "Out" or "Inactive" is false.
+   * Only a roster designation the feeds do not carry (IR, PUP, NFI, Suspended) survives the fallback.
+   */
   return new Map([...metadata].map(([id, player]) => [id, {
-    ...player, injury: lineupDesignation(injury.has(id) ? injury.get(id) : player.injury),
+    ...player, injury: lineupDesignation(injury.has(id) ? injury.get(id) : rosterDesignation(player.injury)),
   }]))
 }

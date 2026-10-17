@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import { useOptionalLanguage } from "@/components/i18n/LanguageProviderClient"
 import type {
   NotificationCategoryId,
   NotificationPreferences,
@@ -43,6 +44,14 @@ import {
  * The edits themselves live in lib/notification-settings/leagueOverrideEdits.ts.
  */
 
+/**
+ * Rows shown before "Show all". An account here can be in dozens of leagues (measured 2026-10-15:
+ * one account was in 101 league rows) and every row is a full-height card, so listing them all
+ * turned this section into a long scroll to reach the settings below it. Leagues with an override
+ * are always shown, whatever this says, so a mute can never be hidden.
+ */
+export const LEAGUE_OVERRIDES_VISIBLE_DEFAULT = 5
+
 type LeagueRow = {
   id: string
   name?: string
@@ -66,14 +75,23 @@ export function LeagueNotificationOverridesCard({
   categoryIds: NotificationCategoryId[]
   categoryLabels: Record<NotificationCategoryId, string>
 }) {
+  const { t, tInterpolate } = useOptionalLanguage()
   const [leagues, setLeagues] = useState<LeagueRow[] | null>(null)
   const [loadFailed, setLoadFailed] = useState(false)
   const [expanded, setExpanded] = useState<string | null>(null)
+  const [query, setQuery] = useState("")
+  const [showAll, setShowAll] = useState(false)
 
   useEffect(() => {
     let cancelled = false
     void (async () => {
-      const data = await fetch("/api/league/list", { cache: "no-store" })
+      /*
+       * `summary=1` drops each league's settings and rosters (~94% of the payload — this card reads
+       * only id and name), and `collapseSeries=1` returns one row per league at its newest season
+       * instead of one per imported season. Notifications are sent for the current season's league,
+       * so that is the row an override has to be keyed on.
+       */
+      const data = await fetch("/api/league/list?summary=1&collapseSeries=1", { cache: "no-store" })
         .then((r) => (r.ok ? r.json() : null))
         .catch(() => null)
       if (cancelled) return
@@ -106,6 +124,26 @@ export function LeagueNotificationOverridesCard({
    * than rebuilding these objects by hand. Read that module before changing any of them —
    * in particular why "no opinion" is `{}` and never a deleted key.
    */
+  /** Customised leagues first (so a mute is never below the fold), then the list's own order. */
+  const ordered = useMemo(() => {
+    if (!leagues) return []
+    const seen = new Set<string>()
+    const unique = leagues.filter((l) => l?.id && !seen.has(l.id) && seen.add(l.id))
+    const isCustomised = (id: string) => {
+      const v = prefs.leagues?.[id]
+      return Boolean(v && (v.enabled === false || (v.mutedCategories?.length ?? 0) > 0))
+    }
+    return [...unique.filter((l) => isCustomised(l.id)), ...unique.filter((l) => !isCustomised(l.id))]
+  }, [leagues, prefs.leagues])
+
+  const needle = query.trim().toLowerCase()
+  const collapsible = ordered.length > LEAGUE_OVERRIDES_VISIBLE_DEFAULT
+  const visible = needle
+    ? ordered.filter((l) => (l.name ?? "").toLowerCase().includes(needle))
+    : showAll || !collapsible
+      ? ordered
+      : ordered.slice(0, Math.max(LEAGUE_OVERRIDES_VISIBLE_DEFAULT, customisedCount))
+
   function onFollowGlobal(leagueId: string) {
     onChange(followGlobal(prefs, leagueId))
   }
@@ -124,18 +162,15 @@ export function LeagueNotificationOverridesCard({
       data-testid="notifications-league-overrides-card"
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-sm font-medium text-[var(--text)]">Per-league settings</span>
+        <span className="text-sm font-medium text-[var(--text)]">{t("settings.notifications.leagues.title")}</span>
         {customisedCount > 0 ? (
           <span className="text-xs text-[var(--muted)]" data-testid="league-overrides-count">
-            {customisedCount} customised
+            {tInterpolate("settings.notifications.leagues.customised", { count: customisedCount })}
           </span>
         ) : null}
       </div>
 
-      <p className="text-xs text-[var(--muted)]">
-        Everything above applies to all your leagues. Turn one down here without changing the
-        rest — a loud dynasty league can stay quiet while your main league still reaches you.
-      </p>
+      <p className="text-xs text-[var(--muted)]">{t("settings.notifications.leagues.intro")}</p>
 
       {globallyOff ? (
         /*
@@ -147,24 +182,38 @@ export function LeagueNotificationOverridesCard({
           className="rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3 text-xs text-[var(--muted)]"
           data-testid="league-overrides-globally-off"
         >
-          Notifications are off for your whole account, so per-league settings have nothing to
-          change yet. Turn notifications on above and these become active.
+          {t("settings.notifications.leagues.globallyOff")}
         </p>
       ) : null}
 
       {leagues === null ? (
-        <p className="text-xs text-[var(--muted)]">Loading your leagues…</p>
+        <p className="text-xs text-[var(--muted)]">{t("settings.notifications.leagues.loading")}</p>
       ) : loadFailed ? (
         <p className="text-xs text-[var(--muted)]" data-testid="league-overrides-load-failed">
-          Could not load your leagues just now. Your global settings above are unaffected.
+          {t("settings.notifications.leagues.loadFailed")}
         </p>
       ) : leagues.length === 0 ? (
-        <p className="text-xs text-[var(--muted)]">
-          Once you join or import a league it will show up here.
-        </p>
+        <p className="text-xs text-[var(--muted)]">{t("settings.notifications.leagues.empty")}</p>
       ) : (
+        <>
+        {collapsible ? (
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={t("settings.notifications.leagues.search")}
+            aria-label={t("settings.notifications.leagues.search")}
+            className="w-full rounded-md border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text)]"
+            data-testid="league-overrides-search"
+          />
+        ) : null}
+        {needle && visible.length === 0 ? (
+          <p className="text-xs text-[var(--muted)]" data-testid="league-overrides-no-match">
+            {tInterpolate("settings.notifications.leagues.noMatch", { query: query.trim() })}
+          </p>
+        ) : null}
         <ul className="space-y-2">
-          {leagues.map((league) => {
+          {visible.map((league) => {
             const override = prefs.leagues?.[league.id]
             const muted = override?.enabled === false
             const mutedCats = override?.mutedCategories ?? []
@@ -179,11 +228,16 @@ export function LeagueNotificationOverridesCard({
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="min-w-0">
                     <p className="truncate text-sm text-[var(--text)]">
-                      {league.name?.trim() || "Untitled league"}
+                      {league.name?.trim() || t("settings.notifications.leagues.untitled")}
                     </p>
                     {mutedCats.length > 0 && !muted ? (
                       <p className="text-xs text-[var(--muted)]">
-                        {mutedCats.length} {mutedCats.length === 1 ? "category" : "categories"} muted
+                        {tInterpolate(
+                          mutedCats.length === 1
+                            ? "settings.notifications.leagues.mutedOne"
+                            : "settings.notifications.leagues.mutedMany",
+                          { count: mutedCats.length },
+                        )}
                       </p>
                     ) : null}
                   </div>
@@ -198,8 +252,8 @@ export function LeagueNotificationOverridesCard({
                     className="rounded-md border border-[var(--border)] bg-[var(--panel2)] px-2 py-1 text-xs text-[var(--text)] disabled:opacity-50"
                     data-testid={`league-override-select-${league.id}`}
                   >
-                    <option value="global">Follow my settings</option>
-                    <option value="muted">Mute this league</option>
+                    <option value="global">{t("settings.notifications.leagues.follow")}</option>
+                    <option value="muted">{t("settings.notifications.leagues.mute")}</option>
                   </select>
                 </div>
 
@@ -208,10 +262,12 @@ export function LeagueNotificationOverridesCard({
                     <button
                       type="button"
                       onClick={() => setExpanded(isExpanded ? null : league.id)}
-                      className="mt-2 text-xs text-[var(--accent-cyan)] underline-offset-2 hover:underline"
+                      className="mt-1 inline-flex min-h-[44px] items-center text-xs text-[var(--accent-cyan)] underline-offset-2 hover:underline"
                       data-testid={`league-override-expand-${league.id}`}
                     >
-                      {isExpanded ? "Hide categories" : "Mute individual categories"}
+                      {isExpanded
+                        ? t("settings.notifications.leagues.hideCategories")
+                        : t("settings.notifications.leagues.muteIndividual")}
                     </button>
 
                     {isExpanded ? (
@@ -228,7 +284,9 @@ export function LeagueNotificationOverridesCard({
                               className="h-3.5 w-3.5 rounded accent-[var(--accent-cyan)]"
                               data-testid={`league-override-cat-${league.id}-${id}`}
                             />
-                            Mute {categoryLabels[id] ?? id}
+                            {tInterpolate("settings.notifications.leagues.muteCategory", {
+                              label: categoryLabels[id] ?? id,
+                            })}
                           </label>
                         ))}
                       </div>
@@ -239,6 +297,19 @@ export function LeagueNotificationOverridesCard({
             )
           })}
         </ul>
+        {collapsible && !needle ? (
+          <button
+            type="button"
+            onClick={() => setShowAll((v) => !v)}
+            className="inline-flex min-h-[44px] items-center text-sm font-medium text-[var(--accent-cyan)]"
+            data-testid="league-overrides-show-all"
+          >
+            {showAll
+              ? t("settings.notifications.leagues.showFewer")
+              : tInterpolate("settings.notifications.leagues.showAll", { count: ordered.length })}
+          </button>
+        ) : null}
+        </>
       )}
     </div>
   )

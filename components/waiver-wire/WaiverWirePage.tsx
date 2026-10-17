@@ -1,5 +1,8 @@
 "use client"
 
+import '@/components/core-app/af-core.css'
+import '@/components/league/league-transactions.css'
+
 import { useState, useCallback, useDeferredValue, useEffect, useMemo } from "react"
 import Link from "next/link"
 import { RefreshCw, CheckCircle, Loader2, MessageSquare, GitCompare } from "lucide-react"
@@ -42,6 +45,7 @@ import CommissionerWaiverInsightsPanel from "@/components/waivers/CommissionerWa
 import { formatWaiverOutcomeLabel, outcomeCodeFromMetadata } from "@/lib/waiver-wire/waiver-outcome-labels"
 import type { UnifiedPlayerWireDto } from "@/lib/player-data/serializeUnifiedPlayerForApi"
 import { adaptWaiverWirePlayer } from "@/lib/player-data/adapters/waiverPlayerAdapter"
+import { isImmediateAddAllowedToday, dailyModeLabel, type DailyPolicySnapshot } from "@/lib/waiver-wire/immediate-add-policy"
 
 type WaiverSettings = {
   leagueId?: string
@@ -56,6 +60,8 @@ type WaiverSettings = {
   faabBudget?: number | null
   tiebreakRule?: string | null
   instantFaAfterClear?: boolean
+  /** Today under the per-day waiver schedule; null/absent when the league has none. */
+  dailyPolicy?: DailyPolicySnapshot | null
 }
 
 type Player = UnifiedPlayerWireDto
@@ -551,7 +557,7 @@ export default function WaiverWirePage({
 
   const handleAddClick = useCallback(
     (player: Player) => {
-      const immediateAddAllowed = settings?.waiverType === "fcfs" || settings?.instantFaAfterClear === true
+      const immediateAddAllowed = isImmediateAddAllowedToday(settings)
       if (!immediateAddAllowed) {
         // Waiver league — use the existing claim drawer.
         setImmediateMode(false)
@@ -569,7 +575,7 @@ export default function WaiverWirePage({
         setDrawerOpen(true)
       }
     },
-    [settings?.waiverType, settings?.instantFaAfterClear, rosterCapacity, rosterPlayerIds, addDropPlayer],
+    [settings, rosterCapacity, rosterPlayerIds, addDropPlayer],
   )
 
   const cancelClaimById = async (claimId: string) => {
@@ -627,7 +633,7 @@ export default function WaiverWirePage({
 
   const isFaab = settings?.waiverType === "faab"
   const hasOpenRosterSpot = rosterCapacity == null ? true : rosterPlayerIds.length < rosterCapacity
-  const immediateAddAllowed = settings?.waiverType === "fcfs" || settings?.instantFaAfterClear === true
+  const immediateAddAllowed = isImmediateAddAllowedToday(settings)
   const watchlistIdSet = useMemo(() => new Set(watchlistPlayerIds), [watchlistPlayerIds])
   const uniqueTeams = useMemo(
     () =>
@@ -969,36 +975,36 @@ export default function WaiverWirePage({
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12" data-testid="waiver-loading-state">
-        <Loader2 className="h-8 w-8 animate-spin text-[#ff3d81]" />
+        <Loader2 className="h-8 w-8 animate-spin text-[var(--accent)]" />
       </div>
     )
   }
 
   return (
-    <div className={chrome === "embedded" ? "space-y-4" : "space-y-6"}>
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className={`af-core af-league-transactions ${chrome === "embedded" ? "af-waiver-embedded space-y-4" : "af-waiver-workspace space-y-6"}`}>
+      <div className="af-transaction-heading flex flex-wrap items-center justify-between gap-3">
         {chrome === "embedded" ? (
           <div className="space-y-0.5">
             {nextRunAt && (
-              <p className="text-[11px] text-white/45" data-testid="waiver-next-run-hint">
+              <p className="text-[11px] text-[var(--muted)]" data-testid="waiver-next-run-hint">
                 Next scheduled run: {formatInTimezone(nextRunAt)}
               </p>
             )}
           </div>
         ) : (
           <div className="space-y-0.5">
-            <h1 className="text-lg font-semibold text-white sm:text-xl">Waiver Wire</h1>
-            <p className="text-xs text-white/60">
+            <h1 className="text-lg font-semibold text-[var(--text)] sm:text-xl">Waiver Wire</h1>
+            <p className="text-xs text-[var(--muted)]">
               Browse free agents, submit claims, and track your FAAB and priority with rule-aware waiver tools.
             </p>
             {nextRunAt && (
-              <p className="text-[11px] text-white/45" data-testid="waiver-next-run-hint">
+              <p className="text-[11px] text-[var(--muted)]" data-testid="waiver-next-run-hint">
                 Next scheduled run: {formatInTimezone(nextRunAt)}
               </p>
             )}
           </div>
         )}
-        <div className="flex flex-wrap items-center justify-end gap-2">
+        <div className="af-transaction-actions flex flex-wrap items-center justify-end gap-2">
           {isFaab && <FaabBudgetCard faabRemaining={faabRemaining} budgetCap={settings?.faabBudget ?? null} />}
           <WaiverPriorityCard waiverPriority={waiverPriority} />
           <span className="inline-flex items-center gap-1 rounded-lg border border-fuchsia-400/30 bg-fuchsia-500/10 px-2.5 py-1 text-xs text-fuchsia-100 sm:text-sm">
@@ -1009,7 +1015,7 @@ export default function WaiverWirePage({
             type="button"
             onClick={() => load()}
             data-testid="waiver-refresh-button"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-white/20 bg-black/20 px-3 py-1.5 text-xs text-white/80 hover:bg-white/10 sm:text-sm"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--line2)] bg-[var(--surface2)] px-3 py-1.5 text-xs text-[var(--muted)] hover:bg-white/10 sm:text-sm"
           >
             <RefreshCw className="h-3.5 w-3.5" />
             Refresh
@@ -1033,7 +1039,7 @@ export default function WaiverWirePage({
                 })
               }
               data-testid="waiver-open-player-compare"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-[#ff3d81]/40 bg-[#ff3d81]/10 px-3 py-1.5 text-xs text-[#ffb8d1] hover:bg-[#ff3d81]/20 sm:text-sm"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--line2)] bg-[var(--accent-soft)] px-3 py-1.5 text-xs text-[var(--accent)] hover:bg-[var(--accent-soft)] sm:text-sm"
             >
               <GitCompare className="h-3.5 w-3.5" />
               Compare players
@@ -1042,7 +1048,7 @@ export default function WaiverWirePage({
             <Link
               href={`/player-compare?leagueId=${encodeURIComponent(leagueId)}&sport=${encodeURIComponent(settings?.sport ?? DEFAULT_SPORT)}`}
               data-testid="waiver-open-player-compare-fallback"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-[#ff3d81]/40 bg-[#ff3d81]/10 px-3 py-1.5 text-xs text-[#ffb8d1] hover:bg-[#ff3d81]/20 sm:text-sm"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--line2)] bg-[var(--accent-soft)] px-3 py-1.5 text-xs text-[var(--accent)] hover:bg-[var(--accent-soft)] sm:text-sm"
             >
               <GitCompare className="h-3.5 w-3.5" />
               Compare players
@@ -1063,11 +1069,14 @@ export default function WaiverWirePage({
         </div>
       )}
 
-      <section className="rounded-xl border border-white/10 bg-black/20 p-4" data-testid="waiver-automation-status">
-        <h2 className="text-sm font-semibold text-white">Waiver automation status</h2>
+      <section className="rounded-xl border border-[var(--line2)] bg-[var(--surface2)] p-4" data-testid="waiver-automation-status">
+        <h2 className="text-sm font-semibold text-[var(--text)]">Waiver automation status</h2>
         <div className="mt-2 grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-3">
           <StatusItem label="Next processing deadline" value={nextRunAt ? formatInTimezone(nextRunAt) : 'Not available yet'} />
           <StatusItem label="Waiver type" value={getWaiverTypeLabel(settings?.waiverType ?? null)} />
+          {settings?.dailyPolicy ? (
+            <StatusItem label="Today" value={dailyModeLabel(settings.dailyPolicy)} />
+          ) : null}
           {isFaab ? (
             <StatusItem
               label="Your FAAB remaining"
@@ -1088,15 +1097,16 @@ export default function WaiverWirePage({
       </section>
 
       {!lockedTab && (
-        <div className="flex gap-2 border-b border-white/10 pb-2">
+        <div className="af-waiver-tabs flex gap-2 border-b border-[var(--line2)] pb-2">
           {(["available", "trending", "claimed", "dropped", "pending", "history"] as const).map((tab) => (
             <button
               key={tab}
               type="button"
               onClick={() => setActiveTab(tab)}
+              aria-pressed={activeTab === tab}
               data-testid={`waiver-tab-${tab}`}
               className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
-                activeTab === tab ? "bg-[#ff3d81]/20 text-[#ffb8d1]" : "text-white/70 hover:text-white"
+                activeTab === tab ? "bg-[var(--accent-soft)] text-[var(--accent)]" : "text-[var(--muted)] hover:text-[var(--text)]"
               }`}
             >
               {tab === "available" ? "All players" : getTabLabel(tab, claims.length)}
@@ -1106,7 +1116,7 @@ export default function WaiverWirePage({
       )}
 
       {(activeTab === "available" || activeTab === "trending") && (
-        <div className="rounded-xl border border-white/10 bg-black/20 p-0 sm:p-3">
+        <div className="rounded-xl border border-[var(--line2)] bg-[var(--surface2)] p-0 sm:p-3">
           <WaiverFilters
             search={search}
             onSearchChange={setSearch}
@@ -1133,9 +1143,9 @@ export default function WaiverWirePage({
           />
           <ul className="max-h-[480px] space-y-1.5 overflow-y-auto px-1 pb-3 pt-1 sm:px-0">
             {activePlayerList.length === 0 ? (
-              <li className="py-6 text-center text-sm text-white/50">
+              <li className="py-6 text-center text-sm text-[var(--muted)]">
                 {WAIVER_EMPTY_PLAYERS_TITLE}
-                <span className="block text-xs text-white/40 mt-1">{WAIVER_EMPTY_PLAYERS_HINT}</span>
+                <span className="block text-xs text-[var(--muted)] mt-1">{WAIVER_EMPTY_PLAYERS_HINT}</span>
               </li>
             ) : (
               visiblePlayerList.map((p) => {
@@ -1197,7 +1207,7 @@ export default function WaiverWirePage({
             )}
             {hiddenPlayerCount > 0 && (
               <li
-                className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-center text-xs text-white/55"
+                className="rounded-lg border border-[var(--line2)] bg-[var(--surface2)] px-3 py-2 text-center text-xs text-[var(--muted)]"
                 data-testid="waiver-player-render-limit-note"
               >
                 Showing {WAIVER_PLAYER_RENDER_LIMIT} of {activePlayerList.length}. Narrow search or filters for more players.
@@ -1208,21 +1218,21 @@ export default function WaiverWirePage({
       )}
 
       {activeTab === "claimed" && (
-        <div className="rounded-xl border border-white/10 bg-black/20 p-4">
-          <h3 className="mb-2 text-sm font-semibold text-white">Recently claimed players</h3>
+        <div className="rounded-xl border border-[var(--line2)] bg-[var(--surface2)] p-4">
+          <h3 className="mb-2 text-sm font-semibold text-[var(--text)]">Recently claimed players</h3>
           <ul className="space-y-1.5 text-sm">
             {claimedTransactions.length === 0 ? (
-              <li className="py-4 text-center text-sm text-white/50">No successful claims yet.</li>
+              <li className="py-4 text-center text-sm text-[var(--muted)]">No successful claims yet.</li>
             ) : (
               claimedTransactions.map((t) => (
                 <li
                   key={`claimed-${t.id}`}
-                  className="flex flex-wrap items-center gap-2 rounded-lg border border-emerald-500/25 bg-emerald-500/5 px-3 py-2 text-white/90"
+                  className="flex flex-wrap items-center gap-2 rounded-lg border border-emerald-500/25 bg-emerald-500/5 px-3 py-2 text-[var(--muted)]"
                 >
                   <CheckCircle className="h-4 w-4 shrink-0 text-emerald-400" />
                   <span>Add {t.addPlayerId}</span>
-                  {t.faabSpent != null && <span className="text-[#ff9ec0]">${t.faabSpent}</span>}
-                  <span className="ml-auto text-xs text-white/50">
+                  {t.faabSpent != null && <span className="text-[var(--accent)]">${t.faabSpent}</span>}
+                  <span className="ml-auto text-xs text-[var(--muted)]">
                     {formatInTimezone(t.processedAt)}
                   </span>
                 </li>
@@ -1233,22 +1243,22 @@ export default function WaiverWirePage({
       )}
 
       {activeTab === "dropped" && (
-        <div className="rounded-xl border border-white/10 bg-black/20 p-4">
-          <h3 className="mb-2 text-sm font-semibold text-white">Recently dropped players</h3>
+        <div className="rounded-xl border border-[var(--line2)] bg-[var(--surface2)] p-4">
+          <h3 className="mb-2 text-sm font-semibold text-[var(--text)]">Recently dropped players</h3>
           <ul className="space-y-1.5 text-sm">
             {droppedTransactions.length === 0 ? (
-              <li className="py-4 text-center text-sm text-white/50">No dropped players in recent waiver runs.</li>
+              <li className="py-4 text-center text-sm text-[var(--muted)]">No dropped players in recent waiver runs.</li>
             ) : (
               droppedTransactions.map((t) => (
                 <li
                   key={`dropped-${t.id}`}
-                  className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-white/90"
+                  className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-[var(--muted)]"
                 >
                   <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-amber-400/60 text-[11px] text-amber-300">
                     -
                   </span>
                   <span>Drop {t.dropPlayerId}</span>
-                  <span className="ml-auto text-xs text-white/50">
+                  <span className="ml-auto text-xs text-[var(--muted)]">
                     {formatInTimezone(t.processedAt)}
                   </span>
                 </li>
@@ -1277,10 +1287,10 @@ export default function WaiverWirePage({
       )}
 
       {activeTab === "history" && (
-        <div className="rounded-xl border border-white/10 bg-black/20 p-4">
-          <h3 className="mb-2 text-sm font-semibold text-white">Processed claims</h3>
+        <div className="rounded-xl border border-[var(--line2)] bg-[var(--surface2)] p-4">
+          <h3 className="mb-2 text-sm font-semibold text-[var(--text)]">Processed claims</h3>
           {history.transactions.length === 0 && history.claims.filter((c) => c.status === "failed").length === 0 ? (
-            <p className="py-4 text-center text-sm text-white/50">{WAIVER_EMPTY_HISTORY_TITLE}</p>
+            <p className="py-4 text-center text-sm text-[var(--muted)]">{WAIVER_EMPTY_HISTORY_TITLE}</p>
           ) : (
             <div className="space-y-4">
               {history.transactions.length > 0 && (
@@ -1312,32 +1322,32 @@ export default function WaiverWirePage({
                     return (
                       <li
                         key={c.id}
-                        className="flex flex-col gap-1 rounded-lg border border-red-500/30 bg-red-500/5 px-3 py-2 text-white/90 sm:flex-row sm:items-start sm:justify-between"
+                        className="flex flex-col gap-1 rounded-lg border border-red-500/30 bg-red-500/5 px-3 py-2 text-[var(--muted)] sm:flex-row sm:items-start sm:justify-between"
                       >
                         <div className="flex min-w-0 items-start gap-2">
                           <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-red-400/60 text-[11px] leading-none text-red-300">
                             !
                           </span>
                           <div className="min-w-0">
-                            <div className="font-medium text-white">Lost · {headline}</div>
-                            <div className="text-xs text-white/70">
+                            <div className="font-medium text-[var(--text)]">Lost · {headline}</div>
+                            <div className="text-xs text-[var(--muted)]">
                               Add {c.addPlayerId}
                               {c.dropPlayerId && <> · Drop {c.dropPlayerId}</>}
                             </div>
                             {c.resultMessage && c.resultMessage !== headline && (
-                              <div className="mt-1 text-[11px] text-white/50">{c.resultMessage}</div>
+                              <div className="mt-1 text-[11px] text-[var(--muted)]">{c.resultMessage}</div>
                             )}
                             {oc && (
-                              <span className="mt-1 inline-block rounded bg-white/10 px-1.5 py-0.5 text-[11px] uppercase tracking-wide text-white/45">
+                              <span className="mt-1 inline-block rounded bg-white/10 px-1.5 py-0.5 text-[11px] uppercase tracking-wide text-[var(--muted)]">
                                 {oc.replace(/_/g, " ")}
                               </span>
                             )}
                           </div>
                         </div>
                         <div className="flex shrink-0 items-center gap-2 sm:flex-col sm:items-end">
-                          {c.faabBid != null && <span className="text-[#ff9ec0]">${c.faabBid}</span>}
+                          {c.faabBid != null && <span className="text-[var(--accent)]">${c.faabBid}</span>}
                           {c.processedAt && (
-                            <span className="text-xs text-white/50">{formatInTimezone(c.processedAt)}</span>
+                            <span className="text-xs text-[var(--muted)]">{formatInTimezone(c.processedAt)}</span>
                           )}
                         </div>
                       </li>
@@ -1354,7 +1364,7 @@ export default function WaiverWirePage({
       {!lockedTab && <CommissionerWaiverInsightsPanel leagueId={leagueId} />}
 
       {!lockedTab && (
-      <section id="waiver-ai-engine-panel" className="rounded-xl border border-[#ff3d81]/20 bg-black/20 p-4" data-testid="waiver-ai-engine-panel">
+      <section id="waiver-ai-engine-panel" className="rounded-xl border border-[var(--line2)] bg-[var(--surface2)] p-4" data-testid="waiver-ai-engine-panel">
         <InContextMonetizationCard
           title="Waiver AI access"
           featureId="ai_waivers"
@@ -1364,8 +1374,8 @@ export default function WaiverWirePage({
         />
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="text-sm font-semibold text-[#ffd7e5]">Waiver AI Engine</h2>
-            <p className="mt-1 text-xs text-white/60">
+            <h2 className="text-sm font-semibold text-[var(--accent)]">Waiver AI Engine</h2>
+            <p className="mt-1 text-xs text-[var(--muted)]">
               Deterministic waiver pickups scored from available players and team-needs context, with an optional explanation from Chimmy.
             </p>
             {!aiAssistantEnabled && !aiAvailabilityLoading && (
@@ -1374,13 +1384,13 @@ export default function WaiverWirePage({
               </p>
             )}
           </div>
-          <label className="inline-flex items-center gap-2 text-xs text-white/75">
+          <label className="inline-flex items-center gap-2 text-xs text-[var(--muted)]">
             <input
               type="checkbox"
               checked={waiverAiIncludeExplanation}
               onChange={(event) => setWaiverAiIncludeExplanation(event.target.checked)}
               disabled={!aiAssistantEnabled}
-              className="rounded border-white/30 bg-black/40"
+              className="rounded border-[var(--line2)] bg-[var(--surface2)]"
               data-testid="waiver-ai-engine-explanation-toggle"
             />
             AI explanation {!aiAssistantEnabled && !aiAvailabilityLoading ? '(disabled)' : ''}
@@ -1393,7 +1403,7 @@ export default function WaiverWirePage({
             onClick={() => void analyzeWaiversWithEngine()}
             disabled={waiverAiLoading || players.length === 0}
             data-testid="waiver-ai-engine-analyze"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-[#ff3d81]/40 bg-[#ff3d81]/20 px-3 py-1.5 text-xs font-medium text-[#ffd7e5] hover:bg-[#ff3d81]/30 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--line2)] bg-[var(--accent-soft)] px-3 py-1.5 text-xs font-medium text-[var(--accent)] hover:bg-[var(--accent-soft)] disabled:cursor-not-allowed disabled:opacity-50"
           >
             {waiverAiLoading ? (
               <>
@@ -1405,7 +1415,7 @@ export default function WaiverWirePage({
             )}
           </button>
           {inferredNeedPositions.length > 0 && (
-            <span className="text-[11px] text-white/55" data-testid="waiver-ai-engine-needs">
+            <span className="text-[11px] text-[var(--muted)]" data-testid="waiver-ai-engine-needs">
               Need focus: {inferredNeedPositions.join(", ")}
             </span>
           )}
@@ -1424,47 +1434,47 @@ export default function WaiverWirePage({
                 className="rounded-lg border border-violet-400/30 bg-violet-500/10 px-3 py-2"
                 data-testid="waiver-ai-decision-os-card"
               >
-                <div className="mb-1 flex flex-wrap items-center justify-between gap-2 text-xs text-white/65">
+                <div className="mb-1 flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--muted)]">
                   <span className="font-medium text-violet-200">Decision OS</span>
                   <span>
                     Confidence {waiverAiDecisionOs.card.confidence}/100
                     {!waiverAiDecisionOs.card.legal ? " · Blocked by league rules" : ""}
                   </span>
                 </div>
-                <p className="text-sm text-white">{waiverAiDecisionOs.card.title}</p>
-                <p className="mt-0.5 text-xs text-white/70">{waiverAiDecisionOs.card.subtitle}</p>
-                <p className="mt-1 text-xs text-[#ffb8d1]">{waiverAiDecisionOs.card.detail}</p>
+                <p className="text-sm text-[var(--text)]">{waiverAiDecisionOs.card.title}</p>
+                <p className="mt-0.5 text-xs text-[var(--muted)]">{waiverAiDecisionOs.card.subtitle}</p>
+                <p className="mt-1 text-xs text-[var(--accent)]">{waiverAiDecisionOs.card.detail}</p>
               </div>
             )}
-            <div className="rounded-lg border border-white/10 bg-black/30 px-3 py-2">
-              <div className="mb-1 flex items-center gap-2 text-xs text-white/65">
+            <div className="rounded-lg border border-[var(--line2)] bg-[var(--surface2)] px-3 py-2">
+              <div className="mb-1 flex items-center gap-2 text-xs text-[var(--muted)]">
                 <span>
                   Explanation source:{" "}
-                  <span className="font-medium text-[#ffb8d1]">{waiverAiAnalysis.explanation.source}</span>
+                  <span className="font-medium text-[var(--accent)]">{waiverAiAnalysis.explanation.source}</span>
                 </span>
-                <span className="text-white/35">|</span>
+                <span className="text-[var(--muted)]">|</span>
                 <span>Sport: {waiverAiAnalysis.sport}</span>
               </div>
-              <p className="text-sm text-white/85">{waiverAiAnalysis.explanation.text}</p>
+              <p className="text-sm text-[var(--muted)]">{waiverAiAnalysis.explanation.text}</p>
             </div>
             <ul className="space-y-2">
               {waiverAiAnalysis.deterministic.suggestions.slice(0, 5).map((suggestion, index) => (
                 <li
                   key={`${suggestion.playerId}-${index}`}
-                  className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2"
+                  className="rounded-lg border border-[var(--line2)] bg-[var(--surface2)] px-3 py-2"
                   data-testid={`waiver-ai-engine-suggestion-${index + 1}`}
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                    <span className="text-white">
+                    <span className="text-[var(--text)]">
                       #{index + 1} {suggestion.playerName} ({suggestion.position})
                     </span>
-                    <span className="text-[#ffb8d1]">
+                    <span className="text-[var(--accent)]">
                       {suggestion.recommendation} · Score {suggestion.compositeScore}
                       {suggestion.faabBid != null ? ` · FAAB $${suggestion.faabBid}` : ""}
                     </span>
                   </div>
                   {suggestion.topDrivers.length > 0 && (
-                    <p className="mt-1 text-[11px] text-white/60">
+                    <p className="mt-1 text-[11px] text-[var(--muted)]">
                       {suggestion.topDrivers.map((driver) => driver.label).join(" · ")}
                     </p>
                   )}
@@ -1477,46 +1487,46 @@ export default function WaiverWirePage({
       )}
 
       {!lockedTab && (
-      <section className="rounded-xl border border-white/10 bg-black/20 p-4">
-        <h2 className="mb-2 text-sm font-semibold text-white">League waiver rules</h2>
-        <p className="mb-3 text-xs text-white/55">{waiverRuleSummary}</p>
+      <section className="rounded-xl border border-[var(--line2)] bg-[var(--surface2)] p-4">
+        <h2 className="mb-2 text-sm font-semibold text-[var(--text)]">League waiver rules</h2>
+        <p className="mb-3 text-xs text-[var(--muted)]">{waiverRuleSummary}</p>
         <dl className="grid gap-2 text-sm sm:grid-cols-2">
           <div>
-            <dt className="text-white/50">Type</dt>
-            <dd className="text-white">
+            <dt className="text-[var(--muted)]">Type</dt>
+            <dd className="text-[var(--text)]">
               {getWaiverTypeLabel(settings?.waiverType ?? null)}
             </dd>
           </div>
           {settings?.faabBudget != null && (
             <div>
-              <dt className="text-white/50">FAAB budget</dt>
-              <dd className="text-white">{settings.faabBudget}</dd>
+              <dt className="text-[var(--muted)]">FAAB budget</dt>
+              <dd className="text-[var(--text)]">{settings.faabBudget}</dd>
             </div>
           )}
           {settings?.processingTimeUtc && (
             <div>
-              <dt className="text-white/50">Process time (UTC)</dt>
-              <dd className="text-white">{settings.processingTimeUtc}</dd>
+              <dt className="text-[var(--muted)]">Process time (UTC)</dt>
+              <dd className="text-[var(--text)]">{settings.processingTimeUtc}</dd>
             </div>
           )}
           {settings?.claimLimitPerPeriod != null && (
             <div>
-              <dt className="text-white/50">Claim limit</dt>
-              <dd className="text-white">
+              <dt className="text-[var(--muted)]">Claim limit</dt>
+              <dd className="text-[var(--text)]">
                 {settings.claimLimitPerPeriod} per period
               </dd>
             </div>
           )}
           {settings?.tiebreakRule && (
             <div>
-              <dt className="text-white/50">Tiebreaker</dt>
-              <dd className="text-white">{settings.tiebreakRule}</dd>
+              <dt className="text-[var(--muted)]">Tiebreaker</dt>
+              <dd className="text-[var(--text)]">{settings.tiebreakRule}</dd>
             </div>
           )}
           {settings?.instantFaAfterClear != null && (
             <div>
-              <dt className="text-white/50">After waivers clear</dt>
-              <dd className="text-white">
+              <dt className="text-[var(--muted)]">After waivers clear</dt>
+              <dd className="text-[var(--text)]">
                 {settings.instantFaAfterClear ? "Instant free agency" : "Remains on waivers"}
               </dd>
             </div>
@@ -1533,16 +1543,16 @@ export default function WaiverWirePage({
             {shadowSource}. Enter the move there before your league&apos;s waiver deadline for it to count.
           </p>
         ) : (
-          <p className="mt-2 text-xs text-white/55">
+          <p className="mt-2 text-xs text-[var(--muted)]">
             Roster and positional limits are enforced by your league settings. If your roster is full or a
             player is ineligible for a slot, you may be required to choose a drop before the claim can process.
           </p>
         )}
-        <div className="mt-3 pt-3 border-t border-white/10">
+        <div className="mt-3 pt-3 border-t border-[var(--line2)]">
           <Link
             href={waiverAiHelpHref}
             data-testid="waiver-ai-help-link"
-            className="inline-flex items-center gap-2 rounded-lg border border-[#ff3d81]/40 bg-[#ff3d81]/10 px-3 py-2 text-xs text-[#ffb8d1] hover:bg-[#ff3d81]/20 transition-colors"
+            className="inline-flex items-center gap-2 rounded-lg border border-[var(--line2)] bg-[var(--accent-soft)] px-3 py-2 text-xs text-[var(--accent)] hover:bg-[var(--accent-soft)] transition-colors"
           >
             <MessageSquare className="h-3.5 w-3.5" />
             {aiAssistantEnabled ? "Get Chimmy's waiver help" : "Open deterministic waiver guidance"}
@@ -1581,9 +1591,9 @@ export default function WaiverWirePage({
 
 function StatusItem({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-2">
-      <p className="text-white/45">{label}</p>
-      <p className="mt-0.5 text-white/90">{value}</p>
+    <div className="rounded-lg border border-[var(--line2)] bg-[var(--surface2)] px-2.5 py-2">
+      <p className="text-[var(--muted)]">{label}</p>
+      <p className="mt-0.5 text-[var(--muted)]">{value}</p>
     </div>
   )
 }

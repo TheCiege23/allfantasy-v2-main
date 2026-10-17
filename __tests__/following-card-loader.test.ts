@@ -9,9 +9,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const listPlayerFollows = vi.fn()
 const resolveInjuryFacts = vi.fn()
 const findGames = vi.fn()
+const findPlayers = vi.fn()
 
 vi.mock('server-only', () => ({}))
-vi.mock('@/lib/prisma', () => ({ prisma: { sportsGame: { findMany: (...a: unknown[]) => findGames(...a) } } }))
+vi.mock('@/lib/prisma', () => ({
+  prisma: {
+    sportsGame: { findMany: (...a: unknown[]) => findGames(...a) },
+    sportsPlayer: { findMany: (...a: unknown[]) => findPlayers(...a) },
+  },
+}))
 vi.mock('@/lib/follows/playerFollows', () => ({ listPlayerFollows: (...a: unknown[]) => listPlayerFollows(...a) }))
 vi.mock('@/lib/injuries/injuryReadPort', () => ({ resolveInjuryFacts: (...a: unknown[]) => resolveInjuryFacts(...a) }))
 
@@ -46,6 +52,8 @@ beforeEach(() => {
   resolveInjuryFacts.mockReset()
   findGames.mockReset()
   findGames.mockResolvedValue([])
+  findPlayers.mockReset()
+  findPlayers.mockResolvedValue([])
 })
 
 describe('getFollowingCard', () => {
@@ -116,5 +124,55 @@ describe('getFollowingCard', () => {
     expect(out?.statusCoverage).toBe('ok')
     expect(resolveInjuryFacts).not.toHaveBeenCalled()
     expect(findGames).not.toHaveBeenCalled()
+  })
+})
+
+/*
+ * 🛑 `player_follows.team` is the club at FOLLOW time and only a re-follow refreshes it. It drove the
+ * team shown, the next game and the injury match, so a player traded or cut after you starred him
+ * kept his old club on all three. The Sleeper row is the authority for a Sleeper id.
+ */
+describe('getFollowingCard — the current club, not the follow-time snapshot', () => {
+  const row = (sleeperId: string, source: string, team: string | null, name = 'Jahmyr Gibbs') => ({
+    sleeperId, source, team, name, position: 'RB', fetchedAt: NOW,
+  })
+  const KC_GAME = { homeTeam: 'KC', awayTeam: 'LV', startTime: new Date('2026-09-20T17:00:00Z'), seasonType: 'regular', venue: null }
+  const DET_GAME = { homeTeam: 'DET', awayTeam: 'GB', startTime: new Date('2026-09-20T17:00:00Z'), seasonType: 'regular', venue: null }
+
+  it('🛑 a traded player shows his NEW club, its next game, and is injury-matched on it', async () => {
+    listPlayerFollows.mockResolvedValue([follow('Jahmyr Gibbs', 'DET')])
+    findPlayers.mockResolvedValue([row('Jahmyr Gibbs', 'sleeper', 'Kansas City Chiefs')])
+    resolveInjuryFacts.mockResolvedValue(facts([]))
+    findGames.mockResolvedValue([KC_GAME, DET_GAME])
+    const out = await getFollowingCard('u1', NOW)
+    expect(out?.rows[0]).toMatchObject({ team: 'Kansas City Chiefs', next: 'vs LV · Sun' })
+    expect(resolveInjuryFacts.mock.calls[0][0].players[0].team).toBe('Kansas City Chiefs')
+    expect(findPlayers.mock.calls[0][0].where).toEqual({ sport: 'NFL', sleeperId: { in: ['Jahmyr Gibbs'] } })
+  })
+
+  it('🛑 a Sleeper row with team null is a FREE AGENT — no team, no next game, never the stale club', async () => {
+    listPlayerFollows.mockResolvedValue([follow('Jahmyr Gibbs', 'DET')])
+    findPlayers.mockResolvedValue([row('Jahmyr Gibbs', 'sleeper', null), row('Jahmyr Gibbs', 'thesportsdb', 'Detroit Lions')])
+    resolveInjuryFacts.mockResolvedValue(facts([]))
+    findGames.mockResolvedValue([DET_GAME])
+    const out = await getFollowingCard('u1', NOW)
+    expect(out?.rows[0]).toMatchObject({ team: null, next: null })
+    expect(resolveInjuryFacts.mock.calls[0][0].players[0].team).toBeNull()
+  })
+
+  it('without a Sleeper row there is no authority, so the snapshot stands (a vendor row got its id by name)', async () => {
+    listPlayerFollows.mockResolvedValue([follow('Jahmyr Gibbs', 'DET')])
+    findPlayers.mockResolvedValue([row('Jahmyr Gibbs', 'thesportsdb', 'Seattle Seahawks')])
+    resolveInjuryFacts.mockResolvedValue(facts([]))
+    const out = await getFollowingCard('u1', NOW)
+    expect(out?.rows[0].team).toBe('DET')
+  })
+
+  it('no row, or a failed read, keeps the snapshot', async () => {
+    listPlayerFollows.mockResolvedValue([follow('Jahmyr Gibbs', 'DET')])
+    resolveInjuryFacts.mockResolvedValue(facts([]))
+    expect((await getFollowingCard('u1', NOW))?.rows[0].team).toBe('DET')
+    findPlayers.mockRejectedValue(new Error('db down'))
+    expect((await getFollowingCard('u1', NOW))?.rows[0].team).toBe('DET')
   })
 })

@@ -1,3 +1,4 @@
+vi.mock('next/navigation', () => ({ usePathname: () => '/core/live', useSearchParams: () => new URLSearchParams(), useRouter: () => ({ refresh() {}, push() {}, replace() {}, prefetch() {} }) }))
 /**
  * The WNBA game view and score card, rendered from real feed values (NY Liberty @
  * Dallas Wings, 2026-07-20, Final/OT 99-98): quarters then OT, the WNBA court

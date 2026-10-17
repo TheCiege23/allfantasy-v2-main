@@ -5,6 +5,13 @@ import { submitCreateLeagueV2 } from '@/lib/create-league-v2/submit'
 afterEach(() => vi.unstubAllGlobals())
 
 describe('create league submission contract', () => {
+  it('sends explicit weekly-lineup acceptance with the native MLB copy', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({leagueId:'native-mlb'}), {status:201}))
+    vi.stubGlobal('fetch', fetchMock)
+    await submitCreateLeagueV2({...DEFAULT_V2_STATE,sport:'MLB',leagueType:'redraft',name:'Baseball',scoringPresetId:'mlb_h2h_5x5'},'source-mlb',true)
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1].body))).toMatchObject({sourceLeagueId:'source-mlb',conceptSetup:{acceptWeeklyLineups:true}})
+  })
+
   it('sends the imported source ID and surfaces incomplete native materialization', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       success: true,

@@ -7,6 +7,8 @@ import { PreviewDataBanner } from '@/components/commissioner-os/PreviewDataBanne
 import type { CommissionerDataMode } from '@/lib/commissioner-ui/demo-mode/constants'
 import type { ManagerDnaProfile } from '@/lib/commissioner-ui/managers/decision-os-client'
 import { Users } from 'lucide-react'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { cardsCopy, cosLoaderText, managerNameText } from '@/lib/commissioner-os/i18n/cardsCopy'
 
 export interface ManagerIntelligenceViewProps {
   managers: ManagerDnaProfile[]
@@ -27,20 +29,30 @@ const RELIABILITY_LABEL = {
  * shown (Privacy & Trust: no single collapsed "manager score"); every
  * profile shows Recognition and Risk with equal structural weight, never
  * one without the other where both apply.
+ *
+ * Spanish: the screen's own labels through `cardsCopy`; `recognition` and `riskFlag` are sentences the
+ * loader wrote, translated at render through `cosLoaderText`. Manager names stay as written.
  */
 export function ManagerIntelligenceView({ managers, dataMode }: ManagerIntelligenceViewProps) {
+  const { language } = useOptionalLanguage()
+  const ui = (english: string) => cardsCopy(english, language)
   return (
     <div>
       <PreviewDataBanner mode={dataMode} />
 
       {managers.length === 0 ? (
-        <EmptyState icon={Users} title="No manager history yet." description="Behavioral profiles build over time as the season progresses." />
+        <EmptyState
+          icon={Users}
+          title={ui('No manager history yet.')}
+          description={ui('Behavioral profiles build over time as the season progresses.')}
+        />
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {managers.map((manager) => (
             <Card key={manager.id}>
               <CardHeader>
-                <CardTitle>{manager.managerName}</CardTitle>
+                {/* A real name stays as written; only the loader's own placeholder for a missing one translates. */}
+                <CardTitle>{managerNameText(manager.managerName, language)}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
                 {/* Tenure and trend are each rendered ONLY when real. An absent trend means the
@@ -49,14 +61,14 @@ export function ManagerIntelligenceView({ managers, dataMode }: ManagerIntellige
                 {(manager.tenureSeasons !== undefined || manager.engagementTrend) && (
                   <div className="flex items-center justify-between text-xs" style={{ color: 'var(--muted)' }}>
                     {manager.tenureSeasons !== undefined ? (
-                      <span>Tenure: {manager.tenureSeasons} season{manager.tenureSeasons === 1 ? '' : 's'}</span>
+                      <span>{ui(`Tenure: ${manager.tenureSeasons} season${manager.tenureSeasons === 1 ? '' : 's'}`)}</span>
                     ) : (
                       <span />
                     )}
                     {manager.engagementTrend && (
                       <TrendIndicator
                         direction={TREND_DIRECTION[manager.engagementTrend]}
-                        label={TREND_LABEL[manager.engagementTrend]}
+                        label={ui(TREND_LABEL[manager.engagementTrend])}
                       />
                     )}
                   </div>
@@ -66,19 +78,20 @@ export function ManagerIntelligenceView({ managers, dataMode }: ManagerIntellige
                     rather than a placeholder. */}
                 {(manager.engagementReliability ?? manager.reliabilityScore) !== undefined && (
                   <div className="text-xs" style={{ color: 'var(--muted)' }}>
-                    Reliability: {manager.engagementReliability
-                      ? RELIABILITY_LABEL[manager.engagementReliability]
+                    {ui('Reliability:')}{' '}
+                    {manager.engagementReliability
+                      ? ui(RELIABILITY_LABEL[manager.engagementReliability])
                       : manager.reliabilityScore}
                   </div>
                 )}
                 {manager.recognition && (
                   <p className="text-xs" style={{ color: 'var(--severity-positive-text)' }}>
-                    {manager.recognition}
+                    {cosLoaderText(manager.recognition, language)}
                   </p>
                 )}
                 {manager.riskFlag && (
                   <p className="text-xs" style={{ color: 'var(--severity-elevated-text)' }}>
-                    {manager.riskFlag}
+                    {cosLoaderText(manager.riskFlag, language)}
                   </p>
                 )}
               </CardContent>

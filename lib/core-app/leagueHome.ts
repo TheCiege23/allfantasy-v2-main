@@ -1,4 +1,5 @@
 import 'server-only'
+import { leagueCalendar, type LeagueCalendarEvent } from './leagueCalendar'
 
 import { prisma } from '@/lib/prisma'
 import {
@@ -28,7 +29,7 @@ import { getRecentTrades, gradeProviderRecentTrade, liveCompletedTrade, type Rec
 import { recordPendingOffers } from './urgencyBadges'
 import { scanPendingSleeperTrades } from '@/lib/provider-trades/scanPendingSleeperTrades'
 import { getMatchupData } from '@/lib/core-app/matchup'
-import { getRivalRecords } from '@/lib/core-app/dash3aPanels'
+import { getRivalRecords, type RivalRow } from '@/lib/core-app/dash3aPanels'
 import { getDraftHqAll } from './draftHqAll'
 import { describeAge } from '@/lib/sports-data/freshnessPolicy'
 import { resolveLeagueStage, isPreDraftOrDrafting } from '@/lib/league-stage/leagueStage'
@@ -133,6 +134,7 @@ export type SeasonStage = TimelinePhase
 export type LeagueHomeData = {
   /** Only a confirmed FAAB rule makes stored roster budgets meaningful. */
   faabEnabled?: boolean
+  calendar?: LeagueCalendarEvent[]
   /**
    * The other league in this one's franchise — the C2C half of an NFL league, or
    * the NFL half of a C2C one.
@@ -145,6 +147,7 @@ export type LeagueHomeData = {
   pairing: PairedHalf | null
   league: {
     id: string
+    variant: string | null
     name: string
     platform: string
     format: string | null
@@ -308,8 +311,12 @@ export type LeagueHomeData = {
       name: string
       wins: number
       losses: number
+      /** Meetings that finished level — never folded into `losses`. */
+      ties: number
       meetings: number
       lastResult: string | null
+      /** The last meeting as parts, so the screen can say it in the reader's language (dashboard3aCopy `rivalLastText`). */
+      lastParts?: RivalRow['lastParts']
     }>
   >
   syncAge: { label: string; stale: boolean }
@@ -331,7 +338,7 @@ function tradeBuzzGrade(t: RecentTrade): { grades?: Array<{ team: string; letter
       : t.sides.find((sd) => String(sd.rosterId) === String(t.verdict!.favoursRosterId))
     const strength = t.verdict?.verdict.toLowerCase().includes('strongly') ? 'Clearly favours' : 'Slightly favours'
     // The letters are the trade's frozen original when one exists — say when (`frozenCompletedGrade.ts`).
-    const when = gradeMoment({ frozenAt: t.gradedAt })
+    const when = gradeMoment(t.gradedMoment ?? { frozenAt: t.gradedAt })
     return {
       grades: t.sides.map((sd) => ({ team: name(sd), letter: sd.grade! })),
       gradeLine: favoured
@@ -373,6 +380,24 @@ function settingWeek(settings: unknown, ...keys: string[]): number | null {
  * Replaced by `buildSeasonTimeline` in ./seasonTimeline, which reads the
  * league's own settings and omits any phase whose setting is absent.
  */
+
+/**
+ * The rival rows League Home ships to the screen, built field by field from `getRivalRecords`. A field
+ * left out here never reaches the screen and nothing complains — `lastParts` was, so the last meeting's
+ * margin stayed English in Spanish ("beat you by 10.0"). Exported so a test pins every field through.
+ */
+export function leagueRivalRows(rows: RivalRow[]): Extract<LeagueHomeData['rivalry'], { available: true }>['data'] {
+  return rows.map((r) => ({
+    key: r.key,
+    name: r.name,
+    wins: r.wins,
+    losses: r.losses,
+    ties: r.ties,
+    meetings: r.meetings,
+    lastResult: r.lastResult,
+    lastParts: r.lastParts ?? null,
+  }))
+}
 
 export async function getLeagueHomeData(
   leagueId: string,
@@ -919,14 +944,7 @@ export async function getLeagueHomeData(
     : rivalData?.available
       ? {
           available: true,
-          data: rivalData.data.rows.map((r) => ({
-            key: r.key,
-            name: r.name,
-            wins: r.wins,
-            losses: r.losses,
-            meetings: r.meetings,
-            lastResult: r.lastResult,
-          })),
+          data: leagueRivalRows(rivalData.data.rows),
         }
       : {
           available: false,
@@ -937,8 +955,10 @@ export async function getLeagueHomeData(
     stage,
     preSeason,
     pairing,
+    calendar: leagueCalendar(league.settings),
     league: {
       id: league.id,
+      variant: league.leagueVariant,
       name: leagueDisplayName(league.name),
       platform: String(league.platform ?? 'manual').toLowerCase(),
       format: league.leagueType ?? null,

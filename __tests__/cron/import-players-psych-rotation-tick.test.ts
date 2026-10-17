@@ -21,6 +21,9 @@ import { NextRequest } from 'next/server'
 const h = vi.hoisted(() => ({
   refresh: vi.fn(),
   intel: vi.fn(async () => ({ feeds: 'inside cadence' })),
+  espnSeason: vi.fn(() => true),
+  espnTeamMap: vi.fn(async () => ({ skipped: 'fresh', unmatched: [] as string[] })),
+  espnRosters: vi.fn(async (_opts: { deadlineAt: number }) => ({ blocked: false, identitiesCreated: 2, headshotsWritten: 3, errors: 0 })),
   heartbeats: [] as Array<{ jobName: string; outcome: Record<string, unknown> | null; threw: boolean }>,
   remainingMs: null as number | null,
 }))
@@ -42,6 +45,12 @@ vi.mock('@/lib/devy/ingestFantraxDevyAdp', () => ({
 vi.mock('@/lib/devy/devyHeadshotRefresh', () => ({
   refreshDevyHeadshots: vi.fn(async () => ({ refreshed: 0 })),
   refreshCollegeSportsPlayerHeadshots: vi.fn(async () => ({ refreshed: 0 })),
+}))
+/* The ESPN NCAAB phase shares this tick. Mocked so the real module (prisma + ESPN) never runs here. */
+vi.mock('@/lib/espn/ncaabEspnIngest', () => ({
+  isNcaabRosterSeason: h.espnSeason,
+  syncEspnNcaabTeamMapIfDue: h.espnTeamMap,
+  syncEspnNcaabRosters: h.espnRosters,
 }))
 
 /* Faithful to the real contract: run fn, derive the outcome from its result, record, rethrow. */
@@ -83,6 +92,9 @@ const intelTick = () => GET(new NextRequest('http://localhost/api/cron/import-pl
 beforeEach(() => {
   h.refresh.mockReset()
   h.intel.mockClear()
+  h.espnSeason.mockClear().mockReturnValue(true)
+  h.espnTeamMap.mockClear()
+  h.espnRosters.mockClear()
   h.heartbeats.length = 0
   h.remainingMs = null
 })
@@ -166,6 +178,55 @@ describe('a failing rotation cannot take the intel tick down with it', () => {
     expect(body.devyIntelSources).toEqual({ feeds: 'inside cadence' })
     expect(body.psychProfiles).toEqual({ error: 'sleeper said no' })
     expect(h.heartbeats.find((b) => b.jobName === PSYCH_JOB)?.threw).toBe(true)
+  })
+})
+
+describe('the ESPN college basketball phase shares the tick without starving the rotation', () => {
+  const ESPN_JOB = 'cron-espn-ncaab-rosters'
+  const settled = () =>
+    h.refresh.mockResolvedValue({ leaguesProfiled: 0, managersProfiled: 0, leagueIds: [], stoppedEarly: false, deferred: 0 })
+
+  it('runs before the rotation, under its own heartbeat, and reports what it wrote', async () => {
+    settled()
+    const body = await (await intelTick()).json()
+
+    expect(h.espnRosters).toHaveBeenCalledTimes(1)
+    expect(h.espnRosters.mock.invocationCallOrder[0]).toBeLessThan(h.refresh.mock.invocationCallOrder[0])
+    expect(body.espnNcaab).toMatchObject({ rosters: { identitiesCreated: 2, headshotsWritten: 3 } })
+    expect(h.heartbeats.find((b) => b.jobName === ESPN_JOB)?.outcome).toMatchObject({ rowsWritten: 5 })
+  })
+
+  it('takes at most 45s, and never the psych runway beneath it', async () => {
+    settled()
+    h.remainingMs = 120_000 // 120s left: psych needs 90s, so ESPN may have 30s
+    const before = Date.now()
+    await intelTick()
+
+    const { deadlineAt } = h.espnRosters.mock.calls[0]![0]
+    expect(deadlineAt - before).toBeLessThanOrEqual(30_000 + 1_000)
+    expect(h.refresh).toHaveBeenCalledTimes(1)
+  })
+
+  it('declines below its own minimum, leaves a warning row, and the rotation still runs', async () => {
+    settled()
+    h.remainingMs = 100_000 // 100 - 90 = 10s, under the 15s minimum
+    const body = await (await intelTick()).json()
+
+    expect(h.espnRosters).not.toHaveBeenCalled()
+    expect(body.espnNcaab).toMatchObject({ skipped: 'no runway' })
+    expect((h.heartbeats.find((b) => b.jobName === ESPN_JOB)?.outcome?.warnings as string[])[0]).toMatch(/no runway/)
+    expect(h.refresh).toHaveBeenCalledTimes(1)
+  })
+
+  it('does nothing out of season, and that is not a warning', async () => {
+    settled()
+    h.espnSeason.mockReturnValue(false)
+    const body = await (await intelTick()).json()
+
+    expect(h.espnTeamMap).not.toHaveBeenCalled()
+    expect(h.espnRosters).not.toHaveBeenCalled()
+    expect(body.espnNcaab).toEqual({ skipped: 'out of season' })
+    expect(h.heartbeats.find((b) => b.jobName === ESPN_JOB)?.outcome?.warnings).toEqual([])
   })
 })
 

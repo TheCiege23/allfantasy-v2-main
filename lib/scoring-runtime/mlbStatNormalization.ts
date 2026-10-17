@@ -26,6 +26,8 @@
 import type { NormalizedGameStats } from './dailySportStatNormalization'
 
 const BATTING: Readonly<Record<string, string>> = {
+  AB: 'ab',
+  H: 'h',
   R: 'r',
   HR: 'hr',
   RBI: 'rbi',
@@ -40,7 +42,7 @@ const BATTING: Readonly<Record<string, string>> = {
   '3B': 'triple',
 }
 /** Batting fields that score nothing (hits are scored by type or as total bases). */
-const BATTING_NON_SCORING = new Set(['AB', 'H', 'E', 'PO', 'Outs', 'BAT_ORD', 'player_id'])
+const BATTING_NON_SCORING = new Set(['E', 'PO', 'Outs', 'BAT_ORD', 'player_id'])
 
 const PITCHING: Readonly<Record<string, string>> = {
   K: 'so',

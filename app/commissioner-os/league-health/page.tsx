@@ -1,6 +1,6 @@
 import { CommissionerPageContainer } from '@/components/commissioner-os/shell/CommissionerPageContainer'
 import { CommissionerDepthLocked } from '@/components/commissioner-os/shell/CommissionerDepthLocked'
-import { FreeUntilNote } from '@/components/core-app/CoreDepthLock'
+import { CommissionerFreeUntilNote } from '@/components/commissioner-os/shell/CommissionerFreeUntilNote'
 import { resolveCommissionerOsDepth } from '@/lib/commissioner-ui/commissionerOsDepth'
 import { LeagueHealthView } from '@/components/commissioner-os/league-health/LeagueHealthView'
 import { getDecisionOSAdapter } from '@/lib/commissioner-ui/adapter'
@@ -20,9 +20,13 @@ export default async function LeagueHealthPage() {
 
   return (
     <CommissionerPageContainer>
-      <FreeUntilNote access={depth} />
+      <CommissionerFreeUntilNote access={depth} />
       <LeagueHealthView
         dataMode={adapter.mode}
+        // Each fallback below stands in for a failed read; the view must not call that "good shape".
+        detailAvailable={detailResponse.error === null && detailResponse.data !== null}
+        risksRead={risksResponse.error === null && risksResponse.data !== null}
+        recommendationsRead={recommendationsResponse.error === null && recommendationsResponse.data !== null}
         detail={
           detailResponse.data ?? {
             /*

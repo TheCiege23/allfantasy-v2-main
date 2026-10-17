@@ -1,4 +1,5 @@
 import { logAdminAudit } from "@/lib/admin-audit"
+import { maskPhonesInText } from "@/lib/sms/maskPhone"
 
 type PasswordResetAuditOutcome =
   | "rate_limited"
@@ -41,7 +42,12 @@ export async function logPasswordResetAudit(input: {
     adminUserId: "system:password-reset",
     action: `password_reset_request_${input.outcome}`,
     targetType: input.type,
-    targetId: input.userId ?? input.email ?? input.phone ?? undefined,
+    /*
+     * ⚠ NEVER THE RAW NUMBER. With no account matched (invalid_sms_phone, sms_profile_not_found)
+     * this keyed the row on the full phone of someone who may not even be a user. Masked like
+     * `details.phone` below, which is enough to match a support ticket by its last four.
+     */
+    targetId: input.userId ?? input.email ?? (input.phone ? `phone:***${input.phone.slice(-4)}` : undefined),
     details: {
       type: input.type,
       userId: input.userId ?? null,
@@ -49,7 +55,10 @@ export async function logPasswordResetAudit(input: {
       emailLower: input.email?.toLowerCase?.() ?? null,
       phone: input.phone ? `***${input.phone.slice(-4)}` : null,
       ip: input.ip ?? null,
-      ...(input.detail ?? {}),
+      // Provider and database error text can quote the number; scrub it before it is stored.
+      ...Object.fromEntries(
+        Object.entries(input.detail ?? {}).map(([k, v]) => [k, typeof v === "string" ? maskPhonesInText(v) : v]),
+      ),
     },
   })
 }

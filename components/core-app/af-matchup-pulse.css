@@ -167,8 +167,13 @@
   about when to stack. Scoped above the phone breakpoint on purpose: below it the
   board is already one column, and a two-up row grid there would be two 160px
   rows.
+
+  ⚠ KEYED ON THE BOARD'S WIDTH, NOT THE VIEWPORT. This was `min-width: 781px`, so
+  an iPad (834) got the two-up grid in a ~510px board: each row ~248px against
+  ~241px of fixed parts (face, crest, ring, PROJ tag, margin, gaps), leaving the
+  league name ~7px. `af-board` is the container af-core-boards.css puts on `.af-bd`.
 */
-@media (min-width: 781px) {
+@container af-board (min-width: 760px) {
   .af-mp-cols[data-stack] {
     grid-template-columns: minmax(0, 1fr);
     gap: 10px;
@@ -299,6 +304,26 @@
   background: rgba(52, 211, 153, 0.14);
   border-color: rgba(52, 211, 153, 0.3);
   color: #5fe0b4;
+}
+/*
+  The tints above are tuned for the dark theme: on a light page their 11px initials sat at roughly
+  1.4–2.6:1 against the tinted chip. The same hues, darkened until the text clears 4.5:1.
+*/
+html[data-mode='light'] .af-core .af-mp-face--none[data-platform='sleeper'],
+html[data-mode='light'] .af-core .af-mp-crest--none[data-platform='sleeper'] {
+  color: #5b2fc9;
+}
+html[data-mode='light'] .af-core .af-mp-face--none[data-platform='espn'],
+html[data-mode='light'] .af-core .af-mp-crest--none[data-platform='espn'] {
+  color: #b3122f;
+}
+html[data-mode='light'] .af-core .af-mp-face--none[data-platform='yahoo'],
+html[data-mode='light'] .af-core .af-mp-crest--none[data-platform='yahoo'] {
+  color: #5a32c4;
+}
+html[data-mode='light'] .af-core .af-mp-face--none[data-platform='fantrax'],
+html[data-mode='light'] .af-core .af-mp-crest--none[data-platform='fantrax'] {
+  color: #0a6e4b;
 }
 
 .af-mp-text {
@@ -433,5 +458,259 @@
     height: 44px;
     transform: translate(-50%, -50%);
     background: transparent;
+  }
+}
+
+/* ── 2026-10-02 visual pass (components/core-app/MatchupPulseBoard.tsx) ──────
+ *
+ * Top-level rules and sibling @media blocks, appended at end of file.
+ */
+
+/* The week as one scoreboard — "21 leading ▬▬▬▬▬▬▬▬ 22 trailing". */
+.af-mp-score {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background:
+    radial-gradient(90% 160% at 0% 50%, var(--good-soft), transparent 50%),
+    radial-gradient(90% 160% at 100% 50%, var(--bad-soft), transparent 50%),
+    var(--surface);
+}
+.af-mp-score-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+.af-mp-score-side[data-tone='bad'] {
+  align-items: flex-end;
+}
+.af-mp-score-n {
+  font-size: 30px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+.af-mp-score-side[data-tone='good'] .af-mp-score-n {
+  color: var(--good);
+}
+.af-mp-score-side[data-tone='bad'] .af-mp-score-n {
+  color: var(--bad);
+}
+.af-mp-score-word {
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.af-mp-split {
+  height: 10px;
+  border-radius: 999px;
+  background: var(--bad);
+  opacity: 0.9;
+  overflow: hidden;
+}
+.af-mp-split-good {
+  display: block;
+  height: 100%;
+  background: var(--good);
+  box-shadow: 2px 0 0 0 var(--surface);
+  transition: width 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* Each row's margin, drawn against the biggest on the board, along the row's foot. */
+.af-core .af-mp-row {
+  position: relative;
+  overflow: hidden;
+}
+.af-mp-bar {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
+  border-radius: 0 3px 3px 0;
+  pointer-events: none;
+}
+.af-mp-row[data-tone='good'] .af-mp-bar {
+  background: var(--good);
+}
+.af-mp-row[data-tone='bad'] .af-mp-bar {
+  background: var(--bad);
+}
+/* A projected margin is a forecast — its bar is hatched rather than solid. */
+.af-mp-row[data-basis='projected'] .af-mp-bar {
+  opacity: 0.55;
+  background-image: repeating-linear-gradient(90deg, transparent 0 4px, var(--surface) 4px 6px);
+}
+.af-mp-row[data-tone='good'] {
+  box-shadow: inset 3px 0 0 0 var(--good);
+}
+.af-mp-row[data-tone='bad'] {
+  box-shadow: inset 3px 0 0 0 var(--bad);
+}
+
+/* Readability: the line that says whether the numbers are points or projections, and each row's
+   opponent line, were 11px — under the 12px floor this app uses for body text on a phone. */
+.af-mp-basis,
+.af-mp-meta,
+.af-mp-gap {
+  font-size: 12px;
+}
+
+/* The refresh button's 44px hit area applied only at ≤720px; a touch tablet got 20px. */
+@media (pointer: coarse) {
+  .af-mp-live-btn {
+    position: relative;
+  }
+  .af-mp-live-btn::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 44px;
+    height: 44px;
+    transform: translate(-50%, -50%);
+    background: transparent;
+  }
+}
+
+@media (max-width: 560px) {
+  .af-mp-score {
+    gap: 10px;
+    padding: 12px 14px;
+  }
+  .af-mp-score-n {
+    font-size: 24px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .af-mp-split-good {
+    transition: none;
+  }
+}
+
+/* ── Win probability on the cross-league board (2026-10-02) ──────────────────
+ *
+ * Top-level rules appended at end of file. The columns are now chosen by odds,
+ * so a row's margin can disagree with its column: the bar takes the MARGIN's
+ * colour (it measures the margin), the inset edge keeps the column's.
+ */
+.af-mp-row[data-margin='good'] .af-mp-bar {
+  background: var(--good);
+}
+.af-mp-row[data-margin='bad'] .af-mp-bar {
+  background: var(--bad);
+}
+.af-mp-diff[data-tone='even'] {
+  color: var(--muted);
+}
+
+/* The odds ring — 36px, number inside, arc is the probability. */
+.af-mp-ring {
+  position: relative;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+}
+.af-mp-ring svg {
+  position: absolute;
+  inset: 0;
+}
+.af-mp-ring-track {
+  stroke: var(--line);
+}
+.af-mp-ring-arc {
+  stroke: var(--muted);
+  transition: stroke-dasharray 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.af-mp-ring[data-tone='good'] .af-mp-ring-arc {
+  stroke: var(--good);
+}
+.af-mp-ring[data-tone='bad'] .af-mp-ring-arc {
+  stroke: var(--bad);
+}
+.af-mp-ring-n {
+  position: relative;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* "Expected record 23.4–19.6 · across 43 matchups with odds" */
+.af-mp-expected {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.af-mp-expected-label {
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.af-mp-expected-n {
+  font-size: 17px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+.af-mp-expected-of {
+  color: var(--faint);
+}
+
+/* Closest games — a full-width list under the two columns. */
+.af-mp-closest {
+  margin-top: 4px;
+}
+.af-mp-col-head[data-tone='even'] {
+  color: var(--accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .af-mp-ring-arc {
+    transition: none;
+  }
+}
+
+/* ── Narrow BOARD, wide viewport (2026-10-02 layout pass) ─────────────────────
+ *
+ * Top-level sibling blocks appended at end of file. The phone rules above key on the viewport, but
+ * the board gets the viewport minus the shell's rail and nav — ~500–760px on every tablet, while
+ * the ≤780 viewport rules stayed off. The same rules on the board's own width (`af-board`, on
+ * `.af-bd`); the viewport blocks stay as the fallback for a browser without container queries.
+ */
+@container af-board (max-width: 760px) {
+  .af-mp-cols {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .af-mp {
+    padding: 0;
+  }
+  .af-mp-crest {
+    display: none;
+  }
+}
+
+@container af-board (max-width: 540px) {
+  .af-mp-score {
+    gap: 10px;
+    padding: 12px 14px;
+  }
+  .af-mp-score-n {
+    font-size: 24px;
   }
 }

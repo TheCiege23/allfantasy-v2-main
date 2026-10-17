@@ -3,6 +3,9 @@
 import Link from 'next/link'
 import type { ToolCard, ToolsHubData } from '@/lib/core-app/toolsHub'
 import '@/components/core-app/af-tools.css'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
+import { TopicTip } from '@/components/core-app/TopicTip'
 
 /**
  * 25a — Tools, grouped by the job you came here to do.
@@ -29,46 +32,51 @@ export type ToolsProps = {
 }
 
 function TierBadge({ tier }: { tier: ToolCard['tier'] }) {
+  const { language } = useOptionalLanguage()
   if (tier === 'free') return null
   const label = tier === 'commissioner' ? 'Commissioner' : tier === 'pro' ? 'Pro' : 'Plan'
   return (
     <span className="af-tl-tier" data-tier={tier}>
-      {label}
+      {coreUiCopy(label, language)}
     </span>
   )
 }
 
 function Card({ tool }: { tool: ToolCard }) {
+  const { language } = useOptionalLanguage()
+  const copy = (english: string) => coreUiCopy(english, language)
   return (
     <div className="af-tl-cardwrap">
       <Link href={tool.href} className="af-tl-card" data-tone={tool.live?.tone ?? 'none'}>
         <span className="af-tl-card-head">
           <span className="af-tl-card-title">
-            {tool.title}
+            {copy(tool.title)}
             {tool.leavesShell ? (
-              <span className="af-tl-out" aria-label="opens the full page" title="Opens the full page">
+              <span className="af-tl-out" aria-label={copy('opens the full page')}>
                 ↗
               </span>
             ) : null}
           </span>
           <span className="af-tl-card-badges">
-            {/* Price before the click. Never revealed after. */}
+            {/* Price before the click. Never revealed after. Explained once, by the "?" at the page heading. */}
             {tool.tokenCost != null ? (
-              <span className="af-tl-cost af-num" title="Tokens per run">
+              <span className="af-tl-cost af-num">
                 {tool.tokenCost}
+                {/* The title= that named this number is gone (phones never showed it); a screen reader still needs it. */}
+                <span className="sr-only"> {copy('Tokens per run')}</span>
               </span>
             ) : null}
             <TierBadge tier={tool.tier} />
           </span>
         </span>
 
-        <span className="af-tl-card-desc">{tool.desc}</span>
+        <span className="af-tl-card-desc">{copy(tool.desc)}</span>
 
         {/* The live line. A tool card with no context is a bare tool name. */}
         {tool.live ? (
           <span className="af-tl-live" data-tone={tool.live.tone}>
             <i className="af-tl-livedot" aria-hidden />
-            {tool.live.text}
+            {copy(tool.live.text)}
           </span>
         ) : null}
       </Link>
@@ -80,10 +88,10 @@ function Card({ tool }: { tool: ToolCard }) {
       */}
       {tool.alternates && tool.alternates.length > 0 ? (
         <div className="af-tl-alts">
-          <span className="af-tl-alts-label">Also:</span>
+          <span className="af-tl-alts-label">{copy('Also:')}</span>
           {tool.alternates.map((a) => (
             <Link key={a.href} href={a.href} className="af-tl-alt">
-              {a.label}
+              {copy(a.label)}
             </Link>
           ))}
         </div>
@@ -93,20 +101,32 @@ function Card({ tool }: { tool: ToolCard }) {
 }
 
 export function Tools({ data }: ToolsProps) {
+  const { language } = useOptionalLanguage()
+  const copy = (english: string) => coreUiCopy(english, language)
+  const hasCardMarks = data.groups.some((g) => g.tools.some((t) => t.tokenCost != null || t.leavesShell))
   return (
     <div className="af-tl">
       <header className="af-tl-head">
-        <h1 className="af-tl-title">Tools</h1>
+        <h1 className="af-tl-title">
+          {copy('Tools')}
+          {/* Replaces two per-card `title=`s ("Tokens per run", "Opens the full page") a phone never showed — the cards are links, so the key lives here. */}
+          {hasCardMarks ? (
+            <>
+              {' '}
+              <TopicTip topic="tokenCost" />
+            </>
+          ) : null}
+        </h1>
         <p className="af-tl-sub">
-          Grouped by what you came to do. Anything with a deadline shows it here, before you open it.
+          {copy('Grouped by what you came to do. Anything with a deadline shows it here, before you open it.')}
         </p>
       </header>
 
       {data.groups.map((group) => (
         <section key={group.id} className="af-tl-group">
           <div className="af-tl-grouphead">
-            <h2 className="af-tl-heading">{group.heading}</h2>
-            <p className="af-tl-groupnote">{group.note}</p>
+            <h2 className="af-tl-heading">{copy(group.heading)}</h2>
+            <p className="af-tl-groupnote">{copy(group.note)}</p>
           </div>
           {/*
             38a·11 gives the deadline-bound group a wider 3-up card and the
@@ -126,7 +146,7 @@ export function Tools({ data }: ToolsProps) {
         </section>
       ))}
 
-      <p className="af-tl-scopenote">{data.leagueScopedNote}</p>
+      <p className="af-tl-scopenote">{copy(data.leagueScopedNote)}</p>
 
     </div>
   )

@@ -81,6 +81,54 @@ export function normalizedFaabValue(
   return situationalFaabValue({ amount, originalBudget: budget }).value
 }
 
+/** What a league's FAAB is buying into right now: every team's balance, and the season left to spend it in. */
+export type LeagueFaabState = {
+  /** Each team's remaining FAAB (live teams only — a chopped or dissolved roster spends nothing). */
+  balances: readonly number[]
+  /** Regular-season weeks FAAB bought now can still be used in. */
+  weeksLeft: number
+  /** Regular-season weeks in all. */
+  seasonWeeks: number
+}
+
+/**
+ * FAAB at its PURCHASING POWER in this league, this week (Guap, 2026-10-11 — the rule the guillotine grade
+ * already uses, for every other league): its share of the FAAB the league still holds, times what the
+ * waiver wire has left to give this season.
+ *
+ *   value = 1800 × amount ÷ (the league's average remaining FAAB) × (weeks left ÷ season weeks)
+ *
+ * ANCHORED TO THE LINEAR FORMULA, so it moves nothing it should not: in week 1, with every team holding the
+ * full budget, it IS `normalizedFaabValue` — the whole wire's worth is 1800 per team's budget then, and a
+ * dollar's share of it is a dollar's share of the budget. From there two things move it, both measured
+ * from the league's own rows rather than tuned:
+ *
+ *   - THE LEAGUE SPENDS DOWN → each dollar is a bigger share of the buying power left. $10 when the
+ *     average team holds $20 is half a team's bids; $10 of a $100 budget nobody has touched is a tenth.
+ *   - THE SEASON RUNS OUT → unspent FAAB buys nothing after the last regular-season week, so the wire it
+ *     can still buy shrinks with the weeks left.
+ *
+ * Capped at the whole wire (the amount cannot buy more than every dollar left). Null when the state cannot
+ * say anything — no balances, or no season length — and the caller keeps `normalizedFaabValue`.
+ */
+export function leagueFaabValue(
+  amount: number | null | undefined,
+  state: LeagueFaabState | null | undefined,
+): number | null {
+  if (!state) return null
+  const balances = state.balances.filter((b) => Number.isFinite(b) && b >= 0)
+  const weeks = finiteOrNull(state.seasonWeeks)
+  const left = finiteOrNull(state.weeksLeft)
+  if (balances.length === 0 || weeks == null || weeks <= 0 || left == null) return null
+  const total = balances.reduce((s, b) => s + b, 0)
+  if (!(total > 0)) return null
+  const amt = Math.max(0, finiteOrNull(amount) ?? 0)
+  const share = Math.min(amt / total, 1)
+  const time = Math.max(0, Math.min(1, left / weeks))
+  // The whole wire's worth now: one full budget's value per team, scaled to the season left.
+  return Math.round(share * FAAB_FULL_BUDGET_VALUE * balances.length * time)
+}
+
 export interface SituationalFaabInput {
   amount: number | null | undefined
   originalBudget?: number | null

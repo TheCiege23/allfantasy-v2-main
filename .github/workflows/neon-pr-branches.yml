@@ -1,5 +1,4 @@
-# Neon: delete a PR's preview database branch when the PR closes, and sweep daily for any that
-# outlived their PR.
+# Neon: sweep daily for preview database branches that outlived their PR.
 #
 # 🛑 IT NO LONGER CREATES THEM (2026-09-22). The `create_neon_branch` job made a
 # `preview/pr-<n>-*` branch on every PR open/push, and NOTHING EVER CONNECTED TO ONE: its
@@ -9,43 +8,34 @@
 # the 21st — and the Launch plan includes 10 branches per project, not Scale's 25.
 #
 # Before bringing creation back, give the branch a consumer (migrations, an e2e lane) in the SAME
-# change. The delete job and the sweep stay, to clean up what earlier PRs left.
+# change — and bring back a delete-on-close job with it (see git history for the last one).
 #
-# ⚠ THIS HEADER USED TO CALL THE DELETE JOB "HARMLESS WHEN THERE IS NOTHING TO FIND", AND IT WAS
-# NOT. It used `neondatabase/delete-branch-action`, which exits 1 when the branch is missing — so
-# once creation stopped, every PR opened after 2026-09-22 went red on close with
-# `ERROR: Branch preview/pr-<n>-… not found.` (first seen on #1224's close, 2026-09-24). The job
-# now treats exactly that message, for exactly this PR's branch, as "nothing to delete", and still
-# fails on anything else — a wrong project, bad credentials, an API outage.
+# 🛑 AND IT NO LONGER RUNS ON PR CLOSE (2026-10-01). The `Branch name` + `Delete Neon branch` pair
+# outlived the branches it deleted. Measured that day:
+#   - every retained close-time run read "No preview branch … nothing to delete";
+#   - zero open PRs predate the 2026-09-22 creation stop, so none can own a branch;
+#   - Neon held three branches, none `preview/*` (production, import-test-sandbox,
+#     staging-nfl-verify).
+# Each close still queued two jobs on the account's shared runner pool, where they sat 30-52
+# minutes behind PR CI to run for 2-3 seconds, holding NEON_API_KEY on a pull_request event to
+# do nothing. The daily sweep below already asserts the invariant the pair approximated — no
+# preview branch outlives its PR — so it alone covers any branch that ever appears again.
 #
 # Requires repository secrets/variables from Neon GitHub integration:
 #   - secrets.NEON_API_KEY
 #   - vars.NEON_PROJECT_ID
 #
-# 🛑 WHY THE DAILY SWEEP EXISTS, GIVEN THE DELETE JOB ALREADY WORKS. On 2026-09-20 this project
-# held 71 preview branches, 67 for PRs long closed — 124 GB, the oldest from 2026-05-01. The
-# delete job below was present the whole time (added 2026-04-16, never edited) and is healthy:
-# 295 of the last 300 runs succeeded, none cancelled.
-#
-# ⚠ AND THE PER-EVENT CAUSE IS UNKNOWN. Two explanations were checked and BOTH DISPROVEN. The
-# computed name `preview/pr-<n>-<head with / → ->` matches the stored Neon name exactly for all
-# nine leaked branches, so it was not a name mismatch; and no run has ever been cancelled, so
-# concurrency eviction did not eat them. The runs from the days that leaked are past retention.
-#
-# An event handler is best-effort: a missed webhook, an API blip, or a re-run of an old create
-# job leaves a branch with nothing to notice. The sweep asserts the invariant instead — no
-# preview branch outlives its PR — so a miss self-heals whatever caused it.
+# Why a sweep and not an event handler: on 2026-09-20 this project held 71 preview branches, 67
+# for PRs long closed — 124 GB — while the close-time delete job was present and 295 of its last
+# 300 runs had succeeded. The per-event cause was never found (a name mismatch and concurrency
+# eviction were both checked and disproven). An event handler is best-effort; the sweep
+# self-heals whatever caused a miss.
 #
 # Docs: https://neon.tech/docs/guides/neon-github-integration
 
 name: Neon — PR preview database branch
 
 on:
-  pull_request:
-    types:
-      # Only `closed`: this workflow no longer CREATES branches (see header), it only removes the
-      # ones earlier PRs left behind.
-      - closed
   schedule:
     # Daily. A sweep that runs after the leak has grown is still a sweep.
     - cron: "23 7 * * *"
@@ -58,7 +48,7 @@ on:
         type: boolean
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
 # Least privilege for GITHUB_TOKEN: this workflow only reads the repo. Jobs that
@@ -67,62 +57,6 @@ permissions:
   contents: read
 
 jobs:
-  setup:
-    name: Branch name
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    outputs:
-      head_branch: ${{ steps.names.outputs.current_branch }}
-    steps:
-      # Was tj-actions/branch-names@v9 — a third-party action on a MUTABLE tag, from
-      # the org whose changed-files action was compromised in 2025, in a workflow that
-      # also holds NEON_API_KEY. All it did was read the PR head branch. The branch
-      # name is attacker-controlled on a PR, so it goes through env (never inlined
-      # into the script) and is reduced to a safe character set.
-      - name: Resolve head branch name
-        id: names
-        env:
-          HEAD_REF: ${{ github.head_ref }}
-        run: |
-          # Neon branch names must not rely on raw slashes from git (e.g. feature/foo).
-          safe=$(printf '%s' "$HEAD_REF" | tr '/' '-' | tr -c 'A-Za-z0-9._-' '-')
-          echo "current_branch=$safe" >> "$GITHUB_OUTPUT"
-
-  delete_neon_branch:
-    name: Delete Neon branch
-    needs: setup
-    if: github.event_name == 'pull_request' && github.event.action == 'closed'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-
-      # 🛑 THE BRANCH NAME REACHES THE SCRIPT THROUGH `env:`, NEVER `${{ }}` INSIDE `run:`. A git
-      # branch name may legally contain `$(…)`, backticks and `;`, and an expression interpolated
-      # into a script is pasted in before bash parses it — a named branch would become a command.
-      # From an environment variable it is only ever data.
-      #
-      # ⚠ ONLY "Branch <this exact name> not found" COUNTS AS NOTHING TO DO. A looser `not found`
-      # would also pass "project not found" (a wrong NEON_PROJECT_ID) and turn a broken cleanup into
-      # a green one. neonctl reads NEON_API_KEY from the environment; the key is never echoed.
-      - name: Delete Neon branch (if one was ever made)
-        env:
-          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
-          NEON_PROJECT_ID: ${{ vars.NEON_PROJECT_ID }}
-          BRANCH: preview/pr-${{ github.event.pull_request.number }}-${{ needs.setup.outputs.head_branch }}
-        run: |
-          if out=$(npx -y neonctl@2 branches delete "$BRANCH" --project-id "$NEON_PROJECT_ID" 2>&1); then
-            echo "Deleted $BRANCH."
-            exit 0
-          fi
-          if printf '%s\n' "$out" | grep -qF "Branch $BRANCH not found"; then
-            echo "No preview branch $BRANCH for this PR — nothing to delete."
-            exit 0
-          fi
-          printf '%s\n' "$out"
-          exit 1
-
   # The reconciler. Reads every branch, asks GitHub for each PR's state, and deletes only the
   # `preview/pr-*` ones whose PR is closed or merged. Every other case — open, unknown, a named
   # branch, anything primary/default/protected — is kept; see the refusal rules and their tests

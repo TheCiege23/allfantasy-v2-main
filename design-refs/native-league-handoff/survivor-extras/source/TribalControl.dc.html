@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Tribal Council control</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./exile/exile.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Caveat:wght@500;600;700&amp;family=Cinzel:wght@600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080d}
+.ex-sg{white-space:nowrap}
+.tc-tl{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.tc-tl > div{position:relative;padding:12px;border-radius:10px;background:#0b0d14;border:1px solid rgba(255,255,255,.06);display:flex;flex-direction:column;gap:4px}
+.tc-ck{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:10px;background:#0b0d14;border:1px solid rgba(255,255,255,.06)}
+.tc-ck i{flex:none;width:26px;height:26px;border-radius:999px;display:grid;place-items:center;font:700 12px 'JetBrains Mono',monospace;font-style:normal}
+.tc-av{width:32px;height:32px;flex:none;border-radius:999px;display:grid;place-items:center;font:700 11px 'Archivo',sans-serif;color:#fff}
+.tc-log{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+.tc-log:last-child{border-bottom:0}
+</style>
+</helmet>
+<div class="ex" style="min-height: 100vh; display: flex; flex-direction: column">
+  <header style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 18px 28px; border-bottom: 1px solid rgba(255,255,255,.06)">
+    <a class="ex-btn" href="SurvivorSettings.dc.html" aria-label="Back" style="padding: 0 12px">‹</a>
+    <div style="flex: 1 1 320px; display: flex; flex-direction: column; gap: 3px">
+      <h1 class="ex-h1">Tribal Council control · week 6</h1>
+      <span class="ex-t2">Commissioner only · Tribal runs on its own; this is where you watch it and step in</span>
+    </div>
+    <div class="ex-seg"><sc-for list="{{autos}}" as="a" hint-placeholder-count="2"><button class="ex-sg {{a.cls}}" onClick="{{a.pick}}" aria-pressed="{{a.on}}">{{a.label}}</button></sc-for></div>
+  </header>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 24px; padding: 24px 28px; align-items: flex-start">
+    <section style="flex: 1 1 640px; min-width: 0; display: flex; flex-direction: column; gap: 16px">
+
+      <div class="tc-tl">
+        <sc-for list="{{tl}}" as="t" hint-placeholder-count="5"><div style="border-color: {{t.line}}; background: {{t.bg}}"><span class="ex-lbl" style="color: {{t.lc}}">{{t.when}}</span><b style="font-size: 13.5px">{{t.t}}</b><span class="ex-t3" style="font-size: 11.5px">{{t.s}}</span></div></sc-for>
+      </div>
+
+      <div class="ex-card" style="padding: 18px; display: flex; flex-direction: column; gap: 12px">
+        <div style="display: flex; align-items: center; gap: 12px">
+          <img src="{{stageArt}}" alt="" style="height: 44px">
+          <div style="flex: 1; display: flex; flex-direction: column; gap: 2px"><b style="font-size: 15px">{{stageT}}</b><span class="ex-t2" style="font-size: 12.5px">{{stageS}}</span></div>
+          <span class="ex-num ex-gold" style="font-size: 13px">{{doneCount}} of 5 done</span>
+        </div>
+        <sc-for list="{{checks}}" as="c" hint-placeholder-count="5">
+          <div class="tc-ck" style="border-color: {{c.line}}"><i style="background: {{c.ib}}; color: {{c.ic}}">{{c.mark}}</i>
+            <div style="flex: 1; display: flex; flex-direction: column; gap: 2px"><b style="font-size: 13.5px">{{c.t}}</b><span class="ex-t2" style="font-size: 12.5px">{{c.s}}</span></div>
+            <sc-if value="{{c.hasBtn}}" hint-placeholder-val="{{ false }}"><button class="ex-btn {{c.btnCls}}" onClick="{{c.act}}" disabled="{{c.dis}}">{{c.btn}}</button></sc-if>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px">
+        <div class="ex-card" style="padding: 16px; display: flex; flex-direction: column; gap: 10px">
+          <div style="display: flex; align-items: center; gap: 8px"><img src="weekly/urn.svg" alt="" style="height: 30px"><span class="ex-lbl" style="flex: 1">Who has voted · Tribe Vela</span><span class="ex-num ex-t2" style="font-size: 12px">{{votesIn}} of 4</span></div>
+          <sc-for list="{{voters}}" as="v" hint-placeholder-count="5">
+            <div style="display: flex; align-items: center; gap: 10px; opacity: {{v.op}}"><span class="tc-av" style="background: {{v.c}}; box-shadow: 0 0 0 2px #0b0d14, 0 0 0 3px {{v.ring}}">{{v.ini}}</span><span style="flex: 1; font-size: 13px">{{v.name}}</span>
+              <span style="font-size: 11.5px; font-weight: 600; color: {{v.sc}}">{{v.s}}</span>
+              <sc-if value="{{v.nudge}}" hint-placeholder-val="{{ false }}"><button class="ex-btn" onClick="{{v.doNudge}}" style="min-height: 28px; padding: 0 10px; font-size: 11.5px">{{v.nudgeL}}</button></sc-if></div>
+          </sc-for>
+          <span class="ex-t3" style="font-size: 11.5px">You see who has voted, never who they voted for. Votes not cast by the deadline don’t count.</span>
+        </div>
+        <div class="ex-card" style="padding: 16px; display: flex; flex-direction: column; gap: 10px">
+          <span class="ex-lbl">Sealed until the read</span>
+          <div style="display: flex; align-items: center; gap: 12px"><img src="survivor/idols/immunity-icon.svg" alt="" style="height: 36px; filter: grayscale(1) brightness(.7)"><div style="display: flex; flex-direction: column"><b style="font-size: 13.5px">Idol plays: hidden from you</b><span class="ex-t2" style="font-size: 12px">“Hide idols from commissioner” is on. Plays are revealed on the scroll.</span></div></div>
+          <div style="display: flex; align-items: center; gap: 12px"><img src="exile/scroll-sealed.svg" alt="" style="height: 36px"><div style="display: flex; flex-direction: column"><b style="font-size: 13.5px">Votes: sealed</b><span class="ex-t2" style="font-size: 12px">Nobody, you included, sees a vote before the read.</span></div></div>
+          <div style="display: flex; align-items: center; gap: 12px"><img src="exile/wax-seal.svg" alt="" style="height: 36px"><div style="display: flex; flex-direction: column"><b style="font-size: 13.5px">Tie rule: revote, then season points</b><span class="ex-t2" style="font-size: 12px">If season points tie too, you’ll be asked to decide.</span></div></div>
+        </div>
+      </div>
+    </section>
+
+    <aside style="flex: 0 1 380px; min-width: 300px; display: flex; flex-direction: column; gap: 16px">
+      <div class="ex-card" style="padding: 16px; display: flex; flex-direction: column; gap: 10px">
+        <span class="ex-lbl">Step in</span>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px">
+          <button class="ex-btn" onClick="{{extend}}" disabled="{{closed}}">Extend votes 1 hour</button>
+          <button class="ex-btn" onClick="{{togglePause}}">{{pauseL}}</button>
+        </div>
+        <span class="ex-t3" style="font-size: 12px">Extending sends every manager in the tribe a push. Pausing freezes the deadline and the reveal until you resume. Both go in the audit log.</span>
+        <div style="padding: 10px 12px; border-radius: 8px; background: rgba(217,180,90,.07); border: 1px solid rgba(217,180,90,.25); font-size: 12px; color: #d9c48a">You play in Tribe Vela too. Your own vote and idols work like everyone else’s, and a co-commissioner settles anything that involves you.</div>
+      </div>
+      <div class="ex-card" style="padding: 16px; display: flex; flex-direction: column">
+        <span class="ex-lbl" style="margin-bottom: 4px">Audit log</span>
+        <sc-for list="{{log}}" as="l" hint-placeholder-count="5">
+          <div class="tc-log"><img src="{{l.icon}}" alt="" style="width: 26px; height: 26px"><div style="display: flex; flex-direction: column; gap: 2px"><b style="font-size: 13px">{{l.t}}</b><span class="ex-t3" style="font-size: 11.5px">{{l.s}}</span></div></div>
+        </sc-for>
+      </div>
+    </aside>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { closed: false, read: false, nudged: false, ext: 0, paused: false, auto: 'auto' }; }
+  renderVals() {
+    const st = this.state;
+    const autos = [['auto', 'Auto-reveal on'], ['manual', 'Manual reveal']].map(([id, label]) => ({ label, on: st.auto === id ? 'true' : 'false', cls: st.auto === id ? 'ex-sg-on' : '', pick: () => this.setState({ auto: id }) }));
+    const ph = st.read ? 5 : st.closed ? 4 : 3;
+    const close = st.ext ? 'Tue 9:00 PM' : 'Tue 8:00 PM';
+    const tl = [['Sun 1:00 PM', 'Lineups lock', 'Week 6 starts'], ['Tue 8:00 AM', 'Scores final', 'Vela 461.6 · Koa 523.0'], ['Tue 8:05 AM', 'Immunity', 'Open Team 5 · 142.6'], [close, 'Votes close', st.ext ? 'Extended 1 hour' : 'Tribe Vela'], ['After close', 'The read', st.auto === 'auto' ? 'Starts on its own' : 'You start it']]
+      .map(([when, t, s], i) => ({ when, t, s, line: i === ph ? 'rgba(217,180,90,.5)' : 'rgba(255,255,255,.06)', bg: i === ph ? 'rgba(217,180,90,.06)' : '#0b0d14', lc: i < ph ? '#7fe0a6' : i === ph ? '#d9b45a' : '#6f7590' }));
+    const votesIn = st.closed ? 3 : 3;
+    const C = [['Scores final for Tribe Vela', 'All 5 starters’ games are in. No stat corrections pending.', true, null],
+      ['Immunity set', 'Open Team 5 wins with 142.6 and can’t receive votes.', true, null],
+      ['Votes close', st.closed ? '3 of 4 voted. Open Team 8’s vote doesn’t count.' : '3 of 4 in. Closes ' + close + ' ET.', st.closed, st.closed ? null : ['Close votes now', () => this.setState({ closed: true }), false, '']],
+      ['Read the scroll', st.read ? 'Read live to the tribe. Open Team 8 voted out, 2 votes to 1.' : 'Votes are read one slip at a time, live, to the whole league.', st.read, st.read ? null : ['Start the reveal', () => this.setState({ read: true }), !st.closed, 'ex-btn-gold']],
+      ['After the read', st.read ? 'Torch out, Exile Island, notifications, moment page.' : 'Runs on its own once the scroll is read.', st.read, null]];
+    const checks = C.map(([t, s, ok, b], i) => ({ t, s, mark: ok ? '✓' : String(i + 1), ib: ok ? 'rgba(58,190,120,.18)' : '#151926', ic: ok ? '#7fe0a6' : '#6f7590', line: ok ? 'rgba(58,190,120,.22)' : 'rgba(255,255,255,.06)',
+      hasBtn: !!b, btn: b ? b[0] : '', act: b ? b[1] : null, dis: b ? b[2] : true, btnCls: b ? b[3] : '' }));
+    const V = [['TheCiege26', 'TC', '#22314f', 'Voted', false], ['Open Team 5', 'O5', '#12352a', 'Voted · immune', false], ['Open Team 4', 'O4', '#1f2a4d', 'Voted', false], ['Open Team 8', 'O8', '#3a2410', st.closed ? 'Missed' : 'Not yet', true], ['Open Team 12', 'O12', '#2a2a2a', 'Out · week 5', null]];
+    const voters = V.map(([name, ini, c, s, pend]) => ({ name, ini, c, s, op: pend === null ? '.5' : '1', ring: name === 'Open Team 5' ? '#f2c94c' : 'transparent',
+      sc: pend === null ? '#6f7590' : pend ? (st.closed ? '#ff8a8a' : '#d9b45a') : '#7fe0a6', nudge: pend === true && !st.closed, nudgeL: st.nudged ? 'Nudged' : 'Nudge', doNudge: () => this.setState({ nudged: true }) }));
+    const L = [];
+    if (st.read) L.push(['weekly/torch-out-icon.svg', 'Scroll read · Open Team 8 voted out', 'System · Tue 8:14 PM ET']);
+    if (st.closed) L.push(['exile/scroll-sealed.svg', 'Votes closed early by commissioner', 'TheCiege26 · Tue 7:58 PM ET · 3 of 4 voted']);
+    if (st.paused) L.push(['exile/wax-seal.svg', 'League paused', 'TheCiege26 · just now']);
+    if (st.ext) L.push(['weekly/urn.svg', 'Vote deadline extended 1 hour', 'TheCiege26 · just now · tribe notified']);
+    if (st.nudged) L.push(['weekly/urn.svg', 'Reminder sent to Open Team 8', 'TheCiege26 · just now']);
+    L.push(['weekly/immunity-necklace-icon.svg', 'Immunity set · Open Team 5', 'System · Tue 8:05 AM ET'], ['weekly/torch-lit-icon.svg', 'Week 6 scores final', 'System · Tue 8:00 AM ET'], ['late/buff-vela.svg', 'Tribal Council: Tribe Vela', 'System · lowest tribe total, 461.6 to 523.0']);
+    return { autos, tl, checks, voters, votesIn, closed: st.closed,
+      doneCount: C.filter(c => c[2]).length,
+      stageArt: st.read ? 'weekly/torch-out.svg' : st.closed ? 'exile/scroll-sealed.svg' : 'weekly/urn.svg',
+      stageT: st.read ? 'Tribal Council is done' : st.closed ? 'Votes are in · ready to read' : st.paused ? 'Paused' : 'Voting is open',
+      stageS: st.read ? 'Everything after the read has run. Week 7 starts Sunday.' : st.closed ? (st.auto === 'auto' ? 'The read starts on its own at 9:00 PM ET, or start it now.' : 'Start the read when the tribe is ready.') : 'Tribe Vela lost the tribe race, 461.6 to 523.0.',
+      extend: () => this.setState({ ext: st.ext + 1 }), togglePause: () => this.setState({ paused: !st.paused }), pauseL: st.paused ? 'Resume league' : 'Pause league',
+      log: L.slice(0, 6).map(([icon, t, s]) => ({ icon, t, s })) };
+  }
+}
+</script>
+</body>
+</html>

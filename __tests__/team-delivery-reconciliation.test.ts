@@ -1,0 +1,20 @@
+import {beforeEach,afterEach,describe,it,expect,vi} from 'vitest'
+const m=vi.hoisted(()=>({rows:vi.fn(),claim:vi.fn(),sql:vi.fn(),fetch:vi.fn()}))
+vi.mock('server-only',()=>({}));vi.mock('@/lib/prisma',()=>({prisma:{automationAuditLog:{findMany:m.rows,updateMany:m.claim},$executeRaw:m.sql}}))
+import {reconcileTeamDeliveryReceipts,providerDeliveryOutcome} from '@/lib/core-app/teamDeliveryReconciliation'
+import {publicDeliveryReceipt} from '@/lib/core-app/teamDeliveryReceipts'
+vi.mock('@/lib/notifications/NotificationDispatcher',()=>({dispatchNotification:vi.fn()}))
+const id='11111111-1111-1111-1111-111111111111'
+const row=(over:Record<string,unknown>={})=>({id:'claim',userId:'owner',metadata:{kind:'injury',deliveryReceipt:{userId:'owner',completedAt:new Date().toISOString(),channels:{email:{status:'accepted',reason:'provider_accepted',providerId:id,...over},sms:{status:'suppressed',reason:'channel_off'},push:{status:'suppressed',reason:'no_subscriptions'},inApp:{status:'stored',reason:'in_app_saved'}}}}})
+beforeEach(()=>{vi.clearAllMocks();vi.useFakeTimers();vi.setSystemTime(new Date('2026-10-06T06:00:00Z'));vi.stubEnv('RESEND_API_KEY','fixture');m.rows.mockResolvedValue([row()]);m.claim.mockResolvedValue({count:1});m.sql.mockResolvedValue(1);m.fetch.mockResolvedValue({ok:true,json:async()=>({id,last_event:'delivered',to:['private@recipient.test']})});vi.stubGlobal('fetch',m.fetch)})
+afterEach(()=>{vi.useRealTimers();vi.unstubAllGlobals();vi.unstubAllEnvs()})
+describe('bounded provider delivery reconciliation',()=>{
+ it('turns acceptance into recipient-server delivery without storing provider content',async()=>{expect(await reconcileTeamDeliveryReceipts(Date.now()+3000)).toEqual({checked:1});expect(m.fetch).toHaveBeenCalledTimes(1);expect(m.sql.mock.calls[0].some(x=>typeof x==='string'&&x.includes('recipient_server_delivered'))).toBe(true);expect(JSON.stringify(m.sql.mock.calls)).not.toContain('private@recipient.test')})
+ it('does not poll a recently checked or terminal receipt',async()=>{m.rows.mockResolvedValue([row({providerCheckedAt:new Date().toISOString()}),row({status:'delivered'})]);expect(await reconcileTeamDeliveryReceipts(Date.now()+3000)).toEqual({checked:0});expect(m.fetch).not.toHaveBeenCalled()})
+ it('requires a compare-and-swap claim and stops at the phase deadline',async()=>{m.claim.mockResolvedValue({count:0});expect(await reconcileTeamDeliveryReceipts(Date.now()+3000)).toEqual({checked:0});expect(m.fetch).not.toHaveBeenCalled();await reconcileTeamDeliveryReceipts(Date.now());expect(m.fetch).not.toHaveBeenCalled()})
+ it('caps two lookups even with more receipts',async()=>{m.rows.mockResolvedValue([row(),{...row(),id:'two'},{...row(),id:'three'}]);expect(await reconcileTeamDeliveryReceipts(Date.now()+3000)).toEqual({checked:2});expect(m.fetch).toHaveBeenCalledTimes(2)})
+ it('does not treat a provider failure or mismatched id as delivery',async()=>{m.fetch.mockResolvedValue({ok:true,json:async()=>({id:'foreign',last_event:'delivered'})});await reconcileTeamDeliveryReceipts(Date.now()+3000);expect(JSON.stringify(m.sql.mock.calls)).toContain('unavailable');expect(JSON.stringify(m.sql.mock.calls)).not.toContain('recipient_server_delivered')})
+ it('does not fetch an arbitrary URL or malformed provider id',async()=>{m.rows.mockResolvedValue([row({providerId:'https://attacker.test'})]);await reconcileTeamDeliveryReceipts(Date.now()+3000);expect(m.fetch).not.toHaveBeenCalled()})
+ it.each([['email','sent','accepted'],['email','delivery_delayed','delayed'],['email','bounced','failed'],['email','opened','delivered'],['sms','sent','accepted'],['sms','undelivered','failed'],['sms','delivered','delivered']])('maps %s %s to %s', (channel,event,status)=>{expect(providerDeliveryOutcome(channel as 'email'|'sms',event).status).toBe(status)})
+ it('strips owner and provider ids from browser receipts',()=>{const r=publicDeliveryReceipt(row().metadata.deliveryReceipt);expect(r?.channels.email.status).toBe('accepted');expect(JSON.stringify(r)).not.toContain(id);expect(JSON.stringify(r)).not.toContain('owner')})
+})

@@ -93,17 +93,17 @@ export async function POST(
       const prefs = parseAutoCoachUserPreferences(profile?.autoCoachPreferences ?? null)
       const excluded = prefs.excludedPlayerIds ?? []
 
-      if (exclude !== false) {
-        // Add to exclusion list
-        if (!excluded.includes(playerId)) {
-          excluded.push(playerId)
-        }
-      } else {
-        // Remove from exclusion list
-        prefs.excludedPlayerIds = excluded.filter((id) => id !== playerId)
-      }
-
-      prefs.excludedPlayerIds = excluded
+      /*
+       * ⚠ REMOVING NEVER WORKED. The remove branch assigned the filtered list and then the line after
+       * this block overwrote it with the unfiltered one, so "un-exclude" saved the exclusion again.
+       * One assignment, computed per branch.
+       */
+      prefs.excludedPlayerIds =
+        exclude !== false
+          ? excluded.includes(playerId)
+            ? excluded
+            : [...excluded, playerId]
+          : excluded.filter((id) => id !== playerId)
       const serialized = serializeAutoCoachPreferences(prefs)
 
       const updated = await prisma.userProfile.update({

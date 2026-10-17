@@ -14,11 +14,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const emitInTxMock = vi.fn()
 
 const db = {
+  league: { findUnique: vi.fn() },
   redraftTradeProposal: { findUnique: vi.fn(), findUniqueOrThrow: vi.fn(), updateMany: vi.fn() },
   tradeExecutionSnapshot: { findUnique: vi.fn(), findUniqueOrThrow: vi.fn() },
   tradeReversal: { findUnique: vi.fn(), create: vi.fn() },
   redraftRoster: { findUnique: vi.fn(), update: vi.fn() },
   redraftRosterPlayer: { findMany: vi.fn(), updateMany: vi.fn() },
+  survivorIdol: { findMany: vi.fn(async () => []) },
   iDPCapTransaction: { findMany: vi.fn(), create: vi.fn() },
   iDPSalaryRecord: { findFirst: vi.fn(), findFirstOrThrow: vi.fn(), update: vi.fn() },
   iDPCapConfig: { findUnique: vi.fn() },
@@ -71,6 +73,7 @@ function serveRosters(world: typeof AFTER) {
 
 /** Immediately after the trade: reversible. */
 function worldAsTheTradeLeftIt() {
+  db.league.findUnique.mockResolvedValue({ sport: 'NFL', survivorMode: false })
   db.redraftTradeProposal.findUnique.mockResolvedValue({ id: 'p-1', status: 'accepted', leagueId: 'l-1' })
   db.redraftTradeProposal.findUniqueOrThrow.mockResolvedValue({ id: 'p-1', leagueId: 'l-1', seasonId: 's-1' })
   db.redraftTradeProposal.updateMany.mockResolvedValue({ count: 1 })

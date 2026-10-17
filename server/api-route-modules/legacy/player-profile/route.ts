@@ -1,35 +1,71 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
 import { getAllPlayers } from '@/lib/sleeper-client'
+import { buildNameIndex, normalizeMatchName, resolveVerifiedMatch } from '@/lib/player-match/verifiedNameMatch'
+import { newsRowMatchesPlayer, playerNameVariants } from '@/lib/legacy/playerNewsMatch'
+
+/** The legacy modal's player pool is Sleeper's NFL map (`getAllPlayers`), so its news is NFL news. */
+const NEWS_SPORT = 'NFL'
+const NEWS_LIMIT = 5
+/** Candidate rows read before the per-row player check; the check, not this query, decides. */
+const NEWS_CANDIDATE_LIMIT = 40
+
+function sleeperFullName(p: any): string {
+  return String(p?.full_name || `${p?.first_name ?? ''} ${p?.last_name ?? ''}`).trim()
+}
 
 export const POST = withApiUsage({ endpoint: "/api/legacy/player-profile", tool: "LegacyPlayerProfile" })(async (req: NextRequest) => {
   try {
-    const { player_name, player_id } = await req.json()
-    
+    const { player_name, player_id, position, team } = await req.json()
+
     if (!player_name && !player_id) {
       return NextResponse.json({ error: 'Player name or ID required' }, { status: 400 })
     }
 
     const allPlayers = await getAllPlayers()
-    
+
     let player: any = null
     let sleeperId = player_id || null
-    
+
     if (player_id && allPlayers[player_id]) {
       player = allPlayers[player_id]
       sleeperId = player_id
     } else if (player_name) {
-      const searchName = player_name.toLowerCase().trim()
-      for (const [pid, p] of Object.entries(allPlayers)) {
-        const fullName = ((p as any).full_name || `${(p as any).first_name} ${(p as any).last_name}`).toLowerCase().trim()
-        if (fullName === searchName) {
-          player = p
-          sleeperId = pid
-          break
+      /*
+       * 🛑 A NAME IS NOT AN IDENTITY. This used to bind the FIRST Sleeper entry with that exact
+       * name — and Sleeper's map holds genuine namesakes (WR DeVonta Smith PHI / CB DeVonta Smith
+       * CAR; RB Michael Carter / CB Michael Carter). Bind only when position/team verify the
+       * candidate, and refuse an ambiguous or contradicted bind rather than show someone else.
+       */
+      const key = normalizeMatchName(player_name)
+      const candidates: Array<{ id: string; name: string; position: string | null; team: string | null }> = []
+      if (key) {
+        for (const [pid, p] of Object.entries(allPlayers)) {
+          const name = sleeperFullName(p)
+          if (normalizeMatchName(name) !== key) continue
+          candidates.push({ id: pid, name, position: (p as any).position ?? null, team: (p as any).team ?? null })
         }
       }
+      const result = resolveVerifiedMatch(
+        buildNameIndex(candidates),
+        {
+          name: String(player_name),
+          position: typeof position === 'string' ? position : null,
+          team: typeof team === 'string' ? team : null,
+        },
+        { refuseContradictedSingle: true },
+      )
+      if (result.match) {
+        player = allPlayers[result.match.id]
+        sleeperId = result.match.id
+      } else if (result.reason === 'ambiguous') {
+        return NextResponse.json(
+          { error: 'More than one player has that name; open the player from a roster or search result.' },
+          { status: 409 },
+        )
+      }
     }
-    
+
     if (!player) {
       return NextResponse.json({ error: 'Player not found' }, { status: 404 })
     }
@@ -60,33 +96,43 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/player-profile", tool:
     let news: any[] = []
     try {
       const { prisma } = await import('@/lib/prisma')
-      const playerNews = await prisma.sportsNews.findMany({
-        where: {
-          OR: [
-            { title: { contains: player.last_name, mode: 'insensitive' } },
-            { playerName: { contains: `${player.first_name} ${player.last_name}`, mode: 'insensitive' } },
-            { content: { contains: `${player.first_name} ${player.last_name}`, mode: 'insensitive' } },
-          ]
-        },
-        orderBy: { publishedAt: 'desc' },
-        take: 5,
-        select: {
-          id: true,
-          title: true,
-          content: true,
-          source: true,
-          publishedAt: true,
-          sourceUrl: true,
-        }
-      })
-      news = playerNews.map(n => ({
-        id: n.id,
-        title: n.title,
-        description: n.content,
-        source: n.source,
-        publishedAt: n.publishedAt,
-        url: n.sourceUrl,
-      }))
+      const variants = playerNameVariants(player)
+      if (variants.length > 0) {
+        const candidates = await prisma.sportsNews.findMany({
+          where: {
+            sport: NEWS_SPORT,
+            OR: [
+              ...variants.map((v) => ({ playerName: { equals: v, mode: 'insensitive' as const } })),
+              { playerNames: { hasSome: variants } },
+            ],
+          },
+          orderBy: { publishedAt: 'desc' },
+          take: NEWS_CANDIDATE_LIMIT,
+          select: {
+            id: true,
+            title: true,
+            content: true,
+            source: true,
+            publishedAt: true,
+            sourceUrl: true,
+            playerName: true,
+            playerNames: true,
+            team: true,
+            teams: true,
+          },
+        })
+        news = candidates
+          .filter((n) => newsRowMatchesPlayer(n, { name: bio.name, team: bio.team }))
+          .slice(0, NEWS_LIMIT)
+          .map((n) => ({
+            id: n.id,
+            title: n.title,
+            description: n.content,
+            source: n.source,
+            publishedAt: n.publishedAt,
+            url: n.sourceUrl,
+          }))
+      }
     } catch (e) {
       console.error('Failed to fetch player news:', e)
     }

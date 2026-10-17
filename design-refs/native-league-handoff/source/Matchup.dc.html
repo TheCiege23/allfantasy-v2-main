@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Blah — Matchup</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./af-shell.css">
+<link rel="stylesheet" href="./draft-sleek.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500;700;800&amp;display=swap" rel="stylesheet">
+<style>body{margin:0;background:#07080d}a{color:#22d3ee}a:hover{color:#67e8f9}</style>
+</helmet>
+<div class="af">
+  <nav class="rail" aria-label="Your leagues">
+    <a class="rail-home" href="#" aria-label="All leagues home">AF</a>
+    <div class="rail-sep"></div>
+    <sc-for list="{{rail}}" as="l" hint-placeholder-count="7">
+      <button class="{{l.cls}}" onClick="{{l.pick}}" aria-label="{{l.name}}">
+        <span class="rl-pill"></span>
+        <span class="av" style="background: {{l.bg}}; color: {{l.fg}}; box-shadow: 0 0 0 2px #0b0d14, 0 0 0 3.5px {{l.ring}}">{{l.ini}}<span class="av-tag" style="background: {{l.tagBg}}; color: {{l.tagFg}}">{{l.tag}}</span><sc-if value="{{l.unread}}" hint-placeholder-val="{{ false }}"><span class="av-dot">{{l.unread}}</span></sc-if></span>
+        <span class="rl-score" style="color: {{l.ring}}">{{l.mini}}</span>
+        <span class="rl-tip"><span style="font: 600 14px/1.2 'Archivo', sans-serif; color: #eef0fa">{{l.name}}</span><span style="font: 500 11px/1.3 'JetBrains Mono', monospace; color: #989fc2">{{l.meta}}</span><span style="font: 700 11px/1.3 'Archivo', sans-serif; color: {{l.ring}}">{{l.status}}</span></span>
+      </button>
+    </sc-for>
+    <div class="rail-sep"></div>
+    <button class="rail-add" aria-label="Create or import a league"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+  </nav>
+
+  <nav class="snav" aria-label="League sections">
+    <a class="nv" href="#">‹ All leagues</a>
+    <div style="display: flex; align-items: center; gap: 10px; margin: 10px 0 4px; padding: 12px; border-radius: 12px; background: #10131c; border: 1px solid rgba(255,255,255,.07)">
+      <span class="av" style="width: 36px; height: 36px; font-size: 14px; background: #10131c; color: #22d3ee; border: 1px solid rgba(255,255,255,.13)">B</span>
+      <span style="display: flex; flex-direction: column; gap: 5px"><span style="font-weight: 600; font-size: 14px">Blah</span><span class="lbl" style="color: #34d399">Wk 5 · 3–1</span></span>
+    </div>
+    <sc-for list="{{nav}}" as="n" hint-placeholder-count="16">
+      <sc-if value="{{n.head}}" hint-placeholder-val="{{ false }}"><span class="lbl nv-h">{{n.label}}</span></sc-if>
+      <sc-if value="{{n.link}}" hint-placeholder-val="{{ true }}"><a class="{{n.cls}}" href="{{n.href}}" style="{{n.style}}">{{n.label}}<sc-if value="{{n.count}}" hint-placeholder-val="{{ false }}"><span class="nv-c">{{n.count}}</span></sc-if></a></sc-if>
+    </sc-for>
+  </nav>
+
+  <div class="mainc">
+    <header class="topb">
+      <button class="viewing"><span class="lbl">Viewing</span>Blah<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+      <label class="search"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><input type="text" placeholder="Find a player or jump to a league" aria-label="Search"><span class="kbd">⌘K</span></label>
+      <div style="flex: 1"></div>
+      <span class="chip chip-af">● Live on AF</span><span class="num" style="font-size: 11px; color: #989fc2">NFL WK 5</span>
+    </header>
+
+    <div class="wrap" style="display: flex; flex-direction: column; gap: 22px">
+      <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap">
+        <div style="display: flex; flex-direction: column; gap: 8px"><span class="lbl">Blah · Matchup</span><h1 class="h1">Week 5</h1></div>
+        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap">
+          <div class="seg" role="tablist" aria-label="View"><sc-for list="{{views}}" as="v" hint-placeholder-count="2"><button role="tab" class="{{v.cls}}" onClick="{{v.pick}}">{{v.label}}</button></sc-for></div>
+          <div style="display: flex; gap: 4px"><button class="iconbtn" aria-label="Previous week">‹</button><button class="iconbtn" aria-label="Next week">›</button></div>
+        </div>
+      </div>
+
+      <!-- Scoreboard -->
+      <section class="card" style="padding: 24px; display: flex; flex-direction: column; gap: 20px; background: #10131c">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 20px; align-items: center">
+          <div style="display: flex; align-items: center; gap: 14px">
+            <span class="av" style="width: 56px; height: 56px; border-radius: 999px; background: #1f2a4d; color: #9fd4ff; box-shadow: 0 0 0 2px #10131c, 0 0 0 4px #34d399">TC</span>
+            <div style="display: flex; flex-direction: column; gap: 6px"><span style="font-weight: 600; font-size: 17px">TheCiege26's Team</span><span class="num" style="font-size: 12px; color: #989fc2">3–1 · 2nd · 3 left to play</span></div>
+          </div>
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 10px">
+            <div style="display: flex; align-items: baseline; gap: 18px">
+              <span class="num" style="font-size: 52px; font-weight: 600; letter-spacing: -0.03em; color: #34d399">112.4</span>
+              <span class="lbl">vs</span>
+              <span class="num" style="font-size: 52px; font-weight: 600; letter-spacing: -0.03em; color: #c3c9e6">98.7</span>
+            </div>
+            <div class="bar" style="width: 100%; max-width: 320px; height: 8px" role="img" aria-label="Win probability 71 percent"><div style="width: 71%; background: #34d399"></div><div style="width: 29%; background: #fb5b78"></div></div>
+            <span class="num" style="font-size: 12px; color: #c3c9e6">AF win prob <strong style="color: #34d399">71%</strong> · proj 131.2 – 119.5</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 14px; justify-content: flex-end">
+            <div style="display: flex; flex-direction: column; gap: 6px; text-align: right"><span style="font-weight: 600; font-size: 17px">Sunday Scaries</span><span class="num" style="font-size: 12px; color: #989fc2">2–2 · 7th · 4 left to play</span></div>
+            <span class="av" style="width: 56px; height: 56px; border-radius: 999px; background: #3a1d55; color: #dcb4ff">SS</span>
+          </div>
+        </div>
+      </section>
+
+      <div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start">
+        <section class="card" style="flex: 999 1 600px; min-width: 0; padding: 8px 0; overflow-x: auto">
+          <table style="width: 100%; min-width: 640px; border-collapse: collapse">
+            <caption class="lbl" style="text-align: left; padding: 14px 20px">Starters</caption>
+            <tbody>
+              <sc-for list="{{rows}}" as="r" hint-placeholder-count="9">
+                <tr style="border-top: 1px solid rgba(255,255,255,.05)">
+                  <td style="padding: 10px 20px; width: 40%"><div style="display: flex; flex-direction: column; gap: 4px"><span style="font-weight: 700; font-size: 14px">{{r.a}}</span><span class="num" style="font-size: 11px; color: {{r.asColor}}">{{r.aTeam}} · {{r.aStatus}}</span></div></td>
+                  <td class="num" style="padding: 10px 8px; text-align: right; font-size: 16px; font-weight: 600; color: {{r.apColor}}">{{r.ap}}</td>
+                  <td style="padding: 10px 8px; text-align: center; width: 56px"><span class="pos p-{{r.pos}}">{{r.slot}}</span></td>
+                  <td class="num" style="padding: 10px 8px; font-size: 16px; font-weight: 600; color: {{r.bpColor}}">{{r.bp}}</td>
+                  <td style="padding: 10px 20px; width: 40%; text-align: right"><div style="display: flex; flex-direction: column; gap: 4px; align-items: flex-end"><span style="font-weight: 700; font-size: 14px">{{r.b}}</span><span class="num" style="font-size: 11px; color: {{r.bsColor}}">{{r.bStatus}} · {{r.bTeam}}</span></div></td>
+                </tr>
+              </sc-for>
+            </tbody>
+          </table>
+          <div style="padding: 14px 20px; border-top: 1px solid rgba(255,255,255,.07); display: flex; justify-content: space-between; align-items: center">
+            <button class="btn btn-g btn-sm">Show bench (6)</button>
+            <a class="btn btn-g btn-sm" href="Lineup.dc.html">Edit my lineup</a>
+          </div>
+        </section>
+
+        <aside style="flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 24px">
+          <section class="card" style="padding: 20px; display: flex; flex-direction: column; gap: 12px; border-color: rgba(34,211,238,.28)">
+            <span class="lbl" style="color: #22d3ee">Chimmy · AF edge</span>
+            <p style="margin: 0; font-size: 14px; line-height: 1.55; color: #c3c9e6">Puka Nacua is questionable and plays Sunday night. If he's out, start <strong style="color: #eef0fa">Rashid Shaheed</strong> (+6.8 proj over the next best bench WR).</p>
+            <a class="btn btn-p btn-sm" href="Lineup.dc.html">Review lineup</a>
+          </section>
+          <section class="card" style="padding: 20px; display: flex; flex-direction: column; gap: 4px">
+            <span class="lbl" style="margin-bottom: 10px">League scoreboard · Wk 5</span>
+            <sc-for list="{{board}}" as="g" hint-placeholder-count="5">
+              <a href="#" style="display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; padding: 10px 8px; border-radius: 10px; color: #eef0fa; border-bottom: 1px solid rgba(255,255,255,.05)">
+                <span style="font-size: 13px; font-weight: {{g.aw}}">{{g.a}}</span><span class="num" style="font-size: 13px; font-weight: 600; text-align: right">{{g.as}}</span>
+                <span style="font-size: 13px; font-weight: {{g.bw}}">{{g.b}}</span><span class="num" style="font-size: 13px; font-weight: 600; text-align: right">{{g.bs}}</span>
+              </a>
+            </sc-for>
+          </section>
+        </aside>
+      </div>
+    </div>
+  </div>
+  <button class="fab" aria-label="Ask Chimmy"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></button>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1500}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { league: 'blah', view: 'mine' }; }
+  shell(active) {
+    const G = '#34d399', R = '#fb5b78', C = '#22d3ee';
+    const L = [
+      ['blah','Blah','B','#10131c',C,'AF',G,'112–99','Winning · Wk 5','2026 · 12-team redraft · Half PPR',3,true],
+      ['parbur','Parbur','P','#1f2a4d','#9fd4ff','SLP',G,'88–71','Winning · Wk 5','2026 · 12-team redraft · PPR',0],
+      ['horse','Four Horsemen All-Stars 2023','4H','#12352a','#7ff0c4','SLP',R,'62–80','Losing · Wk 5','2026 · 4-team dynasty',0],
+      ['koth','KOTH','K','#3a2410','#f0b46a','SLP',G,'101–93','Winning · Wk 5','2026 · 10-team redraft',16],
+      ['pirate','Pirate League!','PL','#3a1d55','#dcb4ff','SLP',R,'70–74','Losing · Wk 5','2026 · 14-team redraft',13],
+      ['guil','Guillotine League 26','GL','#4a1414','#ffb4b4','SLP',G,'8TH','+35.9 over the cut','2026 · 14-team guillotine',0],
+      ['elim','Elimination Station 2','ES','#123244','#7fd4f0','SLP',G,'8TH','+17.5 over the cut','2026 · 14-team guillotine',0]
+    ];
+    const rail = L.map(([id,name,ini,bg,fg,tag,ring,mini,status,meta,unread,nat]) => ({ id,name,ini,bg,fg,tag,ring,mini,status,meta,unread,
+      tagBg: nat ? C : '#2a2f4a', tagFg: nat ? '#04050c' : '#c3c9e6',
+      cls: 'rl' + (this.state.league === id ? ' rl-on' : ''), pick: () => this.setState({ league: id }) }));
+    const H = label => ({ head: true, link: false, label });
+    const A = (id, label, href, count, style) => ({ head: false, link: true, label, href, count: count || 0, style: style || '', cls: 'nv' + (id === active ? ' nv-on' : '') });
+    const nav = [H('This league'), A('home','League home','Main.dc.html'), A('team','My team','Lineup.dc.html'), A('matchup','Matchup','Matchup.dc.html'),
+      A('players','Players & waivers','Waivers.dc.html', 2), A('trades','Trades','Trades.dc.html', 1), A('draft','Draft HQ','MockSetup.dc.html'), A('stand','Standings & playoffs','Standings.dc.html'),
+      A('chat','League chat','Chat.dc.html', 3), A('commish','Commissioner','Commissioner.dc.html', 0, 'color:#f6c445'),
+      H('This week'), A('war','War Room','#'), A('live','Live scores','#', 12), A('outlook','Season Outlook','#'),
+      H('Your record'), A('career','Your career','#'), A('rank','Rankings','#')];
+    return { rail, nav };
+  }
+  renderVals() {
+    const views = [['mine','My matchup'],['league','League scoreboard']].map(([id,label]) => ({ label,
+      cls: 'sg' + (this.state.view === id ? ' sg-on' : ''), pick: () => this.setState({ view: id }) }));
+    const live = '#22d3ee', fin = '#7d84a8', up = '#c3c9e6';
+    const R = (slot, pos, a, aTeam, aStatus, ap, b, bTeam, bStatus, bp) => {
+      const sc = s => s.startsWith('Q') ? live : s === 'Final' ? fin : up;
+      const n = Number(ap), m = Number(bp);
+      return { slot, pos, a, aTeam, aStatus, ap, b, bTeam, bStatus, bp, asColor: sc(aStatus), bsColor: sc(bStatus),
+        apColor: n > m ? '#34d399' : '#eef0fa', bpColor: m > n ? '#fb5b78' : '#eef0fa' };
+    };
+    const rows = [
+      R('QB','QB','Jalen Hurts','PHI','Final','24.6','Josh Allen','BUF','Final','21.3'),
+      R('RB','RB','Bijan Robinson','ATL','Final','19.2','Saquon Barkley','PHI','Final','14.8'),
+      R('RB','RB','Kyren Williams','LAR','Sun 8:20 PM','0.0','Derrick Henry','BAL','Q3 9:14','11.6'),
+      R('WR','WR',"Ja'Marr Chase",'CIN','Final','22.1','Justin Jefferson','MIN','Final','17.4'),
+      R('WR','WR','Puka Nacua','LAR','Sun 8:20 PM','0.0','CeeDee Lamb','DAL','Q3 9:14','9.9'),
+      R('TE','TE','Sam LaPorta','DET','Final','12.7','Trey McBride','ARI','Sun 4:05 PM','0.0'),
+      R('FLX','FLEX','Jahmyr Gibbs','DET','Final','23.8','Amon-Ra St. Brown','DET','Final','16.2'),
+      R('K','K','Brandon Aubrey','DAL','Q3 9:14','6.0','Jake Elliott','PHI','Final','4.5'),
+      R('DEF','DEF','Ravens D/ST','BAL','Q3 9:14','4.0','Steelers D/ST','PIT','Sun 4:05 PM','0.0')
+    ];
+    const g = (a, as, b, bs) => ({ a, as, b, bs, aw: Number(as) >= Number(bs) ? 800 : 500, bw: Number(bs) > Number(as) ? 800 : 500 });
+    const board = [g('Open Team 2','104.1','Open Team 9','97.6'), g('Open Team 3','88.0','Open Team 6','121.4'), g('Open Team 4','76.3','Open Team 10','80.9'), g('Open Team 5','132.0','Open Team 11','99.2'), g('Open Team 8','91.5','Open Team 12','91.1')];
+    return { ...this.shell('matchup'), views, rows, board };
+  }
+}
+</script>
+</body>
+</html>

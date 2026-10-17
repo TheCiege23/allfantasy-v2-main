@@ -44,7 +44,12 @@ describe('League shell layout and waivers integration', () => {
     expect(leagueShell).toContain('data-testid="league-command-center-header"')
     expect(leagueShell).toContain('data-testid="league-command-center-tabs"')
     expect(leagueShell).toContain('data-testid="league-command-center-card"')
-    expect(leagueShell).toContain('bg-gradient-to-br from-cyan-500/[0.07] via-[#050814] to-violet-500/[0.04]')
+    // The card's diagonal gradient through the shell's dark #050814, whatever the accent: 9468582a7
+    // (2026-08-08, "Broadcast Deck") moved the accent from cyan to #ff3d81, and pinning the exact
+    // colour class turned a restyle into a red test.
+    expect(leagueShell).toMatch(
+      /className="[^"]*bg-gradient-to-br[^"]*via-\[#050814\][^"]*"\s*data-testid="league-command-center-card"/,
+    )
   })
 
   it('includes waivers in league tab definitions and nfl redraft core tabs', () => {
@@ -64,13 +69,14 @@ describe('League shell layout and waivers integration', () => {
   })
 
   it('mounts the league shell via client-boundary wrapper', () => {
-    // page.tsx should import the client wrapper, not call nextDynamic directly
+    // page.tsx imports the client wrapper and never calls nextDynamic itself
     expect(leaguePage).toContain("import { LeagueShellClient } from './LeagueShellClient'")
     expect(leaguePage).not.toContain("nextDynamic")
-    // client wrapper owns dynamic() + ssr:false
+    // Since 925110077 (2026-07-01) the wrapper is a plain 'use client' boundary that renders the
+    // shell directly — it server-renders, rather than mounting client-only via dynamic + ssr:false.
     expect(leagueShellClient).toContain("'use client'")
-    expect(leagueShellClient).toContain("import dynamic from 'next/dynamic'")
-    expect(leagueShellClient).toContain("ssr: false")
+    expect(leagueShellClient).toContain("import { LeagueShell, type LeagueShellProps } from './LeagueShell'")
+    expect(leagueShellClient).not.toContain('next/dynamic')
   })
 
   it('logs league_dashboard_render_failed marker with full metadata in catch block', () => {

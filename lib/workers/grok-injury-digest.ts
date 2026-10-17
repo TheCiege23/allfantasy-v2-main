@@ -53,7 +53,7 @@ async function buildDigestForSport(sport: string): Promise<{ summary: string; bu
     }),
     // Canonical injury read port — TTL-respected, one row per player, freshest
     // source wins; same 48h window via maxAgeHours.
-    listInjuryFacts({ sport, maxAgeHours: 48, limit: 25 })
+    listInjuryFacts({ sport, maxAgeHours: 48, limit: 25, designationsOnly: true })
       .then((l) => l.facts)
       .catch(() => []),
   ])

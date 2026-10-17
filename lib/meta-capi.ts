@@ -2,6 +2,8 @@ import crypto from "crypto"
 import { recordAnalyticsEvent } from "@/lib/analytics/recordAnalyticsEvent"
 import { getServedOrigin } from "@/lib/http/served-origin"
 import { isIosAppUserAgent } from "@/lib/platform/iosApp"
+import { hasGpcHeader, isAdOptOutRequest } from "@/lib/privacy/adMeasurementOptOut"
+import { isUserAdOptedOut, setUserAdOptOut } from "@/lib/privacy/adOptOutStore"
 import {
   DEFAULT_META_PIXEL_ID,
   normalizeMetaCustomData,
@@ -101,6 +103,23 @@ export async function sendMetaCAPIEvent(params: CAPIEventParams): Promise<MetaCa
   // Checked first, before any user data is hashed or assembled.
   if (isIosAppUserAgent(params.clientUserAgent ?? params.request?.headers.get("user-agent"))) {
     return { success: false, error: "skipped_ios_app" }
+  }
+
+  /*
+   * "Do Not Sell or Share" (Privacy Policy §5.3; lib/privacy/adMeasurementOptOut). Checked
+   * before anything is hashed, like the iOS rule above. Global Privacy Control on a signed-in
+   * request is also RECORDED on the account, so the person's later server-side events — a
+   * Stripe purchase webhook has no browser to read GPC from — stay suppressed too.
+   */
+  const requestHeaders = params.request?.headers ?? null
+  if (isAdOptOutRequest(requestHeaders)) {
+    if (params.userId && hasGpcHeader(requestHeaders)) {
+      await setUserAdOptOut(params.userId, { source: "gpc" }).catch(() => false)
+    }
+    return { success: false, error: "skipped_ad_opt_out" }
+  }
+  if (params.userId && (await isUserAdOptedOut(params.userId))) {
+    return { success: false, error: "skipped_ad_opt_out" }
   }
 
   const accessToken = process.env.META_CONVERSIONS_API_TOKEN

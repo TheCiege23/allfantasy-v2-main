@@ -3295,6 +3295,22 @@
 }
 .af-cm-dmrow .af-cm-threadrow-unread { margin-left: auto; }
 
+/* ✓ sent / ✓✓ seen on your own last message: muted until it is seen, then the accent. */
+.af-cm-ticks {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  margin-right: -4px;
+  color: var(--faint);
+  line-height: 0;
+}
+.af-cm-ticks[data-seen='true'] { color: var(--accent); }
+.af-cm-seenby { display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
+.af-cm-seenby .af-cm-ticks { margin-right: 0; }
+/* The phone-alerts ask in an open DM: inset like the Sent/Seen line above it. */
+.af-cm-convo > .af-cm-pushask { margin: 8px 16px 0; font-size: 12.5px; }
+
 /* Unread: the name and the line under it go bold and bright, and the time takes the accent. */
 .af-cm-dmrow[data-unread='true'] .af-cm-threadrow-title { font-weight: 800; }
 .af-cm-dmrow[data-unread='true'] .af-cm-dmrow-preview { font-weight: 700; color: var(--text); }
@@ -3607,3 +3623,271 @@
 .af-cm-image-dialog::backdrop { background: rgba(0,0,0,.75); }
 .af-cm-image-dialog img { display: block; max-width: 100%; max-height: calc(100dvh - 110px); object-fit: contain; margin-top: 12px; }
 .af-cm-image-dialog button { min-height: 40px; padding: 8px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--chip); color: var(--text); cursor: pointer; }
+
+/*
+ * ══ 2026-10-10 chat polish layer ══
+ *
+ * Appended as one layer, like the 09-13 handoff above, so every earlier rule keeps its history.
+ * Each change is a measured defect from the 2026-10-10 chat audit, not taste:
+ *
+ *  1. Launcher icon was white on #22d3ee (about 1.8:1, under the 3:1 icon minimum) -> dark ink.
+ *  2. Badge was 17px with no ring, and a mention was accent-on-accent -> 20px, ringed, white.
+ *  3. Their bubbles were #191f24 on #111519 (about 1.1:1) -> a lifted surface with a hairline.
+ *     The hairline is an OUTLINE on purpose: Chimmy's ring and the menu/flash states all use
+ *     box-shadow, and an appended box-shadow would silently erase them.
+ *  4. Bubble text 13.5px, times 11px -> 15px and 12px.
+ *  5. Inputs were 12-13px outside the 520px phone query, so iPhone LANDSCAPE zoomed on focus
+ *     -> 16px at every width.
+ *  6. League / DM / Huddle send was a 14px grey ghost icon -> a filled accent circle once it can send.
+ *  7. Reply quote was a 2px near-invisible bar with 11px faint text -> 3px accent bar, 12.5px, 2 lines.
+ *  8. Motion: messages rise in, sheets slide up, the launcher presses, Chimmy's thinking line
+ *     breathes — all inside the reduced-motion gate, like the open motion near the top.
+ */
+.af-cm { --af-bubble-in: #232b33; }
+
+.af-cm-launch { color: #04121a; transition: transform 160ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 160ms ease, filter 160ms ease; }
+.af-cm-launch:active:not([data-dragging='true']) { transform: scale(0.94); }
+.af-cm-launchdot { top: -4px; right: -4px; min-width: 20px; height: 20px; padding: 0 6px; box-shadow: 0 0 0 2px #0b0f14; }
+.af-cm-launchdot[data-kind='mention'] { background: #ffffff; color: #04121a; }
+
+.af-cm-bubble { font-size: 15px; line-height: 1.42; }
+.af-cm-row:not([data-mine='true']) .af-cm-bubble:not([data-deleted='true']):not(:has(> .af-cm-rich:only-child)) {
+  background: var(--af-bubble-in);
+  outline: 1px solid var(--line2);
+  outline-offset: -1px;
+}
+.af-cm-col > .af-cm-msg-author { font-size: 12px; }
+.af-cm-msg-time { font-size: 12px; }
+
+.af-cm .af-cm-input,
+.af-cm textarea { font-size: 16px; }
+
+.af-cm .af-chat-send:not(:disabled) {
+  display: inline-grid;
+  place-items: center;
+  min-width: 36px;
+  min-height: 36px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.af-cm .af-chat-send:not(:disabled):hover { background: var(--accent); color: var(--accent-ink); filter: brightness(1.08); }
+.af-cm .af-chat-send svg { width: 16px; height: 16px; }
+
+.af-cm-quote-bar { flex-basis: 3px; background: var(--accent); }
+.af-cm-quote-body { font-size: 12.5px; color: var(--text2); }
+.af-cm-quote-text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+}
+
+.af-cm-sheet { margin-bottom: max(8px, env(safe-area-inset-bottom)); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .af-cm-row,
+  .af-cm-turn { animation: af-cm-msg-in 160ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+  .af-cm-sheet { animation: af-cm-sheet-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+  .af-cm-typing { animation: af-cm-breathe 1.4s ease-in-out infinite; }
+}
+
+@keyframes af-cm-msg-in {
+  from { opacity: 0; transform: translateY(4px); }
+}
+@keyframes af-cm-sheet-in {
+  from { opacity: 0; transform: translateY(16px); }
+}
+@keyframes af-cm-breathe {
+  50% { opacity: 0.55; }
+}
+
+/* Who is around: a dot on a DM row's avatar, and "Active 5m ago" beside the open DM's name. */
+.af-cm-dmrow-presence {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #34d399;
+  box-shadow: 0 0 0 2px var(--bg);
+}
+.af-cm-dmrow-muted { display: inline-flex; align-items: center; margin-left: 4px; color: var(--faint); }
+.af-cm-dmrow[data-muted='true'] .af-cm-threadrow-unread { background: var(--chip); color: var(--muted); }
+.af-cm-threadactive { margin-left: 8px; font-size: 12px; font-weight: 500; white-space: nowrap; color: var(--muted); }
+.af-cm-threadactive[data-now='true'] { color: #34d399; }
+
+/*
+ * ══ 2026-10-11 visual pass 2 ══
+ * A message you send shows at once, slightly faded with "Sending…" where its time goes, and takes no
+ * taps until the server has it (there is nothing yet to react to, reply to or edit).
+ */
+.af-cm-row[data-pending='true'] { pointer-events: none; }
+.af-cm-row[data-pending='true'] .af-cm-bubble { opacity: 0.65; }
+.af-cm-sending { font-style: italic; color: var(--faint); }
+.af-cm-col > .af-cm-edited { font-size: 12px; color: var(--faint); }
+@media (prefers-reduced-motion: no-preference) {
+  .af-cm-row[data-pending='true'] .af-cm-bubble { transition: opacity 160ms ease; }
+}
+
+/*
+ * The Chimmy tab used to look like a different app from the chats beside it: your questions were grey
+ * and labelled "You", Chimmy had no face, and the text was 13px against 15px everywhere else. It now
+ * uses the same language — your words in the accent bubble on the right, Chimmy's answers marked by a
+ * small sparkle avatar, one text size.
+ */
+.af-cm-turn .af-cm-turn-text { font-size: 15px; line-height: 1.5; }
+.af-cm-turn[data-role='you'] { background: var(--accent); padding: 9px 14px; }
+.af-cm-turn[data-role='you'] .af-cm-turn-text,
+.af-cm-turn[data-role='you'] > .af-cm-turn-author { color: var(--accent-ink); }
+/* Your own words need no name tag — except an earlier, carried-over turn, which says so. */
+.af-cm-turn[data-role='you']:not([data-carried='true']) > .af-cm-turn-author { display: none; }
+.af-cm-turn[data-role='chimmy'] > .af-cm-turn-author { display: flex; align-items: center; gap: 6px; }
+.af-cm-turn[data-role='chimmy'] > .af-cm-turn-author::before {
+  content: '\2726';
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  /* Accent, not `--chimmy`: that token is a near-black gradient and the dark sparkle vanished on it. */
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 11px;
+}
+
+/*
+ * ── LIGHT MODE ──────────────────────────────────────────────────────────────────────────────────
+ * `.af-cm` pins a dark palette on itself (`color-scheme: dark`), so a light-mode user got a dark slab
+ * over a light page. Under the page's own light theme the drawer now takes the light palette —
+ * the SAME values `html[data-mode='light'] .af-core` uses in af-core.css, including its darker,
+ * contrast-measured accent — and the handful of white-alpha literals that were only ever right on a
+ * dark ground get dark-alpha counterparts. Everything else in this file is written on tokens and
+ * follows automatically.
+ */
+html[data-mode='light'] .af-cm {
+  --bg: #f4f6fc;
+  --surface: #ffffff;
+  --surface2: #eef1f9;
+  --text: #0b1020;
+  --text2: #333c5c;
+  --muted: #484f69;
+  --faint: #5c6587;
+  --accent: #096d8e;
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(9, 109, 142, 0.1);
+  --accent-line: rgba(9, 109, 142, 0.3);
+  --line: rgba(11, 16, 32, 0.09);
+  --line2: rgba(11, 16, 32, 0.16);
+  --chip: rgba(11, 16, 32, 0.05);
+  --af-bubble-in: #e9edf6;
+  color-scheme: light;
+}
+html[data-mode='light'] .af-cm[data-mode='overlay'] {
+  border-color: rgba(11, 16, 32, 0.12);
+  box-shadow: 0 40px 120px -60px rgba(11, 16, 32, 0.35);
+}
+html[data-mode='light'] .af-cm-tabs { background: rgba(11, 16, 32, 0.05); }
+html[data-mode='light'] .af-cm-tab[data-on='true'] { color: #ffffff; }
+html[data-mode='light'] .af-cm-thread { scrollbar-color: #c5ccdc transparent; }
+html[data-mode='light'] .af-cm-threadrow:hover,
+html[data-mode='light'] .af-cm-pick-opt:hover { background: rgba(11, 16, 32, 0.04); }
+html[data-mode='light'] .af-cm-sheet-btn[data-danger='true'],
+html[data-mode='light'] .af-cm-sheet-safety-err { color: #be123c; }
+html[data-mode='light'] .af-cm-scrim { background: rgba(11, 16, 32, 0.35); }
+/*
+ * The league / DM / huddle composer (ChatComposer) is painted with dark-only Tailwind utilities
+ * (`text-white`, `bg-white/[0.03]`, `text-white/40`), so in light mode its typing was white on
+ * white. Scoped to the drawer by the composer's own class hooks — the league page's other chat
+ * keeps its look.
+ */
+html[data-mode='light'] .af-cm .af-chat-box { background: var(--surface); border-color: var(--line2); }
+html[data-mode='light'] .af-cm .af-chat-composer textarea { color: var(--text); }
+html[data-mode='light'] .af-cm .af-chat-composer textarea::placeholder { color: var(--faint); }
+html[data-mode='light'] .af-cm .af-chat-tool:not([aria-pressed='true']) { color: var(--muted); }
+html[data-mode='light'] .af-cm .af-chat-uploading { color: var(--muted); }
+/*
+ * The attachment preview and the @mention list sit on the composer with no ground of their own, in
+ * `text-white/*`. The GIF, emoji and poll pop-ups paint their own dark ground (`bg-[#0c0c1e]`) and
+ * stay as they are, so anything inside one is excluded — dark text on that ground would vanish.
+ */
+/* Not the textarea (it has its own rule above) and not the send circle (white on the accent). */
+html[data-mode='light'] .af-cm .af-chat-composer [class*='text-white']:not(textarea):not(.af-chat-send):not([class*='bg-[#0c0c1e]'] *) { color: var(--text2); }
+html[data-mode='light'] .af-cm .af-chat-composer .af-chat-send:disabled { color: var(--faint); }
+html[data-mode='light'] .af-cm .af-chat-composer [class*='border-white']:not([class*='bg-[#0c0c1e]']):not([class*='bg-[#0c0c1e]'] *) { border-color: var(--line2); }
+
+/*
+ * ══ 2026-10-12 visual pass 3 ══
+ * 1. A reply's quote sits INSIDE its bubble, on a faint panel of its own, the way every messenger
+ *    people already use draws it. Above the bubble it read as a stray line belonging to nobody.
+ *    On your accent bubble the bar and text take the bubble's ink, since accent-on-accent vanished.
+ */
+.af-cm-bubble > .af-cm-quote {
+  margin: -2px -6px 6px;
+  padding: 6px 8px;
+  width: calc(100% + 12px);
+  max-width: none;
+  border-radius: 12px;
+  background: color-mix(in srgb, currentColor 9%, transparent);
+}
+.af-cm-bubble > .af-cm-quote-jump:hover { background: color-mix(in srgb, currentColor 14%, transparent); }
+.af-cm-row[data-mine='true'] .af-cm-bubble > .af-cm-quote .af-cm-quote-bar { background: currentColor; opacity: 0.7; }
+.af-cm-row[data-mine='true'] .af-cm-bubble > .af-cm-quote .af-cm-quote-body { color: inherit; opacity: 0.85; }
+/* A GIF or photo that answers something keeps a bubble, so its quote has somewhere to sit. */
+.af-cm-bubble:has(> .af-cm-quote) { min-width: min(220px, 100%); }
+.af-cm-bubble:has(> .af-cm-quote) > .af-cm-rich { margin-top: 0; }
+
+/*
+ * 2. "Sam is typing…" carries three dots that bounce in turn. Still under reduced motion.
+ */
+.af-cm-typing-note { display: flex; align-items: center; gap: 6px; }
+.af-cm-typing-dots {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 3px;
+  padding: 5px 7px;
+  border-radius: 999px;
+  background: var(--af-bubble-in, var(--surface));
+}
+.af-cm-typing-dots > span { width: 5px; height: 5px; border-radius: 50%; background: var(--muted); }
+@media (prefers-reduced-motion: no-preference) {
+  .af-cm-typing-dots > span { animation: af-cm-typing-dot 1.2s ease-in-out infinite; }
+  .af-cm-typing-dots > span:nth-child(2) { animation-delay: 0.15s; }
+  .af-cm-typing-dots > span:nth-child(3) { animation-delay: 0.3s; }
+}
+@keyframes af-cm-typing-dot {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.45; }
+  30% { transform: translateY(-3px); opacity: 1; }
+}
+html[data-mode='light'] .af-cm-typing-dots { background: var(--surface); box-shadow: inset 0 0 0 1px var(--line2); }
+
+/*
+ * ══ 2026-10-12 weekly recap: share with your league ══
+ * Under Chimmy's weekly recap. Most leagues have one AllFantasy member, so the recap's real audience is
+ * in the league's own group chat — this pill sends it there (RecapShareButton.tsx).
+ */
+.af-cm-recap-share {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  margin-top: 8px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.af-cm-recap-share:hover:not(:disabled) { filter: brightness(1.08); }
+.af-cm-recap-share:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.af-cm-recap-share:disabled { opacity: 0.6; cursor: default; }
+.af-cm-recap-share[data-state='copied'],
+.af-cm-recap-share[data-state='shared'] { background: var(--accent-soft); color: var(--text); box-shadow: inset 0 0 0 1px var(--accent-line); }
+.af-cm-recap-share[data-state='failed'] { background: transparent; color: var(--text); box-shadow: inset 0 0 0 1px var(--line2); }

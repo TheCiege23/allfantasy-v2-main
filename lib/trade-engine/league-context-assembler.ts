@@ -1,4 +1,5 @@
 import { prisma } from '../prisma'
+import { fetchVerifiedTradeInjuries } from './fetchVerifiedInjuries'
 import { pricePlayer, type ValuationContext } from '../hybrid-valuation'
 import { resolveLeagueValuePatch } from '@/lib/values/leagueValuePatch'
 import { getPlayerAnalyticsBatch, type PlayerAnalytics } from '../player-analytics'
@@ -121,34 +122,6 @@ function buildRoster(
 
     return { id: pid, name, pos: pos || 'UNK', team, slot, isIdp: isIdpPos(pos), age: meta.age }
   })
-}
-
-async function fetchInjuries(
-  playerNames: string[]
-): Promise<Map<string, { status: string; type: string | null; description: string | null; date: string | null; fetchedAt: string | null }>> {
-  const result = new Map<string, { status: string; type: string | null; description: string | null; date: string | null; fetchedAt: string | null }>()
-  if (playerNames.length === 0) return result
-
-  try {
-    const injuries = await prisma.sportsInjury.findMany({
-      where: { playerName: { in: playerNames }, sport: 'NFL' },
-      orderBy: { fetchedAt: 'desc' },
-    })
-    for (const inj of injuries) {
-      if (!result.has(inj.playerName)) {
-        result.set(inj.playerName, {
-          status: inj.status || 'Unknown',
-          type: inj.type,
-          description: inj.description,
-          date: inj.date ? inj.date.toISOString().split('T')[0] : null,
-          fetchedAt: inj.fetchedAt ? inj.fetchedAt.toISOString() : null,
-        })
-      }
-    }
-  } catch (e) {
-    console.warn('[league-context] Injury fetch failed:', e)
-  }
-  return result
 }
 
 const HIGH_REINJURY_TYPES = new Set(['acl', 'achilles', 'hamstring', 'ankle', 'concussion', 'knee', 'shoulder'])
@@ -353,11 +326,14 @@ export async function buildLeagueDecisionContext(
    * is the same rule `/api/trade-finder/matchmaking` applies for the same reason.
    */
   const allPlayerNames = new Set<string>()
+  // Team and position ride along so a name shared by two athletes can be told apart.
+  const injuryLookups: Array<{ name: string; team?: string | null; position?: string | null }> = []
   for (const r of parsedRosters) {
     for (const p of r.players) {
       if (!p.name) continue
       if (p.isIdp && !leagueValueByNameLower?.has(p.name.toLowerCase().trim())) continue
       allPlayerNames.add(p.name)
+      injuryLookups.push({ name: p.name, team: p.team ?? null, position: p.pos === 'UNK' ? null : p.pos })
     }
   }
   const uniqueNames = Array.from(allPlayerNames)
@@ -390,7 +366,7 @@ export async function buildLeagueDecisionContext(
       warnings.push(`Analytics fetch failed: ${e.message}`)
       return new Map<string, PlayerAnalytics>()
     }),
-    fetchInjuries(uniqueNames),
+    fetchVerifiedTradeInjuries(injuryLookups, 'league-context'),
     Promise.all(uniqueNames.slice(0, 100).map(name => getPlayerADP(name).catch(() => null))),
   ])
 

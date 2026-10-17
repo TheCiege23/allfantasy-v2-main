@@ -15,12 +15,12 @@ import {
   MessageSquare,
   Sparkles,
   CreditCard,
-  ClipboardList,
   History,
   ExternalLink,
   Flame,
   ChevronRight,
   ScanEye,
+  Send,
 } from 'lucide-react'
 import { SurvivorIslandAmbient } from '@/components/survivor/SurvivorIslandAmbient'
 import {
@@ -31,6 +31,7 @@ import {
 } from '@/components/tournament/TournamentWarRoomPrimitives'
 import { TournamentSubscriptionTokensPanel } from '@/components/tournament/TournamentSubscriptionTokensPanel'
 import { SurvivorPremiumCommandCenterPanel } from '@/components/survivor/SurvivorPremiumCommandCenterPanel'
+import { SurvivorCouncilControl } from '@/components/survivor/SurvivorCouncilControl'
 import type { AfPlanId } from '@/lib/tournament/af-premium-plans'
 import {
   SURVIVOR_TRIBE_ICON_CHOICES,
@@ -41,6 +42,7 @@ import {
 
 type TabId =
   | 'overview'
+  | 'operations'
   | 'tribes'
   | 'tribal'
   | 'minigames'
@@ -51,13 +53,13 @@ type TabId =
   | 'ai'
   | 'premium'
   | 'subscription'
-  | 'approvals'
   | 'history'
 
 const TABS: { id: TabId; label: string; icon: ReactNode }[] = [
   { id: 'overview', label: 'Overview', icon: <LayoutDashboard className="h-4 w-4" /> },
+  { id: 'operations', label: 'Operations', icon: <Scale className="h-4 w-4" /> },
   { id: 'tribes', label: 'Tribes', icon: <Users className="h-4 w-4" /> },
-  { id: 'tribal', label: 'Tribal Council', icon: <Vote className="h-4 w-4" /> },
+  { id: 'tribal', label: 'Elimination Council', icon: <Vote className="h-4 w-4" /> },
   { id: 'minigames', label: 'Mini Games', icon: <Zap className="h-4 w-4" /> },
   { id: 'exile', label: 'Exile Island', icon: <Skull className="h-4 w-4" /> },
   { id: 'jury', label: 'Jury', icon: <Scale className="h-4 w-4" /> },
@@ -66,16 +68,26 @@ const TABS: { id: TabId; label: string; icon: ReactNode }[] = [
   { id: 'ai', label: 'AI & Automation', icon: <Sparkles className="h-4 w-4" /> },
   { id: 'premium', label: 'Premium intel', icon: <ScanEye className="h-4 w-4" /> },
   { id: 'subscription', label: 'Access · Tokens', icon: <CreditCard className="h-4 w-4" /> },
-  { id: 'approvals', label: 'Approvals', icon: <ClipboardList className="h-4 w-4" /> },
   { id: 'history', label: 'History', icon: <History className="h-4 w-4" /> },
 ]
 
 type DashboardPayload = {
   ok: true
   role?: string
+  privacy?: { blindModeActive: boolean; canSeeHiddenIdolAssignments: boolean; canSeePrivateVotes: boolean }
   league: { id: string; name: string; sport: string; leagueSize: number | null }
   config?: { visualThemeId?: string | null } | null
   shell: { draftSessionExists: boolean; survivorChatChannels: number; exileLeagueLinked: boolean }
+  operations: {
+    claimedManagers: number
+    draft: { status: string; picksMade: number; totalPicks: number; timerSeconds: number | null } | null
+    pendingTrades: number
+    completedTrades: number
+    exileActive: boolean
+    activeChallenges: number
+    automationNeedsAttention: boolean
+    readinessIssues: string[]
+  }
   gameState: {
     phase: string
     currentWeek: number
@@ -90,6 +102,8 @@ type DashboardPayload = {
   week: number
   tribes: { id: string; name: string; emoji?: string | null; members: unknown[] }[]
   council: unknown
+  privateBallots: { voterName: string; targetName: string; submittedAt: string; doesNotCount: boolean }[]
+  privateIdols: { id: string; ownerName: string; powerLabel: string }[]
   juryCount: number
   merged: boolean
   rosterCount: number
@@ -105,6 +119,9 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
   const [data, setData] = useState<DashboardPayload | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [tribeDrafts, setTribeDrafts] = useState<Record<string, { name: string; emoji: string }>>({})
+  const [announcement, setAnnouncement] = useState('')
+  const [announcementState, setAnnouncementState] = useState<string | null>(null)
+  const [sendingAnnouncement, setSendingAnnouncement] = useState(false)
 
   const base = `/survivor/${leagueId}`
 
@@ -172,6 +189,30 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
     await load()
   }, [leagueId, load, tribeDrafts])
 
+  const sendAnnouncement = useCallback(async () => {
+    const message = announcement.trim()
+    if (!message || sendingAnnouncement) return
+    setSendingAnnouncement(true)
+    setAnnouncementState(null)
+    try {
+      const response = await fetch('/api/commissioner/broadcast', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leagueIds: [leagueId], message }),
+      })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok || !result.results?.[0]?.sent) {
+        setAnnouncementState(result.error ?? result.results?.[0]?.error ?? 'Announcement was not sent.')
+        return
+      }
+      setAnnouncement('')
+      setAnnouncementState('Sent to league chat and eligible member notifications.')
+    } catch {
+      setAnnouncementState('Network error. Announcement was not confirmed.')
+    } finally {
+      setSendingAnnouncement(false)
+    }
+  }, [announcement, leagueId, sendingAnnouncement])
+
   return (
     <div className={`relative min-h-[80vh] overflow-hidden rounded-[28px] ${theme.backgroundClass} p-4 text-white`}>
       <SurvivorIslandAmbient />
@@ -224,8 +265,7 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
                 role="status"
               >
                 <ChevronRight className="h-4 w-4 shrink-0 text-emerald-300/90" />
-                Survivor league is live — draft shell, tribes (after draft), exile link, and island chats initialize on
-                create. Review operations below.
+                League created. Complete manager invitations and review the draft before starting the season.
               </div>
             ) : null}
 
@@ -243,6 +283,10 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
             </div>
           </WarRoomHeroCard>
         </div>
+
+        {data?.privacy ? <div className="mb-4 rounded-xl border border-amber-400/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-100" role="status">
+          {data.privacy.blindModeActive ? 'Fairness shield on · as a playing commissioner, hidden idols, private ballots, other tribe huddles and unrevealed results stay sealed.' : 'Non-playing host · hidden idols, ballots, tribe huddles and Exile status are available for oversight. Private manager DMs stay private.'}
+        </div> : null}
 
         {error ? (
           <div className="mb-6 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-100" role="alert">
@@ -277,6 +321,10 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
                   accent="violet"
                 />
                 <WarRoomStatOrb label="Merge" value={data.merged ? 'Merged' : 'Pre-merge'} hint="Conference fusion" accent="amber" />
+                <WarRoomStatOrb label="Managers joined" value={`${data.operations.claimedManagers}/${data.league.leagueSize ?? '—'}`} hint="Invitations / league capacity" accent="cyan" />
+                <WarRoomStatOrb label="Draft progress" value={data.operations.draft ? `${data.operations.draft.picksMade}/${data.operations.draft.totalPicks}` : 'Missing'} hint={data.operations.draft?.status ?? 'No session'} accent="violet" />
+                <WarRoomStatOrb label="Trades to review" value={String(data.operations.pendingTrades)} hint={`${data.operations.completedTrades} completed`} accent="amber" />
+                <WarRoomStatOrb label="Automation" value={data.operations.automationNeedsAttention ? 'Attention' : 'Clear'} hint="Season runner" accent={data.operations.automationNeedsAttention ? 'amber' : 'emerald'} />
               </div>
 
               <div className="grid gap-4 lg:grid-cols-2">
@@ -286,7 +334,7 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
                 >
                   <ul className="space-y-2 text-sm text-white/75">
                     <li className="flex justify-between gap-2">
-                      <span>Tribal Council</span>
+                      <span>Elimination Council</span>
                       <Link href={`${base}/tribal`} className="text-emerald-300 hover:text-emerald-200">
                         Open
                       </Link>
@@ -321,11 +369,42 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
                       : 'No active tribal deadline in state.'}
                   </p>
                   <p className="mt-2 text-xs text-white/45">
-                    Immunity holders sync from live game state. Use Tribal Council tab for vote tools.
+                    Immunity holders sync from live game state. Use Elimination Council tab for vote tools.
                   </p>
                 </WarRoomPanel>
               </div>
             </>
+          )}
+
+          {tab === 'operations' && data && (
+            <div className="grid gap-4 lg:grid-cols-2">
+              <WarRoomPanel title="League health" subtitle="Live readiness signals from the league database.">
+                <div className={`mb-4 rounded-xl border p-3 text-sm ${data.operations.readinessIssues.length ? 'border-amber-400/30 bg-amber-500/10 text-amber-100' : 'border-emerald-400/30 bg-emerald-500/10 text-emerald-100'}`} role="status">
+                  {data.operations.readinessIssues.length ? <><strong>{data.operations.readinessIssues.length} item{data.operations.readinessIssues.length === 1 ? '' : 's'} need review before draft</strong><ul className="mt-2 list-disc space-y-1 pl-5">{data.operations.readinessIssues.map(issue => <li key={issue}>{issue}</li>)}</ul></> : 'No configuration mismatch detected.'}
+                </div>
+                <ul className="space-y-3 text-sm text-white/75">
+                  <li>Managers joined: <strong>{data.operations.claimedManagers} of {data.league.leagueSize ?? 'unknown'}</strong></li>
+                  <li>Draft: <strong>{data.operations.draft?.status ?? 'session missing'}</strong>{data.operations.draft ? ` · ${data.operations.draft.picksMade}/${data.operations.draft.totalPicks} picks · ${data.operations.draft.timerSeconds ?? '—'}s timer` : ''}</li>
+                  <li>Island chats: <strong>{data.shell.survivorChatChannels}</strong></li>
+                  <li>Exile: <strong>{data.operations.exileActive ? 'active' : data.shell.exileLeagueLinked ? 'linked, awaiting start' : 'not linked'}</strong></li>
+                  <li>Open challenges: <strong>{data.operations.activeChallenges}</strong></li>
+                  <li>Season automation: <strong>{data.operations.automationNeedsAttention ? 'needs review' : 'no reported error'}</strong></li>
+                </ul>
+              </WarRoomPanel>
+              <WarRoomPanel title="Draft & trades" subtitle="Current status and review workload.">
+                <p className="text-sm text-white/70">{data.operations.pendingTrades} trade{data.operations.pendingTrades === 1 ? '' : 's'} awaiting a decision · {data.operations.completedTrades} completed.</p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <Link href={`/league/${leagueId}?tab=draft`} className="rounded-lg border border-emerald-400/30 px-3 py-2 text-sm text-emerald-200">Open draft board</Link>
+                  <Link href={`/league/${leagueId}?tab=trades`} className="rounded-lg border border-white/20 px-3 py-2 text-sm text-white">Review trades</Link>
+                  <Link href={`${base}/exile`} className="rounded-lg border border-white/20 px-3 py-2 text-sm text-white">Exile status</Link>
+                </div>
+              </WarRoomPanel>
+              {data.privacy?.canSeeHiddenIdolAssignments && !data.privacy.blindModeActive ? (
+                <WarRoomPanel title="Private idol oversight" subtitle="Visible only to a non-playing host. Managers see only their own idols.">
+                  {data.privateIdols.length ? <ul className="space-y-2 text-sm text-white/75">{data.privateIdols.map(idol => <li key={idol.id}><strong>{idol.ownerName}</strong> · {idol.powerLabel}</li>)}</ul> : <p className="text-sm text-white/60">No active idols have been seeded.</p>}
+                </WarRoomPanel>
+              ) : null}
+            </div>
           )}
 
           {tab === 'overview' && !data && !error && (
@@ -408,14 +487,14 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
           )}
 
           {tab === 'tribal' && (
-            <WarRoomPanel title="Tribal Council" subtitle="Private votes, immunity, idols — processed by the Survivor engine and @Chimmy.">
-              <Link
-                href={`${base}/tribal`}
-                className="inline-flex rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm font-medium text-amber-100 hover:bg-amber-500/15"
-              >
-                Open Tribal Council hub
-              </Link>
-            </WarRoomPanel>
+            <div className="space-y-4">
+              <SurvivorCouncilControl leagueId={leagueId} />
+              {data?.privacy?.canSeePrivateVotes && !data.privacy.blindModeActive ? (
+                <WarRoomPanel title="Private ballot oversight" subtitle="Visible only to a non-playing host until the read.">
+                  {data.privateBallots.length ? <ul className="space-y-2 text-sm text-white/75">{data.privateBallots.map((vote, index) => <li key={`${vote.voterName}-${index}`}><strong>{vote.voterName}</strong> voted for <strong>{vote.targetName}</strong>{vote.doesNotCount ? ' · does not count' : ''}</li>)}</ul> : <p className="text-sm text-white/60">No ballots have been submitted for the current council.</p>}
+                </WarRoomPanel>
+              ) : null}
+            </div>
           )}
 
           {tab === 'minigames' && (
@@ -458,6 +537,13 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
 
           {tab === 'chat' && (
             <WarRoomPanel title="Communications" subtitle="Island chat, tribe threads, jury, and exile channels.">
+              <label htmlFor="survivor-announcement" className="mb-2 block text-sm font-semibold text-white">Message the whole league</label>
+              <textarea id="survivor-announcement" maxLength={500} rows={4} value={announcement} onChange={event => setAnnouncement(event.target.value)} placeholder="Write a commissioner announcement…" className="mb-2 w-full rounded-xl border border-white/15 bg-black/25 p-3 text-sm text-white placeholder:text-white/40" />
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <span className="text-xs text-white/50">{announcement.length}/500 · posts to league chat and eligible notifications</span>
+                <button type="button" disabled={!announcement.trim() || sendingAnnouncement} onClick={() => void sendAnnouncement()} className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-black disabled:opacity-40"><Send className="h-4 w-4" />{sendingAnnouncement ? 'Sending…' : 'Send announcement'}</button>
+              </div>
+              {announcementState && <p role="status" className="mb-4 text-sm text-amber-200">{announcementState}</p>}
               <Link href={`${base}/chat`} className="text-emerald-300 hover:text-emerald-200">
                 Survivor chat hub →
               </Link>
@@ -498,11 +584,6 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
             />
           )}
 
-          {tab === 'approvals' && (
-            <WarRoomPanel title="Approvals" subtitle="Co-host setting changes can route through league approval flows when enabled.">
-              <p className="text-sm text-white/55">Wire to your league&apos;s co-commissioner approval policy (same pattern as tournaments).</p>
-            </WarRoomPanel>
-          )}
 
           {tab === 'history' && (
             <WarRoomPanel title="History / archive" subtitle="Recent Survivor audit events.">

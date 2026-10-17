@@ -17,6 +17,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const db = vi.hoisted(() => ({
   league: { findUnique: vi.fn() },
   roster: { findMany: vi.fn() },
+  leagueTeam: { findMany: vi.fn() },
   matchupFact: { findFirst: vi.fn(), deleteMany: vi.fn(), createMany: vi.fn() },
   leagueDynastySeason: { findUnique: vi.fn() },
   $transaction: vi.fn(),
@@ -35,7 +36,7 @@ vi.mock('@/lib/sleeper-client', () => sleeper)
 vi.mock('@/lib/league-import/sleeper/SleeperHistoricalLeagueChain', () => chain)
 vi.mock('@/lib/dynasty-import/normalize-historical', () => persist)
 
-const { syncSleeperHistoricalMatchupsAfterImport, isStoredSeasonSettled } = await import(
+const { syncSleeperHistoricalMatchupsAfterImport, isStoredSeasonSettled, storedSeasonRosterOwners } = await import(
   '@/lib/league-import/sleeper/SleeperHistoricalMatchupSyncService'
 )
 
@@ -63,7 +64,11 @@ function season(status: string) {
 
 function stub(opts: { status: string; hasFacts: boolean; metadata: unknown }) {
   db.league.findUnique.mockResolvedValue({ id: 'L1', platform: 'sleeper', platformLeagueId: 'S26', sport: 'NFL' })
-  db.roster.findMany.mockResolvedValue([])
+  // Today's league: u1–u4 hold slots 1–4, recorded the way the import records them.
+  db.roster.findMany.mockResolvedValue(
+    [1, 2, 3, 4].map((n) => ({ platformUserId: `u${n}`, playerData: { source_team_id: String(n), source_manager_id: `u${n}` } })),
+  )
+  db.leagueTeam.findMany.mockResolvedValue([])
   db.matchupFact.findFirst.mockResolvedValue(opts.hasFacts ? { matchupId: 'mf1' } : null)
   db.matchupFact.deleteMany.mockReturnValue({})
   db.matchupFact.createMany.mockReturnValue({})
@@ -89,7 +94,7 @@ function written(): Record<string, any> {
 }
 
 beforeEach(() => {
-  for (const group of [db.league, db.roster, db.matchupFact, db.leagueDynastySeason, sleeper, chain, persist]) {
+  for (const group of [db.league, db.roster, db.leagueTeam, db.matchupFact, db.leagueDynastySeason, sleeper, chain, persist]) {
     for (const fn of Object.values(group)) (fn as ReturnType<typeof vi.fn>).mockReset()
   }
   db.$transaction.mockReset()
@@ -120,7 +125,7 @@ describe('completed seasons', () => {
 
   it('skips a completed season whose stored bracket already names the champion', async () => {
     // An old flattened row with no marker: settled by its bracket alone.
-    stub({ status: 'complete', hasFacts: true, metadata: { playoffStructure: { winnersBracket: DECIDED_BRACKET } } })
+    stub({ status: 'complete', hasFacts: true, metadata: { sleeperRosterOwners: [{ r: '1', o: 'u1' }, { r: '2', o: 'u2' }, { r: '3', o: 'u3' }, { r: '4', o: 'u4' }], playoffStructure: { winnersBracket: DECIDED_BRACKET, canonicalRosterIdByHistoricalRosterId: { '1': '1', '2': '2', '3': '3', '4': '4' } } } })
     const summary = await syncSleeperHistoricalMatchupsAfterImport({ leagueId: 'L1' })
 
     expect(summary).toMatchObject({ seasonsProcessed: 0, seasonsSkippedComplete: 1, completedSeasonsRefreshed: 0 })
@@ -133,7 +138,8 @@ describe('completed seasons', () => {
       status: 'complete',
       hasFacts: true,
       metadata: {
-        playoffStructure: { bracketPlacementVersion: 2, championRosterId: 3, runnerUpRosterId: 1, winnersBracket: [] },
+        sleeperRosterOwners: [{ r: '1', o: 'u1' }, { r: '2', o: 'u2' }, { r: '3', o: 'u3' }, { r: '4', o: 'u4' }],
+        playoffStructure: { bracketPlacementVersion: 2, championRosterId: 3, runnerUpRosterId: 1, winnersBracket: [], canonicalRosterIdByHistoricalRosterId: { '1': '1', '2': '2', '3': '3', '4': '4' } },
       },
     })
     const summary = await syncSleeperHistoricalMatchupsAfterImport({ leagueId: 'L1' })
@@ -189,6 +195,164 @@ describe('the season being played', () => {
     expect(written().seasonStatusAtSync).toBe('in_season')
     // The completion gate never ran, so the matchup facts were not even checked.
     expect(db.matchupFact.findFirst).not.toHaveBeenCalled()
+  })
+})
+
+describe('which team a past roster was', () => {
+  /* 2024: u1–u3 as today, but roster 4 was u-gone, who left; u4 took that slot for 2025. */
+  const ROSTERS_2024 = [
+    { roster_id: 1, owner_id: 'u1' },
+    { roster_id: 2, owner_id: 'u2' },
+    { roster_id: 3, owner_id: 'u3' },
+    { roster_id: 4, owner_id: 'u-gone' },
+  ]
+  const WEEK_1 = [
+    { roster_id: 1, matchup_id: 1, points: 100 },
+    { roster_id: 4, matchup_id: 1, points: 120 },
+    { roster_id: 2, matchup_id: 2, points: 90 },
+    { roster_id: 3, matchup_id: 2, points: 80 },
+  ]
+  function seasonFacts() {
+    return db.matchupFact.createMany.mock.calls[0][0].data as Array<{ teamA: string; teamB: string; winnerTeamId: string | null }>
+  }
+
+  it("🛑 stores a departed manager's games under their own key, not their old slot's new owner", async () => {
+    stub({ status: 'complete', hasFacts: false, metadata: undefined })
+    sleeper.getLeagueRosters.mockResolvedValue(ROSTERS_2024)
+    sleeper.getLeagueMatchups.mockImplementation(async (_id: string, week: number) => (week === 1 ? WEEK_1 : []))
+    await syncSleeperHistoricalMatchupsAfterImport({ leagueId: 'L1' })
+
+    const facts = seasonFacts()
+    expect(facts[0]).toMatchObject({ teamA: '1', teamB: 'former:sleeper:u-gone', winnerTeamId: 'former:sleeper:u-gone' })
+    expect(facts.flatMap((f) => [f.teamA, f.teamB])).not.toContain('4')
+    const meta = written()
+    expect(meta.sleeperRosterOwners).toEqual([{ r: '1', o: 'u1' }, { r: '2', o: 'u2' }, { r: '3', o: 'u3' }, { r: '4', o: 'u-gone' }])
+    expect(meta.playoffStructure.canonicalRosterIdByHistoricalRosterId).toEqual({ '1': '1', '2': '2', '3': '3', '4': 'former:sleeper:u-gone' })
+  })
+
+  it('maps through source_manager_id, so a claimed team keyed on its AllFantasy id still resolves', async () => {
+    stub({ status: 'complete', hasFacts: false, metadata: undefined })
+    // u2 claimed their team: the roster row is keyed on the AF id, and u2 moved to slot 3 this year.
+    db.roster.findMany.mockResolvedValue([
+      { platformUserId: 'af-user-2', playerData: { source_team_id: '3', source_manager_id: 'u2' } },
+      { platformUserId: 'u1', playerData: { source_team_id: '1', source_manager_id: 'u1' } },
+    ])
+    sleeper.getLeagueRosters.mockResolvedValue([{ roster_id: 2, owner_id: 'u2' }, { roster_id: 1, owner_id: 'u1' }])
+    sleeper.getLeagueMatchups.mockImplementation(async (_id: string, week: number) =>
+      week === 1 ? [{ roster_id: 1, matchup_id: 1, points: 80 }, { roster_id: 2, matchup_id: 1, points: 99 }] : [],
+    )
+    await syncSleeperHistoricalMatchupsAfterImport({ leagueId: 'L1' })
+    expect(seasonFacts()[0]).toMatchObject({ teamA: '1', teamB: '3', winnerTeamId: '3' })
+  })
+
+  it('keeps an ownerless roster of the CURRENT season as its own slot — it is a live team', async () => {
+    stub({ status: 'in_season', hasFacts: false, metadata: undefined })
+    chain.getSleeperHistoricalLeagueChain.mockResolvedValue([
+      { externalLeagueId: 'S26', season: 2026, league: { league_id: 'S26', status: 'in_season', settings: {} } },
+    ])
+    sleeper.getLeagueRosters.mockResolvedValue([{ roster_id: 1, owner_id: 'u1' }, { roster_id: 7, owner_id: null }])
+    await syncSleeperHistoricalMatchupsAfterImport({ leagueId: 'L1' })
+    expect(written().playoffStructure.canonicalRosterIdByHistoricalRosterId).toEqual({ '1': '1', '7': '7' })
+  })
+
+  it('re-checks a settled season stored without its owners, and rewrites it when a game moved', async () => {
+    stub({
+      status: 'complete',
+      hasFacts: true,
+      metadata: {
+        seasonStatusAtSync: 'complete',
+        playoffStructure: { canonicalRosterIdByHistoricalRosterId: { '1': '1', '2': '2', '3': '3', '4': '4' } },
+      },
+    })
+    sleeper.getLeagueRosters.mockResolvedValue(ROSTERS_2024)
+    sleeper.getLeagueMatchups.mockImplementation(async (_id: string, week: number) => (week === 1 ? WEEK_1 : []))
+    const summary = await syncSleeperHistoricalMatchupsAfterImport({ leagueId: 'L1' })
+
+    expect(summary).toMatchObject({ seasonsIdentityChecked: 1, seasonsRemapped: 1, seasonsProcessed: 1, seasonsSkippedComplete: 0 })
+    expect(db.matchupFact.deleteMany).toHaveBeenCalled()
+    expect(seasonFacts()[0].teamB).toBe('former:sleeper:u-gone')
+    expect(written().sleeperRosterOwners).toHaveLength(4)
+  })
+
+  it('only stores the owners when the old mapping was already right — one rosters call, no rewrite', async () => {
+    stub({
+      status: 'complete',
+      hasFacts: true,
+      metadata: {
+        seasonStatusAtSync: 'complete',
+        keep: 'me',
+        playoffStructure: { canonicalRosterIdByHistoricalRosterId: { '1': '1', '2': '2', '3': '3', '4': '4' } },
+      },
+    })
+    const summary = await syncSleeperHistoricalMatchupsAfterImport({ leagueId: 'L1' })
+
+    expect(summary).toMatchObject({ seasonsIdentityChecked: 1, seasonsRemapped: 0, seasonsProcessed: 0, seasonsSkippedComplete: 1 })
+    expect(sleeper.getLeagueRosters).toHaveBeenCalledTimes(1)
+    expect(sleeper.getLeagueMatchups).not.toHaveBeenCalled()
+    expect(sleeper.getPlayoffBracket).not.toHaveBeenCalled()
+    expect(db.$transaction).not.toHaveBeenCalled()
+    expect(written()).toMatchObject({ keep: 'me', seasonStatusAtSync: 'complete' })
+    expect(written().sleeperRosterOwners).toHaveLength(4)
+  })
+
+  it('🛑 rewrites a season stored WITH owners once one of them leaves — and costs no call until then', async () => {
+    // 2024 was stored while u4 held slot 4. Nothing has changed yet: no provider call, no write.
+    const metadata = {
+      seasonStatusAtSync: 'complete',
+      sleeperRosterOwners: [{ r: '1', o: 'u1' }, { r: '2', o: 'u2' }, { r: '3', o: 'u3' }, { r: '4', o: 'u4' }],
+      playoffStructure: { canonicalRosterIdByHistoricalRosterId: { '1': '1', '2': '2', '3': '3', '4': '4' } },
+    }
+    stub({ status: 'complete', hasFacts: true, metadata })
+    const quiet = await syncSleeperHistoricalMatchupsAfterImport({ leagueId: 'L1' })
+    expect(quiet).toMatchObject({ seasonsSkippedComplete: 1, seasonsIdentityChecked: 0, seasonsRemapped: 0 })
+    for (const fetcher of Object.values(sleeper)) expect(fetcher).not.toHaveBeenCalled()
+    expect(persist.persistDynastySeason).not.toHaveBeenCalled()
+
+    // Now u4 leaves and u-new takes slot 4. The stored "4" would make 2024 theirs.
+    db.roster.findMany.mockResolvedValue(
+      [['u1', '1'], ['u2', '2'], ['u3', '3'], ['u-new', '4']].map(([u, slot]) => ({
+        platformUserId: u,
+        playerData: { source_team_id: slot, source_manager_id: u },
+      })),
+    )
+    sleeper.getLeagueRosters.mockResolvedValue([
+      { roster_id: 1, owner_id: 'u1' }, { roster_id: 2, owner_id: 'u2' }, { roster_id: 3, owner_id: 'u3' }, { roster_id: 4, owner_id: 'u4' },
+    ])
+    sleeper.getLeagueMatchups.mockImplementation(async (_id: string, week: number) =>
+      week === 1 ? [{ roster_id: 3, matchup_id: 1, points: 90 }, { roster_id: 4, matchup_id: 1, points: 99 }] : [],
+    )
+    const moved = await syncSleeperHistoricalMatchupsAfterImport({ leagueId: 'L1' })
+    expect(moved).toMatchObject({ seasonsRemapped: 1, seasonsProcessed: 1, seasonsIdentityChecked: 0 })
+    expect(seasonFacts()[0]).toMatchObject({ teamA: '3', teamB: 'former:sleeper:u4', winnerTeamId: 'former:sleeper:u4' })
+  })
+
+  it('⚠ writes nothing for a season whose rosters could not be read', async () => {
+    stub({ status: 'complete', hasFacts: false, metadata: undefined })
+    sleeper.getLeagueRosters.mockResolvedValue([])
+    sleeper.getLeagueMatchups.mockImplementation(async (_id: string, week: number) => (week === 1 ? WEEK_1 : []))
+    const summary = await syncSleeperHistoricalMatchupsAfterImport({ leagueId: 'L1' })
+    expect(summary).toMatchObject({ seasonsProcessed: 0, seasonsSkippedNoRosters: 1 })
+    expect(db.$transaction).not.toHaveBeenCalled()
+    expect(persist.persistDynastySeason).not.toHaveBeenCalled()
+  })
+
+  it('⚠ does not map at all when no current manager is on file', async () => {
+    stub({ status: 'complete', hasFacts: false, metadata: undefined })
+    db.roster.findMany.mockResolvedValue([])
+    const summary = await syncSleeperHistoricalMatchupsAfterImport({ leagueId: 'L1' })
+    expect(summary).toMatchObject({ skipped: true, attempted: false })
+    expect(chain.getSleeperHistoricalLeagueChain).not.toHaveBeenCalled()
+  })
+
+  it('reads stored owners, and refuses a malformed list rather than half-reading it', () => {
+    expect(storedSeasonRosterOwners({ sleeperRosterOwners: [{ r: '1', o: 'u1', c: ['x'] }, { r: '2', o: null }] })).toEqual([
+      { roster_id: '1', owner_id: 'u1', co_owners: ['x'] },
+      { roster_id: '2', owner_id: null, co_owners: [] },
+    ])
+    expect(storedSeasonRosterOwners({ sleeperRosterOwners: [{ r: '1', o: 'u1' }, { o: 'u2' }] })).toBeNull()
+    expect(storedSeasonRosterOwners({ sleeperRosterOwners: [] })).toBeNull()
+    expect(storedSeasonRosterOwners({})).toBeNull()
+    expect(storedSeasonRosterOwners(null)).toBeNull()
   })
 })
 

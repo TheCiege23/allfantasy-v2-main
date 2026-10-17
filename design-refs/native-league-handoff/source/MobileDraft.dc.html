@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Blah — Draft room (phone)</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./af-shell.css">
+<link rel="stylesheet" href="./draft-sleek.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500;700;800&amp;display=swap" rel="stylesheet">
+<style>body{margin:0;background:#07080d}</style>
+</helmet>
+<div class="af ph" style="min-height: 0">
+  <header style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,.07); background: #0b0d14">
+    <a class="iconbtn" href="Mobile.dc.html" aria-label="Back to Blah">‹</a>
+    <span style="flex: 1; display: flex; flex-direction: column; gap: 4px"><span style="font-weight: 700; font-size: 16px; letter-spacing: -0.03em">Draft HQ · Blah</span><span class="lbl">12 teams · Snake · Half PPR</span></span>
+    <a class="chip chip-af" href="MobileMockResults.dc.html">Mock · grade</a><a class="chip" href="MobileDraftBoard.dc.html">Live board</a>
+  </header>
+
+  <section style="padding: 14px 16px; display: flex; align-items: center; gap: 12px; background: radial-gradient(300px 140px at 0% 0%, rgba(34,211,238,.16), transparent 70%); border-bottom: 1px solid rgba(255,255,255,.07)">
+    <div style="flex: 1; display: flex; flex-direction: column; gap: 5px">
+      <span class="lbl" style="color: #22d3ee">You're on the clock</span>
+      <span style="font-size: 18px; font-weight: 700; letter-spacing: -0.03em">Round 2 · Pick 4</span>
+      <span class="num" style="font-size: 11px; color: #989fc2">#16 overall · next: #33</span>
+    </div>
+    <span class="num" style="font-size: 38px; font-weight: 600; color: #22d3ee">0:47</span>
+  </section>
+
+  <nav aria-label="Recent picks" style="display: flex; gap: 8px; overflow-x: auto; padding: 10px 16px; border-bottom: 1px solid rgba(255,255,255,.07)">
+    <sc-for list="{{recent}}" as="r" hint-placeholder-count="4">
+      <span style="flex: none; display: flex; flex-direction: column; gap: 3px; padding: 8px 10px; border-radius: 10px; background: {{r.bg}}; min-width: 112px">
+        <span class="num" style="font-size: 9px; color: #7d84a8">{{r.pick}}</span>
+        <span style="font-size: 12px; font-weight: 600">{{r.name}}</span>
+        <span class="num" style="font-size: 9px; font-weight: 700; color: {{r.c}}">{{r.pos}}</span>
+      </span>
+    </sc-for>
+  </nav>
+
+  <div style="padding: 10px 12px 6px"><div class="seg" role="tablist" aria-label="Draft view"><sc-for list="{{tabs}}" as="t" hint-placeholder-count="4"><button role="tab" class="{{t.cls}}" onClick="{{t.pick}}">{{t.label}}</button></sc-for></div></div>
+
+  <div class="ph-scroll" style="padding: 0 12px 12px">
+    <div style="margin: 6px 0 8px; padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(34,211,238,.28); background: rgba(34,211,238,.06); font-size: 12px; line-height: 1.45; color: #c3c9e6"><span class="lbl" style="color: #22d3ee">Chimmy</span> Kyren Williams is the last RB in this tier.</div>
+    <sc-for list="{{pool}}" as="p" hint-placeholder-count="8">
+      <div style="display: flex; align-items: center; gap: 10px; padding: 10px 4px; border-bottom: 1px solid rgba(255,255,255,.05); min-height: 56px">
+        <span class="num" style="width: 20px; font-size: 10px; color: #7d84a8">{{p.adp}}</span>
+        <span class="pos p-{{p.pos}}">{{p.pos}}</span>
+        <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px"><span style="font-weight: 700; font-size: 14px">{{p.name}}</span><span class="num" style="font-size: 10px; color: #989fc2">{{p.team}} · AF {{p.val}}</span></span>
+        <button class="iconbtn" style="width: 40px; height: 40px" aria-label="Queue {{p.name}}">+</button>
+        <button class="btn btn-p btn-sm" style="min-height: 40px">Draft</button>
+      </div>
+    </sc-for>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { tab: 'players' }; }
+  renderVals() {
+    const PC = { RB: '#5ee6b0', WR: '#7fb7e8' };
+    const recent = [['2.03','Derrick Henry','RB · BAL'],['2.02','Ashton Jeanty','RB · LV'],["2.01","De'Von Achane",'RB · MIA'],['1.12','Nico Collins','WR · HOU'],['1.09 · You','Malik Nabers','WR · NYG']]
+      .map(([pick, name, pos]) => ({ pick, name, pos, c: PC[pos.slice(0, 2)] || '#c3c9e6', bg: pick.includes('You') ? 'rgba(34,211,238,.10)' : '#10131c' }));
+    const tabs = [['players','Players'],['queue','Queue · 1'],['board','Board'],['roster','Roster']].map(([id,label]) => ({ label,
+      cls: 'sg' + (this.state.tab === id ? ' sg-on' : ''), pick: () => this.setState({ tab: id }) }));
+    const pool = [['Kyren Williams','RB','LAR',16,'A'],['Brock Bowers','TE','LV',17,'A'],['Josh Jacobs','RB','GB',18,'A−'],['Drake London','WR','ATL',19,'A−'],['A.J. Brown','WR','PHI',20,'B+'],['Jonathan Taylor','RB','IND',21,'B+'],['Ladd McConkey','WR','LAC',22,'B+'],['Bucky Irving','RB','TB',23,'B+']]
+      .map(([name,pos,team,adp,val]) => ({ name,pos,team,adp,val }));
+    return { recent, tabs, pool };
+  }
+}
+</script>
+</body>
+</html>
