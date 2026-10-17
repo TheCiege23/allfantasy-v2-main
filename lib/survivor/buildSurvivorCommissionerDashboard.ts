@@ -18,6 +18,7 @@ import type { AfPlanId } from '@/lib/tournament/af-premium-plans'
 import { extractLeadingTribeIcon } from '@/lib/survivor/survivorVisuals'
 import { resolveSurvivorAccessContext } from '@/lib/survivor/survivorAccessControl'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { getPendingTribeRedraw } from './survivorTribeRedrawDecision'
 
 export type SurvivorCommissionerDashboardResult =
   | {
@@ -58,6 +59,7 @@ export type SurvivorCommissionerDashboardResult =
       config: Awaited<ReturnType<typeof getSurvivorConfig>>
       week: number
       tribes: Awaited<ReturnType<typeof getTribesWithMembers>>
+      tribeRedraw: Awaited<ReturnType<typeof getPendingTribeRedraw>>
       council: { id: string; week: number; status: string; isRevealed: boolean } | null
       privateBallots: []
       privateIdols: { id: string; ownerName: string; powerLabel: string }[]
@@ -136,6 +138,7 @@ export async function buildSurvivorCommissionerDashboard(
     exileIsland,
     activeChallenges,
     nbaAdpRows,
+    tribeRedraw,
   ] = await Promise.all([
     getSurvivorConfig(leagueId),
     getTribesWithMembers(leagueId),
@@ -157,6 +160,7 @@ export async function buildSurvivorCommissionerDashboard(
     prisma.exileIsland.findUnique({ where: { leagueId }, select: { isActive: true } }),
     prisma.survivorChallenge.count({ where: { leagueId, status: { in: ['active', 'open'] } } }),
     league.sport === 'NBA' ? prisma.adpDataRecord.count({ where: { sport: 'NBA', season: nbaSeason } }) : Promise.resolve(null),
+    getPendingTribeRedraw(leagueId),
   ])
 
   const tribes = tribeRows.map((tribe: Awaited<ReturnType<typeof getTribesWithMembers>>[number]) => ({
@@ -240,6 +244,7 @@ export async function buildSurvivorCommissionerDashboard(
     config,
     week,
     tribes,
+    tribeRedraw,
     // This dashboard embeds Council control. It never transports individual choices.
     council: council ? { id: council.id, week: council.week, status: !council.isRevealed && council.status === 'tie_pending' ? 'closed' : council.status, isRevealed: council.isRevealed } : null,
     privateBallots: [],

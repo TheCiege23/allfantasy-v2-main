@@ -7,6 +7,7 @@ import { clearReleasedRosterData } from '@/lib/guillotine/GuillotineRosterReleas
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { movePlayerBoundIdolsInTransaction } from './playerBoundIdolTransfer'
+import { maybeTriggerSurvivorTribeShuffleRecommendation } from './SurvivorSitOutEngine'
 
 export type EliminationOutcome =
   | { ok: true; alreadyResolved: boolean; outcome: 'removed_to_waivers' | 'exile_island'; eliminatedUserId: string; removedFromChats: number; pendingRelease: boolean; pendingExile: boolean; releasedPlayerCount?: number }
@@ -14,7 +15,7 @@ export type EliminationOutcome =
 
 /** Resolve exactly once. Roster release, cast state, chat membership, and audit commit together. */
 export async function resolveElimination(leagueId: string, councilId: string, actorUserId?: string): Promise<EliminationOutcome> {
-  return prisma.$transaction(async (tx: Prisma.TransactionClient): Promise<EliminationOutcome> => {
+  const result = await prisma.$transaction(async (tx: Prisma.TransactionClient): Promise<EliminationOutcome> => {
     await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`survivor-setup:${leagueId}`}, 0))::text`
     const council = await tx.survivorTribalCouncil.findFirst({ where: { id: councilId, leagueId } })
     if (!council) return { ok: false, status: 404, code: 'not_found', error: 'Council not found.' }
@@ -95,4 +96,13 @@ export async function resolveElimination(leagueId: string, councilId: string, ac
     }
     return { ok: true, alreadyResolved: false, outcome, eliminatedUserId: userId, removedFromChats, pendingRelease: false, pendingExile: false, releasedPlayerCount }
   }, { timeout: 30_000, maxWait: 10_000 })
+  if (result.ok && !result.alreadyResolved) {
+    const council = await prisma.survivorTribalCouncil.findFirst({ where: { id: councilId, leagueId }, select: { week: true, phase: true } })
+    if (council?.phase === 'pre_merge') {
+      await maybeTriggerSurvivorTribeShuffleRecommendation(leagueId, council.week).catch(() => {
+        console.warn('[Survivor] Tribe redraw recommendation could not be queued.')
+      })
+    }
+  }
+  return result
 }

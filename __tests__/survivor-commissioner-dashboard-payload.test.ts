@@ -43,6 +43,7 @@ const {
     redraftTradeProposal: { count: vi.fn() },
     exileIsland: { findUnique: vi.fn() },
     survivorChallenge: { count: vi.fn() },
+    survivorCommissionerAction: { findFirst: vi.fn() },
     survivorIdol: { findMany: vi.fn() },
     survivorPlayer: { findMany: vi.fn() },
     adpDataRecord: { count: vi.fn() },
@@ -168,6 +169,7 @@ describe('survivor commissioner dashboard payload', () => {
     prisma.redraftTradeProposal.count.mockResolvedValue(0)
     prisma.exileIsland.findUnique.mockResolvedValue({ isActive: false })
     prisma.survivorChallenge.count.mockResolvedValue(0)
+    prisma.survivorCommissionerAction.findFirst.mockResolvedValue(null)
     prisma.survivorIdol.findMany.mockResolvedValue([])
     prisma.survivorPlayer.findMany.mockResolvedValue([])
     prisma.adpDataRecord.count.mockResolvedValue(0)

@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { Clock, ScrollText, Shield, Skull, Vote } from 'lucide-react'
 import type { SurvivorSummary } from './types'
 import { SurvivorCommandHelp } from './SurvivorCommandHelp'
@@ -15,8 +16,46 @@ export interface SurvivorTribalCouncilViewProps {
 /**
  * Elimination Council View: countdown, voting instructions, @Chimmy usage examples, immunity markers, scroll reveal history, vote result recap.
  */
-export function SurvivorTribalCouncilView({ summary, names }: SurvivorTribalCouncilViewProps) {
+type ShotStatus = { available: boolean; used: boolean; success: boolean | null; councilId: string | null }
+
+export function SurvivorTribalCouncilView({ leagueId, summary, names }: SurvivorTribalCouncilViewProps) {
   const { council, votedOutHistory, currentWeek } = summary
+  const [shot, setShot] = useState<ShotStatus | null>(null)
+  const [shotPending, setShotPending] = useState(false)
+  const [shotConfirm, setShotConfirm] = useState(false)
+  const [shotError, setShotError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let mounted = true
+    void fetch(`/api/leagues/${encodeURIComponent(leagueId)}/survivor/vote`, { cache: 'no-store' })
+      .then(async response => response.ok ? response.json() as Promise<ShotStatus> : null)
+      .then(value => { if (mounted) setShot(value) })
+      .catch(() => { if (mounted) setShot(null) })
+    return () => { mounted = false }
+  }, [leagueId, council?.id])
+
+  async function playShot() {
+    if (!shot?.available || shotPending) return
+    setShotPending(true)
+    setShotError(null)
+    try {
+      const response = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/survivor/vote`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'shot_in_the_dark' }),
+      })
+      const result = await response.json()
+      if (!response.ok || !result.ok) {
+        setShotError(result.error ?? 'The draw could not be played.')
+      } else {
+        setShot({ available: false, used: true, success: result.success === true, councilId: result.councilId })
+        setShotConfirm(false)
+      }
+    } catch {
+      setShotError('Network error. Check your draw status before trying again.')
+    } finally {
+      setShotPending(false)
+    }
+  }
   const deadline = council?.voteDeadlineAt ? new Date(council.voteDeadlineAt) : null
   const isClosed = !!council?.closedAt
   const eliminated = council?.eliminatedRosterId
@@ -61,6 +100,32 @@ export function SurvivorTribalCouncilView({ summary, names }: SurvivorTribalCoun
           Cast your vote in league or tribe chat using the official command. Only one vote per roster. Self-vote may be disallowed by league settings.
         </p>
         <SurvivorCommandHelp compact />
+      </section>
+
+      <section className="rounded-2xl border border-amber-500/25 bg-amber-950/10 p-4 sm:p-6">
+        <h2 className="mb-2 text-lg font-semibold text-amber-100">Shot in the Dark</h2>
+        <p className="text-sm text-white/70">You may use this once per league during your original council vote window. You give up your vote for a 1-in-6 chance of immunity. Your result stays private until the Torch Ceremony.</p>
+        {shot?.used ? (
+          <p role="status" className="mt-3 text-sm text-amber-100">Your draw: {shot.success ? 'Safe — immune at that council' : 'Not Safe'}. Your vote was forfeited.</p>
+        ) : shot?.available ? (
+          shotConfirm ? <div className="mt-3 space-y-3 rounded-lg border border-amber-400/30 bg-black/20 p-3">
+            <p className="text-sm text-amber-100">Confirm: this permanently uses your one draw and forfeits your vote at this council, even if the draw fails.</p>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={playShot} disabled={shotPending}
+                className="rounded-lg border border-amber-400/50 bg-amber-500/20 px-4 py-2 text-sm font-semibold text-amber-100 disabled:opacity-50">
+                {shotPending ? 'Drawing…' : 'Confirm draw'}
+              </button>
+              <button type="button" onClick={() => setShotConfirm(false)} disabled={shotPending}
+                className="rounded-lg border border-white/20 px-4 py-2 text-sm text-white/80 disabled:opacity-50">Cancel</button>
+            </div>
+          </div> : <button type="button" onClick={() => setShotConfirm(true)}
+            className="mt-3 rounded-lg border border-amber-400/50 bg-amber-500/20 px-4 py-2 text-sm font-semibold text-amber-100">
+            Use Shot in the Dark
+          </button>
+        ) : (
+          <p className="mt-3 text-sm text-white/50">The draw is unavailable now. Cast your private vote with @Chimmy when voting opens.</p>
+        )}
+        {shotError && <p role="alert" className="mt-2 text-sm text-rose-200">{shotError}</p>}
       </section>
 
       {/* Vote scroll (sequence from server when council closes / votes tallied) */}

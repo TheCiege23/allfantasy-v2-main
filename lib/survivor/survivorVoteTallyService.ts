@@ -3,6 +3,7 @@ import 'server-only'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { loadCouncilContext } from './survivorCouncilService'
+import { getCouncilShots } from './survivorShotInTheDark'
 
 /**
  * SURVIVOR VOTE TALLY (canonical Phase 3) — deterministic, no fabrication.
@@ -14,7 +15,7 @@ import { loadCouncilContext } from './survivorCouncilService'
  * here; `revealCouncil` flips the public flag.
  */
 
-export type BallotRevealStatus = 'counts' | 'late_does_not_count' | 'blocked_by_idol' | 'target_safe' | 'taken_by_vote_steal'
+export type BallotRevealStatus = 'counts' | 'late_does_not_count' | 'forfeited_by_shot' | 'blocked_by_idol' | 'blocked_by_shot' | 'target_safe' | 'taken_by_vote_steal'
 
 export interface RevealScroll {
   order: number
@@ -70,8 +71,15 @@ export async function tallyCouncil(leagueId: string, councilId: string): Promise
   const protectedRosters = new Set(
     council.idolsPlayed.filter((p) => p.powerType === 'vote_shield').map((p) => p.protectedRosterId ?? p.playerRosterId),
   )
+  const councilShots = await getCouncilShots(leagueId, councilId)
+  const shotUsers = new Set(councilShots.map(shot => shot.userId))
+  const shotVoterRosters = new Set([...shotUsers].map(userId => ctx.userToRoster[userId]).filter((id): id is string => Boolean(id)))
+  const shotProtectedRosters = new Set(
+    councilShots.filter(shot => shot.success)
+      .map(shot => ctx.userToRoster[shot.userId]).filter((id): id is string => Boolean(id)),
+  )
   const safeRosters = new Set(ctx.scopePlayers.filter(player => !ctx.eligibility.targetUserIds.includes(player.userId)).map(player => player.rosterId))
-  const extraBallots = council.idolsPlayed.filter((p) => (p.powerType === 'extra_vote' || p.powerType === 'vote_steal') && p.extraTargetUserId)
+  const extraBallots = council.idolsPlayed.filter((p) => (p.powerType === 'extra_vote' || p.powerType === 'vote_steal') && p.extraTargetUserId && !shotUsers.has(p.playerUserId))
   const stolenVoterRosters = new Set(council.idolsPlayed.filter((p) => p.powerType === 'vote_steal').map((p) => p.stolenVoterRosterId))
 
   const counts: Record<string, number> = {}
@@ -94,7 +102,10 @@ export async function tallyCouncil(leagueId: string, councilId: string): Promise
     const targetUserId = v.targetUserId ?? rosterToUser[v.targetRosterId] ?? null
     const targetName = targetNameFor(targetUserId, v.targetRosterId, v.targetName)
     let status: BallotRevealStatus = 'counts'
-    if (stolenVoterRosters.has(v.voterRosterId)) {
+    if (shotVoterRosters.has(v.voterRosterId)) {
+      status = 'forfeited_by_shot'
+      doesNotCountVoteIds.push(v.id)
+    } else if (stolenVoterRosters.has(v.voterRosterId)) {
       status = 'taken_by_vote_steal'
       doesNotCountVoteIds.push(v.id)
     } else if (v.doesNotCount || (v.isLateVote && (council.phase === 'revote' || !settings.lateVotesAllowed))) {
@@ -103,6 +114,9 @@ export async function tallyCouncil(leagueId: string, councilId: string): Promise
     } else if (protectedRosters.has(v.targetRosterId)) {
       status = 'blocked_by_idol'
       blockedByIdol = true
+      doesNotCountVoteIds.push(v.id)
+    } else if (shotProtectedRosters.has(v.targetRosterId)) {
+      status = 'blocked_by_shot'
       doesNotCountVoteIds.push(v.id)
     } else if (safeRosters.has(v.targetRosterId)) {
       status = 'target_safe'
@@ -123,6 +137,8 @@ export async function tallyCouncil(leagueId: string, councilId: string): Promise
     if (protectedRosters.has(targetRosterId)) {
       status = 'blocked_by_idol'
       blockedByIdol = true
+    } else if (shotProtectedRosters.has(targetRosterId)) {
+      status = 'blocked_by_shot'
     } else if (safeRosters.has(targetRosterId)) {
       status = 'target_safe'
     } else if (targetUserId) {
@@ -258,11 +274,18 @@ export async function revealCouncil(leagueId: string, councilId: string, actorUs
     }
     const channel = await tx.survivorChatChannel.findFirst({ where: { leagueId, channelType: 'league', isArchived: false }, select: { id: true } })
     if (!channel) return { ok: false, status: 409, code: 'chat_missing', error: 'Restore league chat before publishing the Torch Ceremony.' }
-    const ballots = seq.length ? seq.map((scroll, index) => `Ballot ${index + 1}: ${scroll.targetName ?? 'No eligible target'}${scroll.status === 'counts' ? '' : scroll.status === 'taken_by_vote_steal' ? ' (Taken — does not count)' : ' (does not count)'}.`).join('\n') : 'No ballots were cast.'
+    const shotRows = await tx.survivorAuditEntry.findMany({ where: { leagueId, relatedEntityId: councilId, action: 'shot_in_the_dark_played' }, select: { actorUserId: true, data: true }, orderBy: { createdAt: 'asc' } })
+    const shotNames = shotRows.length ? await tx.survivorPlayer.findMany({ where: { leagueId, userId: { in: shotRows.map(row => row.actorUserId).filter((id): id is string => Boolean(id)) } }, select: { userId: true, displayName: true } }) : []
+    const names = new Map(shotNames.map(player => [player.userId, player.displayName]))
+    const shotAnnouncement = shotRows.map(row => {
+      const safe = row.data && typeof row.data === 'object' && !Array.isArray(row.data) && (row.data as Record<string, unknown>).success === true
+      return `Shot in the Dark: ${names.get(row.actorUserId ?? '') ?? 'A manager'} drew ${safe ? 'Safe' : 'Not Safe'} and forfeited their vote.`
+    }).join('\n')
+    const ballots = seq.length ? seq.map((scroll, index) => `Ballot ${index + 1}: ${scroll.targetName ?? 'No eligible target'}${scroll.status === 'counts' ? '' : scroll.status === 'taken_by_vote_steal' ? ' (Taken — does not count)' : scroll.status === 'blocked_by_shot' ? ' (blocked by Shot in the Dark)' : scroll.status === 'forfeited_by_shot' ? ' (forfeited by Shot in the Dark)' : ' (does not count)'}.`).join('\n') : 'No ballots were cast.'
     const opensRevote = council.isTie && council.tiePhase === 'revote_required' && council.phase !== 'revote'
     const outcome = council.isTie ? opensRevote ? 'The vote is tied. Eligible managers have two hours to revote for the tied managers. Nobody leaves yet.' : 'The vote remains tied. An independent commissioner must decide the exact season-points tie.' : `${council.eliminatedName ?? 'The selected manager'} has been voted off the main island.${council.tiePhase === 'season_points_decided' ? ' The tiebreak used finalized season points.' : ''}`
     await tx.survivorChatMessage.create({ data: { leagueId, channelId: channel.id, channelType: 'league', senderUserId: 'survivor-host-chimmy', senderName: 'Chimmy', senderIsHost: true, isSystemMessage: true,
-      contentType: 'host_announcement', content: `Torch Ceremony · Week ${council.week}\n${ballots}\n${outcome}` } })
+      contentType: 'host_announcement', content: `Torch Ceremony · Week ${council.week}\n${shotAnnouncement ? `${shotAnnouncement}\n` : ''}${ballots}\n${outcome}` } })
     const now = new Date()
     await tx.survivorTribalCouncil.update({ where: { id: councilId }, data: { isRevealed: true, revealStartsAt: now, status: council.isTie ? 'tie_pending' : 'revealed' } })
     // The existing notification worker delivers this after the public read commits.

@@ -6,7 +6,7 @@ const m = vi.hoisted(() => ({ db: {
   survivorGameState: { findUnique: vi.fn(), updateMany: vi.fn() },
   survivorTribalCouncil: { findFirst: vi.fn(), update: vi.fn() },
   survivorVote: { findMany: vi.fn(), count: vi.fn(), updateMany: vi.fn() },
-  survivorAuditEntry: { create: vi.fn() },
+  survivorAuditEntry: { create: vi.fn(), findMany: vi.fn(async () => []) },
   survivorNotification: { create: vi.fn() },
   survivorChatChannel: { findFirst: vi.fn() }, survivorChatMessage: { create: vi.fn() },
 } }))

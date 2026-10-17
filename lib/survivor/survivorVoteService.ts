@@ -1,8 +1,8 @@
 import 'server-only'
 
-import { prisma } from '@/lib/prisma'
 import { loadCouncilContext } from './survivorCouncilService'
 import { isEligibleTarget, isEligibleVoter } from './survivorBallotEligibility'
+import { withSurvivorSetupTransaction } from './survivorSetupTransaction'
 
 /**
  * SURVIVOR PRIVATE VOTE SUBMISSION (canonical Phase 3).
@@ -42,9 +42,8 @@ export async function submitVote(
   targetUserId: string,
   opts: SubmitVoteOptions = {},
 ): Promise<SubmitVoteOutcome> {
-  return prisma.$transaction(async (tx): Promise<SubmitVoteOutcome> => {
-    // Serialize ballot submission with close, pause, extension, and idol actions.
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`survivor-setup:${leagueId}`}, 0))::text`
+  // One league lock serializes ballot submission with close, pause, extension, idol and Shot in the Dark actions.
+  return withSurvivorSetupTransaction(leagueId, async (tx): Promise<SubmitVoteOutcome> => {
     const game = await tx.survivorGameState.findUnique({ where: { leagueId }, select: { pausedSnapshot: true } })
     if (game?.pausedSnapshot != null) return { ok: false, status: 409, code: 'league_paused', error: 'The league is paused.' }
     const ctx = await loadCouncilContext(leagueId, undefined, tx)
@@ -85,6 +84,13 @@ export async function submitVote(
     const targetRosterId = userToRoster[targetUserId]
     if (!voterRosterId || !targetRosterId) {
       return { ok: false, status: 400, code: 'roster_unresolved', error: 'Could not resolve voter/target roster.' }
+    }
+
+    const shot = await tx.survivorAuditEntry.findUnique({
+      where: { id: `survivor-shot:${leagueId}:${voterUserId}` }, select: { relatedEntityId: true },
+    })
+    if (shot?.relatedEntityId === council.id) {
+      return { ok: false, status: 409, code: 'shot_forfeited_vote', error: 'Playing Shot in the Dark forfeited your vote at this council.' }
     }
 
     const existing = await tx.survivorVote.findUnique({

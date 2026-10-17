@@ -70,8 +70,9 @@ const { prisma, loadCouncilContext } = vi.hoisted(() => ({
     $transaction: vi.fn(), $queryRaw: vi.fn(),
     survivorVote: { findMany: vi.fn(), findUnique: vi.fn(), upsert: vi.fn() },
     survivorTribalCouncil: { update: vi.fn(), findUnique: vi.fn(), findFirst: vi.fn() },
-    survivorAuditEntry: { create: vi.fn() },
+    survivorAuditEntry: { create: vi.fn(), findMany: vi.fn(), findUnique: vi.fn() },
     survivorGameState: { findUnique: vi.fn(), updateMany: vi.fn() },
+    $transaction: vi.fn(), $queryRaw: vi.fn(),
   },
   loadCouncilContext: vi.fn(),
 }))
@@ -161,6 +162,7 @@ describe('tallyCouncil', () => {
     vi.clearAllMocks()
     prisma.survivorTribalCouncil.update.mockResolvedValue({})
     prisma.survivorAuditEntry.create.mockResolvedValue({})
+    prisma.survivorAuditEntry.findMany.mockResolvedValue([])
   })
 
   it('counts valid ballots and names the eliminated player', async () => {
@@ -196,6 +198,49 @@ describe('tallyCouncil', () => {
     expect(res.tally.countsByTargetUserId.d).toBeUndefined()
     expect(res.tally.eliminatedUserId).toBe('a')
     expect(res.tally.revealSequence.filter((s) => s.status === 'blocked_by_idol')).toHaveLength(2)
+  })
+
+  it('a successful Shot in the Dark blocks votes only against its owner', async () => {
+    loadCouncilContext.mockResolvedValue(makeCtx())
+    prisma.survivorAuditEntry.findMany.mockResolvedValue([{ actorUserId: 'd', data: { draw: 1, success: true } }])
+    prisma.survivorVote.findMany.mockResolvedValue([
+      { id: 'v1', voterRosterId: 'ra', targetRosterId: 'rd', targetUserId: 'd', targetName: 'D', doesNotCount: false, isLateVote: false },
+      { id: 'v2', voterRosterId: 'rb', targetRosterId: 'rc', targetUserId: 'c', targetName: 'C', doesNotCount: false, isLateVote: false },
+    ])
+    const result = await tallyCouncil('league-1', 'council-1')
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.tally.countsByTargetUserId).toEqual({ c: 1 })
+    expect(result.tally.revealSequence[0].status).toBe('blocked_by_shot')
+    expect(result.tally.eliminatedUserId).toBe('c')
+  })
+
+  it('a failed draw leaves the owner vulnerable and forfeits any extra ballot', async () => {
+    loadCouncilContext.mockResolvedValue(makeCtx({ idolsPlayed: [{ idolId: 'i2', powerType: 'extra_vote', playerUserId: 'a', playerRosterId: 'ra', extraTargetUserId: 'd', extraTargetRosterId: 'rd', playedAt: 'x' }] }))
+    prisma.survivorAuditEntry.findMany.mockResolvedValue([{ actorUserId: 'a', data: { draw: 4, success: false } }])
+    prisma.survivorVote.findMany.mockResolvedValue([
+      { id: 'v1', voterRosterId: 'rb', targetRosterId: 'ra', targetUserId: 'a', targetName: 'A', doesNotCount: false, isLateVote: false },
+    ])
+    const result = await tallyCouncil('league-1', 'council-1')
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.tally.countsByTargetUserId).toEqual({ a: 1 })
+    expect(result.tally.revealSequence).toHaveLength(1)
+  })
+
+  it('does not count a stale ballot recorded for a manager who used a draw', async () => {
+    loadCouncilContext.mockResolvedValue(makeCtx())
+    prisma.survivorAuditEntry.findMany.mockResolvedValue([{ actorUserId: 'a', data: { draw: 6, success: false } }])
+    prisma.survivorVote.findMany.mockResolvedValue([
+      { id: 'v1', voterRosterId: 'ra', targetRosterId: 'rd', targetUserId: 'd', targetName: 'D', doesNotCount: false, isLateVote: false },
+      { id: 'v2', voterRosterId: 'rb', targetRosterId: 'rc', targetUserId: 'c', targetName: 'C', doesNotCount: false, isLateVote: false },
+    ])
+    const result = await tallyCouncil('league-1', 'council-1')
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.tally.countsByTargetUserId).toEqual({ c: 1 })
+    expect(result.tally.revealSequence[0].status).toBe('forfeited_by_shot')
+    expect(result.tally.doesNotCountVoteIds).toContain('v1')
   })
 
   it('Extra Vote adds an additional ballot at tally', async () => {
@@ -289,7 +334,9 @@ describe('submitVote', () => {
     prisma.$transaction.mockImplementation(async fn => fn(prisma))
     prisma.survivorGameState.findUnique.mockResolvedValue({ pausedSnapshot: null })
     prisma.survivorAuditEntry.create.mockResolvedValue({})
+    prisma.survivorAuditEntry.findUnique.mockResolvedValue(null)
     prisma.survivorVote.upsert.mockResolvedValue({})
+    prisma.$transaction.mockImplementation((work: (db: typeof prisma) => Promise<unknown>) => work(prisma))
   })
 
   it('cannot submit while the league is paused', async () => {
@@ -341,5 +388,21 @@ describe('submitVote', () => {
     expect(res.locked).toBe(true)
     expect(res.targetUserId).toBe('c')
     expect(prisma.survivorVote.upsert).toHaveBeenCalledOnce()
+  })
+
+  it('rejects a vote after the manager used Shot in the Dark', async () => {
+    loadCouncilContext.mockResolvedValue(makeCtx({ status: 'voting_open' }))
+    prisma.survivorAuditEntry.findUnique.mockResolvedValue({ relatedEntityId: 'council-1' })
+    const result = await submitVote('league-1', 'a', 'c')
+    expect(result).toEqual(expect.objectContaining({ ok: false, code: 'shot_forfeited_vote' }))
+    expect(prisma.survivorVote.upsert).not.toHaveBeenCalled()
+  })
+
+  it('allows voting at a later council after using the one-time draw earlier', async () => {
+    loadCouncilContext.mockResolvedValue(makeCtx({ status: 'voting_open' }))
+    prisma.survivorAuditEntry.findUnique.mockResolvedValue({ relatedEntityId: 'older-council' })
+    prisma.survivorVote.findUnique.mockResolvedValue(null)
+    const result = await submitVote('league-1', 'a', 'b')
+    expect(result.ok).toBe(true)
   })
 })
