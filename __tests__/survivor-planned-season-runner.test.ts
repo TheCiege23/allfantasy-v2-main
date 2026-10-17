@@ -197,3 +197,15 @@ it('does not activate autonomous hosting merely because a league has a saved sea
   expect(db.league.findMany).not.toHaveBeenCalled()
   expect(engine.advanceWeek).not.toHaveBeenCalled()
 })
+
+it('freezes a league the commissioner paused, even though its phase is unchanged', async () => {
+  const { runPlannedSurvivorLeague } = await import('@/lib/survivor/survivorPlannedSeasonRunner')
+  const plan = await setup('NBA', 1, { finalized: true })
+  state.game.currentWeek = plan.eliminationWeeks[0]
+  state.game.pausedSnapshot = { needsTribalLock: true }
+  expect(await runPlannedSurvivorLeague('league-1', later)).toBe('paused')
+  expect(engine.triggerTribalOpen).not.toHaveBeenCalled()
+  expect(engine.processTribalDeadline).not.toHaveBeenCalled()
+  expect(engine.advanceWeek).not.toHaveBeenCalled()
+  expect(engine.syncWeeklyScores).not.toHaveBeenCalled()
+})
