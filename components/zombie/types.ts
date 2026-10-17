@@ -67,6 +67,10 @@ export interface ZombieSummary {
   lastResolvedWeek?: number | null
   /** The status change the ZombieTurn overlay announces once. */
   turnMoment?: ZombieTurnMoment | null
+  /** Roster ids of the teams the viewer turned. */
+  myInfections?: string[]
+  /** False in a secret-Whisperer league. */
+  whispererPublic?: boolean
   /** The engine's own numbers for this sport — never sample values. */
   rules?: {
     bashingMargin: number

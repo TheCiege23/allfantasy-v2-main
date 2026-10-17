@@ -8,6 +8,7 @@ import { ZombieSceneBackground } from './ZombieSceneBackground'
 import { ZombieStatusChip, zombieChipStatus, type ZombieChipStatus } from './ZombieStatusChip'
 import { ZombieBashingCard, type ZombieBashingRules } from './ZombieBashingCard'
 import { ZombieTurnOverlay } from './ZombieTurnOverlay'
+import { ZombieWhispererLair } from './ZombieWhispererLair'
 
 /*
  * The Zombie league's home (the Zombie tab on /league/[id]). Layout from the design handoff's
@@ -152,6 +153,7 @@ export function ZombieHome({ leagueId }: ZombieHomeProps) {
     <div className="space-y-5 text-[var(--zombie-text-full)]">
       <ZombieTurnOverlay
         leagueId={leagueId}
+        leagueName={lg?.name}
         moment={summary.turnMoment}
         ctx={{
           reviveSerums,
@@ -364,12 +366,19 @@ export function ZombieHome({ leagueId }: ZombieHomeProps) {
         </div>
 
         <aside className="space-y-5">
+          {myChip === 'whisperer' ? (
+            <ZombieWhispererLair
+              isPublic={summary.whispererPublic !== false}
+              horde={(summary.myInfections ?? []).map((id) => nameOf(id))}
+              ambushes={items.ambush}
+            />
+          ) : null}
           {/* Supplies — counts only in v1. */}
           <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
             <h2 className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/55">Your supplies</h2>
             {summary.myRosterId ? (
               <ul className="mt-3 space-y-3">
-                <SupplyRow art="serum" label="Serums" count={items.serums} note={`${reviveSerums} bring a Zombie back as a Survivor.`} />
+                <SupplyRow art="serum" label="Serums" count={items.serums} note={`One registered before kickoff keeps you human for a week; ${reviveSerums} bring a Zombie back.`} />
                 <SupplyRow
                   art="weapon-knife"
                   label="Weapons"
@@ -404,7 +413,7 @@ export function ZombieHome({ leagueId }: ZombieHomeProps) {
                 rules
                   ? `You bank your score every week as Outbreak Points. Get infected and that week goes to whoever turned you; lose by ${fmt(rules.maulingMargin)}+ and ${pct(rules.maulShare)} of it goes, by ${fmt(rules.bashingMargin)}+ and ${pct(rules.bashShare)}.`
                   : 'You bank your score every week as Outbreak Points.',
-                `${reviveSerums} serums bring a Zombie back as a Survivor.`,
+                `A serum registered before kickoff keeps you human for a week; ${reviveSerums} bring a Zombie back.`,
                 `Infections run after the week's last game.${summary.config.zombieTradeBlocked ? ' Zombies can\'t trade.' : ''}`,
               ].map((text, i) => (
                 <li key={i} className="flex gap-2.5">
