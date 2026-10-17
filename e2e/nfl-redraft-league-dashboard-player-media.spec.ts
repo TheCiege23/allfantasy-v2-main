@@ -40,7 +40,7 @@ const LEAGUE_GROUP_TABS = ['home', 'matchups', 'players', 'trades'] as const
 async function gotoHarnessReady(page: Page): Promise<void> {
   await page.goto(HARNESS_PATH, { waitUntil: 'domcontentloaded', timeout: 120_000 })
   await page.getByTestId('nfl-redraft-league-dashboard-harness').waitFor({ state: 'visible', timeout: 120_000 })
-  await page.waitForLoadState('networkidle').catch(() => null)
+  await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => null)
   await page.getByTestId('league-tab-group-league').waitFor({ state: 'visible', timeout: 30_000 })
 }
 
