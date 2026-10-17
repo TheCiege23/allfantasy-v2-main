@@ -154,7 +154,7 @@ test.describe("@creator-leagues-system click audit", () => {
     expect(params.get("sport")).toBe("NFL")
     expect(params.get("sort")).toBe("newest")
 
-    await page.getByRole("button", { name: /next/i }).click()
+    await page.getByRole("button", { name: "Next", exact: true }).click()
     await expect(page.getByTestId("creator-league-card-creator-league-beta")).toBeVisible()
     await page.getByRole("button", { name: /previous/i }).click()
     await expect(page.getByTestId("creator-league-card-creator-league-alpha")).toBeVisible()

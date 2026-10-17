@@ -23,7 +23,7 @@ export async function getOrCreateExileLeague(
 
   const main = await prisma.league.findUnique({
     where: { id: mainLeagueId },
-    select: { userId: true, sport: true, name: true, scoring: true },
+    select: { userId: true, sport: true, name: true, scoring: true, season: true, leagueSize: true },
   })
   if (!main) throw new Error('Main league not found')
 
@@ -34,9 +34,9 @@ export async function getOrCreateExileLeague(
       platformLeagueId: `exile-${mainLeagueId}-${Date.now()}`,
       name: options?.name ?? `Exile Island: ${main.name ?? 'Survivor'}`,
       sport: (options?.sport ?? main.sport) as any,
-      season: new Date().getFullYear(),
+      season: main.season,
       leagueVariant: 'survivor_exile',
-      leagueSize: 20,
+      leagueSize: main.leagueSize ?? 20,
       scoring: main.scoring ?? undefined,
       isDynasty: false,
     },

@@ -40,6 +40,9 @@ import { prisma } from '@/lib/prisma'
 import { assertLeagueMember } from '@/lib/league/league-access'
 import { rateLimit, getClientIp } from '@/lib/rate-limit'
 import { computeRedraftTradeValueSnapshot } from '@/lib/trade-value/captureSnapshot'
+import { evaluateTrade } from '@/lib/decision-os/trade/evaluateTrade'
+import { receiptGradeFields } from '@/lib/decision-os/trade/receiptViews'
+import { gradeInputsFromRedraftAssets } from '@/lib/decision-os/trade/tradeGradeInputs'
 import { valueV2ShadowEnabled } from '@/lib/decision-os/value-v2/shadow'
 import { resolveRedraftTeamWindow } from '@/lib/decision-os/value-v2/redraftWindowServerAdapter'
 import type { WindowDecision } from '@/lib/decision-os/value-v2/windowDecision'
@@ -65,6 +68,18 @@ type RawAssetBody = {
   pickSeason?: number | null
   pickRound?: number | null
   metadata?: Record<string, unknown> | null
+}
+
+/** A request asset as the redraft grader input reads it. */
+function asRedraftAsset(a: RawAssetBody) {
+  return {
+    assetType: String(a.assetType ?? 'player'),
+    playerId: a.playerId ?? null,
+    playerName: a.playerName ?? null,
+    pickSeason: a.pickSeason ?? null,
+    pickRound: a.pickRound ?? null,
+    metadata: a.metadata ?? null,
+  }
 }
 
 /** Keeps a runaway client from turning a keystroke into a hundred valuations. */
@@ -176,6 +191,22 @@ export async function POST(req: NextRequest) {
     })
   }
 
+  /*
+   * 🛑 THE LETTER IS THE ONE GRADE (Trade OS, 2026-09-27), graded from the proposer's side — who is the
+   * caller, proven above — with their roster need, and saved as a receipt. The snapshot below is still
+   * computed: it is the valuation recorded with the proposal, and the modal's "why these numbers"
+   * breakdown. Its own letter (`canonicalFairnessGrade`, A+..F) is no longer what the modal shows.
+   * Started first and awaited last so it overlaps the snapshot.
+   */
+  const gradePromise = evaluateTrade({
+    surface: 'redraft-trade-preview',
+    leagueId,
+    userId,
+    give: gradeInputsFromRedraftAssets(assets.filter((a) => a.fromRosterId === proposerRosterId).map(asRedraftAsset)),
+    get: gradeInputsFromRedraftAssets(assets.filter((a) => a.toRosterId === proposerRosterId).map(asRedraftAsset)),
+    viewerSide: true,
+  }).then(receiptGradeFields)
+
   try {
     const snapshot = await computeRedraftTradeValueSnapshot({
       seasonId,
@@ -206,7 +237,7 @@ export async function POST(req: NextRequest) {
       })),
     })
 
-    return NextResponse.json({ snapshot })
+    return NextResponse.json({ snapshot, tradeGrade: await gradePromise })
   } catch {
     /*
      * ⚠ A FAILED VALUATION MUST NOT LOOK LIKE A CHEAP TRADE. The caller falls back to its own

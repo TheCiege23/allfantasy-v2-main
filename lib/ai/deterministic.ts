@@ -321,14 +321,21 @@ function isOwnRosterQuestion(message: string): boolean {
   return isPersonalRosterScoped(message) || OWN_ROSTER_PATTERNS.some((p) => p.test(message))
 }
 
+/** A full roster review needs joined league evidence, even when it names a player or live game. */
+function isOwnRosterAnalysisQuestion(message: string): boolean {
+  return /\b(?:my|our)\s+(?:[\w'-]+\s+){0,3}(?:teams?|rosters?|lineups?|starters?|bench|leagues?)\b/i.test(message)
+    && /\b(?:count|review|analy[sz]e|assess|summari[sz]e|explain|compare|break\s+down|check|how\s+many)\b/i.test(message)
+}
+
 /**
- * "Who's out in my leagues" — an injury question about the asker's OWN rosters, with no named
- * player. The ONE rule for it: the injury builder below yields on it, and the chat route uses it
+ * An injury question about the asker's OWN rosters, including full reviews that name athletes.
+ * Direct named-player lookups remain separate. The injury builder yields on this predicate, and the chat route uses it
  * to decide when to run the cross-league roster injury check (myRosterInjuriesTool.ts). Two
  * copies of this would drift, and the two callers must agree on which questions they own.
  */
 export function isOwnRosterInjuryQuestion(message: string): boolean {
-  return detectInjuryQuestion(message) && !extractLikelyPlayerName(message) && isOwnRosterQuestion(message)
+  return detectInjuryQuestion(message)
+    && (isOwnRosterAnalysisQuestion(message) || (!extractLikelyPlayerName(message) && isOwnRosterQuestion(message)))
 }
 
 function detectWeatherQuestion(message: string): boolean {
@@ -812,10 +819,12 @@ async function buildCachedGamesAnswer(message: string): Promise<string | null> {
 }
 
 function extractLikelyPlayerName(message: string): string | null {
-  const afterValue = message.match(/\b(?:value|worth|on|for)\s+([A-Z][a-z'.-]+(?:\s+[A-Z][a-z'.-]+){1,3})/)
+  // Product/format labels are not athletes. Keep them from masking a genuine name later in the question.
+  const playerText = message.replace(/\b(?:World\s*Cup|All\s*Fantasy|Best[ -]Ball|Decision\s+OS)\b/gi, 'context')
+  const afterValue = playerText.match(/\b(?:value|worth|on|for)\s+([A-Z][a-z'.-]+(?:\s+[A-Z][a-z'.-]+){1,3})/)
   if (afterValue?.[1]) return afterValue[1].trim()
-  const proper = message.match(/\b([A-Z][a-z'.-]+(?:\s+[A-Z][a-z'.-]+){1,3})\b/)
-  if (proper?.[1] && !/World Cup|All Fantasy|AllFantasy/.test(proper[1])) return proper[1].trim()
+  const proper = playerText.match(/\b([A-Z][a-z'.-]+(?:\s+[A-Z][a-z'.-]+){1,3})\b/)
+  if (proper?.[1]) return proper[1].trim()
   return null
 }
 
@@ -1262,6 +1271,8 @@ export async function tryDeterministicAnswerDetailed(
   const classify = (text: string): DeterministicResult =>
     isReliableUnavailableMiss(text, safeLocale) ? refusal(text) : answer(text)
   const intentRoute = resolveChimmyIntentRoute(message)
+  // A cache hit for one player or game cannot answer a complete roster request.
+  if (isOwnRosterAnalysisQuestion(message)) return null
   if (isScopedRosterReviewQuestion(message, leagueRequested)) return null
   // A result or schedule is evidence for analysis, never a probability or a recommendation.
   // Yield before ANY shortcut so incidental "live", "tonight", or "worth" cannot hijack it.

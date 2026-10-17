@@ -1,4 +1,5 @@
 import 'server-only'
+import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
 
 type StructuredFantasyContext = Record<string, unknown> | null | undefined
 
@@ -258,6 +259,10 @@ function buildReplacementOptionsSection(structuredFantasyContext: StructuredFant
 
   if (reps.limitation === 'no_projection_data') {
     lines.push('- No real projection data exists for this league yet — say so rather than estimating.')
+    return lines.join('\n')
+  }
+  if (reps.limitation === 'roster_ids_unreadable') {
+    lines.push(`- ${FOREIGN_IDS_UNREADABLE}, so no replacements were compared — say so; do not suggest alternatives.`)
     return lines.join('\n')
   }
 

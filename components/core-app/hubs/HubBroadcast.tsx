@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { readableApiError } from '@/lib/http/readableApiError'
 
 /**
  * The @everyone composer every commissioner hub carries — the format hubs and the
@@ -46,10 +47,11 @@ export function HubBroadcast({
         body: JSON.stringify({ leagueIds, message }),
       })
       const body = (await res.json().catch(() => null)) as
-        | { results?: { sent: boolean }[]; error?: string }
+        | { results?: { sent: boolean }[]; error?: string; message?: string }
         | null
       if (!res.ok) {
-        setState({ tone: 'bad', note: body?.error ? `Not sent: ${body.error}.` : 'Not sent. Try again in a moment.' })
+        const why = readableApiError(body, '')
+        setState({ tone: 'bad', note: why ? `Not sent: ${why.replace(/\.$/, '')}.` : 'Not sent. Try again in a moment.' })
         return
       }
       const sent = (body?.results ?? []).filter((r) => r.sent).length

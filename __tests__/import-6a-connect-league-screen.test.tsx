@@ -35,7 +35,7 @@ vi.mock('next/link', () => ({
 }))
 
 import ImportV4 from '@/components/core-app/screens/ImportV4'
-import { IMPORT_PROVIDER_UI_OPTIONS } from '@/lib/league-import/provider-ui-config'
+import { IMPORT_PROVIDER_UI_OPTIONS, availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
 
 /*
  * ⚠ THE ESPN PANEL FETCHES ITS OWN STATUS ON MOUNT, and without a stub that promise
@@ -73,22 +73,9 @@ describe('6a rule 1 — the field follows the platform, and is never generic', (
    */
   const CASES: ReadonlyArray<[RegExp, RegExp, RegExp]> = [
     [/^S\s*Sleeper/, /Sleeper username/i, /sleeper-username/i],
-    /*
-     * ⚠ ANCHORED AT THE START ONLY, AND THAT ASYMMETRY IS THE POINT. This read
-     * `/^123456$/` and broke when ImportV4 deliberately widened the ESPN
-     * placeholder to '123456, or paste the league URL' — `parseEspnSourceInput`
-     * accepts a full league URL and the box had never said so. ESPN was the only
-     * anchored row in this table, which is exactly why it was the only one that
-     * rotted: MFL, Fantrax and Fleaflicker below all match a substring and rode
-     * the same copy change without noticing.
-     *
-     * What this assertion is FOR is that the box shows ESPN's own example id
-     * rather than another provider's — so it pins the discriminating part,
-     * `123456` leading the placeholder, and stays out of the way of the shared
-     * ", or paste the league URL" suffix that four providers now share. Do not
-     * re-add a `$`: it couples the test to copy it was never meant to police.
-     */
-    [/ESPN/, /ESPN league ID/i, /^123456\b/],
+    // ESPN now accepts both NFL ids and sport-qualified baseball inputs.
+    // Pin the MLB example so the placeholder cannot regress to another provider.
+    [/ESPN/, /ESPN league ID/i, /MLB:2026:123456/],
     [/MFL/, /MFL league ID/i, /paste the league URL/i],
     [/Fantrax/, /Fantrax league ID/i, /fantrax\.com|abcd1234efgh5678/i],
     [/Fleaflicker/, /Fleaflicker league ID/i, /206154/],
@@ -170,7 +157,8 @@ describe('6a rule 4 — the READ-ONLY chip and its explainer ride every step', (
     const opener = screen.getByRole('button', { name: /what read-only means/i })
     fireEvent.click(opener)
     expect(screen.getByRole('tooltip')).toBeTruthy()
-    expect(screen.getByText(/never changes anything on Sleeper, ESPN or Yahoo/i)).toBeTruthy()
+    // The platforms named are the ones importable today (availableImportPlatformsPhrase), not a hardcoded list.
+    expect(screen.getByText(new RegExp(`never changes anything on ${availableImportPlatformsPhrase()}`, 'i'))).toBeTruthy()
   })
 
   /**
@@ -314,6 +302,8 @@ describe('6a rule 3 — an unreleased provider is visible, disabled and explaine
       isImportProviderAvailable: (p: string) => p === 'sleeper',
       supportsImportProviderDiscovery: (p: string) => p === 'sleeper',
       getImportProviderSupportedSports: () => ['NFL'],
+      // Matches this mock's availability: only Sleeper is importable.
+      availableImportPlatformsPhrase: () => 'Sleeper',
     }))
   })
 

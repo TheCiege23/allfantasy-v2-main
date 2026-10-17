@@ -71,7 +71,9 @@ vi.mock('@/lib/prisma', () => ({
   },
 }))
 
-vi.mock('@/lib/core-app/rosterIdCrosswalk', () => ({
+// The REAL `sleeperLookupId` rides along: it is the rule under test for a foreign league below.
+vi.mock('@/lib/core-app/rosterIdCrosswalk', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
   crosswalkToSleeperIds: vi.fn(async () => db.crosswalk),
 }))
 
@@ -93,6 +95,38 @@ beforeEach(() => {
   db.injuries = []
   db.crosswalk = new Map()
   db.games = slateWithout('none') // every club plays
+})
+
+/*
+ * 🛑 A FOREIGN-ID LEAGUE NEVER PRICES A STRANGER. Fleaflicker ids are short numbers in Sleeper's range
+ * — 44 of 248 on the one production Fleaflicker league ARE real Sleeper ids. Here the roster's "a" and
+ * "b" are Fleaflicker ids that happen to equal Sleeper players a (10) and b (6): the crosswalk knows
+ * neither, so neither may be priced. One bridged id ("fl-c" -> c) still is.
+ */
+describe('Matchup scoreboard — a foreign-id league', () => {
+  it('an unmapped Fleaflicker id is unprojected, never priced as the Sleeper player sharing its number', async () => {
+    db.platform = 'fleaflicker'
+    db.crosswalk = new Map([['fl-c', 'c']])
+    const { prisma } = await import('@/lib/prisma')
+    vi.mocked(prisma.roster.findMany).mockResolvedValueOnce([
+      { platformUserId: 'you', playerData: { starters: ['a', 'b', 'fl-c'] } },
+      { platformUserId: 'them', playerData: { starters: ['d'] } },
+    ] as never)
+    const sides = await load()
+    expect(sides?.you.projectedRemaining).toBe(8)
+    expect(sides?.you.unprojected).toBe(2)
+    expect(sides?.you.lineup.find((s) => s.playerId === 'a')?.projected ?? null).toBeNull()
+  })
+
+  it('control: the same ids in a Sleeper league ARE Sleeper ids and are priced', async () => {
+    const { prisma } = await import('@/lib/prisma')
+    vi.mocked(prisma.roster.findMany).mockResolvedValueOnce([
+      { platformUserId: 'you', playerData: { starters: ['a', 'b'] } },
+      { platformUserId: 'them', playerData: { starters: ['d'] } },
+    ] as never)
+    const sides = await load()
+    expect(sides?.you.projectedRemaining).toBe(16)
+  })
 })
 
 describe('Matchup scoreboard — a ruled-out starter', () => {
@@ -192,5 +226,51 @@ describe('Matchup scoreboard — the live lineup', () => {
     const sides = await load({ you: ['e'], opponent: null })
     expect(sides?.you.lineup.map((s) => s.playerId)).toEqual(['e'])
     expect(sides?.opponent.lineup.map((s) => s.playerId)).toEqual(['c', 'd'])
+  })
+})
+
+/*
+ * 🛑 "ACTIVE" IS NOT AN INJURY. Every non-empty status used to become a tag, so nearly every healthy
+ * starter on the production board wore an amber "ACTI" chip (2026-10-02). Only a real designation
+ * may reach `atRiskBySleeperId`.
+ */
+describe('Matchup scoreboard — the injury tag', () => {
+  it('🛑 a healthy designation (Active, ACT, NA) carries no tag', async () => {
+    db.injuries = [
+      { playerName: 'Player a', status: 'Active' },
+      { playerName: 'Player b', status: 'ACT' },
+      { playerName: 'Player c', status: 'NA' },
+    ]
+    const sides = await load()
+    expect(sides?.atRiskBySleeperId).toEqual({})
+  })
+
+  it('control: Questionable still carries one, and does not change the price', async () => {
+    db.injuries = [{ playerName: 'Player a', status: 'Questionable' }]
+    const sides = await load()
+    expect(sides?.atRiskBySleeperId).toEqual({ a: 'Questionable' })
+    expect(sides?.you.projectedRemaining).toBe(16)
+  })
+})
+
+/*
+ * 🛑 AN EMPTY SLOT IS NOT AN UNPRICED STARTER. `'0'` used to be looked up, found nothing and counted
+ * as unprojected — so an opponent with four empty IDP slots refused the whole win probability
+ * ("5 starters could not be priced") while the all-leagues board priced the game (2026-10-02).
+ */
+describe('Matchup scoreboard — an empty slot', () => {
+  it('🛑 keeps its place on the board, counts as no unpriced starter, and the odds still come', async () => {
+    const sides = await load({ you: ['a', 'b'], opponent: ['c', '0'] })
+    expect(sides?.opponent.lineup.map((s) => s.playerId)).toEqual(['c', '0'])
+    expect(sides?.opponent.unprojected).toBe(0)
+    const { winProbabilityFor, NO_LIVE_POINTS } = await import('@/lib/core-app/matchupProjections')
+    expect(winProbabilityFor(sides!, NO_LIVE_POINTS).available).toBe(true)
+  })
+
+  it('CONTROL: a real starter with no projection still refuses', async () => {
+    const sides = await load({ you: ['a', 'b'], opponent: ['c', 'nobody'] })
+    expect(sides?.opponent.unprojected).toBe(1)
+    const { winProbabilityFor, NO_LIVE_POINTS } = await import('@/lib/core-app/matchupProjections')
+    expect(winProbabilityFor(sides!, NO_LIVE_POINTS).available).toBe(false)
   })
 })

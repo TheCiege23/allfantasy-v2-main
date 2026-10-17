@@ -42,16 +42,17 @@ import {
 
 describe('canRunSeasonForSport', () => {
   it('is the set whose stat path AND finalizer were both measured', () => {
-    expect([...SEASON_CAPABLE_SPORTS]).toEqual(['NFL', 'NHL', 'NBA', 'NCAAB'])
+    expect([...SEASON_CAPABLE_SPORTS]).toEqual(['NFL', 'NHL', 'NBA', 'MLB', 'NCAAB', 'NCAAF'])
+    expect(canRunSeasonForSport('MLB')).toBe(true)
+    expect(canRunSeasonForSport('NCAAF')).toBe(true)
     expect(canRunSeasonForSport('NFL')).toBe(true)
     expect(canRunSeasonForSport('NHL')).toBe(true)
     expect(canRunSeasonForSport('NBA')).toBe(true)
   })
 
   it('refuses every sport that cannot yet run one', () => {
-    // MLB's game logs are ingested, but it has no weekly normalizer, no recorded opener
-    // and no finalizer window; NCAAF and SOCCER have no stat path to a weekly score here.
-    for (const sport of ['MLB', 'NCAAF', 'SOCCER']) {
+    // Soccer remains outside the general season-capability gate.
+    for (const sport of ['SOCCER']) {
       expect(canRunSeasonForSport(sport), `${sport} must not claim season capability`).toBe(false)
     }
   })

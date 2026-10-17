@@ -1,7 +1,9 @@
 import 'server-only'
+import { injuryStatusLookup } from '@/lib/injuries/matchInjuryRows'
 
 import { prisma } from '@/lib/prisma'
 import { isRuledOut } from '@/lib/core-app/injuryStatus'
+import { isForeignIdSpace } from '@/lib/core-app/rosterIdSpace'
 import { replaceableThreshold } from './leagueScale'
 import type { Scarcity } from './rosterNeed'
 
@@ -46,9 +48,14 @@ export async function getPositionScarcity(args: {
   if (wanted.size === 0) return out
 
   const rosters = await prisma.roster
-    .findMany({ where: { leagueId }, select: { playerData: true } })
+    .findMany({ where: { leagueId }, select: { playerData: true, league: { select: { platform: true, sport: true } } } })
     .catch(() => [])
   if (rosters.length === 0) return out
+  /*
+   * A foreign league's roster ids (Fleaflicker, MFL, ...) collide with real Sleeper ids, so nobody
+   * here can be subtracted from the wire. Empty — "we did not look" — rather than a full wire.
+   */
+  if (rosters.some((r) => isForeignIdSpace(r.league?.platform, r.league?.sport))) return out
 
   const rostered = new Set<string>()
   for (const r of rosters) {
@@ -83,7 +90,7 @@ export async function getPositionScarcity(args: {
   const players = await prisma.sportsPlayer
     .findMany({
       where: { sleeperId: { in: projectedIds }, position: { in: [...wanted] } },
-      select: { sleeperId: true, name: true, position: true },
+      select: { sleeperId: true, name: true, position: true, team: true },
     })
     .catch(() => [])
 
@@ -104,20 +111,18 @@ export async function getPositionScarcity(args: {
    */
   const injuries = await prisma.sportsInjury
     .findMany({
-      where: { sport, playerName: { in: candidates.map((c) => c.name) } },
+      where: { sport, playerName: { in: candidates.map((c) => c.name) }, expiresAt: { gt: new Date() } },
       orderBy: { fetchedAt: 'desc' },
-      select: { playerName: true, status: true },
+      select: { playerName: true, status: true, team: true, position: true, date: true, fetchedAt: true },
     })
     .catch(() => [])
-  const statusByName = new Map<string, string | null>()
-  for (const i of injuries) {
-    const k = i.playerName.toLowerCase()
-    if (!statusByName.has(k)) statusByName.set(k, i.status)
-  }
+  // Bound per athlete (name + team/position): a name-keyed map ruled a free agent out on a
+  // same-named player's injury, dropping a healthy body from the count.
+  const statusOf = injuryStatusLookup(injuries, sport)
 
   const counts = new Map<string, number>()
   for (const c of candidates) {
-    if (isRuledOut(statusByName.get((c.name ?? '').toLowerCase()) ?? null)) continue
+    if (isRuledOut(statusOf({ name: c.name ?? '', team: c.team, position: c.position }))) continue
     const pos = (c.position ?? '').toUpperCase()
     if (!wanted.has(pos)) continue
     counts.set(pos, (counts.get(pos) ?? 0) + 1)

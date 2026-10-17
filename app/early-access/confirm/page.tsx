@@ -32,11 +32,12 @@ function sha256Hex(s: string) {
   return crypto.createHash("sha256").update(s).digest("hex");
 }
 
-export default async function EarlyAccessConfirmPage({
-  searchParams,
-}: {
-  searchParams?: { t?: string; s?: string };
-}) {
+export default async function EarlyAccessConfirmPage(
+  props: {
+    searchParams?: Promise<{ t?: string; s?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const token = (searchParams?.t || "").trim();
   const sig = (searchParams?.s || "").trim();
   const secret = (process.env.EARLY_ACCESS_CONFIRM_SECRET || "").trim();

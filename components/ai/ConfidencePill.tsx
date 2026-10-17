@@ -41,7 +41,7 @@ export default function ConfidencePill({
   showDots = true,
 }: ConfidencePillProps) {
   const sizeClasses = size === 'sm'
-    ? 'px-2 py-0.5 text-[10px] gap-1 min-h-[28px]'
+    ? 'px-2 py-0.5 text-[11px] gap-1 min-h-[28px]'
     : 'px-3 py-1.5 text-xs gap-2 min-h-[36px]'
 
   return (

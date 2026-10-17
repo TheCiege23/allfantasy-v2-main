@@ -97,23 +97,23 @@ export function DraftTeamPanel({
       data-testid="draft-team-panel"
     >
       <div className="border-b border-white/8 px-3 py-2">
-        <p className="text-[10px] font-medium uppercase tracking-wider text-cyan-200/80">Your war room</p>
+        <p className="text-[11px] font-medium uppercase tracking-wider text-cyan-200/80">Your war room</p>
         <h2 className="truncate text-sm font-semibold text-white">{slot?.displayName ?? 'Team'}</h2>
-        <p className="truncate text-[10px] text-white/45">{leagueName}</p>
+        <p className="truncate text-[11px] text-white/45">{leagueName}</p>
         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-          <span className="rounded border border-white/10 bg-black/30 px-1.5 py-0.5 text-[9px] text-white/60">{sport}</span>
+          <span className="rounded border border-white/10 bg-black/30 px-1.5 py-0.5 text-[11px] text-white/60">{sport}</span>
           {slot && (
-            <span className="rounded border border-cyan-400/25 bg-cyan-500/10 px-1.5 py-0.5 text-[9px] text-cyan-100">
+            <span className="rounded border border-cyan-400/25 bg-cyan-500/10 px-1.5 py-0.5 text-[11px] text-cyan-100">
               Slot {slot.slot}
             </span>
           )}
           {aiAssignment ? (
-            <span className="inline-flex items-center gap-0.5 rounded border border-sky-400/35 bg-sky-500/15 px-1.5 py-0.5 text-[9px] text-sky-100">
+            <span className="inline-flex items-center gap-0.5 rounded border border-sky-400/35 bg-sky-500/15 px-1.5 py-0.5 text-[11px] text-sky-100">
               <Bot className="h-3 w-3" aria-hidden />
               AI · {aiAssignment.aiStyle.replace(/_/g, ' ')}
             </span>
           ) : (
-            <span className="inline-flex items-center gap-0.5 rounded border border-white/15 px-1.5 py-0.5 text-[9px] text-white/70">
+            <span className="inline-flex items-center gap-0.5 rounded border border-white/15 px-1.5 py-0.5 text-[11px] text-white/70">
               <User className="h-3 w-3" aria-hidden />
               Human
             </span>
@@ -123,7 +123,7 @@ export function DraftTeamPanel({
 
       {redraftStarterHints && redraftStarterHints.length > 0 ? (
         <div className="border-b border-cyan-500/15 bg-black/20 px-3 py-2">
-          <p className="text-[9px] font-medium uppercase tracking-wider text-cyan-200/75">Starter balance (guide)</p>
+          <p className="text-[11px] font-medium uppercase tracking-wider text-cyan-200/75">Starter balance (guide)</p>
           <div className="mt-1.5 flex flex-wrap gap-1">
             {redraftStarterHints.map((h) => (
               <span
@@ -135,7 +135,7 @@ export function DraftTeamPanel({
                       ? 'Heavy here — OK if value dictates; watch other spots.'
                       : 'On track'
                 }
-                className={`rounded border px-1.5 py-0.5 text-[9px] font-medium ${
+                className={`rounded border px-1.5 py-0.5 text-[11px] font-medium ${
                   h.tone === 'thin'
                     ? 'border-amber-400/40 bg-amber-500/12 text-amber-100'
                     : h.tone === 'heavy'
@@ -147,7 +147,7 @@ export function DraftTeamPanel({
               </span>
             ))}
           </div>
-          <p className="mt-1 text-[9px] text-white/38">Typical redraft targets — not your league&apos;s exact rules.</p>
+          <p className="mt-1 text-[11px] text-white/38">Typical redraft targets — not your league&apos;s exact rules.</p>
         </div>
       ) : null}
 
@@ -155,7 +155,7 @@ export function DraftTeamPanel({
         className="space-y-2 border-b border-white/8 px-3 py-2"
         data-testid="draft-team-panel-positional-mix"
       >
-        <p className="text-[9px] font-medium uppercase tracking-wider text-white/40">Positional mix</p>
+        <p className="text-[11px] font-medium uppercase tracking-wider text-white/40">Positional mix</p>
         <div className="flex flex-wrap gap-1">
           {Object.entries(counts)
             .sort((a, b) => b[1] - a[1])
@@ -163,14 +163,14 @@ export function DraftTeamPanel({
             .map(([pos, n]) => (
               <span
                 key={pos}
-                className="rounded border border-white/10 bg-black/25 px-1.5 py-0.5 text-[9px] text-white/75"
+                className="rounded border border-white/10 bg-black/25 px-1.5 py-0.5 text-[11px] text-white/75"
               >
                 {pos} ×{n}
               </span>
             ))}
-          {myPicks.length === 0 && <span className="text-[10px] text-white/35">No picks yet</span>}
+          {myPicks.length === 0 && <span className="text-[11px] text-white/35">No picks yet</span>}
         </div>
-        <div className="flex items-center gap-2 text-[10px] text-white/55">
+        <div className="flex items-center gap-2 text-[11px] text-white/55">
           <TrendingUp className="h-3.5 w-3.5 text-emerald-300/90" aria-hidden />
           <span>
             Light need: <span className="text-white/80">{topNeed}</span>
@@ -183,7 +183,7 @@ export function DraftTeamPanel({
           className="space-y-1.5 border-b border-white/8 px-3 py-2"
           data-testid="draft-team-panel-needs"
         >
-          <p className="text-[9px] font-medium uppercase tracking-wider text-white/40">
+          <p className="text-[11px] font-medium uppercase tracking-wider text-white/40">
             Starter needs
           </p>
           <div className="flex flex-wrap gap-1">
@@ -199,7 +199,7 @@ export function DraftTeamPanel({
                       ? `Depth-overcommit at ${n.position}`
                       : `${n.position} starters set`
                 }
-                className={`rounded border px-1.5 py-0.5 text-[9px] font-medium tabular-nums ${
+                className={`rounded border px-1.5 py-0.5 text-[11px] font-medium tabular-nums ${
                   n.tone === 'thin'
                     ? 'border-amber-400/40 bg-amber-500/12 text-amber-100'
                     : n.tone === 'heavy'
@@ -219,7 +219,7 @@ export function DraftTeamPanel({
           className="border-b border-amber-400/25 bg-amber-500/[0.07] px-3 py-2"
           data-testid="draft-team-panel-bye-clusters"
         >
-          <p className="flex items-center gap-1 text-[9px] font-medium uppercase tracking-wider text-amber-200/80">
+          <p className="flex items-center gap-1 text-[11px] font-medium uppercase tracking-wider text-amber-200/80">
             <AlertTriangle className="h-3 w-3" aria-hidden />
             Bye-week stack
           </p>
@@ -228,7 +228,7 @@ export function DraftTeamPanel({
               <li
                 key={c.byeWeek}
                 data-testid={`draft-team-panel-bye-cluster-${c.byeWeek}`}
-                className="text-[10px] text-amber-100/85"
+                className="text-[11px] text-amber-100/85"
               >
                 <span className="font-semibold text-amber-50 tabular-nums">Week {c.byeWeek}</span>
                 <span className="text-amber-200/60"> · {c.count} starters</span>
@@ -262,10 +262,10 @@ export function DraftTeamPanel({
         className="flex flex-1 flex-col gap-2 overflow-y-auto px-3 py-2"
         data-testid="draft-team-panel-drafted-list"
       >
-        <p className="text-[9px] font-medium uppercase tracking-wider text-white/40">Drafted ({myPicks.length})</p>
+        <p className="text-[11px] font-medium uppercase tracking-wider text-white/40">Drafted ({myPicks.length})</p>
         <ul className="space-y-1">
           {myPicks.length === 0 ? (
-            <li className="text-[10px] text-white/35">Waiting for first pick…</li>
+            <li className="text-[11px] text-white/35">Waiting for first pick…</li>
           ) : (
             myPicks
               .slice()
@@ -273,7 +273,7 @@ export function DraftTeamPanel({
               .map((p) => (
                 <li
                   key={`${p.overall}-${p.playerName}`}
-                  className="flex items-center justify-between gap-2 rounded border border-white/8 bg-black/20 px-2 py-1 text-[10px]"
+                  className="flex items-center justify-between gap-2 rounded border border-white/8 bg-black/20 px-2 py-1 text-[11px]"
                 >
                   <span className="truncate font-medium text-white/90">{p.playerName}</span>
                   <span className="shrink-0 text-white/45">
@@ -283,7 +283,7 @@ export function DraftTeamPanel({
               ))
           )}
         </ul>
-        <div className="mt-auto rounded border border-white/8 bg-black/25 px-2 py-1.5 text-[9px] text-white/50">
+        <div className="mt-auto rounded border border-white/8 bg-black/25 px-2 py-1.5 text-[11px] text-white/50">
           <div className="flex justify-between">
             <span>League picks left</span>
             <span className="tabular-nums text-cyan-200/90">{picksRemaining}</span>

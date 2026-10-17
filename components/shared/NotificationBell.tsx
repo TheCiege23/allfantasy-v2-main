@@ -152,7 +152,7 @@ export default function NotificationBell() {
           <Bell className="h-4 w-4" />
           {unreadBadge !== 0 && (
             <span
-              className="absolute -right-1 -top-1 inline-flex min-w-[1rem] items-center justify-center rounded-full px-1 text-[10px] font-semibold"
+              className="absolute -right-1 -top-1 inline-flex min-w-[1rem] items-center justify-center rounded-full px-1 text-[11px] font-semibold"
               style={{
                 background: "var(--accent-cyan-strong)",
                 color: "var(--on-accent-bg)",

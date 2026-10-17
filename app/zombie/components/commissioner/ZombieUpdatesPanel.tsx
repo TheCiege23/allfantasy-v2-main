@@ -356,11 +356,11 @@ function UpdateHistory({ leagueId }: { leagueId: string }) {
           <summary className="flex cursor-pointer items-center justify-between px-4 py-3">
             <div>
               <p className="text-[12px] font-semibold text-white/80">{u.title}</p>
-              <p className="text-[10px] text-white/40">
+              <p className="text-[11px] text-white/40">
                 {u.isPosted ? 'Posted' : 'Draft'} · {new Date(u.createdAt).toLocaleDateString()}
               </p>
             </div>
-            <span className="text-[10px] text-white/30 group-open:rotate-180 transition">▼</span>
+            <span className="text-[11px] text-white/30 group-open:rotate-180 transition">▼</span>
           </summary>
           <pre className="max-h-[240px] overflow-auto border-t border-white/[0.06] px-4 py-3 text-[11px] text-white/60 whitespace-pre-wrap">
             {u.content}

@@ -171,7 +171,7 @@ export default function InsightsPanel({
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium text-white truncate">{insight.title}</span>
                   {insight.priority >= 75 && (
-                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-500/20 text-red-300">URGENT</span>
+                    <span className="px-1.5 py-0.5 rounded text-[11px] font-bold bg-red-500/20 text-red-300">URGENT</span>
                   )}
                 </div>
                 {expandedId === insight.id && (

@@ -38,7 +38,7 @@ export function WhatChangedPanel({ team }: { team: TeamScore }) {
   return (
     <div className={`rounded-lg border p-3 ${borderColor} ${bgColor}`}>
       <div className="flex items-center gap-2 mb-2">
-        <span className="text-[10px] font-semibold text-white/40 uppercase tracking-wider">What Changed</span>
+        <span className="text-[11px] font-semibold text-white/40 uppercase tracking-wider">What Changed</span>
       </div>
       <div className="flex items-center gap-1.5 mb-2">
         <span className={`text-sm font-bold ${color}`}>{arrow} {moved}</span>
@@ -89,7 +89,7 @@ export function TierLabel({ team }: { team: TeamScore }) {
 
   return (
     <div className="flex items-center gap-2">
-      <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
+      <span className={`text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
         tier.color === 'text-emerald-400' ? 'bg-emerald-500/10 border-emerald-500/20' :
         tier.color === 'text-amber-400' ? 'bg-amber-500/10 border-amber-500/20' :
         tier.color === 'text-purple-400' ? 'bg-purple-500/10 border-purple-500/20' :
@@ -98,7 +98,7 @@ export function TierLabel({ team }: { team: TeamScore }) {
       } ${tier.color}`}>
         {tier.label}
       </span>
-      <span className="text-[9px] text-white/30">{tier.description}</span>
+      <span className="text-[11px] text-white/30">{tier.description}</span>
     </div>
   )
 }
@@ -132,14 +132,14 @@ export function WinWindowPanel({ team }: { team: TeamScore }) {
 
   return (
     <div className="bg-white/[0.03] rounded-lg border border-white/[0.06] p-3">
-      <div className="text-[10px] font-semibold text-white/40 uppercase tracking-wider mb-2">Win Window</div>
+      <div className="text-[11px] font-semibold text-white/40 uppercase tracking-wider mb-2">Win Window</div>
       <div className="flex items-center gap-2">
         <span className={`text-sm font-bold ${window.color}`}>{window.label}</span>
-        <span className="text-[10px] text-white/30">{window.years}</span>
+        <span className="text-[11px] text-white/30">{window.years}</span>
       </div>
       <div className="flex items-center gap-1 mt-1">
-        <span className="text-[9px] text-white/25">Confidence:</span>
-        <span className={`text-[9px] font-medium ${
+        <span className="text-[11px] text-white/25">Confidence:</span>
+        <span className={`text-[11px] font-medium ${
           window.confidence === 'High' ? 'text-emerald-400' :
           window.confidence === 'Medium' ? 'text-amber-400' : 'text-white/40'
         }`}>{window.confidence}</span>

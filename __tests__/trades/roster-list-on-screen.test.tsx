@@ -223,3 +223,50 @@ describe('🛑 one row component, not a third copy of the markup', () => {
     expect(row).not.toMatch(/className="af-tc-team"/)
   })
 })
+
+/*
+ * AllFantasy's own projection in the trade builder (2026-09-30). Display only: the verdict request
+ * (`toInput`) never carries it, so it cannot move a grade.
+ */
+describe('AllFantasy projection in the builder', () => {
+  beforeEach(() => {
+    rosterData.current = {
+      rosters: [
+        roster('r1', 'You', [
+          player('p1', 'DK Metcalf', { afProjection: 14.2 }),
+          player('p2', 'Luke McCaffrey'),
+          player('p3', 'Tee Higgins', { afProjection: 11.4 }),
+        ]),
+        roster('r2', 'Matt Jones', [player('p9', 'Christian McCaffrey')]),
+      ],
+      viewerRosterId: 'r1',
+      viewerTeamRosterId: 'r1',
+    }
+  })
+
+  it('shows AF on the roster row', () => {
+    render(<TradeCenter league={LEAGUE} />)
+    expect(screen.getByLabelText('Add DK Metcalf').textContent).toContain('AF 14.2')
+    expect(screen.getByLabelText('Add Luke McCaffrey').textContent).not.toContain('AF')
+  })
+
+  it('carries AF onto the deal line and totals the side’s weekly AF points', () => {
+    const { container } = render(<TradeCenter league={LEAGUE} />)
+    fireEvent.click(screen.getByLabelText('Add DK Metcalf'))
+    fireEvent.click(screen.getByLabelText('Add Tee Higgins'))
+    fireEvent.click(screen.getByLabelText('Add Luke McCaffrey'))
+    const lineAf = [...container.querySelectorAll('.af-tc-row .af-tc-af')].map((e) => e.textContent)
+    expect(lineAf).toContain('AF 14.2')
+    expect(lineAf).toContain('AF 11.4')
+    const total = container.querySelector('.af-tc-total--af')
+    // 14.2 + 11.4 = 25.6; Luke has none and adds nothing, not a 0.
+    expect(total?.textContent).toContain('AF this week')
+    expect(total?.textContent).toContain('25.6')
+  })
+
+  it('shows no AF total for a side where nobody has an AF projection', () => {
+    const { container } = render(<TradeCenter league={LEAGUE} />)
+    fireEvent.click(screen.getByLabelText('Add Luke McCaffrey'))
+    expect(container.querySelector('.af-tc-total--af')).toBeNull()
+  })
+})

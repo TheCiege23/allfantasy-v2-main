@@ -1,10 +1,12 @@
+import { isNativeTournamentLeague } from '@/lib/bestball/tournamentCalendar'
+import { runNativeTournamentWeek } from '@/lib/bestball/nativeTournament'
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireAdminOrBearer } from '@/lib/adminAuth'
 import { requireCronAuth } from '@/app/api/cron/_auth'
 import { prisma } from '@/lib/prisma'
 import { updateC2CMatchupScores } from '@/lib/c2c/scoringEngine'
 import { syncWeeklyScores } from '@/lib/survivor/gameStateMachine'
-import { checkAllMatchupsComplete } from '@/lib/zombie/matchupCompletion'
+import { getZombieWeekReadiness, type ZombieWeekReadiness } from '@/lib/zombie/matchupCompletion'
 import { runWeeklyResolution } from '@/lib/zombie/weeklyResolutionEngine'
 import { getZombieLeagueConfig } from '@/lib/zombie/ZombieLeagueConfig'
 import { runZombieHousekeeping } from '@/lib/zombie/zombieAutomation'
@@ -15,9 +17,13 @@ import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 import { REDRAFT_SEASON_STATUS, SCORING_SEASON_STATUSES, engineSeasonScope } from '@/lib/redraft/seasonStatus'
 import { resolveSeasonWeekForRedraftSeason } from '@/lib/season-week'
 import { finalizeCompletedWeeksForSeason } from '@/lib/redraft/weekFinalizer'
+import { isRedraftWeekSealed } from '@/lib/redraft/weekSealed'
 import { rotatingBatch, SCORE_SYNC_BATCH } from '@/lib/redraft/scoreSyncBatch'
 import { runNativeGuillotineWeek } from '@/lib/guillotine/nativeGuillotineWeek'
+import { GUILLOTINE_ARCHIVE_RETRY_MS, GUILLOTINE_UNARCHIVED_LIFECYCLE_STATES } from '@/lib/guillotine/finishGuillotineSeason'
 import { scoreActivePlayoffRound } from '@/lib/playoff-runtime/playoffRoundScoring'
+import { runPlannedSurvivorSeasonBatch } from '@/lib/survivor/survivorPlannedSeasonRunner'
+import { runNbaTribeSitOutDeadlineBatch } from '@/lib/survivor/SurvivorSitOutEngine'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -78,11 +84,38 @@ async function runLegacyAutomationBridge() {
     select: { id: true, leagueId: true, currentWeek: true, season: true },
   })
 
+  /*
+   * 🛑 A NOT-READY WEEK USED TO `return` HERE WITH NO TRACE. A week the finalizer would not seal — NBA
+   * has never sealed a real slate — therefore looked exactly like a healthy mid-week league on every
+   * tick, forever, while the run reported `success`. Each skip now says why. Waiting is normal while
+   * games are in progress, so it does not mark the run partial; the reason is what makes a stall
+   * findable.
+   */
+  const zombieWeeksWaiting: Array<{ leagueId: string; week: number } & Exclude<ZombieWeekReadiness, { ready: true }>> = []
+  let zombieSeasonsClosed = 0
+
   const zombieRes = await Promise.allSettled(
     zombieLeagues.map(async ({ id, leagueId, currentWeek, season }) => {
       const week = Math.max(1, currentWeek || 1)
-      const allComplete = await checkAllMatchupsComplete(leagueId, week, season)
-      if (!allComplete) return
+      const readiness = await getZombieWeekReadiness(leagueId, week, season)
+      if (!readiness.ready) {
+        // Past the last scheduled week there is nothing left to resolve: the season is over. A league
+        // activated with `totalWeeks` reached the first playoff week and stalled here; this ends it.
+        if (
+          readiness.reason === 'NO_SCHEDULED_MATCHUPS' &&
+          readiness.lastScheduledWeek != null &&
+          week > readiness.lastScheduledWeek
+        ) {
+          const closed = await prisma.zombieLeague.updateMany({
+            where: { id, status: 'active' },
+            data: { status: 'complete', currentWeek: readiness.lastScheduledWeek, totalWeeks: readiness.lastScheduledWeek },
+          })
+          zombieSeasonsClosed += closed.count
+          return
+        }
+        zombieWeeksWaiting.push({ leagueId, week, ...readiness })
+        return
+      }
 
       const cfg = await getZombieLeagueConfig(leagueId)
       const replayOnStatCorrection = Boolean(cfg?.statCorrectionReversal)
@@ -130,6 +163,8 @@ async function runLegacyAutomationBridge() {
     survivorBridge,
     zombieResolutionAttempts: zombieRes.length,
     zombieResolutionFailed: zombieRes.filter((r) => r.status === 'rejected').length,
+    zombieWeeksWaiting,
+    zombieSeasonsClosed,
     zombieHousekeepingLeagues: zombieHousekeeping.leaguesChecked,
     zombieHousekeepingErrors: zombieHousekeeping.errors,
     c2cLeaguesSynced: c2cLeagues.length,
@@ -158,19 +193,37 @@ async function runLegacyAutomationBridge() {
 async function runRedraftReconciliation() {
   const eligible = await prisma.redraftSeason.findMany({
     // Playoff seasons included — see SCORING_SEASON_STATUSES. They take their own branch below.
-    where: engineSeasonScope({ statuses: SCORING_SEASON_STATUSES }),
-    select: { id: true, leagueId: true, sport: true, status: true },
+    where: {
+      AND: [engineSeasonScope({ statuses: [...SCORING_SEASON_STATUSES, 'complete'] }), {
+        OR: [
+          { status: { in: [...SCORING_SEASON_STATUSES] } },
+          { status: 'complete', league: { bestBallMode: true, bbContestId: { not: null }, lifecycleState: { in: ['post_draft', 'in_season', 'playoffs', 'completed'] }, settings: { path: ['best_ball_settings', 'contestStructure'], equals: 'tournament' } } },
+          /*
+           * A finished guillotine season still owed its champion and archive (see finishGuillotineSeason).
+           * ⚠ BOUNDED IN TIME, NOT ONLY BY LIFECYCLE: next year's draft puts the league back in
+           * `post_draft`, and without the window last year's season would be re-offered every tick
+           * forever, diluting the rotating batch. A season is marked complete once; the window is
+           * the retry budget.
+           */
+          { status: 'complete', updatedAt: { gte: new Date(Date.now() - GUILLOTINE_ARCHIVE_RETRY_MS) }, league: { lifecycleState: { in: [...GUILLOTINE_UNARCHIVED_LIFECYCLE_STATES] }, OR: [{ leagueVariant: 'guillotine' }, { guillotineConfig: { isNot: null } }] } },
+        ],
+      }],
+    },
+    select: { id: true, leagueId: true, sport: true, status: true, league: { select: { bbContestId: true, bestBallMode: true, settings: true } } },
     orderBy: { id: 'asc' },
   })
   const seasons = rotatingBatch(eligible, SCORE_SYNC_BATCH, Date.now())
 
   let reconciled = 0
   let skippedUnresolvedWeek = 0
+  let skippedSealedWeek = 0
   let failed = 0
   let matchupsRecalculated = 0
   let weeksFinalized = 0
   let finalizeFailed = 0
   const finalizeRefusals: Record<string, number> = {}
+  let tournamentFailed = 0
+  const tournamentOutcomes: Record<string, number> = {}
   let guillotineChops = 0
   let guillotineFailed = 0
   const guillotineOutcomes: Record<string, number> = {}
@@ -179,6 +232,22 @@ async function runRedraftReconciliation() {
   const playoffOutcomes: Record<string, number> = {}
 
   for (const season of seasons) {
+    // A finished contest needs no provider fetch or live-season calendar to repair its archive.
+    if (season.status === 'complete' && isNativeTournamentLeague(season.league)) {
+      try {
+        const outcome = await runNativeTournamentWeek(season.id, 1)
+        tournamentOutcomes[outcome] = (tournamentOutcomes[outcome] ?? 0) + 1
+      } catch { tournamentFailed += 1 }
+      continue
+    }
+    // Only an unarchived guillotine season reaches here complete: crown and archive it, nothing else.
+    if (season.status === 'complete') {
+      try {
+        const guillotine = await runNativeGuillotineWeek({ seasonId: season.id, currentFantasyWeek: 0 })
+        guillotineOutcomes[guillotine.outcome] = (guillotineOutcomes[guillotine.outcome] ?? 0) + 1
+      } catch { guillotineFailed += 1 }
+      continue
+    }
     const resolved = await resolveSeasonWeekForRedraftSeason(season.id)
     if (!resolved.ok || resolved.phase === 'preseason') {
       skippedUnresolvedWeek += 1
@@ -196,7 +265,7 @@ async function runRedraftReconciliation() {
      * The stat sync still runs first: the playoff teams' players need this week's rows, and
      * nothing else fetched them once the season left the running statuses.
      */
-    if (season.status === REDRAFT_SEASON_STATUS.PLAYOFFS) {
+    if (season.status === REDRAFT_SEASON_STATUS.PLAYOFFS && !isNativeTournamentLeague(season.league)) {
       try {
         await syncPlayerWeeklyScoresForRedraftSeason({
           seasonId: season.id,
@@ -223,15 +292,32 @@ async function runRedraftReconciliation() {
       continue
     }
     try {
-      const summary = await syncPlayerWeeklyScoresForRedraftSeason({
-        seasonId: season.id,
-        week: resolved.fantasyWeek,
-        actorId: 'system:score-sync',
-      })
-      const matchups = await recalculateMatchupsForSeasonWeek(summary.seasonId, summary.week)
-      await updateStandings(summary.seasonId, summary.week)
-      matchupsRecalculated += matchups.updated
-      reconciled += 1
+      /*
+       * 🛑 A SEALED WEEK IS NOT RECONCILED AGAIN. The calendar keeps calling a finished week "current"
+       * until the next one kicks off — NFL week 3 until Thursday's game — and the stat sync's upserts
+       * write `isFinalized: false`. So every tick after the seal un-sealed the week's rows, the
+       * recalculation dropped its matchups to 'active', the standings dropped the week, and seconds
+       * later the sweep below sealed it all again. Measured on production 2026-09-29: from the 12:17
+       * UTC seal onward, every five-minute run re-finalized week 3 for both native NFL leagues.
+       *
+       * ⚠ THIS MEANS A STAT CORRECTION AFTER THE SEAL IS NOT APPLIED, AND THAT IS THE INTENT. The
+       * finalizer waits 12 hours after the last kickoff precisely so corrections land BEFORE results
+       * are sealed; after that the week's results, standings and the roller's advance stand.
+       * Re-opening a closed week is a commissioner decision, not something a cron does silently.
+       */
+      if (await isRedraftWeekSealed(prisma, season.id, resolved.fantasyWeek)) {
+        skippedSealedWeek += 1
+      } else {
+        const summary = await syncPlayerWeeklyScoresForRedraftSeason({
+          seasonId: season.id,
+          week: resolved.fantasyWeek,
+          actorId: 'system:score-sync',
+        })
+        const matchups = await recalculateMatchupsForSeasonWeek(summary.seasonId, summary.week)
+        await updateStandings(summary.seasonId, summary.week)
+        matchupsRecalculated += matchups.updated
+        reconciled += 1
+      }
     } catch {
       // A single league's provider gap must not end the sweep for the rest.
       failed += 1
@@ -300,6 +386,12 @@ async function runRedraftReconciliation() {
      * sweep for the same reason the sweep runs after the sync: an older week is still owed its chop
      * even when this tick's sync failed. One chop per week, guarded inside.
      */
+    if (isNativeTournamentLeague(season.league)) {
+      try {
+        const outcome = await runNativeTournamentWeek(season.id, resolved.fantasyWeek)
+        tournamentOutcomes[outcome] = (tournamentOutcomes[outcome] ?? 0) + 1
+      } catch { tournamentFailed += 1 }
+    }
     try {
       const guillotine = await runNativeGuillotineWeek(
         { seasonId: season.id, currentFantasyWeek: resolved.fantasyWeek },
@@ -322,11 +414,14 @@ async function runRedraftReconciliation() {
     seasonsConsidered: seasons.length,
     reconciled,
     skippedUnresolvedWeek,
+    skippedSealedWeek,
     failed,
     matchupsRecalculated,
     weeksFinalized,
     finalizeFailed,
     finalizeRefusals,
+    tournamentFailed,
+    tournamentOutcomes,
     guillotineChops,
     guillotineFailed,
     guillotineOutcomes,
@@ -419,8 +514,17 @@ export async function GET(request: Request) {
       // never ran. Legacy first so a redraft failure cannot cost the
       // survivor/zombie/C2C sweep that has been working all along.
       const legacy = await runLegacyAutomationBridge()
+      // Plan progression uses only scores already sealed by a prior reconciliation.
+      // Run its bounded batch before the large redraft sweep so a long provider
+      // pass cannot starve Survivor for the entire season.
+      const survivorSeason = await runPlannedSurvivorSeasonBatch().catch(error => ({
+        considered: 0, failed: 1,
+        outcomes: { batch_error: 1 },
+        error: error instanceof Error ? error.message : String(error),
+      }))
+      const survivorSitOuts = await runNbaTribeSitOutDeadlineBatch().catch(() => ({ considered: 0, failed: 1, outcomes: { batch_error: 1 } }))
       const redraft = await runRedraftReconciliation()
-      return { ...legacy, redraft, updated: redraft.reconciled }
+      return { ...legacy, redraft, survivorSeason, survivorSitOuts, updated: redraft.reconciled }
     },
     (r) => ({
       rowsWritten: r.matchupsRecalculated + r.redraft.matchupsRecalculated,
@@ -429,11 +533,14 @@ export async function GET(request: Request) {
       // sweep is a degraded run, not a dead one.
       status:
         r.survivorBridge.failed > 0 ||
+        r.survivorSeason.failed > 0 ||
+        r.survivorSitOuts.failed > 0 ||
         r.zombieResolutionFailed > 0 ||
         r.zombieHousekeepingErrors.length > 0 ||
         r.redraft.failed > 0 ||
         r.redraft.finalizeFailed > 0 ||
         r.redraft.guillotineFailed > 0 ||
+        r.redraft.tournamentFailed > 0 ||
         r.redraft.playoffFailed > 0
           ? 'partial'
           : 'success',
@@ -441,8 +548,13 @@ export async function GET(request: Request) {
         matchupsRecalculated: r.matchupsRecalculated,
         survivorSynced: r.survivorBridge.synced,
         survivorFailed: r.survivorBridge.failed,
+        survivorSeason: r.survivorSeason,
+        survivorSitOuts: r.survivorSitOuts,
         zombieResolutionAttempts: r.zombieResolutionAttempts,
         zombieResolutionFailed: r.zombieResolutionFailed,
+        zombieWeeksWaiting: r.zombieWeeksWaiting.length,
+        zombieWeeksWaitingSample: r.zombieWeeksWaiting.slice(0, 10),
+        zombieSeasonsClosed: r.zombieSeasonsClosed,
         zombieHousekeepingLeagues: r.zombieHousekeepingLeagues,
         zombieHousekeepingErrors: r.zombieHousekeepingErrors.slice(0, 10),
         c2cLeaguesSynced: r.c2cLeaguesSynced,

@@ -338,7 +338,7 @@ export default function DispersalDraftSetupPage() {
         </Link>
       </div>
 
-      <div className="mb-6 flex gap-1 text-[10px] text-white/40">
+      <div className="mb-6 flex gap-1 text-[11px] text-white/40">
         {[1, 2, 3, 4, 5].map((s) => (
           <span
             key={s}

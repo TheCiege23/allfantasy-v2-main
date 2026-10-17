@@ -30,10 +30,10 @@ export function TribeCard({
     >
       <div className="mb-3 flex items-center gap-2">
         <div
-          className="flex h-8 w-8 items-center justify-center rounded-lg text-sm font-bold text-black/80"
-          style={{ backgroundColor: accent }}
+          className={`flex shrink-0 items-center justify-center rounded-lg text-sm font-bold text-black/80 ${tribe.logoUrl ? 'h-16 w-16' : 'h-8 w-8'}`}
+          style={{ backgroundColor: tribe.logoUrl ? 'transparent' : accent }}
         >
-          {tribeIcon ?? tribeName.slice(0, 1)}
+          {tribe.logoUrl ? <img src={tribe.logoUrl} alt="" width={56} height={56} className="h-14 w-14 max-w-none object-contain" /> : tribeIcon ?? tribeName.slice(0, 1)}
         </div>
         <div className="min-w-0 flex-1">
           <h3 className="truncate text-[13px] font-bold uppercase tracking-wider text-[var(--survivor-text-bright)]">
@@ -51,13 +51,13 @@ export function TribeCard({
       <p className="mt-2 text-[11px] text-[var(--survivor-text-dim)]">{memberCount} members</p>
       <div className="mt-2">
         {status === 'immune' ? (
-          <span className="text-[10px] font-bold uppercase tracking-wide text-cyan-300">🛡 Immune</span>
+          <span className="text-[11px] font-bold uppercase tracking-wide text-cyan-300">🛡 Immune</span>
         ) : status === 'tribal' ? (
-          <span className="tribal-dot-pulse text-[10px] font-bold uppercase tracking-wide text-red-400">
+          <span className="tribal-dot-pulse text-[11px] font-bold uppercase tracking-wide text-red-400">
             🔥 Tribal tonight
           </span>
         ) : (
-          <span className="text-[10px] text-white/35">—</span>
+          <span className="text-[11px] text-white/35">—</span>
         )}
       </div>
     </article>

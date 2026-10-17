@@ -28,6 +28,7 @@ export const maxDuration = 120
  * freshness monitor report CONFIG ("no rows for job_name") forever.
  */
 const JOB = "cron-notification-outbox-relay"
+const DISCORD_JOB = "cron-discord-inbound"
 
 async function handle(req: NextRequest) {
   const url = new URL(req.url)
@@ -36,6 +37,20 @@ async function handle(req: NextRequest) {
   const limit = limitRaw && /^\d{1,3}$/.test(limitRaw) ? Number(limitRaw) : undefined
 
   const startedAt = Date.now()
+  // Shares the authenticated five-minute schedule. The pass reads only commissioner-opted
+  // league-chat channels and enforces its own short budget; dry runs never import messages.
+  const discordInbound = dryRun ? null : await (async () => {
+    try {
+      const { runDiscordInboundPass } = await import('@/lib/discord/inboundPass')
+      return await withSyncJobRun({jobName:DISCORD_JOB,trigger:'cron'},
+        () => runDiscordInboundPass({budgetMs:8_000}),
+        r => ({rowsRead:r.channels,rowsWritten:r.imported,rowsSkipped:r.deferred,
+          status:r.errors > 0 ? ('partial' as const) : ('success' as const)}))
+    } catch {
+      console.warn('[cron/discord-inbound] pass failed')
+      return {channels:0,deferred:0,imported:0,errors:1}
+    }
+  })()
 
   try {
     const run = () => relayNotificationOutbox({ limit, dryRun })
@@ -65,6 +80,7 @@ async function handle(req: NextRequest) {
       ok: true,
       dryRun,
       ...result,
+      discordInbound,
       durationMs: Date.now() - startedAt,
       timestamp: new Date().toISOString(),
     })
@@ -72,7 +88,7 @@ async function handle(req: NextRequest) {
     const message = err instanceof Error ? err.message : String(err)
     console.error("[cron/notification-outbox-relay] failed:", message)
     return NextResponse.json(
-      { ok: false, error: message.slice(0, 240), durationMs: Date.now() - startedAt },
+      { ok: false, error: message.slice(0, 240), discordInbound, durationMs: Date.now() - startedAt },
       { status: 500 },
     )
   }

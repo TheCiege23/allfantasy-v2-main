@@ -11,7 +11,7 @@ const { prisma, resolveSurvivorAccessContext, canSeeSurvivorChannel } = vi.hoist
     survivorVote: { findUnique: vi.fn(), count: vi.fn() },
     survivorChatChannel: { findMany: vi.fn() },
     survivorChatMessage: { count: vi.fn() },
-    survivorAuditEntry: { count: vi.fn() },
+    survivorAuditEntry: { count: vi.fn(), findFirst: vi.fn().mockResolvedValue(null) },
   },
   resolveSurvivorAccessContext: vi.fn(),
   canSeeSurvivorChannel: vi.fn(),
@@ -28,6 +28,7 @@ import { buildSurvivorStateForUser } from '@/lib/survivor/survivorStateService'
 describe('Survivor state sanitizer', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    prisma.survivorAuditEntry.findFirst.mockResolvedValue(null)
     resolveSurvivorAccessContext.mockResolvedValue({
       leagueId: 'league-1',
       userId: 'commish',
@@ -169,4 +170,36 @@ describe('Survivor state sanitizer', () => {
     expect(result.state.tribalCouncil.reveal).toBeNull()
     expect(result.state.tribalCouncil.isRevealed).toBe(false)
   })
+  it('shows operational draft setup blockers only to administrators', async () => {
+    prisma.survivorAuditEntry.findFirst.mockResolvedValue({ action: 'draft_setup_pending', data: { blockers: ['Every team needs an owner.'] } })
+    const admin = await buildSurvivorStateForUser('league-1', 'commish')
+    expect(admin.ok && admin.state.pendingFoundationWarnings).toContain('Every team needs an owner.')
+    const access = await resolveSurvivorAccessContext()
+    resolveSurvivorAccessContext.mockResolvedValue({ ...access, decisions: { ...access.decisions, canPerformAdminAction: false } })
+    prisma.survivorAuditEntry.findFirst.mockClear()
+    const member = await buildSurvivorStateForUser('league-1', 'other')
+    expect(member.ok && member.state.pendingFoundationWarnings).not.toContain('Every team needs an owner.')
+    expect(prisma.survivorAuditEntry.findFirst).not.toHaveBeenCalled()
+  })
+  it('ignores malformed historical setup blockers', async () => {
+    prisma.survivorAuditEntry.findFirst.mockResolvedValue({ action: 'draft_setup_pending', data: { blockers: 'invalid' } })
+    expect((await buildSurvivorStateForUser('league-1', 'commish')).ok).toBe(true)
+  })
+  it('allows completed setup when idols are explicitly disabled', async () => {
+    const access = await resolveSurvivorAccessContext()
+    resolveSurvivorAccessContext.mockResolvedValue({ ...access, settings: { ...access.settings, idolsEnabled: false } })
+    prisma.survivorIdol.count.mockResolvedValue(0)
+    const result = await buildSurvivorStateForUser('league-1', 'commish')
+    expect(result.ok && result.state.initialization.phase2Complete).toBe(true)
+  })
+  it('keeps the entire non-owner state payload identical when a secret Vote Steal is played', async () => {
+    const before = await buildSurvivorStateForUser('league-1', 'commish')
+    const council = await prisma.survivorTribalCouncil.findFirst()
+    prisma.survivorTribalCouncil.findFirst.mockResolvedValue({ ...council, idolsPlayed: [{ idolId: 'secret-steal', powerType: 'vote_steal', playerUserId: 'other', playerRosterId: 'roster-b', stolenVoterUserId: 'commish', stolenVoterRosterId: 'roster-a', extraTargetUserId: 'commish' }] })
+    const after = await buildSurvivorStateForUser('league-1', 'commish')
+    expect(after.ok).toBe(true)
+    expect(after).toEqual(before)
+    expect(JSON.stringify(after)).not.toMatch(/secret-steal|vote_steal|stolenVoter|extraTarget/)
+  })
+
 })

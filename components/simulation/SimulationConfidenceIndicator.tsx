@@ -54,7 +54,7 @@ export function SimulationConfidenceIndicator({
       </div>
       {volatility && (
         <span
-          className={`text-[10px] px-2 py-0.5 rounded-full ${
+          className={`text-[11px] px-2 py-0.5 rounded-full ${
             volatility === 'high'
               ? 'bg-amber-500/20 text-amber-400'
               : volatility === 'medium'
@@ -66,12 +66,12 @@ export function SimulationConfidenceIndicator({
         </span>
       )}
       {dataFreshness && (
-        <span className="text-[10px] text-white/40" title="When inputs were last updated">
+        <span className="text-[11px] text-white/40" title="When inputs were last updated">
           {dataFreshness}
         </span>
       )}
       {simulationCount != null && simulationCount > 0 && (
-        <span className="text-[10px] text-white/30">
+        <span className="text-[11px] text-white/30">
           {simulationCount.toLocaleString()} sims
         </span>
       )}

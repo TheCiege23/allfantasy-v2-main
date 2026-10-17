@@ -85,7 +85,7 @@ export function StartVsComparisonLauncher({
       {showNameInputs ? (
         <div className="mb-3 grid gap-2 sm:grid-cols-2">
           <label className="block">
-            <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-white/45">
+            <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-white/45">
               Player A
             </span>
             <input
@@ -98,7 +98,7 @@ export function StartVsComparisonLauncher({
             />
           </label>
           <label className="block">
-            <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-white/45">
+            <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-white/45">
               Player B
             </span>
             <input

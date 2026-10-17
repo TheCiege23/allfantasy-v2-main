@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>The Whisperer’s lair</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./specialty/sp.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Cinzel:wght@600;700&amp;family=Caveat:wght@600;700&amp;family=Bebas+Neue&amp;family=Pirata+One&amp;family=Creepster&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080d}
+.zb-t{font-family:'Creepster',cursive;letter-spacing:.04em;color:#c8f08a}
+.zb-lg{display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:12px;background:#10131c;border:1px solid rgba(255,255,255,.07)}
+.zb-dot{width:10px;height:10px;border-radius:99px;flex:none}
+.zb-st{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:99px;font:700 10.5px 'Archivo';letter-spacing:.04em;text-transform:uppercase}.gy-d{font-family:'Bebas Neue',sans-serif;letter-spacing:.03em;line-height:.95}
+.gy-cut{position:relative;height:0;border-top:2px dashed #ff3d2e;margin:9px 0}
+.gy-cut>span{position:absolute;left:50%;top:-12px;transform:translateX(-50%);white-space:nowrap;padding:2px 10px;border-radius:5px;background:#ff3d2e;color:#fff;font:800 10px 'Archivo';letter-spacing:.1em}
+.gy-head{width:34px;height:34px;flex:none}
+.gy-pos{display:inline-grid;place-items:center;height:20px;min-width:26px;padding:0 4px;border-radius:5px;font:900 9.5px 'Archivo';letter-spacing:.02em}
+.gy-gl{display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:22px;padding:0 6px;border-radius:6px;background:#151926;font:700 11px 'JetBrains Mono';color:#e8eaf2}
+.gy-meter{position:relative;height:14px;border-radius:99px;background:linear-gradient(90deg,#7a1410,#ff3d2e 30%,#ffc531 55%,#3abf7a 80%);overflow:visible}
+.gy-meter>i{position:absolute;top:-6px;width:4px;height:26px;border-radius:2px;background:#fff;box-shadow:0 0 0 2px #07080d}
+@keyframes gyBlade{0%{transform:translateY(-120%)}70%{transform:translateY(6%)}85%{transform:translateY(-3%)}100%{transform:translateY(0)}}
+@keyframes gyRoll{0%{transform:translate(-40px,-30px) rotate(-90deg);opacity:0}40%{opacity:1}100%{transform:translate(0,0) rotate(200deg);opacity:1}}
+@keyframes gyShake{0%,100%{transform:translate(0,0)}20%{transform:translate(-6px,3px)}40%{transform:translate(6px,-3px)}60%{transform:translate(-4px,2px)}80%{transform:translate(3px,-1px)}}
+.gy-blade{animation:gyBlade .55s cubic-bezier(.5,0,.75,0) both}
+.gy-roll{animation:gyRoll .9s .45s cubic-bezier(.2,.8,.2,1) both}
+.gy-shake{animation:gyShake .4s .5s both}
+.gy-tomb{position:relative;width:100%;aspect-ratio:200/240}
+.gy-tomb>img{position:absolute;inset:0;width:100%}
+.gy-tomb>div{position:absolute;left:18%;right:18%;top:49%;display:flex;flex-direction:column;align-items:center;gap:1px;text-align:center}
+.gy-tomb>div>b{font:800 12.5px 'Archivo';color:#1a1d24;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gy-tomb>div>span{font:700 10px 'JetBrains Mono';color:#2a2f3a}
+.gy-mode{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px 0 4px;border-radius:99px;background:#151926;border:1px solid rgba(255,255,255,.1);font:700 12px 'Archivo'}
+.gy-mode>img{width:22px}
+.tt-ck{display:flex;align-items:center;gap:14px;padding:14px 16px;border-radius:10px;background:#10131c;border:1px solid rgba(255,255,255,.06)}
+.tt-ck>i{flex:none;width:28px;height:28px;border-radius:99px;display:grid;place-items:center;font:800 13px 'Archivo';font-style:normal}
+.tt-ck>div{flex:1;display:flex;flex-direction:column;gap:2px}
+.tt-ck>div>b{font:600 14px 'Archivo'}
+.tt-ck>div>span{font-size:12px;color:#7d84a3}
+.tt-job{display:flex;align-items:center;gap:10px;font-size:12.5px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+.tt-job:last-child{border-bottom:0}
+.nt-ev{display:flex;align-items:center;gap:12px;width:100%;padding:9px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.07);background:#0b0d14;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.nt-ev>img{width:30px;flex:none}
+.nt-ev>div{flex:1;display:flex;flex-direction:column;gap:1px;min-width:0}
+.nt-ev>div>b{font:700 13px 'Archivo'}
+.nt-ev>div>span{font-size:11px;color:#7d84a3}
+.nt-ev[aria-pressed="true"]{border-color:#ffc531;background:rgba(255,197,49,.08)}
+.nt-phone{position:relative;width:340px;height:700px;flex:none;border-radius:46px;border:10px solid #1b1e29;overflow:hidden;background:radial-gradient(ellipse at 30% 20%,var(--wa),transparent 60%),radial-gradient(ellipse at 80% 90%,var(--wb),transparent 60%),#0a0b12;box-shadow:0 30px 60px rgba(0,0,0,.5)}
+.nt-push{display:flex;gap:10px;padding:11px 12px;border-radius:18px;background:rgba(40,44,60,.72);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);text-align:left}
+.nt-push>img{width:38px;height:38px;flex:none;border-radius:9px;background:#07080d;padding:2px}
+.nt-push>div{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.nt-push>div>small{display:flex;justify-content:space-between;font:600 10.5px 'Archivo';color:#a3a9c2;letter-spacing:.03em}
+.nt-push>div>b{font:700 13px 'Archivo';color:#fff}
+.nt-push>div>span{font-size:12px;color:#d6d9e6;line-height:1.35}
+.nt-push.dim{opacity:.55;transform:scale(.97)}
+.nt-on{display:inline-block;min-width:34px;padding:2px 6px;border-radius:5px;font:700 10px 'Archivo';letter-spacing:.06em;text-transform:uppercase}
+.lu-row{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:10px;background:#10131c;border:1px solid rgba(255,255,255,.05)}
+.lu-row>.s{width:44px;flex:none}
+.lu-row>.n{flex:1;min-width:0;display:flex;flex-direction:column}
+.lu-row>.n>b{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lu-row>.n>span{font-size:11px;color:#7d84a3}
+.lu-flag{display:inline-flex;align-items:center;height:20px;padding:0 7px;border-radius:5px;font:800 9.5px 'Archivo';letter-spacing:.06em;text-transform:uppercase}
+.gy-step{display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;padding:16px 12px;border-radius:14px;background:#10131c;border:1px solid rgba(255,255,255,.06)}
+.gy-step>img{height:84px}
+.gy-step>b{font:800 15px 'Archivo'}
+.gy-step>span{font-size:12.5px;color:#a3a9c2}
+.gy-step>i{font:900 11px 'Archivo';font-style:normal;color:#ffc531;letter-spacing:.12em}
+.gy-tl{display:flex;flex-direction:column;align-items:center;gap:3px;width:62px;flex:none}
+.gy-tl>img{width:40px}
+.gy-tl>b{font:800 9.5px 'Archivo';color:#ffc531;letter-spacing:.06em}
+.gy-tl>span{font:600 9.5px 'Archivo';color:#a3a9c2;max-width:62px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nt-ev[aria-pressed="true"]{border-color:#8be03a;background:rgba(139,224,58,.08)}
+.gy-step>i{color:#8be03a}
+.zt{font-family:'Creepster',cursive;letter-spacing:.04em;line-height:1}
+.zs{position:relative;display:grid;place-items:center;border-radius:18px;overflow:hidden;background:radial-gradient(circle at 50% 45%,var(--zg,rgba(139,224,58,.25)),transparent 62%),#0b0d14;border:1px solid rgba(255,255,255,.07)}
+.zs>img.f{position:absolute;width:300px;height:300px;top:50%;left:50%;margin:-170px 0 0 -150px;opacity:0}
+.zs>img.f0{opacity:1}
+@keyframes zbIn{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:none}}
+@keyframes zbOut{from{opacity:1}to{opacity:0}}
+@keyframes zbFlash{0%{opacity:0}30%{opacity:.9}100%{opacity:0}}
+@keyframes zbShake{0%,100%{transform:none}20%{transform:translate(-5px,2px)}40%{transform:translate(5px,-2px)}60%{transform:translate(-3px,1px)}80%{transform:translate(3px,0)}}
+@keyframes zbPulse{0%,100%{box-shadow:0 0 0 0 rgba(139,224,58,.0)}50%{box-shadow:0 0 0 10px rgba(139,224,58,.18)}}
+@keyframes zbFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+@keyframes zbLoot{0%{transform:translateX(-90px);opacity:0}30%{opacity:1}100%{transform:none;opacity:1}}
+.zs.play>img.f0{animation:zbOut .4s ease-in 1.1s forwards}
+.zs.play>img.f1{animation:zbIn .5s ease-out .9s forwards,zbOut .4s ease-in 2.1s forwards}
+.zs.play>img.f2{animation:zbIn .6s ease-out 1.9s forwards,zbOut .4s ease-in 3.1s forwards}
+.zs.play>img.f3{animation:zbIn .6s ease-out 2.9s forwards}
+.zs.play{animation:zbShake .45s ease-in-out 2.9s 1}
+.zs .fl{position:absolute;inset:0;background:radial-gradient(circle,rgba(200,255,106,.55),transparent 60%);opacity:0;pointer-events:none}
+.zs.play .fl{animation:zbFlash .7s ease-out .9s 1,zbFlash 1s ease-out 2.9s 1}
+.zs.still>img.f{opacity:1;animation:zbFloat 4s ease-in-out infinite}
+.zi{position:relative;display:flex;flex-direction:column;align-items:center;gap:8px;padding:14px 12px 16px;border-radius:14px;background:radial-gradient(circle at 50% 32%,var(--g),transparent 66%),#0b0d14;border:1px solid rgba(255,255,255,.07);color:inherit;font:inherit;text-align:center;cursor:pointer}
+.zi[aria-pressed="true"]{border-color:#8be03a;box-shadow:0 0 0 1px #8be03a inset}
+.zi>img{height:120px}
+.zi>b{font:800 15px 'Archivo'}
+.zi>span{font-size:11.5px;color:#a3a9c2}
+.zi>em{position:absolute;top:10px;right:10px;font:800 11px 'JetBrains Mono';font-style:normal;padding:2px 7px;border-radius:99px;background:#151926;color:#c8f08a}
+.zi[data-off="true"]>img{filter:grayscale(1) brightness(.55)}
+.zpip{display:flex;gap:6px}.zpip>span{width:18px;height:26px;border-radius:6px;border:2px solid #3a5a1a;background:#0b0d14}.zpip>span.on{background:linear-gradient(#e8ff7a,#5ec82a);border-color:#8be03a}
+.zm{position:relative;height:16px;border-radius:99px;background:#151926;overflow:visible}
+.zm>span{position:absolute;left:0;top:0;bottom:0;border-radius:99px}
+.zm>i{position:absolute;top:-6px;bottom:-6px;width:2px;background:#fff;opacity:.6}
+.zm>i>b{position:absolute;top:-18px;left:50%;transform:translateX(-50%);font:700 10px 'Archivo';font-style:normal;white-space:nowrap;color:#a3a9c2}
+.zl{animation:zbLoot .8s cubic-bezier(.2,.8,.2,1) both}
+@media (prefers-reduced-motion: reduce){.zs.play>img.f,.zs.play,.zs.play .fl,.zs.still>img.f,.zl{animation:none!important;opacity:1}}
+</style>
+</helmet>
+<div class="sp" style="--acc: #8be03a; --acc2: #c8f08a; --accInk: #0a1a04; --disp: Creepster; min-height: 100vh; display: flex; flex-direction: column">
+<header style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 18px 28px; border-bottom: 1px solid rgba(255,255,255,.06)">
+  <a class="sp-btn" href="ZombieHome.dc.html" aria-label="Back" style="padding: 0 12px">‹</a>
+  <div style="flex: 1 1 320px; display: flex; flex-direction: column; gap: 3px"><h1 class="sp-h1">The Whisperer’s lair</h1><span class="sp-t2">Only the Whisperer sees this page · Gamma 2 · ambush deadline Wednesday 11:59 PM ET</span></div>
+  <div class="sp-seg"><sc-for list="{{tabs}}" as="t" hint-placeholder-count="3"><button aria-pressed="{{t.on}}" onClick="{{t.pick}}">{{t.label}}</button></sc-for></div>
+</header>
+<sc-if value="{{isLair}}" hint-placeholder-val="{{ true }}">
+<div style="display: grid; grid-template-columns: 320px 1fr 340px; gap: 20px; padding: 22px 28px 28px; align-items: start">
+  <aside class="sp-card" style="padding: 18px; display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; background: radial-gradient(circle at 50% 30%, rgba(167,139,250,.3), transparent 62%), #0b0d14; border-color: rgba(167,139,250,.35)">
+    <img src="specialty/zombie/whisperer.svg" alt="" style="height: 250px; animation: zbFloat 5s ease-in-out infinite">
+    <span class="zt" style="font-size: 38px; color: #c4b5fd">Open Team 12</span>
+    <span class="sp-t2" style="font-size: 13px">The Whisperer of Gamma 2. Drawn at random after the draft. 4 Survivors turned by your hand.</span>
+    <div style="display: flex; gap: 8px"><sc-for list="{{amb}}" as="a" hint-placeholder-count="3"><img src="specialty/zombie/ambush.svg" alt="" style="width: 46px; filter: {{a.f}}"></sc-for></div>
+    <span class="sp-lbl" style="color: #c4b5fd">{{ambL}}</span>
+  </aside>
+  <section style="display: flex; flex-direction: column; gap: 14px">
+    <div class="sp-card" style="padding: 16px; display: flex; flex-direction: column; gap: 8px">
+      <div style="display: flex; align-items: baseline; gap: 10px"><b style="flex: 1; font-size: 15px">Set an ambush for week 7</b><span class="sp-t3" style="font-size: 12px">Survivors only</span></div>
+      <span class="sp-t2" style="font-size: 12.5px">Your target faces you in week 7 instead of their scheduled opponent. They find out at Thursday’s lineup lock. Lose to you and they turn.</span>
+      <sc-for list="{{targets}}" as="t" hint-placeholder-count="6"><button class="nt-ev" onClick="{{t.pick}}" aria-pressed="{{t.on}}" disabled="{{t.dis}}" style="opacity: {{t.op}}"><img src="{{t.img}}" alt="" style="width: 36px; border-radius: 99px; background: #151926"><div><b>{{t.name}}</b><span>{{t.sub}}</span></div><span class="sp-num" style="font-size: 12.5px; color: #a3a9c2">{{t.proj}}</span></button></sc-for>
+      <sc-if value="{{canSet}}" hint-placeholder-val="{{ true }}"><button class="sp-btn" onClick="{{set}}" style="min-height: 46px; background: #7c5ce0; border-color: #7c5ce0; color: #fff">{{setL}}</button></sc-if>
+      <sc-if value="{{isSet}}" hint-placeholder-val="{{ false }}"><div style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 10px; background: rgba(167,139,250,.1); border: 1px solid rgba(167,139,250,.45); animation: zbIn .4s ease-out both"><img src="specialty/zombie/ambush.svg" alt="" style="width: 44px"><div style="display: flex; flex-direction: column"><b>{{setDone}}</b><span class="sp-t2" style="font-size: 12.5px">Sealed until Thursday 8:15 PM ET. You can change the target until Wednesday 11:59 PM ET.</span></div></div></sc-if>
+    </div>
+  </section>
+  <aside style="display: flex; flex-direction: column; gap: 14px">
+    <div class="sp-card" style="padding: 16px; display: flex; flex-direction: column; gap: 10px"><span class="sp-lbl">Powers</span>
+      <sc-for list="{{powers}}" as="p" hint-placeholder-count="4"><div style="display: flex; align-items: center; gap: 12px"><img src="{{p.icon}}" alt="" style="width: 46px"><div style="flex: 1; display: flex; flex-direction: column"><b style="font-size: 13px">{{p.name}}</b><span class="sp-t3" style="font-size: 11.5px">{{p.d}}</span></div><button class="sp-btn" onClick="{{p.use}}" disabled="{{p.dis}}" style="min-height: 32px; padding: 0 10px; font-size: 12px">{{p.l}}</button></div></sc-for>
+    </div>
+    <div class="sp-card2" style="padding: 14px 16px; display: flex; flex-direction: column; gap: 4px"><span class="sp-lbl">Your horde</span><span style="font-size: 13px">Open Team 6 (wk 6) · Open Team 9 (wk 4) · Open Team 11 (wk 3) · Open Team 8 (wk 2)</span><span class="sp-t3" style="font-size: 11.5px">Get mauled by a Zombie and a new Whisperer rises from the horde.</span></div>
+  </aside>
+</div>
+</sc-if>
+<sc-if value="{{isVictim}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; justify-content: center; padding: 30px 28px">
+  <div class="sp-card" style="width: 760px; padding: 28px; display: flex; gap: 24px; align-items: center; background: radial-gradient(circle at 25% 40%, rgba(167,139,250,.3), transparent 60%), #0b0d14; border-color: rgba(167,139,250,.45); animation: zbShake .4s ease-in-out .2s 1">
+    <img src="specialty/zombie/ambush.svg" alt="" style="width: 230px; flex: none">
+    <div style="display: flex; flex-direction: column; gap: 10px">
+      <span class="sp-lbl" style="color: #c4b5fd">Thursday 8:15 PM ET · what TheCiege26 sees</span>
+      <span class="zt" style="font-size: 52px; color: #c4b5fd">You’ve been ambushed</span>
+      <span class="sp-t2" style="font-size: 14px">The Whisperer jumped out of the dark. Your week 7 opponent is now <b style="color: #fff">Open Team 12, the Whisperer</b>, not Open Team 3. Lose and you turn.</span>
+      <div style="display: flex; gap: 10px"><a class="sp-btn sp-btn-p" href="ZombieArmory.dc.html" style="min-height: 44px">Arm up</a><a class="sp-btn" href="#" style="min-height: 44px">See the matchup</a></div>
+      <span class="sp-t3" style="font-size: 11.5px">Your lineup is still open for anyone who hasn’t kicked off. Weapons and serum shields work against the Whisperer.</span>
+    </div>
+  </div>
+</div>
+</sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { v: 'lair', t: 'TheCiege26', set: false, used: [] }; }
+  renderVals() {
+    const Z = "specialty/zombie/", st = this.state;
+    const tabs = [['lair', 'Lair (Whisperer view)'], ['victim', 'Ambushed (their view)']].map(([id, label]) => ({ label, on: st.v === id ? 'true' : 'false', pick: () => this.setState({ v: id }) }));
+    const T = [['TheCiege26', 'char-survivor.svg', 'Survivor · 2 serums · Axe, Knife', '109.5', false], ['Open Team 5', 'char-survivor.svg', 'Survivor · ambushed in week 5, can’t be targeted twice in a row', '131.0', true],
+      ['Open Team 7', 'char-survivor.svg', 'Survivor · 1 serum · Bow', '124.2', false], ['Open Team 4', 'char-survivor.svg', 'Survivor · 1 serum', '101.8', false], ['Open Team 10', 'char-revived.svg', 'Revived · 0 serums', '96.0', false]];
+    const left = st.set ? 1 : 2;
+    const P = [['horde', 'Horde command', 'Every Zombie gets +5 this week', 1], ['whisper', 'Dark whisper', 'See one Survivor’s serums and weapons', 2], ['override', 'Infection override', 'One serum shield fails this week', 1], ['burn', 'Mass serum burn', 'Every Survivor loses 1 serum', 1]];
+    return { tabs, isLair: st.v === 'lair', isVictim: st.v === 'victim', target: st.t, setL: 'Set the ambush on ' + st.t, setDone: 'Ambush set on ' + st.t,
+      amb: [0, 1, 2].map(i => ({ f: i < left ? 'none' : 'grayscale(1) brightness(.4)' })), ambL: left + ' of 3 ambushes left this season',
+      targets: T.map(([name, img, sub, proj, dis]) => ({ name, img: Z + img, sub, proj: 'proj ' + proj, dis, op: dis ? '.45' : '1', on: st.t === name ? 'true' : 'false', pick: () => !st.set && this.setState({ t: name }) })),
+      canSet: !st.set, isSet: st.set, set: () => this.setState({ set: true }),
+      powers: P.map(([k, name, d, n]) => { const u = st.used.includes(k); return { icon: Z + 'power-' + k + '.svg', name: name + ' · ' + (u ? n - 1 : n) + ' left', d, dis: u, l: u ? 'Used' : 'Use', use: () => this.setState({ used: st.used.concat(k) }) }; }) };
+  }
+}
+</script>
+</body>
+</html>

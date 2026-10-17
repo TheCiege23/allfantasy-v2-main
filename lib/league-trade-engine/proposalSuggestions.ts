@@ -1,3 +1,5 @@
+import type { SuggestionGrade } from '@/lib/trade-intel/partnerRanking'
+
 export type SuggestionPlayer = {
   id: string
   name: string
@@ -46,6 +48,12 @@ export type SuggestedTradePackage = {
   /** Signed server receipt for this exact package. Omitted when evidence is incomplete. */
   decisionEvidenceToken?: string | null
   reason: string
+  /**
+   * THE grade (2026-09-28, `proposalPackageGrades.ts`), set by the rosters route on the packages the
+   * composer shows. Absent past the grading bound or when the grader could not load. `fairness`
+   * above is this module's own value gap — the composer shows the grade, not it, when there is one.
+   */
+  grade?: SuggestionGrade | null
 }
 
 export type ProposalOutcomeSimulation = {

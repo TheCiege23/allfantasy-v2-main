@@ -1,5 +1,8 @@
 'use client'
 
+import '@/components/core-app/af-core.css'
+import '@/components/league/league-overview.css'
+
 import { useEffect, useState } from 'react'
 import {
   fetchRedraftSeason,
@@ -63,7 +66,7 @@ export function RedraftStandingsPlayoffsView({
 
   if (loading) {
     return (
-      <div className="p-4">
+      <div className="af-core af-league-overview min-w-0 p-4">
         <LeagueSurfaceState
           kind="loading"
           title="Loading standings"
@@ -76,7 +79,7 @@ export function RedraftStandingsPlayoffsView({
 
   if (error) {
     return (
-      <div className="p-4">
+      <div className="af-core af-league-overview min-w-0 p-4">
         <LeagueSurfaceState
           kind="error"
           title="Standings unavailable"
@@ -91,7 +94,7 @@ export function RedraftStandingsPlayoffsView({
 
   if (noSeason) {
     return (
-      <div className="p-4">
+      <div className="af-core af-league-overview min-w-0 p-4">
         <LeagueSurfaceState
           kind="empty"
           title="Standings begin after the draft"
@@ -103,7 +106,7 @@ export function RedraftStandingsPlayoffsView({
   }
 
   return (
-    <div className="p-4">
+    <div className="af-core af-league-overview min-w-0 p-4">
       <StandingsView rows={rows} seasonId={seasonId} isCommissioner={isCommissioner} />
     </div>
   )

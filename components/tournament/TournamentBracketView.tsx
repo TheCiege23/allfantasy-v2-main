@@ -52,9 +52,9 @@ function phaseLabel(phase: string): string {
 }
 
 function statusBadge(status: string) {
-  if (status === 'active') return <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-300">LIVE</span>
-  if (status === 'completed' || status === 'archived') return <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-bold text-white/50">DONE</span>
-  return <span className="rounded-full bg-white/5 px-2 py-0.5 text-[10px] font-bold text-white/30">PENDING</span>
+  if (status === 'active') return <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[11px] font-bold text-emerald-300">LIVE</span>
+  if (status === 'completed' || status === 'archived') return <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-bold text-white/50">DONE</span>
+  return <span className="rounded-full bg-white/5 px-2 py-0.5 text-[11px] font-bold text-white/30">PENDING</span>
 }
 
 export function TournamentBracketView({
@@ -86,7 +86,7 @@ export function TournamentBracketView({
                   </span>
                   {statusBadge(round.status)}
                 </div>
-                <div className="mb-1 text-[10px] text-white/40">{phaseLabel(round.phase)}</div>
+                <div className="mb-1 text-[11px] text-white/40">{phaseLabel(round.phase)}</div>
 
                 {/* Nodes */}
                 {round.nodes.map((node) => {
@@ -103,13 +103,13 @@ export function TournamentBracketView({
                       <div className="flex items-center justify-between">
                         <p className="text-[11px] font-semibold text-white">{node.label}</p>
                         {isMine && (
-                          <span className="text-[9px] font-bold uppercase text-yellow-300">YOU</span>
+                          <span className="text-[11px] font-bold uppercase text-yellow-300">YOU</span>
                         )}
                       </div>
                       {node.conferenceName && (
-                        <p className="mt-0.5 text-[10px] text-white/40">{node.conferenceName}</p>
+                        <p className="mt-0.5 text-[11px] text-white/40">{node.conferenceName}</p>
                       )}
-                      <div className="mt-1 flex items-center gap-2 text-[10px] text-white/50">
+                      <div className="mt-1 flex items-center gap-2 text-[11px] text-white/50">
                         <span>{node.teamCount}/{node.teamSlots} teams</span>
                         <span className="text-white/20">·</span>
                         <span>{node.status}</span>

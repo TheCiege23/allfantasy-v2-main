@@ -25,6 +25,7 @@ export const CAREER_TABS: Array<{ key: string; label: string }> = [
   { key: 'seasons', label: 'Seasons' },
   { key: 'progress', label: 'Progress' },
   { key: 'peers', label: 'Peers' },
+  { key: 'compare', label: 'Compare' },
   { key: 'records', label: 'Records' },
   { key: 'awards', label: 'Awards' },
   { key: 'hall', label: 'Hall of Fame' },

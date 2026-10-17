@@ -13,7 +13,7 @@ const LEGACY_TABS = [
   { href: "/af-legacy?tab=strategy", label: "Renegotiation" },
   { href: "/af-legacy?tab=pulse", label: "Market Board" },
   { href: "/af-legacy?tab=waiver", label: "Waiver Engine" },
-  { href: "/af-legacy?tab=compare", label: "Opponent Behavior" },
+  { href: "/af-legacy?tab=compare", label: "Manager Comparison" },
   { href: "/af-legacy?tab=share", label: "League Fairness" },
   { href: "/af-legacy?tab=chat", label: "Chimmy Chat" },
 ] as const

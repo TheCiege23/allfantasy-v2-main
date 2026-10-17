@@ -1,6 +1,12 @@
 import { riFetchRows } from '@/lib/workers/providers/rollingInsightsRest'
-import { classifyRiSeasonType, type RiSeasonType } from '@/lib/sports-data/riSeasonType'
+import { classifyRiSeasonType } from '@/lib/sports-data/riSeasonType'
 import { easternCalendarDay, gameDayFromRiGameId } from '@/lib/sports-data/easternGameDay'
+import { isoDay, scheduleKeyPrefix, type ScheduleCacheDb, type ScheduleGame } from '@/lib/sports-data/riScheduleCache'
+import { RI_SOCCER_LEAGUES } from '@/lib/sports-data/rollingInsightsSupport'
+
+// The stored shape and the reader live in the pure leaf so client-reachable code (the lineup lock)
+// can read the schedule without pulling in this module's server-only RI client.
+export { readRiScheduleWindow, scheduleKeyPrefix, type ScheduleGame } from '@/lib/sports-data/riScheduleCache'
 
 /**
  * A COMPLETE season schedule for the sports whose other feeds are not, from Rolling Insights
@@ -28,25 +34,11 @@ import { easternCalendarDay, gameDayFromRiGameId } from '@/lib/sports-data/easte
  * read as "no games scheduled".
  */
 
-export type ScheduleGame = {
-  gameId: string
-  /** US Eastern day, `YYYY-MM-DD` — the same bucketing `player_game_stats.game_date` uses. */
-  day: string
-  startTime: string | null
-  /** The vendor status verbatim (`final`, `completed`, `replaced`, `postponed`, …). */
-  status: string | null
-  seasonType: RiSeasonType | null
-  eventName: string | null
-  replacedBy: string | null
-}
-
-const str = (v: unknown): string | null => {
+const str =(v: unknown): string | null => {
   if (v == null) return null
   const t = String(v).trim()
   return t && t.toLowerCase() !== 'null' ? t : null
 }
-
-const isoDay = (d: Date) => d.toISOString().slice(0, 10)
 
 export function parseRiScheduleSeason(rows: unknown[]): ScheduleGame[] {
   const out: ScheduleGame[] = []
@@ -68,22 +60,13 @@ export function parseRiScheduleSeason(rows: unknown[]): ScheduleGame[] {
       seasonType: classifyRiSeasonType(g.season_type),
       eventName: str(g.event_name),
       replacedBy: str(g.replaced_by),
+      homeTeam: str(g.home_team),
+      awayTeam: str(g.away_team),
+      homeTeamId: str(g.home_team_ID ?? g.home_team_id),
+      awayTeamId: str(g.away_team_ID ?? g.away_team_id),
     })
   }
   return out
-}
-
-export function scheduleKeyPrefix(sport: string, season: number): string {
-  return `${sport.toUpperCase()}:rischedule:${season}:`
-}
-
-type CacheDb = {
-  sportsDataCache: {
-    upsert(args: unknown): Promise<unknown>
-    deleteMany(args: unknown): Promise<{ count: number }>
-    findMany(args: unknown): Promise<Array<{ cacheKey: string; data: unknown }>>
-    findUnique(args: unknown): Promise<{ data: unknown } | null>
-  }
 }
 
 export type ScheduleSyncResult = {
@@ -105,7 +88,7 @@ const KEEP_MS = 400 * 86_400_000
 export async function syncRiSeasonSchedule(opts: {
   sport: string
   season: number
-  db: CacheDb
+  db: ScheduleCacheDb
   now?: Date
   fetchImpl?: typeof fetch
 }): Promise<ScheduleSyncResult> {
@@ -116,21 +99,60 @@ export async function syncRiSeasonSchedule(opts: {
     error: null, games: 0, days: 0, staleDaysRemoved: 0, statusCounts: {},
   }
 
-  const { rows, notModified, unsupported, error } = await riFetchRows('schedule_season', {
-    sport,
-    season: opts.season,
-    fetchImpl: opts.fetchImpl,
-  })
-  if (notModified || unsupported || error) {
-    result.notModified = notModified
-    result.unsupported = unsupported
-    result.error = error
-    return result // never write an emptiness
+  /*
+   * 🛑 SOCCER IS THREE SCHEDULES, AND A PARTIAL ONE IS WORSE THAN NONE. One soccer pool spans EPL,
+   * La Liga and Serie A, and the vendor wants one call per league (`?league=`, keyed `data.<LEAGUE>`).
+   * Writing after two of three would store days that lack a league's games — a slate that reads
+   * complete and SEALS a gameweek whose stats miss them. So every league must come back 200 before
+   * anything is written; any other outcome writes nothing, as a single 304 does.
+   */
+  const leagues: Array<string | undefined> = sport === 'SOCCER' ? [...RI_SOCCER_LEAGUES] : [undefined]
+  const games: ScheduleGame[] = []
+  for (const league of leagues) {
+    const { rows, notModified, unsupported, error } = await riFetchRows('schedule_season', {
+      sport,
+      season: opts.season,
+      league,
+      fetchImpl: opts.fetchImpl,
+    })
+    if (notModified || unsupported || error) {
+      result.notModified = notModified
+      result.unsupported = unsupported
+      result.error = league && error ? `${league}: ${error}` : error
+      return result // never write an emptiness, nor a partial soccer schedule
+    }
+    const parsed = parseRiScheduleSeason(rows)
+    if (league && parsed.length === 0) {
+      result.error = `schedule-season ${league} returned 200 with no parseable games — refusing to write the other leagues without it`
+      return result
+    }
+    games.push(...parsed)
   }
-  const games = parseRiScheduleSeason(rows)
   if (games.length === 0) {
     result.error = 'schedule-season returned 200 with no parseable games — refusing to replace a stored schedule with nothing'
     return result
+  }
+  // MLB schedules 162 games for each of 30 clubs: 2,430 distinct regular-season games.
+  // A partial vendor response could otherwise seal a fantasy week before its missing games
+  // finish. Keep the previous complete cache (or no cache) until the whole slate is published.
+  if (sport === 'MLB') {
+    const regularIds = new Set(games.filter((g) => g.seasonType === 'regular' &&
+      !g.replacedBy && !['postponed', 'replaced'].includes(String(g.status ?? '').toLowerCase())).map((g) => g.gameId))
+    if (regularIds.size < 2430) {
+      result.error = `MLB schedule-season has ${regularIds.size} distinct regular games; expected at least 2430 — refusing a partial slate`
+      return result
+    }
+  }
+  if (sport === 'NCAAB' || sport === 'NCAABB') {
+    // A season endpoint returning last season, or only an opening-month preview,
+    // cannot be used as the complete slate that authorizes week finalization.
+    const regularDays = games.filter(g => g.seasonType === 'regular').map(g => g.day).sort()
+    const first = regularDays[0], last = regularDays[regularDays.length - 1]
+    if (!first || first < `${opts.season}-10-01` || first > `${opts.season}-11-30` ||
+        !last || last < `${opts.season + 1}-03-01` || last > `${opts.season + 1}-04-30`) {
+      result.error = `NCAAB schedule-season lacks the requested autumn-to-March regular season (${first ?? 'missing'} to ${last ?? 'missing'}) — refusing a partial or wrong-season slate`
+      return result
+    }
   }
   result.fetched = true
   result.games = games.length
@@ -170,28 +192,6 @@ export async function syncRiSeasonSchedule(opts: {
     statusCounts: result.statusCounts,
   })
   return result
-}
-
-/**
- * The stored schedule for Eastern days in `[start, end)`, or `null` when no schedule has been
- * synced for the season at all — which the finalizer must treat as "cannot tell", never "empty".
- */
-export async function readRiScheduleWindow(
-  db: CacheDb,
-  args: { sport: string; season: number; window: { start: Date; end: Date } },
-): Promise<ScheduleGame[] | null> {
-  const prefix = scheduleKeyPrefix(args.sport, args.season)
-  const meta = await db.sportsDataCache.findUnique({ where: { cacheKey: `${prefix}meta` } })
-  if (!meta) return null
-  const keys: string[] = []
-  for (let t = args.window.start.getTime(); t < args.window.end.getTime(); t += 86_400_000) {
-    keys.push(`${prefix}${isoDay(new Date(t))}`)
-  }
-  const rows = await db.sportsDataCache.findMany({ where: { cacheKey: { in: keys } }, select: { cacheKey: true, data: true } })
-  return rows.flatMap((r) => {
-    const games = (r.data as { games?: ScheduleGame[] } | null)?.games
-    return Array.isArray(games) ? games : []
-  })
 }
 
 /** The season a sport's schedule sync should fetch now: the year the CURRENT season started. */

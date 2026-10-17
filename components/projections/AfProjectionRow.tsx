@@ -48,21 +48,21 @@ export function AfProjectionRow({ p }: { p: AfProjectionView }) {
       <div className="flex items-baseline gap-2">
         <span className="flex-1 truncate text-[12px] font-medium text-white">
           {p.playerName}
-          <span className="ml-1.5 text-[10px] text-white/35">{p.position}</span>
+          <span className="ml-1.5 text-[11px] text-white/35">{p.position}</span>
           {p.week != null ? (
-            <span className="ml-1.5 text-[10px] text-white/30">wk {p.week}</span>
+            <span className="ml-1.5 text-[11px] text-white/30">wk {p.week}</span>
           ) : (
             /*
              * ⚠ SAY WHICH ROW THIS IS. A season baseline and a week-scoped row are different
              * claims, and an unlabelled number invites the reader to assume the more specific one.
              */
-            <span className="ml-1.5 text-[10px] text-white/30">season baseline</span>
+            <span className="ml-1.5 text-[11px] text-white/30">season baseline</span>
           )}
         </span>
 
         <span className="w-16 text-right" data-testid="af-proj-pergame">
           <span className="text-[14px] font-bold tabular-nums text-white">{num(p.perGame)}</span>
-          <span className="ml-0.5 text-[9px] text-white/35">/gm</span>
+          <span className="ml-0.5 text-[11px] text-white/35">/gm</span>
         </span>
 
         <span className="w-20 text-right" data-testid="af-proj-ros">
@@ -82,7 +82,7 @@ export function AfProjectionRow({ p }: { p: AfProjectionView }) {
               <span className="text-[13px] font-semibold tabular-nums text-white/85">
                 {num(p.restOfSeason)}
               </span>
-              <span className="ml-0.5 text-[9px] text-white/35">
+              <span className="ml-0.5 text-[11px] text-white/35">
                 {p.restOfSeasonWeeks != null ? `/${p.restOfSeasonWeeks}wk` : 'ROS'}
               </span>
             </>
@@ -92,7 +92,7 @@ export function AfProjectionRow({ p }: { p: AfProjectionView }) {
 
       <div className="mt-1 flex flex-wrap items-center gap-1.5">
         <span
-          className={`rounded border px-1.5 py-0.5 text-[9px] font-semibold uppercase ${
+          className={`rounded border px-1.5 py-0.5 text-[11px] font-semibold uppercase ${
             CONFIDENCE_STYLE[conf] ?? CONFIDENCE_STYLE.medium
           }`}
           data-testid="af-proj-confidence"
@@ -104,7 +104,7 @@ export function AfProjectionRow({ p }: { p: AfProjectionView }) {
           * The basis, shown as an arithmetic the reader can check: baseline, then what weather did
           * to it. A single figure with no derivation is the thing this phase exists to replace.
           */}
-        <span className="text-[9px] text-white/35" data-testid="af-proj-basis">
+        <span className="text-[11px] text-white/35" data-testid="af-proj-basis">
           {num(p.baseline)} baseline
           {weather !== 0 ? (
             <>
@@ -123,7 +123,7 @@ export function AfProjectionRow({ p }: { p: AfProjectionView }) {
       </div>
 
       {p.reason ? (
-        <p className="mt-1 text-[10px] text-white/45" data-testid="af-proj-reason">
+        <p className="mt-1 text-[11px] text-white/45" data-testid="af-proj-reason">
           {p.reason}
         </p>
       ) : null}

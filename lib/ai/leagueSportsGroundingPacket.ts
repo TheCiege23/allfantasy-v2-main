@@ -21,7 +21,9 @@ import type { FantasyFreshnessReport } from "@/lib/fantasy-data/fantasyFreshness
 import type { FantasyProviderHealthReport } from "@/lib/fantasy-data/providerHealth"
 import { listInjuryFacts } from "@/lib/injuries/injuryReadPort"
 import { rosterPlayerIds } from "@/lib/core-app/myRoster"
+import { sleeperReadablePlayerDataOf, rosterIdSpaceOf } from "@/lib/core-app/rosterIdSpace"
 import { isBestBallSettings } from "@/lib/core-app/lineupMode"
+import { sleeperIdWhere } from "@/lib/player-identity/externalIdNamespace"
 
 // ─── League grounding sub-types ───────────────────────────────────────────────
 
@@ -78,6 +80,12 @@ export type LeagueGroundingRosterPlayer = {
 export type LeagueGroundingRoster = {
   userId: string
   teamName: string | null
+  /**
+   * Whether `playerId`s are Sleeper ids (`rosterIdSpaceOf`; an ESPN roster arrives translated). A
+   * native NHL roster's are Rolling Insights ids and a Fleaflicker roster's its own — `'other'`, so
+   * nothing derives a Sleeper CDN face from them (chimmyPlayerCards.ts).
+   */
+  idSpace: "sleeper" | "other"
   starters: LeagueGroundingRosterPlayer[]
   bench: LeagueGroundingRosterPlayer[]
 }
@@ -546,6 +554,8 @@ function unnamedRosterPlayer(playerId: string): LeagueGroundingRosterPlayer {
  */
 async function resolveRosterPlayerNames(
   ids: readonly string[],
+  /** The league's sport. Only NFL rows carry a `sleeperId`; without it another sport's id reads as an NFL player. */
+  sport: string | null | undefined,
 ): Promise<Map<string, LeagueGroundingRosterPlayer>> {
   const out = new Map<string, LeagueGroundingRosterPlayer>()
   const lookups: string[] = []
@@ -570,10 +580,18 @@ async function resolveRosterPlayerNames(
 
   if (lookups.length === 0) return out
 
+  /*
+   * 🛑 BY SLEEPER ID ONLY (`sleeperIdWhere`), never a bare id against `externalId`. These are
+   * Sleeper ids, and Rolling Insights writes its own numbers into `externalId` across every sport:
+   * Sleeper 9228 is Bryce Young; RI 9228 is Michael Tarquin (OT) and two college linemen. The old
+   * `OR externalId` read matched all of them with no sport filter, so the roster Chimmy was handed
+   * could name a quarterback as a lineman — and the impostors counted against `take`, crowding real
+   * rows out of a large roster. See externalIdNamespace.ts for the measurement.
+   */
   const rows = await prisma.sportsPlayer
     .findMany({
-      where: { OR: [{ sleeperId: { in: lookups } }, { externalId: { in: lookups } }] },
-      select: { name: true, position: true, team: true, sleeperId: true, externalId: true },
+      where: sleeperIdWhere(lookups, sport ?? undefined),
+      select: { name: true, position: true, team: true, sleeperId: true, source: true },
       take: 400,
     })
     .catch(() => [] as Array<{
@@ -581,28 +599,30 @@ async function resolveRosterPlayerNames(
       position: string | null
       team: string | null
       sleeperId: string | null
-      externalId: string | null
+      source: string | null
     }>)
 
   const wanted = new Set(lookups)
+  const fromSleeper = new Set<string>()
   for (const row of rows) {
     const name = String(row.name ?? "").trim()
-    if (!name) continue
-    for (const key of [row.sleeperId, row.externalId]) {
-      const id = String(key ?? "").trim()
-      // One person can have a row per source; the first named row wins rather than the last.
-      if (!id || !wanted.has(id) || out.has(id)) continue
-      out.set(id, {
-        playerId: id,
-        playerName: name,
-        position: String(row.position ?? "").trim(),
-        team: row.team ? String(row.team) : null,
-        injuryStatus: null,
-        adp: null,
-        projectedPoints: null,
-        isStarter: false,
-      })
-    }
+    const id = String(row.sleeperId ?? "").trim()
+    if (!name || !id || !wanted.has(id)) continue
+    // One person can have a row per source. Sleeper's own row wins (its fields are fantasy-shaped);
+    // otherwise the first named row.
+    const isSleeper = row.source === "sleeper"
+    if (out.has(id) && (fromSleeper.has(id) || !isSleeper)) continue
+    out.set(id, {
+      playerId: id,
+      playerName: name,
+      position: String(row.position ?? "").trim(),
+      team: row.team ? String(row.team) : null,
+      injuryStatus: null,
+      adp: null,
+      projectedPoints: null,
+      isStarter: false,
+    })
+    if (isSleeper) fromSleeper.add(id)
   }
 
   return out
@@ -644,6 +664,7 @@ async function loadViewerRoster(
       select: {
         playerData: true,
         settings: true,
+        league: { select: { platform: true, sport: true } },
       },
     }).catch(() => null)
     if (!roster) return null
@@ -674,7 +695,15 @@ async function loadViewerRoster(
      * this table has held: id sections, `lineup_sections`, bare strings, and objects. The old
      * array-of-objects path is kept because those entries carry names of their own.
      */
-    const playerData = roster.playerData as unknown
+    // An ESPN roster is read in Sleeper ids (translated; an id with no identity dropped, since ESPN
+    // 12483 Stafford IS Sleeper's 12483 Jack Bech). Any other foreign roster keeps its raw ids for
+    // display, and `lookupable` below keeps them out of every Sleeper-id lookup — as does a native
+    // league of another sport (a native NHL roster holds Rolling Insights ids; 49 of 72 on production
+    // league d41382f9… read as NFL strangers by `sleeperId`, so Chimmy was told A.J. Greer was a WR).
+    const platform = roster.league?.platform
+    const sport = roster.league?.sport != null ? String(roster.league.sport) : null
+    const readable = await sleeperReadablePlayerDataOf(platform, roster.playerData, sport)
+    const playerData = (rosterIdSpaceOf(platform, sport) === "espn" ? readable : roster.playerData) as unknown
     const allPlayers: LeagueGroundingRosterPlayer[] = []
     if (Array.isArray(playerData)) {
       for (const p of playerData) {
@@ -685,8 +714,11 @@ async function loadViewerRoster(
 
     const named = new Set(allPlayers.map((p) => p.playerId))
     const idsNeedingNames = rosterPlayerIds(playerData).filter((id) => !named.has(id))
+    // A Fleaflicker/MFL/Fantrax/Yahoo id collides with real Sleeper ids, so it is never looked up as
+    // one: it stays on the roster, honestly unidentified, rather than named as a stranger.
+    const lookupable = new Set(rosterPlayerIds(readable))
     if (idsNeedingNames.length > 0) {
-      const identities = await resolveRosterPlayerNames(idsNeedingNames)
+      const identities = await resolveRosterPlayerNames(idsNeedingNames.filter((id) => lookupable.has(id)), sport)
       for (const id of idsNeedingNames) allPlayers.push(identities.get(id) ?? unnamedRosterPlayer(id))
     }
 
@@ -704,6 +736,7 @@ async function loadViewerRoster(
     return {
       userId,
       teamName: team?.teamName ? String(team.teamName) : null,
+      idSpace: rosterIdSpaceOf(platform, sport) === "other" ? "other" : "sleeper",
       starters: allPlayers.filter((p) => starterIds.has(p.playerId) || p.isStarter),
       bench: allPlayers.filter((p) => !starterIds.has(p.playerId) && !p.isStarter),
     }
@@ -858,7 +891,7 @@ async function loadFantasyData(sport: string, season: number): Promise<LeagueGro
       // orphaned when the cron moved to sports_injuries and froze at 2026-04-28,
       // so both this count and the list below described a dead table while the
       // packet reported hasInjuryData: true.
-      listInjuryFacts({ sport, limit: 200 })
+      listInjuryFacts({ sport, limit: 200, designationsOnly: true })
         .then((l) => (l.facts ?? []).filter((f) => !f.stale).length)
         .catch(() => 0) as Promise<number>,
       (prisma as any).sportsGame.count({ where: { sport, season } }).catch(() => 0) as Promise<number>,

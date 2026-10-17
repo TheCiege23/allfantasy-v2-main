@@ -490,7 +490,7 @@ export default function ToolsHubClient({ sports, tools }: ToolsHubClientProps) {
               <div>
                 <span className="font-semibold">Best tool for me</span>
                 <p className="text-sm mt-0.5" style={{ color: 'var(--muted)' }}>
-                  Ask AI which tool to use next based on your context.
+                  Ask Chimmy which tool to use next based on your context.
                 </p>
               </div>
               <ArrowRight className="h-5 w-5 ml-auto shrink-0" style={{ color: 'var(--muted)' }} />

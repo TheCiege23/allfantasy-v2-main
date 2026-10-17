@@ -1,5 +1,6 @@
 import React from 'react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh() {}, push() {}, replace() {}, prefetch() {} }) }))
 import { render, within } from '@testing-library/react'
 
 import { MyTeamBoard } from '@/components/core-app/MyTeamBoard'
@@ -60,6 +61,12 @@ function pulse(over: Partial<MyTeamPulse> = {}): MyTeamPulse {
 }
 
 describe('paused league accounting', () => {
+  it('reports checked automatic teams separately from excluded inactive teams', () => {
+    const { container } = render(<MyTeamBoard pulse={pulse({ considered: 12, checked: 3, automatic: 2, notChecked: { noRoster: 0, noLineup: 0, automatic: 0, inactive: 9 } })} now={NOW} allHref={ALL_HREF} />)
+    expect(container.textContent).toContain('2 Best Ball teams use automatic lineups')
+    expect(container.textContent).not.toContain('0 Best Ball teams')
+    expect(container.textContent).not.toContain('12 teams read')
+  })
   it('does not turn an inventory-only picker into a healthy lineup verdict', () => {
     const { container } = render(<PickALeague tabKey="my-team" title="My team" blurb="Choose a league" issues={[]} leagues={[{ id: 'l1', name: 'My league' }]} showQueue={false} />)
     expect(container.textContent).not.toContain('Nothing in your leagues is waiting')
@@ -76,8 +83,31 @@ describe('paused league accounting', () => {
     const text = container.textContent?.replace(/\s+/g, ' ')
     expect(text).toContain('57 of 64 active teams read')
     expect(text).toContain('7 of your 64 active claimed teams could not be checked')
-    expect(text).toContain('62 more leagues are either set or could not be read')
+    // The split, not "either set or could not be read": 7 unreadable are all hidden, the other 55 are set.
+    expect(text).toContain('62 more leagues are not shown: 55 set, 7 could not be read')
     expect(within(container).getByRole('link', { name: 'View all 65 →' }).getAttribute('href')).toBe(ALL_HREF)
+  })
+  it('says a foreign-id league cannot be matched, never that it has no starting lineup', () => {
+    const { container } = render(<MyTeamBoard pulse={pulse({
+      considered: 3, checked: 1, set: [row()], setTotal: 1,
+      notChecked: { noRoster: 0, noLineup: 0, idsUnreadable: 2 },
+    })} now={NOW} allHref={ALL_HREF} />)
+    const text = container.textContent?.replace(/\s+/g, ' ')
+    expect(text).toContain('2 of your 3 claimed teams could not be checked')
+    expect(text).toContain("2 have a roster on file, but for each league, its player ids can't be matched to ours yet")
+    expect(text).not.toContain('no starting lineup on file')
+    // A re-sync cannot make those ids matchable, so it is not offered as the fix.
+    expect(text).not.toContain('re-sync imported leagues')
+  })
+  it('CONTROL: a genuinely lineup-less roster still reads "no starting lineup on file"', () => {
+    const { container } = render(<MyTeamBoard pulse={pulse({
+      considered: 2, checked: 1, set: [row()], setTotal: 1,
+      notChecked: { noRoster: 0, noLineup: 1, idsUnreadable: 0 },
+    })} now={NOW} allHref={ALL_HREF} />)
+    const text = container.textContent?.replace(/\s+/g, ' ')
+    expect(text).toContain('1 has a roster but no starting lineup on file')
+    expect(text).not.toContain("can't be matched to ours yet")
+    expect(text).toContain('re-sync imported leagues')
   })
   it('does not claim paused leagues are visible when all active leagues are shown', () => {
     const { container } = render(<MyTeamBoard pulse={pulse({
@@ -157,6 +187,20 @@ describe('formatLockLabel', () => {
 })
 
 describe('MyTeamBoard', () => {
+  it('puts urgent leagues and their platform handoffs in the action queue', () => {
+    const { container } = render(
+      <MyTeamBoard
+        allHref={ALL_HREF}
+        now={NOW}
+        pulse={pulse({ needs: [row({ empty: 1, severity: 1 })], needsTotal: 1 })}
+      />,
+    )
+    const queue = container.querySelector('.af-bd-action-queue')
+    expect(queue?.textContent).toContain('1 lineup needs a look')
+    expect(queue?.querySelector('a[href="/core/my-team?league=l1"]')).not.toBeNull()
+    expect(queue?.querySelector('a[href*="sleeper.com"]')).not.toBeNull()
+  })
+
   it('names every certain hole in the lineup', () => {
     const { container } = render(
       <MyTeamBoard
@@ -332,6 +376,39 @@ describe('MyTeamBoard', () => {
     expect(text).toContain('12 have no roster imported')
   })
 
+  /*
+   * The off-season: every team pre-draft, finished or paused, nothing unreadable. This used to
+   * print "We could not read a single lineup" — a data-gap warning over an account with no gap.
+   */
+  it('says there is nothing to set — not that it could not read — when every team sits out', () => {
+    const { container } = render(
+      <MyTeamBoard
+        allHref={ALL_HREF}
+        now={NOW}
+        pulse={pulse({ considered: 9, checked: 0, paused: 1, notChecked: { noRoster: 0, noLineup: 0, idsUnreadable: 0, inactive: 8 } })}
+      />,
+    )
+    const text = container.textContent ?? ''
+    expect(text).toContain('No lineups to set right now')
+    expect(text).not.toContain('We could not read a single lineup')
+    expect(text).toContain('8 pre-draft, completed, or inactive teams are excluded')
+    // Never a verdict that the lineups are fine.
+    expect(text).not.toContain('is set')
+  })
+
+  it('still warns when even one team could not be read, alongside teams that sit out', () => {
+    const { container } = render(
+      <MyTeamBoard
+        allHref={ALL_HREF}
+        now={NOW}
+        pulse={pulse({ considered: 9, checked: 0, notChecked: { noRoster: 1, noLineup: 0, inactive: 8 } })}
+      />,
+    )
+    const text = container.textContent ?? ''
+    expect(text).toContain('We could not read a single lineup')
+    expect(text).not.toContain('No lineups to set right now')
+  })
+
   it('links the league name into that league own my-team screen', () => {
     const { container } = render(
       <MyTeamBoard allHref={ALL_HREF} now={NOW} pulse={pulse({ needs: [row()], needsTotal: 1 })} />,
@@ -446,7 +523,11 @@ describe('the board ranks only what it actually ordered', () => {
    * keeps counting rows rather than tiers -- "03" means the third ROW, which is
    * what a reader comparing against the list length expects.
    */
-  it('numbers the first row of each tier and bullets the rest', () => {
+  /*
+   * ⚠ A TIE IS WRITTEN "T3", NOT AS A BULLET. The bullet read as a missing number
+   * on the live board ("01, 02, •, 04, •, •").
+   */
+  it('marks every row of a shared tier with the tier rank and a T', () => {
     const { container } = board(
       atLocks([
         '2026-09-13T17:00:00Z',
@@ -455,7 +536,42 @@ describe('the board ranks only what it actually ordered', () => {
         '2026-09-14T00:20:00Z',
       ]),
     )
-    expect(ranksOf(container)).toEqual(['01', '•', '03', '•'])
+    expect(ranksOf(container)).toEqual(['T1', 'T1', 'T3', 'T3'])
+    expect(container.querySelectorAll('.af-bd-rank[data-tied]').length).toBe(4)
+  })
+
+  it('keeps a plain numeral for a row alone in its tier', () => {
+    const { container } = board(
+      atLocks([
+        '2026-09-13T17:00:00Z',
+        '2026-09-13T20:00:00Z',
+        '2026-09-13T20:00:00Z',
+        '2026-09-14T00:20:00Z',
+      ]),
+    )
+    expect(ranksOf(container)).toEqual(['01', 'T2', 'T2', '04'])
+  })
+
+  /*
+   * The loader now orders `set` by questionable count, then lock. The tier key must
+   * follow, or two rows the loader separated would be printed as a tie.
+   */
+  it('ranks a questionable lineup above a clean one at the same lock, and says so', () => {
+    const lock = '2026-09-13T17:00:00Z'
+    const { container } = board([
+      row({ leagueId: 'q', leagueName: 'Risky', lockAt: lock, questionable: 2 }),
+      row({ leagueId: 'c', leagueName: 'Clean', lockAt: lock, questionable: 0 }),
+    ])
+    expect(ranksOf(container)).toEqual(['01', '02'])
+    expect(container.textContent).toContain('questionable starters first, then lock time')
+    expect(container.textContent).not.toContain('nothing is broken, so ranked by lock time')
+  })
+
+  it('prints the deadline it names beside the label, in Eastern time', () => {
+    const { container } = board(atLocks(['2026-09-14T00:20:00Z', '2026-09-13T17:00:00Z']))
+    const text = container.textContent ?? ''
+    expect(text).toContain('Next player deadline Sun 8:20p ET')
+    expect(text).toContain('Next player deadline Sun 1:00p ET')
   })
 
   /*
@@ -494,4 +610,10 @@ describe('the board ranks only what it actually ordered', () => {
     )
     expect(ranksOf(container)).toEqual(['01', '02'])
   })
+})
+
+it('does not call additional urgent teams set when the top-ten payload is truncated', () => {
+  const { container } = render(<MyTeamBoard allHref={ALL_HREF} now={NOW} pulse={pulse({ needs: Array.from({ length: 10 }, (_, i) => row({ leagueId: `urgent-${i}`, empty: 1, severity: 1 })), needsTotal: 12, considered: 65, checked: 65 })} />)
+  expect(container.textContent).toContain('55 more leagues include 2 more teams needing lineup review')
+  expect(container.textContent).not.toContain('55 more leagues are set')
 })

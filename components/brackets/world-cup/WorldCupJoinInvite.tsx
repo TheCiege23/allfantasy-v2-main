@@ -119,20 +119,20 @@ export default function WorldCupJoinInvite({ invite }: { invite: InviteInfo }) {
           </p>
           {/* How it works — game preview for first-time invitees */}
           <div className="mt-4 rounded-xl border border-white/[0.08] bg-white/[0.03] p-4">
-            <p className="mb-3 text-[10px] font-black uppercase tracking-[0.18em] text-white/40">
+            <p className="mb-3 text-[11px] font-black uppercase tracking-[0.18em] text-white/40">
               How it works
             </p>
             <ol className="space-y-2">
               <li className="flex items-start gap-2.5 text-xs text-white/70">
-                <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-cyan-300/20 text-[10px] font-black text-cyan-300">1</span>
+                <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-cyan-300/20 text-[11px] font-black text-cyan-300">1</span>
                 Pick the winner of every match — Group Stage through Final
               </li>
               <li className="flex items-start gap-2.5 text-xs text-white/70">
-                <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-cyan-300/20 text-[10px] font-black text-cyan-300">2</span>
+                <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-cyan-300/20 text-[11px] font-black text-cyan-300">2</span>
                 Earn more points each round as the stakes get higher
               </li>
               <li className="flex items-start gap-2.5 text-xs text-white/70">
-                <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-cyan-300/20 text-[10px] font-black text-cyan-300">3</span>
+                <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-cyan-300/20 text-[11px] font-black text-cyan-300">3</span>
                 Pick the champion for a massive bonus — then watch it play out
               </li>
             </ol>
@@ -148,7 +148,7 @@ export default function WorldCupJoinInvite({ invite }: { invite: InviteInfo }) {
               ].map(({ label, pts }) => (
                 <span
                   key={label}
-                  className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.05] px-2 py-0.5 text-[10px] font-bold"
+                  className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.05] px-2 py-0.5 text-[11px] font-bold"
                 >
                   <span className="text-white/50">{label}</span>
                   <span className="text-cyan-300">{pts}</span>
@@ -166,19 +166,19 @@ export default function WorldCupJoinInvite({ invite }: { invite: InviteInfo }) {
           {/* Stats grid */}
           <div className="mt-5 grid grid-cols-3 gap-2 text-sm">
             <div className="rounded-lg border border-white/10 bg-black/30 p-3">
-              <div className="flex items-center gap-1 text-[10px] uppercase tracking-[0.16em] text-white/35">
+              <div className="flex items-center gap-1 text-[11px] uppercase tracking-[0.16em] text-white/35">
                 <Users className="h-3 w-3" /> Players
               </div>
               <div className="mt-1 font-black">{invite.participantCount}</div>
             </div>
             <div className="rounded-lg border border-white/10 bg-black/30 p-3">
-              <div className="flex items-center gap-1 text-[10px] uppercase tracking-[0.16em] text-white/35">
+              <div className="flex items-center gap-1 text-[11px] uppercase tracking-[0.16em] text-white/35">
                 <Globe className="h-3 w-3" /> Status
               </div>
               <div className="mt-1 font-black capitalize">{invite.status}</div>
             </div>
             <div className="rounded-lg border border-white/10 bg-black/30 p-3">
-              <div className="flex items-center gap-1 text-[10px] uppercase tracking-[0.16em] text-white/35">
+              <div className="flex items-center gap-1 text-[11px] uppercase tracking-[0.16em] text-white/35">
                 <Calendar className="h-3 w-3" /> Season
               </div>
               <div className="mt-1 font-black">{invite.seasonYear}</div>

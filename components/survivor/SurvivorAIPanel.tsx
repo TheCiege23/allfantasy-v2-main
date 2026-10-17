@@ -6,6 +6,7 @@ import { Sparkles, MessageSquare, HelpCircle, Loader2, AlertCircle } from 'lucid
 import type { SurvivorSummary } from './types'
 import { SurvivorCommandHelp } from './SurvivorCommandHelp'
 import { useAfSubGate } from '@/hooks/useAfSubGate'
+import { postWithTokenConfirm } from '@/lib/tokens/clientTokenConfirm'
 import type { SubscriptionFeatureId } from '@/lib/subscription/types'
 
 type SurvivorAIPanelType =
@@ -25,7 +26,7 @@ const TYPE_LABELS: Record<SurvivorAIPanelType, string> = {
   host_intro: 'Host: Intro post',
   host_challenge: 'Host: Challenge announcement',
   host_merge: 'Host: Merge announcement',
-  host_council: 'Host: Tribal Council narration',
+  host_council: 'Host: Elimination Council narration',
   host_scroll: 'Host: Scroll reveal wording',
   host_jury: 'Host: Jury / finale moderation',
   tribe_help: 'Helper: Tribe strategy & challenge coaching',
@@ -93,11 +94,18 @@ export function SurvivorAIPanel({ leagueId, summary }: SurvivorAIPanelProps) {
     setError(null)
     setResult(null)
     try {
-      const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/survivor/ai`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type, week: summary.currentWeek }),
-      })
+      /*
+       * 🛑 THIS PANEL COULD NEVER SPEND A TOKEN (fixed 2026-09-29). It posted without
+       * `confirmTokenSpend`, the route defaults that to false, and the guard answers 409
+       * `token_confirmation_required` — which `useAfSubGate` (402/403 only) let through as an error.
+       * A user paying in tokens got an error on every gated action. Now the 409 becomes a question
+       * that names the cost, and only a yes spends.
+       */
+      const { response: res, declined } = await postWithTokenConfirm(
+        `/api/leagues/${encodeURIComponent(leagueId)}/survivor/ai`,
+        { type, week: summary.currentWeek },
+      )
+      if (declined) return
       const subFeature = subscriptionFeatureForSurvivorAiType(type)
       if (subFeature) {
         if (!(await handleApiResponse(res, subFeature))) return
@@ -134,10 +142,10 @@ export function SurvivorAIPanel({ leagueId, summary }: SurvivorAIPanelProps) {
       <section className="rounded-2xl border border-amber-500/20 bg-amber-950/10 p-4 sm:p-6">
         <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-white">
           <Sparkles className="h-5 w-5 text-amber-400" />
-          AI Host · Chimmy
+          Host · Chimmy
         </h2>
         <p className="mb-4 text-sm text-white/70">
-          Generate host posts or get strategy advice. Outcomes (elimination, votes, idols, immunity, exile return) are always decided by the game engine — AI only narrates and advises.
+          Generate host posts or get strategy advice. Outcomes (elimination, votes, idols, immunity, exile return) are always decided by the game engine — Chimmy only narrates and advises.
         </p>
 
         <div className="mb-4">
@@ -169,7 +177,7 @@ export function SurvivorAIPanel({ leagueId, summary }: SurvivorAIPanelProps) {
             ? 'Intro, scroll, and idol coaching are included for all managers. The game engine still decides votes, idols, and elimination.'
             : aiSubFeature === 'commissioner_ai_narration'
               ? 'Host narration for commissioners uses Commissioner AI. Co-commissioners can use it too.'
-              : 'Strategy helpers use your AllFantasy AI (Chimmy) subscription.'}
+              : 'Strategy helpers use your Chimmy subscription.'}
         </p>
 
         <button
@@ -221,7 +229,7 @@ export function SurvivorAIPanel({ leagueId, summary }: SurvivorAIPanelProps) {
         <ul className="mb-4 space-y-1 text-sm text-white/70">
           <li>· Tribe strategy and who might be at risk</li>
           <li>· Challenge coaching and submission tips</li>
-          <li>· Tribal Council risk explanation</li>
+          <li>· Elimination Council risk explanation</li>
           <li>· Exile Island strategy and token advice</li>
           <li>· Recap and storyline summary</li>
         </ul>

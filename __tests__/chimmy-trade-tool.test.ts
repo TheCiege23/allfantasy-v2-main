@@ -25,3 +25,14 @@ it('does not interpret a failed inbox read as no trades', async () => {
   const result = await executeChimmyTool('get_league_trade_activity', {}, { leagueId: 'selected-league', userId: 'viewer' })
   expect(result).toContain('Incoming proposals: No verified data available')
 })
+
+it('collects the letters the one engine gave for pending offers when the route asks for them', async () => {
+  reads.pending.mockImplementation(async (_l: string, _u: string, deps?: { onGrade?: (g: unknown) => void }) => {
+    deps?.onGrade?.({ letters: ['B', 'C-'], summary: 'AllFantasy grades the offer from Rival: B for you, C- for Rival.' })
+    return 'Pending evidence'
+  })
+  const tradeGrades: Array<{ letters: string[]; summary: string }> = []
+  await executeChimmyTool('get_league_trade_activity', {}, { leagueId: 'selected-league', userId: 'viewer', tradeGrades })
+  expect(reads.pending).toHaveBeenCalledWith('selected-league', 'viewer', expect.objectContaining({ onGrade: expect.any(Function) }))
+  expect(tradeGrades).toEqual([{ letters: ['B', 'C-'], summary: 'AllFantasy grades the offer from Rival: B for you, C- for Rival.' }])
+})

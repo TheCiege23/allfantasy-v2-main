@@ -3,7 +3,7 @@ import LegalPageRenderer, { legalLastUpdated } from "@/components/legal/LegalPag
 import { getSignupReturnUrl } from "@/lib/legal/LegalRouteResolver"
 
 interface MissionPageProps {
-  searchParams?: Promise<{ from?: string; next?: string }> | { from?: string; next?: string }
+  searchParams?: Promise<Promise<{ from?: string; next?: string }> | { from?: string; next?: string }>
 }
 
 export const metadata = {
@@ -12,7 +12,8 @@ export const metadata = {
     "AllFantasy's mission: commissioner-first, AI-powered fantasy sports tools for every league, season, and sport — designed without gambling.",
 }
 
-export default async function MissionPage({ searchParams }: MissionPageProps) {
+export default async function MissionPage(props: MissionPageProps) {
+  const searchParams = await props.searchParams
   const params = searchParams instanceof Promise ? await searchParams : searchParams ?? {}
   const fromSignup = params.from === "signup"
   const next = typeof params.next === "string" ? params.next : undefined

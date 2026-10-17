@@ -1,3 +1,5 @@
+import { completeSeasonDraft } from '@/lib/tournament/seasonDraftCompletion'
+import { isSeasonTournamentDraft, SEASON_DRAFT_MUTATION_BLOCKED } from '@/lib/tournament/seasonDraftMutationGate'
 ﻿/**
  * Post-draft artifacts after DraftSession is marked completed: roster materialization + persisted grades.
  * Kept separate from DraftSessionService to avoid circular imports with ranking/draft-grade code.
@@ -36,6 +38,7 @@ function prunePostDraftArtifactThrottle() {
  *   waivers, trades, scoring, and lineup tools see the drafted roster.
  */
 export async function runPostDraftFinalizationArtifacts(leagueId: string): Promise<void> {
+  if (await isSeasonTournamentDraft(leagueId)) return
   const { finalizeRosterAssignments } = await import('@/lib/live-draft-engine/RosterAssignmentService')
   await finalizeRosterAssignments(leagueId)
 
@@ -70,8 +73,20 @@ export async function runPostDraftFinalizationArtifacts(leagueId: string): Promi
        * Non-fatal: the draft is already finalized and the rosters already
        * materialized by this point. A commissioner can still create the season
        * by hand, exactly as before.
-       */
+      */
       if (summary.seasonId) {
+        try {
+          const { ensureNativeTournamentEntries } = await import('@/lib/bestball/nativeTournament')
+          await ensureNativeTournamentEntries(leagueId, summary.seasonId)
+        } catch (tournamentErr) {
+          // A tournament failure must not prevent another league format's season from starting.
+          // Tournament entry creation is retry-safe and the scoring worker retries open contests.
+          console.error('[postDraftFinalizeArtifacts] tournament entry ensure failed', {
+            leagueId,
+            error: tournamentErr instanceof Error ? tournamentErr.message : String(tournamentErr),
+          })
+        }
+
         try {
           const { ensureGuillotineSeason } = await import('@/lib/guillotine/ensureGuillotineSeason')
           const guillotine = await ensureGuillotineSeason({
@@ -121,6 +136,14 @@ export async function runPostDraftFinalizationArtifacts(leagueId: string): Promi
     })
   }
 
+  // Await Survivor setup here so the completion repair/poll path can retry it too.
+  // Transaction failures propagate to the throttle; rule/ownership blockers are persisted for the commissioner.
+  const { runSurvivorPostDraftBootstrap } = await import('@/lib/survivor/SurvivorDraftBootstrapService')
+  const survivor = await runSurvivorPostDraftBootstrap(leagueId, { canonicalOnly: true })
+  if (survivor.setupComplete === false) {
+    console.warn('[postDraftFinalizeArtifacts] Survivor setup needs attention', { leagueId, warnings: survivor.warnings })
+  }
+
   const { computeAndPersistDraftRankings } = await import('@/lib/post-draft-manager-ranking')
   await computeAndPersistDraftRankings(leagueId)
 }
@@ -161,6 +184,8 @@ export async function syncPostDraftArtifactsIfCompletedThrottled(leagueId: strin
  * Calls `completeDraftSession` which is idempotent when already completed.
  */
 export async function repairDraftCompletionIfBoardFull(leagueId: string): Promise<boolean> {
+  const seasonCompleted = await completeSeasonDraft(leagueId)
+  if (seasonCompleted !== null) return seasonCompleted
   const session = await prisma.draftSession.findFirst({
     where: { leagueId },
     orderBy: CURRENT_DRAFT_SESSION_ORDER,

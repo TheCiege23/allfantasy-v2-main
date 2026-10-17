@@ -1,3 +1,4 @@
+import { getServedOrigin } from '@/lib/http/served-origin'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -10,9 +11,9 @@ import { resolveUserCareerTier } from '@/lib/ranking/tier-visibility'
 export const dynamic = 'force-dynamic'
 
 function getBaseUrl(req: Request): string {
-  const host = req.headers.get('x-forwarded-host') || req.headers.get('host') || 'localhost:3000'
-  const proto = req.headers.get('x-forwarded-proto') || 'http'
-  return `${proto}://${host}`
+  // Config-derived, never the Host / X-Forwarded-Host header, which the caller
+  // controls — see lib/http/served-origin.ts.
+  return getServedOrigin(req)
 }
 
 export async function GET(

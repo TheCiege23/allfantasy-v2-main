@@ -4,8 +4,18 @@ import { getRedisConnection, isRedisConfigured } from "@/lib/queues/bullmq";
 import { prisma } from "@/lib/prisma";
 import { toPrismaJsonInput } from "@/lib/prisma-json";
 
+/*
+ * 🛑 THERE IS NO "psychology" JOB ANY MORE. It existed only to POST one roster to
+ * `/api/rankings/manager-psychology` and hand back an archetype, trait scores, a blind
+ * spot and a negotiation style — a characterisation LABEL of a named manager — which the
+ * power-rankings page rendered on any team a viewer expanded, and which the job also
+ * wrote to `League.settings.psychologyCache`. Milestone 32 shows those labels to nobody,
+ * and that route has answered 410 since `dcaaa6946`, so the job had become a paid
+ * `league-v2` fetch followed by a guaranteed failure. A stale "psychology" job still
+ * sitting in Redis hits the `default` below and fails before any fetch or write.
+ */
 export type PowerRankingsJobData = {
-  jobType: "refresh-rankings" | "psychology" | "dynasty-roadmap";
+  jobType: "refresh-rankings" | "dynasty-roadmap";
   leagueId: string;
   rosterId?: number;
   managerName?: string;
@@ -18,7 +28,6 @@ type PowerRankingsJobResult = {
   leagueId: string;
   processedAt: string;
   rankings?: unknown;
-  psychology?: unknown;
   roadmap?: unknown;
 };
 
@@ -178,7 +187,7 @@ function buildRoadmapRequest(team: RankingsTeamApi, rankings: RankingsApi) {
 async function processPowerRankingsJob(
   job: Job<PowerRankingsJobData, PowerRankingsJobResult>
 ): Promise<PowerRankingsJobResult> {
-  const { jobType, leagueId, rosterId, managerName } = job.data;
+  const { jobType, leagueId, rosterId } = job.data;
   const baseUrl = normalizeBaseUrl(job.data.baseUrl);
 
   switch (jobType) {
@@ -223,61 +232,6 @@ async function processPowerRankingsJob(
         jobType,
         leagueId,
         rankings,
-        processedAt: new Date().toISOString(),
-      };
-    }
-
-    case "psychology": {
-      if (rosterId == null) {
-        throw new Error("rosterId required for psychology jobs");
-      }
-
-      await job.updateProgress(20);
-
-      const rankings = await fetchJson<RankingsApi>(
-        `${baseUrl}/api/rankings/league-v2?leagueId=${encodeURIComponent(leagueId)}`
-      );
-      const team = rankings.teams.find((entry) => entry.rosterId === rosterId);
-
-      if (!team) {
-        throw new Error("Requested roster was not found in rankings data");
-      }
-
-      const psychology = await fetchJson<unknown>(
-        `${baseUrl}/api/rankings/manager-psychology`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            leagueId,
-            rosterId,
-            username: team.username ?? managerName ?? undefined,
-            teamData: team,
-          }),
-        }
-      );
-
-      await job.updateProgress(80);
-
-      await updateLeagueSettings(leagueId, (settings) => {
-        const psychologyCache = asObject(settings.psychologyCache);
-        return {
-          ...settings,
-          psychologyCache: {
-            ...psychologyCache,
-            [String(rosterId)]: psychology,
-          },
-          psychologyCachedAt: new Date().toISOString(),
-        };
-      });
-
-      await job.updateProgress(100);
-
-      return {
-        ok: true,
-        jobType,
-        leagueId,
-        psychology,
         processedAt: new Date().toISOString(),
       };
     }
@@ -332,6 +286,15 @@ async function processPowerRankingsJob(
         roadmap,
         processedAt: new Date().toISOString(),
       };
+    }
+
+    default: {
+      // A retired type ("psychology") or anything unknown. Without this a stale job would
+      // fall out of the switch and COMPLETE with an undefined result — read by the page as
+      // success. Fail before any fetch or League.settings write instead.
+      throw new Error(
+        `Unsupported power-rankings job type: ${String((job.data as { jobType?: unknown }).jobType)}`
+      );
     }
   }
 }

@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+import { loadRiSeasonRowsForName } from '@/lib/player-comparison-lab/riSeasonRowsByName'
 import { normalizeToSupportedSport, isSupportedSport } from '@/lib/sport-scope'
 
 export const dynamic = 'force-dynamic'
 
 /**
- * GET /api/players/season-stats?name=&sport=
+ * GET /api/players/season-stats?name=&sport=[&position=&team=]
  *
  * Real per-player season box-score totals from `player_season_stats`
  * (source: rolling_insights) -- the same table + name-matching pattern
@@ -20,6 +20,13 @@ export const dynamic = 'force-dynamic'
  * receiving_yards, rushing_touchdowns, receiving_touchdowns,
  * passing_yards, passing_touchdowns, interceptions) so a real Rec/Yds/
  * TD/Tgt/PPG grid can be shown without fabricating numbers.
+ *
+ * 🛑 A NAME CAN BE SEVERAL PLAYERS (2026-10-11): 38 NFL names map to 79 RI ids,
+ * and this route used to return all of them interleaved by season (Byron Young
+ * LB/LAR and DT/PHI as one career). Rows now bind to ONE RI id via
+ * `loadRiSeasonRowsForName`; a shared name needs `position` and/or `team` to
+ * say which player, and without them the answer is `ambiguous: true` with no
+ * seasons — never someone else's.
  */
 
 type StatsJson = Record<string, number | null | undefined>
@@ -46,14 +53,15 @@ export async function GET(req: Request) {
   const sport = normalizeToSupportedSport(sportRaw)
 
   try {
-    const rows = await prisma.playerSeasonStats.findMany({
-      where: { sport, playerName: { equals: name, mode: 'insensitive' }, source: 'rolling_insights' },
-      orderBy: { season: 'desc' },
-      take: 5,
-      select: { season: true, position: true, team: true, gamesPlayed: true, fantasyPoints: true, fantasyPointsPerGame: true, stats: true },
+    const resolved = await loadRiSeasonRowsForName({
+      name,
+      sport,
+      position: url.searchParams.get('position')?.trim() || null,
+      team: url.searchParams.get('team')?.trim() || null,
+      limit: 5,
     })
 
-    const seasons = rows.map((row) => {
+    const seasons = resolved.rows.map((row) => {
       const stats = (row.stats as StatsJson) ?? {}
       return {
         season: row.season,
@@ -75,7 +83,7 @@ export async function GET(req: Request) {
       }
     })
 
-    return NextResponse.json({ name, sport, seasons })
+    return NextResponse.json({ name, sport, seasons, ambiguous: resolved.resolution === 'ambiguous' })
   } catch (error) {
     console.error('[players/season-stats]', error)
     return NextResponse.json({ error: 'Failed to load season stats' }, { status: 500 })

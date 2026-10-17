@@ -27,12 +27,38 @@ describe("commissioner-os — Manager Intelligence client parity", () => {
 })
 
 describe("commissioner-os — Manager Intelligence view", () => {
-  it("renders every manager's name and archetype from demo data", async () => {
+  it("renders every manager's name from demo data", async () => {
     const response = await demoManagerIntelligenceClient.getManagerDirectory()
     render(<ManagerIntelligenceView managers={response.data!} dataMode="demo" />)
     for (const manager of response.data!) {
       expect(screen.getByText(manager.managerName)).toBeInTheDocument()
-      expect(screen.getByText(manager.archetype)).toBeInTheDocument()
+    }
+  })
+
+  /*
+   * Milestone 32: a characterisation label of a named manager is shown to NOBODY, commissioners
+   * included. The card used to render `manager.archetype` as a badge ("Active Trader", "Quiet
+   * Participant"…). Fixtures and the live client no longer carry one; this pins the VIEW too, by
+   * handing it a profile that still does (an older payload) and checking it is not drawn.
+   */
+  it("never renders a manager archetype label, even when a payload still carries one", async () => {
+    const response = await demoManagerIntelligenceClient.getManagerDirectory()
+    const withLegacyLabels = response.data!.map((m, i) => ({
+      ...m,
+      archetype: ["Active Trader", "Quiet Participant", "Steady Operator", "Connector"][i % 4],
+    }))
+    const { container } = render(<ManagerIntelligenceView managers={withLegacyLabels as never} dataMode="demo" />)
+    // Positive control: the cards rendered, with their facts.
+    expect(screen.getByText(response.data![0].managerName)).toBeInTheDocument()
+    expect(screen.getAllByText(/Reliability:/).length).toBeGreaterThan(0)
+    expect(container.textContent).not.toMatch(/Active Trader|Quiet Participant|Steady Operator|Connector/)
+  })
+
+  it("the demo and stub fixtures carry no archetype", async () => {
+    for (const client of [demoManagerIntelligenceClient, stubManagerIntelligenceClient]) {
+      const response = await client.getManagerDirectory()
+      expect(response.data!.length).toBeGreaterThan(0)
+      for (const m of response.data!) expect(m).not.toHaveProperty("archetype")
     }
   })
 

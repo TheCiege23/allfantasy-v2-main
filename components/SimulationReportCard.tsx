@@ -80,7 +80,7 @@ export default function SimulationReportCard({ result }: { result: SimulationRes
             {result.iterations.toLocaleString()} simulations ran
           </div>
           <div className="flex items-center gap-2 mt-1">
-            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${riskStyle}`}>
+            <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${riskStyle}`}>
               {result.riskProfile.level.toUpperCase()} RISK
             </span>
           </div>
@@ -90,17 +90,17 @@ export default function SimulationReportCard({ result }: { result: SimulationRes
       <div className="px-4 pb-3 grid grid-cols-3 gap-2">
         {result.distribution.bestCase && (
           <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-center">
-            <div className="text-[10px] text-emerald-300/60 uppercase">Best</div>
+            <div className="text-[11px] text-emerald-300/60 uppercase">Best</div>
             <div className="text-xs font-bold text-emerald-400">{result.distribution.bestCase}</div>
           </div>
         )}
         <div className="p-2 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-center">
-          <div className="text-[10px] text-cyan-300/60 uppercase">Expected</div>
+          <div className="text-[11px] text-cyan-300/60 uppercase">Expected</div>
           <div className="text-xs font-bold text-cyan-400">{result.distribution.expectedCase}</div>
         </div>
         {result.distribution.worstCase && (
           <div className="p-2 rounded-lg bg-red-500/10 border border-red-500/20 text-center">
-            <div className="text-[10px] text-red-300/60 uppercase">Worst</div>
+            <div className="text-[11px] text-red-300/60 uppercase">Worst</div>
             <div className="text-xs font-bold text-red-400">{result.distribution.worstCase}</div>
           </div>
         )}
@@ -144,7 +144,7 @@ export default function SimulationReportCard({ result }: { result: SimulationRes
               <div className="text-xs font-semibold text-white/60 mb-1">Risk Factors</div>
               <div className="flex flex-wrap gap-1">
                 {result.riskProfile.factors.map((factor, i) => (
-                  <span key={i} className="px-2 py-0.5 rounded text-[10px] bg-orange-500/10 text-orange-300 border border-orange-500/20">
+                  <span key={i} className="px-2 py-0.5 rounded text-[11px] bg-orange-500/10 text-orange-300 border border-orange-500/20">
                     {factor}
                   </span>
                 ))}

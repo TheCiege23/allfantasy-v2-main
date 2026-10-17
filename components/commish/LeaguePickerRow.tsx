@@ -57,7 +57,7 @@ export default function LeaguePickerRow({
             {league.subtitle} — chat lives there
           </span>
         </span>
-        <span className="shrink-0 rounded-md border border-white/15 px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-[0.1em] text-white/45">
+        <span className="shrink-0 rounded-md border border-white/15 px-2 py-1 font-mono text-[11px] font-bold uppercase tracking-[0.1em] text-white/45">
           Read-only
         </span>
       </div>

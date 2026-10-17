@@ -1,0 +1,158 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 240 300" width="240" height="300">
+  <defs>
+    <radialGradient id="revote-aura" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#e879f9" stop-opacity="0.5"/>
+      <stop offset="0.5" stop-color="#c026d3" stop-opacity="0.16"/>
+      <stop offset="1" stop-color="#701a75" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="revote-shadow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#000" stop-opacity="0.75"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="revote-wood" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#c88a52"/>
+      <stop offset="0.4" stop-color="#8c5428"/>
+      <stop offset="0.8" stop-color="#4f2a10"/>
+      <stop offset="1" stop-color="#2a1406"/>
+    </linearGradient>
+    <linearGradient id="revote-post" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#d49a62"/>
+      <stop offset="0.45" stop-color="#8c5428"/>
+      <stop offset="1" stop-color="#341a08"/>
+    </linearGradient>
+    <linearGradient id="revote-sand" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fdf4ff"/>
+      <stop offset="0.35" stop-color="#f0abfc"/>
+      <stop offset="1" stop-color="#c026d3"/>
+    </linearGradient>
+    <linearGradient id="revote-glass" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#fae8ff" stop-opacity="0.32"/>
+      <stop offset="0.5" stop-color="#e879f9" stop-opacity="0.08"/>
+      <stop offset="1" stop-color="#701a75" stop-opacity="0.3"/>
+    </linearGradient>
+    <linearGradient id="revote-paper" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff8e8"/>
+      <stop offset="0.6" stop-color="#e3cfa4"/>
+      <stop offset="1" stop-color="#9c8158"/>
+    </linearGradient>
+    <radialGradient id="revote-eye" cx="0.45" cy="0.4" r="0.6">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.4" stop-color="#f5d0fe"/>
+      <stop offset="1" stop-color="#c026d3"/>
+    </radialGradient>
+    <filter id="revote-blur10" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="10"/></filter>
+    <filter id="revote-blur3" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="3"/></filter>
+    <filter id="revote-blur2" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2"/></filter>
+    <filter id="revote-grain" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.03 0.35" numOctaves="3" seed="8" result="n"/>
+      <feColorMatrix in="n" type="matrix" values="0 0 0 0 0.12  0 0 0 0 0.05  0 0 0 0 0.01  -2.6 0 0 0 1.45" result="d"/>
+      <feComposite in="d" in2="SourceAlpha" operator="in"/>
+    </filter>
+    <path id="revote-glasspath" d="M80,68 L160,68 C162,108 142,130 126,146 C142,162 162,184 160,226 L80,226 C78,184 98,162 114,146 C98,130 78,108 80,68 Z"/>
+    <path id="revote-cap" d="M54,0 L186,0 Q198,0 198,10 L198,26 Q198,36 186,36 L54,36 Q42,36 42,26 L42,10 Q42,0 54,0 Z"/>
+    <path id="revote-postpath" d="M-6,0 L6,0 L5,26 Q11,34 5,42 L4,66 Q12,78 4,90 L5,114 Q11,122 5,130 L6,156 L-6,156 L-5,130 Q-11,122 -5,114 L-4,90 Q-12,78 -4,66 L-5,42 Q-11,34 -5,26 Z"/>
+    <g id="revote-scroll">
+      <rect x="-24" y="-7" width="48" height="14" rx="7" fill="url(#revote-paper)" stroke="#120c06" stroke-width="2.6"/>
+      <ellipse cx="22" cy="0" rx="3.5" ry="6" fill="#d8c08f" stroke="#120c06" stroke-width="1.8"/>
+      <path d="M20,-1 Q22,-3 23,0" stroke="#7a6038" stroke-width="1" fill="none"/>
+      <path d="M-20,-3.5 L16,-3.5" stroke="#ffffff" stroke-width="1.4" opacity="0.8"/>
+      <path d="M-4,-8 L-4,8 M1,-8 L1,8" stroke="#120c06" stroke-width="3.6"/>
+      <path d="M-4,-8 L-4,8 M1,-8 L1,8" stroke="#e879f9" stroke-width="2"/>
+    </g>
+  </defs>
+
+  <!-- aura -->
+  <ellipse cx="120" cy="146" rx="114" ry="130" fill="url(#revote-aura)"/>
+  <ellipse cx="120" cy="150" rx="46" ry="80" fill="#e879f9" opacity="0.32" filter="url(#revote-blur10)"/>
+  <!-- contact shadow -->
+  <ellipse cx="120" cy="270" rx="80" ry="9" fill="url(#revote-shadow)"/>
+
+  <!-- back post (center) -->
+  <g transform="translate(120,66)">
+    <use xlink:href="#revote-postpath" fill="#3a1d0a" stroke="#120c06" stroke-width="2.6"/>
+  </g>
+
+  <!-- glass -->
+  <use xlink:href="#revote-glasspath" fill="#2a0a2e" opacity="0.55"/>
+  <!-- top sand -->
+  <path d="M86,108 Q120,98 154,108 C150,122 138,134 125,145 L115,145 C102,134 90,122 86,108 Z" fill="#e879f9" opacity="0.7" filter="url(#revote-blur3)"/>
+  <path d="M86,108 Q120,98 154,108 C150,122 138,134 125,145 L115,145 C102,134 90,122 86,108 Z" fill="url(#revote-sand)"/>
+  <path d="M92,109 Q120,101 148,109" stroke="#fdf4ff" stroke-width="1.6" fill="none"/>
+  <path d="M120,104 L117,108 L120,113 L123,108 Z" fill="#fdf4ff" opacity="0.7"/>
+  <!-- falling stream -->
+  <path d="M120,144 L120,196" stroke="#e879f9" stroke-width="7" filter="url(#revote-blur3)"/>
+  <path d="M120,144 L120,196" stroke="#f5d0fe" stroke-width="2.4"/>
+  <circle cx="117" cy="166" r="1.2" fill="#fdf4ff"/><circle cx="123" cy="178" r="1.1" fill="#fdf4ff"/><circle cx="118" cy="188" r="1" fill="#fdf4ff"/>
+  <!-- bottom sand pile -->
+  <path d="M83,224 C88,210 104,198 120,195 C136,198 152,210 157,224 Z" fill="#e879f9" opacity="0.7" filter="url(#revote-blur3)"/>
+  <path d="M83,225 C88,210 104,198 120,195 C136,198 152,210 157,225 Z" fill="url(#revote-sand)"/>
+  <path d="M96,210 C104,202 112,198 120,197" stroke="#fdf4ff" stroke-width="1.6" fill="none"/>
+  <!-- glass body -->
+  <use xlink:href="#revote-glasspath" fill="url(#revote-glass)" stroke="#120c06" stroke-width="3.4" stroke-linejoin="round"/>
+  <path d="M86,74 C86,104 100,124 112,138" stroke="#ffffff" stroke-width="2.4" fill="none" opacity="0.75" stroke-linecap="round"/>
+  <path d="M112,154 C100,166 88,184 86,216" stroke="#ffffff" stroke-width="2" fill="none" opacity="0.55" stroke-linecap="round"/>
+  <path d="M154,80 C153,100 145,116 134,128" stroke="#f5d0fe" stroke-width="1.4" fill="none" opacity="0.6" stroke-linecap="round"/>
+
+  <!-- front posts -->
+  <g transform="translate(64,66)">
+    <use xlink:href="#revote-postpath" fill="url(#revote-post)" stroke="#120c06" stroke-width="3" stroke-linejoin="round"/>
+    <path d="M-3,4 L-3,150" stroke="#f0c08c" stroke-width="1.3" opacity="0.7"/>
+  </g>
+  <g transform="translate(176,66)">
+    <use xlink:href="#revote-postpath" fill="url(#revote-post)" stroke="#120c06" stroke-width="3" stroke-linejoin="round"/>
+    <path d="M-3,4 L-3,150" stroke="#f0c08c" stroke-width="1.3" opacity="0.5"/>
+    <path d="M5,4 L5,150" stroke="#f5d0fe" stroke-width="1.4" opacity="0.6"/>
+  </g>
+
+  <!-- ballot rolls tucked into the frame -->
+  <g transform="translate(58,186) rotate(-62)"><use xlink:href="#revote-scroll"/></g>
+  <g transform="translate(182,108) rotate(-62)"><use xlink:href="#revote-scroll"/></g>
+
+  <!-- top cap -->
+  <g transform="translate(0,32)">
+    <use xlink:href="#revote-cap" fill="url(#revote-wood)" stroke="#120c06" stroke-width="3.4" stroke-linejoin="round"/>
+    <use xlink:href="#revote-cap" fill="#000" filter="url(#revote-grain)" opacity="0.6"/>
+    <path d="M50,3 L186,3" stroke="#f0b47c" stroke-width="1.8" opacity="0.8" stroke-linecap="round"/>
+    <path d="M196,8 L196,28" stroke="#f5d0fe" stroke-width="2" opacity="0.7" stroke-linecap="round"/>
+    <!-- side chevrons -->
+    <path d="M50,12 L58,18 L50,24 M190,12 L182,18 L190,24" stroke="#2a1406" stroke-width="2.2" fill="none"/>
+    <!-- face -->
+    <path d="M70,10 Q90,4 114,12 L126,12 Q150,4 170,10 L169,15 Q150,10 126,17 L114,17 Q90,10 71,15 Z" fill="#c88a52" stroke="#120c06" stroke-width="1.8" stroke-linejoin="round"/>
+    <ellipse cx="93" cy="21" rx="11" ry="5.6" fill="#1a0a04"/>
+    <ellipse cx="147" cy="21" rx="11" ry="5.6" fill="#1a0a04"/>
+    <ellipse cx="93" cy="21" rx="9" ry="4.4" fill="#e879f9" filter="url(#revote-blur2)"/>
+    <ellipse cx="147" cy="21" rx="9" ry="4.4" fill="#e879f9" filter="url(#revote-blur2)"/>
+    <ellipse cx="93" cy="21" rx="6" ry="3.2" fill="url(#revote-eye)"/>
+    <ellipse cx="147" cy="21" rx="6" ry="3.2" fill="url(#revote-eye)"/>
+    <path d="M115,15 L125,15 L128,28 L112,28 Z" fill="#8c5428" stroke="#120c06" stroke-width="1.6" stroke-linejoin="round"/>
+    <path d="M100,30 L140,30" stroke="#1a0a04" stroke-width="2.4" stroke-linecap="round"/>
+  </g>
+  <!-- top finial -->
+  <path d="M104,32 L108,22 Q120,16 132,22 L136,32 Z" fill="url(#revote-wood)" stroke="#120c06" stroke-width="3" stroke-linejoin="round"/>
+  <circle cx="120" cy="25" r="3.6" fill="url(#revote-eye)" stroke="#120c06" stroke-width="1.5"/>
+
+  <!-- bottom cap -->
+  <g transform="translate(0,222)">
+    <use xlink:href="#revote-cap" fill="url(#revote-wood)" stroke="#120c06" stroke-width="3.4" stroke-linejoin="round"/>
+    <use xlink:href="#revote-cap" fill="#000" filter="url(#revote-grain)" opacity="0.6"/>
+    <path d="M50,3 L186,3" stroke="#f0b47c" stroke-width="1.8" opacity="0.8" stroke-linecap="round"/>
+    <path d="M196,8 L196,28" stroke="#f5d0fe" stroke-width="2" opacity="0.7" stroke-linecap="round"/>
+    <path d="M50,12 L58,18 L50,24 M190,12 L182,18 L190,24" stroke="#2a1406" stroke-width="2.2" fill="none"/>
+    <path d="M70,10 Q90,4 114,12 L126,12 Q150,4 170,10 L169,15 Q150,10 126,17 L114,17 Q90,10 71,15 Z" fill="#c88a52" stroke="#120c06" stroke-width="1.8" stroke-linejoin="round"/>
+    <ellipse cx="93" cy="21" rx="11" ry="5.6" fill="#1a0a04"/>
+    <ellipse cx="147" cy="21" rx="11" ry="5.6" fill="#1a0a04"/>
+    <ellipse cx="93" cy="21" rx="9" ry="4.4" fill="#e879f9" filter="url(#revote-blur2)"/>
+    <ellipse cx="147" cy="21" rx="9" ry="4.4" fill="#e879f9" filter="url(#revote-blur2)"/>
+    <ellipse cx="93" cy="21" rx="6" ry="3.2" fill="url(#revote-eye)"/>
+    <ellipse cx="147" cy="21" rx="6" ry="3.2" fill="url(#revote-eye)"/>
+    <path d="M115,15 L125,15 L128,26 L112,26 Z" fill="#8c5428" stroke="#120c06" stroke-width="1.6" stroke-linejoin="round"/>
+    <path d="M98,28 Q120,34 142,28 L140,33 Q120,37 100,33 Z" fill="#1a0a04"/>
+    <path d="M106,29.5 L106,33 M114,30.5 L114,34.5 M126,30.5 L126,34.5 M134,29.5 L134,33" stroke="#e8d7b8" stroke-width="1.6"/>
+  </g>
+  <!-- feet -->
+  <path d="M52,258 L70,258 L68,266 L54,266 Z M170,258 L188,258 L186,266 L172,266 Z" fill="url(#revote-wood)" stroke="#120c06" stroke-width="2.6" stroke-linejoin="round"/>
+
+  <!-- sparkles -->
+  <path d="M206,152 L208,158 L214,160 L208,162 L206,168 L204,162 L198,160 L204,158 Z" fill="#f5d0fe"/>
+  <path d="M32,96 L33,99 L36,100 L33,101 L32,104 L31,101 L28,100 L31,99 Z" fill="#e879f9"/>
+</svg>

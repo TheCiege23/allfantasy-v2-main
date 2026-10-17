@@ -27,6 +27,17 @@ const ROUTE = fs.readFileSync(
 const idx = (needle: string) => ROUTE.indexOf(needle)
 
 /*
+ * The prompt moved out of the route (2026-10-11) so `@chimmy` in league chat and DMs runs the SAME
+ * tool loop with the SAME instructions. Its shape is asserted where it now lives; the route is still
+ * asserted to hand it to the loop.
+ */
+const PROMPT_SRC = fs.readFileSync(
+  path.join(process.cwd(), 'lib', 'chimmy', 'tools', 'toolLoopSystemPrompt.ts'),
+  'utf8',
+)
+const promptIdx = (needle: string) => PROMPT_SRC.indexOf(needle)
+
+/*
  * The guard, not the import. `indexOf('runChimmyToolLoop')` finds the import at
  * the top of the file, which would make every "block between the loop and PECR"
  * assertion span the whole spend-error section instead.
@@ -289,10 +300,11 @@ describe('tool loop system prompt', () => {
    * only the fallback used to see, now reach the path that answers first.
    */
   it('speaks in the shared Chimmy voice and hands the loop the user\'s saved style', () => {
-    const start = idx('const CHIMMY_TOOL_LOOP_SYSTEM_PROMPT')
-    expect(ROUTE.slice(start, start + 80)).toMatch(/const CHIMMY_TOOL_LOOP_SYSTEM_PROMPT = \[\s*\n\s*CHIMMY_IDENTITY,/)
-    expect(ROUTE).toMatch(/\]\.join\(' '\) \+[\s\S]{0,900}?'\\n\\n' \+\s*\n\s*getChimmyPromptStyleBlock\(\)/)
+    const start = promptIdx('const CHIMMY_TOOL_LOOP_SYSTEM_PROMPT')
+    expect(PROMPT_SRC.slice(start, start + 80)).toMatch(/const CHIMMY_TOOL_LOOP_SYSTEM_PROMPT = \[\s*\n\s*CHIMMY_IDENTITY,/)
+    expect(PROMPT_SRC).toMatch(/\]\.join\(' '\) \+[\s\S]{0,900}?'\\n\\n' \+\s*\n\s*getChimmyPromptStyleBlock\(\)/)
     expect(ROUTE).not.toContain('the calm, analytical fantasy sports assistant')
+    expect(PROMPT_SRC).not.toContain('the calm, analytical fantasy sports assistant')
     expect(ROUTE).toMatch(/systemPrompt: CHIMMY_TOOL_LOOP_SYSTEM_PROMPT,[\s\S]{0,1200}?clockLine: userTemporalContext\.promptLine,[\s\S]{0,900}?styleLine: \[\s*\n\s*personalizationDirectives,/)
     expect(ROUTE).toContain('groundingLine: decisionOsGrounding && leagueSnapshot')
   })
@@ -302,12 +314,58 @@ describe('tool loop system prompt', () => {
    * picks?" is answered from graded calls — and the start/sit calls the loop makes are collected and
    * recorded, so the record grows from chat and not only from the comparison screen.
    */
+  /*
+   * Answer polish (2026-09-28): the chip, the bid card and the supersede keys come from what the
+   * tools computed — the LAST bid plan in the context and the recorded tool runs — and the lines that
+   * build them never read the answer text. The behaviour is pinned in __tests__/chimmy/answer-polish*.
+   */
+  it('hands the chat the answer polish from the tools\' own results, never from the prose', () => {
+    const start = ROUTE.indexOf('const lastFaabPlan')
+    const end = ROUTE.indexOf('const loopAnswerKeys')
+    expect(start).toBeGreaterThan(-1)
+    expect(end).toBeGreaterThan(start)
+    const polish = ROUTE.slice(start, ROUTE.indexOf('\n', end))
+    expect(polish).toContain('toolContext.faabPlans[toolContext.faabPlans.length - 1]')
+    expect(polish).toContain('faabCardFromPlan(lastFaabPlan.plan, lastFaabPlan.leagueId)')
+    expect(polish).toContain('faabPlanVerdict(lastFaabPlan.plan)')
+    expect(polish).toContain('answerKeysFrom(toolContext.toolRuns)')
+    /* SAFE / OUT (2026-09-28): the last settle verdict in the context, for the league the answer reports. */
+    expect(polish).toContain('toolContext.eliminationSettles[toolContext.eliminationSettles.length - 1]')
+    expect(polish).toContain('eliminationSettleVerdict(lastSettle.settle)')
+    expect(polish).not.toMatch(/loopText|loop\.text|\.response\b/)
+    /* The response meta is built once as `loopMeta` — the history row reads it — and returned as-is. */
+    const metaAt = ROUTE.indexOf('const loopMeta = {')
+    expect(metaAt).toBeGreaterThan(start)
+    const meta = ROUTE.slice(metaAt, ROUTE.indexOf("source: 'chimmy_tool_loop'", metaAt))
+    expect(meta).toMatch(/\.\.\.\(loopVerdict \? \{ verdict: loopVerdict \} : \{\}\)/)
+    expect(meta).toMatch(/\.\.\.\(loopFaabCard \? \{ faabPlan: loopFaabCard \} : \{\}\)/)
+    expect(meta).toMatch(/\.\.\.\(loopAnswerKeys\.length > 0 \? \{ answerKeys: loopAnswerKeys \} : \{\}\)/)
+    expect(ROUTE.slice(ROUTE.indexOf("source: 'chimmy_tool_loop'", metaAt), ROUTE.indexOf("source: 'chimmy_tool_loop'", metaAt) + 80)).toMatch(/meta: loopMeta,/)
+  })
+
+  /*
+   * Tool-loop answers reach `chat_history` (2026-09-28) — AFTER the settlement that decides the
+   * refund, so the write only ever reads what was charged. Behaviour: __tests__/chimmy/tool-loop-history.test.ts.
+   */
+  it('writes both halves to chat history after the charge is settled, before the answer returns', () => {
+    const settled = BLOCK.indexOf('const settlement = await settleUndeliveredChimmyAnswer')
+    const written = BLOCK.indexOf("appendChatHistory({ conversationId, role: 'assistant', content: loopText")
+    const returned = BLOCK.indexOf("source: 'chimmy_tool_loop'")
+    expect(settled).toBeGreaterThan(-1)
+    expect(written).toBeGreaterThan(settled)
+    expect(returned).toBeGreaterThan(written)
+    expect(BLOCK).toContain("appendChatHistory({ conversationId, role: 'user', content: message || '[image-only request]'")
+  })
+
   it('hands the loop its graded track record, and records the start/sit calls the answer made', () => {
     expect(ROUTE).toMatch(
       /styleLine: \[\s*\n\s*personalizationDirectives,\s*\n\s*renderTrackRecordPromptLine\(chimmyTrackRecordFor\(await readAdviceLearningSnapshot\(\), userId \?\? null\)\),/,
     )
     /* `actionCards` (2026-09-25) collects the confirm cards the propose tools build; see below. */
-    expect(ROUTE).toMatch(/const toolContext = \{ leagueId: leagueSnapshot\?\.id \?\? null, userId: userId \?\? null, startCalls: \[\] as ChatStartCall\[\], actionCards: \[\] as ChimmyActionCard\[\] \}/)
+    /* `tradeGrades` (2026-09-27) collects the letters the one trade engine gave, for the answer check. */
+    /* `faabPlans` / `toolRuns` (2026-09-28) feed the answer polish: bid card, chip, "Newer answer below". */
+    /* `eliminationSettles` (2026-09-28) feeds the SAFE / OUT chip from a decided guillotine week. */
+    expect(ROUTE).toMatch(/const toolContext = \{ leagueId: leagueSnapshot\?\.id \?\? null, userId: userId \?\? null, startCalls: \[\] as ChatStartCall\[\], actionCards: \[\] as ChimmyActionCard\[\], tradeGrades: \[\] as ChimmyTradeGrade\[\], faabPlans: \[\] as ChimmyFaabPlanRun\[\], toolRuns: \[\] as ChimmyToolRun\[\], eliminationSettles: \[\] as ChimmyEliminationSettleRun\[\] \}/)
     const record = idx('await recordChatStartSitAdvice({ userId, calls: toolContext.startCalls, answer: loopText })')
     expect(record).toBeGreaterThan(-1)
     /* Recorded before the answer is returned, against the text the user is about to see. */
@@ -320,9 +378,9 @@ describe('tool loop system prompt', () => {
    * context is there — so the do-not-invent rule has to travel with the tools.
    */
   it('carries the same refusal discipline as the push path', () => {
-    const start = idx('const CHIMMY_TOOL_LOOP_SYSTEM_PROMPT')
+    const start = promptIdx('const CHIMMY_TOOL_LOOP_SYSTEM_PROMPT')
     expect(start).toBeGreaterThan(-1)
-    const prompt = ROUTE.slice(start, start + 1200)
+    const prompt = PROMPT_SRC.slice(start, start + 1200)
 
     expect(prompt).toMatch(/NEVER invent/i)
     expect(prompt).toMatch(/no data/i)
@@ -331,8 +389,8 @@ describe('tool loop system prompt', () => {
 
   /* An empty live feed is "no games polled", not a scoreline of zero. */
   it('spells out the empty-feed trap', () => {
-    const start = idx('const CHIMMY_TOOL_LOOP_SYSTEM_PROMPT')
-    const prompt = ROUTE.slice(start, start + 1200)
+    const start = promptIdx('const CHIMMY_TOOL_LOOP_SYSTEM_PROMPT')
+    const prompt = PROMPT_SRC.slice(start, start + 1200)
     expect(prompt).toMatch(/NOT that nobody scored/i)
   })
 })

@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { assertLeagueMember } from '@/lib/league/league-access'
 import { commissionerLeagueFieldsFromRow } from '@/lib/league/commissioner-league-patch'
+import { clientLeagueSettings } from '@/lib/league/clientLeagueSettings'
 import { getLeagueRole } from '@/lib/league/permissions'
 import { executeLeagueSettingsPatch } from '@/lib/league/execute-league-settings-patch'
 import { getLeagueScoringConfig } from '@/lib/scoring-defaults/LeagueScoringConfigResolver'
@@ -74,7 +75,8 @@ export async function GET(req: NextRequest) {
     hasAfCommissionerSub: Boolean(commissionerEntitlement.hasAccess),
     canEdit,
     /** Raw `League.settings` JSON for commissioner merges (description, schedule prefs, etc.). */
-    settingsSnapshot: rawLeagueSettings && typeof rawLeagueSettings === 'object' ? rawLeagueSettings : {},
+    settingsSnapshot:
+      rawLeagueSettings && typeof rawLeagueSettings === 'object' ? clientLeagueSettings(rawLeagueSettings) : {},
     league: {
       id: league.id,
       name: league.name,

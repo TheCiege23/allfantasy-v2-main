@@ -257,3 +257,46 @@ describe('refusals', () => {
     expect(board.rows.every((r) => r.ownedBy.isMine === false)).toBe(true)
   })
 })
+
+/*
+ * A Fleaflicker/MFL/Fantrax/Yahoo roster id is a short number in Sleeper's range, and the player
+ * table here answers every id as a Sleeper id — exactly the collision: read raw, 'lb_target' on a
+ * Fleaflicker roster would be listed, priced and owned as Sleeper's 'lb_target'.
+ */
+describe('foreign roster ids', () => {
+  const leagueOn = (platform: string) =>
+    (prisma as any).league.findUnique.mockResolvedValueOnce({
+      id: 'L1',
+      settings: { roster_positions: ['QB', 'LB', 'LB', 'DL', 'DB', 'K'] },
+      leagueType: 'dynasty',
+      platform,
+    })
+
+  it('does not list, price or assign an owner to the Sleeper player who shares a Fleaflicker id', async () => {
+    leagueOn('fleaflicker')
+    const board = await loadLeagueDefenderBoard({ prisma, leagueId: 'L1', userId: 'me' })
+    expect(board.rows.map((r) => r.name)).not.toContain('Target Backer')
+    expect(board.rows).toEqual([])
+    expect(JSON.stringify(loadLeagueIdpVorp.mock.calls)).not.toContain('lb_target')
+  })
+
+  it('CONTROL: the same ids in a Sleeper league ARE listed', async () => {
+    leagueOn('sleeper')
+    const board = await loadLeagueDefenderBoard({ prisma, leagueId: 'L1', userId: 'me' })
+    expect(board.rows.map((r) => r.name)).toContain('Target Backer')
+  })
+
+  it('says the ids are unreadable, not that no roster carries a defender', async () => {
+    leagueOn('fleaflicker')
+    const board = await loadLeagueDefenderBoard({ prisma, leagueId: 'L1', userId: 'me' })
+    expect(board.state).toBe('ids_unreadable')
+  })
+
+  it('CONTROL: a Sleeper league whose rosters are genuinely empty still says no_rostered_defenders', async () => {
+    leagueOn('sleeper')
+    ROSTERS[0] = { platformUserId: 'u-me', playerData: [] }
+    ROSTERS[1] = { platformUserId: 'u-them', playerData: [] }
+    const board = await loadLeagueDefenderBoard({ prisma, leagueId: 'L1', userId: 'me' })
+    expect(board.state).toBe('no_rostered_defenders')
+  })
+})

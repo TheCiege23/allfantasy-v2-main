@@ -1,5 +1,8 @@
 import 'server-only'
+import { automaticLineup } from './teamWorkspace'
+import { portfolioOpponentExposure, type OpponentExposure } from './portfolioOpponentExposure'
 
+import { teamLoadTiming } from '@/lib/observability/teamLoadTiming'
 import { prisma } from '@/lib/prisma'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { getByeWeeks } from './byeWeeks'
@@ -11,6 +14,11 @@ import { resolveSportsWeek, type SportsWeek } from './sportsWeek'
 import { lineupDeadlines } from './lineupDeadlines'
 import { injuryNameKey, injuryNameVariants } from './injuryNames'
 import { isBestBallSettings } from './lineupMode'
+import { sleeperReadableRosters, rosterIdSpaceOf } from './rosterIdSpace'
+import { isTeamEliminated } from './teamElimination'
+import { getLeagueTypeMedia, resolveLeagueCardTypeKey } from '@/lib/league-media/leagueTypeMedia'
+import { availableFilter, boardFilterOptions, matchesBoardFilter, type BoardFilter, type BoardFilterOption } from './myTeamBoardFilter'
+import { injuryClaimAsOf } from '@/lib/injuries/matchInjuryRows'
 
 /**
  * My team pulse — the cross-league landing at `/core/my-team`.
@@ -104,6 +112,11 @@ function startersOf(playerData: unknown): { ids: string[]; empty: number } {
 }
 
 export type MyTeamRow = {
+  archived?: boolean
+  coverageReason?: string | null
+  automatic?: boolean
+  readAt?: string | null
+  players?: Array<{ id: string; name: string; team?: string | null; position?: string | null; status: string | null; kickoff: string | null; onBye: boolean; starter: boolean; opponents: number }>
   leagueId: string
   leagueName: string
   platform: string
@@ -168,13 +181,53 @@ export type MyTeamRow = {
    */
   leagueSeason: number | null
   teamId: string | null
+  /**
+   * When this league was last synced (`League.lastSyncedAt`), ISO. The board reads the STORED
+   * roster, so this is how old every count on the row is. Null when we have never recorded a sync.
+   */
+  syncedAt?: string | null
+  /** The last sync attempt failed (`League.syncStatus`), so the row may describe an older lineup. */
+  syncFailed?: boolean
+  /** `NFL`, `NBA`… — the board's sport filter. */
+  sport?: string
+  /** The league card's format key (`redraft`, `dynasty`, `guillotine`…) and its label — the format filter. */
+  format?: string
+  formatLabel?: string
+}
+
+/**
+ * One starter flagged in TWO OR MORE of your lineups — the fact no single row can show.
+ * 'Jayden Daniels OUT' on one board row is a lineup problem; the same player ruled out in three
+ * leagues is one piece of news with three places to act on it.
+ */
+export type CrossLeagueFlag = {
+  id: string
+  name: string
+  status: 'out' | 'questionable'
+  leagues: Array<{ leagueId: string; leagueName: string; href: string }>
 }
 
 export type MyTeamPulse = {
+  /** Starters flagged in 2+ of your lineups, ruled-out first. Locked games and Best Ball excluded. */
+  crossLeague?: CrossLeagueFlag[]
+  opponentExposure?: OpponentExposure[]
+  viewerKey?: string
+  inventory?: MyTeamRow[]
   /** Lineups with at least one certain hole, most urgent first. */
   needs: MyTeamRow[]
   /** Lineups with nothing wrong we can see, soonest lock first. */
   set: MyTeamRow[]
+  /**
+   * The board's chips, counted over EVERY readable row before any filter or cap — see
+   * `myTeamBoardFilter.ts` for why this cannot be done in the component.
+   */
+  filters?: BoardFilterOption[]
+  /** The chip in force, or null. A requested chip that names nothing on this board is null. */
+  filter?: BoardFilter | null
+  /** Readable rows the chip hides. `needs`/`set` and their totals are AFTER the filter. */
+  filteredOut?: number
+  /** Every league in view, uncapped — the weekend record counts them all, not the ten drawn. */
+  inViewLeagueIds?: string[]
   /** Totals before the display cap, so a truncated column can say so. */
   needsTotal: number
   setTotal: number
@@ -195,6 +248,11 @@ export type MyTeamPulse = {
     noRoster: number
     /** A roster on file that carries no `starters` array at all. */
     noLineup: number
+    /**
+     * A roster on file in a Fleaflicker/MFL/Fantrax/Yahoo league: its player ids are the
+     * provider's own, so its lineup is unread — not absent. Never folded into `noLineup`.
+     */
+    idsUnreadable?: number
     automatic?: number
     inactive?: number
   }
@@ -226,6 +284,11 @@ const EMPTY_PULSE: MyTeamPulse = {
  * rather than a quota — six broken and four quiet is a full board, and so is
  * zero and ten.
  */
+/** League `status` / `lifecycleState` values with no lineup in play — counted as inactive, never checked. */
+const INACTIVE_LEAGUE_STATES = new Set([
+  'pre_draft', 'setup', 'drafting', 'complete', 'completed', 'offseason', 'renewal_pending', 'archived',
+])
+
 const NEEDS_CAP = 10
 const SET_CAP = 10
 
@@ -271,11 +334,25 @@ export async function getMyTeamPulse(
   userId: string,
   now: Date = new Date(),
   pausedLeagueIds?: ReadonlySet<string>,
+  /** `?format=` / `?sport=` / `?platform=` from the URL; ignored unless it names a chip here. */
+  requestedFilter: BoardFilter | null = null,
+  /** Apply a selected league before reads and display caps. */
+  focusLeagueId?: string | null,
+): Promise<MyTeamPulse> {
+  const timing = teamLoadTiming('portfolio')
+  try { return await loadMyTeamPulse(userId, now, pausedLeagueIds, requestedFilter, focusLeagueId, timing) }
+  finally { timing.finish() }
+}
+
+async function loadMyTeamPulse(
+  userId: string, now: Date, pausedLeagueIds: ReadonlySet<string> | undefined,
+  requestedFilter: BoardFilter | null, focusLeagueId: string | null | undefined,
+  timing: ReturnType<typeof teamLoadTiming>,
 ): Promise<MyTeamPulse> {
   /* ── 1. Every team this user has claimed, with its league. ─────────────── */
-  const claimed = await prisma.leagueTeam
+  const claimed = await timing.read('league', () => prisma.leagueTeam
     .findMany({
-      where: { claimedByUserId: userId },
+      where: { claimedByUserId: userId, ...(focusLeagueId ? { leagueId: focusLeagueId } : {}) },
       select: {
         leagueId: true,
         teamName: true,
@@ -293,13 +370,18 @@ export async function getMyTeamPulse(
             platformLeagueId: true,
             season: true,
             status: true, lifecycleState: true, bestBallMode: true, guillotineMode: true, leagueVariant: true,
+            /* The board's format filter, through the same resolver as the league cards. */
+            leagueType: true, isDynasty: true,
             /* Read only to collapse duplicate copies — see `realLeague.ts`. */
             userId: true,
             updatedAt: true,
+            /* When WE last wrote this league, and whether that write failed — the row's freshness stamp. */
+            lastSyncedAt: true,
+            syncStatus: true,
           },
         },
       },
-    })
+    }))
 
   /*
    * 🛑 ONE ROW PER REAL LEAGUE, NOT ONE PER IMPORTER. `leagues.userId` is the importer, so one
@@ -330,16 +412,17 @@ export async function getMyTeamPulse(
    */
   /* Name the batched roster row type for the per-league lookup. */
   type RosterRow = { leagueId: string; platformUserId: string; playerData: unknown }
-  const rosters: RosterRow[] = await prisma.roster
+  const [rosters, eliminated] = await timing.read('roster', () => Promise.all([
+    prisma.roster
     .findMany({
       where: { leagueId: { in: leagueIds } },
       select: { leagueId: true, platformUserId: true, playerData: true },
-    })
-
-  const eliminated = await prisma.guillotineElimination.findMany({
+    }),
+    prisma.guillotineElimination.findMany({
     where: { leagueId: { in: leagueIds }, eliminatedOwnerId: { in: [userId, ...mine.map(c => c.platformUserId).filter((id): id is string => Boolean(id))] } },
     select: { leagueId: true, season: { select: { season: true } } },
-  }).catch(() => [])
+  }).catch(() => []),
+  ]))
 
   const rostersByLeague = new Map<string, RosterRow[]>()
   for (const r of rosters) {
@@ -354,25 +437,38 @@ export async function getMyTeamPulse(
     leagueName: string
     platform: string
     sport: string
+    format: string
+    formatLabel: string
+    automatic: boolean
+    readAt: string | null
+    allIds: string[]
     logoUrl: string | null
     leagueBadge: string
     teamName: string | null
     platformLeagueId: string | null
     leagueSeason: number | null
     teamId: string | null
+    syncedAt: string | null
+    syncFailed: boolean
     ids: string[]
     empty: number
   }
 
   const pending: Pending[] = []
-  const notChecked = { noRoster: 0, noLineup: 0, automatic: 0, inactive: 0 }
+  const notChecked = { noRoster: 0, noLineup: 0, idsUnreadable: 0, automatic: 0, inactive: 0 }
 
+  const selected: Array<{ claim: (typeof mine)[number]; playerData: unknown }> = []
   for (const c of mine) {
     if (pausedLeagueIds?.has(c.leagueId)) continue
     const l = c.league!
-    const state = String(l.status ?? l.lifecycleState ?? '').toLowerCase()
-    if (eliminated.some(e => e.leagueId === l.id && e.season.season === l.season) || ['pre_draft', 'setup', 'drafting', 'complete', 'completed', 'offseason'].includes(state)) { notChecked.inactive++; continue }
-    const bestBall = l.bestBallMode === true || l.leagueVariant === 'best_ball' || isBestBallSettings(l.settings)
+    /*
+     * ⚠ BOTH FIELDS, NOT `status ?? lifecycleState`. `status` is set on every import, so the
+     * lifecycle state was never read — and `archived` (the guillotine archive) and
+     * `renewal_pending` were not in the list either. A finished league's stale roster was
+     * checked as a live lineup. Either field saying the league is not in play is enough.
+     */
+    const states = [l.status, l.lifecycleState].map((s) => String(s ?? '').toLowerCase())
+    if (eliminated.some(e => e.leagueId === l.id && e.season.season === l.season) || states.some((s) => INACTIVE_LEAGUE_STATES.has(s))) { notChecked.inactive++; continue }
     const candidates = myRosterCandidates(c, userId)
     const pool: RosterRow[] = rostersByLeague.get(c.leagueId) ?? []
     /* First candidate that matches wins — the order in `myRosterCandidates` is
@@ -387,15 +483,38 @@ export async function getMyTeamPulse(
     }
 
     const pd = roster.playerData && typeof roster.playerData === 'object' ? roster.playerData as Record<string, unknown> : {}
-    if (pd.eliminated === true || l.guillotineMode && Array.isArray(pd.players) && pd.players.length === 0) { notChecked.inactive++; continue }
-    const { ids, empty } = startersOf(roster.playerData)
+    // The recorded-elimination signal was checked above, with the inactive states. One rule with
+    // the league view now — this copy used to miss a league marked guillotine by `leagueVariant`.
+    if (isTeamEliminated({ playerData: pd, league: l, eliminationRecorded: false })) { notChecked.inactive++; continue }
+    selected.push({ claim: c, playerData: roster.playerData })
+  }
+
+  // Translate only the selected, eligible owned rosters in one identity-map read.
+  const readable = await timing.read('identities', () => sleeperReadableRosters(selected, r => r.claim.league.platform, r => r.claim.league.sport))
+  for (const { claim: c, playerData: readablePd } of readable) {
+    const l = c.league
+    const bestBall = l.bestBallMode === true || l.leagueVariant === 'best_ball' || isBestBallSettings(l.settings)
+    const { ids, empty } = startersOf(readablePd)
     if (ids.length === 0 && empty === 0) {
-      notChecked.noLineup++
+      /* Stripped, not absent: "no starting lineup on file" would be false for a foreign league. */
+      if (rosterIdSpaceOf(l.platform, l.sport) !== 'sleeper') notChecked.idsUnreadable++
+      else notChecked.noLineup++
       continue
     }
 
     const leagueName = leagueDisplayName(l.name)
     const platform = String(l.platform ?? 'manual').toLowerCase()
+    /*
+     * ⚠ THE CANONICAL KEY, NOT A SECOND RULE. The `leagueType` column wins over `isDynasty` in this
+     * resolver, so a league with the flag set but the column left at its `redraft` default reads
+     * Redraft — 4 of 560 in production on 2026-10-03. That is how every league card labels them
+     * too; a filter that disagreed with the card a click away would be the worse bug.
+     */
+    const format = resolveLeagueCardTypeKey({
+      leagueType: l.leagueType, leagueVariant: l.leagueVariant, isDynasty: l.isDynasty,
+      guillotineMode: l.guillotineMode, bestBallMode: l.bestBallMode,
+      settings: l.settings && typeof l.settings === 'object' && !Array.isArray(l.settings) ? (l.settings as Record<string, unknown>) : undefined,
+    })
 
     pending.push({
       bestBall,
@@ -403,33 +522,44 @@ export async function getMyTeamPulse(
       leagueName,
       platform,
       sport: String(l.sport ?? 'NFL').toUpperCase(),
+      format,
+      formatLabel: getLeagueTypeMedia(format).label,
+      automatic: l.bestBallMode || automaticLineup(l.leagueType, l.settings),
+      readAt: l.lastSyncedAt?.toISOString() ?? null,
+      allIds: [...new Set([...ids, ...((readablePd && typeof readablePd === 'object' && Array.isArray((readablePd as Record<string, unknown>).players)) ? ((readablePd as Record<string, unknown>).players as unknown[]).map(String).filter(id => id && id !== '0') : [])])],
       logoUrl: asImageUrl(l.logoUrl, platform) ?? asImageUrl(l.avatarUrl, platform),
       leagueBadge: initialsOf(leagueName),
       teamName: c.teamName?.trim() || null,
       platformLeagueId: l.platformLeagueId ?? null,
       leagueSeason: typeof l.season === 'number' ? l.season : null,
       teamId: c.externalId != null ? String(c.externalId) : null,
+      syncedAt: l.lastSyncedAt instanceof Date ? l.lastSyncedAt.toISOString() : null,
+      /* Prod holds `failed`; `app/api/league/sync` writes `error`. Both mean the last write did not land. */
+      syncFailed: /fail|error/i.test(String(l.syncStatus ?? '')),
       ids,
       empty,
     })
   }
 
+  const unreadableInventory: MyTeamRow[] = mine.map(c => ({ leagueId: c.leagueId, leagueName: leagueDisplayName(c.league!.name), platform: String(c.league!.platform ?? 'manual'), sport: String(c.league!.sport ?? 'NFL'), format: resolveLeagueCardTypeKey({ ...c.league!, settings: c.league!.settings && typeof c.league!.settings === 'object' && !Array.isArray(c.league!.settings) ? c.league!.settings as Record<string,unknown> : undefined }), formatLabel: getLeagueTypeMedia(resolveLeagueCardTypeKey({ ...c.league!, settings: c.league!.settings && typeof c.league!.settings === 'object' && !Array.isArray(c.league!.settings) ? c.league!.settings as Record<string,unknown> : undefined })).label, automatic: automaticLineup(c.league!.leagueType, c.league!.settings), coverageReason: 'Roster or starting lineup unavailable; not checked.', logoUrl: null, leagueBadge: initialsOf(leagueDisplayName(c.league!.name)), teamName: c.teamName, starters: 0, empty: 0, out: 0, bye: null, questionable: 0, unresolved: 0, lockAt: null, locked: false, season: null, week: null, severity: 0, href: `/core/my-team?league=${encodeURIComponent(c.leagueId)}`, platformLeagueId: c.league!.platformLeagueId, leagueSeason: c.league!.season, teamId: c.externalId == null ? null : String(c.externalId) }))
+
   if (pending.length === 0) {
-    return { ...EMPTY_PULSE, considered: mine.length, paused: mine.filter((c) => pausedLeagueIds?.has(c.leagueId)).length, notChecked }
+    return { ...EMPTY_PULSE, viewerKey: userId, inventory: unreadableInventory, considered: mine.length, paused: mine.filter((c) => pausedLeagueIds?.has(c.leagueId)).length, notChecked }
   }
 
   /* ── 3. One player read for every starter on the board. ────────────────── */
-  const everyStarter = [...new Set(pending.flatMap((p) => p.ids))]
-  const players = await prisma.sportsPlayer
+  const everyStarter = [...new Set(pending.flatMap((p) => p.allIds))]
+  const players = await timing.read('players', () => prisma.sportsPlayer
     .findMany({
       where: { sleeperId: { in: everyStarter } },
-      select: { sleeperId: true, name: true, team: true },
-    })
+      select: { sleeperId: true, name: true, team: true, sport: true, position: true, expiresAt: true },
+      orderBy: { fetchedAt: 'desc' },
+    }))
 
-  const playerBy = new Map<string, { name: string; team: string | null }>()
+  const playerBy = new Map<string, { name: string; team: string | null; forecastTeam: string | null; position: string | null }>()
   for (const p of players) {
-    if (!p.sleeperId || playerBy.has(p.sleeperId)) continue
-    playerBy.set(p.sleeperId, { name: p.name, team: p.team })
+    if (!p.sleeperId || playerBy.has(`${p.sport ?? 'NFL'}:${p.sleeperId}`)) continue
+    playerBy.set(`${p.sport ?? 'NFL'}:${p.sleeperId}`, { name: p.name, team: p.team, forecastTeam: p.expiresAt > now ? p.team : null, position: p.position })
   }
 
   const sports = [...new Set(pending.map((p) => p.sport))]
@@ -443,23 +573,19 @@ export async function getMyTeamPulse(
    * on sport for exactly this reason and the first draft of this file did not.
    */
   const names = [...new Set([...playerBy.values()].map((p) => p.name))]
-  const injuries = names.length
+  const injuriesPromise = timing.read('injuries', async () => names.length
     ? await prisma.sportsInjury
         .findMany({
-          where: { sport: { in: sports }, playerName: { in: names.flatMap(injuryNameVariants), mode: 'insensitive' } },
+          // Only rows a feed still carries: a healed player drops off the reports, he is not cleared.
+          where: {
+            sport: { in: sports },
+            playerName: { in: names.flatMap(injuryNameVariants), mode: 'insensitive' },
+            expiresAt: { gt: new Date() },
+          },
           orderBy: { fetchedAt: 'desc' },
-          select: { sport: true, playerName: true, status: true, team: true },
+          select: { sport: true, playerName: true, status: true, team: true, date: true, fetchedAt: true },
         })
-        : []
-
-  /* Preserve newest-first order across name aliases; resolve club matches per player. */
-  const injuryByName = new Map<string, Array<{ status: string | null; team: string | null }>>()
-  for (const i of injuries) {
-    const k = `${i.sport}:${injuryNameKey(i.playerName)}`
-    const list = injuryByName.get(k) ?? []
-    list.push(i)
-    injuryByName.set(k, list)
-  }
+        : [])
 
   /* ── 5. Per DISTINCT SPORT: the week, its fixtures and its byes. ───────── */
 
@@ -467,50 +593,70 @@ export async function getMyTeamPulse(
   const kickoffBySport = new Map<string, Map<string, Date>>()
   const byeIdsBySport = new Map<string, Set<string> | null>()
 
-  for (const sport of sports) {
-    const week = await resolveSportsWeek(sport).catch(() => null)
-    weekBySport.set(sport, week)
-    if (!week) {
-      kickoffBySport.set(sport, new Map())
-      byeIdsBySport.set(sport, null)
-      continue
-    }
-
-    kickoffBySport.set(sport, await kickoffsForWeek(sport, week).catch(() => new Map()))
-
-    /*
-     * The bye check runs over every starter in this sport at once. It returns
-     * null when the week's slate is too thin to judge, and that null travels
-     * all the way to the row — see the field note on `MyTeamRow.bye`.
-     */
-    const playerTeams = new Map<string, string | null>()
-    for (const p of pending) {
-      if (p.sport !== sport) continue
-      for (const id of p.ids) {
-        const row = playerBy.get(id)
-        if (row) playerTeams.set(id, row.team)
+  const schedulePromise = timing.read('schedule', async () => {
+    for (const sport of sports) {
+      const week = await resolveSportsWeek(sport).catch(() => null)
+      weekBySport.set(sport, week)
+      if (!week) {
+        kickoffBySport.set(sport, new Map())
+        byeIdsBySport.set(sport, null)
+        continue
       }
-    }
-    const byes = playerTeams.size
-      ? await getByeWeeks({
-          sport,
-          season: week.season,
-          playerTeams,
-          fromWeek: week.week,
-          /* This week only. The per-league screen is where a four-starter week-7
-             pileup belongs; this board is about the lineup in front of you. */
-          horizon: 0,
-        }).catch(() => null)
-      : null
 
-    byeIdsBySport.set(sport, byes ? new Set(byes.byWeek.get(week.week) ?? []) : null)
+      /*
+       * The bye check runs over every starter in this sport at once. It returns
+       * null when the week's slate is too thin to judge, and that null travels
+       * all the way to the row — see the field note on `MyTeamRow.bye`.
+       */
+      const playerTeams = new Map<string, string | null>()
+      for (const p of pending) {
+        if (p.sport !== sport) continue
+        for (const id of p.ids) {
+          const row = playerBy.get(`${p.sport}:${id}`)
+          if (row) playerTeams.set(id, row.team)
+        }
+      }
+      const [kickoffs, byes] = await Promise.all([
+        kickoffsForWeek(sport, week).catch(() => new Map<string, Date>()),
+        playerTeams.size
+        ? getByeWeeks({
+            sport,
+            season: week.season,
+            playerTeams,
+            fromWeek: week.week,
+            /* This week only. The per-league screen is where a four-starter week-7
+               pileup belongs; this board is about the lineup in front of you. */
+            horizon: 0,
+          }).catch(() => null)
+        : Promise.resolve(null),
+      ])
+      kickoffBySport.set(sport, kickoffs)
+      byeIdsBySport.set(sport, byes ? new Set(byes.byWeek.get(week.week) ?? []) : null)
+    }
+
+  })
+  const [injuries] = await Promise.all([injuriesPromise, schedulePromise])
+
+  /* Newest CLAIM first across name aliases (not newest fetch: a re-pulled Friday report is not
+     Sunday's news); resolve club matches per player. */
+  const injuryByName = new Map<string, Array<{ status: string | null; team: string | null; date: Date | null; fetchedAt: Date }>>()
+  for (const i of injuries) {
+    const k = `${i.sport}:${injuryNameKey(i.playerName)}`
+    const list = injuryByName.get(k) ?? []
+    list.push(i)
+    injuryByName.set(k, list)
+  }
+  for (const list of injuryByName.values()) {
+    list.sort((a, b) => injuryClaimAsOf(b).getTime() - injuryClaimAsOf(a).getTime())
   }
 
   /* ── 6. One row per checked lineup. ────────────────────────────────────── */
   const rows: MyTeamRow[] = []
+  const flaggedBy = new Map<string, CrossLeagueFlag>()
 
   for (const p of pending) {
     const week = weekBySport.get(p.sport) ?? null
+    const archived = p.leagueSeason != null && week != null && p.leagueSeason < week.season
     const kickoffs = kickoffBySport.get(p.sport) ?? new Map<string, Date>()
     const byeIds = byeIdsBySport.get(p.sport) ?? null
 
@@ -518,10 +664,10 @@ export async function getMyTeamPulse(
     let questionable = 0
     let unresolved = 0
     let bye: number | null = byeIds ? 0 : null
-    const deadlines: Array<{ kickoff: Date | null; issues: number }> = []
+    const deadlines: Array<{ kickoff: Date | null; issues: number; bye?: boolean }> = []
 
     for (const id of p.ids) {
-      const row = playerBy.get(id)
+      const row = playerBy.get(`${p.sport}:${id}`)
       if (!row) {
         unresolved += 1
         deadlines.push({ kickoff: null, issues: 0 })
@@ -540,13 +686,43 @@ export async function getMyTeamPulse(
       /* A player on bye has no fixture this week, so he cannot set the lock. */
       const club = normalizeTeamAbbrev(row.team)
       const at = !onBye && club ? kickoffs.get(club) : undefined
-      deadlines.push({ kickoff: at ?? null, issues: Number(isRuledOut(status)) + Number(onBye) })
+      /* `bye` keeps him out of "N without a kickoff": the row used to say a starter's schedule
+         was missing when the schedule says plainly that his team is not playing. */
+      deadlines.push({ kickoff: at ?? null, issues: Number(isRuledOut(status)) + Number(onBye), bye: onBye })
+
+      /*
+       * The cross-league view, from the SAME status this row just counted. Skipped where there is
+       * nothing to do: a Best Ball lineup (the provider sets it) and a game already under way (locked).
+       */
+      const flagged = isRuledOut(status) ? 'out' : isAtRisk(status) ? 'questionable' : null
+      if (flagged && !p.bestBall && !(at && at.getTime() <= now.getTime())) {
+        const held: CrossLeagueFlag = flaggedBy.get(id) ?? { id, name: row.name, status: flagged, leagues: [] }
+        if (flagged === 'out') held.status = 'out'
+        if (!held.leagues.some((l) => l.leagueId === p.leagueId)) {
+          held.leagues.push({
+            leagueId: p.leagueId,
+            leagueName: p.leagueName,
+            href: `/core/my-team?league=${encodeURIComponent(p.leagueId)}#lineup-player-${id}`,
+          })
+        }
+        flaggedBy.set(id, held)
+      }
     }
 
-    const severity = p.bestBall ? 0 : p.empty + out + (bye ?? 0)
+    const severity = p.bestBall || archived ? 0 : p.empty + out + (bye ?? 0)
     const deadline = lineupDeadlines(deadlines, p.empty, now.getTime())
 
     rows.push({
+      archived,
+      coverageReason: archived ? 'Prior-season roster; current-week checks do not apply.' : undefined,
+      automatic: p.automatic,
+      readAt: p.readAt,
+      players: p.allIds.flatMap(id => {
+        const player = playerBy.get(`${p.sport}:${id}`)
+        if (!player) return []
+        const club = normalizeTeamAbbrev(player.team)
+        return [{ id, name: player.name, team: player.forecastTeam, position: player.position, status: archived ? null : injuryByName.get(`${p.sport}:${injuryNameKey(player.name)}`)?.find(injury => !club || !injury.team || normalizeTeamAbbrev(injury.team) === club)?.status ?? null, kickoff: archived ? null : (club ? kickoffs.get(club) : null)?.toISOString() ?? null, onBye: archived ? false : byeIds?.has(id) ?? false, starter: p.ids.includes(id), opponents: 0 }]
+      }),
       leagueId: p.leagueId,
       leagueName: p.leagueName,
       platform: p.platform,
@@ -555,10 +731,10 @@ export async function getMyTeamPulse(
       teamName: p.teamName,
       bestBall: p.bestBall,
       starters: p.ids.length,
-      empty: p.empty,
-      out,
-      bye,
-      questionable,
+      empty: archived ? 0 : p.empty,
+      out: archived ? 0 : out,
+      bye: archived ? null : bye,
+      questionable: archived ? 0 : questionable,
       unresolved,
       lockAt: deadline.lockAt == null ? null : new Date(deadline.lockAt).toISOString(),
       locked: deadline.locked,
@@ -572,6 +748,11 @@ export async function getMyTeamPulse(
       platformLeagueId: p.platformLeagueId,
       leagueSeason: p.leagueSeason,
       teamId: p.teamId,
+      syncedAt: p.syncedAt,
+      syncFailed: p.syncFailed,
+      sport: p.sport,
+      format: p.format,
+      formatLabel: p.formatLabel,
     })
   }
 
@@ -589,7 +770,12 @@ export async function getMyTeamPulse(
     return a.lockAt.localeCompare(b.lockAt)
   }
 
-  const needsAll = rows
+  /* Chips over everything readable; the filter, then the cap. Never the other way round. */
+  const filters = boardFilterOptions(rows)
+  const filter = availableFilter(requestedFilter, filters)
+  const inView = filter ? rows.filter((r) => matchesBoardFilter(r, filter)) : rows
+
+  const needsAll = inView
     .filter((r) => r.severity > 0)
     /*
      * Remaining problems lead. Already-started losses remain visible, without
@@ -598,16 +784,42 @@ export async function getMyTeamPulse(
     .sort(
       (a, b) => Number(a.actionableSeverity === 0) - Number(b.actionableSeverity === 0)
         || (b.actionableSeverity ?? b.severity) - (a.actionableSeverity ?? a.severity)
-        || byLock(a, b),
+        || byLock(a, b)
+        || b.questionable - a.questionable,
     )
 
-  const setAll = rows.filter((r) => r.severity === 0).sort(byLock)
+  /*
+   * ⚠ QUESTIONABLE FIRST, THEN THE CLOCK. This sorted on lock time alone, so a
+   * lineup with four questionable starters tied a lineup with nothing wrong —
+   * observed live 2026-10-02, where "4 questionable" and "SET · nothing missing"
+   * shared one tier and the set league sat at #7 of a list headed "ranked by
+   * urgency". A questionable starter is a risk, not a certain loss, which is why
+   * it stays out of `severity` and below every row in `needs`; but among lineups
+   * with no certain loss it is the only thing left to check.
+   */
+  const setAll = inView
+    .filter((r) => r.severity === 0)
+    .sort((a, b) => b.questionable - a.questionable || byLock(a, b))
 
+  const crossLeague = [...flaggedBy.values()]
+    .filter((f) => f.leagues.length >= 2)
+    .sort((a, b) => Number(b.status === 'out') - Number(a.status === 'out') || b.leagues.length - a.leagues.length || a.name.localeCompare(b.name))
+    .slice(0, 6)
+
+  const opponentExposure=await timing.read('opponents', () => portfolioOpponentExposure(rows).catch(()=>[]))
   return {
+    viewerKey: userId,
+    opponentExposure,
+    inventory: [...rows, ...unreadableInventory.filter(c => !rows.some(r => r.leagueId === c.leagueId))],
+    crossLeague,
     needs: needsAll.slice(0, NEEDS_CAP),
     set: setAll.slice(0, SET_CAP),
     needsTotal: needsAll.length,
     setTotal: setAll.length,
+    filters,
+    filter,
+    filteredOut: rows.length - inView.length,
+    inViewLeagueIds: inView.map((r) => r.leagueId),
     considered: mine.length,
     checked: rows.length,
     automatic: rows.filter((row) => row.bestBall).length,

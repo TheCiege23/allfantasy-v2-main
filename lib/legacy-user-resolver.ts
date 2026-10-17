@@ -146,7 +146,7 @@ async function cascadeUsernameUpdate(oldUsername: string, newUsername: string): 
       data: { sleeperUsername: newUsername },
     }),
     prisma.tradeAnalysisSnapshot.updateMany({
-      where: { sleeperUsername: oldUsername },
+      where: { sleeperUsername: oldUsername, snapshotType: { not: 'trade_value_receipt_v1' } },
       data: { sleeperUsername: newUsername },
     }),
     prisma.shareReward.updateMany({

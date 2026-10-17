@@ -10,7 +10,7 @@ import { isSportsDataEnabled } from '@/lib/sports-evidence/gates'
 import { CertifiedTradeIntegrationService, extractTradePlayerRefs, type TradeSafety } from '@/lib/sports-evidence/tradeIntegration'
 import { weekFromLeagueSettingsForLineup } from '@/lib/roster/buildPersistedRosterDataFromRosterState'
 import { verifyProposalEvidenceToken } from '@/lib/league-trade-engine/proposalEvidenceToken'
-import { publicTradeDecisionReceipt } from '@/lib/league-trade-engine/tradeDecisionReceipt'
+import { PUBLIC_RECEIPT_SELECT, publicTradeDecisionReceipt } from '@/lib/league-trade-engine/tradeDecisionReceipt'
 
 export const dynamic = 'force-dynamic'
 
@@ -39,7 +39,7 @@ export async function GET(
   ])
   const snapshotStore = (prisma as typeof prisma & { tradeDecisionSnapshot?: typeof prisma.tradeDecisionSnapshot }).tradeDecisionSnapshot
   const snapshots = snapshotStore
-    ? await snapshotStore.findMany({ where: { tradeId: { in: trades.map((trade) => trade.id) } } }).catch(() => [])
+    ? await snapshotStore.findMany({ where: { tradeId: { in: trades.map((trade) => trade.id) } }, select: PUBLIC_RECEIPT_SELECT }).catch(() => [])
     : []
   const receiptByTradeId = new Map(snapshots.map((snapshot) => [snapshot.tradeId, publicTradeDecisionReceipt(snapshot)]))
   const tradesWithReceipts = trades.map((trade) => ({ ...trade, decisionReceipt: receiptByTradeId.get(trade.id) ?? null }))

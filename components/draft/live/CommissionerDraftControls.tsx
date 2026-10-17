@@ -46,7 +46,7 @@ export function CommissionerDraftControls({
       className="rounded-2xl border border-violet-500/25 bg-violet-950/20 p-3"
       data-testid="draft-commissioner-controls"
     >
-      <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-violet-200/80">Commissioner</p>
+      <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-violet-200/80">Commissioner</p>
       <div className="flex flex-wrap gap-2">
         <button type="button" disabled={disabled || busy !== null} className={`${btn} border-white/15 bg-black/30 text-white/90`} onClick={() => void run('pause')}>
           <Pause className="h-3.5 w-3.5" aria-hidden />

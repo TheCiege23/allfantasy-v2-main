@@ -1,7 +1,11 @@
+'use client'
+
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import type { LucideIcon } from 'lucide-react'
 import type { SeverityTier } from '@/lib/commissioner-ui/tokens/colors'
 import { getSeverityStyle, SEVERITY_LABELS } from './severityStyles'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { severityLabelText } from '@/lib/commissioner-os/i18n/cardsCopy'
 
 export interface SummaryCardProps {
   title: string
@@ -11,9 +15,13 @@ export interface SummaryCardProps {
   onClick?: () => void
 }
 
-/** Rolls one pillar/module up into one glanceable card, used on Mission Control per module (Design Language §4). */
+/**
+ * Rolls one pillar/module up into one glanceable card, used on Mission Control per module (Design Language §4).
+ * The severity badge is the card's own word and follows the language; `title` and `summary` are the caller's.
+ */
 export function SummaryCard({ title, status, summary, icon: Icon, onClick }: SummaryCardProps) {
   const style = getSeverityStyle(status)
+  const { language } = useOptionalLanguage()
   return (
     <Card
       onClick={onClick}
@@ -28,7 +36,7 @@ export function SummaryCard({ title, status, summary, icon: Icon, onClick }: Sum
             {title}
           </CardTitle>
           <span className="text-xs font-semibold" style={{ color: style.text }}>
-            {SEVERITY_LABELS[status]}
+            {severityLabelText(status, SEVERITY_LABELS[status], language)}
           </span>
         </div>
       </CardHeader>

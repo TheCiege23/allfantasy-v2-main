@@ -202,10 +202,12 @@ describe('🛑 one mark, one rule, in both places it is drawn', () => {
     expect(pickVariant).not.toContain('stock')
   })
 
-  it('⚠ the route resolves stock with the same league-specific value book as the value pass', () => {
+  it('⚠ stock keeps its league value book while pick previews use the evaluator market context', () => {
     expect(ROUTE).toContain('resolvePlayerStock(stockIds, { format: valueBook.format, qbFormat: valueBook.qbFormat })')
-    expect(ROUTE).toContain("isDynasty: valueBook.format === 'DYNASTY'")
-    expect(ROUTE).toContain("numQbs: valueBook.qbFormat === 'SUPERFLEX' ? 2 : 1")
+    expect(ROUTE).toContain('marketContextFor(league?.settings, league?.leagueType ?? null, chartTeams)')
+    // The chart rule is `pricesOnDynastyChart` since 2026-09-28 (a light keeper league is redraft).
+    expect(ROUTE).toContain('isDynasty: pricesOnDynastyChart(marketContext.variant)')
+    expect(ROUTE).toContain('numQbs: (marketContext.variant.superflex ? 2 : 1) as 1 | 2')
   })
 
   /*

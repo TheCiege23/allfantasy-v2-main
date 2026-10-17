@@ -46,7 +46,7 @@ export default function ProductDemoSection() {
               <div className="mt-2 rounded-xl border border-white/10 bg-black/40 p-3 text-xs mode-panel">
                 <div className="flex items-center justify-between text-[11px] text-white/80">
                   <span className="font-medium">Team A</span>
-                  <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] text-emerald-300">
+                  <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] text-emerald-300">
                     +8.4 value
                   </span>
                 </div>
@@ -55,7 +55,7 @@ export default function ProductDemoSection() {
                 </div>
                 <div className="mt-3 flex items-center justify-between text-[11px] text-white/70">
                   <span>AI grade</span>
-                  <span className="rounded-md bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-200">
+                  <span className="rounded-md bg-emerald-500/20 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-200">
                     B+
                   </span>
                 </div>
@@ -97,7 +97,7 @@ export default function ProductDemoSection() {
               <div className="mt-2 rounded-xl border border-white/10 bg-black/40 p-3 text-xs mode-panel">
                 <div className="mb-2 flex items-center justify-between text-[11px] text-white/80">
                   <span className="font-medium">Week 5 Lineup</span>
-                  <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] text-emerald-300">
+                  <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] text-emerald-300">
                     +12.3 projected
                   </span>
                 </div>
@@ -150,7 +150,7 @@ export default function ProductDemoSection() {
               </p>
 
               {/* Mock bracket preview */}
-              <div className="mt-2 grid grid-cols-3 gap-1 rounded-xl border border-white/10 bg-black/40 p-2 text-[10px] text-white/75 mode-panel">
+              <div className="mt-2 grid grid-cols-3 gap-1 rounded-xl border border-white/10 bg-black/40 p-2 text-[11px] text-white/75 mode-panel">
                 <div className="space-y-1">
                   <div className="rounded-md bg-white/5 px-1 py-0.5">1 vs 16</div>
                   <div className="rounded-md bg-white/5 px-1 py-0.5">8 vs 9</div>

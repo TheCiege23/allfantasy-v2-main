@@ -1,10 +1,13 @@
 import type { LeagueSport } from '@prisma/client'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { indexBySleeperId, sleeperIdWhere } from '@/lib/player-identity/externalIdNamespace'
 import { getRosterTemplateForLeague } from '@/lib/multi-sport/MultiSportRosterService'
 import type { LineupsActionThresholds } from '@/lib/lineup-actions/thresholds'
 import type { LineupActionItem } from '@/lib/lineup-actions/types'
 import { isSleeperPlayerLegalInSlot } from '@/lib/lineup-actions/sleeperSlotUtils'
+import { isForeignIdSpace } from '@/lib/core-app/rosterIdSpace'
+import { designationSeverity, resolveCurrentInjuryDesignations } from '@/lib/injuries/currentInjuryDesignations'
 
 function toStringArray(v: unknown): string[] {
   if (!Array.isArray(v)) return []
@@ -15,10 +18,18 @@ function toStringArray(v: unknown): string[] {
   return out
 }
 
+/**
+ * The starter's row in the persisted `lineup_sections` snapshot — for his NAME, POSITION and TEAM only.
+ *
+ * 🛑 ITS `status` IS NOT READ (2026-10-11). It is a snapshot taken whenever the league was last
+ * imported, of whatever the platform called status — for a Sleeper-seeded pool, Sleeper's ROSTER
+ * status ("Active"). Preferring it put an Out starter in the lineup as "Active" for as long as the
+ * snapshot lived. The designation comes from the injury feed (`resolveCurrentInjuryDesignations`).
+ */
 function readLineupSectionPlayer(
   sections: Record<string, unknown> | undefined,
   playerId: string
-): { status: string; position: string; name: string } | null {
+): { position: string; name: string | null; team: string | null } | null {
   const starters = sections?.starters
   if (!Array.isArray(starters)) return null
   for (const row of starters) {
@@ -26,10 +37,12 @@ function readLineupSectionPlayer(
     const o = row as Record<string, unknown>
     const id = typeof o.id === 'string' ? o.id : typeof o.player_id === 'string' ? o.player_id : null
     if (id !== playerId) continue
+    const name = typeof o.name === 'string' && o.name.trim() ? o.name.trim() : typeof o.full_name === 'string' && o.full_name.trim() ? o.full_name.trim() : null
+    const team = typeof o.team === 'string' && o.team.trim() ? o.team.trim() : null
     return {
-      status: String(o.status ?? o.injury_status ?? ''),
       position: String(o.position ?? 'UTIL').toUpperCase(),
-      name: String(o.name ?? o.full_name ?? id),
+      name,
+      team,
     }
   }
   return null
@@ -47,10 +60,6 @@ function parseLockFromGameTime(raw: unknown): Date | null {
     if (!Number.isNaN(t)) return new Date(t)
   }
   return null
-}
-
-function normalizeStatus(st: string): string {
-  return st.trim().toUpperCase()
 }
 
 export type NativeLineupScanArgs = {
@@ -122,21 +131,50 @@ export async function scanNativeLeagueLineup(args: NativeLineupScanArgs): Promis
     }
   }
 
-  const ids = starters.slice(0, starterSlots.length).filter(Boolean)
+  /*
+   * A foreign league's ids (Fleaflicker, MFL, ...) collide with real Sleeper ids, and imported
+   * `lineup_sections` hold bare ids, so a DB row here would name a stranger and flag HIS slot or
+   * injury. Not looked up: the starters still count toward the slot gap above, unnamed.
+   */
+  const ids = isForeignIdSpace(platform) ? [] : starters.slice(0, starterSlots.length).filter(Boolean)
+  /*
+   * 🛑 And the ids that ARE looked up are Sleeper-space, so by Sleeper id only — never against
+   * `externalId`, where Rolling Insights keeps its own colliding numbers (Sleeper 9228 is Bryce
+   * Young; RI 9228 is an offensive tackle). The same stranger-naming the foreign-league guard above
+   * prevents, reached from inside a Sleeper-space league. See externalIdNamespace.ts.
+   */
   const rows = await prisma.sportsPlayer.findMany({
-    where: {
-      sport,
-      OR: [{ externalId: { in: ids } }, { sleeperId: { in: ids } }],
-    },
+    where: sleeperIdWhere(ids, sport),
     orderBy: { fetchedAt: 'desc' },
-    select: { externalId: true, sleeperId: true, name: true, position: true, status: true },
+    select: { sleeperId: true, source: true, name: true, position: true, team: true, status: true },
   })
-  const by = new Map<string, { name: string | null; position: string | null; status: string | null }>()
-  for (const r of rows) {
-    const e = { name: r.name, position: r.position, status: r.status }
-    by.set(r.externalId, e)
-    if (r.sleeperId) by.set(r.sleeperId, e)
+  const by = new Map<string, { name: string | null; position: string | null; team: string | null; rosterStatus: string | null }>()
+  for (const [sleeperId, r] of indexBySleeperId(rows)) {
+    // Only Sleeper's own row carries a ROSTER status; another provider's `status` is its own vocabulary.
+    by.set(sleeperId, { name: r.name, position: r.position, team: r.team ?? null, rosterStatus: r.source === 'sleeper' ? r.status ?? null : null })
   }
+
+  /*
+   * 🛑 THE INJURY DESIGNATION IS THE INJURY FEED'S, BY VERIFIED NAME + TEAM + POSITION (2026-10-11) —
+   * never `SportsPlayer.status` (Sleeper's ROSTER status: "Active" for an Out starter) and never the
+   * imported snapshot's status. A roster absence ("Injured Reserve") still counts when no fresh feed
+   * fact contradicts it.
+   */
+  const starterIdsInSlots = starters.slice(0, starterSlots.length).filter(Boolean)
+  const designations = await resolveCurrentInjuryDesignations({
+    sport,
+    players: starterIdsInSlots.map((pid) => {
+      const fromSection = readLineupSectionPlayer(lineupSections, pid)
+      const fromDb = by.get(pid)
+      return {
+        key: pid,
+        name: fromSection?.name ?? fromDb?.name ?? null,
+        team: fromDb?.team ?? fromSection?.team ?? null,
+        position: fromSection?.position ?? fromDb?.position ?? null,
+        rosterStatus: fromDb?.rosterStatus ?? null,
+      }
+    }),
+  })
 
   for (let i = 0; i < starterSlots.length && i < starters.length; i++) {
     const pid = starters[i]
@@ -146,8 +184,8 @@ export async function scanNativeLeagueLineup(args: NativeLineupScanArgs): Promis
     const fromDb = by.get(pid)
     const name = fromSection?.name ?? fromDb?.name ?? null
     const pos = fromSection?.position ?? fromDb?.position ?? null
-    const rawStatus = fromSection?.status ?? fromDb?.status ?? ''
-    const statusRaw = normalizeStatus(String(rawStatus))
+    const designation = designations.get(pid)?.status ?? null
+    const severity = designationSeverity(designation)
 
     const sectionRow = lineupSections?.starters
     let gameTime: unknown
@@ -193,12 +231,7 @@ export async function scanNativeLeagueLineup(args: NativeLineupScanArgs): Promis
       continue
     }
 
-    if (
-      statusRaw === 'OUT' ||
-      statusRaw === 'IR' ||
-      statusRaw === 'INJURED RESERVE' ||
-      statusRaw === 'SUSPENDED'
-    ) {
+    if (severity === 'unavailable') {
       actions.push({
         leagueId,
         leagueName,
@@ -218,13 +251,13 @@ export async function scanNativeLeagueLineup(args: NativeLineupScanArgs): Promis
         confidence: null,
         expectedGain: null,
         sourceModule: 'lineup_scan',
-        message: `${name ?? 'Starter'} is not available (${rawStatus || statusRaw})`,
+        message: `${name ?? 'Starter'} is not available (${designation})`,
         severity: 'critical',
       })
       continue
     }
 
-    if (statusRaw === 'DOUBTFUL' && thresholds.countDoubtfulAsAction) {
+    if (severity === 'doubtful' && thresholds.countDoubtfulAsAction) {
       actions.push({
         leagueId,
         leagueName,
@@ -250,7 +283,7 @@ export async function scanNativeLeagueLineup(args: NativeLineupScanArgs): Promis
       continue
     }
 
-    if (statusRaw === 'QUESTIONABLE' && thresholds.countQuestionableAsAction) {
+    if (severity === 'questionable' && thresholds.countQuestionableAsAction) {
       actions.push({
         leagueId,
         leagueName,

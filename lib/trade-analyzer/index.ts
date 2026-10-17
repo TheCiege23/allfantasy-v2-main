@@ -1,18 +1,11 @@
 /**
- * Trade Analyzer — UX services, asset controller, value breakdown, UI state, AI bridge, sport resolver.
+ * Trade Analyzer — UX services, asset controller, value breakdown, UI state, AI chat bridge, sport resolver.
  */
 
 export {
   getTradeAnalyzerAIChatUrl,
   buildTradeSummaryForAI,
 } from "./TradeToAIContextBridge"
-export {
-  analyzeTradeWithOptionalAI,
-  type TradeAnalyzerAIInput,
-  type TradeAnalyzerAIOutput,
-  type TradeAnalyzerAssetInput,
-  type TradeAnalyzerSideInput,
-} from "./TradeAnalyzerAIService"
 export {
   TRADE_ANALYZER_SPORTS,
   getSportDisplayLabel,

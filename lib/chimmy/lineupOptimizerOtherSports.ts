@@ -1,6 +1,8 @@
 import 'server-only'
 
 import { resolveNames } from '@/lib/ai-payload/resolveAiTeamContext'
+import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
+import { isForeignIdSpace } from '@/lib/core-app/rosterIdSpace'
 import { resolveCanonicalWorld } from '@/lib/decision-os/world'
 import type { CanonicalWorld } from '@/lib/decision-os/world/facts'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
@@ -100,6 +102,11 @@ export async function buildBaselineLineupContext(
   }
   const roster = viewerRosterOf(world, args.userId)
   if (!roster) return notComputed('Your team in this league is not claimed or has no synced roster.')
+  // The port strips a foreign league's roster ids: "no player on your roster has a projection"
+  // below would be a false claim about the team.
+  if (isForeignIdSpace(world.provenance?.provider)) {
+    return notComputed(`${FOREIGN_IDS_UNREADABLE}, so your roster cannot be read to build a lineup.`)
+  }
   const slots = (world.league.rosterSettings.starterSlots ?? []).map((s) => s.toUpperCase()).filter((s) => !NON_STARTING.has(s))
   if (slots.length === 0) return notComputed("This league's starting lineup slots are not on file, so no lineup can be built.")
   const unknown = [...new Set(slots.filter((s) => !elig[s]))]

@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { requireCommissionerRole } from '@/lib/league/permissions'
 import { normalizeBestBallSettings } from '@/lib/bestball/rules'
+import { withClientLeagueSettings } from '@/lib/league/clientLeagueSettings'
 import type { LeagueSport } from '@prisma/client'
 
 export const dynamic = 'force-dynamic'
@@ -45,6 +46,7 @@ export async function PATCH(req: NextRequest) {
       id: true,
       sport: true,
       bestBallMode: true,
+      bbContestId: true,
       settings: true,
       bbWaiversEnabled: true,
       bbTradesEnabled: true,
@@ -91,6 +93,13 @@ export async function PATCH(req: NextRequest) {
     language: typeof settingsRecord.language === 'string' ? settingsRecord.language : null,
   })
 
+  if (current.bbContestId && body.bestBall) {
+    const fixed = ['contestStructure', 'podSize', 'tournamentAdvancementRounds', 'regularSeasonLength', 'roundEndWeeks', 'advancersPerPod', 'resetBetweenRounds', 'cumulativeScoring', 'scoringPeriod']
+    if (fixed.some(key => Object.prototype.hasOwnProperty.call(body.bestBall, key) && JSON.stringify(body.bestBall![key]) !== JSON.stringify(existingBestBall?.[key]))) {
+      return NextResponse.json({ error: 'Tournament structure is fixed after contest creation; scoring and transaction settings remain editable.' }, { status: 409 })
+    }
+  }
+
   const nextWaivers =
     typeof body.bbWaiversEnabled === 'boolean' ? body.bbWaiversEnabled : normalizedBestBall.waiversEnabled
   const nextTrades =
@@ -129,5 +138,5 @@ export async function PATCH(req: NextRequest) {
     },
   })
 
-  return NextResponse.json({ league })
+  return NextResponse.json({ league: withClientLeagueSettings(league) })
 }

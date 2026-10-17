@@ -9,6 +9,7 @@ import { Prisma, VerificationMethod } from "@prisma/client"
 import bcrypt from "bcryptjs"
 import { sha256Hex, makeToken, isStrongPassword } from "@/lib/tokens"
 import { getClientIp, rateLimit } from "@/lib/rate-limit"
+import { normalizePhoneE164 } from "@/lib/phone/e164"
 import { attributeSignup } from "@/lib/referral"
 import { attributeSignupFromLandingInviteToken } from "@/lib/dashboard/attributeSignupFromLandingInvite"
 import { recordAttribution } from "@/lib/viral-loop"
@@ -32,6 +33,7 @@ class BetaAdmissionConsumeError extends Error {
 }
 import { validateLeagueJoin } from "@/lib/league-privacy"
 import { hasProfanityInUsername } from "@/lib/signup/UsernameProfanityGuard"
+import { isOffensiveDisplayName, OFFENSIVE_DISPLAY_NAME_MESSAGE } from "@/lib/moderation/offensiveName"
 import { generateUniqueUsername } from "@/lib/signup/AutoUsernameGenerator"
 import { resolvePreferredLanguage } from "@/lib/signup/LanguagePreferenceResolver"
 import {
@@ -53,6 +55,7 @@ import { detectUserState } from "@/lib/geo/detectUserState"
 import { isFullyBlocked, isPaidBlocked } from "@/lib/geo/restrictedStates"
 import { buildMetaEventPayload } from "@/lib/meta-events"
 import { trackMetaServerEvent } from "@/lib/meta-capi"
+import { recordLegalAcceptances } from "@/lib/legal/recordLegalAcceptance"
 
 export const runtime = "nodejs"
 
@@ -65,10 +68,7 @@ function normalizeEmail(e: string) {
 }
 
 function normalizePhone(p?: string | null) {
-  const s = (p ?? "").trim().replace(/[\s()-]/g, "")
-  if (!s.length) return null
-  if (s.startsWith("+")) return s
-  return `+1${s}`
+  return normalizePhoneE164(p ?? "") || null
 }
 
 function getUniqueConstraintTarget(err: Prisma.PrismaClientKnownRequestError): string {
@@ -320,6 +320,12 @@ export async function POST(req: Request) {
         })
       )
       return Boolean(hit)
+    }
+
+    // Other managers read the display name on every chat message, and the auto-generated
+    // username below is built from it (lib/moderation/offensiveName).
+    if (typeof displayName === "string" && isOffensiveDisplayName(displayName.trim())) {
+      return NextResponse.json({ error: OFFENSIVE_DISPLAY_NAME_MESSAGE }, { status: 400 })
     }
 
     // The redesigned /signup form no longer collects a username — it is generated
@@ -702,6 +708,10 @@ export async function POST(req: Request) {
       }
     }
 
+    // The Terms and Disclaimer boxes were required above (validateAgreementAcceptance); record
+    // WHAT was agreed and at which version. Best-effort — never blocks the account (see the module).
+    await recordLegalAcceptances(user.id, ["terms", "disclaimer"], "signup")
+
     // PostHog server-side: capture registration event. Best-effort — never throws.
     try {
       const posthog = getPostHogClient()
@@ -844,11 +854,13 @@ export async function POST(req: Request) {
         const { getDeploymentLinkOrigin } = await import("@/lib/site-public-origin")
         const { USER_FACING_SITE_ORIGIN } = await import("@/lib/auth/user-facing-site-origin")
         const emailOrigin = getDeploymentLinkOrigin() || USER_FACING_SITE_ORIGIN
-        // returnTo=/onboarding routes ONLY this new-signup cohort into the profile
-        // setup step after they verify (they hold an auto-generated username).
-        // /onboarding self-guards and bounces already-complete profiles onward, so
-        // existing users and other verification flows are unaffected.
-        const verifyUrl = `${emailOrigin}/verify/email?token=${encodeURIComponent(rawToken)}&returnTo=${encodeURIComponent("/onboarding")}`
+        // 🛑 returnTo=/import, NOT /onboarding (Guap, 2026-09-29). /onboarding put a legacy-styled
+        // profile form and a 5-step tour between verifying and importing — 7+ screens before a new
+        // user saw anything of theirs, the biggest drop-off in the first run (UI audit). Age
+        // confirmation is enforced app-wide by AgeConfirmationPrompt (SafeGlobalChrome), so nothing
+        // required is skipped; the auto-generated username can be changed in Settings. The home
+        // card's resend button already used /import.
+        const verifyUrl = `${emailOrigin}/verify/email?token=${encodeURIComponent(rawToken)}&returnTo=${encodeURIComponent("/import")}`
 
         const { buildVerificationEmailHtml, resolveEmailSafeName } = await import("@/lib/email/verification-email-html")
         const safeName = resolveEmailSafeName({ username })

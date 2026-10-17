@@ -8,6 +8,7 @@ import {
   emptyMatchupSeasonCounters,
 } from "@/lib/league-import/sleeper/historicalRefreshCounters"
 import { withSyncJobRun } from "@/lib/production-health/syncJobRunTelemetry"
+import { followRenewedSleeperLeagues } from "@/lib/league-import/sleeper/followRenewedLeagues"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -108,6 +109,18 @@ export async function GET(request: Request) {
       const budget = createRunBudget(REFRESH_BUDGET_MS)
 
       /*
+       * ── RENEWALS FIRST, AND BOUNDED (Guap 2026-10-12) ─────────────────────────────────────────
+       * A Sleeper league renewed for a new season gets a NEW league id, and nothing ever looked
+       * forward for it — see lib/league-import/sleeper/followRenewedLeagues.ts. In season no row is
+       * `complete`, so this is one query and no Sleeper calls. From December on it asks each importer's
+       * Sleeper account once per fire (≤40 calls) and imports up to 5 renewals, on this fire's budget.
+       * A failure here is reported, never allowed to stop the refresh below.
+       */
+      const renewals = await followRenewedSleeperLeagues({ budget }).catch((e: unknown) => ({
+        error: e instanceof Error ? e.message : String(e),
+      }))
+
+      /*
        * No stored cursor is needed in either bucket. `runDynastyBackfill` upserts the status row
        * at the START of every run, so refreshing a league is what makes it least stale, and the
        * ordering maintains itself.
@@ -176,7 +189,7 @@ export async function GET(request: Request) {
           leaguesRefreshed: 0,
           leaguesFailed: 0,
           skippedForTime: 0,
-          metadata: { note: "No Sleeper leagues carry a backfill status row yet." },
+          metadata: { note: "No Sleeper leagues carry a backfill status row yet.", renewals },
         }
       }
 
@@ -268,6 +281,7 @@ export async function GET(request: Request) {
           budgetMs: REFRESH_BUDGET_MS,
           remainingMs: budget.remainingMs(),
           matchupSeasons,
+          renewals,
         },
       }
     },

@@ -98,7 +98,7 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
             {league.name}
           </h3>
           <span
-            className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap"
+            className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap"
             style={sourceBadgeStyle}
           >
             {getSourceLabel(league.source)}
@@ -108,26 +108,26 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
         {/* League badges */}
         <div className="flex flex-wrap gap-1.5">
           <span
-            className="inline-flex items-center rounded-md px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-medium"
+            className="inline-flex items-center rounded-md px-1.5 sm:px-2 py-0.5 text-[11px] sm:text-xs font-medium"
             style={{ background: "var(--panel2)", color: "var(--text)" }}
           >
             {league.sport}
           </span>
           <span
-            className="inline-flex items-center rounded-md px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-medium capitalize"
+            className="inline-flex items-center rounded-md px-1.5 sm:px-2 py-0.5 text-[11px] sm:text-xs font-medium capitalize"
             style={sourceBadgeStyle}
           >
             {league.source}
           </span>
           <span
-            className="inline-flex items-center rounded-md px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-medium capitalize"
+            className="inline-flex items-center rounded-md px-1.5 sm:px-2 py-0.5 text-[11px] sm:text-xs font-medium capitalize"
             style={{ background: "rgba(148, 163, 184, 0.14)", color: "rgb(203, 213, 225)" }}
           >
             {formatLeagueType(league)}
           </span>
           {league.isPaid ? (
             <span
-              className="inline-flex items-center rounded-md px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-medium"
+              className="inline-flex items-center rounded-md px-1.5 sm:px-2 py-0.5 text-[11px] sm:text-xs font-medium"
               title={paidBoundaryDisclosure}
               style={{ background: "rgba(234, 179, 8, 0.15)", color: "rgb(250, 204, 21)" }}
             >
@@ -135,7 +135,7 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
             </span>
           ) : (
             <span
-              className="inline-flex items-center rounded-md px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-medium"
+              className="inline-flex items-center rounded-md px-1.5 sm:px-2 py-0.5 text-[11px] sm:text-xs font-medium"
               style={{ background: "rgba(34, 197, 94, 0.12)", color: "rgb(74, 222, 128)" }}
             >
               Free
@@ -143,7 +143,7 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
           )}
           {fillingFast && (
             <span
-              className="inline-flex items-center gap-0.5 rounded-md px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-medium"
+              className="inline-flex items-center gap-0.5 rounded-md px-1.5 sm:px-2 py-0.5 text-[11px] sm:text-xs font-medium"
               style={{ background: "rgba(34, 211, 238, 0.12)", color: "rgb(34, 211, 238)" }}
             >
               <Zap className="h-3 w-3" />
@@ -152,7 +152,7 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
           )}
           {showNew && (
             <span
-              className="inline-flex items-center rounded-md px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-medium"
+              className="inline-flex items-center rounded-md px-1.5 sm:px-2 py-0.5 text-[11px] sm:text-xs font-medium"
               style={{ background: "rgba(251, 146, 60, 0.15)", color: "rgb(251, 146, 60)" }}
             >
               New
@@ -160,7 +160,7 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
           )}
           {hasAI && (
             <span
-              className="inline-flex items-center gap-0.5 rounded-md px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-medium"
+              className="inline-flex items-center gap-0.5 rounded-md px-1.5 sm:px-2 py-0.5 text-[11px] sm:text-xs font-medium"
               style={{ background: "rgba(167, 139, 250, 0.15)", color: "rgb(196, 181, 253)" }}
             >
               <Sparkles className="h-3 w-3" />
@@ -169,7 +169,7 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
           )}
           {rankFitScore > 0 && (
             <span
-              className="inline-flex items-center rounded-md px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-medium"
+              className="inline-flex items-center rounded-md px-1.5 sm:px-2 py-0.5 text-[11px] sm:text-xs font-medium"
               title="Ranking effect score based on league tier fit and direct-join eligibility."
               style={{ background: "rgba(56, 189, 248, 0.14)", color: "rgb(125, 211, 252)" }}
             >
@@ -193,7 +193,7 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
             {visibleAiFeatures.map((feature) => (
               <span
                 key={`${league.id}-${feature}`}
-                className="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium"
+                className="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium"
                 style={{ borderColor: "rgba(167, 139, 250, 0.35)", color: "rgb(221, 214, 254)" }}
               >
                 {feature}

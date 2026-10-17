@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import type { ChimmyAlert, ChimmyAlertChannel, ChimmyAlertContext } from './types'
+import { isWithinQuietHours as isWithinSharedQuietHours } from '@/lib/notifications/quietHours'
 
 export interface ChimmyAlertDeliveryHistory {
   lastSeenAt?: Date
@@ -25,13 +26,13 @@ export interface ChimmyAlertDeliveryPlan {
   primarySurface: ChimmyAlertChannel
 }
 
+/*
+ * ⚠ THE SHARED RULE, NOT A LOCAL COPY. This read `now.getHours()` — the SERVER's hour (UTC on
+ * Railway) — and ignored the window's own `timezone`, so a 22→7 window in New York ran 18→3 local.
+ * `lib/notifications/quietHours.ts` says it replaced this; the router was never moved over.
+ */
 function isWithinQuietHours(context: ChimmyAlertContext): boolean {
-  const quiet = context.userPreferences?.quietHours
-  if (!quiet) return false
-  const now = context.now ?? new Date()
-  const hour = now.getHours()
-  if (quiet.startHour <= quiet.endHour) return hour >= quiet.startHour && hour < quiet.endHour
-  return hour >= quiet.startHour || hour < quiet.endHour
+  return isWithinSharedQuietHours(context.userPreferences?.quietHours ?? null, context.now ?? new Date())
 }
 
 function isLeagueWideAlert(alert: ChimmyAlert): boolean {

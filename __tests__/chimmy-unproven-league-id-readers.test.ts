@@ -163,6 +163,8 @@ vi.mock('@/lib/chimmy/chimmy-sport-data-digest', () => ({
 }))
 vi.mock('@/lib/ai-memory/chat-history-store', () => ({
   buildChimmyConversationId: buildChimmyConversationIdMock,
+  /* The tool loop writes its answers to history too (2026-09-28); the mode tests below reach it. */
+  appendChatHistory: vi.fn(async () => undefined),
 }))
 vi.mock('@/lib/ai-memory/ai-memory-store', () => ({
   rememberChimmyAssistantMemory: vi.fn(),

@@ -23,7 +23,8 @@ beforeEach(() => {
 
 it('an authorized user reaches the waiver engine through the real snapshot loader', async () => {
   const result = await prepareChimmyDecisionAnswer({ question: 'How much FAAB should I bid?', leagueId: 'league-1', userId: 'user-1' })
-  expect(result).toMatchObject({ leagueId: 'league-1', status: 'needs_data', gap: { code: 'decision_inputs_required' } })
+  // No move named, so the engine steps aside to the full answer (2026-09-28). Membership is still proven first.
+  expect(result).toBeNull()
   expect(h.membership).toHaveBeenCalledWith('league-1', 'user-1')
   expect(h.waiver).toHaveBeenCalledWith({ message: 'How much FAAB should I bid?', leagueId: 'league-1', userId: 'user-1', engineClaims: null })
 })

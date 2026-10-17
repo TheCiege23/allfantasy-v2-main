@@ -4,7 +4,8 @@ import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 import { verifyAdminSessionCookie } from "@/lib/adminSession";
 import { authOptions } from "@/lib/auth";
-import { isAllFantasyTestEmail, isSiteAdmin } from "@/lib/auth/admin";
+import { isAllFantasyTestEmail, isAllFantasyTestUsername } from "@/lib/auth/admin";
+import { prisma } from "@/lib/prisma";
 
 export type AdminUser = {
   id?: string;
@@ -75,8 +76,8 @@ function checkAdminSecret(request: Request): boolean {
   return timingSafeCompare(headerSecret, adminSecret);
 }
 
-function getCookieAdminAccessState(): AdminAccessState | null {
-  const cookieStore = cookies();
+async function getCookieAdminAccessState(): Promise<AdminAccessState | null> {
+  const cookieStore = await cookies();
   const adminSession = cookieStore.get("admin_session");
   if (!adminSession?.value) return null;
 
@@ -110,6 +111,25 @@ function getCookieAdminAccessState(): AdminAccessState | null {
   return { status: "admin", source: "admin_session", user };
 }
 
+/**
+ * Does the account behind this session hold `email` AND has it verified it?
+ * Read from the database, never from the token: the token's email is copied
+ * from the row whether or not it was ever proven. Any failure answers "no".
+ */
+async function isEmailProvenForUser(userId: string, email: string | null | undefined): Promise<boolean> {
+  const wanted = String(email ?? "").trim().toLowerCase();
+  if (!userId || !wanted) return false;
+  try {
+    const row = await prisma.appUser.findUnique({
+      where: { id: userId },
+      select: { email: true, emailVerified: true },
+    });
+    return Boolean(row?.emailVerified) && String(row?.email ?? "").trim().toLowerCase() === wanted;
+  } catch {
+    return false;
+  }
+}
+
 async function getAppSessionAdminAccessState(): Promise<AdminAccessState> {
   const session = (await getServerSession(authOptions as any).catch(() => null)) as {
     user?: {
@@ -124,15 +144,28 @@ async function getAppSessionAdminAccessState(): Promise<AdminAccessState> {
     return { status: "unauthenticated", source: "none" };
   }
 
+  // ⚠ An allowlisted EMAIL is only a credential once the account has PROVEN it.
+  // Registration and email-change both let an account hold an address nobody
+  // has verified, so trusting session.user.email alone let anyone who claimed an
+  // allowlisted address (one with no account yet) sign in as a full admin. The
+  // handle path is separate and unchanged — it cannot be self-assigned (see
+  // lib/auth/admin.ts) and it is how the founder's second provider signs in.
+  const grantedByHandle = isAllFantasyTestUsername(session.user.username);
+  const grantedByEmail =
+    !grantedByHandle &&
+    isAdminEmailAllowed(session.user.email) &&
+    (await isEmailProvenForUser(session.user.id, session.user.email));
+  const isAdmin = grantedByHandle || grantedByEmail;
+
   const user: AdminUser = {
     id: session.user.id ?? undefined,
     email: session.user.email ?? undefined,
     name: session.user.name ?? undefined,
     username: session.user.username ?? undefined,
-    role: isAdminEmailAllowed(session.user.email) || isSiteAdmin(session.user) ? "admin" : undefined,
+    role: isAdmin ? "admin" : undefined,
   };
 
-  if (isAdminEmailAllowed(session.user.email) || isSiteAdmin(session.user)) {
+  if (isAdmin) {
     return { status: "admin", source: "app_session", user };
   }
 
@@ -140,7 +173,7 @@ async function getAppSessionAdminAccessState(): Promise<AdminAccessState> {
 }
 
 export async function getAdminAccessState(): Promise<AdminAccessState> {
-  const cookieState = getCookieAdminAccessState();
+  const cookieState = await getCookieAdminAccessState();
   if (cookieState?.status === "admin") return cookieState;
   const sessionState = await getAppSessionAdminAccessState();
   if (sessionState.status === "admin") return sessionState;
@@ -167,14 +200,39 @@ export async function requireAdminOrBearer(request: Request) {
   return requireAdmin();
 }
 
+/** One cookie's value from a request's Cookie header, or null. */
+function readRequestCookie(request: Request, name: string): string | null {
+  const header = request.headers.get("cookie");
+  if (!header) return null;
+  for (const part of header.split(";")) {
+    const eq = part.indexOf("=");
+    if (eq < 0) continue;
+    if (part.slice(0, eq).trim() === name) {
+      const raw = part.slice(eq + 1).trim();
+      try {
+        return decodeURIComponent(raw);
+      } catch {
+        return raw;
+      }
+    }
+  }
+  return null;
+}
+
+/*
+ * ⚠ DELIBERATELY SYNCHRONOUS. Next 15 made `cookies()` async; converting this to
+ * async would turn every `Boolean(isAuthorizedRequest(req) || …)` that missed an
+ * `await` into `Boolean(promise)` — always true, a silent admin bypass that no
+ * type check reports. It already receives the request, so it reads the cookie
+ * from the request's own Cookie header instead of next/headers.
+ */
 export function isAuthorizedRequest(request: Request): boolean {
   if (checkBearerToken(request) || checkAdminSecret(request)) return true;
 
   try {
-    const cookieStore = cookies();
-    const adminSession = cookieStore.get("admin_session");
-    if (!adminSession?.value) return false;
-    const payload = verifyAdminSessionCookie(adminSession.value);
+    const adminSessionValue = readRequestCookie(request, "admin_session");
+    if (!adminSessionValue) return false;
+    const payload = verifyAdminSessionCookie(adminSessionValue);
     if (!payload?.authenticated) return false;
     const role = payload.role?.toLowerCase();
     return role === "admin" || !!isAdminEmailAllowed(payload.email);

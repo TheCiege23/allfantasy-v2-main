@@ -51,7 +51,7 @@ export default function ActivityFeed({
         <h2 className="text-sm font-semibold" style={{ color: "var(--text)" }}>
           Activity Feed
         </h2>
-        <p className="text-[10px]" style={{ color: "var(--muted)" }}>
+        <p className="text-[11px]" style={{ color: "var(--muted)" }}>
           Trades, waivers, lineups, messages, announcements
         </p>
       </header>
@@ -80,7 +80,7 @@ export default function ActivityFeed({
                 style={{ borderColor: "var(--border)" }}
               >
                 <div
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold"
                   style={{
                     background: "var(--panel2)",
                     color: "var(--text)",
@@ -105,13 +105,13 @@ export default function ActivityFeed({
                     {item.description}
                   </p>
                   <div className="mt-1 flex items-center gap-2 flex-wrap">
-                    <span className="text-[10px]" style={{ color: "var(--muted)" }}>
+                    <span className="text-[11px]" style={{ color: "var(--muted)" }}>
                       {formatTime(item.timestamp)}
                     </span>
                     {item.leagueId && item.leagueName && (
                       <Link
                         href={`/league/${item.leagueId}`}
-                        className="inline-flex items-center gap-1 text-[10px] font-medium"
+                        className="inline-flex items-center gap-1 text-[11px] font-medium"
                         style={{ color: "var(--accent-cyan-strong)" }}
                       >
                         {item.leagueName}

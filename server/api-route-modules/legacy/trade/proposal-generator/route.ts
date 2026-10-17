@@ -9,11 +9,35 @@ import { getCachedOpponentProfile, formatOpponentForPrompt } from '@/lib/opponen
 import { z } from 'zod'
 import { autoLogDecision } from '@/lib/decision-log'
 import { computeConfidenceRisk, getHistoricalHitRate, type AssetContext } from '@/lib/analytics/confidence-risk-engine'
-import { computeTradeAcceptance, suggestOptimizations, type TradeAcceptanceInput } from '@/lib/analytics/trade-acceptance'
 import { logTradeOfferEvent } from '@/lib/trade-engine/trade-event-logger'
+import { createLegacyPackageGrader, legacySessionUserId } from '@/lib/legacy/legacyOneGrade'
+import { gradeInputsFromRosterAssets, type LegacyPackageGrade } from '@/lib/legacy/legacyPackageGrade'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
+
+/*
+ * 🛑 EVERY PROPOSAL THIS GENERATOR SHOWS CARRIES THE ONE TRADE GRADE (2026-09-29).
+ *
+ * It used to score its own packages "fairness N/100" on its FantasyCalc totals, run a separate
+ * acceptance model ("computed acceptance likelihood is N%"), rank the packages by that acceptance,
+ * and label them "Slight Edge" / "Fair & Balanced" / "Overpay" — three verdicts, none of them the
+ * letter the full analyzer on the same page gives the same deal.
+ *
+ * It still BUILDS the packages the same way (value-matched combinations from your roster; the
+ * FantasyCalc totals only choose which assets go in). What it SHOWS about each one is THE grade from
+ * `lib/legacy/legacyOneGrade.ts`, from your side, taken before the AI writes a word — so the pitch
+ * explains the letter instead of inventing one. The labels now say how a package was built, not who
+ * wins it. No acceptance odds: nothing measured them.
+ */
+export const PROPOSAL_LABELS = {
+  /** You send less than you ask for, on the builder's values. */
+  lighter: 'Lighter offer',
+  /** About what you ask for. */
+  matched: 'Matched offer',
+  /** More than you ask for. */
+  stronger: 'Stronger offer',
+} as const
 
 const RequestSchema = z.object({
   leagueId: z.string().min(1),
@@ -235,7 +259,7 @@ function buildProposal(
   ratioLow: number,
   ratioHigh: number,
   ratioTarget: number
-): { label: string; myOffer: PricedRosterAsset[]; theirOffer: PricedRosterAsset[]; myTotal: number; theirTotal: number; delta: number; fairnessScore: number } | null {
+): { label: string; myOffer: PricedRosterAsset[]; theirOffer: PricedRosterAsset[]; builtGapPct: number } | null {
   const targetValue = desiredTotal * ratioTarget
   const lowBound = desiredTotal * ratioLow
   const highBound = desiredTotal * ratioHigh
@@ -244,17 +268,12 @@ function buildProposal(
   if (!combo) return null
 
   const myTotal = combo.reduce((s, a) => s + a.value, 0)
-  const delta = desiredTotal - myTotal
-  const fairnessScore = Math.max(0, Math.min(100, 100 - Math.abs(delta / Math.max(desiredTotal, 1)) * 100))
-
   return {
     label,
     myOffer: combo,
     theirOffer: desiredAssets,
-    myTotal,
-    theirTotal: desiredTotal,
-    delta,
-    fairnessScore: Math.round(fairnessScore),
+    // How far the BUILD landed from the ask, on the builder's own values. Only filters packages; never shown.
+    builtGapPct: Math.round((Math.abs(desiredTotal - myTotal) / Math.max(desiredTotal, 1)) * 100),
   }
 }
 
@@ -330,13 +349,15 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/proposal-generat
     const MIN_ASSET_VALUE = 5
     const availablePool = pricedMyAssets.filter(a => a.value >= MIN_ASSET_VALUE)
 
-    const slightEdge = buildProposal(availablePool, pricedDesired, desiredTotal, 'Slight Edge', 0.88, 0.96, 0.92)
-    const even = buildProposal(availablePool, pricedDesired, desiredTotal, 'Fair & Balanced', 0.96, 1.06, 1.00)
-    const theyWin = buildProposal(availablePool, pricedDesired, desiredTotal, 'Overpay', 1.08, 1.25, 1.15)
+    // Labels say how each package was BUILT (less, about the same, more than the ask on the builder's
+    // values). Whether it is a good deal is the one grade's call, below.
+    const lighter = buildProposal(availablePool, pricedDesired, desiredTotal, PROPOSAL_LABELS.lighter, 0.88, 0.96, 0.92)
+    const matched = buildProposal(availablePool, pricedDesired, desiredTotal, PROPOSAL_LABELS.matched, 0.96, 1.06, 1.00)
+    const stronger = buildProposal(availablePool, pricedDesired, desiredTotal, PROPOSAL_LABELS.stronger, 1.08, 1.25, 1.15)
 
-    const MIN_FAIRNESS = 80
-    const proposals = [slightEdge, even, theyWin]
-      .filter((p): p is NonNullable<typeof p> => p != null && p.fairnessScore >= MIN_FAIRNESS)
+    const MAX_BUILT_GAP_PCT = 20
+    const proposals = [lighter, matched, stronger]
+      .filter((p): p is NonNullable<typeof p> => p != null && p.builtGapPct <= MAX_BUILT_GAP_PCT)
 
     if (proposals.length === 0) {
       return NextResponse.json({
@@ -344,31 +365,46 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/proposal-generat
       }, { status: 400 })
     }
 
-    const proposalSummaries = proposals.map(p => {
-      if (!p) return ''
-      const myNames = p.myOffer.map(a => `${a.name} (${a.type === 'pick' ? 'Pick' : a.pos || 'Player'}, val: ${a.value})`).join(', ')
-      const theirNames = p.theirOffer.map(a => `${a.name} (${a.type === 'pick' ? 'Pick' : a.pos || 'Player'}, val: ${a.value})`).join(', ')
-      return `${p.label}: You send [${myNames}] (total ${p.myTotal}) for [${theirNames}] (total ${p.theirTotal}). Delta: ${p.delta > 0 ? '+' : ''}${p.delta}. Fairness: ${p.fairnessScore}/100.`
+    /*
+     * THE grade of every package, from your side (you send `myOffer`), BEFORE the AI is asked
+     * anything — so the pitch it writes explains the letter rather than deciding one.
+     */
+    const gradeOf = await createLegacyPackageGrader({
+      suppliedLeagueId: parsed.data.leagueId,
+      userId: await legacySessionUserId(),
+      viewerSide: false,
+    })
+    const grades: LegacyPackageGrade[] = await Promise.all(
+      proposals.map((p) => gradeOf(gradeInputsFromRosterAssets(p.myOffer), gradeInputsFromRosterAssets(p.theirOffer))),
+    )
+
+    const proposalSummaries = proposals.map((p, i) => {
+      const g = grades[i]!
+      const myNames = p.myOffer.map(a => `${a.name} (${a.type === 'pick' ? 'Pick' : a.pos || 'Player'})`).join(', ')
+      const theirNames = p.theirOffer.map(a => `${a.name} (${a.type === 'pick' ? 'Pick' : a.pos || 'Player'})`).join(', ')
+      const verdict = g.graded
+        ? `AllFantasy trade grade for ${username}: ${g.letter} ("${g.label}"), on league values ${g.giveValue} sent vs ${g.getValue} received.`
+        : `Not graded: ${g.reason}`
+      return `${p.label}: You send [${myNames}] for [${theirNames}]. ${verdict}`
     }).join('\n\n')
 
     const myRosterSummary = pricedMyAssets
       .filter(a => a.value > 0)
       .sort((a, b) => b.value - a.value)
       .slice(0, 15)
-      .map(a => `${a.name} (${a.pos || a.type}, val: ${a.value})`)
+      .map(a => `${a.name} (${a.pos || a.type})`)
       .join(', ')
 
     const targetRosterSummary = pricedTargetAssets
       .filter(a => a.value > 0)
       .sort((a, b) => b.value - a.value)
       .slice(0, 15)
-      .map(a => `${a.name} (${a.pos || a.type}, val: ${a.value})`)
+      .map(a => `${a.name} (${a.pos || a.type})`)
       .join(', ')
 
     let aiExplanations: any = {}
 
     let opponentAddendum = '';
-    let opponentTendencyData: any = null;
     try {
       const targetRId = typeof parsed.data.targetRosterId === 'string'
         ? parseInt(parsed.data.targetRosterId)
@@ -377,58 +413,9 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/proposal-generat
         const opponentProfile = await getCachedOpponentProfile(parsed.data.leagueId, targetRId);
         if (opponentProfile && opponentProfile.confidence >= 0.15) {
           opponentAddendum = formatOpponentForPrompt(opponentProfile);
-          opponentTendencyData = {
-            tendencies: opponentProfile.tendencies,
-            tradeLikelihood: opponentProfile.tradeLikelihood,
-            pitchAngles: opponentProfile.pitchAngles,
-            confidence: opponentProfile.confidence,
-            tradeCount: opponentProfile.tradeCount,
-            seasonsCovered: opponentProfile.seasonsCovered,
-          };
         }
       }
     } catch {}
-
-    // Deterministic acceptance model — the single source of truth for "how likely is this
-    // accepted", computed from real trade math BEFORE the LLM call. The LLM is given these
-    // exact numbers and told to quote them, never estimate its own — previously it generated
-    // a second, unreconciled "acceptance" % that could (and did) disagree with this one.
-    const acceptanceByLabel = new Map<string, { score: number; factors: any; summary: string; optimizations: any }>()
-    for (const p of proposals) {
-      const acceptanceInput: TradeAcceptanceInput = {
-        fairnessScore: p.fairnessScore,
-        valueDelta: p.delta,
-        myTotal: p.myTotal,
-        theirTotal: p.theirTotal,
-        proposedAssets: p.myOffer.map((a: any) => ({
-          type: a.type,
-          name: a.name,
-          pos: a.pos,
-          value: a.value,
-          pickYear: a.pickYear,
-          pickRound: a.pickRound,
-        })),
-        opponentTendencies: opponentTendencyData?.tendencies || null,
-        opponentTradeCount: opponentTendencyData?.tradeCount ?? undefined,
-        opponentSeasonsCovered: opponentTendencyData?.seasonsCovered ?? undefined,
-        targetRecord: targetTeam.record || null,
-        myRecord: myTeam.record || null,
-        leagueSize: 12,
-        format,
-      };
-      const acceptance = computeTradeAcceptance(acceptanceInput);
-      const optimizations = suggestOptimizations(acceptance, acceptanceInput);
-      acceptanceByLabel.set(p.label, {
-        score: acceptance.score,
-        factors: acceptance.factors,
-        summary: acceptance.summary,
-        optimizations,
-      })
-    }
-
-    const acceptanceForPrompt = proposals
-      .map(p => `${p.label}: computed acceptance likelihood is ${acceptanceByLabel.get(p.label)?.score ?? '?'}%.`)
-      .join('\n')
 
     try {
       const aiResponse = await openaiChatJson({
@@ -442,9 +429,10 @@ For each proposal, explain:
 1. WHY the other manager would realistically accept this — be honest about weaknesses
 2. What makes this proposal attractive to THEM specifically
 3. A pitch the user could use when proposing this trade
-4. If the trade is lopsided (fairness below 85%), be transparent about that
 
-Keep explanations concise but insightful (2-3 sentences each). Consider team needs, roster construction, and competitive windows. If a trade heavily favors one side, say so — don't dress it up.${opponentAddendum}`
+Each proposal already carries AllFantasy's trade grade. That grade is FINAL and is what the user sees: explain it, never argue for a different one, never give your own letter, fairness score, value estimate or acceptance percentage. If the grade says the trade favors one side, say so — don't dress it up.
+
+Keep explanations concise but insightful (2-3 sentences each). Consider team needs, roster construction, and competitive windows.${opponentAddendum}`
         }, {
           role: 'user',
           content: `Analyze these trade proposals between ${username} (${myTeam.displayName}) and ${targetTeam.displayName}.
@@ -455,26 +443,20 @@ Top assets: ${myRosterSummary}
 ${targetTeam.displayName} (${targetTeam.record?.wins ?? '?'}-${targetTeam.record?.losses ?? '?'}):
 ${targetRosterSummary}
 
-PROPOSALS:
+PROPOSALS (each with its AllFantasy trade grade):
 ${proposalSummaries}
 
-ACCEPTANCE LIKELIHOOD (already computed from real trade math — this is the ONLY acceptance
-number that exists; do not estimate your own, do not include an "acceptance" field. If you
-reference likelihood anywhere in theirPitch or tradePitch, quote this exact figure):
-${acceptanceForPrompt}
-
-For each proposal (Slight Edge, Fair & Balanced, Overpay), provide:
-- "theirPitch": why this trade appeals to ${targetTeam.displayName} (2-3 sentences). Be honest about value gaps. If you mention acceptance likelihood, use the exact computed number above — never estimate your own.
+For each proposal (${PROPOSAL_LABELS.lighter}, ${PROPOSAL_LABELS.matched}, ${PROPOSAL_LABELS.stronger}), provide:
+- "theirPitch": why this trade appeals to ${targetTeam.displayName} (2-3 sentences). Be honest about what the grade says.
 - "yourAdvantage": what ${username} gains strategically (1-2 sentences)
 - "tradePitch": a message ${username} could send to propose this trade (1-2 sentences, casual tone)
-- "fairnessNote": a brief honest assessment of the trade's fairness (1 sentence)
 
 Respond in JSON format:
 {
   "proposals": {
-    "slightEdge": { "theirPitch": string, "yourAdvantage": string, "tradePitch": string, "fairnessNote": string },
-    "even": { "theirPitch": string, "yourAdvantage": string, "tradePitch": string, "fairnessNote": string },
-    "overpay": { "theirPitch": string, "yourAdvantage": string, "tradePitch": string, "fairnessNote": string }
+    "lighter": { "theirPitch": string, "yourAdvantage": string, "tradePitch": string },
+    "matched": { "theirPitch": string, "yourAdvantage": string, "tradePitch": string },
+    "stronger": { "theirPitch": string, "yourAdvantage": string, "tradePitch": string }
   }
 }`
         }],
@@ -491,57 +473,36 @@ Respond in JSON format:
     }
 
     const labelToKey: Record<string, string> = {
-      'Slight Edge': 'slightEdge',
-      'Fair & Balanced': 'even',
-      'Overpay': 'overpay',
+      [PROPOSAL_LABELS.lighter]: 'lighter',
+      [PROPOSAL_LABELS.matched]: 'matched',
+      [PROPOSAL_LABELS.stronger]: 'stronger',
     }
 
-    const finalProposals = proposals.map(p => {
-      if (!p) return null
+    // The builder's values chose the assets; they are not printed — the grade's league values are.
+    const shown = (a: PricedRosterAsset) => ({
+      id: a.id,
+      name: a.name,
+      type: a.type,
+      pos: a.pos,
+      team: a.team,
+      pickYear: a.pickYear,
+      pickRound: a.pickRound,
+    })
+
+    const finalProposals = proposals.map((p, i) => {
       const key = labelToKey[p.label] || ''
       const ai = aiExplanations[key] || {}
       return {
         label: p.label,
-        myOffer: p.myOffer.map(a => ({
-          id: a.id,
-          name: a.name,
-          type: a.type,
-          pos: a.pos,
-          team: a.team,
-          value: a.value,
-          source: a.source,
-          pickYear: a.pickYear,
-          pickRound: a.pickRound,
-        })),
-        theirOffer: p.theirOffer.map(a => ({
-          id: a.id,
-          name: a.name,
-          type: a.type,
-          pos: a.pos,
-          team: a.team,
-          value: a.value,
-          source: a.source,
-          pickYear: a.pickYear,
-          pickRound: a.pickRound,
-        })),
-        myTotal: p.myTotal,
-        theirTotal: p.theirTotal,
-        delta: p.delta,
-        fairnessScore: p.fairnessScore,
-        acceptanceModel: acceptanceByLabel.get(p.label) ?? null,
+        myOffer: p.myOffer.map(shown),
+        theirOffer: p.theirOffer.map(shown),
+        /** THE trade grade, from your side (you send `myOffer`). Withheld with a reason, never guessed. */
+        grade: grades[i]!,
         theirPitch: ai.theirPitch ?? null,
         yourAdvantage: ai.yourAdvantage ?? null,
         tradePitch: ai.tradePitch ?? null,
-        fairnessNote: ai.fairnessNote ?? null,
       }
-    }).filter(Boolean)
-
-    const bestAcceptanceIdx = finalProposals.reduce((best, cur, idx) => {
-      if (!cur || !cur.acceptanceModel) return best;
-      if (best === -1) return idx;
-      const bestScore = finalProposals[best]?.acceptanceModel?.score ?? 0;
-      return cur.acceptanceModel.score > bestScore ? idx : best;
-    }, -1);
+    })
 
     const proposalAssets: AssetContext[] = pricedDesired.map((a: any) => ({
       type: a.type === 'pick' ? 'pick' as const : 'player' as const,
@@ -567,7 +528,6 @@ Respond in JSON format:
       },
       tradeContext: {
         assetCount: pricedDesired.length,
-        fairnessScore: finalProposals[1]?.fairnessScore,
       },
       historicalHitRate: hitRate,
     })
@@ -587,28 +547,26 @@ Respond in JSON format:
       confidenceRisk: crResult,
     })
 
-    for (const proposal of finalProposals) {
-      if (!proposal) continue
+    proposals.forEach((p, i) => {
+      const g = grades[i]!
       logTradeOfferEvent({
         leagueId: parsed.data.leagueId,
         senderUserId: parsed.data.username,
         opponentUserId: String(parsed.data.targetRosterId),
-        assetsGiven: (proposal.myOffer || []).map((a: any) => ({ name: a.name, value: a.value })),
-        assetsReceived: (proposal.theirOffer || []).map((a: any) => ({ name: a.name, value: a.value })),
-        acceptProb: proposal.acceptanceModel?.score ?? null,
-        verdict: proposal.label ?? null,
+        assetsGiven: p.myOffer.map((a) => ({ name: a.name, value: a.value })),
+        assetsReceived: p.theirOffer.map((a) => ({ name: a.name, value: a.value })),
+        acceptProb: null,
+        verdict: g.graded ? g.letter : null,
         confidenceScore: crResult.confidenceScore01,
         mode: 'PROPOSAL_GENERATOR',
         isSuperFlex: parsed.data.isSuperFlex ?? null,
         leagueFormat: parsed.data.format ?? null,
       }).catch(() => {})
-    }
+    })
 
     return NextResponse.json({
       success: true,
       proposals: finalProposals,
-      desiredTotal,
-      bestAcceptanceIndex: bestAcceptanceIdx >= 0 ? bestAcceptanceIdx : null,
       opponentTendencies: null, // Private inputs may inform internal calculations, never the public dossier.
       confidenceRisk: {
         confidence: crResult.numericConfidence,
@@ -617,9 +575,6 @@ Respond in JSON format:
         riskProfile: crResult.riskProfile,
         riskTags: crResult.riskTags,
         explanation: crResult.explanation,
-      },
-      valuationSources: {
-        desired: pricedDesired.map(a => ({ name: a.name, value: a.value, source: a.source })),
       },
     })
 

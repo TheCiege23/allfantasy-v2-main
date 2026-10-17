@@ -16,6 +16,7 @@ import { mergeActivityItems } from "@/lib/activity/merge"
 import { collectNativeLeagueActivity } from "@/lib/activity/sources/nativeLeagueActivity"
 import { collectRosterInjuryActivity } from "@/lib/activity/sources/rosterInjuryActivity"
 import { consumeRateLimit } from "@/lib/rate-limit"
+import { gradeSleeperActivityTrade, MAX_GRADED_PER_REQUEST } from "@/lib/activity/tradeGrades"
 import {
   buildActivityCacheKey,
   getCachedActivityFeed,
@@ -101,6 +102,8 @@ async function collectSleeperActivity(ctx: ActivitySourceContext): Promise<Activ
 
     const players = await getAllPlayers()
     const items: ActivityFeedItem[] = []
+    // Trades to grade after collection, newest first and bounded — see `lib/activity/tradeGrades.ts`.
+    const trades: Array<{ item: ActivityFeedItem; tx: SleeperTransaction; rosterNames: Map<number, string>; afLeagueId: string }> = []
 
     await Promise.all(
       sleeperLeagues.map(async (league) => {
@@ -117,7 +120,7 @@ async function collectSleeperActivity(ctx: ActivitySourceContext): Promise<Activ
 
         for (const tx of txs) {
           const { type, description } = describeTransaction(tx, rosterNames, players)
-          items.push({
+          const item: ActivityFeedItem = {
             id: `sleeper:${tx.transaction_id}`,
             type,
             userId: "",
@@ -128,9 +131,32 @@ async function collectSleeperActivity(ctx: ActivitySourceContext): Promise<Activ
             leagueId: league.id ?? leagueId,
             leagueName: league.name ?? null,
             source: "sleeper",
-          })
+          }
+          items.push(item)
+          // Graded on the viewer's own AF row for this league; no row id, no grade.
+          if (type === "trade" && league.id) trades.push({ item, tx, rosterNames, afLeagueId: league.id })
         }
       })
+    )
+
+    /*
+     * 🛑 BOUNDED: the newest `MAX_GRADED_PER_REQUEST` trades only, each memoised per transaction.
+     * This endpoint is polled every ~90s and has exhausted production Postgres before.
+     */
+    const newest = trades
+      .sort((x, y) => Date.parse(y.item.timestamp) - Date.parse(x.item.timestamp))
+      .slice(0, MAX_GRADED_PER_REQUEST)
+    await Promise.all(
+      newest.map(async (t) => {
+        const grade = await gradeSleeperActivityTrade({
+          afLeagueId: t.afLeagueId,
+          tx: t.tx,
+          rosterNames: t.rosterNames,
+          players: players as never,
+        })
+        // Only when there is one — an item without a grade keeps its old shape exactly.
+        if (grade) t.item.tradeGrade = grade
+      }),
     )
 
     return items

@@ -47,7 +47,7 @@ export function ChampionshipSection({ copy, ctaHref }: { copy: LandingCopy['jour
 
         <GlassCard className="landing-float mx-auto mb-8 max-w-xs p-6" accentBorder="color-mix(in srgb, var(--accent-amber) 30%, var(--border))">
           <Trophy className="mx-auto mb-3 h-10 w-10" style={{ color: 'var(--accent-amber-strong)' }} aria-hidden="true" />
-          <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.12em]" style={{ color: 'var(--accent-amber-strong)' }}>{copy.trophyCardTitle}</p>
+          <p className="mb-1 text-[11px] font-bold uppercase tracking-[0.12em]" style={{ color: 'var(--accent-amber-strong)' }}>{copy.trophyCardTitle}</p>
           <p className="mb-3 text-lg font-black" style={{ color: 'var(--text)' }}>Dynasty Dragons</p>
           <p className="text-xs font-medium" style={{ color: 'var(--muted)' }}>{copy.recordLabel}: 13-1</p>
         </GlassCard>

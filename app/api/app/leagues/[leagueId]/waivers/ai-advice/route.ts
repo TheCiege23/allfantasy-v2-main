@@ -5,7 +5,8 @@ import { proxyToExisting } from '@/lib/api/proxy-adapter'
 import { prisma } from '@/lib/prisma'
 import { resolveLeagueMembership } from '@/lib/league-access'
 
-export async function POST(req: NextRequest, { params }: { params: { leagueId: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
+  const params = await props.params
   /*
    * 🛑 THIS ROUTE HAD NO AUTHENTICATION AT ALL — not a membership check, not even
    * a session check. It read a League row and used its `settings`, `scoring`,

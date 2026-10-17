@@ -108,3 +108,32 @@ describe('NotificationRowMute', () => {
     expect(screen.queryByText('Muted')).toBeNull()
   })
 })
+
+
+describe('verified preference reads before muting', () => {
+  it.each([
+    {},
+    [],
+    { notificationPreferences: [] },
+    { notificationPreferences: 'unavailable' },
+    { notificationPreferences: { leagues: [] } },
+    { notificationPreferences: { leagues: { L1: null } } },
+    { notificationPreferences: { leagues: { L1: { enabled: 'false' } } } },
+    { notificationPreferences: { leagues: { L1: { mutedCategories: {} } } } },
+  ])('does not write over unverified preference data: %j', async (body) => {
+    getResponse = () => new Response(JSON.stringify(body), { status: 200 })
+    render(<NotificationRowMute leagueId="L1" leagueName="Dynasty" category="trade_proposals" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Mute' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /Trade proposals from Dynasty/ }))
+    await screen.findByRole('button', { name: /Not saved/ })
+    expect(patches()).toHaveLength(0)
+  })
+  it('accepts explicit null preferences as an empty first-time setting', async () => {
+    getResponse = () => new Response(JSON.stringify({ notificationPreferences: null }), { status: 200 })
+    render(<NotificationRowMute leagueId="L1" leagueName="Dynasty" category="trade_proposals" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Mute' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /Trade proposals from Dynasty/ }))
+    await screen.findByText('Muted')
+    expect(patches()[0].body).toEqual({ notificationPreferences: { leagues: { L1: { mutedCategories: ['trade_proposals'] } } } })
+  })
+})

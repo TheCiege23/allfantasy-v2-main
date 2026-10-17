@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { clientLeagueSettings } from '@/lib/league/clientLeagueSettings'
 
 export type LeagueForAi = {
   id: string
@@ -7,6 +8,8 @@ export type LeagueForAi = {
   platformLeagueId: string
   name: string | null
   sport: string
+  season?: number
+  scoring?: string | null
   settings: unknown
 }
 
@@ -23,14 +26,21 @@ export async function assertLeagueAccess(
       platformLeagueId: true,
       name: true,
       sport: true,
+      season: true,
+      scoring: true,
       settings: true,
     },
   })
   if (!league?.platformLeagueId) return null
 
+  // 🛑 These settings are pasted into model prompts (chimmy-setup, draft-help, commish-note…) and
+  // the model's text comes back to the user. The retired manager-label keys must reach neither
+  // (Milestone 32; lib/league/clientLeagueSettings.ts).
+  const forAi = { ...league, sport: String(league.sport), settings: clientLeagueSettings(league.settings) }
+
   const isCommish = league.userId === appUserId
   if (isCommish) {
-    return { ...league, sport: String(league.sport) }
+    return forAi
   }
 
   const claimed = await prisma.leagueTeam.findFirst({
@@ -39,7 +49,7 @@ export async function assertLeagueAccess(
   })
   if (!claimed) return null
 
-  return { ...league, sport: String(league.sport) }
+  return forAi
 }
 
 export function requireSleeper(league: LeagueForAi): string | null {

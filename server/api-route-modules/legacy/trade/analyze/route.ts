@@ -6,8 +6,10 @@ import { requireAuthOrOrigin, forbiddenResponse } from '@/lib/api-auth'
 import { openaiChatJson, parseJsonContentFromChatCompletion } from '@/lib/openai-client'
 import { getOrCreateAiResult } from '@/lib/ai/ai-result-cache'
 import { trackLegacyToolUsage } from '@/lib/analytics-server'
-import { evaluateTrade, formatEvaluationForAI, TradeAsset as TierTradeAsset, LeagueSettings, detectIDPFromRosterPositions, detectSFFromRosterPositions } from '@/lib/dynasty-tiers'
-import { formatValuesForPrompt, FantasyCalcSettings, calculateTradeBalance, getPickValue } from '@/lib/fantasycalc'
+// Roster-slot parsing only. The tier system's EVALUATION is not used here — see the note where it ran.
+import { detectSFFromRosterPositions } from '@/lib/dynasty-tiers'
+import { legacyPromptSeason } from '@/lib/legacy/promptSeason'
+import { formatValuesForPrompt, FantasyCalcSettings, getPickValue } from '@/lib/fantasycalc'
 import { getPlayerValuesForNamesDbFirst } from '@/lib/fantasycalc-db'
 import { buildTradeHubIntelBlock, parseTradeIntelBlockMeta } from '@/lib/trade-engine/trade-analyzer-intel'
 import { recordTradeSurfaceShadow } from '@/lib/decision-os/trade/surfaceShadow'
@@ -15,7 +17,20 @@ import {
   buildSurfaceParity,
   legacyVerdictToAdvantage,
 } from '@/lib/decision-os/trade/legacyParity'
-import { buildLegacyCanonicalGrade } from '@/lib/decision-os/trade/legacyCanonicalGrade'
+import { evaluateTrade, type EvaluateTradeDeps, type TradeEvaluationReceipt } from '@/lib/decision-os/trade/evaluateTrade'
+import { NOT_YOUR_LEAGUE_REASON, resolveEvaluationLeagueId } from '@/lib/decision-os/trade/evaluationLeague'
+import {
+  gradeInputsFromLegacyAssets,
+  legacyBalanceFromReceipt,
+  legacyVerdictFromGrade,
+  receiptGradeFields,
+  receiptPromptBlock,
+} from '@/lib/decision-os/trade/receiptViews'
+import { createLegacyPackageGrader } from '@/lib/legacy/legacyOneGrade'
+import { tradeSideAssetOffRoster } from '@/lib/legacy/tradeHubDirection'
+import { gradeLegacyCounters } from '@/lib/legacy/legacyPackageGrade'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
 import { fetchPlayerNewsFromGrok } from '@/lib/ai-gm-intelligence'
 import { buildRuntimeConstraints, formatConstraintsForPrompt, DEFAULT_TRADE_CONSTRAINTS, getPickValueWithRange, getPickRange } from '@/lib/trade-constraints'
 import { buildHistoricalTradeContext, getDataInfo } from '@/lib/historical-values'
@@ -46,7 +61,7 @@ import { fuseDecisionScore } from '@/lib/legacy-tool/fusion'
 import { evaluateCommissionerAlert } from '@/lib/legacy-tool/fairness'
 import { normalizeGrokSignalsToDeltaEvents, persistGrokDeltaEvents } from '@/lib/legacy-tool/grok-delta'
 import { assertSleeperBoundaryForLeagueId } from '@/lib/legacy/sleeper-boundary'
-import { getTheSportsDbApiKey } from '@/lib/env/sports-media-keys'
+import { loadTradeAnalyzerPlayerContext, type TradeContextResult } from '@/lib/legacy/tradeAnalyzerPlayerContext'
 import {
   buildPrivateTradeCoachingNotification,
   buildLeagueTradeProcessedNotification,
@@ -282,18 +297,6 @@ function normalizeName(s?: string) {
     .replace(/\s+/g, '')
 }
 
-async function fetchJson(url: string) {
-  const res = await fetch(url, { next: { revalidate: 0 } })
-  const text = await res.text()
-  let json: any = null
-  try {
-    json = text ? JSON.parse(text) : null
-  } catch {
-    // ignore
-  }
-  return { ok: res.ok, status: res.status, json, text }
-}
-
 function resolveRosterIdsFromLeague(opts: {
   userRosterId?: number | null
   partnerRosterId?: number | null
@@ -419,138 +422,6 @@ function summarizeRoster(roster: RosteredPlayer[]) {
     posCounts: counts,
     starterPosCounts: starterCounts,
     sampleStarters: starters.slice(0, 12).map((p) => `${p.name} (${p.pos}${p.isIdp ? ',IDP' : ''})`),
-  }
-}
-
-async function lookupSportsDbPlayers(args: { sport: Sport; names: string[] }) {
-  const apiKey = getTheSportsDbApiKey() || ''
-  if (!apiKey) return { ok: false, reason: 'missing_api_key', players: [] as any[] }
-
-  const uniq = Array.from(new Set(args.names.map((n) => n.trim()).filter(Boolean))).slice(0, 8)
-  const sportLabel = args.sport === 'nba' ? 'Basketball' : 'American Football'
-
-  const results: any[] = []
-  for (const name of uniq) {
-    const url = `https://www.thesportsdb.com/api/v1/json/${apiKey}/searchplayers.php?p=${encodeURIComponent(name)}`
-    const r = await fetchJson(url)
-    if (!r.ok) continue
-    const arr = r.json?.player
-    if (!Array.isArray(arr) || arr.length === 0) continue
-
-    const best = arr.find((p: any) => String(p?.strSport || '').toLowerCase().includes(sportLabel.toLowerCase())) || arr[0]
-    results.push({
-      name: best?.strPlayer || name,
-      sport: best?.strSport || sportLabel,
-      team: best?.strTeam || null,
-      position: best?.strPosition || null,
-      born: best?.dateBorn || null,
-      height: best?.strHeight || null,
-      weight: best?.strWeight || null,
-      description: best?.strDescriptionEN?.slice(0, 300) || null, // Player bio/situation
-    })
-  }
-
-  return { ok: true, players: results }
-}
-
-// ESPN player search and stats lookup - enhanced version
-async function lookupEspnPlayerStats(args: { sport: Sport; names: string[] }) {
-  const sportPath = args.sport === 'nba' ? 'basketball/nba' : 'football/nfl'
-  const uniq = Array.from(new Set(args.names.map((n) => n.trim()).filter(Boolean))).slice(0, 15)
-  
-  const results: any[] = []
-  const errors: string[] = []
-  
-  // Fetch in parallel batches for speed
-  const fetchPlayer = async (name: string) => {
-    try {
-      // Search for athlete
-      const searchUrl = `https://site.web.api.espn.com/apis/common/v3/search?query=${encodeURIComponent(name)}&limit=5&type=player` // db-first-exception: ad-hoc player enrichment for on-demand trade analysis
-      const searchRes = await fetchJson(searchUrl)
-      
-      if (!searchRes.ok || !searchRes.json?.items?.length) {
-        errors.push(`${name}: Not found in ESPN`)
-        return null
-      }
-      
-      // Find best match for the sport
-      const sportKey = args.sport === 'nba' ? 'nba' : 'nfl'
-      const athlete = searchRes.json.items.find((item: any) => 
-        item?.type === 'player' && 
-        String(item?.league?.slug || '').toLowerCase() === sportKey
-      ) || searchRes.json.items[0]
-      
-      if (!athlete?.id) {
-        errors.push(`${name}: No athlete ID found`)
-        return null
-      }
-      
-      // Fetch athlete details with stats
-      const athleteUrl = `https://site.web.api.espn.com/apis/common/v3/sports/${sportPath}/athletes/${athlete.id}` // db-first-exception: ad-hoc player enrichment for on-demand trade analysis
-      const athleteRes = await fetchJson(athleteUrl)
-      
-      if (!athleteRes.ok || !athleteRes.json) {
-        errors.push(`${name}: Failed to fetch details`)
-        return null
-      }
-      
-      const data = athleteRes.json as any
-      const statsCategories = data?.stats?.categories || []
-      
-      // Extract key stats based on sport and position
-      const statsSummary: Record<string, any> = {}
-      for (const cat of statsCategories) {
-        const stats = cat?.stats || []
-        for (const stat of stats.slice(0, 15)) {
-          if (stat?.displayValue && stat?.abbreviation) {
-            statsSummary[stat.abbreviation] = stat.displayValue
-          }
-        }
-      }
-      
-      // Get injury details
-      const injury = data?.injuries?.[0]
-      const injuryInfo = injury ? {
-        status: injury?.type?.description || 'Unknown',
-        detail: injury?.details?.detail || null,
-        returnDate: injury?.details?.returnDate || null,
-      } : null
-      
-      return {
-        name: data?.displayName || athlete?.displayName || name,
-        team: data?.team?.displayName || data?.team?.abbreviation || null,
-        position: data?.position?.abbreviation || null,
-        age: data?.age || null,
-        experience: data?.experience?.years || null,
-        birthDate: data?.dateOfBirth || null,
-        height: data?.height || null,
-        weight: data?.weight || null,
-        injury: injuryInfo,
-        status: injury ? injuryInfo?.status : 'Active',
-        depthChart: data?.depth?.position?.name || null,
-        stats: Object.keys(statsSummary).length > 0 ? statsSummary : null,
-        headshot: data?.headshot?.href || null,
-        college: data?.college?.name || null,
-        draftInfo: data?.draft ? `${data.draft.year} Round ${data.draft.round} Pick ${data.draft.selection}` : null,
-      }
-    } catch (e) {
-      errors.push(`${name}: ${e instanceof Error ? e.message : 'Unknown error'}`)
-      return null
-    }
-  }
-  
-  // Process in parallel
-  const playerResults = await Promise.all(uniq.map(fetchPlayer))
-  for (const result of playerResults) {
-    if (result) results.push(result)
-  }
-  
-  return { 
-    ok: results.length > 0, 
-    players: results,
-    errors: errors.length > 0 ? errors : undefined,
-    fetchedCount: results.length,
-    requestedCount: uniq.length,
   }
 }
 
@@ -730,7 +601,9 @@ If league size had no material impact, explicitly say: "League size did not mate
 `.trim()
 }
 
-function buildSystemPrompt(numTeams: number) {
+function buildSystemPrompt(numTeams: number, now: Date = new Date()) {
+  // The example years were literal "2025 ceiling" / "2026+ outlook" (fixed 2026-10-12, in the 2026 season).
+  const season = legacyPromptSeason(now)
   return `
 You are the AllFantasy Trade Analyzer — an ELITE fantasy sports trade evaluator for dynasty, redraft, and keeper leagues. You analyze trades like a front office war room, not ESPN hot takes.
 
@@ -766,7 +639,7 @@ Pick Tiers: Early 1st = cornerstone-level | Mid 1st = strong starter | Late 1st 
 - DEPTH CHART: Backup RBs (Allgeier, Mattison) have CAPPED upside. "A bad QB > good RB2" in SF.
 - AGE CURVES: WRs peak 25-29, RBs decline after 26, QBs can last to 40+
 - DEPRECIATING ASSETS: RBs lose value with time. Picks gain value as draft approaches.
-- USE STATS: Reference actual stats from espnPlayerStats (YDS, TD, REC, etc.) to justify value.
+- USE STATS: Reference actual stats from playerStats to justify value — only a player's own line.
 - INJURY HISTORY: Flag players with recurring injury issues (ACL tears, hamstring problems, concussions). Consider: How many games missed last 2 seasons? Is this a chronic issue? Does their play style increase injury risk?
 - INJURY RISK LEVELS: Low (rarely injured, durable), Moderate (1-2 significant injuries, some concerns), High (frequent injuries, soft tissue issues), Extreme (major injuries, currently injured, chronic problems)
 - QB SITUATION: For skill positions, evaluate their team's QB: Elite (Mahomes, Allen) = +value boost, Average = neutral, Bad/Rookie = -value discount. A WR with bad QB is worth less.
@@ -805,7 +678,7 @@ You identify emotional mistakes and flag them directly.
 You're conversational and honest - speak TO the user, not AT them.
 
 Use phrases like:
-- "This trade helps you long-term but hurts your 2025 ceiling."
+- "This trade helps you long-term but hurts your ${season} ceiling."
 - "You're overpaying because you value RB certainty too much."
 - "If you send this, expect a counter."
 - "I know you love this player, but the value isn't there."
@@ -837,7 +710,7 @@ When structuredDriverData is present in the input:
   "verdict": "Fair" | "Slightly favors A" | "Slightly favors B" | "Strongly favors A" | "Strongly favors B",
   "verdict_tone": "SMART" | "RISKY" | "BOLD" | "DONT_DO_THIS",
   "verdict_emoji": "🟢" | "⚠️" | "🔥" | "❌",
-  "verdict_message": string (conversational verdict like "This trade helps you long-term but hurts your 2025 ceiling."),
+  "verdict_message": string (conversational verdict like "This trade helps you long-term but hurts your ${season} ceiling."),
   "winProbabilityShift": number (-30 to +30, how much this helps Team A's championship odds),
   
   "teamAnalysis": {
@@ -868,8 +741,8 @@ When structuredDriverData is present in the input:
   "expertAnalysis": string (conversational, like talking to the manager),
   
   "value_now_vs_future": {
-    "immediate_impact": string (what happens to your 2025 ceiling),
-    "future_impact": string (what happens to your 2026+ outlook)
+    "immediate_impact": string (what happens to your ${season} ceiling),
+    "future_impact": string (what happens to your ${season + 1}+ outlook)
   },
   
   "who_benefits_and_why": string (clear explanation of who wins and why),
@@ -979,7 +852,7 @@ But you CANNOT flip the verdict direction. If calculatedTradeBalance says "Favor
 
 === CRITICAL RULES ===
 - Be SPECIFIC. Reference actual player names, stats, and situations.
-- Use the ESPN stats and TheSportsDB data provided to make concrete points.
+- Use the playerStats data provided to make concrete points.
 - Reference FantasyCalc values explicitly: "According to market values, Player X (7,500) is worth more than Player Y (5,200)."
 - Grade like Sleeper: A+ is a smash win, C is fair, F is getting fleeced.
 - "expertAnalysis" should read like elite fantasy analysis, not generic advice.
@@ -987,7 +860,7 @@ But you CANNOT flip the verdict direction. If calculatedTradeBalance says "Favor
 - When you have 3+ 1sts, trading one for positional stability is SMART, not overpay.
 - Backup RBs on other teams are DEAD VALUE. Trade them before they depreciate further.
 - Young QBs in Superflex > almost any RB in dynasty value.
-- If players show as "Not found in FantasyCalc", treat them as low-value depth players (value ~200).
+- If a player could not be priced, the trade is NOT graded. Never assign any player a default or estimated value.
 
 === INTERNAL GATEKEEPER VALIDATION (RUN BEFORE OUTPUT) ===
 Before outputting your final JSON, run an internal validation step using these Gatekeeper rules. If any rule fails, adjust your analysis or flag the issue:
@@ -1131,48 +1004,6 @@ function buildPickContext(assets: TradeAsset[], numTeams: number) {
     })
 }
 
-function applyScarcityToPlayerValue(base: number, tier: 'elite' | 'starter' | 'depth', scarcityMultiplier: number) {
-  if (!Number.isFinite(base)) return base
-  if (tier === 'elite') return Math.round(base * (1 + (scarcityMultiplier - 1) * 0.9))
-  if (tier === 'starter') return Math.round(base * (1 + (scarcityMultiplier - 1) * 0.6))
-  return Math.round(base * (1 + (scarcityMultiplier - 1) * 0.15))
-}
-
-function classifyPlayerTier(value: number, pos: string): 'elite' | 'starter' | 'depth' {
-  const p = pos.toUpperCase()
-  if (p === 'QB') return value >= 6000 ? 'elite' : value >= 3000 ? 'starter' : 'depth'
-  if (p === 'RB') return value >= 5000 ? 'elite' : value >= 2500 ? 'starter' : 'depth'
-  if (p === 'WR') return value >= 6000 ? 'elite' : value >= 3000 ? 'starter' : 'depth'
-  if (p === 'TE') return value >= 5000 ? 'elite' : value >= 2000 ? 'starter' : 'depth'
-  return value >= 3000 ? 'starter' : 'depth'
-}
-
-function convertToTierAssets(assets: TradeAsset[], numTeams: number): TierTradeAsset[] {
-  return assets.map(asset => {
-    if (asset.type === 'player') {
-      return {
-        name: asset.player.name,
-        position: asset.player.pos,
-        isPick: false,
-      }
-    } else if (asset.type === 'pick') {
-      const year = asset.pick.year
-      const round = asset.pick.round
-      const pickNum = asset.pick.pickNumber
-      const pickSlot = getPickTierByPercentile(pickNum, numTeams)
-      
-      return {
-        name: `${year} Round ${round}${pickNum ? ` (${round}.${String(pickNum).padStart(2, '0')})` : ''}`,
-        isPick: true,
-        pickYear: year,
-        pickRound: round,
-        pickSlot,
-      }
-    }
-    return { name: 'FAAB', isPick: false }
-  })
-}
-
 function buildUserPrompt(args: {
   sport: Sport
   format: 'redraft' | 'dynasty' | 'specialty'
@@ -1189,8 +1020,7 @@ function buildUserPrompt(args: {
   assetsA: TradeAsset[]
   assetsB: TradeAsset[]
 
-  sportsDb?: any
-  espnStats?: any
+  playerContext?: TradeContextResult | null
   fantasyCalcValues?: string
   tradeBalance?: {
     sideAValue: number
@@ -1202,8 +1032,7 @@ function buildUserPrompt(args: {
     unknownPlayers?: string[]
   }
   tradeDriverData?: TradeDriverData
-  
-  tierEvaluation?: string
+
   playerNews?: Array<{ playerName: string; sentiment: string; news: string[]; buzz: string }>
   tradeGoal?: string | null
   runtimeConstraints?: string
@@ -1218,7 +1047,7 @@ function buildUserPrompt(args: {
   unifiedPlayerContext?: string
   newsValueAdjustments?: NewsValueAdjustment[]
 }) {
-  const { sport, format, leagueType, idpEnabled, league, numTeams, sideA, sideB, otherManagers, assetsA, assetsB, sportsDb, espnStats, fantasyCalcValues, tradeBalance, tradeDriverData, tierEvaluation, playerNews, tradeGoal, runtimeConstraints, historicalContext, managerDnaContext, unifiedPlayerContext, newsValueAdjustments } = args
+  const { sport, format, leagueType, idpEnabled, league, numTeams, sideA, sideB, otherManagers, assetsA, assetsB, playerContext, fantasyCalcValues, tradeBalance, tradeDriverData, playerNews, tradeGoal, runtimeConstraints, historicalContext, managerDnaContext, unifiedPlayerContext, newsValueAdjustments } = args
 
   // Parse league settings for AI
   const rosterPositions = league?.roster_positions || []
@@ -1301,10 +1130,10 @@ function buildUserPrompt(args: {
 
       otherManagers: otherManagers || null,
 
-      sportsDbContext: sportsDb || null,
-      
-      espnPlayerStats: espnStats || null,
-      
+      playerStats: playerContext?.players?.length ? playerContext.players : null,
+
+      playerStatsUnresolved: playerContext?.unresolved?.length ? playerContext.unresolved : null,
+
       fantasyCalcMarketValues: fantasyCalcValues || null,
       
       historicalValueContext: historicalContext ? {
@@ -1355,14 +1184,13 @@ function buildUserPrompt(args: {
         verdict: tradeBalance.verdict,
         breakdown: tradeBalance.breakdown,
         unknownPlayers: tradeBalance.unknownPlayers || [],
-        guidance: `AUTHORITATIVE VALUE CALCULATION (from FantasyCalc - ~1M real trades):
+        guidance: `AUTHORITATIVE VALUE CALCULATION (AllFantasy trade engine, on this league's values):
 • Team A RECEIVES: ${tradeBalance.sideAValue} total value
 • Team B RECEIVES: ${tradeBalance.sideBValue} total value
 • Value Gap: ${Math.abs(tradeBalance.difference)} (${tradeBalance.percentDiff}% difference)
-• Initial Verdict: ${tradeBalance.verdict}
-${tradeBalance.unknownPlayers && tradeBalance.unknownPlayers.length > 0 ? `• WARNING: ${tradeBalance.unknownPlayers.length} players not found in FantasyCalc (treated as depth ~200 value each): ${tradeBalance.unknownPlayers.join(', ')}` : ''}
+• Verdict: ${tradeBalance.verdict}
 
-YOUR GRADE MUST ALIGN WITH THESE VALUES. Adjust ±1 level for context, but DO NOT flip the winner.`
+The grade and verdict are FIXED by the engine (see TRADE GRADE). Explain them; do not adjust them.`
       } : null,
 
       structuredDriverData: tradeDriverData ? {
@@ -1410,21 +1238,17 @@ YOUR GRADE MUST ALIGN WITH THESE VALUES. Adjust ±1 level for context, but DO NO
         'PLAYER CONTEXT: For each player involved, consider: (1) Age/retirement risk for veterans 35+, (2) Depth chart status - starters vs backups, (3) Injury history if known, (4) Contract/situation concerns.',
         'DRAFT CAPITAL: When picks are involved, analyze: (1) How many picks the receiving team already has in that round/year, (2) Diminishing returns of multiple same-round picks, (3) Overall draft capital balance after trade. Specific pick slots (like 1.08 or 2.01) indicate pick value - early picks (1.01-1.04) are premium, mid (1.05-1.08) are solid, late (1.09-1.12) are lesser.',
         'FLAG CONCERNS: Include risk_flags for: retirement candidates (Rodgers, Brady-types), backup RBs with limited upside, aging WRs, multiple picks to a team already loaded with picks.',
-        'USE ESPN STATS: espnPlayerStats contains real stats (YDS, TD, REC, etc), age, experience years, injury status, and depth chart position. Use these to inform your analysis.',
-        'USE THESPORTSDB: sportsDbContext contains birth date (for age calculation), position, team, and player bio/description. Cross-reference with ESPN data.',
+        'USE PLAYER STATS: playerStats holds each player\'s stored season stat line and current injury designation, matched to that player\'s own position and team. A player listed in playerStatsUnresolved has NO stats or injury on file here — do not state stats or an injury for them, and never borrow another player\'s (a same-named player at another position is a different person). An injury of null means none on file, not "healthy".',
         'USE FANTASYCALC: fantasyCalcMarketValues contains crowdsourced trade values from ~1 million real fantasy trades. Use these to assess market value and price each side of the trade. 30-day trends show rising/falling players.',
         'USE HISTORICAL VALUES: historicalValueContext (when present) contains what players were actually worth at the time of a historical trade. For past trades, this is CRITICAL - grade the trade based on valueAtTrade (what it looked like THEN), not currentValue. The hindsightVerdict shows how it aged. This enables accurate grading of trades from months/years ago.',
         'USE CALCULATED BALANCE: calculatedTradeBalance contains the pre-calculated value totals for each side based on FantasyCalc data. Use this as your primary value reference. The verdict field gives initial guidance, but you should adjust based on team context and needs.',
         'BESTBALL LEAGUES: When leagueType is "bestball", apply Bestball-specific valuation: (1) Boom/bust players with high ceilings are MORE valuable, (2) Depth and quantity matter more than consolidating into one elite player, (3) Handcuffs and injury insurance matter less, (4) Weekly floor is less important than weekly ceiling, (5) High-variance WRs and RBs who can score 25+ any week are premium assets.',
-        tierEvaluation ? 'TIER EVALUATION (MANDATORY): The deterministic tier system has pre-evaluated this trade. You MUST follow the grade cap and warnings. Do NOT override the tier system verdict.' : '',
         tradeGoal ? `USER TRADE GOAL: The user has specified their goal as "${tradeGoal}". Evaluate the trade in the context of this goal. Does the trade help them achieve it? Be specific about how this trade aligns or conflicts with their stated objective.` : '',
         'CRITICAL - REAL-TIME NEWS: realTimePlayerNews contains LIVE news from X/Twitter (last 7 days). If a player was RELEASED, CUT, INJURED, or had a BREAKOUT PERFORMANCE, this MUST be reflected in your analysis. Real-time news SUPERSEDES static FantasyCalc values. Always mention relevant breaking news in your expertAnalysis and playerBreakdowns.',
         newsValueAdjustments && newsValueAdjustments.length > 0 ? `NEWS VALUE ADJUSTMENTS APPLIED: The trade balance numbers above ALREADY include news-based value adjustments. ${formatNewsAdjustmentsForPrompt(newsValueAdjustments)}` : '',
       ].filter(Boolean),
       
       runtimeConstraints: runtimeConstraints || null,
-      
-      tierEvaluation: tierEvaluation || null,
 
       managerDNA: managerDnaContext || null,
 
@@ -1485,6 +1309,10 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
     }
 
     const reqData = parsedReq.data
+    // The AllFantasy user, when signed in — the one engine grades only on a league they belong to.
+    const sessionUserId = await getServerSession(authOptions as any)
+      .then((s) => (s as { user?: { id?: string } } | null)?.user?.id ?? null)
+      .catch(() => null)
 
     const sport: Sport = 'nfl'
     const format = reqData.format
@@ -1643,25 +1471,16 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
         )
       }
 
-      const rosterAIds = new Set(clientRosterA.map((p) => p.id))
-      const rosterBIds = new Set(clientRosterB.map((p) => p.id))
-
-      for (const a of assetsARaw) {
-        if (a.type === 'player' && a.player.id && !rosterAIds.has(a.player.id)) {
-          return NextResponse.json(
-            { error: `Side A asset "${a.player.name}" (${a.player.id}) not found on Side A roster.` },
-            { status: 400 }
-          )
-        }
-      }
-
-      for (const a of assetsBRaw) {
-        if (a.type === 'player' && a.player.id && !rosterBIds.has(a.player.id)) {
-          return NextResponse.json(
-            { error: `Side B asset "${a.player.name}" (${a.player.id}) not found on Side B roster.` },
-            { status: 400 }
-          )
-        }
+      // Team A RECEIVES `assetsA` (so they sit on Team B's roster) and GIVES `assetsB` (on Team A's) —
+      // the same orientation the grade below is taken in. See `lib/legacy/tradeHubDirection.ts`.
+      const offRoster = tradeSideAssetOffRoster({
+        assetsA: assetsARaw,
+        assetsB: assetsBRaw,
+        rosterA: clientRosterA,
+        rosterB: clientRosterB,
+      })
+      if (offRoster) {
+        return NextResponse.json({ error: offRoster }, { status: 400 })
       }
     }
 
@@ -1970,10 +1789,21 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
       ppr: leaguePpr as 0 | 0.5 | 1,
     }
 
-    // Fetch player context from TheSportsDB, ESPN, FantasyCalc, and real-time news in parallel
-    const [sportsDb, espnStats, fantasyCalcMap, playerNews] = await Promise.all([
-      lookupSportsDbPlayers({ sport, names: involvedNames }),
-      lookupEspnPlayerStats({ sport, names: involvedNames }),
+    /*
+     * Player context from Postgres, FantasyCalc and real-time news in parallel.
+     *
+     * 🛑 THE PLAYER CONTEXT USED TO BE TWO LIVE NAME SEARCHES — TheSportsDB and ESPN — each taking the FIRST
+     * hit and ignoring the asset's position and team, so an IDP Josh Allen got the Bills QB's stats, injury
+     * and depth chart. It is now read from `sports_players` and the injury read port, bound only when the
+     * asset's own position and team agree (`loadTradeAnalyzerPlayerContext`).
+     */
+    const [playerContext, fantasyCalcMap, playerNews] = await Promise.all([
+      loadTradeAnalyzerPlayerContext({
+        sport,
+        assets: [...assetsARaw, ...assetsBRaw]
+          .filter((a: any) => a?.type === 'player' && a.player?.name)
+          .map((a: any) => ({ name: String(a.player.name), position: a.player.pos ?? null, team: a.player.team ?? null })),
+      }).catch(() => ({ ok: false, players: [], unresolved: [] }) as Awaited<ReturnType<typeof loadTradeAnalyzerPlayerContext>>),
       sport === 'nfl' ? getPlayerValuesForNamesDbFirst(involvedNames, calcSettings) : Promise.resolve(new Map()),
       fetchPlayerNewsFromGrok(involvedNames, sport).catch((err) => {
         console.error('Player news fetch failed:', err);
@@ -2036,97 +1866,51 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
       }
     }
 
-    // Calculate trade balance using NEWS-ADJUSTED FantasyCalc values
-    // IMPORTANT: assetsA = what Team A RECEIVES from B, assetsB = what Team A GIVES to B (what B receives)
-    let tradeBalance: ReturnType<typeof calculateTradeBalance> | undefined = undefined
-    if (sport === 'nfl' && newsAdjustedCalcMap.size > 0) {
-      // What Team A RECEIVES (from assetsA)
-      const sideAReceivesPlayers = assetsA.filter(a => a.type === 'player').map((a: any) => a.player?.name).filter(Boolean) as string[]
-      const sideAReceivesPicks = assetsA.filter(a => a.type === 'pick').map((a: any) => ({ year: a.pick.year, round: a.pick.round, pickNumber: a.pick.pickNumber }))
-      
-      // What Team B RECEIVES (from assetsB = what A gives away)
-      const sideBReceivesPlayers = assetsB.filter(a => a.type === 'player').map((a: any) => a.player?.name).filter(Boolean) as string[]
-      const sideBReceivesPicks = assetsB.filter(a => a.type === 'pick').map((a: any) => ({ year: a.pick.year, round: a.pick.round, pickNumber: a.pick.pickNumber }))
-      
-      tradeBalance = calculateTradeBalance(
-        newsAdjustedCalcMap,
-        sideAReceivesPlayers,  // Players that Team A RECEIVES
-        sideBReceivesPlayers,  // Players that Team B RECEIVES (= what A gives)
-        sideAReceivesPicks,    // Picks that Team A RECEIVES
-        sideBReceivesPicks,    // Picks that Team B RECEIVES (= what A gives)
-        format === 'dynasty',
-        numTeams || clientLeagueContext?.numTeams || 12
-      )
+    /*
+     * 🛑 THE ONE TRADE ENGINE (2026-09-26). This was `calculateTradeBalance` over FantasyCalc values —
+     * which priced any player the lookup missed at a flat 200 and let that number anchor the grade —
+     * followed by a private scarcity pass over the result. The grade, the values and the balance
+     * below are now `evaluateTrade()`'s, on the league's own values; an asset the engine cannot
+     * price WITHHOLDS the grade instead of being valued at a placeholder.
+     *
+     * Orientation: `assetsA` is what Team A RECEIVES, `assetsB` what Team A GIVES. The receipt is
+     * taken from Team A's side, so its `give` is `assetsB` and its `get` is `assetsA`.
+     *
+     * ⚠ `viewerSide: false` — the signed-in user is not proven to BE Team A here (the tool takes two
+     * Sleeper usernames), so roster need is not priced; the league's chart and scoring are.
+     */
+    const evaluationLeagueId = await resolveEvaluationLeagueId({ suppliedLeagueId: leagueId, userId: sessionUserId })
+    const notYourLeague: Partial<EvaluateTradeDeps> =
+      leagueId && !evaluationLeagueId
+        ? { grade: async () => ({ graded: false, reason: NOT_YOUR_LEAGUE_REASON, basis: null }) }
+        : {}
+    const evaluationReceipt: TradeEvaluationReceipt = await evaluateTrade(
+      {
+        surface: 'legacy-trade-analyze',
+        leagueId: evaluationLeagueId,
+        userId: sessionUserId,
+        give: gradeInputsFromLegacyAssets(assetsB as never[], numTeams),
+        get: gradeInputsFromLegacyAssets(assetsA as never[], numTeams),
+        viewerSide: false,
+      },
+      notYourLeague,
+    )
+    const tradeBalance = legacyBalanceFromReceipt(evaluationReceipt) ?? undefined
+    console.log('[Trade] One-engine grade:', {
+      graded: evaluationReceipt.grade.graded,
+      letter: evaluationReceipt.grade.graded ? evaluationReceipt.grade.letter : null,
+      receiptId: evaluationReceipt.receiptId,
+    })
 
-      const scarcityMult = getScarcityMultiplier(numTeams)
-
-      if (scarcityMult !== 1.0) {
-        const adjustSide = (players: { name: string; value: number; found: boolean }[]) => {
-          let boost = 0
-          for (const p of players) {
-            if (!p.found || p.value <= 200) continue
-            const lookup = newsAdjustedCalcMap.get(p.name.toLowerCase())
-            const pos = (lookup as any)?.position?.toUpperCase() || ''
-            const playerTier = classifyPlayerTier(p.value, pos)
-            const adjusted = applyScarcityToPlayerValue(p.value, playerTier, scarcityMult)
-            boost += adjusted - p.value
-            p.value = adjusted
-          }
-          return boost
-        }
-        const boostA = adjustSide(tradeBalance.breakdown.sideA.players)
-        const boostB = adjustSide(tradeBalance.breakdown.sideB.players)
-        tradeBalance.breakdown.sideA.total += boostA
-        tradeBalance.breakdown.sideB.total += boostB
-        tradeBalance.sideAValue += boostA
-        tradeBalance.sideBValue += boostB
-        tradeBalance.difference = tradeBalance.sideAValue - tradeBalance.sideBValue
-        const maxVal = Math.max(tradeBalance.sideAValue, tradeBalance.sideBValue, 1)
-        tradeBalance.percentDiff = Math.round(Math.abs(tradeBalance.difference) / maxVal * 100)
-        if (tradeBalance.percentDiff >= 25) {
-          tradeBalance.verdict = tradeBalance.difference > 0 ? 'Strongly favors A' : 'Strongly favors B'
-        } else if (tradeBalance.percentDiff >= 10) {
-          tradeBalance.verdict = tradeBalance.difference > 0 ? 'Slightly favors A' : 'Slightly favors B'
-        } else {
-          tradeBalance.verdict = 'Fair'
-        }
-      }
-
-      console.log('[Trade] Calculated balance:', {
-        teamAReceives: tradeBalance.sideAValue,
-        teamBReceives: tradeBalance.sideBValue,
-        diff: tradeBalance.difference,
-        verdict: tradeBalance.verdict,
-        scarcityMult,
-      })
-    }
-
-    // Deterministic tier evaluation (Dynasty NFL only)
-    let tierEvaluationStr: string | undefined = undefined
-    if (format === 'dynasty' && sport === 'nfl') {
-      const tierAssetsA = convertToTierAssets(assetsA, numTeams)
-      const tierAssetsB = convertToTierAssets(assetsB, numTeams)
-      
-      const tierRosterPositions = league?.roster_positions || []
-      const isSF = clientLeagueContext?.settings?.qbFormat === 'superflex' || clientLeagueContext?.settings?.qbFormat === '2qb' || detectSFFromRosterPositions(tierRosterPositions)
-      const idpStarterCount = detectIDPFromRosterPositions(tierRosterPositions)
-      const isTEP = clientLeagueContext?.settings?.tep?.enabled ?? (league?.scoring_settings?.bonus_rec_te ? league.scoring_settings.bonus_rec_te > 0 : false)
-      
-      const leagueSettings: LeagueSettings = {
-        isSF,
-        isTEP,
-        idpStarterCount,
-      }
-      
-      const tierEvaluation = evaluateTrade(
-        tierAssetsA, // What A gives to B
-        tierAssetsB, // What B gives to A
-        leagueSettings,
-        'middle',
-        'middle'
-      )
-      tierEvaluationStr = formatEvaluationForAI(tierEvaluation)
-    }
+    /*
+     * 🛑 NO `lib/dynasty-tiers` EVALUATION IN THE PROMPT (2026-09-29). This block ran the tier system's
+     * own `evaluateTrade` on the deal and handed the model its grade cap and warnings under
+     * "TIER EVALUATION (MANDATORY) … You MUST follow the grade cap … Do NOT override the tier system
+     * verdict" — a second verdict, on a scale the owner has ruled is NOT authoritative (the market path
+     * is), sitting in the same prompt as the receipt the letter comes from. The prose could follow the
+     * tier cap and contradict the letter. The model's only grading input is now the receipt's facts
+     * (`receiptPromptBlock` below: the letter, the label, each asset's league value).
+     */
 
     // Build runtime constraints for trade validation
     const rosterAForConstraints = (finalRosterA || clientRosterA || []).map((p: any) => ({
@@ -2400,39 +2184,10 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
     }
     const reconciliationDirective = buildTradeIntelReconciliationDirective(providerAudit)
 
-    // P4-8 — deterministic-first: the canonical grade is computed BEFORE the LLM
-    // call so the model explains the deterministic verdict instead of inventing
-    // its own (the waiver engine's deterministic-then-narrate pattern, and the
-    // same MANDATORY-directive shape the tier evaluation already uses).
-    // DECISION_OS_TRADE_LIVE_LEGACY now defaults ON; set it to 'false' to fall
-    // back to the LLM-led grade. Parity is still recorded after the LLM call.
-    const liveLegacy =
-      String(process.env['DECISION_OS_TRADE_LIVE_LEGACY'] ?? 'true').trim().toLowerCase() === 'true'
-    let legacyCanonical: ReturnType<typeof buildLegacyCanonicalGrade> | null = null
-    try {
-      legacyCanonical = buildLegacyCanonicalGrade({
-        assetsA: assetsA as never[],
-        assetsB: assetsB as never[],
-        marketValueFor: (name: string) => {
-          const row = newsAdjustedCalcMap.get(name.toLowerCase()) as { value?: number } | undefined
-          return typeof row?.value === 'number' && Number.isFinite(row.value) ? row.value : null
-        },
-        sport: 'NFL',
-        format: format || 'dynasty',
-        currentSeason: new Date().getFullYear(),
-      })
-    } catch {
-      // Canonical grading must never break the legacy response.
-    }
-    const canonicalGradeDirective =
-      liveLegacy && legacyCanonical && !legacyCanonical.insufficientData && legacyCanonical.grade && legacyCanonical.verdict
-        ? [
-            '--- CANONICAL GRADE (MANDATORY) ---',
-            `The deterministic canonical value engine has already graded this trade: grade=${legacyCanonical.grade}, verdict="${legacyCanonical.verdict}", fairnessScore=${legacyCanonical.fairnessScore}.`,
-            'This grade and verdict are FINAL and are what the user will see. Set your grade and verdict fields to match them exactly. Your job is to EXPLAIN why the value data supports this verdict — do NOT argue for a different grade.',
-            '--- END CANONICAL GRADE ---',
-          ].join('\n')
-        : ''
+    // Deterministic-first: the grade is the one engine's receipt, computed BEFORE the LLM call, so
+    // the model explains the verdict instead of inventing its own — and, when the grade is withheld,
+    // is told not to invent a letter or a value.
+    const canonicalGradeDirective = receiptPromptBlock(evaluationReceipt)
 
     const userPrompt = buildUserPrompt({
       sport,
@@ -2458,12 +2213,10 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
       otherManagers: leagueId ? otherManagers : null,
       assetsA,
       assetsB,
-      sportsDb: sportsDb.ok ? sportsDb.players : null,
-      espnStats: espnStats.ok ? espnStats.players : null,
+      playerContext,
       fantasyCalcValues,
       tradeBalance,
       tradeDriverData,
-      tierEvaluation: tierEvaluationStr,
       playerNews,
       tradeGoal: reqData.tradeGoal,
       runtimeConstraints: constraintsPromptStr,
@@ -2578,9 +2331,20 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
     const validated = TradeAnalyzeResponseSchema.safeParse(parsed)
     if (!validated.success) {
       console.error('Trade AI response validation failed:', validated.error)
+      // The letter is the receipt's on this path too — an unvalidated AI letter is never shown.
+      const unvalidatedGrade = receiptGradeFields(evaluationReceipt)
       return NextResponse.json({
         success: true,
-        data: parsed,
+        data: {
+          ...(parsed as Record<string, unknown>),
+          grade: unvalidatedGrade.grade,
+          verdict: legacyVerdictFromGrade(evaluationReceipt.grade),
+          gradeLabel: unvalidatedGrade.gradeLabel,
+          gradeWithheld: unvalidatedGrade.gradeWithheld,
+          gradeSource: unvalidatedGrade.gradeSource,
+          evaluationReceiptId: unvalidatedGrade.evaluationReceiptId,
+        },
+        evaluationReceipt,
         validated: false,
         rate_limit: { remaining: rlPair.remaining, retryAfterSec: rlPair.retryAfterSec },
       })
@@ -2622,16 +2386,16 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
 
     const hitRate = await getHistoricalHitRate(canonicalA, 'trade', leagueId || undefined).catch(() => null)
 
-    // Honesty (Task 2): classify every valuation that entered the balance math. Players the
-    // FantasyCalc lookup missed carry the flat ~200 fallback — that must reach the response as
-    // 'fallback', in missingInputs, and as lowered confidence, never as a market observation.
+    // Honesty (Task 2): classify every valuation that entered the balance math. Since the one engine
+    // (2026-09-26) a balance exists only when EVERY asset was priced on league values, so nothing
+    // here is a fallback — an unpriced player withholds the grade and there is no balance at all.
     let valuationEvidence: TradeValuationEvidence | null = null
     if (tradeBalance) {
       valuationEvidence = buildTradeValuationEvidence({
         sideAPlayers: tradeBalance.breakdown.sideA.players,
         sideBPlayers: tradeBalance.breakdown.sideB.players,
         unknownPlayers: tradeBalance.unknownPlayers,
-        foundValuesAdjusted: getScarcityMultiplier(numTeams) !== 1.0,
+        foundValuesAdjusted: false,
       })
     }
 
@@ -2932,8 +2696,9 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
     logTradeOfferEvent({
       leagueId: leagueId || null,
       senderUserId: canonicalA || null,
-      assetsGiven: assetsA.map((a: any) => ({ name: a.player?.name || `${a.pick?.year} R${a.pick?.round}`, value: a.player?.value || a.pick?.value, type: a.type })),
-      assetsReceived: assetsB.map((a: any) => ({ name: a.player?.name || `${a.pick?.year} R${a.pick?.round}`, value: a.player?.value || a.pick?.value, type: a.type })),
+      // The sender is Team A, which GIVES `assetsB` and RECEIVES `assetsA`.
+      assetsGiven: assetsB.map((a: any) => ({ name: a.player?.name || `${a.pick?.year} R${a.pick?.round}`, value: a.player?.value || a.pick?.value, type: a.type })),
+      assetsReceived: assetsA.map((a: any) => ({ name: a.player?.name || `${a.pick?.year} R${a.pick?.round}`, value: a.player?.value || a.pick?.value, type: a.type })),
       features: tradeDriverData ? {
         lineupImpact: tradeDriverData.lineupImpactScore,
         vorp: tradeDriverData.vorpScore,
@@ -3018,56 +2783,60 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
       engineAnalysis = await runTradeAnalysis(engineReq)
     } catch {}
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Slice 13/14 + P4-8 — CANONICAL CONVERGENCE for the highest-traffic trade
-    // surface. The canonical grade was computed BEFORE the LLM call (see
-    // legacyCanonical above) so the narrative explains the deterministic
-    // verdict; here we record parity and enforce the override.
-    //
-    //   • Always: record parity (canonical vs legacy) so divergence is measured.
-    //   • DECISION_OS_TRADE_LIVE_LEGACY: the canonical grade/verdict is what the
-    //     user sees. DEFAULT ON since P4-8 — set to 'false' to fall back to the
-    //     LLM-led grade.
-    //   • NEVER override on insufficientData: if the canonical engine cannot
-    //     grade, legacy's existing answer stands rather than blanking a working
-    //     surface.
-    // Fully guarded — convergence can never throw into the legacy response.
-    let canonicalGradeApplied = false
-    try {
-      const canonical = legacyCanonical
-      if (canonical) {
-        const legacyAdvantage = legacyVerdictToAdvantage((data as { verdict?: string })?.verdict)
-        const canonicalAdvantage = canonical.verdict ? legacyVerdictToAdvantage(canonical.verdict) : null
-
-        recordTradeSurfaceShadow({
-          surface: 'legacy',
-          leagueId: leagueId || null,
-          assetsGive: assetsB.length,
-          assetsGet: assetsA.length,
-          surfaceVerdict: (data as { verdict?: string })?.verdict ?? null,
-          surfaceAnalysisMode: (data as { grade?: string })?.grade ?? 'llm_grade',
-          comparison: buildSurfaceParity({
-            surfaceAdvantage: legacyAdvantage,
-            engineAdvantage: canonicalAdvantage,
-            engineGrade: canonical.grade,
-            engineFairnessScore: canonical.fairnessScore,
-            engineConfidenceScore: canonical.confidenceScore,
-            engineValueDifference: canonical.valueDifference,
-          }),
-        })
-
-        if (liveLegacy && !canonical.insufficientData && canonical.grade && canonical.verdict) {
-          const target = data as Record<string, unknown>
-          target.grade = canonical.grade
-          target.verdict = canonical.verdict
-          target.fairnessScore = canonical.fairnessScore
-          target.confidenceScore = canonical.confidenceScore
-          target.gradeSource = 'canonical_value_engine'
-          canonicalGradeApplied = true
-        }
+    /*
+     * 🛑 THE COUNTER SUGGESTIONS CARRY THE ONE GRADE, NOT THIS ENGINE'S (2026-09-29). `runTradeAnalysis`
+     * is kept only for what it SUGGESTS — its counters (which player to add or ask back) and its title
+     * odds. Its verdict, fairness score, acceptance probability and acceptance buckets are no longer sent,
+     * and each counter's own `acceptProb` / `fairnessScore` ("Est. Accept", "Fairness" on the card) is
+     * replaced by the one grade of the deal the counter leaves — the same orientation as the receipt
+     * above (give = assetsB, get = assetsA).
+     */
+    let engineClientView: { counters: Awaited<ReturnType<typeof gradeLegacyCounters>>; championshipEquity: unknown } | null = null
+    if (engineAnalysis) {
+      const counterGrader = await createLegacyPackageGrader({ suppliedLeagueId: leagueId, userId: sessionUserId, viewerSide: false })
+      engineClientView = {
+        counters: await gradeLegacyCounters(
+          engineAnalysis.counters,
+          { give: gradeInputsFromLegacyAssets(assetsB as never[], numTeams), get: gradeInputsFromLegacyAssets(assetsA as never[], numTeams) },
+          counterGrader,
+        ),
+        championshipEquity: engineAnalysis.championshipEquity ?? null,
       }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 🛑 THE LETTER IS THE RECEIPT'S, ALWAYS (2026-09-26). Before the one engine the canonical grade
+    // overrode the LLM's only when it could grade, and otherwise "legacy's existing answer stood" —
+    // an LLM letter anchored on the flat-200 balance. Now a withheld grade is shown as withheld:
+    // `grade: null` with the reason. Parity (LLM verdict vs engine) is still recorded.
+    const oneGrade = receiptGradeFields(evaluationReceipt)
+    try {
+      const g = evaluationReceipt.grade
+      recordTradeSurfaceShadow({
+        surface: 'legacy',
+        leagueId: leagueId || null,
+        assetsGive: assetsB.length,
+        assetsGet: assetsA.length,
+        surfaceVerdict: (data as { verdict?: string })?.verdict ?? null,
+        surfaceAnalysisMode: (data as { grade?: string })?.grade ?? 'llm_grade',
+        comparison: buildSurfaceParity({
+          surfaceAdvantage: legacyVerdictToAdvantage((data as { verdict?: string })?.verdict),
+          engineAdvantage: g.graded ? g.sideAdvantage : null,
+          engineGrade: oneGrade.grade,
+          engineValueDifference: g.graded ? g.getValue - g.giveValue : null,
+        }),
+      })
     } catch {
-      // Convergence must never break the legacy response.
+      // Parity telemetry must never break the response.
+    }
+    {
+      const target = data as Record<string, unknown>
+      target.grade = oneGrade.grade
+      target.verdict = legacyVerdictFromGrade(evaluationReceipt.grade)
+      target.partnerGrade = oneGrade.partnerGrade
+      target.gradeLabel = oneGrade.gradeLabel
+      target.gradeWithheld = oneGrade.gradeWithheld
+      target.evaluationReceiptId = oneGrade.evaluationReceiptId
     }
 
     const leagueStatus = league?.status || ''
@@ -3085,7 +2854,7 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
       result: {
         ...data,
         // Slice 14 — provenance: which engine produced the grade the user sees.
-        gradeSource: canonicalGradeApplied ? 'canonical_value_engine' : 'legacy_llm_fantasycalc',
+        gradeSource: oneGrade.gradeSource,
         notes: finalNotes,
         _leagueSize: numTeams,
         _scarcityMultiplier: scarcityMultiplier,
@@ -3094,6 +2863,7 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
         ...(pickInferenceNotes.length > 0 ? { _pickInferenceNotes: pickInferenceNotes } : {}),
       },
       data: { ...data, notes: finalNotes },
+      evaluationReceipt,
       leagueSize: numTeams,
       scarcityMultiplier,
       pickContext: pickContextAll,
@@ -3109,7 +2879,7 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
       ...(analyticsEnhanced ? { analytics: analyticsEnhanced } : {}),
       ...(valuationEvidence ? { valuationEvidence } : {}),
       intelligenceAudit: providerAudit,
-      ...(engineAnalysis ? { engineAnalysis, engineRequest: engineReqSaved } : {}),
+      ...(engineClientView ? { engineAnalysis: engineClientView, engineRequest: engineReqSaved } : {}),
       ...(offseasonContext ? { offseasonContext } : {}),
       ...(newsValueAdjustments.length > 0 ? {
         newsAdjustments: newsValueAdjustments

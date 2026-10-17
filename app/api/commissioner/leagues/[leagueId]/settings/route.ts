@@ -26,10 +26,8 @@ async function assertCommissionerOrAdmin(leagueId: string, user: SessionUser | n
   await assertCommissioner(leagueId, user.id)
 }
 
-export async function GET(
-  _req: Request,
-  { params }: { params: { leagueId: string } }
-) {
+export async function GET(_req: Request, props: { params: Promise<{ leagueId: string }> }) {
+  const params = await props.params
   const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -43,10 +41,8 @@ export async function GET(
   return NextResponse.json(config)
 }
 
-export async function PATCH(
-  req: Request,
-  { params }: { params: { leagueId: string } }
-) {
+export async function PATCH(req: Request, props: { params: Promise<{ leagueId: string }> }) {
+  const params = await props.params
   const session = (await getServerSession(authOptions as any)) as { user?: SessionUser } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })

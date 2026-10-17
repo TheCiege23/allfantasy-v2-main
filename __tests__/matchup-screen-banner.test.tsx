@@ -1,6 +1,12 @@
 import React from 'react'
-import { describe, expect, it } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen } from '@testing-library/react'
+
+// The week banner's refresh control calls useRouter, which needs an app router outside one.
+vi.mock('next/navigation', async (orig) => ({
+  ...(await orig<typeof import('next/navigation')>()),
+  useRouter: () => ({ refresh() {}, push() {}, replace() {}, prefetch() {}, back() {}, forward() {} }),
+}))
 
 import Matchup from '@/components/core-app/screens/Matchup'
 import type { MatchupData } from '@/lib/core-app/matchup'
@@ -79,6 +85,12 @@ function crests(container: HTMLElement): string[] {
 }
 
 describe('Matchup banner — unplayed week', () => {
+  it('shows team initials if a saved manager avatar fails to load', () => {
+    const { container } = render(<Matchup data={data()} />)
+    fireEvent.error(container.querySelector('img.af-mu-crest--img')!)
+    expect(container.querySelectorAll('img.af-mu-crest--img')).toHaveLength(1)
+    expect(container.querySelector('.af-mu-crest:not(.af-mu-crest--img)')?.textContent).toBe('TH')
+  })
   it('still shows both manager crests when nothing has been scored', () => {
     const { container } = render(<Matchup data={data()} />)
     expect(crests(container)).toEqual([CREST_YOU, CREST_THEM])
@@ -176,5 +188,46 @@ describe('Matchup banner — scored week', () => {
   it('drops the unscored-week caption once there is a score', () => {
     const { container } = render(<Matchup data={scored} />)
     expect(container.querySelector('.af-mu-basis')).toBeNull()
+  })
+})
+
+/*
+ * 🛑 A GUILLOTINE LEAGUE DRAWS NO VERSUS. Production 2026-10-02 showed "Survivor All-Stars Guillotine"
+ * as a head-to-head with a win probability. The loader now returns no opponent for it, and the screen
+ * explains the format and points at the two pages that answer the real question.
+ */
+describe('Matchup — an elimination league', () => {
+  const noOpponent = { available: false as const, reason: 'a guillotine league is scored against the whole field' }
+  const elim = (format: 'guillotine' | 'survivor_guillotine') =>
+    data({
+      league: { ...data().league, elimination: format },
+      week: noOpponent,
+      teams: noOpponent,
+      sides: noOpponent,
+      projectedFinal: { available: false, reason: 'no matchup resolved, so there is nothing to project' },
+    })
+
+  it('🛑 renders the format explanation, not a head-to-head, a win probability or a lineup board', () => {
+    const { container } = render(<Matchup data={elim('guillotine')} />)
+    const text = container.textContent ?? ''
+    expect(text).toContain('No head-to-head in this league')
+    expect(text).toContain('Guillotine')
+    expect(text).not.toContain('Win probability')
+    expect(text).not.toContain('Head to head, slot by slot')
+    expect(container.querySelector('.af-mu-h2h')).toBeNull()
+    const hrefs = [...container.querySelectorAll('a')].map((a) => a.getAttribute('href'))
+    expect(hrefs).toContain('/core/standings?league=l1')
+    expect(hrefs).toContain('/core/my-team?league=l1')
+  })
+
+  it('names a survivor guillotine as such', () => {
+    render(<Matchup data={elim('survivor_guillotine')} />)
+    expect(screen.getByText('Survivor Guillotine')).toBeTruthy()
+  })
+
+  it('CONTROL: an ordinary league still draws the head-to-head', () => {
+    const { container } = render(<Matchup data={data()} />)
+    expect(container.querySelector('.af-mu-h2h')).not.toBeNull()
+    expect(container.textContent ?? '').not.toContain('No head-to-head in this league')
   })
 })

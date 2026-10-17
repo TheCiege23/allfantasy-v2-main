@@ -26,7 +26,7 @@ export function BotPersonalityBadge({
   if (compact) {
     return (
       <span
-        className={`inline-flex max-w-full items-center gap-1 rounded-md border border-sky-500/35 bg-sky-500/10 px-1 py-px text-[8px] font-semibold uppercase tracking-wide text-sky-100/95 ${className}`}
+        className={`inline-flex max-w-full items-center gap-1 rounded-md border border-sky-500/35 bg-sky-500/10 px-1 py-px text-[11px] font-semibold uppercase tracking-wide text-sky-100/95 ${className}`}
         title={summary}
       >
         <span className="text-sky-300/90">AI</span>
@@ -37,10 +37,10 @@ export function BotPersonalityBadge({
 
   return (
     <span
-      className={`inline-flex max-w-full items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] text-white/80 ${className}`}
+      className={`inline-flex max-w-full items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[11px] text-white/80 ${className}`}
       title={summary}
     >
-      <span className="rounded bg-sky-500/25 px-1 text-[9px] font-bold uppercase tracking-wide text-sky-100">AI</span>
+      <span className="rounded bg-sky-500/25 px-1 text-[11px] font-bold uppercase tracking-wide text-sky-100">AI</span>
       <span className="truncate text-white/75">{label}</span>
     </span>
   )

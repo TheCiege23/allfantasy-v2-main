@@ -12,10 +12,8 @@ import { DEFAULT_SLOW_ROUTE_MS } from "@/lib/league-engine-performance/observabi
 /**
  * POST: run waiver processing for the league (cron or commissioner).
  */
-export async function POST(
-  req: NextRequest,
-  { params }: { params: { leagueId: string } }
-) {
+export async function POST(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
+  const params = await props.params
   const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   const leagueId = params.leagueId

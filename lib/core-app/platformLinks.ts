@@ -117,7 +117,14 @@ function screenLink(league: LinkLeague, screen: SourceScreen): PlatformLink | nu
 /** Where a lineup change is made — the "Where to fix it" destination. */
 export function lineupLink(league: LinkLeague): PlatformLink | null {
   if (!normalizeSourcePlatform(league.platform)) {
-    return internal(`/core/my-team?league=${encodeURIComponent(league.id)}`, 'My team')
+    /*
+     * ⚠ NOT /core/my-team. That screen READS a lineup and has no control that changes
+     * one — nothing under /core writes a roster — so "Where to fix it" sent a native
+     * manager to a page where it could not be fixed. The native editor is the league
+     * shell's team tab (`?view=team`, aliased to `roster` on the redraft core), which
+     * saves through /api/leagues/roster/save with its own lock checks.
+     */
+    return internal(`/league/${encodeURIComponent(league.id)}?view=team`, 'Lineup')
   }
   return screenLink(league, 'lineup')
 }
@@ -174,6 +181,32 @@ export function verifiedHandoff(league: LinkLeague, screen: SourceScreen): Platf
   })
   if (!resolved || !resolved.verified) return null
   return fromResolved(resolved, league.platform)
+}
+
+/**
+ * Where to FIX a lineup, for a surface that promises exactly that (the injury fan-out, the finder's
+ * per-league calls): the platform's verified lineup screen, else a native league's in-app team tab,
+ * else nothing. Never `lineupLink`'s league-page fallback — a button that says "fix your lineup" and
+ * opens a homepage is worse than no button.
+ */
+export function lineupFixLink(league: LinkLeague): PlatformLink | null {
+  const verified = verifiedHandoff(league, 'lineup')
+  if (verified) return verified
+  const own = lineupLink(league)
+  return own && !own.external ? own : null
+}
+
+/**
+ * Where to CLAIM a free agent, for a surface that promises exactly that (the Player Finder's
+ * "available in your leagues" list): the platform's verified waiver/add screen, else a native
+ * league's in-app wire, else nothing. Same rule as `lineupFixLink` — never `claimLink`'s
+ * league-page fallback under a "Claim" button.
+ */
+export function waiverClaimLink(league: LinkLeague): PlatformLink | null {
+  const verified = verifiedHandoff(league, 'waivers')
+  if (verified) return verified
+  const own = claimLink(league)
+  return own && !own.external ? own : null
 }
 
 /** The verified screen for the job, else that league's verified page (labelled "League"), else nothing. */

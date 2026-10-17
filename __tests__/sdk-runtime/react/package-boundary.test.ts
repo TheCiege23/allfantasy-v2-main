@@ -61,10 +61,12 @@ describe('@allfantasy/widget-react — package.json', () => {
     expect(regularDeps['react-dom']).toBeUndefined()
   })
 
-  it('the peer range matches the currently installed React major (18.x)', () => {
+  it('the peer range accepts the currently installed React major', () => {
     const pkg = JSON.parse(readFileSync(join(PACKAGE_ROOT, 'package.json'), 'utf8'))
-    expect(pkg.peerDependencies.react).toMatch(/\^18\./)
-    expect(pkg.peerDependencies['react-dom']).toMatch(/\^18\./)
+    const rootPkg = JSON.parse(readFileSync(resolve(process.cwd(), 'package.json'), 'utf8'))
+    const major = String(rootPkg.dependencies.react).match(/\d+/)![0]
+    expect(pkg.peerDependencies.react).toContain(`^${major}.`)
+    expect(pkg.peerDependencies['react-dom']).toContain(`^${major}.`)
   })
 
   it('has no dependency on any embed-adapter package (widget-iframe, widget-web-component, widget-js)', () => {

@@ -143,36 +143,36 @@ function PlayerRow({ player, expanded, onToggle, view }: {
           <div className="w-7 h-7 rounded-lg bg-white/5 flex items-center justify-center flex-shrink-0">
             <span className="text-xs font-bold text-white/70">{player.compositeRank}</span>
           </div>
-          <span className={cx('text-[10px] font-bold uppercase w-6 flex-shrink-0', POS_COLORS[player.position] || 'text-white/50')}>
+          <span className={cx('text-[11px] font-bold uppercase w-6 flex-shrink-0', POS_COLORS[player.position] || 'text-white/50')}>
             {player.position}
           </span>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5">
               <span className="text-sm text-white font-medium truncate">{player.name}</span>
               {player.isOnUserRoster && (
-                <span className="text-[8px] px-1 py-0.5 bg-cyan-500/20 text-cyan-300 rounded flex-shrink-0">YOURS</span>
+                <span className="text-[11px] px-1 py-0.5 bg-cyan-500/20 text-cyan-300 rounded flex-shrink-0">YOURS</span>
               )}
               {player.demandScore >= 65 && (
-                <span className="text-[8px] px-1 py-0.5 bg-red-500/20 text-red-400 rounded flex-shrink-0">HIGH DEMAND</span>
+                <span className="text-[11px] px-1 py-0.5 bg-red-500/20 text-red-400 rounded flex-shrink-0">HIGH DEMAND</span>
               )}
               {player.demandScore <= 35 && (
-                <span className="text-[8px] px-1 py-0.5 bg-cyan-500/20 text-cyan-400 rounded flex-shrink-0">LOW DEMAND</span>
+                <span className="text-[11px] px-1 py-0.5 bg-cyan-500/20 text-cyan-400 rounded flex-shrink-0">LOW DEMAND</span>
               )}
             </div>
             <div className="flex items-center gap-2 mt-0.5">
-              {player.team && <span className="text-[10px] text-white/30">{player.team}</span>}
-              {player.age && <span className="text-[10px] text-white/25">Age {player.age}</span>}
-              <span className="text-[10px] text-white/20">{player.estimatedPPG} PPG</span>
+              {player.team && <span className="text-[11px] text-white/30">{player.team}</span>}
+              {player.age && <span className="text-[11px] text-white/25">Age {player.age}</span>}
+              <span className="text-[11px] text-white/20">{player.estimatedPPG} PPG</span>
               {trendIcon}
             </div>
           </div>
           <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
-            <div className="flex items-center gap-1.5 text-[10px]">
+            <div className="flex items-center gap-1.5 text-[11px]">
               <span className="text-white/30">Mkt</span>
               <RankBadge rank={player.marketRank} />
             </div>
             {view !== 'global' && (
-              <div className="flex items-center gap-1.5 text-[10px]">
+              <div className="flex items-center gap-1.5 text-[11px]">
                 <span className="text-white/30">{['team', 'win_now', 'rebuild', 'consolidate'].includes(view) ? 'VORP' : 'Dmnd'}</span>
                 <RankBadge rank={['team', 'win_now', 'rebuild', 'consolidate'].includes(view) ? player.scarcityRank : player.demandRank} />
               </div>
@@ -189,28 +189,28 @@ function PlayerRow({ player, expanded, onToggle, view }: {
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] text-white/40">Market</span>
+                <span className="text-[11px] text-white/40">Market</span>
                 <RankBadge rank={player.marketRank} />
               </div>
               <MiniBar value={player.marketValue / 100} color="cyan" />
             </div>
             <div className="space-y-1">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] text-white/40">Impact</span>
+                <span className="text-[11px] text-white/40">Impact</span>
                 <RankBadge rank={player.impactRank} />
               </div>
               <MiniBar value={player.impactScore} color="emerald" />
             </div>
             <div className="space-y-1">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] text-white/40">Scarcity (VORP)</span>
+                <span className="text-[11px] text-white/40">Scarcity (VORP)</span>
                 <RankBadge rank={player.scarcityRank} />
               </div>
               <MiniBar value={player.scarcityScore} color="purple" />
             </div>
             <div className="space-y-1">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] text-white/40">League Demand</span>
+                <span className="text-[11px] text-white/40">League Demand</span>
                 <RankBadge rank={player.demandRank} />
               </div>
               <MiniBar value={player.demandScore} color="amber" />
@@ -219,24 +219,24 @@ function PlayerRow({ player, expanded, onToggle, view }: {
 
           <div className="grid grid-cols-4 gap-1.5">
             <div className="text-center p-1.5 bg-white/3 rounded-lg">
-              <div className="text-[9px] text-white/30">Volatility</div>
+              <div className="text-[11px] text-white/30">Volatility</div>
               <div className="text-[11px] font-medium text-white/70">{Math.round(player.scarcityFactors.volatilityFit)}</div>
             </div>
             <div className="text-center p-1.5 bg-white/3 rounded-lg">
-              <div className="text-[9px] text-white/30">Age Curve</div>
+              <div className="text-[11px] text-white/30">Age Curve</div>
               <div className="text-[11px] font-medium text-white/70">{Math.round(player.scarcityFactors.ageCurveFit)}</div>
             </div>
             <div className="text-center p-1.5 bg-white/3 rounded-lg">
-              <div className="text-[9px] text-white/30">Pos Scarcity</div>
+              <div className="text-[11px] text-white/30">Pos Scarcity</div>
               <div className="text-[11px] font-medium text-white/70">{Math.round(player.scarcityFactors.positionalScarcity)}</div>
             </div>
             <div className="text-center p-1.5 bg-white/3 rounded-lg">
-              <div className="text-[9px] text-white/30">Need Fit</div>
+              <div className="text-[11px] text-white/30">Need Fit</div>
               <div className="text-[11px] font-medium text-white/70">{Math.round(player.scarcityFactors.rosterNeedFit)}</div>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 text-[10px] text-white/30">
+          <div className="flex items-center gap-2 text-[11px] text-white/30">
             <span>Value: {player.marketValue.toLocaleString()}</span>
             <span>|</span>
             <span>Pos Rank: #{player.positionRank}</span>
@@ -271,14 +271,14 @@ function DemandInsightsCard({ positionDemand, hotPlayers, pickDemand }: {
           <div className="flex items-center gap-2">
             <Flame className="w-4 h-4 text-amber-400" />
             <span className="text-sm font-semibold text-white">League Demand Index</span>
-            <span className="text-[10px] px-1.5 py-0.5 bg-amber-500/15 text-amber-300/80 rounded-full border border-amber-500/20">LIVE</span>
+            <span className="text-[11px] px-1.5 py-0.5 bg-amber-500/15 text-amber-300/80 rounded-full border border-amber-500/20">LIVE</span>
           </div>
           {open ? <ChevronUp className="w-4 h-4 text-white/30" /> : <ChevronDown className="w-4 h-4 text-white/30" />}
         </div>
         {!open && positionDemand.length > 0 && (
           <div className="flex gap-2 mt-2">
             {positionDemand.slice(0, 4).map(pd => (
-              <div key={pd.position} className={cx('flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px]', POS_BG[pd.position] || 'bg-white/5 border-white/10')}>
+              <div key={pd.position} className={cx('flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px]', POS_BG[pd.position] || 'bg-white/5 border-white/10')}>
                 <span className={cx('font-bold', POS_COLORS[pd.position] || 'text-white/60')}>{pd.position}</span>
                 <span className="text-white/50">{pd.demandScore}</span>
               </div>
@@ -291,7 +291,7 @@ function DemandInsightsCard({ positionDemand, hotPlayers, pickDemand }: {
         <div className="px-3 pb-3 space-y-4 border-t border-white/5 pt-3">
           {positionDemand.length > 0 && (
             <div>
-              <p className="text-[10px] text-white/40 uppercase tracking-wider font-medium mb-2">Position Demand</p>
+              <p className="text-[11px] text-white/40 uppercase tracking-wider font-medium mb-2">Position Demand</p>
               <div className="space-y-2">
                 {positionDemand.map(pd => (
                   <div key={pd.position} className="flex items-center gap-2">
@@ -299,9 +299,9 @@ function DemandInsightsCard({ positionDemand, hotPlayers, pickDemand }: {
                     <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
                       <div className="h-full bg-amber-400/70 rounded-full" style={{ width: `${pd.demandScore}%` }} />
                     </div>
-                    <span className="text-[10px] text-white/40 w-6 text-right">{pd.demandScore}</span>
+                    <span className="text-[11px] text-white/40 w-6 text-right">{pd.demandScore}</span>
                     {pd.avgOverpayPct > 0 && (
-                      <span className="text-[9px] text-amber-300/60">+{pd.avgOverpayPct}%</span>
+                      <span className="text-[11px] text-amber-300/60">+{pd.avgOverpayPct}%</span>
                     )}
                   </div>
                 ))}
@@ -311,7 +311,7 @@ function DemandInsightsCard({ positionDemand, hotPlayers, pickDemand }: {
 
           {hotPlayers.length > 0 && (
             <div>
-              <p className="text-[10px] text-white/40 uppercase tracking-wider font-medium mb-2">Most Traded Players</p>
+              <p className="text-[11px] text-white/40 uppercase tracking-wider font-medium mb-2">Most Traded Players</p>
               <div className="space-y-1">
                 {hotPlayers.slice(0, 5).map((hp, i) => (
                   <div key={i} className="flex items-center gap-2 text-[11px]">
@@ -319,7 +319,7 @@ function DemandInsightsCard({ positionDemand, hotPlayers, pickDemand }: {
                     <span className="text-white/70 flex-1 truncate">{hp.playerName}</span>
                     <span className="text-white/30">{hp.timesTraded}x</span>
                     {hp.overpayPct > 0 && (
-                      <span className="text-amber-300/70 text-[10px]">+{hp.overpayPct}%</span>
+                      <span className="text-amber-300/70 text-[11px]">+{hp.overpayPct}%</span>
                     )}
                   </div>
                 ))}
@@ -329,14 +329,14 @@ function DemandInsightsCard({ positionDemand, hotPlayers, pickDemand }: {
 
           {pickDemand.length > 0 && (
             <div>
-              <p className="text-[10px] text-white/40 uppercase tracking-wider font-medium mb-2">Pick Values Clearing</p>
+              <p className="text-[11px] text-white/40 uppercase tracking-wider font-medium mb-2">Pick Values Clearing</p>
               <div className="flex gap-2">
                 {pickDemand.slice(0, 4).map(pd => (
                   <div key={pd.round} className="flex-1 text-center p-2 bg-white/3 rounded-lg">
-                    <div className="text-[10px] text-white/30">Rd {pd.round}</div>
+                    <div className="text-[11px] text-white/30">Rd {pd.round}</div>
                     <div className="text-xs font-medium text-white/70">{pd.avgClearingValue.toLocaleString()}</div>
                     {pd.premiumPct !== 0 && (
-                      <div className={cx('text-[9px]', pd.premiumPct > 0 ? 'text-emerald-400/70' : 'text-rose-400/70')}>
+                      <div className={cx('text-[11px]', pd.premiumPct > 0 ? 'text-emerald-400/70' : 'text-rose-400/70')}>
                         {pd.premiumPct > 0 ? '+' : ''}{pd.premiumPct}%
                       </div>
                     )}
@@ -504,7 +504,7 @@ export default function AdaptiveRankings({ username, leagueId, leagueName }: Ada
       {loaded && !loading && (
         <>
           {meta && (
-            <div className="text-center text-[10px] text-white/30">
+            <div className="text-center text-[11px] text-white/30">
               {meta.leagueName} | {meta.leagueType} | {meta.scoring}{meta.isSF ? ' | Superflex' : ''} | {meta.numTeams} teams
             </div>
           )}
@@ -534,7 +534,7 @@ export default function AdaptiveRankings({ username, leagueId, leagueName }: Ada
                 const idx = fields.indexOf(sortField)
                 setSortField(fields[(idx + 1) % fields.length])
               }}
-              className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-[10px] text-white/40 hover:text-white/70 transition touch-manipulation"
+              className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-[11px] text-white/40 hover:text-white/70 transition touch-manipulation"
             >
               <ArrowUpDown className="w-3 h-3" />
               <span className="capitalize">{sortField}</span>

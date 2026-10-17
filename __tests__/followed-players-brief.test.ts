@@ -143,3 +143,30 @@ describe('followed players in the brief', () => {
     expect(diffInjuries(null, { takenAt: 'now', standings: {}, injuries: { '9221': 'Out' } }, meta)).toEqual([])
   })
 })
+
+/*
+ * 🛑 A Fleaflicker/MFL/Fantrax/Yahoo roster holds the PROVIDER's ids, short numbers in Sleeper's
+ * range. '6038' is a real Sleeper id in the fake catalog, owned by "Wrong Player" — a stranger.
+ */
+describe('the brief never reports a stranger from a foreign-id roster', () => {
+  const collide = (platform: string) => {
+    h.cacheFind.mockResolvedValue({ data: markerWith({ '6038': null }) })
+    h.teamFind.mockResolvedValue([{ leagueId: 'lg-1', platformUserId: 'su', externalId: '1' }])
+    h.rosterFind.mockResolvedValue([{ leagueId: 'lg-1', playerData: { players: ['6038'] }, league: { platform } }])
+    h.playerFind.mockResolvedValue([{ sleeperId: '6038', name: 'Wrong Player', position: 'WR', team: 'NYJ' }])
+    h.resolveInjuryFacts.mockResolvedValue(facts([['Wrong Player', 'Out']]))
+  }
+
+  it('🛑 Fleaflicker: no injury line for a player you do not roster', async () => {
+    collide('fleaflicker')
+    const brief = await run([{ id: 'lg-1', name: 'Flea League', sport: 'NFL' }])
+    expect(JSON.stringify(brief ?? {})).not.toContain('Wrong Player')
+    expect(h.playerFind).not.toHaveBeenCalled()
+  })
+
+  it('CONTROL: the same id on a Sleeper roster IS named', async () => {
+    collide('sleeper')
+    const brief = await run([{ id: 'lg-1', name: 'Ice Kings', sport: 'NFL' }])
+    expect(brief?.injuries[0]).toMatchObject({ playerId: '6038', name: 'Wrong Player', to: 'Out', leagues: ['Ice Kings'] })
+  })
+})

@@ -4,6 +4,7 @@ import type { ReadyTradeScenario } from '@/lib/chimmy/tradeScenarioTypes'
 const base = { recommendation: { action: 'accept', explanation: 'Favors you on league value.' }, lineup: { before: 150, after: 130, delta: -20, unit: 'league_points_week' }, lineupWeek: 3, depthChanges: [{ position: 'LB', before: 4, after: 2 }], give: [], get: [{ playerId: 'pick:2027:1:other', name: '2027 1st', position: null }] } as unknown as ReadyTradeScenario
 
 describe('trade recommendation respects current competitive roster', () => {
+  it('never turns a held comparison into acceptance', () => { expect(tradeDecisionRecommendation({ ...base, recommendation: { action: 'hold', explanation: 'Missing season coverage' } })).toBe('HOLD: Missing season coverage') })
   it('counters a favorable value deal that harms the lineup', () => {
     expect(tradeDecisionRecommendation(base)).toContain('COUNTER:')
     expect(tradeDecisionRecommendation(base)).toContain('20.0 points')

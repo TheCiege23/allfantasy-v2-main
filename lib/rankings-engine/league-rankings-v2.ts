@@ -13,6 +13,8 @@ import {
 import { FantasyCalcPlayer, FantasyCalcSettings } from '../fantasycalc'
 import { getFantasyCalcValuesDbFirst, getFantasyCalcCacheAgeMs } from '@/lib/fantasycalc-db'
 import { prisma } from '../prisma'
+import { matchInjuryRowsToPlayers, type InjuryPlayerLookup } from '@/lib/injuries/matchInjuryRows'
+import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 import { getWeekStatsFromCache } from './sleeper-matchup-cache'
 import { buildIdpKickerValueMap, detectIdpLeague, detectKickerLeague } from '../idp-kicker-values'
 import { loadLeagueIdpVorp } from '@/lib/idp-projections/leagueIdpVorp'
@@ -218,7 +220,7 @@ export interface TradeHubShortcut {
   ldiPos: string
   ldiScore: number
   leverageScore: number
-  ctas: Array<{ id: 'generate_offers' | 'find_overpayers' | 'open_trade_hub'; label: string; href: string }>
+  ctas: Array<{ id: 'generate_offers' | 'find_trade_partners' | 'open_trade_hub'; label: string; href: string }>
   evidence: {
     exposureByPos: Record<string, number>
     ldiByPos: Record<string, number>
@@ -228,7 +230,6 @@ export interface TradeHubShortcut {
       sample: number
       ldiForPos: number
       meanPremiumPctForPos: number
-      tag: 'Overpayer' | 'Learning'
       posN: number
     }>
   }
@@ -274,7 +275,6 @@ export interface LeagueRankingsV2Output {
       ldiByPos: number
       meanPremiumPct: number
       nByPos: number
-      label: 'Overpayer' | 'Learning'
     }>
     weightVersion: string
     weightCalibratedAt: string
@@ -1191,9 +1191,10 @@ function computeRosterInjuryImpact(
  * `getLeagueRosters`/`getAllPlayers` above), so NFL is the honest default
  * rather than an assumption smuggled into an unscoped query.
  */
-async function fetchDbInjuryMap(playerNames: string[], sport = 'NFL'): Promise<Map<string, { severity: string | null; date: Date | null; type: string | null; description: string | null }>> {
+async function fetchDbInjuryMap(players: InjuryPlayerLookup[], sport = 'NFL'): Promise<Map<string, { severity: string | null; date: Date | null; type: string | null; description: string | null }>> {
   const result = new Map<string, { severity: string | null; date: Date | null; type: string | null; description: string | null }>()
-  if (playerNames.length === 0) return result
+  if (players.length === 0) return result
+  const playerNames = [...new Set(players.map(p => p.name))]
 
   try {
     const cutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
@@ -1202,20 +1203,34 @@ async function fetchDbInjuryMap(playerNames: string[], sport = 'NFL'): Promise<M
         sport,
         playerName: { in: playerNames },
         fetchedAt: { gte: cutoff },
+        // Only rows a feed still carries: the feeds stop listing a healed player, they do not clear him.
+        expiresAt: { gt: new Date() },
       },
       orderBy: { fetchedAt: 'desc' },
-      distinct: ['playerName'],
+      /*
+       * ⚠ NO `distinct: ['playerName']` ANY MORE: it kept the newest row per NAME, so two athletes
+       * sharing one (WR vs LB Justin Jefferson) collapsed into whichever was fetched last. Every
+       * row comes back and `matchInjuryRowsToPlayers` binds the right athlete by team/position,
+       * or none when it cannot tell — the newest row of the matched athlete is then taken.
+       */
       select: {
         playerName: true,
         status: true,
         date: true,
+        fetchedAt: true,
         type: true,
         description: true,
+        team: true,
+        position: true,
       },
     })
 
-    for (const inj of injuries) {
-      result.set(inj.playerName.toLowerCase(), {
+    const { byPlayer } = matchInjuryRowsToPlayers(injuries, players, sport)
+    for (const p of players) {
+      const inj = byPlayer.get(normalizeMatchName(p.name))?.[0]
+      const key = p.name.toLowerCase()
+      if (!inj || result.has(key)) continue
+      result.set(key, {
         severity: inj.status,
         date: inj.date,
         type: inj.type,
@@ -2489,7 +2504,7 @@ function computeTradeHubShortcuts(args: {
       leverageScore,
       ctas: [
         { id: 'generate_offers', label: 'Generate offers', href: `/af-legacy?tab=trade&leagueId=${leagueId}&season=${seasonYear}&rosterId=${t.rosterId}&pos=${encodeURIComponent(pos)}&mode=generate` },
-        { id: 'find_overpayers', label: 'Find overpayers', href: `/af-legacy?tab=finder&leagueId=${leagueId}&season=${seasonYear}&pos=${encodeURIComponent(pos)}` },
+        { id: 'find_trade_partners', label: 'Find trade partners', href: `/af-legacy?tab=finder&leagueId=${leagueId}&season=${seasonYear}&pos=${encodeURIComponent(pos)}` },
         { id: 'open_trade_hub', label: 'Open Trade Hub', href: `/af-legacy?tab=trade&leagueId=${leagueId}&season=${seasonYear}` },
       ],
       evidence: {
@@ -2550,12 +2565,6 @@ function attachProposalTargetsToShortcuts(args: {
     return s1 + s2 + s3
   }
 
-  function tagForPos(p: PartnerTendency, pos: string): 'Overpayer' | 'Learning' {
-    const posN = partnerPosCounts?.[p.partnerName]?.[pos] ?? 0
-    if (posN >= 5) return 'Overpayer'
-    return 'Learning'
-  }
-
   return shortcuts.map(sc => {
     const pos = sc.ldiPos?.toUpperCase?.() ?? sc.ldiPos
 
@@ -2573,7 +2582,6 @@ function attachProposalTargetsToShortcuts(args: {
           ldiForPos,
           meanPremiumPctForPos,
           posN,
-          tag: tagForPos(p, pos),
           _score: score,
         }
       })
@@ -2586,7 +2594,6 @@ function attachProposalTargetsToShortcuts(args: {
       sample: p.sample,
       ldiForPos: p.ldiForPos,
       meanPremiumPctForPos: p.meanPremiumPctForPos,
-      tag: p.tag,
       posN: p.posN,
     }))
 
@@ -2957,11 +2964,17 @@ export async function computeLeagueRankingsV2(
   const valueMap = buildPlayerValueMap(fcPlayers)
 
   const allPlayerNames: string[] = []
+  // Team and position ride along so the injury map can tell same-name athletes apart.
+  const injuryLookups: InjuryPlayerLookup[] = []
   for (const roster of rosters) {
     for (const pid of roster.players || []) {
       const pVal = valueMap.get(pid) as any
       const name = pVal?.name || pVal?.player
-      if (name) allPlayerNames.push(name)
+      if (name) {
+        allPlayerNames.push(name)
+        const sp = (sleeperPlayersRaw as Record<string, { team?: string | null; position?: string | null }> | null)?.[pid]
+        injuryLookups.push({ name, team: sp?.team ?? null, position: pVal?.position ?? sp?.position ?? null })
+      }
     }
   }
   let analyticsMap: Map<string, any> | undefined
@@ -2969,7 +2982,7 @@ export async function computeLeagueRankingsV2(
   try {
     const [analytics, injuries] = await Promise.all([
       getPlayerAnalyticsBatch(allPlayerNames).catch(() => new Map()),
-      fetchDbInjuryMap(allPlayerNames).catch(() => new Map()),
+      fetchDbInjuryMap(injuryLookups).catch(() => new Map()),
     ])
     analyticsMap = analytics.size > 0 ? analytics : undefined
     dbInjuryMap = injuries.size > 0 ? injuries : undefined
@@ -3501,7 +3514,6 @@ export async function computeLeagueRankingsV2(
         ldiByPos: ldi,
         meanPremiumPct: mean,
         nByPos: posN,
-        label: posN >= 5 ? 'Overpayer' : 'Learning',
       })
     }
   }

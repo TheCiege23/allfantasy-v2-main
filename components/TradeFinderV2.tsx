@@ -11,8 +11,14 @@ import { NegotiationSheet } from '@/components/negotiation'
 import MiniPlayerImg from '@/components/MiniPlayerImg'
 import type { NegotiationData } from '@/components/negotiation'
 import type { TradeCandidate as PatchTradeCandidate, TradeAsset as PatchTradeAsset } from '@/lib/trade-finder/apply-counter'
-import { computeValueDeltaPct, previewFairnessLabel, FAIRNESS_DISPLAY } from '@/lib/trade-finder/score-candidate'
-import type { FairnessLabel } from '@/lib/trade-finder/score-candidate'
+/**
+ * THE grade `/api/trade-finder` attaches to a candidate. Declared here rather than imported so this
+ * component does not depend on the route's module; it MUST match `FinderCandidateGrade` in
+ * lib/trade-finder/candidateGrades.ts.
+ */
+type FinderCandidateGrade =
+  | { graded: true; letter: 'A' | 'B' | 'C' | 'D' | 'F'; partnerLetter: 'A' | 'B' | 'C' | 'D' | 'F'; label: string; giveValue: number; getValue: number }
+  | { graded: false; reason: string }
 import { getTradeAnalyzerAIChatUrl } from '@/lib/trade-analyzer/TradeToAIContextBridge'
 import { currentPathForReturn, readPlanRefusal, type PlanRefusal } from '@/lib/monetization/planRefusal'
 import { PlanRefusalNotice } from '@/components/monetization/PlanRefusalNotice'
@@ -130,6 +136,42 @@ interface TradeCandidate {
   teamA: TradeSide
   teamB: TradeSide
   scoreBreakdown?: Record<string, number>
+  /** THE grade from your side, set by `/api/trade-finder` (lib/trade-finder/candidateGrades.ts). */
+  leagueGrade?: FinderCandidateGrade | null
+  /** The partner's team name, from our own league rows. */
+  partnerName?: string | null
+}
+
+/**
+ * THE grade on a finder trade (2026-09-27): your letter, theirs, and the league values it was taken
+ * on — the same letter the Trade Center, /trade-finder and every other trade surface show. A withheld
+ * grade says why and draws no letter; no grade draws nothing. Exported for its render test.
+ */
+export function LeagueGradeLine({ grade, partnerName }: { grade: FinderCandidateGrade | null | undefined; partnerName: string }) {
+  if (!grade) return null
+  if (!grade.graded) {
+    return <p className="text-[11px] text-white/45" data-testid="finder-grade-withheld">Not graded: {grade.reason}</p>
+  }
+  const color = FINDER_GRADE_COLOR[grade.letter]
+  return (
+    <div className="flex flex-wrap items-center gap-2 p-2.5 rounded-xl bg-black/20 border border-white/5" data-testid="finder-grade">
+      <span className="text-xs font-black px-2 py-0.5 rounded-lg" style={{ background: `${color}20`, color, border: `1px solid ${color}40` }}>
+        {grade.letter} for you · {partnerName} {grade.partnerLetter}
+      </span>
+      <span className="text-[11px] text-white/60">{grade.label}</span>
+      <span className="text-[11px] text-white/40">
+        you get {grade.getValue.toLocaleString()} for {grade.giveValue.toLocaleString()} in league value
+      </span>
+    </div>
+  )
+}
+
+const FINDER_GRADE_COLOR: Record<'A' | 'B' | 'C' | 'D' | 'F', string> = {
+  A: '#34d399',
+  B: '#5eead4',
+  C: '#fbbf24',
+  D: '#fb923c',
+  F: '#fb5b78',
 }
 
 interface AssetIndexEntry {
@@ -207,14 +249,14 @@ function AssetRow({ asset, direction }: { asset: TradeAsset; direction: 'in' | '
       )} />
       <div className="flex-1 min-w-0 overflow-hidden">
         <div className="flex items-center gap-1 sm:gap-1.5 min-w-0">
-          <span className={cx('text-[10px] font-bold uppercase flex-shrink-0', posColor)}>{asset.position}</span>
+          <span className={cx('text-[11px] font-bold uppercase flex-shrink-0', posColor)}>{asset.position}</span>
           {!asset.isPick && <MiniPlayerImg sleeperId={asset.assetId} name={asset.name} size={18} />}
           <span className="text-xs sm:text-sm text-white font-medium truncate min-w-0">{asset.name}</span>
         </div>
         <div className="flex items-center gap-1.5 sm:gap-2 mt-0.5 min-w-0 overflow-hidden">
-          <span className="text-[9px] sm:text-[10px] text-white/40 flex-shrink-0">{tierShort}</span>
-          {asset.age && <span className="text-[9px] sm:text-[10px] text-white/30 flex-shrink-0">Age {asset.age}</span>}
-          <span className="text-[9px] sm:text-[10px] text-white/25 flex-shrink-0 truncate">{asset.value.toLocaleString()}</span>
+          <span className="text-[11px] sm:text-[11px] text-white/40 flex-shrink-0">{tierShort}</span>
+          {asset.age && <span className="text-[11px] sm:text-[11px] text-white/30 flex-shrink-0">Age {asset.age}</span>}
+          <span className="text-[11px] sm:text-[11px] text-white/25 flex-shrink-0 truncate">{asset.value.toLocaleString()}</span>
         </div>
       </div>
     </div>
@@ -257,11 +299,11 @@ function ScoreBar({ label, value, max = 100, color = 'cyan' }: { label: string; 
   }
   return (
     <div className="flex items-center gap-2">
-      <span className="text-[10px] text-white/50 w-20 flex-shrink-0 text-right">{label}</span>
+      <span className="text-[11px] text-white/50 w-20 flex-shrink-0 text-right">{label}</span>
       <div className="flex-1 h-1.5 bg-white/5 rounded-full overflow-hidden">
         <div className={cx('h-full rounded-full transition-all', colorMap[color] || 'bg-cyan-400')} style={{ width: `${pct}%` }} />
       </div>
-      <span className="text-[10px] text-white/40 w-6 text-right">{Math.round(value)}</span>
+      <span className="text-[11px] text-white/40 w-6 text-right">{Math.round(value)}</span>
     </div>
   )
 }
@@ -275,7 +317,7 @@ function AcceptBadge({ label, estimate }: { label: string; estimate: number }) {
   }
   const classes = colorMap[label] || 'bg-white/10 text-white/60 border-white/10'
   return (
-    <span className={cx('text-[10px] font-medium px-2 py-0.5 rounded-full border', classes)}>
+    <span className={cx('text-[11px] font-medium px-2 py-0.5 rounded-full border', classes)}>
       {label} ({Math.round(estimate * 100)}%)
     </span>
   )
@@ -298,7 +340,7 @@ function PartnerCard({ partner, rank }: { partner: MatchPartner; rank: number })
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
               <span className="text-sm font-semibold text-white truncate">{partner.displayName}</span>
-              <span className="text-[10px] px-1.5 py-0.5 bg-white/5 rounded text-white/40">{partner.contenderTier}</span>
+              <span className="text-[11px] px-1.5 py-0.5 bg-white/5 rounded text-white/40">{partner.contenderTier}</span>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs text-cyan-400 font-medium">Match: {partner.matchScore}/100</span>
@@ -317,7 +359,7 @@ function PartnerCard({ partner, rank }: { partner: MatchPartner; rank: number })
       {expanded && (
         <div className="px-4 pb-4 space-y-4 border-t border-white/5 pt-3">
           <div className="space-y-1.5">
-            <p className="text-[10px] text-white/40 uppercase tracking-wider font-medium mb-2">Score Breakdown</p>
+            <p className="text-[11px] text-white/40 uppercase tracking-wider font-medium mb-2">Score Breakdown</p>
             <ScoreBar label="Need Overlap" value={bd.needOverlap} color="cyan" />
             <ScoreBar label="Availability" value={bd.targetAvailability} color="emerald" />
             <ScoreBar label="Bias Align" value={bd.biasAlignment} color="purple" />
@@ -327,7 +369,7 @@ function PartnerCard({ partner, rank }: { partner: MatchPartner; rank: number })
 
           {partner.reasons.length > 1 && (
             <div>
-              <p className="text-[10px] text-white/40 uppercase tracking-wider font-medium mb-1.5">Why They Match</p>
+              <p className="text-[11px] text-white/40 uppercase tracking-wider font-medium mb-1.5">Why They Match</p>
               <ul className="space-y-1">
                 {partner.reasons.map((r, i) => (
                   <li key={i} className="text-[11px] text-white/60 flex items-start gap-1.5">
@@ -341,22 +383,22 @@ function PartnerCard({ partner, rank }: { partner: MatchPartner; rank: number })
 
           {partner.suggestedOffer && (
             <div>
-              <p className="text-[10px] text-white/40 uppercase tracking-wider font-medium mb-2">Suggested Trade</p>
+              <p className="text-[11px] text-white/40 uppercase tracking-wider font-medium mb-2">Suggested Trade</p>
               <div className="grid grid-cols-2 gap-2">
                 <div className="bg-amber-500/5 border border-amber-500/10 rounded-xl p-2.5">
-                  <p className="text-[10px] text-amber-400/70 font-medium mb-1.5">You Send</p>
+                  <p className="text-[11px] text-amber-400/70 font-medium mb-1.5">You Send</p>
                   {partner.suggestedOffer.userGives.map((a, i) => (
                     <div key={i} className="flex items-center gap-1 py-0.5">
-                      <span className="text-[10px] font-bold text-white/40">{a.position}</span>
+                      <span className="text-[11px] font-bold text-white/40">{a.position}</span>
                       <span className="text-xs text-white/80 truncate">{a.name}</span>
                     </div>
                   ))}
                 </div>
                 <div className="bg-cyan-500/5 border border-cyan-500/10 rounded-xl p-2.5">
-                  <p className="text-[10px] text-cyan-400/70 font-medium mb-1.5">You Get</p>
+                  <p className="text-[11px] text-cyan-400/70 font-medium mb-1.5">You Get</p>
                   {partner.suggestedOffer.partnerGives.map((a, i) => (
                     <div key={i} className="flex items-center gap-1 py-0.5">
-                      <span className="text-[10px] font-bold text-white/40">{a.position}</span>
+                      <span className="text-[11px] font-bold text-white/40">{a.position}</span>
                       <span className="text-xs text-white/80 truncate">{a.name}</span>
                     </div>
                   ))}
@@ -364,7 +406,7 @@ function PartnerCard({ partner, rank }: { partner: MatchPartner; rank: number })
               </div>
               <div className="mt-2 flex items-center justify-center">
                 <span className={cx(
-                  'text-[10px] font-medium px-2 py-0.5 rounded-full',
+                  'text-[11px] font-medium px-2 py-0.5 rounded-full',
                   Math.abs(partner.suggestedOffer.fairnessPct) < 10
                     ? 'bg-emerald-500/15 text-emerald-300'
                     : Math.abs(partner.suggestedOffer.fairnessPct) < 20
@@ -379,10 +421,10 @@ function PartnerCard({ partner, rank }: { partner: MatchPartner; rank: number })
 
           {partner.tendencyInsights.length > 0 && (
             <div>
-              <p className="text-[10px] text-white/40 uppercase tracking-wider font-medium mb-1.5">Tendency Insights</p>
+              <p className="text-[11px] text-white/40 uppercase tracking-wider font-medium mb-1.5">Tendency Insights</p>
               <div className="flex flex-wrap gap-1">
                 {partner.tendencyInsights.map((t, i) => (
-                  <span key={i} className="text-[10px] px-2 py-0.5 bg-purple-500/10 border border-purple-500/15 rounded-full text-purple-300/80">{t}</span>
+                  <span key={i} className="text-[11px] px-2 py-0.5 bg-purple-500/10 border border-purple-500/15 rounded-full text-purple-300/80">{t}</span>
                 ))}
               </div>
             </div>
@@ -396,7 +438,17 @@ function PartnerCard({ partner, rank }: { partner: MatchPartner; rank: number })
 function buildConfidenceDrivers(rec: TradeRecommendation, candidate?: TradeCandidate): string[] {
   const drivers: string[] = []
 
-  if (candidate?.valueDeltaPct !== undefined) {
+  /*
+   * THE grade first, when the route supplied one — it is the fairness statement every other surface
+   * makes. The finder's own value gap is a DIFFERENT measure on different values, so it is shown only
+   * when there is no grade, and never alongside one where the two could disagree.
+   */
+  const g = candidate?.leagueGrade
+  if (g?.graded) {
+    drivers.push(`League grade: ${g.letter} for you — you get ${g.getValue.toLocaleString()} for ${g.giveValue.toLocaleString()}`)
+  } else if (g && !g.graded) {
+    drivers.push(`League grade withheld: ${g.reason}`)
+  } else if (candidate?.valueDeltaPct !== undefined) {
     const gap = Math.abs(candidate.valueDeltaPct)
     drivers.push(gap < 10
       ? `Value gap is narrow (${candidate.valueDeltaPct > 0 ? '+' : ''}${candidate.valueDeltaPct.toFixed(1)}%)`
@@ -458,30 +510,27 @@ function buildEnrichedIndex(
   return enriched
 }
 
-function FairnessPreview({ label, deltaPct, isPatched, onReset }: {
-  label: FairnessLabel
-  deltaPct: number
-  isPatched: boolean
-  onReset?: () => void
-}) {
-  const display = FAIRNESS_DISPLAY[label]
+/**
+ * A countered deal, said honestly (2026-09-27).
+ *
+ * 🛑 THIS USED TO PRINT A FAIRNESS LABEL OF THE FINDER'S OWN ("Fair Trade", "Leans Your Way",
+ * `previewFairnessLabel` over the finder's values) — a second scale beside the one grade, on a deal
+ * nobody had graded. The league grade belongs to the ORIGINAL deal, so for a countered one the card
+ * says exactly that and makes no fairness claim at all. Exported for its render test.
+ */
+export function CounterAppliedNote({ onReset }: { onReset?: () => void }) {
   return (
-    <div className="flex items-center justify-between p-2.5 rounded-xl bg-black/20 border border-white/5">
+    <div className="flex items-center justify-between p-2.5 rounded-xl bg-black/20 border border-white/5" data-testid="finder-counter-applied">
       <div className="flex items-center gap-2">
-        <div className={cx('text-xs font-bold', display.color)}>
-          {display.text}
-        </div>
-        <span className={cx('text-[11px] font-medium', deltaPct >= 0 ? 'text-emerald-400/80' : 'text-amber-400/80')}>
-          ({deltaPct > 0 ? '+' : ''}{deltaPct}%)
+        <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-purple-500/20 border border-purple-400/20 text-purple-300">
+          Counter Applied
         </span>
-        {isPatched && (
-          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-purple-500/20 border border-purple-400/20 text-purple-300">
-            Counter Applied
-          </span>
-        )}
+        <span className="text-[11px] text-white/50">
+          The league grade was for the original deal — re-check this version before sending it.
+        </span>
       </div>
-      {isPatched && onReset && (
-        <button onClick={onReset} className="flex items-center gap-1 text-[10px] text-white/40 hover:text-white/60 transition-colors touch-manipulation">
+      {onReset && (
+        <button onClick={onReset} className="flex items-center gap-1 text-[11px] text-white/40 hover:text-white/60 transition-colors touch-manipulation">
           <RotateCcw className="w-3 h-3" />
           Reset
         </button>
@@ -533,9 +582,8 @@ function TradeCard({
     assetId: a.id, name: a.label, value: a.value ?? 0, tier: a.tier ?? '', position: a.position ?? '', isPick: a.kind === 'PICK',
   })) : originalReceives
 
-  const previewDelta = patchedTrade ? computeValueDeltaPct(patchedTrade) : null
-  const previewLabel = previewDelta !== null ? previewFairnessLabel(previewDelta) : null
   const isPatched = patchedTrade !== null
+  const partnerName = candidate?.partnerName?.trim() || (partnerTeamId ? `Team ${partnerTeamId}` : 'Your partner')
 
   const handleRecheck = useCallback(async () => {
     if (!onRecheck) return
@@ -558,7 +606,7 @@ function TradeCard({
             <span className="text-sm font-bold text-white">
               {index === 0 ? 'Best Trade' : `Trade #${index + 1}`}
             </span>
-            <span className="text-[10px] text-white/30">{index + 1}/{total}</span>
+            <span className="text-[11px] text-white/30">{index + 1}/{total}</span>
           </div>
           <ConfidencePill
             confidence={{ rating: recommendation.confidence, score: recommendation.confidenceScore }}
@@ -591,18 +639,26 @@ function TradeCard({
         <div className="flex items-center gap-2 mb-4 text-xs text-white/50">
           <span>You</span>
           <ArrowRight className="w-3 h-3" />
-          <span>Team {partnerTeamId}</span>
+          <span>{partnerName}</span>
         </div>
 
-        {previewLabel && previewDelta !== null && (
+        {/*
+          THE grade for the deal as the finder built it. Once a counter changes the deal, that letter
+          no longer describes it — the note below says so, and no fairness claim is made.
+        */}
+        {isPatched ? (
           <div className="mb-3">
-            <FairnessPreview label={previewLabel} deltaPct={previewDelta} isPatched={isPatched} onReset={onResetPatch} />
+            <CounterAppliedNote onReset={onResetPatch} />
           </div>
-        )}
+        ) : candidate?.leagueGrade ? (
+          <div className="mb-3">
+            <LeagueGradeLine grade={candidate.leagueGrade} partnerName={partnerName} />
+          </div>
+        ) : null}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 mb-1">
           <div>
-            <div className="text-[10px] font-bold uppercase text-cyan-400/70 mb-1.5 tracking-wider">You Receive</div>
+            <div className="text-[11px] font-bold uppercase text-cyan-400/70 mb-1.5 tracking-wider">You Receive</div>
             <div className="space-y-0.5">
               {displayReceives.map((asset, i) => (
                 <AssetRow key={i} asset={asset} direction="in" />
@@ -610,7 +666,7 @@ function TradeCard({
             </div>
           </div>
           <div>
-            <div className="text-[10px] font-bold uppercase text-amber-400/70 mb-1.5 tracking-wider">You Send</div>
+            <div className="text-[11px] font-bold uppercase text-amber-400/70 mb-1.5 tracking-wider">You Send</div>
             <div className="space-y-0.5">
               {displayGives.map((asset, i) => (
                 <AssetRow key={i} asset={asset} direction="out" />
@@ -664,7 +720,7 @@ function TradeCard({
         )}
         <Button variant="ghost" size="sm" onClick={onAskAI} className="flex-1">
           <MessageCircle className="w-3.5 h-3.5" />
-          <span>Ask AI</span>
+          <span>Ask Chimmy</span>
         </Button>
       </div>
 
@@ -680,7 +736,7 @@ function TradeCard({
             ) : (
               <Zap className="w-3.5 h-3.5" />
             )}
-            <span>{recheckLoading ? 'Re-checking...' : 'Re-check with AI'}</span>
+            <span>{recheckLoading ? 'Re-checking...' : 'Re-check with Chimmy'}</span>
           </button>
         </div>
       )}
@@ -754,7 +810,13 @@ function DeepDiveModal({ open, onClose, recommendation, candidate }: {
               ))}
             </div>
           )}
-          {candidate && (
+          {/*
+            THE grade when there is one; the finder's own value gap only when there is not — the two are
+            different measures on different values and must not sit side by side disagreeing.
+          */}
+          {candidate?.leagueGrade ? (
+            <LeagueGradeLine grade={candidate.leagueGrade} partnerName={candidate.partnerName?.trim() || 'Your partner'} />
+          ) : candidate && (
             <div className="p-3 bg-black/20 rounded-xl space-y-2">
               <div className="text-xs text-white/50">Value Gap</div>
               <div className="text-lg font-bold text-white">
@@ -812,7 +874,7 @@ function LoadingAnimation({ mode }: { mode: FinderMode }) {
         {mode === 'DEEP' ? 'Deep scanning every roster...' : 'Finding the best trades...'}
       </h3>
       <p className="text-xs text-white/40 max-w-[240px] text-center">
-        AI is scanning every team, roster, and pick in your league
+        Chimmy is scanning every team, roster, and pick in your league
       </p>
     </div>
   )
@@ -1290,7 +1352,7 @@ export default function TradeFinderV2({
             <div className="py-8 text-center space-y-2">
               <Handshake className="w-8 h-8 text-white/20 mx-auto" />
               <p className="text-sm text-white/50">Pick a goal above and find the best trade partners in your league</p>
-              <p className="text-xs text-white/30">AI scores managers by need overlap, bias alignment, and trade willingness</p>
+              <p className="text-xs text-white/30">Chimmy scores managers by need overlap, bias alignment, and trade willingness</p>
             </div>
           )}
         </>
@@ -1441,15 +1503,15 @@ export default function TradeFinderV2({
                         <div>
                           <h4 className="text-sm font-bold text-white">{opp.title}</h4>
                           {opp.targetManager && (
-                            <span className="text-[10px] text-white/40">Target: {opp.targetManager}</span>
+                            <span className="text-[11px] text-white/40">Target: {opp.targetManager}</span>
                           )}
                         </div>
                       </div>
                       <div className="flex items-center gap-1.5">
                         {opp.actionable && (
-                          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/20">ACTIONABLE</span>
+                          <span className="px-1.5 py-0.5 rounded text-[11px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/20">ACTIONABLE</span>
                         )}
-                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                        <span className={`px-1.5 py-0.5 rounded text-[11px] font-bold ${
                           opp.confidence >= 60 ? 'bg-emerald-500/20 text-emerald-300' :
                           opp.confidence >= 40 ? 'bg-amber-500/20 text-amber-300' :
                           'bg-slate-500/20 text-slate-300'
@@ -1461,7 +1523,7 @@ export default function TradeFinderV2({
                       <div className="space-y-1">
                         {opp.relevantPlayers.map((player, pIdx) => (
                           <div key={pIdx} className="flex items-center gap-2 p-1.5 rounded-lg bg-black/20 border border-white/5">
-                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                            <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded ${
                               player.position === 'QB' ? 'bg-red-500/20 text-red-300' :
                               player.position === 'RB' ? 'bg-blue-500/20 text-blue-300' :
                               player.position === 'WR' ? 'bg-green-500/20 text-green-300' :
@@ -1470,11 +1532,11 @@ export default function TradeFinderV2({
                             }`}>{player.position}</span>
                             <span className="text-xs text-white font-medium flex-1 truncate">{player.name}</span>
                             {player.value > 0 && (
-                              <span className="text-[10px] text-white/30 font-mono">{player.value.toLocaleString()}</span>
+                              <span className="text-[11px] text-white/30 font-mono">{player.value.toLocaleString()}</span>
                             )}
                           </div>
                         ))}
-                        <p className="text-[10px] text-white/30 italic mt-1">{opp.relevantPlayers[0]?.reason}</p>
+                        <p className="text-[11px] text-white/30 italic mt-1">{opp.relevantPlayers[0]?.reason}</p>
                       </div>
                     )}
                   </div>
@@ -1516,7 +1578,7 @@ export default function TradeFinderV2({
         <AIBottomSheet
           open={!!chatTradeContext}
           onClose={() => setChatTradeContext(null)}
-          title="Ask AI About This Trade"
+          title="Ask Chimmy About This Trade"
           height="half"
         >
           <div className="space-y-3">
@@ -1524,7 +1586,7 @@ export default function TradeFinderV2({
               {chatTradeContext}
             </div>
             <p className="text-xs text-white/40 text-center">
-              Head to the Chat tab to discuss this trade with your AI assistant
+              Head to the Chat tab to discuss this trade with Chimmy
             </p>
             <div className="flex flex-col gap-2">
               <Button

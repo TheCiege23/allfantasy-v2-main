@@ -3,7 +3,8 @@ import { resolvePlatformUser } from '@/lib/platform/current-user'
 import { createPlatformThreadTypedMessage } from '@/lib/platform/chat-service'
 import { getCreatePollPayload } from '@/lib/social-chat'
 
-export async function POST(req: NextRequest, { params }: { params: { threadId: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ threadId: string }> }) {
+  const params = await props.params
   const user = await resolvePlatformUser()
   if (!user.appUserId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 

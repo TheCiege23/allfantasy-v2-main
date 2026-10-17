@@ -98,6 +98,39 @@ describe('assembleCrossLeaguePlayerPortfolio', () => {
     expect(result.items[0].leagueAppearances).toHaveLength(2)
   })
 
+  /*
+   * 🛑 An ESPN league's player id is ESPN's number; looked up as a Sleeper id it names whoever holds
+   * that number on Sleeper (ESPN 12483 is Matthew Stafford). Only Sleeper and native ids may reach it.
+   */
+  it('never asks the Sleeper-id injury reader about a foreign platform\'s ids', async () => {
+    rosterFindMany.mockResolvedValue([
+      baseRoster({
+        leagueId: 'league-b',
+        league: { ...baseRoster().league, id: 'league-b', platform: 'espn' },
+        playerData: { lineup_sections: { starters: [{ id: '12483', name: 'Player One', position: 'RB', team: 'BUF' }], bench: [], ir: [], taxi: [], devy: [] } },
+      }),
+      baseRoster({
+        leagueId: 'league-a',
+        league: { ...baseRoster().league, id: 'league-a', platform: 'sleeper' },
+        playerData: { lineup_sections: { starters: [{ id: '4881', name: 'Player Two', position: 'WR', team: 'MIA' }], bench: [], ir: [], taxi: [], devy: [] } },
+      }),
+    ])
+    resolvePlayersMock.mockResolvedValue([resolutionFor('12483'), resolutionFor('4881')])
+    resolveInjuryContextMock.mockResolvedValue({
+      byId: new Map([['12483', { status: 'IR', availabilityCategory: 'unavailable', resolved: true, freshness: { isStale: false, updatedAt: null } }]]),
+      resolvedCount: 1,
+      unresolvedIds: [],
+      warnings: [],
+    })
+    const { assembleCrossLeaguePlayerPortfolio } = await import('@/lib/shared-services/league-hub/crossLeaguePlayerPortfolio')
+    const result = await assembleCrossLeaguePlayerPortfolio({ appUserId: 'user-1' })
+    const asked = resolveInjuryContextMock.mock.calls.flatMap((c) => c[1] as string[])
+    expect(asked).toContain('4881')
+    expect(asked).not.toContain('12483')
+    const espnItem = result.items.find((i) => i.displayName === 'Player One')
+    expect(espnItem?.injury ?? null).toBeNull()
+  })
+
   it('never merges an ambiguous or unresolved identity into another player\'s row', async () => {
     rosterFindMany.mockResolvedValue([
       baseRoster({

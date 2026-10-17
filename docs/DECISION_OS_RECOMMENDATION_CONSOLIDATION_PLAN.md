@@ -34,7 +34,7 @@ Already fully inventoried in `docs/DECISION_OS_CLOSED_LOOP_LEARNING_AUDIT.md` §
 
 | System | Purpose | Det. vs AI | Owner |
 |---|---|---|---|
-| Dual-brain trade analyzer / core-engine | ACCEPT/REJECT/LEAN verdict + grade | Deterministic core + AI narrative | Live |
+| Dual-brain trade analyzer / core-engine | ACCEPT/REJECT/LEAN verdict + grade | Deterministic core + AI narrative | Deleted 2026-09-26 (no importers); `lib/decision-os/trade/evaluateTrade.ts` is the one trade engine |
 | `acceptance-model.ts` | Static logistic acceptance probability | Deterministic, hardcoded weights | Live, uncoordinated with trade-engine's own model |
 | `smart-trade-recommendations.ts` | Acquire/sell/swap suggestions from Sleeper history | Deterministic (FantasyCalc) | Live — **confirmed direct duplicate of `phase6/recommendations`'s `trade_coaching` category** (Checkpoint §1) |
 | `trade-alternatives.ts` | Refinement options after a rejected proposal | Deterministic | Live, complementary (not duplicative) |

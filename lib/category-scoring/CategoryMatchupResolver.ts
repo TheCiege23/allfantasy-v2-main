@@ -18,27 +18,44 @@ import type {
   TeamStatTotals,
 } from './types'
 
-function computeCategoryValue(totals: TeamStatTotals, category: CategoryDefinition): number {
+// Native weekly basketball stats use short canonical keys; provider aggregates can use long keys.
+// Prefer the stored primary key without adding aliases twice.
+const NBA_STAT_KEYS: Record<string, string> = { points_scored: 'pts', rebound: 'reb', assist: 'ast', steal: 'stl', block: 'blk', turnover: 'to', three_point_made: 'threes', field_goals_made: 'fgm', field_goals_attempted: 'fga', free_throws_made: 'ftm', free_throws_attempted: 'fta' }
+const categoryStat = (totals: TeamStatTotals, key: string) => totals[key] ?? totals[NBA_STAT_KEYS[key]]
+
+/**
+ * A category's stat from a stat line — the lookup matchups use, exported so a trade grade valuing projected
+ * lines (`lib/decision-os/trade/sportCategoryValue.ts`) reads a category exactly as a weekly matchup does.
+ */
+export function categoryStatValue(totals: TeamStatTotals, key: string): number {
+  const v = categoryStat(totals, key)
+  return typeof v === 'number' && Number.isFinite(v) ? v : 0
+}
+
+export function computeCategoryValue(totals: TeamStatTotals, category: CategoryDefinition): number | null {
   const comp = category.computation
   if (comp.kind === 'sum') {
-    const v = totals[comp.statKey]
+    const v = categoryStat(totals, comp.statKey)
     return typeof v === 'number' && Number.isFinite(v) ? v : 0
   }
   // ratio
-  const num = totals[comp.numeratorStatKey]
-  const den = totals[comp.denominatorStatKey]
+  const num = categoryStat(totals, comp.numeratorStatKey)
+  const den = categoryStat(totals, comp.denominatorStatKey)
   const n = typeof num === 'number' && Number.isFinite(num) ? num : 0
   const d = typeof den === 'number' && Number.isFinite(den) ? den : 0
-  if (d === 0) return 0
-  return n / d
+  if (d <= 0) return comp.unqualifiedWhenZero ? null : 0
+  const extra = (comp.additionalNumeratorStatKeys ?? []).reduce((s, k) => s + (Number.isFinite(totals[k]) ? totals[k] : 0), 0)
+  return (n + extra) * (comp.multiplier ?? 1) / d
 }
 
 function compareValues(
-  aValue: number,
-  bValue: number,
+  aValue: number | null,
+  bValue: number | null,
   direction: CategoryDefinition['direction'],
 ): 'a' | 'b' | 'tie' {
   if (aValue === bValue) return 'tie'
+  if (aValue === null) return 'b'
+  if (bValue === null) return 'a'
   if (direction === 'higher') return aValue > bValue ? 'a' : 'b'
   return aValue < bValue ? 'a' : 'b'
 }

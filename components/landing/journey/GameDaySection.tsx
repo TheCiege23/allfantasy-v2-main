@@ -71,8 +71,8 @@ export function GameDaySection({ copy }: { copy: LandingCopy['journey']['gameDay
       <div className="grid gap-6 sm:grid-cols-2">
         <GlassCard className="p-5" accentBorder="color-mix(in srgb, var(--accent-emerald) 24%, var(--border))">
           <div className="mb-3 flex items-center justify-between">
-            <span className="text-[10px] font-bold uppercase tracking-[0.12em]" style={{ color: 'var(--accent-emerald-strong)' }}>{copy.matchupLabel}</span>
-            <span className="landing-live-pulse rounded-full px-2 py-0.5 text-[9px] font-bold uppercase" style={{ background: 'color-mix(in srgb, var(--accent-red) 16%, transparent)', color: 'var(--accent-red-strong)' }}>
+            <span className="text-[11px] font-bold uppercase tracking-[0.12em]" style={{ color: 'var(--accent-emerald-strong)' }}>{copy.matchupLabel}</span>
+            <span className="landing-live-pulse rounded-full px-2 py-0.5 text-[11px] font-bold uppercase" style={{ background: 'color-mix(in srgb, var(--accent-red) 16%, transparent)', color: 'var(--accent-red-strong)' }}>
               {copy.liveLabel}
             </span>
           </div>
@@ -88,7 +88,7 @@ export function GameDaySection({ copy }: { copy: LandingCopy['journey']['gameDay
         </GlassCard>
 
         <GlassCard className="p-5" accentBorder="color-mix(in srgb, var(--border) 100%, transparent)">
-          <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.12em]" style={{ color: 'var(--muted)' }}>{copy.liveActivityLabel}</p>
+          <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.12em]" style={{ color: 'var(--muted)' }}>{copy.liveActivityLabel}</p>
           <ActivityFeed items={copy.tickerItems} />
         </GlassCard>
       </div>

@@ -1,14 +1,11 @@
 import { NextResponse } from "next/server"
 import { getClientIp, rateLimit } from "@/lib/rate-limit"
+import { normalizePhoneE164 } from "@/lib/phone/e164"
+import { maskPhonesInText } from "@/lib/sms/maskPhone"
 
 export const runtime = "nodejs"
 
-function normalizePhone(phone: string): string {
-  const stripped = phone.trim().replace(/[\s()-]/g, "")
-  if (!stripped) return ""
-  if (stripped.startsWith("+")) return stripped
-  return `+1${stripped}`
-}
+const normalizePhone = normalizePhoneE164
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}))
@@ -21,8 +18,14 @@ export async function POST(req: Request) {
   }
 
   const ip = getClientIp(req)
+  // ⚠ SMS PUMPING. Keyed on ip+phone alone, rotating the NUMBER made sends from
+  // one IP unlimited — each text is billed to us. Three buckets now: the
+  // original per-pair resend throttle, a per-IP ceiling across all numbers,
+  // and a per-number ceiling across all IPs.
   const rl = rateLimit(`signup-phone-start:${ip}:${phone}`, 3, 120_000)
-  if (!rl.success) {
+  const perIp = rl.success ? rateLimit(`signup-phone-start-ip:${ip}`, 10, 60 * 60 * 1000) : rl
+  const perPhone = perIp.success ? rateLimit(`signup-phone-start-num:${phone}`, 5, 60 * 60 * 1000) : perIp
+  if (!perPhone.success) {
     return NextResponse.json(
       {
         error: "RATE_LIMITED",
@@ -49,7 +52,8 @@ export async function POST(req: Request) {
     })
     return NextResponse.json({ ok: true })
   } catch (err: any) {
-    console.error("[auth/phone/signup/start] error:", err?.message || err)
+    // Masked: Twilio's error messages quote the full number.
+    console.error("[auth/phone/signup/start] error:", maskPhonesInText(String(err?.message || err)))
     return NextResponse.json(
       { error: "SEND_FAILED", message: "Failed to send verification code." },
       { status: 500 }

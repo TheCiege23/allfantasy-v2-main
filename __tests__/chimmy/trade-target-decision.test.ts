@@ -4,12 +4,19 @@ import {
   decideTradeTarget,
   renderTradeTargetVerdict,
   type TradeTargetFacts,
+  type TradeTargetGrade,
 } from '@/lib/chimmy/tradeTargetDecision'
 
 /**
  * "Should I trade for X?" — the rules, one at a time. Every fact is handed in, so each test moves
  * exactly one of them and pins which rule decided.
+ *
+ * The package is judged by THE grade (design step 7, 2026-09-27): the letter every trade surface gives
+ * it, from the asker's side — not a second engine's accept/reject, and not the trade finder's band.
  */
+
+const B_GRADE: TradeTargetGrade = { graded: true, letter: 'B', partnerLetter: 'C', label: 'Slightly favors you', action: 'accept', receiptId: 'rcpt_target' }
+const F_GRADE: TradeTargetGrade = { graded: true, letter: 'F', partnerLetter: 'A', label: 'Major loss (you)', action: 'decline', receiptId: null }
 
 function facts(over: Partial<TradeTargetFacts> = {}): TradeTargetFacts {
   return {
@@ -40,7 +47,7 @@ function facts(over: Partial<TradeTargetFacts> = {}): TradeTargetFacts {
       receiveTotal: 3421,
       fairness: 'balanced',
     },
-    grade: { verdict: 'accept', acceptance: 0.62 },
+    grade: B_GRADE,
     noTrades: null,
     ...over,
   }
@@ -73,7 +80,7 @@ describe('yes — he starts, you are contending, and the price works', () => {
     expect(text).toMatch(/Lineup: Rashee Rice \(15\.0 projected\) would start for you over Kyren Williams — \+8\.5 points in week 3 under Draft Junkies' scoring/)
     expect(text).toMatch(/After sending the package below, your lineup moves \+8\.0/)
     expect(text).toMatch(/Your team: 3-1, 2nd of 12 — contending/)
-    expect(text).toMatch(/Price: about Jaylen Waddle \(3,300\) for his 3,421 — a fair deal\. The trade engine calls it a good offer, about 62% they accept/)
+    expect(text).toMatch(/Price: about Jaylen Waddle \(3,300\) for his 3,421\. The AllFantasy grade for you: B — Slightly favors you \(their side C\)/)
     expect(text).toMatch(/Market: Dynasty value 3,421, down 436 over 30 days, age 26/)
     expect(text).toMatch(/His team: Rival is rebuilding — a team likely to sell a veteran/)
   })
@@ -119,7 +126,7 @@ describe('no — each rule, on its own', () => {
       facts({
         target: { ...facts().target, value: null },
         offer: { give: [{ name: 'Chig Okonkwo', position: 'TE', value: 85 }], giveTotal: 85, receiveTotal: 0, fairness: 'low confidence' },
-        grade: { verdict: 'accept', acceptance: 0.66 },
+        grade: B_GRADE,
       }),
     )
     expect(v.verdict).toBe('no')
@@ -174,23 +181,26 @@ describe('no — each rule, on its own', () => {
     expect(v.because).toMatch(/not young or rising enough/)
   })
 
-  it('the engine grades the package against you', () => {
-    const v = decideTradeTarget(facts({ grade: { verdict: 'reject', acceptance: 0.3 } }))
+  it('the one grade says the package costs more than he is worth (F)', () => {
+    const v = decideTradeTarget(facts({ grade: F_GRADE }))
     expect(v.verdict).toBe('no')
-    expect(v.because).toMatch(/the package it would take \(Jaylen Waddle\) costs more than he is worth to you/)
+    expect(v.because).toMatch(/the package it would take \(Jaylen Waddle\) costs more than he is worth to you — it grades F for you/)
   })
 
-  it('a lopsided overpay', () => {
+  it("an overpay is the one grade saying counter (D) — not this surface's own fairness band", () => {
     const v = decideTradeTarget(
-      facts({ offer: { ...facts().offer!, giveTotal: 5200, fairness: 'lopsided' }, grade: null }),
+      facts({ grade: { graded: true, letter: 'D', partnerLetter: 'B+', label: 'Slightly favors opponent', action: 'counter', receiptId: null } }),
     )
     expect(v.verdict).toBe('no')
-    expect(v.because).toMatch(/overpay — about 5,200 for his 3,421/)
+    expect(v.because).toMatch(/you would have to overpay — the package grades D for you \(B\+ for them\)/)
+    // The finder's band no longer decides: a "lopsided" band with a fair grade is not an overpay.
+    const fair = decideTradeTarget(facts({ offer: { ...facts().offer!, giveTotal: 5200, fairness: 'lopsided' } }))
+    expect(fair.verdict).toBe('yes')
   })
 
-  it('a lopsided deal in YOUR favour is not an overpay', () => {
+  it('a deal in YOUR favour is not an overpay', () => {
     const v = decideTradeTarget(
-      facts({ offer: { ...facts().offer!, giveTotal: 2000, fairness: 'lopsided' }, grade: null }),
+      facts({ grade: { graded: true, letter: 'A', partnerLetter: 'F', label: 'Major win (you)', action: 'accept', receiptId: null } }),
     )
     expect(v.verdict).toBe('yes')
   })
@@ -232,7 +242,7 @@ describe('early in the season, the record decides nothing', () => {
       partner: { teamName: 'Puka Troopers', stance: 'contender' },
       lineup: priced({ week: 3, targetPoints: 16.7, addGain: 7.2, netGain: 4.3, replaces: 'Quentin Johnston' }),
       offer: { give: [{ name: 'Kyren Williams', position: 'RB', value: 3562 }], giveTotal: 3562, receiveTotal: 3446, fairness: 'balanced' },
-      grade: { verdict: 'accept', acceptance: 0.56 },
+      grade: B_GRADE,
       ...over,
     })
 
@@ -279,10 +289,19 @@ describe('what the answer says about what it could not see', () => {
     expect(v.because).not.toMatch(/0-0/)
   })
 
-  it('a package the engine did not grade in time is said, not filled in', () => {
-    const v = decideTradeTarget(facts({ grade: null }))
-    expect(v.basis.join(' ')).toMatch(/did not grade the package in time/)
-    expect(v.reasons.join('\n')).not.toMatch(/trade engine calls it/)
+  it('a package the one grade could not price is a no, and says why — never a guessed price', () => {
+    const v = decideTradeTarget(facts({ grade: { graded: false, reason: 'Jaylen Waddle has no value on this league’s chart.' } }))
+    expect(v.verdict).toBe('no')
+    expect(v.because).toMatch(/could not be graded on this league's values \(Jaylen Waddle has no value on this league’s chart\), so there is no price to recommend/)
+    expect(v.reasons.join('\n')).toMatch(/Not graded: Jaylen Waddle has no value on this league’s chart\./)
+    expect(v.reasons.join('\n')).not.toMatch(/AllFantasy grade for you/)
+  })
+
+  it('states the one grade in the price line and names the receipt — no band words, no acceptance odds', () => {
+    const v = decideTradeTarget(facts())
+    expect(v.reasons.join('\n')).toMatch(/The AllFantasy grade for you: B — Slightly favors you \(their side C\), the same grade the Trade Center gives this package\./)
+    expect(v.basis.join(' ')).toMatch(/Evaluation receipt rcpt_target\./)
+    expect(v.reasons.join('\n')).not.toMatch(/a fair deal|slight edge|value gap|% they accept|trade engine calls it/)
   })
 
   it('a package that could not be priced for the lineup says why', () => {
@@ -303,7 +322,7 @@ describe('renderTradeTargetVerdict', () => {
   })
 
   it('a no has no opening offer', () => {
-    const text = renderTradeTargetVerdict(decideTradeTarget(facts({ grade: { verdict: 'reject', acceptance: null } })))
+    const text = renderTradeTargetVerdict(decideTradeTarget(facts({ grade: F_GRADE })))
     expect(text).toMatch(/^No, don't trade for Rashee Rice, because /)
     expect(text).not.toMatch(/Open with:/)
   })
@@ -353,7 +372,7 @@ describe('the trade block', () => {
 
   it('a listing does not turn a no into a yes', () => {
     const v = decideTradeTarget(
-      facts({ block: block({ listed: true, teamName: 'Rival' }), grade: { verdict: 'reject', acceptance: 0.2 } }),
+      facts({ block: block({ listed: true, teamName: 'Rival' }), grade: F_GRADE }),
     )
     expect(v.verdict).toBe('no')
     expect(v.reasons).toContain('Trade block: Rival has him on the block in AllFantasy.')

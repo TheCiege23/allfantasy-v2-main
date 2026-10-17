@@ -75,6 +75,32 @@ describe('getPlayerPoolForSport — de-dup keeps the id that scores', () => {
     expect(pool.map((p) => p.external_source_id)).toEqual(['tsdb_34146'])
   })
 
+  describe('SOCCER — only Rolling Insights rows are in the pool', () => {
+    const riSaka = row({ id: 'r2', name: 'Bukayo Saka', position: 'Forward', team: 'ARS', externalId: '1208', source: 'rolling_insights' })
+    const tsdbSaka = row({ id: 't2', name: 'Bukayo Saka', position: 'Right Winger', team: 'Arsenal', externalId: 'tsdb_34160000', imageUrl: 'https://img.example/saka.png', source: 'thesportsdb' })
+    const tsdbCoach = row({ id: 't3', name: 'Some Coach', position: 'Assistant Coach', team: 'Arsenal', externalId: 'tsdb_1', source: 'thesportsdb' })
+    // Numeric, but an API-Football id: the bridge would read it as a Rolling Insights id and score someone else.
+    const apiFootball = row({ id: 'a1', name: 'B. Saka', position: 'FWD', team: 'ARS', externalId: '1208', imageUrl: 'https://img.example/b.png', source: 'api_football' })
+
+    it('a numeric api_football id is not scorable in soccer', () => {
+      expect(isScorablePoolId('SOCCER', { externalId: '1208', source: 'api_football' })).toBe(false)
+      expect(isScorablePoolId('SOCCER', { externalId: '1208', source: 'rolling_insights' })).toBe(true)
+    })
+
+    it('drops TheSportsDB and api_football rows — cross-source spellings never dedupe', async () => {
+      prismaMock.sportsPlayer.findMany.mockResolvedValue([tsdbSaka, tsdbCoach, apiFootball, riSaka])
+      const pool = await getPlayerPoolForSport('SOCCER', { limit: 10 })
+      expect(pool.map((p) => p.external_source_id)).toEqual(['1208'])
+      expect(pool[0]?.full_name).toBe('Bukayo Saka')
+    })
+
+    it('with no Rolling Insights rows at all it falls back rather than emptying the room', async () => {
+      prismaMock.sportsPlayer.findMany.mockResolvedValue([tsdbSaka])
+      const pool = await getPlayerPoolForSport('SOCCER', { limit: 10 })
+      expect(pool.map((p) => p.external_source_id)).toEqual(['tsdb_34160000'])
+    })
+  })
+
   it('[control] NFL keeps its existing tie-break (photo and source), unchanged', async () => {
     prismaMock.sportsPlayer.findMany.mockResolvedValue([
       row({ id: 't1', name: 'X', position: 'WR', team: 'DAL', externalId: 'tsdb_9', imageUrl: 'https://img.example/x.png', source: 'thesportsdb' }),

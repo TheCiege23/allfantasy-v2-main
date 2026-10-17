@@ -341,8 +341,9 @@ export function findSleeperPoolStatDef(
 }
 
 const NBA_LIKE: DraftStatColumnDef[] = [
-  col('pts', 'PTS', 'number', 'offense', ['points', 'pts', 'nba_points']),
-  col('reb', 'REB', 'number', 'offense', ['rebounds', 'reb', 'total_rebounds']),
+  col('pts', 'PPG', 'number', 'offense', ['pointsPerGame', 'points_per_game', 'ppg', 'points', 'pts', 'nba_points']),
+  col('reb', 'RPG', 'number', 'offense', ['reboundsPerGame', 'rebounds_per_game', 'rpg', 'rebounds', 'reb', 'total_rebounds']),
+  col('mpg', 'MPG', 'number', 'offense', ['minutesPerGame', 'minutes_per_game', 'mpg']),
   col('ast', 'AST', 'number', 'offense', ['assists', 'ast']),
   col('stl', 'STL', 'number', 'offense', ['steals', 'stl']),
   col('blk', 'BLK', 'number', 'offense', ['blocks', 'blk']),

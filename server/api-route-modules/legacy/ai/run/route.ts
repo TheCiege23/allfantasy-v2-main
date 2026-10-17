@@ -15,6 +15,7 @@ import {
   ESCALATION_SYSTEM,
 } from "@/lib/ai-personality"
 import { getUniversalAIContext } from "@/lib/ai-player-context"
+import { bestOutlookLabel, legacyPromptSeason } from "@/lib/legacy/promptSeason"
 import {
   assembleLegacyAIContext,
   formatEnrichedContextForPrompt,
@@ -34,7 +35,14 @@ import {
 
 const openai = getOpenAIRouteClient()
 
-const LEGACY_AI_SYSTEM_PROMPT = `
+/**
+ * Built per request, not once at module load: it names seasons, and a module constant freezes the year the
+ * process started (`lib/legacy/promptSeason.ts` records the stale years this replaced).
+ */
+function buildLegacyAiSystemPrompt(now: Date = new Date()): string {
+  const season = legacyPromptSeason(now)
+  const outlookLabel = bestOutlookLabel(now)
+  return `
 ${AI_CORE_PERSONALITY}
 
 ${getModeInstructions("commentator")}
@@ -67,14 +75,14 @@ You have encyclopedic knowledge of what makes a great fantasy manager:
 This is the OFFSEASON - no weekly projections or record reliance.
 Classify their current window status based on OFFSEASON factors:
 
-**🏆 READY_TO_COMPETE** - Championship window OPEN for 2025
+**🏆 READY_TO_COMPETE** - Championship window OPEN for ${season}
 - Strong positional cores locked in
 - QB stability (elite or young ascending QB)
 - Minimal aging concerns at key positions
 - Pick capital is secondary to competing NOW
 - ADVICE: Buy proven talent, sell uncertainty. Win now!
 
-**🔨 REBUILDING** - Building for 2026+ contention
+**🔨 REBUILDING** - Building for ${season + 1}+ contention
 - Accumulating picks and young assets
 - Trading away aging vets for value
 - QB situation unsettled or in transition
@@ -111,32 +119,15 @@ Score each manager's offseason position (0-100):
 
 ## OFFSEASON LABELS
 Assign ONE primary label:
-- "Best 2025 Outlook" - highest ceiling for upcoming season
+- "${outlookLabel}" - highest ceiling for upcoming season
 - "Most Fragile Contender" - good on paper but vulnerable
 - "Best Rebuild Foundation" - young core with highest upside
 - "Aging Out" - window is closing, must act NOW
 
-## AI AS PSYCHOLOGIST - MANAGER ARCHETYPE PROFILING
-
-You profile behavior patterns. This is SHAREABLE content - be playful but insightful.
-
-Pick archetype based on observable patterns:
-- **Builder**: Patient, develops young talent, plays long game, tolerates short-term pain for long-term gain
-- **Trader**: Active deal-maker, cycles value, seeks buy-low/sell-high opportunities constantly
-- **Sniper**: Precise moves, quality over quantity, makes 2-3 big moves per season
-- **Hoarder**: Collects assets, reluctant to trade, stockpiles depth, holds elite players
-- **Balanced**: Solid all-around approach, no extreme tendencies
-
-Include for each manager:
-- behavior_percentile: "You trade more than 91% of managers" style comparisons
-- tendency_insight: What they consistently do
-- playful_roast: One-liner that's funny and shareable
-  Examples:
-  - "You're allergic to patience."
-  - "You rebuild like it's a hobby."
-  - "You trade like you're being paid by volume."
-  - "Your bench is a graveyard of 'what ifs'."
-  - "You hold players like they owe you money."
+## NO MANAGER LABELS
+Never assign the manager a persona, playstyle label or behavioural type, and never
+roast or characterise them. Describe what happened — records, titles, trades, roster makeup —
+not who they are.
 
 ## AI AS HISTORIAN - SEASON AUTOPSY
 
@@ -149,7 +140,7 @@ Storytelling Approach:
 - "This is where it all went wrong."
 - "You were closer than you think."
 - "If you'd held [Player] one more week..."
-- "This was the move that defined your 2024."
+- "This was the move that defined your ${season - 1}."
 
 Season Autopsy Output:
 For each notable season, include:
@@ -168,9 +159,9 @@ Key Decision Analysis:
 
 Legacy Narrative:
 Tell their STORY across all seasons:
-- "From 2020-2022, you were a perennial contender. Then the rebuild started..."
+- "From [year]-[year], you were a perennial contender. Then the rebuild started..."
 - "You've been stuck in the middle for 3 years. It's time to pick a lane."
-- "Your 2023 championship was built on that 2021 trade for [Player]."
+- "Your [year] championship was built on that [year] trade for [Player]."
 
 ## DYNASTY SUCCESS PATTERNS TO IDENTIFY
 Strengths to look for:
@@ -191,7 +182,7 @@ You simulate futures. You run scenario analysis and project contention timelines
 You speak with the language of control and strategic decision-making.
 
 Window Planning Phrases:
-- "If you trade X, your best window shifts to 2026."
+- "If you trade X, your best window shifts to ${season + 1}."
 - "If you hold, your ceiling stays capped."
 - "You're choosing between risk and patience."
 - "This move locks in a direction."
@@ -199,7 +190,7 @@ Window Planning Phrases:
 
 Scenario Analysis Output:
 - current_trajectory: Where they're headed if they do nothing
-- push_in_scenario: What happens if they go all-in for 2025
+- push_in_scenario: What happens if they go all-in for ${season}
 - pivot_out_scenario: What happens if they sell and rebuild
 - optimal_path: The recommended direction with reasoning
 - timeline_shift: How each move affects their contention window
@@ -238,12 +229,11 @@ Based on their data, recommend specific actions:
 Output JSON only:
 {
   "rating": number (0-100, be honest - 70+ is genuinely good),
-  "title": string (e.g., "Dynasty Dominator", "Waiver Wire Wizard", "Perpetual Rebuilder"),
-  "archetype": "Builder" | "Trader" | "Sniper" | "Hoarder" | "Balanced",
+  "title": string (a short headline built ONLY from their record, e.g. "2x Champion · 61% Win Rate" or "5 Playoff Trips in 6 Seasons" — never a persona or playstyle label),
   "window_status": "READY_TO_COMPETE" | "REBUILDING" | "OVEREXTENDED" | "AGING_CORE" | "DIRECTION_NEEDED",
   "window_status_emoji": "🏆" | "🔨" | "⚠️" | "📉" | "🧱",
-  "window_status_label": string (human readable: "Ready to Compete (2025)", "Rebuilding (2026+)", etc.),
-  "offseason_label": "Best 2025 Outlook" | "Most Fragile Contender" | "Best Rebuild Foundation" | "Aging Out",
+  "window_status_label": string (human readable: "Ready to Compete (${season})", "Rebuilding (${season + 1}+)", etc.),
+  "offseason_label": "${outlookLabel}" | "Most Fragile Contender" | "Best Rebuild Foundation" | "Aging Out",
   "offseason_power_index": number (0-100),
   "power_index_breakdown": {
     "roster_value": number (0-100),
@@ -281,13 +271,6 @@ Output JSON only:
     }
   ],
 
-  "manager_profile": {
-    "behavior_percentile": string ("You trade more than 91% of managers"),
-    "tendency_insight": string,
-    "playful_roast": string,
-    "pattern_memory": string[] (patterns you've observed about them)
-  },
-
   "uncomfortable_truth": string (one honest insight they need to hear),
 
   "citations": [
@@ -307,6 +290,7 @@ Output JSON only:
 - "confidence" is "high" when backed by multiple data points, "medium" for single-source claims, "low" for inferences.
 - Include at minimum 3 citations. More is better if justified.
 - Do NOT fabricate sources — only cite data actually provided to you.`
+}
 
 function buildLegacySnapshot(user: {
   displayName: string | null
@@ -482,7 +466,6 @@ type LegacyCitation = {
 type NormalizedLegacyResponse = {
   rating: number
   title: string
-  archetype: string
   consistency_score: number
   window_status: string
   window_status_emoji: string
@@ -623,12 +606,11 @@ function normalizeLegacyResponse(
   audit: LegacyAudit,
 ): NormalizedLegacyResponse {
   const insights = (aiResponse.insights as Record<string, unknown> | null) || null
+  // A record, never a label (Milestone 32): the title is shown on the report and the share card.
   const fallbackTitle =
-    snapshot.win_percentage >= 60
-      ? "Dynasty Contender"
-      : snapshot.win_percentage >= 50
-        ? "Competitive Manager"
-        : "Rebuild Candidate"
+    snapshot.championships > 0
+      ? `${snapshot.championships}x Champion · ${snapshot.win_percentage}% Win Rate`
+      : `${snapshot.win_percentage}% Win Rate`
 
   // Honesty (Task 2): every field the model omits is filled by a FORMULA over the snapshot —
   // a derived value, not an observation. The tracker records exactly which fields that
@@ -648,7 +630,6 @@ function normalizeLegacyResponse(
   return {
     rating,
     title: tracker.text("title", aiResponse.title, fallbackTitle),
-    archetype: tracker.text("archetype", aiResponse.archetype, "Balanced"),
     consistency_score: tracker.bounded(
       "consistency_score",
       aiResponse.consistency_score,
@@ -728,7 +709,6 @@ function buildLegacyScreenContracts(args: {
   draftInput?: DraftWarRoomInput
   reportSignal?: {
     title?: string
-    archetype?: string
     window_status?: string
     next_season_advice?: string
     insights?: {
@@ -872,7 +852,6 @@ export const POST = withApiUsage({
       }
       const cachedReportSignal = {
         title: existingReport.title || undefined,
-        archetype: typeof insights?.archetype === "string" ? insights.archetype : undefined,
         window_status: typeof insights?.window_status === "string" ? insights.window_status : undefined,
         next_season_advice:
           typeof insights?.next_season_advice === "string"
@@ -915,7 +894,6 @@ export const POST = withApiUsage({
         report: {
           rating: existingReport.rating,
           title: existingReport.title,
-          archetype: insights?.archetype,
           consistency_score: insights?.consistency_score,
           window_status: insights?.window_status,
           window_status_emoji: insights?.window_status_emoji,
@@ -1021,7 +999,7 @@ Generate a comprehensive rating and analysis.`
     const completion = await openai.chat.completions.create({
       model: "gpt-4o",
       messages: [
-        { role: "system", content: LEGACY_AI_SYSTEM_PROMPT },
+        { role: "system", content: buildLegacyAiSystemPrompt() },
         { role: "user", content: userPrompt },
       ],
       temperature: 0.7,
@@ -1045,7 +1023,6 @@ Generate a comprehensive rating and analysis.`
         title: normalized.title,
         summary: normalized.legacy_summary,
         insights: {
-          archetype: normalized.archetype,
           consistency_score: normalized.consistency_score,
           window_status: normalized.window_status,
           window_status_emoji: normalized.window_status_emoji,
@@ -1068,7 +1045,6 @@ Generate a comprehensive rating and analysis.`
 
     const normalizedReportSignal = {
       title: normalized.title,
-      archetype: normalized.archetype,
       window_status: normalized.window_status,
       next_season_advice: normalized.next_season_advice,
       insights: normalized.insights,
@@ -1102,7 +1078,6 @@ Generate a comprehensive rating and analysis.`
       report: {
         rating: normalized.rating,
         title: normalized.title,
-        archetype: normalized.archetype,
         consistency_score: normalized.consistency_score,
         window_status: normalized.window_status,
         window_status_emoji: normalized.window_status_emoji,

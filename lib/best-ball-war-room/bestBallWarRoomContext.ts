@@ -20,6 +20,7 @@ import { resolveLeagueAccess } from '@/lib/league-access'
 import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidation'
 import { buildPlayerKey } from '@/lib/adp/computeAllFantasyAdp'
 import { getBestBallSportProfile, normalizeBestBallSettings } from '@/lib/bestball/rules'
+import { hasVerifiedBestBallRuleConfiguration } from './bestBallRuleEvidence'
 import { fetchAdpByPlayerKey } from '@/lib/redraft-war-room/redraftFreeAgentPool'
 import { fetchRedraftInjuryNews, injuryNameKey } from '@/lib/redraft-war-room/redraftInjuryNews'
 import type {
@@ -165,6 +166,7 @@ export async function buildBestBallWarRoomContext(
     league.settings && typeof league.settings === 'object' && !Array.isArray(league.settings)
       ? (league.settings as Record<string, unknown>)
       : {}
+  const ruleConfigurationVerified = hasVerifiedBestBallRuleConfiguration(settingsRecord)
   const bbSettings = normalizeBestBallSettings({
     sport,
     conceptSetup: (settingsRecord.best_ball_settings as Record<string, unknown> | null) ?? null,
@@ -314,8 +316,8 @@ export async function buildBestBallWarRoomContext(
   const byeAvailable = allPlayers.some((p) => p.byeWeek != null)
   const scoresAvailable = wsAgg.size > 0
   const availability: BestBallDataAvailability = {
-    scoringRules: 'available',
-    rosterRules: 'available',
+    scoringRules: ruleConfigurationVerified ? 'available' : 'missing',
+    rosterRules: ruleConfigurationVerified ? 'available' : 'missing',
     rosters: league.rosters.length > 0 ? 'available' : 'missing',
     playerValues: adpAvailable ? 'available' : 'missing',
     weeklyScores: scoresAvailable ? 'available' : 'missing',
@@ -337,8 +339,12 @@ export async function buildBestBallWarRoomContext(
     missingDataFlags.push('Player team data unavailable — stack/correlation analysis is limited.')
   if (availability.byeWeeks === 'missing')
     missingDataFlags.push('Bye-week data is not available — bye-cluster risk cannot be assessed.')
-  if (!bbSettings.waiversEnabled) missingDataFlags.push('Waivers are disabled in this best-ball league (draft-only).')
-  if (!bbSettings.tradesEnabled) missingDataFlags.push('Trades are disabled in this best-ball league (draft-only).')
+  if (!ruleConfigurationVerified) {
+    missingDataFlags.push('Best Ball waiver, trade and substitution rules are unverified; generic draft-only defaults do not establish provider permissions or this league\'s lineup template.')
+  } else {
+    if (!bbSettings.waiversEnabled) missingDataFlags.push('Waivers are disabled in this best-ball league (draft-only).')
+    if (!bbSettings.tradesEnabled) missingDataFlags.push('Trades are disabled in this best-ball league (draft-only).')
+  }
 
   const bestBall: BestBallSettings = {
     mode: bbSettings.mode,
@@ -356,6 +362,7 @@ export async function buildBestBallWarRoomContext(
   const context: BestBallWarRoomContext = {
     leagueId,
     leagueType: 'best_ball',
+    ruleConfigurationVerified,
     sport,
     season,
     teamCount,

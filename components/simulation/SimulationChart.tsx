@@ -69,7 +69,7 @@ export function SimulationChart({
           Score distribution (run simulation)
         </div>
       )}
-      <div className="flex gap-4 mt-2 text-[10px] text-white/50">
+      <div className="flex gap-4 mt-2 text-[11px] text-white/50">
         <span className="flex items-center gap-1"><span className="w-2 h-2 rounded bg-cyan-500/80" /> {teamAName}</span>
         <span className="flex items-center gap-1"><span className="w-2 h-2 rounded bg-amber-500/80" /> {teamBName}</span>
       </div>

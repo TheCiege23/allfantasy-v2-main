@@ -52,7 +52,7 @@ export function MatchupDetailView({
         <Link
           href={`/league/${leagueId}?tab=Settings`}
           data-testid="matchup-scoring-settings-link"
-          className="rounded border border-cyan-500/40 bg-cyan-500/10 px-2 py-1 text-[10px] text-cyan-200 hover:bg-cyan-500/20"
+          className="rounded border border-cyan-500/40 bg-cyan-500/10 px-2 py-1 text-[11px] text-cyan-200 hover:bg-cyan-500/20"
         >
           Review scoring settings
         </Link>

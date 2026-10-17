@@ -381,6 +381,8 @@ export type LiveGameDetail = {
   gameId: string
   sport: string
   status: { state: GameDetailState; detail: string | null; period: number | null; clock: string | null }
+  /** ESPN's kickoff, ISO. Optional: summaries cached before it was read lack it. */
+  startTime?: string | null
   home: GameDetailTeam
   away: GameDetailTeam
   leaders: { home: GameDetailLeader[]; away: GameDetailLeader[] }
@@ -1341,6 +1343,7 @@ export function trimEspnGameSummary(
       period: num(pick(comp, 'status', 'period')),
       clock: str(pick(comp, 'status', 'displayClock')),
     },
+    startTime: str(comp.date),
     home,
     away,
     leaders: { home: leadersFor(home), away: leadersFor(away) },

@@ -3,11 +3,15 @@ import { createMockNextRequest } from "@/__tests__/helpers/createMockNextRequest
 import { buildStripeCheckoutClientReferenceId } from "@/lib/monetization/StripeCheckoutLinkRegistry"
 
 const constructEventMock = vi.hoisted(() => vi.fn())
+// A buyer-controlled client_reference_id SKU is only honoured if the session bought
+// that SKU's catalog price, so the webhook lists line items on that path.
+const listLineItemsMock = vi.hoisted(() => vi.fn())
 const getStripeClientMock = vi.hoisted(() =>
   vi.fn(() => ({
     webhooks: {
       constructEvent: constructEventMock,
     },
+    checkout: { sessions: { listLineItems: listLineItemsMock } },
   }))
 )
 const getStripeWebhookSecretMock = vi.hoisted(() => vi.fn(() => "whsec_test"))
@@ -80,6 +84,12 @@ vi.mock("@/lib/tokens/TokenSpendService", () => ({
 describe("Stripe webhook route contracts", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    process.env.STRIPE_PRICE_AF_PRO_MONTHLY = "price_test_pro_monthly"
+    process.env.STRIPE_PRICE_AF_TOKENS_5 = "price_test_tokens_5"
+    // By default the session bought whichever of these SKUs it claims.
+    listLineItemsMock.mockResolvedValue({
+      data: [{ price: { id: "price_test_pro_monthly" } }, { price: { id: "price_test_tokens_5" } }],
+    })
     findUniqueMock.mockResolvedValue(null)
     createMock.mockResolvedValue({ id: "row-1" })
     updateMock.mockResolvedValue({ id: "row-1" })
@@ -209,8 +219,11 @@ describe("Stripe webhook route contracts", () => {
   it("retries stale processing webhook events instead of dropping fulfillment", async () => {
     findUniqueMock.mockResolvedValueOnce({
       status: "processing",
-      createdAt: new Date(Date.now() - 10 * 60 * 1000),
-      updatedAt: new Date(Date.now() - 10 * 60 * 1000),
+      // Stale means older than the route's PROCESSING_EVENT_STALE_MS (24h). This used
+      // 10 minutes, which the route correctly treats as still in flight (409), so the
+      // test had been failing on main since that window was widened.
+      createdAt: new Date(Date.now() - 25 * 60 * 60 * 1000),
+      updatedAt: new Date(Date.now() - 25 * 60 * 60 * 1000),
     })
     const { POST } = await import("@/app/api/stripe/webhook/route")
     const req = createMockNextRequest("http://localhost/api/stripe/webhook", {
@@ -261,6 +274,45 @@ describe("Stripe webhook route contracts", () => {
       })
     )
     expect(subscriptionPlanUpsertMock).not.toHaveBeenCalled()
+    expect(userSubscriptionUpsertMock).not.toHaveBeenCalled()
+  })
+
+  // The Payment Link attack: pay for the cheapest link, rewrite client_reference_id
+  // to claim a plan. The session's line items show what was actually bought.
+  it("refuses a client_reference_id SKU the session did not buy, granting nothing", async () => {
+    listLineItemsMock.mockResolvedValue({ data: [{ price: { id: "price_test_tokens_5" } }] })
+    constructEventMock.mockReturnValueOnce({
+      id: "evt_client_ref_forged",
+      type: "checkout.session.completed",
+      data: {
+        object: {
+          id: "cs_client_ref_forged",
+          mode: "subscription",
+          subscription: "sub_forged",
+          customer: "cus_forged",
+          metadata: {},
+          client_reference_id: buildStripeCheckoutClientReferenceId({
+            userId: "attacker-1",
+            sku: "af_pro_monthly",
+            purchaseType: "subscription",
+          }),
+        },
+      },
+    })
+
+    const { POST } = await import("@/app/api/stripe/webhook/route")
+    const res = await POST(
+      createMockNextRequest("http://localhost/api/stripe/webhook", {
+        method: "POST",
+        headers: { "stripe-signature": "sig_test" },
+        body: "{}",
+      }) as any
+    )
+
+    // Non-retryable: 200 to Stripe, recorded as an error, and no plan granted.
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.fulfillmentError).toMatch(/did not buy its catalog price/)
     expect(userSubscriptionUpsertMock).not.toHaveBeenCalled()
   })
 

@@ -7,6 +7,7 @@ import { DEFAULT_SPORT } from '@/lib/sport-scope'
 import { isRealLeague, EXCLUDED_VARIANTS } from '@/lib/leagues/leagueListFilter'
 import { resolveLeagueListSeasonYear } from '@/lib/leagues/resolveLeagueListSeasonYear'
 import type { ActivityLeagueEntry } from '@/lib/activity/types'
+import { clientLeagueSettings } from '@/lib/league/clientLeagueSettings'
 
 const VARIANT_NOT_IN = Array.from(EXCLUDED_VARIANTS)
 
@@ -406,7 +407,9 @@ export function collapseLeagueSeasons<T extends Record<string, unknown>>(
 }
 
 /**
- * Each league's `settings`, minus the importer's `identity_mappings` table.
+ * Each league's `settings`, minus the importer's `identity_mappings` table — and minus the retired
+ * manager-label keys (`psychologyCache`), which this list must never hand a client
+ * (`lib/league/clientLeagueSettings.ts`).
  *
  * 🛑 `identity_mappings` IS ~98% OF THIS LIST'S PAYLOAD AND NOTHING THAT READS THE LIST USES IT.
  * Measured read-only on the test database (ep-muddy-leaf) 2026-09-26: across 229 leagues it is 13.5 MB
@@ -433,13 +436,15 @@ async function readListSettings(ids: string[]): Promise<Map<string, unknown>> {
                   ELSE settings::jsonb END AS settings
       FROM leagues
       WHERE id = ANY(${ids})`
-    return new Map(rows.map((r) => [r.id, r.settings]))
+    return new Map(rows.map((r) => [r.id, clientLeagueSettings(r.settings)]))
   } catch (err) {
     console.error('[League List] slim settings read failed; reading the full column', err)
     const rows = await (prisma as any).league
       .findMany({ where: { id: { in: ids } }, select: { id: true, settings: true } })
       .catch(() => [] as Array<{ id: string; settings: unknown }>)
-    return new Map((rows as Array<{ id: string; settings: unknown }>).map((r) => [r.id, r.settings]))
+    return new Map(
+      (rows as Array<{ id: string; settings: unknown }>).map((r) => [r.id, clientLeagueSettings(r.settings)]),
+    )
   }
 }
 

@@ -118,7 +118,7 @@ function GifFigure({ gif, onImageClick }: { gif: SafeGif; onImageClick?: (url: s
         loading="lazy"
         onClick={() => onImageClick?.(gif.url)}
       />
-      <figcaption className="mt-0.5 text-[10px] opacity-60">{gifCredit(gif.provider)}</figcaption>
+      <figcaption className="mt-0.5 text-[11px] opacity-60">{gifCredit(gif.provider)}</figcaption>
     </figure>
   )
 }

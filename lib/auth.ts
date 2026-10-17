@@ -3,13 +3,27 @@ import { PHASE_PRODUCTION_BUILD } from "next/constants";
 import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
 import AppleProvider from "next-auth/providers/apple";
+import { appleFormPostCookies, resolveAppleClientSecret } from "@/lib/auth/appleClientSecret";
+import { hasAppleSignInCredentials } from "@/lib/auth/appleSignInEnv";
+import {
+  isSessionRevoked,
+  newSessionId,
+  revokeSessionForSignOut,
+  SessionRevokedError,
+} from "@/lib/auth/sessionRevocation";
 import SpotifyProvider from "next-auth/providers/spotify";
 import { SPOTIFY_SCOPES } from "@/lib/spotify/scopes";
 import FacebookProvider from "next-auth/providers/facebook";
 import DiscordProvider from "next-auth/providers/discord";
 import bcrypt from "bcryptjs";
+import { clearSharedRateLimit, consumeSharedRateLimit } from "@/lib/security/sharedRateLimit";
 import { prisma } from "@/lib/prisma";
 import { resolveUnifiedAuthIdentity } from "@/lib/auth/AuthIdentityResolver";
+import {
+  ACCOUNT_SUSPENDED_ERROR,
+  ACCOUNT_SUSPENDED_ERROR_URL,
+  activeAccountRestriction,
+} from "@/lib/moderation/accountSuspension";
 import { linkSocialAccountToAppUser } from "@/lib/auth/SocialAccountLinkingService";
 import { ensureSharedAccountProfile } from "@/lib/auth/SharedAccountBootstrapService";
 import { GUEST_SESSION_COOKIE_NAME } from "@/lib/guest-mode/guestSessionToken";
@@ -90,10 +104,13 @@ function resolveOAuthEmailFromCallback(
  * - Apple: the decoded id_token claim `email_verified` is often the STRING
  *   "true"/"false" rather than a boolean.
  * - Discord: raw `/users/@me` response includes boolean `verified`.
- * - Spotify: the Web API exposes no verification flag at all. Spotify itself
- *   requires a verified email before its own signup completes, so a returned
- *   email is treated as verified-by-platform-design (this mirrors the
- *   provider's existing explicit `allowDangerousEmailAccountLinking: true`).
+ * - Spotify: the Web API exposes no verification flag at all, and a Spotify
+ *   account is fully usable with an UNCONFIRMED email. This used to return
+ *   true on the belief that Spotify verifies before signup completes; it does
+ *   not, so "sign up to Spotify with the victim's address, then Sign in with
+ *   Spotify here" linked straight into the victim's AllFantasy account.
+ *   Unverified now: a new account starts unverified, and an existing email
+ *   account refuses with SOCIAL_EMAIL_UNVERIFIED instead of linking.
  * - Facebook: the Graph API only returns `email` once Facebook considers it
  *   confirmed — presence of the field already implies verification.
  */
@@ -109,9 +126,9 @@ function resolveOAuthEmailVerifiedFromCallback(
       return raw?.email_verified === true || raw?.email_verified === "true";
     case "discord":
       return raw?.verified === true;
-    case "spotify":
     case "facebook":
       return true;
+    case "spotify":
     default:
       return false;
   }
@@ -237,10 +254,29 @@ const providers: NextAuthOptions["providers"] = [
           throw new Error("PASSWORD_NOT_SET");
         }
 
+        // ⚠ PER-ACCOUNT GUESS BUDGET. The only limit here used to be per IP and
+        // in-process, so an attacker rotating addresses could grind one account's
+        // password indefinitely. Keyed on the resolved user, so email / username /
+        // phone spellings of one account share it; spent BEFORE the compare so a
+        // parallel burst cannot all get a guess in. Answers exactly like a wrong
+        // password — it must not confirm the account exists.
+        const budgetKey = `signin-account:${user.id}`;
+        const budget = await consumeSharedRateLimit(budgetKey, 10, 15 * 60);
+        if (!budget.success) {
+          return null;
+        }
+
         const isValidPassword = await bcrypt.compare(password, user.passwordHash);
 
         if (!isValidPassword) {
           return null;
+        }
+        await clearSharedRateLimit(budgetKey).catch(() => undefined);
+
+        // A suspended or banned account (lib/moderation/accountSuspension). Checked only after
+        // the password matched, so it tells nothing to someone who does not have it.
+        if (await activeAccountRestriction(user.id)) {
+          throw new Error(ACCOUNT_SUSPENDED_ERROR);
         }
 
         return {
@@ -300,7 +336,12 @@ if (isDevAuthBypassEnabled()) {
 const googleClientId = process.env.GOOGLE_CLIENT_ID;
 const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
 const appleClientId = process.env.APPLE_CLIENT_ID;
-const appleClientSecret = process.env.APPLE_CLIENT_SECRET;
+// lib/auth/appleSignInEnv: the .p8 signing key (preferred) or a pasted JWT.
+const appleConfigured = hasAppleSignInCredentials();
+// Mirrors NextAuth's own useSecureCookies default (https base URL), plus
+// production, where the site is always https even if NEXTAUTH_URL is unset.
+const useSecureAuthCookies =
+  (process.env.NEXTAUTH_URL ?? "").startsWith("https://") || process.env.NODE_ENV === "production";
 
 if (googleClientId && googleClientSecret) {
   providers.push(
@@ -313,11 +354,17 @@ if (googleClientId && googleClientSecret) {
   );
 }
 
-if (appleClientId && appleClientSecret) {
+if (appleClientId && appleConfigured) {
   providers.push(
     AppleProvider({
       clientId: appleClientId,
-      clientSecret: appleClientSecret,
+      // A getter, not a value: NextAuth re-reads provider options per request,
+      // so a long-running process re-signs before Apple's 6-month cap
+      // (lib/auth/appleClientSecret). The callback URL to register with Apple
+      // is `${NEXTAUTH_URL}/api/auth/callback/apple`.
+      get clientSecret() {
+        return resolveAppleClientSecret();
+      },
     })
   );
 }
@@ -457,6 +504,10 @@ export const authOptions: NextAuthOptions = {
     signIn: "/login",
     error: "/auth/error",
   },
+  // Apple returns users with a cross-site POST; without these two cookies
+  // re-declared SameSite=None every Apple sign-in fails on a missing PKCE
+  // verifier. Only set when Apple is configured, so nothing changes until then.
+  ...(appleConfigured ? { cookies: appleFormPostCookies(useSecureAuthCookies) } : {}),
   logger: {
     error(code, metadata) {
       const inner = (metadata as { error?: Error } | null | undefined)?.error
@@ -478,7 +529,7 @@ export const authOptions: NextAuthOptions = {
       }
 
       if (account.provider === "google" || account.provider === "apple" || account.provider === "spotify" || account.provider === "facebook" || account.provider === "discord") {
-        const runSocialLink = async (): Promise<true> => {
+        const runSocialLink = async (): Promise<true | string> => {
           const oauthEmail = resolveOAuthEmailFromCallback(user, profile);
           if (oauthEmail) {
             user.email = oauthEmail;
@@ -523,6 +574,12 @@ export const authOptions: NextAuthOptions = {
             sessionState:
               typeof account.session_state === "string" ? account.session_state : null,
           });
+
+          // Every social provider comes through here, so this one check refuses a suspended or
+          // banned account on all of them (lib/moderation/accountSuspension).
+          if (await activeAccountRestriction(linkedUser.id)) {
+            return ACCOUNT_SUSPENDED_ERROR_URL;
+          }
 
           (user as { id?: string }).id = linkedUser.id;
           user.email = linkedUser.email;
@@ -636,6 +693,17 @@ export const authOptions: NextAuthOptions = {
       return true;
     },
     async jwt({ token, user, trigger, session: updatePayload }) {
+      /*
+       * 🛑 A SIGNED-OUT SESSION STAYS SIGNED OUT, WHATEVER THE DEVICE KEPT (lib/auth/sessionRevocation).
+       * Sign-out records this session's `sid` as revoked; a cookie that comes back afterwards — the
+       * iOS app restored one after sign-out + close + reopen — is refused here. It THROWS on purpose,
+       * and OUTSIDE the try below: next-auth's session route clears the session cookie on any throw
+       * from this callback, and getServerSession returns null. Returning the token instead would
+       * leave the cookie in place. Skipped at sign-in (`user` set), where the token is brand new.
+       */
+      if (!user && (await isSessionRevoked(token))) {
+        throw new SessionRevokedError();
+      }
       try {
         // Handle useSession().update({ username }) from the choose-username flow.
         // This re-stamps the cookie so the middleware gate sees the new username
@@ -689,6 +757,11 @@ export const authOptions: NextAuthOptions = {
           token.name = user.name;
           token.username = (user as { username?: string | null }).username ?? null;
           token.picture = user.image;
+          // This login's own id — what sign-out revokes, so only THIS device is signed out.
+          token.sid = newSessionId();
+        } else if (!token.sid) {
+          // A session from before sids existed gets one; it sticks once next-auth re-writes the cookie.
+          token.sid = newSessionId();
         }
 
         // Sign-in included: a Washington sign-in over a normal connection is
@@ -782,6 +855,26 @@ export const authOptions: NextAuthOptions = {
     },
   },
   events: {
+    /*
+     * Sign-out ends the session on the SERVER too, not only in the cookie jar (see the jwt
+     * callback and lib/auth/sessionRevocation). next-auth hands us the decoded session token.
+     * Best-effort: a Redis blip must never stop someone signing out.
+     */
+    async signOut(message) {
+      try {
+        const token = (message as { token?: Record<string, unknown> | null }).token ?? null;
+        await revokeSessionForSignOut(token);
+        // The iPhone that held this login stops receiving its notifications. Imported lazily:
+        // the push sender pulls in web-push, which nothing else in auth needs.
+        const sid = typeof token?.sid === "string" ? token.sid : null;
+        if (sid) {
+          const { removeIosDevicesForSession } = await import("@/lib/push-notifications/push-service");
+          await removeIosDevicesForSession(sid);
+        }
+      } catch (error) {
+        console.error("[auth] signOut revocation failed (cookie still cleared):", error);
+      }
+    },
     async signIn({ user }) {
       if (!user?.id) return;
 

@@ -58,7 +58,7 @@ export function GameScores({ games }: { games: Game[] }) {
           ALL GAMES
         </button>
       </div>
-      <div className="text-[10px] font-bold text-red-400 uppercase tracking-wider px-1">Today</div>
+      <div className="text-[11px] font-bold text-red-400 uppercase tracking-wider px-1">Today</div>
 
       <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide -mx-1 px-1">
         {todayGames.map((g) => {
@@ -91,12 +91,12 @@ export function GameScores({ games }: { games: Game[] }) {
               </div>
 
               <div className="flex items-center justify-between border-t border-white/5 pt-1.5">
-                <span className="text-[10px] text-white/40">
+                <span className="text-[11px] text-white/40">
                   {isFinal ? "Final" : isLive ? "Live" : formatTime(g.startTime)}
                 </span>
               </div>
 
-              <div className="flex items-center gap-2 text-[10px] text-white/30">
+              <div className="flex items-center gap-2 text-[11px] text-white/30">
                 <span className="flex items-center gap-0.5">
                   <Eye className="h-2.5 w-2.5" />
                   &lt;1k

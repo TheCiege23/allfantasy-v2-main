@@ -54,7 +54,7 @@ export function PlatformStyleSelector({ sport, value, onChange, onResolvedVarian
             }`}
           >
             <div className="font-semibold leading-tight">{opt.label}</div>
-            <div className="mt-1 text-[10px] text-white/45 leading-snug">{opt.hint}</div>
+            <div className="mt-1 text-[11px] text-white/45 leading-snug">{opt.hint}</div>
           </button>
         ))}
       </div>

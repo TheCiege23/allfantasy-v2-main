@@ -69,6 +69,11 @@ export type LeagueActivityItem = {
   managerName: string | null
   teamName: string | null
   avatarUrl: string | null
+  /**
+   * Every team the row's managers resolve to, team name before owner name — both sides of a trade,
+   * where `teamName` is only the first. Empty when none resolve.
+   */
+  involvedTeams: string[]
   /** Players added / dropped, resolved to names and headshots where possible. */
   adds: ActivityPlayer[]
   drops: ActivityPlayer[]
@@ -80,11 +85,25 @@ export type LeagueActivityItem = {
   bid: number | null
   /** "2027 4th" style pick labels, when the payload carried any. */
   picks: string[]
+  /**
+   * The provider's own transaction id, when the row carries one. Only ever used to keep two events
+   * APART in `dedupeActivityByEvent` — never to merge them, because older rows may lack it.
+   */
+  eventId: string | null
 }
 
 export type LeagueActivity = {
   items: LeagueActivityItem[]
+  /**
+   * EVENTS, counted after `dedupeActivityByEvent` — a trade is one trade however many rows carry it.
+   * ⚠ NOT A SEASON TOTAL: only the newest rows are read (see `countWindow`).
+   */
   counts: { trade: number; waiver: number; rosterMove: number }
+  /**
+   * What `counts` covers. `capped` is true when the read stopped at its row limit, so older moves
+   * exist that are not counted; `oldest` is the earliest row that was read.
+   */
+  countWindow: { capped: boolean; oldest: Date | null }
   /** Newest row we hold, so the panel can say how current it is. */
   newest: Date | null
   /** Rows we hold but could not attribute to a named manager. */
@@ -167,7 +186,45 @@ function pickLabels(v: unknown): string[] {
     .filter(Boolean) as string[]
 }
 
-const KINDS: ActivityKind[] = ['trade', 'waiver', 'roster_move']
+export const ACTIVITY_KINDS: ActivityKind[] = ['trade', 'waiver', 'roster_move']
+const KINDS = ACTIVITY_KINDS
+
+/**
+ * ⚠ DEDUPED BY EVENT, NOT BY ROW. One event can be held as more than one row —
+ * this comment used to say the emitter writes one row PER ROSTER; today's
+ * emitters write one row per transaction, but rows re-keyed by older writers
+ * and sibling importers still carry the same event under different row ids, so
+ * the row id is never part of the key. Showing both copies makes a quiet league
+ * look busy and double-counts the feed. Shared by the league feed and My Team's
+ * own moves, so the two can never disagree about what one event is.
+ *
+ * Same event = same kind, same instant, same players AND the same picks (a
+ * pick-only trade has no players, so without picks two of them at one instant
+ * collapse). A provider transaction id only ever SEPARATES: two items whose ids
+ * are both present and differ are two events even when they read the same.
+ */
+export function dedupeActivityByEvent<
+  T extends Pick<LeagueActivityItem, 'kind' | 'occurredAt' | 'adds' | 'drops'> &
+    Partial<Pick<LeagueActivityItem, 'picks' | 'eventId'>>,
+>(items: readonly T[]): T[] {
+  /** Content key → the provider ids already kept under it (null = a kept copy had none). */
+  const kept = new Map<string, Array<string | null>>()
+  return items.filter((i) => {
+    const players = [...i.adds, ...i.drops].map((pl) => pl.id).sort().join('|')
+    const picks = [...(i.picks ?? [])].sort().join('|')
+    const key = `${i.kind}:${i.occurredAt.getTime()}:${players}:${picks}`
+    const ids = kept.get(key)
+    const id = i.eventId ?? null
+    if (!ids) {
+      kept.set(key, [id])
+      return true
+    }
+    const provablyDifferent = id != null && ids.every((k) => k != null && k !== id)
+    if (!provablyDifferent) return false
+    ids.push(id)
+    return true
+  })
+}
 
 export async function getLeagueActivity(args: {
   /** Internal `League.id`. */
@@ -185,6 +242,7 @@ export async function getLeagueActivity(args: {
   sport?: string | null
 }): Promise<LeagueActivity | null> {
   const limit = args.limit ?? 12
+  const take = Math.max(limit * 3, 60)
 
   const rows = await prisma.decisionOsImportedActivity
     .findMany({
@@ -196,12 +254,13 @@ export async function getLeagueActivity(args: {
         ],
       },
       orderBy: { occurredAt: 'desc' },
-      take: Math.max(limit * 3, 60),
+      take,
       select: {
         id: true,
         activityType: true,
         occurredAt: true,
         rosterId: true,
+        providerEventId: true,
         payload: true,
         /*
          * ⚠ `rosterId` IS HARDCODED NULL BY THE WRITER, on every row. Joining
@@ -216,6 +275,54 @@ export async function getLeagueActivity(args: {
 
   if (rows.length === 0) return null
 
+  const { items, unattributed } = await describeImportedActivityRows(rows, args)
+  const deduped = dedupeActivityByEvent(items)
+
+  /*
+   * ⚠ COUNTED AFTER THE DEDUPE. These were counted from the raw rows, so the feed showed one trade
+   * while the counts — summed across leagues on the connected-franchise command center — said two.
+   */
+  const counts = { trade: 0, waiver: 0, rosterMove: 0 }
+  for (const item of deduped) {
+    if (item.kind === 'trade') counts.trade += 1
+    else if (item.kind === 'waiver') counts.waiver += 1
+    else counts.rosterMove += 1
+  }
+
+  return {
+    items: deduped.slice(0, limit),
+    counts,
+    countWindow: { capped: rows.length >= take, oldest: rows[rows.length - 1]?.occurredAt ?? null },
+    newest: rows[0]?.occurredAt ?? null,
+    unattributed,
+  }
+}
+
+/** The columns `describeImportedActivityRows` reads from a `decision_os_imported_activity` row. */
+export type ImportedActivityRow = {
+  id: string
+  activityType: string
+  occurredAt: Date
+  rosterId: string | null
+  /** Optional: a caller that does not select it gets content-only dedupe. */
+  providerEventId?: string | null
+  payload: unknown
+  normalized: unknown
+}
+
+/**
+ * Imported activity rows as readable items: managers and teams named, player ids resolved to names
+ * in the id space the row was written in, pick labels read. One row in, one item out, same order —
+ * selection, dedupe and counting are the caller's.
+ *
+ * Split out of `getLeagueActivity` (2026-10-01) so the Commissioner Hub's trade list can name its
+ * rows with this rather than a second resolver. The hub keeps its own query because it must tell a
+ * failed read from an empty one, which `getLeagueActivity` deliberately does not.
+ */
+export async function describeImportedActivityRows(
+  rows: readonly ImportedActivityRow[],
+  args: { leagueId: string; platform?: string | null; sport?: string | null },
+): Promise<{ items: LeagueActivityItem[]; unattributed: number }> {
   const teams = await prisma.leagueTeam
     .findMany({
       where: { leagueId: args.leagueId },
@@ -319,21 +426,19 @@ export async function getLeagueActivity(args: {
   }
 
   let unattributed = 0
-  const counts = { trade: 0, waiver: 0, rosterMove: 0 }
 
   const items: LeagueActivityItem[] = rows.map((r) => {
     const p = (r.payload ?? {}) as Payload
     const space = idSpaceOf(p)
     const kind = r.activityType as ActivityKind
-    if (kind === 'trade') counts.trade += 1
-    else if (kind === 'waiver') counts.waiver += 1
-    else counts.rosterMove += 1
-
     const norm = (r.normalized ?? {}) as { managerKeys?: unknown }
     const keys = Array.isArray(norm.managerKeys)
       ? (norm.managerKeys as unknown[]).map((k) => String(k)).filter(Boolean)
       : []
     const team = resolveTeam(keys, r.rosterId)
+    const involvedTeams = [...new Set(
+      keys.map((k) => resolveTeam([k], null)).filter(Boolean).map((t) => t!.teamName ?? t!.ownerName).filter((n): n is string => Boolean(n)),
+    )]
     if (!team) unattributed += 1
 
     return {
@@ -343,34 +448,14 @@ export async function getLeagueActivity(args: {
       managerName: team?.ownerName ?? null,
       teamName: team?.teamName ?? null,
       avatarUrl: team?.avatarUrl ?? null,
+      involvedTeams,
       adds: ids(p.adds).map((id) => resolve(id, space)),
       drops: ids(p.drops).map((id) => resolve(id, space)),
       bid: readBid(p),
       picks: pickLabels(p.draftPicks),
+      eventId: r.providerEventId?.trim() || null,
     }
   })
 
-  /*
-   * ⚠ DEDUPED BY EVENT, NOT BY ROW. The emitter writes one row PER ROSTER
-   * involved, so a two-team trade arrives twice and a waiver once. Showing both
-   * halves of a trade as separate items makes a quiet league look busy and
-   * double-counts the feed.
-   */
-  const seen = new Set<string>()
-  const deduped = items.filter((i) => {
-    const key = `${i.kind}:${i.occurredAt.getTime()}:${[...i.adds, ...i.drops]
-      .map((pl) => pl.id)
-      .sort()
-      .join('|')}`
-    if (seen.has(key)) return false
-    seen.add(key)
-    return true
-  })
-
-  return {
-    items: deduped.slice(0, limit),
-    counts,
-    newest: rows[0]?.occurredAt ?? null,
-    unattributed,
-  }
+  return { items, unattributed }
 }

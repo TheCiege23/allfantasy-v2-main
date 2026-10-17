@@ -12,6 +12,14 @@
   grid-template-columns: 68px 232px minmax(0, 1fr);
   min-height: 100vh;
   min-height: 100dvh;
+  /*
+   * The side insets of a notched phone or tablet held sideways. `app/layout.tsx` sets
+   * `viewportFit: 'cover'`, which hands those edges to the page, and the top and bottom insets were
+   * already handled — the sides never were, so the 68px rail sat under the notch on a landscape
+   * iPhone. Zero everywhere else, so nothing moves on a device without one.
+   */
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
   background: var(--bg);
   background-image: var(--hero);
   background-repeat: no-repeat;
@@ -244,7 +252,7 @@
 .af-nav-badge {
   font-family: var(--font-jetbrains-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-weight: 800;
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: 0.1em;
   padding: 3px 6px;
   border-radius: 6px;
@@ -368,7 +376,7 @@
   white-space: nowrap;
 }
 .af-shell .af-search-ac-meta {
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--faint);
@@ -400,13 +408,13 @@
 .af-admin-shortcut:focus-visible { color: var(--accent-ink); background: var(--accent); }
 
 .af-week {
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.1em;
   color: var(--muted);
   text-transform: uppercase;
 }
 .af-sync {
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.06em;
 }
 
@@ -435,7 +443,7 @@
   color: var(--text);
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
   font-weight: 700;
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   cursor: pointer;
@@ -465,7 +473,7 @@
 }
 
 .af-syncnow-msg {
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.06em;
   color: var(--faint);
   white-space: nowrap;
@@ -494,44 +502,73 @@
 .af-syncnow-panel {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
   gap: 12px;
-  padding: 12px 16px;
-  margin-bottom: 16px;
-  border: 1px solid var(--line2);
-  border-radius: 12px;
-  background: var(--chip);
+  padding: 8px 8px 8px 14px;
+  margin-bottom: 14px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+  min-height: 52px;
+  box-sizing: border-box;
+}
+/* A freshness dot instead of a warning sentence: green when fresh, amber when it is worth a tap. */
+.af-syncnow-panel-dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--good);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--good) 18%, transparent);
+}
+.af-syncnow-panel[data-stale='true'] .af-syncnow-panel-dot {
+  background: var(--warn);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--warn) 18%, transparent);
 }
 .af-syncnow-panel-text {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 1px;
   min-width: 0;
+  flex: 1;
 }
 .af-syncnow-panel-title {
+  font-size: 13px;
+  font-weight: 700;
   color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.af-syncnow-panel-sub {
-  font-size: 12px;
-  line-height: 1.45;
+.af-syncnow-panel-sub,
+.af-syncnow-panel-text .af-syncnow-msg {
+  font-size: 11.5px;
+  line-height: 1.35;
   color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: 0;
 }
 .af-syncnow-panel-sub a {
   color: var(--accent);
   text-decoration: underline;
 }
-.af-syncnow-panel-action {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-shrink: 0;
-}
 
 /* The panel's button is a real button, not a chip: bigger tap target. */
 .af-syncnow-lg {
-  padding: 9px 18px;
-  font-size: 11px;
+  flex-shrink: 0;
+  min-height: 36px;
+  padding: 0 16px;
+  font-family: inherit;
+  font-size: 13px;
+  letter-spacing: 0;
+  text-transform: none;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg, #fff);
+}
+.af-syncnow-lg:hover:not(:disabled) {
+  filter: brightness(1.08);
+  color: var(--bg, #fff);
 }
 
 /*
@@ -550,13 +587,10 @@
   opacity: 0.7;
 }
 
+/* One row on a phone too — it is a status line, and stacking it doubled its height. */
 @media (max-width: 720px) {
-  .af-syncnow-panel {
-    align-items: stretch;
-    flex-direction: column;
-  }
-  .af-syncnow-panel-action {
-    justify-content: space-between;
+  .af-syncnow-lg {
+    min-height: 40px;
   }
 }
 
@@ -622,7 +656,7 @@
   border: 1px solid var(--line2);
   background: var(--chip);
   color: var(--muted);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 800;
   line-height: 1;
   cursor: pointer;
@@ -879,7 +913,7 @@
 .af-nav-grouplabel {
   margin: 12px 0 4px;
   padding: 0 12px;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -1177,7 +1211,7 @@
   }
   .af-core .af-mobile-more-link b {
     color: var(--accent);
-    font: 800 10px/1 var(--font-jetbrains-mono, ui-monospace, monospace);
+    font: 800 11px/1 var(--font-jetbrains-mono, ui-monospace, monospace);
   }
 }
 
@@ -1397,7 +1431,7 @@
   border-radius: 9px;
   color: var(--faint);
   cursor: pointer;
-  font: 700 10px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
@@ -1543,7 +1577,7 @@
 }
 
 .af-core .af-rail-score-status {
-  font: 500 10px/1.4 system-ui, sans-serif;
+  font: 500 11px/1.4 system-ui, sans-serif;
   letter-spacing: 0;
   color: var(--faint);
   overflow-wrap: anywhere;
@@ -1551,6 +1585,20 @@
 
 .af-core .af-rail-score-status[data-delayed='true'] {
   color: var(--warn);
+}
+
+/*
+ * Your record in this league, shown only while the Career screen has published one
+ * (`lib/core-app/railCareerChannel.ts`). Top level on purpose (brace depth 0): it lives inside
+ * `.af-rail-row`, which the collapsed rail already hides, so it needs no state of its own.
+ */
+.af-core .af-rail-row-career {
+  font: 700 11px/1.3 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  letter-spacing: 0.02em;
+  color: var(--accent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .af-core .af-rail-row-name {
@@ -1572,7 +1620,7 @@
 
 .af-core .af-rail-row-side {
   display: grid;
-  grid-template-columns: 16px minmax(0, 1fr) 42px 42px;
+  grid-template-columns: 16px minmax(0, 1fr) 36px 36px 36px;
   align-items: center;
   column-gap: 5px;
   min-height: 18px;
@@ -1583,11 +1631,11 @@
    of repeating PROJ/AF beneath every name. */
 .af-core .af-rail-row-labels {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 42px 42px;
+  grid-template-columns: minmax(0, 1fr) 36px 36px 36px;
   column-gap: 5px;
   padding-left: 21px;
   color: var(--faint);
-  font: 700 7px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
   letter-spacing: 0.08em;
   text-align: right;
 }
@@ -1607,11 +1655,11 @@
   overflow: hidden;
   background: var(--chip);
   color: var(--faint);
-  font: 800 8px/1 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  font: 800 11px/1 var(--font-archivo, 'Archivo', system-ui, sans-serif);
 }
 
 .af-core .af-rail-row-team {
-  font: 500 10px/1.3 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  font: 500 11px/1.3 var(--font-archivo, 'Archivo', system-ui, sans-serif);
   color: var(--muted);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1632,8 +1680,12 @@
 .af-core .af-rail-row-projected {
   text-align: right;
   color: var(--faint);
-  font: 700 10px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
   font-variant-numeric: tabular-nums;
+}
+
+.af-core .af-rail-row-projected[data-kind='af'] {
+  color: var(--accent);
 }
 
 .af-core .af-rail-row-side[data-side='them'] {
@@ -1641,7 +1693,7 @@
   padding-top: 2px;
 }
 
-.af-core .af-rail-row-side[data-partial='true'] .af-rail-row-projected::after {
+.af-core .af-rail-row-side[data-partial='true'] .af-rail-row-projected:not([data-kind='af'])::after {
   content: '*';
   color: var(--warn);
 }
@@ -1686,7 +1738,7 @@
 }
 
 .af-core .af-rail-row-rank-cut {
-  font: 600 10px/1.2 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  font: 600 11px/1.2 var(--font-archivo, 'Archivo', system-ui, sans-serif);
   color: var(--muted);
 }
 
@@ -1702,7 +1754,7 @@
  */
 .af-core .af-rail-row-rank-basis {
   flex-basis: 100%;
-  font: 500 9px/1.2 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font: 500 11px/1.2 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
   letter-spacing: 0.04em;
   color: var(--faint);
 }
@@ -2130,6 +2182,7 @@
 }
 
 /* `af` is the third dark theme; it takes the dark values. Light inverts. */
+html[data-mode='legacy'] .af-core,
 html[data-mode='af'] .af-core {
   --af-sk-fill: rgba(255, 255, 255, 0.14);
   --af-sk-sheen: rgba(255, 255, 255, 0.1);
@@ -2311,7 +2364,7 @@ html[data-mode='light'] .af-core {
   gap: 4px;
   margin-left: 7px;
   color: var(--good);
-  font: 800 8px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font: 800 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
   letter-spacing: .08em;
 }
 
@@ -2330,14 +2383,14 @@ html[data-mode='light'] .af-core {
   border-radius: 999px;
   background: color-mix(in srgb, var(--accent) 12%, transparent);
   color: var(--accent);
-  font: 800 8px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font: 800 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
   white-space: nowrap;
 }
 
 .af-core .af-rail-row-fresh {
   flex: none;
   color: var(--faint);
-  font: 700 7px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
   text-transform: uppercase;
   white-space: nowrap;
 }
@@ -2357,12 +2410,12 @@ html[data-mode='light'] .af-core {
 }
 
 .af-core .af-rail-row-side {
-  grid-template-columns: 19px minmax(0, 1fr) 44px 44px;
+  grid-template-columns: 19px minmax(0, 1fr) 38px 38px 38px;
   min-height: 21px;
 }
 
 .af-core .af-rail-row-labels {
-  grid-template-columns: minmax(0, 1fr) 44px 44px;
+  grid-template-columns: minmax(0, 1fr) 38px 38px 38px;
   padding-left: 24px;
 }
 
@@ -2371,7 +2424,7 @@ html[data-mode='light'] .af-core {
   border-radius: 999px;
   background: var(--chip);
   color: var(--text2);
-  font: 700 8px/1.2 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  font: 700 11px/1.2 var(--font-archivo, 'Archivo', system-ui, sans-serif);
   white-space: nowrap;
 }
 
@@ -2398,13 +2451,13 @@ html[data-mode='light'] .af-core {
 
 .af-core .af-rail-foot-copy strong {
   color: var(--text2);
-  font: 800 10px/1.2 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  font: 800 11px/1.2 var(--font-archivo, 'Archivo', system-ui, sans-serif);
 }
 
 .af-core .af-rail-foot-copy small {
   margin-top: 2px;
   color: var(--faint);
-  font: 600 8px/1.2 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  font: 600 11px/1.2 var(--font-archivo, 'Archivo', system-ui, sans-serif);
 }
 
 .af-core .af-rail-foot-icon {
@@ -2487,7 +2540,7 @@ html[data-mode='light'] .af-core {
   }
   .af-core .af-nav-heading.af-label {
     padding: 0 8px 4px;
-    font-size: 9px;
+    font-size: 11px;
     letter-spacing: 0.12em;
   }
   .af-core .af-nav-item {
@@ -3069,4 +3122,411 @@ html[data-mode='light'] .af-core {
 .af-shell .af-rail-tile[data-nav-pending='true'] {
   background: var(--accent-soft);
   border-color: var(--accent-line);
+}
+
+/* Core readability pass: keep the same controls and data, with clearer scan points. */
+@media (min-width: 721px) {
+  .af-core .af-nav-item {
+    border-radius: 11px;
+  }
+  .af-core .af-nav-item[data-active='true'] {
+    box-shadow: inset 3px 0 0 var(--accent);
+  }
+  .af-shell[data-rail-open='true'] .af-rail-scroll .af-rail-tile {
+    margin-block: 2px;
+    border: 1px solid transparent;
+    border-radius: 13px;
+  }
+  .af-shell[data-rail-open='true'] .af-rail-scroll .af-rail-tile[data-active='true'] {
+    border-color: var(--accent-line);
+    box-shadow: inset 3px 0 0 var(--accent);
+  }
+  .af-core .af-rail-row-name {
+    font-size: 13px;
+  }
+}
+
+@media (min-width: 721px) and (max-width: 1080px) {
+  .af-core.af-shell:not([data-rail-open='true']) {
+    grid-template-columns: 68px 220px minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 720px) {
+  .af-core .af-tabbar {
+    box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.12);
+  }
+  .af-core .af-tabbar-item[data-active='true'] {
+    box-shadow: inset 0 2px 0 var(--accent);
+  }
+  .af-core.af-shell[data-league-first='true'] .af-lf-chatbar {
+    border-color: var(--accent-line);
+    background: var(--surface);
+    box-shadow: 0 12px 35px rgba(0, 0, 0, 0.22);
+  }
+  .af-core.af-shell[data-league-first='true'] .af-lf-chatbar-icon {
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 11px;
+    color: var(--accent);
+    background: var(--accent-soft);
+  }
+}
+
+/* ── League-first, phone: two gaps measured on the live shell, 2026-10-02 ────
+ *
+ * Its own top-level @media, appended — never nested inside an earlier block.
+ *
+ * - Back to top. Phase 1.5 cleared every other floating control off this shell ("nothing
+ *   floating") but missed this one: it is a Tailwind component outside the shell, so it is matched
+ *   through `body:has(...)` like the theme pill. It was the only purple thing on the screen and sat
+ *   on the roster's AF column. Owner's call, 2026-10-02: finish league-first's no-floating rule.
+ * - The content reserve. The comment above the chat bar says its top sits inside the reserve; at
+ *   the true document end the last line ("Standard total built from …") ended 3px above the bar,
+ *   touching it. The reserve now counts the bar itself: tab bar + the bar's 18px offset + its
+ *   ~68px measured height + 20px of air.
+ */
+@media (max-width: 720px) {
+  body:has(.af-core.af-shell[data-league-first='true']) [data-af-back-to-top] {
+    display: none !important;
+  }
+  .af-core.af-shell[data-league-first='true'] .af-content {
+    padding-bottom: calc(var(--af-tabbar-height, calc(56px + env(safe-area-inset-bottom, 0px))) + 18px + 68px + 20px);
+  }
+}
+
+/*
+ * ── Tablet PORTRAIT (721–900px): the phone's bottom bar instead of the side menu ─
+ *
+ * User's decision, 2026-10-03. Measured on the live site at 768×1024: rail 68px + nav 208px +
+ * gutters left My Team 429px of a 768px screen (56%), with names wrapping and the board's rows
+ * twice their landscape height. With the nav folded into the bar the page gets ~650px.
+ *
+ * 🛑 EVERY SCREEN MUST STAY REACHABLE — THAT IS WHY THE 2026-09-25 TABLET BLOCK ABOVE EXISTS.
+ * Between 721 and 1080 a tablet once had no nav at all: nav hidden at ≤1080, bar only at ≤720.
+ * This band hides the nav ONLY where it also shows the bar, and the bar's "More" opens the same
+ * sheet the phone uses, which lists every nav section. Landscape tablets (and anything above 900)
+ * keep the side menu, unchanged.
+ *
+ * ⚠ A NEW BLOCK, NOT A WIDENED ONE. The phone blocks that carry the bar and its sheet also carry
+ * the top-bar crest, the strip nav and the league-first bar; widening their queries would have
+ * leaked all of those onto tablets. These rules are copies of the bar's and the sheet's own, and
+ * every selector is scoped to the standard shell — league-first keeps its own layout.
+ *
+ * ⚠ `(orientation: portrait)` is what keeps a narrow DESKTOP window out of this: a browser
+ * dragged to 800px is still landscape and keeps its menu.
+ *
+ * ── And a PHONE held sideways (2026-10-03) ─────────────────────────────────────
+ *
+ * The second query below. An iPhone in landscape is 780–932px wide, so it fell into the TABLET
+ * band and got the side menu — measured at 844×390: rail 68 + menu 220 left the page 541px, the
+ * menu's scroll area was 142px tall over 1,162px of items (about three visible at a time), and My
+ * Team started 601px down. With this block: page 761px, menu folded into the bar, nothing else
+ * moves (the top bar is static and scrolls away, same as on a tablet).
+ *
+ * The full PHONE shell was tried first and is the wrong tool: appending this condition to the
+ * shell's ≤720 blocks left the ≥721 tablet and desktop rules in force beside them — they win on
+ * specificity — so the grid kept three tracks and the league tray spread to 829px. Excluding
+ * phone-landscape from every ≥721 rule and the shell's JS width checks would be a far larger
+ * change than this one, for a worse layout on a 390px-tall screen.
+ *
+ * `max-height: 500px` is the phone: no tablet is that short (an iPad mini in landscape is 744).
+ * `(hover: none) and (pointer: coarse)` keeps a short DESKTOP window out — same reason the first
+ * query carries `orientation: portrait`.
+ *
+ * Its own top-level block at end of file, per this stylesheet's convention.
+ */
+@media (min-width: 721px) and (max-width: 900px) and (orientation: portrait), (min-width: 721px) and (max-height: 500px) and (hover: none) and (pointer: coarse) {
+  :root:has(.af-core.af-shell:not([data-league-first='true'])) {
+    --af-fab-bottom: var(--af-fab-inset-phone);
+    /* The notch is on a SIDE in landscape; `.af-shell` already pads for it, but the launcher is
+       fixed to the viewport edge. Zero in portrait, so this costs the tablet nothing. */
+    --af-fab-inset: calc(18px + env(safe-area-inset-right, 0px));
+  }
+
+  .af-core.af-shell:not([data-league-first='true']):not([data-rail-open='true']) {
+    grid-template-columns: 68px minmax(0, 1fr);
+  }
+  .af-core.af-shell:not([data-league-first='true']) .af-nav {
+    display: none;
+  }
+
+  .af-core.af-shell:not([data-league-first='true']) .af-tabbar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 40;
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 2px;
+    /* The side insets keep the end tabs off the notch and the rounded corners in landscape. */
+    padding: 6px calc(6px + env(safe-area-inset-right, 0px)) calc(6px + env(safe-area-inset-bottom, 0px))
+      calc(6px + env(safe-area-inset-left, 0px));
+    background: color-mix(in srgb, var(--surface2) 92%, transparent);
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+    border-top: 1px solid var(--line);
+  }
+  .af-core.af-shell:not([data-league-first='true']) .af-tabbar-item {
+    min-height: 44px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 5px 2px;
+    border-radius: 10px;
+    text-decoration: none;
+    color: var(--faint);
+    border: 0;
+    background: transparent;
+    font-family: inherit;
+    cursor: pointer;
+  }
+  .af-core.af-shell:not([data-league-first='true']) .af-tabbar-item[data-active='true'] {
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  .af-core.af-shell:not([data-league-first='true']) .af-tabbar-item:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+  .af-core.af-shell:not([data-league-first='true']) .af-tabbar-glyph {
+    position: relative;
+    font-size: 15px;
+    line-height: 1;
+  }
+  .af-core.af-shell:not([data-league-first='true']) .af-tabbar-dot {
+    position: absolute;
+    top: -3px;
+    right: -5px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--bad);
+  }
+  .af-core.af-shell:not([data-league-first='true']) .af-tabbar-dot[data-tone='count'] {
+    background: var(--accent);
+  }
+  .af-core.af-shell:not([data-league-first='true']) .af-tabbar-label {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    line-height: 1.1;
+    text-align: center;
+  }
+
+  /* The last thing on every screen must clear the bar AND the chat button riding above it —
+     the phone block's reasoning, same arithmetic. */
+  .af-core.af-shell:not([data-league-first='true']) .af-content {
+    padding-bottom: calc(var(--af-fab-inset-phone, 102px) + 56px + 16px);
+  }
+
+  /* The "More" sheet — a bounded, centred card on a tablet rather than edge to edge. */
+  .af-core.af-shell:not([data-league-first='true']) .af-mobile-more-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 64;
+    border: 0;
+    background: rgba(2, 4, 12, 0.72);
+    -webkit-backdrop-filter: blur(4px);
+    backdrop-filter: blur(4px);
+  }
+  .af-core.af-shell:not([data-league-first='true']) .af-mobile-more {
+    position: fixed;
+    left: 50%;
+    width: min(520px, calc(100vw - 20px));
+    transform: translateX(-50%);
+    bottom: calc(68px + env(safe-area-inset-bottom, 0px));
+    z-index: 65;
+    max-height: min(70dvh, 720px);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid var(--accent-line);
+    border-radius: 18px;
+    background: var(--surface2);
+    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.58);
+  }
+  .af-core.af-shell:not([data-league-first='true']) .af-mobile-more-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 14px 12px;
+    border-bottom: 1px solid var(--line);
+  }
+  .af-core.af-shell:not([data-league-first='true']) .af-mobile-more-head > span { min-width: 0; }
+  .af-core.af-shell:not([data-league-first='true']) .af-mobile-more-head strong {
+    display: block;
+    margin-top: 4px;
+    overflow: hidden;
+    color: var(--text);
+    font-size: 16px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .af-core.af-shell:not([data-league-first='true']) .af-mobile-more-head button {
+    width: 44px;
+    height: 44px;
+    flex: none;
+    border: 1px solid var(--line2);
+    border-radius: 50%;
+    background: var(--chip);
+    color: var(--text);
+    font-size: 24px;
+  }
+  .af-core.af-shell:not([data-league-first='true']) .af-mobile-more-list {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 10px;
+  }
+  .af-core.af-shell:not([data-league-first='true']) .af-mobile-more-group + .af-mobile-more-group { margin-top: 14px; }
+  .af-core.af-shell:not([data-league-first='true']) .af-mobile-more-group > .af-label {
+    display: block;
+    padding: 0 8px 6px;
+  }
+  .af-core.af-shell:not([data-league-first='true']) .af-mobile-more-link {
+    display: grid;
+    grid-template-columns: 22px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    min-height: 48px;
+    padding: 0 12px;
+    border-radius: 11px;
+    color: var(--text2);
+    font-size: 14px;
+    font-weight: 750;
+    text-decoration: none;
+  }
+  .af-core.af-shell:not([data-league-first='true']) button.af-mobile-more-link {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  .af-core.af-shell:not([data-league-first='true']) .af-mobile-more-link[data-active='true'] {
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  .af-core.af-shell:not([data-league-first='true']) .af-mobile-more-link b {
+    color: var(--accent);
+    font: 800 11px/1 var(--font-jetbrains-mono, ui-monospace, monospace);
+  }
+  .af-core.af-shell:not([data-league-first='true']) .af-mobile-more-icon {
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    opacity: 0.75;
+  }
+  .af-core.af-shell:not([data-league-first='true']) .af-mobile-more-link[data-active='true'] .af-mobile-more-icon {
+    opacity: 1;
+  }
+}
+
+/*
+ * ── Chimmy's moves on a narrow card: the buttons share the detail's line (2026-10-03) ──
+ *
+ * Measured on the live KBFL page at 375px before this: each move was 112px — the title, the
+ * detail, then "Fix lineup" + ✦ wrapped onto a line of their own, right-aligned under 150px of
+ * nothing. Two moves made the card 294px and put the lock countdown at 860px, below the first
+ * screen. After: 88px a move, the card 246px, the countdown 48px higher (72px with three moves,
+ * which is `MAX_MOVES`).
+ *
+ * The title keeps the whole first line — the rule above exists so a player's name is never
+ * squeezed onto two lines to make room for buttons, and this keeps that promise. Only the detail
+ * ("Out — QB · WAS — locks in 21h 55m") shares its line, and it is the one line that can wrap.
+ *
+ * ⚠ AUDIT 2026-10-02 ASKED FOR THIS CARD TO MOVE BELOW THE COUNTDOWN. It stays above, on purpose:
+ * it holds the page's most actionable line ("Bench Jayden Daniels — Out — Fix lineup"), and a
+ * countdown is not a reason to push the thing it counts down to further away.
+ *
+ * Keyed on the CARD's own width, not the viewport: the card also sits in the league-first home
+ * and matchup screens, at widths the viewport does not predict. At 768px (a 649px card) the rows
+ * are byte-identical with and without this block.
+ *
+ * Its own top-level block at end of file, per this stylesheet's convention.
+ */
+.af-core .af-cmv {
+  container: af-cmv / inline-size;
+}
+@container af-cmv (max-width: 480px) {
+  .af-core .af-cmv-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: 'move move' 'detail actions';
+    column-gap: 10px;
+    row-gap: 4px;
+    align-items: center;
+  }
+  /* A plain div — the tap targets are the link and the button beside it, which keep their boxes. */
+  .af-core .af-cmv-text {
+    display: contents;
+  }
+  .af-core .af-cmv-move {
+    grid-area: move;
+  }
+  .af-core .af-cmv-detail {
+    grid-area: detail;
+  }
+  .af-core .af-cmv-actions {
+    grid-area: actions;
+    margin-left: 0;
+  }
+}
+
+/* Tablet split views reserve space for the roster rather than a full text nav. */
+@media(max-width:720px) {
+ .af-core.af-shell .af-nav { display:none; }
+ .af-core.af-shell { grid-template-rows:minmax(0,1fr); }
+ .af-core .af-tabbar { grid-template-columns:repeat(6,minmax(0,1fr)); }
+ .af-core .af-tabbar-item { min-width:0; min-height:48px; }
+}
+@media(min-width:721px) and (max-width:1080px) {
+ .af-core.af-shell:not([data-rail-open='true']) { grid-template-columns:68px 104px minmax(0,1fr); }
+ .af-core.af-shell:not([data-rail-open='true']) .af-nav { width:104px; min-width:0; overflow-x:hidden; }
+ .af-core.af-shell:not([data-rail-open='true']) .af-nav a { flex-wrap:wrap; justify-content:center; text-align:center; font-size:11px; min-height:48px; padding-inline:4px; }
+ .af-core.af-shell:not([data-rail-open='true']) .af-nav-label { flex-basis:100%; font-size:12px; line-height:1.25; overflow-wrap:anywhere; }
+ .af-core.af-shell:not([data-rail-open='true']) .af-nav-heading,.af-core.af-shell:not([data-rail-open='true']) .af-nav-foot .af-import-cta { display:none; }
+}
+
+/*
+ * ── Phone league tray: it must never pan sideways (2026-10-08) ──────────────
+ *
+ * Reported from an iPhone as "stuck, looks half full screen" from both the header switcher and the
+ * handle. Measured at 430px: the foot's three tiles (Create / Import / Profile) are each held at their
+ * nowrap text width, so the row was 466px in a 402px box, and the tray's scrollWidth was 480 against
+ * 430. The tray is `overflow-y: auto`, which makes overflow-x auto too, so iOS panned the whole tray
+ * 50px sideways — the clipped crest and cut-off profile tile in the report — and diagonal swipes went
+ * to that horizontal pan instead of the league list.
+ *
+ * Two halves, both needed: the foot wraps (the profile tile takes its own row) and its tiles may shrink,
+ * so nothing overflows; and the tray clips the x axis anyway, so a future wide child cannot reintroduce
+ * the pan. Its own top-level @media, appended, per this file's convention.
+ */
+@media (max-width: 720px) {
+  .af-core.af-shell .af-rail {
+    overflow-x: hidden;
+    touch-action: pan-y;
+  }
+  .af-core .af-rail-foot {
+    flex-wrap: wrap;
+  }
+  .af-core .af-rail-foot .af-rail-tile {
+    flex: 1 1 140px;
+    min-width: 0;
+  }
+  /* The account avatar is a `width: 100%` img; once the tile may shrink it must not take the row. */
+  .af-core .af-rail-foot .af-rail-profile > .af-rail-tile-img {
+    flex: none;
+    width: 24px;
+    height: 24px;
+    border-radius: 8px;
+  }
 }

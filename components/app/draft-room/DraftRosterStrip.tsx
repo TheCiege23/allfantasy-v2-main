@@ -242,7 +242,7 @@ export function DraftRosterStrip({
     >
       <div className="mb-1.5 flex items-center gap-1.5">
         <Users className="h-3 w-3 text-cyan-300/80" aria-hidden />
-        <p className="text-[9px] font-medium uppercase tracking-wider text-cyan-200/80">
+        <p className="text-[11px] font-medium uppercase tracking-wider text-cyan-200/80">
           Roster
           {teamLabel ? <span className="ml-1 text-white/55">· {teamLabel}</span> : null}
           {sport ? <span className="ml-1 text-white/30">· {sport}</span> : null}
@@ -289,9 +289,9 @@ function RosterSection({
       className="mb-1.5 last:mb-0"
       data-testid={`draft-roster-strip-section-${title.toLowerCase()}`}
     >
-      <p className="mb-0.5 text-[9px] font-medium uppercase tracking-wider text-white/38">{title}</p>
+      <p className="mb-0.5 text-[11px] font-medium uppercase tracking-wider text-white/38">{title}</p>
       {slots.length === 0 ? (
-        <p className="text-[10px] text-white/30">{emptyHint}</p>
+        <p className="text-[11px] text-white/30">{emptyHint}</p>
       ) : (
         <ul className="space-y-0.5">
           {slots.map((slot, idx) => {
@@ -301,10 +301,10 @@ function RosterSection({
             return (
               <li
                 key={`${title}-${idx}-${slot.label}`}
-                className={`flex items-center gap-2 rounded border px-1.5 py-1 text-[10px] ${tone.border} ${tone.bg}`}
+                className={`flex items-center gap-2 rounded border px-1.5 py-1 text-[11px] ${tone.border} ${tone.bg}`}
               >
                 <span
-                  className={`inline-flex min-w-[28px] shrink-0 justify-center rounded px-1 py-0.5 text-[9px] font-black uppercase tracking-[0.1em] ${tone.text} ${tone.bg} ${tone.border} border`}
+                  className={`inline-flex min-w-[28px] shrink-0 justify-center rounded px-1 py-0.5 text-[11px] font-black uppercase tracking-[0.1em] ${tone.text} ${tone.bg} ${tone.border} border`}
                 >
                   {slot.label}
                 </span>
@@ -322,7 +322,7 @@ function RosterSection({
                     <span className="min-w-0 flex-1 truncate font-medium text-white/88">
                       {slot.pick.playerName}
                     </span>
-                    <span className="shrink-0 text-[9px] text-white/45">
+                    <span className="shrink-0 text-[11px] text-white/45">
                       {slot.pick.position} · #{slot.pick.overall}
                     </span>
                   </>

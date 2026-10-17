@@ -125,13 +125,13 @@ export function ChampionshipTrajectory({
 
             {model.topDecisions.length > 0 ? (
               <div className="mt-4">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-muted">What&apos;s driving this</p>
+                <p className="text-[11px] font-bold uppercase tracking-widest text-muted">What&apos;s driving this</p>
                 <ul className="mt-2 space-y-1.5">
                   {model.topDecisions.map((decision) => (
                     <li key={decision.key} className="flex items-start gap-2 text-[12px]">
                       <span
                         className={cn(
-                          'mt-0.5 inline-flex shrink-0 items-center rounded-md border px-1.5 py-0.5 text-[10px] font-bold uppercase',
+                          'mt-0.5 inline-flex shrink-0 items-center rounded-md border px-1.5 py-0.5 text-[11px] font-bold uppercase',
                           EXECUTIVE_STATUS_SURFACE[decision.status],
                         )}
                       >

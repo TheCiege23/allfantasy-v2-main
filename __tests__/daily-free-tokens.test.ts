@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
  * The free Chimmy floor — `lib/tokens/dailyFreeTokens.ts`.
@@ -37,7 +37,12 @@ vi.mock('@/lib/prisma', () => ({
   },
 }))
 
-import { FREE_CHIMMY_QUESTIONS_PER_DAY, grantDailyFreeTokens } from '@/lib/tokens/dailyFreeTokens'
+import {
+  FREE_CHIMMY_QUESTIONS_PER_DAY,
+  REVIEW_ACCOUNT_CHIMMY_QUESTIONS_PER_DAY,
+  dailyChimmyQuestionsFor,
+  grantDailyFreeTokens,
+} from '@/lib/tokens/dailyFreeTokens'
 
 const COST = 10
 const FLOOR = COST * FREE_CHIMMY_QUESTIONS_PER_DAY
@@ -183,5 +188,54 @@ describe('grantDailyFreeTokens', () => {
 
   it('buys exactly two Chimmy answers at the current price', () => {
     expect(FREE_CHIMMY_QUESTIONS_PER_DAY).toBe(2)
+  })
+})
+
+/*
+ * App Review accounts: the review notes send the reviewer to Chimmy, and two questions run out
+ * mid-review. Ids come from the environment only — the repo is public.
+ */
+describe('App Review account allowance', () => {
+  const REVIEW_FLOOR = COST * REVIEW_ACCOUNT_CHIMMY_QUESTIONS_PER_DAY
+
+  afterEach(() => vi.unstubAllEnvs())
+
+  it('reads ids from CHIMMY_REVIEW_ACCOUNT_USER_IDS, trimmed, and nobody else', () => {
+    const env = { CHIMMY_REVIEW_ACCOUNT_USER_IDS: ' rev-1 , rev-2,, ' }
+    expect(dailyChimmyQuestionsFor('rev-1', env)).toBe(25)
+    expect(dailyChimmyQuestionsFor('rev-2', env)).toBe(25)
+    expect(dailyChimmyQuestionsFor('u1', env)).toBe(2)
+    expect(dailyChimmyQuestionsFor('', env)).toBe(2) // an empty entry names no one
+    expect(dailyChimmyQuestionsFor('rev-1', {})).toBe(2) // unset -> everyone is free
+  })
+
+  it('tops a listed account up to 25 answers, and labels the ledger row', async () => {
+    vi.stubEnv('CHIMMY_REVIEW_ACCOUNT_USER_IDS', 'rev-1')
+    const res = await grantDailyFreeTokens('rev-1', NOW)
+
+    expect(res).toEqual({ granted: REVIEW_FLOOR, reason: 'granted' })
+    expect(h.ledgerCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          tokenDelta: REVIEW_FLOOR,
+          description: 'Daily free floor (App Review account): 25 Chimmy questions',
+        }),
+      }),
+    )
+  })
+
+  it('is still a once-a-day floor for a listed account, never an add', async () => {
+    vi.stubEnv('CHIMMY_REVIEW_ACCOUNT_USER_IDS', 'rev-1')
+    h.balanceUpsert.mockResolvedValue({ id: 'bal-1', balance: REVIEW_FLOOR - COST })
+    expect(await grantDailyFreeTokens('rev-1', NOW)).toEqual({ granted: COST, reason: 'granted' })
+
+    h.ledgerFindUnique.mockResolvedValue({ id: 'already' })
+    h.balanceUpsert.mockResolvedValue({ id: 'bal-1', balance: 0 })
+    expect(await grantDailyFreeTokens('rev-1', NOW)).toEqual({ granted: 0, reason: 'already_granted_today' })
+  })
+
+  it('leaves every other account on the free floor while the list is set (control)', async () => {
+    vi.stubEnv('CHIMMY_REVIEW_ACCOUNT_USER_IDS', 'rev-1')
+    expect(await grantDailyFreeTokens('u1', NOW)).toEqual({ granted: FLOOR, reason: 'granted' })
   })
 })

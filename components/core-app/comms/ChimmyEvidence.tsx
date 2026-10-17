@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useId, useState } from 'react'
 
 /**
  * WHAT AN ANSWER WAS BUILT FROM, RENDERED WHERE THE ANSWER IS.
@@ -94,6 +94,7 @@ const SOURCE_LABELS: Record<string, string> = {
   find_league_by_name: 'Found the league you named',
   get_my_roster: 'Your roster, scoring and waiver budget',
   get_league_trade_activity: 'Trade block, proposals and league trade history',
+  get_league_trade_history: "Your league's completed trades, itemized",
   get_available_players: 'Who is actually available',
   get_player_value: 'Player trade values',
   get_player_projection: 'Player projections',
@@ -200,6 +201,7 @@ function freshnessWord(
 
 export function ChimmyEvidenceBlock({ evidence }: { evidence: ChimmyEvidence }) {
   const [expanded, setExpanded] = useState(false)
+  const detailId = useId()
 
   const {
     confidencePct,
@@ -243,7 +245,7 @@ export function ChimmyEvidenceBlock({ evidence }: { evidence: ChimmyEvidence }) 
         {level ? (
           <span className="af-cm-ev-level af-num" data-level={level}>
             {level} confidence
-            {confidencePct != null ? ` · ${confidencePct}%` : ''}
+
           </span>
         ) : null}
 
@@ -277,7 +279,7 @@ export function ChimmyEvidenceBlock({ evidence }: { evidence: ChimmyEvidence }) 
             className="af-cm-ev-toggle"
             onClick={() => setExpanded((v) => !v)}
             aria-expanded={expanded}
-            aria-controls="af-cm-ev-detail"
+            aria-controls={detailId}
           >
             {expanded ? 'Hide' : 'What is this based on?'}
           </button>
@@ -285,7 +287,7 @@ export function ChimmyEvidenceBlock({ evidence }: { evidence: ChimmyEvidence }) 
       </div>
 
       {expanded ? (
-        <div className="af-cm-ev-detail" id="af-cm-ev-detail" data-testid="chimmy-evidence-detail">
+        <div className="af-cm-ev-detail" id={detailId} data-testid="chimmy-evidence-detail">
           {rationale ? <p className="af-cm-ev-why">{rationale}</p> : null}
 
           {dataSources.length > 0 ? (

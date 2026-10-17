@@ -9,11 +9,11 @@ const submitEntrySchema = z.object({
   action: z.literal("submit_entry"),
 })
 
-export async function POST(request: Request, context: { params: { challengeId: string; entryId: string } }) {
+export async function POST(request: Request, context: { params: Promise<{ challengeId: string; entryId: string }> }) {
   const auth = await requireWorldCupApiUser(request)
   if (!auth.ok) return auth.response
 
-  const params = playoffEntryParamsSchema.safeParse(context.params)
+  const params = playoffEntryParamsSchema.safeParse((await context.params))
   if (!params.success) {
     return NextResponse.json({ error: "Invalid parameters" }, { status: 400 })
   }

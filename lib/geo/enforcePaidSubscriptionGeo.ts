@@ -37,6 +37,20 @@ export async function enforcePaidSubscriptionGeo(
       { status: 451 }
     )
   }
+  // A placed Private Relay user in a Mountain-time state: free features yes,
+  // purchases no — they could be in Idaho or Montana (lib/geo/privateRelayRanges).
+  if (blockVpnOrProxy && geo.privateRelay?.paidBlocked) {
+    return NextResponse.json(
+      {
+        error: "VPN_BLOCKED",
+        kind: "privacy_relay",
+        message:
+          "Purchases aren't available over iCloud Private Relay where you are, because in your time zone it can hide which state you're in. Turn off Private Relay for this site and try again.",
+        allowFree: true,
+      },
+      { status: 451 }
+    )
+  }
   // Fails open by construction: `isVpnOrProxy` is false when no key is set or
   // the vendor is unreachable, so an outage never closes checkout.
   if (blockVpnOrProxy && geo.isVpnOrProxy) {

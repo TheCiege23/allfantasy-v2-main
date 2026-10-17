@@ -1796,7 +1796,8 @@ describe("WorldCupBracketShell fixture readiness", () => {
     expect(within(drawer).getByRole("button", { name: /Mention/i })).toBeInTheDocument()
     expect(within(drawer).getByRole("button", { name: /Hashtag/i })).toBeInTheDocument()
 
-    fireEvent.click(within(drawer).getByRole("button", { name: /Chimmy AI/i }))
+    // Tab label is "Chimmy" (brand voice — was "Chimmy AI").
+    fireEvent.click(within(drawer).getByRole("button", { name: /^Chimmy\b/i }))
     expect(screen.getByPlaceholderText(/Ask Chimmy about the bracket/i)).toBeInTheDocument()
     expect(screen.getByRole("button", { name: /Ask Chimmy/i })).toBeDisabled()
 

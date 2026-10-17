@@ -28,8 +28,9 @@ const bodySchema = z.object({
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { challengeId: string; entryId: string } }
+  props: { params: Promise<{ challengeId: string; entryId: string }> }
 ) {
+  const params = await props.params
   const userResult = await requireWorldCupApiUser()
   if (!userResult.ok) return userResult.response
 

@@ -15,6 +15,7 @@ export async function readLatestSnapshot(opts: {
   const contextKey = opts.contextKey ? String(opts.contextKey).trim() : null
 
   if (!leagueId || !sleeperUsername || !snapshotType) return null
+  if (!(['league_analyze', 'rankings_analyze', 'otb_packages'] as const).includes(snapshotType)) return null
 
   const row = await (prisma as any).tradeAnalysisSnapshot.findFirst({
     where: {

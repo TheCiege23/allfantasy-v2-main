@@ -50,7 +50,7 @@ export function ZombieMatchupCard({
     } as const
     const labels = { low: 'LOW RISK', medium: 'MEDIUM', high: 'HIGH RISK', critical: 'CRITICAL' } as const
     return (
-      <span className={clsx('rounded px-2 py-0.5 text-[9px] font-bold', map[riskLevel])}>
+      <span className={clsx('rounded px-2 py-0.5 text-[11px] font-bold', map[riskLevel])}>
         {labels[riskLevel]}
       </span>
     )
@@ -63,7 +63,7 @@ export function ZombieMatchupCard({
     const bash = m >= rules.bashingThreshold
     const maul = m >= rules.maulingThreshold
     return (
-      <div className="mt-2 flex flex-wrap gap-1 text-[10px] font-bold">
+      <div className="mt-2 flex flex-wrap gap-1 text-[11px] font-bold">
         {maul ? <span className="rounded bg-red-600/40 px-2 py-0.5 text-red-100">MAULING</span> : null}
         {bash && !maul ? <span className="rounded bg-orange-500/30 px-2 py-0.5 text-orange-100">BASHING</span> : null}
       </div>
@@ -78,12 +78,12 @@ export function ZombieMatchupCard({
             <span className="font-medium text-[var(--zombie-text-full)]">{homeName}</span>
             <ZombieStatusBadge status={homeStatus} compact />
             {infectionRisk === 'home' ? (
-              <span className="rounded bg-[var(--zombie-red)]/20 px-1.5 py-0.5 text-[10px] font-bold text-[var(--zombie-red)]">
+              <span className="rounded bg-[var(--zombie-red)]/20 px-1.5 py-0.5 text-[11px] font-bold text-[var(--zombie-red)]">
                 Infection risk
               </span>
             ) : null}
             {mySide === 'home' ? (
-              <span className="text-[10px] text-teal-300/90">🧪 You</span>
+              <span className="text-[11px] text-teal-300/90">🧪 You</span>
             ) : null}
           </div>
           <p
@@ -94,7 +94,7 @@ export function ZombieMatchupCard({
           >
             {hs ?? '—'}
           </p>
-          <div className="flex flex-wrap gap-1 text-[10px] text-[var(--zombie-text-dim)]">
+          <div className="flex flex-wrap gap-1 text-[11px] text-[var(--zombie-text-dim)]">
             <span>🔪 +5 / 🏹 passive — public when revealed</span>
           </div>
         </div>
@@ -102,7 +102,7 @@ export function ZombieMatchupCard({
           <span className="text-[11px] text-[var(--zombie-text-dim)]">vs</span>
           {riskChip}
           {live && mySide && infectionRisk !== 'none' ? (
-            <p className="max-w-[140px] text-[10px] text-[var(--zombie-text-mid)]">
+            <p className="max-w-[140px] text-[11px] text-[var(--zombie-text-mid)]">
               {myDiff != null && myDiff < 0
                 ? '⚠️ Falling behind — infection risk rising'
                 : '✓ Trending safer'}
@@ -112,14 +112,14 @@ export function ZombieMatchupCard({
         <div className="flex-1 space-y-1 text-right sm:text-right">
           <div className="flex flex-wrap items-center justify-end gap-2">
             {infectionRisk === 'away' ? (
-              <span className="rounded bg-[var(--zombie-red)]/20 px-1.5 py-0.5 text-[10px] font-bold text-[var(--zombie-red)]">
+              <span className="rounded bg-[var(--zombie-red)]/20 px-1.5 py-0.5 text-[11px] font-bold text-[var(--zombie-red)]">
                 Infection risk
               </span>
             ) : null}
             <ZombieStatusBadge status={awayStatus} compact />
             <span className="font-medium text-[var(--zombie-text-full)]">{awayName}</span>
             {mySide === 'away' ? (
-              <span className="text-[10px] text-teal-300/90">🧪 You</span>
+              <span className="text-[11px] text-teal-300/90">🧪 You</span>
             ) : null}
           </div>
           <p
@@ -134,7 +134,7 @@ export function ZombieMatchupCard({
       </div>
 
       {margin > 0 && rules ? (
-        <p className="mt-2 text-[10px] text-[var(--zombie-text-dim)]">Margin: {margin.toFixed(1)} pts</p>
+        <p className="mt-2 text-[11px] text-[var(--zombie-text-dim)]">Margin: {margin.toFixed(1)} pts</p>
       ) : null}
 
       {outcomeBadges}

@@ -45,7 +45,6 @@ export default function ChimmyChatTab({
       sport={sport ?? null}
       season={season ?? null}
       week={week ?? null}
-      onSaveConversation={() => toast.info('Save conversation coming soon')}
       onOpenCompare={() => toast.info('Provider comparison available from AI Hub.')}
     />
   )

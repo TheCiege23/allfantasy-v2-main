@@ -1,0 +1,7 @@
+# Best Ball transaction-rule provenance
+
+The live replay of the reported complete-roster question reached the correct selected league and counted 25 players. It also claimed that BB Dynasty League 26! disabled waivers, trades and substitutions. A read-only check of that imported Sleeper league found `best_ball` mode but no `best_ball_settings` record. The specialized Best Ball War Room normalized an absent rule record to draft-only defaults, then described those defaults to Chimmy as league facts. The same block included generic scoring, lineup and roster-size targets that were not verified for the imported league.
+
+The War Room context now records whether all three transaction permissions are explicitly stored. With no complete explicit configuration it marks Best Ball rule coverage missing and does not claim that any permission is disabled. Chimmy gets automatic-lineup guidance and an explicit unverified-rules notice, without the generic scoring, roster-construction and draft-plan claims. Other selected-league roster, injury and scoring evidence remains available. A fully configured league still receives the specialized War Room analysis and its actual enabled/disabled flags. This adds no database query or external call.
+
+One test reproduced the live failure before the fix. The focused rule-evidence, Chimmy grounding and War Room suites now pass 25 tests, including absent, partial, explicitly false and nested rule records. Hosted validation, deployment and a fresh live replay are pending.

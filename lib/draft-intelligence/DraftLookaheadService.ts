@@ -5,6 +5,7 @@ import {
   runDraftLookaheadAgent,
   type UserContext,
 } from '@/lib/agents/anthropic-pipeline'
+import { isDraftIntelAiEnabled } from '@/lib/draft-intelligence/draftIntelAiFlag'
 import {
   computeDraftRecommendation,
   type RecommendationPlayer,
@@ -139,7 +140,11 @@ async function getAppUserIdForRosterId(rosterId: string): Promise<string | null>
   if (!roster?.platformUserId || String(roster.platformUserId).startsWith('orphan-')) {
     return null
   }
-  return String(roster.platformUserId)
+  // Unclaimed draft seats can carry placeholder/legacy owner IDs. Chimmy's platform DM
+  // requires an AppUser FK; only queue one when that account actually exists.
+  const user = await prisma.appUser.findUnique({ where: { id: String(roster.platformUserId) },
+    select: { id: true } })
+  return user?.id ?? null
 }
 
 async function buildAvailablePlayers(
@@ -349,11 +354,13 @@ function buildQueueWithAvailability(
   })
 }
 
-async function applyAiLookaheadCopy(params: {
+/** @internal Exported for the `DRAFT_INTEL_AI_ENABLED` switch test; callers use the state builders. */
+export async function applyAiLookaheadCopy(params: {
   state: DraftIntelState
   ctx: LookaheadContext
 }): Promise<DraftIntelState> {
-  if (!isAnthropicPipelineAvailable() || params.state.queue.length === 0) {
+  // The owner's switch comes first: off means no model call at all, whatever else is configured.
+  if (!isDraftIntelAiEnabled() || !isAnthropicPipelineAvailable() || params.state.queue.length === 0) {
     return params.state
   }
 

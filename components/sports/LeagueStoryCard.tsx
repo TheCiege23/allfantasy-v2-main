@@ -68,7 +68,7 @@ export function LeagueStoryCard({ leagueId, sport, week }: { leagueId: string; s
           type="button"
           onClick={generate}
           disabled={loading}
-          className="flex items-center gap-1 text-[10px] text-white/40 hover:text-white/60"
+          className="flex items-center gap-1 text-[11px] text-white/40 hover:text-white/60"
         >
           <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} />
         </button>

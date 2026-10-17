@@ -15,7 +15,7 @@ export default function PlayerScoreRow({ playerId, points, isStarter }: Props) {
       data-testid={`player-score-row-${playerId}`}
     >
       <span className="truncate text-white/90">
-        {isStarter ? <span className="mr-2 text-[10px] font-bold uppercase text-cyan-300/90">Start</span> : null}
+        {isStarter ? <span className="mr-2 text-[11px] font-bold uppercase text-cyan-300/90">Start</span> : null}
         <span className="font-mono text-xs text-white/55">{playerId}</span>
       </span>
       <span className="font-semibold tabular-nums text-white">{points.toFixed(2)}</span>

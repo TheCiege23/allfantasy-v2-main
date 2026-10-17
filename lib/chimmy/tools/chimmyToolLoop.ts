@@ -4,6 +4,8 @@ import OpenAI from 'openai'
 import { CHIMMY_TOOL_SPECS, executeChimmyTool, type ChimmyToolContext } from './chimmyTools'
 import { isAiSpendEnabled } from '@/lib/ai/aiSpendGuard'
 import { reportProviderFailure } from '@/lib/ai-orchestration/providerOutageAlert'
+import { currentRequestFocus } from '@/lib/chimmy/currentRequestFocus'
+import { anthropicTokenUsage, recordLlmCall } from '@/lib/telemetry/llm-usage'
 import {
   CHIMMY_CLAUDE_EFFORT,
   CHIMMY_CLAUDE_FALLBACK_BETA,
@@ -96,6 +98,11 @@ export type ChimmyToolLoopResult = {
   provider?: ChimmyToolLoopProvider
   /** The model id the answering provider ran. */
   model?: string
+  /**
+   * The tool results the answer was written from, in order. Read only by the route's observe-only
+   * hallucination check (`toolLoopGuardObservation.ts`); never sent to the client or stored.
+   */
+  evidence?: string
 }
 
 function hasXaiKey(): boolean {
@@ -183,6 +190,11 @@ type ChimmyToolLoopArgs = {
   context: ChimmyToolContext
   enabled: boolean
   model?: string
+  /**
+   * Wall-clock budget for the whole loop (Claude). Absent: the panel's 75s. A chat reply holds the
+   * sender's message until it arrives, so `@chimmy` in a chat thread passes less.
+   */
+  budgetMs?: number
 }
 
 export async function runChimmyToolLoop(args: ChimmyToolLoopArgs): Promise<ChimmyToolLoopResult | null> {
@@ -216,13 +228,15 @@ async function runClaudeToolLoop(args: ChimmyToolLoopArgs): Promise<ChimmyToolLo
   if (args.clockLine?.trim()) system.push({ type: 'text', text: args.clockLine.trim() })
   if (args.styleLine?.trim()) system.push({ type: 'text', text: args.styleLine.trim() })
   if (args.groundingLine?.trim()) system.push({ type: 'text', text: args.groundingLine.trim() })
+  system.push({ type: 'text', text: currentRequestFocus(args.context.leagueId) })
 
   const messages: Anthropic.MessageParam[] = [
     ...claudeHistory(args.conversation),
-    { role: 'user', content: args.question },
+    { role: 'user', content: 'CURRENT USER REQUEST:\n' + args.question },
   ]
   const toolsUsed: string[] = []
-  const deadline = Date.now() + CLAUDE_LOOP_BUDGET_MS
+  const evidence: string[] = []
+  const deadline = Date.now() + Math.min(CLAUDE_LOOP_BUDGET_MS, Math.max(5_000, args.budgetMs ?? CLAUDE_LOOP_BUDGET_MS))
   let useFallbacks = true
 
   const call = async (final: boolean): Promise<Anthropic.Message> => {
@@ -248,10 +262,31 @@ async function runClaudeToolLoop(args: ChimmyToolLoopArgs): Promise<ChimmyToolLo
        */
       ...(useFallbacks ? { fallbacks: 'default' } : {}),
     } as Anthropic.MessageCreateParamsNonStreaming
-    return client.messages.create(params, {
-      timeout,
-      headers: useFallbacks ? { 'anthropic-beta': CLAUDE_FALLBACK_BETA } : undefined,
-    })
+    /*
+     * Metered per REQUEST, inside this helper, so every turn, the no-fallbacks retry and a failed
+     * call are all counted. This loop is Chimmy's Opus spend: up to MAX_TOOL_TURNS billed calls per
+     * question, and every one of them is billed even when the loop then returns null and the push
+     * path makes ANOTHER call. It recorded nothing until 2026-09-28.
+     */
+    const meter = {
+      feature: 'chimmy_tool_loop',
+      provider: 'anthropic',
+      userId: args.context.userId,
+      leagueId: args.context.leagueId,
+      maxTokens: CLAUDE_MAX_TOKENS,
+    }
+    const startedAt = Date.now()
+    try {
+      const response = await client.messages.create(params, {
+        timeout,
+        headers: useFallbacks ? { 'anthropic-beta': CLAUDE_FALLBACK_BETA } : undefined,
+      })
+      recordLlmCall({ ...meter, model: response.model || model, usage: anthropicTokenUsage(response.usage), ok: true, durationMs: Date.now() - startedAt })
+      return response
+    } catch (err) {
+      recordLlmCall({ ...meter, model, ok: false, durationMs: Date.now() - startedAt })
+      throw err
+    }
   }
 
   try {
@@ -289,7 +324,7 @@ async function runClaudeToolLoop(args: ChimmyToolLoopArgs): Promise<ChimmyToolLo
           .map((b) => b.text)
           .join('')
           .trim()
-        return text ? { text, toolsUsed, turns: turn, provider: 'claude', model: response.model || model } : null
+        return text ? { text, toolsUsed, turns: turn, provider: 'claude', model: response.model || model, evidence: evidence.join('\n\n') } : null
       }
 
       // See the Grok loop: the last turn must not end on a tool call.
@@ -304,6 +339,7 @@ async function runClaudeToolLoop(args: ChimmyToolLoopArgs): Promise<ChimmyToolLo
       for (const use of toolUses) {
         const result = await executeChimmyTool(use.name, use.input ?? {}, args.context)
         toolsUsed.push(use.name)
+        evidence.push(result)
         results.push({ type: 'tool_result', tool_use_id: use.id, content: result })
       }
       messages.push({ role: 'user', content: results })
@@ -323,12 +359,13 @@ async function runGrokToolLoop(args: ChimmyToolLoopArgs): Promise<ChimmyToolLoop
   const model = args.model?.trim() || DEFAULT_MODEL
 
   const messages: OpenAI.ChatCompletionMessageParam[] = [
-    { role: 'system', content: [args.clockLine, args.systemPrompt, args.styleLine, args.groundingLine].filter((s) => s?.trim()).join('\n\n') },
+    { role: 'system', content: [args.clockLine, args.systemPrompt, args.styleLine, args.groundingLine, currentRequestFocus(args.context.leagueId)].filter((s) => s?.trim()).join('\n\n') },
     ...(args.conversation ?? []).map((t) => ({ role: t.role, content: t.content }) as const),
-    { role: 'user', content: args.question },
+    { role: 'user', content: 'CURRENT USER REQUEST:\n' + args.question },
   ]
 
   const toolsUsed: string[] = []
+  const evidence: string[] = []
 
   try {
     for (let turn = 1; turn <= MAX_TOOL_TURNS; turn += 1) {
@@ -348,6 +385,18 @@ async function runGrokToolLoop(args: ChimmyToolLoopArgs): Promise<ChimmyToolLoop
         },
         { signal: AbortSignal.timeout(TURN_TIMEOUT_MS) },
       )
+      // Metered like the Claude loop. A thrown call is not metered here: the Grok client has no
+      // per-request helper, and the catch below already reports a provider failure.
+      recordLlmCall({
+        feature: 'chimmy_tool_loop',
+        provider: 'xai',
+        model: response.model || model,
+        userId: args.context.userId,
+        leagueId: args.context.leagueId,
+        usage: { inputTokens: response.usage?.prompt_tokens ?? null, outputTokens: response.usage?.completion_tokens ?? null },
+        maxTokens: 1200,
+        ok: true,
+      })
 
       const message = response.choices?.[0]?.message
       if (!message) return null
@@ -357,7 +406,7 @@ async function runGrokToolLoop(args: ChimmyToolLoopArgs): Promise<ChimmyToolLoop
       const calls = message.tool_calls ?? []
       if (calls.length === 0) {
         const text = typeof message.content === 'string' ? message.content.trim() : ''
-        return text ? { text, toolsUsed, turns: turn, provider: 'grok', model } : null
+        return text ? { text, toolsUsed, turns: turn, provider: 'grok', model, evidence: evidence.join('\n\n') } : null
       }
 
       /*
@@ -381,6 +430,7 @@ async function runGrokToolLoop(args: ChimmyToolLoopArgs): Promise<ChimmyToolLoop
 
         const result = await executeChimmyTool(name, parsed, args.context)
         toolsUsed.push(name)
+        evidence.push(result)
 
         messages.push({
           role: 'tool',

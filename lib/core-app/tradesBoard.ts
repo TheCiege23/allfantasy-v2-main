@@ -1,4 +1,7 @@
 import 'server-only'
+import { realManagerName } from './managerName'
+import { composePlayerIdentities } from './playerIdentityCompose'
+import { translateProviderIdsToSleeper, type ProviderIdTranslation } from '@/lib/player-identity/providerToSleeperIds'
 import { CROSS_LEAGUE_BOOK, valueBookFor, type ValueBook } from './valueBook'
 
 import { prisma } from '@/lib/prisma'
@@ -24,6 +27,9 @@ import { oneGradeBreakdown } from '@/lib/decision-os/trade/tradeGradeBreakdown'
 import { ledgerKey, loadLedgerSidesForTrades } from './archivedPickOutcomes'
 import { draftedPickNamesForRow, withDraftedNames } from './archivedPickMatch'
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
+import { assetValues } from '@/lib/decision-os/trade/gradeLineValues'
+import { isPirateLeague, isPirateSteal } from '@/lib/trade-intel/pirateSteal'
+import { runWithConcurrency } from '@/lib/async-utils'
 
 /**
  * Trades, across every league — the cross-league board at `/core/trades`.
@@ -40,6 +46,7 @@ import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
  *     redraft_trade_proposals   0 rows
  *     trade_block_entries       0 rows
  *     LeagueTrade           7,781 rows, 100% platform='sleeper'
+ *     (true when measured; ESPN trades are ingested now — see `translateForeignTrades`)
  *
  * `LeagueTrade` has **no status column** — it is COMPLETED trade history
  * reconstructed from Sleeper transactions. And Sleeper's own `pending` state is
@@ -121,6 +128,20 @@ export type TradeWindowRow = {
   tradesOnFile: number
   /** The most recent one, graded. Null when none is on file. */
   latest: BoardTrade | null
+  /**
+   * The latest trade is from this week or last — see `isFreshTrade`. Such leagues lead the board,
+   * newest first, so a trade made today is on screen today. Optional: a board cached before
+   * 2026-09-30 does not carry it, and reads as not fresh.
+   */
+  freshTrade?: boolean
+  /**
+   * One-way moves on file in a Pirate league: a player went one way and nothing came back on this
+   * store's record. Almost always a steal (`lib/trade-intel/pirateSteal.ts`) — but `LeagueTrade` holds
+   * no FAAB, so a player sold for FAAB reads the same here (Jameis Winston for $35, same league, week
+   * 3). Counted apart from `tradesOnFile`, never the `latest` trade, and never called a steal by this
+   * board. The league's own Trades list reads FAAB and names each one. Optional for cached boards.
+   */
+  oneWayOnFile?: number
   href: string
   reasoning: string
   /**
@@ -163,10 +184,13 @@ const EMPTY: TradesBoardData = {
   currentWeek: null,
 }
 
-const ROW_CAP = 10
+export const ROW_CAP = 10
 
 /** Trades to price per league. Enough to grade the latest without a wide read. */
 const TRADES_PER_LEAGUE = 4
+
+/** Leagues graded at once — see the grading pool in `getTradesBoard`. */
+export const BOARD_GRADE_CONCURRENCY = 6
 
 type DeadlineInfo = {
   week: number | null
@@ -260,9 +284,9 @@ export function collapseMirroredTrades<T extends { leagueId: string; transaction
  * manager" says we could not resolve it, which is true and legible.
  */
 export function managerLabel(raw: string | null | undefined, resolved?: string | null): string {
-  const r = resolved?.trim()
+  const r = realManagerName(resolved)
   if (r) return r
-  const v = String(raw ?? '').trim()
+  const v = realManagerName(raw) ?? ''
   if (!v) return 'a manager'
   return /^\d{6,}$/.test(v) ? 'a manager' : v
 }
@@ -285,11 +309,32 @@ export function managerLabel(raw: string | null | undefined, resolved?: string |
  * Reported from the live screen, not caught by any test. The deadline still orders
  * within each group, so urgency is subordinated to having content, not discarded.
  */
-export function byTradeUrgency(
-  a: { weeksLeft: number | null; deadlineWeek: number | null; noDeadline: boolean; tradesOnFile: number },
-  b: { weeksLeft: number | null; deadlineWeek: number | null; noDeadline: boolean; tradesOnFile: number },
-): number {
-  const rank = (w: typeof a) =>
+type UrgencyRow = {
+  weeksLeft: number | null
+  deadlineWeek: number | null
+  noDeadline: boolean
+  tradesOnFile: number
+  freshTrade?: boolean
+  latest?: { at: string | null } | null
+}
+
+/*
+ * 🛑 AND A TRADE MADE THIS WEEK COMES BEFORE ALL OF IT (Guap, 2026-09-30: the board "should show all
+ * trades as they come in"). Deadline-first put a league with 8 weeks left at row 11 of a 10-row board,
+ * so a 4-for-2 made that morning in Pirate League twinty — emailed, and on the league's own Trades
+ * tab — never reached this screen. Fresh leagues lead, NEWEST TRADE FIRST, whatever their window;
+ * everything below keeps the deadline rule unchanged.
+ */
+export function byTradeUrgency(a: UrgencyRow, b: UrgencyRow): number {
+  const fa = a.freshTrade ? 0 : 1
+  const fb = b.freshTrade ? 0 : 1
+  if (fa !== fb) return fa - fb
+  if (fa === 0) {
+    const ta = Date.parse(a.latest?.at ?? '') || 0
+    const tb = Date.parse(b.latest?.at ?? '') || 0
+    if (ta !== tb) return tb - ta
+  }
+  const rank = (w: UrgencyRow) =>
     w.weeksLeft != null && w.weeksLeft >= 0 ? 0 : w.deadlineWeek != null ? 1 : w.noDeadline ? 2 : 3
   const ra = rank(a)
   const rb = rank(b)
@@ -301,6 +346,24 @@ export function byTradeUrgency(
     return (a.weeksLeft as number) - (b.weeksLeft as number)
   }
   return b.tradesOnFile - a.tradesOnFile
+}
+
+/**
+ * Whether a league's latest trade counts as new: this season, from the current week or the one before.
+ *
+ * ⚠ BY WEEK, NOT BY CLOCK. This board's payload is cached and its source is asserted to hold no clock
+ * read (`tradesBoardSummary`), so "new" is measured against the `currentWeek` the caller passes. The
+ * week before counts too: Sleeper files a trade made between Monday night and the waiver run under the
+ * week just played. PURE.
+ */
+export function isFreshTrade(
+  latest: { season: number | null; week: number | null } | null,
+  leagueSeason: number | null | undefined,
+  currentWeek: number | null,
+): boolean {
+  if (!latest || currentWeek == null || latest.week == null) return false
+  if (leagueSeason != null && latest.season != null && latest.season !== leagueSeason) return false
+  return latest.week >= currentWeek - 1 && latest.week <= currentWeek
 }
 
 /**
@@ -318,7 +381,18 @@ export function valuesOnTheGrade(
 ): TradeAsset[] {
   if (!grade.graded) return assets.map((a) => ({ ...a, value: null }))
   const lines = grade.lines.filter((l) => l.side === side)
-  return lines.length === assets.length ? assets.map((a, i) => ({ ...a, value: lines[i]!.leagueValue })) : [...assets]
+  if (lines.length !== assets.length) return [...assets]
+  /*
+   * By name, then pick year + round, then place (`assetValues`) — never by place alone. The letter is
+   * often the FROZEN original, whose lines are in the order of whichever surface froze it, not this
+   * board's; by place alone a 1st's value printed beside the 2nd it was traded with.
+   */
+  const values = assetValues(
+    assets.map((a) => ({ label: a.name, gradedAs: (a as TradeAsset & { drafted?: string | null }).drafted ?? null })),
+    grade.lines,
+    side,
+  )
+  return assets.map((a, i) => ({ ...a, value: values[i] ?? null }))
 }
 
 export async function getTradesBoard(
@@ -476,7 +550,7 @@ export async function getTradesBoard(
       e = { byUserId: new Map(), byRoster: new Map() }
       managersByLeague.set(row.leagueId, e)
     }
-    const name = row.ownerName?.trim() || row.teamName?.trim() || ''
+    const name = realManagerName(row.ownerName) || realManagerName(row.teamName) || ''
     if (row.platformUserId) {
       e.byUserId.set(String(row.platformUserId), { name, mine: row.claimedByUserId === userId })
     }
@@ -484,7 +558,7 @@ export async function getTradesBoard(
   }
 
   const historyIds = histories.map((h) => h.id)
-  const trades =
+  const rawTrades =
     historyIds.length > 0
       ? await prisma.leagueTrade
           .findMany({
@@ -518,10 +592,15 @@ export async function getTradesBoard(
               partnerName: true,
               /* Resolves the OTHER side's manager via LeagueTeam.externalId. */
               partnerRosterId: true,
+              /* Which id space `playersGiven`/`playersReceived` are in — see `translateForeignTrades`. */
+              platform: true,
+              sport: true,
             },
           })
           .catch(() => [])
       : []
+
+  const { trades, foreignLabel } = await translateForeignTrades(rawTrades)
 
   /*
    * Each league's own value book, and the distinct set the query must cover.
@@ -575,7 +654,7 @@ export async function getTradesBoard(
       ? prisma.sportsPlayer
           .findMany({
             where: { sleeperId: { in: [...assetIds] } },
-            select: { sleeperId: true, name: true, position: true, team: true, imageUrl: true },
+            select: { sleeperId: true, sport: true, name: true, position: true, team: true, imageUrl: true, source: true, fetchedAt: true },
           })
           .catch(() => [])
       : Promise.resolve([]),
@@ -653,7 +732,16 @@ export async function getTradesBoard(
     ).catch(() => []),
   ])
 
-  const playerById = new Map(players.map((p) => [p.sleeperId, p]))
+  /*
+   * 🛑 COMPOSED, NOT `new Map(rows)`. `sleeperId` is not unique in `SportsPlayer`: one
+   * athlete is a `sleeper`, a `thesportsdb` and a `rolling_insights` row, and the last
+   * row returned won. Rolling Insights stores the literal `contact_support` (or, once
+   * cleared, nothing) where a headshot belongs, so whenever its row came last a player
+   * with two good stored photos rendered as initials — Quinshon Judkins, David
+   * Montgomery and Drake Maye on one board, 2026-10-01. Each field now comes from the
+   * row that actually holds it; see `playerIdentityCompose.ts`.
+   */
+  const playerById = composePlayerIdentities(players)
   /*
    * ⚠ KEYED ON BOOK + PLAYER, NOT PLAYER. Two of this user's leagues can want
    * different books for the same man, so a `Map<sleeperId, …>` silently served
@@ -719,9 +807,9 @@ export async function getTradesBoard(
        * would make a 2-for-1 render as a 1-for-1 — a trade the manager never
        * made, shown as fact.
        */
-      name: p?.name ?? `Player ${id}`,
-      position: p?.position ?? null,
-      team: p?.team ?? null,
+      name: p?.name ?? foreignLabel.get(id)?.name ?? `Player ${id}`,
+      position: p?.position ?? foreignLabel.get(id)?.position ?? null,
+      team: p?.team ?? foreignLabel.get(id)?.team ?? null,
       imageUrl: p?.imageUrl ?? null,
       value: v?.value ?? defence?.value ?? null,
     }
@@ -745,7 +833,25 @@ export async function getTradesBoard(
     return [{ ...t, leagueId: league.id, username: h.sleeperUsername, sleeperLeagueId: h.sleeperLeagueId }]
   })
 
-  const { counts: countByLeague, firstByLeague } = collapseMirroredTrades(resolved)
+  /*
+   * 🛑 A PIRATE STEAL IS NOT A TRADE (Guap, 2026-09-30). The league's steal rule moves a player one way
+   * and Sleeper records it as a trade, so Pirate League twinty's card counted its week-3 steals as
+   * trades and headlined whichever came last. One-way moves are counted apart and never become
+   * `latest` — and are NOT called steals here, because this store cannot see FAAB (see `oneWayOnFile`).
+   */
+  const pirateLeagueIds = new Set(
+    mine.flatMap((c) => (c.league && isPirateLeague({ name: c.league.name, settings: c.league.settings }) ? [c.league.id] : [])),
+  )
+  const isOneWay = (t: (typeof resolved)[number]) =>
+    isPirateSteal({
+      pirateLeague: pirateLeagueIds.has(t.leagueId),
+      sides: [
+        { playersIn: idsOf(t.playersReceived).length, picksIn: pickAssets(t.picksReceived).length },
+        { playersIn: idsOf(t.playersGiven).length, picksIn: pickAssets(t.picksGiven).length },
+      ],
+    })
+  const { counts: countByLeague, firstByLeague } = collapseMirroredTrades(resolved.filter((t) => !isOneWay(t)))
+  const { counts: oneWayByLeague } = collapseMirroredTrades(resolved.filter(isOneWay))
 
   /*
    * 🛑 A USED PICK IS THE PLAYER DRAFTED WITH IT (Guap's ruling, 2026-09-25), on this board too. The
@@ -760,10 +866,53 @@ export async function getTradesBoard(
       .map((t) => ({ sleeperLeagueId: t.sleeperLeagueId, transactionId: t.transactionId })),
   )
 
-  /* Latest graded trade per league, built from the surviving copy. */
+  /*
+   * Latest graded trade per league, built from the surviving copy.
+   *
+   * ⚠ GRADED SEVERAL LEAGUES AT A TIME (2026-10-03). This was a sequential `for…await`, and each
+   * league's first grade builds that league's chart (`completedTradeGraderFor`, memoised 5 min), so
+   * the board paid every league's chart load end to end: measured read-only against production, 40
+   * leagues took 27.6s cold and 4–5s warm, ~95% of the whole board. The leagues are independent —
+   * one grader each, one frozen-original row each — so they run in a bounded pool.
+   * `runWithConcurrency` returns results in INPUT order and the map is filled from that array, so
+   * the board reads identically to the sequential loop; the bound keeps one board from taking the
+   * whole connection pool.
+   *
+   * 🛑 AND ONLY THE LEAGUES WHOSE CARDS WILL BE SHOWN (2026-10-03). The board returns `ROW_CAP`
+   * windows, and graded all 40 of the owner's leagues to show 10 — after the pool, per-league chart
+   * builds (1–4s each, cold) were still most of the board. Nothing the ordering reads comes from a
+   * grade: `byTradeUrgency` and `isFreshTrade` read the trade row's season, week and date plus the
+   * deadline and the trade count. So the shortlist is sorted on those row facts with the same
+   * comparator, over `mine` in the same order — `Array.prototype.sort` is stable — and it picks the
+   * same ten, in the same order, that sorting the fully graded windows did.
+   */
+  const rowFacts = new Map<string, { at: string | null; season: number | null; week: number | null }>()
+  for (const t of firstByLeague.values()) {
+    rowFacts.set(t.leagueId, { at: t.tradeDate ? t.tradeDate.toISOString() : null, season: t.season ?? null, week: t.week ?? null })
+  }
+  const shortlist = mine
+    .map((c) => {
+      const l = c.league!
+      const d = readDeadline(l.settings)
+      const facts = rowFacts.get(l.id) ?? null
+      return {
+        leagueId: l.id,
+        weeksLeft: d.week != null && currentWeek != null ? d.week - currentWeek : null,
+        deadlineWeek: d.week,
+        noDeadline: d.none,
+        tradesOnFile: countByLeague.get(l.id) ?? 0,
+        freshTrade: isFreshTrade(facts, l.season, currentWeek),
+        latest: facts,
+      }
+    })
+    .sort(byTradeUrgency)
+    .slice(0, ROW_CAP)
+  const shownLeagueIds = new Set(shortlist.map((row) => row.leagueId))
+
   const latestByLeague = new Map<string, BoardTrade>()
 
-  for (const t of firstByLeague.values()) {
+  const toGrade = [...firstByLeague.values()].filter((t) => shownLeagueIds.has(t.leagueId))
+  const gradedCards = await runWithConcurrency(toGrade, BOARD_GRADE_CONCURRENCY, async (t) => {
     const league = { id: t.leagueId }
     const h = { sleeperUsername: t.username }
     /*
@@ -785,8 +934,8 @@ export async function getTradesBoard(
       },
       ledgerSides.get(ledgerKey(t.sleeperLeagueId, t.transactionId)),
     )
-    const sentPicks = withDraftedNames(pickAssets(t.picksGiven, pickPrice), drafted?.picksOut)
-    const recvPicks = withDraftedNames(pickAssets(t.picksReceived, pickPrice), drafted?.picksIn)
+    const sentPicks = withDraftedNames(pickAssets(t.picksGiven, pickPrice), drafted?.picksOut, drafted?.idsOut)
+    const recvPicks = withDraftedNames(pickAssets(t.picksReceived, pickPrice), drafted?.picksIn, drafted?.idsIn)
 
     const defenders = defendersFor(t.leagueId, leagueBook)
 
@@ -794,14 +943,17 @@ export async function getTradesBoard(
      * 🛑 THE LETTER IS THE ONE GRADE (2026-09-25) — not rank space on share bands, which is what
      * this board and the /core Trades list used to grade in while every other screen graded on
      * league value. Same deal, same letter, same numbers: `gradeArchivedTrade`, on this league's
-     * chart today, from this row's point of view.
+     * chart, from this row's point of view — and, through `original` below, the trade's FROZEN
+     * ORIGINAL from the first time it was graded, not a re-price on today's values.
      */
-    const nameOfId = (id: string) => playerById.get(id)?.name?.trim() || null
-    const pickRef = (p: TradeAsset & { drafted?: string | null }) => ({
+    // Priced by the Sleeper id the row keys each player by, as the live paths price him — see `sleeperPlayerInput`.
+    const nameOfId = (id: string) => ({ name: playerById.get(id)?.name?.trim() || null, sleeperId: id })
+    const pickRef = (p: TradeAsset & { drafted?: string | null; draftedId?: string | null }) => ({
       season: p.pickSeason ?? null,
       round: p.pickRound ?? null,
       label: p.name,
       drafted: p.drafted ?? null,
+      draftedId: p.draftedId ?? null,
     })
     const g = await gradeArchivedTrade(await completedTradeGraderFor(t.leagueId), {
       received: recvIds.map(nameOfId),
@@ -814,6 +966,12 @@ export async function getTradesBoard(
        * treat one of ITS picks as still to come — never a later season's.
        */
       currentSeason: marketSeason ?? (Number(t.season) || 0),
+      /*
+       * The trade's frozen original — a stored row, so the cached payload stays derived from rows.
+       * One read per league (this loop takes each league's first trade). No `now` from this file:
+       * the freeze module stamps a first freeze itself.
+       */
+      original: { afLeagueId: t.leagueId, tradeId: t.transactionId },
     })
 
     const mgr = managersByLeague.get(league.id)
@@ -854,7 +1012,7 @@ export async function getTradesBoard(
       ? oneGradeBreakdown({ grade: g, receiverLabel: fromName, partnerLabel: toName })
       : []
 
-    latestByLeague.set(league.id, {
+    const card: BoardTrade = {
       transactionId: t.transactionId,
       season: t.season ?? null,
       week: t.week ?? null,
@@ -868,8 +1026,10 @@ export async function getTradesBoard(
       breakdown,
       // The grader's own reason — it names what could not be priced, never a count.
       withheldReason: g.graded ? null : g.reason,
-    })
-  }
+    }
+    return [league.id, card] as const
+  })
+  for (const [leagueId, card] of gradedCards) latestByLeague.set(leagueId, card)
 
   let deadlineUnknown = 0
   const windows: TradeWindowRow[] = []
@@ -878,12 +1038,16 @@ export async function getTradesBoard(
     const l = c.league!
     const d = readDeadline(l.settings)
     if (!d.known) deadlineUnknown++
+    // Counted over every league above; a card is built only for the shortlist.
+    if (!shownLeagueIds.has(l.id)) continue
 
     const weeksLeft =
       d.week != null && currentWeek != null ? d.week - currentWeek : null
 
     const latest = latestByLeague.get(l.id) ?? null
     const tradesOnFile = countByLeague.get(l.id) ?? 0
+    const oneWayOnFile = oneWayByLeague.get(l.id) ?? 0
+    const freshTrade = isFreshTrade(latest, l.season, currentWeek)
 
     const bits: string[] = []
     if (d.none) {
@@ -906,6 +1070,11 @@ export async function getTradesBoard(
         ? `${tradesOnFile} ${tradesOnFile === 1 ? 'trade' : 'trades'} on file here.`
         : 'No trade has been made here on any season we hold.',
     )
+    if (oneWayOnFile > 0) {
+      bits.push(
+        `${oneWayOnFile} one-way ${oneWayOnFile === 1 ? 'move' : 'moves'} on file as well — Pirate steals, or a player sold for FAAB, which this list cannot tell apart. They are not counted as trades here; the league's Trades list names each one.`,
+      )
+    }
     if (latest?.withheldReason) {
       bits.push(`The latest one is ungraded: ${latest.withheldReason}.`)
     }
@@ -925,6 +1094,8 @@ export async function getTradesBoard(
       regularSeasonLength: d.regularSeasonLength,
       tradesOnFile,
       latest,
+      freshTrade,
+      oneWayOnFile,
       href: `/core/trades?league=${encodeURIComponent(l.id)}`,
       reasoning: bits.join(' '),
       realKey: realLeagueKey({ platform: l.platform, platformLeagueId: l.platformLeagueId, season: l.season, leagueId: l.id }),
@@ -1013,4 +1184,67 @@ export function pointBoardAtReachableLeagues(
       return id === p.leagueId ? p : { ...p, leagueId: id }
     }),
   }
+}
+
+/**
+ * Put every trade's player ids into the Sleeper id space this board names, prices and grades in.
+ *
+ * 🛑 THE BOARD RESOLVED SLEEPER IDS ONLY, AND ITS HEADER STILL SAYS `LeagueTrade` IS 100% SLEEPER.
+ * That stopped being true when ESPN trades began to be ingested: an ESPN trade printed
+ * "Player 4432620" on /core (production audit 2026-09-28), unnamed AND unpriced, because the
+ * FantasyCalc book is keyed on Sleeper ids too. So a non-Sleeper id is translated to its Sleeper id
+ * through `PlayerIdentityMap` (the platform's own column), and from there the board treats the
+ * trade exactly like a Sleeper one.
+ *
+ * ⚠ AN ID THAT DOES NOT TRANSLATE IS NAMESPACED, NEVER LEFT BARE. A foreign id can equal a real
+ * Sleeper id numerically — the collision #1455 audited out of 13 readers — and a bare one would be
+ * named and PRICED as whichever Sleeper player owns that number. `foreign:<platform>:<id>` misses
+ * every Sleeper-keyed map by construction; `foreignLabel` names it (the identity's own name when it
+ * has one without a Sleeper id, otherwise "Unrecognised <Platform> player"), and it stays unpriced.
+ */
+const FOREIGN_PLATFORM_LABEL: Record<string, string> = { espn: 'ESPN', yahoo: 'Yahoo', mfl: 'MFL', fantrax: 'Fantrax', fleaflicker: 'Fleaflicker' }
+
+export async function translateForeignTrades<T extends { platform: string | null; sport: string | null; playersGiven: unknown; playersReceived: unknown }>(
+  rows: T[],
+): Promise<{ trades: T[]; foreignLabel: Map<string, { name: string; position: string | null; team: string | null }> }> {
+  const foreignLabel = new Map<string, { name: string; position: string | null; team: string | null }>()
+  const platformOf = (t: T) => String(t.platform ?? 'sleeper').toLowerCase()
+  const sportOf = (t: T) => String(t.sport ?? 'nfl').toUpperCase()
+
+  const groups = new Map<string, { platform: string; sport: string; ids: string[] }>()
+  for (const t of rows) {
+    const platform = platformOf(t)
+    if (platform === 'sleeper' || platform === 'native') continue
+    const key = `${platform}|${sportOf(t)}`
+    const g = groups.get(key) ?? { platform, sport: sportOf(t), ids: [] }
+    g.ids.push(...idsOf(t.playersGiven), ...idsOf(t.playersReceived))
+    groups.set(key, g)
+  }
+  if (groups.size === 0) return { trades: rows, foreignLabel }
+
+  const translated = new Map<string, ProviderIdTranslation>()
+  await Promise.all([...groups.values()].map(async (g) => {
+    const found = await translateProviderIdsToSleeper(g.platform, g.ids, g.sport).catch(() => new Map<string, ProviderIdTranslation>())
+    for (const [id, x] of found) translated.set(`${g.platform}|${g.sport}|${id}`, x)
+  }))
+
+  const trades = rows.map((t) => {
+    const platform = platformOf(t)
+    if (platform === 'sleeper' || platform === 'native') return t
+    const sport = sportOf(t)
+    const toSleeper = (ids: string[]) =>
+      ids.map((id) => {
+        const x = translated.get(`${platform}|${sport}|${id}`)
+        if (x?.sleeperId) return x.sleeperId
+        const namespaced = `foreign:${platform}:${id}`
+        foreignLabel.set(namespaced, {
+          name: x?.name || `Unrecognised ${FOREIGN_PLATFORM_LABEL[platform] ?? platform} player`,
+          position: x?.position ?? null,
+          team: x?.team ?? null,
+        })
+        return namespaced
+      })
+    return { ...t, playersGiven: toSleeper(idsOf(t.playersGiven)), playersReceived: toSleeper(idsOf(t.playersReceived)) }
+  })
+  return { trades, foreignLabel }
 }

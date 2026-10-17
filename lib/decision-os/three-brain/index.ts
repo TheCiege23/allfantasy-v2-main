@@ -12,13 +12,14 @@
  *       ZERO callers outside this directory and its tests. Genuinely standalone. The old sentence
  *       was about THIS.
  *
- *   PHASE 2 / 3 / 4 — live in six runtime paths, and it does NOT go through the orchestrator:
+ *   PHASE 2 / 3 / 4 — live in five runtime paths, and it does NOT go through the orchestrator:
  *       `generateLeagueIntelligence` (phase3) calls `runManagedIntelligence` (phase2) directly.
  *         phase2 → app/api/cron/decision-os-intelligence-maintenance/route.ts
  *         phase3 → app/api/decision-os/manager-intelligence/route.ts
  *         phase4 → app/api/waiver-ai/engine/route.ts
- *                  app/api/today/lineup-actions/route.ts
  *                  app/api/redraft/trade-proposals/route.ts
+ *       (app/api/today/lineup-actions/route.ts was a sixth until 2026-09-29, when the duplicate
+ *       lineup engine was retired and that route deleted.)
  *                  lib/commissioner-hub/commissionerHubHealth.ts
  *
  * So "three-brain is unwired" and "three-brain is live" are both true of different halves, and any

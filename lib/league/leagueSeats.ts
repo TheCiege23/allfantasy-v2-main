@@ -17,6 +17,7 @@
  */
 import type { Prisma } from '@prisma/client'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 type Db = Prisma.TransactionClient
 
@@ -113,7 +114,7 @@ export async function assignLeagueSeat(
   const { leagueId, rosterId, userId } = args
 
   const [league, roster, user] = await Promise.all([
-    tx.league.findUnique({ where: { id: leagueId }, select: { platform: true, userId: true } }),
+    tx.league.findUnique({ where: { id: leagueId }, select: { platform: true, userId: true, survivorMode: true } }),
     tx.roster.findFirst({
       where: { id: rosterId, leagueId },
       select: { id: true, platformUserId: true, playerData: true, settings: true },
@@ -211,6 +212,30 @@ export async function assignLeagueSeat(
         ...(native ? { platformUserId: userId } : {}),
       },
     })
+  } else if (native) {
+    /*
+     * 🛑 A NATIVE SEAT WITH NO TEAM ROW IS A SEAT THE APP CANNOT SEE YOU IN. The redraft routes'
+     * member check, the Career Wire, the home brief and the league standings all find your team by
+     * `LeagueTeam.claimedByUserId`, and this function only ever UPDATED that row — so a seat whose
+     * row was never created (production 2026-10-01: 33 of 120 native rosters have none) was claimed
+     * with no team at all. An import's team rows belong to its provider sync and are never created
+     * here. An upsert on (leagueId, externalId): a duplicate insert would abort the transaction.
+     */
+    const seat = {
+      ownerName: name,
+      teamName,
+      claimedByUserId: userId,
+      platformUserId: userId,
+      isOrphan: false,
+      isCommissioner: userId === league.userId,
+      isCoCommissioner: false,
+      role: userId === league.userId ? 'commissioner' : 'member',
+    }
+    await tx.leagueTeam.upsert({
+      where: { leagueId_externalId: { leagueId, externalId: rosterId } },
+      create: { leagueId, externalId: rosterId, ...seat },
+      update: seat,
+    })
   }
 
   const slot = await tx.leagueEntrySlot.findFirst({
@@ -221,6 +246,22 @@ export async function assignLeagueSeat(
     await tx.leagueEntrySlot.update({ where: { id: slot.id }, data: { status: 'FILLED' } })
   }
   const teamNumber = slot?.slotNumber ?? (typeof foundation.slotNumber === 'number' ? foundation.slotNumber : null)
+
+  // Creation reserves a draft slot for every open Survivor team. Claiming the
+  // roster must also replace its draft-room "Open Team" label and open flag.
+  if (native && league.survivorMode) {
+    const draft = await tx.draftSession.findFirst({
+      where: { leagueId, status: 'pre_draft' }, orderBy: CURRENT_DRAFT_SESSION_ORDER,
+      select: { id: true, slotOrder: true },
+    })
+    if (draft && Array.isArray(draft.slotOrder)) {
+      const order = draft.slotOrder.map((entry) => {
+        const row = asRecord(entry)
+        return row.rosterId === rosterId ? { ...row, displayName: name, open: false } : entry
+      })
+      await tx.draftSession.update({ where: { id: draft.id }, data: { slotOrder: order as Prisma.InputJsonValue } })
+    }
+  }
 
   await tx.redraftLeagueMember.upsert({
     where: { leagueId_userId: { leagueId, userId } },
@@ -260,7 +301,7 @@ export async function releaseLeagueSeat(
 ): Promise<{ ok: true; previousOwner: string | null } | { ok: false; code: 'ROSTER_NOT_FOUND' }> {
   const { leagueId, rosterId } = args
   const [league, roster] = await Promise.all([
-    tx.league.findUnique({ where: { id: leagueId }, select: { platform: true, userId: true } }),
+    tx.league.findUnique({ where: { id: leagueId }, select: { platform: true, userId: true, survivorMode: true } }),
     tx.roster.findFirst({ where: { id: rosterId, leagueId }, select: { id: true, platformUserId: true, playerData: true } }),
   ])
   if (!league || !roster) return { ok: false, code: 'ROSTER_NOT_FOUND' }
@@ -303,6 +344,20 @@ export async function releaseLeagueSeat(
     })
   }
   await tx.leagueEntrySlot.updateMany({ where: { leagueId, rosterId }, data: { status: 'OPEN' } })
+  if (native && league.survivorMode) {
+    const draft = await tx.draftSession.findFirst({
+      where: { leagueId, status: 'pre_draft' }, orderBy: CURRENT_DRAFT_SESSION_ORDER,
+      select: { id: true, slotOrder: true },
+    })
+    if (draft && Array.isArray(draft.slotOrder)) {
+      const order = draft.slotOrder.map((entry) => {
+        const row = asRecord(entry)
+        return row.rosterId === rosterId
+          ? { ...row, displayName: `Open Team ${String(row.slot ?? '')}`, open: true } : entry
+      })
+      await tx.draftSession.update({ where: { id: draft.id }, data: { slotOrder: order as Prisma.InputJsonValue } })
+    }
+  }
 
   if (previousOwner) {
     if (previousOwner === league.userId) {

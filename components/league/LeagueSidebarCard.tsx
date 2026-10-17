@@ -92,7 +92,7 @@ export function LeagueSidebarCard({
               onClick={(e) => onRefresh?.(e, league.id)}
               title="Refresh from Sleeper"
               className={[
-                'flex h-5 w-5 items-center justify-center rounded-full text-[10px] transition-all',
+                'flex h-5 w-5 items-center justify-center rounded-full text-[11px] transition-all',
                 isRefreshing
                   ? 'cursor-wait bg-cyan-500/20 text-cyan-400'
                   : isRefreshed
@@ -148,7 +148,7 @@ export function LeagueSidebarCard({
               .join(' ')}
             aria-label="Reorder"
           >
-            <span className="flex flex-col items-center gap-0 text-[8px] leading-[0.7]">
+            <span className="flex flex-col items-center gap-0 text-[11px] leading-[0.7]">
               <span>⋮</span>
               <span>⋮</span>
             </span>
@@ -192,7 +192,7 @@ export function LeagueSidebarCard({
               </p>
               {rosterIssueCount > 0 ? (
                 <span
-                  className="min-w-[1.125rem] shrink-0 rounded-full bg-amber-500/95 px-1 py-0.5 text-center text-[9px] font-extrabold text-[#050814]"
+                  className="min-w-[1.125rem] shrink-0 rounded-full bg-amber-500/95 px-1 py-0.5 text-center text-[11px] font-extrabold text-[#050814]"
                   title="Roster or lineup issues"
                   data-testid={`league-sidebar-roster-issues-${league.id}`}
                 >
@@ -201,7 +201,7 @@ export function LeagueSidebarCard({
               ) : null}
               {league.isCommissioner ? (
                 <span
-                  className="shrink-0 rounded-full border border-amber-500/30 bg-amber-500/15 px-1 py-0.5 text-[8px] font-bold text-amber-300"
+                  className="shrink-0 rounded-full border border-amber-500/30 bg-amber-500/15 px-1 py-0.5 text-[11px] font-bold text-amber-300"
                   title="You are Commissioner"
                 >
                   COMM
@@ -209,29 +209,29 @@ export function LeagueSidebarCard({
               ) : null}
               {league.isDynasty ? (
                 <span
-                  className="shrink-0 rounded border border-violet-500/30 bg-violet-500/15 px-1 py-0.5 text-[8px] font-bold text-violet-300"
+                  className="shrink-0 rounded border border-violet-500/30 bg-violet-500/15 px-1 py-0.5 text-[11px] font-bold text-violet-300"
                   title="Dynasty league"
                 >
                   DYN
                 </span>
               ) : null}
               {league.isPaid ? (
-                <span className="shrink-0 rounded border border-emerald-500/25 bg-emerald-500/10 px-1 py-0.5 text-[8px] font-semibold text-emerald-400">
+                <span className="shrink-0 rounded border border-emerald-500/25 bg-emerald-500/10 px-1 py-0.5 text-[11px] font-semibold text-emerald-400">
                   Paid
                 </span>
               ) : null /* de-noise: "Free" on every row said nothing */}
               {league.lifecycleState === 'renewal_pending' && (
-                <span className="shrink-0 rounded border border-amber-500/40 bg-amber-500/15 px-1 py-0.5 text-[8px] font-bold text-amber-300" title="League renewal window is open">
+                <span className="shrink-0 rounded border border-amber-500/40 bg-amber-500/15 px-1 py-0.5 text-[11px] font-bold text-amber-300" title="League renewal window is open">
                   RENEW
                 </span>
               )}
               {league.lifecycleState === 'offseason' && (
-                <span className="shrink-0 rounded bg-white/[0.06] px-1 py-0.5 text-[8px] font-medium text-white/30">
+                <span className="shrink-0 rounded bg-white/[0.06] px-1 py-0.5 text-[11px] font-medium text-white/30">
                   OFF
                 </span>
               )}
               {league.lifecycleState === 'archived' && (
-                <span className="shrink-0 rounded bg-white/[0.04] px-1 py-0.5 text-[8px] font-medium text-white/20">
+                <span className="shrink-0 rounded bg-white/[0.04] px-1 py-0.5 text-[11px] font-medium text-white/20">
                   ARC
                 </span>
               )}
@@ -244,7 +244,7 @@ export function LeagueSidebarCard({
               */}
               {isShadow && (
                 <span
-                  className="shrink-0 rounded border border-sky-500/35 bg-sky-500/15 px-1 py-0.5 text-[8px] font-bold text-sky-300"
+                  className="shrink-0 rounded border border-sky-500/35 bg-sky-500/15 px-1 py-0.5 text-[11px] font-bold text-sky-300"
                   title={shadowTitle ?? 'Shadow league — changes stay inside AllFantasy'}
                   data-testid="league-card-shadow-badge"
                 >
@@ -259,14 +259,14 @@ export function LeagueSidebarCard({
 
             <div className="flex min-w-0 items-center gap-1.5">
               <span className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${status.dotColor}`} />
-              <span className={`text-[10px] font-semibold tracking-wide ${status.textColor}`}>{status.label}</span>
+              <span className={`text-[11px] font-semibold tracking-wide ${status.textColor}`}>{status.label}</span>
               {league.status === 'in_season' && league.currentWeek != null ? (
-                <span className="shrink-0 rounded-full border border-cyan-500/25 bg-cyan-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-cyan-300">
+                <span className="shrink-0 rounded-full border border-cyan-500/25 bg-cyan-500/15 px-1.5 py-0.5 text-[11px] font-semibold text-cyan-300">
                   Wk {league.currentWeek}
                 </span>
               ) : null}
-              <span className="text-[10px] text-white/20">·</span>
-              <span className={`truncate text-[10px] font-medium ${getPlatformColor(league.platform)}`}>
+              <span className="text-[11px] text-white/20">·</span>
+              <span className={`truncate text-[11px] font-medium ${getPlatformColor(league.platform)}`}>
                 {platformLabel}
               </span>
             </div>

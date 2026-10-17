@@ -147,7 +147,7 @@ export function C2CMatchupClient({ leagueId, userId }: { leagueId: string; userI
           <div className="h-full flex-1 bg-white/[0.04]" />
         </div>
         {left == null && right == null ? (
-          <p className="mt-1 text-center text-[10px] text-white/40">{missingLabel}</p>
+          <p className="mt-1 text-center text-[11px] text-white/40">{missingLabel}</p>
         ) : null}
       </div>
     )
@@ -185,7 +185,7 @@ export function C2CMatchupClient({ leagueId, userId }: { leagueId: string; userI
         </div>
       ) : null}
 
-      <p className="mb-4 text-center text-[10px] text-white/40">{c2cScoreModeDescription(cfg)}</p>
+      <p className="mb-4 text-center text-[11px] text-white/40">{c2cScoreModeDescription(cfg)}</p>
 
       <div className="sticky top-14 z-10 mb-4 flex gap-1 rounded-xl border border-white/[0.07] bg-[#0c0c1e]/95 p-1 backdrop-blur">
         {(['all', 'campus', 'canton'] as const).map((t) => (
@@ -208,7 +208,7 @@ export function C2CMatchupClient({ leagueId, userId }: { leagueId: string; userI
           <h3 className="mb-2 text-[11px] font-bold uppercase text-violet-300">Campus starters</h3>
           <div className="grid gap-4 md:grid-cols-2">
             <div>
-              <p className="mb-2 text-[10px] text-violet-200/70">{youName}</p>
+              <p className="mb-2 text-[11px] text-violet-200/70">{youName}</p>
               <div className="space-y-2">
                 {yourCampus.map((p) => (
                   <C2CCampusPlayerCard key={p.playerId} player={p} />
@@ -216,7 +216,7 @@ export function C2CMatchupClient({ leagueId, userId }: { leagueId: string; userI
               </div>
             </div>
             <div>
-              <p className="mb-2 text-[10px] text-violet-200/70">{oppName}</p>
+              <p className="mb-2 text-[11px] text-violet-200/70">{oppName}</p>
               <div className="space-y-2">
                 {oppCampus.map((p) => (
                   <C2CCampusPlayerCard key={p.playerId} player={p} />
@@ -232,7 +232,7 @@ export function C2CMatchupClient({ leagueId, userId }: { leagueId: string; userI
           <h3 className="mb-2 text-[11px] font-bold uppercase text-blue-300">Canton starters</h3>
           <div className="grid gap-4 md:grid-cols-2">
             <div>
-              <p className="mb-2 text-[10px] text-blue-200/70">{youName}</p>
+              <p className="mb-2 text-[11px] text-blue-200/70">{youName}</p>
               <div className="space-y-2">
                 {yourCanton.map((p) => (
                   <C2CCantonPlayerCard key={p.playerId} player={p} />
@@ -240,7 +240,7 @@ export function C2CMatchupClient({ leagueId, userId }: { leagueId: string; userI
               </div>
             </div>
             <div>
-              <p className="mb-2 text-[10px] text-blue-200/70">{oppName}</p>
+              <p className="mb-2 text-[11px] text-blue-200/70">{oppName}</p>
               <div className="space-y-2">
                 {oppCanton.map((p) => (
                   <C2CCantonPlayerCard key={p.playerId} player={p} />
@@ -251,7 +251,7 @@ export function C2CMatchupClient({ leagueId, userId }: { leagueId: string; userI
         </section>
       ) : null}
 
-      <p className={`mt-6 text-center text-[10px] text-white/30 ${tick ? 'idp-score-tick-pulse' : ''}`}>Live scores sync with league engine</p>
+      <p className={`mt-6 text-center text-[11px] text-white/30 ${tick ? 'idp-score-tick-pulse' : ''}`}>Live scores sync with league engine</p>
 
       <Link href={`/league/${leagueId}`} className="mt-8 block text-center text-[12px] text-cyan-300/90">
         ← Back to league

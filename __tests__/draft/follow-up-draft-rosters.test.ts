@@ -18,6 +18,7 @@ const m = vi.hoisted(() => ({
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
+    league: { findUnique: vi.fn().mockResolvedValue(null) },
     draftSession: { findFirst: m.sessionFindFirst, count: m.sessionCount },
     roster: { findFirst: m.rosterFindFirst, update: m.rosterUpdate },
   },

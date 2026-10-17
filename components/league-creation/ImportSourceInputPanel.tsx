@@ -30,7 +30,7 @@ const PROVIDER_INPUT_CONFIG: Record<
   espn: {
     label: 'ESPN League ID',
     placeholder: 'e.g. 12345678, 2025:12345678, or a full ESPN league URL',
-    help: 'Paste an ESPN league ID or full league URL. Public leagues work directly; private leagues need SWID and espn_s2 cookies saved first — connect ESPN in Settings → Connected Accounts.',
+    help: 'Paste an ESPN NFL league ID, baseball league URL, or MLB:2026:leagueId. Public leagues work directly; private leagues need SWID and espn_s2 cookies saved first — connect ESPN in Settings → Connected Accounts.',
   },
   yahoo: {
     label: 'Yahoo League Key',
@@ -67,7 +67,7 @@ export function ImportSourceInputPanel({
 
   if (!available) {
     return (
-      <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-3 flex items-start gap-2">
+      <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-3 flex items-start gap-2" data-hide-in-ios-app="">
         <Info className="h-5 w-5 shrink-0 text-amber-400 mt-0.5" />
         <div className="text-sm text-white/90">
           <p className="font-medium text-amber-200">Import from {getImportProviderLabel(provider)} is coming soon</p>

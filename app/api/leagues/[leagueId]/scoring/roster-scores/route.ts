@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { resolveLeagueAccess } from '@/lib/league-access'
 import { calculateScoreFromSportConfig, isScoringStarterSlot } from '@/lib/redraft/scoringEngine'
+import { loadWeekLineups, weekSlotType } from '@/lib/redraft/weekLineupSlots'
 import type { RosterScorePlayer } from '@/lib/types/liveScoring'
 
 export const dynamic = 'force-dynamic'
@@ -40,7 +41,16 @@ export async function GET(
     select: { playerId: true, playerName: true, position: true, slotType: true, sport: true },
   })
 
-  const starters = players.filter((p) => isScoringStarterSlot(p.slotType))
+  /*
+   * ⚠ THIS IS THE BREAKDOWN BEHIND A WEEK'S MATCHUP SCORE, so it picks starters the way the matchup
+   * does: from the lineup saved for THAT week, falling back to current `slotType`
+   * (`lib/redraft/weekLineupSlots.ts`). Reading `slotType` alone listed next week's lineup under
+   * last week's total once a manager had set it.
+   */
+  const weekLineups = await loadWeekLineups(prisma, { redraftRosterIds: [rosterId], season, week })
+  const starters = players
+    .map((p) => ({ ...p, slotType: weekSlotType({ ...p, rosterId }, weekLineups) }))
+    .filter((p) => isScoringStarterSlot(p.slotType))
 
   const results: RosterScorePlayer[] = await Promise.all(
     starters.map(async (p) => {

@@ -3,6 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { getPlayersBySport } from '@/lib/sleeper-client'
 import { teamDisplayNameForSport } from '@/lib/team-abbrev'
+import { parseBirthday } from '@/lib/player-identity/birthdayRules'
 
 /**
  * Keep the Sleeper-sourced `SportsPlayer` rows current, without deleting any.
@@ -60,6 +61,43 @@ type FeedPlayer = {
   weight?: string | null
   college?: string | null
   status?: string | null
+  /** `YYYY-MM-DD`. The same field `lib/sports-data-gateway/providers/sleeper.ts` types and reads. */
+  birth_date?: string | null
+}
+
+/**
+ * Sleeper's own birthday for the player, when it is a real date — else undefined, so an update never
+ * blanks a birthday another pass already holds.
+ *
+ * 🛑 THIS FIELD ARRIVED ON EVERY PASS AND WAS THROWN AWAY. Every `source: 'sleeper'` row had
+ * `dob = NULL` (2026-09-30), so the only birthdays reachable through a Sleeper id were Rolling
+ * Insights' and TheSportsDB's — and TheSportsDB's are wrong for exactly the players that matter:
+ * Justin Jefferson 1999-01-16 (true 1999-06-16), Josh Allen 1996-03-21 (1996-05-21), Kyler Murray
+ * 1997-08-27 (1997-08-07), plus same-named OLDER players' dates (Devin Bush 1973, Jack Campbell
+ * 1958). Those wrong dates became canonical birthdays, and the ESPN linker — which corroborates a
+ * name with a birthday — correctly refused every one of those stars. Sleeper's date is the one this
+ * Sleeper-keyed row is about; see `backfillCanonicalBirthdays` for how it is promoted.
+ */
+function sleeperBirthday(p: FeedPlayer): string | undefined {
+  const raw = p.birth_date?.trim()
+  return raw && parseBirthday(raw) ? raw : undefined
+}
+
+/**
+ * The team to write on an UPDATE.
+ *
+ * 🛑 A FREE AGENT IS `null`, NOT "LEAVE IT". Sleeper reports a released player as `team: null`, and
+ * `teamDisplayNameForSport` maps null/blank to null. This was `?? undefined`, which Prisma reads as
+ * "skip the column" — so the authoritative `source='sleeper'` row of a cut player kept his old club
+ * on every pass, forever, while the create path below already wrote `?? null`.
+ *
+ * An unrecognised non-empty code is NOT a wipe: `teamDisplayNameForSport` returns it as given
+ * (never null), so it is written through exactly as before. Only a feed row that omits the key
+ * altogether is left alone — absence is not evidence of free agency.
+ */
+function sleeperTeamForUpdate(sport: string, p: FeedPlayer): string | null | undefined {
+  if (p.team === undefined) return undefined
+  return teamDisplayNameForSport(sport, p.team) ?? null
 }
 
 /** Matches the seed service's parse: a non-finite value becomes null, never 0. */
@@ -163,13 +201,14 @@ export async function refreshSleeperPlayerRows(args: {
            * caller (see the note in app/api/cron/import-players/route.ts), while THIS runs every
            * 6 hours at 1,500 players a pass and would re-introduce codes within one lap.
            */
-          team: teamDisplayNameForSport(sport, p.team) ?? undefined,
+          team: sleeperTeamForUpdate(sport, p),
           age: toFiniteNumber(p.age),
           yearsExp: toFiniteNumber(p.years_exp),
           height: p.height?.trim() || null,
           weight: p.weight?.trim() || null,
           college: p.college?.trim() || null,
           status: p.status?.trim() || null,
+          dob: sleeperBirthday(p),
           fetchedAt: now,
           expiresAt,
         },
@@ -220,6 +259,7 @@ export async function refreshSleeperPlayerRows(args: {
             imageUrl: `https://sleepercdn.com/content/nfl/players/thumb/${id}.jpg`,
             sleeperId: id,
             status: p.status?.trim() || null,
+            dob: sleeperBirthday(p) ?? null,
             source: SOURCE,
             fetchedAt: now,
             expiresAt,

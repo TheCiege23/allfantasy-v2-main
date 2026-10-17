@@ -105,7 +105,7 @@ export function DraftTimer({
             <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-cyan-400" />
           </span>
         ) : null}
-        <p className={`text-[10px] font-bold uppercase tracking-[0.2em] ${labelColor}`}>
+        <p className={`text-[11px] font-bold uppercase tracking-[0.2em] ${labelColor}`}>
           {labelText}
         </p>
       </div>
@@ -113,21 +113,21 @@ export function DraftTimer({
         {label}
       </p>
       {critical ? (
-        <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-rose-200/90">
+        <p className="mt-1 text-[11px] font-bold uppercase tracking-wider text-rose-200/90">
           Hurry!
         </p>
       ) : urgent ? (
-        <p className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-amber-200/90">
+        <p className="mt-1 text-[11px] font-semibold uppercase tracking-wider text-amber-200/90">
           Time running out
         </p>
       ) : timer.status === 'paused' ? (
-        <p className="mt-1 text-[10px] font-medium text-amber-200/60">Draft clock is paused</p>
+        <p className="mt-1 text-[11px] font-medium text-amber-200/60">Draft clock is paused</p>
       ) : timer.status === 'expired' ? (
-        <p className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-rose-300/80">
+        <p className="mt-1 text-[11px] font-semibold uppercase tracking-wider text-rose-300/80">
           Pick overdue
         </p>
       ) : timer.timerEndAt && timer.status === 'running' ? (
-        <p className="mt-1 text-[10px] text-white/35">Ends {new Date(timer.timerEndAt).toLocaleTimeString()}</p>
+        <p className="mt-1 text-[11px] text-white/35">Ends {new Date(timer.timerEndAt).toLocaleTimeString()}</p>
       ) : null}
     </div>
   )

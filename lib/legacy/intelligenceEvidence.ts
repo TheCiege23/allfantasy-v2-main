@@ -34,9 +34,13 @@ export interface TradeValuationEvidence {
 }
 
 /**
- * Classifies every player valuation that entered `calculateTradeBalance`. Players the
- * FantasyCalc lookup missed carry the flat unknown-player value (~200) — that is a FALLBACK
- * approximation and must be disclosed as such, with confidence lowered accordingly.
+ * Classifies every player valuation that entered the legacy analyzer's balance. A player marked
+ * `found: false` is a FALLBACK and must be disclosed as such, with confidence lowered accordingly.
+ *
+ * Since 2026-09-26 that balance is the one trade engine's receipt (`legacyBalanceFromReceipt`),
+ * which exists only when every asset was priced — so the legacy route no longer produces a
+ * fallback at all. `calculateTradeBalance`, whose flat ~200 for an unknown player this disclosed,
+ * was deleted.
  */
 export function buildTradeValuationEvidence(input: {
   sideAPlayers: Array<{ name: string; value: number; found: boolean }>

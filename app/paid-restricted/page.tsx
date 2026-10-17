@@ -1,5 +1,8 @@
 import Link from "next/link"
 
+import { CancelSubscriptionPanel } from "@/components/billing/CancelSubscriptionPanel"
+import { liveSubscriptions } from "@/lib/account/liveSubscriptions"
+
 import { CARD_PAID_LOCK_MESSAGE } from "@/lib/geo/cardLockCopy"
 import { RESTRICTED_STATES } from "@/lib/geo/restrictedStates"
 
@@ -7,12 +10,16 @@ export const dynamic = "force-dynamic"
 
 type PaidRestrictedParams = { state?: string; reason?: string }
 
-export default async function PaidRestrictedPage({
-  searchParams,
-}: {
-  searchParams?: Promise<PaidRestrictedParams> | PaidRestrictedParams
-}) {
+export default async function PaidRestrictedPage(
+  props: {
+    searchParams?: Promise<Promise<PaidRestrictedParams> | PaidRestrictedParams>
+  }
+) {
+  const searchParams = await props.searchParams
   const sp = searchParams instanceof Promise ? await searchParams : searchParams ?? {}
+  const subs = await liveSubscriptions()
+  const cancelPanel =
+    subs.hasStripe || subs.hasApple ? <CancelSubscriptionPanel hasStripe={subs.hasStripe} hasApple={subs.hasApple} /> : null
 
   /*
    * The card lock (lib/subscription/paidStateRefusal): this ACCOUNT, not this
@@ -24,9 +31,10 @@ export default async function PaidRestrictedPage({
     return (
       <main className="min-h-screen bg-gradient-to-b from-neutral-950 via-slate-950 to-neutral-950 px-4 py-12 text-white sm:px-6">
         <div className="mx-auto max-w-xl">
-          <img src="/af-crest.png" alt="" className="mx-auto mb-6 h-16 w-16 object-contain opacity-90" />
+          <img src="/af-crest.svg" alt="" className="mx-auto mb-6 h-16 w-16 object-contain opacity-90" />
           <h1 className="mb-3 text-center text-2xl font-black sm:text-3xl">🟡 Paid Features Aren&apos;t Available on This Account</h1>
           <p className="mb-8 text-center text-sm leading-7 text-white/70">{CARD_PAID_LOCK_MESSAGE}</p>
+          {cancelPanel}
           <div className="mb-8 text-center">
             <Link href="/core" className="inline-flex rounded-xl bg-cyan-500/90 px-6 py-3 text-sm font-semibold text-slate-950">
               Keep using AllFantasy.ai for free →
@@ -52,7 +60,7 @@ export default async function PaidRestrictedPage({
   return (
     <main className="min-h-screen bg-gradient-to-b from-neutral-950 via-slate-950 to-neutral-950 px-4 py-12 text-white sm:px-6">
       <div className="mx-auto max-w-xl">
-        <img src="/af-crest.png" alt="" className="mx-auto mb-6 h-16 w-16 object-contain opacity-90" />
+        <img src="/af-crest.svg" alt="" className="mx-auto mb-6 h-16 w-16 object-contain opacity-90" />
         <h1 className="mb-3 text-center text-2xl font-black sm:text-3xl">
           🟡 Paid Leagues Are Not Available in {stateName}
         </h1>
@@ -61,12 +69,14 @@ export default async function PaidRestrictedPage({
           paid subscriptions, or any contest involving real money from your location.
         </p>
 
+        {cancelPanel}
+
         <div className="mb-8 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-5 text-sm">
           <p className="mb-3 font-semibold text-emerald-200">What you CAN do:</p>
           <ul className="space-y-2 text-emerald-100/90">
             <li>✅ Create a free account</li>
             <li>✅ Join and participate in free leagues</li>
-            <li>✅ Use AI tools (Chimmy AI, Trade Analyzer, etc.)</li>
+            <li>✅ Use Chimmy and the analysis tools (Trade Analyzer, etc.)</li>
             <li>✅ Draft, set lineups, manage rosters</li>
             <li>✅ Compete for fun with friends</li>
           </ul>
@@ -94,7 +104,7 @@ export default async function PaidRestrictedPage({
           <p className="mb-2 font-semibold text-white/80">Why is this restricted?</p>
           <p>
             {meta?.details ??
-              `${stateName} state law currently classifies paid fantasy sports contests as a form of illegal gambling. We comply with all state laws.`}
+              `${stateName} restricts paid fantasy sports. Free features remain available. We comply with all state laws.`}
           </p>
           <p className="mt-3">
             <strong>Legal citation:</strong> {meta?.legalBasis ?? "See state gaming regulations."}

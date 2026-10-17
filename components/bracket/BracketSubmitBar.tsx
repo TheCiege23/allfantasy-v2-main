@@ -155,11 +155,11 @@ export function BracketSubmitBar({
           <div className="flex items-center gap-3 min-w-0 flex-1">
             <div className="hidden sm:flex flex-col gap-1 min-w-0">
               <div className="flex items-center gap-2">
-                <span className="text-[10px] font-semibold uppercase tracking-[0.12em]" style={{ color: "rgba(148,163,184,0.9)" }}>
+                <span className="text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: "rgba(148,163,184,0.9)" }}>
                   Bracket Status
                 </span>
                 <span
-                  className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-semibold"
+                  className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
                   style={{
                     background: "rgba(15,23,42,0.9)",
                     border: "1px solid rgba(148,163,184,0.6)",
@@ -187,11 +187,11 @@ export function BracketSubmitBar({
 
             <div className="flex sm:hidden flex-col gap-0.5 min-w-0">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-[10px] font-semibold uppercase tracking-[0.12em]" style={{ color: "rgba(148,163,184,0.9)" }}>
+                <span className="text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: "rgba(148,163,184,0.9)" }}>
                   Status
                 </span>
                 <span
-                  className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                  className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold"
                   style={{
                     background: "rgba(15,23,42,0.9)",
                     border: "1px solid rgba(148,163,184,0.6)",
@@ -201,7 +201,7 @@ export function BracketSubmitBar({
                   {statusLabel(normalizedStatus)}
                 </span>
               </div>
-              <div className="text-[10px]" style={{ color: "rgba(148,163,184,0.9)" }}>
+              <div className="text-[11px]" style={{ color: "rgba(148,163,184,0.9)" }}>
                 {totalPicks}/{totalGames} picks · {completionPct}%
               </div>
             </div>
@@ -209,7 +209,7 @@ export function BracketSubmitBar({
 
           {/* Center: progress + lock countdown */}
           <div className="hidden sm:flex flex-col gap-1 flex-1 max-w-xs">
-            <div className="flex items-center justify-between text-[10px]">
+            <div className="flex items-center justify-between text-[11px]">
               <span style={{ color: "rgba(148,163,184,0.9)" }}>Completion</span>
               <span style={{ color: "rgba(226,232,240,0.9)" }}>{completionPct}%</span>
             </div>
@@ -224,7 +224,7 @@ export function BracketSubmitBar({
               />
             </div>
             {lockAtIso && (
-              <div className="flex items-center gap-1 text-[10px]" style={{ color: "rgba(148,163,184,0.9)" }}>
+              <div className="flex items-center gap-1 text-[11px]" style={{ color: "rgba(148,163,184,0.9)" }}>
                 <Clock className="w-3 h-3" />
                 <span>
                   {lockCountdown === "Locked"
@@ -238,12 +238,12 @@ export function BracketSubmitBar({
           {/* Right: CTA */}
           <div className="flex items-center gap-2">
             {error && (
-              <span className="hidden sm:inline text-[10px]" style={{ color: "rgba(248,113,113,0.95)" }} data-testid="bracket-submit-error">
+              <span className="hidden sm:inline text-[11px]" style={{ color: "rgba(248,113,113,0.95)" }} data-testid="bracket-submit-error">
                 {error}
               </span>
             )}
             {success && !error && (
-              <span className="hidden sm:inline text-[10px]" style={{ color: "rgba(52,211,153,0.95)" }} data-testid="bracket-submit-success">
+              <span className="hidden sm:inline text-[11px]" style={{ color: "rgba(52,211,153,0.95)" }} data-testid="bracket-submit-success">
                 {t("bracket.entry.submit.success")}
               </span>
             )}

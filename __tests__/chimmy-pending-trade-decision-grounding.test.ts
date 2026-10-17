@@ -1,22 +1,21 @@
+/**
+ * Pending incoming trades in Chimmy's prompt carry the ONE grade (design step 7, 2026-09-27): each
+ * proposal goes through `evaluateStoredTrade`, the path every trade screen uses — never the
+ * proposal-time snapshot letter, and never a letter Chimmy makes up.
+ */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+vi.mock('server-only', () => ({}))
 
 const mocks = vi.hoisted(() => ({
   proposalFindMany: vi.fn(),
-  runTradeShadowForProposal: vi.fn(),
-  shouldRunTradeLive: vi.fn(),
-  toTradeCard: vi.fn(),
+  evaluate: vi.fn(),
 }))
 
 vi.mock('@/lib/prisma', () => ({
   prisma: { redraftTradeProposal: { findMany: mocks.proposalFindMany } },
 }))
-vi.mock('@/lib/decision-os/trade/shadow', () => ({
-  runTradeShadowForProposal: mocks.runTradeShadowForProposal,
-  shouldRunTradeLive: mocks.shouldRunTradeLive,
-}))
-vi.mock('@/lib/decision-os/trade/tradeCardAdapter', () => ({
-  toTradeCard: mocks.toTradeCard,
-}))
+vi.mock('@/lib/decision-os/trade/evaluateStoredTrade', () => ({ evaluateStoredTrade: mocks.evaluate }))
 
 import { buildPendingTradeDecisionContext } from '@/lib/chimmy-trade/pendingTradeDecisionGrounding'
 
@@ -32,49 +31,41 @@ function makeProposal(overrides: Record<string, unknown> = {}) {
     createdAt: new Date('2026-08-25T00:00:00.000Z'),
     proposerRoster: { teamName: 'Rival FC', ownerName: 'Rival' },
     assets: [
-      {
-        fromRosterId: 'roster-them',
-        toRosterId: 'roster-me',
-        assetType: 'player',
-        playerId: 'p1',
-        playerName: 'Incoming Guy',
-        metadata: {},
-      },
-      {
-        fromRosterId: 'roster-me',
-        toRosterId: 'roster-them',
-        assetType: 'player',
-        playerId: 'p2',
-        playerName: 'Outgoing Guy',
-        metadata: {},
-      },
+      { fromRosterId: 'roster-them', toRosterId: 'roster-me', assetType: 'player', playerId: 'p1', playerName: 'Incoming Guy', metadata: {} },
+      { fromRosterId: 'roster-me', toRosterId: 'roster-them', assetType: 'player', playerId: 'p2', playerName: 'Outgoing Guy', metadata: {} },
     ],
-    valueSnapshot: { payload: { some: 'snapshot' }, grade: 'B', confidenceScore: 80 },
     ...overrides,
   }
 }
 
-function makeDecision(completeness: number) {
+function evaluated(over: Record<string, unknown> = {}) {
   return {
-    decision_id: 'dec-1',
-    data_completeness: completeness,
-    uncertainty_sources: completeness < 100 ? ['projections'] : [],
+    ok: true,
+    receipt: {
+      receiptId: 'rcpt_pending',
+      grade: { graded: true, letter: 'B', label: 'Slightly favors you', giveValue: 4000, getValue: 4600 },
+      partnerGrade: { graded: true, letter: 'C-' },
+      canonical: {
+        proposerRosterId: 'roster-me',
+        receiverRosterId: 'roster-them',
+        participants: [
+          { rosterId: 'roster-me', rosterImpact: { week: 4, startingPointsBefore: 112, startingPointsAfter: 115.5, startingPointsDelta: 3.5 } },
+          { rosterId: 'roster-them', rosterImpact: { week: 4, startingPointsBefore: 120, startingPointsAfter: 110, startingPointsDelta: -10 } },
+        ],
+      },
+      ...over,
+    },
+    trade: {},
+    perspectiveTeamId: 'roster-me',
+    viewerInTrade: true,
   }
 }
 
 describe('buildPendingTradeDecisionContext', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mocks.shouldRunTradeLive.mockReturnValue(true)
-    mocks.toTradeCard.mockReturnValue({
-      title: 'You were offered a trade.',
-      subtitle: 'It moves value toward you.',
-      detail: 'Consider accepting.',
-      grade: 'B',
-      fairnessScore: 72,
-      legal: true,
-      proposalId: 'prop-1',
-    })
+    mocks.proposalFindMany.mockResolvedValue([makeProposal()])
+    mocks.evaluate.mockResolvedValue(evaluated())
   })
 
   it('returns null when nothing is pending, so the prompt gains no empty block', async () => {
@@ -82,116 +73,94 @@ describe('buildPendingTradeDecisionContext', () => {
     expect(await buildPendingTradeDecisionContext('lg1', 'user-1')).toBeNull()
   })
 
-  it('only looks at trades awaiting this user, not ones they sent', async () => {
-    mocks.proposalFindMany.mockResolvedValue([])
+  it('only looks at trades awaiting this user, not ones they sent — and never reads the snapshot letter', async () => {
     await buildPendingTradeDecisionContext('lg1', 'user-1')
+    const args = mocks.proposalFindMany.mock.calls[0]![0]
+    expect(args.where).toMatchObject({ leagueId: 'lg1', status: 'pending', receiverRoster: { ownerId: 'user-1' } })
+    // The proposal-time `valueSnapshot.grade` is its own A+..F scale; it is not even selected.
+    expect(args.select).not.toHaveProperty('valueSnapshot')
+  })
 
-    const where = mocks.proposalFindMany.mock.calls[0][0].where
-    expect(where).toMatchObject({
+  it('evaluates each proposal through the one engine, as the asker, on its own surface', async () => {
+    await buildPendingTradeDecisionContext('lg1', 'user-1')
+    expect(mocks.evaluate).toHaveBeenCalledWith({
       leagueId: 'lg1',
-      status: 'pending',
-      receiverRoster: { ownerId: 'user-1' },
+      ref: { kind: 'redraft', proposalId: 'prop-1' },
+      userId: 'user-1',
+      surface: 'chimmy-pending',
     })
   })
 
-  it('relays the Decision OS evaluation for an incoming trade', async () => {
-    mocks.proposalFindMany.mockResolvedValue([makeProposal()])
-    mocks.runTradeShadowForProposal.mockResolvedValue({
-      ran: true,
-      proposalId: 'prop-1',
-      result: { decision: makeDecision(90) },
-    })
-
+  it('relays the one grade, both letters, the values, this week’s lineup and the receipt', async () => {
     const out = await buildPendingTradeDecisionContext('lg1', 'user-1')
-
-    expect(out).toContain('PENDING INCOMING TRADES (1)')
-    expect(out).toContain('Rival FC')
-    expect(out).toContain('you receive [Incoming Guy]')
-    expect(out).toContain('you send [Outgoing Guy]')
-    expect(out).toContain('Decision OS (decision dec-1)')
-    expect(out).toContain('grade B')
-    expect(out).toContain('data completeness 90/100')
+    expect(out).toContain('Proposal prop-1 from Rival FC: you receive [Incoming Guy], you send [Outgoing Guy].')
+    expect(out).toContain('you B — Slightly favors you; Rival FC C-.')
+    expect(out).toContain('League value: you send 4,000, you receive 4,600.')
+    expect(out).toContain("week 4 projections under this league's rules: 112.0 before, 115.5 after (+3.5). One week, not the season.")
+    expect(out).toContain('Evaluation receipt: rcpt_pending.')
   })
 
-  /**
-   * R4b.7 (P4) — this block is composed into the chat prompt separately from the packet (see
-   * the file's own header), so a framing-only rule stated ONLY in the packet's serializer would
-   * never reach a turn built from this surface. Restated here for the same reason it exists there.
-   */
+  it('tells the chat route the letters the one engine gave, for its answer check', async () => {
+    const onGrade = vi.fn()
+    await buildPendingTradeDecisionContext('lg1', 'user-1', { onGrade })
+    expect(onGrade).toHaveBeenCalledWith({
+      letters: ['B', 'C-'],
+      summary: 'AllFantasy grades the offer from Rival FC (you receive [Incoming Guy], you send [Outgoing Guy]): B for you, C- for Rival FC.',
+    })
+    // A refused or withheld grade gives no letters to allow.
+    onGrade.mockClear()
+    mocks.evaluate.mockResolvedValue({ ok: false, refusal: { code: 'not_found', reason: 'gone' } })
+    await buildPendingTradeDecisionContext('lg1', 'user-1', { onGrade })
+    expect(onGrade).not.toHaveBeenCalled()
+  })
+
   it('🛑 states the psychology framing-only rule, every time — this surface never runs through the packet serializer', async () => {
-    mocks.proposalFindMany.mockResolvedValue([makeProposal()])
-    mocks.runTradeShadowForProposal.mockResolvedValue({
-      ran: true,
-      proposalId: 'prop-1',
-      result: { decision: makeDecision(90) },
-    })
-
     const out = await buildPendingTradeDecisionContext('lg1', 'user-1')
-    expect(out).toContain('never to argue the grade above should be different than it is')
+    expect(out).toMatch(/never to argue the grade above should be different/)
+    expect(out).toMatch(/AllFantasy never accepts, rejects, counters or vetoes a trade/)
   })
 
-  /*
-   * The known way this surface lies: a letter produced from almost nothing,
-   * which reads as a considered verdict.
-   */
-  it('withholds the grade and says why when completeness is low', async () => {
-    mocks.proposalFindMany.mockResolvedValue([makeProposal()])
-    mocks.runTradeShadowForProposal.mockResolvedValue({
-      ran: true,
-      proposalId: 'prop-1',
-      result: { decision: makeDecision(35) },
-    })
-
+  it('a trade the engine refuses says why, and carries no letter', async () => {
+    mocks.evaluate.mockResolvedValue({ ok: false, refusal: { code: 'asset_moved', reason: 'Incoming Guy is no longer on the roster sending him.' } })
     const out = await buildPendingTradeDecisionContext('lg1', 'user-1')
-
-    expect(out).toContain('LOW DATA (35/100)')
-    expect(out).not.toContain('grade B')
+    expect(out).toContain('Grade: NOT AVAILABLE — Incoming Guy is no longer on the roster sending him. Do not grade it yourself.')
+    expect(out).not.toMatch(/you [A-F][+-]? —/)
   })
 
-  it('does not invent a grade when no value snapshot was captured', async () => {
-    mocks.proposalFindMany.mockResolvedValue([makeProposal({ valueSnapshot: null })])
-
+  it('a withheld grade says why, and carries no letter', async () => {
+    mocks.evaluate.mockResolvedValue(evaluated({ grade: { graded: false, reason: 'Outgoing Guy has no value on this league’s chart.' } }))
     const out = await buildPendingTradeDecisionContext('lg1', 'user-1')
-
-    expect(out).toContain('Decision OS: NOT AVAILABLE')
-    expect(mocks.runTradeShadowForProposal).not.toHaveBeenCalled()
+    expect(out).toContain('Grade: NOT GRADED — Outgoing Guy has no value on this league’s chart. Do not grade it yourself.')
   })
 
-  it('honours the DECISION_OS_TRADE_LIVE kill switch and labels the snapshot as historical', async () => {
-    mocks.shouldRunTradeLive.mockReturnValue(false)
-    mocks.proposalFindMany.mockResolvedValue([makeProposal()])
-
+  it('no receipt (before the receipts migration) is simply not named', async () => {
+    mocks.evaluate.mockResolvedValue(evaluated({ receiptId: null }))
     const out = await buildPendingTradeDecisionContext('lg1', 'user-1')
-
-    expect(mocks.runTradeShadowForProposal).not.toHaveBeenCalled()
-    expect(out).toContain('Decision OS: not enabled')
-    expect(out).toContain('never as a current recommendation')
+    expect(out).not.toMatch(/Evaluation receipt/)
+    expect(out).toContain('you B')
   })
 
-  /*
-   * "Could not read" must never render as "you have none" — that is the same
-   * confident-wrong failure the league-grounding work closed.
-   */
+  it('does not depend on the Decision OS kill switch — the one grade shows everywhere', async () => {
+    const before = process.env.DECISION_OS_TRADE_LIVE
+    delete process.env.DECISION_OS_TRADE_LIVE
+    try {
+      expect(await buildPendingTradeDecisionContext('lg1', 'user-1')).toContain('you B')
+    } finally {
+      if (before !== undefined) process.env.DECISION_OS_TRADE_LIVE = before
+    }
+  })
+
   it('says the inbox was unreadable rather than reporting no trades', async () => {
-    mocks.proposalFindMany.mockRejectedValue(new Error('connection lost'))
-
+    mocks.proposalFindMany.mockRejectedValue(new Error('db down'))
     const out = await buildPendingTradeDecisionContext('lg1', 'user-1')
-
-    expect(out).toContain('could not be read')
-    expect(out).toContain('Do NOT tell the user whether they have trades waiting')
+    expect(out).toMatch(/could not be read just now/)
+    expect(out).toMatch(/Do NOT tell the user whether they have trades waiting/)
   })
 
-  it('does not substitute its own grade when the evaluator returns nothing', async () => {
-    mocks.proposalFindMany.mockResolvedValue([makeProposal()])
-    mocks.runTradeShadowForProposal.mockResolvedValue({
-      ran: false,
-      proposalId: 'prop-1',
-      error: 'inputs_unavailable',
-    })
-
+  it('does not substitute its own grade when the evaluator throws', async () => {
+    mocks.evaluate.mockRejectedValue(new Error('boom'))
     const out = await buildPendingTradeDecisionContext('lg1', 'user-1')
-
-    expect(out).toContain('could not evaluate (inputs_unavailable)')
-    expect(out).toContain('Do not substitute your own grade')
+    expect(out).toContain('Grade: evaluation failed. Do not substitute your own grade.')
+    expect(out).not.toMatch(/you [A-F][+-]? —/)
   })
 })

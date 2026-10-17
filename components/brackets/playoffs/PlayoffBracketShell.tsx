@@ -400,7 +400,7 @@ export default function PlayoffBracketShell({ initialView }: Props) {
 
           {canUseAutofillResults ? (
             <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-3">
-              <div className="mb-2 inline-flex items-center gap-1.5 rounded-full bg-rose-200/70 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-rose-900">
+              <div className="mb-2 inline-flex items-center gap-1.5 rounded-full bg-rose-200/70 px-2 py-0.5 text-[11px] font-black uppercase tracking-wide text-rose-900">
                 Test-mode only
               </div>
               <button

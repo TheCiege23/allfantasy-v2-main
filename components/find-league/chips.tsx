@@ -61,7 +61,7 @@ export function CommissionerTrustChip({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider",
+        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider",
         className
       )}
       style={{
@@ -91,7 +91,7 @@ export function FitTagChip({
         : { bg: "rgba(148,163,184,0.12)", color: "rgb(203,213,225)" }
   return (
     <span
-      className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium"
+      className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium"
       style={{
         background: palette.bg,
         color: palette.color,
@@ -107,7 +107,7 @@ export function OpenSeatsTag({ seats }: { seats: number | null }) {
   if (seats == null || seats <= 0) return null
   return (
     <span
-      className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider"
+      className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider"
       style={{
         background: "rgba(34,197,94,0.12)",
         color: "rgb(134,239,172)",
@@ -159,7 +159,7 @@ export function DifficultyTierChip({
     <span
       data-testid="difficulty-tier-chip"
       className={cn(
-        "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider",
+        "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider",
         className
       )}
       style={{ background: bg, color, border: "1px solid var(--border)" }}
@@ -207,7 +207,7 @@ export function ActivityTierChip({
     <span
       data-testid="activity-tier-chip"
       className={cn(
-        "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider",
+        "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider",
         className
       )}
       style={{ background: bg, color, border: "1px solid var(--border)" }}

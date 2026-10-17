@@ -1,4 +1,4 @@
-import { TIER_0_UNTOUCHABLES, TIER_1_CORNERSTONES, TieredPlayer } from './dynasty-tiers';
+import { findPlayerTier } from './dynasty-tiers';
 
 // ============================================
 // AI PROMPT TEMPLATES (Controlled AI Layer)
@@ -1878,12 +1878,13 @@ export function identifyCornerstones(
   playerValues: Map<string, number> | Record<string, number>
 ): string[] {
   const cornerstones: string[] = [];
-  const allCornerstones = [...TIER_0_UNTOUCHABLES, ...TIER_1_CORNERSTONES];
-  const cornerstoneNames = new Set(allCornerstones.map(p => p.name.toLowerCase()));
   
   for (const player of roster) {
     const nameLower = player.name.toLowerCase();
-    if (cornerstoneNames.has(nameLower)) {
+    // Tier 0/1 by `findPlayerTier`: exact name AND position group. A bare lowercase-name set made
+    // LB Justin Jefferson a cornerstone and an untouchable (fixed 2026-10-12).
+    const tiered = findPlayerTier(player.name, player.pos);
+    if (tiered && tiered.tier <= 1) {
       cornerstones.push(player.name);
       continue;
     }
@@ -1902,9 +1903,8 @@ export function identifyCornerstones(
 export function identifyUntouchables(
   roster: { name: string; pos: string }[]
 ): string[] {
-  const untouchableNames = new Set(TIER_0_UNTOUCHABLES.map(p => p.name.toLowerCase()));
   return roster
-    .filter(p => untouchableNames.has(p.name.toLowerCase()))
+    .filter(p => findPlayerTier(p.name, p.pos)?.tier === 0)
     .map(p => p.name);
 }
 
@@ -1962,9 +1962,8 @@ export function validateCornerstoneProtection(
   }
   
   const receivedCornerstones = assetsReceived.filter(a => 
-    [...TIER_0_UNTOUCHABLES, ...TIER_1_CORNERSTONES].some(
-      c => c.name.toLowerCase() === a.name.toLowerCase()
-    )
+    // No position on these assets, so exact normalized name only — never a substring.
+    (findPlayerTier(a.name)?.tier ?? 99) <= 1
   );
   
   if (receivedCornerstones.length > 0) {

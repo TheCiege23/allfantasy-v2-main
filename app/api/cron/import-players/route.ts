@@ -61,6 +61,15 @@ const TAIL_PHASE_RESERVE_MS = 60_000
  */
 const PSYCH_MIN_RUNWAY_MS = 90_000
 
+/**
+ * The ESPN college basketball pass on the `?intel=1` tick: at most this long, and not at all with
+ * less than the minimum (one roster plus its headshot checks). NOT MEASURED in production yet —
+ * sized from the probe (each request well under a second, ~15-20 HEADs a school). Tune from the
+ * `cron-espn-ncaab-rosters` heartbeat's `durationMs` and `rosters.schoolsFetched`.
+ */
+const ESPN_NCAAB_MAX_MS = 45_000
+const ESPN_NCAAB_MIN_MS = 15_000
+
 async function handle(req: NextRequest) {
   const url = new URL(req.url)
   const sportParam = url.searchParams.get("sport")
@@ -150,6 +159,20 @@ async function handle(req: NextRequest) {
        * problem.
        */
       const { withSyncJobRun } = await import('@/lib/production-health/syncJobRunTelemetry')
+      const { ingestMlbFantraxIdentities } = await import('@/lib/player-identity/ingestMlbFantraxIdentities')
+      // The dedicated intel tick has runway for this weekly, batched identity refresh.
+      // It must run before the long feeds, rather than starve at the main import's tail.
+      await withSyncJobRun(
+        { jobName: 'mlb-fantrax-identities', sport: 'MLB', provider: 'fantrax', trigger: 'cron' },
+        () => ingestMlbFantraxIdentities(),
+        result => ({ rowsWritten: result.updated, metadata: result }),
+      ).catch(error => console.error('[cron/import-players] MLB Fantrax identities:', error instanceof Error ? error.message : 'refresh failed'))
+      const { ingestNcaafFantraxIdentities } = await import('@/lib/player-identity/ingestNcaafFantraxIdentities')
+      await withSyncJobRun(
+        { jobName: 'ncaaf-fantrax-identities', sport: 'NCAAF', provider: 'fantrax', trigger: 'cron' },
+        () => ingestNcaafFantraxIdentities(),
+        result => ({ rowsWritten: result.updated, metadata: result }),
+      ).catch(error => console.error('[cron/import-players] NCAAF Fantrax identities:', error instanceof Error ? error.message : 'refresh failed'))
       const { refreshDevyIntelSources } = await import('@/lib/devy/devyIntelRefresh')
       const { refreshDevyHeadshots, refreshCollegeSportsPlayerHeadshots } = await import(
         '@/lib/devy/devyHeadshotRefresh',
@@ -196,13 +219,86 @@ async function handle(req: NextRequest) {
             error: err instanceof Error ? err.message : String(err),
           }))
 
+          /*
+           * The CFBD team directory: every college reader's identity index, and since
+           * 2026-09-30 its stadiums too (My Team's college weather, the weather prewarm).
+           * It had NO scheduled writer before this — see `ingestCollegeTeamsIfDue`.
+           * Weekly-gated inside the helper, and placed before headshots by the rule above:
+           * it changes what the product knows. Needs room for one CFBD fetch and one
+           * directory write, so it defers rather than starting on a nearly spent budget.
+           */
+          const { ingestCollegeTeamsIfDue } = await import('@/lib/sport-teams/ingestCollegeTeams')
+          const COLLEGE_TEAMS_MIN_MS = 30_000
+          const collegeTeams =
+            budget.remainingMs() < COLLEGE_TEAMS_MIN_MS
+              ? { skipped: 'deferred: run budget too low to start' }
+              : await ingestCollegeTeamsIfDue({ deadlineAt: Date.now() + budget.remainingMs() - 15_000 }).catch(
+                  (err: unknown) => ({ error: err instanceof Error ? err.message.slice(0, 200) : String(err) }),
+                )
+
+          /*
+           * The NCAAF skill-player pool on the CURRENT season's FBS rosters. Its only writer
+           * used to be a hand-run script last run against the 2025 rosters, which left 593
+           * players on 2026 rosters (461 freshmen) with no pool row at all. After the team
+           * directory, whose list it reads; before the headshots, which fill the rows it adds.
+           * Weekly-gated and resumable, so a short budget defers rows rather than redoing them.
+           */
+          const { refreshCollegeRosterPoolIfDue } = await import('@/lib/ncaaf/cfbdRosterPool')
+          const COLLEGE_ROSTER_POOL_MIN_MS = 30_000
+          const collegeRosterPool =
+            budget.remainingMs() < COLLEGE_ROSTER_POOL_MIN_MS
+              ? { skipped: 'deferred: run budget too low to start' }
+              : await refreshCollegeRosterPoolIfDue({ deadlineAt: Date.now() + budget.remainingMs() - 15_000 }).catch(
+                  (err: unknown) => ({ error: err instanceof Error ? err.message.slice(0, 200) : String(err) }),
+                )
+
           const devyHeadshots = await refreshDevyHeadshots(budget)
           // SportsPlayer is what the player cards and search actually read —
           // the devy pool is 1,718 of 73,883 NCAAF rows.
           const collegeHeadshots = await refreshCollegeSportsPlayerHeadshots(budget)
-          return { devyIntelSources, devyAdp, devyHeadshots, collegeHeadshots }
+          return { devyIntelSources, devyAdp, collegeTeams, collegeRosterPool, devyHeadshots, collegeHeadshots }
         },
       )
+
+      /*
+       * ESPN college basketball rosters -> identities + headshots (lib/espn/ncaabEspnIngest.ts).
+       *
+       * ⚠ BOUNDED SO IT CANNOT STARVE THE PSYCH ROTATION BELOW. That rotation needs
+       * PSYCH_MIN_RUNWAY_MS and is the reason this tick exists, so this phase takes at most
+       * ESPN_NCAAB_MAX_MS and only what is left above that floor. Roughly 40 schools a tick, four
+       * ticks a day: every one of 362 is revisited about every two days.
+       *
+       * ITS OWN HEARTBEAT, so "out of season", "no runway" and "ESPN blocked us" each leave a row
+       * the freshness check can read, instead of looking like a tick that never fired.
+       */
+      const espnNcaab = await withSyncJobRun(
+        { jobName: 'cron-espn-ncaab-rosters', jobScope: 'NCAAB', trigger: 'cron' },
+        async () => {
+          const { isNcaabRosterSeason, syncEspnNcaabTeamMapIfDue, syncEspnNcaabRosters } = await import(
+            '@/lib/espn/ncaabEspnIngest'
+          )
+          if (!isNcaabRosterSeason()) return { skipped: 'out of season' as const }
+          const allowanceMs = Math.min(ESPN_NCAAB_MAX_MS, budget.remainingMs() - PSYCH_MIN_RUNWAY_MS)
+          if (allowanceMs < ESPN_NCAAB_MIN_MS) return { skipped: 'no runway' as const, remainingMs: budget.remainingMs() }
+          const deadlineAt = Date.now() + allowanceMs
+          const teamMap = await syncEspnNcaabTeamMapIfDue()
+          const rosters = teamMap.skipped === 'blocked' ? null : await syncEspnNcaabRosters({ deadlineAt })
+          return { teamMap, rosters }
+        },
+        (r) =>
+          'skipped' in r
+            ? { warnings: r.skipped === 'out of season' ? [] : [`skipped: ${r.skipped}`] }
+            : {
+                rowsWritten: (r.rosters?.identitiesCreated ?? 0) + (r.rosters?.headshotsWritten ?? 0),
+                warnings: [
+                  ...(r.teamMap.skipped === 'blocked' || r.rosters?.blocked ? ['ESPN returned 403 — pass stopped'] : []),
+                  ...(r.rosters && r.rosters.errors > 0 ? [`${r.rosters.errors} school/row errors`] : []),
+                ],
+                metadata: { teamMap: { ...r.teamMap, unmatched: r.teamMap.unmatched.length }, rosters: r.rosters },
+              },
+      ).catch((err: unknown) => ({
+        error: err instanceof Error ? err.message.slice(0, 160) : 'espn ncaab pass failed',
+      }))
 
       /*
        * 🛑 THE PSYCH PROFILE ROTATION RUNS ON THIS TICK, NOT IN THE MAIN RUN — BY MEASUREMENT.
@@ -266,6 +362,7 @@ async function handle(req: NextRequest) {
         ok: true,
         mode: 'intel',
         ...outcome,
+        espnNcaab,
         psychProfiles,
         durationMs: Date.now() - startedAt,
       })
@@ -321,6 +418,8 @@ async function handle(req: NextRequest) {
           staleFallbackApplied: result.staleFallbackApplied,
           pagedSeeds: result.pagedSeeds,
           seedCursors: result.seedCursors,
+          // Rows whose `injuryStatus` the importer cleared, and why — see sports-data-importer.ts.
+          injuryCleanup: result.injuryCleanup,
         }),
       },
     })
@@ -679,13 +778,21 @@ async function handle(req: NextRequest) {
       deferredPhases.push('canonicalBirthdays')
     } else if (!dryRun && wantsNfl) {
       try {
-        const { backfillCanonicalBirthdays } = await import(
+        const { backfillCanonicalBirthdays, promoteSleeperBirthdays } = await import(
           '@/lib/player-identity/backfillCanonicalBirthdays'
         )
-        canonicalBirthdays = await backfillCanonicalBirthdays({
+        /*
+         * SLEEPER FIRST, and it may correct: a canonical player's Sleeper identity IS Sleeper's player,
+         * so Sleeper's birthday is his by id. TheSportsDB then only fills players Sleeper sent none for
+         * — its dates put Justin Jefferson, Josh Allen and Kyler Murray on the wrong birthday and the
+         * ESPN linker (next phase) refused all three. See `promoteSleeperBirthdays`.
+         */
+        const sleeper = await promoteSleeperBirthdays({ sport: 'NFL', isExhausted: () => budget.exhausted() })
+        const thesportsdb = await backfillCanonicalBirthdays({
           sport: 'NFL',
           isExhausted: () => budget.exhausted(),
         })
+        canonicalBirthdays = { sleeper, thesportsdb }
       } catch (dobErr) {
         /* Enrichment must never fail the import it rides on. */
         canonicalBirthdays = {
@@ -708,6 +815,27 @@ async function handle(req: NextRequest) {
         /* Enrichment must never fail the import it rides on. */
         espnIdentities = {
           error: espnErr instanceof Error ? espnErr.message.slice(0, 160) : 'espn identity ingest failed',
+        }
+      }
+    }
+
+    /*
+     * Fleaflicker / MFL -> Sleeper id bridge, filled from the FantasyCalc values already cached in
+     * Postgres (no provider call). The Player Finder reads those leagues only through this bridge
+     * (bridgedRosterIds.ts); left unscheduled, the columns stay empty and the leagues stay unread —
+     * the "scheduled writer is the part that is easy to skip" rule from CLAUDE.md.
+     */
+    let identityBridge: unknown = { skipped: true }
+    if (!dryRun && wantsNfl && budget.exhausted()) {
+      deferredPhases.push('identityBridge')
+    } else if (!dryRun && wantsNfl) {
+      try {
+        const { bridgeIdentityMapFromFantasyCalcCache } = await import('@/lib/player-identity/fantasyCalcIdentityBridge')
+        identityBridge = await bridgeIdentityMapFromFantasyCalcCache({ isExhausted: () => budget.exhausted() })
+      } catch (bridgeErr) {
+        /* Enrichment must never fail the import it rides on. */
+        identityBridge = {
+          error: bridgeErr instanceof Error ? bridgeErr.message.slice(0, 160) : 'identity bridge failed',
         }
       }
     }
@@ -748,6 +876,7 @@ async function handle(req: NextRequest) {
               staleFallbackApplied: result.staleFallbackApplied,
               pagedSeeds: result.pagedSeeds,
               seedCursors: result.seedCursors,
+              injuryCleanup: result.injuryCleanup,
               // [] means "every phase ran", which is a different fact from a missing field.
               deferredPhases,
               budgetExhausted: budget.exhausted(),
@@ -776,6 +905,7 @@ async function handle(req: NextRequest) {
       sleeperRows,
       canonicalBirthdays,
       espnIdentities,
+      identityBridge,
       sports: result.sports,
       identity,
       staleFallbackApplied: result.staleFallbackApplied,

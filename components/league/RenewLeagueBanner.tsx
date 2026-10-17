@@ -11,6 +11,7 @@ import type { LeagueLifecycleState } from '@prisma/client'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { RenewLeagueModal } from '@/components/league-settings/RenewLeagueModal'
 import { isSeasonOverForRenewal } from '@/lib/leagues/renewalPolicy'
+import { isImportedPlatform } from '@/lib/league/isNativeLeague'
 
 interface Props {
   leagueId: string
@@ -20,6 +21,13 @@ interface Props {
   /** Merged from settings (dynasty / generic season phase) */
   seasonPhase?: string
   lifecycleState?: LeagueLifecycleState | string | null
+  /**
+   * 🛑 AN IMPORTED LEAGUE IS RENEWED ON ITS PLATFORM, NEVER HERE. This banner showed to every
+   * commissioner whose season was over, and renewing an imported Sleeper league moved the row to next
+   * season while it still pointed at last season's Sleeper league — after which every sync refused it
+   * for a season mismatch. Sleeper renewals are now followed automatically (followRenewedLeagues.ts).
+   */
+  platform?: string | null
 }
 
 export function RenewLeagueBanner({
@@ -29,6 +37,7 @@ export function RenewLeagueBanner({
   leagueStatus,
   seasonPhase,
   lifecycleState,
+  platform,
 }: Props) {
   const { t } = useLanguage()
   const [showModal, setShowModal] = useState(false)
@@ -38,7 +47,8 @@ export function RenewLeagueBanner({
 
   const nextSeason = nextSeasonFromApi
 
-  const isSeasonOver = isSeasonOverForRenewal({
+  const imported = isImportedPlatform(platform)
+  const isSeasonOver = !imported && isSeasonOverForRenewal({
     status: leagueStatus,
     dynastySeasonPhase: seasonPhase,
     seasonPhase,

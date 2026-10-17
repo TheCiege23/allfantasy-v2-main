@@ -421,7 +421,7 @@ export function DraftRoomShell({
                     type="button"
                     onClick={() => onMobileTabChange(id)}
                     data-testid={`draft-mobile-tab-${id}`}
-                    className={`inline-flex min-h-[38px] shrink-0 touch-manipulation items-center gap-1.5 rounded-full border px-3 text-[10px] font-medium transition active:scale-[0.98] ${
+                    className={`inline-flex min-h-[38px] shrink-0 touch-manipulation items-center gap-1.5 rounded-full border px-3 text-[11px] font-medium transition active:scale-[0.98] ${
                       mobileTab === id
                         ? 'border-cyan-400/45 bg-cyan-500/15 text-cyan-100'
                         : 'border-white/15 bg-black/20 text-white/70'

@@ -52,7 +52,7 @@ export function ScheduleView({ schedule }: { schedule: RedraftScheduleClient | n
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#ffb8d1]/70">Schedule</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb8d1]/70">Schedule</p>
           <h3 className="text-[15px] font-semibold text-white">
             Week {visibleWeek?.week ?? schedule.currentWeek} matchups
           </h3>
@@ -62,7 +62,7 @@ export function ScheduleView({ schedule }: { schedule: RedraftScheduleClient | n
           </p>
         </div>
         <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-right">
-          <p className="text-[10px] uppercase tracking-[0.14em] text-white/35">Current week</p>
+          <p className="text-[11px] uppercase tracking-[0.14em] text-white/35">Current week</p>
           <p className="text-lg font-bold text-white">{schedule.currentWeek || '-'}</p>
         </div>
       </div>
@@ -94,10 +94,10 @@ export function ScheduleView({ schedule }: { schedule: RedraftScheduleClient | n
             data-testid={matchup.bye ? 'redraft-schedule-bye' : 'redraft-schedule-matchup'}
           >
             <div className="mb-2 flex items-center justify-between gap-2">
-              <span className="text-[10px] uppercase tracking-[0.12em] text-white/35">
+              <span className="text-[11px] uppercase tracking-[0.12em] text-white/35">
                 {matchup.bye ? 'Bye week' : matchup.divisionGame ? 'Division matchup' : 'Matchup'}
               </span>
-              <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] text-white/50">
+              <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[11px] text-white/50">
                 {matchup.status}
               </span>
             </div>
@@ -108,12 +108,12 @@ export function ScheduleView({ schedule }: { schedule: RedraftScheduleClient | n
               <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
                 <div>
                   <p className="truncate text-sm font-semibold text-white">{matchup.homeName}</p>
-                  <p className="text-[10px] text-white/35">{matchup.homeDivisionName ?? 'League'}</p>
+                  <p className="text-[11px] text-white/35">{matchup.homeDivisionName ?? 'League'}</p>
                 </div>
-                <span className="text-[10px] uppercase text-white/35">vs</span>
+                <span className="text-[11px] uppercase text-white/35">vs</span>
                 <div className="text-right">
                   <p className="truncate text-sm font-semibold text-white">{matchup.awayName}</p>
-                  <p className="text-[10px] text-white/35">{matchup.awayDivisionName ?? 'League'}</p>
+                  <p className="text-[11px] text-white/35">{matchup.awayDivisionName ?? 'League'}</p>
                 </div>
               </div>
             )}
@@ -123,7 +123,7 @@ export function ScheduleView({ schedule }: { schedule: RedraftScheduleClient | n
 
       <div className="grid gap-3 lg:grid-cols-[1fr_1fr]">
         <div className="rounded-xl border border-white/[0.08] bg-black/15 p-3">
-          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/35">Playoff qualification prep</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-white/35">Playoff qualification prep</p>
           {playoffSnapshot.seeds.length ? (
             <div className="mt-2 space-y-1">
               {playoffSnapshot.seeds.slice(0, 6).map((seed) => (
@@ -139,7 +139,7 @@ export function ScheduleView({ schedule }: { schedule: RedraftScheduleClient | n
         </div>
 
         <div className="rounded-xl border border-white/[0.08] bg-black/15 p-3">
-          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/35">Schedule health</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-white/35">Schedule health</p>
           {blockingIssues.length ? (
             <ul className="mt-2 space-y-1 text-[11px] text-rose-200">
               {blockingIssues.slice(0, 3).map((issue) => (

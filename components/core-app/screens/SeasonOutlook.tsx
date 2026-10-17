@@ -4,11 +4,16 @@ import Link from 'next/link'
 import type { SeasonOutlook as SeasonOutlookData } from '@/lib/core-app/seasonOutlook'
 import type { FreshnessMeta } from '@/lib/sports-os/freshness'
 import { kickoffDayLabel } from '@/lib/core-app/kickoffLabel'
+import { kickoffText } from '@/lib/core-app/kickoffText'
 import { band, ordinal, pct, rangeLabel } from '@/lib/core-app/outlookCopy'
 import { FreshnessChip } from '@/components/sports-os/FreshnessChip'
 import { StatusPill } from '@/components/core-app/outlook/OutlookParts'
+import { TopicTip } from '@/components/core-app/TopicTip'
 import '@/components/core-app/af-season-outlook.css'
 import '@/components/core-app/af-outlook.css'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
+import { seasonOutlookSentence } from '@/lib/core-app/outlookSpanish'
 
 /**
  * 26b — Season Outlook. Playoff, bye and championship odds across every active league.
@@ -43,11 +48,18 @@ function Tile({ value, label, tone }: { value: string; label: string; tone?: 'go
   )
 }
 
+/** Moved to `lib/core-app/outlookSpanish.ts` so the league screen can share it without importing this one. */
+export { seasonOutlookSentence }
+
 export function SeasonOutlook({ data, freshness = null }: SeasonOutlookProps) {
+  const { language } = useOptionalLanguage()
+  const es = language === 'es'
+  const copy = (english: string) => coreUiCopy(english, language)
   const hasLeagues = data.leagues.length > 0
   const preseasonKickoffLabel =
     data.firstKickoffAt && new Date(data.firstKickoffAt).getTime() > Date.now()
-      ? kickoffDayLabel(data.firstKickoffAt)
+      ? /* Pinned en-US so it hydrates; translated at render — "Oct 4" → «4 oct». */
+        kickoffText(kickoffDayLabel(data.firstKickoffAt), language)
       : null
 
   /* The three results that swing your season most, across every league. */
@@ -60,66 +72,69 @@ export function SeasonOutlook({ data, freshness = null }: SeasonOutlookProps) {
   return (
     <div className="af-so af-olk">
       <header className="af-so-head">
-        <p className="af-so-eyebrow af-label">Across every league you play</p>
+        <p className="af-so-eyebrow af-label">{copy('Across every league you play')}</p>
         <div className="af-olk-titlerow">
-          <h1 className="af-display af-so-title">Season Outlook</h1>
+          <h1 className="af-display af-so-title">{copy('Season Outlook')}</h1>
+          {/* Beside the title, not in it: the tiles below have no heading of their own to carry it. */}
+          {hasLeagues ? <TopicTip topic="outlookTiles" /> : null}
           {freshness ? (
             <FreshnessChip meta={freshness.meta} initialLabel={freshness.initialLabel} initialWarn={freshness.initialWarn} />
           ) : null}
         </div>
         <p className="af-so-sub">
-          Playoff, bye and championship odds, simulated per league against that league&apos;s own rules. Open a
-          league for its what-ifs, moves and roster risk.
+          {copy("Playoff, bye and championship odds, simulated per league against that league's own rules. Open a league for its what-ifs, moves and roster risk.")}
         </p>
       </header>
 
       {hasLeagues ? (
         <>
-          <section className="af-so-tiles" aria-label="Your odds across leagues">
+          <section className="af-so-tiles" aria-label={copy('Your odds across leagues')}>
             <Tile
               value={String(data.summary.makingPlayoffs)}
-              label={`of ${data.leagues.length} on track for the playoffs`}
+              label={es ? `de ${data.leagues.length} con opciones de playoffs` : `of ${data.leagues.length} on track for the playoffs`}
               tone="accent"
             />
-            <Tile value={String(data.summary.clinched)} label="already clinched" tone="good" />
-            <Tile value={String(data.summary.onTheBubble)} label="on the bubble" tone="warn" />
-            {anyByes ? <Tile value={String(data.summary.onByePace)} label="on pace for a bye" /> : null}
+            <Tile value={String(data.summary.clinched)} label={copy('already clinched')} tone="good" />
+            <Tile value={String(data.summary.onTheBubble)} label={copy('on the bubble')} tone="warn" />
+            {anyByes ? <Tile value={String(data.summary.onByePace)} label={copy('on pace for a bye')} /> : null}
             <Tile
               value={data.summary.bestTitle ? `${pct(data.summary.bestTitle.pct)}%` : '—'}
               label={
                 data.summary.bestTitle
-                  ? `best title odds · ${data.summary.bestTitle.leagueName}`
-                  : 'no title odds yet'
+                  ? es ? `mejor probabilidad de título · ${data.summary.bestTitle.leagueName}` : `best title odds · ${data.summary.bestTitle.leagueName}`
+                  : copy('no title odds yet')
               }
             />
           </section>
 
-          <section className="af-olk-hero-grid af-so-lead" aria-label="What to do next">
+          <section className="af-olk-hero-grid af-so-lead" aria-label={copy('What to do next')}>
             <div className="af-olk-next">
-              <h2 className="af-label">Next action</h2>
+              <h2 className="af-label">{copy('Next action')}</h2>
               {next ? (
                 <>
                   <p className="af-olk-next-t">{next.leagueName}</p>
-                  <p className="af-olk-next-d">{next.reason}</p>
+                  <p className="af-olk-next-d">{seasonOutlookSentence(next.reason, language)}</p>
                   <Link className="af-btn af-olk-next-cta" href={next.href}>
-                    Open {next.leagueName}
+                    {es ? 'Abrir' : 'Open'} {next.leagueName}
                   </Link>
                 </>
               ) : (
-                <p className="af-olk-next-d">No league needs a decision right now.</p>
+                <p className="af-olk-next-d">{copy('No league needs a decision right now.')}</p>
               )}
             </div>
             <div className="af-olk-drivebox">
-              <h2 className="af-label">The games that swing your season</h2>
+              <h2 className="af-label">
+                {copy('The games that swing your season')} <TopicTip topic="swingGame" />
+              </h2>
               {swings.length === 0 ? (
-                <p className="af-olk-empty">No single game left moves your odds in a contested league.</p>
+                <p className="af-olk-empty">{copy('No single game left moves your odds in a contested league.')}</p>
               ) : (
                 <ol className="af-olk-drivers">
                   {swings.map((s) => (
                     <li key={s.leagueId} className="af-olk-driver" data-dir="both">
                       <div className="af-olk-driver-top">
                         <Link className="af-olk-driver-l" href={`/core/season-outlook?league=${encodeURIComponent(s.leagueId)}`}>
-                          {s.leagueName} · week {s.week}
+                          {s.leagueName} · {copy('week')} {s.week}
                         </Link>
                         <span className="af-olk-driver-v af-num">±{(s.swing / 2).toFixed(0)} pts</span>
                       </div>
@@ -129,8 +144,8 @@ export function SeasonOutlook({ data, freshness = null }: SeasonOutlookProps) {
                         <span className="af-olk-diverge-bar" data-side="right" style={{ width: `${Math.min(50, s.swing / 2)}%` }} />
                       </span>
                       <p className="af-olk-driver-d">
-                        {s.opponentName ? `Against ${s.opponentName}: ` : ''}
-                        {pct(s.ifWin)}% with a win, {pct(s.ifLose)}% with a loss.
+                        {s.opponentName ? es ? `Contra ${s.opponentName}: ` : `Against ${s.opponentName}: ` : ''}
+                        {es ? `${pct(s.ifWin)}% si ganas; ${pct(s.ifLose)}% si pierdes.` : `${pct(s.ifWin)}% with a win, ${pct(s.ifLose)}% with a loss.`}
                       </p>
                     </li>
                   ))}
@@ -141,9 +156,9 @@ export function SeasonOutlook({ data, freshness = null }: SeasonOutlookProps) {
 
           {/* The basis. Never optional, never a tooltip. */}
           <p className="af-so-basis">
-            {data.basis}{' '}
+            {seasonOutlookSentence(data.basis, language)}{' '}
             {data.runs.reused > 0
-              ? `${data.runs.reused} of ${data.runs.reused + data.runs.computed} league runs were reused because nothing they read had changed.`
+              ? es ? `Se reutilizaron ${data.runs.reused} de ${data.runs.reused + data.runs.computed} simulaciones porque sus datos no cambiaron.` : `${data.runs.reused} of ${data.runs.reused + data.runs.computed} league runs were reused because nothing they read had changed.`
               : ''}
           </p>
 
@@ -151,13 +166,17 @@ export function SeasonOutlook({ data, freshness = null }: SeasonOutlookProps) {
             <table className="af-so-table">
               <thead>
                 <tr>
-                  <th scope="col">League</th>
-                  <th scope="col" className="af-so-num">Record</th>
-                  <th scope="col" className="af-so-num">Seed</th>
-                  <th scope="col" className="af-so-num">Playoffs</th>
-                  {anyByes ? <th scope="col" className="af-so-num">Bye</th> : null}
-                  <th scope="col" className="af-so-num">Title</th>
-                  <th scope="col">What decides it</th>
+                  <th scope="col">
+                    {copy('League')} <TopicTip topic="strengthOfSchedule" />
+                  </th>
+                  <th scope="col" className="af-so-num">{copy('Record')}</th>
+                  <th scope="col" className="af-so-num">{copy('Seed')}</th>
+                  <th scope="col" className="af-so-num">
+                    {copy('Playoffs')} <TopicTip topic="outlookPlayoffOdds" />
+                  </th>
+                  {anyByes ? <th scope="col" className="af-so-num">{copy('Bye')}</th> : null}
+                  <th scope="col" className="af-so-num">{copy('Title')}</th>
+                  <th scope="col">{copy('What decides it')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -174,33 +193,33 @@ export function SeasonOutlook({ data, freshness = null }: SeasonOutlookProps) {
                           {l.leagueName}
                         </Link>
                         <span className="af-so-leaguemeta af-num">
-                          {l.season} · top {l.playoffTeams} of {l.assumptions.teams}
-                          {l.byeTeams > 0 ? `, ${l.byeTeams} bye${l.byeTeams === 1 ? '' : 's'}` : ''} ·{' '}
-                          {l.weeksRemaining === 0 ? 'season over' : `${l.weeksRemaining} to play`}
-                          {rest != null && l.weeksRemaining > 0 ? ` · ${ordinal(rest)} hardest schedule left` : ''}
+                          {l.season} · {es ? `primeros ${l.playoffTeams} de ${l.assumptions.teams}` : `top ${l.playoffTeams} of ${l.assumptions.teams}`}
+                          {l.byeTeams > 0 ? es ? `, ${l.byeTeams} descansos` : `, ${l.byeTeams} bye${l.byeTeams === 1 ? '' : 's'}` : ''} ·{' '}
+                          {l.weeksRemaining === 0 ? copy('season over') : es ? `${l.weeksRemaining} por jugar` : `${l.weeksRemaining} to play`}
+                          {rest != null && l.weeksRemaining > 0 ? es ? ` · ${rest}.º calendario más difícil restante` : ` · ${ordinal(rest)} hardest schedule left` : ''}
                         </span>
                         {l.you?.status ? <StatusPill status={l.you.status} /> : null}
                       </th>
                       {l.you ? (
                         <>
-                          <td className="af-so-num" data-label="Record">
-                            {l.you.wins}–{l.you.losses}
+                          <td className="af-so-num" data-label={copy('Record')}>
+                            {l.you.wins}–{l.you.losses}{l.you.ties ? `–${l.you.ties}` : ''}
                           </td>
-                          <td className="af-so-num" data-label="Seed">
+                          <td className="af-so-num" data-label={copy('Seed')}>
                             {l.you.seed}
                           </td>
-                          <td className="af-so-num" data-label="Playoffs">
+                          <td className="af-so-num" data-label={copy('Playoffs')}>
                             <span className="af-so-pct" data-band={band(l.you.playoffPct)}>
                               {pct(l.you.playoffPct)}%
                             </span>
                             {l.you.range ? <span className="af-so-range af-num">{rangeLabel(l.you.range.playoff)}</span> : null}
                           </td>
                           {anyByes ? (
-                            <td className="af-so-num" data-label="Bye">
+                            <td className="af-so-num" data-label={copy('Bye')}>
                               {l.byeTeams > 0 ? `${pct(l.you.byePct)}%` : '—'}
                             </td>
                           ) : null}
-                          <td className="af-so-num" data-label="Title">
+                          <td className="af-so-num" data-label={copy('Title')}>
                             {/* Neutral on purpose: a 3% title chance is ordinary, not a warning. */}
                             <span className="af-so-pct" data-band="none">
                               {pct(l.you.titlePct)}%
@@ -210,10 +229,10 @@ export function SeasonOutlook({ data, freshness = null }: SeasonOutlookProps) {
                         </>
                       ) : (
                         <td className="af-so-noteam" colSpan={anyByes ? 5 : 4}>
-                          We cannot tell which team is yours in this league.
+                          {copy('We cannot tell which team is yours in this league.')}
                         </td>
                       )}
-                      <td className="af-so-decides">{l.whatDecidesIt}</td>
+                      <td className="af-so-decides">{seasonOutlookSentence(l.whatDecidesIt, language)}</td>
                     </tr>
                   )
                 })}
@@ -223,23 +242,19 @@ export function SeasonOutlook({ data, freshness = null }: SeasonOutlookProps) {
         </>
       ) : preseasonKickoffLabel ? (
         <div className="af-so-empty">
-          <p className="af-so-empty-t">The season has not started yet.</p>
+          <p className="af-so-empty-t">{copy('The season has not started yet.')}</p>
           <p className="af-so-empty-b">
-            Odds are simulated from each team&apos;s completed weeks, and none have been played
-            this season. They start filling in as weeks are scored — first kickoff{' '}
-            {preseasonKickoffLabel}.
+            {es ? `Las probabilidades se simulan a partir de las semanas completas de cada equipo. Aún no se ha jugado ninguna esta temporada. Empezarán a aparecer tras el primer partido: ${preseasonKickoffLabel}.` : `Odds are simulated from each team's completed weeks, and none have been played this season. They start filling in as weeks are scored — first kickoff ${preseasonKickoffLabel}.`}
           </p>
         </div>
       ) : (
         <div className="af-so-empty">
-          <p className="af-so-empty-t">Nothing can be simulated yet.</p>
+          <p className="af-so-empty-t">{copy('Nothing can be simulated yet.')}</p>
           <p className="af-so-empty-b">
-            Odds are computed from synced matchups — each team&apos;s completed weeks in its own
-            league&apos;s scoring. None of your leagues has enough of that on file, so there is
-            nothing to run. That is a gap in what we have read, not a season with no games.
+            {copy("Odds are computed from synced matchups — each team's completed weeks in its own league's scoring. None of your leagues has enough of that on file, so there is nothing to run. That is a gap in what we have read, not a season with no games.")}
           </p>
           <Link href="/import" className="af-so-cta">
-            Import or re-sync a league
+            {copy('Import or re-sync a league')}
           </Link>
         </div>
       )}
@@ -248,14 +263,13 @@ export function SeasonOutlook({ data, freshness = null }: SeasonOutlookProps) {
       {data.withheld.length > 0 ? (
         <section className="af-so-withheld">
           <h2 className="af-so-withheld-t">
-            {data.withheld.length} {data.withheld.length === 1 ? 'league is' : 'leagues are'} not on
-            this page
+            {es ? `${data.withheld.length} ${data.withheld.length === 1 ? 'liga no aparece' : 'ligas no aparecen'} en esta página` : `${data.withheld.length} ${data.withheld.length === 1 ? 'league is' : 'leagues are'} not on this page`}
           </h2>
           <ul>
             {/* Keyed by position too: two withheld leagues can share a name (one per season). */}
             {data.withheld.map((w, i) => (
               <li key={`${w.leagueName}-${i}`}>
-                <b>{w.leagueName}</b> — {w.reason}
+                <b>{w.leagueName}</b> — {seasonOutlookSentence(w.reason, language)}
               </li>
             ))}
           </ul>

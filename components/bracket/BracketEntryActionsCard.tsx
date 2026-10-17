@@ -265,7 +265,7 @@ export default function BracketEntryActionsCard({ leagueId, tournamentId, entryI
                 </span>
                 <span>{simResult.expectedRank}</span>
               </div>
-              <p className="mt-1 text-[10px] text-white/45">
+              <p className="mt-1 text-[11px] text-white/45">
                 {t("bracket.intel.simulate.note")}
               </p>
             </div>
@@ -350,7 +350,7 @@ export default function BracketEntryActionsCard({ leagueId, tournamentId, entryI
 
               {reviewResult.strengths.length > 0 && (
                 <div>
-                  <div className="text-[10px] font-semibold text-emerald-300">
+                  <div className="text-[11px] font-semibold text-emerald-300">
                     {t("bracket.intel.review.strengths")}
                   </div>
                   <ul className="mt-0.5 list-disc pl-4 space-y-0.5">
@@ -363,7 +363,7 @@ export default function BracketEntryActionsCard({ leagueId, tournamentId, entryI
 
               {reviewResult.risks.length > 0 && (
                 <div>
-                  <div className="text-[10px] font-semibold text-amber-300">
+                  <div className="text-[11px] font-semibold text-amber-300">
                     {t("bracket.intel.review.risks")}
                   </div>
                   <ul className="mt-0.5 list-disc pl-4 space-y-0.5">
@@ -376,7 +376,7 @@ export default function BracketEntryActionsCard({ leagueId, tournamentId, entryI
 
               {reviewResult.strategyNotes.length > 0 && (
                 <div>
-                  <div className="text-[10px] font-semibold text-sky-300">
+                  <div className="text-[11px] font-semibold text-sky-300">
                     {t("bracket.intel.review.strategy")}
                   </div>
                   <ul className="mt-0.5 list-disc pl-4 space-y-0.5">
@@ -387,7 +387,7 @@ export default function BracketEntryActionsCard({ leagueId, tournamentId, entryI
                 </div>
               )}
 
-              <p className="mt-1 text-[10px] text-white/45">
+              <p className="mt-1 text-[11px] text-white/45">
                 {t("bracket.intel.review.note")}
               </p>
             </div>

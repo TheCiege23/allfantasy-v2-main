@@ -19,10 +19,10 @@ export function TradeDeadlineSection({ copy }: { copy: LandingCopy['journey']['t
       </div>
 
       <GlassCard className="p-5 sm:p-6" accentBorder="color-mix(in srgb, var(--accent-amber) 24%, var(--border))">
-        <p className="mb-4 text-[10px] font-bold uppercase tracking-[0.12em]" style={{ color: 'var(--accent-amber-strong)' }}>{copy.proposalLabel}</p>
+        <p className="mb-4 text-[11px] font-bold uppercase tracking-[0.12em]" style={{ color: 'var(--accent-amber-strong)' }}>{copy.proposalLabel}</p>
         <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-center sm:gap-5">
           <div className="w-full rounded-xl border p-4 text-center sm:w-64" style={{ borderColor: 'var(--border)', background: 'color-mix(in srgb, var(--panel2) 60%, transparent)' }}>
-            <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.1em]" style={{ color: 'var(--muted)' }}>{copy.giveLabel}</p>
+            <p className="mb-1 text-[11px] font-bold uppercase tracking-[0.1em]" style={{ color: 'var(--muted)' }}>{copy.giveLabel}</p>
             <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>{copy.mockTrade.give}</p>
           </div>
           <span className="shrink-0" aria-hidden="true">
@@ -30,7 +30,7 @@ export function TradeDeadlineSection({ copy }: { copy: LandingCopy['journey']['t
             <ArrowDown className="block h-5 w-5 sm:hidden" style={{ color: 'var(--accent-amber-strong)' }} />
           </span>
           <div className="w-full rounded-xl border p-4 text-center sm:w-64" style={{ borderColor: 'color-mix(in srgb, var(--accent-emerald) 30%, var(--border))', background: 'color-mix(in srgb, var(--accent-emerald) 8%, transparent)' }}>
-            <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.1em]" style={{ color: 'var(--accent-emerald-strong)' }}>{copy.getLabel}</p>
+            <p className="mb-1 text-[11px] font-bold uppercase tracking-[0.1em]" style={{ color: 'var(--accent-emerald-strong)' }}>{copy.getLabel}</p>
             <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>{copy.mockTrade.get}</p>
           </div>
         </div>

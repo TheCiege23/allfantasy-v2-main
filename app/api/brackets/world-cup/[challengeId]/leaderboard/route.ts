@@ -8,8 +8,8 @@ import {
 
 export const runtime = "nodejs"
 
-export async function GET(request: Request, context: { params: { challengeId: string } }) {
-  const params = worldCupChallengeParamsSchema.safeParse(context.params)
+export async function GET(request: Request, context: { params: Promise<{ challengeId: string }> }) {
+  const params = worldCupChallengeParamsSchema.safeParse((await context.params))
   if (!params.success) {
     return NextResponse.json({ error: "Invalid challenge id" }, { status: 400 })
   }

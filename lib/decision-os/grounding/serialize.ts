@@ -48,6 +48,18 @@ const MAX_ITEMS = 8
 /** Trim a prose slice so one long saved analysis cannot crowd out every other fact. */
 const MAX_PROSE = 1200
 
+/*
+ * ⚠ LEAGUE INTELLIGENCE GETS MORE, BECAUSE IT IS THE ONLY SLICE THAT NAMES THE LEAGUE'S TEAMS. The
+ * standings slice is not itemised ("rows: 20 items"), so this prose is the one place the model can
+ * learn which team is in which division/tribe. A 22-team league's groups plus the format summary
+ * run past 1200, and the cut falls from the END: the tail of a tribe list, then the "these are the
+ * ONLY league truths" instruction. A truncated member list reads as complete. The slice builder
+ * orders its lines most-important first, so the cap still falls on the least important.
+ */
+// Measured 2026-09-28: a 22-team survivor league with long team names is ~1,960 characters before
+// the values, trade-ledger and history lines (~500-600 more). 3200 leaves room; 2600 did not.
+const MAX_PROSE_BY_SLICE: Readonly<Record<string, number>> = { 'League intelligence': 3200 }
+
 function fmt(n: number): string {
   return Number.isInteger(n) ? String(n) : String(Math.round(n * 10) / 10)
 }
@@ -69,7 +81,8 @@ function renderValue(name: string, value: unknown, onRoster?: ReadonlySet<string
   // The four `GroundedSlice<string>` slices are already prompt-ready prose. Reducing them to
   // "available" is what silenced three-brain's saved conclusion — the substance of plan item 6.2.
   if (typeof value === 'string') {
-    const trimmed = value.length > MAX_PROSE ? `${value.slice(0, MAX_PROSE)}…` : value
+    const cap = MAX_PROSE_BY_SLICE[name] ?? MAX_PROSE
+    const trimmed = value.length > cap ? `${value.slice(0, cap)}…` : value
     return trimmed.split('\n').map((l) => `    ${l}`)
   }
 

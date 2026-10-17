@@ -62,7 +62,8 @@ function EntryUnavailable({ leagueId }: { leagueId: string }) {
   )
 }
 
-export async function generateMetadata({ params }: { params: { leagueId: string; entryId: string } }): Promise<Metadata> {
+export async function generateMetadata(props: { params: Promise<{ leagueId: string; entryId: string }> }): Promise<Metadata> {
+  const params = await props.params
   let session: { user?: SessionUser } | null = null
   try {
     session = (await getServerSession(authOptions as any)) as { user?: SessionUser } | null
@@ -87,11 +88,12 @@ export async function generateMetadata({ params }: { params: { leagueId: string;
   return { title: "Bracket Entry" }
 }
 
-export default async function PlayoffBracketEntryPage({
-  params,
-}: {
-  params: { leagueId: string; entryId: string }
-}) {
+export default async function PlayoffBracketEntryPage(
+  props: {
+    params: Promise<{ leagueId: string; entryId: string }>
+  }
+) {
+  const params = await props.params
   let session: { user?: SessionUser } | null = null
   try {
     session = (await getServerSession(authOptions as any)) as { user?: SessionUser } | null

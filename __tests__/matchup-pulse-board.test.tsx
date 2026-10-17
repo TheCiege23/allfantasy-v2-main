@@ -48,12 +48,14 @@ function row(over: Partial<PulseRow> = {}): PulseRow {
     logoUrl: null,
     leagueBadge: 'DW',
     opponentName: 'Gridiron Ghosts',
+    opponentLabel: 'Gridiron Ghosts',
     opponentAvatarUrl: null,
     opponentInitials: 'GG',
     margin: 12.4,
     basis: 'scored',
     season: 2026,
     week: 2,
+    final: false,
     startersLeft: 6,
     coverage: null,
     href: '/core/matchup?league=l1',
@@ -68,6 +70,7 @@ function pulse(over: Partial<MatchupPulse> = {}): MatchupPulse {
     considered: 1,
     ranked: 1,
     basis: 'scored',
+    allFinal: false,
     notRanked: { noSchedule: 0, noOpponent: 0, unpriceable: 0, uncomparable: 0, unidentifiedRoster: 0 },
     ...over,
   }
@@ -134,12 +137,20 @@ describe('MatchupPulseBoard', () => {
     expect(diffs).toEqual(['+12.4', '−9.2'])
   })
 
-  /* An unnamed opposing roster stays unnamed — never given a placeholder name. */
-  it('says the opponent is not named rather than inventing one', () => {
+  /*
+   * An opposing roster with no real name is the platform's own "Team N" (`rosterLabel`) — the same
+   * label every surface uses, never a manager we made up and never the stored placeholder "Unknown".
+   */
+  it('prints the roster label for an opponent with no real name', () => {
     const { container } = render(
-      <MatchupPulseBoard allHref={ALL_HREF} totalLeagues={TOTAL} pulse={pulse({ leading: [row({ opponentName: null })] })} />,
+      <MatchupPulseBoard
+        allHref={ALL_HREF}
+        totalLeagues={TOTAL}
+        pulse={pulse({ leading: [row({ opponentName: null, opponentLabel: 'Team 8' })] })}
+      />,
     )
-    expect(container.textContent ?? '').toContain('opponent not named')
+    expect(container.textContent ?? '').toContain('vs Team 8')
+    expect(container.textContent ?? '').not.toMatch(/Unknown|opponent not named/)
   })
 
   /*
@@ -460,6 +471,23 @@ describe('MatchupPulseBoard — the unidentified-roster gap', () => {
     expect(text).toMatch(/our gap, not theirs/i)
   })
 
+  /* Production 2026-09-28: 7 native leagues in setup were reported as "our gap". */
+  it('says leagues that have not drafted are not started, and does not call them our gap', () => {
+    const { container } = render(
+      <MatchupPulseBoard
+        allHref={ALL_HREF}
+        totalLeagues={TOTAL}
+        pulse={pulse({
+          leading: [row()],
+          notRanked: { noSchedule: 0, noOpponent: 0, unpriceable: 0, uncomparable: 0, unidentifiedRoster: 0, notStarted: 7 },
+        })}
+      />,
+    )
+    const text = container.textContent ?? ''
+    expect(text).toContain('7 have not started yet')
+    expect(text).not.toMatch(/our gap/i)
+  })
+
   it('still says "no claimed team" when there genuinely is none', () => {
     const { container } = render(
       <MatchupPulseBoard
@@ -484,5 +512,168 @@ describe('MatchupPulseBoard — the unidentified-roster gap', () => {
       />,
     )
     expect(container.textContent ?? '').toContain('View all 65')
+  })
+})
+
+describe('MatchupPulseBoard header counts', () => {
+  /* Production 2026-09-28: the header printed the capped column lengths, "5 leading · 5 trailing",
+     on an account 32 ahead and 21 behind. */
+  it('states the true totals, not the length of the five-row columns', () => {
+    const { container } = render(
+      <MatchupPulseBoard
+        allHref={ALL_HREF}
+        totalLeagues={TOTAL}
+        pulse={pulse({
+          ranked: 53,
+          leading: [row({ leagueId: 'a' }), row({ leagueId: 'b' })],
+          trailing: [row({ leagueId: 'c', margin: -3 })],
+          leadingTotal: 32,
+          trailingTotal: 21,
+        })}
+      />,
+    )
+    expect(container.querySelector('.af-mp-count')?.textContent).toBe('32 leading · 21 trailing')
+  })
+})
+
+/*
+ * 🛑 A FINISHED WEEK IS A RESULT, NOT A STANDING. On the Tuesday after week 3 (App Review account,
+ * 2026-09-29) this board said "0 leading · 3 trailing" and "You are not ahead in any league right
+ * now" about three games that had all ended.
+ */
+describe('MatchupPulseBoard — a finished week', () => {
+  it('says won / lost when every ranked row is final', () => {
+    const { container } = render(
+      <MatchupPulseBoard
+        allHref={ALL_HREF}
+        totalLeagues={TOTAL}
+        pulse={pulse({
+          allFinal: true,
+          leading: [],
+          trailing: [row({ leagueId: 'l2', margin: -40.8, final: true })],
+          leadingTotal: 0,
+          trailingTotal: 1,
+        })}
+      />,
+    )
+    const text = container.textContent ?? ''
+    expect(text).toContain('0 won · 1 lost')
+    expect(text).toContain('Lost · bottom 5')
+    expect(text).toContain('You did not win a league this week.')
+    expect(text).not.toMatch(/leading|trailing|right now/i)
+    // The whole board already says it; no per-row FINAL tag to repeat it.
+    expect(container.querySelector('[data-kind="final"]')).toBeNull()
+  })
+
+  it('keeps leading / trailing on a mixed board, and tags the finished rows FINAL', () => {
+    const { container } = render(
+      <MatchupPulseBoard
+        allHref={ALL_HREF}
+        totalLeagues={TOTAL}
+        pulse={pulse({
+          allFinal: false,
+          leading: [row({ leagueId: 'a', final: true }), row({ leagueId: 'b', final: false })],
+        })}
+      />,
+    )
+    expect(container.textContent ?? '').toContain('leading')
+    expect(container.querySelectorAll('[data-kind="final"]')).toHaveLength(1)
+  })
+
+  it('is NOT live once the week is final, even where starters could not be placed', () => {
+    // startersLeft null alone reads as "still in play" (see the refresh gate above); final settles it.
+    const { container } = render(
+      <MatchupPulseBoard
+        allHref={ALL_HREF}
+        totalLeagues={TOTAL}
+        pulse={pulse({ allFinal: true, leading: [row({ basis: 'scored', startersLeft: null, final: true })] })}
+      />,
+    )
+    expect(container.querySelector('.af-mp-live')?.getAttribute('data-inplay')).toBe('false')
+  })
+})
+
+/* Production 2026-10-02, a 65-league account: four claims the board made that did not add up. */
+describe('MatchupPulseBoard — counts that must add up', () => {
+  const many = (prefix: string, n: number, over: Partial<PulseRow> = {}) =>
+    Array.from({ length: n }, (_, i) => row({ leagueId: `${prefix}${i}`, href: `/core/matchup?league=${prefix}${i}`, ...over }))
+
+  it('🛑 the footer counts the closest-games rows as shown — 50 more, not 55', () => {
+    const { container } = render(
+      <MatchupPulseBoard
+        allHref={ALL_HREF}
+        totalLeagues={65}
+        pulse={pulse({ ranked: 15, leading: many('a', 5), trailing: many('b', 5, { margin: -4 }), closest: many('c', 5, { margin: 0.5 }) })}
+      />,
+    )
+    const text = container.textContent ?? ''
+    expect(text).toContain('50 more')
+    expect(text).not.toContain('55 more')
+  })
+
+  it('names guillotine leagues as a format, not a gap', () => {
+    const { container } = render(
+      <MatchupPulseBoard
+        allHref={ALL_HREF}
+        totalLeagues={TOTAL}
+        pulse={pulse({ leading: [row()], notRanked: { elimination: 2, noSchedule: 0, noOpponent: 0, unpriceable: 0, uncomparable: 0, unidentifiedRoster: 0 } })}
+      />,
+    )
+    expect(container.textContent ?? '').toContain('2 are guillotine leagues, scored against the whole field')
+  })
+
+  it('🛑 the expected record says "of N" when some ranked rows carry no odds', () => {
+    const { container } = render(
+      <MatchupPulseBoard
+        allHref={ALL_HREF}
+        totalLeagues={65}
+        pulse={pulse({ ranked: 43, leading: [row({ pWin: 0.7 })], leadingTotal: 19, trailingTotal: 24, expectedWins: 18.1, withOdds: 38 })}
+      />,
+    )
+    expect(container.textContent ?? '').toContain('across 38 of 43 matchups with odds')
+  })
+
+  it('CONTROL: every ranked row has odds — no "of N"', () => {
+    const { container } = render(
+      <MatchupPulseBoard
+        allHref={ALL_HREF}
+        totalLeagues={65}
+        pulse={pulse({ ranked: 43, leading: [row({ pWin: 0.7 })], leadingTotal: 19, trailingTotal: 24, expectedWins: 20.5, withOdds: 43 })}
+      />,
+    )
+    const text = container.textContent ?? ''
+    expect(text).toContain('across 43 matchups with odds')
+    expect(text).not.toContain(' of 43 matchups')
+  })
+
+  it('🛑 a live game among the closest rows keeps the board live', () => {
+    const { container } = render(
+      <MatchupPulseBoard
+        allHref={ALL_HREF}
+        totalLeagues={TOTAL}
+        pulse={pulse({
+          leading: [row({ basis: 'projected', startersLeft: 9 })],
+          closest: [row({ leagueId: 'c1', basis: 'scored', startersLeft: 3, margin: 0.4 })],
+        })}
+      />,
+    )
+    expect(container.querySelector('.af-mp-live')?.getAttribute('data-inplay')).toBe('true')
+  })
+})
+
+/* 🛑 The loader's `liveNow` decides the board's cadence wherever it is present (2026-10-02). */
+describe('MatchupPulseBoard — liveNow decides the cadence', () => {
+  it('🛑 a scored row with starters still to play is NOT live when no game is in progress', () => {
+    const { container } = render(
+      <MatchupPulseBoard allHref={ALL_HREF} totalLeagues={TOTAL} pulse={pulse({ leading: [row({ basis: 'scored', startersLeft: 6 })], liveNow: false })} />,
+    )
+    expect(container.querySelector('.af-mp-live')?.getAttribute('data-inplay')).toBe('false')
+  })
+
+  it('a game in progress is live, whatever the rows say', () => {
+    const { container } = render(
+      <MatchupPulseBoard allHref={ALL_HREF} totalLeagues={TOTAL} pulse={pulse({ leading: [row({ basis: 'projected', startersLeft: 9 })], liveNow: true })} />,
+    )
+    expect(container.querySelector('.af-mp-live')?.getAttribute('data-inplay')).toBe('true')
   })
 })

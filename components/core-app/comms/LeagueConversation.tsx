@@ -2,10 +2,15 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Search } from 'lucide-react'
+import { TypingNote } from './TypingNote'
 import { ChatMessageList, type ChatListMessage } from './ChatMessageList'
 import { ChatSearch } from './ChatSearch'
+import { chatFailure } from './chatFailure'
+import type { ReportReason } from '@/lib/moderation/shared'
 import { useTypingSignal } from './useTypingSignal'
 import RichMessage, { hasRichContent } from './RichMessage'
+import { RecapShareButton } from './RecapShareButton'
+import { isWeeklyRecap } from '@/lib/league-chat/recapShare'
 import { PresenceStrip, type PresentViewer } from './PresenceStrip'
 import { PinnedBoard } from './PinnedBoard'
 import { DraftPollView, draftPollVoteUrl, readDraftPoll } from './draftPoll'
@@ -53,6 +58,7 @@ export type ConversationLeague = {
 export type LeagueConversationSurface = 'drawer' | 'page' | 'draft_room'
 
 export type LeagueConversationProps = {
+  reviewedDraft?: import('@/lib/core-app/commissionerWeeklyPlan').ReviewedLeagueDraft
   leagueId: string
   leagueName?: string | null
   /** Offers "close the poll" on anyone's poll and @global. The server re-checks both. */
@@ -91,6 +97,8 @@ type LeagueMessage = {
   metadata?: Record<string, unknown> | null
   /** `'draft'` when it was posted in the draft room. */
   source: string | null
+  /** The viewer's own message, shown before the server has it (see `pending` below). */
+  pending?: boolean
 }
 
 function leagueToListMessage(m: LeagueMessage): ChatListMessage {
@@ -104,6 +112,7 @@ function leagueToListMessage(m: LeagueMessage): ChatListMessage {
     parentMessageId: m.parentMessageId,
     metadata: m.metadata ?? null,
     messageType: m.messageType,
+    ...(m.pending ? { pending: true } : {}),
   }
 }
 
@@ -166,6 +175,7 @@ function readDraftLink(value: unknown): LeagueDraftLink | null {
 }
 
 export function LeagueConversation({
+  reviewedDraft,
   leagueId,
   leagueName = null,
   isCommissioner = false,
@@ -180,6 +190,8 @@ export function LeagueConversation({
   const room = `league:${leagueId}`
 
   const [messages, setMessages] = useState<LeagueMessage[]>([])
+  /* The viewer's own sends that the server has not returned yet — see `listMessages`. */
+  const [pendingSends, setPendingSends] = useState<LeagueMessage[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
@@ -334,6 +346,7 @@ export function LeagueConversation({
   /* A different league is a different conversation: nothing carries over from the last one. */
   useEffect(() => {
     setMessages([])
+    setPendingSends([])
     setPresence([])
     setReactionOverride({})
     setReplyTo(null)
@@ -539,6 +552,45 @@ export function LeagueConversation({
     [room, load],
   )
 
+  /*
+   * ── Report and Block (App Store guideline 1.2) ────────────────────────────────────
+   * The same routes DMs use. A report is recorded against this league's room
+   * (`league:<id>`) — ReportSubmissionService checks the reporter can read the league and
+   * the message is really in it. Block is per person, not per room, and league chat's GET
+   * already drops blocked senders, so the reload agrees with the local filter below.
+   * Chimmy's posts reach here with no author (asChimmyWhenMarked), so neither action is
+   * offered on them — blocking one would block the commissioner it is stored under.
+   * Both THROW on a non-OK answer so the sheet stays open and says why.
+   */
+  const reportMessage = useCallback(
+    async (m: ChatListMessage, reason: ReportReason) => {
+      const res = await fetch('/api/shared/chat/report/message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messageId: m.id, threadId: room, reason }),
+      })
+      if (!res.ok) throw await chatFailure(res, 'Report not sent', 'Report not sent. Try again in a moment.')
+    },
+    [room],
+  )
+
+  const blockAuthor = useCallback(
+    async (m: ChatListMessage) => {
+      const blockedUserId = m.authorId
+      if (!blockedUserId) throw new Error('There is nobody to block on that message.')
+      const res = await fetch('/api/shared/chat/block', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ blockedUserId }),
+      })
+      if (!res.ok) throw await chatFailure(res, 'Not blocked', 'Not blocked. Try again in a moment.')
+      setMessages((prev) => prev.filter((x) => x.authorId !== blockedUserId))
+      setReplyTo((r) => (r && r.authorId === blockedUserId ? null : r))
+      void load(true)
+    },
+    [load],
+  )
+
   /* Names for "who reacted": everybody who has spoken on screen, plus who is here now. */
   const nameForUserId = useCallback(
     (id: string): string | null =>
@@ -546,7 +598,16 @@ export function LeagueConversation({
     [messages, presence],
   )
 
-  const listMessages = useMemo(() => messages.map(leagueToListMessage), [messages])
+  /*
+   * 🛑 A SENT MESSAGE APPEARED ONLY AFTER TWO ROUND TRIPS (the POST, then a reload of the list), with
+   * nothing on screen in between — the "feels slow" every chat app is judged on. The viewer's message
+   * now shows at once as a pending bubble. It lives in its OWN list, appended after the server's:
+   * a poll that lands mid-send replaces `messages` wholesale and would otherwise erase it.
+   */
+  const listMessages = useMemo(
+    () => [...messages, ...pendingSends].map(leagueToListMessage),
+    [messages, pendingSends],
+  )
   const sourceById = useMemo(() => {
     const map = new Map<string, string | null>()
     for (const m of messages) map.set(m.id, m.source)
@@ -627,6 +688,24 @@ export function LeagueConversation({
       if (!displayText && Object.keys(metadata).length === 0) throw new Error('nothing to send')
 
       setSending(true)
+      const pendingId = `pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+      setPendingSends((prev) => [
+        ...prev,
+        {
+          id: pendingId,
+          parentMessageId: replyTo?.id ?? null,
+          authorId: viewerUserId ?? viewerId ?? null,
+          author: 'You',
+          avatarUrl: null,
+          message: displayText,
+          createdAt: new Date().toISOString(),
+          messageType: 'text',
+          metadata: Object.keys(metadata).length > 0 ? metadata : null,
+          source: tribe ?? null,
+          pending: true,
+        },
+      ])
+      const dropPending = () => setPendingSends((prev) => prev.filter((p) => p.id !== pendingId))
       try {
         const res = tribe
           ? await fetch(`/api/shared/chat/threads/${encodeURIComponent(room)}/messages`, {
@@ -667,7 +746,11 @@ export function LeagueConversation({
         setReplyTo(null)
         /* Quiet: a full reload flashed "Loading…" over the chat after every send. */
         await load(true)
+        // The real row is in `messages` now; the pending copy goes in the same render.
+        dropPending()
       } catch (e) {
+        // The draft comes back to the composer (below), so the bubble must not linger as if sent.
+        dropPending()
         setError(e instanceof Error ? `Message not sent (${e.message}).` : 'Message not sent.')
         /*
          * ⚠ RETHROW. Setting the inline error is not enough: the composer has already
@@ -679,7 +762,7 @@ export function LeagueConversation({
         setSending(false)
       }
     },
-    [load, leagueId, room, tribe, sending, replyTo],
+    [load, leagueId, room, tribe, sending, replyTo, viewerUserId, viewerId],
   )
 
   const commissionerLeagues = useMemo(
@@ -787,6 +870,8 @@ export function LeagueConversation({
           pinBusy={pinBusy}
           onEdit={editMessage}
           onDelete={deleteMessage}
+          onReport={reportMessage}
+          onBlock={blockAuthor}
           nameForUserId={nameForUserId}
           focusRequest={focusRequest}
           tagFor={(m) =>
@@ -795,9 +880,25 @@ export function LeagueConversation({
             m.messageType === 'broadcast' ? 'Commissioner' : isDraftRoomSource(sourceById.get(m.id)) ? 'Draft room' : null
           }
           hasRichFor={(m) =>
-            hasRichContent(m.metadata, m.messageType, m.body) || readDraftPoll(m.metadata, m.messageType, viewer) != null
+            hasRichContent(m.metadata, m.messageType, m.body) ||
+            readDraftPoll(m.metadata, m.messageType, viewer) != null ||
+            isWeeklyRecap(m.metadata)
           }
           renderRich={(m) => {
+            /*
+             * Chimmy's weekly recap carries a way OUT: most leagues have one AllFantasy member, so the
+             * recap is shared into the league's own group chat with the invite link (recapShare.ts).
+             */
+            if (isWeeklyRecap(m.metadata)) {
+              return (
+                <>
+                  {hasRichContent(m.metadata, m.messageType, m.body) ? (
+                    <RichMessage metadata={m.metadata} messageType={m.messageType} body={m.body} viewerUserId={viewer} />
+                  ) : null}
+                  <RecapShareButton leagueId={leagueId} leagueName={leagueName} recap={m.body} />
+                </>
+              )
+            }
             const older = readDraftPoll(m.metadata, m.messageType, viewer)
             if (older) {
               return (
@@ -839,11 +940,7 @@ export function LeagueConversation({
         ⚠ HONEST ABOUT BEING LATE, as in DMs: this rides the 4–8s poll, so it can
         appear just after the message it was announcing.
       */}
-      {typing.length > 0 ? (
-        <p className="af-cm-typing-note">
-          {typing.length === 1 ? `${typing[0]!.name} is typing…` : `${typing.length} people are typing…`}
-        </p>
-      ) : null}
+      <TypingNote typing={typing} />
 
       {/*
         What this message will be answering, right above the composer — a reply target you
@@ -866,6 +963,7 @@ export function LeagueConversation({
         re-checks commissioner status, so this decides what is shown, never what is permitted.
       */}
       <ChatComposer
+        reviewedDraft={reviewedDraft}
         /* A half-written message belongs to the league it was typed in. */
         key={`${leagueId}:${tribe ?? ''}`}
         leagueId={leagueId}

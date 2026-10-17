@@ -25,7 +25,7 @@ export function SubscriptionGateBadge({
         'bg-amber-500/10 font-semibold text-amber-300/80',
         'transition hover:border-amber-400/40 hover:text-amber-200',
         'focus:outline-none focus:ring-1 focus:ring-amber-400/30',
-        size === 'xs' ? 'px-1.5 py-0.5 text-[9px]' : 'px-2 py-0.5 text-[10px]',
+        size === 'xs' ? 'px-1.5 py-0.5 text-[11px]' : 'px-2 py-0.5 text-[11px]',
       ].join(' ')}
     >
       🔒 {planLabel}

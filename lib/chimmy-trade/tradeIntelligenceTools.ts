@@ -6,16 +6,11 @@
  * Read-only. No tool sends/accepts/vetoes a trade or mutates provider/official values.
  */
 import { prisma } from '@/lib/prisma'
-import type { TeamProfile } from '@/lib/trade-value/types'
-import { buildTeamProfile } from '@/lib/trade-value/teamProfile'
-import { summarizeMarketContext, type MarketEventLite } from '@/lib/trade-review/marketContext'
-import { buildCommissionerTradeReview, type ReviewAsset } from '@/lib/trade-review/redraftCommissionerTradeReview'
 import { resolveAllFantasyMarketValue } from '@/lib/trade-market/allFantasyMarketValues'
 import { assembleDiscoveryLeague } from '@/lib/trade-discovery/assembleRosters'
 import { findPartners, findPackages } from '@/lib/trade-discovery/redraftTradeDiscovery'
 import { discoverySignals } from '@/lib/trade-block/redraftTradeBlockService'
 import type {
-  ExplainTradeData,
   PlayerMarketValueData,
   TradeBlockSummaryData,
   TradeRole,
@@ -70,110 +65,6 @@ export async function resolveTradeRole(
     league.teams.some((t: { isCommissioner: boolean | null; isCoCommissioner: boolean | null }) => t.isCommissioner || t.isCoCommissioner)
   const role: TradeRole = isCommish ? 'commissioner' : rosterId ? 'manager' : 'non_member'
   return { role, rosterId, seasonId: season?.id ?? null, sport: season?.sport ?? null }
-}
-
-// ── explainTrade (T2 immutable snapshot) ────────────────────────────────────────
-export async function explainTrade(proposalId: string): Promise<TradeToolResult<ExplainTradeData>> {
-  const proposal = await prisma.redraftTradeProposal
-    .findUnique({ where: { id: proposalId }, include: { valueSnapshot: true } })
-    .catch(() => null)
-  if (!proposal) {
-    return { ok: false, data: null, text: [], limitations: [{ code: 'NOT_FOUND', detail: `No proposal ${proposalId}.` }] }
-  }
-  const snap = proposal.valueSnapshot
-  if (!snap) {
-    return {
-      ok: true,
-      data: { proposalId, status: proposal.status, snapshotGrade: null, fairnessScore: null, confidenceScore: null, valueDifference: null, sideTotals: [], reasons: [], warnings: [], snapshotIsHistorical: true },
-      text: ['No value snapshot was captured for this proposal, so there is no grade to explain.'],
-      limitations: [{ code: 'NO_SNAPSHOT', detail: 'Proposal has no captured value snapshot.' }],
-    }
-  }
-  const payload = (snap.payload ?? {}) as { sides?: Array<{ rosterId: string; total: number }>; reasons?: string[]; warnings?: string[] }
-  const data: ExplainTradeData = {
-    proposalId,
-    status: proposal.status,
-    snapshotGrade: snap.grade ?? null,
-    fairnessScore: num(snap.fairnessScore),
-    confidenceScore: num(snap.confidenceScore),
-    valueDifference: num(snap.valueDifference),
-    sideTotals: Array.isArray(payload.sides) ? payload.sides.map((s) => ({ rosterId: s.rosterId, total: s.total })) : [],
-    reasons: Array.isArray(payload.reasons) ? payload.reasons.slice(0, 6) : [],
-    warnings: Array.isArray(payload.warnings) ? payload.warnings.slice(0, 6) : [],
-    snapshotIsHistorical: true,
-  }
-  const text = [
-    `At proposal time this trade graded ${data.snapshotGrade ?? 'n/a'} (fairness ${data.fairnessScore ?? 'n/a'}/100, confidence ${data.confidenceScore ?? 'n/a'}/100). This grade is a historical snapshot and may differ from current market value.`,
-  ]
-  if (data.reasons.length) text.push(`Why: ${data.reasons.join('; ')}.`)
-  if (data.warnings.length) text.push(`Watch-outs: ${data.warnings.join('; ')}.`)
-  text.push('A lopsided grade can still make sense if it fills a roster need or matches your strategy — the grade is one input, not a verdict.')
-  return { ok: true, data, text, limitations: [] }
-}
-
-// ── commissionerTradeReview (T4 — commissioner-gated) ───────────────────────────
-export async function commissionerTradeReview(
-  proposalId: string,
-  role: TradeRole,
-): Promise<TradeToolResult<unknown>> {
-  if (role !== 'commissioner') {
-    return { ok: false, data: null, text: ['Commissioner review details are only available to the league commissioner or co-commissioner.'], limitations: [{ code: 'PERMISSION_REQUIRED', detail: 'Commissioner-only context.' }] }
-  }
-  const proposal = await prisma.redraftTradeProposal
-    .findUnique({ where: { id: proposalId }, include: { assets: true, valueSnapshot: true } })
-    .catch(() => null)
-  if (!proposal) return { ok: false, data: null, text: [], limitations: [{ code: 'NOT_FOUND', detail: `No proposal ${proposalId}.` }] }
-
-  const [season, league, teamCount] = await Promise.all([
-    prisma.redraftSeason.findUnique({ where: { id: proposal.seasonId }, select: { sport: true, currentWeek: true } }).catch(() => null),
-    prisma.league.findUnique({ where: { id: proposal.leagueId }, select: { tradeReviewHours: true, tradeDeadlineWeek: true, draftPickTrading: true } }).catch(() => null),
-    prisma.redraftRoster.count({ where: { seasonId: proposal.seasonId } }).catch(() => 0),
-  ])
-  const leagueSize = teamCount || 12
-  async function profileFor(rosterId: string): Promise<TeamProfile | undefined> {
-    const r = await prisma.redraftRoster
-      .findUnique({ where: { id: rosterId }, select: { id: true, wins: true, losses: true, ties: true, pointsFor: true, playoffSeed: true, players: { where: { droppedAt: null }, select: { position: true } } } })
-      .catch(() => null)
-    if (!r) return undefined
-    return buildTeamProfile({ rosterId: r.id, wins: r.wins, losses: r.losses, ties: r.ties, pointsFor: r.pointsFor, playoffSeed: r.playoffSeed, leagueSize, positions: r.players.map((p: { position: string }) => p.position) })
-  }
-  const [proposerProfile, receiverProfile] = await Promise.all([profileFor(proposal.proposerRosterId), profileFor(proposal.receiverRosterId)])
-  const [leagueEvents, proposalEvents] = await Promise.all([
-    prisma.redraftTradeMarketEvent.findMany({ where: { leagueId: proposal.leagueId, ...(season?.sport ? { sport: season.sport } : {}) }, select: { eventType: true, fairnessScore: true, createdAt: true }, orderBy: { createdAt: 'desc' }, take: 500 }).catch(() => []),
-    prisma.redraftTradeMarketEvent.findMany({ where: { tradeProposalId: proposalId }, select: { eventType: true, createdAt: true }, orderBy: { createdAt: 'asc' } }).catch(() => []),
-  ])
-  const assets: ReviewAsset[] = proposal.assets.map(
-    (a: { assetType: string; fromRosterId: string; toRosterId: string; metadata: unknown }) => {
-      const md = (a.metadata ?? {}) as Record<string, unknown>
-      return { kind: a.assetType, fromRosterId: a.fromRosterId, toRosterId: a.toRosterId, position: typeof md.position === 'string' ? md.position : null, faabAmount: a.assetType === 'faab' ? num(md.amount) : null }
-    },
-  )
-  const snapPayload = (proposal.valueSnapshot?.payload ?? null) as { sides?: Array<{ rosterId: string; total: number }> } | null
-  const snapshot = proposal.valueSnapshot
-    ? { grade: proposal.valueSnapshot.grade, fairnessScore: proposal.valueSnapshot.fairnessScore, confidenceScore: proposal.valueSnapshot.confidenceScore, valueDifference: proposal.valueSnapshot.valueDifference, sideTotals: snapPayload?.sides?.map((s) => ({ rosterId: s.rosterId, total: s.total })) ?? [] }
-    : null
-  const review = buildCommissionerTradeReview({
-    proposerRosterId: proposal.proposerRosterId,
-    receiverRosterId: proposal.receiverRosterId,
-    status: proposal.status,
-    vetoMode: proposal.vetoMode,
-    vetoThreshold: proposal.vetoThreshold,
-    sport: season?.sport ?? 'NFL',
-    currentWeek: season?.currentWeek ?? null,
-    settings: { tradeReviewHours: league?.tradeReviewHours ?? null, tradeDeadlineWeek: league?.tradeDeadlineWeek ?? null, draftPickTrading: league?.draftPickTrading ?? false },
-    snapshot,
-    assets,
-    proposerProfile,
-    receiverProfile,
-    hasMarketEvents: proposalEvents.length > 0,
-    marketContext: summarizeMarketContext(leagueEvents as MarketEventLite[]),
-  })
-  return {
-    ok: true,
-    data: { review, snapshotSummary: snapshot },
-    text: ['Manual commissioner review suggested — the flags below are neutral risk/context signals, not an instruction to veto. They never imply collusion or bad faith.'],
-    limitations: [],
-  }
 }
 
 // ── explainPlayerMarketValue (T9 official value, source-separated) ───────────────

@@ -1,8 +1,21 @@
 'use client'
 
+import { TopicTip } from '@/components/core-app/TopicTip'
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import MiniPlayerImg from '@/components/MiniPlayerImg'
+import { GameHighlight } from '@/components/live/GameHighlight'
+import { MyStarters } from '@/components/core-app/screens/LiveScores'
+import { groupStartersByPlayer, type StarterGroup } from '@/lib/live/liveTieInGroups'
+import type { GameStarters } from '@/lib/live/liveScoresPage'
+import {
+  boxAthleteForStarter,
+  FOOTBALL_MAIN_GROUPS,
+  footballBoxTeams,
+  hasFootballBox,
+  starterStatLines,
+  type BoxGroup,
+} from '@/lib/live/gameBoxScore'
 import type {
   BaseballAtBat,
   BaseballBoxTable,
@@ -44,22 +57,62 @@ import '@/components/core-app/af-live.css'
  *   - the drive field draws a ball only where the feed's text placed one.
  */
 
-export type GameViewPayload = { detail: LiveGameDetail | null; stale: boolean; failed: boolean }
+export type GameViewPayload = {
+  detail: LiveGameDetail | null
+  stale: boolean
+  failed: boolean
+  /**
+   * Your starters in this game (`getGameStarters`). Absent or null when signed
+   * out — the view then simply has no starters panel.
+   */
+  starters?: GameStarters | null
+}
+
+/**
+ * Which starters to keep across a poll.
+ *
+ * ⚠ A FAILED ROSTER READ ON ONE POLL MUST NOT BLANK A PANEL THAT WAS FINE. The
+ * same rule this view already applies to the game itself: the last good answer
+ * stays and the failure is not promoted over it. A GOOD read always wins, so a
+ * lineup change or a new points row lands on the next poll.
+ */
+export function mergeStarters(
+  prev: GameStarters | null | undefined,
+  next: GameStarters | null | undefined,
+): GameStarters | null {
+  if (next && !next.rosterFailed) return next
+  return prev ?? next ?? null
+}
 
 const LIVE_POLL_MS = 20_000
 const IDLE_POLL_MS = 120_000
+export const FINAL_CORRECTION_POLLS = 10
 const YARD_MARKS = [10, 20, 30, 40, 50, 60, 70, 80, 90]
 
-export function LiveGameView({
+export function LiveGameView(props: Parameters<typeof ScopedLiveGameView>[0]) {
+  return <ScopedLiveGameView key={`${props.sport}:${props.gameId}`} {...props} />
+}
+
+function ScopedLiveGameView({
   initial,
   sport,
   gameId,
   backHref,
+  highlightYoutubeId = null,
+  selectedLeagueId = null,
 }: {
   initial: GameViewPayload | null
   sport: string
   gameId: string
   backHref: string
+  /** The league held in the rail: each starter row then shows THAT league's points. */
+  selectedLeagueId?: string | null
+  /**
+   * The game's highlight video, resolved on the server (`highlightForGameDetail`).
+   * A prop rather than part of the payload so the poll, which re-reads the ESPN
+   * summary alone, cannot drop it.
+   */
+  highlightYoutubeId?: string | null
 }) {
   const [payload, setPayload] = useState<GameViewPayload | null>(initial)
   const [tab, setTab] = useState<'scoring' | 'all'>('scoring')
@@ -72,13 +125,19 @@ export function LiveGameView({
     try {
       const res = await fetch(
         `/api/dashboard/live-scores?view=game&sport=${encodeURIComponent(sport)}&game=${encodeURIComponent(gameId)}`,
-        { cache: 'no-store' },
+        { cache: 'no-store', signal: AbortSignal.timeout(15_000) },
       )
       if (!res.ok) throw new Error('Game feed unavailable')
       const next = (await res.json()) as GameViewPayload
       if (mine !== seq.current) return
       // A failed read never replaces a game already on screen; it marks it stale.
-      setPayload((prev) => (next.detail ? next : prev?.detail ? { ...prev, stale: true } : next))
+      setPayload((prev) =>
+        next.detail
+          ? { ...next, starters: mergeStarters(prev?.starters, next.starters) }
+          : prev?.detail
+            ? { ...prev, stale: true }
+            : next,
+      )
     } catch {
       if (mine !== seq.current) return
       setPayload((prev) => (prev?.detail ? { ...prev, stale: true } : { detail: null, stale: true, failed: true }))
@@ -86,10 +145,14 @@ export function LiveGameView({
   }, [sport, gameId])
 
   useEffect(() => {
-    // A final does not change; polling it would only spend requests.
-    if (state === 'post') return
-    const id = window.setInterval(() => void load(), state === 'in' ? LIVE_POLL_MS : IDLE_POLL_MS)
-    return () => window.clearInterval(id)
+    // Final totals and personal points may still be corrected. Stop after ten
+    // slower checks rather than polling a completed game indefinitely.
+    let finalPolls = 0
+    const id = window.setInterval(() => {
+      void load()
+      if (state === 'post' && ++finalPolls >= FINAL_CORRECTION_POLLS) window.clearInterval(id)
+    }, state === 'in' ? LIVE_POLL_MS : IDLE_POLL_MS)
+    return () => { window.clearInterval(id); seq.current += 1 }
   }, [load, state])
 
   if (!detail) {
@@ -125,6 +188,25 @@ export function LiveGameView({
           Showing the last update we have — the latest refresh did not come through. Retrying.
         </p>
       ) : null}
+
+      {highlightYoutubeId && state === 'post' ? (
+        <section className="af-gv-card af-gv-highlight" aria-labelledby="af-gv-highlight-h">
+          <h2 className="af-label" id="af-gv-highlight-h">
+            Highlights
+          </h2>
+          <GameHighlight
+            youtubeId={highlightYoutubeId}
+            title={`${detail.away.name} at ${detail.home.name} highlights`}
+          />
+        </section>
+      ) : null}
+
+      <YourStartersPanel
+        detail={detail}
+        starters={payload?.starters ?? null}
+        sport={sport}
+        selectedLeagueId={selectedLeagueId}
+      />
 
       <div className="af-gv-grid">
         <div className="af-gv-col" data-col="side">
@@ -185,8 +267,191 @@ export function LiveGameView({
       {detail.basketball ? <BoxScore detail={detail} basketball={detail.basketball} /> : null}
       {detail.hockey ? <HockeyBoxScore detail={detail} hockey={detail.hockey} /> : null}
       {detail.baseball ? <BaseballBoxScore detail={detail} baseball={detail.baseball} /> : null}
+      {hasFootballBox(detail) ? <FootballBoxScore detail={detail} starters={payload?.starters ?? null} /> : null}
 
       <GameFooter detail={detail} />
+    </div>
+  )
+}
+
+/* ── your starters ─────────────────────────────────────────────────────────── */
+
+/**
+ * Your starters in this game, with each league's points and his live line.
+ *
+ * The list is the slate card's own `MyStarters`, so points, the league
+ * breakdown and the per-league number under a held league read identically on
+ * both screens. What this view adds is the stat line, from the box score it
+ * already holds.
+ *
+ * ⚠ FOUR STATES, NOT TWO, and each says something different:
+ *   - signed out / no claimed team in this sport → no panel at all;
+ *   - roster read failed → say so; never "none of your starters are here";
+ *   - read fine, nobody of yours in this game → say that, plainly;
+ *   - starters → the list.
+ */
+function YourStartersPanel({
+  detail,
+  starters,
+  sport,
+  selectedLeagueId,
+}: {
+  detail: LiveGameDetail
+  starters: GameStarters | null
+  sport: string
+  selectedLeagueId: string | null
+}) {
+  const groups = useMemo(() => groupStartersByPlayer(starters?.tieIns ?? []), [starters])
+  if (!starters) return null
+  if (groups.length === 0) {
+    if (starters.rosterFailed) {
+      return (
+        <section className="af-gv-card af-gv-mine" aria-labelledby="af-gv-mine-h" data-tone="bad">
+          <h2 className="af-label" id="af-gv-mine-h">Your starters</h2>
+          <p className="af-gv-mine-note">
+            We could not read your rosters just now — this is a problem on our end, not an empty
+            lineup. The game itself is fine.
+          </p>
+        </section>
+      )
+    }
+    if (!starters.hasRosterData) return null
+    return (
+      <section className="af-gv-card af-gv-mine" aria-labelledby="af-gv-mine-h">
+        <h2 className="af-label" id="af-gv-mine-h">Your starters</h2>
+        <p className="af-gv-mine-note">None of your starters are playing in this game.</p>
+      </section>
+    )
+  }
+  return (
+    // Not an `af-gv-card`: `MyStarters` draws its own accented box, and a card
+    // around it would nest one frame inside another.
+    <section className="af-gv-mine" aria-label="Your starters in this game">
+      <MyStarters
+        gameId={detail.gameId}
+        sport={sport}
+        groups={groups}
+        selectedLeagueId={selectedLeagueId}
+        renderStatLine={(group) => <StarterBoxLine detail={detail} group={group} />}
+        /* Before kickoff each row shows this week's projection, as on the slate card. */
+        upcoming={detail.status.state === 'pre'}
+      />
+    </section>
+  )
+}
+
+/**
+ * One starter's line from the box score: "CAR 14 · YDS 71 · TD 1".
+ *
+ * Nothing before kickoff, and nothing when he cannot be placed in the box score
+ * unambiguously (`boxAthleteForStarter`) — an absent line is honest, a line
+ * pinned to a namesake is not.
+ */
+function StarterBoxLine({ detail, group }: { detail: LiveGameDetail; group: StarterGroup }) {
+  if (detail.status.state === 'pre') return null
+  const athleteId = boxAthleteForStarter(detail, group)
+  const lines = athleteId ? starterStatLines(detail.players[athleteId] ?? [], group.position) : []
+  if (lines.length === 0) return null
+  return (
+    <p className="af-gv-mine-line af-num">
+      {lines.map((line) => (
+        <span key={line.group} className="af-gv-mine-group">
+          {statCells(line).map((c) => (
+            <span key={c.label} className="af-gv-mine-cell">
+              <span className="af-gv-mine-cell-label">{c.label}</span> {c.value}
+            </span>
+          ))}
+        </span>
+      ))}
+    </p>
+  )
+}
+
+/* ── football box score ────────────────────────────────────────────────────── */
+
+/**
+ * Passing, rushing, receiving and kicking for both teams; defense, returns and
+ * punting behind a disclosure. Your starters' rows are marked.
+ *
+ * Columns are ESPN's own for each group, not a hardcoded list, so the table
+ * shows what the feed actually reported.
+ */
+function FootballBoxScore({ detail, starters }: { detail: LiveGameDetail; starters: GameStarters | null }) {
+  const teams = useMemo(() => footballBoxTeams(detail), [detail])
+  const mine = useMemo(() => {
+    const ids = new Set<string>()
+    for (const g of groupStartersByPlayer(starters?.tieIns ?? [])) {
+      const id = boxAthleteForStarter(detail, g)
+      if (id) ids.add(id)
+    }
+    return ids
+  }, [detail, starters])
+  const main = new Set<string>(FOOTBALL_MAIN_GROUPS)
+  if (teams.every((t) => t.groups.length === 0)) return null
+  return (
+    <section className="af-gv-card af-gv-box" aria-labelledby="af-gv-fbox">
+      <h2 className="af-label" id="af-gv-fbox">
+        Box score
+      </h2>
+      {teams.map(({ teamId, groups }) => {
+        const team = teamId === detail.home.id ? detail.home : detail.away
+        const primary = groups.filter((g) => main.has(g.group))
+        const more = groups.filter((g) => !main.has(g.group))
+        if (groups.length === 0) return null
+        return (
+          <div key={teamId} className="af-gv-box-team" data-team={teamId}>
+            <div className="af-gv-box-team-head">
+              <TeamLogo team={team} size={22} />
+              <strong>{team.name}</strong>
+            </div>
+            {primary.map((g) => (
+              <FootballBoxTable key={g.group} group={g} mine={mine} />
+            ))}
+            {more.length > 0 ? (
+              <details className="af-gv-box-more">
+                <summary>Defense, returns &amp; punting</summary>
+                {more.map((g) => (
+                  <FootballBoxTable key={g.group} group={g} mine={mine} />
+                ))}
+              </details>
+            ) : null}
+          </div>
+        )
+      })}
+    </section>
+  )
+}
+
+function FootballBoxTable({ group, mine }: { group: BoxGroup; mine: ReadonlySet<string> }) {
+  return (
+    <div className="af-gv-box-scroll">
+      <table className="af-gv-box-table af-num">
+        <thead>
+          <tr>
+            <th scope="col" className="af-gv-box-name">
+              {group.title}
+            </th>
+            {group.labels.map((l) => (
+              <th key={l} scope="col">
+                {l}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {group.rows.map((r) => (
+            <tr key={r.athleteId} data-mine={mine.has(r.athleteId) || undefined}>
+              <th scope="row" className="af-gv-box-name">
+                {r.name}
+                {mine.has(r.athleteId) ? <span className="af-gv-box-mine"> · yours</span> : null}
+              </th>
+              {group.labels.map((_, i) => (
+                <td key={i}>{r.stats[i] ?? ''}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }
@@ -667,9 +932,13 @@ function LastPlay({ detail, play }: { detail: LiveGameDetail; play: GameDetailPl
       <div className="af-gv-lastplay-top">
         <strong className="af-gv-lastplay-title">{title}</strong>
         {favored && favoredPct != null ? (
-          <span className="af-gv-wp af-num" title="ESPN's win probability after this play">
-            ESPN win % · {favored.abbrev} {favoredPct}
-          </span>
+          <>
+            <span className="af-gv-wp af-num">
+              ESPN win % · {favored.abbrev} {favoredPct}
+            </span>
+            {/* Replaces a `title=` a phone never shows; a sibling, so no title sits over the popover. */}
+            <TopicTip topic="espnWinProbability" />
+          </>
         ) : null}
         <span className="af-label af-gv-lastplay-tag">Last play</span>
       </div>
@@ -896,6 +1165,7 @@ function ShotChart({ detail, basketball }: { detail: LiveGameDetail; basketball:
         <h2 className="af-label" id="af-gv-shots">
           Shot chart
         </h2>
+        <TopicTip topic="shotChartCount" />
         <span className="af-gv-muted af-num">
           {made}/{visible.length} FG
         </span>
@@ -1203,6 +1473,7 @@ function RinkShotMap({ detail, hockey }: { detail: LiveGameDetail; hockey: Hocke
         <h2 className="af-label" id="af-gv-rink">
           Shot map
         </h2>
+        <TopicTip topic="hockeyShotsOnGoal" />
         <span className="af-gv-muted af-num">
           {goals} G · {onGoal} SOG
         </span>
@@ -1304,9 +1575,12 @@ function HockeyPlayByPlay({
 
   return (
     <section className="af-gv-card" aria-labelledby="af-gv-hpbp">
-      <h2 className="af-label" id="af-gv-hpbp">
-        Play-by-play
-      </h2>
+      <div className="af-gv-shots-head">
+        <h2 className="af-label" id="af-gv-hpbp">
+          Play-by-play
+        </h2>
+        <TopicTip topic="hockeyStrength" />
+      </div>
       <div className="af-live-scope af-gv-tabs" role="group" aria-label="Which plays to show">
         <button
           type="button"
@@ -1910,9 +2184,12 @@ function BaseballBoxScore({ detail, baseball }: { detail: LiveGameDetail; baseba
   if (teams.length === 0) return null
   return (
     <section className="af-gv-card af-gv-box" aria-labelledby="af-gv-mlbbox">
-      <h2 className="af-label" id="af-gv-mlbbox">
-        Box score
-      </h2>
+      <div className="af-gv-shots-head">
+        <h2 className="af-label" id="af-gv-mlbbox">
+          Box score
+        </h2>
+        <TopicTip topic="baseballBoxColumns" />
+      </div>
       {teams.map(({ team, box }) => (
         <div key={team.id} className="af-gv-box-team" data-team={team.id}>
           <div className="af-gv-box-team-head">

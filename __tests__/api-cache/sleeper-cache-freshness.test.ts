@@ -38,6 +38,7 @@ function answerWith(body: () => unknown) {
 }
 
 beforeEach(async () => {
+  vi.clearAllMocks()
   vi.resetModules()
   h.rows.clear()
   fetchMock.mockReset()
@@ -56,6 +57,47 @@ afterEach(() => {
 async function layer() {
   return import('@/lib/api-cache/SleeperCacheLayer')
 }
+
+describe('cold cache database reads', () => {
+  it('reads a large player payload once for concurrent cold requests', async () => {
+    const { prisma } = await import('@/lib/prisma')
+    let complete!: (row: { data: unknown; expiresAt: Date }) => void
+    vi.mocked(prisma.sportsDataCache.findUnique).mockImplementationOnce(() => new Promise(resolve => { complete = resolve }) as never)
+    const { getAllPlayers } = await layer()
+    const requests = Array.from({ length: 20 }, () => getAllPlayers())
+    expect(prisma.sportsDataCache.findUnique).toHaveBeenCalledTimes(1)
+    complete({ data: { defender: { position: 'LB' } }, expiresAt: new Date(T0 + 24 * 60 * 60 * 1000) })
+    const answers = await Promise.all(requests)
+    expect(answers.every(answer => answer === answers[0])).toBe(true)
+    expect(answers[0]).toEqual({ defender: { position: 'LB' } })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+  it('keeps strict freshness separate and does not downgrade memory after a delayed older read', async () => {
+    const { prisma } = await import('@/lib/prisma')
+    const row = { data: [{ transaction_id: 'old' }], expiresAt: new Date(T0 + 3 * 60 * 1000) }
+    h.rows.set('transactions:L1:5', row)
+    let complete!: (result: typeof row) => void
+    vi.mocked(prisma.sportsDataCache.findUnique).mockImplementationOnce(() => new Promise(resolve => { complete = resolve }) as never)
+    const { getLeagueTransactions } = await layer()
+    const lenient = getLeagueTransactions('L1', 5)
+    expect((await getLeagueTransactions('L1', 5, { maxAgeMs: 45_000 }))[0]).toEqual(expect.objectContaining({ transaction_id: 'tx1' }))
+    complete(row)
+    expect((await lenient)[0]).toEqual({ transaction_id: 'old' })
+    expect((await getLeagueTransactions('L1', 5))[0]).toEqual(expect.objectContaining({ transaction_id: 'tx1' }))
+  })
+  it('releases a failed shared request so the next caller can recover', async () => {
+    const { prisma } = await import('@/lib/prisma')
+    const { getAllPlayers } = await layer()
+    fetchMock.mockRejectedValueOnce(new Error('Provider unavailable'))
+    const failures = await Promise.allSettled([getAllPlayers(), getAllPlayers()])
+    expect(failures.map(result => result.status)).toEqual(['rejected', 'rejected'])
+    expect(prisma.sportsDataCache.findUnique).toHaveBeenCalledTimes(1)
+    answerWith(() => ({ defender: { position: 'LB' } }))
+    expect(await getAllPlayers()).toEqual({ defender: { position: 'LB' } })
+    expect(prisma.sportsDataCache.findUnique).toHaveBeenCalledTimes(2)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+})
 
 describe('🛑 the provider fetch is not a second cache', () => {
   it('asks for no-store and never sets `next.revalidate`', async () => {

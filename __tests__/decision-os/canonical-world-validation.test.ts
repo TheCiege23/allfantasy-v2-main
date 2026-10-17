@@ -20,7 +20,9 @@
  */
 import { describe, expect, it } from 'vitest'
 import { assembleCanonicalWorld } from '@/lib/decision-os/world/assemble'
-import { projectCanonicalLineupInput } from '@/lib/decision-os/lineup/canonicalBridge'
+// The lineup canonical bridge (`lib/decision-os/lineup/canonicalBridge.ts`) was deleted 2026-09-29
+// with the lineup shadow runner, its only production caller. Its read-path cases ((6) and the bye/
+// projection finding) went with it; every WORLD invariant below is unchanged.
 import type { CanonicalWorld, CanonicalWorldRawInput } from '@/lib/decision-os/world/facts'
 import {
   IMPORTED_SETTINGS_SNAPSHOT_WITH_PROVIDER_CHROME,
@@ -158,27 +160,6 @@ describe('Phase D.2 — Canonical World contract holds across all league configs
         expect(world.provenance.sourceModels).toContain('Roster')
         expect(world.provenance.sourceModels).toContain('TeamPerformance')
       })
-
-      // (6) Consumer read path holds: the pure lineup bridge projects EVERY config without throwing and
-      //     degrades honestly (substrate has no enrichment → scanIncomplete, null projection confidence).
-      it('(6) the lineup bridge projects this config honestly (no throw, honest degradation)', () => {
-        let res!: ReturnType<typeof projectCanonicalLineupInput>
-        expect(() => {
-          res = projectCanonicalLineupInput(world, cfg.viewerId, world.league.leagueId)
-        }).not.toThrow()
-        expect(res.source).toBe('canonical_world')
-        expect(res.input).not.toBeNull()
-        expect(res.input!.scanIncomplete).toBe(true) // no metadata enrichment at the substrate level
-        expect(res.input!.projectionConfidence).toBeNull() // never fabricated
-
-        const team = world.teams.find((t) => t.managerUserId === cfg.viewerId)!
-        const roster = world.rosters.find((r) => r.teamId === team.teamId)!
-        expect(res.input!.players.length).toBe(roster.playerCount)
-        // Starters are honestly marked STARTER (the substrate knows membership, not the specific slot).
-        for (const starterId of roster.starterIds) {
-          expect(res.input!.players.find((p) => p.playerId === starterId)?.slotType).toBe('STARTER')
-        }
-      })
     })
   }
 })
@@ -280,17 +261,6 @@ describe('Phase D.2 — documented substrate findings', () => {
     // FAAB leagues leave it null (no priority order) — still surfaced, never invented.
     const faab = assemble(makeImportedProviderWorld())
     expect(faab.rosters.every((r) => r.waiverPriority === null)).toBe(true)
-  })
-
-  // FINDING (DOCUMENTED, unchanged): bye week + projections have NO provider-id-keyed source, so the
-  // substrate/bridge leave them null and never fabricate. This is the honest gap the trade/lineup
-  // bridges must degrade around — asserted here so the contract stays explicit, not silently assumed.
-  it('DOCUMENTED: bye week + projection confidence remain honestly null (never fabricated)', () => {
-    const world = assemble(makeImportedSleeperDynastyWorld())
-    const res = projectCanonicalLineupInput(world, 'af-user-aaa', world.league.leagueId)
-    expect(res.input).not.toBeNull()
-    expect(res.input!.projectionConfidence).toBeNull()
-    expect(res.input!.players.every((p) => p.byeWeek === null)).toBe(true)
   })
 
   // FINDING F0-1 (CLOSED): a REAL imported settings snapshot carries league chrome + provenance whose

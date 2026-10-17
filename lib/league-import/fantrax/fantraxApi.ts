@@ -55,8 +55,14 @@ export const FANTRAX_ENDPOINTS = [
   'getMatchupScores',
 ] as const
 
-/** Fantrax's own sport codes. 'CFB' and 'NCAAF' are the same 16,886-row map. */
-export type FantraxSport = 'CFB' | 'NCAAF' | 'NFL'
+/**
+ * Fantrax's own sport codes. 'CFB' and 'NCAAF' are the same 16,886-row map.
+ *
+ * 'NBA' — `getAdp?sport=NBA` verified 2026-10-13: HTTP 200, a JSON array of 351
+ * `{ pos, name: "Last, First", id, ADP }`. The field is `ADP`, not NCAAF's `ADP_PPR`;
+ * `getFantraxAdp` already reads both.
+ */
+export type FantraxSport = 'CFB' | 'NCAAF' | 'NFL' | 'MLB' | 'NBA'
 
 export type FantraxFailure = {
   /**
@@ -75,6 +81,7 @@ export type FantraxFailure = {
 export type FantraxResult<T> = { ok: true; data: T } | { ok: false; failure: FantraxFailure }
 
 export type FantraxPlayerRef = {
+  rotowireId?: string | number
   fantraxId: string
   name: string
   team: string

@@ -79,7 +79,7 @@ export default function GuardianStateOverlay({
           <div className="flex items-center gap-2 mb-0.5">
             <span className={`text-sm font-semibold ${config.textColor}`}>{config.title}</span>
             {deviationScore > 0 && (
-              <span className={`text-[10px] font-mono ${config.textColor} opacity-60`}>
+              <span className={`text-[11px] font-mono ${config.textColor} opacity-60`}>
                 {deviationScore}% deviation
               </span>
             )}
@@ -96,8 +96,8 @@ export default function GuardianStateOverlay({
 
       <div className="space-y-0.5">
         <div className="flex items-center justify-between">
-          <span className="text-[10px] text-white/30 uppercase tracking-wider">Risk Level</span>
-          <span className={`text-[10px] font-medium capitalize ${config.textColor}`}>{severity}</span>
+          <span className="text-[11px] text-white/30 uppercase tracking-wider">Risk Level</span>
+          <span className={`text-[11px] font-medium capitalize ${config.textColor}`}>{severity}</span>
         </div>
         <div className="h-1.5 rounded-full bg-white/5 overflow-hidden">
           <div className={`h-full rounded-full ${severityBar} transition-all duration-500`} />

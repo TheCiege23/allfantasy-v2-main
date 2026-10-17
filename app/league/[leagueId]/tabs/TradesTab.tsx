@@ -1,5 +1,8 @@
 'use client'
 
+import '@/components/core-app/af-core.css'
+import '@/components/league/league-transactions.css'
+
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useVisibleRefresh } from '@/hooks/useVisibleRefresh'
@@ -12,6 +15,10 @@ import { TeamLogo } from '@/app/components/TeamLogo'
 import PlayerHeadshot from '@/components/league/PlayerHeadshot'
 import type { LeagueTradeHistoryItem } from '@/components/league/types'
 import { mirrorLetter, type TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
+import { assetValues, gradeReasons, type importedTradeTimelineRows, type TimelineAsset } from '@/lib/core-app/importedTradeTimeline'
+
+/** One completed trade from an imported league's history, as the panel returns it (`?history=1`). */
+type ImportedHistoryRow = ReturnType<typeof importedTradeTimelineRows>[number]
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import type { LeagueTradeBlockPanelItem } from '@/components/league/types'
 import type { GradeLetter } from '@/lib/trade-intel/gradeScale'
@@ -22,7 +29,10 @@ import { shadowDisclosure } from '@/lib/league/write-authority'
 import { ProposeTradeModal } from './ProposeTradeModal'
 import { LeagueSurfaceState } from '@/components/league/LeagueSurfaceState'
 import { ReverseTradeDialog } from '@/components/league-trade/ReverseTradeDialog'
+import { TradeReviewPanel } from '@/components/trade-review/TradeReviewPanel'
+import { reviewIdFor } from '@/lib/trade-review/reviewIdStore'
 import { previewGenericTradeReversal, requestGenericTradeReversal } from '@/lib/trade-reversal/client'
+import { SleeperOffersNotice } from '@/components/trades/SleeperOffersNotice'
 import {
   groupTradeTimelineBySeason,
   tradeSeasonFromIso,
@@ -37,9 +47,9 @@ import {
  *   1. Needs your action — offers waiting on the viewer, provider offers that
  *      can only be answered on the provider, and reviews waiting on the
  *      commissioner.
- *   2. Your trades — active, then (native leagues) completed.
- *   3. League trade log — native leagues only. An imported league's completed trades are in the
- *      /core Trade Center instead; see "🛑 RETIRED FOR IMPORTED LEAGUES" below.
+ *   2. Your trades — active, then completed.
+ *   3. League trade log — every league. An imported league's completed trades come from the graded
+ *      history (`?history=1`); see "RESTORED ON THE ONE GRADE" below.
  *   4. Trade block — what managers have flagged available.
  *
  * One read: `/api/league/trades-panel` (pending + completed offers + native history + block).
@@ -50,6 +60,12 @@ import {
  * therefore appeared twice (once "COMPLETED", once falling through to "Pending"), and the ledger's
  * copy printed "COMPLETED · EVEN" beside a board that graded it F. That read is gone. An imported
  * league's full history, on the one grade, lives in the Trade Center; this tab links there.
+ *
+ * ✅ RESTORED ON THE ONE GRADE (Guap, 2026-09-27: "bring them back, graded"). The retirement was about
+ * the SECOND letter, not about showing history. The panel now returns the league's completed history
+ * carrying THE grade (`leagueGrade`, the Trade Center's letter for the same trade), built by the same
+ * `importedTradeTimelineRows`. The realized-points ledger is still never read, and `realizedGrade` is
+ * deliberately not drawn here — see `rowFromImportedTimeline`.
  * ⚠ A NATIVE league keeps its log here: its trades are never written to `transactionFact`, so the
  * Trade Center's history cannot show them.
  *
@@ -82,6 +98,8 @@ type PanelResponse = {
   activeTrades?: LeagueTradeHistoryItem[]
   /** Native completed and closed negotiation history, privacy-filtered by the server. */
   historyTrades?: LeagueTradeHistoryItem[]
+  /** An imported league's completed history on the one grade. Only on a `?history=1` read. */
+  importedHistory?: { rows: ImportedHistoryRow[]; available: boolean }
   /** Commissioner-only, native leagues only: trades that have executed and may be reversed. */
   executedTrades?: LeagueTradeHistoryItem[]
   activeCount?: number
@@ -134,7 +152,8 @@ type LogSide = {
   name: string
   avatarUrl?: string | null
   you: boolean
-  sends: string
+  /** What this side RECEIVED — each column is named for the team that got it, beside its own letter. */
+  gets: string
   /** Realized result in the trade's first scored season. */
   initialGrade: GradeLetter | null
   initialLabel: 'Then' | 'First'
@@ -159,6 +178,8 @@ type LogRow = {
   /** Viewer-relative direction, only for the viewer's own rows. */
   direction: 'incoming' | 'outgoing' | 'done' | null
   receiptNote?: string | null
+  /** THE grade's own sentences — why it graded this way. Imported history only, for now. */
+  why?: string[] | null
 }
 
 function watchStorageKey(leagueId: string): string {
@@ -199,7 +220,7 @@ function positionAccent(pos: string): { border: string; label: string } {
   if (['DB', 'CB', 'S', 'SS', 'FS'].includes(p)) return { border: 'border-indigo-400/65', label: 'text-indigo-300/90' }
   if (p === 'K') return { border: 'border-yellow-400/55', label: 'text-yellow-200/85' }
   if (p === 'DEF' || p === 'DST') return { border: 'border-slate-400/60', label: 'text-slate-300/90' }
-  return { border: 'border-[#ff3d81]/50', label: 'text-[#ff9ec0]/85' }
+  return { border: 'border-[var(--line2)]', label: 'text-[#ff9ec0]/85' }
 }
 
 const PLATFORM_MARK: Record<string, string> = {
@@ -232,7 +253,7 @@ const STATUS_TONE: Record<LogRow['status']['tone'], string> = {
   warn: 'border-amber-400/30 bg-amber-400/10 text-amber-200',
   violet: 'border-violet-400/30 bg-violet-400/10 text-violet-200',
   good: 'border-emerald-400/30 bg-emerald-400/10 text-emerald-200',
-  muted: 'border-white/10 bg-white/[0.04] text-white/50',
+  muted: 'border-[var(--line2)] bg-[var(--surface2)] text-[var(--muted)]',
 }
 
 const EYEBROW = 'font-mono font-bold uppercase tracking-[0.14em]'
@@ -301,8 +322,8 @@ function rowFromActive(t: LeagueTradeHistoryItem): LogRow {
       when: whenLabel(t.timestamp),
       sortKey: Date.parse(t.timestamp) || 0,
       season: tradeSeasonFromIso(t.timestamp),
-      a: { name: 'You', you: true, sends: sent, initialGrade: null, initialLabel: 'Then', grade: null, gradeWhy: why },
-      b: { name: t.partnerName, you: false, sends: received, initialGrade: null, initialLabel: 'Then', grade: null, gradeWhy: why },
+      a: { name: 'You', you: true, gets: received, initialGrade: null, initialLabel: 'Then', grade: null, gradeWhy: why },
+      b: { name: t.partnerName, you: false, gets: sent, initialGrade: null, initialLabel: 'Then', grade: null, gradeWhy: why },
       extraSides: 0,
       status: statusOf(t),
       mine: true,
@@ -317,8 +338,8 @@ function rowFromActive(t: LeagueTradeHistoryItem): LogRow {
     season: tradeSeasonFromIso(t.timestamp),
     when: whenLabel(t.timestamp),
     sortKey: Date.parse(t.timestamp) || 0,
-    a: { name: t.partnerName, you: false, sends: sent, initialGrade: null, initialLabel: 'Then', grade: null, gradeWhy: why },
-    b: { name: 'Receiving team', you: false, sends: received, initialGrade: null, initialLabel: 'Then', grade: null, gradeWhy: why },
+    a: { name: t.partnerName, you: false, gets: received, initialGrade: null, initialLabel: 'Then', grade: null, gradeWhy: why },
+    b: { name: 'Receiving team', you: false, gets: sent, initialGrade: null, initialLabel: 'Then', grade: null, gradeWhy: why },
     extraSides: 0,
     status: statusOf(t),
     mine: false,
@@ -376,7 +397,7 @@ function rowFromNativeHistory(t: LeagueTradeHistoryItem): LogRow {
       name: providerRow ? 'You' : t.proposerName ?? (viewerIsA ? 'You' : t.partnerName),
       avatarUrl: t.proposerAvatarUrl ?? (viewerIsA ? t.viewerAvatarUrl : t.partnerAvatarUrl) ?? null,
       you: viewerIsA,
-      sends: joinNames(t.sent),
+      gets: joinNames(t.received),
       initialGrade: (frozenProposer?.grade as GradeLetter | null | undefined) ?? proposalGrade,
       initialLabel: 'Then',
       initialWhy: frozenProposer?.reason ?? t.proposalGradeReason ?? null,
@@ -387,7 +408,7 @@ function rowFromNativeHistory(t: LeagueTradeHistoryItem): LogRow {
       name: providerRow ? t.partnerName : t.receiverName ?? (viewerIsB ? 'You' : t.partnerName),
       avatarUrl: t.receiverAvatarUrl ?? (viewerIsB ? t.viewerAvatarUrl : t.partnerAvatarUrl) ?? null,
       you: viewerIsB,
-      sends: joinNames(t.received),
+      gets: joinNames(t.sent),
       initialGrade: receiverProposalGrade,
       initialLabel: 'Then',
       initialWhy: frozenReceiver?.reason ?? t.proposalGradeReason ?? null,
@@ -404,15 +425,85 @@ function rowFromNativeHistory(t: LeagueTradeHistoryItem): LogRow {
   }
 }
 
+/** "Woody Marks · 1,240, 2027 round 3 · 610" — each asset with the league value THE grade priced it at. */
+function assetsWithValues(assets: TimelineAsset[], values: Array<number | null>): string {
+  if (assets.length === 0) return '—'
+  return assets
+    .map((a, i) => {
+      const drafted = a.gradedAs ? ` (drafted ${a.gradedAs})` : ''
+      const v = values[i]
+      return `${a.label}${drafted}${v != null ? ` · ${Math.round(v).toLocaleString()}` : ''}`
+    })
+    .join(', ')
+}
+
+/**
+ * A completed trade from an imported league's history (2026-09-27).
+ *
+ * 🛑 THE ONE GRADE ONLY. The 2026-09-25 retirement was about a SECOND letter — the realized-points
+ * ledger printing "EVEN" beside a board that said F. This row carries `leagueGrade`, the letter the
+ * Trade Center shows for the same trade, and deliberately drops the row's `realizedGrade`: bringing
+ * that back here would rebuild exactly the contradiction that was retired.
+ *
+ * "Then" stays an em dash with its reason: nothing recorded a grade when the trade was made on Sleeper.
+ */
+function rowFromImportedTimeline(t: ImportedHistoryRow): LogRow {
+  const g = t.leagueGrade
+  const graded = g?.graded ? g : null
+  const sentValues = graded ? assetValues(t.sent, graded.lines, 'give') : []
+  const receivedValues = graded ? assetValues(t.received, graded.lines, 'get') : []
+  const aYou = t.sideAYou === true
+  const bYou = t.sideBYou === true
+  const noThen = 'no grade was recorded when this trade was made'
+  const nowWhy = g && !g.graded ? g.reason : graded ? null : 'league values could not be read for this trade'
+  return {
+    id: `imported:${t.id}`,
+    kind: 'completed',
+    season: tradeSeasonFromIso(t.timestamp),
+    when: whenLabel(t.timestamp),
+    sortKey: Date.parse(t.timestamp) || 0,
+    a: {
+      name: aYou ? 'You' : t.sideAName,
+      you: aYou,
+      gets: assetsWithValues(t.received, receivedValues),
+      initialGrade: null,
+      initialLabel: 'Then',
+      initialWhy: noThen,
+      grade: graded ? graded.letter : null,
+      gradeWhy: nowWhy,
+    },
+    b: {
+      name: bYou ? 'You' : t.sideBName,
+      you: bYou,
+      gets: assetsWithValues(t.sent, sentValues),
+      initialGrade: null,
+      initialLabel: 'Then',
+      initialWhy: noThen,
+      grade: graded ? graded.partnerLetter : null,
+      gradeWhy: nowWhy,
+    },
+    extraSides: 0,
+    status: { label: 'Completed · on Sleeper', tone: 'good' },
+    mine: aYou || bYou,
+    direction: aYou || bYou ? 'done' : null,
+    why: graded ? gradeReasons(graded, aYou ? 'You' : t.sideAName, bYou ? 'You' : t.sideBName) : null,
+  }
+}
+
+/** The platform transaction a log row stands for, whichever feed produced it. */
+function transactionKey(rowId: string): string {
+  return rowId.split(':').at(-1) ?? rowId
+}
+
 function GradeTile({ letter, why, size = 'md' }: { letter: GradeLetter | null; why: string | null; size?: 'sm' | 'md' }) {
   const dim = size === 'sm' ? 'h-6 w-6 text-[12px] rounded-md' : 'h-7 w-7 text-[14px] rounded-lg'
   if (!letter) {
     return (
       <span className="inline-flex items-center gap-1.5" title={why ?? undefined}>
-        <span className={`inline-flex items-center justify-center border border-white/10 bg-white/[0.04] font-black text-white/35 ${dim}`}>
+        <span className={`inline-flex items-center justify-center border border-[var(--line2)] bg-[var(--surface2)] font-black text-[var(--muted)] ${dim}`}>
           —
         </span>
-        {why ? <span className="text-[10px] leading-tight text-white/35">{why}</span> : null}
+        {why ? <span className="text-[11px] leading-tight text-[var(--muted)]">{why}</span> : null}
       </span>
     )
   }
@@ -424,9 +515,23 @@ function GradeTile({ letter, why, size = 'md' }: { letter: GradeLetter | null; w
   )
 }
 
+/** Why a completed trade graded the way it did — THE grade's own sentences, full width under the row. */
+function GradeWhy({ lines }: { lines: string[] | null | undefined }) {
+  if (!lines || lines.length === 0) return null
+  return (
+    <ul className="col-span-full flex flex-col gap-0.5 rounded-lg bg-[var(--surface2)] px-3 py-2" aria-label="Why it graded this way">
+      {lines.map((line, i) => (
+        <li key={line} className={`text-[11px] leading-snug ${i === 0 ? 'font-semibold text-[var(--text2)]' : 'text-[var(--muted)]'}`}>
+          {line}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 function StatusChip({ status }: { status: LogRow['status'] }) {
   return (
-    <span className={`whitespace-nowrap rounded border px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[0.06em] ${STATUS_TONE[status.tone]}`}>
+    <span className={`whitespace-nowrap rounded border px-1.5 py-0.5 font-mono text-[11px] font-bold uppercase tracking-[0.06em] ${STATUS_TONE[status.tone]}`}>
       {status.label}
     </span>
   )
@@ -434,7 +539,7 @@ function StatusChip({ status }: { status: LogRow['status'] }) {
 
 function YouPill() {
   return (
-    <span className="rounded border border-[#ff3d81]/40 bg-[#ff3d81]/10 px-1 py-px font-mono text-[8px] font-bold tracking-[0.08em] text-[#ffb8d1]">
+    <span className="rounded border border-[var(--line2)] bg-[var(--accent-soft)] px-1 py-px font-mono text-[11px] font-bold tracking-[0.08em] text-[var(--accent)]">
       YOU
     </span>
   )
@@ -536,9 +641,10 @@ export type PendingVerdict =
  * at six) — so one offer could carry a different letter here than in the Trade Center or the
  * inbox. The server now grades every open offer with the one grader and this only reshapes it.
  *
- * Per-asset values are matched by POSITION, not by name: the grader prices the sides in the order
- * the row lists them, and a pricer's canonical spelling ("Kenneth Walker III") need not match the
- * label on the card.
+ * Per-asset values are matched by name, then pick year + round, and only then by POSITION — the
+ * grader prices the sides in the order the row lists them, and a pricer's canonical spelling
+ * ("Kenneth Walker III") need not match the label on the card, so position still settles what
+ * names cannot. It no longer overrides a name that matches outright (2026-10-01).
  */
 export function pendingVerdictFromGrade(
   grade: TradeGradeView | null | undefined,
@@ -548,10 +654,14 @@ export function pendingVerdictFromGrade(
   if (!grade) return undefined
   if (!grade.graded) return { kind: 'skipped', why: grade.reason }
   const values: Record<string, number | null> = {}
-  const give = grade.lines.filter((l) => l.side === 'give')
-  const get = grade.lines.filter((l) => l.side === 'get')
-  giveNames.forEach((n, i) => { values[n.toLowerCase()] = give[i]?.leagueValue ?? null })
-  getNames.forEach((n, i) => { values[n.toLowerCase()] = get[i]?.leagueValue ?? null })
+  /*
+   * Name, then pick year + round, then place (`assetValues`) — place stays the fallback for a
+   * pricer's canonical spelling, but no longer decides a pick or a name that matches outright.
+   */
+  const giveValues = assetValues(giveNames.map((label) => ({ label })), grade.lines, 'give')
+  const getValues = assetValues(getNames.map((label) => ({ label })), grade.lines, 'get')
+  giveNames.forEach((n, i) => { values[n.toLowerCase()] = giveValues[i] ?? null })
+  getNames.forEach((n, i) => { values[n.toLowerCase()] = getValues[i] ?? null })
   return {
     kind: 'ok',
     fairnessScore: null,
@@ -615,7 +725,7 @@ function initialsOf(name: string): string {
 function AssetAvatar({ a, sport }: { a: CardAsset; sport: string }) {
   if (a.kind === 'pick') {
     return (
-      <span className="inline-flex h-8 w-8 flex-none items-center justify-center rounded-lg bg-[#8f97bd]/20 font-mono text-[9px] font-black tracking-[0.06em] text-[#c3c9e6]">
+      <span className="inline-flex h-8 w-8 flex-none items-center justify-center rounded-lg bg-[#8f97bd]/20 font-mono text-[11px] font-black tracking-[0.06em] text-[#c3c9e6]">
         PICK
       </span>
     )
@@ -634,7 +744,7 @@ function AssetAvatar({ a, sport }: { a: CardAsset; sport: string }) {
     return <PlayerImage sleeperId={a.sleeperId} sport={sport} name={a.name} size={32} variant="round" />
   }
   return (
-    <span className="inline-flex h-8 w-8 flex-none items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-[10px] font-bold text-white/70">
+    <span className="inline-flex h-8 w-8 flex-none items-center justify-center rounded-full border border-[var(--line2)] bg-[var(--surface2)] text-[11px] font-bold text-[var(--muted)]">
       {initialsOf(a.name)}
     </span>
   )
@@ -654,6 +764,7 @@ function ManagerBlock({
   sport,
   avatarUrl,
   gradeReason,
+  verb = 'gets',
 }: {
   name: string
   isYou: boolean
@@ -664,35 +775,37 @@ function ManagerBlock({
   sport: string
   avatarUrl?: string | null
   gradeReason?: string | null
+  /** What the listed assets are to this manager: what they get (the default) or, on a legacy multi-team row, send. */
+  verb?: 'gets' | 'sends'
 }) {
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center gap-2">
         {avatarUrl ? <PlayerHeadshot src={avatarUrl} alt={name} size={24} /> : (
-          <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#ff3d81]/15 text-[9px] font-black text-[#ffb8d1]">{initialsOf(name)}</span>
+          <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[var(--accent-soft)] text-[11px] font-black text-[var(--accent)]">{initialsOf(name)}</span>
         )}
-        <span className="text-[13px] font-extrabold text-white">{name}</span>
+        <span className="text-[13px] font-extrabold text-[var(--text)]">{name}</span>
         {isYou ? <YouPill /> : null}
-        <span className={`${EYEBROW} text-[8.5px] text-white/35`}>sends</span>
+        <span className={`${EYEBROW} text-[11px] text-[var(--muted)]`}>{verb}</span>
         <span className="flex-1" />
         {grade ? <GradeTile letter={grade} why={null} size="sm" /> : null}
-        {values ? <span className="font-mono text-[11px] font-bold text-[#CBD5E1]">{money(total)}</span> : null}
+        {values ? <span className="font-mono text-[11px] font-bold text-[var(--text2)]">{money(total)}</span> : null}
       </div>
       {assets.length === 0 ? (
-        <p className="pl-8 text-[11.5px] italic text-white/35">Nothing</p>
+        <p className="pl-8 text-[11.5px] italic text-[var(--muted)]">Nothing</p>
       ) : (
         assets.map((a) => {
           const v = values && a.kind === 'player' ? values[a.name.toLowerCase()] : undefined
           return (
-            <div key={a.key} className="flex items-center gap-2.5 rounded-lg border border-[#1E2A42] bg-[#0a1228] px-2.5 py-2">
+            <div key={a.key} className="flex items-center gap-2.5 rounded-lg border border-[var(--line2)] bg-[var(--surface2)] px-2.5 py-2">
               <AssetAvatar a={a} sport={sport} />
               <div className="min-w-0 flex-1">
-                <p className="truncate text-[12.5px] font-bold leading-tight text-white">{a.name}</p>
-                {a.meta ? <p className="font-mono text-[10px] text-white/45">{a.meta}</p> : null}
+                <p className="truncate text-[12.5px] font-bold leading-tight text-[var(--text)]">{a.name}</p>
+                {a.meta ? <p className="font-mono text-[11px] text-[var(--muted)]">{a.meta}</p> : null}
               </div>
-              {a.kind === 'player' && a.team ? <TeamLogo teamAbbr={a.team} sport={sport} size={21} /> : null}
+              {a.kind === 'player' && a.team ? <TeamLogo teamAbbr={a.team} sport={sport} logoUrl={a.teamLogoUrl} size={21} /> : null}
               {values ? (
-                <span className={`font-mono text-[11.5px] font-bold ${v == null ? 'text-white/30' : 'text-[#CBD5E1]'}`}>
+                <span className={`font-mono text-[11.5px] font-bold ${v == null ? 'text-[var(--muted)]' : 'text-[var(--text2)]'}`}>
                   {a.kind === 'player' ? money(v) : '—'}
                 </span>
               ) : null}
@@ -700,13 +813,15 @@ function ManagerBlock({
           )
         })
       )}
-      {gradeReason ? <p className="pl-8 text-[10.5px] leading-snug text-white/45">{gradeReason}</p> : null}
+      {gradeReason ? <p className="pl-8 text-[11px] leading-snug text-[var(--muted)]">{gradeReason}</p> : null}
     </div>
   )
 }
 
 export function PendingTradeCard(props: {
   trade: LeagueTradeHistoryItem
+  /** The AllFantasy league id — set where a commissioner may review the trade (design step 6). */
+  leagueId?: string
   offer: BuilderOffer | null
   verdict: PendingVerdict | undefined
   sport: string
@@ -731,9 +846,24 @@ export function PendingTradeCard(props: {
     return index === 0 ? t.partnerName : index === 1 ? 'You' : `Team ${index + 1}`
   }
 
-  /* The viewer's side is `sent`; the partner's is `received`. Proposer goes first, like the provider's card. */
-  const youAssets = offer ? cardAssetsFromOffer(offer.give, 'g') : cardAssetsFromPanel(t.sent)
-  const themAssets = offer ? cardAssetsFromOffer(offer.get, 'k') : cardAssetsFromPanel(t.received)
+  /*
+   * Each block lists what that manager GETS (2026-10-01), under the letter graded for them — the
+   * KeepTradeCut "Team 1 gets…" reading. `sent` left the viewer's roster, so it is what the partner
+   * gets; `received` is what the viewer gets. Proposer goes first, like the provider's card.
+   */
+  const youAssets = offer ? cardAssetsFromOffer(offer.get, 'k') : cardAssetsFromPanel(t.received)
+  const themAssets = offer ? cardAssetsFromOffer(offer.give, 'g') : cardAssetsFromPanel(t.sent)
+  /*
+   * A participant's own `received`, or — on a two-team row without it — the other side's assets. A
+   * three-team row without `received` cannot say who got what, so that card keeps the old "sends"
+   * framing whole rather than print "gets: Nothing" under every manager.
+   */
+  const sides = t.participantSides ?? []
+  const framing: 'gets' | 'sends' = sides.length > 2 && !sides.every((side) => side.received) ? 'sends' : 'gets'
+  const participantGets = (side: NonNullable<LeagueTradeHistoryItem['participantSides']>[number]) =>
+    framing === 'sends'
+      ? side.assets
+      : side.received ?? sides.find((other) => other.rosterId !== side.rosterId)?.assets ?? []
 
   const you = { name: commissionerView ? (t.proposerName ?? 'Proposer') : 'You', isYou: !commissionerView, assets: youAssets, avatarUrl: t.viewerAvatarUrl ?? t.proposerAvatarUrl ?? null, viewerSide: true }
   const them = { name: t.partnerName, isYou: false, assets: themAssets, avatarUrl: t.partnerAvatarUrl ?? null, viewerSide: false }
@@ -741,7 +871,7 @@ export function PendingTradeCard(props: {
     ? t.participantSides.map((side) => ({
         name: side.name,
         isYou: side.isViewer,
-        assets: cardAssetsFromPanel(side.assets),
+        assets: cardAssetsFromPanel(participantGets(side)),
         avatarUrl: side.avatarUrl,
         viewerSide: side.isViewer,
         rosterId: side.rosterId,
@@ -761,7 +891,9 @@ export function PendingTradeCard(props: {
    * proposer's (listed first) when a commissioner is looking at someone else's.
    */
   const gradeFor = (gradedSide: boolean) => (ok ? (gradedSide ? ok.giveGrade : ok.getGrade) : null)
-  const totalFor = (gradedSide: boolean) => (ok ? (gradedSide ? ok.giveTotal : ok.getTotal) : null)
+  // A "gets" block totals the value coming in (the graded side's `get`); a "sends" block, going out.
+  const totalFor = (gradedSide: boolean) =>
+    ok ? ((gradedSide === (framing === 'gets')) ? ok.getTotal : ok.giveTotal) : null
 
   const headline = commissionerView
     ? `${t.proposerName ?? 'A manager'} has proposed a trade`
@@ -774,26 +906,26 @@ export function PendingTradeCard(props: {
     : review
       ? { label: 'Commissioner review', cls: 'bg-violet-400/15 text-violet-200' }
       : t.direction === 'outgoing'
-        ? { label: 'Your offer', cls: 'bg-white/[0.06] text-[#CBD5E1]' }
+        ? { label: 'Your offer', cls: 'bg-[var(--surface2)] text-[var(--text2)]' }
         : { label: 'Offer to you', cls: 'bg-amber-400/15 text-amber-200' }
-  const border = onSleeper ? 'border-[#1E2A42]' : review ? 'border-violet-400/35' : t.direction === 'outgoing' ? 'border-[#1E2A42]' : 'border-amber-400/40'
+  const border = onSleeper ? 'border-[var(--line2)]' : review ? 'border-violet-400/35' : t.direction === 'outgoing' ? 'border-[var(--line2)]' : 'border-amber-400/40'
 
   return (
-    <article className={`flex flex-col gap-3 rounded-2xl border bg-[#131929] p-3.5 ${border}`} data-testid="pending-trade-card">
+    <article className={`flex flex-col gap-3 rounded-2xl border bg-[var(--surface)] p-3.5 ${border}`} data-testid="pending-trade-card">
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2">
-          <span className="inline-flex h-7 w-7 flex-none items-center justify-center rounded-lg bg-[#ff3d81]/15 text-[#ffb8d1]" aria-hidden>
+          <span className="inline-flex h-7 w-7 flex-none items-center justify-center rounded-lg bg-[var(--accent-soft)] text-[var(--accent)]" aria-hidden>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3l4 4-4 4" /><path d="M3 7h18" /><path d="M7 21l-4-4 4-4" /><path d="M21 17H3" /></svg>
           </span>
           <div>
-            <p className="text-[13px] font-extrabold leading-tight text-white">{headline}</p>
-            <p className="mt-0.5 text-[10.5px] text-white/40">
+            <p className="text-[13px] font-extrabold leading-tight text-[var(--text)]">{headline}</p>
+            <p className="mt-0.5 text-[11px] text-[var(--muted)]">
               {whenLabel(t.timestamp)}
               {review ? ' · awaiting the commissioner' : ''}
             </p>
           </div>
         </div>
-        <span className={`whitespace-nowrap rounded px-1.5 py-1 font-mono text-[9px] font-bold uppercase tracking-[0.08em] ${role.cls}`}>
+        <span className={`whitespace-nowrap rounded px-1.5 py-1 font-mono text-[11px] font-bold uppercase tracking-[0.08em] ${role.cls}`}>
           {role.label}
         </span>
       </div>
@@ -821,6 +953,7 @@ export function PendingTradeCard(props: {
             grade={gradeFor(gradedSide)}
             sport={props.sport}
             avatarUrl={side.avatarUrl}
+            verb={framing}
             gradeReason={('gradeReason' in side ? side.gradeReason : null) ?? frozen?.reason ?? null}
           />
           )
@@ -830,21 +963,21 @@ export function PendingTradeCard(props: {
       {/* ── The AllFantasy read ──────────────────────────────────────── */}
       <div className="rounded-xl border border-[#22d3ee]/25 bg-[#22d3ee]/[0.06] px-3 py-2.5">
         {t.decisionReceipt ? (
-          <div className="mb-2 flex flex-wrap items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.06em]">
+          <div className="mb-2 flex flex-wrap items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.06em]">
             <span className={t.decisionReceipt.completeness === 'complete'
               ? 'rounded bg-emerald-400/15 px-1.5 py-1 text-emerald-200'
               : 'rounded bg-amber-400/15 px-1.5 py-1 text-amber-200'}>
               {t.decisionReceipt.completeness === 'complete' ? 'Verified league receipt' : 'Partial league receipt'}
             </span>
-            <span className="text-white/40">{t.decisionReceipt.format.replaceAll('_', ' ')}</span>
+            <span className="text-[var(--muted)]">{t.decisionReceipt.format.replaceAll('_', ' ')}</span>
             {t.decisionReceipt.outcomeVerified && typeof t.decisionReceipt.deltaPct === 'number' ? (
               <span className="text-[#67e4f7]">
                 {t.decisionReceipt.outcomeMetric === 'survival' ? 'Survival' : 'Playoff'} {t.decisionReceipt.deltaPct >= 0 ? '+' : ''}{t.decisionReceipt.deltaPct.toFixed(1)}%
               </span>
             ) : null}
-            {t.decisionReceipt.valueSource ? <span className="normal-case tracking-normal text-white/35">Values: {t.decisionReceipt.valueSource}</span> : null}
+            {t.decisionReceipt.valueSource ? <span className="normal-case tracking-normal text-[var(--muted)]">Values: {t.decisionReceipt.valueSource}</span> : null}
             {t.decisionReceipt.participantOutcomes.map((outcome, index) => (
-              <span key={outcome.rosterId} className="normal-case tracking-normal text-white/60">
+              <span key={outcome.rosterId} className="normal-case tracking-normal text-[var(--muted)]">
                 {receiptParticipantLabel(index)}: {outcome.deltaPct >= 0 ? '+' : ''}{outcome.deltaPct.toFixed(1)}%
               </span>
             ))}
@@ -853,38 +986,38 @@ export function PendingTradeCard(props: {
         {t.decisionReceipt?.participantDecisions.length ? (
           <div className="mb-2 space-y-1.5">
             {t.decisionReceipt.participantDecisions.map((participant, index) => (
-              <p key={participant.rosterId} className="text-[10.5px] leading-snug text-white/55">
-                <strong className="text-white/75">{receiptParticipantLabel(index)}{participant.grade ? ` · ${participant.grade} at proposal` : ''}:</strong>{' '}{participant.reason}
+              <p key={participant.rosterId} className="text-[11px] leading-snug text-[var(--muted)]">
+                <strong className="text-[var(--muted)]">{receiptParticipantLabel(index)}{participant.grade ? ` · ${participant.grade} at proposal` : ''}:</strong>{' '}{participant.reason}
               </p>
             ))}
           </div>
         ) : null}
         {t.decisionRecommendation ? (
-          <div className="mb-2 flex items-start gap-2 rounded-lg border border-[#22d3ee]/20 bg-black/10 px-2.5 py-2">
-            <span className="rounded bg-[#22d3ee]/15 px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase text-[#67e4f7]">
+          <div className="mb-2 flex items-start gap-2 rounded-lg border border-[#22d3ee]/20 bg-[var(--surface2)] px-2.5 py-2">
+            <span className="rounded bg-[#22d3ee]/15 px-1.5 py-0.5 font-mono text-[11px] font-bold uppercase text-[#67e4f7]">
               {t.decisionAction ?? 'review'}
             </span>
-            <p className="text-[11.5px] leading-snug text-white/75">
+            <p className="text-[11.5px] leading-snug text-[var(--muted)]">
               {t.decisionRecommendation}
               {typeof t.decisionCoveragePct === 'number' ? ` · ${t.decisionCoveragePct}% asset coverage` : ''}
             </p>
           </div>
         ) : null}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <span className={`${EYEBROW} text-[9px] text-[#67e4f7]`}>AF read</span>
+          <span className={`${EYEBROW} text-[11px] text-[#67e4f7]`}>AF read</span>
           {!verdict || verdict.kind === 'loading' ? (
-            <span className="text-[11.5px] text-white/50">Pricing this deal…</span>
+            <span className="text-[11.5px] text-[var(--muted)]">Pricing this deal…</span>
           ) : verdict.kind === 'failed' ? (
-            <span className="text-[11.5px] text-white/50">Couldn&rsquo;t price this one just now — the offer above is exactly as proposed.</span>
+            <span className="text-[11.5px] text-[var(--muted)]">Couldn&rsquo;t price this one just now — the offer above is exactly as proposed.</span>
           ) : verdict.kind === 'skipped' ? (
-            <span className="text-[11.5px] text-white/50">{verdict.why}</span>
+            <span className="text-[11.5px] text-[var(--muted)]">{verdict.why}</span>
           ) : (
             <>
-              <span className="text-[12.5px] font-bold text-white">{verdict.fairnessLabel}</span>
+              <span className="text-[12.5px] font-bold text-[var(--text)]">{verdict.fairnessLabel}</span>
               {verdict.fairnessScore != null ? (
                 <span className="font-mono text-[11px] font-bold text-[#67e4f7]">{Math.round(verdict.fairnessScore)}/100</span>
               ) : null}
-              {verdict.confidenceLabel ? <span className="text-[11px] text-white/45">{verdict.confidenceLabel}</span> : null}
+              {verdict.confidenceLabel ? <span className="text-[11px] text-[var(--muted)]">{verdict.confidenceLabel}</span> : null}
             </>
           )}
         </div>
@@ -894,7 +1027,7 @@ export function PendingTradeCard(props: {
           </p>
         ) : null}
         {ok && ok.dropped.length > 0 ? (
-          <p className="mt-1.5 text-[11px] leading-snug text-white/45">
+          <p className="mt-1.5 text-[11px] leading-snug text-[var(--muted)]">
             Priced without {ok.dropped.join(', ')} — could not be read as a pick or player, so the read is short that piece.
           </p>
         ) : null}
@@ -913,12 +1046,18 @@ export function PendingTradeCard(props: {
                 Act on it in {providerName}
               </a>
             ) : null}
-            <Link href={props.tradeCenterHref} className="rounded-lg border border-white/15 px-2.5 py-1.5 text-[11px] font-semibold text-white/70">
+            <Link href={props.tradeCenterHref} className="rounded-lg border border-[var(--line2)] px-2.5 py-1.5 text-[11px] font-semibold text-[var(--muted)]">
               Load into builder
             </Link>
           </>
         ) : props.canAct && review ? (
           <>
+            {/* The commissioner review — flags computed in code, advice only; the buttons log what it said. */}
+            {t.viewerIsCommissioner && props.leagueId ? (
+              <div className="basis-full">
+                <TradeReviewPanel leagueId={props.leagueId} tradeId={t.id} kind="af" />
+              </div>
+            ) : null}
             <button type="button" disabled={props.busy} onClick={props.onApprove} className="rounded-lg border border-emerald-400/40 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-300 disabled:opacity-50" data-testid="trade-action-commissioner-approve">
               Approve
             </button>
@@ -936,7 +1075,7 @@ export function PendingTradeCard(props: {
             </button>
           </>
         ) : props.canAct && t.viewerIsProposer && t.status === 'pending' ? (
-          <button type="button" disabled={props.busy} onClick={props.onCancel} className="rounded-lg border border-white/20 px-2.5 py-1.5 text-[11px] font-semibold text-white/70 disabled:opacity-50" data-testid="trade-action-cancel">
+          <button type="button" disabled={props.busy} onClick={props.onCancel} className="rounded-lg border border-[var(--line2)] px-2.5 py-1.5 text-[11px] font-semibold text-[var(--muted)] disabled:opacity-50" data-testid="trade-action-cancel">
             Cancel offer
           </button>
         ) : (
@@ -961,6 +1100,8 @@ export function TradesTab({ league, teams }: TradesTabProps) {
   const [tradeBlockReadable, setTradeBlockReadable] = useState(true)
   const [activeTrades, setActiveTrades] = useState<LeagueTradeHistoryItem[]>([])
   const [historyTrades, setHistoryTrades] = useState<LeagueTradeHistoryItem[]>([])
+  /* null: not read, or the read failed — distinct from a league with no completed trades. */
+  const [importedHistory, setImportedHistory] = useState<ImportedHistoryRow[] | null>(null)
   const [executedTrades, setExecutedTrades] = useState<LeagueTradeHistoryItem[]>([])
   /** Pending trades proposed ON the provider (Sleeper). Read-only in AllFantasy. */
   const [providerPending, setProviderPending] = useState(0)
@@ -1009,7 +1150,12 @@ export function TradesTab({ league, teams }: TradesTabProps) {
       setErr(null)
     }
     try {
-      const res = await fetch(`/api/league/trades-panel?leagueId=${encodeURIComponent(league.id)}`, {
+      /*
+       * The graded history is asked for on a full load only: it grades up to sixty trades, and the
+       * once-a-minute background refresh exists to see new OFFERS. A background read that omits it
+       * leaves the last history on screen (see below).
+       */
+      const res = await fetch(`/api/league/trades-panel?leagueId=${encodeURIComponent(league.id)}${background ? '' : '&history=1'}`, {
         credentials: 'include',
         cache: 'no-store',
       })
@@ -1035,6 +1181,9 @@ export function TradesTab({ league, teams }: TradesTabProps) {
       setTradeBlockReadable(data?.tradeBlockReadable !== false)
       setActiveTrades(Array.isArray(data?.activeTrades) ? (data.activeTrades as LeagueTradeHistoryItem[]) : [])
       setHistoryTrades(Array.isArray(data?.historyTrades) ? (data.historyTrades as LeagueTradeHistoryItem[]) : [])
+      if (data?.importedHistory && typeof data.importedHistory === 'object') {
+        setImportedHistory(data.importedHistory.available && Array.isArray(data.importedHistory.rows) ? data.importedHistory.rows : null)
+      }
       setExecutedTrades(Array.isArray(data?.executedTrades) ? (data.executedTrades as LeagueTradeHistoryItem[]) : [])
       setProviderPending(typeof data?.providerPendingCount === 'number' ? data.providerPendingCount : 0)
       setProviderUrl(typeof data?.providerLeagueUrl === 'string' ? data.providerLeagueUrl : null)
@@ -1112,7 +1261,8 @@ export function TradesTab({ league, teams }: TradesTabProps) {
         const res = await fetch(`/api/leagues/${encodeURIComponent(league.id)}/trades/${encodeURIComponent(tradeId)}/commissioner`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ decision }),
+          // The review the commissioner was shown, logged with the decision. Null when there was none.
+          body: JSON.stringify({ decision, reviewId: reviewIdFor(tradeId) }),
         })
         await res.json().catch(() => ({}))
         if (!res.ok) {
@@ -1160,14 +1310,19 @@ export function TradesTab({ league, teams }: TradesTabProps) {
 
 
   /*
-   * An imported league's completed trades are the Trade Center's to show (see the header note), so
-   * this tab lists none for it — the history card links there instead.
+   * An imported league's completed trades (2026-09-27, restored on the one grade — see the header).
+   * Two feeds can hold the same trade: this season's live Sleeper read (`historyTrades`) and the graded
+   * history (`importedHistory`). One row per transaction, and the HISTORY copy wins — both carry the
+   * same letter from the same grader, but only the history copy names both managers and says why.
    */
   const importedLeague = tradeShadowNotice != null
-  const completedRows = useMemo<LogRow[]>(
-    () => (importedLeague ? [] : historyTrades.map(rowFromNativeHistory)),
-    [importedLeague, historyTrades],
-  )
+  const completedRows = useMemo<LogRow[]>(() => {
+    const live = historyTrades.map(rowFromNativeHistory)
+    if (!importedLeague || !importedHistory) return live
+    const graded = importedHistory.map(rowFromImportedTimeline)
+    const seen = new Set(graded.map((r) => transactionKey(r.id)))
+    return [...graded, ...live.filter((r) => !seen.has(transactionKey(r.id)))]
+  }, [importedLeague, historyTrades, importedHistory])
 
   const pendingRows = useMemo<LogRow[]>(() => activeTrades.map(rowFromActive), [activeTrades])
 
@@ -1193,7 +1348,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
 
   const platformKey = String(league.platform ?? '').toLowerCase()
   const platformMark = PLATFORM_MARK[platformKey] ?? (league.name?.charAt(0).toUpperCase() || '·')
-  const platformTone = PLATFORM_TONE[platformKey] ?? 'bg-white/[0.06] text-white/70'
+  const platformTone = PLATFORM_TONE[platformKey] ?? 'bg-[var(--surface2)] text-[var(--muted)]'
   const formatLine = [
     league.sport,
     league.leagueType ? String(league.leagueType).replace(/_/g, ' ') : null,
@@ -1211,7 +1366,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
     <button
       type="button"
       onClick={() => setProposeOpen(true)}
-      className="rounded-lg bg-[#ff3d81]/85 px-3.5 py-2 text-[12px] font-bold text-black hover:bg-[#ff3d81]"
+      className="rounded-lg bg-[var(--accent)] px-3.5 py-2 text-[12px] font-bold text-[var(--bg)] hover:bg-[var(--accent)]"
       data-testid="trades-tab-propose-trade"
     >
       Build a trade
@@ -1219,15 +1374,15 @@ export function TradesTab({ league, teams }: TradesTabProps) {
   )
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 md:p-5">
+    <div className="af-core af-league-transactions flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 md:p-5">
       {/* ── Header ───────────────────────────────────────────────────── */}
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="af-transaction-heading flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-col gap-1">
-          <p className={`${EYEBROW} text-[10px] text-white/40`}>
+          <p className={`${EYEBROW} text-[11px] text-[var(--muted)]`}>
             {league.name} · Trades
           </p>
-          <h1 className="text-[22px] font-black tracking-tight text-white">Trade Center</h1>
-          <p className="max-w-[62ch] text-[12px] leading-relaxed text-[#8B9DB8]">
+          <h1 className="text-[22px] font-black tracking-tight text-[var(--text)]">Trade Center</h1>
+          <p className="max-w-[62ch] text-[12px] leading-relaxed text-[var(--muted)]">
             Every deal in this league — and the ones with your name on them. Grades are scored against
             this league&rsquo;s own rules, so the same trade grades differently next door.
           </p>
@@ -1241,7 +1396,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
             className="max-w-[62ch]"
           />
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="af-transaction-actions flex flex-wrap items-center gap-2">
           {nflRedraftTradesShell ? (
             <button
               type="button"
@@ -1261,7 +1416,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
             <button
               type="button"
               onClick={() => setProposeOpen(true)}
-              className="rounded-xl border border-[#ff3d81]/35 bg-[#ff3d81]/10 px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-[#ffd7e5] hover:bg-[#ff3d81]/20"
+              className="rounded-xl border border-[var(--line2)] bg-[var(--accent-soft)] px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-[var(--accent)] hover:bg-[var(--accent-soft)]"
               data-testid="trades-tab-propose-trade-header"
             >
               {tradeShadowNotice ? 'Build a Shadow Trade' : 'Propose a Trade'}
@@ -1269,26 +1424,29 @@ export function TradesTab({ league, teams }: TradesTabProps) {
         </div>
       </div>
 
+      {/* Sleeper never shares an offer before it is accepted — say so, and how to grade one. */}
+      {platformKey === 'sleeper' ? <SleeperOffersNotice leagueId={league.id} /> : null}
+
       {/* ── League context bar ───────────────────────────────────────── */}
-      <div className="flex flex-wrap items-center gap-2.5 rounded-2xl border border-[#1E2A42] bg-[#131929] px-3.5 py-3">
+      <div className="flex flex-wrap items-center gap-2.5 rounded-2xl border border-[var(--line2)] bg-[var(--surface)] px-3.5 py-3">
         <span className={`inline-flex h-7 w-7 flex-none items-center justify-center rounded-lg text-[12px] font-black ${platformTone}`} aria-hidden>
           {platformMark}
         </span>
-        <span className="text-[14px] font-extrabold text-white">{league.name}</span>
+        <span className="text-[14px] font-extrabold text-[var(--text)]">{league.name}</span>
         {formatLine ? (
           <>
             <span className="h-4 w-px bg-white/15" aria-hidden />
-            <span className="text-[12px] text-[#8B9DB8]">{formatLine}</span>
+            <span className="text-[12px] text-[var(--muted)]">{formatLine}</span>
           </>
         ) : null}
         <span className="flex-1" />
-        <span className="font-mono text-[11px] font-bold text-[#8B9DB8]">
+        <span className="font-mono text-[11px] font-bold text-[var(--muted)]">
           {completedRows.length > 0
             ? `${completedCount} completed · ${activeTrades.length} pending${closedCount > 0 ? ` · ${closedCount} closed` : ''}`
             : `${activeTrades.length} pending`}
         </span>
         {deadlineChip ? (
-          <span className="rounded-md border border-amber-400/40 bg-amber-400/10 px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-[0.04em] text-amber-200">
+          <span className="rounded-md border border-amber-400/40 bg-amber-400/10 px-2 py-1 font-mono text-[11px] font-bold uppercase tracking-[0.04em] text-amber-200">
             {deadlineChip}
           </span>
         ) : null}
@@ -1309,20 +1467,20 @@ export function TradesTab({ league, teams }: TradesTabProps) {
       ) : null}
 
       {loading && !err ? (
-        <div className="flex flex-col items-center gap-3 rounded-2xl border border-[#1E2A42] bg-[#131929] py-12">
+        <div className="flex flex-col items-center gap-3 rounded-2xl border border-[var(--line2)] bg-[var(--surface)] py-12">
           <div className="h-10 w-10 animate-pulse rounded-full bg-white/10" />
           <div className="h-3 w-40 rounded bg-white/10" />
-          <p className="text-[12px] text-white/40">Reading this league&rsquo;s trades…</p>
+          <p className="text-[12px] text-[var(--muted)]">Reading this league&rsquo;s trades…</p>
         </div>
       ) : null}
 
       {/* ── Empty ─────────────────────────────────────────────────────── */}
       {nothingAtAll ? (
-        <div className="flex flex-col items-center gap-3 rounded-2xl border border-[#1E2A42] bg-[#131929] px-6 py-12 text-center">
-          <p className="text-[16px] font-extrabold text-white">
+        <div className="flex flex-col items-center gap-3 rounded-2xl border border-[var(--line2)] bg-[var(--surface)] px-6 py-12 text-center">
+          <p className="text-[16px] font-extrabold text-[var(--text)]">
             {importedLeague ? 'No open trades right now' : 'No trades in this league yet'}
           </p>
-          <p className="max-w-md text-[12.5px] leading-relaxed text-[#8B9DB8]">
+          <p className="max-w-md text-[12.5px] leading-relaxed text-[var(--muted)]">
             {importedLeague
               ? 'Nothing is waiting on anyone. Completed trades are in the Trade Center. Start a deal in the builder, or let the finder pick a partner whose roster shape fits yours.'
               : 'Nothing has been proposed or completed this season. Start a deal in the builder, or let the finder pick a partner whose roster shape fits yours.'}
@@ -1331,7 +1489,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
             {proposeAffordance}
             <Link
               href={tradeCenterHref}
-              className="rounded-lg border border-white/15 px-3.5 py-2 text-[12px] font-bold text-white/80 hover:border-white/30"
+              className="rounded-lg border border-[var(--line2)] px-3.5 py-2 text-[12px] font-bold text-[var(--muted)] hover:border-[var(--line2)]"
             >
               Find a partner
             </Link>
@@ -1342,10 +1500,10 @@ export function TradesTab({ league, teams }: TradesTabProps) {
       {/* ── Needs your action ────────────────────────────────────────── */}
       {!loading && !err && needsAction.length > 0 ? (
         <section className="flex flex-col gap-2.5">
-          <div className="flex items-baseline gap-2">
-            <span className={`${EYEBROW} text-[10px] text-amber-300`}>Needs your action</span>
-            <span className="h-px flex-1 bg-white/[0.07]" aria-hidden />
-            <span className="text-[10px] text-white/35">
+          <div className="af-transaction-block-heading flex items-baseline gap-2">
+            <span className={`${EYEBROW} text-[11px] text-amber-300`}>Needs your action</span>
+            <span className="h-px flex-1 bg-[var(--surface2)]" aria-hidden />
+            <span className="text-[11px] text-[var(--muted)]">
               Offers waiting on you, and reviews waiting on the commissioner
             </span>
           </div>
@@ -1358,6 +1516,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
                 offer={offerById.get(t.id) ?? null}
                 verdict={verdictFor(t)}
                 sport={sport}
+                leagueId={league.id}
                 tradeCenterHref={tradeCenterHref}
                 providerUrl={providerUrl}
                 canAct={nflRedraftTradesShell}
@@ -1381,10 +1540,10 @@ export function TradesTab({ league, teams }: TradesTabProps) {
        */}
       {!loading && !err && !tradeShadowNotice && executedTrades.length > 0 ? (
         <section className="flex flex-col gap-2.5" data-testid="executed-trades-section">
-          <div className="flex items-baseline gap-2">
-            <span className={`${EYEBROW} text-[10px] text-white/60`}>Executed trades</span>
-            <span className="h-px flex-1 bg-white/[0.07]" aria-hidden />
-            <span className="text-[10px] text-white/35">Commissioner only · most recent first</span>
+          <div className="af-transaction-block-heading flex items-baseline gap-2">
+            <span className={`${EYEBROW} text-[11px] text-[var(--muted)]`}>Executed trades</span>
+            <span className="h-px flex-1 bg-[var(--surface2)]" aria-hidden />
+            <span className="text-[11px] text-[var(--muted)]">Commissioner only · most recent first</span>
           </div>
           <ul className="grid gap-2 md:grid-cols-2">
             {executedTrades.map((t) => {
@@ -1394,21 +1553,22 @@ export function TradesTab({ league, teams }: TradesTabProps) {
               return (
                 <li
                   key={t.id}
-                  className="rounded-lg border border-white/10 bg-black/20 p-3 text-[11px] text-white/80"
+                  className="rounded-lg border border-[var(--line2)] bg-[var(--surface2)] p-3 text-[11px] text-[var(--muted)]"
                   data-testid="executed-trade-row"
                 >
-                  <p className="font-semibold text-white">
+                  <p className="font-semibold text-[var(--text)]">
                     {participants ? participants.map((side) => side.name).join(' ⇄ ') : `${proposer} ⇄ ${receiver}`}
                   </p>
                   {participants ? participants.map((side) => (
-                    <p key={side.rosterId} className="mt-1 flex items-center gap-1.5 text-white/55">
+                    <p key={side.rosterId} className="mt-1 flex items-center gap-1.5 text-[var(--muted)]">
                       {side.avatarUrl ? <PlayerHeadshot src={side.avatarUrl} alt={side.name} size={20} /> : null}
-                      <span>{side.name} sent {side.assets.map((asset) => asset.label).join(', ') || '—'}</span>
+                      <span>{side.name} received {(side.received ?? (participants.length === 2 ? participants.find((other) => other.rosterId !== side.rosterId)?.assets ?? [] : [])).map((asset) => asset.label).join(', ') || '—'}</span>
                     </p>
                   )) : (
                     <>
-                      <p className="mt-1 text-white/55">{proposer} sent {t.sent.map((a) => a.label).join(', ') || '—'}</p>
-                      <p className="text-white/55">{receiver} sent {t.received.map((a) => a.label).join(', ') || '—'}</p>
+                      {/* `sent` is the proposer's outgoing assets, so it is what the receiver got. */}
+                      <p className="mt-1 text-[var(--muted)]">{proposer} received {t.received.map((a) => a.label).join(', ') || '—'}</p>
+                      <p className="text-[var(--muted)]">{receiver} received {t.sent.map((a) => a.label).join(', ') || '—'}</p>
                     </>
                   )}
                   {t.viewerIsCommissioner ? (
@@ -1439,13 +1599,13 @@ export function TradesTab({ league, teams }: TradesTabProps) {
 
       {/* ── Provider scan honesty ────────────────────────────────────── */}
       {!loading && !err && pendingScan && !pendingScan.scanned ? (
-        <p className="text-[11px] text-white/40">
+        <p className="text-[11px] text-[var(--muted)]">
           Pending offers on {pendingScan.platform} are not read here
           {pendingScan.reason ? ` — ${pendingScan.reason}` : ''}. Anything waiting there will not show above.
         </p>
       ) : null}
       {!loading && !err && providerPending > 0 && needsAction.every((t) => t.status !== 'pending_on_sleeper') ? (
-        <p className="text-[11px] text-white/40">
+        <p className="text-[11px] text-[var(--muted)]">
           {providerPending} pending {providerPending === 1 ? 'trade' : 'trades'} from Sleeper are yours to answer there
           {providerUrl ? (
             <>
@@ -1464,31 +1624,33 @@ export function TradesTab({ league, teams }: TradesTabProps) {
       {!loading && !err && !nothingAtAll ? (
         <section className="flex flex-col gap-2.5">
           <div className="flex flex-wrap items-center gap-3">
-            <span className={`${EYEBROW} text-[10px] text-white/40`}>Your trades</span>
-            <div className="flex gap-0.5 rounded-lg border border-white/10 bg-white/[0.04] p-0.5">
-              {(importedLeague ? (['active'] as const) : (['active', 'completed'] as const)).map((k) => (
+            <span className={`${EYEBROW} text-[11px] text-[var(--muted)]`}>Your trades</span>
+            <div className="flex gap-0.5 rounded-lg border border-[var(--line2)] bg-[var(--surface2)] p-0.5">
+              {(['active', 'completed'] as const).map((k) => (
                 <button
                   key={k}
                   type="button"
                   onClick={() => setYourTab(k)}
-                  className={`rounded-md px-2.5 py-1.5 font-mono text-[10px] font-bold ${
-                    yourTab === k ? 'bg-[#ff3d81] text-black' : 'text-white/50 hover:text-white/80'
+                  className={`rounded-md px-2.5 py-1.5 font-mono text-[11px] font-bold ${
+                    yourTab === k ? 'bg-[var(--accent)] text-[var(--bg)]' : 'text-[var(--muted)] hover:text-[var(--muted)]'
                   }`}
                 >
                   {k === 'active' ? `Active · ${yourActive.length}` : `History · ${yourCompleted.length}`}
                 </button>
               ))}
             </div>
-            <span className="h-px flex-1 bg-white/[0.07]" aria-hidden />
-            <span className="text-[10px] text-white/35">
+            <span className="h-px flex-1 bg-[var(--surface2)]" aria-hidden />
+            <span className="text-[11px] text-[var(--muted)]">
               {yourTab === 'active'
                 ? 'Offers with your name on them'
-                : 'Realized grades — scored on what each side has produced since'}
+                : importedLeague
+                  ? 'Each trade keeps its original grade on this league’s values — priced at the time of the trade where a market record covers that date — the same grade as the Trade Center'
+                  : 'Realized grades — scored on what each side has produced since'}
             </span>
           </div>
-          {yourTab === 'active' || importedLeague ? (
+          {yourTab === 'active' ? (
             yourActiveTrades.length === 0 ? (
-              <p className="rounded-2xl border border-[#1E2A42] bg-[#131929] px-4 py-6 text-center text-[12px] text-white/40">
+              <p className="rounded-2xl border border-[var(--line2)] bg-[var(--surface)] px-4 py-6 text-center text-[12px] text-[var(--muted)]">
                 Nothing active with your name on it.
               </p>
             ) : (
@@ -1500,6 +1662,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
                     offer={offerById.get(t.id) ?? null}
                     verdict={verdictFor(t)}
                     sport={sport}
+                    leagueId={league.id}
                     tradeCenterHref={tradeCenterHref}
                     providerUrl={providerUrl}
                     canAct={nflRedraftTradesShell}
@@ -1514,16 +1677,16 @@ export function TradesTab({ league, teams }: TradesTabProps) {
               </div>
             )
           ) : (
-          <div className="overflow-hidden rounded-2xl border border-[#1E2A42] bg-[#131929]">
+          <div className="overflow-hidden rounded-2xl border border-[var(--line2)] bg-[var(--surface)]">
             {yourCompleted.length === 0 ? (
-              <p className="px-4 py-6 text-center text-[12px] text-white/40">
+              <p className="px-4 py-6 text-center text-[12px] text-[var(--muted)]">
                 You have not completed a trade in this league.
               </p>
             ) : (
               yourCompletedGroups.map(({ season, items }) => (
                 <div key={season} data-testid={`your-trades-season-${season}`}>
-                  <div className="border-b border-white/[0.06] bg-white/[0.025] px-4 py-2">
-                    <span className={`${EYEBROW} text-[9px] text-[#ffb8d1]`}>{season} season</span>
+                  <div className="border-b border-[var(--line2)] bg-[var(--surface2)] px-4 py-2">
+                    <span className={`${EYEBROW} text-[11px] text-[var(--accent)]`}>{season} season</span>
                   </div>
                   {items.map((r) => {
                 const youA = r.a.you
@@ -1532,35 +1695,37 @@ export function TradesTab({ league, teams }: TradesTabProps) {
                 return (
                   <div
                     key={r.id}
-                    className="grid items-center gap-3 border-b border-white/[0.06] px-4 py-3 last:border-b-0 md:grid-cols-[110px_1fr_1fr_150px_130px]"
+                    className="grid items-center gap-3 border-b border-[var(--line2)] px-4 py-3 last:border-b-0 md:grid-cols-[110px_1fr_1fr_150px_130px]"
                   >
                     <div className="flex flex-col gap-1">
-                      <span className="self-start rounded bg-white/[0.06] px-1.5 py-1 font-mono text-[8.5px] font-bold uppercase tracking-[0.08em] text-[#CBD5E1]">
+                      <span className="self-start rounded bg-[var(--surface2)] px-1.5 py-1 font-mono text-[11px] font-bold uppercase tracking-[0.08em] text-[var(--text2)]">
                         Done
                       </span>
-                      <span className="font-mono text-[10px] text-white/35">{r.when}</span>
+                      <span className="font-mono text-[11px] text-[var(--muted)]">{r.when}</span>
+                    </div>
+                    {/* What each team RECEIVED, yours first — the letters beside are read against these. */}
+                    <div className="min-w-0">
+                      <p className={`${EYEBROW} text-[11px] text-emerald-300`}>You got</p>
+                      <p className="mt-0.5 text-[12px] leading-snug text-[var(--text2)]">{you.gets}</p>
                     </div>
                     <div className="min-w-0">
-                      <p className={`${EYEBROW} text-[8.5px] text-rose-300`}>You send</p>
-                      <p className="mt-0.5 text-[12px] leading-snug text-[#CBD5E1]">{you.sends}</p>
-                    </div>
-                    <div className="min-w-0">
-                      <p className={`${EYEBROW} truncate text-[8.5px] text-emerald-300`}>You get · {them.name}</p>
-                      <p className="mt-0.5 text-[12px] leading-snug text-[#CBD5E1]">{them.sends}</p>
+                      <p className={`${EYEBROW} truncate text-[11px] text-rose-300`}>{them.name} got</p>
+                      <p className="mt-0.5 text-[12px] leading-snug text-[var(--text2)]">{them.gets}</p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="flex items-center gap-1" title="Realized result in the first scored season">
-                        <span className={`${EYEBROW} text-[8px] text-white/35`}>{you.initialLabel}</span>
+                        <span className={`${EYEBROW} text-[11px] text-[var(--muted)]`}>{you.initialLabel}</span>
                         <GradeTile letter={you.initialGrade} why={you.gradeWhy} size="sm" />
                       </span>
                       <span className="flex items-center gap-1" title="Realized result through the latest scored season">
-                        <span className={`${EYEBROW} text-[8px] text-white/35`}>Now</span>
+                        <span className={`${EYEBROW} text-[11px] text-[var(--muted)]`}>Now</span>
                         <GradeTile letter={you.grade} why={you.gradeWhy} size="sm" />
                       </span>
                     </div>
                     <div className="md:justify-self-end">
                       <StatusChip status={r.status} />
                     </div>
+                    <GradeWhy lines={r.why} />
                   </div>
                 )
                   })}
@@ -1575,31 +1740,32 @@ export function TradesTab({ league, teams }: TradesTabProps) {
       {/* ── Completed trades live in the Trade Center (imported leagues) ─ */}
       {!loading && !err && importedLeague ? (
         <section
-          className="flex flex-wrap items-center gap-3 rounded-2xl border border-[#1E2A42] bg-[#131929] px-4 py-3.5"
+          className="flex flex-wrap items-center gap-3 rounded-2xl border border-[var(--line2)] bg-[var(--surface)] px-4 py-3.5"
           data-testid="league-trade-history-link"
         >
           <div className="flex min-w-0 flex-1 flex-col gap-1">
-            <span className={`${EYEBROW} text-[10px] text-white/40`}>Completed trades</span>
-            <p className="max-w-[62ch] text-[12px] leading-relaxed text-[#8B9DB8]">
-              Every completed trade in this league, graded on this league&rsquo;s values &mdash; the same
-              grade as your trade emails.
+            <span className={`${EYEBROW} text-[11px] text-[var(--muted)]`}>Completed trades</span>
+            <p className="max-w-[62ch] text-[12px] leading-relaxed text-[var(--muted)]">
+              {importedHistory
+                ? 'The log below grades every completed trade on this league’s values. The Trade Center shows the same grades with player photos and a full breakdown.'
+                : 'Every completed trade in this league, graded on this league’s values — the same grade as your trade emails.'}
             </p>
           </div>
           <Link
             href={tradeCenterHref}
-            className="rounded-lg border border-white/15 px-3.5 py-2 text-[12px] font-bold text-white/85 hover:border-white/30"
+            className="rounded-lg border border-[var(--line2)] px-3.5 py-2 text-[12px] font-bold text-[var(--muted)] hover:border-[var(--line2)]"
           >
             Open trade history
           </Link>
         </section>
       ) : null}
 
-      {/* ── League trade log (native leagues) ────────────────────────── */}
-      {!loading && !err && !nothingAtAll && !importedLeague ? (
+      {/* ── League trade log ─────────────────────────────────────────── */}
+      {!loading && !err && !nothingAtAll ? (
         <section className="flex flex-col gap-2.5">
           <div className="flex flex-wrap items-center gap-3">
-            <span className={`${EYEBROW} text-[10px] text-white/40`}>League trade log</span>
-            <div className="flex gap-1.5">
+            <span className={`${EYEBROW} text-[11px] text-[var(--muted)]`}>League trade log</span>
+            <div className="af-transaction-log-filters flex gap-1.5">
               {(
                 [
                   ['all', 'All'],
@@ -1612,10 +1778,10 @@ export function TradesTab({ league, teams }: TradesTabProps) {
                   key={k}
                   type="button"
                   onClick={() => setLogFilter(k)}
-                  className={`rounded-md border px-2.5 py-1.5 text-[10.5px] font-bold ${
+                  className={`rounded-md border px-2.5 py-1.5 text-[11px] font-bold ${
                     logFilter === k
-                      ? 'border-[#ff3d81] bg-[#ff3d81]/10 text-[#ffb8d1]'
-                      : 'border-white/10 bg-[#0a1228] text-white/60 hover:border-white/20'
+                      ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]'
+                      : 'border-[var(--line2)] bg-[var(--surface2)] text-[var(--muted)] hover:border-[var(--line2)]'
                   }`}
                 >
                   {label}
@@ -1626,11 +1792,11 @@ export function TradesTab({ league, teams }: TradesTabProps) {
               type="button"
               onClick={() => setOnlyMine((v) => !v)}
               aria-pressed={onlyMine}
-              className={`flex items-center gap-2 text-[10.5px] font-bold ${onlyMine ? 'text-[#ffb8d1]' : 'text-white/55'}`}
+              className={`flex items-center gap-2 text-[11px] font-bold ${onlyMine ? 'text-[var(--accent)]' : 'text-[var(--muted)]'}`}
             >
               <span
                 className={`relative h-[18px] w-[30px] rounded-full border ${
-                  onlyMine ? 'border-[#ff3d81] bg-[#ff3d81]' : 'border-white/15 bg-white/[0.06]'
+                  onlyMine ? 'border-[var(--accent)] bg-[var(--accent)]' : 'border-[var(--line2)] bg-[var(--surface2)]'
                 }`}
                 aria-hidden
               >
@@ -1641,12 +1807,12 @@ export function TradesTab({ league, teams }: TradesTabProps) {
               Only mine
             </button>
             {seasonOptions.length > 0 ? (
-              <label className="flex items-center gap-1.5 text-[10px] font-bold text-white/45">
+              <label className="flex items-center gap-1.5 text-[11px] font-bold text-[var(--muted)]">
                 Season
                 <select
                   value={seasonFilter}
                   onChange={(event) => setSeasonFilter(event.target.value)}
-                  className="min-h-[32px] rounded-md border border-white/10 bg-[#0a1228] px-2 text-[11px] font-bold text-white outline-none focus:border-[#ff3d81]"
+                  className="min-h-[32px] rounded-md border border-[var(--line2)] bg-[var(--surface2)] px-2 text-[11px] font-bold text-[var(--text)] outline-none focus:border-[var(--accent)]"
                   aria-label="Filter trades by season"
                   data-testid="league-trade-season-filter"
                 >
@@ -1657,67 +1823,68 @@ export function TradesTab({ league, teams }: TradesTabProps) {
                 </select>
               </label>
             ) : null}
-            <span className="h-px flex-1 bg-white/[0.07]" aria-hidden />
-            <span className="text-[10px] text-white/35">{logRows.length} shown</span>
+            <span className="h-px flex-1 bg-[var(--surface2)]" aria-hidden />
+            <span className="text-[11px] text-[var(--muted)]">{logRows.length} shown</span>
           </div>
-          <div className="overflow-hidden rounded-2xl border border-[#1E2A42] bg-[#131929]">
-            <div className="hidden grid-cols-[56px_1.15fr_1.15fr_140px_120px] gap-3 border-b border-white/[0.06] px-4 py-2 md:grid">
-              {['When', 'Side A sends', 'Side B sends', 'Earlier / now · A and B', 'Status'].map((h, i) => (
-                <span key={h} className={`${EYEBROW} text-[9px] text-white/35 ${i === 4 ? 'text-right' : ''}`}>
+          <div className="overflow-hidden rounded-2xl border border-[var(--line2)] bg-[var(--surface)]">
+            <div className="hidden grid-cols-[56px_1.15fr_1.15fr_140px_120px] gap-3 border-b border-[var(--line2)] px-4 py-2 md:grid">
+              {['When', 'Side A gets', 'Side B gets', 'Earlier / now · A and B', 'Status'].map((h, i) => (
+                <span key={h} className={`${EYEBROW} text-[11px] text-[var(--muted)] ${i === 4 ? 'text-right' : ''}`}>
                   {h}
                 </span>
               ))}
             </div>
             {logRows.length === 0 ? (
-              <p className="px-4 py-6 text-center text-[12px] text-white/40">No trades match this filter.</p>
+              <p className="px-4 py-6 text-center text-[12px] text-[var(--muted)]">No trades match this filter.</p>
             ) : (
               logRowGroups.map(({ season, items }) => (
                 <div key={season} data-testid={`league-trade-season-${season}`}>
-                  <div className="border-b border-white/[0.06] bg-white/[0.025] px-4 py-2">
-                    <span className={`${EYEBROW} text-[9px] text-[#ffb8d1]`}>{season} season</span>
+                  <div className="border-b border-[var(--line2)] bg-[var(--surface2)] px-4 py-2">
+                    <span className={`${EYEBROW} text-[11px] text-[var(--accent)]`}>{season} season</span>
                   </div>
                   {items.map((r) => (
                 <div
                   key={r.id}
-                  className={`grid gap-3 border-b border-white/[0.06] px-4 py-3 last:border-b-0 md:grid-cols-[56px_1.15fr_1.15fr_140px_120px] md:items-center ${
+                  className={`grid gap-3 border-b border-[var(--line2)] px-4 py-3 last:border-b-0 md:grid-cols-[56px_1.15fr_1.15fr_140px_120px] md:items-center ${
                     r.mine ? 'bg-[#ff3d81]/[0.035]' : ''
                   }`}
                 >
-                  <span className="font-mono text-[11px] font-bold text-[#8B9DB8]">{r.when}</span>
+                  <span className="font-mono text-[11px] font-bold text-[var(--muted)]">{r.when}</span>
                   {[r.a, r.b].map((s, i) => (
                     <div key={i} className="min-w-0">
                       <div className="flex items-center gap-1.5">
                         {s.avatarUrl ? <PlayerHeadshot src={s.avatarUrl} alt={s.name} size={24} /> : null}
-                        <span className="truncate text-[12.5px] font-extrabold text-white">{s.name}</span>
+                        <span className="truncate text-[12.5px] font-extrabold text-[var(--text)]">{s.name}</span>
                         {s.you ? <YouPill /> : null}
                         {i === 1 && r.extraSides > 0 ? (
-                          <span className="text-[10px] text-white/40">+{r.extraSides} more</span>
+                          <span className="text-[11px] text-[var(--muted)]">+{r.extraSides} more</span>
                         ) : null}
                       </div>
-                      <p className="mt-0.5 text-[11.5px] leading-snug text-[#CBD5E1]">{s.sends}</p>
+                      <p className="mt-0.5 text-[11.5px] leading-snug text-[var(--text2)]">{s.gets}</p>
                     </div>
                   ))}
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                     <span className="flex items-center gap-1" title="Side A: first scored season, then current realized result">
-                      <span className={`${EYEBROW} text-[7.5px] text-white/30`}>A {r.a.initialLabel}</span>
+                      <span className={`${EYEBROW} text-[11px] text-[var(--muted)]`}>A {r.a.initialLabel}</span>
                       <GradeTile letter={r.a.initialGrade} why={r.a.initialWhy ?? null} size="sm" />
-                      <span className="text-[8px] text-white/25">→</span>
+                      <span className="text-[11px] text-[var(--muted)]">→</span>
                       <GradeTile letter={r.a.grade} why={null} size="sm" />
                     </span>
                     <span className="flex items-center gap-1" title="Side B: first scored season, then current realized result">
-                      <span className={`${EYEBROW} text-[7.5px] text-white/30`}>B {r.b.initialLabel}</span>
+                      <span className={`${EYEBROW} text-[11px] text-[var(--muted)]`}>B {r.b.initialLabel}</span>
                       <GradeTile letter={r.b.initialGrade} why={r.b.initialWhy ?? null} size="sm" />
-                      <span className="text-[8px] text-white/25">→</span>
+                      <span className="text-[11px] text-[var(--muted)]">→</span>
                       <GradeTile letter={r.b.grade} why={null} size="sm" />
                     </span>
                     {!r.a.grade && !r.b.grade && r.a.gradeWhy ? (
-                      <span className="max-w-[70px] text-[9.5px] leading-tight text-white/35">{r.a.gradeWhy}</span>
+                      <span className="max-w-[70px] text-[11px] leading-tight text-[var(--muted)]">{r.a.gradeWhy}</span>
                     ) : null}
                   </div>
                   <div className="flex flex-col items-start gap-1 md:items-end md:justify-self-end">
                     <StatusChip status={r.status} />
-                    {r.receiptNote ? <span className="max-w-[120px] text-[9px] leading-tight text-[#67e4f7]/70">{r.receiptNote}</span> : null}
+                    {r.receiptNote ? <span className="max-w-[120px] text-[11px] leading-tight text-[#67e4f7]/70">{r.receiptNote}</span> : null}
                   </div>
+                  <GradeWhy lines={r.why} />
                 </div>
                   ))}
                 </div>
@@ -1730,18 +1897,18 @@ export function TradesTab({ league, teams }: TradesTabProps) {
       {/* ── Trade block ──────────────────────────────────────────────── */}
       {!loading && !err ? (
         <section className="flex flex-col gap-2.5">
-          <div className="flex items-baseline gap-2">
-            <span className={`${EYEBROW} text-[10px] text-white/40`}>Trade block</span>
-            <span className="h-px flex-1 bg-white/[0.07]" aria-hidden />
-            <span className="text-[10px] text-white/35">Players managers have flagged available</span>
+          <div className="af-transaction-block-heading flex items-baseline gap-2">
+            <span className={`${EYEBROW} text-[11px] text-[var(--muted)]`}>Trade block</span>
+            <span className="h-px flex-1 bg-[var(--surface2)]" aria-hidden />
+            <span className="text-[11px] text-[var(--muted)]">Players managers have flagged available</span>
           </div>
           {tradeBlock.length === 0 ? (
-            <div className="rounded-2xl border border-[#1E2A42] bg-[#131929] px-4 py-8 text-center">
+            <div className="rounded-2xl border border-[var(--line2)] bg-[var(--surface)] px-4 py-8 text-center">
               {/*
                 * Three states, not two: a read that failed claims nothing about who is listed; with a
                 * note, "empty" means nobody marked a player HERE; without one, it is the plain case.
                 */}
-              <p className="text-[13px] text-white/45">
+              <p className="text-[13px] text-[var(--muted)]">
                 {!tradeBlockReadable
                   ? 'We could not read the trade block'
                   : tradeBlockNote
@@ -1749,11 +1916,11 @@ export function TradesTab({ league, teams }: TradesTabProps) {
                     : 'No players on the trade block yet'}
               </p>
               {tradeBlockNote ? (
-                <p className="mx-auto mt-1.5 max-w-md text-[11px] text-white/40" data-testid="trade-block-note">
+                <p className="mx-auto mt-1.5 max-w-md text-[11px] text-[var(--muted)]" data-testid="trade-block-note">
                   {tradeBlockNote}
                 </p>
               ) : null}
-              <p className="mt-1.5 text-[11px] text-white/30">
+              <p className="mt-1.5 text-[11px] text-[var(--muted)]">
                 {league.name} · {teams.length} teams
               </p>
             </div>
@@ -1766,15 +1933,15 @@ export function TradesTab({ league, teams }: TradesTabProps) {
                 return (
                   <div
                     key={item.id}
-                    className={`relative flex flex-col gap-2 rounded-xl border-2 ${accent.border} bg-[#07071a]/90 p-2.5 shadow-sm`}
+                    className={`relative flex flex-col gap-2 rounded-xl border-2 ${accent.border} bg-[var(--surface)] p-2.5 shadow-sm`}
                   >
                     <div className="flex items-start justify-between gap-1">
-                      <span className={`text-[10px] font-bold leading-tight ${accent.label}`}>{teamLine}</span>
+                      <span className={`text-[11px] font-bold leading-tight ${accent.label}`}>{teamLine}</span>
                       <button
                         type="button"
                         onClick={() => toggleWatch(item.playerId)}
                         className={`rounded-full p-1 transition ${
-                          watched ? 'text-rose-400' : 'text-white/30 hover:text-rose-400/80'
+                          watched ? 'text-rose-400' : 'text-[var(--muted)] hover:text-rose-400/80'
                         }`}
                         aria-label={watched ? 'Remove from watch' : 'Watch player'}
                       >
@@ -1790,18 +1957,18 @@ export function TradesTab({ league, teams }: TradesTabProps) {
                         size={30}
                         variant="round"
                       />
-                      <p className="truncate text-[12px] font-bold leading-tight text-white">
+                      <p className="truncate text-[12px] font-bold leading-tight text-[var(--text)]">
                         {shortDisplayName(item.name)}
                       </p>
                     </div>
-                    <p className="truncate text-[10px] text-[#ffb8d1]/45">{item.ownerName}</p>
+                    <p className="truncate text-[11px] text-[#ffb8d1]/45">{item.ownerName}</p>
                   </div>
                 )
               })}
             </div>
           )}
           {tradeBlock.length > 0 && tradeBlockNote ? (
-            <p className="text-[10px] text-white/35" data-testid="trade-block-note">
+            <p className="text-[11px] text-[var(--muted)]" data-testid="trade-block-note">
               {tradeBlockNote}
             </p>
           ) : null}
@@ -1811,14 +1978,14 @@ export function TradesTab({ league, teams }: TradesTabProps) {
       {/* ── Actions ──────────────────────────────────────────────────── */}
       {!loading && !err && !nothingAtAll ? (
         <div className="flex flex-wrap items-center gap-3">
-          <p className="min-w-[240px] flex-1 text-[11px] leading-relaxed text-white/35">
+          <p className="min-w-[240px] flex-1 text-[11px] leading-relaxed text-[var(--muted)]">
             Pending offers from Sleeper are shown for analysis only — AllFantasy can price them, not respond to
             them. AllFantasy proposals accept, reject and counter right here.
           </p>
           {proposeAffordance}
           <Link
             href={tradeCenterHref}
-            className="rounded-lg border border-white/15 px-3.5 py-2 text-[12px] font-bold text-white/80 hover:border-white/30"
+            className="rounded-lg border border-[var(--line2)] px-3.5 py-2 text-[12px] font-bold text-[var(--muted)] hover:border-[var(--line2)]"
           >
             Find a partner
           </Link>

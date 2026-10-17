@@ -454,3 +454,44 @@ describe('loadWaiverPool — one row per player', () => {
     expect(out.availablePlayers.map((p) => p.name)).toEqual(['One', 'Two'])
   })
 })
+
+describe('loadWaiverPool — a foreign league’s roster ids', () => {
+  /*
+   * 🛑 A Fleaflicker/MFL id is a short number in Sleeper's range, and some ARE real Sleeper ids. Read
+   * as one, the asker's roster named and priced a stranger — the drop the engine offered was somebody
+   * else. The control below proves the same id IS named in a Sleeper league, so a pass is not blindness.
+   */
+  const leagueOn = (platform: string) =>
+    leagueFindUnique.mockResolvedValue({
+      settings: { roster_positions: ['QB', 'RB', 'WR', 'FLEX', 'BN'] },
+      leagueType: 'Redraft',
+      leagueSize: 12,
+      season: 2026,
+      platform,
+    })
+
+  beforeEach(() => {
+    rosterFindMany.mockResolvedValue([
+      { id: 'r-mine', platformUserId: 'u1', playerData: { starters: ['4046'], players: ['4046'] } },
+    ])
+    playerFindMany.mockResolvedValue([{ sleeperId: '4046', name: 'Wrong Player', position: 'RB', team: 'DET', age: 24 }])
+    getPool.mockResolvedValue([player('sp-4046', { external_source_id: '4046', full_name: 'Wrong Player', position: 'RB' })])
+  })
+
+  it('🛑 a Fleaflicker roster id that equals a Sleeper id is not named, priced or subtracted', async () => {
+    leagueOn('fleaflicker')
+    const out = await loadWaiverPool('L1', 'NFL', 'r-mine')
+    expect(out.myRoster.map((p) => p.name)).not.toContain('Wrong Player')
+    expect(out.myRoster.every((p) => p.value === 0)).toBe(true)
+    expect(playerFindMany).not.toHaveBeenCalled()
+    /* The stranger is a real free agent in this league; a colliding id must not hide him either. */
+    expect(out.availablePlayers.map((p) => p.name)).toEqual(['Wrong Player'])
+  })
+
+  it('CONTROL: the same id in a Sleeper league IS named, priced and subtracted', async () => {
+    leagueOn('sleeper')
+    const out = await loadWaiverPool('L1', 'NFL', 'r-mine')
+    expect(out.myRoster.map((p) => [p.name, p.value])).toEqual([['Wrong Player', 2200]])
+    expect(out.availablePlayers).toEqual([])
+  })
+})

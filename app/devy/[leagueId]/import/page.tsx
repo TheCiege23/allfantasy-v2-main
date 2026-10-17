@@ -6,14 +6,14 @@ import { ImportWizard } from '@/app/devy/components/ImportWizard'
 
 export const dynamic = 'force-dynamic'
 
-export default async function DevyImportPage({
-  params,
-  searchParams,
-}: {
-  params: Promise<{ leagueId: string }>
-  searchParams?: Promise<Record<string, string | string[] | undefined>>
-}) {
-  const { leagueId } = await params
+export default async function DevyImportPage(
+  props: {
+    params: Promise<{ leagueId: string }>
+    searchParams?: Promise<Record<string, string | string[] | undefined>>
+  }
+) {
+  const searchParams = await props.searchParams
+  const { leagueId } = await props.params
   const sp = searchParams ? await searchParams : {}
   const sid = sp.sessionId
   const initialSessionId = typeof sid === 'string' ? sid : Array.isArray(sid) ? sid[0] : undefined

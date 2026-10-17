@@ -7,6 +7,7 @@ import {
   PLAYOFF_UNRESOLVED_SERIES_MESSAGE,
 } from "@/lib/playoffs/playoffBracketProjection"
 import { canUsePlayoffLatePicks, getPlayoffSeriesLockedReason } from "@/lib/playoffs/playoffLocking"
+import { formatLabel, matchupNoun } from "@/lib/playoffs/singleGame"
 import { getPlayoffPickResult } from "@/lib/playoffs/playoffScoring"
 
 type Props = {
@@ -39,6 +40,10 @@ const ROUND_LABELS: Record<PlayoffRoundKey, string> = {
   division_series: "Division Series",
   league_championship: "Championship Series",
   world_series: "World Series",
+  cfp_first_round: "First Round",
+  cfp_quarterfinals: "Quarterfinals",
+  cfp_semifinals: "Semifinals",
+  cfp_championship: "National Championship",
 }
 
 /**
@@ -52,8 +57,14 @@ const ROUND_LABELS: Record<PlayoffRoundKey, string> = {
 function conferenceLabel(series: PlayoffSeriesView): string {
   if (series.conference === "al") return "American League"
   if (series.conference === "nl") return "National League"
+  // CFP halves are positional (the 1/4 side and the 2/3 side), not conferences —
+  // without these the generic fallback below rendered "UPPER Conference".
+  if (series.conference === "upper") return "Upper Bracket"
+  if (series.conference === "lower") return "Lower Bracket"
   if (series.conference === "finals") {
-    return series.round === "world_series" ? "World Series" : "Cup Finals"
+    if (series.round === "world_series") return "World Series"
+    if (series.round === "cfp_championship") return "National Championship"
+    return "Cup Finals"
   }
   return `${series.conference.toUpperCase()} Conference`
 }
@@ -204,7 +215,7 @@ export default function PlayoffBracketBoard({
                   const pick = getPickForSeries(picks, item.id)
                   const unresolved = !isPlayoffSeriesResolved(item)
                   const unresolvedMessage = officialBracketMode ? PLAYOFF_OFFICIAL_MATCHUP_TBD_MESSAGE : PLAYOFF_UNRESOLVED_SERIES_MESSAGE
-                  const lockedReason = locked ? "Series already started/locked" : getPlayoffSeriesLockedReason(item, lockRule, { hasPoolAdminAccess: canUseLatePicks })
+                  const lockedReason = locked ? `${matchupNoun(item)} already started/locked` : getPlayoffSeriesLockedReason(item, lockRule, { hasPoolAdminAccess: canUseLatePicks })
                   const isSaving = savingSeriesIds?.has(item.id) ?? false
                   const isSaved = savedSeriesIds?.has(item.id) ?? false
                   const isNext = nextSeriesId === item.id
@@ -227,7 +238,7 @@ export default function PlayoffBracketBoard({
                       <div className="mb-2 flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-slate-500">
                         <span>S{item.seriesNumber}</span>
                         <span>
-                          {isSaving ? "Saving..." : isSaved ? "Saved" : item.bestOf === 7 ? "Best of 7" : `Best of ${item.bestOf}`}
+                          {isSaving ? "Saving..." : isSaved ? "Saved" : formatLabel(item.bestOf)}
                         </span>
                       </div>
                       {unresolved ? (
@@ -288,7 +299,7 @@ export default function PlayoffBracketBoard({
                       </div>
                       <div className="mt-2 space-y-1 rounded-lg bg-slate-50 px-2 py-2 text-xs font-semibold text-slate-600">
                         <p data-testid={`playoff-series-summary-${item.id}`}>
-                          {item.seriesSummary || "Series starts TBD"}
+                          {item.seriesSummary || `${matchupNoun(item)} starts TBD`}
                         </p>
                         {item.liveStatus ? (
                           <p data-testid={`playoff-series-live-${item.id}`} className="text-emerald-700">

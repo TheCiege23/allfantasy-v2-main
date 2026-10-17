@@ -2,7 +2,10 @@ import React from 'react'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { LeagueNotificationOverridesCard } from '../components/notification-settings/LeagueNotificationOverridesCard'
+import {
+  LEAGUE_OVERRIDES_VISIBLE_DEFAULT,
+  LeagueNotificationOverridesCard,
+} from '../components/notification-settings/LeagueNotificationOverridesCard'
 import type { NotificationPreferences } from '../lib/notification-settings/types'
 
 /**
@@ -102,6 +105,56 @@ describe('LeagueNotificationOverridesCard', () => {
 
     await waitFor(() => expect(screen.getByTestId('league-overrides-load-failed')).toBeTruthy())
     expect(screen.queryByText(/Once you join or import a league/)).toBeNull()
+  })
+
+  it('asks for the light, one-row-per-league list', async () => {
+    mockLeagues([{ id: 'l1', name: 'Dynasty Warriors' }])
+    renderCard({ globalEnabled: true })
+    await waitFor(() => expect(screen.getByText('Dynasty Warriors')).toBeTruthy())
+    const url = String((global.fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls[0][0])
+    expect(url).toContain('summary=1')
+    expect(url).toContain('collapseSeries=1')
+  })
+
+  describe('a long league list', () => {
+    const many = Array.from({ length: 12 }, (_, i) => ({ id: `l${i}`, name: `League ${i}` }))
+
+    it('shows the first few, with search and "Show all"', async () => {
+      mockLeagues(many)
+      renderCard({ globalEnabled: true })
+      await waitFor(() => expect(screen.getByText('League 0')).toBeTruthy())
+      expect(screen.queryByText(`League ${LEAGUE_OVERRIDES_VISIBLE_DEFAULT}`)).toBeNull()
+      expect(screen.getByTestId('league-overrides-search')).toBeTruthy()
+
+      fireEvent.click(screen.getByTestId('league-overrides-show-all'))
+      expect(screen.getByText('League 11')).toBeTruthy()
+    })
+
+    it('never hides a league the user has customised', async () => {
+      mockLeagues(many)
+      renderCard({ globalEnabled: true, leagues: { l11: { enabled: false } } })
+      await waitFor(() => expect(screen.getByText('League 11')).toBeTruthy())
+    })
+
+    it('search finds a league past the fold, and says when nothing matches', async () => {
+      mockLeagues(many)
+      renderCard({ globalEnabled: true })
+      await waitFor(() => expect(screen.getByText('League 0')).toBeTruthy())
+      fireEvent.change(screen.getByTestId('league-overrides-search'), { target: { value: 'league 10' } })
+      expect(screen.getByText('League 10')).toBeTruthy()
+      expect(screen.queryByText('League 0')).toBeNull()
+
+      fireEvent.change(screen.getByTestId('league-overrides-search'), { target: { value: 'zzz' } })
+      expect(screen.getByTestId('league-overrides-no-match')).toBeTruthy()
+    })
+
+    it('a short list has no search box or toggle', async () => {
+      mockLeagues(many.slice(0, 3))
+      renderCard({ globalEnabled: true })
+      await waitFor(() => expect(screen.getByText('League 2')).toBeTruthy())
+      expect(screen.queryByTestId('league-overrides-search')).toBeNull()
+      expect(screen.queryByTestId('league-overrides-show-all')).toBeNull()
+    })
   })
 
   it('shows the empty state when the account genuinely has no leagues', async () => {

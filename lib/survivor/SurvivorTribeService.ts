@@ -140,6 +140,8 @@ export async function getTribesWithMembers(leagueId: string): Promise<SurvivorTr
     configId: t.configId,
     name: t.name,
     slotIndex: t.slotIndex,
+    logoUrl: t.logoUrl,
+    colorHex: t.colorHex,
     members: t.members.map((m): SurvivorTribeMemberRow => ({
       id: m.id,
       tribeId: m.tribeId,

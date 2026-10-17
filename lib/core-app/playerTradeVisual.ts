@@ -8,26 +8,34 @@ import {
   type MarketValuesPayload,
 } from '@/lib/trade-intel/marketValueService'
 import {
+  FAIRNESS_BAND_REASON,
   findPackages,
   type DiscoveryPlayer,
   type DiscoveryRoster,
   type FairnessBand,
   type TradePackage,
 } from '@/lib/trade-discovery/redraftTradeDiscovery'
+import { createLeagueTradeGrader, gradeDeal } from '@/lib/decision-os/trade/leagueTradeGrader'
+import type { GradeInputs } from '@/lib/decision-os/trade/tradeGradeInputs'
+import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
+import type { GradeLetter } from '@/lib/trade-intel/gradeScale'
 import { describeScoringFit } from '@/lib/trade-value/scoringFit'
 import { allocateFaabAcrossPool, type FaabCandidate } from '@/lib/trade-intel/faabBid'
 import { readFormatRules } from '@/lib/trade-intel/leagueFormatRules'
+import { tradeBanReason } from '@/lib/league-rules/tradeLegality'
 import { scheduleForLeague, survivorHorizon, type SurvivorHorizon } from '@/lib/trade-intel/survivorSchedule'
 import { leagueContextFor, type LeagueContext } from './leagueContext'
 import { resolveCurrentWeekForLeague } from './currentWeek'
 import { buildTeamProfile } from '@/lib/trade-value/teamProfile'
 import type { TeamStance } from '@/lib/trade-value/types'
-import { runTradeAnalysis } from '@/lib/engine/trade'
-import type { TradeEngineRequest, TradePlayerAsset } from '@/lib/engine/trade-types'
 import type { LeagueContextEnvelope } from '@/lib/league-context/leagueContextService'
 import type { SectionState } from './leagueHome'
 import { leagueDisplayName } from './leagueHome'
 import { normalizePosition } from './positionNormalization'
+import { lineupSeatsFromSettings } from './slotEligibility'
+import { lineupGainCalculator } from '@/lib/trade-intel/faabLineupGain'
+import { FOREIGN_IDS_UNREADABLE } from './foreignIdSpaceCopy'
+import { isForeignIdSpace, sleeperReadableRosters } from './rosterIdSpace'
 import { leagueVariantFor } from './valueBook'
 /*
  * Moved to `lib/trade-intel/marketContext.ts` (2026-09-24) so the trade analysis engine can use the
@@ -51,10 +59,19 @@ export { marketContextFor }
  *   2. The deterministic package finder (`findPackages`), told the target, which
  *      builds give/get packages from your surplus positions and bands their
  *      fairness on those values.
- *   3. The trade engine (`runTradeAnalysis`) on the recommended package, for the
- *      verdict, fairness score, starter-points delta and acceptance odds — under
- *      a time budget, and reported as unavailable rather than guessed when it
- *      cannot answer.
+ *   3. THE trade grade — `createLeagueTradeGrader` + `gradeDeal`, the one grader every trade
+ *      surface uses — on every package, from your side, with exactly the inputs the Trade
+ *      Center's builder sends (`{ playerId, name }`), so this card and the builder it hands off
+ *      to read one letter. Under a time budget, and reported as unavailable rather than guessed
+ *      when it cannot answer.
+ *
+ * 🛑 THIS CARD USED TO PRINT A SECOND ENGINE'S VERDICT (2026-09-29). It ran `runTradeAnalysis`
+ * (`lib/engine/trade`) and showed "Engine: accept/reject", starter points and acceptance odds
+ * beside the finder's own fairness band — two verdicts from two models, neither of them the
+ * letter the Trade Center gives the same deal one tap away. Both are gone from the screen: the
+ * package is chosen by, and labelled with, the one grade. The band is still computed (the finder
+ * needs it to build packages, and Chimmy's trade-target decision reads it) but is not printed,
+ * and neither are the finder's band sentences (`FAIRNESS_BAND_REASON`).
  *
  * ⚠ THE PACKAGE FINDER'S OWN LOADER ONLY READS NATIVE REDRAFT LEAGUES
  * (`assembleDiscoveryLeague` keys on `redraftSeason`), and the Player Finder's
@@ -80,23 +97,32 @@ export type TradeVisualPackage = {
   receiveTotal: number
   /** receive minus give, in market-value units. Positive favours you. */
   delta: number
+  /** The package finder's market-value band. Not printed — see the file header. */
   fairness: FairnessBand
   confidence: number
   reasons: string[]
   warnings: string[]
+  /** THE grade of this package, from your side. */
+  grade: SectionState<TradeVisualGrade>
 }
 
+/**
+ * THE trade grade of a package (`lib/decision-os/trade/leagueTradeGrader.ts`) — the letter the
+ * Trade Center shows for the same deal, and nothing from any other model.
+ */
 export type TradeVisualGrade = {
-  verdict: 'accept' | 'reject' | 'counter'
-  verdictConfidence: 'high' | 'medium' | 'low'
-  fairnessScore: number
-  fairnessDelta: number
-  /** Projected starter points gained (positive) or lost by your lineup. */
-  starterDeltaPts: number
-  lineupNote: string
-  /** 0–1, the engine's estimate that the partner accepts. */
-  acceptance: number | null
-  explanations: string[]
+  /** For you — the side that gives. */
+  letter: GradeLetter
+  /** For the other manager. Always the mirror of `letter`. */
+  partnerLetter: GradeLetter
+  /** "Even", "Slightly favors you", … — read off the same number as the letter. */
+  label: string
+  recommendation: string
+  /** League value each way: the totals the letter is taken on. */
+  giveValue: number
+  getValue: number
+  /** The chart underneath, in a manager's words ("Dynasty · Superflex · 12 teams · PPR"). */
+  basis: string
 }
 
 export type TradeVisualSide = {
@@ -154,21 +180,25 @@ export type PlayerTradeVisual = {
   /**
    * Set when the league FORBIDS TRADES, in which case `packages` is empty and this is the answer.
    *
-   * 🛑 A GUILLOTINE LEAGUE IS NOT A TRADE MARKET. Survivor All-Stars says it outright — "there are
+   * 🛑 ONLY A NO-TRADE ELIMINATION LEAGUE. Survivor All-Stars Guillotine says it outright — "there are
    * no trades allowed in this league" — so a package this surface could build is one the manager
-   * can never send. Offering it is worse than refusing: it looks like a plan. What is real is that
-   * the man reaches waivers if his owner is chopped, and what to bid when he does.
+   * can never send. What is real is that the man reaches waivers if his owner is chopped, and what
+   * to bid when he does. A PLAIN guillotine or survivor league trades (concept catalog) and gets
+   * packages, never this.
    */
   bidInstead: PlayerBidInstead | null
   /**
-   * False when the league's format forbids trades (guillotine, survivor). `packages` is then empty
-   * and `recommended` null whether or not a bid could be worked out.
+   * False when the league's format forbids trades, per `lib/league-rules/tradeLegality.ts`
+   * (survivor-guillotine, tournament). `packages` is then empty and `recommended` null whether or
+   * not a bid could be worked out.
    *
    * ⚠ THE BID IS NOT THE GATE. A no-trade league whose bid cannot be computed (no roster values, no
    * allocation) used to fall through with its packages intact — a plan the manager can never send.
    * Optional so a payload built before it existed still reads; absent means allowed.
    */
   tradesAllowed?: boolean
+  /** The catalog's reason trades are forbidden, when they are. Shown on the no-trade card. */
+  tradeBan?: string
 }
 
 export type PlayerBidInstead = {
@@ -196,7 +226,29 @@ export type PlayerBidInstead = {
   ceilingAtRemaining: number | null
   /** What that manager has left, in dollars. Null when the roster row does not carry it. */
   budgetRemaining: number | null
+  /** The English sentence. Chimmy's trade-target verdict reads it as written. */
   reason: string
+  /**
+   * The values `reason` was built from, so the card can say it in the reader's language
+   * (finderTradeValueCopy.ts `bidReasonText`). Optional: a payload built before it existed renders
+   * its English.
+   */
+  parts?: PlayerBidReasonParts
+}
+
+export type PlayerBidReasonParts = {
+  /** Which of faabBid.ts's three bid sentences `reason` carries. */
+  bid: 'unpriced' | 'no-upgrade' | 'upgrade'
+  /** His share of the upgrade value, whole percent, as the sentence prints it. */
+  sharePct: number
+  weekBudget: number
+  /** True when a published elimination schedule paced the budget. */
+  paced: boolean
+  /** The budget the allocation was run against (`faabRemaining`, or 0 when unknown). */
+  budgetRemaining: number
+  weeksAssumed: number
+  /** False when we do not hold this manager's remaining FAAB — the sentence then says so. */
+  faabKnown: boolean
 }
 
 const GRADE_BUDGET_MS = 6000
@@ -241,7 +293,18 @@ export async function readLeagueTradeRows(leagueId: string) {
       })
       .catch(() => []),
     prisma.roster
-      .findMany({ where: { leagueId }, select: { platformUserId: true, playerData: true, faabRemaining: true } })
+      .findMany({
+        where: { leagueId },
+        select: { platformUserId: true, playerData: true, faabRemaining: true, league: { select: { platform: true, sport: true } } },
+      })
+      /*
+       * A foreign league's ids collide with real Sleeper ids: read raw, the holder, "already on your
+       * roster" and every priced package name strangers. Stripped here, every trade surface sees none.
+       * An ESPN roster is translated instead — read raw, its 12483 (Stafford) priced as Jack Bech.
+       */
+      .then(async (rs) =>
+        (await sleeperReadableRosters(rs, (r) => r.league?.platform, (r) => r.league?.sport)).map(({ league: _league, ...r }) => r),
+      )
       .catch(() => []),
   ])
   return { teams, rosters }
@@ -368,7 +431,9 @@ function toAssets(list: TradePackage['giveAssets']): TradeVisualAsset[] {
   }))
 }
 
-function toPackage(p: TradePackage): TradeVisualPackage {
+const BAND_REASONS = new Set<string>(Object.values(FAIRNESS_BAND_REASON))
+
+function toPackage(p: TradePackage): Omit<TradeVisualPackage, 'grade'> {
   return {
     id: p.packageId,
     give: toAssets(p.giveAssets),
@@ -378,15 +443,135 @@ function toPackage(p: TradePackage): TradeVisualPackage {
     delta: Math.round(p.partnerTotalValue - p.myTotalValue),
     fairness: p.fairnessBand,
     confidence: p.confidence,
-    reasons: p.reasons,
+    // The finder's band sentence is its own fairness call; the one grade speaks for the package.
+    reasons: p.reasons.filter((r) => !BAND_REASONS.has(r)),
     warnings: p.warningFlags,
   }
 }
 
+/** Where the package's assets go into the one grader: exactly the Trade Center builder's `toInput`. */
+export function tradeVisualGradeInputs(assets: ReadonlyArray<TradeVisualAsset>): GradeInputs {
+  const out: GradeInputs = { assets: [], unpriceable: [] }
+  for (const a of assets) {
+    if (a.kind === 'player' && a.playerId) out.assets.push({ kind: 'player', playerId: a.playerId, name: a.name })
+    /*
+     * Everything else is named, never dropped — leaving an asset out would grade the deal as though
+     * it were not in it. That includes FAAB: this card's `value` for a FAAB asset is the finder's
+     * NORMALISED value, not the dollar amount the grader prices, and the finder is called with
+     * `faabSupported: false`, so a FAAB line here would be a surprise worth withholding on.
+     */
+    else out.unpriceable.push(a.name)
+  }
+  return out
+}
+
+function toVisualGrade(view: TradeGradeView): SectionState<TradeVisualGrade> {
+  if (!view.graded) return { available: false, reason: view.reason.replace(/\.$/, '') }
+  return {
+    available: true,
+    data: {
+      letter: view.letter,
+      partnerLetter: view.partnerLetter,
+      label: view.label,
+      recommendation: view.recommendation,
+      giveValue: view.giveValue,
+      getValue: view.getValue,
+      basis: view.basis,
+    },
+  }
+}
+
+/**
+ * A package worth opening with, on the ONE grade: even (C) or a slight edge to you (B). The same
+ * two bands the finder's `balanced` / `slight edge you` stood for, now read off the letter the
+ * Trade Center will show — so the card never recommends a deal the builder then calls an overpay.
+ */
+const OPENABLE_LETTERS: ReadonlyArray<GradeLetter> = ['C', 'B']
+/** Only when no package could be graded does the finder's own band choose. */
 const OPENABLE: FairnessBand[] = ['balanced', 'slight edge you']
 
-/** How many of each position a lineup starts, for working out who a new man would displace. */
+/**
+ * The package the card leads with. PURE. The first the one grade calls C or B; failing that, and
+ * only when NOTHING was graded, the first the finder's band calls openable; failing that, the
+ * finder's first. A graded D is never passed over for an ungraded "balanced" — the letter is the
+ * better-informed answer even when it is the unwelcome one.
+ */
+export function recommendedPackage<P extends Pick<TradeVisualPackage, 'fairness' | 'grade'>>(packages: ReadonlyArray<P>): P | null {
+  const byLetter = packages.find((p) => p.grade.available && OPENABLE_LETTERS.includes(p.grade.data.letter))
+  if (byLetter) return byLetter
+  const anyGraded = packages.some((p) => p.grade.available)
+  return (anyGraded ? undefined : packages.find((p) => OPENABLE.includes(p.fairness))) ?? packages[0] ?? null
+}
+
+/**
+ * How many of each position a lineup starts — the FALLBACK, used only when the league's own slots
+ * are not on file or include one `lineupSeatsFromSettings` does not recognise. It is wrong for any
+ * FLEX/SUPER_FLEX lineup, which is why it is no longer the default (see `faabLineupGain.ts`).
+ */
 const STARTS: Record<string, number> = { QB: 1, RB: 2, WR: 2, TE: 1 }
+
+/**
+ * The FAAB candidates among `candidateIds`, each priced under the league's scoring and set against
+ * YOUR starting lineup.
+ *
+ * With the league's slots readable (`leagueSettings.roster_positions`), a candidate's worth to you
+ * is what he adds to your best legal lineup under those slots, and `displacedName` says who leaves
+ * it. Without them it falls back to the fixed table: the weakest starter at his position, or 0 for
+ * a seat you cannot fill.
+ *
+ * One implementation, shared by the Player Finder's bid card (`bidFor`, pool = one owner's roster)
+ * and Chimmy's `get_faab_bid_plan` tool (pool = every valued unrostered player), so the two surfaces
+ * cannot price the same player two ways. Pure. A candidate with no player row or no value is left
+ * out, never priced at zero.
+ */
+export function faabPoolFor(args: {
+  candidateIds: string[]
+  byId: Map<string, { sleeperId: string | null; name: string; position: string | null }>
+  values: MarketValuesPayload
+  leagueScoring: Record<string, number>
+  myPlayers: DiscoveryPlayer[]
+  /** The league's raw settings. Omitted or slot-less, the fixed 1/2/2/1 table is used. */
+  leagueSettings?: unknown
+}): FaabCandidate[] {
+  const seats = args.leagueSettings === undefined ? null : lineupSeatsFromSettings(args.leagueSettings)
+  const gainFor = seats
+    ? lineupGainCalculator(
+        seats,
+        args.myPlayers.map((p) => ({ id: p.playerId, name: p.playerName, position: p.position, value: p.value ?? null })),
+      )
+    : null
+
+  /* Fallback only: your weakest starter at each position, by the fixed table. */
+  const weakest: Record<string, number> = {}
+  if (!gainFor) {
+    for (const pos of Object.keys(STARTS)) {
+      const atPos = args.myPlayers.filter((p) => p.position === pos).sort((a, b) => (b.value ?? 0) - (a.value ?? 0))
+      const starters = atPos.slice(0, STARTS[pos])
+      weakest[pos] = starters.length >= STARTS[pos] ? (starters[starters.length - 1].value ?? 0) : 0
+    }
+  }
+
+  return args.candidateIds.flatMap((id) => {
+    const row = args.byId.get(id)
+    if (!row) return []
+    const priced = playerValueForLeague(args.values, id, args.leagueScoring)
+    const value = priced?.adjusted ?? playerValue(args.values, id)
+    if (value == null) return []
+    const position = row.position ? normalizePosition(row.position) : 'UNK'
+    if (gainFor) {
+      /* replacedValue is expressed so that playerValue − replacedValue is exactly his lineup gain. */
+      const { gain, displacedName } = gainFor({ id, name: row.name, position, value })
+      return [{ id, name: row.name, position, playerValue: value, replacedValue: value - gain, displacedName }]
+    }
+    return [{
+      id,
+      name: row.name,
+      position,
+      playerValue: value,
+      replacedValue: weakest[position] ?? 0,
+    }]
+  })
+}
 
 /**
  * What to bid for him, for a league where he cannot be traded for at any price.
@@ -410,29 +595,16 @@ function bidFor(args: {
   /** The published elimination schedule at this week, or null when the league has none on file. */
   horizon: SurvivorHorizon | null
   myPlayers: DiscoveryPlayer[]
+  /** The league's raw settings, so the lineup gain is measured against its real slots. */
+  leagueSettings: unknown
 }): PlayerBidInstead | null {
-  /* Your weakest starter at each slot — what a new man would actually displace. */
-  const weakest: Record<string, number> = {}
-  for (const pos of Object.keys(STARTS)) {
-    const atPos = args.myPlayers.filter((p) => p.position === pos).sort((a, b) => (b.value ?? 0) - (a.value ?? 0))
-    const starters = atPos.slice(0, STARTS[pos])
-    weakest[pos] = starters.length >= STARTS[pos] ? (starters[starters.length - 1].value ?? 0) : 0
-  }
-
-  const pool: FaabCandidate[] = allIds(args.holderPlayerData).flatMap((id) => {
-    const row = args.byId.get(id)
-    if (!row) return []
-    const priced = playerValueForLeague(args.values, id, args.leagueScoring)
-    const value = priced?.adjusted ?? playerValue(args.values, id)
-    if (value == null) return []
-    const position = row.position ? normalizePosition(row.position) : 'UNK'
-    return [{
-      id,
-      name: row.name,
-      position,
-      playerValue: value,
-      replacedValue: weakest[position] ?? 0,
-    }]
+  const pool = faabPoolFor({
+    candidateIds: allIds(args.holderPlayerData),
+    byId: args.byId,
+    values: args.values,
+    leagueScoring: args.leagueScoring,
+    myPlayers: args.myPlayers,
+    leagueSettings: args.leagueSettings,
   })
   if (!pool.length) return null
 
@@ -454,6 +626,11 @@ function bidFor(args: {
   })
   const mine = alloc?.bids.find((b) => b.id === args.targetSleeperId)
   if (!alloc || !mine) return null
+  // The same test faabBid.ts makes before it picks a sentence: no usable margin is "not priced".
+  const candidate = pool.find((c) => c.id === args.targetSleeperId)
+  const priced =
+    candidate != null && Number.isFinite(candidate.playerValue) && Number.isFinite(candidate.replacedValue)
+  const margin = priced ? candidate.playerValue - candidate.replacedValue : null
 
   return {
     concept: args.concept,
@@ -470,6 +647,15 @@ function bidFor(args: {
           (args.faabRemaining == null
             ? ' We do not hold your remaining FAAB for this league, so that share cannot be turned into dollars.'
             : ''),
+    parts: {
+      bid: margin == null ? 'unpriced' : margin <= 0 ? 'no-upgrade' : 'upgrade',
+      sharePct: Math.round(mine.shareOfSupply * 100),
+      weekBudget: alloc.weekBudget,
+      paced: alloc.paced,
+      budgetRemaining: args.faabRemaining ?? 0,
+      weeksAssumed: alloc.weeksAssumed,
+      faabKnown: args.faabRemaining != null,
+    },
   }
 }
 
@@ -495,6 +681,11 @@ export async function getPlayerTradeVisual(
   const { yours, myRoster } = callerTradeSeat(tradeRows, userId)
   if (!myRoster) return { available: false, reason: 'you need a claimed team in this league to build a trade' }
 
+  // A foreign league's rosters are stripped (readLeagueTradeRows), so "no holder" there means we cannot
+  // read them — not that he is free to claim.
+  if (isForeignIdSpace(league.platform, league.sport)) {
+    return { available: false, reason: `${FOREIGN_IDS_UNREADABLE.toLowerCase()}, so we can't tell who holds him` }
+  }
   const holder = rosters.find((r) => contains((r.playerData ?? {}) as Record<string, unknown>, targetSleeperId)) ?? null
   if (!holder) return { available: false, reason: 'he is not on any roster we can read here — claim him instead of trading for him' }
   if (holder.platformUserId === myRoster.platformUserId) {
@@ -533,7 +724,22 @@ export async function getPlayerTradeVisual(
   )
 
   const targetRow = byId.get(targetSleeperId)
-  const packages = findPackages({
+  /*
+   * ── THE LEAGUE MAY NOT ALLOW TRADES AT ALL, IN WHICH CASE NO PACKAGE IS THE RIGHT ANSWER ──
+   *
+   * 🛑 WHETHER IT DOES IS THE CONCEPT CATALOG'S ANSWER (`lib/league-rules/tradeLegality.ts`), NOT
+   * "IS IT A GUILLOTINE". This block used to refuse packages in every guillotine and survivor league.
+   * The catalog marks trading LEGAL in both; only Survivor All-Stars Guillotine and Tournament forbid
+   * it. Production (2026-09-28): 16 leagues were refused packages they could send, and 18 tournament
+   * leagues were offered packages they could not. `readFormatRules` below still names the format
+   * for the bid maths, but it maps survivor-guillotine onto plain guillotine, so it cannot decide this.
+   *
+   * Decided BEFORE grading, so a league that cannot trade is never charged the grader's reads.
+   */
+  const tradeBan = tradeBanReason({ leagueType: league.leagueType, isDynasty: marketContext.variant.dynasty, settings: league.settings })
+  const tradesAllowed = tradeBan === null
+
+  const found = findPackages({
     myRoster: me,
     partnerRoster: partner,
     sport: 'NFL',
@@ -543,69 +749,39 @@ export async function getPlayerTradeVisual(
     max: 3,
   }).map(toPackage)
 
-  const recommended = packages.find((p) => OPENABLE.includes(p.fairness)) ?? packages[0] ?? null
-
   /*
-   * The engine's grade of the package we would open with. Budgeted: the engine
-   * prices both rosters and runs a championship-odds simulation, and a page
-   * view cannot wait on it forever. A miss is said, never filled in.
+   * THE grade of every package, from your side. One grader for the league (it reads the chart once),
+   * then each package through `gradeDeal` — the same call the Trade Center's partner suggestions and
+   * /trade-finder make. Budgeted: a page view cannot wait on it forever, and a miss is said, never
+   * filled in with some other model's verdict.
    */
-  let grade: SectionState<TradeVisualGrade> = {
-    available: false,
-    reason: recommended ? 'the trade engine did not answer in time' : 'no package to grade',
+  const ungraded = (reason: string): SectionState<TradeVisualGrade> => ({ available: false, reason })
+  let grades: Array<SectionState<TradeVisualGrade>> = found.map(() => ungraded('the trade grade did not answer in time'))
+  if (tradesAllowed && found.length > 0) {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const graded = await Promise.race([
+      (async () => {
+        const grader = await createLeagueTradeGrader({ leagueId: league.id, userId })
+        return Promise.all(
+          found.map((p) =>
+            gradeDeal(grader, { give: tradeVisualGradeInputs(p.give), get: tradeVisualGradeInputs(p.receive), viewerSide: true })
+              .then(toVisualGrade)
+              .catch(() => ungraded('this package could not be graded just now')),
+          ),
+        )
+      })(),
+      new Promise<null>((resolve) => {
+        timer = setTimeout(() => resolve(null), GRADE_BUDGET_MS)
+      }),
+    ]).catch(() => found.map(() => ungraded('this package could not be graded just now')))
+    if (timer) clearTimeout(timer)
+    if (graded) grades = graded
   }
-  if (recommended) {
-    const ctx = marketContext
-    const format: TradeEngineRequest['format'] = ctx.variant.dynasty ? 'dynasty' : ctx.variant.keeper ? 'keeper' : 'redraft'
-    const asset = (a: TradeVisualAsset) =>
-      a.kind === 'player' && a.playerId
-        ? ({ type: 'player', player: { id: a.playerId, name: a.name, pos: a.position ?? undefined } } as const)
-        : ({ type: 'faab', faab: { amount: a.value ?? 0 } } as const)
-    const rosterAssets = (players: DiscoveryPlayer[]): TradePlayerAsset[] =>
-      players.map((p) => ({ id: p.playerId, name: p.playerName, pos: p.position }))
-    const req: TradeEngineRequest = {
-      sport: 'NFL',
-      format,
-      leagueId: league.id,
-      numTeams: leagueSize,
-      assetsA: recommended.give.map(asset),
-      assetsB: recommended.receive.map(asset),
-      rosterA: rosterAssets(me.players),
-      rosterB: rosterAssets(partner.players),
-      teamAName: me.teamName,
-      teamBName: partner.teamName,
-    }
-    try {
-      const res = await Promise.race([
-        runTradeAnalysis(req),
-        new Promise<null>((resolve) => setTimeout(() => resolve(null), GRADE_BUDGET_MS)),
-      ])
-      if (res) {
-        grade = {
-          available: true,
-          data: {
-            verdict: res.verdict,
-            verdictConfidence: res.verdictConfidence,
-            fairnessScore: Math.round(res.fairness.score),
-            fairnessDelta: Math.round(res.fairness.delta),
-            starterDeltaPts: Math.round(res.lineupImpact.starterDeltaPts * 10) / 10,
-            lineupNote: res.lineupImpact.note,
-            acceptance: typeof res.acceptanceProbability?.final === 'number' ? res.acceptanceProbability.final : null,
-            explanations: (res.fairness.explanations ?? []).slice(0, 3),
-          },
-        }
-      }
-    } catch {
-      grade = { available: false, reason: 'the trade engine could not grade this package' }
-    }
-  }
+  const packages: TradeVisualPackage[] = found.map((p, i) => ({ ...p, grade: grades[i]! }))
 
-  /*
-   * ── THE LEAGUE MAY NOT ALLOW TRADES AT ALL, IN WHICH CASE EVERYTHING ABOVE IS THE WRONG ANSWER ──
-   *
-   * Resolved through `readFormatRules`, which is the canonical "what format is this league" — two
-   * implementations of that question is the defect this repo already records, not the fix.
-   */
+  const recommended = recommendedPackage(packages)
+  const grade: SectionState<TradeVisualGrade> = recommended ? recommended.grade : ungraded('no package to grade')
+
   const concept = readFormatRules({
     leagueType: league.leagueType,
     isDynasty: marketContext.variant.dynasty,
@@ -616,7 +792,13 @@ export async function getPlayerTradeVisual(
      */
     settings: league.settings,
   }).concept
-  const isGuillotine = concept === 'guillotine' || concept === 'survivor'
+  /*
+   * The bid card answers "no trades here, so what do I bid when his team is chopped?". That only
+   * exists in a no-trade ELIMINATION league, where a released roster hits waivers. A plain guillotine
+   * trades, so it gets packages. A tournament forbids trades but has no chop-to-waivers market, so it
+   * gets the plain no-trade card.
+   */
+  const bidsInstead = !tradesAllowed && (concept === 'guillotine' || concept === 'survivor')
   const faabRaw = Number((settings as Record<string, unknown>).faab_budget)
 
   /*
@@ -626,11 +808,11 @@ export async function getPlayerTradeVisual(
    * is a database round trip, and the overwhelming majority of leagues have no schedule on file —
    * paying for a query whose answer can only be discarded would tax every league to serve one.
    */
-  const schedule = isGuillotine ? scheduleForLeague(league.platformLeagueId) : null
+  const schedule = bidsInstead ? scheduleForLeague(league.platformLeagueId) : null
   const resolvedWeek = schedule ? await resolveCurrentWeekForLeague(league.platformLeagueId ?? '').catch(() => null) : null
   const horizon = schedule && resolvedWeek ? survivorHorizon(schedule, resolvedWeek.week) : null
 
-  const bidInstead = isGuillotine
+  const bidInstead = bidsInstead
       ? bidFor({
           horizon,
           concept,
@@ -642,6 +824,7 @@ export async function getPlayerTradeVisual(
           faabBudget: Number.isFinite(faabRaw) && faabRaw > 0 ? faabRaw : null,
           faabRemaining: typeof myRoster.faabRemaining === 'number' ? myRoster.faabRemaining : null,
           myPlayers: me.players,
+          leagueSettings: league.settings,
         })
       : null
 
@@ -687,13 +870,14 @@ export async function getPlayerTradeVisual(
        * 🛑 A NO-TRADE LEAGUE GETS NO PACKAGES. Leaving them in would offer a manager a plan they
        * cannot execute, which is worse than offering nothing — it looks actionable.
        */
-      packages: isGuillotine ? [] : packages,
-      recommended: isGuillotine ? null : recommended,
-      grade: isGuillotine
-        ? { available: false, reason: 'this league does not allow trades, so there is no package to grade' }
-        : grade,
+      packages: tradesAllowed ? packages : [],
+      recommended: tradesAllowed ? recommended : null,
+      grade: tradesAllowed
+        ? grade
+        : { available: false, reason: 'this league does not allow trades, so there is no package to grade' },
       bidInstead,
-      tradesAllowed: !isGuillotine,
+      tradesAllowed,
+      ...(tradeBan ? { tradeBan } : {}),
     },
   }
 }

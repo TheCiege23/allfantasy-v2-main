@@ -72,7 +72,7 @@ export function AFCrestButton(props: AFCrestButtonProps) {
   const deltaDisplay =
     hasDelta && data ? (
       <span
-        className={`text-[9px] font-semibold ${data.delta > 0 ? 'text-green-400' : 'text-red-400'}`}
+        className={`text-[11px] font-semibold ${data.delta > 0 ? 'text-green-400' : 'text-red-400'}`}
       >
         {data.delta > 0 ? '↑' : '↓'}
         {data.deltaStr}

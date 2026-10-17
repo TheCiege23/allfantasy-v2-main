@@ -59,7 +59,7 @@ export function CoOwnerSettingsPanel({ leagueId }: Props) {
         { cache: 'no-store' }
       )
       if (!res.ok) {
-        setError('Failed to load')
+        setError(t('leagueSettings.loadFailed'))
         return
       }
       const data = await res.json()
@@ -74,18 +74,18 @@ export function CoOwnerSettingsPanel({ leagueId }: Props) {
         isCoCommissioner?: boolean
       }>
       setMembers(
-        teams.map((t) => ({
-          teamId: t.id,
-          teamName: t.teamName ?? 'Unknown',
-          ownerName: t.ownerName ?? '',
-          avatarUrl: t.avatarUrl ?? null,
-          platformUserId: t.platformUserId ?? null,
-          isCommissioner: t.isCommissioner ?? false,
-          isCoCommissioner: t.isCoCommissioner ?? false,
+        teams.map((team) => ({
+          teamId: team.id,
+          teamName: team.teamName ?? t('division.unknownTeam'),
+          ownerName: team.ownerName ?? '',
+          avatarUrl: team.avatarUrl ?? null,
+          platformUserId: team.platformUserId ?? null,
+          isCommissioner: team.isCommissioner ?? false,
+          isCoCommissioner: team.isCoCommissioner ?? false,
         }))
       )
     } catch {
-      setError('Failed to load co-owner settings')
+      setError(t('coowner.loadFailed'))
     } finally {
       setLoading(false)
     }
@@ -110,11 +110,9 @@ export function CoOwnerSettingsPanel({ leagueId }: Props) {
         }),
       })
       const data = await res.json()
-      if (!res.ok) { setError(data.error ?? 'Failed to update'); return }
+      if (!res.ok) { setError(data.error ?? t('coowner.updateFailed')); return }
       setSuccess(
-        member.isCoCommissioner
-          ? `${member.ownerName || member.teamName} removed as co-owner.`
-          : `${member.ownerName || member.teamName} added as co-owner.`
+        `${member.ownerName || member.teamName} ${member.isCoCommissioner ? t('coowner.removed') : t('coowner.added')}`
       )
       setTimeout(() => setSuccess(null), 3000)
       // Update local state
@@ -126,7 +124,7 @@ export function CoOwnerSettingsPanel({ leagueId }: Props) {
         )
       )
     } catch {
-      setError('Request failed')
+      setError(t('leagueSettings.requestFailed'))
     } finally {
       setActionLoading(null)
     }
@@ -149,7 +147,7 @@ export function CoOwnerSettingsPanel({ leagueId }: Props) {
   )
 
   if (loading) {
-    return <div className="py-8 text-center text-sm text-white/50">Loading co-owner settings...</div>
+    return <div className="py-8 text-center text-sm text-white/50">{t('coowner.loading')}</div>
   }
 
   return (
@@ -170,7 +168,7 @@ export function CoOwnerSettingsPanel({ leagueId }: Props) {
 
       {/* Search bar — matches Sleeper screenshot exactly */}
       <div className="space-y-2">
-        <p className="text-[10px] font-bold uppercase tracking-wider text-white/40">
+        <p className="text-[11px] font-bold uppercase tracking-wider text-white/40">
           {t('coowner.searchLabel')}
         </p>
         <div className="relative">
@@ -233,12 +231,12 @@ export function CoOwnerSettingsPanel({ leagueId }: Props) {
                         {member.ownerName || member.teamName}
                       </span>
                       {isMain && (
-                        <span className="shrink-0 rounded bg-amber-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase text-amber-300">
+                        <span className="shrink-0 rounded bg-amber-500/20 px-1.5 py-0.5 text-[11px] font-bold uppercase text-amber-300">
                           {t('coowner.commissioner')}
                         </span>
                       )}
                       {isCo && !isMain && (
-                        <span className="shrink-0 rounded bg-cyan-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase text-cyan-300">
+                        <span className="shrink-0 rounded bg-cyan-500/20 px-1.5 py-0.5 text-[11px] font-bold uppercase text-cyan-300">
                           {t('coowner.coOwner')}
                         </span>
                       )}

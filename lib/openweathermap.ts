@@ -41,11 +41,16 @@ export const NFL_VENUE_COORDS: Record<string, { lat: number; lon: number; dome: 
   'Soldier Field': { lat: 41.8623, lon: -87.6167, dome: false },
   'Paycor Stadium': { lat: 39.0955, lon: -84.5160, dome: false },
   'Cleveland Browns Stadium': { lat: 41.5061, lon: -81.6995, dome: false },
+  // The same stadium under its name since 2024. A provider sending the current name matched no
+  // row above. Same coordinates, so the weather cache key agrees with `NFL_TEAM_VENUES['CLE']`.
+  'Huntington Bank Field': { lat: 41.5061, lon: -81.6995, dome: false },
   'AT&T Stadium': { lat: 32.7473, lon: -97.0945, dome: true },
   'Empower Field at Mile High': { lat: 39.7439, lon: -105.0201, dome: false },
   'Ford Field': { lat: 42.3400, lon: -83.0456, dome: true },
   'Lambeau Field': { lat: 44.5013, lon: -88.0622, dome: false },
   'NRG Stadium': { lat: 29.6847, lon: -95.4107, dome: true },
+  // NRG Stadium's name before 2014, still sent by some providers. Same coordinates as the row above.
+  'Reliant Stadium': { lat: 29.6847, lon: -95.4107, dome: true },
   'Lucas Oil Stadium': { lat: 39.7601, lon: -86.1639, dome: true },
   'EverBank Stadium': { lat: 30.3239, lon: -81.6373, dome: false },
   'GEHA Field at Arrowhead Stadium': { lat: 39.0489, lon: -94.4839, dome: false },

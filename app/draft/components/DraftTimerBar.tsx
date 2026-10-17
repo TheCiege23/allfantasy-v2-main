@@ -47,7 +47,7 @@ export function DraftTimerBar({
     <div className="rounded-lg border border-white/[0.08] bg-[#0c0c1e] px-3 py-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <p className="text-[10px] uppercase tracking-wider text-white/40">{t('draftRoom.timer.onTheClock')}</p>
+          <p className="text-[11px] uppercase tracking-wider text-white/40">{t('draftRoom.timer.onTheClock')}</p>
           <p className="truncate text-sm font-semibold text-white">{onTheClockLabel}</p>
         </div>
         <div className="text-right font-mono text-xl font-bold tabular-nums text-white">
@@ -58,14 +58,14 @@ export function DraftTimerBar({
             <button
               type="button"
               onClick={onPause}
-              className="rounded border border-white/15 px-2 py-1 text-[10px] font-semibold text-white/80 hover:bg-white/10"
+              className="rounded border border-white/15 px-2 py-1 text-[11px] font-semibold text-white/80 hover:bg-white/10"
             >
               Pause
             </button>
             <button
               type="button"
               onClick={onResume}
-              className="rounded border border-cyan-500/40 px-2 py-1 text-[10px] font-semibold text-cyan-300 hover:bg-cyan-500/10"
+              className="rounded border border-cyan-500/40 px-2 py-1 text-[11px] font-semibold text-cyan-300 hover:bg-cyan-500/10"
             >
               {t('draftRoom.timer.resume')}
             </button>
@@ -76,7 +76,7 @@ export function DraftTimerBar({
         <div className={cn('h-full transition-all', color)} style={{ width: `${pct}%` }} />
       </div>
       {autopickActive ? (
-        <p className="mt-1 text-[10px] text-cyan-300/80">{t('draftRoom.timer.autopickArmed')}</p>
+        <p className="mt-1 text-[11px] text-cyan-300/80">{t('draftRoom.timer.autopickArmed')}</p>
       ) : null}
     </div>
   )

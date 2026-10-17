@@ -409,7 +409,7 @@ export default function DispersalDraftLivePage() {
             className="mb-3 w-full rounded-lg border border-white/10 bg-black/25 px-3 py-2 text-[11px] text-white/90 placeholder:text-white/30"
             aria-label="Search asset pool"
           />
-          <div className="mb-3 flex flex-wrap gap-2 text-[10px]">
+          <div className="mb-3 flex flex-wrap gap-2 text-[11px]">
             {(['all', 'player', 'draft_pick', 'faab'] as const).map((k) => (
               <button
                 key={k}
@@ -431,7 +431,7 @@ export default function DispersalDraftLivePage() {
             {tab === 'player'
               ? playersByPosition.map(({ position, assets: group }) => (
                   <div key={position}>
-                    <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-white/35">{position}</p>
+                    <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-white/35">{position}</p>
                     <div className="space-y-2">
                       {group.map((a) => (
                         <div
@@ -450,7 +450,7 @@ export default function DispersalDraftLivePage() {
                             type="button"
                             disabled={!isMyTurn || isPassed || pickBusy || state.status !== 'in_progress'}
                             onClick={() => void submitPick(a.id)}
-                            className="shrink-0 rounded border border-cyan-400/35 px-2 py-1 text-[10px] font-bold text-cyan-100 disabled:opacity-30"
+                            className="shrink-0 rounded border border-cyan-400/35 px-2 py-1 text-[11px] font-bold text-cyan-100 disabled:opacity-30"
                           >
                             Pick →
                           </button>
@@ -477,11 +477,11 @@ export default function DispersalDraftLivePage() {
                           <p>
                             {a.pickYear} Round {a.pickRound}
                             {a.isTradedPick ? (
-                              <span className="ml-2 rounded bg-amber-500/20 px-1.5 text-[9px] text-amber-200">TRADED</span>
+                              <span className="ml-2 rounded bg-amber-500/20 px-1.5 text-[11px] text-amber-200">TRADED</span>
                             ) : null}
                           </p>
                           {a.isTradedPick && a.originalOwnerRosterId ? (
-                            <p className="mt-0.5 text-[9px] text-white/40">
+                            <p className="mt-0.5 text-[11px] text-white/40">
                               Original owner roster preserved in DB — pick routes to winner on claim.
                             </p>
                           ) : null}
@@ -497,7 +497,7 @@ export default function DispersalDraftLivePage() {
                       type="button"
                       disabled={!isMyTurn || isPassed || pickBusy || state.status !== 'in_progress'}
                       onClick={() => void submitPick(a.id)}
-                      className="shrink-0 rounded border border-cyan-400/35 px-2 py-1 text-[10px] font-bold text-cyan-100 disabled:opacity-30"
+                      className="shrink-0 rounded border border-cyan-400/35 px-2 py-1 text-[11px] font-bold text-cyan-100 disabled:opacity-30"
                     >
                       Pick →
                     </button>
@@ -544,7 +544,7 @@ export default function DispersalDraftLivePage() {
                 PASS
               </button>
             ) : (
-              <span className="inline-block rounded-full bg-white/10 px-3 py-1 text-[10px] text-white/60">PASSED</span>
+              <span className="inline-block rounded-full bg-white/10 px-3 py-1 text-[11px] text-white/60">PASSED</span>
             )}
           </div>
         </div>
@@ -564,7 +564,7 @@ export default function DispersalDraftLivePage() {
                   }`}
                 >
                   <span className="truncate">{nameFor(rid)}</span>
-                  <span className="flex flex-col items-end gap-1 text-[10px] text-white/45">
+                  <span className="flex flex-col items-end gap-1 text-[11px] text-white/45">
                     {passed ? <span className="text-amber-200/80">✓ Passed</span> : null}
                     <span>
                       Picks: {taken}/{turns}
@@ -601,7 +601,7 @@ export default function DispersalDraftLivePage() {
 
       <div className="mt-6 rounded-2xl border border-white/10 bg-[#080f1f] p-4">
         <p className="text-[11px] font-semibold uppercase tracking-wide text-white/45">Pick board</p>
-        <p className="mt-1 text-[10px] text-white/35">
+        <p className="mt-1 text-[11px] text-white/35">
           Next overall pick #{state.currentPickNumber}
           {state.status === 'in_progress' && currentRosterId ? (
             <span className="text-cyan-200/90"> · On the clock: {nameFor(currentRosterId)}</span>
@@ -610,7 +610,7 @@ export default function DispersalDraftLivePage() {
         <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {pickBoardRounds.map(({ round, picks }) => (
             <div key={round} className="rounded-xl border border-white/[0.07] bg-black/20 p-2">
-              <p className="text-[10px] font-bold text-white/40">Round {round}</p>
+              <p className="text-[11px] font-bold text-white/40">Round {round}</p>
               <ul className="mt-2 space-y-1.5">
                 {picks.map((p) => {
                   const isLatest =
@@ -618,7 +618,7 @@ export default function DispersalDraftLivePage() {
                   return (
                     <li
                       key={p.pickNumber}
-                      className={`rounded-lg border px-2 py-1.5 text-[10px] ${
+                      className={`rounded-lg border px-2 py-1.5 text-[11px] ${
                         isLatest ? 'border-cyan-400/35 bg-cyan-500/10' : 'border-white/[0.06] text-white/75'
                       }`}
                     >

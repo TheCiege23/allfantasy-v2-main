@@ -211,10 +211,25 @@ export function buildTradeDecisionSnapshot(input: {
 
 export async function writeTradeDecisionSnapshot(
   tx: Prisma.TransactionClient,
-  input: { tradeId: string; leagueId: string; proposedByUserId: string; snapshot: TradeDecisionSnapshotPayload },
+  input: {
+    tradeId: string
+    leagueId: string
+    proposedByUserId: string
+    snapshot: TradeDecisionSnapshotPayload
+    /**
+     * The one trade engine's receipt for this proposal (`receiptColumns` in
+     * `lib/decision-os/trade/receiptStore.ts`) — so a proposal's receipt lives in this row, not in a
+     * second table. Pass it ONLY when `receiptColumnsReady()` said the columns exist: writing a column
+     * the database lacks aborts this transaction, and with it the trade.
+     */
+    receipt?: { surface: string; inputHash: string; evaluationReceipt: Prisma.InputJsonValue } | null
+  },
 ) {
   return tx.tradeDecisionSnapshot.create({
+    // Only the id comes back, so the insert never RETURNs a column an unmigrated database lacks.
+    select: { id: true },
     data: {
+      ...(input.receipt ?? {}),
       tradeId: input.tradeId,
       leagueId: input.leagueId,
       proposedByUserId: input.proposedByUserId,

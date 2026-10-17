@@ -51,6 +51,24 @@ const GUARD_CALL = /\b(assertAiSpendAllowed|isAiSpendEnabled)\s*\(/
  * would leave those four removable without a single check failing, which is the
  * whole failure mode this file exists to close. The floor tracks what is
  * MEASURED, never what another list happens to say.
+ *
+ * Raised to 40 on 2026-09-27: measured 39 on origin/main before the change (the
+ * floor had lagged two guards behind), plus `lib/ai/providerRouter.ts`, whose
+ * inline Anthropic adapter was the one unguarded path in the provider router.
+ *
+ * Lowered to 39 on 2026-09-27, a DELETION: `lib/integrity/CollusionDetectionEngine.ts` no
+ * longer calls a provider at all. Its direct Anthropic verdict was removed (the scan now runs
+ * the trade review), and its note goes through `explainTrade` → `lib/ai/providerRouter.ts`,
+ * which is guarded. Measured: the guarded set differs from origin/main by that one file only.
+ *
+ * Lowered to 38 on 2026-09-30, a DELETION: `app/api/instant/improve-trade/route.ts` was removed
+ * together with `app/components/ImproveTradeModal.tsx`, its only fetcher, which nothing mounted.
+ * Measured 39 on b85cdfb15; the guarded set differs by that one file only.
+ *
+ * Lowered to 37 on 2026-09-30, a DELETION: `app/api/start-sit/chimmy/route.ts` was removed with
+ * the rest of `app/api/start-sit/` and `components/StartSitPopup/`, its only fetcher, which nothing
+ * mounted (0 production requests in 7 days). Measured: 38 on origin/main, 37 on the branch, and
+ * the guarded sets differ by that one file only.
  */
 const MINIMUM = 37
 

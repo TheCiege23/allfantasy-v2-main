@@ -7,6 +7,7 @@ import { prisma } from '@/lib/prisma'
 import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
 import { getDisplayPlanName } from '@/lib/subscription/feature-access'
 import { CHIMMY_PLAN_DAILY_INCLUDED, type ChimmyPlanAllowanceView } from './planAllowanceView'
+import type { ReceiptContext } from './requestReceipts'
 
 /**
  * Chimmy answers INCLUDED in a subscription, before tokens apply.
@@ -135,6 +136,7 @@ type AllowanceReservation = {
   userId: string
   window: { windowStart: Date; windowEnd: Date }
   counted: boolean
+  durable?: ReceiptContext
   release?: Promise<boolean>
 }
 const reservations = new WeakMap<ChimmyPlanAllowanceState, AllowanceReservation>()
@@ -182,18 +184,21 @@ export async function readChimmyPlanAllowance(
  * uncounted. One uncounted answer on a database error costs less than billing a subscriber for it.
  */
 export async function takeChimmyPlanAllowance(
-  args: { userId: string; state: ChimmyPlanAllowanceState },
+  args: { userId: string; state: ChimmyPlanAllowanceState; requestReceipt?: ReceiptContext },
   deps: PlanAllowanceDeps = defaultDeps,
 ): Promise<ChimmyPlanAllowanceState | null> {
   const window = utcDayWindow(deps.now())
   const receipt = (state: ChimmyPlanAllowanceState, counted: boolean) => {
-    reservations.set(state, { userId: args.userId, window, counted })
+    reservations.set(state, { userId: args.userId, window, counted, durable: args.requestReceipt })
     return state
   }
   let used: number | null
   try {
-    used = await deps.take(endpointFor(args.userId), window, args.state.limit)
-  } catch {
+    used = args.requestReceipt
+      ? await (await import('./requestReceipts')).takeReceiptAllowance(args.requestReceipt, endpointFor(args.userId), window, args.state.limit)
+      : await deps.take(endpointFor(args.userId), window, args.state.limit)
+  } catch (error) {
+    if (args.requestReceipt) throw error
     // No successful take was observed. Cleanup must never subtract another turn's answer.
     const used = args.state.resetsAt === window.windowEnd.toISOString()
       ? args.state.used : await deps.readUsed(endpointFor(args.userId), window).catch(() => 0)
@@ -212,6 +217,9 @@ export async function releaseChimmyPlanAllowance(
 ): Promise<boolean> {
   const reservation = reservations.get(args.state)
   if (!reservation || reservation.userId !== args.userId || !reservation.counted) return false
+  if (reservation.durable) {
+    try { return await (await import('./requestReceipts')).releaseReceiptAllowance(reservation.durable) } catch { return false }
+  }
   if (reservation.release) return reservation.release
   const release = Promise.resolve().then(async () => {
     try {

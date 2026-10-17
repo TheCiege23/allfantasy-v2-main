@@ -109,6 +109,35 @@ export type FleaflickerImportPayload = {
   draftBoard?: FleaflickerDraftBoardResponse | null
   /** Explicit provider transaction feed. Null means the optional call failed. */
   transactions?: FleaflickerTransactionsResponse | null
+  /**
+   * `FetchRoster` per team id — the only source of who STARTS. FetchLeagueRosters is composition
+   * only. A team whose call failed maps to `null` (and a payload built before this field existed has
+   * none at all): its starters are then unknown, exactly as they were before, never guessed.
+   */
+  lineups?: Record<string, FleaflickerRosterResponse | null>
+}
+
+/**
+ * `FetchRoster` — one team's lineup for one scoring period.
+ *
+ * Captured 2026-09-28: contracts/fleaflicker/fixtures/roster.NFL.2021.week1.team1371776.json.
+ * Two things the vendor docs get wrong, both measured on that capture:
+ *   - the player is `leaguePlayer` (camelCase), not the documented `league_player`;
+ *   - the BENCH group carries NO `group` key at all. Only START / INJURED / TAXI name themselves,
+ *     so "no group" means bench and must never be read as "unknown, skip".
+ * An EMPTY slot has no `leaguePlayer` (the captured team started week 1 with its QB slot empty).
+ */
+export type FleaflickerRosterGroupName = 'START' | 'INJURED' | 'TAXI' | 'BENCH'
+
+export type FleaflickerRosterResponse = {
+  groups?: Array<{
+    group?: FleaflickerRosterGroupName | string
+    slots?: Array<{
+      position?: { label?: string; group?: string; start?: number }
+      leaguePlayer?: { proPlayer?: { id?: number } }
+    }>
+  }>
+  lineupPeriod?: { ordinal?: number; low?: { season?: number } }
 }
 
 export type FleaflickerActivityTradeType =

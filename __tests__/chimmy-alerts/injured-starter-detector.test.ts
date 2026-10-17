@@ -150,3 +150,11 @@ describe('per-player lock times', () => {
     ])
   })
 })
+
+describe('the tap target rides on the alert (2026-09-27)', () => {
+  it("carries the player's Sleeper id and sport in metadata, so the sweep can link HIS card", () => {
+    const alerts = detectInjuredStarterAlerts(ctx([{ ...OUT_STARTER, sleeperId: '6794', sport: 'NFL' }]))
+    expect(alerts[0]!.metadata).toMatchObject({ sleeperId: '6794', sport: 'NFL' })
+    expect(detectInjuredStarterAlerts(ctx([OUT_STARTER]))[0]!.metadata).toMatchObject({ sleeperId: null, sport: null })
+  })
+})

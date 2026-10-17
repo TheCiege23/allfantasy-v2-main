@@ -23,7 +23,7 @@ vi.mock("@/lib/auth", () => ({ authOptions: {} }))
  * `league` and `leagueTeam`, not `roster`.
  *
  * 🛑 THE MOCK AND THE MODULE HAD DISAGREED SINCE `resolveActiveLeagueId` STOPPED RESOLVING BY
- * ROSTER. It now asks `prisma.league.findMany({ where: { userId } })` — commissioner-of, not
+ * ROSTER. It now asks `prisma.league.findMany` for leagues owned OR co-commissioned via a claimed team — commissioner-of, not
  * plays-in — while this mock still supplied only `roster`, so every test that reached it died on
  * `Cannot read properties of undefined (reading 'findMany')` before its own assertion ran. Five
  * suites, red on main.
@@ -126,7 +126,16 @@ describe("Manager Intelligence live.ts — active-league resolution", () => {
     withActiveLeague("lg live/one")
     callDecisionOSMock.mockResolvedValue(directoryResponse([]))
     await liveManagerIntelligenceClient.getManagerDirectory()
-    expect(prismaMock.league.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { userId: "user-1" } }))
+    // Owner, OR a co-commissioner/commissioner via a team they CLAIMED — never a viewer. Exact,
+    // not objectContaining: the viewer exclusion and claimedByUserId are the authority boundary.
+    expect(prismaMock.league.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: {
+        OR: [
+          { userId: "user-1" },
+          { teams: { some: { claimedByUserId: "user-1", role: { not: "viewer" }, OR: [{ isCommissioner: true }, { isCoCommissioner: true }] } } },
+        ],
+      },
+    }))
     expect(callDecisionOSMock).toHaveBeenCalledWith(
       "managers",
       `/api/v1/intelligence/league/manager-dna?leagueId=${encodeURIComponent("lg live/one")}`,
@@ -140,7 +149,13 @@ describe("Manager Intelligence live.ts — the directory is real now, and still 
     withActiveLeague()
   })
 
-  it("returns a real directory with humanized archetypes, no error", async () => {
+  /*
+   * Milestone 32: the backend row still carries the DNA classifier's `primaryIdentity`
+   * ("serial_trader", "committed_grinder"), and this client used to humanise it into an
+   * `archetype` ("Active Trader", "Steady Operator") on every card. A characterisation label of a
+   * named manager is shown to nobody, commissioners included, so it is no longer read.
+   */
+  it("returns a real directory with names and no archetype label, no error", async () => {
     callDecisionOSMock.mockResolvedValue(
       directoryResponse([row({ managerId: "u-1" }), row({ managerId: "u-2", primaryIdentity: "committed_grinder" })]),
     )
@@ -153,9 +168,11 @@ describe("Manager Intelligence live.ts — the directory is real now, and still 
 
     expect(result.error).toBeNull()
     expect(result.data).toHaveLength(2)
-    expect(result.data?.[0]).toMatchObject({ id: "u-1", managerName: "Priya N.", archetype: "Active Trader" })
+    expect(result.data?.[0]).toMatchObject({ id: "u-1", managerName: "Priya N.", engagementReliability: "reliable" })
     // displayName null falls back to username, matching Mission Control's own resolution.
-    expect(result.data?.[1]).toMatchObject({ managerName: "sam_r", archetype: "Steady Operator" })
+    expect(result.data?.[1]).toMatchObject({ managerName: "sam_r" })
+    for (const profile of result.data ?? []) expect(profile).not.toHaveProperty("archetype")
+    expect(JSON.stringify(result.data)).not.toMatch(/Active Trader|Steady Operator|serial_trader|committed_grinder/)
   })
 
   it("OMITS tenureSeasons entirely — it has no source, and a fabricated number is worse than a gap", async () => {

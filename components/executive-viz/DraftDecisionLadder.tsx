@@ -88,7 +88,7 @@ export function DraftDecisionLadder({
         <>
           <p className="mb-3 text-[12px] font-semibold text-secondary">{model.headline}</p>
           <ExecutiveDecisionSequence items={items} testIdPrefix="draft-step" />
-          <p className="mt-3 text-[10px] font-medium text-muted">
+          <p className="mt-3 text-[11px] font-medium text-muted">
             Ordered by priority, not by draft value or pick number — no draft board, player values, or pick timing is available.
           </p>
         </>

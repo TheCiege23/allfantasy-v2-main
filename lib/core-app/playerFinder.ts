@@ -3,19 +3,28 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { describeAge } from '@/lib/sports-data/freshnessPolicy'
 import type { SectionState, UnavailableSection } from './leagueHome'
-import { latestProjectionWeek, lookupProjections, positionRanks } from './playerProjections'
+import { isBestBallLeagueRow } from './leagueBestBall'
+import { latestProjectionWeek, lookupAfEngineProjections, lookupProjections, positionRanks } from './playerProjections'
 import { normalizePosition } from './positionNormalization'
 import { asHeadshotUrl } from './playerIdentityCompose'
+import { withoutDetectablyWrongHeadshots } from '@/lib/player-assets/playerImageStore'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
+import {
+  rowsDescribeSamePlayer,
+  selectAuthoritativePlayerRow,
+  selectRowForExternalRef,
+} from '@/lib/player-match/authoritativePlayerRow'
 import { loadSnapShare } from './snapShare'
 import { isIdpPosition } from '@/lib/core-app/scoringNotes'
 import { getCanonicalDefenderValue } from '@/lib/values/canonicalDefenderBoardCache'
 import { resolveSportsWeek } from './sportsWeek'
 import { playerGame, unresolvedClubNames, weekKickoffs, type PlayerGame } from './playerGame'
 import { designationOnset } from './designationOnset'
+import { injuryTimelineFromRows, type InjuryTimeline } from './injuryTimeline'
 import { createSwrCache } from './staleWhileRevalidate'
 import { rosterIdCoverage, sampleRosterIds } from './rosterIdCoverage'
-import { translateRostersByLeague } from './rosterIdSpace'
+import { isForeignIdSpace, isKnownNonNflSport, translateRostersByLeague } from './rosterIdSpace'
+import { applyBridge, bridgeIdsForSleeperId, loadBridgedLeagues } from './bridgedRosterIds'
 import { getPlayerImpact, type LeagueImpact } from './playerImpact'
 export type { LeagueImpact, ReplacementOption } from './playerImpact'
 // Re-exported so server callers keep one import site; the definitions live in a
@@ -71,6 +80,12 @@ export type PlayerMatch = {
    * athlete each page load, with our projections attached to whoever came back.
    */
   sport: string
+  /**
+   * The feed that minted `externalId` — an id is only unique per (sport, source); see
+   * lib/core-app/playerRef.ts. Optional so older builders keep compiling; a ref built
+   * without it still opens, but only when the id is unambiguous.
+   */
+  source?: string | null
 }
 
 export type LeagueSlot = {
@@ -92,6 +107,8 @@ export type LeagueSlot = {
    * for (the row then reads "another manager" rather than inventing a name).
    */
   owner: { teamName: string; ownerName: string; avatarUrl: string | null; externalId: string } | null
+  /** Best ball: the platform sets this lineup itself, so no "Open lineup" button is offered for it (leagueBestBall.ts). */
+  bestBall?: boolean
 }
 
 /**
@@ -119,6 +136,8 @@ export type PlayerDetail = {
   identityResolved: boolean
   bio: { height: string | null; weight: string | null; age: number | null; college: string | null }
   injury: SectionState<{ status: string | null; description: string | null; reportedAt: Date | null }>
+  /** What came before this designation and ESPN's estimated return (injuryTimeline.ts); null when neither is known. */
+  injuryTimeline?: InjuryTimeline | null
   seasonStats: SectionState<Array<{ season: string; stats: Record<string, string> }>>
   leagues: SectionState<LeagueSlot[]>
   /**
@@ -163,6 +182,14 @@ export type PlayerDetail = {
    * the copy says "standard scoring".
    */
   projection: SectionState<{ points: number; season: string; week: number }>
+  /**
+   * AllFantasy's OWN engine for the same week, generic PPR — the AF number beside `projection`.
+   *
+   * League-free here, like `projection`. The screen carries it into a league with
+   * `afEngineForLeague` (afEngineCarry.ts) against that league's provider number, which it already
+   * holds, so no per-league read is needed. Optional so a cached or older payload still parses.
+   */
+  afProjection?: SectionState<{ points: number; season: string; week: number }>
   /**
    * The game he plays this week — the instant every lineup lock on the card
    * counts down to (2026-09-06). From the ingested schedule for the resolved
@@ -305,7 +332,7 @@ export async function searchPlayers(query: string, limit = 12): Promise<PlayerMa
     take: limit * 3,
     select: {
       externalId: true, sleeperId: true, name: true, position: true,
-      team: true, imageUrl: true, number: true, sport: true,
+      team: true, imageUrl: true, number: true, sport: true, source: true,
     },
   })
 
@@ -341,8 +368,11 @@ export async function searchPlayers(query: string, limit = 12): Promise<PlayerMa
    * multi-row groups and ZERO recoverable — an answer that says "leave it
    * alone". The folding is what puts the duplicate rows in the same group at
    * all, so any census of this collapse has to use the real key.
+   *
+   * Scrubbed first: `SportsPlayer.imageUrl` holds the image cron's unvetted copies, and a
+   * detectably wrong one would otherwise survive the collapse as the group's face.
    */
-  return collapseCatalog(rows, limit)
+  return collapseCatalog(await withoutDetectablyWrongHeadshots(rows), limit)
 }
 
 /** One catalog row as the two search paths read it. */
@@ -355,11 +385,12 @@ type CatalogRow = {
   imageUrl: string | null
   number: number | null
   sport: string
+  source?: string | null
 }
 
 const CATALOG_SELECT = {
   externalId: true, sleeperId: true, name: true, position: true,
-  team: true, imageUrl: true, number: true, sport: true,
+  team: true, imageUrl: true, number: true, sport: true, source: true,
 } as const
 
 /**
@@ -390,6 +421,7 @@ function collapseCatalog(rows: CatalogRow[], limit: number): PlayerMatch[] {
   return [...seen.values()].slice(0, limit).map(({ row: r, imageUrl }) => ({
     externalId: r.externalId,
     sport: r.sport,
+    source: r.source ?? null,
     sleeperId: r.sleeperId,
     name: r.name,
     position: r.position,
@@ -495,7 +527,7 @@ export async function suggestCatalog(
   for (const { where, take } of passes) {
     if (out.length >= limit) break
     const rows = await prisma.sportsPlayer.findMany({ where, orderBy, take, select: CATALOG_SELECT })
-    add(rows ?? [])
+    add(await withoutDetectablyWrongHeadshots(rows ?? []))
   }
   return out.slice(0, limit)
 }
@@ -518,7 +550,8 @@ export async function suggestCatalog(
  */
 type UnmatchedLeague = { leagueId: string; leagueName: string; platform: string }
 
-async function resolveLeagueSlots(
+/** Exported for tests only (`__tests__/player-finder-foreign-roster-ids.test.ts`); the card calls it through getPlayerDetail. */
+export async function resolveLeagueSlots(
   sleeperId: string,
   leagueIds: string[],
   userId: string | null | undefined
@@ -552,20 +585,66 @@ async function resolveLeagueSlots(
   // leagues where someone else has him, and those need a name and a platform too.
   const leagues = await prisma.league.findMany({
     where: { id: { in: leagueIds } },
-    select: { id: true, name: true, platform: true, leagueType: true, platformLeagueId: true, season: true },
+    select: { id: true, name: true, platform: true, sport: true, leagueType: true, platformLeagueId: true, season: true, bestBallMode: true, leagueVariant: true, settings: true },
   })
   const byId = new Map(leagues.map((l) => [l.id, l]))
-  // ESPN rosters -> Sleeper ids through the identity chain before any scan below (rosterIdSpace.ts).
-  const platformByLeague = new Map(leagues.map((l) => [l.id, l.platform]))
+  const bestBallIds = new Set(leagues.filter((l) => isBestBallLeagueRow(l)).map((l) => l.id))
+  // ESPN rosters -> Sleeper ids through the identity chain before any scan below (rosterIdSpace.ts);
+  // the id-space map the translator reads is built below, once the bridge verdicts are known.
+  /*
+   * 🛑 A ROSTER IN ANOTHER PLATFORM'S ID SPACE IS NEVER SCANNED FOR A SLEEPER ID.
+   *
+   * Only ESPN has a bridge to Sleeper ids (rosterIdSpace.ts). Fleaflicker, MFL, Fantrax and
+   * Yahoo rosters arrive under the provider's own ids and `translateRostersByLeague` passes them
+   * through untouched — and those ids are NUMBERS in the same range as Sleeper's. Measured on
+   * production 2026-09-27: 44 of the 248 ids on the one Fleaflicker league's rosters are also real
+   * Sleeper ids, so a raw `includes(sleeperId)` told a manager he rosters a player he does not (or
+   * that a rival does). The coverage guard below could not catch it: it only looks at leagues with
+   * NO hit, and a collision IS a hit. So these leagues are named as unchecked instead of scanned —
+   * the same stance the game-day triage and the shares board already take ("counted, not read").
+   */
+  /*
+   * EXCEPT A LEAGUE THE IDENTITY BRIDGE CAN READ (Phase 4, 2026-09-27). Fleaflicker and MFL ids reach
+   * Sleeper ids through `PlayerIdentityMap` (bridgedRosterIds.ts). Such a league is scanned only when
+   * most of it translates, and only in translated form — unbridged ids are DROPPED, because a raw
+   * one is exactly the collision above.
+   */
+  const bridgedLeagues = await loadBridgedLeagues(leagues)
+  const hisBridgeIds = bridgedLeagues.size > 0 ? await bridgeIdsForSleeperId(sleeperId) : {}
+  const foreignLeagueIds = new Set(
+    leagues
+      // A native league of another sport too: its Rolling Insights ids collide with Sleeper's (rosterIdSpace.ts).
+      .filter((l) => isForeignIdSpace(l.platform, l.sport) && !bridgedLeagues.get(l.id)?.readable)
+      .map((l) => l.id),
+  )
+  /*
+   * ⚠ BRIDGED FROM THE RAW ROSTER, BEFORE THE SHARED TRANSLATOR — which strips every foreign-id
+   * roster (rosterIdSpace.ts). A readable bridged league is bridged here and then handed to the
+   * translator as the Sleeper-id roster it now is; bridging AFTER the translator would find an
+   * already-emptied roster.
+   */
+  // Concrete, not generic: `.map(genericFn)` over these union-typed reads inferred the bare constraint
+  // and dropped `platformUserId`, which both passes below need.
+  type RosterRead = { leagueId: string; platformUserId: string; playerData: unknown }
+  const throughBridge = (r: RosterRead): RosterRead => {
+    const b = bridgedLeagues.get(r.leagueId)
+    return b?.readable ? { ...r, playerData: applyBridge(r.playerData, b.map) } : r
+  }
+  const idSpaceByLeague = new Map(
+    leagues.map((l) => [l.id, bridgedLeagues.get(l.id)?.readable ? 'sleeper' : l.platform]),
+  )
+  const sportByLeague = new Map(leagues.map((l) => [l.id, l.sport]))
 
   const rosters = await translateRostersByLeague(
-    claimedLeagueIds.length > 0 && allCandidates.length > 0
+    (claimedLeagueIds.length > 0 && allCandidates.length > 0
       ? await prisma.roster.findMany({
           where: { leagueId: { in: claimedLeagueIds }, platformUserId: { in: allCandidates } },
           select: { leagueId: true, platformUserId: true, playerData: true },
         })
-      : [],
-    platformByLeague,
+      : []
+    ).map(throughBridge),
+    idSpaceByLeague,
+    sportByLeague,
   )
 
   const out: LeagueSlot[] = []
@@ -573,7 +652,7 @@ async function resolveLeagueSlots(
   const claimed = new Set<string>()
 
   for (const r of rosters) {
-    if (claimed.has(r.leagueId)) continue
+    if (claimed.has(r.leagueId) || foreignLeagueIds.has(r.leagueId)) continue
     // The candidate union spans every claimed team; accept only a roster whose
     // platformUserId belongs to THIS league's own candidate set.
     if (!r.platformUserId || !candidatesByLeague.get(r.leagueId)?.has(r.platformUserId)) continue
@@ -596,6 +675,7 @@ async function resolveLeagueSlots(
         slot: slotLabel(key),
         isYours: true,
         owner: null,
+        bestBall: bestBallIds.has(r.leagueId),
       })
       claimed.add(r.leagueId)
       break
@@ -627,18 +707,21 @@ async function resolveLeagueSlots(
   const unclaimed = leagueIds.filter((id) => !claimed.has(id))
   if (unclaimed.length > 0) {
     const everyRoster = await translateRostersByLeague(
-      await prisma.roster
-        .findMany({
-          where: { leagueId: { in: unclaimed } },
-          select: { leagueId: true, platformUserId: true, playerData: true },
-        })
-        .catch(() => [] as Array<{ leagueId: string; platformUserId: string; playerData: unknown }>),
-      platformByLeague,
+      (
+        await prisma.roster
+          .findMany({
+            where: { leagueId: { in: unclaimed } },
+            select: { leagueId: true, platformUserId: true, playerData: true },
+          })
+          .catch(() => [] as Array<{ leagueId: string; platformUserId: string; playerData: unknown }>)
+      ).map(throughBridge),
+      idSpaceByLeague,
+      sportByLeague,
     )
 
     const held = new Map<string, { platformUserId: string; slot: string }>()
     for (const r of everyRoster) {
-      if (held.has(r.leagueId)) continue
+      if (held.has(r.leagueId) || foreignLeagueIds.has(r.leagueId)) continue
       const pd = (r.playerData ?? {}) as Record<string, unknown>
       for (const key of SLOT_ORDER) {
         const arr = pd[key]
@@ -662,7 +745,7 @@ async function resolveLeagueSlots(
     if (missed.length > 0) {
       const byLeague = new Map<string, unknown[]>()
       for (const r of everyRoster) {
-        if (held.has(r.leagueId)) continue
+        if (held.has(r.leagueId) || foreignLeagueIds.has(r.leagueId)) continue
         const arr = byLeague.get(r.leagueId) ?? []
         arr.push(r.playerData)
         byLeague.set(r.leagueId, arr)
@@ -678,6 +761,28 @@ async function resolveLeagueSlots(
           : []
       const known = new Set(knownRows.map((r) => r.sleeperId).filter((x): x is string => Boolean(x)))
       for (const id of missed) {
+        // He is a Sleeper id, so an NFL player: a league of another sport cannot hold him, and naming
+        // it "unchecked" would invent a gap. It is never scanned either (foreignLeagueIds).
+        if (isKnownNonNflSport(byId.get(id)?.sport)) continue
+        // Another platform's ids: unchecked by definition, no sample needed — but only when
+        // something was imported (no rosters at all is a different gap, as below).
+        /*
+         * A bridged league we CAN read still cannot see a player the bridge does not know — a kicker,
+         * a defense, a deep bench body FantasyCalc does not value. Every roster slot he could fill was
+         * dropped as unbridged, so "not here" would be a guess. Name it unchecked for him instead.
+         */
+        const bridged = bridgedLeagues.get(id)
+        const blindToHim = Boolean(bridged?.readable && !hisBridgeIds[bridged.column])
+        if (foreignLeagueIds.has(id) || blindToHim) {
+          if (!everyRoster.some((r) => r.leagueId === id)) continue
+          const league = byId.get(id)
+          unmatched.push({
+            leagueId: id,
+            leagueName: league?.name ?? 'League',
+            platform: String(league?.platform ?? 'manual').toLowerCase(),
+          })
+          continue
+        }
         const sample = samples.get(id) ?? []
         // No rosters at all is a different gap (nothing imported); only a
         // vocabulary mismatch is reported here.
@@ -727,6 +832,7 @@ async function resolveLeagueSlots(
           platformLeagueId: league?.platformLeagueId ?? null,
           season: league?.season ?? null,
           teamExternalId: teamExternalIdByLeague.get(leagueId) ?? null,
+          bestBall: bestBallIds.has(leagueId),
         }
         /*
          * If the holder is one of YOUR candidate ids after all — the first pass
@@ -778,7 +884,7 @@ export async function getPlayerDetail(
   } = {},
 ): Promise<PlayerDetail | null> {
   const includeMoves = opts.includeMoves !== false
-  const { sport: refSport, externalId } = parsePlayerRef(playerReference)
+  const { sport: refSport, externalId, source: refSource } = parsePlayerRef(playerReference)
 
   /*
    * ⚠ TWO CACHES, AND WHAT IS NOT IN THEM. On game day the same few injured
@@ -797,9 +903,11 @@ export async function getPlayerDetail(
    * A minute is the ceiling on how old an injury designation can be here; the
    * feeds behind it move every five (alert-sweep fold) to fifteen (import-injuries).
    */
-  const facts = await playerFacts.get(cardFactsKey(refSport, externalId), () => loadPlayerFacts(refSport, externalId))
+  const facts = await playerFacts.get(cardFactsKey(refSport, externalId, refSource), () =>
+    loadPlayerFacts(refSport, externalId, refSource),
+  )
   if (!facts) return null
-  const { row, identityResolved, injury, seasonStats, projection, snapShare, idpValue, positionRank: rank } = facts
+  const { row, identityResolved, injury, injuryTimeline, seasonStats, projection, afProjection, snapShare, idpValue, positionRank: rank } = facts
 
 
   const resolvedSlots = identityResolved
@@ -911,6 +1019,7 @@ export async function getPlayerDetail(
     player: {
       externalId: row.externalId,
       sport: row.sport,
+      source: row.source,
       sleeperId: row.sleeperId,
       name: row.name,
       position: row.position,
@@ -928,11 +1037,13 @@ export async function getPlayerDetail(
     idpValue,
     bio: { height: row.height, weight: row.weight, age: row.age, college: row.college },
     injury,
+    injuryTimeline,
     seasonStats,
     leagues,
     rosterCoverage,
     impact,
     projection,
+    afProjection,
     game,
     kickoffs,
     scheduleWeek,
@@ -948,8 +1059,8 @@ const CARD_FACTS_TTL_MS = 60_000
 const CARD_FACTS_CAP = 500
 const WEEK_SCHEDULE_TTL_MS = 60_000
 
-function cardFactsKey(sport: string | null | undefined, externalId: string): string {
-  return `${sport ?? '*'}:${externalId}`
+function cardFactsKey(sport: string | null | undefined, externalId: string, source: string | null | undefined): string {
+  return `${sport ?? '*'}~${source ?? '*'}:${externalId}`
 }
 
 const playerFacts = createSwrCache<Awaited<ReturnType<typeof loadPlayerFacts>>>({ ttlMs: CARD_FACTS_TTL_MS, cap: CARD_FACTS_CAP })
@@ -971,7 +1082,11 @@ export function playerCardCacheStats() {
  * identity set, injury claim, season stats, projection, rank, snap share and
  * defender value. Null when the reference resolves to nobody.
  */
-async function loadPlayerFacts(refSport: string | null | undefined, externalId: string) {
+async function loadPlayerFacts(
+  refSport: string | null | undefined,
+  externalId: string,
+  refSource: string | null | undefined = null,
+) {
 
   /*
    * ⚠ SPORT-SCOPED AND EXPLICITLY ORDERED, BOTH FOR THE SAME REASON. `externalId`
@@ -995,9 +1110,17 @@ async function loadPlayerFacts(refSport: string | null | undefined, externalId: 
    * statistics ingested for this player" while nine rows across five seasons sat in the
    * table. The name join used to paper over this by matching regardless of which row won.
    */
-  const row = await prisma.sportsPlayer.findFirst({
+  /*
+   * 🛑 AND SCOPED TO THE SOURCE, OR REFUSED. Sport alone did not make the id unique:
+   * SOCCER `1100` is Haaland (api_football) and James Daly (rolling_insights), and the
+   * newest row won. `selectRowForExternalRef` keeps the ordering above (Sleeper id first,
+   * then freshest) but takes the ref's own source when it names one, and refuses a
+   * source-less ref whose rows describe different men rather than picking one.
+   */
+  const candidates = await prisma.sportsPlayer.findMany({
     where: refSport ? { externalId, sport: refSport } : { externalId },
     orderBy: [{ sleeperId: { sort: 'desc', nulls: 'last' } }, { fetchedAt: 'desc' }],
+    take: 20,
     select: {
       externalId: true, sleeperId: true, name: true, position: true, team: true,
       imageUrl: true, number: true, height: true, weight: true, age: true,
@@ -1006,7 +1129,31 @@ async function loadPlayerFacts(refSport: string | null | undefined, externalId: 
       college: true, sport: true, fetchedAt: true, source: true,
     },
   })
-  if (!row) return null
+  const picked = selectRowForExternalRef(candidates ?? [], refSource)
+  if (!picked) return null
+
+  /*
+   * 🛑 A VENDOR ROW'S SLEEPER ID IS A NAME MATCH, AND IT CAN NAME SOMEBODY ELSE. Measured
+   * 2026-10-12: TheSportsDB's `tsdb_34249738` "Byron Murphy DT Seattle Seahawks" carries
+   * 5864 — the Vikings CB. Opening it showed a DT/Seattle header over the CB's leagues,
+   * projection and rank. When the Sleeper row for that id contradicts the clicked row
+   * (name or position group), the id is not this man's: drop it, so nothing Sleeper-keyed
+   * is attached. "Unresolved" is true; "the CB's fantasy life" was not.
+   */
+  /*
+   * The card's face. NFL DL Cam Jackson (Rolling Insights 8966) carried NCAAB forward Cameron
+   * Jackson's cutout here, mirrored by the image cron; `asHeadshotUrl` only checks the shape.
+   */
+  let row = (await withoutDetectablyWrongHeadshots([picked]))[0] ?? picked
+  if (row.sleeperId && row.source !== 'sleeper') {
+    const owner = await prisma.sportsPlayer
+      .findFirst({
+        where: { sport: row.sport, source: 'sleeper', sleeperId: row.sleeperId },
+        select: { name: true, position: true },
+      })
+      .catch(() => null)
+    if (owner && !rowsDescribeSamePlayer(owner, row)) row = { ...row, sleeperId: null }
+  }
 
   const identityResolved = Boolean(row.sleeperId)
 
@@ -1090,10 +1237,30 @@ async function loadPlayerFacts(refSport: string | null | undefined, externalId: 
           where: { sport: row.sport, playerName: { equals: row.name, mode: 'insensitive' } },
           orderBy: { fetchedAt: 'desc' },
           take: 8,
-          select: { status: true, description: true, date: true, fetchedAt: true },
+          select: { status: true, description: true, date: true, fetchedAt: true, expiresAt: true },
         })
-        .catch(() => [] as Array<{ status: string | null; description: string | null; date: Date | null; fetchedAt: Date }>)
+        .catch(() => [] as Array<{ status: string | null; description: string | null; date: Date | null; fetchedAt: Date; expiresAt: Date | null }>)
   const injuryRow = designationOnset(injuryRows)
+
+  /*
+   * The timeline beside the status (injuryTimeline.ts): the designation before this one and ESPN's
+   * estimated return. A deeper read than the eight rows above — ESPN keeps one row per update, ~4.5 a
+   * player — behind the SAME name-ambiguity guard, so it annotates exactly the rows the card trusts.
+   */
+  const timelineRows =
+    nameIsAmbiguous || !injuryRow
+      ? []
+      : await prisma.sportsInjury
+          .findMany({
+            where: { sport: row.sport, playerName: { equals: row.name, mode: 'insensitive' } },
+            orderBy: { fetchedAt: 'desc' },
+            take: 40,
+            select: { status: true, date: true, fetchedAt: true, source: true, raw: true },
+          })
+          .catch(() => [] as Array<{ status: string | null; date: Date | null; fetchedAt: Date; source: string; raw: unknown }>)
+  const injuryTimeline: InjuryTimeline | null = injuryRow
+    ? injuryTimelineFromRows({ rows: timelineRows, current: { status: injuryRow.status, reportedAt: injuryRow.reportedAt }, now: new Date() })
+    : null
 
   const injury: SectionState<{ status: string | null; description: string | null; reportedAt: Date | null }> =
     injuryRow
@@ -1288,7 +1455,32 @@ async function loadPlayerFacts(refSport: string | null | undefined, externalId: 
       }
 
 
-  return { row, identityResolved, injury, seasonStats, projection, snapShare, idpValue, positionRank: rank }
+  /*
+   * AllFantasy's own engine, same week and same Sleeper-id key as the provider row above. Read once
+   * per player per minute with the rest of these facts; a failed read costs the AF figure only.
+   */
+  const afRow = projectionWeek && row.sleeperId
+    ? (await lookupAfEngineProjections([projKey], projectionWeek).catch(
+        (): Awaited<ReturnType<typeof lookupAfEngineProjections>> => new Map(),
+      )).get(projKey)
+    : undefined
+  const afProjection: PlayerDetail['afProjection'] = afRow
+    ? {
+        available: true,
+        data: {
+          points: Math.round(afRow.projectedPoints * 100) / 100,
+          season: projectionWeek!.season,
+          week: projectionWeek!.week,
+        },
+      }
+    : {
+        available: false,
+        reason: row.sleeperId
+          ? 'AllFantasy’s engine has no projection for this player this week'
+          : 'we hold no Sleeper id for this player, and AllFantasy’s projections are keyed by one',
+      }
+
+  return { row, identityResolved, injury, injuryTimeline, seasonStats, projection, afProjection, snapShare, idpValue, positionRank: rank }
 }
 
 /**
@@ -1330,10 +1522,20 @@ async function loadWeekSchedule(sport: string) {
  * The slug carries sport + sleeperId (see lib/core-app/playerSlug.ts for why
  * neither the name nor externalId can be the key). One athlete has one row per
  * ingest source, so this picks between them deterministically instead of letting
- * the planner decide: prefer a row that actually carries a team and a position
- * over a bare stub, then the freshest. Without the explicit order the same URL
- * rendered "Justin Jefferson, WR, MIN" and "Justin Jefferson, no team" on
- * alternating requests.
+ * the planner decide. Without an explicit choice the same URL rendered "Justin
+ * Jefferson, WR, MIN" and "Justin Jefferson, no team" on alternating requests.
+ *
+ * 🛑 THE SLEEPER ROW SPEAKS FOR A SLEEPER ID — NOT THE FRESHEST, NOT THE FULLEST.
+ * This used to prefer "has team and position, then freshest", which on production
+ * (2026-10-11) resolved 391 Sleeper ids to their TheSportsDB row — and TheSportsDB
+ * stamps Sleeper ids by name, so three of those rows are a different athlete:
+ * `/players/byron-murphy-nfl-5864` rendered "Byron Murphy (DT · Seattle Seahawks)"
+ * for the Vikings corner, 11304 rendered Elgton Jenkins (G, CLE) for TE E.J. Jenkins,
+ * 6273 rendered Jackson Powers-Johnson for DT P.J. Johnson. The rule and the
+ * measurement live in lib/player-match/authoritativePlayerRow.ts.
+ *
+ * ⚠ It also means ~121 free agents lose the stale "last team" another feed carried,
+ * because a null team on the Sleeper row is Sleeper saying he has none.
  *
  * `canonicalSlug` is returned so the page can redirect a URL whose name head has
  * gone stale — a player changing their listed name must not orphan an already
@@ -1358,16 +1560,14 @@ export async function resolvePublicPlayer(
         sleeperId: true,
         team: true,
         position: true,
+        source: true,
+        fetchedAt: true,
       },
     })
     .catch(() => [])
 
-  if (rows.length === 0) return null
-
-  const best =
-    rows.find((r) => r.team != null && r.position != null) ??
-    rows.find((r) => r.position != null) ??
-    rows[0]
+  // `base`, not the merged row: the reference must name the authoritative row itself.
+  const best = selectAuthoritativePlayerRow(rows)?.base
   if (!best || !best.sleeperId) return null
 
   return {
@@ -1390,6 +1590,14 @@ export async function resolvePublicPlayer(
  *
  * DISTINCT on sleeperId because one athlete has one row per ingest source; six
  * "Justin Jefferson" rows would render as six identical suggestions.
+ *
+ * 🛑 SLEEPER ROWS ONLY. A TheSportsDB row carries a Sleeper id it matched BY NAME,
+ * so it can sit on another club under another man's id: the Seahawks DT Byron Murphy
+ * row carries the Vikings CB's id 5864, and Elgton Jenkins (G, CLE) carries TE E.J.
+ * Jenkins's 11304. Reading every source listed "Elgton Jenkins" among the Browns
+ * guards and linked him to the Eagles tight end's page. The Sleeper row is the one
+ * that speaks for the id (lib/player-match/authoritativePlayerRow.ts), and the
+ * page's own team and position now come from it too, so the vocabularies match.
  */
 export async function getRelatedPlayers(
   sport: string,
@@ -1404,6 +1612,7 @@ export async function getRelatedPlayers(
     .findMany({
       where: {
         sport,
+        source: 'sleeper',
         team,
         position,
         sleeperId: { not: null },

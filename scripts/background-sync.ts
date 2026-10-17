@@ -245,7 +245,8 @@ const syncTasks: SyncTask[] = [
     method: 'POST',
     intervalMs: 30 * 60 * 1000,
     body: {},
-    requiresAuth: false,
+    // The worker route is now gated (requireCronAuth accepts ADMIN_PASSWORD).
+    requiresAuth: true,
     lastRun: 0,
     running: false,
     phase: 'fast',

@@ -125,7 +125,10 @@ describe('RedraftWarRoomPanel UI wiring', () => {
     expect(screen.getAllByText(/provider integration/i).length).toBeGreaterThan(0)
 
     fireEvent.click(screen.getByTestId('redraft-war-room-tool-trade-analyze'))
-    await screen.findByTestId('redraft-war-room-trade-analyze-result')
+    const analyzed = await screen.findByTestId('redraft-war-room-trade-analyze-result')
+    // 🛑 2026-09-29: no grade back is "Not graded" with the reason — never the engine's own verdict.
+    expect(screen.getByTestId('redraft-war-room-trade-grade-withheld').textContent).toBe('Not graded: This trade could not be graded just now.')
+    expect(analyzed.textContent).not.toMatch(/Verdict:|needs more data/i)
     expect(client.analyzeTrade).toHaveBeenCalledWith('lg-panel', {
       outgoingPlayerIds: ['p-out'],
       incomingPlayerIds: [],

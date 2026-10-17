@@ -51,7 +51,8 @@ const LINKS: HubLink[] = [
   },
 ]
 
-export default function C2CLeagueHubPage({ params }: { params: { leagueId: string } }) {
+export default async function C2CLeagueHubPage(props: { params: Promise<{ leagueId: string }> }) {
+  const params = await props.params
   const { leagueId } = params
   return (
     <div className="min-h-screen bg-[#040915] px-4 py-8 text-white">
@@ -61,7 +62,7 @@ export default function C2CLeagueHubPage({ params }: { params: { leagueId: strin
             <GraduationCap className="h-8 w-8" />
           </div>
           <div className="flex-1">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-sky-200/80">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-sky-200/80">
               Campus to Canton
             </p>
             <h1 className="mt-1 text-2xl font-black tracking-tight">League hub</h1>

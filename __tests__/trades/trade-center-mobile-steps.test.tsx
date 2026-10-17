@@ -133,9 +133,9 @@ describe('steps', () => {
     expect(tag('.af-tc-draft')).toBe('offers review')
   })
 
-  it('the league history, passed in, belongs to Offers too — not trailing every step', () => {
+  it('the league history follows the builder on Review', () => {
     const { container } = render(<TradeCenter league={LEAGUE} history={<section className="history-probe">History</section>} />)
-    expect(container.querySelector('.history-probe')?.closest('[data-mstep]')?.getAttribute('data-mstep')).toBe('offers')
+    expect(container.querySelector('.history-probe')?.closest('[data-mstep]')?.getAttribute('data-mstep')).toBe('review')
   })
 })
 
@@ -270,6 +270,33 @@ describe('the persistent control', () => {
     const body = JSON.parse(String((call![1] as RequestInit).body))
     expect(body.sideGive.map((a: { name: string }) => a.name)).toEqual(['DK Metcalf'])
     expect(body.sideGet.map((a: { name: string }) => a.name)).toEqual(['Christian McCaffrey'])
+  })
+
+  it('🛑 never sends the AllFantasy projection to the verdict — it is display only', async () => {
+    rosterData.current = {
+      rosters: [
+        roster('r1', 'You', [{ ...player('p1', 'DK Metcalf', 5000), afProjection: 14.2 }]),
+        roster('r2', 'Matt Jones', [{ ...player('p9', 'Christian McCaffrey', 7000), afProjection: 19.8 }]),
+      ],
+      viewerRosterId: 'r1',
+      viewerTeamRosterId: 'r1',
+    }
+    render(<TradeCenter league={LEAGUE} />)
+    fireEvent.click(screen.getByLabelText('Add DK Metcalf'))
+    fireEvent.click(step('Get'))
+    chooseMatt()
+    fireEvent.click(screen.getByLabelText('Add Christian McCaffrey'))
+    fireEvent.click(step('Review'))
+    await act(async () => {
+      fireEvent.click(primary())
+    })
+    const call = fetchMock.mock.calls.find(([u]) => String(u).includes('/api/trade-value/analyze'))
+    expect(call).toBeTruthy()
+    const raw = String((call![1] as RequestInit).body)
+    // The positive control: the players ARE in the request, so an absent key is a real absence.
+    expect(raw).toContain('DK Metcalf')
+    expect(raw).not.toContain('afProjection')
+    expect(raw).not.toContain('14.2')
   })
 })
 
@@ -484,15 +511,29 @@ describe('stylesheet', () => {
   const CSS = readFileSync(resolve(process.cwd(), 'components/core-app/af-trade-center.css'), 'utf8').replace(/\r\n/g, '\n')
   const tail = CSS.slice(CSS.indexOf('Phone builder: step bar, review, asset sheet'))
 
-  /** The body of the LAST top-level `@media (max-width: 720px)` block, balanced on braces. */
+  /**
+   * The top-level `@media (max-width: 720px)` block that carries the step bar, balanced on braces.
+   *
+   * ⚠ FOUND BY WHAT IT HOLDS, NOT BY BEING LAST. This used to take the LAST 720px block in the
+   * file, which held only while nobody followed the stylesheet's own convention of appending new
+   * phone rules as a sibling block at the end — the 2026-10-01 phone audit did, and all three
+   * stylesheet checks went red over a file whose step bar had not changed.
+   */
   function lastPhoneBlock(src: string): string {
-    const start = src.lastIndexOf('@media (max-width: 720px) {')
-    let depth = 0
-    for (let i = src.indexOf('{', start); i < src.length; i++) {
-      if (src[i] === '{') depth++
-      else if (src[i] === '}' && --depth === 0) return src.slice(start, i + 1)
+    const opener = '@media (max-width: 720px) {'
+    let found = ''
+    for (let start = src.indexOf(opener); start !== -1; start = src.indexOf(opener, start + 1)) {
+      let depth = 0
+      for (let i = src.indexOf('{', start); i < src.length; i++) {
+        if (src[i] === '{') depth++
+        else if (src[i] === '}' && --depth === 0) {
+          const block = src.slice(start, i + 1)
+          if (block.includes('.af-tc-stepbar {')) found = block
+          break
+        }
+      }
     }
-    return ''
+    return found
   }
 
   it('[control] the scan found the new section and a balanced phone block', () => {

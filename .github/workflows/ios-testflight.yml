@@ -1,0 +1,273 @@
+# Builds the iOS shell (ios-app/) and uploads it to App Store Connect / TestFlight.
+#
+# MANUAL ONLY (workflow_dispatch). It never runs on push: the app is a thin
+# WebView over allfantasy.ai, so a web deploy needs no new binary — rebuild only
+# when ios-app/ itself changes. See docs/app-store/RUNBOOK.md.
+#
+# Signing is automatic, driven by an App Store Connect API key with the Admin
+# role (it creates the distribution certificate). Required repository secrets:
+#   APPLE_TEAM_ID                     10-character Team ID (BROWN PIG LLC)
+#   APP_STORE_CONNECT_KEY_ID          the key's Key ID
+#   APP_STORE_CONNECT_ISSUER_ID       the Issuer ID shown above the key list
+#   APP_STORE_CONNECT_API_KEY_P8      full contents of AuthKey_<KEYID>.p8
+# None of them is ever echoed; the .p8 is written to the runner temp dir and
+# deleted in an always() step.
+name: ios-testflight
+
+on:
+  workflow_dispatch:
+    inputs:
+      marketing_version:
+        description: "Version shown on the App Store (must match the version in App Store Connect)"
+        required: true
+        default: "1.0"
+      push_notifications:
+        description: "Ship the push-notification entitlement. Needs Push Notifications enabled on the App ID ai.allfantasy.app first, or the export fails."
+        type: boolean
+        required: false
+        default: false
+      universal_links:
+        description: "Ship the associated-domains entitlement (the email verify link opens the app). Needs Associated Domains enabled on the App ID ai.allfantasy.app first, or the export fails."
+        type: boolean
+        required: false
+        default: false
+      career_widget:
+        description: "Ship the 'Your career' home-screen widget. Needs App Groups enabled on ai.allfantasy.app with the group group.ai.allfantasy.app, and an App ID ai.allfantasy.app.CareerWidget with the same group, or the export fails. See docs/app-store/RUNBOOK.md."
+        type: boolean
+        required: false
+        default: false
+      notification_images:
+        description: "Ship the notification service extension that shows pictures (headshots, trade cards) on push notifications. Needs an App ID ai.allfantasy.app.NotificationService (no capabilities to enable). Only useful together with push_notifications."
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-testflight
+  cancel-in-progress: false
+
+jobs:
+  build-and-upload:
+    # App Store Connect refuses any upload not built with the iOS 26 SDK
+    # (Xcode 26+). macos-15 defaulted to Xcode 16.4 and the upload failed
+    # validation with "SDK version issue", so the job runs on macos-26 and the
+    # next step pins the newest Xcode 26 installed there.
+    runs-on: macos-26
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: ios-app
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Select Xcode 26 or later
+        run: |
+          xcode=$(ls -d /Applications/Xcode_2[6-9]*.app /Applications/Xcode_[3-9][0-9]*.app 2>/dev/null | sort -V | tail -1)
+          if [ -z "$xcode" ]; then
+            echo "::error::No Xcode 26+ on this runner. Installed:"; ls -d /Applications/Xcode*.app
+            exit 1
+          fi
+          sudo xcode-select -s "$xcode/Contents/Developer"
+          xcodebuild -version
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ios-app/package-lock.json
+
+      - name: Install Capacitor
+        run: npm ci --no-audit --no-fund
+
+      - name: Sync web assets and plugins into the Xcode project
+        run: npx cap sync ios
+
+      # The widget target is NOT committed to the Xcode project (see the script's header): with this
+      # input off, the archive is exactly what it was before the widget existed.
+      - name: Add the career widget target
+        if: ${{ inputs.career_widget }}
+        run: |
+          gem list -i xcodeproj >/dev/null || gem install xcodeproj --no-document
+          ruby scripts/add-career-widget-target.rb
+
+      # Same build-time-only rule as the widget: with this input off, no extension exists.
+      - name: Add the notification image extension target
+        if: ${{ inputs.notification_images }}
+        run: |
+          gem list -i xcodeproj >/dev/null || gem install xcodeproj --no-document
+          ruby scripts/add-notification-service-target.rb
+
+      - name: Check required secrets are present
+        env:
+          TEAM: ${{ secrets.APPLE_TEAM_ID }}
+          KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ISSUER: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+        run: |
+          missing=0
+          for name in TEAM KEY_ID ISSUER P8; do
+            if [ -z "${!name}" ]; then echo "::error::secret for $name is not set"; missing=1; fi
+          done
+          exit $missing
+
+      - name: Write API key
+        env:
+          P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+        run: |
+          umask 077
+          printf '%s\n' "$P8" > "$RUNNER_TEMP/AuthKey.p8"
+
+      # ⚠ The archive is built UNSIGNED, on purpose. Automatic signing during
+      # `archive` signs for DEVELOPMENT, and Apple only issues a development
+      # profile to a team with at least one registered device — this team has
+      # none, so the first run died with "Your team has no devices from which to
+      # generate a provisioning profile". The only signature that ships is the
+      # App Store distribution one, and the export step below applies it
+      # (cloud-managed certificate + App Store profile, via the API key). No
+      # device is needed for that.
+      - name: Archive (unsigned)
+        env:
+          TEAM: ${{ secrets.APPLE_TEAM_ID }}
+          MARKETING_VERSION: ${{ inputs.marketing_version }}
+        run: |
+          xcodebuild archive \
+            -project ios/App/App.xcodeproj \
+            -scheme App \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/App.xcarchive" \
+            DEVELOPMENT_TEAM="$TEAM" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            MARKETING_VERSION="$MARKETING_VERSION" \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}"
+
+      # An UNSIGNED archive carries no entitlements (they live in the code
+      # signature), and export takes its entitlements from the archived app, so
+      # without this step aps-environment silently never reaches the store build
+      # and push registration fails on every device. Ad-hoc signing the archived
+      # app with App.entitlements puts them where export reads them; export then
+      # replaces the ad-hoc signature with the distribution one.
+      #
+      # ⚠ ONLY THE REQUESTED KEYS. App.entitlements holds every entitlement the app can use, and
+      # each one needs its capability enabled on the App ID or the export fails. So each key is
+      # shipped only when its input is ticked: a push-only run must not start carrying
+      # associated-domains (added 2026-09-29) and fail on a capability nobody enabled.
+      - name: Embed requested entitlements in the archive
+        if: ${{ inputs.push_notifications || inputs.universal_links || inputs.career_widget || inputs.notification_images }}
+        env:
+          PUSH: ${{ inputs.push_notifications }}
+          LINKS: ${{ inputs.universal_links }}
+          WIDGET: ${{ inputs.career_widget }}
+          IMAGES: ${{ inputs.notification_images }}
+        run: |
+          app="$RUNNER_TEMP/App.xcarchive/Products/Applications/App.app"
+          ent="$RUNNER_TEMP/App.entitlements"
+          cp ios/App/App/App.entitlements "$ent"
+          [ "$PUSH" = "true" ] || /usr/libexec/PlistBuddy -c "Delete :aps-environment" "$ent" 2>/dev/null || true
+          [ "$LINKS" = "true" ] || /usr/libexec/PlistBuddy -c "Delete :com.apple.developer.associated-domains" "$ent" 2>/dev/null || true
+          if [ "$WIDGET" = "true" ]; then
+            # The App Group is added HERE, not in App.entitlements, so local and default builds
+            # never ask for a capability the App ID may not have.
+            /usr/libexec/PlistBuddy -c "Add :com.apple.security.application-groups array" "$ent"
+            /usr/libexec/PlistBuddy -c "Add :com.apple.security.application-groups:0 string group.ai.allfantasy.app" "$ent"
+            appex="$app/PlugIns/CareerWidget.appex"
+            if [ ! -d "$appex" ]; then echo "::error::career_widget was requested but $appex is not in the archive"; exit 1; fi
+            # Nested code is signed before the bundle that contains it.
+            codesign --force --sign - --entitlements ios/App/CareerWidget/CareerWidget.entitlements "$appex"
+          fi
+          if [ "$IMAGES" = "true" ]; then
+            # No entitlements — but the app is signed below without --deep, and codesign refuses a
+            # bundle whose nested code is unsigned, so the extension is ad-hoc signed first.
+            nse="$app/PlugIns/NotificationService.appex"
+            if [ ! -d "$nse" ]; then echo "::error::notification_images was requested but $nse is not in the archive"; exit 1; fi
+            codesign --force --sign - "$nse"
+          fi
+          if [ -d "$app/Frameworks" ]; then
+            for fw in "$app"/Frameworks/*; do codesign --force --sign - "$fw"; done
+          fi
+          codesign --force --sign - --entitlements "$ent" "$app"
+          signed="$(codesign -d --entitlements - "$app" 2>/dev/null)"
+          if [ "$PUSH" = "true" ] && ! grep -q aps-environment <<<"$signed"; then
+            echo "::error::aps-environment is not in the archived app after signing"; exit 1
+          fi
+          if [ "$LINKS" = "true" ] && ! grep -q com.apple.developer.associated-domains <<<"$signed"; then
+            echo "::error::associated-domains is not in the archived app after signing"; exit 1
+          fi
+          if [ "$WIDGET" = "true" ] && ! grep -q group.ai.allfantasy.app <<<"$signed"; then
+            echo "::error::the App Group is not in the archived app after signing"; exit 1
+          fi
+
+      - name: Export and upload to App Store Connect
+        env:
+          TEAM: ${{ secrets.APPLE_TEAM_ID }}
+          KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ISSUER: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          PUSH: ${{ inputs.push_notifications }}
+          LINKS: ${{ inputs.universal_links }}
+          WIDGET: ${{ inputs.career_widget }}
+          IMAGES: ${{ inputs.notification_images }}
+        run: |
+          run_export() {
+            cat > "$RUNNER_TEMP/ExportOptions-$1.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>$1</string>
+            <key>teamID</key><string>${TEAM}</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+          </dict>
+          </plist>
+          PLIST
+            xcodebuild -exportArchive \
+              -archivePath "$RUNNER_TEMP/App.xcarchive" \
+              -exportOptionsPlist "$RUNNER_TEMP/ExportOptions-$1.plist" \
+              -exportPath "$RUNNER_TEMP/export-$1" \
+              -allowProvisioningUpdates \
+              -authenticationKeyPath "$RUNNER_TEMP/AuthKey.p8" \
+              -authenticationKeyID "$KEY_ID" \
+              -authenticationKeyIssuerID "$ISSUER"
+          }
+          # Export to a local IPA first and read the SIGNED build's
+          # entitlements, so a build that dropped the push entitlement never
+          # reaches TestFlight. Then export again straight to App Store Connect.
+          run_export export
+          mkdir -p "$RUNNER_TEMP/ipa"
+          unzip -q "$RUNNER_TEMP/export-export/App.ipa" -d "$RUNNER_TEMP/ipa"
+          echo "Entitlements of the signed build:"
+          codesign -d --entitlements - "$RUNNER_TEMP/ipa/Payload/App.app" 2>/dev/null | tee "$RUNNER_TEMP/entitlements.txt"
+          if [ "$PUSH" = "true" ] && ! grep -q aps-environment "$RUNNER_TEMP/entitlements.txt"; then
+            echo "::error::push_notifications was requested but the signed build has no aps-environment entitlement. Enable Push Notifications on the App ID ai.allfantasy.app and re-run."
+            exit 1
+          fi
+          if [ "$LINKS" = "true" ] && ! grep -q com.apple.developer.associated-domains "$RUNNER_TEMP/entitlements.txt"; then
+            echo "::error::universal_links was requested but the signed build has no associated-domains entitlement. Enable Associated Domains on the App ID ai.allfantasy.app and re-run."
+            exit 1
+          fi
+          if [ "$WIDGET" = "true" ]; then
+            widget_ent="$(codesign -d --entitlements - "$RUNNER_TEMP/ipa/Payload/App.app/PlugIns/CareerWidget.appex" 2>/dev/null || true)"
+            if ! grep -q group.ai.allfantasy.app "$RUNNER_TEMP/entitlements.txt" || ! grep -q group.ai.allfantasy.app <<<"$widget_ent"; then
+              echo "::error::career_widget was requested but the signed app or widget lacks the App Group. Enable App Groups (group.ai.allfantasy.app) on ai.allfantasy.app and ai.allfantasy.app.CareerWidget and re-run."
+              exit 1
+            fi
+          fi
+          if [ "$IMAGES" = "true" ]; then
+            nse_ipa="$RUNNER_TEMP/ipa/Payload/App.app/PlugIns/NotificationService.appex"
+            if [ ! -d "$nse_ipa" ] || ! codesign -v "$nse_ipa" 2>/dev/null; then
+              echo "::error::notification_images was requested but the signed build has no valid NotificationService.appex. Create the App ID ai.allfantasy.app.NotificationService and re-run."
+              exit 1
+            fi
+          fi
+          run_export upload
+          echo "Uploaded build ${GITHUB_RUN_NUMBER}. It appears in App Store Connect after processing (~10-30 min)."
+
+      - name: Remove API key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/AuthKey.p8"

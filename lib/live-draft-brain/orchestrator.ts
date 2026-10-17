@@ -60,16 +60,16 @@ function buildPickRecommendationFromCandidate(
       age: poolRow?.age ?? null,
     },
   })
-  const ext = blended.externalAdp ?? blended.combinedAdp
-  const site = blended.siteAdp ?? blended.combinedAdp
+  const ext = blended.externalAdp
+  const site = blended.siteAdp
 
   return {
     playerName: top.playerName,
     position: top.position,
     team: String(top.team ?? ''),
     combinedAdp: blended.combinedAdp,
-    externalAdp: typeof ext === 'number' ? ext : blended.combinedAdp,
-    siteAdp: typeof site === 'number' ? site : blended.combinedAdp,
+    externalAdp: ext,
+    siteAdp: site,
     pickScore: top.pickScore,
     recommendationType: mapModeToRecommendationType(mode),
     reasoning: top.pickReasons,

@@ -7,6 +7,7 @@ import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { normalizeLeagueScoring } from '@/lib/league-context-engine/normalizeScoring'
 import { resolveMatchupPeriod } from '@/lib/league-context-engine/resolvePeriod'
 import { normalizeBestBallSettings } from '@/lib/bestball/rules'
+import { hasVerifiedBestBallRuleConfiguration } from '@/lib/best-ball-war-room/bestBallRuleEvidence'
 import { resolveLeagueConcept } from '@/lib/league/leagueConceptOptions'
 import type {
   LeagueSourceType,
@@ -115,7 +116,10 @@ export async function resolveNormalizedLeagueContext(
     leagueSeason: league.season,
   })
 
-  const bestBallSettings = league.bestBallMode
+  // Imported provider settings can mark a league as Best Ball without storing its
+  // transaction rules. The normalizer fills missing rules with new-league defaults;
+  // those defaults must not become "verified" permissions in Chimmy's roster tool.
+  const bestBallSettings = league.bestBallMode && hasVerifiedBestBallRuleConfiguration(settings)
     ? normalizeBestBallSettings({
         sport: league.sport,
         conceptSetup: (settings?.best_ball_settings as Record<string, unknown> | null) ?? null,

@@ -10,7 +10,7 @@ import type { LeagueTypeId, DraftTypeId } from '@/lib/league-creation-wizard/typ
 import type { SupportedSport } from '@/lib/create-league-v2/state'
 import { getAllowedSportsForLeagueType } from '@/lib/league-creation-wizard/league-type-registry'
 import {
-  SURVIVOR_CAST_SIZE_OPTIONS,
+  SURVIVOR_CREATE_CAST_SIZES,
   getTeamCountOptionsForSport,
 } from '@/lib/league-creation-wizard/sport-team-limits'
 import { SUPPORTED_SPORTS, supportsIdpLeagueSport } from '@/lib/sport-scope'
@@ -19,7 +19,7 @@ import {
   getDraftTypeUiLabel,
   resolveEffectiveDraftTypeForConcept,
 } from '@/lib/draft-types/draftTypeRegistry'
-import { getCreateLeagueDraftTypes } from '@/lib/league/format-engine'
+import { getAllowedDraftTypesForFormat } from '@/lib/league/format-engine'
 import { getGuillotineSportConfig } from '@/lib/guillotine/sportConfig'
 import { BEST_BALL_DRAFT_MODES } from '@/lib/bestball/rules'
 import { getClientLeagueCreateOptionsCatalog } from '@/lib/create-league-v2/options-catalog-client'
@@ -29,11 +29,15 @@ import {
   type ScoringPresetOption,
 } from '@/lib/league-creation-preset/scoring-presets'
 import { UNIVERSAL_CREATE_TEAM_COUNTS } from '@/lib/create-league-v2/simple-create'
+import { isSurvivorCreationSportAvailable } from '@/lib/survivor/survivorCreationAvailability'
 
 // ── Sport filtering ─────────────────────────────────────────────────
 
 /** Which sports are allowed for a given league type? */
 export function getAllowedSportsForType(leagueType: LeagueTypeId): SupportedSport[] {
+  if (leagueType === 'survivor') {
+    return SUPPORTED_SPORTS.filter(isSurvivorCreationSportAvailable) as SupportedSport[]
+  }
   const catalog = getClientLeagueCreateOptionsCatalog()
   const seeded = catalog?.allowedSportsByConcept?.[leagueType]
   if (Array.isArray(seeded) && seeded.length > 0) {
@@ -140,7 +144,8 @@ export function getTeamCountOptions(
     // depending on whether one fetch succeeded. It held [16, 20, 24] for three months after
     // 29566580a moved the cast to 16-20, and `POST /api/league/create` clamps to
     // SURVIVOR_CAST_SIZE_OPTIONS, so a 24 picked from this list was silently saved as 20.
-    return [...SURVIVOR_CAST_SIZE_OPTIONS]
+    // New leagues are offered the catalog's 16 / 20 (SURVIVOR_CREATE_CAST_SIZES).
+    return [...SURVIVOR_CREATE_CAST_SIZES]
   }
   const max = getMaxTeamsForSport(sport, soccerPipeline)
   return evenTeamCountsUpTo(max)
@@ -154,6 +159,8 @@ export function getDefaultTeamCount(
 ): number {
   const opts = getTeamCountOptions(sport, leagueType, soccerPipeline)
   if (opts.length === 0) return 12
+  // Survivor starts at its smallest cast: 16 managers, four tribes of four (user's call, 2026-10-12).
+  if (leagueType === 'survivor') return opts[0]!
   // Prefer 12 if available, otherwise middle of the list
   if (opts.includes(12)) return 12
   return opts[Math.floor(opts.length / 2)] ?? opts[0]!
@@ -184,7 +191,9 @@ export function getDraftTypeOptions(leagueType: LeagueTypeId, sport: SupportedSp
   const catalog = getClientLeagueCreateOptionsCatalog()
   const seeded = catalog?.allowedDraftTypesByConcept?.[leagueType]
 
-  const sportAllowed = getCreateLeagueDraftTypes(sport, leagueType)
+  // The canonical create endpoint validates against the format's full draft matrix.
+  // Keep the wizard in sync so supported Linear and Auction drafts can be chosen at creation.
+  const sportAllowed = getAllowedDraftTypesForFormat(sport, leagueType)
   const seededNormalized = Array.isArray(seeded)
     ? seeded
         .map((dt) => resolveEffectiveDraftTypeForConcept(leagueType, dt))
@@ -238,7 +247,7 @@ export function getDraftTypeOptions(leagueType: LeagueTypeId, sport: SupportedSp
         hint: mode === 'auto' ? 'CPU drafts for everyone' : 'Commissioner records picks manually',
       })
     }
-  } else if (leagueType !== 'big_brother' && leagueType !== 'zombie') {
+  } else if (leagueType !== 'big_brother' && leagueType !== 'zombie' && leagueType !== 'salary_cap') {
     result.push({
       id: 'auto',
       label: 'Auto',

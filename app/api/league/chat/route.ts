@@ -25,6 +25,7 @@ import { markViewingChat, readChatPresence } from '@/lib/chat-core/chatPresence'
 import { redactAnonymousPollVotes } from '@/lib/chat-core/messagePolls'
 import { syncTradeCardsForLeague } from '@/lib/league-chat/tradeChatCards'
 import { generateChimmyPrivateReply } from '@/lib/chat-core/chimmyPrivateReply'
+import { activateSGLivePower } from '@/lib/survivor-guillotine/live'
 import { decisionAnswerMeta } from '@/lib/chimmy/decisionAnswerContract'
 import { getLeagueMemberUserIds } from '@/lib/league-chat/leagueMemberIds'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
@@ -35,6 +36,9 @@ import { readLeagueDraftLink } from '@/lib/league-chat/readLeagueDraftLink'
 import { DRAFT_ROOM_ONLY_TYPES, resolveIncludeDraft } from '@/lib/league-chat/draftChatLink'
 import { getBlockedUserIdsForRead } from '@/lib/moderation/BlockUserService'
 import { filterMessagesByBlocked } from '@/lib/moderation/SafetyVisibilityResolver'
+import { isSurvivorLeague } from '@/lib/survivor/SurvivorLeagueConfig'
+import { parseSurvivorCommand } from '@/lib/survivor/SurvivorCommandParser'
+import { processSurvivorOfficialCommand } from '@/lib/survivor/SurvivorOfficialCommandService'
 
 function toStringValue(value: unknown, fallback = '') {
   return typeof value === 'string' ? value : fallback
@@ -387,19 +391,30 @@ export async function POST(req: NextRequest) {
     !(idpProcessed?.outcome === 'post_user_and_chimmy' && (idpProcessed.chimmyMessages?.length ?? 0) > 0)
 
   if (wantsChimmyPrivateDm) {
-    const mentionParsed = parseAtMentions(message)
     const privateUserMsg = await createLeagueChatMessage(leagueId, userId, message, {
       metadata: finalMetadata,
       isPrivate: true,
       visibleToUserId: userId,
       messageSubtype: 'chimmy_private',
-      mentionedUserIds: await resolveLeagueMentionIds(leagueId, userId, mentionParsed.userMentions),
     })
     if (!privateUserMsg) {
       return NextResponse.json({ error: 'Failed to send message' }, { status: 500 })
     }
     let decision: ReturnType<typeof decisionAnswerMeta> | undefined
-    const replyText = await generateChimmyPrivateReply(message, { leagueId, userId, onDecision: result => { decision = decisionAnswerMeta(result) } })
+    const survivorVote = (parseSurvivorCommand(message).intent === 'vote' || /^@chimmy\s+vote(?:\s|$)/i.test(message)) && await isSurvivorLeague(leagueId)
+    const voteResult = survivorVote
+      ? await processSurvivorOfficialCommand({ leagueId, userId, command: message, source: 'private_chimmy' })
+      : null
+    let sgReply: string | null = null
+    if (/^@chimmy\s+(?:use|play)\s+(?:idol|token)\b/i.test(message)) {
+      try { sgReply = (await activateSGLivePower(leagueId, userId, message))?.reply ?? null }
+      catch (error) { sgReply = error instanceof Error ? error.message : 'Power activation failed.' }
+    }
+    const replyText = sgReply ?? (voteResult?.handled
+      ? voteResult.ok
+        ? voteResult.message ?? 'Your vote was recorded privately.'
+        : `${voteResult.error ?? 'Vote was not recorded.'} To vote, send @Chimmy @manager or @Chimmy vote @manager.`
+      : await generateChimmyPrivateReply(message, { leagueId, userId, onDecision: result => { decision = decisionAnswerMeta(result) } }))
     const leagueRow = await prisma.league.findUnique({
       where: { id: leagueId },
       select: { userId: true },
@@ -520,14 +535,18 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  void syncOutboundLeagueChat({
+  // Keep the outbound relay alive until Discord accepts or rejects it. Returning
+  // first can cancel an unawaited task in a serverless request.
+  await syncOutboundLeagueChat({
     leagueId,
     messageId: created.id,
     authorName: created.senderName ?? 'Manager',
     authorAvatarUrl: created.senderAvatarUrl ?? null,
     text: created.body,
     gifUrl: gifUrlFromMetadata(metadata),
-  }).catch(() => {})
+  }).catch((error) => {
+    console.warn('[league/chat] Discord relay failed', error)
+  })
 
   /*
    * "New message in your league chat" — bell/push/email/text for members who turned the League chat

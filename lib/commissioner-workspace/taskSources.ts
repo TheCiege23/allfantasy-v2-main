@@ -1,3 +1,4 @@
+import { readOperationalTasks } from './operationalTasks'
 import { MANAGER_INACTIVE_AFTER_DAYS } from '@/lib/decision-os/behavioral/manager-intelligence'
 import { readActivityWindow, readManagerActivity } from '@/lib/league-history/leagueWarehouseReads'
 import { readOrphanTeamCounts } from './rosterReads'
@@ -35,6 +36,7 @@ export interface WorkspaceTaskCandidate {
   sourceKey: string
   title: string
   description: string
+  dueAt?: Date
   priority: 'critical' | 'elevated' | 'standard' | 'advisory'
   /** True only where a scheduled job could genuinely do the work — never for judgement calls. */
   automationCandidate: boolean
@@ -321,5 +323,5 @@ export async function detectLeagueTasks(leagueId: string, now = new Date()): Pro
   const managers = withSilentManagers(moved, roster.ownedTeamNames)
   const inactive = detectInactiveManagers(managers, window.lastActivityAt, now)
 
-  return [neverImported, stale, inactive, orphans].filter((c): c is WorkspaceTaskCandidate => c !== null)
+  return [...[neverImported, stale, inactive, orphans].filter((c): c is WorkspaceTaskCandidate => c !== null), ...await readOperationalTasks(leagueId, now)]
 }

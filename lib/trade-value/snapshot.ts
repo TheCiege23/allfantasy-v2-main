@@ -17,7 +17,7 @@ import {
   valueBasisFor,
   type ScoringContext,
 } from './valueEngine'
-import { gradeTrade } from './grader'
+import { canonicalFairnessGrade } from '@/lib/decision-os/trade/fairnessGrader'
 import { applyFormatFit } from './formats/applyFormat'
 import { buildValueV2Shadow, valueV2ShadowEnabled } from '@/lib/decision-os/value-v2/shadow'
 import { assessTradeAssetCoverage } from './assetCoverage'
@@ -240,7 +240,7 @@ export function buildTradeValueSnapshot(input: {
 
   const sideA = sideFor(input.proposerRosterId)
   const sideB = sideFor(input.receiverRosterId)
-  let { grade, commissionerReview } = gradeTrade(sideA, sideB, input.profiles)
+  let { grade, commissionerReview } = canonicalFairnessGrade(sideA, sideB, input.profiles)
   const coverage = assessTradeAssetCoverage(snapAssets)
   if (coverage.status !== 'complete') {
     grade = {

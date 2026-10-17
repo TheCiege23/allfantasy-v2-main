@@ -39,21 +39,6 @@ export interface TradeToolResult<T> {
   limitations: TradeToolLimitation[]
 }
 
-export interface ExplainTradeData {
-  proposalId: string
-  status: string
-  /** Immutable grade captured at proposal time (T2 snapshot). */
-  snapshotGrade: string | null
-  fairnessScore: number | null
-  confidenceScore: number | null
-  valueDifference: number | null
-  sideTotals: Array<{ rosterId: string; total: number }>
-  reasons: string[]
-  warnings: string[]
-  /** Snapshot values are historical; current market value may differ (T9/T6). */
-  snapshotIsHistorical: true
-}
-
 export interface PlayerMarketValueData {
   playerId: string
   playerName: string | null

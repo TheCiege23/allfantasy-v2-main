@@ -34,7 +34,7 @@ export default function WorldCupBracketHealthCard({
           Bracket Health
         </span>
         <span
-          className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+          className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
             health.label === "Excellent"
               ? "bg-emerald-500/20 text-white/85"
               : health.label === "Alive"
@@ -72,7 +72,7 @@ export default function WorldCupBracketHealthCard({
 function Stat({ label, value }: { label: string; value: number }) {
   return (
     <div className="rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1.5">
-      <div className="text-[10px] text-white/40">{label}</div>
+      <div className="text-[11px] text-white/40">{label}</div>
       <div className="font-bold text-white/85">{value}</div>
     </div>
   )

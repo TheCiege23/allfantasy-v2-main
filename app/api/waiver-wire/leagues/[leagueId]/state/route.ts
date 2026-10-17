@@ -9,10 +9,8 @@ import { getEffectiveLeagueWaiverSettings } from "@/lib/waiver-wire"
  * League waiver snapshot: next run hint, priority order JSON, processing lock (for all members).
  * Also returns FAAB budget, watchlist, and waiver order for the requesting user.
  */
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { leagueId: string } }
-) {
+export async function GET(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
+  const params = await props.params
   const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })

@@ -35,7 +35,7 @@
   background: var(--warn);
   color: #1a1204;
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.14em;
 }
@@ -162,7 +162,7 @@
   border: 1px solid var(--line2);
   border-radius: 4px;
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.12em;
   color: var(--muted);
@@ -179,13 +179,13 @@
 .af-biz-axis {
   fill: var(--faint);
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .af-biz-axis-title {
   fill: var(--faint);
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.12em;
 }
@@ -222,7 +222,7 @@
 .af-biz-callout-sub {
   fill: var(--muted);
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 10.5px;
+  font-size: 11px;
 }
 
 .af-biz-area { stroke-width: 2; }

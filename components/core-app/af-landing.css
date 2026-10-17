@@ -90,7 +90,7 @@
   background: var(--accent-soft);
   border: 1px solid var(--accent-line);
   color: var(--accent);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.12em;
 }
@@ -110,7 +110,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 420px);
   gap: 48px;
-  padding: 76px 40px 60px;
+  padding: 56px 40px 52px;
   background-image: var(--hero);
   background-repeat: no-repeat;
   align-items: start;
@@ -123,7 +123,7 @@
   border: 1px solid var(--line2);
   background: var(--chip);
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -136,7 +136,7 @@
 
 .af-lp-h1 {
   margin: 20px 0 0;
-  font-size: 66px;
+  font-size: clamp(48px, 5vw, 66px);
   line-height: 0.98;
   font-weight: 900;
   letter-spacing: -0.045em;
@@ -202,7 +202,7 @@
 /* Says "example" on purpose — this is an illustration, not a live reading. */
 .af-lp-card-week {
   margin-left: auto;
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -242,7 +242,7 @@
   white-space: nowrap;
 }
 .af-lp-card-meta {
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--muted);
 }
 
@@ -254,7 +254,7 @@
 }
 .af-lp-card-against {
   display: block;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--faint);
 }
@@ -263,7 +263,7 @@
   flex: 0 0 auto;
   padding: 3px 8px;
   border-radius: 999px;
-  font-size: 8.5px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -371,16 +371,22 @@
   color: var(--faint);
 }
 .af-lp-soon {
-  font-size: 8.5px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--warn);
 }
+/* The reason a "soon" chip is soon, on its own line under the strip. */
+.af-lp-soon-note {
+  flex-basis: 100%;
+  font-size: 12px;
+  color: var(--faint);
+}
 
 .af-lp-sports {
   margin-left: auto;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.12em;
   color: var(--faint);
@@ -420,7 +426,7 @@
 }
 
 .af-lp-reason-n {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.14em;
   color: var(--accent);
@@ -724,53 +730,24 @@
   line-height: 1.5;
 }
 
-/* ── Network ─────────────────────────────────────────────────────────── */
+/* ── Footer ──────────────────────────────────────────────────────────── */
 
-.af-lp-network-body {
-  margin: 12px 0 0;
-  max-width: 620px;
-  font-size: 14px;
-  line-height: 1.55;
-  color: var(--muted);
-}
-
-.af-lp-network-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 12px;
-  margin-top: 22px;
-}
-
-.af-lp-network-card {
+/* The Brown Pig products, as one line in the footer (was a six-card section — see LandingV4). */
+.af-lp-footer-network {
   display: flex;
-  flex-direction: column;
-  gap: 5px;
-  padding: 16px;
-  border-radius: 13px;
-  border: 1px solid var(--line);
-  background: var(--surface);
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 14px;
+  margin: 0;
+  font-size: 12.5px;
+}
+.af-lp-footer-network a {
+  color: var(--text2);
   text-decoration: none;
 }
-
-.af-lp-network-name {
-  font-weight: 800;
-  font-size: 14.5px;
+.af-lp-footer-network a:hover {
   color: var(--text);
 }
-.af-lp-network-desc {
-  font-size: 12.5px;
-  line-height: 1.5;
-  color: var(--muted);
-}
-.af-lp-network-link {
-  margin-top: 4px;
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  color: var(--accent);
-}
-
-/* ── Footer ──────────────────────────────────────────────────────────── */
 
 .af-lp-footer {
   padding: 34px 40px 40px;
@@ -819,6 +796,32 @@
 
 /* ── Responsive ──────────────────────────────────────────────────────── */
 
+/*
+ * ⚠ TABLET NAV: SIGN IN AND "GET STARTED" WERE UNTAPPABLE ON EVERY iPAD IN PORTRAIT.
+ * The hamburger only takes over at ≤720px, but the full nav does not fit on one row until
+ * ~980px (English) or ~1100px (Spanish). In between it wrapped, and because `.af-lp-nav` had a
+ * fixed 74px height the second row — the language switch, Sign in and the primary CTA — hung out
+ * of the bar UNDER the launch banner. Measured 2026-09-29: at 721–899px a tap on either button
+ * landed on the banner, in both languages, signed in and out.
+ *
+ * Two parts. The three text links (every one reachable by scrolling or from the footer) step
+ * aside until the row fits, so the actions stay on one line. And the bar grows instead of
+ * overflowing, so a wider label or a new nav item can make the bar taller but can never again
+ * push a button underneath the page. Scoped above 720px: the phone nav has its own 64px bar.
+ */
+@media (min-width: 721px) and (max-width: 1099px) {
+  .af-lp-nav-links {
+    display: none;
+  }
+}
+
+@media (min-width: 721px) {
+  .af-lp-nav {
+    height: auto;
+    min-height: 74px;
+  }
+}
+
 @media (max-width: 1080px) {
   .af-lp-cap-grid {
     grid-template-columns: repeat(2, 1fr);
@@ -832,12 +835,24 @@
   .af-lp-b2b-bottom {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+@media (min-width: 901px) and (max-width: 1100px) {
   .af-lp-hero {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 360px);
+    gap: 24px;
+    padding-inline: 32px;
   }
 }
 
-@media (max-width: 720px) {
+@media (max-width: 900px) {
+  .af-lp-hero {
+    grid-template-columns: minmax(0, 1fr);
+    padding-top: 44px;
+  }
+}
+
+@media (max-width: 1100px) {
   .af-lp-nav {
     position: relative;
     height: 64px;
@@ -916,6 +931,9 @@
     align-self: center;
     justify-self: start;
   }
+}
+
+@media (max-width: 720px) {
   .af-lp-hero {
     padding: 34px 16px 32px;
     gap: 28px;
@@ -1216,5 +1234,115 @@
 @media (max-width: 720px) {
   .af-core .af-btn.af-lp-cta {
     min-height: 44px;
+  }
+}
+
+/* ── Clarity + trust pass (2026-09-29) ───────────────────────────────── */
+
+/* Two labelled sport lists under "Connects to": what imports, and what a created league runs. */
+.af-lp-sports {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+.af-lp-sports-label {
+  margin-right: 6px;
+  color: var(--text2);
+}
+
+/* "How it works" reuses the reason cards; it is an ordered list for screen readers. */
+.af-lp-steps .af-lp-reason-grid {
+  list-style: none;
+  padding: 0;
+}
+
+.af-lp-chimmy {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 32px;
+  padding: 52px 40px;
+  border-bottom: 1px solid var(--line);
+}
+.af-lp-chimmy-copy .af-label {
+  display: block;
+  margin-bottom: 10px;
+}
+.af-lp-chimmy-body {
+  margin: 12px 0 0;
+  max-width: 520px;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+.af-lp-chimmy-free {
+  margin: 12px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text2);
+}
+.af-lp-chimmy-chat {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 18px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+/* The "example" tag — the exchange is an illustration, like the hero card. */
+.af-lp-chimmy-example {
+  align-self: flex-end;
+  margin-left: 0;
+}
+.af-lp-chimmy-q {
+  align-self: flex-end;
+  max-width: 85%;
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 14px 14px 4px 14px;
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+}
+.af-lp-chimmy-a {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.af-lp-chimmy-a p {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 14px 14px 14px 4px;
+  border: 1px solid var(--line);
+  background: var(--surface2);
+  color: var(--text2);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+@media (max-width: 1080px) {
+  .af-lp-chimmy {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 720px) {
+  .af-lp-sports {
+    align-items: flex-start;
+  }
+  .af-lp-chimmy {
+    gap: 20px;
+    padding: 36px 16px;
+  }
+  /* 44px minimum touch rows on mobile frames, like the other footer links. */
+  .af-lp-footer-network a {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
   }
 }

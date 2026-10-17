@@ -221,6 +221,32 @@ describe('the one grade, and only the one grade', () => {
     for (const v of ['5,170', '2,830', '8,000', '2,600', '2,100', '1,300', '6,000']) expect(html, v).toContain(v)
   })
 
+  /*
+   * The letter is often the FROZEN original, whose lines are in the order of whichever surface froze
+   * it — so the email lists this side's picks 2nd-then-1st while the grade lists 1st-then-2nd. By place
+   * alone the 1st's value printed beside the 2nd (HailShiva, 2026-10-01).
+   */
+  it('prints each pick’s value beside that pick, whatever order the grade lists them in', () => {
+    const twoPicks = trade([
+      side({ rosterId: 1, ownerId: 'u1', managerName: 'managerOne', picksIn: [pick(2, true), pick(1, true)], playersOut: [player('Rashid Shaheed', 0)], net: 0 }),
+      side({ rosterId: 2, ownerId: 'u2', managerName: 'managerTwo', playersIn: [player('Rashid Shaheed', 0)], picksOut: [pick(2, true), pick(1, true)], net: 0 }),
+    ])
+    const g = graded({
+      lines: [
+        { side: 'give', name: 'Rashid Shaheed', marketValue: 2600, leagueValue: 2600 },
+        { side: 'get', name: '2026 1st', marketValue: 6100, leagueValue: 6100 },
+        { side: 'get', name: '2026 2nd', marketValue: 2830, leagueValue: 2830 },
+      ],
+    })
+    const { html } = buildTradeGradeEmail({ leagueName: 'L', trade: twoPicks, ledgerUrl: URL, grade: g })
+    const at = (s: string) => html.indexOf(s)
+    // 2nd, its 2,830, then 1st, its 6,100 — never the 1st's 6,100 beside the 2nd.
+    expect(at('2026 2nd round pick')).toBeGreaterThan(-1)
+    expect(at('2026 2nd round pick')).toBeLessThan(at('2,830'))
+    expect(at('2,830')).toBeLessThan(at('2026 1st round pick'))
+    expect(at('2026 1st round pick')).toBeLessThan(at('6,100'))
+  })
+
   it('a count mismatch prints names without values rather than values against the wrong asset', () => {
     const g = graded({ lines: [{ side: 'get', name: 'Brenton Strange', marketValue: 5170, leagueValue: 5170 }] })
     const { html } = buildTradeGradeEmail({ leagueName: 'L', trade: PRESEASON, ledgerUrl: URL, grade: g })
@@ -257,6 +283,69 @@ describe('the one grade, and only the one grade', () => {
     expect(subject).toContain('not graded')
     expect(html).toContain('Only two-team trades are graded')
     expect(html).toContain('managerThree')
+  })
+})
+
+/*
+ * Guap, 2026-09-29: "make the email explain why it's a C". A C beside "−2%" read as a grader stuck on
+ * one letter; the email now says why, in the deal's own totals and the grader's own bands.
+ */
+describe('why these letters', () => {
+  const why = (html: string) => html.match(/Why these letters<\/div><div[^>]*>([^<]*)<\/div><div[^>]*>([^<]*)</)
+
+  it('a C says both totals, the gap, and that it is under the even band', () => {
+    // Freedom Fantasy Football, 2026 week 3: Pitts + 2027 3rd (3,259) for Kittle + 2027 4th (3,326).
+    const g = graded({ letter: 'C', partnerLetter: 'C', percentDiff: -2, giveValue: 3326, getValue: 3259 })
+    const { html } = buildTradeGradeEmail({ leagueName: 'L', trade: PRESEASON, ledgerUrl: URL, grade: g })
+    const m = why(html)
+    expect(m, 'why card present').not.toBeNull()
+    expect(m![1]).toBe(
+      'Both sides got a C: managerOne received 3,259 and managerTwo received 3,326 in this league’s values. ' +
+        'That is 67 apart, 2% of the bigger side — under 10%, so the trade reads as even and neither side earns a B.',
+    )
+    expect(m![2]).toBe('The scale: a gap under 10% is a C for both sides · 10–24% is a B and a D · 25% or more is an A and an F.')
+  })
+
+  it('a B/D names who gained, by how much, and the band', () => {
+    const g = graded({ letter: 'D', partnerLetter: 'B', percentDiff: -18, giveValue: 4000, getValue: 3280 })
+    const { html } = buildTradeGradeEmail({ leagueName: 'L', trade: PRESEASON, ledgerUrl: URL, grade: g })
+    expect(why(html)![1]).toBe(
+      'managerTwo got a B and managerOne a D: managerTwo received 4,000 in this league’s values for 3,280, 18% more. ' +
+        'A gap of 10–24% is a B for the side that gained and a D for the side that gave; 25% or more would be an A and an F.',
+    )
+  })
+
+  it('an A/F says the strong band, with "an"', () => {
+    const { html } = buildTradeGradeEmail({ leagueName: 'L', trade: PRESEASON, ledgerUrl: URL, grade: graded() })
+    expect(why(html)![1]).toBe(
+      'managerOne got an A and managerTwo an F: managerOne received 8,000 in this league’s values for 6,000, 25% more. ' +
+        'A gap of 25% or more is an A for the side that gained and an F for the side that gave.',
+    )
+  })
+
+  it('speaks to the reader as "you" on their own side — capitalised only when it opens a sentence', () => {
+    const g = graded({ letter: 'C', partnerLetter: 'C', percentDiff: -2, giveValue: 3326, getValue: 3259 })
+    const { html } = buildTradeGradeEmail({ leagueName: 'L', trade: PRESEASON, ledgerUrl: URL, grade: g, viewerOwnerId: 'u2' })
+    expect(why(html)![1]).toMatch(/^Both sides got a C: you received 3,326 and managerOne received 3,259/)
+  })
+
+  // Pirate League twinty, 2026-09-29: CrazyFisher's copy read "Hibboisthebest got an A and You an F".
+  it('the reader on the losing side is "you" mid-sentence', () => {
+    const { html } = buildTradeGradeEmail({ leagueName: 'L', trade: PRESEASON, ledgerUrl: URL, grade: graded(), viewerOwnerId: 'u2' })
+    expect(why(html)![1]).toMatch(/^managerOne got an A and you an F: managerOne received 8,000/)
+  })
+
+  it('the reader on the winning side opens the sentence as "You", then "you"', () => {
+    const { html } = buildTradeGradeEmail({ leagueName: 'L', trade: PRESEASON, ledgerUrl: URL, grade: graded(), viewerOwnerId: 'u1' })
+    expect(why(html)![1]).toMatch(/^You got an A and managerTwo an F: you received 8,000/)
+  })
+
+  it('a withheld or missing grade explains nothing — there is no letter to explain', () => {
+    const withheld: TradeGradeView = { graded: false, reason: 'One side of this trade has no assets recorded.', basis: null }
+    for (const grade of [withheld, null]) {
+      const { html } = buildTradeGradeEmail({ leagueName: 'L', trade: PRESEASON, ledgerUrl: URL, grade })
+      expect(html).not.toContain('Why these letters')
+    }
   })
 })
 
@@ -371,5 +460,65 @@ describe('stored manager psychology cannot reach the email', () => {
   it('neither builder accepts it', () => {
     const src = readFileSync(join(process.cwd(), 'lib/trade-intel/tradeGradeEmail.ts'), 'utf8')
     expect(src).not.toMatch(/psychology\??\s*:/i)
+  })
+})
+
+/*
+ * FAAB in a completed trade (2026-09-29). "Jameis Winston for $35 FAAB" printed the FAAB side as
+ * receiving "Nothing", because the ledger never read Sleeper's `waiver_budget`.
+ */
+describe('FAAB a side received', () => {
+  const WINSTON_FOR_FAAB = trade([
+    { ...side({ rosterId: 3, ownerId: 'u3', managerName: 'seller', playersOut: [player('Jameis Winston', 0, 'QB')], net: 0 }), faabIn: 35, faabOut: 0 },
+    { ...side({ rosterId: 8, ownerId: 'u8', managerName: 'buyer', playersIn: [player('Jameis Winston', 0, 'QB')], net: 0 }), faabIn: 0, faabOut: 35 },
+  ])
+  // Side one (seller) gets the FAAB line; side two gets Winston. Names are the grader's own.
+  const g = graded({
+    letter: 'F', partnerLetter: 'A', percentDiff: -74, giveValue: 2400, getValue: 630,
+    lines: [
+      { side: 'give', name: 'Jameis Winston', marketValue: 2400, leagueValue: 2400 },
+      { side: 'get', name: 'FAAB $35', marketValue: 630, leagueValue: 630 },
+    ],
+  })
+
+  it('lists "$35 FAAB" as what the seller received, with its league value — not "Nothing"', () => {
+    const { html } = buildTradeGradeEmail({ leagueName: 'Pirate League twinty', trade: WINSTON_FOR_FAAB, ledgerUrl: URL, grade: g })
+    expect(html).toContain('$35 FAAB')
+    expect(html).toMatch(/\$35 FAAB<div[^>]*>FAAB<\/div><\/td><td[^>]*>630</)
+    expect(html).not.toContain('>Nothing<')
+  })
+
+  it('names the FAAB in the subject line', () => {
+    const { subject } = buildTradeGradeEmail({ leagueName: 'P', trade: WINSTON_FOR_FAAB, ledgerUrl: URL, grade: g })
+    expect(subject).toBe('Trade completed in P — seller F, buyer A — Jameis Winston, $35 FAAB')
+  })
+
+  it('a side with no FAAB field (an old cached payload) renders exactly as before', () => {
+    const { html } = buildTradeGradeEmail({ leagueName: 'L', trade: PRESEASON, ledgerUrl: URL, grade: graded() })
+    expect(html).not.toContain('FAAB')
+  })
+})
+
+/*
+ * A giveaway's reason stands alone (Guap, 2026-09-29: "fix the wording"). The stock "No letter is
+ * shown rather than one drawn from part of the deal" read as nonsense under "received nothing".
+ */
+describe('a giveaway explains itself without the partial-deal line', () => {
+  const ZAY_GIVEAWAY = trade([
+    { ...side({ rosterId: 4, ownerId: 'u4', managerName: 'BigTzzy57', playersOut: [player('Zay Flowers', 0)], net: 0 }), faabIn: 0, faabOut: 0 },
+    { ...side({ rosterId: 11, ownerId: 'u11', managerName: 'cstanhope12', playersIn: [player('Zay Flowers', 0)], net: 0 }), faabIn: 0, faabOut: 0 },
+  ])
+  const REASON = 'BigTzzy57 received nothing in return — no player, pick or FAAB on Sleeper’s record — so there is no value gap to grade.'
+
+  it('prints the giveaway reason and nothing after it', () => {
+    const { html } = buildTradeGradeEmail({ leagueName: 'L', trade: ZAY_GIVEAWAY, ledgerUrl: URL, grade: { graded: false, reason: REASON, basis: null } })
+    expect(html).toContain(`>${REASON}</div>`)
+    expect(html).not.toContain('part of the deal')
+  })
+
+  it('every other withheld grade keeps the partial-deal line', () => {
+    const g: TradeGradeView = { graded: false, reason: '1 asset has no value on this league’s chart.', basis: null }
+    const { html } = buildTradeGradeEmail({ leagueName: 'L', trade: PRESEASON, ledgerUrl: URL, grade: g })
+    expect(html).toContain('No letter is shown rather than one drawn from part of the deal.')
   })
 })

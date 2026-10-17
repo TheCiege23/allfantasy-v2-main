@@ -105,9 +105,16 @@ export function describeScoringDifferences(
   return notes
 }
 
-/** Positions the vendor's generic PPR line does not score at all. */
+/**
+ * Positions the vendor's generic PPR line does not score at all.
+ *
+ * ⚠ NT AND EDGE WERE MISSING HERE WHILE `DL_SPELLINGS` BELOW ALREADY GROUPED THEM (2026-09-28):
+ * `idpPositionGroup('NT')` said DL and `isIdpPosition('NT')` said no, so a nose tackle had a group but
+ * was never admitted to the league's VORP board — Keeanu Benton and Landon Robinson in the price
+ * coverage audit. The two lists must name the same positions.
+ */
 const IDP_POSITIONS = new Set([
-  'DL', 'DE', 'DT', 'LB', 'ILB', 'OLB', 'MLB', 'DB', 'CB', 'S', 'SS', 'FS', 'IDP_FLEX',
+  'DL', 'DE', 'DT', 'NT', 'EDGE', 'LB', 'ILB', 'OLB', 'MLB', 'DB', 'CB', 'S', 'SS', 'FS', 'IDP_FLEX',
 ])
 
 /**

@@ -20,7 +20,8 @@ const UPSTREAM = "https://us-assets.i.posthog.com"
 const ALLOWED_ROOTS = new Set(["static", "array"])
 const PASSTHROUGH_HEADERS = ["content-type", "cache-control", "etag", "last-modified", "vary"]
 
-export async function GET(req: NextRequest, { params }: { params: { path: string[] } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ path: string[] }> }) {
+  const params = await props.params
   const path = params.path || []
   if (path.length < 2 || !ALLOWED_ROOTS.has(path[0])) {
     return new Response("Not found", { status: 404 })

@@ -572,8 +572,12 @@ export async function transferIdol(
   }
   const league = await prisma.league.findUnique({
     where: { id: idol.leagueId },
-    select: { survivorIdolsTradable: true },
+    select: { survivorIdolsTradable: true, settings: true, sport: true },
   })
+  const leagueSettings = league?.settings as Record<string, unknown> | null
+  if (String(league?.sport ?? '').toUpperCase() === 'NBA' && leagueSettings?.survivorFoundationSettingsVersion === 1) {
+    throw new Error('In NBA Survivor, a player-bound idol transfers only when its player is traded or claimed from waivers.')
+  }
   if (!idol.isTradable && !league?.survivorIdolsTradable) throw new Error('Idol is not tradable')
 
   const toRoster = await prisma.roster.findFirst({

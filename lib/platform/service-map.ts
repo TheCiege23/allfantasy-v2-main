@@ -60,7 +60,7 @@ const sharedServices: PlatformServiceDefinition[] = [
     name: 'AI Orchestrator Service',
     product: 'shared',
     responsibility: 'OpenAI/Grok/DeepSeek routing and final response assembly.',
-    endpoints: ['/api/ai/chat', '/api/legacy/ai/run', '/api/chimmy', '/api/chat/chimmy'],
+    endpoints: ['/api/legacy/ai/run', '/api/chimmy', '/api/chat/chimmy'],
   },
   {
     key: 'rankings-values',
@@ -143,7 +143,7 @@ const webappServices: PlatformServiceDefinition[] = [
     name: 'Trade Service',
     product: 'webapp',
     responsibility: 'Trade proposals and evaluation flows.',
-    endpoints: ['/api/trade/propose', '/api/trade-evaluator', '/api/trades/analyze'],
+    endpoints: ['/api/trade/propose', '/api/trade-evaluator'],
   },
   {
     key: 'webapp-draft',

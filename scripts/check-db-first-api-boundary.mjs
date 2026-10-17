@@ -8,6 +8,10 @@ import { parseChangedLineNumbers } from "./db-first-diff-lines.mjs";
 import { listGitVisibleFiles } from "./git-visible-files.mjs";
 
 const DATA_API_HOST_PATTERNS = [
+  // X now supplies recent video-post reads as well as publishing.
+  /^api\.x\.com$/i,
+  // Draft market references: only ingestion workers may read this provider.
+  /^api\.statsguyfantasy\.com$/i,
   // ⚠ FANTRAX WAS INVISIBLE TO THIS GUARD ENTIRELY, and it is a full data API:
   // rosters, standings, schedules, live matchup scores and college ADP, all from
   // www.fantrax.com/fxea/general. It has been read by the import stack since
@@ -201,6 +205,9 @@ const DATA_API_HOST_PATTERNS = [
    * — "league-import" does not match `ingest|ingestion|sync`.
    *
    * The three request paths are real exposure, not bookkeeping, and are left REPORTED.
+   * ⚠ 2026-10: all three are gone, not exempted — the MFL password login and the
+   * session-cookie listing behind it were retired, and /api/mfl/import kept only its
+   * API-key path, which reads through the import pipeline.
    */
   /(^|\.)api\.myfantasyleague\.com$/i,
   /*
@@ -272,6 +279,11 @@ const DATA_API_HOST_PATTERNS = [
    */
   /(^|\.)ipapi\.co$/i,
   /(^|\.)proxycheck\.io$/i,
+  // Apple's iCloud Private Relay egress feed (a multi-megabyte public CSV). Read
+  // once a day by lib/geo/privateRelayIngest through lib/geo/privateRelayFetch,
+  // which is allowlisted below; a fetch of it from anywhere else — above all from
+  // a request path — is reported.
+  /(^|\.)mask-api\.icloud\.com$/i,
 ];
 
 /**
@@ -288,6 +300,11 @@ const DATA_API_HOST_PATTERNS = [
  */
 const DATA_API_IDENTIFIERS = [
   'ESPN_SITE_API_BASE',
+  // The URL BUILDER next to that constant in `lib/providers/espnUrls.ts`. A caller of the builder
+  // never names the constant, so it was invisible here — found 2026-10-01 when the NCAAB adapter
+  // (its first caller) passed this guard with its allowlist entry REMOVED. Tracking the function
+  // name is the same move as `CFBD_BASE_URL` below: DRY at the call site must not cost coverage.
+  'espnSiteApiUrl',
   'THE_SPORTS_DB_V1_JSON_BASE',
   'THE_SPORTS_DB_V2_JSON_BASE',
   // The six hardcoded CFBD literals now all resolve to `CFBD_BASE_URL`, exported
@@ -347,6 +364,10 @@ const SOURCE_EXTENSIONS = new Set([
 ]);
 
 const ALLOWED_PATH_PATTERNS = [
+  // Paid recent-search fetch is called only by refreshXCatalog, reached from
+  // the authenticated import-news cron. Browser routes read the DB catalog;
+  // their xHighlightsEnabled import reads configuration without calling X.
+  /^lib\/highlights\/x-provider\.ts$/,
   /*
    * `audit` joins this list because an audit script's whole purpose is comparing what a provider
    * says against what we stored — it cannot do that without calling the provider, and a script is
@@ -386,7 +407,24 @@ const ALLOWED_PATH_PATTERNS = [
    * makes, including ones nobody has written yet.
    */
   /^scripts\/deploy-verify-wait\.mjs$/,
+  /*
+   * ONE file, by exact path: the Sleeper team-ownership PROOF (lib/league-join/sleeperOwnershipClaim.ts).
+   * It asks "has this person, right now, put the code we gave them into their Sleeper team name?" —
+   * a question only Sleeper can answer, the same footing as an auth exchange. A copy in Postgres would
+   * be precisely the stale answer that lets the wrong person claim a team. Public endpoint, no
+   * credential, read only on a member's explicit Verify tap, capped per code. The file holds that one
+   * read and nothing else, so the exemption covers nothing else.
+   */
+  /^lib\/league-join\/sleeperOwnershipFetch\.ts$/,
   /^lib\/.*(ingest|ingestion|sync)/i,
+  // Explicit commissioner-triggered ingestion only: this builder supplies the
+  // verified download contract to the browser connector; it is not a scoreboard
+  // read path. The extension downloader feeds verified CSVs into Postgres through
+  // the owned-league import API. These two fixture tests assert request shapes
+  // and use mocked fetches, never live provider calls. Keep exemptions exact.
+  /^lib\/import-os\/collector\/fantraxBrowserContext\.ts$/,
+  /^tools\/fantrax-browser-connector\/download\.js$/,
+  /^__tests__\/fantrax-browser-(context|download)\.test\.ts$/,
   /^app\/api\/sports\/news\/sync-helper\.(ts|tsx|js|jsx|mjs|cjs)$/i,
   /^app\/api\/cron\//i,
   /*
@@ -461,6 +499,17 @@ const ALLOWED_PATH_PATTERNS = [
    * for a value retires the exemption.
    */
   /^lib\/espn\/espnAthleteFetch\.(ts|tsx|js|jsx|mjs|cjs)$/i,
+  /*
+   * `lib/espn/espnNcaabFetch.ts` — ESPN men's college basketball teams + rosters, the adapter
+   * half of the NCAAB headshot source (contract: `contracts/espn/`). Same split as the entry
+   * above: every export is a live fetch or a pure parser for one, and the writing lives in
+   * `lib/espn/ncaabEspnIngest.ts`, which the `lib/.*(ingest|sync)` rule already covers.
+   *
+   * ⚠ RE-CHECK BEFORE TRUSTING THIS. Valid only while the ingestion module is the sole runtime
+   * importer. Censused on 2026-10-01 across all four forms (`from '@/lib/espn/espnNcaabFetch'`,
+   * relative, `require(`, `await import(`): the ingestion module and tests, nothing else.
+   */
+  /^lib\/espn\/espnNcaabFetch\.(ts|tsx|js|jsx|mjs|cjs)$/i,
   /*
    * `lib/cfbd-fetch.ts` — the single CFBD request path, and where `CFBD_BASE_URL`
    * is defined. It is an ADAPTER rather than a pure definition site: `cfbdGet`
@@ -576,6 +625,16 @@ const ALLOWED_PATH_PATTERNS = [
    * hostname setting `cf-ipcountry`, after which this path never runs at all.
    */
   /^lib\/geo\/geoIpFetch\.(ts|tsx|js|jsx|mjs|cjs)$/i,
+  /*
+   * Apple's Private Relay egress feed, fetched — the same inverted split as
+   * geoIpFetch above. Its ONE runtime importer is lib/geo/privateRelayIngest,
+   * run from the hourly reaper (/api/cron/reap-sync-runs), and request paths read
+   * the parsed ranges from Postgres (lib/geo/privateRelayStore) — never this file.
+   * Conditional on that staying true:
+   *     grep -rnE "privateRelayFetch" --include=*.ts --include=*.tsx .
+   * must show privateRelayIngest and tests, and nothing else.
+   */
+  /^lib\/geo\/privateRelayFetch\.(ts|tsx|js|jsx|mjs|cjs)$/i,
   /*
    * The api-sports.io adapter. Allowlisted on a FULL caller census — every
    * import form, aliased, relative and dynamic:

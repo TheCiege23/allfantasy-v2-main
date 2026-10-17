@@ -182,7 +182,7 @@ function scorePlayer(
   teamFitScore = clamp(teamFitScore, 0, 100)
 
   // --- Board Value Score (0-100) --- ADP vs current pick
-  const adpDiff = player.adp - input.currentPick
+  const adpDiff = input.currentPick - player.adp
   let boardValueScore = clamp(50 + adpDiff * 2, 0, 100)
   // Tier bonus
   if (player.tier != null && player.tier <= 2) boardValueScore = Math.min(100, boardValueScore + 10)
@@ -420,7 +420,7 @@ function generateDraftPlanNote(
   const parts: string[] = []
 
   if (recommendation.isValue) {
-    parts.push(`${recommendation.playerName} is a value pick — ADP says they should go later.`)
+    parts.push(`${recommendation.playerName} is a value pick — available after their usual draft position.`)
   } else if (recommendation.isReach) {
     parts.push(`${recommendation.playerName} is a slight reach, but the need justifies it.`)
   }

@@ -12,6 +12,8 @@ import { TaskDetailDrawer } from './TaskDetailDrawer'
 import { WORKSPACE_QUEUES, DEFAULT_WORKSPACE_QUEUE_ID, getWorkspaceQueue } from '@/lib/commissioner-ui/workspace/queues'
 import type { CommissionerDataMode } from '@/lib/commissioner-ui/demo-mode/constants'
 import type { CommissionerTask } from '@/lib/commissioner-ui/workspace/decision-os-client'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { cosErrorText, workspaceCopy } from '@/lib/commissioner-os/i18n/analyticsCopy'
 
 export interface WorkspaceViewProps {
   tasks: CommissionerTask[]
@@ -30,6 +32,8 @@ export interface WorkspaceViewProps {
 export function WorkspaceView({ tasks, dataMode, errorMessage }: WorkspaceViewProps) {
   const [activeQueueId, setActiveQueueId] = useState(DEFAULT_WORKSPACE_QUEUE_ID)
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
+  const { language } = useOptionalLanguage()
+  const es = workspaceCopy(language)
 
   const activeQueue = getWorkspaceQueue(activeQueueId)
   const visibleTasks = useMemo(() => activeQueue.filter(tasks), [activeQueue, tasks])
@@ -52,25 +56,33 @@ export function WorkspaceView({ tasks, dataMode, errorMessage }: WorkspaceViewPr
         */}
       {ageBands.length > 0 ? (
         <div className="mb-6">
-          <InfoCard title="Open tasks by age">
+          <InfoCard title={es ? es.openByAge : 'Open tasks by age'}>
             <DistributionBarChart
-              data={ageBands}
+              data={es ? ageBands.map((band) => ({ ...band, label: es.ageBand(band.label) })) : ageBands}
               height={200}
-              valueLabel="Open tasks"
-              ariaLabel={`${ageBands.reduce((sum, band) => sum + band.value, 0)} open tasks grouped by how long they have been open`}
+              valueLabel={es ? es.openTasks : 'Open tasks'}
+              ariaLabel={
+                es
+                  ? es.ageAria(ageBands.reduce((sum, band) => sum + band.value, 0))
+                  : `${ageBands.reduce((sum, band) => sum + band.value, 0)} open tasks grouped by how long they have been open`
+              }
             />
           </InfoCard>
         </div>
       ) : null}
 
       {errorMessage ? (
-        <ErrorState message={errorMessage} />
+        <ErrorState message={cosErrorText(errorMessage, language)} />
       ) : (
         <>
           <WorkQueueStrip queues={WORKSPACE_QUEUES} tasks={tasks} activeQueueId={activeQueueId} onSelectQueue={setActiveQueueId} />
 
           {visibleTasks.length === 0 ? (
-            <EmptyState icon={Briefcase} title={activeQueue.emptyTitle} description={activeQueue.emptyDescription} />
+            <EmptyState
+              icon={Briefcase}
+              title={es?.queue[activeQueue.id]?.emptyTitle ?? activeQueue.emptyTitle}
+              description={es?.queue[activeQueue.id]?.emptyDescription ?? activeQueue.emptyDescription}
+            />
           ) : (
             <div className="space-y-2">
               {visibleTasks.map((task) => (

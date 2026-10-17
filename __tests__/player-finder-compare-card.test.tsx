@@ -202,3 +202,27 @@ describe('PlayerCompare', () => {
     expect(screen.getByRole('table', { name: 'Side by side' })).toBeInTheDocument()
   })
 })
+
+describe('PlayerCompare — AllFantasy projection', () => {
+  it('adds an AF row beside the provider row, marking the leader, with a dash where one side has none', () => {
+    renderCard({
+      a: { ...KINCAID, afProjection: { available: true, data: { points: 12.1, season: '2026', week: 12 } } },
+      b: { ...FERGUSON, afProjection: { available: true, data: { points: 12.9, season: '2026', week: 12 } } },
+    })
+    const tiles = screen.getByRole('table', { name: 'Side by side' })
+    const af = within(tiles).getByText('AF proj wk 12').closest('[role="row"]') as HTMLElement
+    const cells = within(af).getAllByRole('cell')
+    // AF can disagree with the provider about who leads — here Ferguson.
+    expect(cells[0]).toHaveTextContent('12.1')
+    expect(cells[0]).not.toHaveAttribute('data-lead')
+    expect(cells[1]).toHaveTextContent('12.9')
+    expect(cells[1]).toHaveAttribute('data-lead', 'true')
+  })
+
+  it('shows a dash, not a lead, when a player has no AF projection', () => {
+    renderCard({ a: { ...KINCAID, afProjection: { available: true, data: { points: 12.1, season: '2026', week: 12 } } } })
+    const af = within(screen.getByRole('table', { name: 'Side by side' })).getByText('AF proj wk 12').closest('[role="row"]') as HTMLElement
+    expect(within(af).getAllByRole('cell')[1]).toHaveTextContent('—')
+    expect(within(af).getAllByRole('cell')[0]).not.toHaveAttribute('data-lead')
+  })
+})

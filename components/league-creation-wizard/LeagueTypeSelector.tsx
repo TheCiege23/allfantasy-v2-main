@@ -2,7 +2,7 @@
 
 import { Label } from '@/components/ui/label'
 import {
-  LEAGUE_TYPE_IDS,
+  getAllowedLeagueTypesForSport,
   LEAGUE_TYPE_LABELS,
 } from '@/lib/league-creation-wizard/league-type-registry'
 import { getLeagueTypeMedia } from '@/lib/league-media/leagueTypeMedia'
@@ -24,7 +24,7 @@ const LEAGUE_TYPE_TOOLTIPS: Partial<Record<LeagueTypeId, string>> = {
   devy: 'Long-term devy format: NFL/NCAAF or NBA/NCAAB prospect pipelines — not available for MLB, NHL, or Soccer.',
   c2c: 'Campus to Canton: college + pro assets in one league with live college scoring; supports football and basketball ecosystems.',
   guillotine: 'Lowest scorer each week is eliminated. Roster released to waivers. Last team standing wins.',
-  survivor: 'Tribes compete weekly. Losing tribe votes someone out. Idols, exile island, merge, jury — full Survivor experience.',
+  survivor: 'NBA Survivor pilot: tribes, private votes, idols, Exile, merge and jury. Full-season automation is still being certified.',
   zombie: 'Infection mechanics, whisperer role, serums & weapons. Eliminated teams can spread the virus.',
   salary_cap: 'Salary cap and contracts.',
 }
@@ -40,8 +40,8 @@ const LEAGUE_TYPE_BADGES: Partial<Record<LeagueTypeId, 'POPULAR' | 'NEW' | 'FLAG
 /**
  * League type selection (redraft, dynasty, keeper, etc.). Options filtered by sport.
  */
-export function LeagueTypeSelector({ value, onChange }: LeagueTypeSelectorProps) {
-  const visibleLeagueTypes = LEAGUE_TYPE_IDS
+export function LeagueTypeSelector({ sport = 'NFL', value, onChange }: LeagueTypeSelectorProps) {
+  const visibleLeagueTypes = getAllowedLeagueTypesForSport(sport)
   const safeValue = visibleLeagueTypes.includes(value) ? value : visibleLeagueTypes[0]!
   const selectedMedia = getLeagueTypeMedia(safeValue)
 
@@ -61,7 +61,7 @@ export function LeagueTypeSelector({ value, onChange }: LeagueTypeSelectorProps)
       <div className="space-y-3">
         <Label className="text-cyan-300">Type</Label>
         <div className="grid gap-3 sm:grid-cols-2">
-          {LEAGUE_TYPE_IDS.filter((id) => visibleLeagueTypes.includes(id)).map((id) => {
+          {visibleLeagueTypes.map((id) => {
             const media = getLeagueTypeMedia(id)
             return (
               <button
@@ -76,7 +76,7 @@ export function LeagueTypeSelector({ value, onChange }: LeagueTypeSelectorProps)
                 title={LEAGUE_TYPE_TOOLTIPS[id]}
               >
                 {LEAGUE_TYPE_BADGES[id] && (
-                  <span className={`absolute left-2 top-2 z-[4] rounded-md px-1.5 py-0.5 text-[10px] font-black tracking-[0.08em] ${
+                  <span className={`absolute left-2 top-2 z-[4] rounded-md px-1.5 py-0.5 text-[11px] font-black tracking-[0.08em] ${
                     LEAGUE_TYPE_BADGES[id] === 'FLAGSHIP'
                       ? 'bg-amber-400 text-[#1a0800]'
                       : LEAGUE_TYPE_BADGES[id] === 'NEW'
@@ -100,7 +100,7 @@ export function LeagueTypeSelector({ value, onChange }: LeagueTypeSelectorProps)
                     {LEAGUE_TYPE_LABELS[id]}
                   </p>
                   {LEAGUE_TYPE_TOOLTIPS[id] && (
-                    <p className="mt-0.5 text-[10px] leading-tight text-white/70 line-clamp-2 drop-shadow-[0_1px_6px_rgba(0,0,0,0.9)]">
+                    <p className="mt-0.5 text-[11px] leading-tight text-white/70 line-clamp-2 drop-shadow-[0_1px_6px_rgba(0,0,0,0.9)]">
                       {LEAGUE_TYPE_TOOLTIPS[id]}
                     </p>
                   )}

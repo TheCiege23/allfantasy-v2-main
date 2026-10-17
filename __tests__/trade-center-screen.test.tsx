@@ -1,13 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { render, screen, waitFor } from '@testing-library/react'
-import { TradeLeagueStrip } from '@/components/core-app/screens/TradeLeagueStrip'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { TradeLeagueStrip, stateOf } from '@/components/core-app/screens/TradeLeagueStrip'
 import { __resetTradesPanelShare } from '@/components/core-app/screens/tradesPanelFetch'
 import React from 'react'
 
 import { TradeCenter } from '@/components/core-app/screens/TradeCenter'
 import { StockMark } from '@/components/core-app/screens/TradeAssetPicker'
+import { tradeDeviceDraftKey } from '@/components/core-app/screens/tradeDeviceDraft'
 
 const SRC = readFileSync(
   resolve(process.cwd(), 'components/core-app/screens/TradeCenter.tsx'),
@@ -22,14 +23,16 @@ function text(ui: React.ReactElement): string {
 }
 
 describe('Trade Center renders and is reachable', () => {
-  it('shows the league context and the full asset vocabulary', () => {
+  it('shows the league context and only asset kinds the builder can add', () => {
     const t = text(<TradeCenter league={LEAGUE} />)
     expect(t).toContain('Trade Center')
     expect(t).toContain('Last League Left')
-    /* The legend documents every asset class regardless of this deal's contents. */
-    expect(t).toContain('Idol · Survivor')
-    expect(t).toContain('Weapon · Zombie')
-    expect(t).toContain('Serum · Zombie')
+    expect(t).toContain('Player · any position, incl. IDP')
+    expect(t).toContain('Pick')
+    expect(t).toContain('FAAB')
+    expect(t).not.toContain('Idol · Survivor')
+    expect(t).not.toContain('Weapon · Zombie')
+    expect(t).not.toContain('Serum · Zombie')
   })
 
   it('⚠ is wired into /core/trades and does not replace the history', () => {
@@ -38,7 +41,7 @@ describe('Trade Center renders and is reachable', () => {
      * new surface settles.
      */
     expect(PAGE).toContain('<TradeCenter')
-    expect(PAGE).toContain('<Trades data={trades} />')
+    expect(PAGE).toContain('<Trades data={trades} hidePending />')
   })
 
   it('⚠ posts to the EXISTING analyze route, not a new one', () => {
@@ -210,8 +213,10 @@ describe('phase 1 — the seams', () => {
   it('names the actual assets in the question', () => {
     // The drawer does not carry the builder's state, so "explain this trade"
     // would produce a vague answer to a vague question.
-    expect(SRC).toContain("side('I give', give)")
-    expect(SRC).toContain("side('I get', get)")
+    // Built by lib/core-app/tradeExplainPrompt.ts from the builder's own assets, in the "X for Y"
+    // shape Chimmy's trade grader reads (its naming is pinned in __tests__/core-app/trade-explain-prompt).
+    expect(SRC).toContain('prefill: tradeExplainPrompt({')
+    expect(SRC).toMatch(/give: giveAssets,\s*\n\s*get: getAssets,/)
   })
 
   it('⚠ Trade Finder keeps its four refusals apart', () => {
@@ -334,9 +339,10 @@ describe('phase 2 — mobile and drafts', () => {
     expect(SRC).toContain('analyse it again to get a verdict')
   })
 
-  it('scopes the draft key per league', () => {
-    // One draft per league, not one global draft that leaks across them.
-    expect(SRC).toContain('`af-trade-draft:${props.league.id}`')
+  it('isolates device drafts between accounts as well as leagues', () => {
+    expect(tradeDeviceDraftKey('account-a', 'league-a')).not.toBe(tradeDeviceDraftKey('account-b', 'league-a'))
+    expect(tradeDeviceDraftKey('account-a', 'league-a')).not.toBe(tradeDeviceDraftKey('account-a', 'league-b'))
+    expect(tradeDeviceDraftKey(null, 'league-a')).toBeNull()
   })
 })
 
@@ -384,7 +390,7 @@ describe('⚠ naming the other side is what turns the counterparty layer on', ()
 
   it('offers real picks above the hand-typed fallback, and labels which is which', () => {
     expect(PICKER).toContain('On the roster — can be proposed')
-    expect(PICKER).toContain('priced but not proposable')
+    expect(PICKER).toContain('proposals require a pick listed on the roster')
   })
 
   it('never claims a roster holds no picks when we do not know whose roster it is', () => {
@@ -441,35 +447,37 @@ describe('core visual upgrade — design-refs/trade-center-handoff', () => {
     'utf8',
   ).replace(/\r\n/g, '\n')
 
-  it('scopes the asset legend to what this league can trade, once the type is known', () => {
+  it('scopes the supported asset legend to the known format', () => {
     /*
      * A redraft league has no future draft to send a pick into — the format
      * banner refuses one — so the legend must not advertise it. Keyed on the
      * resolved type key, never on a display string.
      */
     const redraft = text(<TradeCenter league={LEAGUE} leagueType="redraft" />)
-    expect(redraft).toContain('Asset types in this league')
+    expect(redraft).toContain('Available in this builder for this format')
     expect(redraft).toContain('FAAB')
+    expect(redraft).not.toContain('DPick')
     expect(redraft).not.toContain('Idol · Survivor')
     expect(redraft).not.toContain('Weapon · Zombie')
 
     const zombie = text(<TradeCenter league={LEAGUE} leagueType="redraft" leagueVariant="zombie" />)
-    expect(zombie).toContain('Weapon · Zombie')
-    expect(zombie).toContain('Serum · Zombie')
+    expect(zombie).not.toContain('Weapon · Zombie')
+    expect(zombie).not.toContain('Serum · Zombie')
     expect(zombie).not.toContain('Idol · Survivor')
   })
 
-  it('⚠ keeps the full vocabulary when the league type is unknown', () => {
-    // "We do not know" must not read as "this league forbids picks".
+  it('shows builder-supported types without claiming unknown league rules', () => {
     const t = text(<TradeCenter league={LEAGUE} />)
-    expect(t).toContain('Asset types supported')
-    expect(t).toContain('Idol · Survivor')
+    expect(t).toContain('Supported by this builder')
+    expect(t).toContain('DPick')
+    expect(t).not.toContain('Idol · Survivor')
   })
 
   it('⚠ the cross-league strip never renders "nothing waiting" for a league it did not read', () => {
     // The same rule TradeInbox carries, for the same reason.
     expect(STRIP).toContain('NOT SCANNED IS CHECKED BEFORE EMPTY')
-    expect(STRIP).toContain("if (panel.pending && !panel.pending.scanned)")
+    expect(stateOf({ pending: { scanned: false, reason: 'Source unavailable', platform: 'espn' } }))
+      .toMatchObject({ kind: 'unread', reason: 'Source unavailable' })
     /*
      * ⚠ ASSERTS THAT IT READS THE PANEL, NOT WHERE THE URL LITERAL LIVES. This used to pin
      * '/api/league/trades-panel?leagueId=' in this file; the literal moved into the shared
@@ -482,6 +490,36 @@ describe('core visual upgrade — design-refs/trade-center-handoff', () => {
   it('caps how many leagues it reads at once', () => {
     // Each read may sweep a provider's pending transactions.
     expect(STRIP).toContain('MAX_LEAGUES_READ')
+  })
+
+  it('lets a manager inspect leagues beyond the first eight on demand', () => {
+    render(<TradeLeagueStrip leagues={Array.from({ length: 10 }, (_, index) => ({
+      id: `league-${index + 1}`, name: `League ${index + 1}`, platform: 'espn', mark: 'E',
+    }))} activeLeagueId={null} />)
+    expect(screen.queryByText('League 9')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Show 2 more leagues' }))
+    expect(screen.getByText('League 9')).toBeTruthy()
+    expect(screen.getByText('League 10')).toBeTruthy()
+  })
+
+  it('takes a native incoming offer to the league response controls', async () => {
+    const original = globalThis.fetch
+    globalThis.fetch = vi.fn(() => Promise.resolve({
+      ok: true,
+      json: async () => ({
+        pending: { scanned: true }, pendingOffers: [],
+        activeTrades: [{ direction: 'incoming', partnerName: 'Manager B', status: 'pending' }],
+      }),
+    } as Response)) as unknown as typeof fetch
+    try {
+      render(<TradeLeagueStrip leagues={[{ id: 'league-1', name: 'League 1', platform: 'af', mark: 'A' }]} activeLeagueId={null} />)
+      await screen.findByText(/1 offer waiting/)
+      const link = screen.getByText('League 1').closest('a')
+      expect(link?.getAttribute('href')).toBe('/league/league-1?view=trades')
+      expect(link?.textContent).toContain('Respond in league')
+    } finally {
+      globalThis.fetch = original
+    }
   })
 
   /*
@@ -647,7 +685,7 @@ describe('🛑 a draft pick reaches the TOTAL, not just the row', () => {
     const pickBranch = /position: 'PICK'[\s\S]{0,220}?marketValue:\s*([^,}]+)/.exec(code)
     expect(pickBranch).not.toBeNull()
     expect(pickBranch![1].trim()).not.toBe('null')
-    expect(pickBranch![1]).toContain('a.value')
+    expect(pickBranch![1]).toContain('readPickPreviewValue')
   })
 
   it('FAAB is priced by the ANALYSIS only — never a number invented on this screen', () => {
@@ -664,44 +702,14 @@ describe('🛑 a draft pick reaches the TOTAL, not just the row', () => {
     expect(body).not.toMatch(/normalizedFaabValue|pickValueByOverall|marketValue:\s*\d/)
   })
 
-  it('🛑 DERIVES the price from the round rather than trusting what the asset carries', () => {
-    /*
-     * This field was fixed three times in three places — the rosters route, the hand-typed pick,
-     * and here — because pricing at CREATION time bakes a number into stored state, so every path
-     * that makes a pick has to remember to set it. One that forgets shows an em dash and a total
-     * short by a whole first-rounder.
-     *
-     * Deriving at render makes one rule serve every path, including a draft serialized into
-     * localStorage BEFORE the rule existed — which no amount of fixing creation sites can reach,
-     * because those assets are already on disk.
-     */
-    const pickBranch = /position: 'PICK'[\s\S]{0,600}?marketValue:([\s\S]{0,420}?)\n\s*\}/.exec(code)
-    expect(pickBranch).not.toBeNull()
-    expect(pickBranch![1]).toContain('pickValueByOverall')
-    expect(pickBranch![1]).toContain('a.round')
+  it('uses the server league quote for picks, including restored draft values', () => {
+    expect(code).toContain('readPickPreviewValue')
+    expect(code).toContain('book: rosterData?.pickPreviewBook')
+    expect(code).toContain('year: a.year, round: a.round')
   })
 
-  it('⚠ a STORED price still wins over the derived one', () => {
-    /*
-     * The route prices a roster pick against the slot it projects to; the curve here knows only
-     * the round. Derived is the fallback, never the override — `a.value ??` has to come first.
-     */
-    const pickBranch = /position: 'PICK'[\s\S]{0,600}?marketValue:([\s\S]{0,420}?)\n\s*\}/.exec(code)
-    const body = pickBranch![1]
-    /*
-     * ⚠ PRESENCE FIRST, THEN ORDER. Asserting only the order passes when `a.value` is DELETED —
-     * `indexOf` returns -1, which is dutifully "less than" the other index. A mutation control
-     * removing the fallback left this green, which is how the hole was found.
-     */
-    expect(body).toContain('a.value')
-    expect(body.indexOf('a.value')).toBeGreaterThanOrEqual(0)
-    expect(body.indexOf('a.value')).toBeLessThan(body.indexOf('pickValueByOverall'))
-  })
-
-  it('prices against the real league size, and the memo depends on it', () => {
-    // A stale memo would keep a 12-team price after switching to a 10-team league.
-    expect(code).toContain('teams: props.league?.teamCount ?? null')
-    expect(code).toContain('[pricedBy, props.league?.teamCount]')
+  it('refreshes quotes when the league or server book changes', () => {
+    expect(code).toContain('[pricedBy, props.league?.id, props.league?.teamCount, rosterData?.pickPreviewBook]')
   })
 })
 
@@ -736,9 +744,13 @@ describe('🛑 a trade line shows the player, not just his name', () => {
   it('🛑 reuses the picker’s logo resolver instead of adding a sixth', () => {
     /*
      * This repo already carries five team-logo functions. The logo beside a player in the builder
-     * must be the same asset as the logo beside him in the list he was picked from.
+     * must be the same asset as the logo beside him in the list he was picked from — and both read
+     * the safe helper, which returns null for a club it does not know. `resolveTeamLogoUrlSync`
+     * guessed a path for anything, so every free agent ("FA") drew a broken image.
      */
-    expect(code).toContain('resolveTeamLogoUrlSync')
+    expect(code).toContain("from '@/lib/core-app/teamLogo'")
+    expect(code).not.toContain('resolveTeamLogoUrlSync')
+    expect(readFileSync(resolve(process.cwd(), 'components/core-app/screens/TradeAssetPicker.tsx'), 'utf8')).toContain("from '@/lib/core-app/teamLogo'")
     expect(code).not.toMatch(/function\s+\w*[tT]eamLogo\w*\s*\(/)
   })
 

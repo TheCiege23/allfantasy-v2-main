@@ -16,11 +16,17 @@ export interface DeliveryMethodAvailability {
 export function getDeliveryMethodAvailability(options: {
   hasEmail: boolean
   phoneVerified: boolean
+  /**
+   * A live SMS opt-in for the current number (`hasSmsConsent`). Senders MUST pass it: a
+   * verified phone alone is not consent — several flows verify a number with no opt-in box.
+   * Omitted (display-only callers) it does not restrict.
+   */
+  smsConsented?: boolean
 }): DeliveryMethodAvailability {
   return {
     inApp: true,
     email: options.hasEmail,
-    sms: options.phoneVerified,
+    sms: options.phoneVerified && options.smsConsented !== false,
     push: true,
   }
 }
@@ -30,4 +36,12 @@ export const DELIVERY_LABELS: Record<keyof DeliveryMethodAvailability, string> =
   email: "Email",
   sms: "SMS",
   push: "Push",
+}
+
+/** i18n keys beside `DELIVERY_LABELS` — display only; the English labels stay the fallback. */
+export const DELIVERY_LABEL_KEYS: Record<keyof DeliveryMethodAvailability, string> = {
+  inApp: "settings.notifications.delivery.inApp",
+  email: "settings.notifications.delivery.email",
+  sms: "settings.notifications.delivery.sms",
+  push: "settings.notifications.delivery.push",
 }

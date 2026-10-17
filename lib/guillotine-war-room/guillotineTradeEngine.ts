@@ -3,18 +3,21 @@
  *
  * Guillotine leagues usually DISABLE trades — in that case this returns a truthful disabled
  * state. When trades ARE enabled, analysis is survival-first: weighs floor value + whether
- * the incoming set shores up a weak (elimination-risk) starting position. When no value
- * signal exists the verdict is 'needs_more_data'.
+ * the incoming set shores up a weak (elimination-risk) starting position. A missing value
+ * signal is flagged, never fabricated.
+ *
+ * 🛑 IT RETURNS FACTS, NEVER A VERDICT (2026-09-30) — see redraftTradeEngine.ts. The
+ * verdict is THE grade (lib/decision-os/trade/warRoomTradeGrade.ts); the retired
+ * accept / reject / neutral / disabled rule for the shadow is
+ * lib/decision-os/trade/warRoomLegacyVerdict.ts (the route passes `tradesEnabled`).
  */
 
 import { playerValue } from './guillotineValue'
 import { evaluateRosterRisk } from './guillotineRosterRiskEngine'
 import type { GuillotinePlayerFact, GuillotineWarRoomContext } from './types'
 
-export type GuillotineTradeVerdict = 'accept' | 'reject' | 'neutral' | 'needs_more_data' | 'disabled'
-
 export interface GuillotineTradeAnalysis {
-  verdict: GuillotineTradeVerdict
+  /** Incoming − outgoing floor-value delta; null when no value signal. Shadow input only. */
   valueDelta: number | null
   rosterFitDelta: number
   riskFlags: string[]
@@ -38,10 +41,10 @@ export interface AnalyzeGuillotineTradeInput {
   incomingPlayerIds: string[]
 }
 
-export function analyzeGuillotineTrade(context: GuillotineWarRoomContext, input: AnalyzeGuillotineTradeInput): GuillotineTradeAnalysis {
+export function guillotineTradeFacts(context: GuillotineWarRoomContext, input: AnalyzeGuillotineTradeInput): GuillotineTradeAnalysis {
   const missingDataFlags = [...context.missingDataFlags]
   if (!context.guillotine.tradesEnabled) {
-    return { verdict: 'disabled', valueDelta: null, rosterFitDelta: 0, riskFlags: [], explanationFacts: ['Trades are disabled in this guillotine league.'], missingDataFlags: [...new Set(missingDataFlags)] }
+    return { valueDelta: null, rosterFitDelta: 0, riskFlags: [], explanationFacts: ['Trades are disabled in this guillotine league.'], missingDataFlags: [...new Set(missingDataFlags)] }
   }
 
   const facts: string[] = []
@@ -49,18 +52,19 @@ export function analyzeGuillotineTrade(context: GuillotineWarRoomContext, input:
   const outgoing = findPlayers(context, input.outgoingPlayerIds)
   const incoming = findPlayers(context, input.incomingPlayerIds)
   if (outgoing.length === 0 && incoming.length === 0) {
-    return { verdict: 'needs_more_data', valueDelta: null, rosterFitDelta: 0, riskFlags: [], explanationFacts: ['No players resolved for this trade.'], missingDataFlags }
+    return { valueDelta: null, rosterFitDelta: 0, riskFlags: [], explanationFacts: ['No players resolved for this trade.'], missingDataFlags }
   }
 
   const outVals = outgoing.map(valueOf)
   const inVals = incoming.map(valueOf)
   const haveAny = [...outVals, ...inVals].some((v) => v != null)
+  // 🛑 Kept for this engine's shadow telemetry only (2026-09-29): the War Room's value scale is never a
+  // line users read — the verdict on this screen is the one grade (warRoomTradeGrade.ts).
   let valueDelta: number | null = null
   if (haveAny) {
     const inSum = inVals.reduce<number>((s, v) => s + (v ?? 0), 0)
     const outSum = outVals.reduce<number>((s, v) => s + (v ?? 0), 0)
     valueDelta = Math.round((inSum - outSum) * 100) / 100
-    facts.push(`Floor value in ${inSum.toFixed(1)} vs out ${outSum.toFixed(1)} (delta ${valueDelta >= 0 ? '+' : ''}${valueDelta}).`)
   }
 
   const weakPositions = new Set(evaluateRosterRisk(context, input.rosterId).weaknesses.map((w) => w.position))
@@ -74,16 +78,8 @@ export function analyzeGuillotineTrade(context: GuillotineWarRoomContext, input:
   }
   rosterFitDelta = Math.round(rosterFitDelta * 10) / 10
 
-  let verdict: GuillotineTradeVerdict
-  if (!haveAny) {
-    verdict = 'needs_more_data'
-    missingDataFlags.push('No value signal for the involved players — verdict unavailable.')
-  } else {
-    const composite = (valueDelta ?? 0) + rosterFitDelta * 1.5
-    if (composite >= 3) verdict = 'accept'
-    else if (composite <= -3) verdict = 'reject'
-    else verdict = 'neutral'
-  }
+  // Value-signal coverage — a fact, not a verdict (the retired rule is warRoomLegacyVerdict.ts).
+  if (!haveAny) missingDataFlags.push('No value signal for the involved players.')
 
-  return { verdict, valueDelta, rosterFitDelta, riskFlags: [...new Set(riskFlags)], explanationFacts: facts, missingDataFlags: [...new Set(missingDataFlags)] }
+  return { valueDelta, rosterFitDelta, riskFlags: [...new Set(riskFlags)], explanationFacts: facts, missingDataFlags: [...new Set(missingDataFlags)] }
 }

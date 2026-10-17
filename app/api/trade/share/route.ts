@@ -10,16 +10,27 @@ const assetSchema = z.object({
   type: z.enum(['player', 'pick']),
 });
 
+/*
+ * 🛑 A share stores THE grade (2026-09-29, components/dynasty-trade/sharedTrade.ts) — and nothing of
+ * the dual-brain engine's verdict. `winner` / `valueDelta` / `confidence` / `dynastyVerdict` /
+ * `vetoRisk` are no longer accepted, so a stale client that still sends them stores none of them
+ * (zod drops an unknown key). /trade/[id] never reads them from an old share either.
+ */
+const leagueGradeSchema = z.object({
+  grade: z.string().max(4).nullable(),
+  partnerGrade: z.string().max(4).nullable(),
+  gradeLabel: z.string().max(200).nullable(),
+  gradeWithheld: z.string().max(500).nullable(),
+  giveValue: z.number().finite().nullable(),
+  getValue: z.number().finite().nullable(),
+});
+
 const shareSchema = z.object({
   sideA: z.array(assetSchema).max(20),
   sideB: z.array(assetSchema).max(20),
   analysis: z.object({
-    winner: z.string(),
-    valueDelta: z.string(),
+    leagueGrade: leagueGradeSchema.nullable().optional(),
     factors: z.array(z.string()),
-    confidence: z.number(),
-    dynastyVerdict: z.string().optional(),
-    vetoRisk: z.string().optional(),
     agingConcerns: z.array(z.string()).optional(),
     recommendations: z.array(z.string()).optional(),
     teamAName: z.string().optional(),

@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 import type { PlayerDetail, RecommendedMove } from '@/lib/core-app/playerFinder'
@@ -27,6 +27,7 @@ vi.mock('next/link', () => ({
 
 import PlayerFinder from '@/components/core-app/screens/PlayerFinder'
 import { decideCoreDepth } from '@/lib/core-app/coreDepthAccess'
+import { lineupLink } from '@/lib/core-app/platformLinks'
 
 function impact(
   over: Partial<LeagueImpact> & Pick<LeagueImpact, 'leagueId' | 'leagueName' | 'platform' | 'slot'>,
@@ -191,12 +192,160 @@ describe('Player Finder — core view', () => {
     expect(link.getAttribute('href')).toBe('/core/players?q=Isaiah%20Likely&player=NFL%3Ari-9')
   })
 
+  it('shows "Most added this week" in the rail, each row opening that player', () => {
+    renderCore({
+      trendingAdds: {
+        rows: [{ sleeperId: '1339', name: 'Zach Ertz', position: 'TE', team: 'PHI', imageUrl: null, ref: 'NFL:E1339', leagues: 66 }],
+        activeLeagues: 189,
+        through: '2026-09-28T14:59:00.000Z',
+      },
+    })
+    const region = screen.getByRole('region', { name: 'Most added this week' })
+    expect(within(region).getByRole('link', { name: /Zach Ertz/ }).getAttribute('href')).toBe('/core/players?q=Zach%20Ertz&player=NFL%3AE1339')
+    expect(within(region).getByLabelText('added in 66 leagues')).toHaveTextContent('+66')
+    // English is pinned byte for byte; Spanish is core-finder-page-spanish's job.
+    expect(within(region).getByRole('heading').textContent).toBe('Most added this week')
+    expect(region.querySelector('.af-pf-trend-sub')?.textContent).toBe('of 189 leagues adding · through Sep 28')
+  })
+
+  it('no trending list, no empty card', () => {
+    renderCore({ trendingAdds: null })
+    expect(screen.queryByRole('region', { name: 'Most added this week' })).toBeNull()
+  })
+
+  it('shows the league strip — one chip per league, FA where nobody has him, "?" where we cannot read', () => {
+    renderCore({
+      signedIn: true,
+      pickLeagues: [
+        { id: 'L-warriors', name: 'Waiver Warriors', platform: 'yahoo' },
+        { id: 'L-dragons', name: 'Dynasty Dragons', platform: 'sleeper' },
+        { id: 'L-elites', name: 'End Zone Elites', platform: 'espn' },
+        { id: 'L-gang', name: 'Gridiron Gang', platform: 'espn' },
+        { id: 'L-open', name: 'Open League', platform: 'sleeper' },
+        { id: 'L-espn2', name: 'Office Pool', platform: 'espn' },
+      ],
+      detail: { ...DETAIL, rosterCoverage: { unmatched: [{ leagueId: 'L-espn2', leagueName: 'Office Pool', platform: 'espn' }] } },
+    })
+    const strip = screen.getByLabelText('Where he is in each of your leagues')
+    const links = within(strip).getAllByRole('link')
+    expect(links.map((l) => l.textContent)).toEqual([
+      'Waiver WarriorsSTART',
+      'Dynasty DragonsBENCH',
+      'End Zone ElitesIR',
+      'Open LeagueFA',
+      "Gridiron GangTasha's Titans",
+      'Office Pool?',
+    ])
+    expect(links[0]).toHaveAttribute('href', '/core/players?q=Dalton%20Kincaid&player=NFL%3Ari-1&league=L-warriors')
+  })
+
+  it('shows "Available in your leagues" with a claim link when the page passes free-agent rows', () => {
+    renderCore({
+      signedIn: true,
+      freeAgentBids: {
+        bidsLocked: false,
+        rows: [
+          {
+            leagueId: 'L-open',
+            leagueName: 'Open League',
+            platform: 'sleeper',
+            claim: { href: 'https://sleeper.com/leagues/9/players', label: 'Open in Sleeper', platformLabel: 'Sleeper', screen: 'Waivers', external: true },
+            bid: { amount: 12, budget: 100, remaining: 64 },
+            room: { claims: 30, median: 4, p75: 8 },
+            note: null,
+          },
+        ],
+      },
+    })
+    expect(screen.getByRole('heading', { name: 'Available in 1 of your leagues' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Claim Kincaid in Sleeper' })).toHaveAttribute('href', 'https://sleeper.com/leagues/9/players')
+  })
+
+  it('shows his market value over 30 days, signed in or not', () => {
+    const valueTrend = {
+      nudge: null,
+      nudgeLocked: false,
+      books: [
+        {
+          book: { source: 'FANTASYCALC' as const, format: 'DYNASTY' as const, qbFormat: 'SUPERFLEX' as const },
+          label: 'dynasty · superflex',
+          points: [
+            { day: '2026-09-20', value: 5000 },
+            { day: '2026-09-21', value: 5100 },
+            { day: '2026-09-28', value: 5600 },
+          ],
+          value: 5600,
+          lastDay: '2026-09-28',
+          change7: { pct: 0.098, from: 5100, fromDay: '2026-09-21' },
+          change30: null,
+          moverShare: 0.5,
+          leagues: 0,
+          yours: 0,
+        },
+      ],
+    }
+    renderCore({ signedIn: false, valueTrend })
+    expect(screen.getByRole('heading', { name: 'Market value, last 30 days' })).toBeInTheDocument()
+    expect(screen.getByText('7 days: +10%')).toBeInTheDocument()
+    expect(screen.getByText('default chart — no league in view')).toBeInTheDocument()
+  })
+
+  it('shows "Next man up" with the backup linked on the finder and the league scope kept', () => {
+    renderCore({
+      signedIn: true,
+      selectedLeagueId: 'L-dragons',
+      depthChart: {
+        team: 'BUF',
+        slot: 'TE',
+        asOfIso: '2026-09-23T04:18:00.000Z',
+        hisDepth: 1,
+        entries: [
+          { depth: 1, name: 'Dalton Kincaid', sleeperId: '9001', ref: 'NFL:ri-1', isHim: true },
+          { depth: 2, name: 'Dawson Knox', sleeperId: '4000', ref: 'NFL:ri-2', isHim: false },
+        ],
+        presence: { '4000': [{ leagueId: 'L-dragons', leagueName: 'Dynasty Dragons', state: 'yours', detail: 'bench', claim: null }] },
+      },
+    })
+    expect(screen.getByRole('heading', { name: 'Next man up · BUF TE' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Dawson Knox' })).toHaveAttribute('href', '/core/players?q=Dawson%20Knox&player=NFL%3Ari-2&league=L-dragons')
+    expect(screen.getByText(/Who plays if Kincaid misses time/)).toBeInTheDocument()
+  })
+
+  it("shows \"Who'd start\" where he is yours, signed in only", () => {
+    const whoStartsHim = {
+      locked: false,
+      leagues: [
+        {
+          leagueId: 'L-dragons',
+          leagueName: 'Dynasty Dragons',
+          state: 'ranked' as const,
+          note: null,
+          otherTeams: 11,
+          teams: [{ key: 'r2', teamName: 'Gridiron Gang', slot: 'SUPER_FLEX', bumps: { name: 'Jake Ferguson', position: 'TE' }, gain: 12 }],
+        },
+      ],
+    }
+    const { unmount } = renderCore({ signedIn: true, whoStartsHim })
+    expect(screen.getByRole('heading', { name: "Who'd start Kincaid" })).toBeInTheDocument()
+    expect(screen.getByText('would start for 1 of 11 teams')).toBeInTheDocument()
+    expect(screen.getByText(/at superflex, over Jake Ferguson/)).toBeInTheDocument()
+    unmount()
+    renderCore({ signedIn: false, whoStartsHim })
+    expect(screen.queryByRole('heading', { name: "Who'd start Kincaid" })).toBeNull()
+  })
+
+  it('no league strip with a league in context — the card is already that league', () => {
+    renderCore({ signedIn: true, selectedLeagueId: 'L-dragons', pickLeagues: [{ id: 'L-dragons', name: 'Dynasty Dragons', platform: 'sleeper' }] })
+    expect(screen.queryByLabelText('Where he is in each of your leagues')).toBeNull()
+  })
+
   it('names the leagues whose rosters could not be read instead of dropping them', () => {
     renderCore({
       detail: { ...DETAIL, rosterCoverage: { unmatched: [{ leagueId: 'L-espn2', leagueName: 'Office Pool', platform: 'espn' }] } },
     })
-    expect(screen.getByText(/Not checked: Office Pool/)).toBeInTheDocument()
-    expect(screen.getByText(/ESPN player ids/)).toBeInTheDocument()
+    // Twice in the DOM: under the phone's league cards and under the desktop table — CSS shows one per width.
+    expect(screen.getAllByText(/Not checked: Office Pool/)).toHaveLength(2)
+    expect(screen.getAllByText(/ESPN player ids/)).toHaveLength(2)
   })
 
   it('says where he is across your leagues, and that someone else has him elsewhere', () => {
@@ -204,6 +353,8 @@ describe('Player Finder — core view', () => {
     expect(screen.getByText(/on 3 of your 6 leagues, across Yahoo, Sleeper and ESPN/)).toBeInTheDocument()
     expect(screen.getByText(/rostered by others in 1/)).toBeInTheDocument()
     expect(screen.getByText('Ready · Ankle')).toBeInTheDocument()
+    // 3 of the 6 leagues the finder reads: half your fantasy life (playerFun.exposureOf, 2026-10-08).
+    expect(screen.getByText('50% exposure · Core piece')).toBeInTheDocument()
   })
 
   it('renders every league as a row, with the manager who has him named', () => {
@@ -215,6 +366,34 @@ describe('Player Finder — core view', () => {
     expect(gang).toHaveAttribute('data-tone', 'other')
     expect(within(gang).getByText('rostered by @tashaR')).toBeInTheDocument()
     expect(within(gang).getByRole('link', { name: /Trade for Kincaid/ })).toHaveAttribute('href', '/core/trades?league=L-gang')
+  })
+
+  /*
+   * Guap, 2026-10-08: a 65-league manager read 4 rows of his and 52 of other people's. Past
+   * OTHERS_FOLD_AFTER, other managers' rows fold behind one toggle; yours never do.
+   */
+  it('folds other managers’ rows behind one toggle once there are more than a few, and never folds yours', () => {
+    const gang = DETAIL.leagues.available ? DETAIL.leagues.data[3]! : null
+    const others = Array.from({ length: 6 }, (_, i) => ({ ...gang!, leagueId: `L-o${i}`, leagueName: `Other ${i}` }))
+    const leagues = DETAIL.leagues.available ? [...DETAIL.leagues.data, ...others] : []
+    renderCore({ detail: { ...DETAIL, leagues: { available: true, data: leagues } }, leagueCount: 12 })
+    expect(screen.getAllByRole('row').slice(1)).toHaveLength(3)
+    // One toggle under the phone's cards, one under the desktop table — one state, CSS shows one per width.
+    const [phoneToggle, tableToggle] = screen.getAllByRole('button', { name: 'Show the 7 leagues where someone else has him' })
+    expect(phoneToggle!.closest('.af-pf-cards')).not.toBeNull()
+    fireEvent.click(tableToggle!)
+    expect(screen.getAllByRole('row').slice(1)).toHaveLength(10)
+    for (const b of screen.getAllByRole('button', { name: 'Show only your leagues' })) expect(b).toHaveAttribute('aria-expanded', 'true')
+    // The header still counts them — folding hides rows, not facts.
+    expect(screen.getByText(/rostered by others in 7/)).toBeInTheDocument()
+  })
+
+  it('offers "Alert me" on the open card when follows are available, and nothing when they are not', () => {
+    const { unmount } = renderCore({ followingPlayer: false })
+    expect(screen.getByRole('button', { name: /Alert me about Dalton Kincaid/ })).toHaveAttribute('aria-pressed', 'false')
+    unmount()
+    renderCore()
+    expect(screen.queryByRole('button', { name: /Alert me/ })).toBeNull()
   })
 
   it('a benched player who beats a starter is a red row that links to the platform lineup', () => {
@@ -321,7 +500,13 @@ describe('Player Finder — league in context', () => {
       leagueView: { ...LEAGUE_VIEW, ownership: { kind: 'free-agent' } },
     })
     expect(screen.getByText('Unrostered in this league')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /Claim Kincaid/ })).toBeInTheDocument()
+    // The card's own button — scoped, because the phone's sticky bar (CSS-hidden above 720px, but in
+    // the DOM here, where no stylesheet applies) carries the same action by design.
+    const card = document.querySelector('.af-pf-lv') as HTMLElement
+    const claim = within(card).getByRole('link', { name: /Claim Kincaid/ })
+    expect(claim).toBeInTheDocument()
+    const bar = document.querySelector('.af-pf-stickybar') as HTMLElement
+    expect(within(bar).getByRole('link', { name: /Claim Kincaid/ }).getAttribute('href')).toBe(claim.getAttribute('href'))
   })
 })
 
@@ -462,9 +647,22 @@ describe('Player Finder — game day', () => {
     expect(buttons[0]).toHaveAttribute('target', '_blank')
     // The fixture's Yahoo slot carries no team id, so the verified lineup format cannot build; the league page is offered and labelled as such.
     expect(buttons[0].textContent).toMatch(/^Open (lineup in Yahoo|in Yahoo · League)/)
-    // The banner sits above the tiles, at the top of the card.
+    // The banner sits above the tiles, at the top of the card — with the phone's league cards right under it (2026-10-08).
     const card = banner.closest('.af-pf-detail') as HTMLElement
-    expect(card.querySelector('.af-pf-gameday + .af-pf-compare-entry')).not.toBeNull()
+    expect(card.querySelector('.af-pf-gameday + .af-pf-cards')).not.toBeNull()
+    expect(card.querySelector('.af-pf-cards ~ .af-pf-compare-entry')).not.toBeNull()
+  })
+
+  it('offers no Open-lineup button for a best-ball league — the platform sets that lineup itself', () => {
+    const leagues = DETAIL.leagues.available ? DETAIL.leagues.data : []
+    const bestBall = {
+      ...DETAIL,
+      injury: { available: true, data: { status: 'Out', description: 'Ankle', reportedAt: null } },
+      leagues: { available: true, data: leagues.map((l) => (l.leagueId === 'L-warriors' ? { ...l, bestBall: true } : l)) },
+    } as PlayerDetail
+    renderCore({ detail: bestBall, nowIso: NOW })
+    const banner = screen.queryByRole('region', { name: 'Game day' })
+    expect(banner ? within(banner).queryAllByRole('link') : []).toHaveLength(0)
   })
 
   it('says there is nothing to move when he is benched everywhere, and stays quiet with no kickoff on file', () => {
@@ -498,8 +696,8 @@ describe('Player Finder — game-day home', () => {
           description: 'Ankle',
           reportedAt: null,
           leagues: [
-            { leagueId: 'L-dragons', leagueName: 'Dynasty Dragons', platform: 'sleeper' },
-            { leagueId: 'L-elites', leagueName: 'End Zone Elites', platform: 'espn' },
+            { leagueId: 'L-dragons', leagueName: 'Dynasty Dragons', platform: 'sleeper', platformLeagueId: '1313566817444167680', season: 2026, teamId: '1' },
+            { leagueId: 'L-elites', leagueName: 'End Zone Elites', platform: 'espn', platformLeagueId: '919055222', season: 2026, teamId: '7' },
           ],
           kickoff: '2026-10-25T17:00:00.000Z',
           noGame: false,
@@ -524,11 +722,18 @@ describe('Player Finder — game-day home', () => {
     render(<PlayerFinder query="" matches={[]} detail={null} leagueCount={6} signedIn triage={TRIAGE} nowIso={NOW} />)
     const card = screen.getByRole('region', { name: 'Game day · your flagged starters' })
     expect(within(card).getByText('3 of 6 lineups read · week 12')).toBeInTheDocument()
-    const rows = within(card).getAllByRole('listitem')
+    const rows = [...card.querySelectorAll('li.af-pf-triage-row')] as HTMLElement[]
     expect(rows).toHaveLength(2)
-    expect(within(rows[0]).getByRole('link')).toHaveAttribute('href', '/core/players?q=Dalton%20Kincaid&player=NFL%3Ari-1')
+    const links = within(rows[0]).getAllByRole('link')
+    expect(links[0]).toHaveAttribute('href', '/core/players?q=Dalton%20Kincaid&player=NFL%3Ari-1')
     expect(within(rows[0]).getByText('Out · Ankle')).toBeInTheDocument()
-    expect(within(rows[0]).getByText(/starting in Dynasty Dragons · Sleeper, End Zone Elites · ESPN/)).toBeInTheDocument()
+    expect(within(rows[0]).getByText(/starting in 2 leagues/)).toBeInTheDocument()
+    // One lineup button per league ON THE ROW (2026-09-27) — no round trip through the card.
+    const sleeperBtn = within(rows[0]).getByRole('link', { name: /Dynasty Dragons — open the lineup on Sleeper/ })
+    expect(sleeperBtn).toHaveAttribute('href', 'https://sleeper.com/leagues/1313566817444167680/team')
+    expect(sleeperBtn).toHaveAttribute('target', '_blank')
+    const espnBtn = within(rows[0]).getByRole('link', { name: /End Zone Elites — open the lineup on ESPN/ })
+    expect(espnBtn.getAttribute('href')).toBe(lineupLink({ id: 'L-elites', platform: 'espn', platformLeagueId: '919055222', season: 2026, name: 'End Zone Elites', teamId: '7' })!.href)
     expect(within(rows[0]).getByText('locks in 42 min')).toHaveAttribute('data-lock', 'soon')
     expect(rows[1]).toHaveAttribute('data-nogame', 'true')
     // A plain schedule gap (the fixture's `bye: false`): the chip says so, and there is no kickoff to count down to.
@@ -860,5 +1065,118 @@ describe('Player Finder — player depth paywall', () => {
     expect(screen.getByRole('region', { name: 'Recommended moves' })).toBeInTheDocument()
     expect(screen.queryByTestId('core-lock-player_depth')).toBeNull()
     expect(screen.queryByTestId('core-free-until-player_depth')).toBeNull()
+  })
+})
+
+describe('Player Finder — the deeper card (Phase 1)', () => {
+  const DEPTH = {
+    season: { available: false as const, reason: 'none in fixture' },
+    nextGame: { available: true as const, data: { opponent: 'MIA', home: true, kickoff: '2026-10-25T17:00:00.000Z', market: { impliedTeamTotal: 27.5, spread: -6.5, gameTotal: 48.5, winProbability: 0.71, isStale: false } } },
+    upcoming: { available: false as const, reason: 'none in fixture' },
+    news: { available: true as const, data: [{ title: 'Kincaid limited Thursday', source: 'espn', url: null, publishedAt: null }] },
+    leagueValues: { 'L-warriors': { value: 4210, base: 4210, fitNote: null, mode: 'redraft' as const, numQbs: 1 as const } },
+  }
+
+  it('adds next game, news and a per-league Value column', () => {
+    const { container } = renderCore({ depth: DEPTH })
+    expect(screen.getByRole('region', { name: 'Next game' })).toHaveTextContent('his team implied for 27.5 pts')
+    expect(screen.getByRole('region', { name: 'News' })).toHaveTextContent('Kincaid limited Thursday')
+    expect(screen.getByRole('columnheader', { name: 'Value' })).toBeInTheDocument()
+    expect(container.querySelector('td.af-pf-col-value .af-pf-value')).toHaveTextContent('4,210')
+  })
+
+  it('has no Value column at all for a viewer without AF Pro (leagueValues null)', () => {
+    renderCore({ depth: { ...DEPTH, leagueValues: null } })
+    expect(screen.queryByRole('columnheader', { name: 'Value' })).toBeNull()
+  })
+
+  it('marks each upcoming week with its matchup rank when the page passes one', () => {
+    const upcoming = {
+      available: true as const,
+      data: { season: 2026, weeks: [{ week: 8, opponent: 'MIA', home: true, bye: false, projection: null }, { week: 9, opponent: null, home: false, bye: true, projection: null }] },
+    }
+    const matchupOutlook = {
+      position: 'TE',
+      season: 2026,
+      leagueAverage: 14,
+      minGames: 3,
+      reads: { 8: { week: 8, opponent: 'MIA', tier: 'soft' as const, rank: 2, of: 32, allowedPerGame: 24.1, games: 3 } },
+    }
+    renderCore({ depth: { ...DEPTH, upcoming }, matchupOutlook })
+    const region = screen.getByRole('region', { name: 'Next game' })
+    expect(region).toHaveTextContent('Soft #2')
+    expect(region).toHaveTextContent('2nd-softest vs TEs')
+    expect(region).toHaveTextContent('among 32 defenses')
+  })
+
+  it('renders exactly as before with no depth', () => {
+    renderCore()
+    expect(screen.queryByRole('region', { name: 'Next game' })).toBeNull()
+    expect(screen.queryByRole('columnheader', { name: 'Value' })).toBeNull()
+  })
+})
+
+describe('Player Finder — the start/sit call, league by league (Phase 3a)', () => {
+  const NOW = '2026-10-25T16:18:00.000Z'
+  it('gives each of your leagues a call on the card, and leaves a best-ball league out', () => {
+    const { unmount } = renderCore({ nowIso: NOW })
+    const panel = screen.getByRole('region', { name: 'Your call, league by league' })
+    const leagueNames = within(panel).getAllByRole('listitem').map((li) => li.querySelector('.af-pf-call-league')?.textContent)
+    expect(leagueNames).toContain('Waiver Warriors')
+    unmount()
+
+    const leagues = DETAIL.leagues.available ? DETAIL.leagues.data : []
+    const bestBall = { ...DETAIL, leagues: { available: true, data: leagues.map((l) => (l.leagueId === 'L-warriors' ? { ...l, bestBall: true } : l)) } } as PlayerDetail
+    renderCore({ detail: bestBall, nowIso: NOW })
+    const again = screen.queryByRole('region', { name: 'Your call, league by league' })
+    const names = again ? within(again).getAllByRole('listitem').map((li) => li.querySelector('.af-pf-call-league')?.textContent) : []
+    expect(names).not.toContain('Waiver Warriors')
+  })
+})
+
+/*
+ * AllFantasy's own projection on the Finder (2026-09-30). The loader sends the engine's
+ * standard-scoring number; the screen carries it into each league with that league's provider
+ * number, the same carry-over every /core surface uses (afEngineCarry.ts).
+ */
+describe('Player Finder — AllFantasy projection', () => {
+  const AF = { available: true as const, data: { points: 14.5, season: '2026', week: 12 } }
+  const carry = (leaguePts: number) => Math.round(14.5 * (leaguePts / 13.8) * 100) / 100
+
+  it('shows the AF tile across leagues at standard scoring', () => {
+    renderCore({ detail: { ...DETAIL, afProjection: AF } })
+    const tile = screen.getByText('AF proj wk 12').closest('.af-pf-tile') as HTMLElement
+    expect(tile.querySelector('.af-pf-tile-value')?.textContent).toBe('14.5')
+    expect(tile.textContent).toContain('Standard scoring')
+  })
+
+  it('carries AF into each league row by that row’s own provider figure', () => {
+    const { container } = renderCore({ detail: { ...DETAIL, afProjection: AF }, signedIn: true })
+    const rows = [...container.querySelectorAll('.af-pf-table tbody tr')]
+    let priced = 0
+    for (const row of rows) {
+      const proj = row.querySelector('td.af-pf-col-proj:not(.af-pf-col-af)')?.textContent?.trim() ?? ''
+      const af = row.querySelector('td.af-pf-col-af')?.textContent?.trim() ?? ''
+      if (/^\d/.test(proj)) {
+        priced += 1
+        expect(af).toBe(carry(Number(proj)).toFixed(1))
+      } else {
+        expect(af).toBe('—')
+      }
+    }
+    expect(priced).toBeGreaterThan(0)
+  })
+
+  it('in league mode the AF tile is carried into the held league’s scoring', () => {
+    renderCore({ detail: { ...DETAIL, afProjection: AF }, selectedLeagueId: 'L-gang', leagueView: LEAGUE_VIEW })
+    const tile = screen.getByText('AF proj wk 12').closest('.af-pf-tile') as HTMLElement
+    // League provider 9.8 against generic 13.8.
+    expect(tile.querySelector('.af-pf-tile-value')?.textContent).toBe(carry(9.8).toFixed(1))
+    expect(tile.textContent).toContain('this league’s scoring')
+  })
+
+  it('draws no AF tile when the loader sent no AF projection', () => {
+    renderCore()
+    expect(screen.queryByText(/^AF proj/)).toBeNull()
   })
 })

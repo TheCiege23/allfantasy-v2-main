@@ -1,12 +1,21 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import { Copy, Check, Users, UserPlus, Gift, Loader2 } from "lucide-react"
 import { useLanguage } from "@/components/i18n/LanguageProviderClient"
 import { ReferralShareBar } from "@/components/referral/ReferralShareBar"
+import { copyText, selectField } from "@/lib/clipboard/copyText"
 
-type Stats = { clicks: number; signups: number; pendingRewards: number; redeemedRewards: number }
+/*
+ * `claimableRewards` is optional only for an older API response that lacked it. The "pending" tile is
+ * pending + claimable: a reward waiting on the user to claim it is exactly what that tile should
+ * count, and before 2026-10-02 it counted only `pending` — two claimable rewards read as 0, and a
+ * redeem then decremented a number that had never included the reward.
+ */
+type Stats = { clicks: number; signups: number; pendingRewards: number; claimableRewards?: number; redeemedRewards: number }
+
+const unclaimedCount = (s: Stats) => s.pendingRewards + (s.claimableRewards ?? 0)
 type Reward = {
   id: string
   type: string
@@ -28,6 +37,10 @@ export function ReferralSection() {
   const [copiedLink, setCopiedLink] = useState(false)
   const [copiedCode, setCopiedCode] = useState(false)
   const [redeemingId, setRedeemingId] = useState<string | null>(null)
+  const [redeemError, setRedeemError] = useState<string | null>(null)
+  const [copyError, setCopyError] = useState<string | null>(null)
+  const codeInputRef = useRef<HTMLInputElement>(null)
+  const linkInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -60,31 +73,50 @@ export function ReferralSection() {
     return () => { cancelled = true }
   }, [])
 
-  const copyLink = () => {
-    if (!link) return
-    navigator.clipboard.writeText(link).then(() => {
-      setCopiedLink(true)
-      setTimeout(() => setCopiedLink(false), 2000)
-    })
+  /*
+   * lib/clipboard/copyText tries the async clipboard API, then the legacy copy command, which still
+   * works in the in-app browsers and older iOS Safari that refuse the first. Only when BOTH fail is
+   * the text selected in its field (iOS needs the explicit range selectField sets) with a message —
+   * the old `.then()` had no rejection path and the button simply did nothing.
+   */
+  const copyFromField = async (text: string, input: HTMLInputElement | null): Promise<boolean> => {
+    setCopyError(null)
+    if (await copyText(text)) return true
+    selectField(input)
+    setCopyError("Couldn't copy automatically — the text is selected, so copy it from the field.")
+    return false
   }
 
-  const copyCode = () => {
+  const copyLink = async () => {
+    if (!link) return
+    if (await copyFromField(link, linkInputRef.current)) {
+      setCopiedLink(true)
+      setTimeout(() => setCopiedLink(false), 2000)
+    }
+  }
+
+  const copyCode = async () => {
     if (!code) return
-    navigator.clipboard.writeText(code).then(() => {
+    if (await copyFromField(code, codeInputRef.current)) {
       setCopiedCode(true)
       setTimeout(() => setCopiedCode(false), 2000)
-    })
+    }
   }
 
   const redeem = async (rewardId: string) => {
     setRedeemingId(rewardId)
+    setRedeemError(null)
     try {
       const res = await fetch("/api/referral/rewards/redeem", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ rewardId }),
       })
-      const data = await res.json()
+      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string }
+      // A refused redeem used to vanish: the route's 400 message was read and dropped.
+      if (!res.ok || !data.ok) {
+        setRedeemError(typeof data.error === "string" && data.error ? data.error : "Couldn't redeem that reward. Please try again.")
+      }
       if (res.ok && data.ok) {
         setRewards((prev) =>
           prev.map((r) => (r.id === rewardId ? { ...r, status: "redeemed" as const, redeemedAt: new Date().toISOString() } : r))
@@ -93,12 +125,15 @@ export function ReferralSection() {
           prev
             ? {
                 ...prev,
-                pendingRewards: Math.max(0, prev.pendingRewards - 1),
+                // The redeemed reward was CLAIMABLE (only those have a claim button).
+                claimableRewards: Math.max(0, (prev.claimableRewards ?? 0) - 1),
                 redeemedRewards: prev.redeemedRewards + 1,
               }
             : null
         )
       }
+    } catch {
+      setRedeemError("Couldn't redeem that reward. Check your connection and try again.")
     } finally {
       setRedeemingId(null)
     }
@@ -127,11 +162,13 @@ export function ReferralSection() {
         <div className="rounded-xl border p-4" style={{ borderColor: "var(--border)", background: "color-mix(in srgb, var(--panel2) 60%, transparent)" }}>
           {code && (
             <>
-              <label className="text-xs font-medium" style={{ color: "var(--muted)" }}>
+              <label htmlFor="referral-code-input" className="text-xs font-medium" style={{ color: "var(--muted)" }}>
                 {t("settings.referral.yourCode")}
               </label>
               <div className="mt-2 flex flex-wrap items-center gap-2 mb-4">
                 <input
+                  id="referral-code-input"
+                  ref={codeInputRef}
                   type="text"
                   readOnly
                   value={code}
@@ -151,11 +188,13 @@ export function ReferralSection() {
               </div>
             </>
           )}
-          <label className="text-xs font-medium" style={{ color: "var(--muted)" }}>
+          <label htmlFor="referral-link-input" className="text-xs font-medium" style={{ color: "var(--muted)" }}>
             {t("settings.referral.yourLink")}
           </label>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <input
+              id="referral-link-input"
+              ref={linkInputRef}
               type="text"
               readOnly
               value={link ?? ""}
@@ -173,6 +212,11 @@ export function ReferralSection() {
               {copiedLink ? t("settings.referral.copied") : t("settings.referral.copyLink")}
             </button>
           </div>
+          {copyError ? (
+            <p className="mt-2 text-xs" role="status" style={{ color: "var(--muted2)" }}>
+              {copyError}
+            </p>
+          ) : null}
           {link && (
             <div className="mt-3 pt-3 border-t" style={{ borderColor: "var(--border)" }}>
               <ReferralShareBar referralLink={link} testIdPrefix="referral-share" />
@@ -202,7 +246,7 @@ export function ReferralSection() {
               <Gift className="h-5 w-5" style={{ color: "var(--muted)" }} />
               <span className="text-sm" style={{ color: "var(--muted)" }}>{t("settings.referral.statPendingRewards")}</span>
             </div>
-            <p className="mt-1 text-2xl font-semibold" style={{ color: "var(--text)" }}>{stats.pendingRewards}</p>
+            <p className="mt-1 text-2xl font-semibold" style={{ color: "var(--text)" }}>{unclaimedCount(stats)}</p>
           </div>
           <div data-testid="referral-stat-redeemed-rewards" className="rounded-xl border p-4" style={{ borderColor: "var(--border)" }}>
             <span className="text-sm" style={{ color: "var(--muted)" }}>{t("settings.referral.statRedeemed")}</span>
@@ -216,6 +260,11 @@ export function ReferralSection() {
           <h3 className="text-sm font-semibold mb-3" style={{ color: "var(--text)" }}>
             {t("settings.referral.rewardsHeading")}
           </h3>
+          {redeemError ? (
+            <p className="mb-2 text-xs text-red-600" role="alert" data-testid="referral-redeem-error">
+              {redeemError}
+            </p>
+          ) : null}
           <ul className="space-y-2">
             {rewards.map((r) => (
               <li
@@ -226,7 +275,16 @@ export function ReferralSection() {
                 <div>
                   <span className="font-medium" style={{ color: "var(--text)" }}>{r.label}</span>
                   <span className="ml-2 text-xs" style={{ color: "var(--muted)" }}>
-                    {r.status === "redeemed" ? t("settings.referral.statusClaimed") : r.status === "claimable" ? t("settings.referral.statusReady") : t("settings.referral.statusPending")}
+                    {/* expired and blocked are real statuses (ReferralRewardStatus); both read "Pending" before 2026-10-02. */}
+                    {r.status === "redeemed"
+                      ? t("settings.referral.statusClaimed")
+                      : r.status === "claimable"
+                        ? t("settings.referral.statusReady")
+                        : r.status === "expired"
+                          ? t("settings.referral.statusExpired")
+                          : r.status === "blocked"
+                            ? t("settings.referral.statusBlocked")
+                            : t("settings.referral.statusPending")}
                   </span>
                   {r.helperText ? (
                     <p className="mt-1 text-xs" style={{ color: "var(--muted)" }}>

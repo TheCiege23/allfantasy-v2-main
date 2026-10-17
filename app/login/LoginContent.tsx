@@ -378,7 +378,7 @@ export default function LoginContent() {
           </div>
         )}
 
-        <div className="n-divider" style={{ margin: "22px 0 16px" }}>
+        <div className="n-divider" style={{ margin: "22px 0 16px" }} data-hide-in-ios-app>
           <span>or continue with</span>
         </div>
 

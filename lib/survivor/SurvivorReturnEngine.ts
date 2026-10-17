@@ -1,3 +1,5 @@
+import { isNativePlatform } from '@/lib/dashboard/platform-label'
+import { normalizeSurvivorFoundationSettings } from './survivorSettings'
 /**
  * Survivor return-to-island: check eligibility at N tokens (PROMPT 346). Deterministic.
  */
@@ -18,6 +20,11 @@ export async function canReturnToIsland(
   exileRosterId: string,
   currentWeek: number
 ): Promise<{ eligible: boolean; reason?: string }> {
+  const league = await prisma.league.findUnique({ where: { id: mainLeagueId }, select: { platform: true, settings: true } })
+  if (league && isNativePlatform(league.platform)) {
+    const settings = normalizeSurvivorFoundationSettings(league.settings as Record<string, unknown> | null)
+    return { eligible: false, reason: `The system selects one qualifying return after Week ${settings.exileReturnWeek}; ${settings.exileReturnTokens} tokens are required. Manual returns are disabled.` }
+  }
   const config = await getSurvivorConfig(mainLeagueId)
   if (!config) return { eligible: false, reason: 'Not a Survivor league' }
   if (!config.exileReturnEnabled) return { eligible: false, reason: 'Return not enabled' }
@@ -65,6 +72,8 @@ export async function executeReturn(
   exileRosterId: string,
   options?: { platformUserId?: string }
 ): Promise<{ ok: boolean; error?: string; mainRosterId?: string }> {
+  const league = await prisma.league.findUnique({ where: { id: mainLeagueId }, select: { platform: true } })
+  if (league && isNativePlatform(league.platform)) return { ok: false, error: 'Native Exile returns are selected by the system at the scheduled deadline.' }
   const config = await getSurvivorConfig(mainLeagueId)
   if (!config) return { ok: false, error: 'Not a Survivor league' }
 

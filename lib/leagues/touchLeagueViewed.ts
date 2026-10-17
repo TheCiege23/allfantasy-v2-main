@@ -102,3 +102,38 @@ export async function touchLeagueViewed(leagueId: string | null | undefined): Pr
     // Never let recording a view affect the page. See the header.
   }
 }
+
+/**
+ * The same record for several leagues in ONE write — the game-day list marks the leagues where
+ * a flagged starter still has a lineup to fix, so the five-minute active lane refreshes them first.
+ *
+ * ⚠ THE CALLER CAPS THE LIST, AND THE CAP IS WHAT KEEPS THIS FAIR. The lane takes 4 leagues per
+ * provider per tick and puts every "viewed in the last 30 min" league ahead of everyone else's, so
+ * marking a 65-league account wholesale would park other users behind it for over an hour. Mark
+ * only the leagues that need it now (the finder passes at most `MAX_BATCH`).
+ *
+ * Same prefetch guard, same per-process throttle, same swallow-everything stance as the single form.
+ */
+const MAX_BATCH = 10
+
+export async function touchLeaguesViewed(leagueIds: readonly string[]): Promise<void> {
+  try {
+    const h = await headers()
+    if (isSpeculativeRequestHeaders(h)) return
+    const now = Date.now()
+    const due = [...new Set(leagueIds.filter(Boolean))]
+      .filter((id) => shouldRecordView({ leagueId: id, isSpeculative: false, lastTouchedAt: recentlyTouched.get(id) ?? null, now }))
+      .slice(0, MAX_BATCH)
+    if (due.length === 0) return
+    for (const id of due) {
+      if (recentlyTouched.size >= TOUCH_MEMO_MAX) {
+        const oldest = recentlyTouched.keys().next().value
+        if (oldest !== undefined) recentlyTouched.delete(oldest)
+      }
+      recentlyTouched.set(id, now)
+    }
+    await prisma.league.updateMany({ where: { id: { in: due } }, data: { lastViewedAt: new Date(now) } })
+  } catch {
+    // Never let recording a view affect the page. See the header.
+  }
+}

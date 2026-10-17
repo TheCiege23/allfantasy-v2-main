@@ -18,7 +18,7 @@ export function AITimeSeriesChart({ series }: { series: AdminAIMetricsBundle['ti
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data}>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
-            <XAxis dataKey="date" tick={{ fill: 'rgba(255,255,255,0.45)', fontSize: 10 }} />
+            <XAxis dataKey="date" tick={{ fill: 'rgba(255,255,255,0.45)', fontSize: 11 }} />
             <YAxis yAxisId="left" tick={{ fill: 'rgba(255,255,255,0.45)', fontSize: 11 }} />
             <YAxis yAxisId="right" orientation="right" tick={{ fill: 'rgba(255,255,255,0.45)', fontSize: 11 }} />
             <Tooltip

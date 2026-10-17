@@ -43,18 +43,18 @@ export function TournamentBracketProgress({ tournamentId }: TournamentBracketPro
               round.status === 'completed' ? 'border-emerald-400/20 bg-emerald-400/5' :
               'border-white/10 bg-white/[0.02]'
             }`}>
-              <div className="text-[10px] uppercase tracking-wide text-white/40">{round.roundLabel}</div>
+              <div className="text-[11px] uppercase tracking-wide text-white/40">{round.roundLabel}</div>
               <div className="text-xs font-semibold text-white mt-1">
                 <Users className="inline h-3 w-3 mr-1" />
                 {round.leagues.length} league{round.leagues.length !== 1 ? 's' : ''}
               </div>
               {round.status === 'completed' && (
-                <div className="text-[10px] text-emerald-400/60 mt-1">
+                <div className="text-[11px] text-emerald-400/60 mt-1">
                   {round.advancersCount} advanced · {round.eliminatedCount} out
                 </div>
               )}
               {round.status === 'active' && (
-                <div className="text-[10px] text-purple-300/60 mt-1">In progress</div>
+                <div className="text-[11px] text-purple-300/60 mt-1">In progress</div>
               )}
             </div>
             {i < rounds.length - 1 && <ChevronRight className="h-4 w-4 text-white/20 flex-shrink-0" />}

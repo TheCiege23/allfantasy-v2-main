@@ -3,6 +3,7 @@ import 'server-only'
 
 import type { LeagueLifecycleState, LeagueSport, Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { indexBySleeperId, leagueIdentityColumns, sleeperIdWhere } from '@/lib/player-identity/externalIdNamespace'
 import { resolveLeagueAccess } from '@/lib/league-access'
 import { getLeagueRole } from '@/lib/league/permissions'
 import { getAllowedActions } from '@/server/services/leagueLifecycleService'
@@ -14,6 +15,7 @@ import { getScheduleConfigForLeague } from '@/lib/schedule-defaults/ScheduleConf
 import { getDevyConfig } from '@/lib/devy/DevyLeagueConfig'
 import { getC2CConfig } from '@/lib/merged-devy-c2c/C2CLeagueConfig'
 import { attachPlayerMediaBatch } from '@/lib/player-media'
+import { isForeignIdSpace, loadEspnToSleeperMap, rosterIdSpaceOf } from '@/lib/core-app/rosterIdSpace'
 import { getLeagueChatMessages } from '@/lib/league-chat/LeagueChatMessageService'
 import { getFormatIntroMetadata } from '@/lib/league/format-engine'
 import { resolveLeagueIntroFormatKey } from '@/lib/league/resolveLeagueIntroFormatKey'
@@ -73,6 +75,7 @@ type LeagueContext = {
     settings: Prisma.JsonValue | null
     scoring: string | null
     isDynasty: boolean
+    platform: string
     platformLeagueId: string
     lifecycleState: LeagueLifecycleState
     locked: boolean
@@ -343,6 +346,7 @@ async function loadLeagueContext(leagueId: string, userId: string): Promise<Leag
         settings: true,
         scoring: true,
         isDynasty: true,
+        platform: true,
         platformLeagueId: true,
         lifecycleState: true,
         locked: true,
@@ -405,23 +409,50 @@ async function loadLeagueContext(leagueId: string, userId: string): Promise<Leag
 
 async function resolvePlayerIndex(
   sport: string,
-  playerIds: string[]
+  playerIds: string[],
+  /** The platform of the league these ids came from. Omitted for ids that are not a league's own. */
+  platform?: string | null
 ): Promise<Map<string, ResolvedPlayerIndexEntry>> {
   const uniqueIds = Array.from(new Set(playerIds.filter(Boolean)))
   if (!uniqueIds.length) return new Map()
 
+  /*
+   * ⚠ A FOREIGN LEAGUE'S IDS COLLIDE WITH REAL SLEEPER IDS (Fleaflicker's are short numbers in
+   * Sleeper's range), so they are never matched on a Sleeper-vocabulary key: not `sleeperId`, not
+   * SportsPlayer (whose `externalId` IS the Sleeper id on Sleeper-seeded rows), not the media batch
+   * (keyed on `sleeperId`). Nor is a provider-column hit indexed under its row's `sleeperId`, where
+   * it could overwrite another roster id's entry. The provider-column matches (`mflId`, ...) stay.
+   * A native league of another sport is skipped the same way: its bare numbers are Rolling Insights
+   * ids (asked of `rollingInsightsId` below), and the media batch would hand them a Sleeper portrait.
+   */
+  const foreign = isForeignIdSpace(platform, sport)
+
+  /*
+   * 🛑 EACH ID IS ASKED OF ITS OWN IDENTITY COLUMN, AND AN ESPN ID IS TRANSLATED BEFORE ANY
+   * SLEEPER-KEYED READ (2026-09-30). This used to put the whole list to `sleeperId`,
+   * `rollingInsightsId`, `apiSportsId`, `clearSportsId`, `espnId` and `mflId` at once and file every
+   * hit under every column's value — so a Sleeper league's 9228 could come back as Rolling Insights'
+   * 9228, an offensive tackle, whenever no Sleeper row overwrote it. And an ESPN league (not
+   * "foreign" to `isForeignIdSpace`) had its ids read as Sleeper ids below: 17 of 489 live ESPN ids
+   * are somebody else's Sleeper id. `leagueIdentityColumns` owns the column rule.
+   */
+  const identityLookups = leagueIdentityColumns(uniqueIds, sport, platform)
+  const espn = rosterIdSpaceOf(platform) === 'espn'
+  /** League id → the Sleeper id its Sleeper-keyed reads use. Empty for a foreign league. */
+  const sleeperIdOf = new Map<string, string>(
+    foreign
+      ? []
+      : espn
+        ? [...(await loadEspnToSleeperMap(uniqueIds))]
+        : uniqueIds.map((id) => [id, id] as [string, string])
+  )
+  const sleeperIds = [...new Set(sleeperIdOf.values())]
+
   const [identityRows, sportsPlayers, sportsRecords, mediaMap] = await Promise.all([
-    prisma.playerIdentityMap.findMany({
+    identityLookups.length === 0 ? [] : prisma.playerIdentityMap.findMany({
       where: {
         sport: sport.toUpperCase(),
-        OR: [
-          { sleeperId: { in: uniqueIds } },
-          { rollingInsightsId: { in: uniqueIds } },
-          { apiSportsId: { in: uniqueIds } },
-          { clearSportsId: { in: uniqueIds } },
-          { espnId: { in: uniqueIds } },
-          { mflId: { in: uniqueIds } },
-        ],
+        OR: identityLookups.map(({ column, ids }) => ({ [column]: { in: ids } })),
       },
       select: {
         canonicalName: true,
@@ -429,26 +460,25 @@ async function resolvePlayerIndex(
         currentTeam: true,
         sleeperId: true,
         rollingInsightsId: true,
-        apiSportsId: true,
-        clearSportsId: true,
         espnId: true,
         mflId: true,
+        fleaflickerId: true,
+        fantraxId: true,
       },
     }).catch((error) => {
       logOptionalLeagueDataWarning('player identity index', error)
       return []
     }),
-    prisma.sportsPlayer.findMany({
-      where: {
-        sport: sport.toUpperCase(),
-        OR: [
-          { externalId: { in: uniqueIds } },
-          { sleeperId: { in: uniqueIds } },
-        ],
-      },
+    /*
+     * 🛑 Sleeper-space ids (this read is skipped for a foreign league), so by Sleeper id only — never
+     * a bare id against `externalId`, where Rolling Insights keeps its own numbers for different
+     * people (RI 9228 is an offensive tackle; Sleeper 9228 is Bryce Young). externalIdNamespace.ts.
+     */
+    sleeperIds.length === 0 ? [] : prisma.sportsPlayer.findMany({
+      where: sleeperIdWhere(sleeperIds, sport),
       orderBy: { fetchedAt: 'desc' },
       select: {
-        externalId: true,
+        source: true,
         sleeperId: true,
         name: true,
         position: true,
@@ -479,7 +509,7 @@ async function resolvePlayerIndex(
       logOptionalLeagueDataWarning('sports player records', error)
       return []
     }),
-    attachPlayerMediaBatch(uniqueIds.map((playerId) => ({ playerId, sport }))).catch((error) => {
+    sleeperIds.length === 0 ? (new Map() as PlayerMediaBatchMap) : attachPlayerMediaBatch(sleeperIds.map((playerId) => ({ playerId, sport }))).catch((error) => {
       logOptionalLeagueDataWarning('player media', error)
       return new Map() as PlayerMediaBatchMap
     }),
@@ -487,46 +517,52 @@ async function resolvePlayerIndex(
 
   const index = new Map<string, ResolvedPlayerIndexEntry>()
 
-  for (const row of identityRows) {
-    const keys = [
-      row.sleeperId,
-      row.rollingInsightsId,
-      row.apiSportsId,
-      row.clearSportsId,
-      row.espnId,
-      row.mflId,
-    ].filter((value): value is string => Boolean(value))
-    for (const key of keys) {
-      index.set(key, {
-        id: key,
-        name: row.canonicalName,
-        position: row.position ?? 'FLEX',
-        team: row.currentTeam ?? null,
-        adp: null,
-        injuryStatus: null,
-        stats: {},
-        headshotUrl: null,
-        teamLogoUrl: null,
-      })
+  /*
+   * Filed ONLY under an asked id, and only under the column it was asked in. Two identity rows
+   * answering one id (possible outside `sleeperId`, the one unique column) name nobody.
+   */
+  const identityByAsked = new Map<string, (typeof identityRows)[number] | null>()
+  for (const { column, ids } of identityLookups) {
+    const asked = new Set(ids)
+    for (const row of identityRows) {
+      const key = row[column]
+      if (!key || !asked.has(key)) continue
+      identityByAsked.set(key, identityByAsked.has(key) ? null : row)
     }
   }
+  for (const [key, row] of identityByAsked) {
+    if (!row) continue
+    index.set(key, {
+      id: key,
+      name: row.canonicalName,
+      position: row.position ?? 'FLEX',
+      team: row.currentTeam ?? null,
+      adp: null,
+      injuryStatus: null,
+      stats: {},
+      headshotUrl: null,
+      teamLogoUrl: null,
+    })
+  }
 
-  for (const row of sportsPlayers) {
-    const keys = [row.externalId, row.sleeperId].filter((value): value is string => Boolean(value))
-    for (const key of keys) {
-      const existing = index.get(key)
-      index.set(key, {
-        id: key,
-        name: row.name || existing?.name || fallbackPlayerName(key),
-        position: row.position || existing?.position || 'FLEX',
-        team: row.team || existing?.team || null,
-        adp: existing?.adp ?? null,
-        injuryStatus: existing?.injuryStatus ?? null,
-        stats: existing?.stats ?? {},
-        headshotUrl: toImageUrl(row.imageUrl) || existing?.headshotUrl || null,
-        teamLogoUrl: existing?.teamLogoUrl || null,
-      })
-    }
+  // By Sleeper id alone (Sleeper's own row wins a shared id) — never by `externalId` — and filed
+  // under the LEAGUE id that asked, which for an ESPN league is not the Sleeper id.
+  const bySleeperId = indexBySleeperId(sportsPlayers)
+  for (const [key, sleeperId] of sleeperIdOf) {
+    const row = bySleeperId.get(sleeperId)
+    if (!row) continue
+    const existing = index.get(key)
+    index.set(key, {
+      id: key,
+      name: row.name || existing?.name || fallbackPlayerName(key),
+      position: row.position || existing?.position || 'FLEX',
+      team: row.team || existing?.team || null,
+      adp: existing?.adp ?? null,
+      injuryStatus: existing?.injuryStatus ?? null,
+      stats: existing?.stats ?? {},
+      headshotUrl: toImageUrl(row.imageUrl) || existing?.headshotUrl || null,
+      teamLogoUrl: existing?.teamLogoUrl || null,
+    })
   }
 
   for (const row of sportsRecords) {
@@ -545,7 +581,8 @@ async function resolvePlayerIndex(
   }
 
   for (const playerId of uniqueIds) {
-    const media = mediaMap.get(playerId)
+    const sleeperId = sleeperIdOf.get(playerId)
+    const media = sleeperId ? mediaMap.get(sleeperId) : undefined
     const existing = index.get(playerId)
     index.set(playerId, {
       id: playerId,
@@ -796,12 +833,18 @@ async function buildCollegePlayersData(
   if (variant.mode === 'standard' || variant.collegeSports.length === 0) return null
 
   const sports = variant.collegeSports
-  const [trendRows, availableRows, leaderRows] = await Promise.all([
-    prisma.devyPlayer.findMany({
-      where: { sport: { in: sports } },
-      orderBy: [{ stockTrendDelta: 'desc' }, { draftProjectionScore: 'desc' }],
-      take: 20,
-    }).catch(() => []),
+  /*
+   * 🛑 THERE IS NO COLLEGE TREND LIST, AND `stockTrendDelta` MUST NOT BECOME ONE AGAIN.
+   * This used to order a "trend" list by `DevyPlayer.stockTrendDelta desc` and hand that column
+   * to the Trend tab as `trendValue`, drawn as "+N.N". The column is a LEVEL — its only writer
+   * (`lib/workers/devy-data-worker.ts`) stores `score/100*10 + c2cPoints/10`, non-negative for
+   * every scored prospect — so the tab showed the whole pool rising. No measured college trend
+   * exists (`lib/devy/devyTrend.ts`, which the Devy hub and per-league Devy tab already use), and
+   * the list's fallback ranking (draftProjectionScore) is what Leaders below already shows, so it
+   * is removed rather than relabelled. When a real delta has a writer, add it through
+   * `devyTrendOf`, not by reading this column.
+   */
+  const [availableRows, leaderRows] = await Promise.all([
     prisma.devyPlayer.findMany({
       where: { sport: { in: sports }, graduatedToNFL: false },
       orderBy: [{ devyAdp: 'asc' }, { draftProjectionScore: 'desc' }],
@@ -822,11 +865,6 @@ async function buildCollegePlayersData(
   ])
 
   return {
-    trend: trendRows.map((player) =>
-      toCollegeResolvedPlayer(player, {
-        trendValue: player.stockTrendDelta ?? player.draftProjectionScore ?? null,
-      })
-    ),
     available: availableRows.map((player) => toCollegeResolvedPlayer(player)),
     leaders: leaderRows.map((player) =>
       toCollegeResolvedPlayer(player, {
@@ -1139,7 +1177,7 @@ async function buildRosterCard(context: LeagueContext): Promise<LeagueRosterCard
     ...allPlayers,
     ...reserve,
     ...taxi,
-  ])
+  ], context.league.platform)
 
   const totalAllowed = template
     ? template.slots.reduce(
@@ -1394,7 +1432,7 @@ async function buildActivityItems(context: LeagueContext): Promise<LeagueActivit
       waiverRows.flatMap((row) => [row.addPlayerId, row.dropPlayerId]).filter((value): value is string => Boolean(value))
     )
   )
-  const playerIndex = await resolvePlayerIndex(String(context.league.sport), activityPlayerIds)
+  const playerIndex = await resolvePlayerIndex(String(context.league.sport), activityPlayerIds, context.league.platform)
 
   const waiverItems: LeagueActivityItem[] = waiverRows.map((row) => {
     const roster = rosterById.get(row.rosterId)
@@ -1409,6 +1447,7 @@ async function buildActivityItems(context: LeagueContext): Promise<LeagueActivit
       badge: row.faabSpent != null ? 'WAIVERED' : 'FREE AGENCY',
       badgeTone: row.faabSpent != null ? 'teal' : 'neutral',
       timestamp: formatDateTime(row.processedAt),
+      occurredAt: row.processedAt ? new Date(row.processedAt).toISOString() : null,
       amountLabel: row.faabSpent != null ? `BID $${row.faabSpent}` : null,
       lines: [
         ...(addPlayer
@@ -1442,6 +1481,7 @@ async function buildActivityItems(context: LeagueContext): Promise<LeagueActivit
         badge: 'TRADE',
         badgeTone: 'teal' as const,
         timestamp: formatDateTime(trade.tradeDate ?? history.updatedAt),
+        occurredAt: new Date(trade.tradeDate ?? history.updatedAt).toISOString(),
         summary: `Trade between ${history.sleeperUsername}${trade.partnerName ? ` and ${trade.partnerName}` : ''}`,
         lines: [{
           type: 'note' as const,
@@ -1450,10 +1490,11 @@ async function buildActivityItems(context: LeagueContext): Promise<LeagueActivit
       }))
     )
 
+  // By the ISO time: `timestamp` is a display string with no year, and parsing it back is wrong.
   return [...waiverItems, ...tradeItems]
     .sort((a, b) => {
-      const timeA = new Date(a.timestamp).getTime()
-      const timeB = new Date(b.timestamp).getTime()
+      const timeA = a.occurredAt ? new Date(a.occurredAt).getTime() : 0
+      const timeB = b.occurredAt ? new Date(b.occurredAt).getTime() : 0
       return timeB - timeA
     })
     .slice(0, 12)
@@ -1520,7 +1561,9 @@ async function buildTradesData(context: LeagueContext): Promise<LeagueTradesData
       ...jsonAssetLabels(trade.playersReceived as Prisma.JsonValue),
     ])
   )
-  const mediaIndex = await resolvePlayerIndex(String(context.league.sport), blockPlayerIds)
+  // `currentListings` yields Sleeper ids whatever the league's platform — say so, or a Sleeper NBA
+  // league's ids would be read by the native rule as Rolling Insights numbers.
+  const mediaIndex = await resolvePlayerIndex(String(context.league.sport), blockPlayerIds, 'sleeper')
 
   const tradeBlock: LeagueTradeBlockItem[] = tradeBlockRows.map((row, index) => {
     const player = mediaIndex.get(row.playerId)

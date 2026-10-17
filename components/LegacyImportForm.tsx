@@ -278,7 +278,7 @@ export default function LegacyImportForm({ userId }: { userId: string }) {
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
                   <Label htmlFor="espn-s2">
-                    espn_s2 Cookie <Badge variant="outline" className="ml-1 text-[10px] border-gray-600">Optional</Badge>
+                    espn_s2 Cookie <Badge variant="outline" className="ml-1 text-[11px] border-gray-600">Optional</Badge>
                   </Label>
                   <Input
                     id="espn-s2"
@@ -291,7 +291,7 @@ export default function LegacyImportForm({ userId }: { userId: string }) {
                 </div>
                 <div>
                   <Label htmlFor="swid">
-                    SWID Cookie <Badge variant="outline" className="ml-1 text-[10px] border-gray-600">Optional</Badge>
+                    SWID Cookie <Badge variant="outline" className="ml-1 text-[11px] border-gray-600">Optional</Badge>
                   </Label>
                   <Input
                     id="swid"

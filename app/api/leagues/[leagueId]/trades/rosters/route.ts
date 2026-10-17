@@ -1,3 +1,4 @@
+import { rosterManagerHandles } from '@/lib/trade-screenshot/managerHandles'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -8,26 +9,34 @@ import { listProposablePicks } from '@/lib/league-trade-engine/tradeValidationSe
 import { resolveSleeperRosterPlayers } from '@/lib/player-identity/resolveSleeperRosterPlayers'
 import { resolveProviderRosterPlayers } from '@/lib/player-identity/resolveProviderRosterPlayers'
 import { byeForTeam, resolveTeamByeWeeks } from '@/lib/schedule/teamByeWeeks'
-import { FIRST_ROUND_IN_MARKET_UNITS, pickValueByOverall } from '@/lib/pick-curve'
-import { getPlayerValuesForNamesDbFirst } from '@/lib/fantasycalc-db'
+import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
+import { buildPlayerValuesForNames } from '@/lib/fantasycalc'
+import { marketContextFor } from '@/lib/trade-intel/marketContext'
+import { priceLeagueTradePick } from '@/lib/trade-value-console/leagueTradePricing'
+import { pickPreviewKey, type TradePickPreviewBook } from '@/lib/trade-value-console/pickPreview'
 import { loadLeagueTradeValues } from '@/lib/league-values/leagueTradeValues'
 import { leagueValueForPlayer, valuePositionsAgree } from '@/lib/league-values/playerValueIdentity'
 import { resolvePlayerStock, type StockDirection } from '@/lib/trade-intel/playerStock'
 import { rankTradePartners, type PartnerRanking } from '@/lib/trade-intel/partnerRanking'
+import { gradePartnerSuggestions } from '@/lib/trade-intel/partnerSuggestionGrades'
+import { gradeProposalPackages } from '@/lib/league-trade-engine/proposalPackageGrades'
+import { createLeagueTradeGrader, gradeDeal } from '@/lib/decision-os/trade/leagueTradeGrader'
 import { loadLeagueTradeHistory } from '@/lib/trade-intel/partnerHistory'
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { resolveCoreDepth } from '@/lib/core-app/corePaywall'
 import {
+  noSportPickMarketUnpricedReason,
   pickUnpricedReason,
   playerUnpricedReason,
+  sportHasPickMarket,
   type UnpricedReason,
 } from '@/lib/trade-value/unpricedReason'
 import { loadImportedFuturePicks, type RosterFuturePick } from '@/lib/league-trade-engine/importedFuturePicks'
 import { inventoryPickId, roundOrdinal, type InventoryPick } from '@/lib/league-trade-engine/futurePickInventory'
 import { isNativeFuturePickLeague, loadNativeFuturePicks } from '@/lib/league-trade-engine/nativeFuturePicks'
 import { isDraftPickTradingAllowed } from '@/lib/league-trade-engine/tradeSettingsResolver'
-import { valueBookFor, describeValueBook } from '@/lib/core-app/valueBook'
-import { latestProjectionWeek, lookupProjections } from '@/lib/core-app/playerProjections'
+import { valueBookFor, describeValueBook, pricesOnDynastyChart } from '@/lib/core-app/valueBook'
+import { afEngineForLeague, latestProjectionWeek, lookupAfEngineProjections, lookupProjections } from '@/lib/core-app/playerProjections'
 import { computeLeagueProjectedPoints } from '@/lib/projections/leagueScoring'
 import {
   generateMultiTeamTradeSuggestions,
@@ -43,6 +52,11 @@ import type { TradeAssetInput } from '@/lib/league-trade-engine/types'
 import type { SuggestedTradeAsset } from '@/lib/league-trade-engine/proposalSuggestions'
 
 export const dynamic = 'force-dynamic'
+
+/** How many ranked partners' suggested deals are graded — the cards the Trade Center shows, plus headroom. */
+const GRADED_PARTNER_SUGGESTIONS = 5
+/** The composer shows 3 partner cards plus the chosen partner's packages; this covers both. */
+const GRADED_COMPOSER_PACKAGES = 8
 
 /**
  * A player the picker can offer.
@@ -96,6 +110,13 @@ export type TradeableRosterPlayer = {
   value: number | null
   /** Current provider weekly projection used only for before/after simulation. */
   weeklyProjection: number | null
+  /**
+   * AllFantasy's own engine for the same week, carried into this league's scoring by the player's
+   * provider line (`afEngineForLeague`). DISPLAY ONLY: nothing in the simulation, the proposal
+   * evidence or the grade reads it — those stay on `weeklyProjection`. Optional for the same rollout
+   * reason as `stock`; absent or null when the engine has no row for him.
+   */
+  afProjection?: number | null
   /**
    * Why `value` is null, in words the builder prints beside "Unpriced"; null when priced.
    *
@@ -159,6 +180,8 @@ export type TradeableRoster = {
   teamExternalId: string | null
   /** Team name where the league has one, else the AllFantasy account's name. */
   ownerName: string | null
+  /** Other names this manager goes by (the manager's own name beside the team name), for matching a screenshot's label. */
+  ownerHandles: string[]
   /** Manager avatar from `LeagueTeam`, so the picker can show whose roster it is. */
   avatarUrl: string | null
   /**
@@ -315,6 +338,8 @@ export async function GET(
           where: { leagueId },
           select: {
             platformUserId: true, teamName: true, externalId: true,
+            // The manager's own Sleeper name; the chips show the TEAM name. A DM screenshot uses this one.
+            ownerName: true,
             // Already one query; these ride along rather than costing another.
             avatarUrl: true, wins: true, losses: true, ties: true,
             // The roster↔team join the imported pick inventory needs.
@@ -392,8 +417,14 @@ export async function GET(
   const scoring = settingsBag.scoring_settings && typeof settingsBag.scoring_settings === 'object'
     ? settingsBag.scoring_settings as Record<string, unknown>
     : {}
-  const rawPpr = Number(scoring.rec ?? nestedSettings.rec ?? 1)
-  const ppr: 0 | 0.5 | 1 = rawPpr >= 0.75 ? 1 : rawPpr >= 0.25 ? 0.5 : 0
+  const chartTeams = Number(league?.leagueSize) || 12
+  const marketContext = marketContextFor(league?.settings, league?.leagueType ?? null, chartTeams)
+  const chartSettings = {
+    isDynasty: pricesOnDynastyChart(marketContext.variant),
+    numQbs: (marketContext.variant.superflex ? 2 : 1) as 1 | 2,
+    numTeams: chartTeams,
+    ppr: (marketContext.scoring.format === 'ppr' ? 1 : marketContext.scoring.format === 'half_ppr' ? 0.5 : 0) as 0 | 0.5 | 1,
+  }
 
   /*
    * Who among these rosters is an actual AllFantasy account, and what to call
@@ -486,6 +517,9 @@ export async function GET(
   const teamNameByPlatformId = new Map(
     namedTeams.map((t) => [String(t.platformUserId), t.teamName]),
   )
+  const managerNameByPlatformId = new Map(
+    namedTeams.map((t) => [String(t.platformUserId), t.ownerName ?? null]),
+  )
   const externalIdByPlatformId = new Map(
     namedTeams.map((t) => [String(t.platformUserId), String(t.externalId)]),
   )
@@ -507,22 +541,7 @@ export async function GET(
     rosters.map((r) => [r.id, teamNameByPlatformId.get(String(r.platformUserId)) ?? null]),
   )
 
-  /*
-   * ⚠ THE UNITS MATCH THE PLAYERS BESIDE IT, WHICH IS THE ONLY REASON THE TOTAL MEANS ANYTHING.
-   * Player values on this route come from `getPlayerValuesForNamesDbFirst`, i.e. FantasyCalc
-   * dynasty units, and `FIRST_ROUND_IN_MARKET_UNITS` is the first-round anchor SOLVED in those same
-   * units across 771 real trades. Anchoring to any other number would put picks and players on two
-   * scales inside one sum.
-   *
-   * ⚠ AND THE SLOT IS DELIBERATELY OMITTED. A future pick has no draft position yet, so
-   * `pickValueByOverall` defaults it to the middle of the round rather than assuming a favourable
-   * one. A 2027 1st prices as a MID first, not an early one — the honest read when the order is
-   * unknown.
-   */
-  const pickValue = (round: number | null): number | null =>
-    round != null && Number.isFinite(round)
-      ? pickValueByOverall({ round, teams: rosters.length || null, firstRoundValue: FIRST_ROUND_IN_MARKET_UNITS })
-      : null
+  // Picks are priced below, from the same chart read that supplies the players.
   const itemTypeFor = (season: number | null) =>
     currentSeason != null && season != null && season > currentSeason
       ? ('future_pick' as const)
@@ -588,15 +607,8 @@ export async function GET(
           ...listProposablePicks(r.playerData).map((p): TradeableRosterPick => ({
             ...p,
             itemType: itemTypeFor(p.season),
-            // The one way a pick goes unpriced here; see `pickValue` above.
             unpricedReason: p.round != null && Number.isFinite(p.round) ? null : pickUnpricedReason(),
-            /*
-             * 🛑 A PICK USED TO CARRY NO VALUE AT ALL, so the builder showed an em dash and reported
-             * "1 unpriced" on a side whose total then understated it by a first-round pick. The
-             * curve to price it has existed in `lib/pick-curve.ts` the whole time — it was simply
-             * never called from here.
-             */
-            value: pickValue(p.round),
+            value: null,
           })),
           ...(importedPicks.picksByRosterId.get(r.id) ?? []).map(
             (p: RosterFuturePick): TradeableRosterPick => ({
@@ -605,7 +617,7 @@ export async function GET(
               round: p.round,
               label: `${p.season} ${roundOrdinal(p.round)}${p.fromTeamName ? ` (${p.fromTeamName})` : ''}`,
               itemType: itemTypeFor(p.season),
-              value: pickValue(p.round),
+              value: null,
               unpricedReason: null,
               proposable: false,
               fromTeam: p.fromTeamName,
@@ -620,7 +632,7 @@ export async function GET(
               round: p.round,
               label: `${p.season} ${roundOrdinal(p.round)}${fromTeam ? ` (${fromTeam})` : ''}`,
               itemType: itemTypeFor(p.season),
-              value: pickValue(p.round),
+              value: null,
               unpricedReason: null,
               proposable: true,
               fromTeam,
@@ -633,6 +645,7 @@ export async function GET(
           account?.displayName ||
           account?.username ||
           null,
+        ownerHandles: rosterManagerHandles(r.playerData, [managerNameByPlatformId.get(String(r.platformUserId)), account?.username]),
         canReceiveProposal: Boolean(account),
       }
     }),
@@ -695,12 +708,11 @@ export async function GET(
    * ⚠ THE SETTINGS MATCH `/api/trade-value/player-search` EXACTLY, and that is not incidental. The
    * picker shows search results beside roster rows; if the two resolved value under different
    * settings the SAME player would carry two different numbers on one screen, and a manager would
-   * have no way to tell which the engine used. `getPlayerValuesForNamesDbFirst` defaults to
+   * have no way to tell which the engine used. `getFantasyCalcValuesDbFirst` defaults to
    * `numQbs: 2`, so the settings are passed explicitly rather than defaulted.
    *
    * DB-first by construction — this is a request path, and `getFantasyCalcValuesDbFirst` reads
-   * `sportsDataCache` rather than the vendor. It returns an empty map on failure, so an outage
-   * costs values and nothing else.
+   * `sportsDataCache` rather than the vendor. A failed chart read withholds prices while preserving the roster list.
    */
   /*
    * ── THIRTY-DAY STOCK, ONE QUERY FOR THE WHOLE LEAGUE ───────────────────────────────────────
@@ -719,7 +731,7 @@ export async function GET(
    * what keeps a missing snapshot table from costing the rosters.
    */
   const positionBySleeperId = new Map(result.flatMap((roster) => roster.players.map((player) => [player.id, player.position] as const)))
-  const [stock, projections, values, leagueValues] = await Promise.all([
+  const [stock, projections, loadedMarketRows, leagueValues, afEngine] = await Promise.all([
     stockIds.length > 0
       ? resolvePlayerStock(stockIds, { format: valueBook.format, qbFormat: valueBook.qbFormat }).catch(
           () => new Map(),
@@ -728,14 +740,9 @@ export async function GET(
     stockIds.length > 0
       ? lookupProjections(stockIds, projectionWeek, { scoringSettings: scoring, positionBySleeperId }, String(league?.sport ?? 'NFL')).catch(() => new Map())
       : Promise.resolve(new Map()),
-    allNames.length > 0
-      ? getPlayerValuesForNamesDbFirst(allNames, {
-          isDynasty: valueBook.format === 'DYNASTY',
-          numQbs: valueBook.qbFormat === 'SUPERFLEX' ? 2 : 1,
-          numTeams: Number(league?.leagueSize) || rosters.length || 12,
-          ppr,
-        }).catch(() => new Map())
-      : Promise.resolve(new Map()),
+    // One chart read supplies both players and picks, using the evaluator's profile and freshness.
+    league ? getFantasyCalcValuesDbFirst(chartSettings, { maxStaleMs: 1000 * 60 * 60 * 2 }).catch(() => null)
+      : Promise.resolve(null),
     loadLeagueTradeValues({
       prisma,
       platformLeagueId: league?.platform === 'sleeper' ? league.platformLeagueId : null,
@@ -745,7 +752,68 @@ export async function GET(
         numTeams: Number(league?.leagueSize) || rosters.length || null,
       },
     }).catch(() => null),
+    /* AllFantasy's own engine, same ids and week as the provider read above. Display only; a failed
+       read costs the AF figures and nothing else. */
+    stockIds.length > 0
+      ? lookupAfEngineProjections(stockIds, projectionWeek).catch(
+          (): Awaited<ReturnType<typeof lookupAfEngineProjections>> => new Map(),
+        )
+      : Promise.resolve(new Map() as Awaited<ReturnType<typeof lookupAfEngineProjections>>),
   ])
+
+  const marketRows = loadedMarketRows ?? []
+  const values = buildPlayerValuesForNames(marketRows, allNames)
+  const pickPreviewBook: TradePickPreviewBook = { leagueId, values: {} }
+  const requestedPicks = new Map<string, { year: number; round: number }>()
+  const rememberPick = (year: number, round: number) => {
+    if (Number.isInteger(year) && Number.isInteger(round) && round > 0) {
+      requestedPicks.set(pickPreviewKey(year, round), { year, round })
+    }
+  }
+  const calendarYear = new Date().getFullYear()
+  // Cover the manual pick fields as well as the league's owned pick inventory.
+  for (let year = calendarYear; year <= calendarYear + 5; year++) {
+    for (let round = 1; round <= 10; round++) rememberPick(year, round)
+  }
+  for (const roster of result) {
+    for (const pick of roster.picks) {
+      if (pick.round != null) rememberPick(pick.season ?? calendarYear, pick.round)
+    }
+  }
+  const pickPricing = {
+    fcPlayers: marketRows,
+    nflCtx: { asOfDate: new Date().toISOString().slice(0, 10),
+      isSuperFlex: chartSettings.numQbs === 2, numTeams: chartTeams, fantasyCalcPlayers: marketRows },
+  }
+  // The pricer's own reason for a pick it refuses (no market in this format), so the preview does not
+  // call a pick with no market "could not be loaded".
+  const pickRefusals = new Map<string, UnpricedReason>()
+  // Outside the NFL nothing prices a pick — the chart is the NFL's — so the preview refuses it with the
+  // sport's reason, as the analysis does (`resolveAssets`), rather than quoting a football price.
+  const leagueSportForPicks = String(league?.sport ?? 'NFL')
+  const pickSportRefusal = sportHasPickMarket(leagueSportForPicks) ? null : noSportPickMarketUnpricedReason(leagueSportForPicks)
+  await Promise.all([...requestedPicks].map(async ([key, pick]) => {
+    if (pickSportRefusal) {
+      pickPreviewBook.values[key] = null
+      pickRefusals.set(key, pickSportRefusal)
+      return
+    }
+    const resolved = loadedMarketRows == null ? null
+      : await priceLeagueTradePick(pick, pickPricing).catch(() => null)
+    pickPreviewBook.values[key] = resolved && !resolved.priced.unpriced
+      ? resolved.priced.assetValue.marketValue : null
+    if (resolved?.priced.unpriced && resolved.priced.unpricedReason) pickRefusals.set(key, resolved.priced.unpricedReason)
+  }))
+  for (const roster of result) {
+    for (const pick of roster.picks) {
+      const key = pickPreviewKey(pick.season ?? calendarYear, pick.round ?? 0)
+      pick.value = pick.round != null ? pickPreviewBook.values[key] ?? null : null
+      if (pick.value == null && !pick.unpricedReason) {
+        pick.unpricedReason = (pick.round != null ? pickRefusals.get(key) : undefined)
+          ?? { code: 'priced_on_analysis', label: 'Pick values could not be loaded. Analyze to retry.' }
+      }
+    }
+  }
 
   /*
    * ⚠ WHETHER THE FEED LOADED IS INFERRED, BECAUSE THE LOOKUP HIDES IT. Both of its failure paths
@@ -780,6 +848,14 @@ export async function GET(
         ? computeLeagueProjectedPoints(projection.componentStats, scoring)?.points ?? null
         : null
       p.weeklyProjection = leagueProjection ?? projection?.projectedPoints ?? null
+      // Set only when the engine priced him, so every other player's shape is exactly as before.
+      const afProjection = afEngineForLeague(
+        afEngine.get(p.id),
+        projection?.projectedPoints ?? null,
+        leagueProjection,
+        scoring,
+      )
+      if (afProjection != null) p.afProjection = afProjection
       p.unpricedReason =
         p.value == null
           ? (resolvedForLeague.has(p.id)
@@ -836,6 +912,36 @@ export async function GET(
       })
     } catch {
       partnerRanking = null
+    }
+  }
+
+  /*
+   * 🛑 THE GRADE ON A SUGGESTED DEAL (2026-09-27). The finder called a package "fair" on its own
+   * roster-value gap (`percentApart`) — and the same deal, loaded into the builder, could grade
+   * "Major overpay" (2026-09-25 field test: picks 515 vs 4,818). Each shown suggestion is now graded
+   * HERE by the one grader, with exactly the inputs the builder sends for it (`toInput` in
+   * TradeCenter.tsx: `{ playerId, name }`, `{ year, round, label }`), on the viewer's side — so the
+   * card and the builder read one letter.
+   *
+   * ⚠ BOUNDED to the cards the screen shows, and FAILURE-CONTAINED like the ranking: a grader that
+   * cannot load costs the letter, never the rosters.
+   */
+  /* One league grader per request, shared by the partner ranking and the composer's packages. */
+  let graderPromise: ReturnType<typeof createLeagueTradeGrader> | null = null
+  const leagueGrader = () => (graderPromise ??= createLeagueTradeGrader({ leagueId, userId }).catch(() => null))
+
+  if (partnerRanking) {
+    try {
+      const grader = await leagueGrader()
+      await gradePartnerSuggestions({
+        ranking: partnerRanking,
+        picks: new Map(result.flatMap((r) => r.picks.map((p) => [p.pickId, p] as const))),
+        // The viewer's side, roster need included — the same call the builder's verdict makes.
+        grade: (give, get) => gradeDeal(grader, { give, get, viewerSide: true }),
+        limit: GRADED_PARTNER_SUGGESTIONS,
+      })
+    } catch {
+      /* The ranking stands without letters. */
     }
   }
 
@@ -964,6 +1070,27 @@ export async function GET(
    */
   const depthOpen = tradeDepth.unlocked
 
+  /*
+   * 🛑 THE GRADE ON THE COMPOSER'S PACKAGES (2026-09-28, lib/league-trade-engine/proposalPackageGrades.ts).
+   * The "Propose a Trade" composer showed each package as "N% value match" — `fairness`, this route's
+   * own value gap. The packages it can show are now graded by the one grader, on the viewer's side,
+   * with the inputs the builder would send. Only when the suggestions are actually sent (`depthOpen`),
+   * bounded to GRADED_COMPOSER_PACKAGES, and failure-contained: no grader, no letters, same response.
+   */
+  if (depthOpen && suggestions.length > 0) {
+    try {
+      const grader = await leagueGrader()
+      await gradeProposalPackages({
+        suggestions,
+        picks: new Map(result.flatMap((r) => r.picks.map((p) => [p.pickId, p] as const))),
+        grade: (give, get) => gradeDeal(grader, { give, get, viewerSide: true }),
+        limit: GRADED_COMPOSER_PACKAGES,
+      })
+    } catch {
+      /* The packages stand without letters. */
+    }
+  }
+
   return NextResponse.json({
     rosters: result,
     viewerRosterId: viewerRosterId?.id ?? null,
@@ -994,5 +1121,6 @@ export async function GET(
      * rather than letting a short list read as a team with no picks.
      */
     pickCoverage: nativePicks ? 'complete' : importedPicks.coverage,
-  })
+    pickPreviewBook,
+  });
 }

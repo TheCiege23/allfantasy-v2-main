@@ -14,6 +14,12 @@ import type { PlatformChatMessage } from '@/types/platform-shared'
 
 afterEach(cleanup)
 
+// The Matchup week banner's refresh control calls useRouter, which needs an app router outside one.
+vi.mock('next/navigation', async (orig) => ({
+  ...(await orig<typeof import('next/navigation')>()),
+  useRouter: () => ({ refresh() {}, push() {}, replace() {}, prefetch() {}, back() {}, forward() {} }),
+}))
+
 function captureComms() {
   const seen: unknown[] = []
   const on = (e: Event) => seen.push((e as CustomEvent).detail)

@@ -105,7 +105,7 @@ export default function LeagueFeed({
         </div>
         <button
           type="button"
-          className="shrink-0 rounded-lg border border-white/10 px-2 py-1 text-[10px] text-white/70 hover:bg-white/5"
+          className="shrink-0 rounded-lg border border-white/10 px-2 py-1 text-[11px] text-white/70 hover:bg-white/5"
           onClick={() => void load()}
         >
           Refresh

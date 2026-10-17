@@ -4,11 +4,12 @@ import WorldCupJoinInvite from "@/components/brackets/world-cup/WorldCupJoinInvi
 
 export const dynamic = "force-dynamic"
 
-export default async function JoinWorldCupBracketPage({
-  params,
-}: {
-  params: { inviteCode: string }
-}) {
+export default async function JoinWorldCupBracketPage(
+  props: {
+    params: Promise<{ inviteCode: string }>
+  }
+) {
+  const params = await props.params
   const invite = await getWorldCupChallengeByInvite(params.inviteCode)
   if (!invite) notFound()
 

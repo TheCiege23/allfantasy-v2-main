@@ -558,6 +558,46 @@ export class TokenSpendService {
     })
   }
 
+  /** Reconcile an Apple refund once, without removing tokens already spent. */
+  async reverseApplePackagePurchase(transactionId: string): Promise<void> {
+    const purchaseKey = `apple_iap:${transactionId}`
+    const reversalKey = `apple_iap_refund:${transactionId}`
+    await (prisma as any).$transaction(async (tx: any) => {
+      const existing = await tx.tokenLedger.findUnique({ where: { idempotencyKey: reversalKey } })
+      if (existing) return
+      const purchase = await tx.tokenLedger.findUnique({ where: { idempotencyKey: purchaseKey } })
+      if (!purchase || purchase.sourceType !== "apple_iap" || purchase.entryType !== TOKEN_ENTRY_TYPES.PURCHASE) {
+        return
+      }
+      const rows = await tx.$queryRaw(Prisma.sql`
+        SELECT "balance" FROM "user_token_balances"
+        WHERE "id" = ${purchase.userTokenBalanceId} FOR UPDATE`)
+      const balanceBefore = Number(rows?.[0]?.balance ?? 0)
+      const reversed = Math.min(Math.max(0, balanceBefore), Number(purchase.tokenDelta))
+      const balanceAfter = balanceBefore - reversed
+      await tx.userTokenBalance.update({
+        where: { id: purchase.userTokenBalanceId },
+        data: { balance: { decrement: reversed } },
+      })
+      await tx.tokenLedger.create({
+        data: {
+          userId: purchase.userId,
+          userTokenBalanceId: purchase.userTokenBalanceId,
+          entryType: TOKEN_ENTRY_TYPES.ADJUSTMENT,
+          tokenDelta: -reversed,
+          balanceBefore,
+          balanceAfter,
+          tokenPackageSku: purchase.tokenPackageSku,
+          sourceType: "apple_iap_refund",
+          sourceId: transactionId,
+          idempotencyKey: reversalKey,
+          description: "App Store token pack refund",
+          metadata: { originalTokenAmount: purchase.tokenDelta, alreadySpent: purchase.tokenDelta - reversed },
+        },
+      })
+    })
+  }
+
   /**
    * Grant monthly subscription credits for a billing cycle.
    *
@@ -652,6 +692,7 @@ export class TokenSpendService {
     idempotencyKey?: string | null
     /** Session email — enables ADMIN_EMAILS platform-admin bypass for token charges. */
     userEmail?: string | null
+    assertWithinTransaction?: (tx: Prisma.TransactionClient) => Promise<void>
   }): Promise<TokenLedgerEntryView> {
     if (isSubscriptionEntitlementBypassUserId(input.userId, input.userEmail)) {
       return buildDevAdminSpendLedgerEntry({
@@ -667,6 +708,7 @@ export class TokenSpendService {
     const idempotencyKey = input.idempotencyKey?.trim() || null
 
     return (prisma as any).$transaction(async (tx: any) => {
+      await input.assertWithinTransaction?.(tx)
       if (idempotencyKey) {
         const existing = await tx.tokenLedger.findUnique({
           where: { idempotencyKey },
@@ -785,6 +827,8 @@ export class TokenSpendService {
     metadata?: Record<string, unknown> | null
     idempotencyKey?: string | null
     userEmail?: string | null
+    /** Server-only proof for crash recovery after the ordinary refund window. */
+    recoveryReceiptId?: string
   }): Promise<TokenLedgerEntryView> {
     if (isSubscriptionEntitlementBypassUserId(input.userId, input.userEmail)) {
       return buildDevAdminRefundLedgerEntry({
@@ -827,6 +871,7 @@ export class TokenSpendService {
           userTokenBalanceId: true,
           tokenDelta: true,
           createdAt: true,
+          idempotencyKey: true,
         },
       })
       if (!originalSpend) {
@@ -853,7 +898,13 @@ export class TokenSpendService {
       if (refundRule.maxAgeMinutes && Number(refundRule.maxAgeMinutes) > 0) {
         const maxAgeMs = Number(refundRule.maxAgeMinutes) * 60_000
         if (Date.now() - new Date(originalSpend.createdAt).getTime() > maxAgeMs) {
-          throw new TokenRefundNotAllowedError("Refund window has expired for this spend entry")
+          const recovery = input.recoveryReceiptId && input.refundRuleCode === 'feature_execution_failed'
+            && originalSpend.idempotencyKey === `chimmy_request:${input.recoveryReceiptId}`
+            ? await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "chimmy_request_receipts"
+                WHERE "id"=${input.recoveryReceiptId} AND "user_id"=${input.userId}
+                  AND "status"='recovering' AND "bill_kind"='token' AND "bill_state"='reserved' FOR UPDATE`)
+            : []
+          if (!recovery.length) throw new TokenRefundNotAllowedError("Refund window has expired for this spend entry")
         }
       }
 

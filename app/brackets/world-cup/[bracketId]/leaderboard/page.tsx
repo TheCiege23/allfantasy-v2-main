@@ -9,16 +9,17 @@ export const dynamic = "force-dynamic"
 
 type SessionUser = { id?: string | null; email?: string | null; name?: string | null }
 
-export default async function WorldCupBracketLeaderboardPage({
-  params,
-}: {
-  params: { bracketId: string }
-}) {
+export default async function WorldCupBracketLeaderboardPage(
+  props: {
+    params: Promise<{ bracketId: string }>
+  }
+) {
+  const params = await props.params
   const session = (await getServerSession(authOptions as any)) as { user?: SessionUser } | null
   const view = await getWorldCupChallengeView({
     challengeId: params.bracketId,
     user: session?.user ?? null,
-    isAdmin: hasWorldCupAdminPageSession(),
+    isAdmin: await hasWorldCupAdminPageSession(),
   })
 
   if (!view) notFound()

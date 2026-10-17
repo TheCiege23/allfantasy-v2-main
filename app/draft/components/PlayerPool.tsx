@@ -149,7 +149,7 @@ export function PlayerPool({ sport, draftedIds, onDraft, onQueue, canDraft, onPl
               data-testid={`legacy-draft-pool-position-filter-${p.toLowerCase()}`}
               onClick={() => setPos(p)}
               className={cn(
-                'shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40',
+                'shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40',
                 pos === p
                   ? 'bg-cyan-500/25 text-cyan-100 ring-1 ring-cyan-400/40 shadow-[0_0_10px_rgba(34,211,238,0.18)]'
                   : 'bg-white/[0.04] text-white/55 hover:bg-white/10 hover:text-white/80',
@@ -166,7 +166,7 @@ export function PlayerPool({ sport, draftedIds, onDraft, onQueue, canDraft, onPl
           className="mt-2 w-full rounded border border-white/[0.08] bg-black/30 px-2 py-1 text-[11px] text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/35"
           data-testid="legacy-draft-pool-search"
         />
-        <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-white/50">
+        <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-white/50">
           <label className="flex items-center gap-1">
             <input type="checkbox" checked={hideDrafted} onChange={(e) => setHideDrafted(e.target.checked)} />
             {t('draftRoom.playerPool.hideDrafted')}
@@ -213,7 +213,7 @@ export function PlayerPool({ sport, draftedIds, onDraft, onQueue, canDraft, onPl
             ) : null}
           </div>
         ) : (
-        <table className="w-full text-left text-[10px]">
+        <table className="w-full text-left text-[11px]">
           <thead className="sticky top-0 bg-[#0d1117] text-white/40">
             <tr>
               <th className="px-2 py-1">#</th>
@@ -254,7 +254,7 @@ export function PlayerPool({ sport, draftedIds, onDraft, onQueue, canDraft, onPl
                               : 'bg-white/[0.06] text-white/55 ring-1 ring-white/15'
                       return (
                         <span
-                          className={`shrink-0 rounded-full px-1.5 py-0 text-[8px] font-bold uppercase tracking-wide ${toneClass}`}
+                          className={`shrink-0 rounded-full px-1.5 py-0 text-[11px] font-bold uppercase tracking-wide ${toneClass}`}
                           title={p.status ?? ''}
                           data-testid={`draft-player-injury-${p.id}`}
                         >

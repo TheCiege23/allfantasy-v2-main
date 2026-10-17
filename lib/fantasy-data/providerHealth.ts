@@ -357,7 +357,7 @@ const DOMAIN_DEFINITIONS: DomainDefinition[] = [
     models: ["WeatherCache", "GameSchedule"],
     evidenceReturnedToAI: true,
     uiConsumer: ["ScoresTab", "start/sit", "AI league chat", "projection adjustments"],
-    cronAdminRoute: ["/api/sports/weather", "/api/start-sit/weather"],
+    cronAdminRoute: ["/api/sports/weather"],
     fixNeededWhenMissing: "Weather is attached opportunistically to games; add cron coverage if stale during season.",
   },
   {

@@ -1,4 +1,6 @@
+import { getSurvivorDefaultContract, buildSurvivorSettingsSnapshot } from '@/lib/league-concepts/survivorDefaults'
 import type { LeagueSport } from '@prisma/client'
+import { buildScoringFromPresetId, isScoringPresetValidForContext } from '@/lib/league-creation-preset/scoring-presets'
 import { mapCanonicalDraftTypeToEngineCore } from '@/lib/draft-types/draftTypeRegistry'
 import { CONCEPT_PRESET_CATALOG } from '@/lib/league-concepts/conceptPresetCatalog'
 import type { ConceptPresetSeed } from '@/lib/league-concepts/conceptPresetCatalog'
@@ -10,6 +12,7 @@ import {
   getRedraftDefaultContract,
   type RedraftDefaultContract,
 } from '@/lib/league-concepts/redraftDefaults'
+import { getBestBallDefaultContract } from '@/lib/league-concepts/bestBallDefaults'
 import {
   buildKeeperSettingsSnapshot,
   getKeeperDefaultContract,
@@ -246,6 +249,12 @@ export function getLeagueDefaults(input: LeagueFoundationDefaultsInput): LeagueF
   const format = normalizeFormat(input.format)
   const engineDraftType = mapCanonicalDraftTypeToEngineCore(input.draftType)
   const scoringPreset = String(input.scoringPreset ?? '').trim()
+  const nbaCategory = sport === 'NBA' && ['nba_8cat', 'nba_9cat'].includes(scoringPreset)
+  const categoryContext = { sport, leagueType: format, idpSelected: false }
+  if (nbaCategory && !isScoringPresetValidForContext(scoringPreset, categoryContext)) throw new Error('NBA category scoring requires redraft, dynasty or keeper.')
+  const categorySettings = nbaCategory ? buildScoringFromPresetId(scoringPreset, categoryContext).scoringSettings : {}
+  const survivorContract = format === 'survivor' ? getSurvivorDefaultContract({ sport, draftType: input.draftType, scoringPresetId: scoringPreset || null, teamCount: input.managerCount }) : null
+  const survivorSnapshot = survivorContract ? buildSurvivorSettingsSnapshot({ sport, draftType: input.draftType, scoringPresetId: survivorContract.scoring_preset_id, teamCount: input.managerCount }) : null
   const redraftContract =
     format === 'redraft'
       ? getRedraftDefaultContract({
@@ -316,13 +325,23 @@ export function getLeagueDefaults(input: LeagueFoundationDefaultsInput): LeagueF
   })
   const managerCount = numericOr(
     input.managerCount,
-    devyContract?.teams ?? keeperContract?.teams ?? redraftContract?.teams ?? preset?.defaultTeamCount ?? resolution.leagueDefaults.default_team_count ?? 12,
+    survivorContract?.teams ?? devyContract?.teams ?? keeperContract?.teams ?? redraftContract?.teams ?? preset?.defaultTeamCount ?? resolution.leagueDefaults.default_team_count ?? 12,
   )
-  const canonicalSnapshot = redraftSnapshot ?? keeperSnapshot ?? devySnapshot ?? null
+  const canonicalSnapshot = survivorSnapshot ?? redraftSnapshot ?? keeperSnapshot ?? devySnapshot ?? null
   const canonicalDraftSettings = (canonicalSnapshot?.draftSettings as Record<string, unknown> | undefined) ?? null
   const canonicalWaiverSettings = (canonicalSnapshot?.waiverSettings as Record<string, unknown> | undefined) ?? null
   const canonicalPlayoffSettings = (canonicalSnapshot?.playoffSettings as Record<string, unknown> | undefined) ?? null
-  const rounds = numericOr(canonicalDraftSettings?.rounds ?? resolution.draftDefaults.rounds_default, engineDraftType === 'auction' ? 15 : 15)
+  /*
+   * Best ball drafts its whole roster — every drafted player is a lineup candidate and there is no
+   * bench (bestBallDefaults), so the draft length IS the contract's roster size. Without this it fell
+   * to the sport's generic registry default: NCAAF drafted 14 rounds into a 16-player best ball roster,
+   * NFL 12 into 18.
+   */
+  const bestBallRounds =
+    format === 'best_ball'
+      ? getBestBallDefaultContract({ sport, draftType: input.draftType, scoringPresetId: scoringPreset || null, teamCount: input.managerCount })?.rounds ?? null
+      : null
+  const rounds = numericOr(canonicalDraftSettings?.rounds ?? bestBallRounds ?? resolution.draftDefaults.rounds_default, engineDraftType === 'auction' ? 15 : 15)
   const timerSeconds = numericOr(canonicalDraftSettings?.timerSeconds ?? resolution.draftDefaults.timer_seconds_default, 90)
   const playoff = resolution.playoffDefaults as unknown as Record<string, unknown>
   const scoring = resolution.scoring as unknown as Record<string, unknown>
@@ -331,7 +350,7 @@ export function getLeagueDefaults(input: LeagueFoundationDefaultsInput): LeagueF
   const scheduleDefaults = resolution.scheduleDefaults as unknown as Record<string, unknown>
   const canonicalRosterSettings = (canonicalSnapshot?.rosterSettings as Record<string, unknown> | undefined) ?? {}
   /** Guillotine crowns the last team standing rather than running a bracket. */
-  const playoffOverrides = format === 'guillotine' ? { playoffTeams: 1, playoffStartWeek: null } : null
+  const playoffOverrides = format === 'survivor' ? { playoffTeams: 0, playoffStartWeek: null } : format === 'guillotine' ? { playoffTeams: 1, playoffStartWeek: null } : null
   const playoffWeekBounds = derivePlayoffWeekBounds({
     startWeek: firstPresent(
       playoffOverrides?.playoffStartWeek,
@@ -358,6 +377,7 @@ export function getLeagueDefaults(input: LeagueFoundationDefaultsInput): LeagueF
     rosterSettings: {
       ...roster,
       ...canonicalRosterSettings,
+      ...(survivorContract ? { starter_slots: survivorContract.rosterTemplate.starterSlots } : {}),
       rosterSlots: resolvedRosterSlots,
       benchSlots: resolvedBenchSlots,
       irSlots: resolvedIrSlots,
@@ -390,6 +410,7 @@ export function getLeagueDefaults(input: LeagueFoundationDefaultsInput): LeagueF
       preset: scoringPreset || preset?.scoringPreset || scoring.scoringTemplateId,
       scoringTemplateId: scoringPreset || preset?.scoringPreset || scoring.scoringTemplateId,
       scoringMode: scoring.scoringMode ?? 'points',
+      ...categorySettings,
       rules: {
         ...(scoring.rules && typeof scoring.rules === 'object' ? scoring.rules : {}),
         ...(preset?.idpRules ? { idp: preset.idpRules } : {}),

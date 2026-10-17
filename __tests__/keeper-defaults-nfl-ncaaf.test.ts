@@ -93,8 +93,9 @@ describe('NFL/NCAAF keeper creation defaults', () => {
       TE: 1,
       FLEX: 1,
       K: 1,
-      DEF: 1,
     })
+    // No team-defense starter: none exists to draft, and an unfilled slot fails lineup validation.
+    expect(contract?.rosterTemplate.starterSlots).not.toHaveProperty('DEF')
     expect(contract?.rosterTemplate.starterSlots).not.toHaveProperty('SUPERFLEX')
     expect(contract?.rosterTemplate.benchSlots).toBe(8)
     expect(contract?.rosterTemplate.irSlots).toBe(2)
@@ -231,7 +232,7 @@ describe('NFL/NCAAF keeper creation defaults', () => {
     expect(defaults.engineDraftType).toBe('snake')
     expect(defaults.draftSettings).toMatchObject({
       requestedDraftType: 'mock_draft',
-      rounds: 17,
+      rounds: 16,
       timerSeconds: 90,
       queueSizeLimit: 70,
       mockDraftEnabled: true,
@@ -363,7 +364,7 @@ describe('NFL/NCAAF keeper creation defaults', () => {
     expect(config).toMatchObject({
       sport: 'NCAAF',
       draft_type: 'snake',
-      rounds: 17,
+      rounds: 16,
       timer_seconds: 90,
       queue_size_limit: 70,
       autopick_behavior: 'queue-first',

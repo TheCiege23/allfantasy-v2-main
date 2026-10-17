@@ -6,6 +6,8 @@ import type { FantasyCalcPlayer, FantasyCalcSettings } from '@/lib/fantasycalc'
 import { safeDisplayName } from '@/lib/chat-notifications/displayName'
 import { postChimmyMoment, type PostChimmyMomentResult } from '@/lib/league-chat/chimmyMoments'
 import { buildChimmyTradeTake, type TradeTakeAsset, type TradeTakeSide } from '@/lib/league-chat/chimmyTradeTake'
+import { nativeTradeCardGrade } from '@/lib/league-chat/tradeCardGrade'
+import { cardValues, gradedTradeTakeText, type TradeCardGrade } from '@/lib/league-chat/tradeCardGradeView'
 
 /**
  * Trades, as Chimmy moments: the card for a trade that just happened, with Chimmy's take on who won it
@@ -116,9 +118,16 @@ export type ChimmyTradeCard = {
   /** Assets with no player or pick shape — FAAB, specialty assets — as labels. */
   extrasGave?: string[]
   extrasGot?: string[]
-  /** Market value of each side, from `manager`'s point of view. Present only with a take. */
+  /**
+   * Value of each side, from `manager`'s point of view — LEAGUE value when `grade` carries it (the
+   * totals the letter was taken on), MARKET value when there is no grade and Chimmy's market take ran.
+   * `valueBasis` says which, so the card never labels one as the other.
+   */
   valueGave?: number | null
   valueGot?: number | null
+  valueBasis?: 'league' | 'market' | null
+  /** THE grade: both teams' letters, or why there is none (`tradeCardGradeView.ts`). */
+  grade?: TradeCardGrade | null
   /** One line on where the trade stands ("Goes to commissioner review before it processes."). */
   note?: string | null
 }
@@ -249,7 +258,18 @@ export async function postNativeTradeMoment(input: {
       { manager: proposerName, receives: toProposer.map((p) => p.asset) },
       { manager: receiverName, receives: toReceiver.map((p) => p.asset) },
     ]
-    const values = await readTradeMarketValues(league, now)
+    /*
+     * THE grade first (the letters frozen into this trade's receipt at proposal). With it, the message
+     * is worded from the letters and the card carries them; the market take below is only for a trade
+     * with no receipt to read, and its values are not even fetched otherwise.
+     */
+    const grade = await nativeTradeCardGrade({
+      tradeId: trade.id,
+      proposerRosterId: trade.proposerRosterId,
+      receiverRosterId: trade.receiverRosterId,
+    })
+    const gradedText = grade ? gradedTradeTakeText({ manager: proposerName, partner: receiverName, grade, seed: trade.id }) : null
+    const values = gradedText ? null : await readTradeMarketValues(league, now)
     const take = values
       ? buildChimmyTradeTake({ sides, players: values.players, isDynasty: values.isDynasty, seed: trade.id, now })
       : null
@@ -266,12 +286,12 @@ export async function postNativeTradeMoment(input: {
       picksGot: toProposer.filter((p) => p.pick).length,
       extrasGave: toReceiver.map((p) => p.extra).filter((e): e is string => Boolean(e)),
       extrasGot: toProposer.map((p) => p.extra).filter((e): e is string => Boolean(e)),
-      valueGave: take ? take.sides[0].sent : null,
-      valueGot: take ? take.sides[0].received : null,
+      ...cardValues(grade, take),
       note: input.note ?? null,
       tradedAt: now.toISOString(),
     }
     const text =
+      gradedText ??
       take?.text ??
       `${proposerName} traded ${describeList(toReceiver.map((p) => p.label))} to ${receiverName} for ${describeList(toProposer.map((p) => p.label))}.`
 

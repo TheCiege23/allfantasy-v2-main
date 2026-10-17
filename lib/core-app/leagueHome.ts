@@ -1,4 +1,5 @@
 import 'server-only'
+import { leagueCalendar, type LeagueCalendarEvent } from './leagueCalendar'
 
 import { prisma } from '@/lib/prisma'
 import {
@@ -24,16 +25,17 @@ import { readMemberActivityInputs } from './commissioner/memberActivityReads'
 import { getLeagueScoreboard, type LeagueScoreboard } from './leagueScoreboard'
 import { extractScoringSettings } from '@/lib/projections/leagueScoring'
 import { latestProjectionWeek } from './playerProjections'
-import { getRecentTrades } from './recentTrades'
+import { getRecentTrades, gradeProviderRecentTrade, liveCompletedTrade, type RecentTrade } from './recentTrades'
 import { recordPendingOffers } from './urgencyBadges'
 import { scanPendingSleeperTrades } from '@/lib/provider-trades/scanPendingSleeperTrades'
 import { getMatchupData } from '@/lib/core-app/matchup'
-import { getRivalRecords } from '@/lib/core-app/dash3aPanels'
+import { getRivalRecords, type RivalRow } from '@/lib/core-app/dash3aPanels'
 import { getDraftHqAll } from './draftHqAll'
 import { describeAge } from '@/lib/sports-data/freshnessPolicy'
 import { resolveLeagueStage, isPreDraftOrDrafting } from '@/lib/league-stage/leagueStage'
 import { rosterIdsMatch } from './rosterIdMatch'
 import { CURRENT_TEAMS } from '@/lib/leagues/leagueTeamLifecycle'
+import { gradeMoment } from '@/lib/decision-os/trade/gradeMoment'
 
 /**
  * Everything the league-selected dashboard (screen 2) renders, read from the
@@ -132,6 +134,7 @@ export type SeasonStage = TimelinePhase
 export type LeagueHomeData = {
   /** Only a confirmed FAAB rule makes stored roster budgets meaningful. */
   faabEnabled?: boolean
+  calendar?: LeagueCalendarEvent[]
   /**
    * The other league in this one's franchise — the C2C half of an NFL league, or
    * the NFL half of a C2C one.
@@ -144,6 +147,7 @@ export type LeagueHomeData = {
   pairing: PairedHalf | null
   league: {
     id: string
+    variant: string | null
     name: string
     platform: string
     format: string | null
@@ -259,6 +263,13 @@ export type LeagueHomeData = {
       players?: ActivityPlayer[]
       /** What the claim cost. Null is UNKNOWN — render nothing, never $0. */
       bid?: number | null
+      /**
+       * A TRADE's letters, one per team, from THE grade (the same letter the Trade Center shows).
+       * Absent on non-trade rows and on a trade whose grade is withheld — never a stand-in letter.
+       */
+      grades?: Array<{ team: string; letter: 'A' | 'B' | 'C' | 'D' | 'F' }>
+      /** One line: who the grade favours, or why there is no grade. */
+      gradeLine?: string | null
     }>
   >
   /**
@@ -300,11 +311,45 @@ export type LeagueHomeData = {
       name: string
       wins: number
       losses: number
+      /** Meetings that finished level — never folded into `losses`. */
+      ties: number
       meetings: number
       lastResult: string | null
+      /** The last meeting as parts, so the screen can say it in the reader's language (dashboard3aCopy `rivalLastText`). */
+      lastParts?: RivalRow['lastParts']
     }>
   >
   syncAge: { label: string; stale: boolean }
+}
+
+/**
+ * A trade's grade, for its League buzz row (2026-09-27).
+ *
+ * Letters appear only when EVERY side carries THE grade (`gradeBasis: 'League'`), so a row never
+ * mixes it with a Realized or Market letter. The line names who it favours — the same sentence
+ * the dashboard band uses — or says why there is no grade.
+ */
+function tradeBuzzGrade(t: RecentTrade): { grades?: Array<{ team: string; letter: 'A' | 'B' | 'C' | 'D' | 'F' }>; gradeLine: string | null } {
+  const name = (sd: RecentTrade['sides'][number]) => sd.teamName || sd.managerName
+  const allLeague = t.sides.length === 2 && t.sides.every((sd) => sd.gradeBasis === 'League' && sd.grade)
+  if (allLeague) {
+    const favoured = t.verdict?.favoursRosterId == null
+      ? null
+      : t.sides.find((sd) => String(sd.rosterId) === String(t.verdict!.favoursRosterId))
+    const strength = t.verdict?.verdict.toLowerCase().includes('strongly') ? 'Clearly favours' : 'Slightly favours'
+    // The letters are the trade's frozen original when one exists — say when (`frozenCompletedGrade.ts`).
+    const when = gradeMoment(t.gradedMoment ?? { frozenAt: t.gradedAt })
+    return {
+      grades: t.sides.map((sd) => ({ team: name(sd), letter: sd.grade! })),
+      gradeLine: favoured
+        ? `${strength} ${name(favoured)} on this league’s values ${when}`
+        : t.verdict?.favoursRosterId == null
+          ? `An even deal on this league’s values ${when}`
+          : `One side comes out ahead on this league’s values ${when}`,
+    }
+  }
+  const withheld = t.sides.find((sd) => sd.gradeReason.startsWith('League grade withheld'))
+  return { gradeLine: withheld ? withheld.gradeReason : null }
 }
 
 function recordOf(t: { wins: number; losses: number; ties: number }): string {
@@ -335,6 +380,24 @@ function settingWeek(settings: unknown, ...keys: string[]): number | null {
  * Replaced by `buildSeasonTimeline` in ./seasonTimeline, which reads the
  * league's own settings and omits any phase whose setting is absent.
  */
+
+/**
+ * The rival rows League Home ships to the screen, built field by field from `getRivalRecords`. A field
+ * left out here never reaches the screen and nothing complains — `lastParts` was, so the last meeting's
+ * margin stayed English in Spanish ("beat you by 10.0"). Exported so a test pins every field through.
+ */
+export function leagueRivalRows(rows: RivalRow[]): Extract<LeagueHomeData['rivalry'], { available: true }>['data'] {
+  return rows.map((r) => ({
+    key: r.key,
+    name: r.name,
+    wins: r.wins,
+    losses: r.losses,
+    ties: r.ties,
+    meetings: r.meetings,
+    lastResult: r.lastResult,
+    lastParts: r.lastParts ?? null,
+  }))
+}
 
 export async function getLeagueHomeData(
   leagueId: string,
@@ -440,35 +503,32 @@ export async function getLeagueHomeData(
           new Date(),
         ).catch(() => undefined)
       }
-      const fresh = (live?.completedTrades ?? []).map((trade) => {
-        const assets = (items: typeof trade.assetsReceived) => items.map((asset) => ({
-          kind: asset.isPick ? 'pick' as const : 'player' as const,
-          playerId: asset.isPick ? null : asset.playerId ?? null,
-          name: asset.isPick ? (asset.pickRound ?? asset.playerName) : asset.playerName,
-          position: asset.isPick ? null : asset.position,
-          team: null,
-          headshotUrl: null,
-          teamLogoUrl: null,
-        }))
-        return {
-          id: trade.transactionId,
-          leagueId: league.id,
-          leagueName: league.name ?? 'League',
-          leagueAvatarUrl: (league as { avatarUrl?: string | null }).avatarUrl ?? null,
-          platformLeagueId: league.platformLeagueId,
-          acceptedAt: trade.proposedAt ?? new Date().toISOString(),
-          sides: [
-            { rosterId: Number(trade.viewerRosterExternalId) || 0, managerName: 'You', teamName: null, avatarUrl: null, received: assets(trade.assetsReceived), grade: null, gradeBasis: null, gradeReason: 'League-specific grade is still being prepared.' },
-            { rosterId: Number(trade.counterpartyRosterExternalId) || 0, managerName: trade.proposedBy, teamName: null, avatarUrl: null, received: assets(trade.assetsGiven), grade: null, gradeBasis: null, gradeReason: 'League-specific grade is still being prepared.' },
-          ],
-          partial: trade.assetsReceived.length === 0 || trade.assetsGiven.length === 0,
-          verdict: null,
-        }
-      })
-      const liveIds = new Set(fresh.map((trade) => trade.id))
-      recentTrades = [...fresh, ...recentTrades.filter((trade) => ![...liveIds].some((id) => trade.id === id || trade.id.endsWith(`:${id}`)))]
+      /*
+       * 🛑 THE GRADED COPY WINS (2026-09-27). This used to keep the LIVE copy and drop the loader's —
+       * so every trade the scan could see replaced its graded twin with "League-specific grade is
+       * still being prepared", on the one page whose subject is this league. A live copy is now
+       * added only for a trade the loader does not have, built by the loader's own
+       * `liveCompletedTrade` (it was a hand-kept copy here) and graded the same way.
+       */
+      const recentLeague = {
+        id: league.id,
+        name: league.name ?? 'League',
+        platformLeagueId: league.platformLeagueId,
+        avatarUrl: (league as { avatarUrl?: string | null }).avatarUrl ?? null,
+        sport: String(league.sport ?? 'NFL'),
+      }
+      const known = new Set(recentTrades.map((trade) => trade.id.slice(trade.id.lastIndexOf(':') + 1)))
+      const fresh = (live?.completedTrades ?? [])
+        .filter((trade) => !known.has(trade.transactionId))
+        // A trade with no date keeps the old behaviour — dated now — rather than disappearing.
+        .map((trade) => liveCompletedTrade(recentLeague, { ...trade, proposedAt: trade.proposedAt ?? new Date().toISOString() }))
+        .filter((trade): trade is NonNullable<typeof trade> => trade != null)
+      recentTrades = [...recentTrades, ...fresh]
         .sort((a, b) => Date.parse(b.acceptedAt) - Date.parse(a.acceptedAt))
         .slice(0, 6)
+      // Only the fresh trades that survived the cut are graded — grading rows nobody sees is pure cost.
+      const freshIds = new Set(fresh.map((trade) => trade.id))
+      await Promise.all(recentTrades.filter((trade) => freshIds.has(trade.id)).map((trade) => gradeProviderRecentTrade(trade)))
     }
   }
   /*
@@ -544,11 +604,25 @@ export async function getLeagueHomeData(
           `${sd.teamName || sd.managerName} got ${
             sd.received.length > 0
               ? sd.received.map((a) => a.name).join(', ')
-              : 'nothing we can name'
+              : 'no players or picks on record'
           }`,
       )
       .join(' · '),
     at: new Date(t.acceptedAt),
+    ...tradeBuzzGrade(t),
+    // Faces for the players who moved, as a waiver row already shows them.
+    players: t.sides.flatMap((sd) =>
+      sd.received
+        .filter((a) => a.kind === 'player')
+        .map((a, i): ActivityPlayer => ({
+          id: a.playerId ?? `${sd.rosterId}:${i}:${a.name}`,
+          label: a.name,
+          name: a.name,
+          position: a.position,
+          team: a.team,
+          imageUrl: a.headshotUrl,
+        })),
+    ),
   }))
 
   /*
@@ -870,14 +944,7 @@ export async function getLeagueHomeData(
     : rivalData?.available
       ? {
           available: true,
-          data: rivalData.data.rows.map((r) => ({
-            key: r.key,
-            name: r.name,
-            wins: r.wins,
-            losses: r.losses,
-            meetings: r.meetings,
-            lastResult: r.lastResult,
-          })),
+          data: leagueRivalRows(rivalData.data.rows),
         }
       : {
           available: false,
@@ -888,8 +955,10 @@ export async function getLeagueHomeData(
     stage,
     preSeason,
     pairing,
+    calendar: leagueCalendar(league.settings),
     league: {
       id: league.id,
+      variant: league.leagueVariant,
       name: leagueDisplayName(league.name),
       platform: String(league.platform ?? 'manual').toLowerCase(),
       format: league.leagueType ?? null,

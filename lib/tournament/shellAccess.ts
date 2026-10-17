@@ -3,12 +3,13 @@ import { prisma } from '@/lib/prisma'
 export async function assertTournamentCommissioner(
   tournamentId: string,
   userId: string,
+  allowPlanning = false,
 ): Promise<void> {
   const shell = await prisma.tournamentShell.findUnique({
     where: { id: tournamentId },
-    select: { commissionerId: true },
+    select: { commissionerId: true, status: true },
   })
-  if (!shell || shell.commissionerId !== userId) {
+  if (!shell || shell.commissionerId !== userId || (!allowPlanning && ['blueprint', 'rules_published'].includes(shell.status))) {
     throw new Error('FORBIDDEN')
   }
 }

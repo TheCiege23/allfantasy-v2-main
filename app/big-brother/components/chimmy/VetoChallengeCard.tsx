@@ -96,7 +96,7 @@ export function VetoChallengeCard({
           >
             <span className="text-[13px] font-medium text-white/90">{names[id] ?? id}</span>
             {id === myRosterId && (
-              <span className="rounded-full bg-violet-500/20 px-2 py-0.5 text-[10px] font-bold uppercase text-violet-200">
+              <span className="rounded-full bg-violet-500/20 px-2 py-0.5 text-[11px] font-bold uppercase text-violet-200">
                 You
               </span>
             )}

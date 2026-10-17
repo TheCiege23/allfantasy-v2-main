@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Eviction night</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./specialty/sp.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Cinzel:wght@600;700&amp;family=Caveat:wght@600;700&amp;family=Bebas+Neue&amp;family=Pirata+One&amp;family=Creepster&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080d}
+.bb-ph{display:flex;align-items:center;gap:0}
+.bb-ph div{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;position:relative}
+.bb-ph div::before{content:"";position:absolute;top:15px;left:-50%;right:50%;height:3px;background:#22305a}
+.bb-ph div:first-child::before{display:none}
+.bb-ph i{position:relative;z-index:1;width:32px;height:32px;border-radius:99px;display:grid;place-items:center;font:700 12px 'JetBrains Mono';font-style:normal;background:#10131c;border:2px solid #22305a;color:#7d84a3}
+.bb-ph span{font:600 11.5px 'Archivo';color:#7d84a3;text-align:center}
+.bb-ph .done i{background:#1d4ed8;border-color:#3b82f6;color:#fff}.bb-ph .done::before{background:#3b82f6}
+.bb-ph .on i{background:#ff5ec8;border-color:#ff9ad8;color:#fff;box-shadow:0 0 0 5px rgba(255,94,200,.18)}.bb-ph .on span{color:#ffb3e3}.bb-ph .on::before{background:#3b82f6}
+.bb-spot{flex:1 1 200px;display:flex;flex-direction:column;align-items:center;gap:8px;padding:16px;border-radius:14px;background:#10131c;border:1px solid rgba(255,255,255,.07);text-align:center}
+.bb-hg{display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 6px;border-radius:12px;background:#10131c;border:1px solid rgba(255,255,255,.06)}
+.bb-nom{position:relative;flex:1 1 300px;display:flex;flex-direction:column;align-items:center;gap:12px;padding:28px 20px;border-radius:16px;background:#10131c;border:1px solid rgba(255,94,200,.3);transition:opacity .5s,filter .5s}
+.bb-count{font:800 74px/1 'Archivo';letter-spacing:-.04em}
+.bb-out{border-color:rgba(255,255,255,.08)}
+.bb-door{position:absolute;inset:0;border-radius:16px;background:rgba(7,8,13,.72);display:grid;place-items:center;animation:spUp .5s ease-out both}
+</style>
+</helmet>
+<div class="sp" style="--acc: #3b82f6; --acc2: #9fd0ff; --accInk: #fff; --disp: Archivo; min-height: 100vh; display: flex; flex-direction: column">
+<header style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 18px 28px; border-bottom: 1px solid rgba(255,255,255,.06)">
+  <a class="sp-btn" href="BigBrotherHome.dc.html" aria-label="Back" style="padding: 0 12px">‹</a>
+  <div style="flex: 1 1 320px; display: flex; flex-direction: column; gap: 3px"><h1 class="sp-h1">Eviction night · week 6</h1><span class="sp-t2">Blah House · 9 votes · the HOH votes only to break a tie</span></div>
+  <span class="sp-chip" style="color: #ff9ad8; border-color: rgba(255,94,200,.45)">Votes closed · 9 of 9 in</span>
+</header>
+<div style="display: flex; flex-wrap: wrap; gap: 24px; padding: 24px 28px 32px; align-items: flex-start">
+  <section class="sp-card" style="flex: 1 1 760px; padding: 26px; display: flex; flex-direction: column; gap: 20px; background: radial-gradient(ellipse at 50% 0%, rgba(255,94,200,.12), transparent 60%), radial-gradient(ellipse at 50% 100%, rgba(59,130,246,.14), transparent 60%), #0b0d14">
+    <div style="display: flex; align-items: center; gap: 12px"><span class="sp-lbl" style="flex: 1">{{stage}}</span>
+      <sc-if value="{{canReveal}}" hint-placeholder-val="{{ true }}"><button class="sp-btn sp-btn-p" onClick="{{reveal}}" style="min-height: 46px; padding: 0 22px">Reveal the vote</button></sc-if>
+      <sc-if value="{{done}}" hint-placeholder-val="{{ false }}"><button class="sp-btn" onClick="{{reset}}">Replay</button></sc-if></div>
+    <div style="display: flex; flex-wrap: wrap; gap: 20px; align-items: stretch">
+      <sc-for list="{{noms}}" as="n" hint-placeholder-count="2">
+        <div class="bb-nom {{n.cls}}">
+          <span class="sp-av" style="width: 84px; height: 84px; font-size: 22px; background: {{n.c}}; box-shadow: 0 0 0 3px #07080d, 0 0 0 6px #ff5ec8">{{n.ini}}</span>
+          <span style="font-weight: 800; font-size: 20px">{{n.name}}</span>
+          <span class="sp-t3" style="font-size: 12.5px">{{n.sub}}</span>
+          <span class="bb-count sp-num" style="color: {{n.cc}}">{{n.v}}</span>
+          <span class="sp-lbl">votes to evict</span>
+          <sc-if value="{{n.evicted}}" hint-placeholder-val="{{ false }}"><div class="bb-door"><div style="display: flex; flex-direction: column; align-items: center; gap: 8px"><img src="specialty/bigbrother/icon-evict.svg" alt="" style="width: 80px"><span style="font: 800 26px 'Archivo'; letter-spacing: .1em; color: #ff9ad8">EVICTED</span></div></div></sc-if>
+        </div>
+      </sc-for>
+    </div>
+    <span style="font-size: 16px; font-weight: 600; color: {{lineC}}; text-align: center">{{line}}</span>
+  </section>
+  <aside style="flex: 1 1 340px; max-width: 400px; display: flex; flex-direction: column; gap: 14px">
+    <div class="sp-card2" style="padding: 18px; display: flex; flex-direction: column; gap: 10px"><span class="sp-lbl">What's shown, what stays private</span>
+      <div class="sp-rule"><b>✓</b><span>Who was evicted and the vote count.</span></div>
+      <div class="sp-rule"><b>✓</b><span>Who voted is never shown until the season ends.</span></div>
+      <div class="sp-rule"><b>✓</b><span>AF never reveals sealed ballots in chat or recaps.</span></div></div>
+    <div class="sp-card2" style="padding: 18px; display: flex; flex-direction: column; gap: 10px; border-color: rgba(167,139,250,.35)"><span class="sp-lbl" style="color: #c4b5fd">After the eviction</span>
+      <span class="sp-t2" style="font-size: 13px">{{after}}</span>
+      <div style="display: flex; gap: 6px; flex-wrap: wrap"><sc-for list="{{waiv}}" as="w" hint-placeholder-count="4"><span class="sp-chip" style="opacity: {{w.op}}">{{w.p}}</span></sc-for></div></div>
+  </aside>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":760}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { n: -1 }; this.t = []; }
+  renderVals() {
+    const st = this.state; const final = [5, 3]; const shown = st.n < 0 ? [0, 0] : [Math.min(final[0], st.n), Math.min(final[1], Math.max(0, st.n - 1))];
+    const done = st.n >= 6;
+    const go = () => { this.t.forEach(clearTimeout); this.setState({ n: 0 }); this.t = [1, 2, 3, 4, 5, 6].map(i => setTimeout(() => this.setState({ n: i }), i * 650)); };
+    return { canReveal: st.n < 0, done, reveal: go, reset: () => { this.t.forEach(clearTimeout); this.setState({ n: -1 }); },
+      stage: st.n < 0 ? 'Votes are sealed' : done ? 'Final count' : 'Counting votes…',
+      noms: [['Open Team 9', 'O9', '#3a3418', 'Nominated by Open Team 7'], ['Open Team 4', 'O4', '#1f2a4d', 'Nominated by Open Team 7']].map(([name, ini, c, sub], i) => ({ name, ini, c, sub,
+        v: st.n < 0 ? '–' : String(shown[i]), cc: done && i === 0 ? '#ff9ad8' : '#fff', evicted: done && i === 0, cls: done && i === 0 ? 'bb-out' : '' })),
+      line: done ? 'Open Team 9 is evicted, 5 votes to 3. Open Team 4 stays in the house.' : st.n < 0 ? 'Nine houseguests voted. Nobody knows the result yet.' : '…', lineC: done ? '#ffd0ec' : '#a3a9c2',
+      after: done ? 'Open Team 9 joins the jury. Their team stops scoring and all 15 players go to waivers tonight at 3:00 AM ET.' : 'The evicted manager’s players go to waivers. Pending trades with them are cancelled.',
+      waiv: ['Garrett Wilson', 'Kyren Williams', 'Jared Goff', 'Sam LaPorta'].map(p => ({ p, op: done ? '1' : '.4' })) };
+  }
+}
+</script>
+</body>
+</html>

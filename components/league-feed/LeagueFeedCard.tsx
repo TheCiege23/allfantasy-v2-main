@@ -45,7 +45,7 @@ export function LeagueFeedCard({ row, animateIn }: { row: LeagueFeedCardRow; ani
       } ${show ? 'translate-y-0 opacity-100' : 'translate-y-1 opacity-0'}`}
     >
       <div className="flex items-start gap-2">
-        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/10 bg-gradient-to-br from-slate-600/40 to-slate-900/60 text-[10px] font-bold text-white/85">
+        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/10 bg-gradient-to-br from-slate-600/40 to-slate-900/60 text-[11px] font-bold text-white/85">
           {(who ?? '?').slice(0, 2).toUpperCase()}
         </div>
         <div className="min-w-0 flex-1">
@@ -58,7 +58,7 @@ export function LeagueFeedCard({ row, animateIn }: { row: LeagueFeedCardRow; ani
             {isAi && row.botArchetypeLabel ? (
               <BotPersonalityBadge archetypeLabel={row.botArchetypeLabel} compact className="max-w-[140px]" />
             ) : null}
-            <span className="text-[9px] font-medium uppercase tracking-wide text-white/35">
+            <span className="text-[11px] font-medium uppercase tracking-wide text-white/35">
               {row.source ? `${row.source} · ` : ''}
               {row.type}
             </span>
@@ -69,7 +69,7 @@ export function LeagueFeedCard({ row, animateIn }: { row: LeagueFeedCardRow; ani
               {flavor}
             </p>
           ) : null}
-          <p className="mt-1.5 text-[10px] text-white/35">{new Date(row.createdAt).toLocaleString()}</p>
+          <p className="mt-1.5 text-[11px] text-white/35">{new Date(row.createdAt).toLocaleString()}</p>
         </div>
       </div>
     </li>

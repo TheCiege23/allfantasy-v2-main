@@ -1,7 +1,7 @@
 /**
  * [NEW] lib/ncaaf-roster/NcaafRosterTemplates.ts
  * NCAAF roster slot definitions and league-type templates.
- * College football defaults: K/DEF redraft, 2 WR, Superflex optional, IDP optional.
+ * College football defaults: K in redraft (team defense optional and off — none exists to draft), 2 WR, Superflex optional, IDP optional.
  */
 
 import type { RosterSlotDef } from '@/lib/nfl-roster/NflRosterTemplates'
@@ -21,7 +21,10 @@ export const NCAAF_ROSTER_SLOTS: RosterSlotDef[] = [
   { key: 'SUPERFLEX', label: 'Super Flex (QB/WR/RB/TE)', shortLabel: 'SF', color: '#ec4899', category: 'flex', eligiblePositions: ['QB', 'WR', 'RB', 'TE'], defaultCount: 0, minCount: 0, maxCount: 2 },
   // K / DEF
   { key: 'K', label: 'Kicker', shortLabel: 'K', color: '#6b7280', category: 'kicker', eligiblePositions: ['K'], defaultCount: 1, minCount: 0, maxCount: 2 },
-  { key: 'DEF', label: 'Defense / Special Teams', shortLabel: 'DEF', color: '#64748b', category: 'dst', eligiblePositions: ['DEF'], defaultCount: 1, minCount: 0, maxCount: 2 },
+  // Off by default: no college team defense exists to draft (the pool holds none) and no feed carries a
+  // college team-defense stat line, so a default DEF starter could never be filled — and an unfilled
+  // starter slot makes every lineup save fail. A commissioner can still add one.
+  { key: 'DEF', label: 'Defense / Special Teams', shortLabel: 'DEF', color: '#64748b', category: 'dst', eligiblePositions: ['DEF'], defaultCount: 0, minCount: 0, maxCount: 2 },
   // IDP (optional for college)
   { key: 'DL', label: 'Defensive Line', shortLabel: 'DL', color: '#22d3ee', category: 'idp', eligiblePositions: ['DE', 'DT', 'DL'], defaultCount: 0, minCount: 0, maxCount: 4 },
   { key: 'LB', label: 'Linebacker', shortLabel: 'LB', color: '#34d399', category: 'idp', eligiblePositions: ['LB', 'ILB', 'OLB'], defaultCount: 0, minCount: 0, maxCount: 4 },
@@ -48,13 +51,19 @@ export const NCAAF_SLOT_MAP = new Map(NCAAF_ROSTER_SLOTS.map((s) => [s.key, s]))
 
 export const NCAAF_ROSTER_TEMPLATES: NcaafRosterTemplate[] = [
   { key: 'redraft', label: 'Redraft', leagueTypes: ['redraft'], description: 'Standard NCAAF redraft.',
-    slots: { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, K: 1, DEF: 1, BN: 8, IR: 1 } },
+    slots: { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, K: 1, BN: 8, IR: 1 } },
   { key: 'dynasty', label: 'Dynasty', leagueTypes: ['dynasty'], description: 'Deep dynasty with superflex and taxi.',
     slots: { QB: 1, RB: 2, WR: 3, TE: 1, FLEX: 2, SUPERFLEX: 1, BN: 15, IR: 3, TAXI: 4 } },
-  { key: 'keeper', label: 'Keeper', leagueTypes: ['keeper'], description: 'Extended keeper roster.',
-    slots: { QB: 1, RB: 2, WR: 3, TE: 1, FLEX: 1, BN: 10, IR: 1 } },
-  { key: 'best_ball', label: 'Best Ball', leagueTypes: ['best_ball'], description: 'Deep best ball with superflex.',
-    slots: { QB: 1, RB: 2, WR: 3, TE: 1, FLEX: 2, SUPERFLEX: 1, BN: 12 } },
+  // Matches the keeper contract (lib/league-concepts/keeperDefaults.ts), which the settings screens show
+  // and the draft's round count is computed from. It was 3 WR, no K, 10 bench, 1 IR here, so a keeper
+  // league showed a kicker slot its lineup did not have, and drafted 16 rounds into 18 draftable spots.
+  { key: 'keeper', label: 'Keeper', leagueTypes: ['keeper'], description: 'Standard NCAAF keeper.',
+    slots: { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, K: 1, BN: 8, IR: 2 } },
+  // Matches what the best ball optimizer SCORES (lib/bestball/rules.ts NCAAF lineupSlots) and the best
+  // ball contract (bestBallDefaults: 16-player roster, 16-round draft): QB, 2 RB, 3 WR, 2 FLEX — TEs start
+  // through FLEX. It carried a TE, a superflex and 12 bench (22 spots) that nothing scored.
+  { key: 'best_ball', label: 'Best Ball', leagueTypes: ['best_ball'], description: 'Standard NCAAF best ball.',
+    slots: { QB: 1, RB: 2, WR: 3, FLEX: 2, BN: 8 } },
   { key: 'superflex', label: 'Superflex', leagueTypes: ['redraft', 'dynasty'], description: 'Superflex variant.',
     slots: { QB: 1, RB: 2, WR: 3, TE: 1, FLEX: 1, SUPERFLEX: 1, BN: 8 } },
   { key: 'idp', label: 'IDP', leagueTypes: ['redraft', 'dynasty'], description: 'College IDP roster.',

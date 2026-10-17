@@ -29,9 +29,10 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const { leagueTeamFindMany, weeklyScoreFindMany, sportsPlayerFindMany, getLiveScores, getCachedLiveScores, getPlayFeedMock } =
+const { leagueTeamFindMany, rosterFindMany, weeklyScoreFindMany, sportsPlayerFindMany, getLiveScores, getCachedLiveScores, getPlayFeedMock } =
   vi.hoisted(() => ({
     leagueTeamFindMany: vi.fn(),
+    rosterFindMany: vi.fn(),
     weeklyScoreFindMany: vi.fn(),
     sportsPlayerFindMany: vi.fn(async () => [] as unknown[]),
     getLiveScores: vi.fn(),
@@ -42,6 +43,7 @@ const { leagueTeamFindMany, weeklyScoreFindMany, sportsPlayerFindMany, getLiveSc
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     leagueTeam: { findMany: leagueTeamFindMany },
+    roster: { findMany: rosterFindMany },
     leaguePlayerWeeklyScore: { findMany: weeklyScoreFindMany },
     sportsPlayer: { findMany: sportsPlayerFindMany },
   },
@@ -95,7 +97,7 @@ function row() {
     broadcast: null,
     odds: null,
     overUnder: null,
-    week: 1,
+    week: 3,
     season: 2026,
     topPerformer: null,
   }
@@ -116,9 +118,93 @@ beforeEach(() => {
   getCachedLiveScores.mockResolvedValue({ scores: [], fetchedAt: null })
   getPlayFeedMock.mockResolvedValue([])
   leagueTeamFindMany.mockResolvedValue(claimedNflTeam)
+  rosterFindMany.mockResolvedValue([{ id: 'r1', leagueId: 'L1', platformUserId: 'u1', playerData: { players: ['owned', 'bench'], starters: ['owned'] } }])
 })
 
 describe('getLivePageData — roster read failure', () => {
+  it('shows owned upcoming players before any weekly scores have arrived', async () => {
+    getLiveScores.mockResolvedValue({ scores: [{ ...row(), status: 'STATUS_SCHEDULED', startTime: new Date(Date.now() + 3_600_000).toISOString() }], fetchedAt: new Date().toISOString() })
+    weeklyScoreFindMany.mockResolvedValue([])
+    sportsPlayerFindMany.mockResolvedValue([{ sleeperId: 'owned', name: 'My player', position: 'RB', team: 'BUF', sport: 'NFL' }])
+    const data = await getLivePageData({ userId: 'u1', sport: 'NFL', scope: 'my' })
+    expect(data.games[0]?.tieIns[0]).toMatchObject({ playerId: 'owned', points: null })
+  })
+  it('never carries prior-week points into games in the current provider period', async () => {
+    leagueTeamFindMany.mockResolvedValue([{ ...claimedNflTeam[0], league: { ...claimedNflTeam[0].league, settings: { leg: 3 } } }])
+    weeklyScoreFindMany.mockResolvedValue([{ leagueId: 'p1', playerId: 'owned', points: 22, isStarter: true, week: 2 }])
+    sportsPlayerFindMany.mockResolvedValue([{ sleeperId: 'owned', name: 'My player', position: 'RB', team: 'BUF', sport: 'NFL' }])
+    const data = await getLivePageData({ userId: 'u1', sport: 'NFL', scope: 'my' })
+    expect(data.games[0]?.tieIns[0]).toMatchObject({ playerId: 'owned', points: null })
+  })
+  it('never presents another manager’s player as mine in a shared league', async () => {
+    weeklyScoreFindMany.mockResolvedValue([
+      { leagueId: 'p1', playerId: 'owned', points: 4, isStarter: true, week: 3 },
+      { leagueId: 'p1', playerId: 'opponent', points: 18, isStarter: true, week: 3 },
+      { leagueId: 'p1', playerId: 'bench', points: 9, isStarter: true, week: 3 },
+    ])
+    sportsPlayerFindMany.mockResolvedValue([
+      { sleeperId: 'owned', name: 'My player', position: 'RB', team: 'BUF', sport: 'NFL' },
+      { sleeperId: 'opponent', name: 'Other player', position: 'QB', team: 'PIT', sport: 'NFL' },
+      { sleeperId: 'bench', name: 'My benched player', position: 'WR', team: 'BUF', sport: 'NFL' },
+    ])
+    const data = await getLivePageData({ userId: 'u1', sport: 'NFL', scope: 'my' })
+    expect(data.rosterFailed).toBe(false)
+    expect(data.games.flatMap((g) => g.tieIns).map((t) => t.playerId)).toEqual(['owned'])
+    expect(data.games[0]?.tieIns[0]?.points).toBe(4)
+  })
+  it('keeps verified player tie-ins when another claimed league has an unreadable roster', async () => {
+    leagueTeamFindMany.mockResolvedValue([...claimedNflTeam, { leagueId: 'L2', externalId: '2', league: { ...claimedNflTeam[0].league, id: 'L2', platformLeagueId: 'p2' } }])
+    weeklyScoreFindMany.mockResolvedValue([{ leagueId: 'p1', playerId: 'owned', points: 4, isStarter: true, week: 3 }])
+    sportsPlayerFindMany.mockResolvedValue([{ sleeperId: 'owned', name: 'My player', position: 'RB', team: 'BUF', sport: 'NFL' }])
+    const data = await getLivePageData({ userId: 'u1', sport: 'NFL', scope: 'my' })
+    expect(data.rosterFailed).toBe(true)
+    expect(data.loadFailed).toBe(false)
+    expect(data.games.flatMap((g) => g.tieIns).map((t) => t.playerId)).toEqual(['owned'])
+  })
+  /*
+   * 🛑 PRODUCTION, 2026-10-08: a Fantrax league held TWO claimed rows for one seat — a stale
+   * `fantrax-team:ciege82` (last written 09-03) and the current `789336590`, both
+   * `fantrax-user:Ciege82` — and one roster. Counted per row, the stale one "failed" and the college
+   * tab said "we could not read your rosters" every day. A seat with its roster is a read that worked.
+   */
+  it('two claimed rows for ONE seat, one roster: the read is complete', async () => {
+    const league = { ...claimedNflTeam[0].league }
+    leagueTeamFindMany.mockResolvedValue([
+      { leagueId: 'L1', externalId: 'fantrax-team:ciege82', platformUserId: 'fantrax-user:Ciege82', lifecycleState: 'CURRENT', league },
+      { leagueId: 'L1', externalId: '789336590', platformUserId: 'fantrax-user:Ciege82', lifecycleState: 'CURRENT', league },
+    ])
+    rosterFindMany.mockResolvedValue([{ id: 'r1', leagueId: 'L1', platformUserId: '789336590', playerData: { players: ['owned'], starters: ['owned'] } }])
+    weeklyScoreFindMany.mockResolvedValue([])
+    sportsPlayerFindMany.mockResolvedValue([{ sleeperId: 'owned', name: 'My player', position: 'RB', team: 'BUF', sport: 'NFL' }])
+    const data = await getLivePageData({ userId: 'u1', sport: 'NFL', scope: 'my' })
+    expect(data.rosterFailed).toBe(false)
+    expect(data.games.flatMap((g) => g.tieIns).map((t) => t.playerId)).toEqual(['owned'])
+  })
+
+  it('CONTROL: two DIFFERENT seats, one without a roster, is still an incomplete read', async () => {
+    const league = { ...claimedNflTeam[0].league }
+    leagueTeamFindMany.mockResolvedValue([
+      { leagueId: 'L1', externalId: '789336590', platformUserId: 'fantrax-user:Ciege82', lifecycleState: 'CURRENT', league },
+      { leagueId: 'L1', externalId: '555', platformUserId: 'fantrax-user:Someone', lifecycleState: 'CURRENT', league },
+    ])
+    rosterFindMany.mockResolvedValue([{ id: 'r1', leagueId: 'L1', platformUserId: '789336590', playerData: { players: ['owned'], starters: ['owned'] } }])
+    weeklyScoreFindMany.mockResolvedValue([])
+    const data = await getLivePageData({ userId: 'u1', sport: 'NFL', scope: 'my' })
+    expect(data.rosterFailed).toBe(true)
+  })
+
+  it('an ARCHIVED claimed team is not a seat, so its missing roster is not a failure', async () => {
+    const league = { ...claimedNflTeam[0].league }
+    leagueTeamFindMany.mockResolvedValue([
+      { leagueId: 'L1', externalId: '789336590', platformUserId: 'fantrax-user:Ciege82', lifecycleState: 'CURRENT', league },
+      { leagueId: 'L1', externalId: '555', platformUserId: 'fantrax-user:Gone', lifecycleState: 'ARCHIVED', league },
+    ])
+    rosterFindMany.mockResolvedValue([{ id: 'r1', leagueId: 'L1', platformUserId: '789336590', playerData: { players: ['owned'], starters: ['owned'] } }])
+    weeklyScoreFindMany.mockResolvedValue([])
+    const data = await getLivePageData({ userId: 'u1', sport: 'NFL', scope: 'my' })
+    expect(data.rosterFailed).toBe(false)
+  })
+
   it('contains the throw, flags the roster, and does NOT blame the slate', async () => {
     const p2021 = Object.assign(new Error('The table `league_player_weekly_scores` does not exist'), {
       code: 'P2021',
@@ -176,5 +262,35 @@ describe('getLivePageData — roster read failure', () => {
     expect(data.rosterFailed).toBe(false)
     expect(data.hasRosterData).toBe(false)
     expect(weeklyScoreFindMany).not.toHaveBeenCalled()
+  })
+})
+
+/*
+ * 🛑 A Fleaflicker/MFL/Fantrax/Yahoo roster holds the PROVIDER's ids, short numbers in Sleeper's
+ * range. '6038' is a real Sleeper id in the fake catalog, owned by "Wrong Player" who plays for
+ * BUF — in the game on the slate. Reading the Fleaflicker roster as Sleeper ids ties a stranger in.
+ */
+describe('getLivePageData — foreign roster ids', () => {
+  function collide(platform: string) {
+    leagueTeamFindMany.mockResolvedValue([{ ...claimedNflTeam[0], league: { ...claimedNflTeam[0].league, platform } }])
+    rosterFindMany.mockResolvedValue([{ id: 'r1', leagueId: 'L1', platformUserId: 'u1', playerData: { players: ['6038'], starters: ['6038'] } }])
+    weeklyScoreFindMany.mockResolvedValue([])
+    sportsPlayerFindMany.mockImplementation((async ({ where }: { where: { sleeperId: { in: string[] } } }) =>
+      where.sleeperId.in.includes('6038')
+        ? [{ sleeperId: '6038', name: 'Wrong Player', position: 'WR', team: 'BUF', sport: 'NFL' }]
+        : []) as never)
+  }
+
+  it('🛑 never ties a stranger into the game from a Fleaflicker roster', async () => {
+    collide('fleaflicker')
+    const data = await getLivePageData({ userId: 'u1', sport: 'NFL', scope: 'all' })
+    expect(data.games.flatMap((g) => g.tieIns).map((t) => t.playerName)).not.toContain('Wrong Player')
+    expect(JSON.stringify(data.games)).not.toContain('Wrong Player')
+  })
+
+  it('CONTROL: the same roster in a Sleeper league IS tied in', async () => {
+    collide('sleeper')
+    const data = await getLivePageData({ userId: 'u1', sport: 'NFL', scope: 'all' })
+    expect(data.games.flatMap((g) => g.tieIns).map((t) => t.playerName)).toContain('Wrong Player')
   })
 })

@@ -14,7 +14,12 @@ import { buildExplainValueContext } from '@/lib/chimmy/tools/explainValueTool'
 import { buildTradeBlockContext } from '@/lib/chimmy/tradeBlockGrounding'
 import { resolveNormalizedLeagueContext } from '@/lib/league-context-engine'
 import { buildWaiverContext } from '@/lib/chimmy/waiverGrounding'
+import { lineupActionEvidence } from '@/lib/chimmy/lineupActionEvidence'
 import type { ChimmyActionCard } from '@/lib/chimmy/actions/types'
+import type { ChimmyTradeGrade } from '@/lib/chimmy/tradeGradeCheck'
+import type { FaabBidPlan } from '@/lib/chimmy/tools/faabBidTool'
+import type { MatchupSettleRun } from '@/lib/chimmy/matchupPreviewGrounding'
+import { SUPERSEDING_TOOLS } from '@/lib/chimmy/answerPolish'
 
 /**
  * READ-ONLY TOOLS THE MODEL MAY CALL FOR ITSELF.
@@ -66,7 +71,39 @@ export type ChimmyToolContext = {
    * tools say so instead of promising one.
    */
   actionCards?: ChimmyActionCard[]
+  /**
+   * Every trade letter the one trade engine gave during this answer, collected so the route can check
+   * the answer states no other (`lib/chimmy/tradeGradeCheck.ts`). Absent = do not collect.
+   */
+  tradeGrades?: ChimmyTradeGrade[]
+  /**
+   * Every bid plan `get_faab_bid_plan` computed during this answer, AS DATA, so the route can hand
+   * the chat a card and a HOLD / BID chip from the same numbers the model was given — not a second
+   * computation, and never a reading of the model's prose. Absent = do not collect.
+   */
+  faabPlans?: ChimmyFaabPlanRun[]
+  /**
+   * The whole-league tools (`SUPERSEDING_TOOLS`) that ran during this answer, with the league each
+   * ran against — so a later answer that re-ran one for the same league can mark this one "Newer
+   * answer below". Recorded per call because `find_league_by_name` can rebind the league mid-answer.
+   * Absent = do not collect.
+   */
+  toolRuns?: ChimmyToolRun[]
+  /**
+   * Every SINGLE-league `get_my_matchup` read's guillotine settle verdict, AS DATA — the same object
+   * the model's "SAFE THIS WEEK — IT IS DECIDED" sentence is written from — so the route can hand the
+   * chat a SAFE / OUT chip without reading prose. `settle` is null for a league with no elimination
+   * week. The all-leagues view records nothing. Absent = do not collect.
+   */
+  eliminationSettles?: ChimmyEliminationSettleRun[]
 }
+
+/** One `get_faab_bid_plan` result, with the league it was computed for. */
+export type ChimmyFaabPlanRun = { leagueId: string; plan: FaabBidPlan }
+/** One single-league `get_my_matchup` read's settle verdict, with the league it was read for. */
+export type ChimmyEliminationSettleRun = MatchupSettleRun
+/** One run of a `SUPERSEDING_TOOLS` tool, with the league it ran against. */
+export type ChimmyToolRun = { tool: string; leagueId: string }
 
 /** More cards than this in one answer is a model looping, not a user deciding. */
 export const MAX_ACTION_CARDS_PER_ANSWER = 3
@@ -83,6 +120,17 @@ export type ChatStartCall = {
 
 /** OpenAI-shaped function tools; Grok accepts these through the OpenAI SDK. */
 export const CHIMMY_TOOL_SPECS = [
+  {
+    type: 'function' as const,
+    function: {
+      name: 'get_draft_analysis',
+      description: 'Explain a selected Draft HQ historical draft: recorded picks, ADP differences, clock coverage, original-team draft and result rankings, validated grades, asset transfers and selecting-team weekly points, starter/roster status, coverage and observation dates. Distinguish provisional provider scores from finalized results. Use the exact archive key supplied by the user or Draft HQ. Never guess a source. League access comes from the authenticated selected league. Missing historical evidence remains unavailable.',
+      parameters: { type: 'object', properties: {
+        archiveKey: { type: 'string', description: 'Exact selected archive key from Draft HQ, e.g. native:source.' },
+        fromOverall: { type: 'integer', minimum: 1, maximum: 10000, description: 'First overall pick to read; returns up to 40 picks and nextOverall.' },
+      }, required: ['archiveKey'], additionalProperties: false },
+    },
+  },
   {
     type: 'function' as const,
     function: {
@@ -129,6 +177,15 @@ export const CHIMMY_TOOL_SPECS = [
       name: 'get_available_players',
       description:
         "Ranked players who are on NOBODY's roster in the league in scope — use for 'who can I pick up', 'who is on waivers', 'best free agent', 'who should I add'. Returns the highest AllFantasy market values among unrostered players (NFL); in NBA, NHL, MLB and college leagues it ranks the sport's unrostered players by AllFantasy's standard per-game projection instead, and says so. It does NOT know who is claimable: unrostered is not the same as on-waivers, and the block says so — for waiver order, FAAB left, pending claims and when waivers run, call get_waiver_status. Returns a sentence saying so if rosters have not synced or every ranked player is taken.",
+      parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'get_faab_bid_plan',
+      description:
+        "How much FAAB the user should spend THIS WEEK, and on whom, in the league in scope. Use for 'should I spend FAAB', 'how much should I bid', 'is anyone worth a bid', 'save or spend my FAAB'. Prices every valued unrostered player against the starter he would replace in the user's lineup, then splits their REMAINING budget across the genuine upgrades by how much each improves them, paced against a published elimination schedule where one exists. Gives dollar ceilings ONLY in guillotine/survivor leagues (the only formats the sizing is calibrated for); elsewhere it ranks the upgrades without dollars and says why. 'Do not bid' is a real answer when nobody improves the lineup. Unrostered is not the same as claimable — for waiver order and pending claims, call get_waiver_status.",
       parameters: { type: 'object', properties: {}, required: [] },
     },
   },
@@ -224,6 +281,23 @@ export const CHIMMY_TOOL_SPECS = [
   {
     type: 'function' as const,
     function: {
+      name: 'get_league_trade_history',
+      description:
+        "Trades that already HAPPENED in the league in scope, itemized: date, both managers, and every player and pick that moved each way. Use for 'what trades happened this year', 'who has X traded with', 'what did X give up for Y', 'when was X traded'. Optional filters narrow it to one season, one manager (Sleeper username or team name) or one player. Sleeper leagues only; it says so for other platforms. Where AllFantasy already graded a trade it prints that FROZEN original letter and when it was priced — quote only those, exactly; never grade the others or say who won.",
+      parameters: {
+        type: 'object',
+        properties: {
+          season: { type: 'integer', description: 'Only trades from this season, e.g. 2026.' },
+          manager: { type: 'string', description: 'Only trades this manager was part of — a Sleeper username or team name exactly as the user wrote it.' },
+          player: { type: 'string', description: 'Only trades that moved this player (full or last name).' },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
       name: 'get_upcoming_games',
       description:
         'Scheduled games that have not kicked off yet. Use for "when is the next game", "when does the season start", "what is on this week".',
@@ -281,7 +355,7 @@ export const CHIMMY_TOOL_SPECS = [
     function: {
       name: 'get_my_injuries',
       description:
-        "Injury designations (Out, IR, Doubtful, Questionable…) for players on the user's OWN rosters across EVERY league they are in, current season, any platform. Use for 'who's out in my leagues', 'any injuries on my teams', 'is anyone on my roster hurt', 'injury updates for my players'. Needs NO league in scope. Each player comes with the date it was reported and which leagues/slots they are on, and STARTERS who are Out are flagged. Players not listed have no report on file — that is NOT a statement that they are healthy. It lists the leagues and players it could not check; never fill those gaps from general knowledge.",
+        "Injury designations (Out, IR, Doubtful, Questionable…) for players on the user's OWN roster in the selected league, current season, any platform. Use for roster reviews and injury updates. Defaults to the selected league; with no league selected it checks all current leagues. Pass scope=all only when the CURRENT request explicitly asks across leagues, such as 'who's out in all my leagues'. Each player comes with the report date and roster slot. Players not listed have no report on file — that is NOT a statement that they are healthy. Report coverage gaps; never fill them from general knowledge.",
       parameters: {
         type: 'object',
         properties: {
@@ -289,6 +363,11 @@ export const CHIMMY_TOOL_SPECS = [
             type: 'string',
             description:
               "Limit to one sport, e.g. 'NFL', 'NBA', 'MLB', 'NHL'. Omit to check every sport the user has a current league in.",
+          },
+          scope: {
+            type: 'string',
+            enum: ['selected', 'all'],
+            description: 'Default selected. Use all only when the current request explicitly asks across leagues.',
           },
         },
         required: [],
@@ -638,8 +717,17 @@ export async function executeChimmyTool(
 ): Promise<string> {
   const args = (rawArgs && typeof rawArgs === 'object' ? rawArgs : {}) as Record<string, unknown>
 
+  // Only with a league bound: without one these tools answer NO_LEAGUE and computed nothing.
+  if (ctx.toolRuns && ctx.leagueId && ctx.userId && (SUPERSEDING_TOOLS as readonly string[]).includes(name)) {
+    ctx.toolRuns.push({ tool: name, leagueId: ctx.leagueId })
+  }
+
   try {
     switch (name) {
+      case 'get_draft_analysis': {
+        const { buildDraftAnalysisContext } = await import('@/lib/chimmy/tools/draftAnalysisTool')
+        return await buildDraftAnalysisContext(ctx, args)
+      }
       case 'get_league_trade_activity': {
         if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
         const [{ buildTradeContextForChimmy }, { buildPendingTradeDecisionContext }, { buildLeagueTradeHistoryContext }] = await Promise.all([
@@ -649,7 +737,10 @@ export async function executeChimmyTool(
         ])
         const results = await Promise.allSettled([
           buildTradeContextForChimmy(ctx.leagueId, ctx.userId),
-          buildPendingTradeDecisionContext(ctx.leagueId, ctx.userId),
+          // The third argument only when grades are collected, so the scoped read stays exactly (league, user).
+          ctx.tradeGrades
+            ? buildPendingTradeDecisionContext(ctx.leagueId, ctx.userId, { onGrade: (g) => ctx.tradeGrades!.push(g) })
+            : buildPendingTradeDecisionContext(ctx.leagueId, ctx.userId),
           buildLeagueTradeHistoryContext(ctx.leagueId, ctx.userId),
           executeChimmyTool('get_my_roster', {}, ctx),
         ])
@@ -749,6 +840,19 @@ export async function executeChimmyTool(
         return buildAvailablePlayersContext(ctx.leagueId, ctx.userId)
       }
 
+      case 'get_faab_bid_plan': {
+        if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
+        // Lazy: the pricing graph (market values, trade rows) is only loaded when this tool runs.
+        const { computeFaabBidPlan, renderFaabBidText } = await import('@/lib/chimmy/tools/faabBidTool')
+        /*
+         * Computed ONCE: the model gets `renderFaabBidText(plan)` (exactly `buildFaabBidContext`),
+         * and the same `plan` object goes to the chat's bid card and verdict chip.
+         */
+        const plan = await computeFaabBidPlan(ctx.leagueId, ctx.userId)
+        ctx.faabPlans?.push({ leagueId: ctx.leagueId, plan })
+        return renderFaabBidText(plan)
+      }
+
       case 'get_my_roster': {
         if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
         const [roster, rules, waiver] = await Promise.all([
@@ -763,7 +867,15 @@ export async function executeChimmyTool(
           format: rules.context.flags, waiver: rules.context.waiver,
           lastSyncedAt: rules.context.importHealth.lastSyncedAt,
         }) : 'League rules could not be retrieved; do not substitute generic PPR or invented FAAB.'
-        return [roster, `VERIFIED LEAGUE RULES: ${settings}`, waiver ?? 'Personal FAAB balance is unavailable. Do not substitute starting budget.'].join('\n\n')
+        const bestBallRuleGap = rules?.ok && rules.context.lineupBehavior.bestBallMode && !rules.context.lineupBehavior.bestBallSettings
+          ? 'BEST BALL RULE EVIDENCE GAP: Automatic scoring lineup is confirmed, but this import has no verified Best Ball transaction or substitution configuration. Waiver, trade, and substitution permissions are UNVERIFIED; do not say they are disabled or enabled. Prior chat answers and generic Best Ball defaults are not evidence of this league\'s rules.'
+          : null
+        const actionEvidence = lineupActionEvidence({
+          platform: rules?.ok ? rules.context.platform : null,
+          bestBallMode: rules?.ok ? rules.context.lineupBehavior.bestBallMode : false,
+          lastSyncedAt: rules?.ok ? rules.context.importHealth.lastSyncedAt : null,
+        })
+        return [roster, `VERIFIED LEAGUE RULES: ${settings}`, bestBallRuleGap, actionEvidence, waiver ?? 'Personal FAAB balance is unavailable. Do not substitute starting budget.'].filter(Boolean).join('\n\n')
       }
 
       case 'get_league_standings': {
@@ -775,6 +887,42 @@ export async function executeChimmyTool(
       case 'get_trade_block': {
         if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
         return buildTradeBlockContext(ctx.leagueId)
+      }
+
+      /*
+       * 🛑 CHIMMY TOLD A KBFL MANAGER THE LEAGUE'S TRADE HISTORY "ISN'T ITEMIZED" (2026-09-20/21) while
+       * 27 trades with resolvable players were on file. The only completed-trade read it had was the
+       * push block inside `get_league_trade_activity`: eight trades, "one side got [..] for [..]", no
+       * manager on either side. This lists a season of them with both managers named from the league's
+       * own team rows. DB-first: `LeagueTrade` (synced daily from Sleeper) for the session's league,
+       * plus the FROZEN original grades already stored — read, never taken. The model's filters only
+       * narrow that read; they never name a league.
+       */
+      case 'get_league_trade_history': {
+        if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
+        const { buildLeagueTradeHistoryOutcome, TOOL_TRADES_SHOWN, TOOL_TRADE_SCAN_LIMIT } = await import(
+          '@/lib/chimmy-trade/leagueTradeHistoryGrounding'
+        )
+        const season =
+          typeof args.season === 'number' ? Math.trunc(args.season) : Number.parseInt(String(args.season ?? ''), 10)
+        const outcome = await buildLeagueTradeHistoryOutcome(ctx.leagueId, ctx.userId, {
+          season: Number.isFinite(season) ? season : null,
+          manager: typeof args.manager === 'string' ? args.manager.slice(0, 60) : null,
+          player: typeof args.player === 'string' ? args.player.slice(0, 60) : null,
+          maxShown: TOOL_TRADES_SHOWN,
+          scanLimit: TOOL_TRADE_SCAN_LIMIT,
+          frozenGrades: true,
+          // Only when the route collects letters, so a quoted frozen grade is not refused as invented.
+          ...(ctx.tradeGrades ? { onGrade: (g: ChimmyTradeGrade) => ctx.tradeGrades!.push(g) } : {}),
+        })
+        if (outcome.kind === 'ok') return outcome.text
+        if (outcome.kind === 'not-sleeper') {
+          return `Completed-trade history is only synced for Sleeper leagues, and this league is on ${outcome.platform}. Say that plainly; do NOT say the league has made no trades.`
+        }
+        if (outcome.kind === 'no-history-rows' || outcome.kind === 'no-trade-rows') {
+          return 'No completed trades are stored for this league yet (trade history syncs daily from Sleeper). Say no trades are on file — not that none have happened.'
+        }
+        return 'The trade history could not be read just now. Say so; do not describe any trades.'
       }
 
       case 'get_head_to_head': {
@@ -835,13 +983,13 @@ export async function executeChimmyTool(
         return await buildMyStartersPlayingContext({ userId: ctx.userId, window })
       }
 
-      /* Session-scoped like get_my_starters_playing: leagues come only from listMemberLeagues. */
+      /* Selected by default; an explicit cross-league request can scan authorized memberships. */
       case 'get_my_injuries': {
         if (!ctx.userId) {
           return 'I cannot tell who is signed in, so I cannot read their leagues. Say that; do not name a player or a league.'
         }
         const sport = typeof args.sport === 'string' && args.sport.trim() ? args.sport.trim().toUpperCase() : null
-        return await buildMyRosterInjuriesContext({ userId: ctx.userId, sport })
+        return await buildMyRosterInjuriesContext({ userId: ctx.userId, sport, leagueId: args.scope === 'all' ? null : ctx.leagueId })
       }
 
       case 'get_upcoming_games': {
@@ -945,7 +1093,13 @@ export async function executeChimmyTool(
       case 'evaluate_trade': {
         if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
         const { runTradeScenarioTool } = await import('@/lib/chimmy/tools/scenarioTools')
-        return await runTradeScenarioTool({ give: args.give, get: args.get, leagueId: ctx.leagueId, userId: ctx.userId })
+        return await runTradeScenarioTool({
+          give: args.give,
+          get: args.get,
+          leagueId: ctx.leagueId,
+          userId: ctx.userId,
+          ...(ctx.tradeGrades ? { onGrade: (g: ChimmyTradeGrade) => ctx.tradeGrades!.push(g) } : {}),
+        })
       }
 
       case 'find_trade_ideas': {
@@ -983,7 +1137,12 @@ export async function executeChimmyTool(
           return 'I cannot tell who is signed in, so I cannot read their leagues. Say that; do not name an opponent.'
         }
         const { buildMatchupPreviewContext } = await import('@/lib/chimmy/matchupPreviewGrounding')
-        return await buildMatchupPreviewContext({ leagueId: ctx.leagueId, userId: ctx.userId })
+        const settles = ctx.eliminationSettles
+        return await buildMatchupPreviewContext({
+          leagueId: ctx.leagueId,
+          userId: ctx.userId,
+          ...(settles ? { onSettle: (run: ChimmyEliminationSettleRun) => settles.push(run) } : {}),
+        })
       }
 
       /* ── League chat, waivers, and the two confirm-card tools. All need the proven league. ── */

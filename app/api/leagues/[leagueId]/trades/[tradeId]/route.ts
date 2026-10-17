@@ -7,7 +7,7 @@ import { prisma } from '@/lib/prisma'
 import { isSportsDataEnabled } from '@/lib/sports-evidence/gates'
 import { CertifiedTradeIntegrationService, extractTradePlayerRefs, type CertifiedScheduleDescription } from '@/lib/sports-evidence/tradeIntegration'
 import { weekFromLeagueSettingsForLineup } from '@/lib/roster/buildPersistedRosterDataFromRosterState'
-import { publicTradeDecisionReceipt } from '@/lib/league-trade-engine/tradeDecisionReceipt'
+import { PUBLIC_RECEIPT_SELECT, publicTradeDecisionReceipt } from '@/lib/league-trade-engine/tradeDecisionReceipt'
 
 export const dynamic = 'force-dynamic'
 
@@ -46,7 +46,7 @@ export async function GET(
   }
 
   const snapshotStore = (prisma as typeof prisma & { tradeDecisionSnapshot?: typeof prisma.tradeDecisionSnapshot }).tradeDecisionSnapshot
-  const snapshot = snapshotStore ? await snapshotStore.findUnique({ where: { tradeId } }).catch(() => null) : null
+  const snapshot = snapshotStore ? await snapshotStore.findUnique({ where: { tradeId }, select: PUBLIC_RECEIPT_SELECT }).catch(() => null) : null
   return NextResponse.json({
     trade: { ...trade, decisionReceipt: snapshot ? publicTradeDecisionReceipt(snapshot) : null },
     ...(sportsContext ? { sportsContext } : {}),

@@ -167,12 +167,12 @@ export function RivalryEngineList({
               <span
                 className={
                   r.tierBadgeColor === 'amber'
-                    ? 'rounded px-1.5 py-0.5 text-[10px] font-bold text-amber-300 border border-amber-500/20 bg-amber-500/10'
+                    ? 'rounded px-1.5 py-0.5 text-[11px] font-bold text-amber-300 border border-amber-500/20 bg-amber-500/10'
                     : r.tierBadgeColor === 'red'
-                      ? 'rounded px-1.5 py-0.5 text-[10px] font-bold text-red-300 border border-red-500/20 bg-red-500/10'
+                      ? 'rounded px-1.5 py-0.5 text-[11px] font-bold text-red-300 border border-red-500/20 bg-red-500/10'
                       : r.tierBadgeColor === 'orange'
-                        ? 'rounded px-1.5 py-0.5 text-[10px] font-bold text-orange-300 border border-orange-500/20 bg-orange-500/10'
-                        : 'rounded px-1.5 py-0.5 text-[10px] font-bold text-blue-300 border border-blue-500/20 bg-blue-500/10'
+                        ? 'rounded px-1.5 py-0.5 text-[11px] font-bold text-orange-300 border border-orange-500/20 bg-orange-500/10'
+                        : 'rounded px-1.5 py-0.5 text-[11px] font-bold text-blue-300 border border-blue-500/20 bg-blue-500/10'
                 }
               >
                 {r.rivalryTier}
@@ -182,7 +182,7 @@ export function RivalryEngineList({
               <span className="text-sm text-white/90">{r.managerBId}</span>
               <span className="text-xs text-white/40 tabular-nums">({r.rivalryScore.toFixed(1)})</span>
               {r.eventCount != null && r.eventCount > 0 && (
-                <span className="text-[10px] text-white/35">{r.eventCount} events</span>
+                <span className="text-[11px] text-white/35">{r.eventCount} events</span>
               )}
               <div className="ml-auto flex gap-1">
                 <Link
@@ -191,7 +191,7 @@ export function RivalryEngineList({
                   }${sport ? `sport=${encodeURIComponent(sport)}${season != null ? "&" : ""}` : ""}${
                     season != null ? `season=${encodeURIComponent(String(season))}` : ""
                   }`}
-                  className="rounded border border-white/15 bg-white/5 px-2 py-0.5 text-[10px] text-white/70 hover:bg-white/10"
+                  className="rounded border border-white/15 bg-white/5 px-2 py-0.5 text-[11px] text-white/70 hover:bg-white/10"
                 >
                   Details
                 </Link>
@@ -201,7 +201,7 @@ export function RivalryEngineList({
                   )}?tab=h2h${sport ? `&sport=${encodeURIComponent(sport)}` : ""}${
                     season != null ? `&season=${encodeURIComponent(String(season))}` : ""
                   }`}
-                  className="rounded border border-white/15 bg-white/5 px-2 py-0.5 text-[10px] text-white/70 hover:bg-white/10"
+                  className="rounded border border-white/15 bg-white/5 px-2 py-0.5 text-[11px] text-white/70 hover:bg-white/10"
                 >
                   H2H
                 </Link>
@@ -209,7 +209,7 @@ export function RivalryEngineList({
                   <button
                     type="button"
                     onClick={() => onViewTimeline(r.id)}
-                    className="rounded border border-white/15 bg-white/5 px-2 py-0.5 text-[10px] text-white/70 hover:bg-white/10"
+                    className="rounded border border-white/15 bg-white/5 px-2 py-0.5 text-[11px] text-white/70 hover:bg-white/10"
                   >
                     Timeline
                   </button>
@@ -218,7 +218,7 @@ export function RivalryEngineList({
                   <button
                     type="button"
                     onClick={() => onExplain(r.id)}
-                    className="rounded border border-cyan-400/20 bg-cyan-500/10 px-2 py-0.5 text-[10px] text-cyan-200 hover:bg-cyan-500/20"
+                    className="rounded border border-cyan-400/20 bg-cyan-500/10 px-2 py-0.5 text-[11px] text-cyan-200 hover:bg-cyan-500/20"
                   >
                     Explain
                   </button>

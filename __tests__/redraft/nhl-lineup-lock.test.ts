@@ -83,17 +83,26 @@ describe('NHL lineup lock', () => {
     expect(warnings[0]).toContain('No NHL games found')
   })
 
-  it('[control] NCAAB is still not locked from SportsGame — its schedule there is incomplete', async () => {
-    const { warnings } = await hydrateRedraftLineupLocks(schedule(GAMES), {
+  it('[control] NCAAB is never locked from SportsGame — its schedule there is incomplete', async () => {
+    // NCAAB reads the Rolling Insights schedule instead (ncaab-lineup-lock.test.ts); with none synced
+    // it fails open and says so. The partial SportsGame feed must not be read as a fallback.
+    let sportsGameReads = 0
+    const db = {
+      sportsGame: { findMany: async () => { sportsGameReads += 1; return [] } },
+      sportsDataCache: { findUnique: async () => null, findMany: async () => [] },
+    } as never
+    const { players, warnings } = await hydrateRedraftLineupLocks(db, {
       sport: 'NCAAB',
       season: 2026,
       week: 1,
       rosterId: 'r1',
       leagueSettings: {},
       players: PLAYERS,
-      now: new Date('2026-10-03T12:00:00.000Z'),
+      now: new Date('2026-11-05T12:00:00.000Z'),
     })
-    expect(warnings[0]).toContain('not locked')
+    expect(sportsGameReads).toBe(0)
+    expect(players.every((p) => !p.isLocked)).toBe(true)
+    expect(warnings[0]).toMatch(/schedule is not synced yet/)
   })
 })
 
@@ -161,8 +170,10 @@ describe('NBA lineup lock', () => {
   })
 
   it('[control] a sport with no week window names the sports that DO lock, NBA among them', async () => {
+    // Was MLB until MLB joined DATE_WINDOWED_SPORTS (2026-09-28). Soccer is date-windowed too, but it is
+    // in LOCK_NOT_WIRED_SPORTS: its gameweeks are not the lock's seven-day windows, so it stays unlocked.
     const { warnings } = await hydrateRedraftLineupLocks(schedule(NBA_GAMES), {
-      sport: 'MLB',
+      sport: 'SOCCER',
       season: 2026,
       week: 1,
       rosterId: 'r1',
@@ -172,6 +183,9 @@ describe('NBA lineup lock', () => {
     })
     expect(warnings[0]).toContain('not locked')
     expect(warnings[0]).toContain('NBA')
+    // It must not name soccer among the sports it locks while refusing to lock soccer.
+    expect(warnings[0]).not.toMatch(/SOCCER only/)
+    expect(warnings[0]).not.toMatch(/, SOCCER/)
   })
 })
 

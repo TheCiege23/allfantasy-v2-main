@@ -64,7 +64,7 @@ export function PickCell({ pickLabel, pick, managerIndex, isCurrentPick, isTrade
        *  metadata. */}
       <span
         data-testid="legacy-draft-board-pick-number"
-        className="inline-flex items-center rounded-md bg-black/30 px-1.5 py-0.5 font-mono text-[10px] tabular-nums text-white/60 ring-1 ring-white/[0.06]"
+        className="inline-flex items-center rounded-md bg-black/30 px-1.5 py-0.5 font-mono text-[11px] tabular-nums text-white/60 ring-1 ring-white/[0.06]"
       >
         {pickLabel}
       </span>
@@ -78,7 +78,7 @@ export function PickCell({ pickLabel, pick, managerIndex, isCurrentPick, isTrade
           </div>
           <div
             data-testid="legacy-draft-board-player-meta"
-            className="mt-0.5 flex items-center gap-1 text-[9px] text-white/55"
+            className="mt-0.5 flex items-center gap-1 text-[11px] text-white/55"
           >
             {pick!.position ? (
               <span className="rounded bg-black/30 px-1 py-px font-semibold uppercase tracking-wider text-white/75 ring-1 ring-white/[0.06]">
@@ -92,13 +92,13 @@ export function PickCell({ pickLabel, pick, managerIndex, isCurrentPick, isTrade
         <div className="mt-1 flex flex-col gap-0.5">
           <span
             data-testid="legacy-draft-board-on-the-clock-label"
-            className="self-start rounded bg-cyan-500/20 px-1 py-px text-[8px] font-bold uppercase tracking-widest text-cyan-100 ring-1 ring-cyan-400/40"
+            className="self-start rounded bg-cyan-500/20 px-1 py-px text-[11px] font-bold uppercase tracking-widest text-cyan-100 ring-1 ring-cyan-400/40"
           >
             On the clock
           </span>
           <span
             data-testid="legacy-draft-board-open-label"
-            className="text-[9px] font-semibold uppercase tracking-widest text-cyan-200/70"
+            className="text-[11px] font-semibold uppercase tracking-widest text-cyan-200/70"
           >
             Pick {pickLabel}
           </span>
@@ -106,7 +106,7 @@ export function PickCell({ pickLabel, pick, managerIndex, isCurrentPick, isTrade
       ) : (
         <div
           data-testid="legacy-draft-board-open-label"
-          className="mt-1 text-[9px] font-semibold uppercase tracking-widest text-white/35"
+          className="mt-1 text-[11px] font-semibold uppercase tracking-widest text-white/35"
         >
           Open
         </div>

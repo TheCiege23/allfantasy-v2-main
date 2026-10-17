@@ -21,7 +21,7 @@
 .af-triage-title {
   margin: 0;
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   line-height: 1;
   letter-spacing: 0.12em;
@@ -100,7 +100,7 @@
 }
 
 .af-triage-status {
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -160,7 +160,7 @@
 }
 
 .af-triage-league-platform {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.08em;
   color: color-mix(in srgb, var(--text) 55%, transparent);
@@ -238,7 +238,7 @@
   margin-left: 6px;
   padding: 0 4px;
   border-radius: 3px;
-  font-size: 8.5px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.05em;
   background: var(--chip);
@@ -252,7 +252,7 @@
 /* The price caveat, stated once for the panel. */
 .af-triage-basis {
   margin: 8px 0 0;
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--muted);
 }
 
@@ -326,4 +326,156 @@
     min-height: 44px;
     box-sizing: border-box;
   }
+}
+
+/*
+ * Best ball depth check (2026-10-08) — appended AFTER every existing @media block on purpose; a rule
+ * dropped inside one closes it early (see CLAUDE.md). Cards, not table rows: on a phone each one is
+ * a single thumb-sized tile with the position as its badge and the fix one tap away.
+ */
+.af-depth {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+}
+.af-triage-head + .af-depth {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+.af-depth-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text);
+}
+.af-depth-sub {
+  margin: 2px 0 8px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+.af-depth-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 8px;
+}
+.af-depth-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--warn) 6%, var(--surface));
+}
+.af-depth-card[data-tone='bad'] {
+  background: color-mix(in srgb, var(--bad) 8%, var(--surface));
+  border-color: color-mix(in srgb, var(--bad) 35%, var(--line));
+}
+.af-depth-pos {
+  flex-shrink: 0;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 16%, transparent);
+}
+.af-depth-pos[data-tone='bad'] {
+  color: var(--bad);
+  background: color-mix(in srgb, var(--bad) 16%, transparent);
+}
+.af-depth-main {
+  min-width: 0;
+  flex: 1;
+}
+.af-depth-league {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.af-depth-count {
+  margin-top: 1px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text);
+}
+.af-depth-names {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.af-depth-name em {
+  font-style: normal;
+  font-weight: 700;
+  color: var(--warn);
+}
+.af-depth-cta {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line2);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  text-decoration: none;
+  white-space: nowrap;
+}
+@media (max-width: 640px) {
+  .af-depth-list {
+    grid-template-columns: 1fr;
+  }
+  .af-depth-cta {
+    min-height: 44px;
+  }
+}
+
+/* 2026-10-17 — the fix-all summary, game-time (Questionable) rows, handled chips, and the fix hand-off. */
+.af-triage-summary {
+  display: block;
+  width: 100%;
+  font-size: 12px;
+  color: var(--af-text-dim, inherit);
+  margin-top: 2px;
+}
+.af-triage-row[data-tone='warn'] .af-triage-note--gametime {
+  font-style: italic;
+}
+.af-triage-slot[data-handled='true'] {
+  color: var(--af-good, #3ecf8e);
+}
+.af-triage-cta--fix {
+  font-weight: 600;
+}
+
+.af-triage-upsell {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--af-accent, #7c5cff);
 }

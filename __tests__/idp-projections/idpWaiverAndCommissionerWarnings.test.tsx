@@ -61,7 +61,7 @@ describe('IDP waiver section shows no invented rows', () => {
 
   it('invites the user to load targets instead', () => {
     render(<IDPWaiverSection leagueId="lg1" week={3} />)
-    expect(screen.getByTestId('idp-waiver-empty').textContent).toMatch(/Tap AI Targets/)
+    expect(screen.getByTestId('idp-waiver-empty').textContent).toMatch(/Tap Chimmy's Targets/)
   })
 
   /**

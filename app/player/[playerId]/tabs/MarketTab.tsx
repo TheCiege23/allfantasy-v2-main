@@ -80,7 +80,7 @@ function ValueBox({ label, value, tone = 'neutral' }: { label: string; value: st
   const color = tone === 'positive' ? 'text-emerald-400' : tone === 'negative' ? 'text-red-400' : 'text-white/80'
   return (
     <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] px-3 py-2.5 text-center">
-      <p className="text-[9px] uppercase tracking-wide text-white/30">{label}</p>
+      <p className="text-[11px] uppercase tracking-wide text-white/30">{label}</p>
       <p className={`mt-0.5 text-[16px] font-bold ${color}`}>{value}</p>
     </div>
   )

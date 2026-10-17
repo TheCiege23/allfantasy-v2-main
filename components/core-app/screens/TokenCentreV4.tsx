@@ -5,6 +5,7 @@ import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { useTokenBalance } from '@/hooks/useTokenBalance'
 import { usePostPurchaseSync } from '@/hooks/usePostPurchaseSync'
 import { resolveCheckoutUrl } from '@/lib/monetization/checkout-client'
+import { useAppleIapPrices } from '@/lib/monetization/apple-iap-client'
 import { CheckoutOutcomePanel } from '@/components/monetization/CheckoutOutcomePanel'
 import { getTokenPurchasableRule, type TokenBuyer } from '@/lib/tokens/tokenPurchasable'
 import '@/components/core-app/af-tokens.css'
@@ -55,6 +56,7 @@ const WHO_KEY: Partial<Record<TokenBuyer, string>> = {
 const CHIMMY_RULE = 'ai_chimmy_chat_message'
 
 export function TokenCentreV4({ packs }: TokenCentreV4Props) {
+  const { appleApp, prices: applePrices } = useAppleIapPrices()
   const { t } = useLanguage()
   const { balance, loading: balanceLoading } = useTokenBalance()
   const postPurchase = usePostPurchaseSync({})
@@ -120,6 +122,10 @@ export function TokenCentreV4({ packs }: TokenCentreV4Props) {
     if (!res.ok) {
       setError(res.error)
       setPendingSku(null)
+      return
+    }
+    if ('completed' in res) {
+      window.location.reload()
       return
     }
     window.location.assign(res.url)
@@ -211,7 +217,7 @@ export function TokenCentreV4({ packs }: TokenCentreV4Props) {
                 {p.tokenAmount != null ? p.tokenAmount.toLocaleString() : '—'}
               </span>
               <span className="af-tk-pack-label">{t('tokens.v4.packTokens')}</span>
-              <span className="af-tk-pack-price af-num">${p.amountUsd.toFixed(2)}</span>
+              <span className="af-tk-pack-price af-num">{appleApp ? (applePrices[p.sku] ?? 'Loading Apple price…') : `$${p.amountUsd.toFixed(2)}`}</span>
               {p.tokenAmount != null && chimmyCost ? (
                 <span className="af-tk-pack-about" data-testid={`tokens-pack-about-${p.sku}`}>
                   {t('tokens.v4.packAbout').replace('{{n}}', Math.floor(p.tokenAmount / chimmyCost).toLocaleString())}
@@ -230,7 +236,7 @@ export function TokenCentreV4({ packs }: TokenCentreV4Props) {
                 type="button"
                 className="af-tk-btn"
                 data-testid={`tokens-buy-cta-${p.sku}`}
-                disabled={pendingSku === p.sku}
+                disabled={pendingSku === p.sku || (appleApp && !applePrices[p.sku])}
                 onClick={() => buy(p.sku)}
               >
                 {pendingSku === p.sku ? `${t('tokens.v4.loading')}…` : t('tokens.v4.packBuy')}

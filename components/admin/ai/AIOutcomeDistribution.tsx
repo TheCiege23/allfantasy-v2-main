@@ -15,7 +15,7 @@ export function AIOutcomeDistribution({ buckets }: { buckets: AdminAIMetricsBund
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data}>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
-            <XAxis dataKey="name" tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 10 }} interval={0} angle={-12} height={48} />
+            <XAxis dataKey="name" tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 11 }} interval={0} angle={-12} height={48} />
             <YAxis domain={[0, max]} tick={{ fill: 'rgba(255,255,255,0.45)', fontSize: 11 }} />
             <Tooltip
               contentStyle={{ background: '#111118', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8 }}

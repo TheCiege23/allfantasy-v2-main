@@ -84,6 +84,18 @@ describe('media registries point at files that actually ship', () => {
     expect(missing).toEqual([])
   })
 
+  it('every create-league concept tile has a shipped poster, video, and video fallback', () => {
+    const missing: string[] = []
+    for (const [concept, asset] of Object.entries(LEAGUE_TYPE_MEDIA)) {
+      if (!shipped(asset.video)) missing.push(`${concept} video: ${asset.video}`)
+      if (!asset.poster || !shipped(asset.poster)) missing.push(`${concept} poster: ${asset.poster}`)
+      if (asset.fallback && (!asset.fallback.endsWith('.mp4') || !shipped(asset.fallback))) {
+        missing.push(`${concept} fallback: ${asset.fallback}`)
+      }
+    }
+    expect(missing).toEqual([])
+  })
+
   it('every create-league sport clip and poster exists', () => {
     const missing: string[] = []
     for (const [sport, asset] of Object.entries(SPORT_MEDIA)) {

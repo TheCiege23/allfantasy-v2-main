@@ -123,11 +123,11 @@ export default function FinalDashboardClient() {
     source: 'dashboard',
   })
   const chimmyCtaHref = aiAssistantEnabled ? chimmyHref : aiSuggestionsHref
-  const chimmyCtaTitle = aiAssistantEnabled ? 'Chimmy AI' : 'AI temporarily unavailable'
+  const chimmyCtaTitle = aiAssistantEnabled ? 'Chimmy' : 'Chimmy is temporarily unavailable'
   const chimmyCtaSubtitle = aiAssistantEnabled
     ? 'Ask about your leagues'
     : aiAssistantLoading
-      ? 'Checking AI availability...'
+      ? 'Checking whether Chimmy is available...'
       : 'Open deterministic suggestions instead'
   const subscriptionLabel = formatPlanLabel(entitlement?.plans, isActiveOrGrace)
   const hasSignalData = upcomingDrafts.length > 0 || liveMatchups.length > 0
@@ -153,7 +153,7 @@ export default function FinalDashboardClient() {
       <main className="mx-auto w-full max-w-lg px-4 py-10 sm:py-14">
         <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-8 text-center">
           <h1 className="text-xl font-semibold text-white">Your dashboard</h1>
-          <p className="mt-2 text-sm text-white/50">Sign in to see leagues, drafts, matchups, and AI suggestions.</p>
+          <p className="mt-2 text-sm text-white/50">Sign in to see leagues, drafts, matchups, and Chimmy&apos;s suggestions.</p>
           <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
             <Link
               href="/login?callbackUrl=/dashboard"
@@ -181,7 +181,7 @@ export default function FinalDashboardClient() {
             <div>
               <p className="text-[11px] uppercase tracking-[0.16em] text-white/45">AllFantasy Dashboard</p>
               <h1 className="mt-1 text-xl font-bold text-white">Game Day Control Center</h1>
-              <p className="mt-1 text-xs text-white/55">Leagues, drafts, matchups, and AI in one clean view.</p>
+              <p className="mt-1 text-xs text-white/55">Leagues, drafts, matchups, and Chimmy in one clean view.</p>
             </div>
             <button
               type="button"
@@ -406,8 +406,8 @@ export default function FinalDashboardClient() {
           </div>
         </section>
 
-        <section className="space-y-3" aria-label="AI suggestions">
-          <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-white/45">AI suggestions</h2>
+        <section className="space-y-3" aria-label="Chimmy's suggestions">
+          <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-white/45">Chimmy&apos;s suggestions</h2>
           <Link
             href={aiSuggestionsHref}
             className="flex items-center gap-3 rounded-xl border border-cyan-500/25 bg-cyan-500/10 p-4 hover:bg-cyan-500/15 transition-premium focus-ring"
@@ -416,7 +416,7 @@ export default function FinalDashboardClient() {
               <Sparkles className="h-4 w-4" />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block text-sm font-semibold text-white">League AI advisor</span>
+              <span className="block text-sm font-semibold text-white">League advisor with Chimmy</span>
               <span className="block text-xs text-cyan-100/75">Start/sit, trade posture, waiver priorities.</span>
             </span>
             <ChevronRight className="h-4 w-4 text-cyan-300/70 shrink-0" />

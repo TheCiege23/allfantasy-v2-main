@@ -167,7 +167,11 @@ export const REDRAFT_SPORT_CONFIGS: Record<string, RedraftSportConfig> = {
       'September callups expand available player pool',
     ],
     flexPositions: {
-      UTIL: ['C', '1B', '2B', '3B', 'SS', 'OF'],
+        UTIL: ['C', '1B', '2B', '3B', 'SS', 'OF', 'LF', 'CF', 'RF', 'DH', 'TWP'],
+      P: ['SP', 'RP', 'P'],
+      OF: ['OF', 'LF', 'CF', 'RF'],
+      CI: ['1B', '3B'],
+      MI: ['2B', 'SS'],
     },
   },
   nhl: {
@@ -207,15 +211,17 @@ export const REDRAFT_SPORT_CONFIGS: Record<string, RedraftSportConfig> = {
   ncaaf: {
     sport: 'ncaaf',
     label: 'College Football',
-    starterSlots: ['QB', 'RB', 'WR', 'WR', 'TE', 'DEF'],
+    // No DEF starter: no college team defense exists to draft (see redraftTeamDefenseEnabled).
+    starterSlots: ['QB', 'RB', 'WR', 'WR', 'TE'],
     benchSlots: 8,
     irSlots: 1,
-    totalRosterSize: 15,
+    totalRosterSize: 14,
     lineupFrequency: 'weekly',
     defaultScoringFormat: 'half_ppr',
     supportedScoringFormats: ['ppr', 'half_ppr', 'standard'],
-    regularSeasonWeeks: 12,
-    defaultPlayoffStartWeek: 13,
+    // A 4-team bracket plays weeks 12-13 — NCAAF brackets end on week 13 (ncaafPlayoffWindow.ts).
+    regularSeasonWeeks: 11,
+    defaultPlayoffStartWeek: 12,
     defaultPlayoffTeams: 4,
     supportedPlayoffSizes: [4, 6],
     defaultTeamCount: 12,

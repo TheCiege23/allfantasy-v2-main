@@ -19,6 +19,7 @@ import { TradeBoardSection } from './TradeBoardSection'
 import '@/components/core-app/af-core.css'
 
 import type { DefenseHubPayload, DefenseHubState } from '@/lib/idp-projections/defenseHub'
+import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
 import { ValuesPageLink } from '@/components/values/ValuesPageLink'
 
 /**
@@ -63,6 +64,12 @@ const FALLBACK_REASON: Record<DefenseHubState, { title: string; body: string }> 
     title: 'You don’t roster any defensive players yet',
     body: 'This league starts defensive slots — once you hold a defender, he shows up here.',
   },
+  ids_unreadable: {
+    title: FOREIGN_IDS_UNREADABLE,
+    body:
+      'Your roster is imported, but until its players can be matched there is no defender here ' +
+      'we could name or price — so none is shown, rather than the wrong one.',
+  },
   no_projection_history: {
     title: 'No scored games on file yet',
     body:
@@ -99,7 +106,7 @@ function Blocked({ state, leagueId }: { state: DefenseHubState; leagueId: string
 }
 
 const Label = ({ children }: { children: React.ReactNode }) => (
-  <div className="mb-2.5 font-mono text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--faint)]">
+  <div className="mb-2.5 font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--faint)]">
     {children}
   </div>
 )
@@ -168,7 +175,7 @@ export function DefenseHubClient({
       <div className="mx-auto max-w-[1200px]">
         <header className="mb-6">
           {!embedded ? (
-            <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--faint)]">
+            <div className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--faint)]">
               <Link href={`/league/${leagueId}`} className="hover:text-[var(--accent)]">
                 ← League
               </Link>
@@ -245,7 +252,7 @@ function Kickers({ data }: { data: DefenseHubPayload }) {
           <div className="font-mono text-[17px] font-black text-[var(--text)]">
             {data.kickerValue.value?.toLocaleString()}
           </div>
-          <div className="font-mono text-[9px] font-bold uppercase tracking-[0.1em] text-[var(--faint)]">
+          <div className="font-mono text-[11px] font-bold uppercase tracking-[0.1em] text-[var(--faint)]">
             each · replacement about K{data.kickerValue.replacementRank}
           </div>
         </div>
@@ -280,7 +287,7 @@ function CoverageBanner({ data }: { data: DefenseHubPayload }) {
       }`}
     >
       <span
-        className={`mr-2.5 font-mono text-[9px] font-bold uppercase tracking-[0.14em] ${
+        className={`mr-2.5 font-mono text-[11px] font-bold uppercase tracking-[0.14em] ${
           full ? 'text-[var(--good)]' : 'text-[var(--warn)]'
         }`}
       >
@@ -308,7 +315,7 @@ function DefenderTable({ data }: { data: DefenseHubPayload }) {
       <div className="overflow-x-auto rounded-[13px] border border-[var(--line)] bg-[var(--surface)]">
         <table className="w-full min-w-[680px] text-left">
           <thead>
-            <tr className="border-b border-[var(--line)] font-mono text-[9px] font-bold uppercase tracking-[0.1em] text-[var(--faint)]">
+            <tr className="border-b border-[var(--line)] font-mono text-[11px] font-bold uppercase tracking-[0.1em] text-[var(--faint)]">
               <th className="px-4 py-3">Player</th>
               <th className="px-2 py-3">Pos</th>
               <th className="px-2 py-3 text-right text-[var(--accent)]">Proj ↓</th>
@@ -323,7 +330,7 @@ function DefenderTable({ data }: { data: DefenseHubPayload }) {
               <tr key={d.sleeperId} className="border-b border-[var(--line)] last:border-0">
                 <td className="px-4 py-3" colSpan={d.reason ? 7 : 1}>
                   <div className="text-[13px] font-extrabold">{d.name}</div>
-                  <div className="font-mono text-[10px] text-[var(--faint)]">{d.team ?? '—'}</div>
+                  <div className="font-mono text-[11px] text-[var(--faint)]">{d.team ?? '—'}</div>
                   {d.reason && (
                     <div className="mt-1.5 text-[11px] font-semibold text-[var(--warn)]">{d.reason}</div>
                   )}
@@ -389,7 +396,7 @@ function DefenderTable({ data }: { data: DefenseHubPayload }) {
                           title="Floor price: below this league's meaningful board, not a measured value. Do not compare two floor-priced defenders."
                         >
                           {d.value.toLocaleString()}
-                          <span className="ml-1 text-[10px]">floor</span>
+                          <span className="ml-1 text-[11px]">floor</span>
                         </span>
                       ) : (
                         d.value.toLocaleString()
@@ -441,7 +448,7 @@ function SnapShare({ data }: { data: DefenseHubPayload }) {
               change as though it were form.
             */}
             {s.share != null && (
-              <div className="mt-1 font-mono text-[10px] text-[var(--faint)]">— first week</div>
+              <div className="mt-1 font-mono text-[11px] text-[var(--faint)]">— first week</div>
             )}
           </div>
         ))}
@@ -467,7 +474,7 @@ function RoleCards({ data }: { data: DefenseHubPayload }) {
             <div className="flex flex-col gap-2">
               {r.lines.map((l) => (
                 <div key={l.label}>
-                  <div className="font-mono text-[9px] font-bold uppercase tracking-[0.1em] text-[var(--faint)]">
+                  <div className="font-mono text-[11px] font-bold uppercase tracking-[0.1em] text-[var(--faint)]">
                     {l.label}
                   </div>
                   <div
@@ -477,7 +484,7 @@ function RoleCards({ data }: { data: DefenseHubPayload }) {
                   >
                     {l.value ?? '—'}
                   </div>
-                  <div className="text-[10px] leading-snug text-[var(--faint)]">{l.basis}</div>
+                  <div className="text-[11px] leading-snug text-[var(--faint)]">{l.basis}</div>
                 </div>
               ))}
             </div>
@@ -509,7 +516,7 @@ function Tendencies({ data }: { data: DefenseHubPayload }) {
             <div className="mb-3 flex items-baseline gap-2">
               <span className="text-[13px] font-extrabold">{team} defence</span>
               {/* The season is not decoration — coordinators change between years. */}
-              <span className="font-mono text-[10px] text-[var(--faint)]">{t.season} season</span>
+              <span className="font-mono text-[11px] text-[var(--faint)]">{t.season} season</span>
             </div>
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               <Stat label="Pass rate faced" value={t.passRateFaced != null ? pct(t.passRateFaced) : null} />
@@ -544,7 +551,7 @@ function Stat({ label, value }: { label: string; value: string | null }) {
       <div className="font-mono text-[16px] font-extrabold leading-none">
         {value ?? <Dash />}
       </div>
-      <div className="mt-1.5 font-mono text-[9px] font-bold uppercase tracking-[0.1em] text-[var(--faint)]">
+      <div className="mt-1.5 font-mono text-[11px] font-bold uppercase tracking-[0.1em] text-[var(--faint)]">
         {label}
       </div>
     </div>

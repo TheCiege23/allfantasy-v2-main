@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { assertCommissioner } from '@/lib/commissioner/permissions'
+import { withClientLeagueSettings } from '@/lib/league/clientLeagueSettings'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import { getFormatTypeForVariant } from '@/lib/sport-defaults/LeagueVariantRegistry'
 import { getRosterTemplateForLeague } from '@/lib/multi-sport/MultiSportRosterService'
@@ -23,10 +24,8 @@ async function resolveLeagueRosterTemplate(
 /** GET: list rosters invalid under the resolved sport/variant roster template.
  * POST: set lineup lock rules or force-correct one roster using template validation/correction.
  */
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: { leagueId: string } }
-) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
+  const params = await props.params
   const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -86,10 +85,8 @@ export async function GET(
   })
 }
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: { leagueId: string } }
-) {
+export async function POST(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
+  const params = await props.params
   const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -171,5 +168,5 @@ export async function POST(
     },
     select: { id: true, settings: true },
   })
-  return NextResponse.json(updated)
+  return NextResponse.json(withClientLeagueSettings(updated))
 }

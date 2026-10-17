@@ -98,13 +98,35 @@ function getAssistantConfig(assistant: OpenClawAssistant): OpenClawConfig {
   }
 }
 
-export function buildOpenClawTargetUrl(path = ''): string {
-  const { webUiUrl } = getOpenClawConfig()
-  const base = new URL(webUiUrl)
+/**
+ * Resolve a caller-supplied path against the configured gateway, pinned to it.
+ *
+ * ⚠ SSRF + TOKEN THEFT. `new URL('//evil.com/x', base)` is a PROTOCOL-RELATIVE
+ * URL and resolves to https://evil.com/x — and `/\evil.com` does the same under
+ * WHATWG parsing. The routes' own check only rejected '://', so any signed-in
+ * user could point the upstream call (which carries the OpenClaw bearer token)
+ * at a host of their choosing, or at an internal address. The resolved origin
+ * must equal the base origin, whatever the path looked like.
+ */
+function resolvePinnedPath(baseUrl: string, path: string): string {
+  const base = new URL(baseUrl)
   if (!path) return base.toString()
-
+  if (/[\\\u0000-\u001f]/.test(path)) {
+    throw new Error('upstreamPath contains characters that are not allowed.')
+  }
   const safePath = path.startsWith('/') ? path : `/${path}`
-  return new URL(safePath, base).toString()
+  if (safePath.startsWith('//')) {
+    throw new Error('upstreamPath must be a path on the configured gateway.')
+  }
+  const target = new URL(safePath, base)
+  if (target.origin !== base.origin) {
+    throw new Error('upstreamPath must be a path on the configured gateway.')
+  }
+  return target.toString()
+}
+
+export function buildOpenClawTargetUrl(path = ''): string {
+  return resolvePinnedPath(getOpenClawConfig().webUiUrl, path)
 }
 
 export function getOpenClawPublicMeta(): { webUiUrl: string; gatewayUrl: string } {
@@ -126,12 +148,7 @@ export function isOpenClawGrowthConfigured(): boolean {
 }
 
 export function buildOpenClawGrowthTargetUrl(path = ''): string {
-  const { webUiUrl } = getOpenClawGrowthConfig()
-  const base = new URL(webUiUrl)
-  if (!path) return base.toString()
-
-  const safePath = path.startsWith('/') ? path : `/${path}`
-  return new URL(safePath, base).toString()
+  return resolvePinnedPath(getOpenClawGrowthConfig().webUiUrl, path)
 }
 
 export function getOpenClawGrowthPublicMeta(): { webUiUrl: string; gatewayUrl: string } {

@@ -10,8 +10,12 @@ import type { CommissionerPlatformResponse } from '../../contracts'
 export interface ManagerDnaProfile {
   id: string
   managerName: string
-  /** A descriptive archetype, never a permanent label — see the blueprint's DNA naming discipline. */
-  archetype: string
+  /*
+   * 🛑 NO `archetype`. It carried a characterisation label for a named manager ("Active Trader",
+   * "Waiver Hawk", "Quiet Participant"…) and Milestone 32 shows those to NOBODY — commissioners
+   * included. Everything below is a fact or a continuity signal about the league, not a verdict
+   * on the person.
+   */
   /**
    * OPTIONAL because it has no source in the live backend. Tenure is a roster-history fact, not a
    * Decision OS concept, and there is no season-continuity query to reuse. Demo and stub supply it;

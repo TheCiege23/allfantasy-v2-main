@@ -22,7 +22,7 @@ function GameCard({ game }: { game: LiveScoreGame }) {
       live ? 'border-red-500/30 bg-red-500/5' : 'border-white/[0.06] bg-white/[0.03]'
     }`} style={{ minWidth: 120 }}>
       {live && (
-        <span className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest text-red-400">
+        <span className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-widest text-red-400">
           <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-500" /> Live
         </span>
       )}
@@ -34,7 +34,7 @@ function GameCard({ game }: { game: LiveScoreGame }) {
         <span className="text-white/80">{game.homeTeam}</span>
         <span className="text-white/50">{game.homeScore}</span>
       </div>
-      <span className={`text-[10px] font-medium ${gameStatusColor(game.status)}`}>
+      <span className={`text-[11px] font-medium ${gameStatusColor(game.status)}`}>
         {game.quarter ? `${game.quarter} ${game.clock ?? ''}` : game.status}
       </span>
     </div>

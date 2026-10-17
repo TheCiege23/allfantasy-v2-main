@@ -4,6 +4,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { userHasBracketBrainAi } from "@/lib/bracket-brain/bracketBrainAccess"
 import { prisma } from "@/lib/prisma"
+import { BlockListUnavailableError, getBlockedSenderSetForRead } from "@/lib/moderation/BlockUserService"
 import {
   getGifProviderName,
   isGifSearchConfigured,
@@ -165,7 +166,6 @@ type RawWorldCupChatEvent = {
   user?: {
     displayName?: string | null
     username?: string | null
-    email?: string | null
     avatarUrl?: string | null
   } | null
 }
@@ -183,7 +183,6 @@ type WorldCupChatMemberRow = {
     id: string
     username?: string | null
     displayName?: string | null
-    email?: string | null
     avatarUrl?: string | null
   } | null
 }
@@ -269,7 +268,7 @@ function imageMetadata(value: unknown) {
 function isAllowedCloudinaryImageUrl(value: string) {
   try {
     const url = new URL(value)
-    return url.protocol === "https:" && /(^|\.)res\.cloudinary\.com$/i.test(url.hostname)
+    return url.protocol === "https:" && /(^|\.)res\.cloudinary\.com$/i.test(url.hostname);
   } catch {
     return false
   }
@@ -280,7 +279,7 @@ function sanitizeGifQuery(value: string | null) {
     .replace(/[<>]/g, "")
     .replace(/[\u0000-\u001F\u007F]/g, "")
     .trim()
-    .slice(0, 64)
+    .slice(0, 64);
 }
 
 function safeNumber(value: unknown) {
@@ -346,7 +345,7 @@ function sanitizePollText(value: string, maxLength: number) {
     .replace(/[\u0000-\u001F\u007F]/g, "")
     .replace(/\s+/g, " ")
     .trim()
-    .slice(0, maxLength)
+    .slice(0, maxLength);
 }
 
 function normalizePollOptions(values: string[]) {
@@ -427,11 +426,16 @@ function serializeChatMessage(row: RawWorldCupChatEvent, requesterUserId: string
   const visibility = typeof metadata.visibility === "string" ? metadata.visibility : "public"
   const targetUserId = typeof metadata.targetUserId === "string" ? metadata.targetUserId : null
   const authorNameOverride = typeof metadata.authorName === "string" ? metadata.authorName : null
+  /*
+   * 🛑 NEVER A NAME FROM AN EMAIL. This fell back to the part before the "@" of the author's email,
+   * and the result went to every member of the pool — for anyone with no display name or username,
+   * their email prefix was their name in chat (found 2026-09-29). The bracket pool chat route found
+   * and fixed the same leak on 2026-09-25. Email is no longer even selected for these rows.
+   */
   const displayName =
     authorNameOverride ||
     row.user?.displayName ||
     row.user?.username ||
-    row.user?.email?.split("@")[0] ||
     (row.isAiGenerated ? "Chimmy" : null) ||
     (row.userId === requesterUserId ? "You" : "Pool member")
 
@@ -484,7 +488,6 @@ async function listChatMessages(challengeId: string, requesterUserId: string) {
         select: {
           displayName: true,
           username: true,
-          email: true,
           avatarUrl: true,
         },
       },
@@ -691,7 +694,6 @@ async function createWorldCupPoll(input: {
         select: {
           displayName: true,
           username: true,
-          email: true,
           avatarUrl: true,
         },
       },
@@ -722,7 +724,6 @@ async function voteWorldCupPoll(input: {
         select: {
           displayName: true,
           username: true,
-          email: true,
           avatarUrl: true,
         },
       },
@@ -775,7 +776,6 @@ async function voteWorldCupPoll(input: {
         select: {
           displayName: true,
           username: true,
-          email: true,
           avatarUrl: true,
         },
       },
@@ -804,14 +804,13 @@ async function resolveMentionedUsers(challengeId: string, names: string[]) {
           id: true,
           username: true,
           displayName: true,
-          email: true,
         },
       },
     },
   }) as Array<{
     userId: string
     displayName: string
-    user?: { id: string; username?: string | null; displayName?: string | null; email?: string | null } | null
+    user?: { id: string; username?: string | null; displayName?: string | null } | null
   }>
 
   return participants.map((participant) => ({
@@ -831,7 +830,6 @@ async function listWorldCupChatMembers(challengeId: string, requesterUserId: str
           id: true,
           username: true,
           displayName: true,
-          email: true,
           avatarUrl: true,
         },
       },
@@ -841,11 +839,11 @@ async function listWorldCupChatMembers(challengeId: string, requesterUserId: str
   return participants.map((participant) => {
     const user = participant.user
     const username = user?.username ?? null
+    /* Never a name from an email — see serializeChatMessage. This list goes to every member. */
     const label =
       user?.displayName ||
       username ||
       participant.displayName ||
-      user?.email?.split("@")[0] ||
       "Pool member"
     return {
       userId: participant.userId,
@@ -995,7 +993,6 @@ async function createPrivateChimmyResponse(input: {
         select: {
           displayName: true,
           username: true,
-          email: true,
           avatarUrl: true,
         },
       },
@@ -1007,12 +1004,12 @@ async function createPrivateChimmyResponse(input: {
 
 export async function GET(
   request: Request,
-  context: { params: { challengeId: string } }
+  context: { params: Promise<{ challengeId: string }> }
 ) {
   const auth = await requireWorldCupApiUser(request)
   if (!auth.ok) return auth.response
 
-  const params = worldCupChallengeParamsSchema.safeParse(context.params)
+  const params = worldCupChallengeParamsSchema.safeParse((await context.params))
   if (!params.success) {
     return NextResponse.json({ error: "Invalid challenge id" }, { status: 400 })
   }
@@ -1033,18 +1030,33 @@ export async function GET(
     return NextResponse.json({ members })
   }
 
-  const messages = await listChatMessages(params.data.challengeId, auth.user.id)
-  return NextResponse.json({ messages })
+  /*
+   * People this viewer blocked are not shown (App Store guideline 1.2), and a failed block-list read
+   * is a 503, never an unfiltered pool chat — the rule every other chat read follows. Author-less
+   * rows are never filtered, and the viewer is never in their own block set.
+   */
+  let blocked: Set<string>
+  try {
+    blocked = await getBlockedSenderSetForRead(auth.user.id)
+  } catch (err) {
+    if (!(err instanceof BlockListUnavailableError)) throw err
+    return NextResponse.json({ error: "Messages are temporarily unavailable. Try again in a moment." }, { status: 503 })
+  }
+  const messages = (await listChatMessages(params.data.challengeId, auth.user.id)).filter(
+    (m) => !m.userId || !blocked.has(m.userId),
+  )
+  /* `viewerUserId`: the shell offers Report and Block on everyone's messages but the viewer's own. */
+  return NextResponse.json({ messages, viewerUserId: auth.user.id })
 }
 
 export async function POST(
   request: Request,
-  context: { params: { challengeId: string } }
+  context: { params: Promise<{ challengeId: string }> }
 ) {
   const auth = await requireWorldCupApiUser(request)
   if (!auth.ok) return auth.response
 
-  const params = worldCupChallengeParamsSchema.safeParse(context.params)
+  const params = worldCupChallengeParamsSchema.safeParse((await context.params))
   if (!params.success) {
     return NextResponse.json({ error: "Invalid challenge id" }, { status: 400 })
   }
@@ -1273,7 +1285,6 @@ export async function POST(
         select: {
           displayName: true,
           username: true,
-          email: true,
           avatarUrl: true,
         },
       },

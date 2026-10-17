@@ -112,7 +112,12 @@ export function AFSupremeBundleSpotlight({ className = '' }: { className?: strin
             ))}
           </ul>
           <p className="mt-2 text-[11px] text-white/65" data-testid="af-supreme-token-clarity-copy">
-            Includes 1,000 tokens monthly or 15,000 yearly. Tokens only apply to token-metered actions where policy requires.
+            {/*
+              Used to promise a monthly and a yearly token grant — a grant that stopped on the day
+              subscriptions stopped carrying tokens (catalog.ts tokenAmount: null; subscription-policy
+              grants 0). Fixed 2026-10-03 when the honesty test caught it.
+            */}
+            Every AF Supreme feature is unlocked outright, so you never spend tokens on them. Tokens are only for pay-as-you-go use without a plan.
           </p>
         </article>
 

@@ -61,17 +61,19 @@ describe('projectedLetterFor', () => {
 })
 
 describe('the screen honours the no-letter rule', () => {
+  /*
+   * Trade OS (2026-09-27): the screen's letters come ONLY from the server's one grade. The
+   * `projectedLetterFor(percentDiff)` fallback it kept for older responses was a second copy of the
+   * arithmetic run in the browser; with it gone, "no grade on the response" means "no badge".
+   */
   it('⚠ renders a badge only when a letter came back', () => {
-    expect(SCREEN).toContain('A LETTER PER SIDE, OR NO LETTER AT ALL')
     expect(SCREEN).toContain('g.letter ? (')
   })
 
-  it('mirrors percentDiff for the opponent rather than recomputing it', () => {
-    expect(SCREEN).toContain('-result.percentDiff')
-  })
-
-  it('passes hasSignal from the same no-signal test the callout uses', () => {
-    // One source of truth — the badge and the warning cannot disagree.
-    expect(SCREEN).toContain('hasSignal: Boolean(result) && !noSignal')
+  it('takes both letters from the server grade, and computes none itself', () => {
+    expect(SCREEN).toMatch(/const yourGrade = serverGrade\?\.graded \? serverGrade\.letter : null/)
+    expect(SCREEN).toMatch(/const theirGrade = serverGrade\?\.graded \? serverGrade\.partnerLetter : null/)
+    // Not imported at all. (The file's comments name the removed call, so match the import, not the word.)
+    expect(SCREEN).not.toMatch(/import[^\n]*projectedLetterFor/)
   })
 })

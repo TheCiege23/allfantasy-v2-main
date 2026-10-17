@@ -1,7 +1,15 @@
 import { prisma } from '@/lib/prisma'
-import type { FantasyCalcPlayer, FantasyCalcSettings, PlayerValueLookup } from '@/lib/fantasycalc'
+import type { FantasyCalcPlayer, FantasyCalcPlayerIdentity, FantasyCalcSettings, PlayerValueLookup } from '@/lib/fantasycalc'
 import { buildPlayerValuesForNames } from '@/lib/fantasycalc'
 import { fetchFantasyCalcValues } from '@/lib/fantasycalc-fetch'
+import {
+  buildFantasyCalcCacheKey,
+  packProfileCapture,
+  profileCaptureDay,
+  profileCaptureKey,
+  PROFILE_CAPTURE_EXPIRES_AT,
+  PROFILE_CAPTURE_PREFIX,
+} from '@/lib/fantasycalc-profile-capture'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
 
 const KEY_PREFIX = 'fantasycalc:values:'
@@ -12,9 +20,8 @@ type CachedFantasyCalcPayload = {
   syncedAt: string
 }
 
-export function buildFantasyCalcCacheKey(settings: FantasyCalcSettings): string {
-  return `${KEY_PREFIX}dynasty:${settings.isDynasty ? '1' : '0'}:qbs:${settings.numQbs}:teams:${settings.numTeams}:ppr:${settings.ppr}`
-}
+// The key format lives with the profile capture, which needs it without importing this module.
+export { buildFantasyCalcCacheKey }
 
 function parseCachedPayload(data: unknown): CachedFantasyCalcPayload | null {
   if (!data || typeof data !== 'object' || Array.isArray(data)) return null
@@ -23,6 +30,28 @@ function parseCachedPayload(data: unknown): CachedFantasyCalcPayload | null {
   if (!payload.settings || typeof payload.settings !== 'object') return null
   if (typeof payload.syncedAt !== 'string') return null
   return payload as CachedFantasyCalcPayload
+}
+
+/**
+ * Every player identity held in ANY cached FantasyCalc profile — one Postgres read, never a fetch.
+ *
+ * FantasyCalc hands us each player's id on several platforms at once (`sleeperId`, `mflId`,
+ * `fleaflickerId`, `espnId`). That makes the cache the cheapest honest bridge from those platforms'
+ * roster ids to Sleeper ids (`lib/player-identity/fantasyCalcIdentityBridge.ts`). A stale row is as
+ * good as a fresh one for this: a player's ids do not change when his value does.
+ */
+export async function readCachedFantasyCalcIdentities(): Promise<FantasyCalcPlayerIdentity[]> {
+  const rows = await prisma.sportsDataCache.findMany({
+    where: { cacheKey: { startsWith: KEY_PREFIX } },
+    select: { data: true },
+  })
+  const out: FantasyCalcPlayerIdentity[] = []
+  for (const row of rows) {
+    const payload = parseCachedPayload(row.data)
+    if (!payload) continue
+    for (const v of payload.players) if (v?.player) out.push(v.player)
+  }
+  return out
 }
 
 export async function writeFantasyCalcValuesToDb(
@@ -99,13 +128,49 @@ export async function listCachedFantasyCalcProfiles(
   return out
 }
 
+/**
+ * Store today's board for one profile — ONCE per profile per UTC day, never overwritten. The first
+ * successful warm of the day is the capture, with its real time recorded (`capturedAt`); every later
+ * warm that day is a no-op here. See `lib/fantasycalc-profile-capture.ts` for the key and payload,
+ * and `lib/decision-os/trade/datedMarket.ts` for the reader (a completed trade graded more than a day
+ * after it happened is priced on its league's own profile from the trade date).
+ *
+ * `createMany` + `skipDuplicates` is `INSERT … ON CONFLICT DO NOTHING`: two overlapping warms cannot
+ * both write, and neither can replace the other's row. Ingestion only — the warm cron is its caller.
+ *
+ * Resolves `true` when this call wrote the day's capture, `false` when one already existed.
+ */
+export async function captureFantasyCalcProfileDaily(
+  settings: FantasyCalcSettings,
+  players: FantasyCalcPlayer[],
+  capturedAt: Date,
+): Promise<boolean> {
+  // An empty board is a vendor hiccup, not a market: it must not take the day's only slot.
+  if (players.length === 0) return false
+  const payload = packProfileCapture(settings, players, capturedAt)
+  const written = await prisma.sportsDataCache.createMany({
+    data: [{
+      cacheKey: profileCaptureKey(settings, profileCaptureDay(capturedAt)),
+      data: toPrismaJsonInput(payload),
+      expiresAt: PROFILE_CAPTURE_EXPIRES_AT,
+      createdAt: capturedAt,
+    }],
+    skipDuplicates: true,
+  })
+  return written.count > 0
+}
+
 export type FantasyCalcWarmResult = {
   attempted: number
   refreshed: number
   failed: number
   skippedFresh: number
   timedOut: boolean
-  profiles: Array<{ cacheKey: string; ok: boolean; count?: number; error?: string }>
+  /** Profiles whose daily capture this run wrote (the first successful warm of the UTC day). */
+  captured: number
+  /** Capture writes that FAILED — the warm itself still succeeded. */
+  captureFailed: number
+  profiles: Array<{ cacheKey: string; ok: boolean; count?: number; error?: string; captured?: boolean; captureError?: string }>
 }
 
 /**
@@ -133,7 +198,7 @@ export async function warmFantasyCalcCache(options?: {
   const profiles = await listCachedFantasyCalcProfiles({ limit: options?.limit })
 
   const result: FantasyCalcWarmResult = {
-    attempted: 0, refreshed: 0, failed: 0, skippedFresh: 0, timedOut: false, profiles: [],
+    attempted: 0, refreshed: 0, failed: 0, skippedFresh: 0, timedOut: false, captured: 0, captureFailed: 0, profiles: [],
   }
 
   for (const profile of profiles) {
@@ -149,11 +214,22 @@ export async function warmFantasyCalcCache(options?: {
     result.attempted += 1
     try {
       const players = await fetchFantasyCalcValues(profile.settings)
+      const syncedAt = new Date()
       const written = await writeFantasyCalcValuesToDb(profile.settings, players, {
         ttlMs: options?.ttlMs,
+        syncedAt,
       })
       result.refreshed += 1
-      result.profiles.push({ cacheKey: written.cacheKey, ok: true, count: written.count })
+      const entry: FantasyCalcWarmResult['profiles'][number] = { cacheKey: written.cacheKey, ok: true, count: written.count }
+      // After the warm landed, and contained: a failed capture must not mark a good warm as failed.
+      try {
+        entry.captured = await captureFantasyCalcProfileDaily(profile.settings, players, syncedAt)
+        if (entry.captured) result.captured += 1
+      } catch (error) {
+        result.captureFailed += 1
+        entry.captureError = error instanceof Error ? error.message : 'unknown error'
+      }
+      result.profiles.push(entry)
     } catch (error) {
       // One vendor failure must not abandon the remaining profiles.
       result.failed += 1
@@ -165,6 +241,124 @@ export async function warmFantasyCalcCache(options?: {
     }
   }
 
+  return result
+}
+
+export type FantasyCalcCaptureCatchUpResult = {
+  /** The UTC day caught up. */
+  day: string
+  /** Live profiles in the table (every one, no warm limit). */
+  profiles: number
+  /** Already had today's capture — untouched. */
+  alreadyCaptured: number
+  /** Captured from the cached row, synced today — no vendor call. */
+  capturedFromCache: number
+  /** Fetched (cached row older than today, or empty), then captured. */
+  fetched: number
+  /** Still uncaptured because the per-run fetch cap or the deadline was reached; the next run continues. */
+  deferred: number
+  /** A row whose payload will not parse, or whose settings do not build its own key — never guessed at. */
+  skippedUnreadable: number
+  fetchFailed: number
+  captureFailed: number
+  errors: string[]
+}
+
+/** Per-run vendor-call cap for the catch-up. Steady state needs ~0–13 a day; this bounds a bad day. */
+export const CAPTURE_CATCH_UP_MAX_FETCHES = 20
+
+/**
+ * THE DAILY CATCH-UP: every cached profile gets today's capture, not only the ones the warm reached.
+ *
+ * The warm reads at most `limit` (60) profiles, newest sync first; production holds 73 (measured
+ * 2026-10-04), and the extras are kept fresh by the on-demand read-through (`getFantasyCalcChartDbFirst`),
+ * which writes no capture. Owner's ruling (2026-10-04): those get the DAILY COPY only — not an hourly
+ * warm. So, after the warm, for each live profile with no capture for today's UTC day:
+ *
+ *   - its cached row was synced TODAY and is non-empty → capture FROM THAT ROW, `capturedAt` = its real
+ *     `syncedAt`. No vendor call, and the capture-time rule still holds: the capture says when the board
+ *     was really read.
+ *   - otherwise → ONE fetch for that profile (the same fetch + write the warm does), then capture.
+ *     At most `maxFetches` per run, and never past the deadline; the rest wait for the next hourly run.
+ *
+ * Idempotent per day by capture existence: once every profile has today's capture, a run is two
+ * key-only reads. ⚠ Which profiles are missing is decided by KEYS — a capture key is the values key plus
+ * the day — so the boards themselves are read only for the profiles that need one.
+ */
+export async function catchUpFantasyCalcProfileCaptures(options?: {
+  now?: Date
+  maxFetches?: number
+  deadlineMs?: number
+}): Promise<FantasyCalcCaptureCatchUpResult> {
+  const startedAt = Date.now()
+  const now = options?.now ?? new Date()
+  const day = profileCaptureDay(now)
+  const maxFetches = options?.maxFetches ?? CAPTURE_CATCH_UP_MAX_FETCHES
+  const deadlineMs = options?.deadlineMs ?? 60_000
+  const result: FantasyCalcCaptureCatchUpResult = {
+    day, profiles: 0, alreadyCaptured: 0, capturedFromCache: 0, fetched: 0, deferred: 0,
+    skippedUnreadable: 0, fetchFailed: 0, captureFailed: 0, errors: [],
+  }
+
+  const [valueKeys, capturedRows] = await Promise.all([
+    prisma.sportsDataCache.findMany({ where: { cacheKey: { startsWith: KEY_PREFIX } }, select: { cacheKey: true } }),
+    prisma.sportsDataCache.findMany({
+      where: { cacheKey: { startsWith: PROFILE_CAPTURE_PREFIX, endsWith: `:${day}` } },
+      select: { cacheKey: true },
+    }),
+  ])
+  result.profiles = valueKeys.length
+  const captured = new Set(capturedRows.map((r) => r.cacheKey))
+  const missing = valueKeys.map((r) => r.cacheKey).filter((k) => !captured.has(`${PROFILE_CAPTURE_PREFIX}${k}:${day}`))
+  result.alreadyCaptured = valueKeys.length - missing.length
+  if (missing.length === 0) return result
+
+  const rows = await prisma.sportsDataCache.findMany({
+    where: { cacheKey: { in: missing } },
+    select: { cacheKey: true, data: true },
+  })
+  for (const row of rows) {
+    const payload = parseCachedPayload(row.data)
+    // The settings come from the payload (see `listCachedFantasyCalcProfiles`), and must build this
+    // row's own key — otherwise the capture would land under another profile's name.
+    if (!payload || buildFantasyCalcCacheKey(payload.settings) !== row.cacheKey) {
+      result.skippedUnreadable += 1
+      continue
+    }
+    const syncedMs = Date.parse(payload.syncedAt)
+    const syncedToday = Number.isFinite(syncedMs) && profileCaptureDay(new Date(syncedMs)) === day && syncedMs <= now.getTime()
+    if (syncedToday && payload.players.length > 0) {
+      try {
+        if (await captureFantasyCalcProfileDaily(payload.settings, payload.players, new Date(syncedMs))) result.capturedFromCache += 1
+        else result.alreadyCaptured += 1 // a concurrent run got there first
+      } catch (error) {
+        result.captureFailed += 1
+        result.errors.push(`${row.cacheKey} (daily capture): ${error instanceof Error ? error.message : 'unknown error'}`)
+      }
+      continue
+    }
+    if (result.fetched + result.fetchFailed >= maxFetches || Date.now() - startedAt > deadlineMs) {
+      result.deferred += 1
+      continue
+    }
+    let players: FantasyCalcPlayer[]
+    const fetchedAt = new Date()
+    try {
+      players = await fetchFantasyCalcValues(payload.settings)
+      await writeFantasyCalcValuesToDb(payload.settings, players, { syncedAt: fetchedAt })
+      result.fetched += 1
+    } catch (error) {
+      result.fetchFailed += 1
+      result.errors.push(`${row.cacheKey}: ${error instanceof Error ? error.message : 'unknown error'}`)
+      continue
+    }
+    try {
+      await captureFantasyCalcProfileDaily(payload.settings, players, fetchedAt)
+    } catch (error) {
+      result.captureFailed += 1
+      result.errors.push(`${row.cacheKey} (daily capture): ${error instanceof Error ? error.message : 'unknown error'}`)
+    }
+  }
   return result
 }
 
@@ -217,19 +411,47 @@ export async function getFantasyCalcValuesDbFirst(
   settings: FantasyCalcSettings,
   options?: { maxStaleMs?: number }
 ): Promise<FantasyCalcPlayer[]> {
+  return (await getFantasyCalcChartDbFirst(settings, options)).players
+}
+
+/**
+ * `getFantasyCalcValuesDbFirst`, plus WHEN the chart was synced from FantasyCalc — so a trade grade
+ * can record the age of every market value it was taken on (2026-09-28).
+ *
+ * 🛑 `maxStaleMs` IS AN AGE LIMIT, AND UNTIL 2026-09-28 IT WAS NOT ONE. The old test was
+ * `!stale || age <= maxStale`, and a row is only `stale` once past its 6 h expiry — so any unexpired
+ * row was served whatever its age, and the trade chart's 2 h limit never applied: the real bound was
+ * 6 h (trade price coverage audit). Guap chose freshness over speed (see the warm cron): the hourly
+ * warm keeps rows under an hour old, and the 2 h limit is what forces a live fetch when it lapses.
+ * Now a row older than the limit IS refetched.
+ *
+ * ⚠ AN OUTAGE STILL SERVES THE RECENT CHART. If that live fetch fails, a row still inside its own
+ * expiry is returned with its TRUE sync time (every grade line now records it) rather than failing
+ * a request the old code would have answered. Only a row past its expiry, or none, rethrows.
+ */
+export async function getFantasyCalcChartDbFirst(
+  settings: FantasyCalcSettings,
+  options?: { maxStaleMs?: number }
+): Promise<{ players: FantasyCalcPlayer[]; syncedAt: string | null }> {
   const fromDb = await readFantasyCalcValuesFromDb(settings, { allowStale: true })
   const maxStale = options?.maxStaleMs ?? 1000 * 60 * 60 * 6
+  const cached = fromDb.players.length > 0 ? { players: fromDb.players, syncedAt: fromDb.syncedAt } : null
+  // No sync time means an unknown age, which is not "fresh enough".
+  const ageMs = fromDb.syncedAt ? Date.now() - new Date(fromDb.syncedAt).getTime() : Infinity
 
-  if (fromDb.players.length > 0) {
-    const syncedMs = fromDb.syncedAt ? Date.now() - new Date(fromDb.syncedAt).getTime() : Infinity
-    if (!fromDb.stale || syncedMs <= maxStale) {
-      return fromDb.players
-    }
+  if (cached && ageMs <= maxStale) return cached
+
+  let fresh: FantasyCalcPlayer[]
+  try {
+    fresh = await fetchFantasyCalcValues(settings)
+  } catch (error) {
+    // Only the VENDOR call falls back; a failed write below behaves exactly as it always has.
+    if (cached && !fromDb.stale) return cached
+    throw error
   }
-
-  const fresh = await fetchFantasyCalcValues(settings)
-  await writeFantasyCalcValuesToDb(settings, fresh)
-  return fresh
+  const syncedAt = new Date()
+  await writeFantasyCalcValuesToDb(settings, fresh, { syncedAt })
+  return { players: fresh, syncedAt: syncedAt.toISOString() }
 }
 
 /**

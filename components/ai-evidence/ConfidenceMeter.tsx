@@ -84,14 +84,14 @@ export default function ConfidenceMeter({
         </div>
       )}
       {(capped && cap) && (
-        <p className="mt-1.5 text-[10px] text-amber-300/90">Capped: {cap}</p>
+        <p className="mt-1.5 text-[11px] text-amber-300/90">Capped: {cap}</p>
       )}
       {reasonText && (
         <>
           <button
             type="button"
             onClick={() => setShowReason(!showReason)}
-            className="mt-1.5 flex items-center gap-1 text-[10px] text-white/50 hover:text-white/70"
+            className="mt-1.5 flex items-center gap-1 text-[11px] text-white/50 hover:text-white/70"
             aria-label="Why this confidence?"
           >
             <Info className="h-3 w-3" />

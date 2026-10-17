@@ -211,13 +211,13 @@ function SectionRow({
       >
         <div className="flex min-w-0 items-center gap-2">
           <span className="text-white/40">{icon}</span>
-          <span className="text-[10px] font-black uppercase tracking-widest text-white/35">
+          <span className="text-[11px] font-black uppercase tracking-widest text-white/35">
             {label}
           </span>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <span
-            className={`text-[9px] font-bold uppercase tracking-wider ${confidenceColor}`}
+            className={`text-[11px] font-bold uppercase tracking-wider ${confidenceColor}`}
             aria-label={`Data confidence: ${section.confidence}`}
           >
             ●
@@ -315,7 +315,7 @@ function FeedbackRow({
   if (state === "done") {
     return (
       <p
-        className="text-[10px] text-white/40"
+        className="text-[11px] text-white/40"
         data-testid="edge-report-feedback-thanks"
       >
         {t("wc.edgeReport.feedback.thanks")}
@@ -332,7 +332,7 @@ function FeedbackRow({
             type="button"
             onClick={() => handleReason(code)}
             data-testid={`edge-report-feedback-reason-${code}`}
-            className="rounded-full border border-white/12 bg-white/[0.04] px-2.5 py-1 text-[10px] font-semibold text-white/60 transition hover:border-white/20 hover:text-white/80"
+            className="rounded-full border border-white/12 bg-white/[0.04] px-2.5 py-1 text-[11px] font-semibold text-white/60 transition hover:border-white/20 hover:text-white/80"
           >
             {t(labelKey)}
           </button>
@@ -346,7 +346,7 @@ function FeedbackRow({
       className="flex items-center gap-2"
       data-testid="edge-report-feedback-row"
     >
-      <span className="text-[10px] text-white/35">
+      <span className="text-[11px] text-white/35">
         {t("wc.edgeReport.feedback.title")}
       </span>
       <button
@@ -355,7 +355,7 @@ function FeedbackRow({
         disabled={state === "submitting"}
         data-testid="edge-report-feedback-helpful"
         aria-label={t("wc.edgeReport.feedback.helpful")}
-        className="inline-flex items-center gap-1 rounded-full border border-emerald-300/20 bg-emerald-300/[0.05] px-2 py-1 text-[10px] text-emerald-300/70 transition hover:bg-emerald-300/[0.12] disabled:opacity-40"
+        className="inline-flex items-center gap-1 rounded-full border border-emerald-300/20 bg-emerald-300/[0.05] px-2 py-1 text-[11px] text-emerald-300/70 transition hover:bg-emerald-300/[0.12] disabled:opacity-40"
       >
         <ThumbsUp className="h-3 w-3" aria-hidden />
         {t("wc.edgeReport.feedback.helpful")}
@@ -366,7 +366,7 @@ function FeedbackRow({
         disabled={state === "submitting"}
         data-testid="edge-report-feedback-not-helpful"
         aria-label={t("wc.edgeReport.feedback.notHelpful")}
-        className="inline-flex items-center gap-1 rounded-full border border-white/12 bg-white/[0.03] px-2 py-1 text-[10px] text-white/40 transition hover:bg-white/[0.08] disabled:opacity-40"
+        className="inline-flex items-center gap-1 rounded-full border border-white/12 bg-white/[0.03] px-2 py-1 text-[11px] text-white/40 transition hover:bg-white/[0.08] disabled:opacity-40"
       >
         <ThumbsDown className="h-3 w-3" aria-hidden />
         {t("wc.edgeReport.feedback.notHelpful")}
@@ -417,11 +417,11 @@ function CoachingBlock({
       >
         <div className="mb-1.5 flex items-center gap-1.5">
           <Sparkles className="h-3.5 w-3.5 text-cyan-300/60" aria-hidden />
-          <span className="text-[10px] font-black uppercase tracking-widest text-cyan-300/50">
+          <span className="text-[11px] font-black uppercase tracking-widest text-cyan-300/50">
             {t("wc.edgeReport.coaching.title")}
           </span>
           {coaching.fromCache && (
-            <span className="rounded-full border border-cyan-300/20 bg-cyan-300/[0.07] px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-cyan-300/60">
+            <span className="rounded-full border border-cyan-300/20 bg-cyan-300/[0.07] px-2 py-0.5 text-[11px] font-black uppercase tracking-wider text-cyan-300/60">
               {t("wc.edgeReport.coaching.cachedBadge")}
             </span>
           )}
@@ -433,7 +433,7 @@ function CoachingBlock({
         {/* Billing clarity */}
         {billingLabel && (
           <p
-            className="mt-2 text-[9px] text-white/30"
+            className="mt-2 text-[11px] text-white/30"
             data-testid="edge-report-billing-label"
           >
             {billingLabel}
@@ -446,7 +446,7 @@ function CoachingBlock({
         className="rounded-xl border border-amber-300/15 bg-amber-400/[0.04] px-3.5 py-3"
         data-testid="edge-report-commissioner-post"
       >
-        <p className="mb-1.5 text-[10px] font-black uppercase tracking-widest text-amber-300/50">
+        <p className="mb-1.5 text-[11px] font-black uppercase tracking-widest text-amber-300/50">
           {t("wc.edgeReport.commissionerPost.title")}
         </p>
         <p className="text-[12px] leading-relaxed text-white/75">
@@ -683,7 +683,7 @@ export default function WorldCupDailyEdgeReportCard({
             <h3 className="text-sm font-black text-white">
               {t("wc.edgeReport.title")}
             </h3>
-            <p className="text-[10px] text-white/40">
+            <p className="text-[11px] text-white/40">
               {t("wc.edgeReport.subtitle")}
             </p>
           </div>
@@ -697,7 +697,7 @@ export default function WorldCupDailyEdgeReportCard({
           })()}
           {loadState === "loaded" && (
             <span
-              className="flex items-center gap-1 rounded-full border border-green-400/25 bg-green-400/[0.08] px-2 py-0.5 text-[9px] font-semibold text-green-300/80"
+              className="flex items-center gap-1 rounded-full border border-green-400/25 bg-green-400/[0.08] px-2 py-0.5 text-[11px] font-semibold text-green-300/80"
               data-testid="edge-report-cue-ready"
               aria-live="polite"
             >
@@ -709,7 +709,7 @@ export default function WorldCupDailyEdgeReportCard({
             </span>
           )}
           <span
-            className="rounded-full border border-emerald-300/25 bg-emerald-300/[0.07] px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-emerald-300/70"
+            className="rounded-full border border-emerald-300/25 bg-emerald-300/[0.07] px-2 py-0.5 text-[11px] font-black uppercase tracking-wider text-emerald-300/70"
             data-testid="edge-report-free-badge"
           >
             {t("wc.edgeReport.badge.free")}
@@ -857,7 +857,7 @@ export default function WorldCupDailyEdgeReportCard({
           </div>
 
           {/* Freshness footer */}
-          <p className="text-[10px] text-white/25" data-testid="edge-report-freshness">
+          <p className="text-[11px] text-white/25" data-testid="edge-report-freshness">
             {t("wc.edgeReport.freshness")}
           </p>
         </>

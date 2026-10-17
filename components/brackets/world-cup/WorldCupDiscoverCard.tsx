@@ -53,7 +53,7 @@ export default function WorldCupDiscoverCard({
           </p>
         </div>
         {blocked ? (
-          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-rose-400/15 px-2 py-0.5 text-[10px] font-bold text-white/85">
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-rose-400/15 px-2 py-0.5 text-[11px] font-bold text-white/85">
             <Lock className="h-3 w-3" />
             {reasonLabel}
           </span>

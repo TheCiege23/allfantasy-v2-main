@@ -8,8 +8,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // ─── Mock Prisma ─────────────────────────────────────────────────────────────
-vi.mock('@/lib/prisma', () => ({
-  prisma: {
+vi.mock('@/lib/prisma', () => {
+  const db = {
     league: { findUnique: vi.fn(), findFirst: vi.fn() },
     roster: { findMany: vi.fn(), findFirst: vi.fn(), count: vi.fn(), updateMany: vi.fn(), update: vi.fn() },
     bigBrotherLeagueConfig: {
@@ -25,6 +25,7 @@ vi.mock('@/lib/prisma', () => ({
       count: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       upsert: vi.fn(),
     },
     bigBrotherEvictionVote: {
@@ -40,14 +41,15 @@ vi.mock('@/lib/prisma', () => ({
       findMany: vi.fn(),
       upsert: vi.fn(),
     },
-    bigBrotherAuditLog: { create: vi.fn() },
+    bigBrotherAuditLog: { create: vi.fn(), findFirst: vi.fn().mockResolvedValue(null) },
     rosterWaiverRequest: { create: vi.fn(), findFirst: vi.fn(), findMany: vi.fn(), update: vi.fn() },
-  },
-}))
+  }
+  return { prisma: { ...db, $transaction: vi.fn(async fn => fn(db)) } }
+})
 
-// ─── Mock getSeasonPointsFromRosterPerformance ────────────────────────────────
-vi.mock('@/lib/survivor/SurvivorVoteEngine', () => ({
-  getSeasonPointsFromRosterPerformance: vi.fn(async (_l: string, _r: string, _w: number) => 100),
+// ─── Mock getBigBrotherSeasonPoints ────────────────────────────────
+vi.mock('@/lib/big-brother/BigBrotherScores', () => ({
+  getBigBrotherSeasonPoints: vi.fn(async (_l: string, _r: string, _w: number) => 100),
 }))
 
 vi.mock('@/lib/big-brother/BigBrotherChatAnnouncements', () => ({
@@ -56,7 +58,7 @@ vi.mock('@/lib/big-brother/BigBrotherChatAnnouncements', () => ({
 }))
 
 vi.mock('@/lib/big-brother/BigBrotherVoteProgressChat', () => ({
-  syncBigBrotherVoteProgressChat: vi.fn(),
+  syncBigBrotherVoteProgressChat: vi.fn().mockResolvedValue(undefined),
 }))
 
 vi.mock('@/lib/big-brother/BigBrotherChatChannels', () => ({
@@ -387,7 +389,7 @@ describe('Big Brother — HOH Engine', () => {
     ] as never)
     vi.mocked(prisma.roster).findMany.mockResolvedValue(rosters as never)
     vi.mocked(prisma.bigBrotherCycle).findUnique.mockImplementation(async ({ where }: any) => {
-      if (where?.id === 'cycle-1') return { id: 'cycle-1', week: 2 }
+      if (where?.id === 'cycle-1') return { id: 'cycle-1', week: 2, leagueId: 'league-1', configId: 'config-1' }
       return { hohRosterId: null }
     })
     vi.mocked(prisma.league).findUnique.mockResolvedValue({
@@ -415,7 +417,7 @@ describe('Big Brother — HOH Engine', () => {
 
 // ─── SECTION 6: Nomination Engine ────────────────────────────────────────────
 describe('Big Brother — Nomination Engine', () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => { vi.clearAllMocks(); vi.mocked(prisma.roster).findMany.mockResolvedValue([{id:'roster-2'},{id:'roster-3'}] as never) })
 
   it('should set nominations successfully', async () => {
     vi.mocked(prisma.bigBrotherCycle).findUnique.mockResolvedValue({
@@ -618,6 +620,7 @@ describe('Big Brother — Voting System', () => {
           leagueId: 'league-1',
           configId: 'config-1',
           phase: 'VOTING_OPEN',
+          nominee1RosterId: 'roster-2', nominee2RosterId: 'roster-3', vetoUsed: false,
           voteDeadlineAt: new Date(Date.now() + 3600000),
           closedAt: null,
           hohRosterId: 'roster-1',
@@ -635,7 +638,7 @@ describe('Big Brother — Voting System', () => {
     // voter=roster-4, target=roster-2 (nominee)
     const result = await submitEvictionVote('cycle-1', 'roster-4', 'roster-2')
     // We expect OK — eligible voter, valid target
-    expect(result).toBeDefined()
+    expect(result.ok).toBe(true)
   })
 
   it('should reject vote when cycle is closed', async () => {
@@ -692,7 +695,15 @@ describe('Big Brother — Voting System', () => {
 
 // ─── SECTION 9: Jury Engine ──────────────────────────────────────────────────
 describe('Big Brother — Jury Engine', () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(prisma.league).findUnique.mockResolvedValue({ id: 'league-1', sport: 'NFL' } as never)
+    vi.mocked(prisma.bigBrotherLeagueConfig).findUnique.mockResolvedValue({ ...mockConfig('league-1'), id: 'config-1' } as never)
+    vi.mocked(prisma.roster).findMany.mockResolvedValue(['finalist-A','finalist-B','jury-1','jury-2','jury-3'].map(id=>({id})) as never)
+    vi.mocked(prisma.bigBrotherCycle).findMany.mockResolvedValue(['jury-1','jury-2','jury-3'].map(evictedRosterId=>({evictedRosterId})) as never)
+    vi.mocked(prisma.bigBrotherJuryMember).findMany.mockResolvedValue(['jury-1','jury-2','jury-3'].map(rosterId=>({rosterId})) as never)
+    vi.mocked(prisma.bigBrotherAuditLog).findFirst.mockResolvedValue(null)
+  })
 
   it('should correctly determine jury eligibility (after_eliminations mode)', async () => {
     vi.mocked(prisma.league).findUnique.mockResolvedValue({ id: 'league-1', sport: 'NFL', leagueVariant: 'big_brother' } as never)
@@ -771,6 +782,7 @@ describe('Big Brother — Jury Engine', () => {
   it('should allow jury member to submit finale vote', async () => {
     vi.mocked(prisma.bigBrotherJuryMember).findUnique.mockResolvedValue({
       leagueId: 'league-1',
+      configId: 'config-1',
       rosterId: 'jury-1',
     } as never)
     vi.mocked(prisma.bigBrotherFinaleVote).upsert.mockResolvedValue({} as never)
@@ -828,8 +840,8 @@ describe('Big Brother — Challenge Engine (HOH + Veto)', () => {
   })
 
   it('should break ties using season points', async () => {
-    const { getSeasonPointsFromRosterPerformance } = await import('@/lib/survivor/SurvivorVoteEngine')
-    vi.mocked(getSeasonPointsFromRosterPerformance).mockImplementation(async (_l, r, _w) => {
+    const { getBigBrotherSeasonPoints } = await import('@/lib/big-brother/BigBrotherScores')
+    vi.mocked(getBigBrotherSeasonPoints).mockImplementation(async (_l, r, _w) => {
       return r === 'roster-2' ? 200 : 100
     })
 

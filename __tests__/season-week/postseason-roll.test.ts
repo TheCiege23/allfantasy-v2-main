@@ -211,3 +211,39 @@ describe('rollSeasonWeeks — unsupported formats', () => {
     expect(out.failed).toBe(0)
   })
 })
+describe('linked tournament ownership', () => {
+  it('does not send a tournament through the head-to-head week roller', async () => {
+    findManySeasons.mockResolvedValue([{id:'s',leagueId:'l',sport:'NFL',currentWeek:1,totalWeeks:3,playoffStartWeek:4,league:{bbContestId:'c',bestBallMode:true,settings:{best_ball_settings:{contestStructure:'tournament'}}}}])
+    const out=await rollSeasonWeeks()
+    expect(out.held).toBe(1)
+    expect(advanceWeek).not.toHaveBeenCalled()
+    expect(resolveWeek).not.toHaveBeenCalled()
+  })
+  it('does not create a head-to-head playoff bracket for a linked tournament', async () => {
+    findManySeasons.mockResolvedValue([{...SEASON,status:'regular_season_complete',league:{bbContestId:'c',bestBallMode:true,settings:{best_ball_settings:{contestStructure:'tournament'}}}}])
+    const out=await rollPostseason()
+    expect(out.held).toBe(1)
+    expect(generateBracket).not.toHaveBeenCalled()
+    expect(finalizeSeason).not.toHaveBeenCalled()
+  })
+})
+
+
+describe('rotisserie postseason routing', () => {
+  beforeEach(() => findManySeasons.mockResolvedValue([{...SEASON,league:{settings:{scoring_mode:'roto'}},status:'regular_season_complete'}]))
+  it('finalizes cumulative standings without generating or advancing a bracket', async () => {
+    finalizeSeason.mockResolvedValue({ok:true,championRosterId:'roto-winner',offseasonEntered:true})
+    expect(await rollPostseason()).toMatchObject({finalized:1,generated:0,advanced:0})
+    expect(generateBracket).not.toHaveBeenCalled()
+    expect(advanceRound).not.toHaveBeenCalled()
+    expect(finalizeSeason).toHaveBeenCalledTimes(1)
+  })
+  it('writes nothing during a roto dry run', async () => {
+    expect(await rollPostseason({dryRun:true})).toMatchObject({held:1,finalized:0})
+    expect(finalizeSeason).not.toHaveBeenCalled()
+  })
+  it('holds a tied or incompletely scored roto season', async () => {
+    finalizeSeason.mockResolvedValue({ok:false,code:'NO_WINNER'})
+    expect(await rollPostseason()).toMatchObject({held:1,finalized:0,outcomes:[expect.objectContaining({detail:'NO_WINNER'})]})
+  })
+})

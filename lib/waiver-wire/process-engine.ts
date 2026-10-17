@@ -11,6 +11,7 @@ import { getSpecialtySpecByVariant } from '@/lib/specialty-league/registry'
 import { isWaiverFrozenForRoster } from '@/lib/survivor/SurvivorEffectEngine'
 import type { ProcessedClaimResult, WaiverClaimOutcomeCode } from './types'
 import { normalizeWaiverTypeForEngine } from './waiver-engine-config'
+import { isAutomatedWaiverRunBlocked, resolveEngineWaiverTypeForDate } from '@/lib/waivers/dailyWaiverSchedule'
 import { commissionerOverrideAllowed, getCommissionerOverrides } from './commissioner-claim-override'
 import { recordAfLearningEvent } from '@/lib/ai-learning-system/recordEvent'
 import { resolveLeagueSport } from '@/lib/ai-learning-system/resolveLeagueSport'
@@ -19,6 +20,8 @@ import { assertNonEmptyIdempotencyKey } from '@/lib/engine-testing/hardening/eng
 import { logEngineInvariantOptional } from '@/lib/engine-testing/runtime/invariantRuntime'
 import { ENGAGEMENT } from '@/lib/analytics/eventNames'
 import { recordProductEvent } from '@/lib/analytics/recordAnalyticsEvent'
+import { isCommissionerRosterLocked } from '@/lib/league/commissioner-roster-lock'
+import { claimSnapshotWhere, isClaimSnapshotConflict } from './claim-snapshot'
 
 type ClaimRow = {
   id: string
@@ -42,6 +45,7 @@ type ClaimRow = {
 
 function outcomeFromFailureMessage(msg: string): WaiverClaimOutcomeCode {
   const m = msg.toLowerCase()
+  if (m.includes('locked by the commissioner')) return 'blocked_by_roster_lock'
   if (m.includes('insufficient faab')) return 'insufficient_faab'
   if (m.includes('no longer available')) return 'player_no_longer_available'
   if (m.includes('frozen')) return 'blocked_by_lineup_lock'
@@ -86,7 +90,7 @@ export async function processWaiverClaimsForLeague(
     getEffectiveLeagueWaiverSettings(leagueId),
     (prisma as any).league.findUnique({
       where: { id: leagueId },
-      select: { id: true, rosterSize: true, leagueVariant: true, sport: true },
+      select: { id: true, rosterSize: true, leagueVariant: true, sport: true, settings: true, timezone: true },
     }),
     (prisma as any).waiverClaim.findMany({
       where: { leagueId, status: 'pending' },
@@ -115,10 +119,21 @@ export async function processWaiverClaimsForLeague(
   ])
 
   if (!league) return []
+  // Per-day schedule: an automated run on a Free-agents or Locked day processes nothing (guards stale
+  // engine processing days). A commissioner's manual run is never blocked.
+  if (isAutomatedWaiverRunBlocked(league.settings, new Date(), league.timezone, opts?.runType)) return []
   const specialtySpec = getSpecialtySpecByVariant(league.leagueVariant ?? null)
   const rosterGuard = specialtySpec?.rosterGuard
-  const waiverType =
+  const configuredWaiverType =
     effectiveSettings.normalizedWaiverType ?? normalizeWaiverTypeForEngine(effectiveSettings.waiverType)
+  // A commissioner's per-day schedule (lib/waivers/dailyWaiverSchedule.ts) may name THIS day's type
+  // (Mon reverse standings, Tue rolling …). Null — no schedule, or a non-processing day reached by
+  // a manual run — keeps the configured type. FCFS leagues are never overridden.
+  const dayWaiverType =
+    configuredWaiverType === 'fcfs'
+      ? null
+      : resolveEngineWaiverTypeForDate(league.settings, new Date(), league.timezone)
+  const waiverType = dayWaiverType ?? configuredWaiverType
   const tiebreakRule =
     (effectiveSettings.tiebreakRule ?? effectiveSettings.waiverEngineConfig?.faab_tiebreaker ?? '')
       .toString()
@@ -180,6 +195,7 @@ export async function processWaiverClaimsForLeague(
   }> = []
 
   for (const claim of ordered) {
+    try {
     const roster = claim.roster
     const pushFail = async (msg: string, extra?: Record<string, unknown>) => {
       const oc = outcomeFromFailureMessage(msg)
@@ -188,7 +204,7 @@ export async function processWaiverClaimsForLeague(
           ? (claim.metadata as Record<string, unknown>)
           : {}
       await (prisma as any).waiverClaim.update({
-        where: { id: claim.id },
+        where: claimSnapshotWhere(claim),
         data: {
           status: 'failed',
           processedAt: new Date(),
@@ -220,9 +236,18 @@ export async function processWaiverClaimsForLeague(
       })
     }
 
+    if (await isCommissionerRosterLocked(leagueId, claim.rosterId)) {
+      await pushFail('This roster is locked by the commissioner.')
+      continue
+    }
     const waiversFrozen = await isWaiverFrozenForRoster(leagueId, claim.rosterId).catch(() => false)
     if (waiversFrozen) {
       await pushFail("Roster's waiver moves are frozen by an active Survivor idol effect.")
+      continue
+    }
+    if (league.leagueVariant === 'survivor_guillotine' &&
+        await prisma.survivorGuillotineChop.count({ where: { leagueId, rosterId: claim.rosterId, reversedAt: null } })) {
+      await pushFail('Eliminated Survivor Guillotine rosters cannot win waiver claims.')
       continue
     }
     if (rosterGuard && !(await rosterGuard(leagueId, claim.rosterId))) {
@@ -296,9 +321,33 @@ export async function processWaiverClaimsForLeague(
       priorityAfter = newWaiverPriority
     }
 
+    const survivorGuillotineWrites: Array<Promise<unknown>> = []
+    if (league.leagueVariant === 'survivor_guillotine') {
+      const linked = await prisma.roster.findUnique({ where: { id: claim.rosterId }, select: { redraftRosterId: true } })
+      const player = await prisma.player.findUnique({ where: { id: addId }, select: {
+        name: true, position: true, team: true, sport: true } })
+      if (!player) {
+        await pushFail('Survivor Guillotine claim needs a known player.')
+        continue
+      }
+      if (!linked?.redraftRosterId && await prisma.redraftSeason.count({ where: { leagueId } })) {
+        await pushFail('Survivor Guillotine roster needs its redraft link reconciled before waivers.')
+        continue
+      }
+      if (linked?.redraftRosterId) {
+        if (dropId) survivorGuillotineWrites.push(prisma.redraftRosterPlayer.updateMany({ where: {
+          rosterId: linked.redraftRosterId, playerId: dropId, droppedAt: null }, data: { droppedAt: new Date() } }))
+        survivorGuillotineWrites.push(prisma.redraftRosterPlayer.create({ data: { rosterId: linked.redraftRosterId,
+          playerId: addId, playerName: player.name, position: player.position, team: player.team,
+          sport: player.sport, slotType: 'bench', acquisitionType: 'waiver' } }))
+        if (faabSpent != null) survivorGuillotineWrites.push(prisma.redraftRoster.update({ where: { id: linked.redraftRosterId },
+          data: { faabBalance: { decrement: faabSpent } } }))
+      }
+    }
+
     await (prisma as any).$transaction([
       (prisma as any).waiverClaim.update({
-        where: { id: claim.id },
+        where: claimSnapshotWhere(claim),
         data: { status: 'processed', processedAt: new Date(), resultMessage: 'Awarded' },
       }),
       (prisma as any).roster.update({
@@ -323,6 +372,7 @@ export async function processWaiverClaimsForLeague(
           waiverPriorityAfter: priorityAfter ?? null,
         },
       }),
+      ...survivorGuillotineWrites,
     ])
 
     rosteredByPlayer.set(addId, claim.rosterId)
@@ -385,6 +435,12 @@ export async function processWaiverClaimsForLeague(
       claim.roster.faabRemaining = fresh.faabRemaining
       claim.roster.waiverPriority = fresh.waiverPriority
       claim.roster.playerData = fresh.playerData
+    }
+    } catch (error) {
+      // A newer override/cancellation or another processor won. The guarded
+      // award transaction rolls back its roster and ledger writes. Leave a
+      // changed pending claim for the next run to evaluate with fresh metadata.
+      if (!isClaimSnapshotConflict(error)) throw error
     }
   }
 

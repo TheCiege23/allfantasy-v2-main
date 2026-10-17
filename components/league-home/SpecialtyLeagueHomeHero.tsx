@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { bigBrotherPhaseLabel, survivorPhase as survivorPhaseOf } from '@/lib/league/format-stakes'
 import Link from 'next/link'
 import { Crown, LayoutGrid, MessageSquare, Settings, Shield, Trophy, Wrench } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -202,17 +203,8 @@ export function SpecialtyLeagueHomeHero({
     return () => mq.removeEventListener('change', sync)
   }, [])
 
-  const survivorPhase = useMemo(() => {
-    if (!survivor) return { label: '…', mood: 'default' as const }
-    const w = survivor.currentWeek
-    if (survivor.finale?.open || survivor.finale?.closed) return { label: 'Finale', mood: 'jury' as const }
-    if (survivor.jury.length > 0 && survivor.merged) return { label: `Jury · Week ${w}`, mood: 'jury' as const }
-    if (survivor.council?.phase === 'voting_open' || survivor.council?.phase === 'votes_tallying')
-      return { label: 'Tribal Council', mood: 'tribal' as const }
-    if (survivor.merged) return { label: `Merge · Week ${w}`, mood: 'merge' as const }
-    if (survivor.exileLeagueId) return { label: `Island · Week ${w}`, mood: 'exile' as const }
-    return { label: `Tribe Phase · Week ${w}`, mood: 'default' as const }
-  }, [survivor])
+  // Shared with the native home's stakes card (lib/league/format-stakes.ts) so the two never disagree.
+  const survivorPhase = useMemo(() => survivorPhaseOf(survivor), [survivor])
 
   const tribalDeadline =
     survivor?.council?.voteDeadlineAt && !survivor.council?.closedAt ? survivor.council.voteDeadlineAt : null
@@ -231,16 +223,7 @@ export function SpecialtyLeagueHomeHero({
       ? survivor.tribes.map((t) => t.name).join(' · ')
       : 'Tribes forming'
 
-  const bbPhaseLabel = useMemo(() => {
-    if (!bb?.cycle) return 'House'
-    const ph = String(bb.cycle.phase ?? '').toLowerCase()
-    if (ph.includes('jury') || (bb.eligibility?.juryRosterIds?.length ?? 0) > 0) return 'Jury Phase'
-    if (ph.includes('veto')) return 'Veto'
-    if (ph.includes('nom')) return 'Nominations'
-    if (ph.includes('vote') || ph.includes('evict')) return 'Eviction'
-    if (ph.includes('hoh')) return 'Head of Household'
-    return `Week ${bb.cycle.week}`
-  }, [bb])
+  const bbPhaseLabel = useMemo(() => bigBrotherPhaseLabel(bb), [bb])
 
   const hohName =
     bb?.cycle?.hohRosterId && bb.rosterDisplayNames
@@ -367,7 +350,7 @@ export function SpecialtyLeagueHomeHero({
                 <div className="mt-0.5 flex flex-wrap items-center gap-2">
                   <span
                     className={cn(
-                      'rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider',
+                      'rounded-full border px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider',
                       variant === 'tournament' &&
                         'border-amber-400/35 bg-amber-500/15 text-amber-100',
                       variant === 'survivor' &&
@@ -391,7 +374,7 @@ export function SpecialtyLeagueHomeHero({
             </div>
 
             <div className="rounded-2xl border border-white/[0.1] bg-black/45 px-3 py-2.5 backdrop-blur-md md:max-w-xl">
-              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/45">Phase</p>
+              <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/45">Phase</p>
               <p className="mt-1 text-sm font-semibold text-white/95">
                 {variant === 'tournament' && tournamentContext ? (
                   <>

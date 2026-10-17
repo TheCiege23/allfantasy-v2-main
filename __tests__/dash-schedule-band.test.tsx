@@ -91,7 +91,8 @@ describe('DashScheduleBand', () => {
         syncLabel={null}
       />,
     )
-    expect(screen.getByText('Roster 4')).toBeTruthy()
+    // The platform's own label for a nameless roster, the same on every surface (rosterLabel).
+    expect(screen.getByText('Team 4')).toBeTruthy()
   })
 
   it('states leagues carrying no schedule instead of hiding them', () => {
@@ -134,6 +135,6 @@ describe('DashScheduleBand', () => {
         syncLabel={null}
       />,
     )
-    expect(container.textContent).not.toContain('first kickoff')
+    expect(container.textContent).not.toMatch(/kickoff/i)
   })
 })

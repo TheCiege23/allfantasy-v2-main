@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from 'react'
 import { ArrowDown, Ban, Copy, CornerUpLeft, Flag, MoreHorizontal, Pencil, Pin, SmilePlus, Sparkles, Trash2 } from 'lucide-react'
-import { REPORT_REASONS, type ReportReason } from '@/lib/moderation/shared'
+import { REPORT_REASONS, REPORT_REASON_LABELS, type ReportReason } from '@/lib/moderation/shared'
 import { QUICK_REACTIONS, type ViewerReaction } from '@/lib/chat-core/messageReactions'
 import { censorProfanity } from '@/lib/chat-core/censorProfanity'
 import { isNearBottom } from '@/lib/chat-core/useChatPolling'
@@ -26,6 +26,8 @@ import { QuotedMessage } from './QuotedMessage'
 import { renderMessageText } from './messageText'
 import { MessageReactions } from './MessageReactions'
 import { hasRichContent } from './RichMessage'
+import { ChimmyVerdictChip } from './ChimmyAnswerPolish'
+import { readAnswerPolish } from '@/lib/chimmy/answerPolish'
 import {
   describeReactors,
   initialsFor,
@@ -71,6 +73,11 @@ export type ChatListMessage = {
   parentMessageId?: string | null
   metadata?: Record<string, unknown> | null
   messageType?: string | null
+  /**
+   * Shown the moment the viewer sends, before the server has it: the row says "Sending…" where its
+   * time goes and offers no actions (there is no server id to react to, reply to or edit yet).
+   */
+  pending?: boolean
 }
 
 export type ChatMessageListProps = {
@@ -125,17 +132,6 @@ export type ChatMessageListProps = {
 }
 
 /** What a reporter can pick. The route takes one of these; "Something else" is the default. */
-const REPORT_REASON_LABELS: Record<ReportReason, string> = {
-  spam: 'Spam',
-  harassment: 'Harassment or bullying',
-  hate_speech: 'Hate speech',
-  violence: 'Violence or threats',
-  nudity: 'Nudity or sexual content',
-  self_harm: 'Self-harm',
-  impersonation: 'Pretending to be someone',
-  other: 'Something else',
-}
-
 const LONG_PRESS_MS = 450
 const MOVE_CANCEL_PX = 10
 
@@ -403,6 +399,7 @@ export function ChatMessageList({
            * never "mine" — not even for the commissioner — whatever id the wire carries.
            */
           const chimmy = isChimmyAuthored(m.metadata)
+          const chimmyVerdict = chimmy && !isDeletedMessage(m.metadata) ? readAnswerPolish(m.metadata).verdict : null
           const mine = item.mine && !chimmy
           const deleted = isDeletedMessage(m.metadata)
           const rich = !deleted && richOf(m)
@@ -429,6 +426,7 @@ export function ChatMessageList({
               data-flash={flashId === m.id || undefined}
               data-menu={menuFor === m.id || undefined}
               data-chimmy={chimmy || undefined}
+              data-pending={m.pending || undefined}
             >
               {!mine ? (
                 item.startsRun ? (
@@ -451,14 +449,6 @@ export function ChatMessageList({
                   )
                 ) : null}
                 {tag ? <span className="af-cm-msg-tag">{tag}</span> : null}
-
-                {m.parentMessageId && !deleted ? (
-                  <QuotedMessage
-                    author={parent?.authorName ?? null}
-                    text={parent ? censorProfanity(parent.body) : null}
-                    onJump={parent ? () => void jumpTo(parent.id) : undefined}
-                  />
-                ) : null}
 
                 <div
                   className="af-cm-bubble"
@@ -584,6 +574,24 @@ export function ChatMessageList({
                         Links and "@sam" highlights as React nodes (messageText.tsx) — the one place
                         a bubble's words are drawn, for league chat, DMs and huddles alike.
                       */}
+                      {/*
+                        A private @chimmy reply from the decision engine stores its verdict on the
+                        message (`metadata.decision.verdict`); the chip reads that, never the text,
+                        and only on a Chimmy-marked row.
+                      */}
+                      {/*
+                        The message this one answers sits INSIDE the bubble, as in every messenger
+                        people already know — above it, it read as a separate line belonging to
+                        nobody. A tap on it is the quote's (jump to the original), not "show the time".
+                      */}
+                      {m.parentMessageId ? (
+                        <QuotedMessage
+                          author={parent?.authorName ?? null}
+                          text={parent ? censorProfanity(parent.body) : null}
+                          onJump={parent ? () => void jumpTo(parent.id) : undefined}
+                        />
+                      ) : null}
+                      {chimmyVerdict ? <ChimmyVerdictChip verdict={chimmyVerdict} /> : null}
                       {shown ? <p className="af-cm-bubble-text">{renderMessageText(censorProfanity(shown))}</p> : null}
                       {rich ? renderRich(m) : null}
                     </>
@@ -601,13 +609,18 @@ export function ChatMessageList({
                   />
                 ) : null}
 
-                {showTime && time ? (
+                {m.pending ? (
+                  <span className="af-cm-meta af-cm-sending">Sending…</span>
+                ) : showTime && time ? (
                   <span className="af-cm-meta">
                     <time dateTime={toDateTimeAttr(m.createdAt)} title={formatChatMessageTimestampFull(m.createdAt)}>
                       {time}
                     </time>
                     {isEditedMessage(m.metadata) && !deleted ? <span className="af-cm-edited"> · edited</span> : null}
                   </span>
+                ) : isEditedMessage(m.metadata) && !deleted ? (
+                  /* Mid-run there is no time line, and "edited" used to vanish with it. */
+                  <span className="af-cm-meta af-cm-edited">edited</span>
                 ) : null}
               </div>
 
@@ -745,9 +758,13 @@ export function ChatMessageList({
            * Report and Block are for somebody ELSE's message, and only one with a person behind it:
            * a system row has no author to report or block. The sheet stays open on a failure (the
            * promise rejects) and only closes once the server said yes.
+           *
+           * 🛑 NEVER ON A CHIMMY POST, EVEN IF AN AUTHOR ID LEAKED ONTO IT. Chimmy's rows are stored
+           * under the league owner (a required FK), so "Block" there would block the commissioner.
+           * League chat strips the id (asChimmyWhenMarked); this is the second lock on that door.
            */
           onReport={
-            onReport && menuMessage.authorId && menuMessage.authorId !== viewerId
+            onReport && menuMessage.authorId && menuMessage.authorId !== viewerId && !isChimmyAuthored(menuMessage.metadata)
               ? async (reason) => {
                   await onReport(menuMessage, reason)
                   setMenuFor(null)
@@ -756,7 +773,7 @@ export function ChatMessageList({
               : undefined
           }
           onBlock={
-            onBlock && menuMessage.authorId && menuMessage.authorId !== viewerId
+            onBlock && menuMessage.authorId && menuMessage.authorId !== viewerId && !isChimmyAuthored(menuMessage.metadata)
               ? async () => {
                   const name = menuMessage.authorName
                   await onBlock(menuMessage)

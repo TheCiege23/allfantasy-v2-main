@@ -200,7 +200,7 @@ export default function RateCommissionerPage() {
             {/* Show averages if available */}
             {averages && (
               <div className="mt-6 space-y-2 text-left">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-white/30">Season Averages</p>
+                <p className="text-[11px] font-bold uppercase tracking-wider text-white/30">Season Averages</p>
                 {questions.map((q, i) => {
                   const avg = averages[q.id] ?? 0
                   return (
@@ -336,7 +336,7 @@ export default function RateCommissionerPage() {
 
         {/* Optional comment */}
         <div className="mt-6 space-y-2">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-white/40">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-white/40">
             Additional Comments <span className="font-normal text-white/25">(optional)</span>
           </p>
           <textarea
@@ -347,7 +347,7 @@ export default function RateCommissionerPage() {
             placeholder="Share any thoughts about the season, suggestions for improvement, or kudos..."
             className="w-full resize-none rounded-xl border border-white/15 bg-[#0d1526] px-4 py-3 text-[13px] text-white placeholder:text-white/20 focus:border-cyan-500/40 focus:outline-none focus:ring-1 focus:ring-cyan-500/30"
           />
-          <p className="text-right text-[10px] text-white/20">{comment.length}/500</p>
+          <p className="text-right text-[11px] text-white/20">{comment.length}/500</p>
         </div>
 
         {/* Submit */}

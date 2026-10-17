@@ -20,7 +20,7 @@ export function ChimmyDraftPanel({
 
       {recommendation?.player ? (
         <div className="rounded-xl border border-cyan-400/15 bg-black/20 p-3">
-          <p className="text-[10px] uppercase tracking-wide text-cyan-200">Top pick</p>
+          <p className="text-[11px] uppercase tracking-wide text-cyan-200">Top pick</p>
           <p className="mt-1 text-base font-semibold text-white">{recommendation.player.name}</p>
           <p className="text-sm text-white/60">
             {recommendation.player.position}

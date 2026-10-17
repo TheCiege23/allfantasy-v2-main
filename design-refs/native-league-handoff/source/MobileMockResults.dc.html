@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Blah — Mock recap (phone)</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./af-shell.css">
+<link rel="stylesheet" href="./draft-sleek.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500;700;800&amp;display=swap" rel="stylesheet">
+<style>body{margin:0;background:#07080d}</style>
+</helmet>
+<div class="af ph" style="min-height: 0">
+  <header style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,.07)">
+    <a class="iconbtn" href="MobileDraft.dc.html" aria-label="Back to Draft HQ">‹</a>
+    <span style="flex: 1; display: flex; flex-direction: column; gap: 4px"><span style="font-weight: 700; font-size: 18px; letter-spacing: -0.03em">Mock recap</span><span class="lbl">Blah settings · slot 9</span></span>
+    <button class="iconbtn" aria-label="Share to league chat"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 12v8h16v-8M16 6l-4-4-4 4M12 2v14"/></svg></button>
+  </header>
+  <div class="ph-scroll" style="padding: 12px; gap: 12px">
+    <section style="padding: 18px; border-radius: 16px; background: #10131c; border: 1px solid rgba(255,255,255,.07); display: flex; align-items: center; gap: 16px">
+      <span style="font-size: 64px; line-height: 1; font-weight: 700; letter-spacing: -0.04em; color: #34d399">A−</span>
+      <span style="display: flex; flex-direction: column; gap: 6px"><span style="font-size: 17px; font-weight: 700; letter-spacing: -0.03em">Projected 2nd of 12</span><span class="num" style="font-size: 12px; color: #c3c9e6">10.4 wins · 2,388 pts</span></span>
+    </section>
+    <div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px">
+      <sc-for list="{{posGrades}}" as="g" hint-placeholder-count="5">
+        <div style="padding: 10px 4px; border-radius: 12px; background: #10131c; display: flex; flex-direction: column; align-items: center; gap: 6px"><span class="pos p-{{g.pos}}" style="width: 36px; height: 22px">{{g.pos}}</span><span style="font-size: 18px; font-weight: 700; color: {{g.c}}">{{g.grade}}</span></div>
+      </sc-for>
+    </div>
+    <div style="display: flex; gap: 6px; flex-wrap: wrap"><span class="chip chip-good">Steal · Evans 3.09</span><span class="chip chip-warn">Reach · Love 7.09</span></div>
+    <section style="border-radius: 14px; border: 1px solid rgba(255,255,255,.07); background: #10131c">
+      <sc-for list="{{picks}}" as="p" hint-placeholder-count="8">
+        <div style="display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-top: 1px solid rgba(255,255,255,.05)">
+          <span class="num" style="width: 38px; font-size: 11px; color: #7d84a8">{{p.pick}}</span>
+          <span class="pos p-{{p.pos}}" style="width: 36px">{{p.pos}}</span>
+          <span style="flex: 1; font-weight: 700; font-size: 13px">{{p.name}}</span>
+          <span class="num" style="font-size: 11px; font-weight: 600; color: {{p.c}}">{{p.val}}</span>
+        </div>
+      </sc-for>
+    </section>
+    <div style="padding: 12px; border-radius: 12px; background: rgba(34,211,238,.08); border: 1px solid rgba(34,211,238,.28); font-size: 12px; line-height: 1.45; color: #c3c9e6"><strong style="color: #22d3ee">Chimmy</strong> Queue a TE for 2.04 in the real draft — that's your one weak spot.</div>
+  </div>
+  <div style="display: flex; gap: 8px; padding: 10px 12px 24px; border-top: 1px solid rgba(255,255,255,.07); background: #0b0d14">
+    <button class="btn btn-g" style="flex: 1">Save plan</button>
+    <a class="btn btn-p" href="MobileDraft.dc.html" style="flex: 1">Run it back</a>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const G = { 'A': '#34d399', 'A−': '#34d399', 'B+': '#22d3ee', 'B': '#22d3ee', 'C+': '#fbbf24' };
+    const posGrades = [['QB','B'],['RB','A−'],['WR','A'],['TE','C+'],['FLEX','B+']].map(([pos, grade]) => ({ pos, grade, c: G[grade] }));
+    const picks = [['1.09','Malik Nabers','WR','0'],['2.04','Kyren Williams','RB','+1'],['3.09','Mike Evans','WR','+11'],['4.04','DK Metcalf','WR','+1'],['5.09','Jaylen Warren','RB','+5'],['6.04','Dallas Goedert','TE','0'],['7.09','Jordan Love','QB','−9'],['8.04','Rashid Shaheed','WR','+13']]
+      .map(([pick, name, pos, val]) => ({ pick, name, pos, val, c: val.startsWith('+') && Number(val.slice(1)) >= 5 ? '#34d399' : val.startsWith('−') ? '#fb5b78' : '#c3c9e6' }));
+    return { posGrades, picks };
+  }
+}
+</script>
+</body>
+</html>

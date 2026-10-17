@@ -3,12 +3,10 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { assertLeagueMember } from "@/lib/league/league-access";
 import { rateLimit, getClientIp } from "@/lib/rate-limit";
-import { runTradeAnalysis } from "@/lib/engine/trade";
-import type {
-  TradeEngineRequest,
-  LeagueFormat,
-  SportKey,
-} from "@/lib/engine/trade-types";
+import { evaluateTrade } from "@/lib/decision-os/trade/evaluateTrade";
+import { NOT_YOUR_LEAGUE_REASON, resolveEvaluationLeagueId } from "@/lib/decision-os/trade/evaluationLeague";
+import { gradeInputsFromLegacyAssets } from "@/lib/decision-os/trade/receiptViews";
+import { appliedCounterInputs, legacyPackageGrade, type CounterCandidate } from "@/lib/legacy/legacyPackageGrade";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,6 +17,23 @@ export const dynamic = "force-dynamic";
 // (standalone analyzer flows with no internal league) remain allowed for
 // authenticated users only.
 
+/*
+ * 🛑 A SIMULATED COUNTER IS GRADED BY THE ONE TRADE GRADE (2026-09-29).
+ *
+ * This route ran `runTradeAnalysis` (lib/engine/trade) on the countered deal and the AF Legacy
+ * analyzer's counter card printed its verdict, "fairness N/100" and an animated acceptance percentage.
+ * Now the countered deal — the original deal plus the counter's added/asked player, exactly what the
+ * card's Apply button puts in the builder — goes through `evaluateTrade()` and the card prints that
+ * letter. Orientation is the legacy analyzer's: Team A receives `assetsA` and sends `assetsB`.
+ *
+ * It also never worked for its only caller: the card posts `{ originalRequest, appliedCounter }`,
+ * which this route did not read, so every "Apply & Simulate" came back 400. It reads that shape now.
+ *
+ * ⚠ THE LEGACY PAGE SENDS A SLEEPER LEAGUE ID. `assertLeagueMember` keys on an AllFantasy id and
+ * answers 404 for a Sleeper one, so a 404 falls through to `resolveEvaluationLeagueId`, which accepts
+ * either and proves membership the same way. A 403 (their league, not yours) is still a 403.
+ */
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -27,214 +42,22 @@ function toStringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
-function toNumberValue(value: unknown): number | undefined {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-
-  if (typeof value === "string" && value.trim()) {
-    const parsed = Number(value.trim());
-    if (Number.isFinite(parsed)) {
-      return parsed;
-    }
-  }
-
-  return undefined;
-}
-
-function toAssetArray(value: unknown): TradeEngineRequest["assetsA"] {
-  return Array.isArray(value) ? (value as TradeEngineRequest["assetsA"]) : [];
-}
-
-function normalizeLeagueFormat(value: unknown): LeagueFormat {
-  const raw = String(value ?? "")
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, "_")
-    .replace(/-/g, "_");
-
-  switch (raw) {
-    case "dynasty":
-      return "dynasty";
-    case "redraft":
-      return "redraft";
-    case "keeper":
-      return "keeper";
-    default:
-      return "dynasty";
-  }
-}
-
-function normalizeSport(value: unknown): SportKey {
-  const raw = String(value ?? "")
-    .trim()
-    .toUpperCase()
-    .replace(/\s+/g, "")
-    .replace(/-/g, "")
-    .replace(/_/g, "");
-
-  switch (raw) {
-    case "NFL":
-      return "NFL";
-    case "NBA":
-      return "NBA";
-    case "MLB":
-      return "MLB";
-    case "NHL":
-      return "NHL";
-    case "NCAAF":
-    case "CFB":
-    case "COLLEGEFOOTBALL":
-      return "NCAAF";
-    case "NCAAB":
-    case "CBB":
-    case "COLLEGEBASKETBALL":
-      return "NCAAB";
-    case "SOCCER":
-    case "FUTBOL":
-    case "FOOTBALL":
-      return "SOCCER";
-    case "GOLF":
-    case "PGA":
-      return "GOLF";
-    case "NASCAR":
-      return "NASCAR";
-    case "WWE":
-      return "WWE";
-    case "AEW":
-      return "AEW";
-    case "CRICKET":
-      return "CRICKET";
-    case "CUSTOM":
-      return "CUSTOM";
-    default:
-      return "NFL";
-  }
-}
-
-type SimulateCounterRequest = TradeEngineRequest & {
-  rosterIdA?: number;
-  rosterIdB?: number;
-};
-
-function buildTradeRequest(body: Record<string, unknown>): SimulateCounterRequest {
-  const leagueId =
-    toStringValue(body.leagueId) ?? toStringValue(body.league_id);
-
-  const teamAName = toStringValue(body.teamAName);
-  const teamBName = toStringValue(body.teamBName);
-  const rosterIdA = toNumberValue(body.rosterIdA);
-  const rosterIdB = toNumberValue(body.rosterIdB);
-
-  const request: SimulateCounterRequest = {
-    sport: normalizeSport(body.sport),
-    format: normalizeLeagueFormat(body.format),
-    assetsA: toAssetArray(body.assetsA),
-    assetsB: toAssetArray(body.assetsB),
+function toCandidate(value: unknown): CounterCandidate | null {
+  if (!isRecord(value)) return null;
+  return {
+    id: toStringValue(value.id) ?? null,
+    name: toStringValue(value.name) ?? null,
+    pos: toStringValue(value.pos) ?? null,
+    team: toStringValue(value.team) ?? null,
   };
-
-  if (leagueId) {
-    request.leagueId = leagueId;
-    request.league_id = leagueId;
-  }
-
-  if (teamAName) {
-    request.teamAName = teamAName;
-  }
-
-  if (teamBName) {
-    request.teamBName = teamBName;
-  }
-
-  if (rosterIdA !== undefined) {
-    request.rosterIdA = rosterIdA;
-  }
-
-  if (rosterIdB !== undefined) {
-    request.rosterIdB = rosterIdB;
-  }
-
-  if (body.leagueContext !== undefined) {
-    request.leagueContext = body.leagueContext as TradeEngineRequest["leagueContext"];
-  }
-
-  if (body.rosterA !== undefined && Array.isArray(body.rosterA)) {
-    request.rosterA = body.rosterA as TradeEngineRequest["rosterA"];
-  }
-
-  if (body.rosterB !== undefined && Array.isArray(body.rosterB)) {
-    request.rosterB = body.rosterB as TradeEngineRequest["rosterB"];
-  }
-
-  if (body.marketContext !== undefined) {
-    request.marketContext =
-      body.marketContext as TradeEngineRequest["marketContext"];
-  }
-
-  if (body.nflContext !== undefined) {
-    request.nflContext = body.nflContext as TradeEngineRequest["nflContext"];
-  }
-
-  if (typeof body.tradeGoal === "string") {
-    request.tradeGoal = body.tradeGoal;
-  }
-
-  if (body.numTeams !== undefined) {
-    const numTeams = toNumberValue(body.numTeams);
-    if (numTeams !== undefined) {
-      request.numTeams = numTeams;
-    }
-  }
-
-  if (body.newsAdjustments !== undefined) {
-    request.newsAdjustments =
-      body.newsAdjustments as TradeEngineRequest["newsAdjustments"];
-  }
-
-  if (body.options !== undefined) {
-    request.options = body.options as TradeEngineRequest["options"];
-  }
-
-  if (typeof body.sleeper_username_a === "string") {
-    request.sleeper_username_a = body.sleeper_username_a;
-  }
-
-  if (typeof body.sleeper_username_b === "string") {
-    request.sleeper_username_b = body.sleeper_username_b;
-  }
-
-  if (body.sleeperUserA !== undefined) {
-    request.sleeperUserA =
-      body.sleeperUserA as TradeEngineRequest["sleeperUserA"];
-  }
-
-  if (body.sleeperUserB !== undefined) {
-    request.sleeperUserB =
-      body.sleeperUserB as TradeEngineRequest["sleeperUserB"];
-  }
-
-  return request;
 }
 
-function extractSimulationPayload(
-  rawBody: Record<string, unknown>
-): Record<string, unknown> {
-  if (isRecord(rawBody.trade)) {
-    return rawBody.trade;
+/** The deal being countered: the card's `originalRequest`, or one of the older wrapper keys. */
+function extractSimulationPayload(rawBody: Record<string, unknown>): Record<string, unknown> {
+  for (const key of ["originalRequest", "trade", "proposedTrade", "counterTrade", "simulation"]) {
+    const v = rawBody[key];
+    if (isRecord(v)) return v;
   }
-
-  if (isRecord(rawBody.proposedTrade)) {
-    return rawBody.proposedTrade;
-  }
-
-  if (isRecord(rawBody.counterTrade)) {
-    return rawBody.counterTrade;
-  }
-
-  if (isRecord(rawBody.simulation)) {
-    return rawBody.simulation;
-  }
-
   return rawBody;
 }
 
@@ -280,15 +103,26 @@ export async function POST(req: NextRequest) {
       toStringValue(sourcePayload.league_id) ??
       (req.nextUrl.searchParams?.get("leagueId")?.trim() || undefined);
 
+    let gradeLeagueId: string | null = null;
     if (leagueId) {
       const gate = await assertLeagueMember(leagueId, userId);
-      if (!gate.ok) {
-        return NextResponse.json({ error: "Forbidden" }, { status: gate.status });
+      if (gate.ok) {
+        gradeLeagueId = leagueId;
+      } else if (gate.status === 403) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      } else {
+        // Not an AllFantasy league id — a provider's (the legacy page's Sleeper id). Same proof.
+        gradeLeagueId = await resolveEvaluationLeagueId({ suppliedLeagueId: leagueId, userId });
       }
     }
-    const payload = buildTradeRequest(sourcePayload);
 
-    if (payload.assetsA.length === 0 && payload.assetsB.length === 0) {
+    const assetsA = Array.isArray(sourcePayload.assetsA) ? sourcePayload.assetsA : [];
+    const assetsB = Array.isArray(sourcePayload.assetsB) ? sourcePayload.assetsB : [];
+    const applied = isRecord(rawBody.appliedCounter) ? rawBody.appliedCounter : {};
+    const addToGive = toCandidate(applied.addToGive);
+    const addToGet = toCandidate(applied.addToGet);
+
+    if (assetsA.length === 0 && assetsB.length === 0 && !addToGive && !addToGet) {
       return NextResponse.json(
         {
           ok: false,
@@ -298,25 +132,42 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const result = await runTradeAnalysis(payload);
+    const numTeams = Number(sourcePayload.numTeams) || 12;
+    const deal = appliedCounterInputs(
+      {
+        give: gradeInputsFromLegacyAssets(assetsB as never[], numTeams),
+        get: gradeInputsFromLegacyAssets(assetsA as never[], numTeams),
+      },
+      { addToGive, addToGet },
+    );
+
+    const receipt = await evaluateTrade(
+      {
+        surface: "legacy-counter-simulate",
+        leagueId: gradeLeagueId,
+        userId,
+        give: deal.give,
+        get: deal.get,
+        viewerSide: false,
+      },
+      leagueId && !gradeLeagueId
+        ? { grade: async () => ({ graded: false, reason: NOT_YOUR_LEAGUE_REASON, basis: null }) }
+        : {},
+    );
 
     return NextResponse.json({
       ok: true,
-      simulation: result,
-      result,
+      /** THE grade of the countered deal, for Team A (the side that receives `assetsA`). */
+      grade: legacyPackageGrade(receipt.grade),
+      evaluationReceiptId: receipt.receiptId,
     });
   } catch (error: unknown) {
     console.error("[trade/simulate-counter] error:", error);
 
-    const message =
-      error instanceof Error
-        ? error.message
-        : "Failed to simulate trade counter.";
-
     return NextResponse.json(
       {
         ok: false,
-        error: message,
+        error: "Failed to simulate trade counter.",
       },
       { status: 500 }
     );

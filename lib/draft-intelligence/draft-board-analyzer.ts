@@ -191,8 +191,8 @@ export function identifyValuePlayers(
   minAdpGap: number = 10,
 ): { name: string; position: string; adp: number; value: number }[] {
   return available
-    .filter(p => p.adp - currentPick >= minAdpGap && p.value >= 2000)
-    .sort((a, b) => (b.adp - currentPick) - (a.adp - currentPick))
+    .filter(p => currentPick - p.adp >= minAdpGap && p.value >= 2000)
+    .sort((a, b) => (currentPick - b.adp) - (currentPick - a.adp))
     .slice(0, 5)
     .map(p => ({ name: p.name, position: p.position, adp: p.adp, value: p.value }))
 }
@@ -209,7 +209,7 @@ export function identifyFades(
 
   for (const p of available) {
     // ADP reach — going before ADP by 15+
-    if (currentPick - p.adp >= 15 && p.value < 5000) {
+    if (p.adp - currentPick >= 15 && p.value < 5000) {
       fades.push({
         name: p.name,
         position: p.position,

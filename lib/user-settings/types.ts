@@ -6,6 +6,12 @@
 import type { LanguageCode } from "@/lib/i18n/constants"
 
 export type ThemePreference = "dark" | "light" | "legacy" | "system"
+
+/**
+ * Longest display name the profile accepts — what other managers see on chat, standings and trades.
+ * Enforced by UserProfileService and mirrored as the input's maxLength. Uncapped before 2026-10-02.
+ */
+export const MAX_DISPLAY_NAME_LENGTH = 50
 export type PreferredLanguage = LanguageCode
 
 /** Supported sport code (aligns with LeagueSport). */
@@ -71,6 +77,11 @@ export interface UserProfileForSettings {
   userId: string
   username: string
   email: string | null
+  /**
+   * The address's Unsubscribe state (lib/email/emailSubscription). Set by getSettingsSnapshot;
+   * absent on profiles built elsewhere, which the dispatcher treats as "no opt-out known".
+   */
+  emailSubscription?: import("@/lib/email/emailSubscription").EmailSubscriptionState
   displayName: string | null
   profileImageUrl: string | null
   avatarPreset: string | null
@@ -177,4 +188,6 @@ export interface SettingsSavePayload {
   profile?: ProfileUpdatePayload
   settings?: UserSettingsUpdatePayload
   aiSettings?: Record<string, boolean>
+  /** Resume alert emails after an Unsubscribe (lib/email/emailSubscription.resumeAlertEmails). */
+  emailResubscribe?: boolean
 }

@@ -62,7 +62,7 @@ export default function ChimmyAnalyticsSummaryPanel({ className = '', limit = 50
 
   return (
     <section className={`rounded-xl border border-white/10 bg-white/[0.02] p-3 ${className}`}>
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-white/40">Learning Snapshot</p>
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-white/40">Learning Snapshot</p>
 
       {loading && <p className="mt-2 text-xs text-white/40">Loading action analytics...</p>}
       {!loading && error && <p className="mt-2 text-xs text-amber-300">{error}</p>}
@@ -102,7 +102,7 @@ export default function ChimmyAnalyticsSummaryPanel({ className = '', limit = 50
 function Metric({ label, value }: { label: string; value: number }) {
   return (
     <div className="rounded-lg border border-white/10 bg-black/20 px-2 py-1.5">
-      <p className="text-[10px] uppercase tracking-wide text-white/40">{label}</p>
+      <p className="text-[11px] uppercase tracking-wide text-white/40">{label}</p>
       <p className="font-mono text-sm text-white/80">{value}</p>
     </div>
   )

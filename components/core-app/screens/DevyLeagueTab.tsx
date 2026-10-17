@@ -19,6 +19,11 @@
 import '../af-core.css'
 import '../af-devy.css'
 import type { DevyNewsItem, DevyTrend, DevyViewState } from './DevyCore'
+import DevyTrendMark from './DevyTrendMark'
+import { TopicTip } from '@/components/core-app/TopicTip'
+
+/** Eyebrow and "?" grouped so the section head's space-between does not split them. */
+const EYEBROW_WITH_TIP = { display: 'inline-flex', alignItems: 'center', gap: 6 } as const
 
 /**
  * Devy — the per-league tab.
@@ -60,13 +65,35 @@ export interface DevyDraftPick {
   selection: string | null
 }
 
+/**
+ * A prospect on the ADP-ranked board — what the draft board shows when this league has no devy
+ * draft order to show. Not a pick: nobody owns a slot, so it carries no team.
+ */
+export interface DevyBoardProspect {
+  id: string
+  /** Average draft position. Lower is earlier. */
+  adp: number
+  name: string
+  position: string
+  school: string
+}
+
 export interface DevyTradeValue {
+  /** Stable row key; two prospects can share a name. Falls back to `player`. */
+  id?: string
   player: string
   value: number | null
-  trend: DevyTrend
+  /**
+   * Null when no trend is measured. ⚠ NOT 'flat': "Flat" is a claim that the value held still, and a
+   * row nothing has re-priced has made no such claim.
+   */
+  trend: DevyTrend | null
   /** "Rostered · You", a manager name, or "Free agent". */
   status: string
 }
+
+/** The sections that can each be empty for their own reason. */
+export type DevyLeagueSection = 'slots' | 'freeAgents' | 'draftBoard' | 'news' | 'tradeValues'
 
 export interface DevyLeagueTabProps {
   viewState: DevyViewState
@@ -77,10 +104,26 @@ export interface DevyLeagueTabProps {
   draftRoundLabel: string
   draftCountdown: string | null
   draftBoard: DevyDraftPick[]
+  /** Shown when `draftBoard` is empty — the ADP-ranked best available. */
+  draftProspects?: DevyBoardProspect[]
+  /** One line saying what the board is built from. */
+  draftBoardNote?: string | null
   news: DevyNewsItem[]
   tradeValues: DevyTradeValue[]
+  /** What the trade values are denominated in. Omitted, the section states no basis rather than a wrong one. */
+  tradeValueNote?: string | null
+  /**
+   * One honest line per section whose source had nothing to show, from the loader — which knows WHY
+   * (no rights recorded, a stale feed, no draft scheduled). The component's own fallback copy is
+   * deliberately generic because it cannot know.
+   */
+  emptyReasons?: Partial<Record<DevyLeagueSection, string>>
   settingsHref?: string
   onAddFreeAgent?: (id: string) => void
+}
+
+function EmptyLine({ children }: { children: string }) {
+  return <p className="af-devy-note" style={{ margin: 0 }}>{children}</p>
 }
 
 function initials(name: string): string {
@@ -114,16 +157,6 @@ function Avatar({ url, name, color }: { url: string | null; name: string; color:
   )
 }
 
-function Trend({ trend }: { trend: DevyTrend }) {
-  const glyph = trend === 'up' ? '↑' : trend === 'down' ? '↓' : '—'
-  const label = trend === 'up' ? 'Trending up' : trend === 'down' ? 'Trending down' : 'Flat'
-  return (
-    <span className={`af-devy-trend af-devy-trend--${trend}`} title={label}>
-      <span aria-hidden="true">{glyph}</span>
-      <span className="af-sr-only"> {label}</span>
-    </span>
-  )
-}
 
 export default function DevyLeagueTab({
   viewState,
@@ -134,8 +167,12 @@ export default function DevyLeagueTab({
   draftRoundLabel,
   draftCountdown,
   draftBoard,
+  draftProspects = [],
+  draftBoardNote = null,
   news,
   tradeValues,
+  tradeValueNote = null,
+  emptyReasons = {},
   settingsHref,
   onAddFreeAgent,
 }: DevyLeagueTabProps) {
@@ -210,8 +247,11 @@ export default function DevyLeagueTab({
         <>
           <section className="af-devy-card" aria-labelledby="af-devy-slots">
             <div className="af-devy-sec-head">
-              <div className="af-devy-eyebrow" id="af-devy-slots">
-                Your devy slots
+              <div style={EYEBROW_WITH_TIP}>
+                <div className="af-devy-eyebrow" id="af-devy-slots">
+                  Your devy slots
+                </div>
+                <TopicTip topic="devySlots" />
               </div>
               <span className="af-devy-pill">
                 {slots.filter((s) => s.player).length} of {slots.length} filled
@@ -236,18 +276,29 @@ export default function DevyLeagueTab({
                 ),
               )}
             </div>
+            {/* Said only when NOTHING is filled: a half-filled grid explains itself. */}
+            {emptyReasons.slots && !slots.some((s) => s.player) ? (
+              <EmptyLine>{emptyReasons.slots}</EmptyLine>
+            ) : null}
           </section>
 
           <section className="af-devy-card" aria-labelledby="af-devy-fa">
             <div className="af-devy-sec-head">
-              <div className="af-devy-eyebrow" id="af-devy-fa">
-                Available devy free agents
+              <div style={EYEBROW_WITH_TIP}>
+                <div className="af-devy-eyebrow" id="af-devy-fa">
+                  Available devy free agents
+                </div>
+                <TopicTip topic="devyGrade" />
               </div>
             </div>
+            {/*
+              ⚠ THE OLD COPY HERE WAS "Every tracked prospect in this league is rostered." — rendered
+              for ANY empty list, including a pool that never loaded. That is a confident false fact
+              about the league. The loader's reason says why the list is empty; the fallback claims
+              nothing it cannot know.
+            */}
             {freeAgents.length === 0 ? (
-              <p style={{ fontSize: 12, color: 'var(--faint)', margin: 0 }}>
-                Every tracked prospect in this league is rostered.
-              </p>
+              <EmptyLine>{emptyReasons.freeAgents ?? 'No unrostered prospects to show.'}</EmptyLine>
             ) : (
               freeAgents.map((fa) => (
                 <div className="af-devy-prospect" key={fa.id}>
@@ -307,31 +358,55 @@ export default function DevyLeagueTab({
 
           <section className="af-devy-card" aria-labelledby="af-devy-board">
             <div className="af-devy-sec-head">
-              <div className="af-devy-eyebrow" id="af-devy-board">
-                Devy draft board · {draftRoundLabel}
+              <div style={EYEBROW_WITH_TIP}>
+                <div className="af-devy-eyebrow" id="af-devy-board">
+                  Devy draft board · {draftRoundLabel}
+                </div>
+                <TopicTip topic="devyDraftBoard" />
               </div>
               {draftCountdown ? <span className="af-devy-pill">{draftCountdown}</span> : null}
             </div>
-            <div className="af-devy-grid4">
-              {draftBoard.map((d) => (
-                <div
-                  className={`af-devy-tile${d.status === 'on-the-clock' ? ' af-devy-pick--live' : ''}`}
-                  key={d.id}
-                >
-                  <div className="af-devy-pick-lab">{d.label}</div>
-                  <div className="af-devy-name" style={{ marginTop: 4 }}>
-                    {d.team}
+            {draftBoard.length > 0 ? (
+              <div className="af-devy-grid4">
+                {draftBoard.map((d) => (
+                  <div
+                    className={`af-devy-tile${d.status === 'on-the-clock' ? ' af-devy-pick--live' : ''}`}
+                    key={d.id}
+                  >
+                    <div className="af-devy-pick-lab">{d.label}</div>
+                    <div className="af-devy-name" style={{ marginTop: 4 }}>
+                      {d.team}
+                    </div>
+                    <div className="af-devy-pick-status">
+                      {d.status === 'drafted'
+                        ? (d.selection ?? 'Drafted')
+                        : d.status === 'on-the-clock'
+                          ? 'On the clock'
+                          : 'Upcoming'}
+                    </div>
                   </div>
-                  <div className="af-devy-pick-status">
-                    {d.status === 'drafted'
-                      ? (d.selection ?? 'Drafted')
-                      : d.status === 'on-the-clock'
-                        ? 'On the clock'
-                        : 'Upcoming'}
+                ))}
+              </div>
+            ) : draftProspects.length > 0 ? (
+              <div className="af-devy-grid4">
+                {draftProspects.map((p) => (
+                  <div className="af-devy-tile" key={p.id}>
+                    <div className="af-devy-pick-lab">ADP {p.adp.toFixed(1)}</div>
+                    <div className="af-devy-name" style={{ marginTop: 4 }}>
+                      {p.name}
+                    </div>
+                    <div className="af-devy-pick-status">
+                      {p.position} · {p.school}
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <EmptyLine>{emptyReasons.draftBoard ?? 'Nothing to show on the devy draft board yet.'}</EmptyLine>
+            )}
+            {draftBoardNote && (draftBoard.length > 0 || draftProspects.length > 0) ? (
+              <p className="af-devy-note">{draftBoardNote}</p>
+            ) : null}
           </section>
 
           <section className="af-devy-card" aria-labelledby="af-devy-lnews">
@@ -340,6 +415,9 @@ export default function DevyLeagueTab({
                 Devy news · this league
               </div>
             </div>
+            {news.length === 0 ? (
+              <EmptyLine>{emptyReasons.news ?? 'No recent devy news for this league.'}</EmptyLine>
+            ) : null}
             {news.map((n) => (
               <div className="af-devy-news" key={n.id}>
                 <span className={`af-devy-tag af-devy-tag--${n.kind}`}>{n.kind}</span>
@@ -358,23 +436,28 @@ export default function DevyLeagueTab({
                 Devy trade values
               </div>
             </div>
+            {tradeValues.length === 0 ? (
+              <EmptyLine>{emptyReasons.tradeValues ?? 'No devy trade values to show.'}</EmptyLine>
+            ) : (
             <div className="af-devy-tablewrap">
               <table className="af-devy-table">
                 <thead>
                   <tr>
                     <th scope="col">Player</th>
                     <th scope="col">Value</th>
-                    <th scope="col">Trend</th>
+                    <th scope="col">
+                      Trend <TopicTip topic="devyTrend" />
+                    </th>
                     <th scope="col">Status</th>
                   </tr>
                 </thead>
                 <tbody>
                   {tradeValues.map((t) => (
-                    <tr key={t.player}>
+                    <tr key={t.id ?? t.player}>
                       <td>{t.player}</td>
                       <td className="af-devy-num">{t.value == null ? '—' : Math.round(t.value)}</td>
                       <td>
-                        <Trend trend={t.trend} />
+                        <DevyTrendMark trend={t.trend} />
                       </td>
                       <td>{t.status}</td>
                     </tr>
@@ -382,11 +465,15 @@ export default function DevyLeagueTab({
                 </tbody>
               </table>
             </div>
-            <p className="af-devy-note">
-              Devy values are this league&apos;s scoring applied to a college projection, not a
-              market price. They move with the projection, and a prospect years from the draft
-              carries more uncertainty than the number shows.
-            </p>
+            )}
+            {/*
+              ⚠ THE NOTE THAT USED TO BE HARD-CODED HERE WAS FALSE for the numbers now shown: it said
+              "this league's scoring applied to a college projection, not a market price". The values
+              are `devyOptionValue` — P(drafted) x dynasty value on arrival x a wait discount, on the
+              FantasyCalc dynasty board — i.e. exactly a market-denominated price. The loader supplies
+              the basis the grade itself states, so the two cannot drift.
+            */}
+            {tradeValueNote && tradeValues.length > 0 ? <p className="af-devy-note">{tradeValueNote}</p> : null}
           </section>
         </>
       ) : null}

@@ -99,17 +99,17 @@ export function DraftPlayerHistoryBlock(props: DraftPlayerHistoryBlockProps) {
     >
       {seasons.length > 0 && (
         <div className="mb-2">
-          <div className="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-white/45">
+          <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-white/45">
             <History className="h-3 w-3" />
             Recent seasons
           </div>
           <div className="grid grid-cols-4 gap-1 text-center">
             {seasons.map((s) => (
               <div key={s.season} className="rounded border border-white/8 bg-white/[0.02] px-1 py-1">
-                <div className="text-[10px] text-white/50">{s.season}</div>
+                <div className="text-[11px] text-white/50">{s.season}</div>
                 <div className="text-[11px] font-semibold text-white/90">{s.points.toFixed(1)}</div>
                 {typeof s.games === 'number' ? (
-                  <div className="text-[9px] text-white/40">{s.games} GP</div>
+                  <div className="text-[11px] text-white/40">{s.games} GP</div>
                 ) : null}
               </div>
             ))}
@@ -119,7 +119,7 @@ export function DraftPlayerHistoryBlock(props: DraftPlayerHistoryBlockProps) {
 
       {trends.length > 0 && (
         <div className="mb-2">
-          <div className="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-white/45">
+          <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-white/45">
             <TrendingUp className="h-3 w-3" />
             Meta trends
           </div>
@@ -146,7 +146,7 @@ export function DraftPlayerHistoryBlock(props: DraftPlayerHistoryBlockProps) {
 
       {(bullets.length > 0 || data.aiInsights?.summary) && (
         <div>
-          <div className="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-white/45">
+          <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-white/45">
             <Sparkles className="h-3 w-3" />
             AI insight
           </div>

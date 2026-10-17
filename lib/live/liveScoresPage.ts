@@ -1,4 +1,6 @@
 import 'server-only'
+import { liveWorkspace } from './liveWorkspace'
+import { canonicalPlayGames } from './canonicalPlayGames'
 
 import { prisma } from '@/lib/prisma'
 import {
@@ -11,9 +13,19 @@ import { getPlayFeed, type PlayFeedItem } from '@/lib/live/playFeedPresentation'
 import { estimateWinProbability, type WinProbability } from '@/lib/live/winProbability'
 import { liveTeamAbbreviation } from '@/lib/live/teamAbbreviation'
 import { composePlayerIdentities } from '@/lib/core-app/playerIdentityCompose'
-import { isRosteredPlayer, rosterNameKeys } from '@/lib/live/rosterPlayMatch'
+import { myRosterCandidates, rosterPlayerIds } from '@/lib/core-app/myRoster'
+import { sleeperReadablePlayerDataOf } from '@/lib/core-app/rosterIdSpace'
+import { resolveRostersForTeams } from '@/lib/leagues/rosterTeamIdentity'
+import { leagueWeekFromSettings } from '@/lib/core-app/seasonTimeline'
+import { attachSlateGames, deriveImpact } from '@/lib/live/liveImpact'
+import { gameStageRank } from '@/lib/live/gameStage'
+import { loadStarterProjections, PROJECTED_SPORTS, type StarterProjection } from '@/lib/live/starterProjections'
+import { loadGameHighlights } from '@/lib/live/gameHighlights'
+import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 import { buildLockAlerts, type LiveLockAlert } from '@/lib/live/lockAlerts'
 import { isLiveSport, type LiveSport } from '@/lib/sport-scope'
+import { isTop25Sport, pollIsKnown, rankOf, showCollegeGame, type FollowedTeam, type RankBook } from '@/lib/live/collegeTop25'
+import { readFollowedTeams, readRankBook } from '@/lib/live/collegeTop25Store'
 import {
   basketballPeriodLabel,
   espnScoreboardDatesForWindow,
@@ -74,10 +86,24 @@ export type LiveRosterTieIn = {
    * broken `<img>` beside a real name.
    */
   imageUrl: string | null
+  /**
+   * The club that placed him in this game, in the slate's own abbreviation. It
+   * says which side he is on — the clicked-game view needs it to find his line
+   * in the box score. Optional so fixtures that predate it stay valid.
+   */
+  team?: string | null
   /** True when he is in your starting lineup this week. */
   isStarter: boolean
   /** Points as THIS league scored them. Null when the league has not reported yet. */
   points: number | null
+  /**
+   * Before kickoff only: this week's projection under THIS league's scoring (`starterProjections.ts`).
+   * Null or absent when it could not be priced — unpriced, never zero. Optional so payloads and
+   * fixtures that predate it stay valid.
+   */
+  projected?: number | null
+  /** The projection is 0 because he is ruled out, not because the model expects nothing. */
+  projectedOut?: boolean
 }
 
 export type LiveTeamSide = {
@@ -104,6 +130,8 @@ export type LiveTeamSide = {
   leaders: LiveGameLeader[]
   /** Basketball: made-attempted and percentage from the field, from three and at the line. */
   shooting: TeamShooting | null
+  /** College only: the Top-25 rank ("#5 Georgia"), or null when unranked or unknown. */
+  rank?: number | null
 }
 
 /** One PASS / RUSH / REC leader, with the feed's own stat line. */
@@ -193,15 +221,43 @@ export type LiveGameCard = {
   tieIns: LiveRosterTieIn[]
   /** Distinct leagues affected — the sort key for "My games". */
   leaguesAffected: number
+  /**
+   * The game's highlight video, finished games only — see `gameHighlightMatch.ts`.
+   * Game-level: TheSportsDB has no per-play clips. Optional so every existing
+   * fixture and caller that predates it stays valid.
+   */
+  highlight?: { youtubeId: string } | null
 }
 
+/**
+ * A feed play, placed in the slate game it happened in (`attachSlateGames`).
+ * `gameId` is the FEED's id and never meets the slate's; `slateGameId` does.
+ */
+export type LivePlay = PlayFeedItem & { slateGameId?: string | null }
+
 export type LiveImpact = {
-  /** Sum of your live points across every rostered player in a live game. */
+  /**
+   * Sum of your live points across every rostered player in a live game, once per (player, league).
+   * NOT a headline: it spans leagues with different scoring and falls when a game ends. See
+   * `starterStageCounts` for what the panel leads with instead.
+   */
   totalPoints: number
+  /** Distinct starters in a game being played now, each counted once across leagues. */
   livePlayers: number
+  /** Distinct starters whose game has not started. Optional for payloads built before it existed. */
+  upcomingPlayers?: number
+  /** Distinct starters whose game is over. */
+  finishedPlayers?: number
+  /** Distinct leagues those live players count in. `totalPoints` sums across them. */
+  liveLeagues?: number
   liveGames: number
-  /** The most recent notable play involving a player you roster. */
-  biggestMover: (PlayFeedItem & { leagues: string[] }) | null
+  /**
+   * The most recent notable play by one of your STARTERS in a live game — shown as "Latest for you".
+   * ⚠ NOT A RANKING BY POINTS, whatever the field name says: nothing on this page holds a starter's
+   * point history, so "biggest" could not be measured. It was labelled "Biggest mover" until
+   * 2026-10-11, which promised a comparison the data never made.
+   */
+  biggestMover: (LivePlay & { leagues: string[] }) | null
   /**
    * The recent play feed for this slate, newest first — the very rows
    * `biggestMover` is picked from, now kept instead of thrown away.
@@ -212,7 +268,7 @@ export type LiveImpact = {
    * feed render under another sport's tab would caption real plays with the
    * wrong games — the exact class of confident lie this page refuses to tell.
    */
-  plays: PlayFeedItem[]
+  plays: LivePlay[]
   /** Your players whose games have not kicked off yet. */
   upNext: Array<{ playerName: string; matchup: string; startTime: string }>
 }
@@ -272,6 +328,11 @@ export type LivePageData = {
    * not know.
    */
   rosterFailed: boolean
+  /**
+   * College tabs only (NCAAF/NCAAB): the Top 25 filter's effect on this slate, so the view can say
+   * what it hid and offer to show everything. Null on every other tab.
+   */
+  top25: { hidden: number; showingAll: boolean } | null
 }
 
 /** A rostered player of yours, resolved to a real-world team. */
@@ -281,7 +342,14 @@ type RosteredPlayer = {
   position: string | null
   team: string | null
   imageUrl: string | null
-  leagues: Array<{ leagueId: string; leagueName: string; isStarter: boolean; points: number | null }>
+  leagues: Array<{
+    leagueId: string
+    leagueName: string
+    isStarter: boolean
+    points: number | null
+    projected: number | null
+    projectedOut: boolean
+  }>
 }
 
 function isLiveRow(row: LiveScoreRow): boolean {
@@ -357,14 +425,20 @@ function teamLeaders(leaders: LiveScoreRow['homeTeamLeaders'], abbrev: string): 
 async function loadRosteredPlayers(
   userId: string,
   sport: string,
-): Promise<{ players: Map<string, RosteredPlayer>; hasRosterData: boolean }> {
+  period?: { season: number; week: number } | null,
+  /** Clubs whose game on this slate has not started. Their starters get a projection. */
+  upcomingTeams?: ReadonlySet<string>,
+): Promise<{ players: Map<string, RosteredPlayer>; hasRosterData: boolean; rosterFailed?: boolean }> {
   const players = new Map<string, RosteredPlayer>()
 
   const teams = await prisma.leagueTeam.findMany({
     where: { claimedByUserId: userId },
     select: {
       leagueId: true,
-      league: { select: { id: true, name: true, platformLeagueId: true, sport: true, season: true } },
+      externalId: true,
+      platformUserId: true,
+      lifecycleState: true,
+      league: { select: { id: true, name: true, platform: true, platformLeagueId: true, sport: true, season: true, settings: true } },
     },
   })
   if (teams.length === 0) return { players, hasRosterData: false }
@@ -374,36 +448,89 @@ async function loadRosteredPlayers(
     .filter((l): l is NonNullable<typeof l> => l != null && String(l.sport) === sport)
   if (leagues.length === 0) return { players, hasRosterData: false }
 
-  /*
-   * ⚠ THE WEEK IS READ FROM THE DATA, NOT ASSUMED. A hardcoded "current week" is
-   * how a live page silently shows last week's numbers all Sunday. Each league
-   * reports its own, so the newest week per league is the one in play.
-   */
-  const rows = await prisma.leaguePlayerWeeklyScore.findMany({
-    where: {
-      leagueId: { in: leagues.map((l) => l.platformLeagueId) },
-      seasonYear: { in: [...new Set(leagues.map((l) => l.season))] },
-    },
-    orderBy: [{ week: 'desc' }],
-    select: { leagueId: true, playerId: true, points: true, isStarter: true, week: true },
-    take: 5000,
+  // Weekly scores contain every manager's players. Ownership comes from the
+  // claimed roster, never from membership in a league the viewer plays in.
+  const rosters = await prisma.roster.findMany({
+    where: { OR: teams.filter((team) => leagues.some((league) => league.id === team.leagueId)).map((team) => ({ leagueId: team.leagueId, platformUserId: { in: myRosterCandidates(team, userId) } })) },
+    select: { id: true, leagueId: true, platformUserId: true, playerData: true },
   })
-  if (rows.length === 0) return { players, hasRosterData: true }
-
-  const latestWeek = new Map<string, number>()
-  for (const r of rows) {
-    const seen = latestWeek.get(r.leagueId)
-    if (seen == null || r.week > seen) latestWeek.set(r.leagueId, r.week)
+  const ownedByLeague = new Map<string, Set<string>>()
+  const startedByLeague = new Map<string, Set<string>>()
+  let incomplete = false
+  for (const league of leagues) {
+    const claimed = teams.filter((team) => team.leagueId === league.id)
+    let pool = rosters.filter((roster) => roster.leagueId === league.id)
+    let resolved = resolveRostersForTeams(claimed, pool, (team) => myRosterCandidates(team, userId))
+    if (claimed.some((team) => team.externalId && !resolved.has(team.externalId))) {
+      pool = (await prisma.roster.findMany({ where: { leagueId: league.id }, select: { id: true, leagueId: true, platformUserId: true, playerData: true } })).filter((roster) => roster.leagueId === league.id)
+      resolved = resolveRostersForTeams(claimed, pool, (team) => myRosterCandidates(team, userId))
+    }
+    const owned = new Set<string>()
+    const started = new Set<string>()
+    /*
+     * ⚠ A SEAT IS ONE MANAGER, NOT ONE ROW. An import that changed its team-id format can leave the
+     * old row behind, still claimed: measured 2026-10-08 on a Fantrax league holding
+     * `fantrax-team:ciege82` (last written 09-03) beside `789336590` for the same
+     * `fantrax-user:Ciege82` — two claimed rows, one roster. Counted per row, the stale one always
+     * "failed", and the college tab told its owner "we could not read your rosters" every day.
+     * So rows are grouped by the provider's user id, and the read is incomplete only when a SEAT
+     * has no roster. An ARCHIVED team is not a seat at all.
+     */
+    const seatOf = (team: (typeof claimed)[number]) => team.platformUserId || team.externalId || `${team.leagueId}:?`
+    const seatsWithRoster = new Set<string>()
+    const seats = new Set<string>()
+    for (const team of claimed) {
+      if (team.lifecycleState === 'ARCHIVED') continue
+      seats.add(seatOf(team))
+      const roster = team.externalId ? resolved.get(team.externalId) : pool.find((r) => myRosterCandidates(team, userId).includes(r.platformUserId))
+      if (!roster) continue
+      seatsWithRoster.add(seatOf(team))
+      // A Fleaflicker/MFL/Fantrax/Yahoo id collides with a real Sleeper id: that roster ties in nobody.
+      // An ESPN one is translated (raw, ESPN 12483 Stafford is Sleeper's 12483 Jack Bech). A native NHL
+      // one holds Rolling Insights ids, which `sleeperId` reads as NFL strangers: the sport strips it.
+      const readable = await sleeperReadablePlayerDataOf(league.platform, roster.playerData, String(league.sport))
+      for (const id of rosterPlayerIds(readable)) owned.add(id)
+      const data = readable as { starters?: unknown } | null
+      for (const id of rosterPlayerIds({ starters: data?.starters })) started.add(id)
+    }
+    if ([...seats].some((seat) => !seatsWithRoster.has(seat))) incomplete = true
+    ownedByLeague.set(league.platformLeagueId, owned)
+    startedByLeague.set(league.platformLeagueId, started)
   }
 
+  const statedWeek = new Map<string, number>()
+  for (const league of leagues) {
+    const week = leagueWeekFromSettings(league.settings) ?? (period && league.season === period.season ? period.week : null)
+    if (week != null) statedWeek.set(league.platformLeagueId, week)
+  }
+  // Bound the read to this user's starters in the verified period. Reading all
+  // managers and all weeks could hit the row cap before reaching their scores.
+  const scorePeriods = leagues.flatMap((league) => {
+    const week = statedWeek.get(league.platformLeagueId)
+    const playerIds = [...(startedByLeague.get(league.platformLeagueId) ?? [])]
+    return week != null && playerIds.length > 0
+      ? [{ leagueId: league.platformLeagueId, seasonYear: league.season, week, playerId: { in: playerIds } }]
+      : []
+  })
+  const rows = scorePeriods.length > 0 ? await prisma.leaguePlayerWeeklyScore.findMany({
+    where: { OR: scorePeriods },
+    select: { leagueId: true, playerId: true, points: true, week: true },
+    take: 5000,
+  }) : []
+
   const byPlatformId = new Map(leagues.map((l) => [l.platformLeagueId, l]))
-  const current = rows.filter((r) => latestWeek.get(r.leagueId) === r.week)
+  const currentScores = new Map(rows.filter((r) => statedWeek.get(r.leagueId) === r.week).map((r) => [`${r.leagueId}:${r.playerId}`, r.points]))
+  // Roster ownership exists before the first score row. Upcoming players stay
+  // visible, with missing current-week points shown as unknown, never last week.
+  const current = [...ownedByLeague].flatMap(([leagueId, ids]) => [...ids].map((playerId) => ({
+    leagueId, playerId, points: currentScores.get(`${leagueId}:${playerId}`) ?? null,
+  })))
 
   const identities = await prisma.sportsPlayer.findMany({
     where: { sleeperId: { in: [...new Set(current.map((r) => r.playerId))] } },
     // `sport` is required by `composePlayerIdentities` — it gates the NFL-only
     // club fold, and omitting it would silently leave every club unfolded.
-    select: { sleeperId: true, name: true, position: true, team: true, sport: true, imageUrl: true },
+    select: { sleeperId: true, name: true, position: true, team: true, sport: true, imageUrl: true, source: true, fetchedAt: true },
   })
   /*
    * ⚠ `new Map(pairs)` RESOLVED A DUPLICATE KEY TO THE LAST PAIR, AND `sleeperId`
@@ -427,6 +554,35 @@ async function loadRosteredPlayers(
    */
   const identityById = composePlayerIdentities(identities)
 
+  /*
+   * Projections for starters whose game has not kicked off. An ENHANCEMENT, like the tie-ins
+   * themselves: a failed read leaves the rows unpriced (a dash) and never fails the roster read.
+   */
+  const projections =
+    upcomingTeams && upcomingTeams.size > 0 && PROJECTED_SPORTS.has(sport)
+      ? await loadStarterProjections({
+          leagues: leagues.flatMap((league) => {
+            const week = statedWeek.get(league.platformLeagueId)
+            if (week == null || league.season == null) return []
+            const playerIds = [...(startedByLeague.get(league.platformLeagueId) ?? [])].filter((id) => {
+              const team = identityById.get(id)?.team
+              return team != null && upcomingTeams.has(team)
+            })
+            return [{ key: league.platformLeagueId, season: Number(league.season), week, settings: league.settings, playerIds }]
+          }),
+          // Every vendor spelling for the injury match, with the composed club and position.
+          identities: identities.map((row) => ({
+            sleeperId: row.sleeperId,
+            name: row.name,
+            team: identityById.get(row.sleeperId ?? '')?.team ?? null,
+            position: identityById.get(row.sleeperId ?? '')?.position ?? null,
+          })),
+        }).catch((err) => {
+          console.error('[live] starter projections failed, rows stay unpriced:', err instanceof Error ? err.message : err)
+          return new Map<string, StarterProjection>()
+        })
+      : new Map<string, StarterProjection>()
+
   for (const r of current) {
     const identity = identityById.get(r.playerId)
     // Unresolvable ids are skipped, not rendered as a blank player row.
@@ -437,8 +593,10 @@ async function loadRosteredPlayers(
     const entry = {
       leagueId: league.id,
       leagueName: league.name ?? 'League',
-      isStarter: r.isStarter,
+      isStarter: startedByLeague.get(r.leagueId)?.has(r.playerId) ?? false,
       points: Number.isFinite(r.points) ? r.points : null,
+      projected: projections.get(`${r.leagueId}:${r.playerId}`)?.projected ?? null,
+      projectedOut: projections.get(`${r.leagueId}:${r.playerId}`)?.out ?? false,
     }
     const existing = players.get(r.playerId)
     if (existing) {
@@ -465,7 +623,128 @@ async function loadRosteredPlayers(
     }
   }
 
-  return { players, hasRosterData: true }
+  return { players, hasRosterData: true, rosterFailed: incomplete }
+}
+
+/** Clubs whose game on this slate has not started — the same "played" test the cards use. */
+function upcomingTeamsOf(rows: readonly LiveScoreRow[], sport: string): Set<string> {
+  const teams = new Set<string>()
+  for (const row of rows) {
+    if (hasStarted(row.status) || row.completed) continue
+    teams.add(liveTeamAbbreviation(row.homeTeam, sport))
+    teams.add(liveTeamAbbreviation(row.awayTeam, sport))
+  }
+  return teams
+}
+
+/** Real-world team -> your players on it. */
+function playersByTeam(players: Map<string, RosteredPlayer>): Map<string, RosteredPlayer[]> {
+  const byTeam = new Map<string, RosteredPlayer[]>()
+  for (const p of players.values()) {
+    if (!p.team) continue
+    const list = byTeam.get(p.team) ?? []
+    list.push(p)
+    byTeam.set(p.team, list)
+  }
+  return byTeam
+}
+
+/**
+ * Your starters on either of a game's two teams, one row per (player, league),
+ * highest points first. The ONE rule for "whose game is this" — the slate card
+ * and the clicked-game view both come through here.
+ *
+ * STARTERS ONLY — user decision, 2026-09-13, replacing the handoff's "build rule
+ * 4" (bench players visible, dimmed). One WR rostered in fifteen leagues printed
+ * fifteen rows, bench included, and a game card several screens tall. A
+ * bench/IR/taxi slot does not score for you, so it is also dropped from the
+ * live-impact total that sums these.
+ */
+function starterTieInsForTeams(
+  byTeam: Map<string, RosteredPlayer[]>,
+  teams: readonly string[],
+): LiveRosterTieIn[] {
+  const tieIns: LiveRosterTieIn[] = []
+  for (const team of new Set(teams)) {
+    for (const p of byTeam.get(team) ?? []) {
+      for (const l of p.leagues) {
+        if (!l.isStarter) continue
+        tieIns.push({
+          leagueId: l.leagueId,
+          leagueName: l.leagueName,
+          playerId: p.playerId,
+          playerName: p.name,
+          position: p.position,
+          imageUrl: p.imageUrl,
+          team,
+          isStarter: l.isStarter,
+          points: l.points,
+          projected: l.projected,
+          projectedOut: l.projectedOut,
+        })
+      }
+    }
+  }
+  tieIns.sort((a, b) => (b.points ?? 0) - (a.points ?? 0))
+  return tieIns
+}
+
+/** Your starters in one game, for the clicked-game view. */
+export type GameStarters = {
+  tieIns: LiveRosterTieIn[]
+  /** False when you have claimed no team in this sport — "nobody to show", not a failure. */
+  hasRosterData: boolean
+  /** The roster read failed or was incomplete. Distinct from having no starters here. */
+  rosterFailed: boolean
+}
+
+/**
+ * Your starters in ONE game — the clicked-game view's half of the same join the
+ * slate card makes. Null when signed out: the view simply has no panel.
+ *
+ * ⚠ THE WEEK COMES FROM THE GAME, NOT FROM THE CLOCK. A league whose settings do
+ * not state a week falls back to the fixture's own season and week (the stored
+ * ESPN row), exactly as the slate falls back to its rows. Reading "this week"
+ * instead would show last week's points on a game opened from history.
+ */
+export async function getGameStarters(opts: {
+  userId: string | null
+  sport: string
+  gameId: string
+  homeAbbrev: string
+  awayAbbrev: string
+  /**
+   * The game has not kicked off (`status.state === 'pre'`): its starters are priced with this
+   * week's projection, as on the slate card. Optional; omitted means no projections.
+   */
+  upcoming?: boolean
+}): Promise<GameStarters | null> {
+  if (!opts.userId) return null
+  const sport = String(opts.sport).toUpperCase()
+  try {
+    const period = ['NFL', 'NCAAF'].includes(sport)
+      ? await prisma.sportsGame
+          .findFirst({
+            where: { sport, externalId: opts.gameId, source: { in: ['espn', 'espn_live'] }, season: { not: null }, week: { not: null } },
+            select: { season: true, week: true },
+          })
+          .catch(() => null)
+      : null
+    const teams = [liveTeamAbbreviation(opts.homeAbbrev, sport), liveTeamAbbreviation(opts.awayAbbrev, sport)]
+    const { players, hasRosterData, rosterFailed } = await loadRosteredPlayers(
+      opts.userId,
+      sport,
+      period?.season != null && period.week != null ? { season: period.season, week: period.week } : null,
+      // Before kickoff, the same projections the slate card prints — this game's two clubs only.
+      opts.upcoming ? new Set(teams) : undefined,
+    )
+    const tieIns = starterTieInsForTeams(playersByTeam(players), teams)
+    return { tieIns, hasRosterData, rosterFailed: rosterFailed === true }
+  } catch (err) {
+    // Same rule as the slate: a roster fault is said, never drawn as "no starters".
+    console.error('[live] game starters read failed:', err instanceof Error ? err.message : err)
+    return { tieIns: [], hasRosterData: false, rosterFailed: true }
+  }
 }
 
 /** Games starting within this window of now still count as "the current slate". */
@@ -686,6 +965,12 @@ export async function getLivePageData(opts: {
   userId: string | null
   sport?: string | null
   scope?: 'my' | 'all'
+  /**
+   * 'off' shows every college game (the view's "Show all games" link, `?t25=off`). Needed because the
+   * rank book only knows teams it has SEEN on a fetched scoreboard: early in a season, or before a
+   * Saturday slate is fetched, a ranked team can be missing from it — and its game would be hidden.
+   */
+  top25?: 'on' | 'off'
 }): Promise<LivePageData> {
   const requested = String(opts.sport ?? 'NFL').toUpperCase()
   const sport: LiveSport = isLiveSport(requested) ? requested : 'NFL'
@@ -706,6 +991,45 @@ export async function getLivePageData(opts: {
    *
    * Build rule 6: a zero-count tab stays visible, so every sport is still here.
    */
+  /*
+   * ⚠ COLLEGE TABS SHOW THE TOP 25, PLUS YOUR TEAMS (founder, 2026-10-08) — see collegeTop25.ts.
+   * The rank book and the viewer's followed teams are read once here, from Postgres only.
+   */
+  const top25 = new Map<string, { book: RankBook | null; follows: FollowedTeam[] }>(
+    await Promise.all(
+      LIVE_SPORTS.filter((s) => isTop25Sport(s)).map(async (s) => {
+        const [book, follows] = await Promise.all([
+          readRankBook(s).catch(() => null),
+          readFollowedTeams(opts.userId, s).catch(() => [] as FollowedTeam[]),
+        ])
+        return [s, { book, follows }] as const
+      }),
+    ),
+  )
+  const sideOf = (s: string, teamId: string | null | undefined, abbrev: string, name: string, rowRank: number | null | undefined) => ({
+    teamId: teamId ?? null,
+    abbrev,
+    name,
+    rank: rowRank ?? rankOf(top25.get(s)?.book ?? null, { teamId, abbrev, name }),
+  })
+  const top25Rows = (s: string, rows: LiveScoreRow[], yours: (row: LiveScoreRow) => boolean = () => false) => {
+    const t = top25.get(s)
+    if (!t) return rows
+    const known = pollIsKnown(t.book, rows)
+    return rows.filter((r) =>
+      showCollegeGame(
+        {
+          home: sideOf(s, r.homeTeamId, r.homeTeam, r.homeTeamFull, r.homeRank),
+          away: sideOf(s, r.awayTeamId, r.awayTeam, r.awayTeamFull, r.awayRank),
+          yours: yours(r),
+        },
+        t.book,
+        t.follows,
+        known,
+      ),
+    )
+  }
+
   const perSport = await Promise.all(
     LIVE_SPORTS.map(async (s) => {
       const isActive = s === sport
@@ -763,7 +1087,8 @@ export async function getLivePageData(opts: {
   const counts = perSport.map((entry) => ({
     sport: entry.sport,
     label: SPORT_LABELS[entry.sport] ?? entry.sport,
-    slateCount: entry.rows.length,
+    // College tabs count the Top-25 slate they will actually show (games with your players are added below).
+    slateCount: top25Rows(entry.sport, entry.rows).length,
   }))
 
   const active = perSport.find((entry) => entry.sport === sport)
@@ -787,8 +1112,19 @@ export async function getLivePageData(opts: {
    * cannot say which half failed.
    */
   let rosterFailed = false
+  const footballPeriod = ['NFL', 'NCAAF'].includes(sport)
+    ? rows.find((row) => row.season != null && row.week != null)
+    : null
   const { players, hasRosterData } = opts.userId
-    ? await loadRosteredPlayers(opts.userId, sport).catch((err) => {
+    ? await loadRosteredPlayers(
+        opts.userId,
+        sport,
+        footballPeriod?.season != null && footballPeriod.week != null ? { season: footballPeriod.season, week: footballPeriod.week } : null,
+        upcomingTeamsOf(rows, sport),
+      ).then((result) => {
+        rosterFailed = result.rosterFailed === true
+        return result
+      }).catch((err) => {
         console.error(
           '[live] roster tie-in read failed, rendering slate without it:',
           err instanceof Error ? err.message : err,
@@ -813,14 +1149,7 @@ export async function getLivePageData(opts: {
       })
     : { players: new Map<string, RosteredPlayer>(), hasRosterData: false }
 
-  // Real-world team -> your players on it.
-  const byTeam = new Map<string, RosteredPlayer[]>()
-  for (const p of players.values()) {
-    if (!p.team) continue
-    const list = byTeam.get(p.team) ?? []
-    list.push(p)
-    byTeam.set(p.team, list)
-  }
+  const byTeam = playersByTeam(players)
 
   const nowMs = Date.now()
   const games: LiveGameCard[] = rows.map((sourceRow) => {
@@ -828,32 +1157,7 @@ export async function getLivePageData(opts: {
     // NFL aliases such as STL -> LAR must not rename baseball or basketball clubs.
     const home = liveTeamAbbreviation(row.homeTeam, sport)
     const away = liveTeamAbbreviation(row.awayTeam, sport)
-    const involved = [...(byTeam.get(home) ?? []), ...(byTeam.get(away) ?? [])]
-
-    const tieIns: LiveRosterTieIn[] = []
-    for (const p of involved) {
-      for (const l of p.leagues) {
-        /*
-         * STARTERS ONLY — user decision, 2026-09-13, replacing the handoff's
-         * "build rule 4" (bench players visible, dimmed). One WR rostered in
-         * fifteen leagues printed fifteen rows, bench included, and a game card
-         * several screens tall. A bench/IR/taxi slot does not score for you, so
-         * it is also dropped from the live-impact total that sums these.
-         */
-        if (!l.isStarter) continue
-        tieIns.push({
-          leagueId: l.leagueId,
-          leagueName: l.leagueName,
-          playerId: p.playerId,
-          playerName: p.name,
-          position: p.position,
-          imageUrl: p.imageUrl,
-          isStarter: l.isStarter,
-          points: l.points,
-        })
-      }
-    }
-    tieIns.sort((a, b) => (b.points ?? 0) - (a.points ?? 0))
+    const tieIns = starterTieInsForTeams(byTeam, [home, away])
 
     // ESPN sends 0-0 before kickoff; a score is only real once play began.
     const played = hasStarted(row.status) || row.completed
@@ -881,6 +1185,7 @@ export async function getLivePageData(opts: {
         errors: played ? row.homeErrors ?? null : null,
         leaders: played ? teamLeaders(row.homeTeamLeaders, home) : [],
         shooting: played ? row.homeShooting ?? null : null,
+        ...(isTop25Sport(sport) ? { rank: sideOf(sport, row.homeTeamId, home, row.homeTeamFull, row.homeRank).rank } : {}),
       },
       away: {
         abbrev: away,
@@ -893,6 +1198,7 @@ export async function getLivePageData(opts: {
         errors: played ? row.awayErrors ?? null : null,
         leaders: played ? teamLeaders(row.awayTeamLeaders, away) : [],
         shooting: played ? row.awayShooting ?? null : null,
+        ...(isTop25Sport(sport) ? { rank: sideOf(sport, row.awayTeamId, away, row.awayTeamFull, row.awayRank).rank } : {}),
       },
       leaders: (row.leaders ?? []).map((l) => {
         const side = sideFor(l.teamId)
@@ -947,28 +1253,78 @@ export async function getLivePageData(opts: {
   /*
    * Build rule 1: "My games" surfaces ONLY games containing a player you actually
    * roster — never a popular or recommended game.
-   * Build rule 2: sorted strictly by leagues affected, ties broken by closeness
-   * (win probability nearest 50/50), never by kickoff time.
+   * Build rule 2: grouped by stage first — live, then not started, then final
+   * (`gameStageRank`) — and within a stage sorted by leagues affected, ties
+   * broken by closeness (win probability nearest 50/50), never by kickoff time.
+   *
+   * ⚠ THE STAGE COMES FIRST BECAUSE "LEAGUES AFFECTED" ALONE PUT FINALS ABOVE
+   * LIVE GAMES. Seen on prod 2026-10-11: a finished CHI–GB sat second, above a
+   * live SF–SEA, because more of your leagues had a starter in it. A game that is
+   * over cannot change anything you are watching for.
    */
-  const visible = scope === 'my' ? games.filter((g) => g.leaguesAffected > 0) : games
+  const scoped = scope === 'my' ? games.filter((g) => g.leaguesAffected > 0) : games
+  /*
+   * Top 25 for the college tabs: a game stays when a side is ranked, a side is a team you follow, or
+   * one of your players is in it. Fails open when no poll is held yet (collegeTop25.ts).
+   */
+  const t25 = opts.top25 === 'off' ? undefined : top25.get(sport)
+  const visible = t25
+    ? (() => {
+        const known = pollIsKnown(t25.book, rows)
+        return scoped.filter((g) =>
+          showCollegeGame(
+            {
+              home: { abbrev: g.home.abbrev, name: g.home.name, rank: g.home.rank ?? null },
+              away: { abbrev: g.away.abbrev, name: g.away.name, rank: g.away.rank ?? null },
+              yours: g.leaguesAffected > 0,
+            },
+            null,
+            t25.follows,
+            known,
+          ),
+        )
+      })()
+    : scoped
   visible.sort((a, b) => {
+    const stage = gameStageRank(a) - gameStageRank(b)
+    if (stage !== 0) return stage
     if (b.leaguesAffected !== a.leaguesAffected) return b.leaguesAffected - a.leaguesAffected
     const closeness = (g: LiveGameCard) =>
       g.winProbability ? Math.abs(g.winProbability.home - 50) : 100
     return closeness(a) - closeness(b)
   })
 
+  /*
+   * Highlight videos for the finished games on this slate, from rows we already
+   * hold. Only finals: TheSportsDB posts a game's package after it ends, and a
+   * live card has better things to show than a gap.
+   */
+  const finals = visible.filter((g) => g.completed)
+  if (finals.length > 0) {
+    const highlights = await loadGameHighlights(
+      sport,
+      finals.map((g) => ({ key: g.gameId, homeName: g.home.name, awayName: g.away.name, startTime: g.startTime })),
+    )
+    for (const g of finals) {
+      const youtubeId = highlights.get(g.gameId)
+      if (youtubeId) g.highlight = { youtubeId }
+    }
+  }
+
   return {
     sport,
     scope,
     counts,
     games: visible,
-    impact: await buildImpact(visible, players, sport),
+    impact: await buildImpact(visible, sport),
     lockAlerts: buildLockAlerts(visible, Date.now()),
     // Never invented — see the field's note. Null means "we cannot date this".
     fetchedAt: active?.fetchedAt ?? null,
     hasRosterData,
     loadFailed: active?.failed ?? false,
+    top25: isTop25Sport(sport)
+      ? { hidden: Math.max(0, scoped.length - visible.length), showingAll: opts.top25 === 'off' }
+      : null,
     rosterFailed,
   }
 }
@@ -976,82 +1332,12 @@ export async function getLivePageData(opts: {
 /** Right-hand panel: your totals, the last notable play, and what is still to come. */
 async function buildImpact(
   games: readonly LiveGameCard[],
-  players: Map<string, RosteredPlayer>,
   sport: string,
 ): Promise<LiveImpact> {
-  const liveGames = games.filter((g) => g.isLive)
-
-  /*
-   * ⚠ SUMMED PER (PLAYER, LEAGUE), NOT PER PLAYER. The same player in three
-   * leagues contributes three separate scores, because that is three separate
-   * matchups of yours he is affecting. Deduplicating to one would understate the
-   * total by exactly the amount that makes this page worth opening.
-   */
-  let totalPoints = 0
-  const livePlayerIds = new Set<string>()
-  for (const g of liveGames) {
-    for (const t of g.tieIns) {
-      if (t.points != null) totalPoints += t.points
-      livePlayerIds.add(t.playerId)
-    }
-  }
-
-  /*
-   * ⚠ SCOPED BY SPORT, NOT BY GAME ID — AND THAT IS NOT THE OBVIOUS CHOICE.
-   * The tempting scoping is "keep the plays whose `gameId` is on this slate".
-   * It yields NOTHING, always, because the two ids come from different
-   * providers: the feed is built from `SportsGame.externalId` rows where
-   * `source: 'rolling_insights'`, while the active slate is fetched from ESPN
-   * and carries `event.id`. They are different id spaces that happen to share a
-   * field name. The feed's own cache key is `pbp:feed:NFL`, so the sport is the
-   * scope that is both honest and non-empty.
-   *
-   * Skipping the read outright off-NFL also spares every other tab a cache
-   * lookup that could only ever return plays it must not display.
-   */
   const plays = sport === 'NFL' ? await getPlayFeed().catch(() => [] as PlayFeedItem[]) : []
-  const liveGameIds = new Set(liveGames.map((g) => g.gameId))
-  /*
-   * The most recent play involving a player YOU roster, in a game that is
-   * actually live. A league-wide "biggest play" would be editorialising with
-   * data the user did not ask about.
-   */
-  const roster = [...players.values()]
-  /*
-   * ⚠ MATCHED ON A NORMALISED NAME, NOT WITH `===`. The roster side and the
-   * play side come from different vendors and disagree about case, punctuation
-   * and generational suffixes on 748 of 9,412 NFL names — see
-   * `rosterPlayMatch.ts`, which holds the measurement and the reason a fuzzy
-   * fallback is deliberately absent.
-   */
-  const rosterNames = rosterNameKeys(roster.map((r) => r.name))
-  const mine = plays.find(
-    (p) => liveGameIds.has(p.gameId) && isRosteredPlayer(rosterNames, p.playerName),
-  )
-  const biggestMover = mine
-    ? {
-        ...mine,
-        leagues: roster
-          .filter((r) => r.name === mine.playerName)
-          .flatMap((r) => r.leagues.map((l) => l.leagueName)),
-      }
-    : null
-
-  const upNext = games
-    .filter((g) => !g.isLive && !g.completed && g.tieIns.length > 0)
-    .slice(0, 3)
-    .map((g) => ({
-      playerName: g.tieIns[0]!.playerName,
-      matchup: `${g.away.abbrev} @ ${g.home.abbrev}`,
-      startTime: g.startTime,
-    }))
-
-  return {
-    totalPoints: Math.round(totalPoints * 10) / 10,
-    livePlayers: livePlayerIds.size,
-    liveGames: liveGames.length,
-    biggestMover,
-    plays,
-    upNext,
-  }
+  const fixtures = plays.length ? await prisma.sportsGame.findMany({
+    where: { sport: 'NFL', source: 'rolling_insights', externalId: { in: [...new Set(plays.map(play => play.gameId))] } },
+    select: { externalId: true, homeTeam: true, awayTeam: true, startTime: true },
+  }).catch(() => []) : []
+  return liveWorkspace([...games], canonicalPlayGames(plays, games, fixtures), null).impact
 }

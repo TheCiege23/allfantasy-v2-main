@@ -12,6 +12,9 @@ import {
 import { recordAfLearningEvent } from '@/lib/ai-learning-system/recordEvent'
 import { resolveLeagueSport } from '@/lib/ai-learning-system/resolveLeagueSport'
 import { captureRedraftTradeValueSnapshot } from '@/lib/trade-value/captureSnapshot'
+import { createLeagueTradeGrader, gradeDeal } from '@/lib/decision-os/trade/leagueTradeGrader'
+import { gradeInputsFromRedraftAssets } from '@/lib/decision-os/trade/tradeGradeInputs'
+import { receiptIdForGrade, storedTradeLink } from '@/lib/decision-os/trade/recordTradeGrade'
 import { recordRedraftTradeMarketEvent } from '@/lib/trade-market/redraftTradeMarketEvents'
 import { shouldRunTradeShadow, shouldRunTradeLive, runTradeShadowForProposal } from '@/lib/decision-os/trade/shadow'
 import { toTradeCard, type TradeCard } from '@/lib/decision-os/trade/tradeCardAdapter'
@@ -122,7 +125,49 @@ export async function GET(req: NextRequest) {
     take: 100,
   })
 
-  return NextResponse.json({ proposals })
+  /*
+   * 🛑 THE ONE GRADE PER PROPOSAL (Trade OS, 2026-09-27). The list used to badge each proposal with
+   * its `valueSnapshot.grade` — `canonicalFairnessGrade`, an A+..F scale of its own. Each proposal is
+   * now graded by the one grader from the PROPOSER's side, without roster need, so every member sees
+   * the same letter for it; the grade is recorded as a receipt. One grader for the whole list.
+   * `valueSnapshot` stays in the payload for the fields that are not a letter.
+   */
+  // Built only when some proposal has assets to grade — a list with nothing to price reads no chart.
+  let graderPromise: ReturnType<typeof createLeagueTradeGrader> | null = null
+  const grader = () => (graderPromise ??= createLeagueTradeGrader({ leagueId, userId }).catch(() => null))
+  const graded = await Promise.all(
+    proposals.map(async (p) => {
+      const assets = Array.isArray(p.assets) ? p.assets : []
+      const give = gradeInputsFromRedraftAssets(assets.filter((a) => a.fromRosterId === p.proposerRosterId))
+      const get = gradeInputsFromRedraftAssets(assets.filter((a) => a.toRosterId === p.proposerRosterId))
+      const grade = assets.length === 0
+        ? { graded: false as const, reason: 'This proposal has no assets on record.', basis: null }
+        : await Promise.resolve()
+            .then(async () => gradeDeal(await grader(), { give, get, viewerSide: false }))
+            .catch(() => ({ graded: false as const, reason: 'This trade could not be graded just now.', basis: null }))
+      const receiptId = await receiptIdForGrade({
+        surface: 'redraft-trade-list',
+        leagueId,
+        userId,
+        give,
+        get,
+        viewerSide: false,
+        grade,
+        stored: storedTradeLink({ kind: 'redraft', proposalId: p.id }, { source: 'redraft', platform: 'allfantasy', status: p.status }),
+      })
+      return {
+        ...p,
+        tradeGrade: {
+          grade: grade.graded ? grade.letter : null,
+          partnerGrade: grade.graded ? grade.partnerLetter : null,
+          gradeWithheld: grade.graded ? null : grade.reason,
+          receiptId,
+        },
+      }
+    }),
+  )
+
+  return NextResponse.json({ proposals: graded })
 }
 
 export async function POST(req: NextRequest) {

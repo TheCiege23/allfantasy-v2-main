@@ -1,3 +1,4 @@
+import { defaultTribeSlots, type SurvivorTribeSlot } from '@/lib/survivor/survivorTribeIdentity'
 /**
  * Per–league-type options collected during create (sport-aware).
  * Deeper tuning stays in League settings after the league exists.
@@ -22,6 +23,7 @@ export interface WizardFormatOptions {
   /** One name per line when naming mode is commissioner_custom */
   tournamentCustomLeagueNamesLines: string
   /** Survivor — team count (bounded per sport season length) */
+  survivorTribeSlots?: SurvivorTribeSlot[]
   survivorTeamCount: number
   survivorTribeNameMode: SurvivorTribeNameMode
   survivorCustomTribeNamesLines: string
@@ -34,7 +36,7 @@ export interface WizardFormatOptions {
    * Survivor — tribe count sent to create (`survivor_suggested_tribe_count`).
    * `null` = auto from cast size via `suggestedSurvivorTribeCount`; otherwise 2–4.
    */
-  survivorTribeCountOverride: null | 2 | 3 | 4
+  survivorTribeCountOverride: null | 2 | 3 | 4 | 5
   /** Survivor — free play vs paid buy-in (amount set by commissioner). */
   survivorEntryFeeMode: SurvivorEntryFeeMode
   /** USD buy-in per manager when `survivorEntryFeeMode === 'paid'`; stored as cents in league settings. */
@@ -170,9 +172,10 @@ export function formatOptionsApplyToLeagueType(
     const cast = clampSurvivorTeamCount(sport, options.survivorTeamCount)
     const tribeCount =
       options.survivorTribeCountOverride != null
-        ? Math.min(4, Math.max(2, options.survivorTribeCountOverride))
+        ? Math.min(5, Math.max(2, options.survivorTribeCountOverride))
         : Math.min(4, Math.max(2, suggestedSurvivorTribeCount(cast)))
     out.survivor_suggested_tribe_count = tribeCount
+    out.survivorTribeSlots = options.survivorTribeSlots ?? defaultTribeSlots(cast, tribeCount)
     if (options.survivorCustomTribeNamesLines.trim()) {
       out.survivor_custom_tribe_names = options.survivorCustomTribeNamesLines
         .split('\n')

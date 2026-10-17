@@ -87,7 +87,7 @@ export function StandingsWidget({ leagueId, sport }: { leagueId?: string; sport?
               {t.wins}-{t.losses}{t.ties ? `-${t.ties}` : ''}
             </span>
             {t.pointsFor != null && (
-              <span className="text-[10px] text-white/30">{t.pointsFor.toFixed(1)} PF</span>
+              <span className="text-[11px] text-white/30">{t.pointsFor.toFixed(1)} PF</span>
             )}
           </div>
         ))}

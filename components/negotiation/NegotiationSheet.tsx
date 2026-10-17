@@ -397,7 +397,7 @@ export default function NegotiationSheet({
 
           <div className="border-t border-white/10 px-4 py-3 flex items-center justify-between">
             <div className="text-xs text-white/50">
-              Tip: Apply 1 tweak, then re-check with AI if needed.
+              Tip: Apply 1 tweak, then re-check with Chimmy if needed.
             </div>
             <button
               onClick={onClose}
@@ -425,7 +425,7 @@ function TabButton({ active, onClick, label, count }: { active: boolean; onClick
     >
       <span>{label}</span>
       {typeof count === 'number' && count > 0 && (
-        <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${
+        <span className={`text-[11px] px-1.5 py-0.5 rounded-full ${
           active ? 'bg-zinc-200 text-zinc-700' : 'bg-white/10 text-white/40'
         }`}>
           {count}

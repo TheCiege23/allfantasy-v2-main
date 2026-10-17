@@ -128,7 +128,6 @@ const WORKBENCH_TOOL_KEYS = [
   'waiver_ai',
   'draft_helper',
   'rankings',
-  'psychological',
   'story_creator',
 ] as const
 
@@ -140,12 +139,11 @@ const QUICK_CHIPS = [
 ]
 
 const ENTRY_BUTTONS = [
-  { id: 'ask-ai', label: 'Ask AI', tool: 'chimmy_chat', prompt: 'Help me with my next best move.' },
+  { id: 'ask-ai', label: 'Ask Chimmy', tool: 'chimmy_chat', prompt: 'Help me with my next best move.' },
   { id: 'explain-trade', label: 'Explain Trade', tool: 'trade_analyzer', prompt: 'Explain this trade from both sides.' },
-  { id: 'waiver', label: 'AI Waiver', tool: 'waiver_ai', prompt: 'What waiver move gives me the best edge this week?' },
-  { id: 'draft', label: 'AI Draft Helper', tool: 'draft_helper', prompt: "I'm on the clock. Give me the best pick and two pivots." },
+  { id: 'waiver', label: "Chimmy's Waiver Picks", tool: 'waiver_ai', prompt: 'What waiver move gives me the best edge this week?' },
+  { id: 'draft', label: "Chimmy's Draft Help", tool: 'draft_helper', prompt: "I'm on the clock. Give me the best pick and two pivots." },
   { id: 'rankings', label: 'Rankings Explanation', tool: 'rankings', prompt: 'Explain these rankings with evidence and caveats.' },
-  { id: 'psychological', label: 'Psychological Profile', tool: 'psychological', prompt: 'Explain this manager profile with evidence.' },
   { id: 'story', label: 'Story Creator', tool: 'story_creator', prompt: 'Create a concise rivalry storyline with facts only.' },
 ] as const
 
@@ -183,11 +181,6 @@ function getDeterministicContext(tool: string, sport: string): Record<string, un
           tier1: ['Team Alpha'],
           tier2: ['Team Beta', 'Team Gamma'],
         },
-      }
-    case 'psychological':
-      return {
-        profile: { style: 'aggressive', risk: 'high' },
-        evidence: ['Trade frequency above league median', 'FAAB velocity elevated'],
       }
     case 'story_creator':
       return {
@@ -330,7 +323,7 @@ export default function UnifiedAIWorkbench() {
     const now = Date.now()
     if (requestInFlightRef.current || now < requestLockUntilRef.current) return
     if (!prompt.trim()) {
-      setError('Enter a prompt before running AI.')
+      setError('Enter a prompt before asking Chimmy.')
       return
     }
     requestInFlightRef.current = true
@@ -367,7 +360,7 @@ export default function UnifiedAIWorkbench() {
         const serverError =
           (typeof data?.userMessage === 'string' && data.userMessage) ||
           (typeof data?.message === 'string' && data.message) ||
-          'AI request failed.'
+          'Chimmy could not finish that request.'
         setError(serverError)
         setResult(null)
         return
@@ -427,19 +420,22 @@ export default function UnifiedAIWorkbench() {
       // visible if the viewport later narrows — see the note on mobileResultOpen.
       setMobileResultOpen(isNarrowViewport())
     } catch {
-      setError('Network error while running AI. Please retry.')
+      setError('Network error while asking Chimmy. Please retry.')
       setResult(null)
     } finally {
       setLoading(false)
-      const unlock = () => {
-        requestInFlightRef.current = false
-      }
-      const remainingLockMs = requestLockUntilRef.current - Date.now()
-      if (remainingLockMs > 0 && typeof window !== 'undefined') {
-        window.setTimeout(unlock, remainingLockMs)
-      } else {
-        unlock()
-      }
+      /*
+       * A completed request releases the guard with it. The lock absorbs a
+       * double-dispatched click only while the request is in flight; holding it
+       * past completion (the old deferred unlock) left Run and Retry enabled —
+       * `loading` is already false — for up to REQUEST_LOCK_MIN_MS after a fast
+       * response, with every click in that window silently dropped. Measured on
+       * the mobile step of e2e/ai-reliability-click-audit: a Run click 76–89 ms
+       * after the previous response started no request, so the drawer never
+       * showed the recovery result.
+       */
+      requestInFlightRef.current = false
+      requestLockUntilRef.current = 0
     }
   }
 
@@ -483,15 +479,15 @@ export default function UnifiedAIWorkbench() {
         const message =
           data?.userMessage ??
           data?.message ??
-          'Unable to save this AI result right now.'
+          "Unable to save Chimmy's result right now."
         setSaveError(message)
         toast.error(message)
         return
       }
       setSavedResultId(typeof data?.id === 'string' ? data.id : 'saved')
-      toast.success('AI result saved to history.')
+      toast.success("Chimmy's result saved to history.")
     } catch {
-      const message = 'Network error while saving this AI result.'
+      const message = "Network error while saving Chimmy's result."
       setSaveError(message)
       toast.error(message)
     } finally {
@@ -504,7 +500,7 @@ export default function UnifiedAIWorkbench() {
     if (!activeExplanation) return
     try {
       await navigator.clipboard.writeText(activeExplanation)
-      toast.success('AI explanation copied.')
+      toast.success("Chimmy's explanation copied.")
     } catch {
       toast.error('Unable to copy response.')
     }
@@ -540,7 +536,7 @@ export default function UnifiedAIWorkbench() {
     >
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <h2 className="text-base font-semibold text-white">Unified AI Interface</h2>
+          <h2 className="text-base font-semibold text-white">Chimmy Workbench</h2>
           <p className="text-xs text-white/55">
             Deterministic-first orchestration across tools, with mode control, comparison, and confidence-aware output.
           </p>
@@ -550,7 +546,7 @@ export default function UnifiedAIWorkbench() {
           data-testid="unified-ai-chat-open-button"
           className="inline-flex min-h-[44px] w-full touch-manipulation items-center justify-center rounded-lg border border-white/20 bg-white/[0.03] px-3 py-2 text-xs text-white/80 hover:bg-white/10 sm:w-auto sm:justify-start sm:py-1.5"
         >
-          Open AI Chat
+          Open Chat with Chimmy
         </Link>
       </div>
 
@@ -702,7 +698,7 @@ export default function UnifiedAIWorkbench() {
           disabled={loading}
           className="shrink-0 touch-manipulation rounded-lg bg-cyan-500/20 px-4 py-2.5 text-sm font-medium text-cyan-200 hover:bg-cyan-500/30 disabled:opacity-60 sm:py-2"
         >
-          Run AI
+          Run with Chimmy
         </button>
         <button
           type="button"
@@ -819,7 +815,7 @@ export default function UnifiedAIWorkbench() {
                   result.reliability?.fallbackExplanation ??
                   result.reliability?.message ??
                   (result.usedDeterministicFallback
-                    ? 'AI providers are temporarily unavailable. Showing deterministic output.'
+                    ? 'Chimmy is temporarily unavailable. Showing deterministic output.'
                     : undefined)
                 }
                 reliability={reliabilityForRenderer}
@@ -865,7 +861,7 @@ export default function UnifiedAIWorkbench() {
             />
             <div className="rounded-lg border border-white/10 bg-black/20 p-3">
               <div className="mb-2 flex items-center justify-between gap-2">
-                <span className="text-xs font-medium text-white/70">AI explanation</span>
+                <span className="text-xs font-medium text-white/70">Chimmy&apos;s explanation</span>
                 <button
                   type="button"
                   data-testid="unified-ai-explanation-toggle-button"
@@ -952,12 +948,12 @@ export default function UnifiedAIWorkbench() {
             data-testid="unified-ai-mobile-drawer"
             role="dialog"
             aria-modal="true"
-            aria-label="AI result"
+            aria-label="Chimmy's result"
             onClick={(e) => e.stopPropagation()}
           >
           <div className="mx-auto mb-2 h-1 w-10 shrink-0 rounded-full bg-white/25" aria-hidden />
           <div className="mb-3 flex items-center justify-between gap-2">
-            <h3 className="text-sm font-semibold text-white">AI result</h3>
+            <h3 className="text-sm font-semibold text-white">Chimmy&apos;s result</h3>
             <button
               type="button"
               data-testid="unified-ai-mobile-drawer-close-button"
@@ -991,7 +987,7 @@ export default function UnifiedAIWorkbench() {
                     result.reliability?.fallbackExplanation ??
                     result.reliability?.message ??
                     (result.usedDeterministicFallback
-                      ? 'AI providers are temporarily unavailable. Showing deterministic output.'
+                      ? 'Chimmy is temporarily unavailable. Showing deterministic output.'
                       : undefined)
                   }
                   reliability={reliabilityForRenderer}
@@ -1037,7 +1033,7 @@ export default function UnifiedAIWorkbench() {
               />
             </div>
           ) : (
-            <p className="text-xs text-white/60">Run AI to view a result.</p>
+            <p className="text-xs text-white/60">Run with Chimmy to view a result.</p>
           )}
           </div>
         </div>

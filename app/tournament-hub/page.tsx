@@ -49,7 +49,7 @@ export default async function TournamentHubIndex() {
     .catch(() => [])
 
   const tournaments = await prisma.tournamentShell.findMany({
-    where: { commissionerId: userId },
+    where: { OR: [{ commissionerId: userId }, { status: { in: ['blueprint', 'rules_published'] }, grants: { some: { userId } } }] },
     orderBy: { createdAt: 'desc' },
     select: {
       id: true,
@@ -57,10 +57,12 @@ export default async function TournamentHubIndex() {
       sport: true,
       status: true,
       currentRoundNumber: true,
-      currentParticipantCount: true,
+      currentParticipantCount: true, maxParticipants: true, leaguesPerConference: true,
       _count: { select: { tournamentLeagues: true, conferences: true } },
     },
   })
+
+  const joined = await prisma.tournamentParticipant.findMany({ where: { userId, status: { in: ['registered', 'waitlisted'] }, tournament: { status: 'rules_published' } }, select: { status: true, tournament: { select: { id: true, name: true, sport: true } } } })
 
   return (
     <main className="af-th">
@@ -104,6 +106,7 @@ export default async function TournamentHubIndex() {
           </div>
         </div>
         <div className="af-th-actions">
+          <Link href="/tournament/create" className="af-th-copy">Plan NFL / NBA tournament</Link>
           <Link href="/tournament-hub/new" className="af-th-copy">
             Connect imported leagues
           </Link>
@@ -133,6 +136,7 @@ export default async function TournamentHubIndex() {
         </>
       ) : null}
 
+      {joined.length > 0 && <section><h2 className="af-th-league-name">Your tournament entries</h2>{joined.map(e => <Link key={e.tournament.id} href={'/tournament-entry/' + e.tournament.id} className="af-th-league af-th-card"><h3 className="af-th-league-name">{e.tournament.name}</h3><p className="af-th-pick-meta">{e.tournament.sport} · {e.status}</p></Link>)}</section>}
       {tournaments.map((t) => (
         <Link key={t.id} href={`/tournament-hub/${t.id}`} className="af-th-league af-th-card">
           <h2 className="af-th-league-name">
@@ -140,9 +144,9 @@ export default async function TournamentHubIndex() {
             <span className="af-th-linknote">{t.status}</span>
           </h2>
           <p className="af-th-pick-meta">
-            {t.sport} · round {t.currentRoundNumber || 1} · {t._count.conferences}{' '}
+            {['blueprint', 'rules_published'].includes(t.status) ? <>{t.sport} · {t.status === 'rules_published' ? 'Rules published' : 'Planning preview'} · {t.maxParticipants} entrants · {t.leaguesPerConference} opening leagues</> : <>{t.sport} · round {t.currentRoundNumber || 1} · {t._count.conferences}{' '}
             {t._count.conferences === 1 ? 'conference' : 'conferences'} ·{' '}
-            {t._count.tournamentLeagues} leagues · {t.currentParticipantCount} managers
+            {t._count.tournamentLeagues} leagues · {t.currentParticipantCount} managers</>}
           </p>
         </Link>
       ))}

@@ -23,7 +23,15 @@ import { triggerAlertFromScreenRead } from '@/lib/trade-intel/screenTradeAlerts'
  * league showed as "Active Trades 0", and nothing could analyze it because
  * nothing knew it existed.
  *
- * Sleeper's public API DOES expose these: `/league/<id>/transactions/<week>`
+ * 🛑 IN PRACTICE IT DOES NOT, AND THE SENTENCE THAT STOOD HERE SAID IT DID. Measured on
+ * production 2026-09-28: 2,154 Sleeper trades in `provider_trade_offers` (12 days of 5-minute
+ * sweeps) and 28,167 trade rows in `dw_transaction_facts`, every one `complete` and not one ever
+ * first seen pending. Sleeper's docs list no proposal endpoint and no authenticated API. The
+ * pending branch below is kept because it costs nothing if Sleeper ever does publish one, but an
+ * empty result is NOT "nothing is waiting" — screens must say Sleeper does not share open offers
+ * and offer manual entry (TradeInbox, TradeLeagueStrip).
+ *
+ * Originally written on the belief that `/league/<id>/transactions/<week>`
  * returns `type: "trade"` rows with `status: "pending"`. This logic already ran
  * in production inside `lib/dashboard-strip/fetchTradesDashboard.ts`, but was
  * trapped in a per-user dashboard loop. It is extracted here verbatim in
@@ -70,6 +78,11 @@ export interface PendingProviderTrade {
    */
   proposedByViewer: boolean
   proposedAt: string | null
+  /**
+   * When a COMPLETED trade completed (Sleeper's `status_updated`) — the moment its frozen original is
+   * priced at (`completedTradeGrade.gradeAtTradeTime`). Absent on a pending offer and on Yahoo.
+   */
+  completedAt?: string | null
   /** Assets leaving the viewer's roster. */
   assetsGiven: PendingTradeAsset[]
   /** Assets arriving on the viewer's roster. */
@@ -475,6 +488,9 @@ export async function scanPendingSleeperTrades(args: {
                 (tx.creator ? `Manager ${tx.creator.slice(0, 6)}` : 'Another team'),
           proposedByViewer,
           proposedAt: tx.created ? new Date(tx.created).toISOString() : null,
+          ...(lifecycleStatus === 'complete' && tx.status_updated > 0
+            ? { completedAt: new Date(tx.status_updated).toISOString() }
+            : {}),
           assetsGiven,
           assetsReceived,
           readOnly: true,

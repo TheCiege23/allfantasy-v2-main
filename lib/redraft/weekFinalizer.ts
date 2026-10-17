@@ -1,13 +1,18 @@
 import type { PrismaClient } from '@prisma/client'
 
 import { prisma as defaultPrisma } from '@/lib/prisma'
+import { easternCalendarDay } from '@/lib/sports-data/easternGameDay'
 import { normalizeGameStatus } from '@/lib/sports/gameStatus'
 import { readRiScheduleWindow } from '@/lib/sports-data/riSeasonSchedule'
-import { weekWindowFromSeasonStart } from '@/lib/scoring-runtime/dailySportStatNormalization'
-import { resolveDailySportSeasonStart } from '@/lib/season-week/dailySportSeasonStarts'
+import { resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
 import { DATE_WINDOWED_SPORTS, RI_SCHEDULE_SLATE_SPORTS, readWeekGames } from './weekGames'
 import { countsTowardScore, leagueIsBestBall, recalculateMatchupsForSeasonWeek } from './scoringEngine'
 import { seasonSportToLeagueSport } from '@/lib/season-week/standardSeasonScope'
+import { enqueueTankingScan } from '@/lib/integrity/enqueueTankingScan'
+import { loadWeekLineups, weekSlotType } from './weekLineupSlots'
+import { isSealedWeek } from './weekSealed'
+import { isNativePlatform } from '@/lib/dashboard/platform-label'
+import { readExileRoster } from '@/lib/survivor/exileRosterRules'
 
 /**
  * CLOSE A WEEK, SO THE SEASON CAN MOVE.
@@ -85,8 +90,11 @@ export type WeekFinalizeRefusal =
   | 'no_games_on_slate'
   | 'games_not_final'
   | 'within_grace_period'
+  | 'week_window_open'
   | 'no_starters'
   | 'stat_coverage_below_floor'
+  | 'exile_roster_open'
+  | 'exile_stat_missing'
   /**
    * A daily sport whose season opener is not recorded, so its week has no date window.
    *
@@ -143,6 +151,12 @@ export type WeekFinalizeResult = {
 }
 
 export type WeekFinalizerDeps = {
+  enqueueTankingScan?: (leagueId: string, weekNumber: number, seasonId: string) => Promise<void>
+  /**
+   * The "week N final — you won" push (`nativeResultNotify.ts`), sent once every game is final.
+   * Loaded on first use by default: the dispatcher's import graph is not this module's to carry.
+   */
+  notifyResults?: (args: { prisma: PrismaClient; seasonId: string; week: number }) => Promise<unknown>
   prisma?: PrismaClient
   now?: () => Date
   recalculateMatchups?: typeof recalculateMatchupsForSeasonWeek
@@ -258,7 +272,7 @@ export async function readWeekSlate(
      *
      * A daily sport's week IS a date window — the same one
      * `syncPlayerWeeklyScoresForRedraftSeason` already aggregates its stats over, from the
-     * same `weekWindowFromSeasonStart` anchor. Passing it keeps both halves reading the
+     * same `resolveDailySportWeekWindow` resolver. Passing it keeps both halves reading the
      * same seven days.
      */
     dateWindow?: { start: Date; end: Date } | null
@@ -275,6 +289,18 @@ export async function readWeekSlate(
     const slateGames = games.filter((g) =>
       args.seasonType === 'regular' ? g.seasonType === 'regular' || g.seasonType == null : g.seasonType === 'post',
     )
+    /*
+     * ⚠ SOCCER: A POSTPONED FIXTURE IS A BLANK, NOT AN OPEN GAME. Rolling Insights reschedules a
+     * soccer match as a NEW game id and marks the old one `replaced` — but a match called off with
+     * no new date yet stays `postponed` (La Liga's Levante v Athletic, 16 Sep 2026, in the captured
+     * schedule). Counted as unfinished, its gameweek could never seal. It carries no stats, and when
+     * it is played it lands in a later gameweek under its new id, so it is off this slate — the FPL
+     * convention.
+     */
+    // MLB's original postponed fixture is also a blank: RI keeps it under the old date,
+    // then lists the makeup separately. Measured 2026: all 27 postponed originals have only
+    // zero placeholder boxes, and all 2,429 completed regular games have ingested stat lines.
+    const postponedIsBlank = ['SOCCER', 'MLB'].includes(args.sport.toUpperCase())
     let final = 0
     let cancelled = 0
     let unfinished = 0
@@ -282,7 +308,7 @@ export async function readWeekSlate(
     for (const g of slateGames) {
       const status = normalizeGameStatus(g.status)
       if (status === 'final') final += 1
-      else if (status === 'cancelled') cancelled += 1
+      else if (status === 'cancelled' || (postponedIsBlank && status === 'postponed')) cancelled += 1
       else unfinished += 1
       if (g.startTime && (lastStart == null || g.startTime > lastStart)) lastStart = g.startTime
     }
@@ -367,22 +393,35 @@ export async function finalizeRedraftWeek(
    */
   let dateWindow: { start: Date; end: Date } | null = null
   if (isDateWindowed) {
-    const seasonStart = resolveDailySportSeasonStart(sport, season.season)
-    const window = seasonStart ? weekWindowFromSeasonStart(seasonStart, params.week) : null
+    // The stat sync's own resolver, so slate and stats cover the same days — gameweeks for soccer.
+    const window = resolveDailySportWeekWindow(sport, season.season, params.week)
     if (!window) return emptyResult(base, 'season_start_unknown')
     dateWindow = { start: new Date(window.start), end: new Date(window.end) }
   }
 
   const matchups = await prisma.redraftMatchup.findMany({
     where: { seasonId: season.id, week: params.week },
-    select: { id: true, status: true },
+    select: { id: true, status: true, awayRosterId: true },
   })
   const matchupsConsidered = matchups.length
-  if (matchupsConsidered > 0 && matchups.every((m) => m.status === 'final')) {
+  /*
+   * ⚠ A BYE NEVER GOES FINAL. It has no opponent, so `updateMatchupScores` returns before writing
+   * it and its status stays 'scheduled' for good. Counting it kept a finished week "not final"
+   * forever: the sweep re-sealed it every tick while it sat in the lookback, and reported each
+   * re-seal as a week finalized. `advance_week` already judges a week on its non-bye matchups
+   * ("All non-bye matchups must be finalized"); this agrees with it.
+   *
+   * Only an explicit null is a bye. Anything else counts as a real matchup, because the costly
+   * mistake runs one way: misreading a bye re-seals a finished week, misreading a real matchup as
+   * a bye would skip sealing a week that is not done.
+   */
+  const contested = matchups.filter((m) => m.awayRosterId !== null)
+  // The rule lives in weekSealed.ts, which score-sync also reads, so the two cannot disagree.
+  if (isSealedWeek(matchups)) {
     return emptyResult(base, null, {
       alreadyFinal: true,
-      matchupsConsidered,
-      matchupsFinal: matchupsConsidered,
+      matchupsConsidered: contested.length,
+      matchupsFinal: contested.length,
     })
   }
 
@@ -397,6 +436,13 @@ export async function finalizeRedraftWeek(
   if (slate.games === 0) return emptyResult(base, 'no_games_on_slate', { slate, matchupsConsidered })
   if (slate.unfinished > 0) return emptyResult(base, 'games_not_final', { slate, matchupsConsidered })
 
+  // A partial feed must never close an active date window, even if all known games are final.
+  // Window bounds represent Eastern calendar days, while now is an instant.
+  const today = easternCalendarDay(now)
+  if (dateWindow && today && today < dateWindow.end) {
+    return emptyResult(base, 'week_window_open', { slate, matchupsConsidered })
+  }
+
   const lastStart = slate.lastStartTime ? new Date(slate.lastStartTime) : null
   if (lastStart && now.getTime() < lastStart.getTime() + graceMs) {
     return emptyResult(base, 'within_grace_period', { slate, matchupsConsidered })
@@ -410,30 +456,65 @@ export async function finalizeRedraftWeek(
   const rosterPlayers = rosterIds.length
     ? await prisma.redraftRosterPlayer.findMany({
         where: { rosterId: { in: rosterIds }, droppedAt: null },
-        select: { playerId: true, sport: true, slotType: true },
+        select: { rosterId: true, playerId: true, position: true, sport: true, slotType: true },
       })
     : []
+  /*
+   * ⚠ SEAL THE LINEUP THAT WAS SET FOR THIS WEEK. `slotType` is current state, and this runs
+   * twelve hours after the last kickoff — long enough for a manager to have set NEXT week's lineup.
+   * `weekLineupSlots.ts` reads the week's own saved lineup and falls back to `slotType`.
+   */
+  const weekLineups = await loadWeekLineups(prisma, {
+    redraftRosterIds: rosterIds,
+    season: season.season,
+    week: params.week,
+  })
 
   /*
    * ⚠ IN BEST BALL THE BENCH SCORES TOO. The matchup starts each team's best lineup from every
    * active player, so every one of them needs a sealed row — sealing starters only left bench
    * players without a row and the matchup could never go final.
    */
-  const bestBall = leagueIsBestBall(
-    await prisma.league.findFirst({
+  const league = await prisma.league.findFirst({
       where: { id: season.leagueId },
-      select: { bestBallMode: true, leagueVariant: true, leagueType: true },
-    }),
-  )
+      select: { bestBallMode: true, leagueVariant: true, leagueType: true, survivorMode: true, platform: true },
+    })
+  const bestBall = leagueIsBestBall(league)
 
   /*
    * One row per (playerId, sport): the score table is keyed that way, and two managers
    * starting the same player must not be counted as two starters to cover.
    */
   const starters = new Map<string, { playerId: string; sport: string }>()
+  const exileStarterKeys = new Set<string>()
   for (const p of rosterPlayers) {
-    if (!countsTowardScore(p.slotType, bestBall)) continue
+    if (!countsTowardScore(weekSlotType(p, weekLineups), bestBall)) continue
     starters.set(`${p.sport}::${p.playerId}`, { playerId: p.playerId, sport: p.sport })
+  }
+  // Closed Exile lineups are separate from the main league roster. They must
+  // participate in the same slate and coverage proof before their score can
+  // be finalized; otherwise an Exile manager could be stranded indefinitely.
+  if (league?.survivorMode && isNativePlatform(league.platform)) {
+    const entries = await prisma.exileWeeklyEntry.findMany({
+      where: { leagueId: season.leagueId, week: params.week },
+      select: { submittedLineup: true },
+    })
+    for (const entry of entries) {
+      const roster = readExileRoster(entry.submittedLineup)
+      if (!roster) continue
+      // The Exile rollover can lag the common score-sync cron. Never seal the
+      // week before that saved lineup becomes immutable.
+      if (!roster.closedAt && roster.players.some(player => player.slot !== 'BENCH')) {
+        return emptyResult(base, 'exile_roster_open', { slate, matchupsConsidered })
+      }
+      if (!roster.closedAt) continue
+      for (const player of roster.players) {
+        if (player.slot === 'BENCH') continue
+        const key = `${sport}::${player.id}`
+        starters.set(key, { playerId: player.id, sport })
+        exileStarterKeys.add(key)
+      }
+    }
   }
   if (starters.size === 0) {
     return emptyResult(base, 'no_starters', { slate, matchupsConsidered })
@@ -462,7 +543,18 @@ export async function finalizeRedraftWeek(
 
   const startersWithStats = existing.size
   const coverage = startersWithStats / starters.size
-  if (coverage < coverageFloor) {
+  // The ordinary 80% floor permits verified league starters with no box row
+  // to be recorded as DNP zeroes. Exile has a smaller pool and no independent
+  // participation proof yet; missing rows must remain pending, never be
+  // converted into a token-deciding zero by the main-league coverage ratio.
+  if ([...exileStarterKeys].some(key => !existing.has(key))) {
+    return emptyResult(base, 'exile_stat_missing', {
+      slate, matchupsConsidered, starters: starters.size, startersWithStats, coverage,
+    })
+  }
+  // College sync writes explicit rows for verified byes/non-appearances. A missing college
+  // row therefore means missing identity or ingestion evidence, never a zero to invent.
+  if (coverage < (sport === 'NCAAF' ? 1 : coverageFloor)) {
     return emptyResult(base, 'stat_coverage_below_floor', {
       slate,
       matchupsConsidered,
@@ -537,6 +629,31 @@ export async function finalizeRedraftWeek(
     select: { status: true },
   })
   const matchupsFinal = after.filter((m) => m.status === 'final').length
+
+  if (matchupsFinal > 0 && matchupsFinal === after.length) {
+    try {
+      await (deps.enqueueTankingScan ?? enqueueTankingScan)(season.leagueId, params.week, season.id)
+    } catch (error) {
+      // A queue outage must not undo a completed scoring week; coverage remains unscanned.
+      console.error('[weekFinalizer] Unable to queue tanking scan', { leagueId: season.leagueId, week: params.week, error })
+    }
+    /*
+     * The result push, on the same gate: every game final, so a week this function refused (or
+     * only partly scored) never announces a score. The notifier dedupes per person per week, so the
+     * scheduled re-runs of an already-closed week cannot repeat it.
+     */
+    try {
+      const notify =
+        deps.notifyResults ?? (await import('./nativeResultNotify')).notifyNativeWeekResults
+      await notify({ prisma, seasonId: season.id, week: params.week })
+    } catch (error) {
+      console.error('[weekFinalizer] Unable to send result push', {
+        leagueId: season.leagueId,
+        week: params.week,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }
 
   return {
     ...base,
@@ -668,6 +785,8 @@ export async function finalizeCompletedWeeksForSeason(
       seasonId: params.seasonId,
       week: { gte: earliest, lte: params.throughWeek },
       status: { not: 'final' },
+      // A bye never goes final (see `finalizeRedraftWeek`), so it must not hold its week open.
+      awayRosterId: { not: null },
     },
     select: { week: true },
   })

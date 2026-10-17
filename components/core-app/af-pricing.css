@@ -29,7 +29,7 @@
 }
 
 .af-pr-eyebrow {
-  font: 700 10px/1 'JetBrains Mono', ui-monospace, monospace;
+  font: 700 11px/1 'JetBrains Mono', ui-monospace, monospace;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--faint);
@@ -91,7 +91,7 @@
 
 /* The savings chip is derived copy — see planPresentation.ts. */
 .af-pr-savechip {
-  font: 700 10px/1 'JetBrains Mono', ui-monospace, monospace;
+  font: 700 11px/1 'JetBrains Mono', ui-monospace, monospace;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   padding: 6px 11px;
@@ -149,7 +149,7 @@
   left: 50%;
   transform: translateX(-50%);
   white-space: nowrap;
-  font: 800 9px/1 'JetBrains Mono', ui-monospace, monospace;
+  font: 800 11px/1 'JetBrains Mono', ui-monospace, monospace;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   padding: 5px 10px;
@@ -285,7 +285,7 @@
   color: var(--accent);
 }
 .af-pr-pack-label {
-  font: 500 10px/1 'JetBrains Mono', ui-monospace, monospace;
+  font: 500 11px/1 'JetBrains Mono', ui-monospace, monospace;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--faint);

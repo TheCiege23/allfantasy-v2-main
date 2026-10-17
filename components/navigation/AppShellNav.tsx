@@ -34,7 +34,7 @@ const GLOBAL_TABS = [
   { href: "/discover/leagues", label: "Leagues" },
   { href: "/player-command-center", label: "My Players" },
   { href: "/ai/tools", label: "Intelligence Hub" },
-  { href: "/af-rankings", label: "Rankings" },
+  { href: "/core/rankings", label: "Rankings" },
   { href: "/profile", label: "Profile" },
   { href: "/messages", label: "Messages" },
   { href: "/wallet", label: "Wallet" },
@@ -60,7 +60,7 @@ export default function AppShellNav({
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <Link href={isAuthenticated ? "/dashboard" : "/"} className="flex shrink-0 items-center gap-2">
             <Image
-              src="/af-crest.png"
+              src="/af-crest.svg"
               alt="AllFantasy crest"
               width={32}
               height={32}
@@ -123,7 +123,7 @@ export default function AppShellNav({
                   href={chimmyEntry.href}
                   className="rounded-lg border p-2 transition hover:opacity-90"
                   style={{ borderColor: "color-mix(in srgb, var(--accent-cyan) 45%, var(--border))", background: "color-mix(in srgb, var(--accent-cyan) 14%, transparent)", color: "var(--accent-cyan-strong)" }}
-                  title="AI Chat"
+                  title="Chat with Chimmy"
                 >
                   <Sparkles className="h-4 w-4" />
                 </Link>

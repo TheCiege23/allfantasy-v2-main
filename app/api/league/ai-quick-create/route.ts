@@ -4,11 +4,12 @@ import { authOptions } from '@/lib/auth'
 import { upgradePathForPlan } from '@/lib/monetization/upgradeDestination'
 import { resolveLivePlanFlags } from '@/lib/subscription/livePlanFlags'
 import { DEFAULT_SPORT, SUPPORTED_SPORTS } from '@/lib/sport-scope'
+import { isSurvivorCreationSportAvailable, SURVIVOR_CREATION_UNAVAILABLE_MESSAGE } from '@/lib/survivor/survivorCreationAvailability'
 
 export const dynamic = 'force-dynamic'
 
 const VALID_SPORTS: readonly string[] = SUPPORTED_SPORTS
-const VALID_LEAGUE_TYPES = ['redraft', 'dynasty', 'keeper', 'best_ball', 'guillotine', 'survivor', 'tournament', 'zombie', 'salary_cap', 'devy', 'c2c']
+const VALID_LEAGUE_TYPES = ['redraft', 'dynasty', 'keeper', 'best_ball', 'guillotine', 'survivor', 'tournament', 'zombie', 'salary_cap', 'devy', 'c2c', 'big_brother']
 const VALID_DRAFT_TYPES = ['snake', 'linear', 'auction', 'slow_draft']
 
 /**
@@ -45,6 +46,9 @@ export async function POST(req: Request) {
 
   // Parse the prompt deterministically first (no AI needed for clear inputs)
   const result = parseLeaguePrompt(prompt)
+  if (result.leagueType === 'survivor' && !isSurvivorCreationSportAvailable(result.sport)) {
+    return NextResponse.json({ error: SURVIVOR_CREATION_UNAVAILABLE_MESSAGE }, { status: 400 })
+  }
 
   return NextResponse.json({ result })
 }
@@ -97,7 +101,7 @@ function parseLeaguePrompt(prompt: string): {
   else if (lower.includes('salary cap') || lower.includes('contract')) leagueType = 'salary_cap'
   else if (lower.includes('devy')) leagueType = 'devy'
   else if (lower.includes('c2c') || lower.includes('campus to canton') || lower.includes('campus 2 canton')) leagueType = 'c2c'
-  else if (lower.includes('big brother')) leagueType = 'survivor' // closest match
+  else if (lower.includes('big brother')) leagueType = 'big_brother'
   else if (lower.includes('idp')) leagueType = 'redraft' // IDP is a modifier, not a type
 
   // Detect draft type

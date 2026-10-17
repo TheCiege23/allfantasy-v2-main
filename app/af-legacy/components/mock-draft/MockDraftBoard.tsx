@@ -342,7 +342,7 @@ export default function MockDraftBoard({ leagues, username }: Props) {
                 roundPlayers.length > 0 && (
                   <div key={rIdx}>
                     <div className="flex items-center gap-2 mb-2">
-                      <span className="text-[10px] font-bold text-white/30 uppercase tracking-wider">Round {rIdx + 1}</span>
+                      <span className="text-[11px] font-bold text-white/30 uppercase tracking-wider">Round {rIdx + 1}</span>
                       <div className="flex-1 h-px bg-white/5" />
                     </div>
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-1.5">
@@ -354,8 +354,8 @@ export default function MockDraftBoard({ leagues, username }: Props) {
                             className={`relative rounded-xl border p-2.5 transition hover:scale-[1.02] ${POS_COLORS[p.position] || 'bg-slate-700/30 text-white/60 border-white/10'}`}
                           >
                             <div className="flex items-start justify-between mb-1">
-                              <span className="text-[9px] font-bold opacity-50">#{overall}</span>
-                              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-black/20">
+                              <span className="text-[11px] font-bold opacity-50">#{overall}</span>
+                              <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded-full bg-black/20">
                                 {p.position}
                               </span>
                             </div>
@@ -371,9 +371,9 @@ export default function MockDraftBoard({ leagues, username }: Props) {
                               <div className="min-w-0 flex-1">
                                 <div className="text-xs font-semibold truncate leading-tight">{p.name}</div>
                                 <div className="flex items-center justify-between mt-0.5">
-                                  <span className="text-[9px] opacity-50">{p.team || '—'}</span>
+                                  <span className="text-[11px] opacity-50">{p.team || '—'}</span>
                                   {p.adpTrend !== null && p.adpTrend !== 0 && (
-                                    <span className={`text-[9px] font-medium ${p.adpTrend > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                    <span className={`text-[11px] font-medium ${p.adpTrend > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                                       {p.adpTrend > 0 ? '↑' : '↓'}{Math.abs(p.adpTrend).toFixed(1)}
                                     </span>
                                   )}
@@ -422,7 +422,7 @@ export default function MockDraftBoard({ leagues, username }: Props) {
           </div>
 
           {activeScenarios.length > 0 && (
-            <div className="text-[10px] text-purple-300/60 flex items-center gap-1">
+            <div className="text-[11px] text-purple-300/60 flex items-center gap-1">
               <Zap className="w-3 h-3" /> Scenario active — predictions adjusted for: {activeScenarios.map(s => SCENARIO_OPTIONS.find(o => o.id === s)?.label).join(', ')}
             </div>
           )}
@@ -457,18 +457,18 @@ export default function MockDraftBoard({ leagues, username }: Props) {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="text-xs font-semibold text-white/80 truncate">{pick.manager}</span>
-                          <span className="text-[9px] text-white/30">R{pick.round}.{pick.pick}</span>
+                          <span className="text-[11px] text-white/30">R{pick.round}.{pick.pick}</span>
                         </div>
                         {top && (
                           <div className="flex items-center gap-2 mt-0.5">
                             <MiniPlayerImg sleeperId={top.sleeperId || undefined} name={top.player} size={16} />
                             <span className="text-xs text-white/60">{top.player}</span>
                             <TeamLogo team={top.team} size={12} />
-                            <span className="text-[9px] text-cyan-400/70">{Math.round(top.probability * 100)}%</span>
+                            <span className="text-[11px] text-cyan-400/70">{Math.round(top.probability * 100)}%</span>
                           </div>
                         )}
                       </div>
-                      <span className={`text-[9px] font-medium ${chaosColor}`}>
+                      <span className={`text-[11px] font-medium ${chaosColor}`}>
                         {pick.volatility?.chaosLevel || 'low'}
                       </span>
                       {isExpanded ? <ChevronDown className="w-3.5 h-3.5 text-white/30" /> : <ChevronRight className="w-3.5 h-3.5 text-white/30" />}
@@ -478,7 +478,7 @@ export default function MockDraftBoard({ leagues, username }: Props) {
                       <div className="border-t border-white/5 p-3 space-y-2 bg-slate-950/30">
                         {pick.topTargets.slice(0, 5).map((t, tIdx) => (
                           <div key={tIdx} className="flex items-center gap-3">
-                            <span className="text-[9px] text-white/20 w-4 text-right">{tIdx + 1}.</span>
+                            <span className="text-[11px] text-white/20 w-4 text-right">{tIdx + 1}.</span>
                             <div className="relative flex-shrink-0">
                               <MiniPlayerImg sleeperId={t.sleeperId || undefined} name={t.player} size={20} />
                               {t.team && (
@@ -488,13 +488,13 @@ export default function MockDraftBoard({ leagues, username }: Props) {
                               )}
                             </div>
                             <span className="text-xs text-white/70 flex-1">{t.player}</span>
-                            <span className="text-[10px] text-white/30">{t.position}</span>
-                            <span className="text-[10px] text-cyan-400/80 font-medium">{Math.round(t.probability * 100)}%</span>
+                            <span className="text-[11px] text-white/30">{t.position}</span>
+                            <span className="text-[11px] text-cyan-400/80 font-medium">{Math.round(t.probability * 100)}%</span>
                           </div>
                         ))}
                         {pick.topTargets[0]?.scorecard && (
                           <div className="mt-2 pt-2 border-t border-white/5">
-                            <div className="text-[9px] text-white/25 mb-1.5">Chimmy Factor Breakdown (Top Pick)</div>
+                            <div className="text-[11px] text-white/25 mb-1.5">Chimmy Factor Breakdown (Top Pick)</div>
                             <div className="flex gap-0.5 h-2 rounded-full overflow-hidden">
                               {[
                                 { w: pick.topTargets[0].scorecard.adpWeight, c: 'bg-blue-500', l: 'ADP' },
@@ -514,7 +514,7 @@ export default function MockDraftBoard({ leagues, username }: Props) {
                                 { c: 'bg-amber-500', l: 'News' },
                                 { c: 'bg-red-500', l: 'Rookie' },
                               ].map((leg, li) => (
-                                <span key={li} className="flex items-center gap-1 text-[8px] text-white/25">
+                                <span key={li} className="flex items-center gap-1 text-[11px] text-white/25">
                                   <span className={`w-1.5 h-1.5 rounded-full ${leg.c}`} />{leg.l}
                                 </span>
                               ))}
@@ -551,14 +551,14 @@ export default function MockDraftBoard({ leagues, username }: Props) {
                     <MiniPlayerImg name={dna.manager} sleeperId={null} avatarUrl={dna.avatarUrl} size={36} className="rounded-xl" />
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-semibold text-white/80 truncate">{dna.manager}</div>
-                      <div className="text-[10px] text-purple-300/60 mt-0.5">{dna.overallArchetype}</div>
+                      <div className="text-[11px] text-purple-300/60 mt-0.5">{dna.overallArchetype}</div>
                     </div>
                     <div className="flex gap-1.5 flex-wrap justify-end">
                       {[
                         { label: dna.reachLabel, color: dna.reachFrequency > 0.5 ? 'text-red-300 bg-red-500/10' : 'text-emerald-300 bg-emerald-500/10' },
                         { label: dna.rookieLabel, color: dna.rookieAppetite > 0.6 ? 'text-amber-300 bg-amber-500/10' : 'text-blue-300 bg-blue-500/10' },
                       ].map((badge, bi) => (
-                        <span key={bi} className={`text-[8px] px-1.5 py-0.5 rounded-full ${badge.color} font-medium`}>
+                        <span key={bi} className={`text-[11px] px-1.5 py-0.5 rounded-full ${badge.color} font-medium`}>
                           {badge.label}
                         </span>
                       ))}
@@ -576,7 +576,7 @@ export default function MockDraftBoard({ leagues, username }: Props) {
                           { label: 'Panic', value: dna.panicResponse, score: dna.panicScore },
                         ].map((stat, si) => (
                           <div key={si} className="bg-white/[0.03] rounded-lg p-2">
-                            <div className="text-[9px] text-white/30 mb-1">{stat.label}</div>
+                            <div className="text-[11px] text-white/30 mb-1">{stat.label}</div>
                             <div className="text-xs font-semibold text-white/70">{stat.value}</div>
                             <div className="mt-1 h-1 rounded-full bg-white/5 overflow-hidden">
                               <div
@@ -590,19 +590,19 @@ export default function MockDraftBoard({ leagues, username }: Props) {
 
                       {dna.positionalAggression && Object.keys(dna.positionalAggression).length > 0 && (
                         <div>
-                          <div className="text-[9px] text-white/25 mb-1.5">Positional Aggression</div>
+                          <div className="text-[11px] text-white/25 mb-1.5">Positional Aggression</div>
                           <div className="grid grid-cols-4 gap-1.5">
                             {['QB', 'RB', 'WR', 'TE'].map(pos => {
                               const agg = dna.positionalAggression[pos]
                               if (!agg) return null
                               return (
                                 <div key={pos} className="bg-white/[0.02] rounded-lg p-1.5 text-center">
-                                  <div className={`text-[9px] font-bold ${POS_DOT[pos] ? POS_DOT[pos].replace('bg-', 'text-') : 'text-white/40'}`}>{pos}</div>
+                                  <div className={`text-[11px] font-bold ${POS_DOT[pos] ? POS_DOT[pos].replace('bg-', 'text-') : 'text-white/40'}`}>{pos}</div>
                                   <div className="flex justify-center gap-1 mt-1">
                                     {['early', 'mid', 'late'].map(phase => (
                                       <div key={phase} className="text-center">
-                                        <div className="text-[7px] text-white/20">{phase[0].toUpperCase()}</div>
-                                        <div className="text-[9px] text-white/50">{((agg as any)[phase] * 100).toFixed(0)}%</div>
+                                        <div className="text-[11px] text-white/20">{phase[0].toUpperCase()}</div>
+                                        <div className="text-[11px] text-white/50">{((agg as any)[phase] * 100).toFixed(0)}%</div>
                                       </div>
                                     ))}
                                   </div>
@@ -654,7 +654,7 @@ export default function MockDraftBoard({ leagues, username }: Props) {
                     <span className="text-white/20">{entry.picksBefore} picks before yours</span>
                   </div>
                   {entry.alerts.length === 0 ? (
-                    <div className="text-[10px] text-emerald-400/50 pl-2">No major snipe threats for this pick</div>
+                    <div className="text-[11px] text-emerald-400/50 pl-2">No major snipe threats for this pick</div>
                   ) : (
                     entry.alerts.map((alert, aIdx) => {
                       const urgencyColors = {
@@ -680,20 +680,20 @@ export default function MockDraftBoard({ leagues, username }: Props) {
                                 )}
                               </div>
                               <span className="text-sm font-semibold text-white/80">{alert.player}</span>
-                              <span className="text-[10px] text-white/30">{alert.position}</span>
+                              <span className="text-[11px] text-white/30">{alert.position}</span>
                             </div>
-                            <span className={`text-[9px] px-2 py-0.5 rounded-full font-medium ${urgencyBadge[alert.urgencyLevel]}`}>
+                            <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${urgencyBadge[alert.urgencyLevel]}`}>
                               {alert.urgencyLevel}
                             </span>
                           </div>
-                          <div className="flex items-center gap-4 text-[10px] text-white/40">
+                          <div className="flex items-center gap-4 text-[11px] text-white/40">
                             <span>Snipe prob: <strong className="text-white/60">{alert.snipeProbability}%</strong></span>
                             <span>EV lost: <strong className="text-white/60">{alert.expectedValueLost}</strong></span>
                           </div>
                           {alert.snipedByManagers.length > 0 && (
                             <div className="flex gap-2 mt-2 flex-wrap">
                               {alert.snipedByManagers.slice(0, 3).map((s, si) => (
-                                <span key={si} className="text-[9px] text-white/30 bg-white/[0.03] px-2 py-0.5 rounded-full">
+                                <span key={si} className="text-[11px] text-white/30 bg-white/[0.03] px-2 py-0.5 rounded-full">
                                   {s.manager} ({s.probability}%)
                                 </span>
                               ))}

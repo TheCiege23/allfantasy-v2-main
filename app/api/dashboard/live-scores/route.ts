@@ -3,7 +3,9 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getPlayFeed } from '@/lib/live/playFeedPresentation'
-import { getLivePageData } from '@/lib/live/liveScoresPage'
+import { getGameStarters, getLivePageData } from '@/lib/live/liveScoresPage'
+import { getMatchupData } from '@/lib/core-app/matchup'
+import { buildMatchupStrip } from '@/lib/live/matchupStrip'
 import { etagMatches, livePayloadEtag } from '@/lib/live/livePayloadEtag'
 import { getEspnGameSummary } from '@/lib/sports-live-scores-service'
 import type { DashboardLiveScore } from '@/lib/types/liveScoring'
@@ -159,17 +161,41 @@ export async function GET(request: NextRequest) {
    * validates sport and game id, and serves the DB cache before ESPN.
    */
   if (view === 'game') {
+    const sport = request.nextUrl.searchParams.get('sport') ?? ''
     const data = await getEspnGameSummary({
-      sport: request.nextUrl.searchParams.get('sport') ?? '',
+      sport,
       gameId: request.nextUrl.searchParams.get('game') ?? '',
     })
-    return NextResponse.json(data)
+    /*
+     * Your starters in this game ride the same poll, so their points move while
+     * the game does. Signed out, `starters` is null and the payload is the
+     * public one it always was.
+     *
+     * ⚠ WITH STARTERS IT NAMES A USER, SO IT MUST NOT BE SHARED BY A CACHE. The
+     * public shape stays cacheable-by-default; the personal one is `private,
+     * no-store`, the same boundary `view=live` draws with its ETag headers.
+     */
+    const starters = data.detail
+      ? await getGameStarters({
+          userId: session?.user?.id ?? null,
+          sport,
+          gameId: data.detail.gameId,
+          homeAbbrev: data.detail.home.abbrev,
+          awayAbbrev: data.detail.away.abbrev,
+          upcoming: data.detail.status?.state === 'pre',
+        })
+      : null
+    return NextResponse.json(
+      { ...data, starters },
+      starters ? { headers: { 'Cache-Control': 'private, no-store' } } : undefined,
+    )
   }
   if (view === 'live') {
     const data = await getLivePageData({
       userId: session?.user?.id ?? null,
       sport: request.nextUrl.searchParams.get('sport'),
       scope: request.nextUrl.searchParams.get('scope') === 'all' ? 'all' : 'my',
+      top25: request.nextUrl.searchParams.get('t25') === 'off' ? 'off' : 'on',
     })
 
     /*
@@ -203,6 +229,26 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(data, {
       headers: { ETag: etag, 'Cache-Control': 'private, max-age=0, must-revalidate' },
     })
+  }
+
+  /*
+   * The live matchup strip's poll rides this route for the same ceiling reason as the views above.
+   *
+   * ⚠ PERSONAL, SO SESSION-GATED AND `private, no-store`. `getMatchupData` scopes the league to the
+   * user itself and returns null for one they are not in; a failed read is a 500 (the client keeps the
+   * last good strip) and never `{ strip: null }`, which means "no matchup".
+   */
+  if (view === 'matchup') {
+    if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const leagueId = request.nextUrl.searchParams.get('league') ?? ''
+    if (!leagueId) return NextResponse.json({ error: 'league is required' }, { status: 400 })
+    try {
+      const data = await getMatchupData(leagueId, session.user.id, null)
+      return NextResponse.json({ strip: buildMatchupStrip(data) }, { headers: { 'Cache-Control': 'private, no-store' } })
+    } catch (e) {
+      console.error('[dashboard/live-scores] matchup strip read failed', e)
+      return NextResponse.json({ error: 'matchup read failed' }, { status: 500 })
+    }
   }
 
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

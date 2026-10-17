@@ -3,7 +3,7 @@
  *
  * WHY THIS FILE IS SEPARATE FROM `lib/fantasycalc.ts`. That module holds the
  * pure half: `findPlayerByName`, `getPickValue`, `getValueTier`,
- * `calculateTradeBalance`, the trade-grading maths, the types. Roughly 45
+ * the trade-grading maths, the types. Roughly 45
  * modules import those, legitimately and with no interest in the network.
  *
  * While the fetch lived beside them, the DB-first guard could never exempt the

@@ -1,0 +1,66 @@
+/* Pull to refresh on a phone (PullToRefresh.tsx, 2026-10-08). Mounted only in the phone layout. */
+
+.af-ptr {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 8px);
+  left: 50%;
+  z-index: 80;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px 7px 8px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--line2);
+  box-shadow: 0 6px 20px color-mix(in srgb, #000 28%, transparent);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  pointer-events: none;
+  /* The pull itself follows the finger; only the release animates. */
+  transition: opacity 120ms ease-out;
+}
+.af-ptr[data-phase='refreshing'],
+.af-ptr[data-phase='done'],
+.af-ptr[data-phase='idle'] {
+  transition: transform 200ms ease-out, opacity 200ms ease-out;
+}
+.af-ptr-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+  font-weight: 900;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.af-ptr[data-ready='true'] .af-ptr-icon,
+.af-ptr[data-phase='refreshing'] .af-ptr-icon {
+  color: var(--bg);
+  background: var(--accent);
+}
+.af-ptr[data-phase='done'] .af-ptr-icon {
+  color: var(--bg);
+  background: var(--good);
+}
+.af-ptr[data-phase='refreshing'] .af-ptr-icon {
+  animation: af-ptr-spin 900ms linear infinite;
+}
+@keyframes af-ptr-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .af-ptr,
+  .af-ptr[data-phase='refreshing'],
+  .af-ptr[data-phase='done'],
+  .af-ptr[data-phase='idle'] {
+    transition: none;
+  }
+  .af-ptr[data-phase='refreshing'] .af-ptr-icon {
+    animation: none;
+  }
+}

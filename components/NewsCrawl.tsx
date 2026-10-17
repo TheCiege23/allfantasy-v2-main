@@ -97,7 +97,7 @@ export default function NewsCrawl() {
       <div className="flex items-center h-8 sm:h-9 overflow-hidden">
         <div className="flex-shrink-0 bg-gradient-to-r from-cyan-500 to-purple-500 px-2 sm:px-3 h-full flex items-center gap-1 sm:gap-1.5 z-10">
           <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-red-500 rounded-full animate-pulse" />
-          <span className="text-[10px] sm:text-[11px] font-bold text-white tracking-wider whitespace-nowrap">LIVE</span>
+          <span className="text-[11px] sm:text-[11px] font-bold text-white tracking-wider whitespace-nowrap">LIVE</span>
         </div>
 
         <div className="flex-1 overflow-hidden relative">
@@ -108,9 +108,9 @@ export default function NewsCrawl() {
             {doubled.map((item, idx) => (
               <div key={`${item.id}-${idx}`} className="flex items-center flex-shrink-0 mx-3 sm:mx-4">
                 {item.type === 'injury' ? (
-                  <span className="text-[10px] sm:text-[11px] font-semibold text-red-400 mr-1 sm:mr-1.5 uppercase">INJURY</span>
+                  <span className="text-[11px] sm:text-[11px] font-semibold text-red-400 mr-1 sm:mr-1.5 uppercase">INJURY</span>
                 ) : (
-                  <span className="text-[10px] sm:text-[11px] font-semibold text-cyan-400 mr-1 sm:mr-1.5 uppercase">{item.source || 'NEWS'}</span>
+                  <span className="text-[11px] sm:text-[11px] font-semibold text-cyan-400 mr-1 sm:mr-1.5 uppercase">{item.source || 'NEWS'}</span>
                 )}
                 {item.url ? (
                   <a
@@ -128,9 +128,9 @@ export default function NewsCrawl() {
                   </span>
                 )}
                 {item.team && (
-                  <span className="text-[9px] sm:text-[10px] text-white/30 ml-1 sm:ml-1.5">{item.team}</span>
+                  <span className="text-[11px] sm:text-[11px] text-white/30 ml-1 sm:ml-1.5">{item.team}</span>
                 )}
-                <span className="text-[9px] sm:text-[10px] text-white/20 ml-1 sm:ml-1.5">{timeAgo(item.timestamp)}</span>
+                <span className="text-[11px] sm:text-[11px] text-white/20 ml-1 sm:ml-1.5">{timeAgo(item.timestamp)}</span>
                 <span className="text-white/10 ml-3 sm:ml-4">|</span>
               </div>
             ))}

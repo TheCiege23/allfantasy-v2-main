@@ -1,4 +1,5 @@
 import 'server-only'
+import { recentTradesTiming } from '@/lib/observability/recentTradesTiming'
 import { persistedRecentTrades } from './persistedRecentTrades'
 
 import { prisma } from '@/lib/prisma'
@@ -8,10 +9,12 @@ import { loadTradeExpectation } from '@/lib/trade-intel/tradeExpectationLoader'
 import { hasNoSignal } from '@/lib/trade-intel/tradeGradeEmail'
 import { attachPlayerMediaBatch, buildPlayerMedia, type ResolvedPlayerMedia } from '@/lib/player-media'
 import { sleeperAvatarUrl } from '@/lib/sleeper-avatar'
-import { oneGradeForCompletedTrade } from '@/lib/decision-os/trade/completedTradeGrade'
+import { completedTradeGraderFor, completedTradeInputs, gradeArchivedTrade, oneGradeForCompletedTrade, type ArchivedPlayer } from '@/lib/decision-os/trade/completedTradeGrade'
+import { receiptIdForGrade } from '@/lib/decision-os/trade/recordTradeGrade'
+import { gradeMoment, gradeMomentOf, type GradeMomentInput } from '@/lib/decision-os/trade/gradeMoment'
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import { scanPendingSleeperTrades } from '@/lib/provider-trades/scanPendingSleeperTrades'
-import { publicTradeDecisionReceipt } from '@/lib/league-trade-engine/tradeDecisionReceipt'
+import { PUBLIC_RECEIPT_SELECT, publicTradeDecisionReceipt } from '@/lib/league-trade-engine/tradeDecisionReceipt'
 
 /**
  * Trades that landed in your leagues recently.
@@ -82,6 +85,12 @@ export type RecentTradeAsset = {
   team: string | null
   headshotUrl: string | null
   teamLogoUrl: string | null
+  /**
+   * How THE grade prices this asset, for a trade the graded ledger has not reached yet (the live
+   * scan, the durable feed). Structured, never parsed back out of `name`. `null`: it cannot be
+   * priced, and the letter is withheld with the reason — never graded as if it were worth zero.
+   */
+  gradeAs?: { kind: 'player'; name: string } | { kind: 'pick'; season: number; round: number } | null
 }
 
 export type RecentTradeSide = {
@@ -91,9 +100,33 @@ export type RecentTradeSide = {
   avatarUrl: string | null
   received: RecentTradeAsset[]
   grade: 'A' | 'B' | 'C' | 'D' | 'F' | null
-  gradeBasis: 'Market' | 'Realized' | null
+  /**
+   * 'League' is THE grade — the letter the verdict sentence, the Trade Center and the grade email
+   * all show. 'Market' and 'Realized' are the older per-side letters, now used only where THE grade
+   * is withheld, so a side can no longer read one letter beside a verdict drawn from another.
+   */
+  gradeBasis: 'League' | 'Market' | 'Realized' | null
   gradeReason: string
+  /**
+   * What `gradeReason` was built from, for the two lines the home's trade band can say in Spanish
+   * (lib/core-app/homeBandsCopy.ts). The English is unchanged; a line without parts stays English.
+   */
+  gradeParts?: RecentTradeGradeParts
 }
+
+export type RecentTradeGradeParts =
+  | {
+      kind: 'league'
+      got: number
+      gave: number
+      /** The `gradeMoment` input the English phrase was written from. */
+      moment: GradeMomentInput
+      /** Today's letter, only when the frozen original has since moved. */
+      nowLetter: string | null
+      /** Net fantasy points while the assets were held, when the ledger has them. */
+      realizedNet: number | null
+    }
+  | { kind: 'realized'; net: number }
 
 /**
  * A prospective verdict on the deal as struck — market value of what each side
@@ -108,7 +141,7 @@ export type RecentTradeVerdict = {
   /** 0–100 confidence the engine reports in its own inputs. */
   confidence: number
   /** Roster id the verdict favours, or null when it reads as fair. */
-  favoursRosterId: number | null
+  favoursRosterId: number | string | null
 }
 
 export type RecentTrade = {
@@ -127,8 +160,20 @@ export type RecentTrade = {
    * exactly that — never a neutral grade standing in for missing data.
    */
   verdict: RecentTradeVerdict | null
+  /** The saved receipt for the grade behind `verdict` (Trade OS). Null until the receipts migration is applied. */
+  receiptId?: string | null
   /** Native lifecycle state. Provider history omits it because those rows are completed. */
   status?: string
+  /**
+   * When the letters on this trade were frozen as its original grade (`frozenCompletedGrade.ts`), so
+   * the band says WHEN rather than "today". Absent: a live grade.
+   */
+  gradedAt?: string | null
+  /**
+   * With `gradedAt`: how those letters were priced — at the time of the trade, or first-graded where
+   * no market record covers the trade date (`gradeMoment`). Absent: a live grade, or an older payload.
+   */
+  gradedMoment?: GradeMomentInput | null
 }
 
 export type RecentTradesLeague = {
@@ -247,7 +292,7 @@ async function loadNativeRecentTrades(leagues: RecentTradesLeague[], cutoff: Dat
         }).catch(() => [])
       : Promise.resolve([]),
     client.tradeDecisionSnapshot
-      ? client.tradeDecisionSnapshot.findMany({ where: { tradeId: { in: rows.map((row) => row.id) } } }).catch(() => [])
+      ? client.tradeDecisionSnapshot.findMany({ where: { tradeId: { in: rows.map((row) => row.id) } }, select: PUBLIC_RECEIPT_SELECT }).catch(() => [])
       : Promise.resolve([]),
   ])
   const rosterById = new Map(rosters.map((row) => [row.id, row]))
@@ -339,7 +384,8 @@ function reportIncomplete(
   }
 }
 
-function liveCompletedTrade(
+/** A completed trade from a live Sleeper scan, in the band's shape. Exported for the league home. */
+export function liveCompletedTrade(
   league: RecentTradesLeague,
   trade: NonNullable<Awaited<ReturnType<typeof scanPendingSleeperTrades>>['completedTrades']>[number],
 ): RecentTrade | null {
@@ -354,6 +400,9 @@ function liveCompletedTrade(
     team: null,
     headshotUrl: null,
     teamLogoUrl: null,
+    gradeAs: asset.isPick
+      ? asset.pickYear && asset.pickRoundNumber ? { kind: 'pick', season: asset.pickYear, round: asset.pickRoundNumber } : null
+      : asset.faabAmount != null || !asset.playerName ? null : { kind: 'player', name: asset.playerName },
   })
   const sides: RecentTradeSide[] = [
     {
@@ -414,7 +463,11 @@ function assetsOf(side: GradedTrade['sides'][number]): RecentTradeAsset[] {
     headshotUrl: null,
     teamLogoUrl: null,
   }))
-  return [...players, ...picks]
+  // FAAB last — the order `completedTradeInputs` prices a side in. Absent on a pre-2026-09-29 payload.
+  const faab: RecentTradeAsset[] = side.faabIn != null && side.faabIn > 0
+    ? [{ kind: 'faab' as const, playerId: null, name: `$${side.faabIn} FAAB`, position: null, team: null, headshotUrl: null, teamLogoUrl: null }]
+    : []
+  return [...players, ...picks, ...faab]
 }
 
 /**
@@ -424,23 +477,129 @@ function assetsOf(side: GradedTrade['sides'][number]): RecentTradeAsset[] {
  * `PlayerValueSnapshot` with no format or QB filter — the newest FantasyCalc row per player, dynasty
  * or redraft, 1QB or superflex, whichever was written last — so the band's sentence could disagree
  * with the letter printed on the same card. Now the sentence and the letters come from one grade:
- * `oneGradeForCompletedTrade`, on this league's own chart, today.
+ * `oneGradeForCompletedTrade`, on this league's own chart — the trade's FROZEN ORIGINAL from the
+ * first time it was graded, not a re-price on today's values (`frozenCompletedGrade.ts`).
  *
  * ⚠ NULL WHEN THERE IS NO GRADE — a withheld grade (an unpriced player, a used pick, a three-team
  * deal) publishes no verdict, never a neutral one standing in for missing data.
  */
 function gradeOf(trade: GradedTrade, grade: TradeGradeView | null): RecentTradeVerdict | null {
   const sides = trade.sides ?? []
-  if (sides.length !== 2 || trade.multiTeam || !grade || !grade.graded) return null
-  const [a, b] = sides
+  if (sides.length !== 2 || trade.multiTeam) return null
+  return verdictFromGrade(grade, sides[0]!.rosterId, sides[1]!.rosterId)
+}
+
+/** The verdict, from THE grade taken from side `a`'s point of view (`a` received its `get`). */
+function verdictFromGrade(grade: TradeGradeView | null, a: number | string, b: number | string): RecentTradeVerdict | null {
+  if (!grade || !grade.graded) return null
   const strong = grade.letter === 'A' || grade.letter === 'F'
-  const favours = grade.letter === 'C' ? null : grade.percentDiff > 0 ? a.rosterId : b.rosterId
+  const favours = grade.letter === 'C' ? null : grade.percentDiff > 0 ? a : b
   return {
-    verdict: favours == null ? 'Fair' : `${strong ? 'Strongly' : 'Slightly'} favors ${favours === a.rosterId ? 'A' : 'B'}`,
+    verdict: favours == null ? 'Fair' : `${strong ? 'Strongly' : 'Slightly'} favors ${favours === a ? 'A' : 'B'}`,
     // The one grade carries no separate fairness or confidence number; the card states neither.
     fairness: null,
     confidence: 0,
+    /*
+     * ⚠ PASSED THROUGH AS-IS. Coercing a non-numeric id (the durable feed's fallback) to null would
+     * read as "favours nobody" — an even deal the grade never said.
+     */
     favoursRosterId: favours,
+  }
+}
+
+/**
+ * THE grade onto each side of the card (2026-09-27).
+ *
+ * 🛑 THE VERDICT SENTENCE MOVED TO THE ONE GRADE ON 2026-09-25 AND THE LETTERS BESIDE IT DID NOT.
+ * Each side kept a Realized-points or Market-projection letter, so one card could read "Slightly
+ * favours Hoovi" over a D on Hoovi's own side. Both now come from one grade: `a` reads `letter`,
+ * the other side `partnerLetter` — the exact mirror. Realized points, where the ledger has them,
+ * stay on the line as a FACT with no letter of their own.
+ */
+function applyOneGrade(
+  trade: RecentTrade,
+  grade: Extract<TradeGradeView, { graded: true }>,
+  a: number | string,
+  /** Net fantasy points the side realised while holding the assets, or null. */
+  realizedNet: (side: RecentTradeSide) => number | null = () => null,
+): void {
+  trade.gradedAt = grade.frozenAt ?? null
+  trade.gradedMoment = grade.frozenAt ? gradeMomentOf(grade) : null
+  for (const side of trade.sides) {
+    const isA = String(side.rosterId) === String(a)
+    const got = isA ? grade.getValue : grade.giveValue
+    const gave = isA ? grade.giveValue : grade.getValue
+    side.grade = isA ? grade.letter : grade.partnerLetter
+    side.gradeBasis = 'League'
+    const net = realizedNet(side)
+    const realized = net != null ? `Realized so far: net ${net.toFixed(1)} fantasy points while the assets were held.` : null
+    // A frozen original says WHEN; today's letter rides beside it only when it moved (`frozenCompletedGrade.ts`).
+    const nowLetter = grade.current ? (isA ? grade.current.letter : grade.current.partnerLetter) : null
+    const moved = nowLetter && nowLetter !== side.grade ? ` On today’s values: ${nowLetter}.` : ''
+    side.gradeReason = `Got ${got.toLocaleString()} for ${gave.toLocaleString()} on this league’s values ${gradeMoment(grade)}.${moved}${realized ? ` ${realized}` : ''}`
+    side.gradeParts = { kind: 'league', got, gave, moment: gradeMomentOf(grade), nowLetter: moved ? nowLetter : null, realizedNet: net }
+  }
+}
+
+/**
+ * THE grade for a two-sided provider trade the graded ledger has not reached yet, from its own
+ * structured assets — side `a` received what `a.received` holds. Any asset without `gradeAs`
+ * withholds the letter through the grader's own rule; nothing is priced as zero.
+ */
+async function gradeFromAssets(
+  leagueId: string,
+  a: RecentTradeSide,
+  b: RecentTradeSide,
+  currentSeason: number,
+  /** The trade's id (any form ending in Sleeper's transaction id), so its frozen original is read. */
+  tradeId: string,
+  now: Date,
+): Promise<TradeGradeView> {
+  const split = (side: RecentTradeSide) => {
+    const players: ArchivedPlayer[] = []
+    const picks: Array<{ season: number | null; round: number | null; label: string }> = []
+    for (const asset of side.received) {
+      const g = asset.gradeAs
+      if (g?.kind === 'pick') picks.push({ season: g.season, round: g.round, label: asset.name })
+      // `playerId` is a Sleeper id (set only for NFL Sleeper assets): priced by it, as the live paths are.
+      else if (g?.kind === 'player') players.push({ name: g.name, sleeperId: asset.playerId, position: asset.position })
+      else if (asset.kind === 'pick') picks.push({ season: null, round: null, label: asset.name })
+      else players.push(null)
+    }
+    return { players, picks }
+  }
+  const got = split(a)
+  const gave = split(b)
+  return gradeArchivedTrade(await completedTradeGraderFor(leagueId), {
+    received: got.players,
+    gave: gave.players,
+    picksIn: got.picks,
+    picksOut: gave.picks,
+    currentSeason,
+    // The same frozen original the email and history show for this trade (`frozenCompletedGrade.ts`).
+    original: { afLeagueId: leagueId, tradeId, now },
+  })
+}
+
+/**
+ * Grade a two-sided PROVIDER trade in place from its own assets: THE letter on each side (mirrored)
+ * and the verdict, or the withheld reason on each side. A native trade (`status` set) keeps its
+ * frozen receipt and is left alone. Never throws — a grading failure leaves the trade as it was.
+ * Shared by the band's loader and the league home, which reads its own live scan.
+ */
+export async function gradeProviderRecentTrade(t: RecentTrade, now: Date = new Date()): Promise<void> {
+  if (t.status || t.sides.length !== 2) return
+  const [a, b] = t.sides as [RecentTradeSide, RecentTradeSide]
+  const g = await gradeFromAssets(t.leagueId, a, b, now.getUTCFullYear(), t.id, now).catch(() => null)
+  if (g?.graded) {
+    applyOneGrade(t, g, a.rosterId)
+    t.verdict = verdictFromGrade(g, a.rosterId, b.rosterId)
+  } else if (g) {
+    for (const side of t.sides) {
+      side.gradeReason = `League grade withheld: ${g.reason}`
+      // A withheld line has no parts: it renders whole, in English, rather than half-translated.
+      delete side.gradeParts
+    }
   }
 }
 
@@ -450,15 +609,23 @@ export async function getRecentTrades(
   limit = 20,
   live?: RecentTradesLiveOptions,
 ): Promise<RecentTrade[]> {
+  const timing = recentTradesTiming()
+  try { return await loadRecentTrades(leagues, now, limit, live, timing) } finally { timing.finish() }
+}
+
+async function loadRecentTrades(
+  leagues: RecentTradesLeague[], now: Date, limit: number,
+  live: RecentTradesLiveOptions | undefined, timing: ReturnType<typeof recentTradesTiming>,
+): Promise<RecentTrade[]> {
   const byPlatformId = new Map<string, RecentTradesLeague>()
   for (const l of leagues) {
     if (l.platformLeagueId && (!l.platform || String(l.platform).toLowerCase() === 'sleeper')) byPlatformId.set(l.platformLeagueId, l)
   }
   const cutoff = now.getTime() - RECENT_DAYS * 24 * 60 * 60 * 1000
-  const [nativeRecent, persisted] = await Promise.all([
+  const [nativeRecent, persisted] = await timing.read('ledger', () => Promise.all([
     loadNativeRecentTrades(leagues, new Date(cutoff), live?.viewerUserId),
     persistedRecentTrades(leagues, new Date(cutoff)).catch(() => { reportIncomplete(live, 'league-scan-unanswered'); return [] }),
-  ])
+  ]))
 
   const keys = [...byPlatformId.keys()].map((id) => `${CACHE_PREFIX}${id}`)
   /*
@@ -469,28 +636,30 @@ export async function getRecentTrades(
    * graded trade it holds, so the failure is reported rather than swallowed.
    */
   let rows = keys.length > 0
-    ? await prisma.sportsDataCache
+    ? await timing.read('grade-cache', () => prisma.sportsDataCache
       .findMany({ where: { cacheKey: { in: keys } }, select: { cacheKey: true, data: true } })
       .catch(() => {
         reportIncomplete(live, 'grade-cache-unreadable')
         return [] as { cacheKey: string; data: unknown }[]
-      })
+      }))
     : []
 
   if (live?.reconcileLive) {
     const liveRows: { cacheKey: string; data: unknown }[] = []
     const ids = [...byPlatformId.keys()]
-    for (let i = 0; i < ids.length; i += 4) {
-      const chunk = ids.slice(i, i + 4)
-      const settled = await Promise.all(chunk.map(async (id) => ({
-        id,
-        result: await getReconciledTradeGrades(id).catch(() => null),
-      })))
-      for (const item of settled) {
-        if (!item.result || item.result.incomplete) reportIncomplete(live, 'league-scan-unanswered')
-        if (item.result?.grades) liveRows.push({ cacheKey: `${CACHE_PREFIX}${item.id}`, data: item.result.grades })
+    await timing.read('reconcile', async () => {
+      for (let i = 0; i < ids.length; i += 4) {
+        const chunk = ids.slice(i, i + 4)
+        const settled = await Promise.all(chunk.map(async (id) => ({
+          id,
+          result: await getReconciledTradeGrades(id).catch(() => null),
+        })))
+        for (const item of settled) {
+          if (!item.result || item.result.incomplete) reportIncomplete(live, 'league-scan-unanswered')
+          if (item.result?.grades) liveRows.push({ cacheKey: `${CACHE_PREFIX}${item.id}`, data: item.result.grades })
+        }
       }
-    }
+    })
     if (liveRows.length > 0) {
       const liveKeys = new Set(liveRows.map((r) => r.cacheKey))
       rows = [...liveRows, ...rows.filter((r) => !liveKeys.has(r.cacheKey))]
@@ -565,17 +734,19 @@ export async function getRecentTrades(
       .slice(0, live.maxLeagues ?? 8)
     const scans: Array<Awaited<ReturnType<typeof scanPendingSleeperTrades>> | null> = new Array(liveLeagues.length).fill(null)
     const concurrency = 4
-    for (let start = 0; start < liveLeagues.length; start += concurrency) {
-      await Promise.all(liveLeagues.slice(start, start + concurrency).map(async (league, offset) => {
-        scans[start + offset] = await scanPendingSleeperTrades({
-          platformLeagueId: league.platformLeagueId!,
-          ownerSleeperId: live.ownerSleeperId!,
-          sport: 'NFL',
-          weeks,
-          alertOnNewOffers: true,
-        }).catch(() => null)
-      }))
-    }
+    await timing.read('provider', async () => {
+      for (let start = 0; start < liveLeagues.length; start += concurrency) {
+        await Promise.all(liveLeagues.slice(start, start + concurrency).map(async (league, offset) => {
+          scans[start + offset] = await scanPendingSleeperTrades({
+            platformLeagueId: league.platformLeagueId!,
+            ownerSleeperId: live.ownerSleeperId!,
+            sport: 'NFL',
+            weeks,
+            alertOnNewOffers: true,
+          }).catch(() => null)
+        }))
+      }
+    })
     /*
      * What this pass could NOT see, reported before anything is returned. `scanned` alone hides
      * all of it: a league whose scan threw is `null`, one Sleeper refused is `scanned: false`, and
@@ -670,54 +841,113 @@ export async function getRecentTrades(
   const currentSeason = now.getUTCFullYear()
   let mediaByPlayerId = new Map<string, ResolvedPlayerMedia>()
   if (playerIds.size > 0) {
-    mediaByPlayerId = await attachPlayerMediaBatch(
+    mediaByPlayerId = await timing.read('media', () => attachPlayerMediaBatch(
       [...playerIds].map((playerId) => ({ playerId, sport: 'nfl' })),
-    ).catch(() => new Map<string, ResolvedPlayerMedia>())
+    ).catch(() => new Map<string, ResolvedPlayerMedia>()))
   }
-  for (const t of visible) {
-    const src = graded.get(`${t.platformLeagueId}:${t.id}`)
-    if (!src) continue
-    t.verdict = gradeOf(src, await oneGradeForCompletedTrade(t.leagueId, src, currentSeason).catch(() => null))
-    for (const side of t.sides) {
-      for (const asset of side.received) {
-        if (!asset.playerId) continue
-        const media = mediaByPlayerId.get(asset.playerId)
-        asset.team = media?.teamAbbr ?? null
-        asset.headshotUrl = media?.media.headshotUrl ?? null
-        asset.teamLogoUrl = media?.media.teamLogoUrl ?? null
-      }
-    }
+  // Receipt reuse reads before creating. Preserve serialized writes within this
+  // read while independent grades and league context run in bounded groups.
+  let receiptWrites = Promise.resolve()
+  const queueReceipt = (write: () => Promise<string | null>) => {
+    const save = receiptWrites.then(write)
+    receiptWrites = save.then(() => undefined, () => undefined)
+    return save
+  }
+  // Grade only visible trades without changing display order or provider scan limits.
+  await timing.read('grading', async () => {
+    const gradeConcurrency = 4
+    for (let start = 0; start < visible.length; start += gradeConcurrency) {
+      await Promise.all(visible.slice(start, start + gradeConcurrency).map(async (t) => {
+        const src = graded.get(`${t.platformLeagueId}:${t.id}`)
+        if (!src) {
+          /*
+           * A provider trade the graded ledger has not reached yet — just accepted, read live or from the
+           * durable feed. These used to sit at "Grade pending" for as long as the ledger lagged; they are
+           * graded from their own assets now. A native trade (`status` set) keeps its frozen receipt.
+           */
+          await gradeProviderRecentTrade(t, now)
+          return
+        }
+        const oneGrade = await oneGradeForCompletedTrade(t.leagueId, src, currentSeason).catch(() => null)
+        t.verdict = gradeOf(src, oneGrade)
+        /*
+         * The receipt for that grade (Trade OS). No stored link: completed imported trades have no loader yet.
+         * ⚠ FAILURE-CONTAINED: recording a receipt is bookkeeping, and must never cost the card its trade.
+         */
+        if (oneGrade) {
+          try {
+            const inputs = completedTradeInputs(src, currentSeason)
+            if (inputs) {
+              t.receiptId = await queueReceipt(() => receiptIdForGrade({
+                surface: 'dashboard-trades',
+                leagueId: t.leagueId,
+                userId: live?.viewerUserId ?? null,
+                give: inputs.give,
+                get: inputs.get,
+                viewerSide: false,
+                grade: oneGrade,
+              }))
+            }
+          } catch {
+            t.receiptId = null
+          }
+        }
+        for (const side of t.sides) {
+          for (const asset of side.received) {
+            if (!asset.playerId) continue
+            const media = mediaByPlayerId.get(asset.playerId)
+            asset.team = media?.teamAbbr ?? null
+            asset.headshotUrl = media?.media.headshotUrl ?? null
+            asset.teamLogoUrl = media?.media.teamLogoUrl ?? null
+          }
+        }
 
-    if (live?.enrichLeagueContext && hasNoSignal(src)) {
-      const expectation = await loadTradeExpectation(t.platformLeagueId, src, { afLeagueId: t.leagueId }).catch(() => null)
-      for (const side of t.sides) {
-        const exp = expectation?.sides.find((s) => s.rosterId === side.rosterId)
-        side.grade = exp?.projected?.letter ?? null
-        side.gradeBasis = exp?.projected ? 'Market' : null
-        const edge = exp?.projected ? Math.round(exp.projected.valueEdge * 100) : null
-        const needs = exp?.starterGaps == null
-          ? 'Roster needs unavailable.'
-          : exp.starterGaps.length === 0
-            ? 'No required starter gaps detected.'
-            : `Starter gaps: ${exp.starterGaps.map((g) => `${g.position} ${g.rostered}/${g.required}`).join(', ')}.`
-        side.gradeReason = expectation?.evaluation.withheldReason
-          ?? (edge == null
-            ? `No complete market grade is available for ${expectation?.leagueNote ?? 'this league'}.`
-            : `${edge >= 0 ? '+' : ''}${edge}% market-value edge in ${expectation?.leagueNote}. ${needs} Full context remains withheld until playoff probability and every required league input are available.`)
-      }
-    } else {
-      const srcByRoster = new Map(src.sides.map((s) => [String(s.rosterId), s]))
-      for (const side of t.sides) {
-        const realized = srcByRoster.get(String(side.rosterId))
-        const hasRealizedGrade = Boolean(realized?.currentGrade && typeof realized.cumulativeNet === 'number')
-        side.grade = hasRealizedGrade ? realized!.currentGrade : null
-        side.gradeBasis = hasRealizedGrade ? 'Realized' : null
-        side.gradeReason = hasRealizedGrade
-          ? `Net ${realized!.cumulativeNet.toFixed(1)} fantasy points under this league's scoring while the assets were held.`
-          : 'No grade is available for this side.'
-      }
+        if (oneGrade?.graded && t.verdict) {
+          // `t.verdict` set means a two-team trade — the only kind one letter per side can describe.
+          const srcByRoster = new Map(src.sides.map((s) => [String(s.rosterId), s]))
+          /*
+           * ⚠ GUARDED: `hasNoSignal` reads `seasonNets[0]` and THROWS on a ledger row without it. The note
+           * is a nicety; an unreadable row means "no realized points to report", never a lost card.
+           */
+          const noSignal = (() => { try { return hasNoSignal(src) } catch { return true } })()
+          applyOneGrade(t, oneGrade, src.sides[0]!.rosterId, (side) => {
+            const realized = srcByRoster.get(String(side.rosterId))
+            return !noSignal && realized && typeof realized.cumulativeNet === 'number' ? realized.cumulativeNet : null
+          })
+        } else if (live?.enrichLeagueContext && hasNoSignal(src)) {
+          const expectation = await loadTradeExpectation(t.platformLeagueId, src, { afLeagueId: t.leagueId }).catch(() => null)
+          for (const side of t.sides) {
+            const exp = expectation?.sides.find((s) => s.rosterId === side.rosterId)
+            side.grade = exp?.projected?.letter ?? null
+            side.gradeBasis = exp?.projected ? 'Market' : null
+            const edge = exp?.projected ? Math.round(exp.projected.valueEdge * 100) : null
+            const needs = exp?.starterGaps == null
+              ? 'Roster needs unavailable.'
+              : exp.starterGaps.length === 0
+                ? 'No required starter gaps detected.'
+                : `Starter gaps: ${exp.starterGaps.map((g) => `${g.position} ${g.rostered}/${g.required}`).join(', ')}.`
+            delete side.gradeParts
+            side.gradeReason = expectation?.evaluation.withheldReason
+              ?? (edge == null
+                ? `No complete market grade is available for ${expectation?.leagueNote ?? 'this league'}.`
+                : `${edge >= 0 ? '+' : ''}${edge}% market-value edge in ${expectation?.leagueNote}. ${needs} Full context remains withheld until playoff probability and every required league input are available.`)
+          }
+        } else {
+          const srcByRoster = new Map(src.sides.map((s) => [String(s.rosterId), s]))
+          for (const side of t.sides) {
+            const realized = srcByRoster.get(String(side.rosterId))
+            const hasRealizedGrade = Boolean(realized?.currentGrade && typeof realized.cumulativeNet === 'number')
+            side.grade = hasRealizedGrade ? realized!.currentGrade : null
+            side.gradeBasis = hasRealizedGrade ? 'Realized' : null
+            side.gradeReason = hasRealizedGrade
+              ? `Net ${realized!.cumulativeNet.toFixed(1)} fantasy points under this league's scoring while the assets were held.`
+              : 'No grade is available for this side.'
+            if (hasRealizedGrade) side.gradeParts = { kind: 'realized', net: realized!.cumulativeNet }
+          }
+        }
+      }))
     }
-  }
+  })
 
   return visible
 }

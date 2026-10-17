@@ -1,6 +1,9 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import '@/components/core-app/af-core.css'
+import '@/components/league/league-overview.css'
+
+import { useCallback, useEffect, useId, useState } from 'react'
 import {
   advancePlayoffRound,
   fetchRedraftPlayoffRuntime,
@@ -29,6 +32,7 @@ export function StandingsView({
   seasonId: string | null
   isCommissioner?: boolean
 }) {
+  const scrollHintId = useId()
   const [playoffTeams, setPlayoffTeams] = useState<number>(Math.min(6, Math.max(2, rows.length || 6)))
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<string | null>(null)
@@ -146,7 +150,8 @@ export function StandingsView({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="af-core af-league-overview min-w-0 space-y-4">
+      <h2 className="af-overview-title">Standings &amp; playoffs</h2>
       {isCommissioner ? (
         <div
           data-testid="redraft-playoff-commissioner-controls"
@@ -229,24 +234,26 @@ export function StandingsView({
         Rankings and playoff seeds come from the league standings service. Points and records reflect the latest completed recalculation; pending stat corrections may change the order.
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-white/[0.08]" tabIndex={0} aria-label="League standings table">
-        <table className="min-w-[680px] w-full text-left text-[12px] text-white/80">
+      <p id={scrollHintId} className="af-standings-scroll-hint">Scroll the table horizontally to see all statistics.</p>
+      <div className="af-standings-scroll overflow-x-auto rounded-xl border border-white/[0.08]" role="region" tabIndex={0} aria-label="League standings table" aria-describedby={scrollHintId}>
+        <table className="min-w-[600px] w-full text-left text-[12px] text-white/80">
         <caption className="sr-only">Authoritative league standings ordered by the configured tiebreaker rules.</caption>
-        <thead className="border-b border-white/[0.08] bg-white/[0.04] text-[10px] uppercase text-white/45">
+        <thead className="border-b border-white/[0.08] bg-white/[0.04] text-[11px] uppercase text-white/45">
           <tr>
-            <th className="px-3 py-2">#</th>
-            <th className="px-3 py-2">Team</th>
-            <th className="px-3 py-2">W-L-T</th>
-            <th className="px-3 py-2">PF</th>
-            <th className="px-3 py-2">PA</th>
-            <th className="px-3 py-2">Streak</th>
+            <th scope="col" className="px-3 py-2">#</th>
+            <th scope="col" className="px-3 py-2">Team</th>
+            <th scope="col" className="px-3 py-2">W-L-T</th>
+            <th scope="col" className="px-3 py-2">PF</th>
+            <th scope="col" className="px-3 py-2">PA</th>
+            <th scope="col" className="px-3 py-2">Streak</th>
           </tr>
         </thead>
         <tbody>
+          {rows.length === 0 ? <tr><td colSpan={6} className="p-5 text-center text-[var(--muted)]">No standings have been recorded yet.</td></tr> : null}
           {rows.map((r, i) => (
             <tr key={r.id} className="border-b border-white/[0.05]">
               <td className="px-3 py-2 text-white/45">{r.playoffSeed ?? i + 1}</td>
-              <td className="px-3 py-2">{r.teamName ?? r.ownerName ?? r.id.slice(0, 6)}</td>
+              <th scope="row" className="af-standings-team px-3 py-2">{r.teamName ?? r.ownerName ?? r.id.slice(0, 6)}</th>
               <td className="px-3 py-2">
                 {r.wins}-{r.losses}-{r.ties ?? 0}
               </td>
@@ -306,14 +313,14 @@ function PlayoffRuntimePanel({
     >
       <div className="space-y-3">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded-full border border-white/10 bg-white/10 px-2 py-1 text-[10px] uppercase tracking-[0.16em] text-white/50">
+          <span className="rounded-full border border-white/10 bg-white/10 px-2 py-1 text-[11px] uppercase tracking-[0.16em] text-white/50">
             Playoff runtime
           </span>
-          <span className="rounded-full border border-emerald-300/20 bg-emerald-400/10 px-2 py-1 text-[10px] text-emerald-200">
+          <span className="rounded-full border border-emerald-300/20 bg-emerald-400/10 px-2 py-1 text-[11px] text-emerald-200">
             {runtime.bracket.status.replace(/_/g, ' ')}
           </span>
           {runtime.bracket.locked ? (
-            <span className="rounded-full border border-amber-300/20 bg-amber-400/10 px-2 py-1 text-[10px] text-amber-200">
+            <span className="rounded-full border border-amber-300/20 bg-amber-400/10 px-2 py-1 text-[11px] text-amber-200">
               Locked
             </span>
           ) : null}
@@ -328,7 +335,7 @@ function PlayoffRuntimePanel({
 
         {runtime.bracket.generated ? (
           <div data-testid="redraft-playoff-seeds" className="space-y-1">
-            <p className="text-[10px] uppercase tracking-[0.16em] text-white/40">Qualified seeds</p>
+            <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Qualified seeds</p>
             <div className="flex flex-wrap gap-1.5">
               {runtime.seeds.map((seed) => (
                 <span key={seed.rosterId} className="rounded-full border border-white/10 bg-black/20 px-2 py-1 text-[11px] text-white/75">
@@ -362,7 +369,7 @@ function PlayoffRuntimePanel({
             <div key={round.roundId} className="rounded-lg border border-white/[0.08] bg-black/15 p-3">
               <div className="mb-2 flex items-center justify-between gap-2">
                 <p className="font-semibold text-white/80">{round.roundName}</p>
-                <span className="text-[10px] uppercase tracking-[0.14em] text-white/38">{round.status}</span>
+                <span className="text-[11px] uppercase tracking-[0.14em] text-white/38">{round.status}</span>
               </div>
               <div className="grid gap-1.5">
                 {round.matchups.map((matchup) => (
@@ -388,7 +395,7 @@ function PlayoffRuntimePanel({
 function RuntimeMetric({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="rounded-lg border border-white/[0.08] bg-black/15 p-2">
-      <p className="text-[10px] uppercase tracking-[0.14em] text-white/38">{label}</p>
+      <p className="text-[11px] uppercase tracking-[0.14em] text-white/38">{label}</p>
       <p className="mt-1 text-sm font-semibold text-white/85">{value}</p>
     </div>
   )

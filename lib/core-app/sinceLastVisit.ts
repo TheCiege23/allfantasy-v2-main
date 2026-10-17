@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { resolveInjuryFacts } from '@/lib/injuries/injuryReadPort'
 import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 import { asIds, isResolvableId, rosterCandidates } from './dash3aPanels'
+import { sleeperReadableRosters } from './rosterIdSpace'
 import { listPlayerFollows } from '@/lib/follows/playerFollows'
 import { handoffFor } from './platformLinks'
 import type { RecentTrade } from './recentTrades'
@@ -232,11 +233,18 @@ function isMarker(value: unknown): value is VisitMarker {
 /** "Open in <platform>" for a brief line — a verified provider destination (2026-09-14). */
 export type BriefHandoff = { href: string; label: string; screen: string }
 
+/**
+ * What `summary` was built from, side by side (2026-10-04) — the /core home says it in Spanish at
+ * render (lib/core-app/homeBandsCopy.ts). The English `summary` is unchanged.
+ */
+export type BriefTradeParts = { sides: Array<{ who: string; got: string[]; more: number }> }
+
 export type BriefTrade = {
   leagueId: string
   leagueName: string
   acceptedAt: string
   summary: string
+  parts?: BriefTradeParts
   /** Present only when that league's trade screen (or league page) is a verified destination. */
   handoff?: BriefHandoff
 }
@@ -294,11 +302,17 @@ export type SinceLastVisitBrief = {
   comparisonPending: boolean
 }
 
+function sideParts(side: RecentTrade['sides'][number]): BriefTradeParts['sides'][number] {
+  return {
+    who: side.teamName || side.managerName,
+    got: side.received.slice(0, 2).map((a) => a.name),
+    more: Math.max(0, side.received.length - 2),
+  }
+}
+
 function sideText(side: RecentTrade['sides'][number]): string {
-  const who = side.teamName || side.managerName
-  const got = side.received.slice(0, 2).map((a) => a.name)
-  const more = side.received.length > 2 ? ` +${side.received.length - 2}` : ''
-  return got.length ? `${who} got ${got.join(', ')}${more}` : `${who} got nothing we can name`
+  const { who, got, more } = sideParts(side)
+  return got.length ? `${who} got ${got.join(', ')}${more > 0 ? ` +${more}` : ''}` : `${who} got no players or picks on record`
 }
 
 /**
@@ -316,6 +330,7 @@ export function tradesSince(trades: RecentTrade[], since: Date, limit: number): 
       leagueName: t.leagueName,
       acceptedAt: t.acceptedAt,
       summary: t.sides.map(sideText).join('; '),
+      parts: { sides: t.sides.map(sideParts) },
     }))
   return { items, atLeast: trades.length >= limit && items.length === trades.length && items.length > 0 }
 }
@@ -363,7 +378,16 @@ export function diffStandings(
     const tied = now.ties - was.ties
     /* A record that went DOWN is a season rollover or a re-import, not a result. */
     if (won < 0 || lost < 0 || tied < 0) continue
-    const rankMoved = now.rank != null && was.rank != null && now.rank !== was.rank
+    /*
+     * 🛑 A RANK TAKEN BEFORE ANY GAME IS NOT A STANDING. Before week 1 a league's stored rank is the
+     * importer's row order, so every team is "#1" through "#N" by roster id. On the App Review
+     * account (2026-09-29) this card said "went 0–1, now 0–1, down to #10 (was #1)" — a fall from a
+     * position that was never earned. A previous rank counts only when the snapshot had games on
+     * record; without one the result still shows, the move does not.
+     */
+    const wasRanked = was.rank != null && was.wins + was.losses + was.ties > 0
+    const previousRank = wasRanked ? was.rank : null
+    const rankMoved = now.rank != null && previousRank != null && now.rank !== previousRank
     if (won === 0 && lost === 0 && tied === 0 && !rankMoved) continue
     out.push({
       leagueId,
@@ -375,7 +399,7 @@ export function diffStandings(
       lost,
       tied,
       rank: now.rank,
-      previousRank: was.rank,
+      previousRank,
     })
   }
   return out
@@ -443,7 +467,8 @@ async function writeMarker(userId: string, marker: VisitMarker, now: Date): Prom
     .catch(() => undefined)
 }
 
-async function snapshotStandings(userId: string, leagueIds: string[]): Promise<Record<string, StandingSnap>> {
+/** Exported for the Career Wire (`careerWire.ts`), which diffs the same claimed-team standings. */
+export async function snapshotStandings(userId: string, leagueIds: string[]): Promise<Record<string, StandingSnap>> {
   if (leagueIds.length === 0) return {}
   const teams = await prisma.leagueTeam
     .findMany({
@@ -459,6 +484,46 @@ async function snapshotStandings(userId: string, leagueIds: string[]): Promise<R
     out[t.leagueId] = { rank: t.currentRank ?? null, wins: t.wins, losses: t.losses, ties: t.ties }
   }
   for (const id of dupes) delete out[id]
+
+  const unclaimed = leagueIds.filter((id) => !out[id] && !dupes.has(id))
+  if (unclaimed.length > 0) Object.assign(out, await snapshotNativeStandings(userId, unclaimed))
+  return out
+}
+
+/**
+ * Your record in an AllFantasy-native league where you have no claimed `LeagueTeam`, read from the
+ * season engine's own row (`RedraftRoster`, owned by your AppUser id).
+ *
+ * 🛑 THE `LeagueTeam` MIRROR CANNOT BE TRUSTED TO FIND YOU IN A NATIVE LEAGUE. The standings engine
+ * copies records onto `LeagueTeam` (`mirrorNativeLeagueTeamRecords`), but the Wire and the home
+ * brief only read a team CLAIMED by you. Measured on production 2026-10-01: of the three native
+ * leagues with games played, one had 3 `league_teams` rows against 12 rosters and its owner's seat
+ * was not among the claimed ones — a 1-2 record the Career Wire could never report.
+ *
+ * A FALLBACK, NEVER AN OVERRIDE: a league with a claimed team keeps that reading, and a league with
+ * two claimed teams stays dropped. `playoffSeed` is the engine's standings order, so it is the rank;
+ * before a game is on record it is withheld, as `diffStandings` already does for a stored rank.
+ * Newest season wins. A failed read — or a client without the model — is simply no fallback.
+ */
+async function snapshotNativeStandings(userId: string, leagueIds: string[]): Promise<Record<string, StandingSnap>> {
+  const rows = await Promise.resolve()
+    .then(() =>
+      prisma.redraftRoster.findMany({
+        where: { leagueId: { in: leagueIds }, ownerId: userId },
+        select: { leagueId: true, wins: true, losses: true, ties: true, playoffSeed: true, season: { select: { season: true } } },
+      }),
+    )
+    .catch(() => [])
+  const newest = new Map<string, (typeof rows)[number]>()
+  for (const r of rows) {
+    const held = newest.get(r.leagueId)
+    if (!held || (r.season?.season ?? 0) > (held.season?.season ?? 0)) newest.set(r.leagueId, r)
+  }
+  const out: Record<string, StandingSnap> = {}
+  for (const [leagueId, r] of newest) {
+    const played = r.wins + r.losses + r.ties > 0
+    out[leagueId] = { rank: played ? (r.playoffSeed ?? null) : null, wins: r.wins, losses: r.losses, ties: r.ties }
+  }
   return out
 }
 
@@ -509,16 +574,21 @@ async function snapshotInjuries(
   }
   for (const id of twoTeams) teamIdByLeague.delete(id)
 
+  // In Sleeper ids: an ESPN roster translated, any other foreign one emptied (see rosterIdSpace.ts).
   const rosters =
     teams.length > 0
-      ? await prisma.roster
-          .findMany({
-            where: {
-              OR: teams.map((t) => ({ leagueId: t.leagueId, platformUserId: { in: rosterCandidates(t, userId) } })),
-            },
-            select: { leagueId: true, playerData: true },
-          })
-          .catch(() => [])
+      ? await sleeperReadableRosters(
+          await prisma.roster
+            .findMany({
+              where: {
+                OR: teams.map((t) => ({ leagueId: t.leagueId, platformUserId: { in: rosterCandidates(t, userId) } })),
+              },
+              select: { leagueId: true, playerData: true, league: { select: { platform: true, sport: true } } },
+            })
+            .catch(() => []),
+          (r) => r.league?.platform,
+          (r) => r.league?.sport,
+        )
       : []
 
   const leaguesByPlayer = new Map<string, Set<string>>()

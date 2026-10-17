@@ -140,7 +140,7 @@ export default function SmartToolsSection() {
                 </div>
                 <div className="leading-tight">
                   <p className="text-xs font-semibold">AI Player Recommendations</p>
-                  <p className="text-[10px] text-emerald-100/80">Placeholder feed • wired for AI later</p>
+                  <p className="text-[11px] text-emerald-100/80">Placeholder feed • wired for AI later</p>
                 </div>
               </div>
             </div>
@@ -153,9 +153,9 @@ export default function SmartToolsSection() {
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
                       <p className="truncate text-xs font-semibold text-white">{rec.player}</p>
-                      <p className="text-[10px] text-emerald-100/80">{rec.sport}</p>
+                      <p className="text-[11px] text-emerald-100/80">{rec.sport}</p>
                     </div>
-                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-200">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-200">
                       <Sparkles className="h-3 w-3" />
                       AI
                     </span>
@@ -174,7 +174,7 @@ export default function SmartToolsSection() {
               </div>
               <div className="leading-tight">
                 <p className="text-xs font-semibold">Quick Draft</p>
-                <p className="text-[10px] text-cyan-100/85">Leagues starting soon (placeholder schedule)</p>
+                <p className="text-[11px] text-cyan-100/85">Leagues starting soon (placeholder schedule)</p>
               </div>
             </div>
             <ul className="mt-1 space-y-2.5 text-xs">
@@ -186,19 +186,19 @@ export default function SmartToolsSection() {
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
                       <p className="truncate text-xs font-semibold text-white">{league.name}</p>
-                      <p className="text-[10px] text-cyan-100/85">
+                      <p className="text-[11px] text-cyan-100/85">
                         {league.sport} • {league.draftType}
                       </p>
                     </div>
-                    <span className="text-[10px] font-medium text-cyan-100/90">
+                    <span className="text-[11px] font-medium text-cyan-100/90">
                       {league.startsIn}
                     </span>
                   </div>
-                  <div className="mt-1 flex items-center justify-between gap-2 text-[10px] text-cyan-50/85">
+                  <div className="mt-1 flex items-center justify-between gap-2 text-[11px] text-cyan-50/85">
                     <span>{league.entries}</span>
                     <button
                       type="button"
-                      className="inline-flex items-center gap-1 rounded-full bg-cyan-400 px-2 py-0.5 text-[10px] font-semibold text-black shadow-sm"
+                      className="inline-flex items-center gap-1 rounded-full bg-cyan-400 px-2 py-0.5 text-[11px] font-semibold text-black shadow-sm"
                     >
                       <PlayCircle className="h-3 w-3" />
                       Join
@@ -217,7 +217,7 @@ export default function SmartToolsSection() {
               </div>
               <div className="leading-tight">
                 <p className="text-xs font-semibold">Mock Draft</p>
-                <p className="text-[10px] text-violet-100/85">
+                <p className="text-[11px] text-violet-100/85">
                   Configure your room now • AI toggle ready for future coaching.
                 </p>
               </div>
@@ -275,7 +275,7 @@ export default function SmartToolsSection() {
                   <Sparkles className="h-3.5 w-3.5 text-violet-300" />
                   <div className="leading-tight">
                     <p className="font-semibold text-violet-50">AI assistance</p>
-                    <p className="text-[10px] text-violet-100/80">
+                    <p className="text-[11px] text-violet-100/80">
                       Let the AI suggest picks, tiers, and trade-offs.
                     </p>
                   </div>
@@ -311,12 +311,12 @@ export default function SmartToolsSection() {
               </button>
 
               {lastMockId && !error && (
-                <p className="mt-1 text-[10px] text-violet-100/80">
+                <p className="mt-1 text-[11px] text-violet-100/80">
                   Mock draft created. ID: <span className="font-mono">{lastMockId}</span>
                 </p>
               )}
               {error && (
-                <p className="mt-1 text-[10px] text-red-200/90">
+                <p className="mt-1 text-[11px] text-red-200/90">
                   {error}
                 </p>
               )}

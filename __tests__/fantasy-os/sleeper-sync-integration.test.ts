@@ -270,6 +270,58 @@ describe.skipIf(!OPTED_IN)('durable Sleeper sync — persisted integration', () 
     expect(await prisma.teamPerformance.count({ where: { teamId: team3.id } })).toBe(1)
   })
 
+  /*
+   * 🛑 #6h/#6i — A PROVIDER RE-KEY IS NOT A DEPARTURE (2026-10-08). Fantrax changed team ids
+   * (`fantrax-team:<slug>` -> numeric); the bootstrap wrote the new row and carried the claim onto it,
+   * and the old row stayed CURRENT and claimed for five weeks because a vanished CLAIMED team was only
+   * ever marked orphan. Same seat (same manager) in the complete response -> archive the old row as
+   * superseded and leave exactly one claim. A seat with no live counterpart keeps today's rule.
+   */
+  it('#6h a claimed team re-keyed by the provider is archived as superseded, leaving one claim', async () => {
+    const mgr = `rk-${STAMP}`
+    const owner = await createLinkedManager(mgr)
+    const before = [
+      { teamId: 'old-slug', managerId: mgr, players: ['p1'], starters: ['p1'] },
+      { teamId: '2', managerId: 'u2', players: ['p2'], starters: ['p2'] },
+    ]
+    const leagueId = await seed(makeSleeperNormalized({ leagueId: lid('rk'), rosters: before }))
+    expect((await prisma.leagueTeam.findFirstOrThrow({ where: { leagueId, externalId: 'old-slug' } })).claimedByUserId).toBe(owner)
+
+    // The provider now lists the same manager under a new team id.
+    const rekeyed = makeSleeperNormalized({
+      leagueId: lid('rk'),
+      rostersCoverage: 'full',
+      rosters: [{ teamId: '789336590', managerId: mgr, players: ['p1'], starters: ['p1'] }, before[1]!],
+    })
+    const r = await applySleeperScopeToLeague({ leagueId, scope: 'teams_rosters', normalized: rekeyed })
+
+    const old = await prisma.leagueTeam.findFirstOrThrow({ where: { leagueId, externalId: 'old-slug' } })
+    expect(old.lifecycleState).toBe('ARCHIVED')
+    expect(old.archiveReason).toBe('superseded')
+    expect(old.claimedByUserId).toBeNull()
+    const live = await prisma.leagueTeam.findFirstOrThrow({ where: { leagueId, externalId: '789336590' } })
+    expect(live.claimedByUserId).toBe(owner)
+    expect(await prisma.leagueTeam.count({ where: { leagueId, claimedByUserId: owner } })).toBe(1)
+    expect(r.removed).toBe(1)
+  })
+
+  it('#6i CONTROL: a claimed team whose manager is GONE keeps its claim and is only marked orphan', async () => {
+    const mgr = `gone-${STAMP}`
+    const owner = await createLinkedManager(mgr)
+    const before = [
+      { teamId: 'mine', managerId: mgr, players: ['p1'], starters: ['p1'] },
+      { teamId: '2', managerId: 'u2', players: ['p2'], starters: ['p2'] },
+    ]
+    const leagueId = await seed(makeSleeperNormalized({ leagueId: lid('gone'), rosters: before }))
+    const full = makeSleeperNormalized({ leagueId: lid('gone'), rostersCoverage: 'full', rosters: [before[1]!] })
+    await applySleeperScopeToLeague({ leagueId, scope: 'teams_rosters', normalized: full })
+
+    const kept = await prisma.leagueTeam.findFirstOrThrow({ where: { leagueId, externalId: 'mine' } })
+    expect(kept.claimedByUserId).toBe(owner)
+    expect(kept.lifecycleState).not.toBe('ARCHIVED')
+    expect(kept.isOrphan).toBe(true)
+  })
+
   it('#6c a vanished past CHAMPION stays resolvable, so the league does not forget who won', async () => {
     const two = [
       { teamId: '1', managerId: 'u1', players: ['p1'], starters: ['p1'] },

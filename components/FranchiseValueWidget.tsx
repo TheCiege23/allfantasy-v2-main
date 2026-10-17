@@ -47,7 +47,7 @@ export function FranchiseValueWidget({
       )}
       {showTier && profile.tierLabel && (
         <span
-          className={`rounded border px-1.5 py-0.5 text-[10px] font-medium ${tierColor}`}
+          className={`rounded border px-1.5 py-0.5 text-[11px] font-medium ${tierColor}`}
           title="GM tier"
         >
           {profile.tierLabel}

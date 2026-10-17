@@ -95,11 +95,11 @@ export default function SavedRecommendationRow({
           {/* Left: title + meta */}
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5 flex-wrap mb-1">
-              <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${typeColor}`}>
+              <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${typeColor}`}>
                 {typeLabel}
               </span>
               {rec.sport && rec.sport !== 'all' && (
-                <span className="text-[10px] text-white/35 uppercase">{rec.sport}</span>
+                <span className="text-[11px] text-white/35 uppercase">{rec.sport}</span>
               )}
               {statusIcon}
             </div>
@@ -108,12 +108,12 @@ export default function SavedRecommendationRow({
             <p className="mt-0.5 text-xs text-white/50 line-clamp-2">{rec.summary}</p>
 
             <div className="mt-1.5 flex items-center gap-2 flex-wrap">
-              <span className="text-[10px] text-white/30">{relativeTime(rec.createdAt)}</span>
+              <span className="text-[11px] text-white/30">{relativeTime(rec.createdAt)}</span>
               {confidencePct > 0 && (
-                <span className="text-[10px] text-white/30">{confidencePct}% conf.</span>
+                <span className="text-[11px] text-white/30">{confidencePct}% conf.</span>
               )}
               {rec.riskLevel && (
-                <span className={`text-[10px] font-medium ${
+                <span className={`text-[11px] font-medium ${
                   rec.riskLevel === 'high' || rec.riskLevel === 'critical' ? 'text-red-400' :
                   rec.riskLevel === 'medium' ? 'text-amber-400' : 'text-emerald-400'
                 }`}>
@@ -136,7 +136,7 @@ export default function SavedRecommendationRow({
           <button
             type="button"
             onClick={() => onOpen(rec)}
-            className="inline-flex items-center gap-1 rounded-md border border-cyan-500/30 bg-cyan-500/10 px-2 py-0.5 text-[10px] text-cyan-200 hover:bg-cyan-500/20 transition"
+            className="inline-flex items-center gap-1 rounded-md border border-cyan-500/30 bg-cyan-500/10 px-2 py-0.5 text-[11px] text-cyan-200 hover:bg-cyan-500/20 transition"
           >
             Reopen
           </button>
@@ -147,7 +147,7 @@ export default function SavedRecommendationRow({
             type="button"
             onClick={() => onMarkActedOn(rec)}
             disabled={isUpdating}
-            className="inline-flex items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-300 hover:bg-emerald-500/20 transition disabled:opacity-50"
+            className="inline-flex items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-300 hover:bg-emerald-500/20 transition disabled:opacity-50"
           >
             <CheckCircle2 className="h-2.5 w-2.5" />
             Execute
@@ -158,7 +158,7 @@ export default function SavedRecommendationRow({
             type="button"
             onClick={() => onArchive(rec)}
             disabled={isUpdating}
-            className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] text-white/40 hover:text-white/70 hover:bg-white/10 transition disabled:opacity-50"
+            className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] text-white/40 hover:text-white/70 hover:bg-white/10 transition disabled:opacity-50"
           >
             <ArchiveX className="h-2.5 w-2.5" />
             Archive

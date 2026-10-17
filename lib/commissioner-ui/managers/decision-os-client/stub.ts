@@ -7,7 +7,6 @@ export const stubManagerIntelligenceClient: ManagerIntelligenceClient = {
         {
           id: 'stub-mgr-1',
           managerName: 'Test Manager One',
-          archetype: 'Steady Operator',
           tenureSeasons: 2,
           engagementTrend: 'steady',
           reliabilityScore: 88,

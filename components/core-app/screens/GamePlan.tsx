@@ -3,9 +3,14 @@
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 
-import type { GameDayTriage, TriageRow } from '@/lib/core-app/gameDayTriage'
+import type { GameDayTriage, TriageLeague, TriageRow } from '@/lib/core-app/gameDayTriage'
 import { lockState } from '@/lib/core-app/lineupLock'
-import { platformLabel } from '@/lib/core-app/platformLinks'
+import { lineupLink, platformLabel } from '@/lib/core-app/platformLinks'
+import { playerRef } from '@/lib/core-app/playerRef'
+import { RefreshLineups } from '@/components/core-app/player-finder/RefreshLineups'
+import { TopicTip } from '@/components/core-app/TopicTip'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import '@/components/core-app/af-game-plan.css'
 
 /**
@@ -39,11 +44,11 @@ import '@/components/core-app/af-game-plan.css'
  *
  * ── ⚠ WHAT THIS SCREEN DELIBERATELY DOES NOT CLAIM ─────────────────────────
  *
- * It flags a starter who is hurt or has no game. It does NOT rank a replacement,
- * because ranking one needs a projection for the week and BOTH projection tables
- * hold a single week — a bench recommendation would be invented, and invented
- * advice at kickoff minus twenty is the worst possible place to guess. The
- * footer says so rather than leaving the absence to be discovered.
+ * It flags a starter who is hurt or has no game. It does NOT rank a replacement
+ * itself: My Team's bench swaps are the one start/sit answer (owner's ruling,
+ * 2026-09-29), priced with this week's projections under each league's scoring.
+ * A second ranking here would be a second answer that can disagree with the
+ * first, so each row LINKS to My Team for it, and the footer says so.
  */
 
 export type GamePlanProps = {
@@ -68,6 +73,22 @@ export type GamePlanProps = {
    * needs it more than a standalone one, not less.
    */
   showHead?: boolean
+  /**
+   * 'league' when this is ONE league's plan, inline on Scout (War Room step 4c). Words that only make
+   * sense across leagues — "any of your leagues", a leagues-affected tile — change or drop out.
+   */
+  scope?: 'all' | 'league'
+}
+
+/**
+ * The reader's language. Game Plan is a client component but never read it, so the whole room — and the
+ * plan inline on Scout — stayed English in Spanish mode (2026-10-04). Loader text (the injury status on
+ * a chip, the lock label) goes through `copy`; the provider's free-text injury description is left as
+ * the feed wrote it.
+ */
+function useGpCopy() {
+  const { language } = useOptionalLanguage()
+  return { es: language === 'es', copy: (english: string) => coreUiCopy(english, language) }
 }
 
 /** Live countdown to a kickoff, re-derived each minute. */
@@ -83,15 +104,194 @@ function Lock({ kickoff, nowIso }: { kickoff: string; nowIso: string }) {
     return () => clearInterval(t)
   }, [])
 
+  const { copy } = useGpCopy()
   const s = lockState(kickoff, now)
   return (
     <span className="af-gp-lock af-num" data-state={s.state}>
-      {s.label}
+      {copy(s.label)}
     </span>
   )
 }
 
+/**
+ * One league chip, opening the screen where that league's lineup is CHANGED.
+ *
+ * 🛑 THIS WENT TO `/core/my-team`, WHICH CANNOT CHANGE A LINEUP. My Team reads one and
+ * nothing under /core writes a roster (platformLinks.lineupLink says so in as many words),
+ * so a flagged starter's only call to action landed on a page where the fix was impossible.
+ * `lineupLink` is the Player Finder's own destination for this exact list: the provider's
+ * lineup screen, or a native league's in-app team tab.
+ */
+function LeagueLineupLink({ league }: { league: TriageLeague }) {
+  const { es } = useGpCopy()
+  const link = lineupLink({
+    id: league.leagueId,
+    platform: league.platform,
+    platformLeagueId: league.platformLeagueId ?? null,
+    season: league.season ?? null,
+    name: league.leagueName,
+    teamId: league.teamId ?? null,
+  })
+  const body = (
+    <>
+      <span className="af-gp-league-name">{league.leagueName}</span>
+      <span className="af-gp-plat" data-platform={league.platform ?? undefined}>
+        {platformLabel(league.platform).toUpperCase()}
+        {link?.external ? ' ↗' : ''}
+      </span>
+    </>
+  )
+  if (!link) return <span className="af-gp-league">{body}</span>
+  const lands = link.screen === 'Lineup' ? 'lineup' : link.screen.toLowerCase()
+  const landsEs = link.screen === 'Lineup' ? 'la alineación' : 'el equipo'
+  return link.external ? (
+    <a
+      className="af-gp-league"
+      href={link.href}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={
+        es ? `${league.leagueName}: abrir ${landsEs} en ${link.platformLabel}` : `${league.leagueName} — open the ${lands} on ${link.platformLabel}`
+      }
+    >
+      {body}
+    </a>
+  ) : (
+    <Link
+      className="af-gp-league"
+      href={link.href}
+      aria-label={es ? `${league.leagueName}: abrir ${landsEs}` : `${league.leagueName} — open the ${lands}`}
+    >
+      {body}
+    </Link>
+  )
+}
+
+/** A league whose lineup is older than this is named on its own rather than dating the list. */
+const STALE_AFTER_MS = 3 * 24 * 60 * 60 * 1000
+
+function daysAgo(nowMs: number, iso: string, es: boolean): string {
+  const d = Math.floor((nowMs - new Date(iso).getTime()) / 86_400_000)
+  return es ? `hace ${d} d` : `${d}d ago`
+}
+
+/**
+ * The week in one line: how much there is to fix, across how many leagues, and when the first of it
+ * locks — what a manager wants before reading a single row.
+ *
+ * ⚠ COUNTED FROM THE ROWS BELOW, NEVER FROM A SEPARATE READ, so the strip and the list cannot
+ * disagree. Locked rows are left out of "to fix": nothing can move them now.
+ *
+ * ⚠ AND IT SAYS WHAT IT DID NOT READ. Best-ball leagues, leagues on a platform we cannot translate,
+ * and the age of the oldest lineup were all returned by the loader and printed nowhere — so an
+ * all-zero strip could not be told apart from "we skipped your leagues".
+ */
+function Summary({
+  data,
+  actionable,
+  nowIso,
+  oneLeague = false,
+}: {
+  data: GameDayTriage
+  actionable: TriageRow[]
+  nowIso: string
+  /** League scope: a "leagues affected" tile can only read 0 or 1 there, so it is left out. */
+  oneLeague?: boolean
+}) {
+  const { es } = useGpCopy()
+  const empty = data.emptySlots ?? []
+  const emptyCount = empty.reduce((n, l) => n + l.count, 0)
+  const leagues = new Set([...actionable.flatMap((r) => r.leagues.map((l) => l.leagueId)), ...empty.map((l) => l.leagueId)])
+  const firstKickoff = actionable
+    .map((r) => r.kickoff)
+    .filter((k): k is string => Boolean(k))
+    .sort()[0]
+  const skipped = (
+    es
+      ? [
+          data.bestBallLeagues
+            ? `${data.bestBallLeagues} ${data.bestBallLeagues === 1 ? 'liga best ball omitida' : 'ligas best ball omitidas'}: la plataforma arma esas alineaciones`
+            : null,
+          data.unsupportedLeagues ? `${data.unsupportedLeagues} en una plataforma que todavía no podemos leer` : null,
+          data.leaguesNotRead ? `${data.leaguesNotRead} sin leer: más de las que esta lista revisa a la vez` : null,
+        ]
+      : [
+          data.bestBallLeagues ? `${data.bestBallLeagues} best-ball ${data.bestBallLeagues === 1 ? 'league' : 'leagues'} skipped — the platform sets those lineups` : null,
+          data.unsupportedLeagues ? `${data.unsupportedLeagues} on a platform we can’t read yet` : null,
+          data.leaguesNotRead ? `${data.leaguesNotRead} not read — more than this list checks at once` : null,
+        ]
+  ).filter(Boolean)
+  const asOfMs = data.rostersAsOf ? new Date(data.rostersAsOf).getTime() : NaN
+  /*
+   * ⚠ ONE STALE LEAGUE MUST NOT DATE THE WHOLE LIST. The stamp is the oldest lineup read, by design (a
+   * newest-first stamp would say "just now" over a league last seen at 9am). But a single league that
+   * stopped syncing made all fifty read "as of 101d ago". So a league past STALE_AFTER_MS is NAMED, with
+   * its age, and the stamp describes the rest.
+   */
+  const nowMs = new Date(nowIso).getTime()
+  const ages = data.rosterAges ?? []
+  const stale = ages.filter((a) => nowMs - new Date(a.asOf).getTime() > STALE_AFTER_MS).sort((a, b) => a.asOf.localeCompare(b.asOf))
+  const fresh = ages.filter((a) => !stale.includes(a))
+  const freshOldest = fresh.length > 0 ? fresh.map((a) => a.asOf).sort()[0]! : null
+  const stampAsOf = stale.length > 0 && freshOldest ? freshOldest : (data.rostersAsOf ?? null)
+
+  return (
+    <section className="af-gp-summary" aria-label={es ? 'Esta semana de un vistazo' : 'This week at a glance'}>
+      <dl className="af-gp-stats">
+        <div data-tone={actionable.length > 0 ? 'warn' : undefined}>
+          <dt>
+            {es ? 'Titulares señalados' : 'Flagged starters'} <TopicTip topic="flaggedStarter" />
+          </dt>
+          <dd className="af-num">{actionable.length}</dd>
+        </div>
+        <div data-tone={emptyCount > 0 ? 'bad' : undefined}>
+          <dt>{es ? 'Puestos vacíos' : 'Empty slots'}</dt>
+          <dd className="af-num">{emptyCount}</dd>
+        </div>
+        {oneLeague ? null : (
+          <div>
+            <dt>{es ? 'Ligas afectadas' : 'Leagues affected'}</dt>
+            <dd className="af-num">{leagues.size}</dd>
+          </div>
+        )}
+        <div>
+          <dt>
+            {es ? 'Primer bloqueo' : 'First lock'} <TopicTip topic="lineupLock" />
+          </dt>
+          <dd className="af-gp-stat-text">{firstKickoff ? <Lock kickoff={firstKickoff} nowIso={nowIso} /> : <span className="af-gp-lock">—</span>}</dd>
+        </div>
+      </dl>
+      {/*
+        The Player Finder's own control: the OLDEST lineup's time, and a button that refreshes every
+        claimed league through the collector and reloads. A lineup fixed on Sleeper a minute ago stops
+        being flagged here — before, the only way was to wait for the next sync.
+      */}
+      <RefreshLineups asOf={stampAsOf} nowIso={nowIso} />
+      {stale.length > 0 && fresh.length > 0 ? (
+        <p className="af-gp-summary-note af-gp-stale" role="note">
+          {es ? 'Sin sincronizar hace más de 3 días, así que sus avisos pueden estar desactualizados:' : 'Not synced in over 3 days, so flags there may be out of date:'}{' '}
+          {stale.map((a, i) => (
+            <span key={a.leagueId}>
+              {i > 0 ? ', ' : ''}
+              <Link href={`/core/sync?league=${encodeURIComponent(a.leagueId)}`}>{a.leagueName}</Link>{' '}
+              <span className="af-num">({daysAgo(nowMs, a.asOf, es)})</span>
+            </span>
+          ))}
+          .
+        </p>
+      ) : null}
+      {!Number.isFinite(asOfMs) || skipped.length > 0 ? (
+        <p className="af-gp-summary-note">
+          {!Number.isFinite(asOfMs) ? (es ? 'No hay hora de sincronización de alineaciones registrada.' : 'No lineup sync time on file.') : ''}
+          {skipped.length > 0 ? `${!Number.isFinite(asOfMs) ? ' ' : ''}${skipped.join(' · ')}.` : ''}
+        </p>
+      ) : null}
+    </section>
+  )
+}
+
 function Row({ row, nowIso }: { row: TriageRow; nowIso: string }) {
+  const { es, copy } = useGpCopy()
   const locked = row.kickoff ? lockState(row.kickoff, nowIso).state === 'locked' : false
 
   return (
@@ -107,16 +307,22 @@ function Row({ row, nowIso }: { row: TriageRow; nowIso: string }) {
         )}
 
         <span className="af-gp-who">
-          <span className="af-gp-name">{row.player.name}</span>
+          {/* His card: injury detail, depth chart, who starts him — the Player Finder's own link. */}
+          <Link
+            className="af-gp-name"
+            href={`/core/players?q=${encodeURIComponent(row.player.name)}&player=${encodeURIComponent(playerRef(row.player.sport, row.player.externalId, row.player.source))}`}
+          >
+            {row.player.name}
+          </Link>
           <span className="af-gp-meta">
-            {[row.player.position, row.player.team].filter(Boolean).join(' · ') || 'club unknown'}
+            {[row.player.position, row.player.team].filter(Boolean).join(' · ') || (es ? 'club desconocido' : 'club unknown')}
           </span>
         </span>
 
         <span className="af-gp-state">
           {row.status ? (
             <span className="af-gp-chip" data-tone={row.status.tone}>
-              {row.status.label}
+              {copy(row.status.label)}
             </span>
           ) : null}
           {/*
@@ -128,11 +334,11 @@ function Row({ row, nowIso }: { row: TriageRow; nowIso: string }) {
           */}
           {row.bye ? (
             <span className="af-gp-chip" data-tone="warn">
-              ON BYE
+              {es ? 'DESCANSA' : 'ON BYE'}
             </span>
           ) : row.noGame ? (
             <span className="af-gp-chip" data-tone="warn">
-              NO GAME ON THE SCHEDULE
+              {es ? 'SIN PARTIDO EN EL CALENDARIO' : 'NO GAME ON THE SCHEDULE'}
             </span>
           ) : null}
         </span>
@@ -142,7 +348,7 @@ function Row({ row, nowIso }: { row: TriageRow; nowIso: string }) {
             <Lock kickoff={row.kickoff} nowIso={nowIso} />
           ) : (
             <span className="af-gp-lock af-num" data-state="none">
-              no kickoff on file
+              {es ? 'sin hora de inicio registrada' : 'no kickoff on file'}
             </span>
           )}
         </span>
@@ -154,17 +360,26 @@ function Row({ row, nowIso }: { row: TriageRow; nowIso: string }) {
         */}
         <span className="af-gp-leagues">
           {row.leagues.map((l) => (
-            <Link
-              key={l.leagueId}
-              className="af-gp-league"
-              href={`/core/my-team?league=${encodeURIComponent(l.leagueId)}`}
-            >
-              <span className="af-gp-league-name">{l.leagueName}</span>
-              <span className="af-gp-plat" data-platform={l.platform ?? undefined}>
-                {platformLabel(l.platform).toUpperCase()}
-              </span>
-            </Link>
+            <LeagueLineupLink key={l.leagueId} league={l} />
           ))}
+          {/*
+            WHO TO START INSTEAD lives on My Team — the owner's 2026-09-29 ruling made its bench swaps
+            the one start/sit answer, so this links there rather than ranking a replacement here. One
+            league opens that league's My Team; several open My Team's every-lineup view. A locked row
+            gets no link: nothing of his can move now.
+          */}
+          {locked ? null : (
+            <Link
+              className="af-gp-swap"
+              href={
+                row.leagues.length === 1
+                  ? `/core/my-team?league=${encodeURIComponent(row.leagues[0]!.leagueId)}`
+                  : '/core/my-team'
+              }
+            >
+              {es ? 'A quién alinear en su lugar' : 'Who to start instead'} &rarr;
+            </Link>
+          )}
         </span>
 
         {row.description ? <p className="af-gp-note">{row.description}</p> : null}
@@ -179,8 +394,12 @@ export function GamePlan({
   weekHref,
   waiversHref,
   showHead = true,
+  scope = 'all',
 }: GamePlanProps) {
+  const { es } = useGpCopy()
+  const oneLeague = scope === 'league'
   const rows = data.rows
+  const emptySlots = data.emptySlots ?? []
   const actionable = rows.filter((r) => !r.kickoff || lockState(r.kickoff, nowIso).state !== 'locked')
   const locked = rows.length - actionable.length
 
@@ -188,11 +407,12 @@ export function GamePlan({
     <div className="af-gp" data-embedded={showHead ? undefined : 'true'}>
       {showHead ? (
         <header className="af-frame af-gp-head">
-          <h1 className="af-display af-gp-title">Game plan</h1>
+          <h1 className="af-display af-gp-title">{es ? 'Plan de juego' : 'Game plan'}</h1>
           <p className="af-gp-blurb">
-            Every starter across your leagues who is hurt or has no game this week, soonest deadline
-            first.
-            {data.week ? ` Week ${data.week.week} of ${data.week.season}.` : ''}
+            {es
+              ? 'Cada titular de tus ligas que está lesionado o no tiene partido esta semana, primero el que se bloquea antes.'
+              : 'Every starter across your leagues who is hurt or has no game this week, soonest deadline first.'}
+            {data.week ? (es ? ` Semana ${data.week.week} de ${data.week.season}.` : ` Week ${data.week.week} of ${data.week.season}.`) : ''}
           </p>
         </header>
       ) : (
@@ -202,8 +422,14 @@ export function GamePlan({
          * which an unlabelled `<div>` would not be.
          */
         <h2 className="af-label af-gp-embedhead">
-          Every flagged starter, across every league · soonest deadline first
-          {data.week ? ` · week ${data.week.week}` : ''}
+          {oneLeague
+            ? es
+              ? 'Tu alineación en esta liga · qué arreglar antes del bloqueo'
+              : 'Your lineup in this league · what to fix before it locks'
+            : es
+              ? 'Titulares señalados en alineaciones manuales activas · primero el que se bloquea antes'
+              : 'Flagged starters in active manual lineups · soonest deadline first'}
+          {data.week ? (es ? ` · semana ${data.week.week}` : ` · week ${data.week.week}`) : ''}
         </h2>
       )}
 
@@ -212,31 +438,81 @@ export function GamePlan({
         "we read nothing" render almost identically and mean opposite things, so
         the count of what was actually inspected is stated either way.
       */}
+      {data.startersRead > 0 || emptySlots.length > 0 ? <Summary data={data} actionable={actionable} nowIso={nowIso} oneLeague={oneLeague} /> : null}
+
       <p className="af-gp-coverage">
-        <span className="af-num">{data.startersRead}</span> starters checked across{' '}
+        <span className="af-num">{data.startersRead}</span> {es ? 'titulares revisados en' : 'starters checked across'}{' '}
         <span className="af-num">{data.leaguesRead}</span>{' '}
-        {data.leaguesRead === 1 ? 'league' : 'leagues'}
+        {es ? (data.leaguesRead === 1 ? 'liga' : 'ligas') : data.leaguesRead === 1 ? 'league' : 'leagues'}
         {locked > 0 ? (
           <>
             {' · '}
-            <span className="af-num">{locked}</span> already locked and shown at the end
+            <span className="af-num">{locked}</span> {es ? (locked === 1 ? 'ya bloqueado y al final' : 'ya bloqueados y al final') : 'already locked and shown at the end'}
           </>
         ) : null}
         .
       </p>
 
+      {/*
+        Empty slots first: a hole in a lineup is a certain zero, where a Questionable tag
+        is only a risk. One row per league — there is no player to name, only a slot to fill.
+      */}
+      {emptySlots.length > 0 ? (
+        <ul className="af-gp-list" aria-label={es ? 'Alineaciones con un puesto titular vacío' : 'Lineups with an empty starting slot'}>
+          {emptySlots.map((l) => (
+            <li key={`empty:${l.leagueId}`}>
+              <article className="af-gp-row" data-tone="bad">
+                <span className="af-gp-face af-gp-face--none" aria-hidden>
+                  –
+                </span>
+                <span className="af-gp-who">
+                  <span className="af-gp-name">
+                    {es
+                      ? `${l.count} ${l.count === 1 ? 'puesto titular vacío' : 'puestos titulares vacíos'}`
+                      : `${l.count} empty starting ${l.count === 1 ? 'slot' : 'slots'}`}
+                  </span>
+                  <span className="af-gp-meta">{es ? 'un puesto vacío anota cero' : 'an empty slot scores zero'}</span>
+                </span>
+                <span className="af-gp-state">
+                  <span className="af-gp-chip" data-tone="bad">
+                    {es ? 'VACÍO' : 'EMPTY'}
+                  </span>
+                </span>
+                <span className="af-gp-when">
+                  <span className="af-gp-lock af-num" data-state="none">
+                    {es ? 'complétalo antes del bloqueo de tu liga' : 'fill before your league locks'}
+                  </span>
+                </span>
+                <span className="af-gp-leagues">
+                  <LeagueLineupLink league={l} />
+                </span>
+              </article>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
       {rows.length > 0 ? (
         <ul className="af-gp-list">
           {rows.map((r) => (
-            <Row key={r.player.sleeperId} row={r} nowIso={nowIso} />
+            /* Sport in the key: a Sleeper id can exist in two sports, and the list now holds both. */
+            <Row key={`${r.player.sport}:${r.player.sleeperId}`} row={r} nowIso={nowIso} />
           ))}
         </ul>
-      ) : (
+      ) : emptySlots.length > 0 ? null : (
         <section className="af-frame af-gp-empty">
           <p className="af-gp-clear">
             {data.startersRead > 0
-              ? 'No starter in any of your leagues is flagged this week.'
-              : 'No starting lineups could be read, so nothing here has been checked.'}
+              ? oneLeague
+                ? es
+                  ? 'Ningún titular de esta alineación está señalado esta semana.'
+                  : 'No starter in this lineup is flagged this week.'
+                : es
+                  ? 'Ningún titular de tus ligas está señalado esta semana.'
+                  : 'No starter in any of your leagues is flagged this week.'
+              : es
+                ? 'No se pudo leer ninguna alineación titular, así que aquí no se revisó nada.'
+                : 'No starting lineups could be read, so nothing here has been checked.'}
           </p>
         </section>
       )}
@@ -246,17 +522,22 @@ export function GamePlan({
           Stated, not left to be discovered — see the header note on why no
           replacement is ranked.
         */}
+        {/*
+          🛑 THIS SAID "the projection tables hold a single week — so a suggested swap here would be
+          invented". This week IS the week held, and My Team already ranks the bench against it; the
+          sentence explained an absence that a link now fills. Say where the answer is instead.
+        */}
         <p className="af-gp-limits">
-          This flags who is at risk; it does not pick a replacement. Ranking one needs a projection
-          for the week ahead, and the projection tables hold a single week — so a suggested swap
-          here would be invented rather than measured.
+          {es
+            ? 'Esto señala quién está en riesgo. A quién alinear en su lugar lo decide Mi equipo: ordena tu banca con las proyecciones de esta semana y la puntuación de cada liga. Las alineaciones se cambian en la plataforma; los botones de cada liga la abren.'
+            : "This flags who is at risk. Who to start instead is My Team's call — it ranks your bench with this week's projections under each league's scoring. Lineups change on the platform; the league buttons open it."}
         </p>
         <div className="af-gp-links">
           <Link className="af-gp-cta" href={weekHref}>
-            Your week · every matchup &rarr;
+            {es ? 'Tu semana · todos los enfrentamientos' : 'Your week · every matchup'} &rarr;
           </Link>
           <Link className="af-gp-cta" href={waiversHref}>
-            Waivers &rarr;
+            {es ? 'Agentes libres' : 'Waivers'} &rarr;
           </Link>
         </div>
       </footer>

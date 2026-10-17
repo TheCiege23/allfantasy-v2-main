@@ -53,7 +53,7 @@ export function DraftReadinessCard({
             )}
           >
             <span className="text-[30px] font-black leading-none">{model.draftsApproaching}</span>
-            <span className="mt-1 text-[10px] font-semibold uppercase tracking-wide opacity-80">drafts approaching</span>
+            <span className="mt-1 text-[11px] font-semibold uppercase tracking-wide opacity-80">drafts approaching</span>
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-[15px] font-bold text-primary">{model.readinessLabel}</p>

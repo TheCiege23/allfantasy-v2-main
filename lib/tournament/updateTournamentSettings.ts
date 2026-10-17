@@ -47,8 +47,9 @@ export async function updateTournamentSettings(args: {
 
   const shell = await prisma.tournamentShell.findFirst({
     where: { id: tournamentId, commissionerId: commissionerUserId },
-    select: { id: true, currentParticipantCount: true },
+    select: { id: true, currentParticipantCount: true, status: true },
   })
+  if (shell && ['blueprint', 'rules_published'].includes(shell.status)) return { ok: false, error: 'Use the season tournament planner. Published rules are frozen.', status: 400 }
   /* Same answer for "not found" and "not yours". */
   if (!shell) return { ok: false, error: 'Tournament not found', status: 404 }
 

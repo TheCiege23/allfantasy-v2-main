@@ -475,12 +475,12 @@ function normalizeLeagueFromSleeperFallback(rawLeague: unknown): UserLeague | nu
 }
 
 function PosBadge({ position }: { position: string }) {
-  return <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase ${positionBadgeClass(position)}`}>{position || 'BN'}</span>
+  return <span className={`rounded-full border px-2 py-0.5 text-[11px] font-bold uppercase ${positionBadgeClass(position)}`}>{position || 'BN'}</span>
 }
 
 function InjuryBadge({ status }: { status: InjuryStatus }) {
   if (!status) return null
-  return <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase ${injuryBadgeClass(status)}`}>{status}</span>
+  return <span className={`rounded-full px-1.5 py-0.5 text-[11px] font-bold uppercase ${injuryBadgeClass(status)}`}>{status}</span>
 }
 
 function ScoreRing({ score }: { score: number }) {
@@ -588,7 +588,7 @@ function LeagueGate({
       <div className="border-b border-white/6 bg-[#07071a]/90 backdrop-blur-xl">
         <div className="mx-auto max-w-5xl px-4 py-5 sm:px-6">
           <div className="flex items-center gap-2">
-            <span className="rounded-full border border-green-500/20 bg-green-500/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.24em] text-green-300">
+            <span className="rounded-full border border-green-500/20 bg-green-500/10 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-[0.24em] text-green-300">
               Waiver AI
             </span>
           </div>
@@ -647,10 +647,10 @@ function LeagueGate({
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] text-white/50">
+                      <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[11px] text-white/50">
                         {SPORT_LABELS[league.sport]}
                       </span>
-                      <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] text-white/50">
+                      <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[11px] text-white/50">
                         {league.format}
                       </span>
                     </div>
@@ -714,7 +714,7 @@ function RosterPanel({
       </div>
 
       <div className="flex-1 overflow-y-auto p-3">
-        {starters.length > 0 ? <div className="px-2 pb-2 text-[10px] font-bold uppercase tracking-[0.24em] text-white/30">Starters</div> : null}
+        {starters.length > 0 ? <div className="px-2 pb-2 text-[11px] font-bold uppercase tracking-[0.24em] text-white/30">Starters</div> : null}
         <div className="space-y-2">
           {starters.map((player) => (
             <div key={player.id} className="flex items-center gap-3 rounded-2xl border border-white/8 bg-white/[0.03] px-3 py-3">
@@ -728,7 +728,7 @@ function RosterPanel({
           ))}
         </div>
 
-        {bench.length > 0 ? <div className="px-2 pb-2 pt-5 text-[10px] font-bold uppercase tracking-[0.24em] text-white/30">Bench</div> : null}
+        {bench.length > 0 ? <div className="px-2 pb-2 pt-5 text-[11px] font-bold uppercase tracking-[0.24em] text-white/30">Bench</div> : null}
         <div className="space-y-2">
           {bench.map((player) => (
             <div key={player.id} className="flex items-center gap-3 rounded-2xl border border-white/8 bg-white/[0.03] px-3 py-3">
@@ -997,11 +997,11 @@ function AnalysisPanel({
           <div className="space-y-5">
             <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
               <div className="flex items-center gap-2">
-                <span className="rounded-full border border-green-500/20 bg-green-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.24em] text-green-300">
+                <span className="rounded-full border border-green-500/20 bg-green-500/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.24em] text-green-300">
                   AI Summary
                 </span>
                 {typeof analysis.pecrIterations === 'number' && analysis.pecrIterations > 1 ? (
-                  <span className="ml-auto text-[10px] uppercase tracking-[0.2em] text-white/35">{analysis.pecrIterations} iterations</span>
+                  <span className="ml-auto text-[11px] uppercase tracking-[0.2em] text-white/35">{analysis.pecrIterations} iterations</span>
                 ) : null}
               </div>
               <p className="mt-3 text-sm leading-6 text-white/75">{analysis.summary}</p>
@@ -1022,7 +1022,7 @@ function AnalysisPanel({
                         <div className="text-[11px] text-white/35">{add.team ?? 'FA'}</div>
                       </div>
                       {add.faab_bid_recommendation != null ? (
-                        <div className="rounded-full border border-green-500/20 bg-green-500/10 px-2 py-1 text-[10px] font-bold text-green-300">
+                        <div className="rounded-full border border-green-500/20 bg-green-500/10 px-2 py-1 text-[11px] font-bold text-green-300">
                           ${add.faab_bid_recommendation}
                         </div>
                       ) : null}
@@ -1484,7 +1484,7 @@ export default function WaiverAIPage() {
               <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="rounded-full border border-green-500/20 bg-green-500/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.24em] text-green-300">
+                    <span className="rounded-full border border-green-500/20 bg-green-500/10 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-[0.24em] text-green-300">
                       Waiver AI
                     </span>
                   </div>

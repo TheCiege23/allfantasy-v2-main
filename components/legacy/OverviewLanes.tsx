@@ -34,19 +34,19 @@ function LaneCard({ lane }: { lane: LaneStats }) {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="text-center p-2.5 rounded-xl bg-black/20 border border-white/5">
           <div className="text-lg font-bold text-white">{lane.wins}-{lane.losses}{lane.ties > 0 ? `-${lane.ties}` : ''}</div>
-          <div className="text-[10px] text-white/40 mt-0.5">Record</div>
+          <div className="text-[11px] text-white/40 mt-0.5">Record</div>
         </div>
         <div className="text-center p-2.5 rounded-xl bg-black/20 border border-white/5">
           <div className="text-lg font-bold text-emerald-300">{lane.playoffRate}%</div>
-          <div className="text-[10px] text-white/40 mt-0.5">Playoff Rate</div>
+          <div className="text-[11px] text-white/40 mt-0.5">Playoff Rate</div>
         </div>
         <div className="text-center p-2.5 rounded-xl bg-black/20 border border-white/5">
           <div className="text-lg font-bold text-amber-300">{lane.championshipRate}%</div>
-          <div className="text-[10px] text-white/40 mt-0.5">Ship Rate</div>
+          <div className="text-[11px] text-white/40 mt-0.5">Ship Rate</div>
         </div>
         <div className="text-center p-2.5 rounded-xl bg-black/20 border border-white/5">
           <div className="text-lg font-bold text-purple-300">{lane.difficultyScore}x</div>
-          <div className="text-[10px] text-white/40 mt-0.5">Difficulty</div>
+          <div className="text-[11px] text-white/40 mt-0.5">Difficulty</div>
         </div>
       </div>
 

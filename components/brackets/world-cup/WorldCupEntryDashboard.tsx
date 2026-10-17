@@ -25,7 +25,7 @@ function StatusBadge({ entry }: { entry: WorldCupBracketEntryClient }) {
   const status = getEntryStatus(entry)
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${STATUS_STYLES[status]}`}
+      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide ${STATUS_STYLES[status]}`}
     >
       {status === "live" && <Radio className="h-2.5 w-2.5" />}
       {status === "complete" && <Check className="h-2.5 w-2.5" />}
@@ -253,7 +253,7 @@ function EntryCard({
 function Stat({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1.5">
-      <div className="text-[9px] font-bold uppercase tracking-widest text-white/45">{label}</div>
+      <div className="text-[11px] font-bold uppercase tracking-widest text-white/45">{label}</div>
       <div className="text-sm font-black tabular-nums text-white">{value}</div>
     </div>
   )
@@ -379,7 +379,7 @@ export default function WorldCupEntryDashboard({
                 ].map(({ label, pts }) => (
                   <span
                     key={label}
-                    className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.05] px-2.5 py-1 text-[10px] font-bold"
+                    className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.05] px-2.5 py-1 text-[11px] font-bold"
                   >
                     <span className="text-white/45">{label}</span>
                     <span className="text-cyan-300">{pts}</span>

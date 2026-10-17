@@ -141,7 +141,7 @@ export default function MockDraftLobbyPage({ leagues, savedDrafts }: MockDraftLo
             </div>
             <div>
               <p className="text-sm font-semibold text-white">Mock lobby</p>
-              <p className="text-[10px] text-white/60">Create, resume, or share your mocks.</p>
+              <p className="text-[11px] text-white/60">Create, resume, or share your mocks.</p>
             </div>
           </div>
         </div>
@@ -157,7 +157,7 @@ export default function MockDraftLobbyPage({ leagues, savedDrafts }: MockDraftLo
         <div className="space-y-2">
           <p className="text-[11px] font-medium text-white/80">Recent mocks</p>
           {savedDrafts.length === 0 ? (
-            <p className="text-[10px] text-white/55">
+            <p className="text-[11px] text-white/55">
               No saved mocks yet. Complete a mock draft to see it here.
             </p>
           ) : (
@@ -179,10 +179,10 @@ export default function MockDraftLobbyPage({ leagues, savedDrafts }: MockDraftLo
                           {metadata.sport || 'NFL'} - {metadata.leagueType || 'redraft'} - {metadata.draftType || 'snake'}
                         </span>
                       </div>
-                      <p className="mt-0.5 text-[10px] text-white/55">
+                      <p className="mt-0.5 text-[11px] text-white/55">
                         {metadata.numTeams || 12}-team - {draft.rounds} rounds - {formatDateInTimezone(draft.createdAt)}
                       </p>
-                      <div className="mt-1 flex items-center gap-2 text-[10px] text-white/60">
+                      <div className="mt-1 flex items-center gap-2 text-[11px] text-white/60">
                         {draft.results.length > 0 && (
                           <Link
                             href={`/mock-draft/${encodeURIComponent(draft.id)}/replay`}
@@ -230,7 +230,7 @@ export default function MockDraftLobbyPage({ leagues, savedDrafts }: MockDraftLo
             </ul>
           )}
         </div>
-        <div className="mt-4 space-y-1 border-t border-white/10 pt-3 text-[10px] text-white/50">
+        <div className="mt-4 space-y-1 border-t border-white/10 pt-3 text-[11px] text-white/50">
           <p>Mocks auto-save when you finish a draft. You can share recap links with friends.</p>
           <p className="flex items-center gap-1">
             <Clock className="h-3 w-3" /> History is limited to your most recent 25 mocks.

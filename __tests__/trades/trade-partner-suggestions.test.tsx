@@ -105,6 +105,29 @@ describe('TradePartnerSuggestions', () => {
     render(<TradePartnerSuggestions ranking={ranking([])} selectedRosterId={null} onChoose={() => {}} onStartWith={() => {}} />)
     expect(screen.getByText('No other team in this league could be ranked.')).toBeTruthy()
   })
+
+  /*
+   * 🛑 THE GRADE ON A SUGGESTED DEAL (2026-09-27): the card called a deal a fit while the builder
+   * graded the same deal an overpay. It now shows THE grade — both letters and the values.
+   */
+  it('shows THE grade on the suggested deal: your letter, theirs, and the league values', () => {
+    const graded = partner()
+    graded.suggestion = { ...graded.suggestion!, grade: { graded: true, letter: 'D', partnerLetter: 'B', label: 'Slightly favors opponent', giveValue: 5200, getValue: 4100 } }
+    const { container } = render(<TradePartnerSuggestions ranking={ranking([graded])} selectedRosterId={null} onChoose={() => {}} onStartWith={() => {}} />)
+    const line = container.querySelector('.af-tc-fit-grade')!
+    expect(line.getAttribute('data-letter')).toBe('D')
+    expect(line.textContent).toBe('Dfor you · Alpha B · Slightly favors opponent — you get 4,100 for 5,200 in league value')
+  })
+
+  it('a withheld grade says why with no letter; an ungraded suggestion draws nothing', () => {
+    const withheld = partner()
+    withheld.suggestion = { ...withheld.suggestion!, grade: { graded: false, reason: 'Runner could not be found in the NFL player database' } }
+    const { container, rerender } = render(<TradePartnerSuggestions ranking={ranking([withheld])} selectedRosterId={null} onChoose={() => {}} onStartWith={() => {}} />)
+    expect(container.querySelector('.af-tc-fit-grade')?.textContent).toBe('Not graded: Runner could not be found in the NFL player database')
+    expect(container.querySelector('.af-tc-fit-grade strong')).toBeNull()
+    rerender(<TradePartnerSuggestions ranking={ranking([partner()])} selectedRosterId={null} onChoose={() => {}} onStartWith={() => {}} />)
+    expect(container.querySelector('.af-tc-fit-grade')).toBeNull()
+  })
 })
 
 describe('suggestionToPickedAssets', () => {

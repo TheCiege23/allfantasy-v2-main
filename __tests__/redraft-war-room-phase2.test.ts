@@ -3,7 +3,8 @@ import { adpToValue, confidenceForSource, playerValue } from '@/lib/redraft-war-
 import { rosteredPlayerKeys } from '@/lib/redraft-war-room/redraftFreeAgentPool'
 import { buildLineupRecommendation } from '@/lib/redraft-war-room/redraftLineupEngine'
 import { buildWaiverRecommendations } from '@/lib/redraft-war-room/redraftWaiverEngine'
-import { analyzeTrade } from '@/lib/redraft-war-room/redraftTradeEngine'
+import { redraftTradeFacts } from '@/lib/redraft-war-room/redraftTradeEngine'
+import { warRoomLegacyVerdict } from '@/lib/decision-os/trade/warRoomLegacyVerdict'
 import type {
   RedraftDataAvailability,
   RedraftPlayerFact,
@@ -192,8 +193,8 @@ describe('trade engine uses ADP as ROS value when projections/actuals are missin
       ],
       availability: AVAIL({ projections: 'missing', playerStats: 'missing', tradeValues: 'available' }),
     })
-    const res = analyzeTrade(ctx, { rosterId: 'r1', outgoingPlayerIds: ['out'], incomingPlayerIds: ['in'] })
-    expect(res.verdict).not.toBe('needs_more_data')
+    const res = redraftTradeFacts(ctx, { rosterId: 'r1', outgoingPlayerIds: ['out'], incomingPlayerIds: ['in'] })
+    expect(warRoomLegacyVerdict(res)).not.toBe('needs_more_data')
     // Receiving the much better ADP player is a value gain.
     expect(res.valueDelta ?? 0).toBeGreaterThan(0)
   })

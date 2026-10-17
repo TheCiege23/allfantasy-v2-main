@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Guilly notifications</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./specialty/sp.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Cinzel:wght@600;700&amp;family=Caveat:wght@600;700&amp;family=Bebas+Neue&amp;family=Pirata+One&amp;family=Creepster&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080d}
+.gy-d{font-family:'Bebas Neue',sans-serif;letter-spacing:.03em;line-height:.95}
+.gy-cut{position:relative;height:0;border-top:2px dashed #ff3d2e;margin:9px 0}
+.gy-cut>span{position:absolute;left:50%;top:-12px;transform:translateX(-50%);white-space:nowrap;padding:2px 10px;border-radius:5px;background:#ff3d2e;color:#fff;font:800 10px 'Archivo';letter-spacing:.1em}
+.gy-head{width:34px;height:34px;flex:none}
+.gy-pos{display:inline-grid;place-items:center;height:20px;min-width:26px;padding:0 4px;border-radius:5px;font:900 9.5px 'Archivo';letter-spacing:.02em}
+.gy-gl{display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:22px;padding:0 6px;border-radius:6px;background:#151926;font:700 11px 'JetBrains Mono';color:#e8eaf2}
+.gy-meter{position:relative;height:14px;border-radius:99px;background:linear-gradient(90deg,#7a1410,#ff3d2e 30%,#ffc531 55%,#3abf7a 80%);overflow:visible}
+.gy-meter>i{position:absolute;top:-6px;width:4px;height:26px;border-radius:2px;background:#fff;box-shadow:0 0 0 2px #07080d}
+@keyframes gyBlade{0%{transform:translateY(-120%)}70%{transform:translateY(6%)}85%{transform:translateY(-3%)}100%{transform:translateY(0)}}
+@keyframes gyRoll{0%{transform:translate(-40px,-30px) rotate(-90deg);opacity:0}40%{opacity:1}100%{transform:translate(0,0) rotate(200deg);opacity:1}}
+@keyframes gyShake{0%,100%{transform:translate(0,0)}20%{transform:translate(-6px,3px)}40%{transform:translate(6px,-3px)}60%{transform:translate(-4px,2px)}80%{transform:translate(3px,-1px)}}
+.gy-blade{animation:gyBlade .55s cubic-bezier(.5,0,.75,0) both}
+.gy-roll{animation:gyRoll .9s .45s cubic-bezier(.2,.8,.2,1) both}
+.gy-shake{animation:gyShake .4s .5s both}
+.gy-tomb{position:relative;width:100%;aspect-ratio:200/240}
+.gy-tomb>img{position:absolute;inset:0;width:100%}
+.gy-tomb>div{position:absolute;left:18%;right:18%;top:49%;display:flex;flex-direction:column;align-items:center;gap:1px;text-align:center}
+.gy-tomb>div>b{font:800 12.5px 'Archivo';color:#1a1d24;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gy-tomb>div>span{font:700 10px 'JetBrains Mono';color:#2a2f3a}
+.gy-mode{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px 0 4px;border-radius:99px;background:#151926;border:1px solid rgba(255,255,255,.1);font:700 12px 'Archivo'}
+.gy-mode>img{width:22px}
+.tt-ck{display:flex;align-items:center;gap:14px;padding:14px 16px;border-radius:10px;background:#10131c;border:1px solid rgba(255,255,255,.06)}
+.tt-ck>i{flex:none;width:28px;height:28px;border-radius:99px;display:grid;place-items:center;font:800 13px 'Archivo';font-style:normal}
+.tt-ck>div{flex:1;display:flex;flex-direction:column;gap:2px}
+.tt-ck>div>b{font:600 14px 'Archivo'}
+.tt-ck>div>span{font-size:12px;color:#7d84a3}
+.tt-job{display:flex;align-items:center;gap:10px;font-size:12.5px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+.tt-job:last-child{border-bottom:0}
+.nt-ev{display:flex;align-items:center;gap:12px;width:100%;padding:9px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.07);background:#0b0d14;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.nt-ev>img{width:30px;flex:none}
+.nt-ev>div{flex:1;display:flex;flex-direction:column;gap:1px;min-width:0}
+.nt-ev>div>b{font:700 13px 'Archivo'}
+.nt-ev>div>span{font-size:11px;color:#7d84a3}
+.nt-ev[aria-pressed="true"]{border-color:#ffc531;background:rgba(255,197,49,.08)}
+.nt-phone{position:relative;width:340px;height:700px;flex:none;border-radius:46px;border:10px solid #1b1e29;overflow:hidden;background:radial-gradient(ellipse at 30% 20%,var(--wa),transparent 60%),radial-gradient(ellipse at 80% 90%,var(--wb),transparent 60%),#0a0b12;box-shadow:0 30px 60px rgba(0,0,0,.5)}
+.nt-push{display:flex;gap:10px;padding:11px 12px;border-radius:18px;background:rgba(40,44,60,.72);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);text-align:left}
+.nt-push>img{width:38px;height:38px;flex:none;border-radius:9px;background:#07080d;padding:2px}
+.nt-push>div{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.nt-push>div>small{display:flex;justify-content:space-between;font:600 10.5px 'Archivo';color:#a3a9c2;letter-spacing:.03em}
+.nt-push>div>b{font:700 13px 'Archivo';color:#fff}
+.nt-push>div>span{font-size:12px;color:#d6d9e6;line-height:1.35}
+.nt-push.dim{opacity:.55;transform:scale(.97)}
+.nt-on{display:inline-block;min-width:34px;padding:2px 6px;border-radius:5px;font:700 10px 'Archivo';letter-spacing:.06em;text-transform:uppercase}
+.lu-row{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:10px;background:#10131c;border:1px solid rgba(255,255,255,.05)}
+.lu-row>.s{width:44px;flex:none}
+.lu-row>.n{flex:1;min-width:0;display:flex;flex-direction:column}
+.lu-row>.n>b{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lu-row>.n>span{font-size:11px;color:#7d84a3}
+.lu-flag{display:inline-flex;align-items:center;height:20px;padding:0 7px;border-radius:5px;font:800 9.5px 'Archivo';letter-spacing:.06em;text-transform:uppercase}
+.gy-step{display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;padding:16px 12px;border-radius:14px;background:#10131c;border:1px solid rgba(255,255,255,.06)}
+.gy-step>img{height:84px}
+.gy-step>b{font:800 15px 'Archivo'}
+.gy-step>span{font-size:12.5px;color:#a3a9c2}
+.gy-step>i{font:900 11px 'Archivo';font-style:normal;color:#ffc531;letter-spacing:.12em}
+.gy-tl{display:flex;flex-direction:column;align-items:center;gap:3px;width:62px;flex:none}
+.gy-tl>img{width:40px}
+.gy-tl>b{font:800 9.5px 'Archivo';color:#ffc531;letter-spacing:.06em}
+.gy-tl>span{font:600 9.5px 'Archivo';color:#a3a9c2;max-width:62px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+</style>
+</helmet>
+<div class="sp" style="--acc: #ff3d2e; --acc2: #ffc531; --accInk: #fff; --disp: Bebas Neue; min-height: 100vh; display: flex; flex-direction: column">
+<header style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 18px 28px; border-bottom: 1px solid rgba(255,255,255,.06)">
+  <a class="sp-btn" href="GuillyHome.dc.html" aria-label="Back" style="padding: 0 12px">‹</a>
+  <div style="flex: 1 1 320px; display: flex; flex-direction: column; gap: 3px"><h1 class="sp-h1">Guilly notifications</h1><span class="sp-t2">Push, in-app and email for every chop, frenzy and draft moment</span></div>
+  <img src="specialty/guilly/wordmark.svg" alt="Guilly" style="height: 46px">
+</header>
+<div style="display: flex; flex-wrap: wrap; gap: 24px; padding: 22px 28px 32px; align-items: flex-start">
+  <section style="flex: 0 1 300px; display: flex; flex-direction: column; gap: 6px">
+    <sc-for list="{{groups}}" as="g" hint-placeholder-count="3">
+      <span class="sp-lbl" style="margin: 8px 0 2px">{{g.t}}</span>
+      <sc-for list="{{g.evs}}" as="e" hint-placeholder-count="4"><button class="nt-ev" aria-pressed="{{e.on}}" onClick="{{e.pick}}"><img src="{{e.icon}}" alt=""><div><b>{{e.name}}</b><span>{{e.when}}</span></div></button></sc-for>
+    </sc-for>
+  </section>
+  <section style="flex: none; display: flex; flex-direction: column; align-items: center; gap: 10px">
+    <div class="nt-phone" style="--wa: {{wa}}; --wb: {{wb}}">
+      <div style="display: flex; flex-direction: column; align-items: center; padding-top: 54px; gap: 2px"><span style="font: 600 15px 'Archivo'; color: #d6d9e6">{{day}}</span><span style="font: 300 76px/1 'Archivo'; color: #fff; letter-spacing: -.02em">{{time}}</span></div>
+      <div style="position: absolute; left: 12px; right: 12px; top: 230px; display: flex; flex-direction: column; gap: 8px">
+        <sc-for list="{{stack}}" as="p" hint-placeholder-count="3"><div class="nt-push {{p.cls}}"><img src="{{p.icon}}" alt=""><div><small><span>ALLFANTASY · GUILLY</span><span>{{p.ago}}</span></small><b>{{p.t}}</b><span>{{p.b}}</span></div></div></sc-for>
+      </div>
+    </div>
+    <span class="sp-t3" style="font-size: 11.5px">Lock screen · newest on top</span>
+  </section>
+  <section style="flex: 1 1 420px; min-width: 0; display: flex; flex-direction: column; gap: 16px">
+    <div class="sp-card" style="padding: 12px 14px; display: flex; flex-direction: column; gap: 8px"><span class="sp-lbl">In-app banner</span>
+      <div style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 12px; background: linear-gradient(90deg, {{wa}}, #10131c 70%); border: 1px solid rgba(255,255,255,.1)"><img src="{{icon}}" alt="" style="width: 44px"><div style="flex: 1; display: flex; flex-direction: column"><b style="font-size: 14px">{{t}}</b><span class="sp-t2" style="font-size: 12.5px">{{b}}</span></div><a class="sp-btn sp-btn-p" href="#" style="min-height: 36px">{{cta}}</a></div></div>
+    <div style="display: flex; flex-direction: column; border-radius: 14px; overflow: hidden; border: 1px solid rgba(255,255,255,.08); background: #0d0f17">
+      <div style="padding: 12px 16px; border-bottom: 1px solid rgba(255,255,255,.06); display: flex; flex-direction: column; gap: 2px"><span class="sp-t3" style="font-size: 11.5px">From AllFantasy · to you</span><span style="font-weight: 700">{{subject}}</span></div>
+      <div style="display: flex; align-items: center; gap: 16px; padding: 20px 22px 16px; background: radial-gradient(ellipse at 15% 50%, {{wa}}, transparent 65%), #0a0b12"><img src="{{mailArt}}" alt="" style="width: {{mailW}}; flex: none"><div style="display: flex; flex-direction: column; gap: 4px"><span class="sp-lbl" style="color: #ffc531">Guilly · {{kick}}</span><span class="gy-d" style="font-size: 34px; color: #fff">{{head}}</span></div></div>
+      <div style="padding: 14px 22px 18px; display: flex; flex-direction: column; gap: 12px"><span class="sp-t2" style="font-size: 13.5px; line-height: 1.55">{{mail}}</span><a class="sp-btn sp-btn-p" href="#" style="align-self: flex-start; min-height: 42px; padding: 0 20px">{{cta}}</a><span class="sp-t3" style="font-size: 11px">You get this because you play in Guilly League 26. Manage notifications in Settings.</span></div>
+    </div>
+    <div class="sp-card" style="padding: 14px 16px; display: flex; flex-direction: column; gap: 6px"><span class="sp-lbl">Default channels · managers can turn any off</span>
+      <table class="sp-tbl"><tr><th>Moment</th><th>Push</th><th>In-app</th><th>Email</th><th>League chat</th></tr>
+        <sc-for list="{{mx}}" as="m" hint-placeholder-count="12"><tr style="background: {{m.bg}}"><td style="font-weight: 600; font-size: 12.5px">{{m.n}}</td><sc-for list="{{m.ch}}" as="x" hint-placeholder-count="4"><td style="text-align: center"><span class="nt-on" style="background: {{x.bg}}; color: {{x.c}}">{{x.l}}</span></td></sc-for></tr></sc-for></table></div>
+  </section>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1080}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { ev: 'block' }; }
+  renderVals() {
+    const G = "specialty/guilly/";
+    const R = 'rgba(255,61,46,.45)', Y = 'rgba(255,197,49,.4)', GR = 'rgba(58,190,120,.4)', DK = 'rgba(60,10,10,.7)';
+    const E = [
+      ['Week', 'block', 'On the chopping block', 'Mid-week, you drop below the line', 'icon-danger.svg', 'You’re on the chopping block', '11th of 11 with 6 games left. You’re 38.4 behind the line — Wembanyama plays twice more.', 'Set lineup', R, DK, 'Wed 9:41 PM', 'You’re below the blade', 'head-nervous.svg', '120px', 'You dropped below the blade line on Wednesday night. You have 6 games left and the team above you has 4. A strong weekend still gets you out.', [1, 1, 0, 0]],
+      ['Week', 'danger', 'Danger alert', 'Sunday, within 25 points', 'icon-streak.svg', 'Danger: 12.6 over the line', 'Sunday night, 1 game left for you, 2 for FastBreakFam. Swap in anyone who plays tonight.', 'Check lineup', Y, DK, 'Sun 6:02 PM', 'Too close for comfort', 'head-nervous.svg', '120px', 'You’re 12.6 points over the blade with one game left. FastBreakFam has two. Make sure everyone who plays tonight is in your lineup.', [1, 1, 0, 0]],
+      ['Chop', 'live', 'Chop night is live', 'Monday, before the reveal', 'icon-chop.svg', 'Chop night is live', 'Week 8 is final. The blade drops at 11:00 AM ET. BoxOutBandits and FastBreakFam are sweating.', 'Watch the chop', R, 'rgba(20,4,6,.8)', 'Mon 10:55 AM', 'The blade is about to drop', 'emblem.svg', '110px', 'Week 8 is final and stat corrections are closed. Two teams are in the bottom two. Watch the reveal live.', [1, 1, 0, 1]],
+      ['Chop', 'off', 'Off with your head', 'You were chopped', 'icon-tomb.svg', 'Off with your head!', 'Chopped in week 8 with 987.3. Your roster hits waivers Tuesday. Thanks for playing — your tombstone is ready.', 'See the graveyard', R, DK, 'Mon 11:00 AM', 'Off with your head', 'chop.svg', '170px', 'You finished week 8 with 987.3 points — the lowest of 11. Your roster goes to the waiver frenzy on Tuesday. You can still follow every chop to the end.', [1, 1, 1, 1]],
+      ['Chop', 'safe', 'You survived', 'Your head stays on', 'icon-safe.svg', 'You survived week 8', 'Beat the blade by 74.3. BoxOutBandits’ roster hits waivers Tuesday — you have $412.', 'Go to waivers', GR, 'rgba(10,40,24,.8)', 'Mon 11:00 AM', 'Your head stays on', 'head-calm.svg', '120px', 'You beat the blade by 74.3. 10 teams left. A full roster just dropped into the basket.', [1, 1, 0, 0]],
+      ['Frenzy', 'frenzy', 'Waiver frenzy is open', 'Tuesday, after the chop', 'icon-basket.svg', 'Waiver frenzy is open', '14 players in the basket, led by Scottie Barnes. Blind bids lock tonight 11:00 PM ET. You have $412.', 'Place bids', Y, 'rgba(40,24,4,.8)', 'Mon 11:05 AM', 'The basket is full', 'icon-basket.svg', '96px', 'BoxOutBandits’ 14 players are up for blind FAAB. Top of the basket: Scottie Barnes, Austin Reaves, Onyeka Okongwu. Bids lock Tuesday 11:00 PM ET.', [1, 1, 1, 0]],
+      ['Frenzy', 'deadline', 'Bid deadline', '1 hour before bids lock', 'icon-faab.svg', '1 hour left to bid', 'You have 2 bids in for $227. Bids lock at 11:00 PM ET.', 'Review bids', Y, DK, 'Tue 10:00 PM', 'One hour left', 'icon-faab.svg', '96px', 'You have two bids in: Scottie Barnes $186 and Onyeka Okongwu $41. Bids lock at 11:00 PM ET.', [1, 1, 0, 0]],
+      ['Frenzy', 'won', 'Bid results', 'Wednesday, after processing', 'icon-crown.svg', 'You won Scottie Barnes for $186', 'Lost Okongwu to DunkCity ($58). $226 FAAB left.', 'See results', GR, 'rgba(40,30,4,.8)', 'Wed 12:01 AM', 'Frenzy results', 'head-crown.svg', '110px', 'You won Scottie Barnes for $186. DunkCity outbid you on Onyeka Okongwu ($58). You have $226 left for 9 more frenzies.', [1, 1, 1, 1]],
+      ['Draft', 'clock', 'You’re on the clock', 'Snake drafts', 'icon-streak.svg', 'You’re on the clock · pick 10.08', '60 seconds. Best available: Naz Reid, Bilal Coulibaly, Tari Eason.', 'Make pick', Y, DK, 'Sat 8:41 PM', 'You’re up', 'head-nervous.svg', '110px', 'Round 10, pick 8. Your queue has Naz Reid at the top. Auto-pick takes the top of your queue at 0:00.', [1, 1, 0, 0]],
+      ['Draft', 'nom', 'Your nomination', 'Auction drafts', 'icon-gavel.svg', 'Your turn to nominate', 'Put a player on the block. You have $142 and 8 open spots.', 'Nominate', Y, DK, 'Sat 8:12 PM', 'Put someone on the block', 'icon-gavel.svg', '96px', 'It’s your nomination. Tip: nominating a star you don’t want drains everyone else’s budget.', [1, 1, 0, 0]],
+      ['Draft', 'outbid', 'You’ve been outbid', 'Auction drafts', 'icon-faab.svg', 'Outbid on Jalen Williams', 'DunkCity bid $34. 6 seconds left. Your max is $135.', 'Bid $35', R, DK, 'Sat 8:14 PM', 'You’ve been outbid', 'icon-faab.svg', '96px', 'DunkCity raised to $34 on Jalen Williams with 6 seconds left.', [1, 1, 0, 0]],
+      ['End', 'champ', 'Last team standing', 'After the final chop', 'icon-crown.svg', 'Last one standing', '17 chops. One head left. You’re the Guilly champion.', 'See your trophy', 'rgba(255,197,49,.5)', 'rgba(60,40,6,.8)', 'Mon 11:00 AM', 'Guilly champion', 'head-crown.svg', '130px', 'You survived all 17 chops. Your trophy page and share card are ready.', [1, 1, 1, 1]]];
+    const st = this.state, e = E.find(x => x[1] === st.ev), others = E.filter(x => x[1] !== st.ev).slice(0, 2);
+    const ON = { bg: 'rgba(58,190,120,.16)', c: '#7fe0a6', l: 'On' }, OFF = { bg: '#151926', c: '#5a6078', l: 'Off' };
+    const grp = ['Week', 'Chop', 'Frenzy', 'Draft', 'End'];
+    return { groups: grp.map(g => ({ t: { Week: 'During the week', Chop: 'Chop night', Frenzy: 'Waiver frenzy', Draft: 'Draft day', End: 'Season end' }[g],
+        evs: E.filter(x => x[0] === g).map(x => ({ name: x[2], when: x[3], icon: G + x[4], on: x[1] === st.ev ? 'true' : 'false', pick: () => this.setState({ ev: x[1] }) })) })),
+      day: e[10].split(' ')[0] === 'Sat' ? 'Saturday, October 18' : 'Monday, December 15', time: e[10].split(' ').slice(1).join(' ').replace(/ [AP]M/, ''), wa: e[8], wb: e[9],
+      stack: [{ icon: G + e[4], t: e[5], b: e[6], ago: 'now', cls: '' }].concat(others.map((x, k) => ({ icon: G + x[4], t: x[5], b: x[6], ago: k ? 'Sun' : 'Tue', cls: 'dim' }))),
+      icon: G + e[4], t: e[5], b: e[6], cta: e[7], subject: e[5], kick: e[2], head: e[11], mailArt: G + e[12], mailW: e[13], mail: e[14],
+      mx: E.map(x => ({ n: x[2], bg: x[1] === st.ev ? 'rgba(255,197,49,.07)' : 'transparent', ch: x[15].map(v => v ? ON : OFF) })) };
+  }
+}
+</script>
+</body>
+</html>

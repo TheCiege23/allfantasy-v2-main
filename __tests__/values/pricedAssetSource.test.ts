@@ -62,17 +62,23 @@ beforeEach(() => {
   getPlayerAnalytics.mockResolvedValue(null)
 })
 
-describe('the three branches that used to all say "unknown"', () => {
-  it('names the flat IDP constant as its own source, with a real value attached', async () => {
+/*
+ * 🛑 NOTHING BELOW THE LIVE BOARD PRICES A LIVE GRADE (2026-09-28). The three fallbacks this file
+ * was written to tell apart — the flat IDP constant, the analytics lifetime value, the historical
+ * snapshot — each put a number on the wrong scale into a grade as if it were the market (the
+ * snapshot measured 1.4–2.4× the live board at the fringe it served). A player arriving with a
+ * Sleeper id was already refused all three; a typed name now gets the same answer, with a reason.
+ */
+describe('the fallbacks below the live board refuse, and say why', () => {
+  it('refuses a defender with no league board rather than pricing him off a flat constant', async () => {
     const priced = await pricePlayer('Nameless Backer', asDefender('Nameless Backer'))
 
-    expect(priced.source).toBe('idp-flat-baseline')
-    /* The positive control: this branch is only interesting because it DOES price him. */
-    expect(priced.value).toBeGreaterThan(0)
-    expect(priced.unpriced).toBeUndefined()
+    expect(priced.unpriced).toBe(true)
+    expect(priced.value).toBe(0)
+    expect(priced.unpricedReason?.code).toBe('defender')
   })
 
-  it('names the analytics lifetime-value fallback as its own source', async () => {
+  it('does not price off the analytics lifetime value — a different unit, never calibrated', async () => {
     getPlayerAnalytics.mockResolvedValue({
       position: 'WR',
       draft: { lifetimeValue: 1234 },
@@ -80,8 +86,41 @@ describe('the three branches that used to all say "unknown"', () => {
 
     const priced = await pricePlayer('Fringe Receiver', baseCtx)
 
-    expect(priced.source).toBe('analytics-lifetime')
-    expect(priced.value).toBe(1234)
+    expect(priced.unpriced).toBe(true)
+    expect(priced.value).toBe(0)
+  })
+
+  it('refuses a player only the historical snapshot carries, naming the snapshot date', async () => {
+    getHistoricalPlayerValue.mockReturnValue({ value: 1605, actualDate: '2026-02-05', source: 'historical' })
+
+    const priced = await pricePlayer('Joe Mixon', baseCtx)
+
+    expect(priced.unpriced).toBe(true)
+    expect(priced.value).toBe(0)
+    expect(priced.unpricedReason?.code).toBe('not_on_feed')
+    expect(priced.unpricedReason?.label).toContain('2026-02-05')
+  })
+
+  /* The positive controls: the refusal is for a player the live board lacks, and for a live grade only. */
+  it('prices from the live board when it carries him, whatever the snapshot says', async () => {
+    getHistoricalPlayerValue.mockReturnValue({ value: 9000, actualDate: '2026-02-05', source: 'historical' })
+    findPlayerByName.mockReturnValue({
+      value: 4200, redraftValue: 3000, positionRank: 20, player: { name: 'Board Receiver', position: 'WR', maybeAge: 26 },
+    })
+
+    const priced = await pricePlayer('Board Receiver', baseCtx)
+
+    expect(priced.source).toBe('fantasycalc')
+    expect(priced.value).toBe(4200)
+  })
+
+  it('still answers a question about the PAST from the historical file', async () => {
+    getHistoricalPlayerValue.mockReturnValue({ value: 1605, actualDate: '2025-10-01', source: 'historical' })
+
+    const priced = await pricePlayer('Joe Mixon', { ...baseCtx, asOfDate: '2025-10-01' })
+
+    expect(priced.source).toBe('excel')
+    expect(priced.value).toBe(1605)
     expect(priced.unpriced).toBeUndefined()
   })
 
@@ -127,14 +166,14 @@ describe('isEvidencedPrice', () => {
 })
 
 describe('valuationStats counts fallbacks apart from unpriced', () => {
-  it('puts a flat-baseline defender in playersFromFallback, not playersUnknown', async () => {
+  it('counts a defender with no league board as unknown now that no constant prices him', async () => {
     const res = await priceAssets(
       { players: ['Nameless Backer'], picks: [] },
       asDefender('Nameless Backer'),
     )
 
-    expect(res.stats.playersFromFallback).toBe(1)
-    expect(res.stats.playersUnknown).toBe(0)
+    expect(res.stats.playersFromFallback).toBe(0)
+    expect(res.stats.playersUnknown).toBe(1)
   })
 
   it('still counts a genuinely unpriced player as unknown', async () => {

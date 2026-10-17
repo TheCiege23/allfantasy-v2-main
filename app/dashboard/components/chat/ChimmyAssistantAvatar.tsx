@@ -27,7 +27,7 @@ export function ChimmyAssistantAvatar({ className = "" }: { className?: string }
 
   return (
     <div
-      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/[0.12] bg-purple-600/85 text-[10px] font-bold text-white ${className}`}
+      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/[0.12] bg-purple-600/85 text-[11px] font-bold text-white ${className}`}
       style={{ width: SIZE_PX, height: SIZE_PX }}
       aria-hidden
     >

@@ -58,6 +58,9 @@ vi.mock("bcryptjs", () => ({
   hash: mocks.bcryptHash,
 }))
 
+const revokeAllSessionsForUser = vi.hoisted(() => vi.fn())
+vi.mock("@/lib/auth/sessionRevocation", () => ({ revokeAllSessionsForUser }))
+
 import { Prisma } from "@prisma/client"
 import { linkSocialAccountToAppUser } from "@/lib/auth/SocialAccountLinkingService"
 
@@ -90,6 +93,74 @@ describe("linkSocialAccountToAppUser — duplicate-account protections", () => {
         betaInvite: { findUnique: mocks.betaFindUnique, updateMany: mocks.betaUpdateMany },
       }),
     )
+  })
+
+  // PRE-ACCOUNT TAKEOVER: an attacker registers the victim's address first and sets a
+  // password. The victim's verified Google sign-in must not land in an account whose
+  // attacker-set password still works.
+  it("a verified sign-in into an UNVERIFIED account replaces its password and revokes prior sessions", async () => {
+    revokeAllSessionsForUser.mockResolvedValue(undefined)
+    mocks.authAccountFindFirst.mockResolvedValue(null)
+    mocks.appUserFindFirst.mockResolvedValue({ ...EXISTING_USER, emailVerified: null })
+    mocks.authAccountCreate.mockResolvedValue({})
+
+    const before = Math.floor(Date.now() / 1000)
+    const result = await linkSocialAccountToAppUser({
+      provider: "google",
+      providerAccountId: "google-victim",
+      email: "shared@example.com",
+      emailVerified: true,
+    })
+
+    expect(result.id).toBe(EXISTING_USER.id)
+    expect(mocks.appUserUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ passwordHash: "hashed-placeholder", emailVerified: expect.any(Date) }),
+      }),
+    )
+    expect(revokeAllSessionsForUser).toHaveBeenCalledTimes(1)
+    const [revokedUser, cutoff] = revokeAllSessionsForUser.mock.calls[0]
+    expect(revokedUser).toBe(EXISTING_USER.id)
+    // Strictly before the current second, so the session this sign-in mints (iat = now)
+    // is not revoked on arrival — `iat <= cutoff` would catch a cutoff of "now".
+    expect(cutoff).toBeLessThan(Math.floor(Date.now() / 1000))
+    expect(cutoff).toBeGreaterThanOrEqual(before - 2)
+  })
+
+  it("leaves an already-VERIFIED account's password and sessions alone", async () => {
+    mocks.authAccountFindFirst.mockResolvedValue(null)
+    mocks.appUserFindFirst.mockResolvedValue(EXISTING_USER)
+    mocks.authAccountCreate.mockResolvedValue({})
+
+    await linkSocialAccountToAppUser({
+      provider: "google",
+      providerAccountId: "google-owner",
+      email: "shared@example.com",
+      emailVerified: true,
+    })
+
+    for (const call of mocks.appUserUpdate.mock.calls) {
+      expect(call[0].data).not.toHaveProperty("passwordHash")
+    }
+    expect(revokeAllSessionsForUser).not.toHaveBeenCalled()
+  })
+
+  it("does not neutralize an account reached through its OWN linked provider account", async () => {
+    mocks.authAccountFindFirst.mockResolvedValue({ id: "auth-acct-1", userId: EXISTING_USER.id })
+    mocks.appUserFindUnique.mockResolvedValue({ ...EXISTING_USER, emailVerified: null })
+    mocks.appUserFindFirst.mockResolvedValue(null)
+
+    await linkSocialAccountToAppUser({
+      provider: "google",
+      providerAccountId: "google-acct-1",
+      email: "shared@example.com",
+      emailVerified: true,
+    })
+
+    for (const call of mocks.appUserUpdate.mock.calls) {
+      expect(call[0].data).not.toHaveProperty("passwordHash")
+    }
+    expect(revokeAllSessionsForUser).not.toHaveBeenCalled()
   })
 
   it("Google then Discord with the same email resolves to the same AppUser", async () => {

@@ -7,6 +7,7 @@ import type {
 import { teamLogoUrl } from '@/lib/core-app/teamLogo'
 import PlayerName from '@/components/core-app/player-card/PlayerName'
 import BoardActionLink from '@/components/core-app/boards/BoardActionLink'
+import { SleeperOffersNotice } from '@/components/trades/SleeperOffersNotice'
 import {
   BoardHead,
   FooterSummary,
@@ -15,6 +16,7 @@ import {
   SectionHead,
   StatPair,
   platformKey,
+  NoLeaguesYet,
 } from '@/components/core-app/boards/BoardKit'
 import '@/components/core-app/af-core-boards.css'
 
@@ -39,6 +41,8 @@ export type TradesBoardProps = {
   data: TradesBoardData
   /** Where the footer's "View all" goes — the full picker. */
   allHref: string
+  /** Leagues on this account. 0 shows the no-leagues next steps instead of an empty board. */
+  totalLeagues?: number
 }
 
 const GRADE_SEV: Record<string, 'good' | 'warn' | 'bad'> = {
@@ -134,14 +138,19 @@ function Asset({ a, leagueId }: { a: TradeAsset; leagueId: string }) {
   )
 }
 
+/*
+ * Each side is named for the team that RECEIVED it (2026-10-01), so the reader's own column holds
+ * what the grade above credited them with — the convention KeepTradeCut's "Team 1 gets…" uses. Read
+ * as "<name> sent", the card put a manager's grade over the assets they gave away.
+ */
 function TradeBody({ t, leagueId }: { t: BoardTrade; leagueId: string }) {
   return (
     <>
       <div className="af-bd-card-body">
         <div className="af-bd-side">
-          <span className="af-bd-side-label">{t.fromName} sent</span>
-          {t.sent.length > 0 ? (
-            t.sent.map((a) => <Asset key={`s-${a.id}`} a={a} leagueId={leagueId} />)
+          <span className="af-bd-side-label">{t.fromName} received</span>
+          {t.received.length > 0 ? (
+            t.received.map((a) => <Asset key={`r-${a.id}`} a={a} leagueId={leagueId} />)
           ) : (
             <span className="af-bd-asset">
               {/*
@@ -155,9 +164,9 @@ function TradeBody({ t, leagueId }: { t: BoardTrade; leagueId: string }) {
           )}
         </div>
         <div className="af-bd-side">
-          <span className="af-bd-side-label">{t.toName} sent</span>
-          {t.received.length > 0 ? (
-            t.received.map((a) => <Asset key={`r-${a.id}`} a={a} leagueId={leagueId} />)
+          <span className="af-bd-side-label">{t.toName} received</span>
+          {t.sent.length > 0 ? (
+            t.sent.map((a) => <Asset key={`s-${a.id}`} a={a} leagueId={leagueId} />)
           ) : (
             <span className="af-bd-asset">
               {/*
@@ -220,6 +229,11 @@ function WindowCard({ row }: { row: TradeWindowRow }) {
             An unknown or absent deadline is a fact about what we hold, not an
             alert — so it reads faint, not in the accent it used to borrow.
           */}
+          {row.freshTrade ? (
+            <span className="af-bd-tag" data-sev="good">
+              NEW TRADE
+            </span>
+          ) : null}
           <span
             className="af-bd-tag"
             data-sev={urgent ? 'bad' : row.deadlineWeek != null ? 'warn' : 'muted'}
@@ -267,16 +281,15 @@ function WindowCard({ row }: { row: TradeWindowRow }) {
             Who came out ahead, and by how much — the half of the verdict a letter alone
             cannot carry. `sharePct` was already on `BoardTrade` and rendered nowhere.
 
-            🛑 A SHARE, NOT TWO TOTALS, AND THE REASON IS ARITHMETIC THE READER CAN DO.
-            The per-asset numbers above are the raw `PlayerValueSnapshot.value` for each
-            man; the grade is computed in RANK space, by pushing each asset's rank through
-            `DEFAULT_RANK_CURVE`. Those two agree closely but not exactly — the curve is a
-            nine-point interpolation of the same market, so it is near the raw value and
-            never equal to it. Print side totals and they will not sum to the rows anyone
-            can see, and the discrepancy is the reader's to explain rather than ours. A
-            share is scale-free, so it states the result without inviting an addition that
-            does not balance — which is `tradeGrading.ts`'s own argument for banding the
-            letter on share rather than on an absolute points gap.
+            A SHARE, NOT TWO TOTALS. The letter is THE grade — this league's values, and for
+            a completed trade the FROZEN original taken the first time AllFantasy graded it
+            (`gradeArchivedTrade` with `original`, in `lib/core-app/tradesBoard.ts`). Rank
+            space on share bands was retired on 2026-09-25; this note used to argue from it.
+            `sharePct` is that grade's own totals (getValue against getValue + giveValue), and
+            the per-asset numbers above are its own line values (`valuesOnTheGrade`). They are
+            NOT guaranteed to add up to it: when the grade's lines do not pair one-for-one with
+            the card's assets, `valuesOnTheGrade` keeps the book's display values instead. A
+            scale-free share states the result without inviting that addition.
 
             ⚠ `sharePct` IS THE SHARE RECEIVED BY `fromName`, because the loader passes
             their incoming side as side A. Naming the two managers in that order is what
@@ -330,7 +343,7 @@ function WindowCard({ row }: { row: TradeWindowRow }) {
   )
 }
 
-export function TradesBoard({ data, allHref }: TradesBoardProps) {
+export function TradesBoard({ data, allHref, totalLeagues }: TradesBoardProps) {
   const live = data.windows.filter((w) => w.weeksLeft != null && w.weeksLeft >= 0).length
   const anyDeadline = data.windows.some((w) => w.deadlineWeek != null || w.noDeadline)
   /*
@@ -341,6 +354,18 @@ export function TradesBoard({ data, allHref }: TradesBoardProps) {
     heading promising trades.
   */
   const anyTrades = data.windows.some((w) => w.tradesOnFile > 0)
+  /* The loader leads with leagues traded this week or last, newest first — the label must say so. */
+  const anyFresh = data.windows.some((w) => w.freshTrade)
+
+  /* No leagues on this account yet: say so and offer a way forward (BoardKit NoLeaguesYet). */
+  if (totalLeagues === 0) {
+    return (
+      <div className="af-bd">
+        <BoardHead eyebrow="Core · Trades" title="Trades" blurb="Your trade windows, soonest to close first — with the most recent real trade in each league and how it graded." />
+        <NoLeaguesYet what="Once one is, this board ranks your leagues' trade windows, soonest to close first, with each league's latest trade and how it graded." />
+      </div>
+    )
+  }
 
   return (
     <div className="af-bd">
@@ -349,6 +374,12 @@ export function TradesBoard({ data, allHref }: TradesBoardProps) {
         title="Trades"
         blurb="Your trade windows, soonest to close first — with the most recent real trade in each league and how it graded."
       />
+
+      {/*
+        Sleeper never shares an offer before it is accepted, so a manager looking here for one they
+        were just sent must be told why it is missing and how to grade it (Guap, 2026-09-30).
+      */}
+      {data.windows.some((w) => w.platform === 'sleeper') ? <SleeperOffersNotice className="af-bd-sec" /> : null}
 
       {/*
         ⚠ THIS SECTION IS WIRED AND ALMOST ALWAYS EMPTY, AND THAT IS CORRECT.
@@ -427,7 +458,9 @@ export function TradesBoard({ data, allHref }: TradesBoardProps) {
             */
             label={
               anyDeadline
-                ? anyTrades
+                ? anyFresh
+                  ? `Top ${data.windows.length} · newest trades first, then leagues with trades, then deadline`
+                  : anyTrades
                   ? `Top ${data.windows.length} · leagues with trades first, then deadline`
                   : `Top ${data.windows.length} · ranked by deadline · no trades on file in any of them`
                 : `Your ${data.windows.length} ${data.windows.length === 1 ? 'league' : 'leagues'} · no deadline ingested for any of them`
@@ -469,9 +502,10 @@ export function TradesBoard({ data, allHref }: TradesBoardProps) {
       ) : null}
 
       <p className="af-bd-note af-bd-note--plain">
-        Grades price both sides against current market rank. A trade whose assets could not all
-        be priced is shown with its reason instead of a letter — a &ldquo;C&rdquo; from no data
-        would read as &ldquo;an average trade&rdquo;.
+        Grades price both sides on this league&rsquo;s own values. A completed trade keeps the
+        grade it got the first time AllFantasy graded it, so it does not change as values move.
+        A trade whose assets could not all be priced is shown with its reason instead of a
+        letter — a &ldquo;C&rdquo; from no data would read as &ldquo;an average trade&rdquo;.
       </p>
 
       <FooterSummary

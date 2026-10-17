@@ -67,7 +67,7 @@ export default function MissingDataBlock({
                 <span className="text-xs text-cyan-300/80">{item.suggestedAction}</span>
               )}
               <span
-                className={`inline-flex w-fit rounded px-2 py-0.5 text-[10px] font-medium border capitalize ${impactStyles[item.impact] ?? impactStyles.low}`}
+                className={`inline-flex w-fit rounded px-2 py-0.5 text-[11px] font-medium border capitalize ${impactStyles[item.impact] ?? impactStyles.low}`}
               >
                 {item.impact} impact
               </span>

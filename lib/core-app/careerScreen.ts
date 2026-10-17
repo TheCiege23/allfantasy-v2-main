@@ -1,4 +1,6 @@
 import 'server-only'
+import { buildCareerCompare, type CareerCompare } from './careerCompare'
+import { parseHallLayout, type HallLayout } from './trophyWall'
 
 import {
   buildCareerData,
@@ -47,6 +49,7 @@ export const CAREER_VIEWS = [
   'seasons',
   'progress',
   'peers',
+  'compare',
   'records',
   'awards',
   'coverage',
@@ -87,6 +90,10 @@ export type CareerScreenData = {
   records: CareerRecordBook | null
   peers: CareerPeers | null
   coverage: CareerCoverageExtras | null
+  /** `?view=compare` only (live-career plan, phase 5): two slices of this career side by side. */
+  compare?: CareerCompare | null
+  /** `?view=hall` only: `?layout=wall|list`, or null to let the device decide (af-career-wall.css). */
+  hallLayout?: HallLayout
 }
 
 /** Trade counts narrowed the way the rows are. Trades are Sleeper-only. */
@@ -231,7 +238,22 @@ export async function getCareerScreen(
     }
   }
 
-  return { view, data, awards, trades, profile, timeline, records, peers, coverage }
+  /*
+   * Compare reads nothing new: both sides are `buildCareerData` over the source already loaded.
+   * Its sides carry their own filters (`ca`/`cb`), so the page filter does not narrow them.
+   */
+  const compare =
+    view === 'compare'
+      ? buildCareerCompare(
+          source,
+          typeof sp.ca === 'string' ? sp.ca : null,
+          typeof sp.cb === 'string' ? sp.cb : null,
+        )
+      : null
+
+  const hallLayout = view === 'hall' ? parseHallLayout(sp.layout) : null
+
+  return { view, data, awards, trades, profile, timeline, records, peers, coverage, compare, hallLayout }
 }
 
 /**

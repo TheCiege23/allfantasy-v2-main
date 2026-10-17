@@ -25,15 +25,22 @@ vi.mock("@/lib/workers/rate-limit-manager", () => ({
     recordCall: vi.fn().mockResolvedValue(undefined),
   },
 }))
-// Mock Anthropic SDK (dynamic import)
-vi.mock("@anthropic-ai/sdk", () => ({
-  default: vi.fn().mockImplementation(() => ({
-    messages: {
-      create: vi.fn(),
-      stream: vi.fn(),
+// Mock Anthropic SDK (dynamic import). The spies are hoisted so they survive `vi.resetModules()`:
+// the spend-guard tests below re-import the router to pick up ANTHROPIC_API_KEY, which it reads once
+// at module load, and must still see whether the SDK was constructed or called.
+const anthropicSdk = vi.hoisted(() => {
+  const create = vi.fn()
+  const stream = vi.fn()
+  // A `class`, not an arrow: the router calls `new mod.default(...)`, and vitest 4 refuses `new` on an
+  // arrow implementation — the router's `.catch(() => null)` would swallow that and read as "unavailable".
+  const ctor = vi.fn(
+    class {
+      messages = { create, stream }
     },
-  })),
-}))
+  )
+  return { ctor, create, stream }
+})
+vi.mock("@anthropic-ai/sdk", () => ({ default: anthropicSdk.ctor }))
 
 import { openaiChatText, openaiChatTextStream } from "@/lib/openai-client"
 import { xaiChatJson } from "@/lib/xai-client"
@@ -376,5 +383,144 @@ describe("routeTextCall — skipCache", () => {
     mockOpenaiText.mockResolvedValue(openaiSuccess())
     await routeTextCall({ messages: [{ role: "user", content: "test" }] })
     expect(mockOpenaiText).toHaveBeenCalledWith(expect.objectContaining({ skipCache: false }))
+  })
+})
+
+// ─── Anthropic adapter — the AI spend kill switch ─────────────────────────────
+//
+// The Anthropic adapter is INLINE in the router and builds its own SDK client, so no guarded client
+// module ever sees it. These tests pin that with spend OFF it never constructs or calls that client,
+// and that a spend refusal from ANY provider ends the chain instead of falling through to the next.
+
+describe("Anthropic adapter — AI spend kill switch", () => {
+  const saved = {
+    order: process.env.AI_PROVIDER_ORDER,
+    key: process.env.ANTHROPIC_API_KEY,
+    spend: process.env.AI_FEATURES_ENABLED,
+  }
+  const restore = (name: string, value: string | undefined) => {
+    if (value === undefined) delete process.env[name]
+    else process.env[name] = value
+  }
+  const messages = [{ role: "user" as const, content: "grade this trade" }]
+
+  /** Fresh router, so its module-scope ANTHROPIC_API_KEY read and cached client start clean. */
+  async function loadRouter() {
+    vi.resetModules()
+    return import("@/lib/ai/providerRouter")
+  }
+  /** The guarded OpenAI client's real behaviour with spend off: `getOpenAIClient()` throws. */
+  async function openaiRefusesSpend() {
+    const { AiSpendDisabledError } = await import("@/lib/ai/aiSpendGuard")
+    const client = await import("@/lib/openai-client")
+    ;(client.openaiChatText as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new AiSpendDisabledError("openai-client"),
+    )
+    return client
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    // A real-looking key, so the missing-key branch cannot be what stops the call.
+    process.env.ANTHROPIC_API_KEY = "placeholder-anthropic-key-for-tests"
+    anthropicSdk.create.mockResolvedValue({
+      content: [{ type: "text", text: "hello from anthropic" }],
+      model: "claude-test",
+      usage: { input_tokens: 3, output_tokens: 4 },
+    })
+  })
+
+  afterEach(() => {
+    restore("AI_PROVIDER_ORDER", saved.order)
+    restore("ANTHROPIC_API_KEY", saved.key)
+    restore("AI_FEATURES_ENABLED", saved.spend)
+  })
+
+  it("positive control: with spend ON the harness DOES see the SDK constructed and called", async () => {
+    // Without this, the refusals below could be passing because the mock is unreachable.
+    process.env.AI_FEATURES_ENABLED = "true"
+    process.env.AI_PROVIDER_ORDER = "anthropic"
+    const router = await loadRouter()
+
+    const result = await router.routeTextCall({ messages })
+
+    expect(result).toMatchObject({ ok: true, provider: "anthropic", text: "hello from anthropic" })
+    expect(anthropicSdk.ctor).toHaveBeenCalledTimes(1)
+    expect(anthropicSdk.create).toHaveBeenCalledTimes(1)
+  })
+
+  it("text: with spend OFF an Anthropic-routed call never constructs or calls the SDK", async () => {
+    process.env.AI_FEATURES_ENABLED = "false"
+    process.env.AI_PROVIDER_ORDER = "anthropic"
+    const router = await loadRouter()
+
+    const result = await router.routeTextCall({ messages })
+
+    expect(result).toEqual({ ok: false })
+    expect(anthropicSdk.ctor).not.toHaveBeenCalled()
+    expect(anthropicSdk.create).not.toHaveBeenCalled()
+  })
+
+  it("stream: with spend OFF an Anthropic-routed stream never constructs or calls the SDK", async () => {
+    process.env.AI_FEATURES_ENABLED = "false"
+    process.env.AI_PROVIDER_ORDER = "anthropic"
+    const router = await loadRouter()
+    const onText = vi.fn()
+
+    const result = await router.routeStreamCall({ messages, onText })
+
+    expect(result).toEqual({ ok: false })
+    expect(anthropicSdk.ctor).not.toHaveBeenCalled()
+    expect(anthropicSdk.stream).not.toHaveBeenCalled()
+    expect(onText).not.toHaveBeenCalled()
+  })
+
+  it("the refusal STOPS the chain — later providers are not tried", async () => {
+    process.env.AI_FEATURES_ENABLED = "false"
+    process.env.AI_PROVIDER_ORDER = "anthropic,xai,deepseek"
+    const router = await loadRouter()
+    const xai = await import("@/lib/xai-client")
+    const deepseek = await import("@/lib/deepseek-client")
+
+    const result = await router.routeTextCall({ messages })
+
+    expect(result).toEqual({ ok: false })
+    expect(xai.xaiChatJson).not.toHaveBeenCalled()
+    expect(deepseek.deepseekChat).not.toHaveBeenCalled()
+  })
+
+  it("default order: OpenAI's spend refusal does not fall through to Anthropic", async () => {
+    // The leak as it was reachable in production: the guarded OpenAI client refused, the router
+    // read that as an ordinary failure, fell back to Anthropic, and Anthropic spent.
+    process.env.AI_FEATURES_ENABLED = "false"
+    delete process.env.AI_PROVIDER_ORDER
+    const router = await loadRouter()
+    const openai = await openaiRefusesSpend()
+    const xai = await import("@/lib/xai-client")
+
+    const result = await router.routeTextCall({ messages })
+
+    expect(result).toEqual({ ok: false })
+    expect(openai.openaiChatText).toHaveBeenCalledTimes(1)
+    expect(anthropicSdk.ctor).not.toHaveBeenCalled()
+    expect(anthropicSdk.create).not.toHaveBeenCalled()
+    expect(xai.xaiChatJson).not.toHaveBeenCalled()
+  })
+
+  it("an ordinary OpenAI outage still falls back — and with spend OFF, Anthropic still refuses", async () => {
+    // A 503 is not a spend refusal, so fallback is right; the Anthropic adapter's own guard is what
+    // must hold here, with no help from the classifier.
+    process.env.AI_FEATURES_ENABLED = "false"
+    process.env.AI_PROVIDER_ORDER = "openai,anthropic"
+    const router = await loadRouter()
+    const openai = await import("@/lib/openai-client")
+    ;(openai.openaiChatText as ReturnType<typeof vi.fn>).mockResolvedValue(openaiFailure(503))
+
+    const result = await router.routeTextCall({ messages })
+
+    expect(result).toEqual({ ok: false })
+    expect(openai.openaiChatText).toHaveBeenCalledTimes(1)
+    expect(anthropicSdk.ctor).not.toHaveBeenCalled()
+    expect(anthropicSdk.create).not.toHaveBeenCalled()
   })
 })

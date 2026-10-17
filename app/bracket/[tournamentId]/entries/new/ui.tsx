@@ -92,8 +92,8 @@ export default function CreateEntryChooser({
             <div className="text-lg font-semibold text-white">{selectedLeague?._count.members ?? 0}</div>
           </div>
           <div className="rounded-xl border border-cyan-400/25 bg-cyan-500/5 p-3">
-            <div className="inline-flex items-center gap-1.5 text-cyan-200 text-xs font-medium"><Sparkles className="h-3.5 w-3.5" />AI Coach</div>
-            <div className="text-[11px] text-cyan-100/75 mt-1">After creation, use AI pick assist from the entry page.</div>
+            <div className="inline-flex items-center gap-1.5 text-cyan-200 text-xs font-medium"><Sparkles className="h-3.5 w-3.5" />Chimmy</div>
+            <div className="text-[11px] text-cyan-100/75 mt-1">After creation, ask Chimmy for pick help from the entry page.</div>
           </div>
         </div>
 

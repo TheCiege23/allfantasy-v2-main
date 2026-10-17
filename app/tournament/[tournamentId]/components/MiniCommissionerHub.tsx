@@ -194,7 +194,7 @@ export function MiniCommissionerHub({
                       })}
                     </p>
                     {req.proposedPatchKeys.length > 0 ? (
-                      <p className="mt-1 text-[10px] text-white/40">
+                      <p className="mt-1 text-[11px] text-white/40">
                         {tInterpolate('tournament.miniComm.keysLabel', {
                           keys: req.proposedPatchKeys.join(', '),
                         })}
@@ -237,13 +237,13 @@ export function MiniCommissionerHub({
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
                       <p className="text-[13px] font-semibold text-white">{row.name}</p>
-                      <p className="text-[10px] text-white/40">{row.conferenceName}</p>
+                      <p className="text-[11px] text-white/40">{row.conferenceName}</p>
                     </div>
                     {cur ? (
                       <div className="text-right text-[11px] text-white/70">
                         <span className="text-white/45">{t('tournament.miniComm.deputyLabel')}</span>
                         {cur.displayName}
-                        <span className="ml-1 font-mono text-[10px] text-white/35">({cur.userId.slice(0, 8)}…)</span>
+                        <span className="ml-1 font-mono text-[11px] text-white/35">({cur.userId.slice(0, 8)}…)</span>
                       </div>
                     ) : (
                       <span className="text-[11px] text-white/40">{t('tournament.miniComm.unassigned')}</span>
@@ -251,7 +251,7 @@ export function MiniCommissionerHub({
                   </div>
                   <div className="mt-3 flex flex-wrap items-end gap-2">
                     <label className="flex min-w-[200px] flex-1 flex-col gap-1">
-                      <span className="text-[10px] uppercase text-white/40">{t('tournament.miniComm.userIdLabel')}</span>
+                      <span className="text-[11px] uppercase text-white/40">{t('tournament.miniComm.userIdLabel')}</span>
                       <input
                         value={draftUserId[row.leagueId] ?? ''}
                         onChange={(e) =>

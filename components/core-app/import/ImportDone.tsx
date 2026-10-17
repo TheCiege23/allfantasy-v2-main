@@ -35,6 +35,7 @@ import Link from 'next/link'
 
 import { ChimmyNote } from '@/components/core-app/import/ChimmyNote'
 import { EnableWebPushCard } from '@/components/notifications/EnableWebPushCard'
+import { IosAppPushCard } from '@/components/notifications/IosAppPushCard'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-progress.css'
 
@@ -169,6 +170,7 @@ export function ImportDone({
       */}
       <div className="af-done-push">
         <EnableWebPushCard />
+        <IosAppPushCard />
       </div>
 
       <div className="af-done-actions">

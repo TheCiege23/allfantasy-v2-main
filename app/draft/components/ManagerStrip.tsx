@@ -64,10 +64,10 @@ export function ManagerStrip({ slots, onClockIndex, selfIndex }: Props) {
                 <span className={cn('text-[11px] font-bold', m.text)}>{initials(s.label)}</span>
               )}
             </div>
-            <span className={cn('w-full truncate text-center text-[10px] font-semibold', m.text)}>
+            <span className={cn('w-full truncate text-center text-[11px] font-semibold', m.text)}>
               {s.label}
             </span>
-            {s.isCpu ? <span className="text-[8px] uppercase tracking-wide text-white/35">CPU</span> : null}
+            {s.isCpu ? <span className="text-[11px] uppercase tracking-wide text-white/35">CPU</span> : null}
           </div>
         )
       })}

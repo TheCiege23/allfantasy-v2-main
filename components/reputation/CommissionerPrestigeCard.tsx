@@ -66,7 +66,7 @@ export function CommissionerPrestigeCard({
       </div>
 
       {/* Footer */}
-      <p className="text-[10px] italic" style={{ color: "var(--muted2)" }}>
+      <p className="text-[11px] italic" style={{ color: "var(--muted2)" }}>
         Prestige is computed from verified league activity · No personal history shown
       </p>
     </div>

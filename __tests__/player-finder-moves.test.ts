@@ -264,7 +264,8 @@ describe('platform links', () => {
   })
 
   it('keeps a native league inside AllFantasy', () => {
-    expect(lineupLink(native)).toMatchObject({ href: '/core/my-team?league=L2', external: false, label: 'Open in AllFantasy' })
+    // The league shell's team tab is the native editor; /core/my-team only reads a lineup.
+    expect(lineupLink(native)).toMatchObject({ href: '/league/L2?view=team', external: false, label: 'Open in AllFantasy', screen: 'Lineup' })
     expect(claimLink(native)?.href).toBe('/waiver-wire?leagueId=L2')
   })
 

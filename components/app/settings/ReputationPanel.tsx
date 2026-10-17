@@ -457,7 +457,7 @@ export default function ReputationPanel({ leagueId }: LeagueTabProps) {
       )}
       {aiPrestigeContext?.combinedHint && (
         <details className="mt-3 rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-3 text-xs text-cyan-100">
-          <summary className="cursor-pointer font-medium">Unified prestige context for AI</summary>
+          <summary className="cursor-pointer font-medium">Unified prestige context for Chimmy</summary>
           <p className="mt-2">{aiPrestigeContext.combinedHint}</p>
         </details>
       )}
@@ -573,7 +573,7 @@ export default function ReputationPanel({ leagueId }: LeagueTabProps) {
               disabled={explainLoading}
               onClick={explainManager}
             >
-              <BookOpen className="h-3 w-3" /> {explainLoading ? '…' : 'AI explain'}
+              <BookOpen className="h-3 w-3" /> {explainLoading ? '…' : 'Explain with Chimmy'}
             </button>
             <Link
               href={`/app/league/${encodeURIComponent(leagueId)}/legacy/breakdown?entityType=MANAGER&entityId=${encodeURIComponent(selectedManagerId)}&sport=${encodeURIComponent(sportFilter)}`}

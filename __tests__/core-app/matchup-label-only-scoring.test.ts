@@ -31,7 +31,8 @@ vi.mock('@/lib/prisma', () => ({
   },
 }))
 
-vi.mock('@/lib/core-app/rosterIdCrosswalk', () => ({
+vi.mock('@/lib/core-app/rosterIdCrosswalk', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
   crosswalkToSleeperIds: vi.fn(async () => new Map()),
 }))
 

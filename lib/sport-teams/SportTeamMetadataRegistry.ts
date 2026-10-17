@@ -188,8 +188,24 @@ export function getTeamByAbbreviation(
 }
 
 /**
+ * Abbreviations that mean "no team", never a club. Providers put these in the team column
+ * for free agents and unknowns; building a logo path from one is a guaranteed 404.
+ */
+const NOT_A_TEAM = new Set(['FA', 'F/A', 'FREE AGENT', 'N/A', 'NONE', 'NULL', 'TBD', 'UNK', '—', '-', '--'])
+
+/** True for a team-column value that names no club (free agent, unknown, blank). */
+export function isNotATeam(abbreviation: string | null | undefined): boolean {
+  const abbr = abbreviation?.trim()
+  return !abbr || NOT_A_TEAM.has(abbr.toUpperCase())
+}
+
+/**
  * Primary logo URL for a team (abbreviation + sport). Use for rendering when DB has no logo.
  * If team is not in static list (e.g. Soccer club not in SOCCER_TEAMS), returns ESPN-style URL by sport + abbr so logos can still be attempted.
+ *
+ * ⚠ BUT NOT FOR A VALUE THAT IS NOT A TEAM. The attempt above is deliberate for real clubs the
+ * static lists miss; it is never right for "FA", which every free agent carries — that built
+ * `…/nfl/500/fa.png`, a 404, and a broken-image glyph beside every free agent in a trade.
  */
 export function getPrimaryLogoUrlForTeam(
   sportType: SportType | string,
@@ -198,8 +214,8 @@ export function getPrimaryLogoUrlForTeam(
   const sport = toSportType(typeof sportType === 'string' ? sportType : sportType)
   const team = getTeamByAbbreviation(sport, abbreviation)
   if (team?.primary_logo_url) return team.primary_logo_url
-  if (abbreviation?.trim()) return logoUrlForAbbrev(sport, abbreviation.trim())
-  return null
+  if (isNotATeam(abbreviation)) return null
+  return logoUrlForAbbrev(sport, abbreviation.trim())
 }
 
 /**

@@ -1,14 +1,15 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { sha256Hex } from "@/lib/tokens"
+import { consumeResetCodeAttempt } from "@/lib/auth/passwordResetAttempts"
+import { normalizePhoneE164 } from "@/lib/phone/e164"
 
 export const runtime = "nodejs"
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}))
   const email = String(body?.email || "").trim().toLowerCase()
-  let phone = String(body?.phone || "").trim().replace(/[\s()-]/g, "")
-  if (phone && !phone.startsWith("+")) phone = "+1" + phone
+  const phone = normalizePhoneE164(String(body?.phone || ""))
   const code = String(body?.code || "").trim()
 
   if (!code || (!email && !phone)) {
@@ -34,6 +35,12 @@ export async function POST(req: Request) {
 
   if (!userId) {
     return NextResponse.json({ error: "INVALID_OR_USED_TOKEN" }, { status: 400 })
+  }
+
+  // A yes/no answer about a guessed code is as good as the reset itself to an
+  // attacker, so this spends from the same per-user budget as confirm.
+  if (!(await consumeResetCodeAttempt(userId))) {
+    return NextResponse.json({ error: "TOO_MANY_ATTEMPTS" }, { status: 429 })
   }
 
   const row = await (prisma as any).passwordResetToken.findFirst({

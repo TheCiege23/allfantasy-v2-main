@@ -55,12 +55,12 @@ export const DEFAULT_SLOT_ELIGIBILITY: SlotEligibility = {
   REC_FLEX: ['WR', 'TE'],
   SUPER_FLEX: ['QB', 'RB', 'WR', 'TE'],
   SUPERFLEX: ['QB', 'RB', 'WR', 'TE'],
-  IDP_FLEX: ['DL', 'DE', 'DT', 'EDGE', 'LB', 'DB', 'CB', 'S', 'FS', 'SS'],
+  IDP_FLEX: ['DL', 'DE', 'DT', 'EDGE', 'LB', 'ILB', 'OLB', 'DB', 'CB', 'S', 'FS', 'SS'],
   DL: ['DL', 'DE', 'DT', 'EDGE'],
   DE: ['DE', 'EDGE'],
   DT: ['DT'],
   EDGE: ['EDGE', 'DE'],
-  LB: ['LB'],
+  LB: ['LB', 'ILB', 'OLB'],
   DB: ['DB', 'CB', 'S', 'FS', 'SS'],
   CB: ['CB'],
   S: ['S', 'FS', 'SS'],
@@ -88,15 +88,9 @@ export type LineupFill = {
 /**
  * The best starting lineup available from `players`.
  *
- * ── WHY GREEDY IS CORRECT HERE, RATHER THAN MERELY CONVENIENT ────────────────────────────────
- *
- * Slots are filled in order of how restrictive they are: a slot accepting one position is filled
- * before a FLEX accepting several. Within that order each slot takes the best remaining eligible
- * player. That is optimal for this slot structure because the eligibility sets are NESTED — a
- * dedicated RB slot's candidates are a subset of FLEX's — so a player displaced from a dedicated
- * slot can only ever land in a slot the replacement could also have filled, and the replacement is
- * by construction no better. It would NOT be optimal for arbitrary overlapping eligibility, which
- * is why the ordering is explicit rather than incidental.
+ * Rectangular assignment fills as many legal slots as possible, then maximizes projected points.
+ * This supports overlapping flex groups: WR/RB and WR/TE are not nested, so taking the best WR
+ * for the first group can strand the second group despite a legal, stronger lineup existing.
  *
  * ⚠ UNPRICED PLAYERS ARE NOT CANDIDATES. They cannot be compared, and guessing a zero would push a
  * real starter out of the lineup in favour of someone recorded as scoring nothing.
@@ -107,11 +101,11 @@ export function fillLineup(
   eligibility: SlotEligibility = DEFAULT_SLOT_ELIGIBILITY,
 ): LineupFill {
   const available = players
-    .filter((p) => p.projectedPoints != null)
+    .filter((p) => p.projectedPoints != null && Number.isFinite(p.projectedPoints))
     .slice()
     .sort((a, b) => (b.projectedPoints as number) - (a.projectedPoints as number))
 
-  const taken = new Set<string>()
+  const unique = available.filter((p, i) => available.findIndex(other => other.playerId === p.playerId) === i)
   const unknownSlots: string[] = []
   const unfilledSlots: string[] = []
   const starterIds: string[] = []
@@ -128,17 +122,18 @@ export function fillLineup(
     // Most restrictive first; original order breaks ties so the result is deterministic.
     .sort((a, b) => a.size - b.size || a.index - b.index)
 
-  for (const { slot, index, elig } of ordered) {
-    if (!elig) {
-      unknownSlots.push(slot)
-      continue
-    }
-    const pick = available.find((p) => !taken.has(p.playerId) && elig.includes(p.position.toUpperCase()))
+  const known = ordered.filter(({ slot, elig }) => {
+    if (!elig) unknownSlots.push(slot)
+    return !!elig
+  })
+  const matching = optimalSlotAssignment(unique, known.map(s => s.elig!))
+  for (let row = 0; row < known.length; row++) {
+    const { slot, index } = known[row]
+    const pick = unique[matching[row]]
     if (!pick) {
       unfilledSlots.push(slot)
       continue
     }
-    taken.add(pick.playerId)
     starterIds.push(pick.playerId)
     byIndex.push({ index, slot, playerId: pick.playerId })
     points += pick.projectedPoints as number
@@ -146,6 +141,66 @@ export function fillLineup(
 
   const assignments = byIndex.sort((a, b) => a.index - b.index).map(({ slot, playerId }) => ({ slot, playerId }))
   return { points, starterIds, unfilledSlots, unknownSlots, assignments }
+}
+
+/** Hungarian rectangular assignment with one empty column per slot. */
+function optimalSlotAssignment(players: readonly ImpactPlayer[], slots: readonly (readonly string[])[]): number[] {
+  const n = slots.length
+  if (!n) return []
+  const m = players.length + n
+  // Scale only the optimization costs, never the returned points. A filled slot's bonus
+  // exceeds every possible points difference, so negative/zero projections still fill legal slots.
+  const scale = Math.max(1, ...players.map(p => Math.abs(p.projectedPoints!)))
+  const bonus = 2 * n + 1
+  const costs = slots.map(eligible => Array.from({ length: m }, (_, column) =>
+    column >= players.length ? 0 : eligible.includes(players[column].position.toUpperCase())
+      ? -bonus - players[column].projectedPoints! / scale : bonus))
+  const u = Array<number>(n + 1).fill(0)
+  const v = Array<number>(m + 1).fill(0)
+  const assignedRow = Array<number>(m + 1).fill(0)
+  const previousColumn = Array<number>(m + 1).fill(0)
+  for (let row = 1; row <= n; row++) {
+    assignedRow[0] = row
+    let column = 0
+    const best = Array<number>(m + 1).fill(Infinity)
+    const used = Array<boolean>(m + 1).fill(false)
+    do {
+      used[column] = true
+      const activeRow = assignedRow[column]
+      let delta = Infinity
+      let nextColumn = 0
+      for (let candidate = 1; candidate <= m; candidate++) {
+        if (used[candidate]) continue
+        const cost = costs[activeRow - 1][candidate - 1] - u[activeRow] - v[candidate]
+        if (cost < best[candidate]) {
+          best[candidate] = cost
+          previousColumn[candidate] = column
+        }
+        if (best[candidate] < delta) {
+          delta = best[candidate]
+          nextColumn = candidate
+        }
+      }
+      for (let candidate = 0; candidate <= m; candidate++) {
+        if (used[candidate]) {
+          u[assignedRow[candidate]] += delta
+          v[candidate] -= delta
+        } else best[candidate] -= delta
+      }
+      column = nextColumn
+    } while (assignedRow[column] !== 0)
+    do {
+      const prior = previousColumn[column]
+      assignedRow[column] = assignedRow[prior]
+      column = prior
+    } while (column !== 0)
+  }
+  const result = Array<number>(n).fill(-1)
+  for (let column = 1; column <= players.length; column++) {
+    const row = assignedRow[column] - 1
+    if (row >= 0 && slots[row].includes(players[column - 1].position.toUpperCase())) result[row] = column - 1
+  }
+  return result
 }
 
 /**
@@ -187,6 +242,13 @@ export type RosterImpact = {
   unpricedExcluded: number
   depth: DepthRow[]
   replacement: ReplacementRow[]
+  /**
+   * Who starts, by player id, before and after — the optimal lineup `fillLineup` already chose.
+   * Commissioner review mode (`./tradeReview.ts`) reads them to tell starter value from bench value.
+   * Absent on a refusal, and on impacts recorded before 2026-09-27.
+   */
+  startersBefore?: string[]
+  startersAfter?: string[]
 }
 
 const EMPTY = (blockedReason: string, unpricedExcluded = 0): RosterImpact => ({
@@ -210,7 +272,9 @@ function benchByPosition(players: readonly ImpactPlayer[], starterIds: readonly 
     out.set(key, list)
   }
   for (const list of out.values()) {
-    list.sort((a, b) => (b.projectedPoints ?? -Infinity) - (a.projectedPoints ?? -Infinity))
+    const value = (p: ImpactPlayer) => p.projectedPoints != null && Number.isFinite(p.projectedPoints)
+      ? p.projectedPoints : -Infinity
+    list.sort((a, b) => value(b) - value(a))
   }
   return out
 }
@@ -233,9 +297,10 @@ export function computeRosterImpact(args: {
 }): RosterImpact {
   const eligibility = args.eligibility ?? DEFAULT_SLOT_ELIGIBILITY
 
-  const unpricedTraded = [...args.incoming].filter((p) => p.projectedPoints == null)
+  const hasProjection = (p: ImpactPlayer) => p.projectedPoints != null && Number.isFinite(p.projectedPoints)
+  const unpricedTraded = [...args.incoming].filter((p) => !hasProjection(p))
   const outgoing = new Set(args.outgoingPlayerIds)
-  const outgoingUnpriced = args.roster.filter((p) => outgoing.has(p.playerId) && p.projectedPoints == null)
+  const outgoingUnpriced = args.roster.filter((p) => outgoing.has(p.playerId) && !hasProjection(p))
   if (unpricedTraded.length > 0 || outgoingUnpriced.length > 0) {
     const n = unpricedTraded.length + outgoingUnpriced.length
     return EMPTY(`${n} traded player(s) have no projection under this league's scoring, so the lineup effect cannot be computed`)
@@ -257,13 +322,18 @@ export function computeRosterImpact(args: {
 
   const fillBefore = fillLineup(before, args.slots, eligibility)
   const fillAfter = fillLineup(after, args.slots, eligibility)
+  const unpricedExcluded = [...before, ...args.incoming].filter((p) => !hasProjection(p)).length
 
   const unknown = [...new Set([...fillBefore.unknownSlots, ...fillAfter.unknownSlots])]
   if (unknown.length > 0) {
-    return EMPTY(`the lineup contains slot(s) this model does not know how to fill: ${unknown.join(', ')}`)
+    return EMPTY(`the lineup contains slot(s) this model does not know how to fill: ${unknown.join(', ')}`, unpricedExcluded)
   }
 
-  const unpricedExcluded = [...before, ...args.incoming].filter((p) => p.projectedPoints == null).length
+  if (fillBefore.unfilledSlots.length || fillAfter.unfilledSlots.length) {
+    const phase = fillAfter.unfilledSlots.length ? 'after' : 'before'
+    const missingSlots = phase === 'after' ? fillAfter.unfilledSlots : fillBefore.unfilledSlots
+    return EMPTY(`the ${phase}-trade lineup cannot fill ${missingSlots.join(', ')} with projected eligible players; replacement production is unknown`, unpricedExcluded)
+  }
 
   const benchBefore = benchByPosition(before, fillBefore.starterIds)
   const benchAfter = benchByPosition(after, fillAfter.starterIds)
@@ -296,8 +366,8 @@ export function computeRosterImpact(args: {
 
   const replacement: ReplacementRow[] = positions.map((position) => ({
     position,
-    before: benchBefore.get(position)?.[0]?.projectedPoints ?? null,
-    after: benchAfter.get(position)?.[0]?.projectedPoints ?? null,
+    before: benchBefore.get(position)?.find(hasProjection)?.projectedPoints ?? null,
+    after: benchAfter.get(position)?.find(hasProjection)?.projectedPoints ?? null,
   }))
 
   return {
@@ -308,5 +378,7 @@ export function computeRosterImpact(args: {
     unpricedExcluded,
     depth,
     replacement,
+    startersBefore: [...fillBefore.starterIds],
+    startersAfter: [...fillAfter.starterIds],
   }
 }

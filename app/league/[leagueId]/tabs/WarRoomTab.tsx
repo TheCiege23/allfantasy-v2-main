@@ -314,7 +314,7 @@ export function WarRoomTab({ league, sport, dashboardEmbed = false }: WarRoomTab
                 key={f}
                 type="button"
                 onClick={() => setMetaFrame(f)}
-                className={`rounded-md px-2 py-1 text-[10px] font-semibold ${
+                className={`rounded-md px-2 py-1 text-[11px] font-semibold ${
                   metaFrame === f ? 'bg-[#ff3d81]/20 text-[#ffd7e5]' : 'text-white/45 hover:text-white/70'
                 }`}
               >

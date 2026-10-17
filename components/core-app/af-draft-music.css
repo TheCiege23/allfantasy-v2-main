@@ -55,7 +55,7 @@
   border-radius: 4px;
   background: var(--warn-soft);
   color: var(--warn);
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -122,7 +122,7 @@
 
 .af-dm-pending code {
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 10px;
+  font-size: 11px;
   color: var(--text2);
 }
 
@@ -240,7 +240,7 @@
 
 .af-dm-time {
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 10px;
+  font-size: 11px;
   color: var(--faint);
 }
 
@@ -262,7 +262,7 @@
 
 .af-dm-vol-val {
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--muted);
   width: 22px;
   text-align: right;
@@ -280,7 +280,7 @@
 }
 
 .af-dm-queue-title {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -292,7 +292,7 @@
   border-radius: 999px;
   background: var(--chip);
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 10px;
+  font-size: 11px;
   color: var(--muted);
 }
 
@@ -323,7 +323,7 @@
 
 .af-dm-queue-dur {
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--faint);
   text-align: right;
 }

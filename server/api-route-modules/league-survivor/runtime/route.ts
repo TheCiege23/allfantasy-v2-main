@@ -7,7 +7,8 @@ import { getServerSession } from 'next-auth'
 import { z } from 'zod'
 import { authOptions } from '@/lib/auth'
 import { assertLeagueMember } from '@/lib/league-access'
-import { getLeagueRole } from '@/lib/league/permissions'
+import { resolveSurvivorAccessContext } from '@/lib/survivor/survivorAccessControl'
+import { survivorHostGuard } from '@/lib/survivor/survivorHostGuard'
 import { isSurvivorLeague } from '@/lib/survivor/SurvivorLeagueConfig'
 import {
   advanceClueChain,
@@ -54,17 +55,18 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: 
 
   const spec = await loadSurvivorEngineSpecForLeague(leagueId)
   const runtime = await getSurvivorEngineRuntimeState(leagueId)
-  const role = await getLeagueRole(leagueId, userId)
+  const access = await resolveSurvivorAccessContext(leagueId, userId)
+  if (!access?.isLeagueMember) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const confessionals =
-    role === 'commissioner' || role === 'co_commissioner'
+    access.decisions.canSeeHiddenIdolAssignments
       ? runtime.confessionals
       : runtime.confessionals.filter((c) => c.userId === userId)
 
   return NextResponse.json({
     ok: true,
     engineSpecV2: spec,
-    runtime: { ...runtime, confessionals },
+    runtime: { version: runtime.version, confessionals, clueChains: access.decisions.canSeeHiddenIdolAssignments ? runtime.clueChains : [], storyBeats: access.decisions.canSeeHiddenIdolAssignments ? runtime.storyBeats : [] },
   })
 }
 
@@ -121,10 +123,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
     return NextResponse.json({ ok: true, entry: result.entry })
   }
 
-  const role = await getLeagueRole(leagueId, userId)
-  if (role !== 'commissioner' && role !== 'co_commissioner') {
-    return NextResponse.json({ error: 'Only commissioners can advance clue chains' }, { status: 403 })
-  }
+  const denied = await survivorHostGuard(leagueId, userId)
+  if (denied) return denied
 
   const adv = await advanceClueChain(leagueId, spec, body.chainId, body.idolTemplateKey)
   if (!adv.ok) return NextResponse.json({ error: adv.error }, { status: 400 })

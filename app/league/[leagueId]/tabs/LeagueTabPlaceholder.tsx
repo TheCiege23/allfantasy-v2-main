@@ -10,7 +10,7 @@ export function LeagueTabPlaceholder({ league, tabLabel }: { league: UserLeague;
         {leagueTabSportEmoji(String(league.sport))}
       </span>
       <p className="text-[14px] font-semibold text-white/60">{tabLabel}</p>
-      <p className="max-w-[200px] text-center text-[11px] text-white/30">
+      <p className="max-w-[200px] text-center text-[11px] text-white/30" data-hide-in-ios-app="">
         {league.sport} {tabLabel.toLowerCase()} coming soon
       </p>
     </div>

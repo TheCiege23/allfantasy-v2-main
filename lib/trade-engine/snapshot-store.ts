@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { Prisma } from '@prisma/client'
 
 export type SnapshotType = 'league_analyze' | 'rankings_analyze' | 'otb_packages'
+const LEGACY_SNAPSHOT_TYPES: SnapshotType[] = ['league_analyze', 'rankings_analyze', 'otb_packages']
 
 export async function writeSnapshot(params: {
   leagueId: string
@@ -14,6 +15,7 @@ export async function writeSnapshot(params: {
   ttlHours?: number
 }): Promise<void> {
   const { leagueId, sleeperUsername, snapshotType, payload, contextKey, season, ttlHours } = params
+  if (!LEGACY_SNAPSHOT_TYPES.includes(snapshotType)) return
   const expiresAt = ttlHours ? new Date(Date.now() + ttlHours * 60 * 60 * 1000) : null
 
   try {
@@ -40,6 +42,7 @@ export async function readLatestSnapshot(params: {
   contextKey?: string
 }): Promise<Record<string, any> | null> {
   const { leagueId, sleeperUsername, snapshotType, contextKey } = params
+  if (!LEGACY_SNAPSHOT_TYPES.includes(snapshotType)) return null
   try {
     const snapshot = await prisma.tradeAnalysisSnapshot.findFirst({
       where: {
@@ -79,6 +82,7 @@ export async function readLatestSnapshotRecord(params: {
   contextKey?: string
 }): Promise<SnapshotRecord | null> {
   const { leagueId, sleeperUsername, snapshotType, contextKey } = params
+  if (!LEGACY_SNAPSHOT_TYPES.includes(snapshotType)) return null
   try {
     const s = await prisma.tradeAnalysisSnapshot.findFirst({
       where: {
@@ -115,11 +119,14 @@ export async function readSnapshotsForUser(params: {
   limit?: number
 }): Promise<SnapshotRecord[]> {
   const { sleeperUsername, snapshotType, leagueId, limit = 10 } = params
+  if (snapshotType && !LEGACY_SNAPSHOT_TYPES.includes(snapshotType)) return []
   try {
     const snapshots = await prisma.tradeAnalysisSnapshot.findMany({
       where: {
         sleeperUsername: sleeperUsername.toLowerCase(),
-        ...(snapshotType ? { snapshotType } : {}),
+        // Account-owned trade receipts are read only through their authenticated
+        // store, never through this legacy username-based listing.
+        snapshotType: snapshotType ?? { in: LEGACY_SNAPSHOT_TYPES },
         ...(leagueId ? { leagueId } : {}),
         OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
       },

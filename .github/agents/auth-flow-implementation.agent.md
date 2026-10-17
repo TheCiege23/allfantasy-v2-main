@@ -33,7 +33,7 @@ This project uses a **NextAuth + Supabase hybrid**:
 | Admin magic link (consume) | `app/api/auth/admin-magic/consume/` |
 | Yahoo OAuth | `app/api/auth/yahoo/route.ts` + `app/api/auth/yahoo/callback/route.ts` |
 | Discord OAuth | `app/api/auth/discord/` |
-| Sleeper lookup | `app/api/auth/sleeper-lookup/route.ts` |
+| Sleeper lookup | server-side only: `lib/sleeper/user-lookup.ts` (`lookupSleeperUser`, used by `app/api/auth/register`). The public `app/api/auth/sleeper-lookup` route was removed 2026-09-27 — unused since the signup UI dropped it, and an unthrottled Sleeper proxy. Public lookups go through `/api/sleeper-check` (PR #1426). |
 
 ### Provider status
 

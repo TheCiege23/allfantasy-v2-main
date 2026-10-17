@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { latestProjectionWeek } from '@/lib/core-app/playerProjections'
+import { resolveWaiverClaimWeek } from '@/lib/core-app/waiverClaimWeek'
 import { getWaiversBoard, type WaiversBoardData } from '@/lib/core-app/waiversBoard'
 import { isCategoryAllowedForLeague } from '@/lib/notifications/leagueOverrides'
 import type { ScheduledGame } from './lineupCheck'
@@ -29,11 +29,21 @@ import {
  * outside its Tuesday window it reads two small sets of rows and returns. Audience, settings, the
  * weekly claim and dispatch are the lineup check's — `proactiveDelivery.ts`.
  *
- * 🛑 THE FEED MUST HOLD THE WEEK AHEAD. The board prices whatever week the projection feed holds.
- * If the feed has not yet moved on from the week just played, its "best add" is a player whose
- * points are already scored, and the window stays closed: the check waits for the week ahead
- * rather than advising on the week behind. The window is keyed on THAT week's first kickoff, so a
- * feed that has not moved yet reads as "the week's games have started" and nothing is sent.
+ * 🛑 IT PRICES THE WEEK AHEAD, NEVER THE WEEK BEHIND. The week is the CLAIM week
+ * (lib/core-app/waiverClaimWeek.ts): once most of the week being played has kicked off, a claim is
+ * for next week, and the board prices next week's Sleeper board from `future_week_projections`.
+ * Before that table existed (2026-09-29) the check had to wait for the current-week feed to roll
+ * over, and a feed that had not moved read as "the week's games have started" so nothing was sent.
+ * That fallback still holds: with next week unpublished the claim week is the current one, its
+ * first kickoff has passed, and the window stays closed rather than advising on the week behind.
+ *
+ * ⚠ NFL ROWS ONLY, DELIBERATELY — `board.rows`, never `board.sports`. The board's other-sport
+ * sections are priced PER GAME from a season rate; this message says "+N projected pts in week W",
+ * gates on WAIVER_CHECK_MIN_GAIN points per NFL week, is windowed on the NFL schedule and goes to an
+ * NFL-league audience. None of that is true of a basketball gain, so sending one here would state a
+ * weekly forecast the number never made. Those sports have their own window, audience and "worth a
+ * claim" threshold (owner's decision 2026-09-29) — in `runSportWaiverCheck.ts`, on the rules in
+ * `waiverAlertRules.ts`, never by widening this filter.
  */
 
 export type WaiverCheckUserOutcome =
@@ -48,9 +58,10 @@ export type WaiverCheckUserOutcome =
   | 'error'
 
 export interface WaiverCheckDeps extends ProactiveDeliveryDeps {
-  latestWeek: () => Promise<{ season: string; week: number } | null>
+  /** The claim week at `nowMs` — `basis: 'next'` when it is priced on next week's board. */
+  latestWeek: (nowMs: number) => Promise<{ season: string; week: number; basis?: 'current' | 'next' } | null>
   loadGames: (season: number, week: number) => Promise<ScheduledGame[]>
-  board: (userId: string) => Promise<WaiversBoardData>
+  board: (userId: string, opts?: { week?: number | null }) => Promise<WaiversBoardData>
 }
 
 export type WaiverCheckRun =
@@ -78,7 +89,7 @@ const DEFAULT_BUDGET_MS = 90_000
 
 const defaultDeps: WaiverCheckDeps = {
   ...proactiveDeliveryDeps,
-  latestWeek: latestProjectionWeek,
+  latestWeek: (nowMs) => resolveWaiverClaimWeek(nowMs),
   loadGames: loadRegularSeasonGames,
   board: getWaiversBoard,
 }
@@ -93,7 +104,7 @@ export async function runWaiverCheck(
   const now = deps.now()
   const dryRun = Boolean(opts.dryRun)
 
-  const week = await deps.latestWeek()
+  const week = await deps.latestWeek(now.getTime())
   const season = week ? Number(week.season) : NaN
   if (!week || !Number.isInteger(season)) return { ran: false, reason: 'no_projection_week', week: null, firstKickoff: null }
 
@@ -151,7 +162,7 @@ export async function runWaiverCheck(
         continue
       }
 
-      const board = await deps.board(userId)
+      const board = await deps.board(userId, week.basis === 'next' ? { week: week.week } : {})
       // The board's week is the feed's, read again; a week that moved mid-run is not this run's.
       const sameWeek = board.at != null && board.at.week === week.week && board.at.season === week.season
       const picks = sameWeek

@@ -102,6 +102,18 @@ describe('scopes the write to one surface', () => {
     expect(sentWhere()).toEqual({ leagueId: LEAGUE_ID, surface: 'league_chat' })
   })
 
+  it('clears the inbound cursor on opt-out so a later opt-in cannot backfill the off period', async () => {
+    const res = await patch({ leagueId: LEAGUE_ID, syncInbound: false })
+    expect(res.status).toBe(200)
+    expect(mocks.channelUpdateMany.mock.calls[0][0].data).toMatchObject({ syncInbound: false, lastSyncedMessageId: null })
+  })
+
+  it('refuses inbound on a non-league surface', async () => {
+    const res = await patch({ leagueId: LEAGUE_ID, surface: 'commissioner_notes', syncInbound: true })
+    expect(res.status).toBe(400)
+    expect(mocks.channelUpdateMany).not.toHaveBeenCalled()
+  })
+
   it.each([
     ['an unknown surface', 'not_a_surface'],
     ['a SQL-ish string', "league_chat' OR '1'='1"],

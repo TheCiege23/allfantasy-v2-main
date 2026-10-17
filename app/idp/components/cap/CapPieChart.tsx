@@ -33,13 +33,13 @@ export function CapPieChart({ activeSalary, deadMoney, availableCap, size = 180 
           className="flex h-full w-full items-center justify-center rounded-full bg-[#0a0f18]"
           style={{ margin: 0 }}
         >
-          <div className="text-center text-[10px] text-white/45">
+          <div className="text-center text-[11px] text-white/45">
             <p className="font-bold text-white/80">Cap</p>
             <p>${(a + d + o).toFixed(0)}M</p>
           </div>
         </div>
       </div>
-      <ul className="w-full space-y-1 text-[10px] text-white/70">
+      <ul className="w-full space-y-1 text-[11px] text-white/70">
         <li className="flex justify-between">
           <span className="text-[color:var(--cap-contract)]">Active</span>
           <span>${a.toFixed(1)}M</span>

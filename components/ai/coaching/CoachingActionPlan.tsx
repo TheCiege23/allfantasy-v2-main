@@ -85,7 +85,7 @@ export function CoachingActionPlan({
                   <span className="text-[13px] font-semibold text-white">{s.title}</span>
                   <span
                     className={cn(
-                      'rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide',
+                      'rounded-full border px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide',
                       URGENCY[s.urgency],
                     )}
                   >

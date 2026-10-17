@@ -1,8 +1,11 @@
 import 'server-only'
 
 import { resolveNames } from '@/lib/ai-payload/resolveAiTeamContext'
+import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
+import { isForeignIdSpace } from '@/lib/core-app/rosterIdSpace'
 import { extractPlayerNameCandidates, splitSides } from '@/lib/chimmy-trade/tradeSentence'
 import { evaluateCanonicalTrade, type CanonicalTradeEvaluation, type EvaluateCanonicalTradeArgs } from '@/lib/decision-os/trade/canonicalEvaluator'
+import { evaluateTrade, type TradeEvaluationReceipt } from '@/lib/decision-os/trade/evaluateTrade'
 import type { TradeAssetSummary } from '@/lib/decision-os/trade/dco'
 import { extractPickMentions, pickLabel, type PickMention } from './tradePickMentions'
 import { resolveCanonicalWorld } from '@/lib/decision-os/world'
@@ -54,8 +57,8 @@ import type {
  * mistake absence for a number.
  */
 
-/** A league the size anyone plays; bounds the one name read. */
-const MAX_LEAGUE_PLAYER_IDS = 800
+/** Covers large 32-team IDP leagues without dropping the later teams' assets. */
+const MAX_LEAGUE_PLAYER_IDS = 4096
 
 export type {
   ReadyTradeScenario,
@@ -71,6 +74,8 @@ export interface TradeScenarioDeps {
   evaluate: (args: EvaluateCanonicalTradeArgs, deps: { resolveWorld: (leagueId: string) => Promise<CanonicalWorld | null> }) => Promise<CanonicalTradeEvaluation>
   /** THE grade for the deal, from the viewer's side. */
   grade: (args: { leagueId: string; userId: string; give: GradeInputs; get: GradeInputs }) => Promise<TradeGradeView>
+  /** Save the receipt. Default: the one trade engine's own receipt store. */
+  saveReceipt?: (receipt: TradeEvaluationReceipt) => Promise<{ id: string }>
 }
 
 const defaultDeps: TradeScenarioDeps = {
@@ -164,6 +169,18 @@ export async function buildTradeScenario(
       detail: 'Your team in this league is not claimed or has no synced roster, so there is no "before" to compare.',
     }
   }
+  /*
+   * The port strips a foreign league's roster ids (`loadRosters`), so every roster here is empty and
+   * the name match below would refuse with "not every player named is on a roster in this league" —
+   * a false claim about the league. `provenance.provider` decides only this refusal.
+   */
+  if (isForeignIdSpace(world.provenance?.provider)) {
+    return {
+      status: 'unresolved',
+      reason: 'roster_ids_unreadable',
+      detail: `${FOREIGN_IDS_UNREADABLE}, so no roster in this league can be read to compare this trade.`,
+    }
+  }
 
   const names = await deps.loadPlayerNames(world.league.sport, allRosteredIds(world)).catch(() => new Map())
   const byName = indexRosterNames(world, names)
@@ -209,10 +226,14 @@ export async function buildTradeScenario(
       return { error: 'players_not_rostered' }
     }
     /*
-     * The partner is identified by the players you would RECEIVE. With only picks on that side
-     * there is no way to know whose picks they are — refused, and the reply asks for a name.
+     * The partner is identified by the players you would RECEIVE. With only picks on that side, the
+     * one other signal is the pick's bracketed original owner — "2028 2nd Rd (JeffersonTD)", as a
+     * Sleeper trade card writes it (2026-09-30). Accepted only when every received pick names the
+     * same manager and that manager is exactly one other roster; otherwise refused, and the reply
+     * asks for a name.
      */
-    if (getSide.length === 0) return { error: 'pick_partner_unclear' }
+    const pickOwnerRoster = getSide.length === 0 ? rosterNamedByPickOwners(world, getPicks, viewerRoster.rosterId) : null
+    if (getSide.length === 0 && !pickOwnerRoster) return { error: 'pick_partner_unclear' }
     const give: Located[] = []
     for (const hits of giveSide) {
       const mine = hits.filter((h) => h.rosterId === viewerRoster.rosterId)
@@ -228,6 +249,7 @@ export async function buildTradeScenario(
       get.push(theirs[0]!)
       partnerIds.add(theirs[0]!.rosterId)
     }
+    if (pickOwnerRoster) partnerIds.add(pickOwnerRoster)
     if (partnerIds.size !== 1) return { error: 'multiple_partners' }
     return { give, get, givePicks, getPicks, partnerRosterId: [...partnerIds][0]! }
   }
@@ -284,45 +306,46 @@ export async function buildTradeScenario(
     ],
     unpriceable: [],
   })
-  const gradePromise = deps
-    .grade({
+  /*
+   * ONE CALL TO THE ONE TRADE ENGINE (design step 7, 2026-09-27). `evaluateTrade` joins the grade and
+   * the canonical lineup effect — both the same halves this used to call separately — and saves the
+   * receipt every other surface reads, so the letter Chimmy states is a record, not a recital. The
+   * already-loaded world is handed to the evaluator so the league is not read twice.
+   *
+   * ⚠ A LINEUP THAT CANNOT BE COMPUTED NO LONGER REFUSES THE TRADE. It used to return
+   * `evaluation_failed` and drop a perfectly good grade with it; the engine now keeps the grade and
+   * says why the lineup is missing (`canonicalError`).
+   */
+  const receipt = await evaluateTrade(
+    {
+      surface: 'chimmy',
       leagueId: args.leagueId,
       userId: args.userId,
       give: gradeSide(chosen.give, chosen.givePicks),
       get: gradeSide(chosen.get, chosen.getPicks),
-    })
-    .catch((): TradeGradeView => ({ graded: false, reason: 'The trade could not be graded just now.', basis: null }))
-
-  let evaluation: CanonicalTradeEvaluation
-  try {
-    evaluation = await deps.evaluate(
-      {
-        leagueId: args.leagueId,
-        proposalId: 'chimmy-scenario',
+      viewerSide: true,
+      canonical: {
         proposerRosterId: viewerRoster.rosterId,
         receiverRosterId: chosen.partnerRosterId,
-        viewerRosterId: viewerRoster.rosterId,
+        participantRosterIds: [viewerRoster.rosterId, chosen.partnerRosterId],
         assets,
-        currentSeason: world.league.season ?? undefined,
+        currentSeason: world.league.season ?? null,
         includeRosterImpact: true,
       },
+    },
+    {
+      grade: (input) => deps.grade({ leagueId: args.leagueId, userId: args.userId, give: input.give, get: input.get }),
       // The world is already loaded; the evaluator must not load it a second time.
-      { resolveWorld: async () => world },
-    )
-  } catch {
-    return {
-      status: 'unresolved',
-      reason: 'evaluation_failed',
-      detail: 'The trade could not be evaluated against this league right now.',
-    }
-  }
-
-  const grade = await gradePromise
+      evaluateCanonical: (a) => deps.evaluate(a, { resolveWorld: async () => world }),
+      ...(deps.saveReceipt ? { saveReceipt: deps.saveReceipt } : {}),
+    },
+  )
+  const grade = receipt.grade
   const partnerTeamId = world.rosters.find((r) => r.rosterId === chosen.partnerRosterId)?.teamId ?? null
   const partnerTeam = world.teams.find((t) => t.teamId === partnerTeamId) ?? null
 
   const viewerTeam = world.teams.find(t => t.teamId === viewerRoster.teamId)
-  const impact = evaluation.rosterImpact ?? null
+  const impact = receipt.canonical?.participants.find((p) => p.rosterId === viewerRoster.rosterId)?.rosterImpact ?? null
   const lineup: TradeScenarioLineup | null =
     impact &&
     impact.startingPointsBefore != null &&
@@ -366,6 +389,8 @@ export async function buildTradeScenario(
           label: grade.label,
           basis: grade.basis,
           withheld: null,
+          partnerGrade: receipt.partnerGrade.graded ? receipt.partnerGrade.letter : null,
+          marketGrade: grade.letterBasis === 'your_team' && grade.market ? grade.market.letter : null,
         }
       : {
           given: null,
@@ -378,11 +403,34 @@ export async function buildTradeScenario(
           basis: grade.basis,
           withheld: grade.reason,
         },
+    receiptId: receipt.receiptId,
     lineup,
     lineupWeek: impact?.week ?? null,
-    lineupUnavailable: lineup ? null : impact?.blockedReason ?? 'The starting lineup could not be priced for this league.',
+    lineupUnavailable: lineup ? null : impact?.blockedReason ?? receipt.canonicalError ?? 'The starting lineup could not be priced for this league.',
     playoffOdds: { available: false, reason: PLAYOFF_ODDS_UNAVAILABLE },
   }
+}
+
+/**
+ * The one other roster every one of these picks names as its original owner, or null. Names compare
+ * on letters and digits only ("@JeffersonTD" and "JeffersonTD" meet), against the team's owner and
+ * display name. Exported for tests.
+ */
+export function rosterNamedByPickOwners(
+  world: Pick<CanonicalWorld, 'teams' | 'rosters'>,
+  picks: readonly PickMention[],
+  viewerRosterId: string,
+): string | null {
+  const key = (s: string | null | undefined) => String(s ?? '').toLowerCase().replace(/[^a-z0-9]/g, '')
+  if (picks.length === 0) return null
+  const owners = new Set(picks.map((p) => key(p.owner)))
+  if (owners.size !== 1 || owners.has('')) return null
+  const want = [...owners][0]!
+  const teamIds = new Set(world.teams.filter((t) => key(t.ownerName) === want || key(t.displayName) === want).map((t) => t.teamId))
+  const rosterIds = new Set(
+    world.rosters.filter((r) => r.teamId != null && teamIds.has(r.teamId) && r.rosterId !== viewerRosterId).map((r) => r.rosterId),
+  )
+  return rosterIds.size === 1 ? [...rosterIds][0]! : null
 }
 
 /** Why a trade that names picks cannot be evaluated, or null when every pick is usable. */
@@ -466,7 +514,13 @@ export function renderTradeScenarioBlock(scenario: TradeScenario): string {
     s.value.grade
       ? `- League value (${s.value.basis ?? "this league's chart"}): you send ${fmt(s.value.given, 0)}, you receive ${fmt(s.value.received, 0)}` +
         (s.value.delta != null ? ` (${signed(s.value.delta, 0)})` : '') +
-        `; grade ${s.value.grade}${s.value.label ? ` — ${s.value.label}` : ''}. This is the same grade the Trade Center gives this trade.`
+        (s.value.marketGrade
+          // A your-team letter: the league values above adjusted for this user's roster need. Both letters are stated so
+          // the model can never present the market letter as the user's grade, or the reverse.
+          ? `; grade ${s.value.grade} for your team${s.value.label ? ` — ${s.value.label}` : ''}, taken on these league values adjusted for your roster's needs; market grade ${s.value.marketGrade} on league value alone`
+          : `; grade ${s.value.grade}${s.value.label ? ` — ${s.value.label}` : ''}`) +
+        (s.value.partnerGrade ? ` (${s.partnerTeamName}'s side grades ${s.value.partnerGrade}${s.value.marketGrade ? ' on the market' : ''})` : '') +
+        '. This is the same grade the Trade Center gives this trade. Quote these letters exactly; state no other grade.'
       : `- Grade: NOT GRADED — ${(s.value.withheld ?? "the trade could not be priced on this league's chart").replace(/\.$/, '')}. Do not grade it yourself.`,
     /*
      * The week and the rules are named in the line itself: this is ONE week under the league's own
@@ -481,6 +535,8 @@ export function renderTradeScenarioBlock(scenario: TradeScenario): string {
           "- Draft picks are valued as the giving team's own pick at that round's average dynasty market price (FantasyCalc) — the exact slot is not known. Say so, and do not quote a slot.",
         ]
       : []),
+    // The saved evaluation, so the answer is a record every surface can read back.
+    ...(s.receiptId ? [`- Evaluation receipt: ${s.receiptId}.`] : []),
   ]
   return lines.join('\n')
 }

@@ -1,12 +1,29 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { computePickInventory } from './draftPickInventory'
+export { computePickInventory } from './draftPickInventory'
+import { getDraftPreparationData, unavailablePreparation, type DraftPreparationData } from './draftPreparation'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { getDraftReport, type DraftGradeLetter } from '@/lib/draft-intel/draftReportService'
 import { buildImportedDraftReport } from '@/lib/draft-intel/importedDraftReport'
-import { leagueDisplayName, type SectionState, type UnavailableSection } from './leagueHome'
-import { leagueContextFor, type LeagueContext } from './leagueContext'
+import { checkDynastyLotteryEligibility, isDynastyLeagueRow } from '@/lib/draft-lottery/dynastyYearGuard'
+import { readDraftOrderModeAndLotteryConfig } from '@/lib/draft-lottery/lotteryConfigStorage'
+import { previewLotteryOdds } from '@/lib/draft-lottery/WeightedDraftLotteryEngine'
+import {
+  dedupeQueueEntries,
+  normalizeDraftedNameSet,
+  removeDraftedPlayersFromQueue,
+} from '@/lib/draft-queue-engine/queue-utils'
+import { formatPickLabel, getSlotInRoundForOverall } from '@/lib/live-draft-engine/DraftOrderService'
+import { resolvePickOwner } from '@/lib/live-draft-engine/PickOwnershipResolver'
+import type { KeeperConfig, KeeperSelection } from '@/lib/live-draft-engine/keeper/types'
+import type { QueueEntry, TradedPickRecord } from '@/lib/live-draft-engine/types'
+import { leagueDisplayName, type SectionState } from './leagueHome'
+import { leagueContextFor, type LeagueContext, type LeagueContextRow } from './leagueContext'
 import { composePlayerIdentities } from './playerIdentityCompose'
+import { loadDraftAfProjections, type DraftAfProjection } from './draftAfProjections'
+import { parseFormerSleeperKey } from '@/lib/league-import/sleeper/historicalTeamIdentity'
 
 /**
  * Draft HQ — "before the draft: your picks, the lottery, the board settings and
@@ -16,20 +33,25 @@ import { composePlayerIdentities } from './playerIdentityCompose'
  * order (slotOrder, a JSON array of { slot, rosterId, displayName }). 28 of 46
  * stored sessions carry an order.
  *
- * Your pick SLOTS are computed, not stored — snake order is deterministic given
- * your slot, the round count and the team count, so deriving 1.02 / 2.11 / 3.02
- * is arithmetic rather than invention.
+ * Your picks are worked out the way the live draft room works them out: the
+ * room's own order maths (`getSlotInRoundForOverall`, 3RR included) finds whose
+ * slot each pick is, and `resolvePickOwner` applies `DraftSession.tradedPicks`.
+ * That column is written when a draft-pick trade is accepted
+ * (`appendDraftPickTrades`), when a new season's draft consumes native future-pick
+ * trades (`createNextLeagueDraft`), by a draft import (`ImportCommitFlow`) and by
+ * commissioner pick edits — so "2.01, from @dre" and "3.02, traded to Kim" are
+ * the board's own answer, not ours. What it cannot see is a trade made on the
+ * league's provider (a Sleeper-hosted draft never writes it), and the screen
+ * says so for those leagues rather than implying every pick is still yours.
  *
- * ⚠ But they are labelled ORIGINAL slots, because pick TRADES are not ingested.
- * DraftPick.tradedPickMeta exists for picks already made; nothing records that a
- * future pick changed hands. So "you hold 2.01, acquired from @dre" — which the
- * handoff shows — cannot be said, and claiming a traded-away pick is still yours
- * would be worse than saying nothing.
+ * The weighted lottery is `lib/draft-lottery`: shown only for a dynasty league,
+ * past its startup year (`checkDynastyLotteryEligibility`), whose draft order is
+ * set to `weighted_lottery`, and computed by `previewLotteryOdds` — the engine's
+ * read-only path, which never draws. Anywhere else the section says why.
  *
- * ⚠ The weighted lottery in the handoff has NO model at all. There is no lottery
- * table, no ball counts, no odds. That section reports itself unavailable rather
- * than computing odds from standings, which would look authoritative and be
- * entirely our own invention.
+ * The queue is the viewer's own `DraftQueue` row for this session, the one the
+ * draft room saves; keepers are `DraftSession.keeperSelections` for a draft run
+ * here, or Sleeper's `is_keeper` flag on the imported picks when there is none.
  */
 
 export type PickSlot = {
@@ -37,6 +59,53 @@ export type PickSlot = {
   pickInRound: number
   overall: number
   label: string
+  /** Who held this pick before a trade brought it to you; null for a pick that was always yours. */
+  acquiredFrom: string | null
+}
+
+/** One of your original picks that a trade has moved to another team. */
+export type TradedAwayPick = {
+  round: number
+  overall: number
+  label: string
+  to: string
+}
+
+export type PickInventory = {
+  held: PickSlot[]
+  tradedAway: TradedAwayPick[]
+  /** What the ownership cannot see, said where it is read; null when there is nothing to add. */
+  note: string | null
+}
+
+export type LotteryOdds = {
+  /** How many picks the lottery draws. */
+  pickCount: number
+  playoffTeamCount: number
+  /** How the picks after the drawn ones are ordered, in words. */
+  fallbackOrder: string
+  alreadyRunAt: string | null
+  teams: Array<{
+    rosterId: string
+    name: string
+    record: string
+    oddsPercent: number
+    isYou: boolean
+  }>
+}
+
+export type PreparedQueue = {
+  /** The first few, in queue order. */
+  players: Array<{ rank: number; playerName: string; position: string; team: string | null }>
+  total: number
+}
+
+export type KeeperList = {
+  /** `draft`: declared for the draft run here. `imported`: flagged by Sleeper on your last draft. */
+  source: 'draft' | 'imported'
+  season: number | null
+  maxKeepers: number | null
+  players: Array<{ playerName: string; position: string; team: string | null; round: number }>
 }
 
 export type MadePick = {
@@ -60,6 +129,8 @@ export type MadePick = {
    * inherit them from here.
    */
   imageUrl: string | null
+  /** AllFantasy's own projection for the player — see draftAfProjections.ts. Absent when none. */
+  af?: DraftAfProjection
 }
 
 /** One pick on the completed board - any team's, not just yours. */
@@ -72,6 +143,8 @@ export type BoardPick = {
   isYou: boolean
   playerName: string
   position: string
+  /** AllFantasy's own projection for the player — see draftAfProjections.ts. Absent when none. */
+  af?: DraftAfProjection
 }
 
 export type CompletedDraft = {
@@ -123,8 +196,8 @@ export type DraftHqData = {
     teamCount: number
     yourSlot: number | null
   }>
-  /** Original pick slots, before any trades we cannot see. */
-  pickSlots: SectionState<PickSlot[]>
+  /** The picks you hold in the upcoming draft, trades applied, and the ones traded away. */
+  pickSlots: SectionState<PickInventory>
   /** What you actually drafted, when the draft has run. */
   madePicks: SectionState<MadePick[]>
   /**
@@ -147,34 +220,244 @@ export type DraftHqData = {
    * already means "no data".
    */
   grades: SectionState<DraftGrades>
-  lottery: UnavailableSection
-  queue: UnavailableSection
-  keepers: UnavailableSection
+  lottery: SectionState<LotteryOdds>
+  queue: SectionState<PreparedQueue>
+  preparation?: DraftPreparationData
+  keepers: SectionState<KeeperList>
+}
+
+type SlotOrderRow = { slot: number; rosterId: string; displayName: string }
+
+
+const PLATFORM_LABEL: Record<string, string> = {
+  sleeper: 'Sleeper',
+  espn: 'ESPN',
+  yahoo: 'Yahoo',
+  fantrax: 'Fantrax',
+  mfl: 'MyFantasyLeague',
+}
+
+/** How many queued players the screen lists; the count says how many more there are. */
+const QUEUE_SHOWN = 10
+
+const FALLBACK_ORDER_TEXT: Record<string, string> = {
+  reverse_standings: 'reverse order of finish',
+  reverse_max_pf: 'reverse order of max points for',
+  manual: 'an order the commissioner sets',
 }
 
 /**
- * Snake order. Odd rounds run 1..n, even rounds reverse — so a slot-2 team in a
- * 12-team league picks 1.02 then 2.11.
+ * Lottery odds for the next draft, when this league runs one.
+ *
+ * The cheap refusals come first and read the row the render already holds: a
+ * league that is not dynasty, or whose order is not set by lottery, costs no
+ * query. Only a lottery league reaches the guard and the standings.
  */
-export function computePickSlots(
-  slot: number,
-  rounds: number,
-  teamCount: number,
-  draftType: string
-): PickSlot[] {
-  const out: PickSlot[] = []
-  const snake = draftType.toLowerCase() === 'snake'
-  for (let round = 1; round <= rounds; round += 1) {
-    const reversed = snake && round % 2 === 0
-    const pickInRound = reversed ? teamCount - slot + 1 : slot
-    out.push({
-      round,
-      pickInRound,
-      overall: (round - 1) * teamCount + pickInRound,
-      label: `${round}.${String(pickInRound).padStart(2, '0')}`,
-    })
+async function loadLottery(
+  lc: LeagueContext,
+  league: LeagueContextRow,
+): Promise<SectionState<LotteryOdds>> {
+  const unavailable = (reason: string) => ({ available: false as const, reason })
+
+  if (!isDynastyLeagueRow({ isDynasty: Boolean(league.isDynasty), leagueVariant: league.leagueVariant ?? null })) {
+    return unavailable('a weighted draft lottery only applies to dynasty leagues, and this one is not')
   }
-  return out
+  const { draftOrderMode, lotteryConfig, lotteryLastRunAt } = readDraftOrderModeAndLotteryConfig(league.settings)
+  if (draftOrderMode !== 'weighted_lottery') {
+    return unavailable('this league’s draft order is not set by a weighted lottery')
+  }
+  const eligibility = await checkDynastyLotteryEligibility(lc.leagueId)
+  if (!eligibility.eligible) {
+    return unavailable(
+      eligibility.isStartupLeague
+        ? 'a weighted lottery starts in a dynasty league’s second season, and this league is in its first'
+        : 'this league is not eligible for a weighted draft lottery',
+    )
+  }
+
+  const [preview, myTeam, viewerRoster] = await Promise.all([
+    previewLotteryOdds(lc.leagueId, lotteryConfig),
+    lc.claimedTeam().catch(() => null),
+    // The lottery's standings carry Roster ids; this is the viewer's, keyed the way the draft
+    // routes key it. A native team's `externalId` is the same id, an import's is not.
+    prisma.roster
+      .findFirst({ where: { leagueId: lc.leagueId, platformUserId: lc.userId }, select: { id: true } })
+      .catch(() => null),
+  ])
+  if (!preview) return unavailable('there are no standings on file yet to weight the lottery by')
+  if (preview.eligible.length === 0) {
+    return unavailable('no team qualifies for the lottery under this league’s current settings')
+  }
+
+  const mine = new Set(
+    [viewerRoster?.id, myTeam?.externalId, myTeam?.id].filter((v): v is string => Boolean(v)),
+  )
+  return {
+    available: true,
+    data: {
+      pickCount: lotteryConfig.lotteryPickCount,
+      playoffTeamCount: preview.playoffTeamCount,
+      fallbackOrder: FALLBACK_ORDER_TEXT[lotteryConfig.fallbackOrder] ?? 'the league’s fallback order',
+      alreadyRunAt: lotteryLastRunAt,
+      teams: preview.eligible.map((t) => ({
+        rosterId: t.rosterId,
+        name: t.displayName,
+        record: t.ties > 0 ? `${t.wins}-${t.losses}-${t.ties}` : `${t.wins}-${t.losses}`,
+        oddsPercent: t.oddsPercent,
+        isYou: mine.has(t.rosterId),
+      })),
+    },
+  }
+}
+
+/**
+ * The viewer's prepared queue for this draft — the `DraftQueue` row the draft
+ * room saves (`PUT /api/leagues/[leagueId]/draft/queue`, and its AI reorder).
+ *
+ * ⚠ READ, NEVER WRITTEN BACK. `loadDraftQueueForUser` prunes drafted players by
+ * UPDATING the row; a planning screen must not change draft state because someone
+ * opened it, so the same pure clean-up runs here in memory only.
+ */
+async function loadPreparedQueue(sessionId: string, userId: string): Promise<SectionState<PreparedQueue>> {
+  const unavailable = (reason: string) => ({ available: false as const, reason })
+
+  const row = await prisma.draftQueue.findUnique({
+    where: { sessionId_userId: { sessionId, userId } },
+    select: { order: true },
+  })
+  const order = row?.order
+  const raw = Array.isArray(order) ? (order as unknown as QueueEntry[]) : []
+  const named = raw.filter((e) => typeof e?.playerName === 'string' && e.playerName.trim().length > 0)
+  if (named.length === 0) return unavailable('you have not queued any players for this draft yet')
+
+  const drafted = await prisma.draftPick.findMany({ where: { sessionId }, select: { playerName: true } })
+  const { queue } = removeDraftedPlayersFromQueue(dedupeQueueEntries(named), normalizeDraftedNameSet(drafted))
+  if (queue.length === 0) return unavailable('every player you queued has already been drafted')
+
+  return {
+    available: true,
+    data: {
+      total: queue.length,
+      players: queue.slice(0, QUEUE_SHOWN).map((e, i) => ({
+        rank: i + 1,
+        playerName: e.playerName.trim(),
+        position: e.position?.trim() || '—',
+        team: e.team ?? null,
+      })),
+    },
+  }
+}
+
+/**
+ * Keepers declared for the draft run here — `DraftSession.keeperSelections`,
+ * written by the draft room's keeper route, next season's draft and draft import.
+ */
+function keepersFromSession(
+  session: { keeperConfig: unknown; keeperSelections: unknown; sleeperDraftId: string | null },
+  myRosterIds: ReadonlySet<string>,
+): SectionState<KeeperList> {
+  const unavailable = (reason: string) => ({ available: false as const, reason })
+  const config =
+    session.keeperConfig && typeof session.keeperConfig === 'object'
+      ? (session.keeperConfig as Partial<KeeperConfig>)
+      : null
+  const selections = Array.isArray(session.keeperSelections)
+    ? (session.keeperSelections as KeeperSelection[]).filter((s) => s && s.rosterId != null)
+    : []
+
+  if (!config && selections.length === 0) {
+    return unavailable(
+      session.sleeperDraftId
+        ? 'keepers for this draft are set on Sleeper, and they are not imported until the draft runs'
+        : 'this draft has no keepers set up',
+    )
+  }
+  if (myRosterIds.size === 0) {
+    return unavailable('no team in this league is claimed by you, so there are no keepers of yours to show')
+  }
+  const mine = selections.filter((s) => myRosterIds.has(String(s.rosterId)))
+  if (mine.length === 0) return unavailable('you have not declared any keepers for this draft')
+
+  return {
+    available: true,
+    data: {
+      source: 'draft',
+      season: null,
+      maxKeepers: typeof config?.maxKeepers === 'number' ? config.maxKeepers : null,
+      players: mine
+        .map((s) => ({
+          playerName: String(s.playerName ?? '').trim() || 'Unnamed player',
+          position: String(s.position ?? '').trim() || '—',
+          team: s.team ?? null,
+          round: Number(s.roundCost),
+        }))
+        .sort((a, b) => a.round - b.round),
+    },
+  }
+}
+
+/**
+ * Keepers from the draft this league already ran, when AllFantasy is not running
+ * the next one: Sleeper's `is_keeper`, kept by `SleeperHistoricalDraftSyncService`
+ * as `dw_draft_facts.metadata.isKeeper`.
+ *
+ * ⚠ SLEEPER ONLY, AND SAID SO. No other provider's sync writes the flag, so for
+ * them an absence of flags says nothing about whether anyone kept a player.
+ */
+async function loadImportedKeepers(
+  lc: LeagueContext,
+  platform: string,
+): Promise<SectionState<KeeperList>> {
+  const unavailable = (reason: string) => ({ available: false as const, reason })
+  if (platform !== 'sleeper') {
+    return unavailable('keepers are only imported from Sleeper drafts, so none can be shown for this league')
+  }
+  const myTeam = await lc.claimedTeam()
+  if (!myTeam?.externalId) {
+    return unavailable('no team in this league is claimed by you, so there are no keepers of yours to show')
+  }
+
+  const facts = await prisma.draftFact.findMany({
+    where: { leagueId: lc.leagueId, managerId: String(myTeam.externalId) },
+    orderBy: [{ season: 'desc' }, { pickNumber: 'asc' }],
+    select: { season: true, round: true, playerId: true, metadata: true },
+  })
+  if (facts.length === 0) {
+    return unavailable('no imported draft is on file for your team, so there are no keepers to show')
+  }
+  const season = facts[0]?.season ?? null
+  const kept = facts.filter(
+    (f) =>
+      f.season === season &&
+      f.metadata != null &&
+      typeof f.metadata === 'object' &&
+      (f.metadata as { isKeeper?: unknown }).isKeeper === true,
+  )
+  if (kept.length === 0) {
+    return unavailable(`Sleeper flagged none of your ${season ?? 'latest'} draft picks as keepers`)
+  }
+
+  const names = await resolvePlayerNames(
+    kept.map((k) => k.playerId),
+    platform,
+  )
+  return {
+    available: true,
+    data: {
+      source: 'imported',
+      season,
+      maxKeepers: null,
+      players: kept.map((k) => {
+        const hit = names.get(k.playerId)
+        return {
+          playerName: hit?.name ?? `Player ${k.playerId} (not yet mapped)`,
+          position: hit?.position ?? '—',
+          team: hit?.team ?? null,
+          round: k.round,
+        }
+      }),
+    },
+  }
 }
 
 /**
@@ -217,9 +500,10 @@ type ResolvedDraftPlayer = {
   imageUrl: string | null
 }
 
-async function resolvePlayerNames(
+export async function resolvePlayerNames(
   playerIds: string[],
   platform: string,
+  sport?: string,
 ): Promise<Map<string, ResolvedDraftPlayer>> {
   const out = new Map<string, ResolvedDraftPlayer>()
   if (playerIds.length === 0) return out
@@ -251,7 +535,7 @@ async function resolvePlayerNames(
     scoped
       ? prisma.playerProviderIdentity
           .findMany({
-            where: { provider: scoped, providerPlayerId: { in: playerIds } },
+            where: { provider: scoped, providerPlayerId: { in: playerIds }, ...(sport ? { sportKey: { equals: sport, mode: 'insensitive' as const } } : {}) },
             select: { providerPlayerId: true, displayName: true },
           })
           .catch(() => [])
@@ -260,12 +544,12 @@ async function resolvePlayerNames(
     scoped === 'sleeper'
       ? prisma.sportsPlayer
           .findMany({
-            where: { sleeperId: { in: playerIds } },
+            where: { sleeperId: { in: playerIds }, ...(sport ? { sport: { equals: sport, mode: 'insensitive' as const } } : {}) },
             // `sport` is required by `composePlayerIdentities` — it gates the
             // NFL-only club fold. `imageUrl` is what puts a face on the board.
             select: {
               sleeperId: true, name: true, position: true, team: true,
-              sport: true, imageUrl: true,
+              sport: true, imageUrl: true, source: true, fetchedAt: true,
             },
           })
           .catch(() => [])
@@ -433,6 +717,13 @@ async function loadCompletedDraftBoard(lc: LeagueContext): Promise<SectionState<
     resolvePlayerNames([...new Set(rows.map((r) => r.playerId))], boardLeague?.platform ?? ''),
   ])
 
+  /* AllFantasy's own projection for every player on the board — one read. */
+  const afs = await loadDraftAfProjections({
+    platform: boardLeague?.platform,
+    playerIds: rows.map((r) => r.playerId),
+    leagueSettings: boardLeague?.settings,
+  })
+
   const teamCount = teams.length
   const nameByKey = new Map<string, string>()
   for (const t of teams) {
@@ -454,10 +745,11 @@ async function loadCompletedDraftBoard(lc: LeagueContext): Promise<SectionState<
       overall: inRound > 0 ? (r.round - 1) * teamCount + inRound : r.pickNumber,
       label: inRound > 0 ? `${r.round}.${String(inRound).padStart(2, '0')}` : `Round ${r.round}`,
       teamKey,
-      teamName: nameByKey.get(teamKey) ?? null,
+      teamName: nameByKey.get(teamKey) ?? (parseFormerSleeperKey(teamKey) ? 'Former manager' : null),
       isYou: yours.has(teamKey),
       playerName: hit?.name ?? `Player ${r.playerId} (not yet mapped)`,
       position: hit?.position ?? '\u2014',
+      ...(afs.byPlayerId.has(r.playerId) ? { af: afs.byPlayerId.get(r.playerId)! } : {}),
     }
     const bucket = byRound.get(r.round)
     if (bucket) bucket.push(pick)
@@ -563,6 +855,11 @@ async function loadImportedDraftPicks(lc: LeagueContext): Promise<SectionState<M
     rows.map((r) => r.playerId),
     league?.platform ?? '',
   )
+  const afs = await loadDraftAfProjections({
+    platform: league?.platform,
+    playerIds: rows.map((r) => r.playerId),
+    leagueSettings: league?.settings,
+  })
 
   return {
     available: true,
@@ -597,6 +894,7 @@ async function loadImportedDraftPicks(lc: LeagueContext): Promise<SectionState<M
         position: hit?.position ?? '—',
         team: hit?.team ?? null,
         imageUrl: hit?.imageUrl ?? null,
+        ...(afs.byPlayerId.has(r.playerId) ? { af: afs.byPlayerId.get(r.playerId)! } : {}),
       }
     }),
   }
@@ -616,43 +914,54 @@ export async function getDraftHqData(
   const league = await lc.league()
   if (!league) return null
 
+  const platform = String(league.platform ?? 'manual').toLowerCase()
+
+  // Beside the session read, not before it: a lottery league reads standings, and that wait
+  // should not be serial with the draft's own.
+  const [lottery, session] = await Promise.all([
+    loadLottery(lc, league).catch(() => ({
+      available: false as const,
+      reason: 'the lottery odds could not be worked out for this league right now',
+    })),
+    prisma.draftSession.findFirst({
+      where: { leagueId },
+      orderBy: CURRENT_DRAFT_SESSION_ORDER,
+      select: {
+        id: true, status: true, draftType: true, rounds: true, teamCount: true, slotOrder: true,
+        thirdRoundReversal: true, tradedPicks: true, keeperConfig: true, keeperSelections: true,
+        sleeperDraftId: true, startedAt: true, playerPool: true, draftModeLabel: true, customRankingsEnabled: true, auctionBudgetPerTeam: true,
+      },
+    }),
+  ])
+
   const base = {
     league: {
       id: league.id,
       name: leagueDisplayName(league.name),
-      platform: String(league.platform ?? 'manual').toLowerCase(),
+      platform,
       format: league.leagueType ?? null,
     },
-    lottery: {
-      available: false as const,
-      reason:
-        'This league has no draft lottery on file — no ball counts or odds were imported, and we won’t make them up from the standings.',
-    },
-    queue: {
-      available: false as const,
-      reason: 'no pre-draft queue has been saved for this league',
-    },
-    keepers: {
-      available: false as const,
-      reason: 'no keeper declarations recorded for this league',
-    },
+    lottery,
   }
-
-  const session = await prisma.draftSession.findFirst({
-    where: { leagueId },
-    orderBy: CURRENT_DRAFT_SESSION_ORDER,
-    select: { id: true, status: true, draftType: true, rounds: true, teamCount: true, slotOrder: true },
-  })
 
   if (!session) {
     /* Session and slots genuinely do not exist — this app is not running a draft here,
        and saying otherwise would invent one. The picks, however, may well exist. */
     const none = { available: false as const, reason: 'no draft has been set up for this league' }
-    const [madePicks, board, grades] = await Promise.all([
+    const [madePicks, board, grades, keepers] = await Promise.all([
       loadImportedDraftPicks(lc).catch(() => none),
       loadCompletedDraftBoard(lc).catch(() => none),
       loadDraftGrades(leagueId, league.platform, league.platformLeagueId ?? null).catch(() => none),
+      loadImportedKeepers(lc, platform).catch(() => ({
+        available: false as const,
+        reason: 'keepers could not be read for this league right now',
+      })),
     ])
+    // A queue belongs to a draft AllFantasy runs; with none there is nothing to queue for.
+    const queue = {
+      available: false as const,
+      reason: 'a prepared queue belongs to a draft AllFantasy runs, and none is set up for this league',
+    }
 
     /*
      * ⚠ "NO DRAFT HAS BEEN SET UP" SAT DIRECTLY ABOVE FOURTEEN DRAFTED PICKS.
@@ -680,7 +989,7 @@ export async function getDraftHqData(
         }
       : none
 
-    return { ...base, session: noSession, pickSlots: noSession, madePicks, board, grades }
+    return { ...base, session: noSession, pickSlots: noSession, madePicks, board, grades, queue, keepers, preparation: unavailablePreparation('Historical imported ADP needs a preserved draft-time context. No upcoming draft is scheduled here.') }
   }
 
   const myTeam = await lc.claimedTeam()
@@ -705,8 +1014,25 @@ export async function getDraftHqData(
     },
   }
 
-  const pickSlots: SectionState<PickSlot[]> =
-    yourSlot == null
+  const slotOrder: SlotOrderRow[] = order
+    .filter((o) => typeof o.slot === 'number' && o.rosterId != null)
+    .map((o) => ({ slot: o.slot as number, rosterId: String(o.rosterId), displayName: String(o.displayName ?? '') }))
+  // Ids are compared as strings by the resolver, so a numeric id stored in JSON must not miss.
+  const tradedPicks: TradedPickRecord[] = (Array.isArray(session.tradedPicks) ? (session.tradedPicks as unknown[]) : [])
+    .filter((t): t is Record<string, unknown> => Boolean(t) && typeof t === 'object')
+    .filter((t) => typeof t.round === 'number' && t.originalRosterId != null && t.newRosterId != null)
+    .map((t) => ({
+      round: t.round as number,
+      originalRosterId: String(t.originalRosterId),
+      previousOwnerName: String(t.previousOwnerName ?? ''),
+      newRosterId: String(t.newRosterId),
+      newOwnerName: String(t.newOwnerName ?? ''),
+    }))
+
+  const pickSlots: SectionState<PickInventory> =
+    !['snake', 'linear'].includes(session.draftType.toLowerCase())
+      ? { available: false, reason: 'fixed pick ownership is not shown for this draft format; review the recorded selections on the board' }
+      : yourSlot == null
       ? {
           available: false,
           reason:
@@ -716,7 +1042,26 @@ export async function getDraftHqData(
         }
       : {
           available: true,
-          data: computePickSlots(yourSlot, session.rounds, session.teamCount, session.draftType),
+          data: {
+            ...computePickInventory({
+              myRosterId: String(mySlotEntry?.rosterId),
+              slotOrder,
+              tradedPicks,
+              rounds: session.rounds,
+              teamCount: session.teamCount,
+              draftType: session.draftType,
+              thirdRoundReversal: Boolean(session.thirdRoundReversal),
+            }),
+            /*
+             * ⚠ A PROVIDER-HOSTED LEAGUE TRADES ITS PICKS ON THE PROVIDER, and nothing syncs those
+             * trades into this draft (the Sleeper mirror never writes `tradedPicks`). Showing the
+             * list bare there would claim a pick traded away on Sleeper is still yours.
+             */
+            note:
+              platform === 'manual'
+                ? null
+                : `pick trades made on ${PLATFORM_LABEL[platform] ?? 'this league’s own platform'} are not synced into this draft, so a pick shown here may have changed hands there`,
+          },
         }
 
   const made = myTeam?.externalId
@@ -752,6 +1097,11 @@ export async function getDraftHqData(
     [...new Set(made.map((p) => p.playerId).filter((id): id is string => Boolean(id)))],
     String(league.platform ?? '').toLowerCase(),
   ).catch(() => new Map<string, ResolvedDraftPlayer>())
+  const madeAfs = await loadDraftAfProjections({
+    platform: league.platform,
+    playerIds: made.map((p) => p.playerId),
+    leagueSettings: league.settings,
+  })
 
   const madePicks: SectionState<MadePick[]> =
     made.length > 0
@@ -771,6 +1121,7 @@ export async function getDraftHqData(
             position: p.position,
             team: p.team,
             imageUrl: p.playerId ? madeFaces.get(p.playerId)?.imageUrl ?? null : null,
+            ...(p.playerId && madeAfs.byPlayerId.has(p.playerId) ? { af: madeAfs.byPlayerId.get(p.playerId)! } : {}),
           })),
         }
       : {
@@ -781,19 +1132,25 @@ export async function getDraftHqData(
               : 'no picks recorded for your team in this draft',
         }
 
-  /* A live session and a completed board are not exclusive: a league can be mid-draft in
-     one season and hold a finished board from the last one. */
-  const board = await loadCompletedDraftBoard(lc).catch(() => ({
+  // Imported reports are not bound to this native session. The archive selector owns
+  // historical reports; do not place another draft's board or grades beside this session.
+  const board: SectionState<CompletedDraft> = {
+    available: false, reason: 'Choose a completed draft in the archive to review its selections',
+  }
+  const grades: SectionState<DraftGrades> = {
+    available: false, reason: 'Analysis requires data bound to this individual draft',
+  }
+
+  const queue = await loadPreparedQueue(session.id, userId).catch(() => ({
     available: false as const,
-    reason: 'no completed draft has been imported for this league',
+    reason: 'your queue could not be read right now',
   }))
 
-  const grades = await loadDraftGrades(leagueId, league.platform, league.platformLeagueId ?? null).catch(
-    () => ({
-      available: false as const,
-      reason: 'the draft report could not be built for this league',
-    }),
+  const myRosterIds = new Set(
+    [mySlotEntry?.rosterId, myTeam?.externalId].filter((v) => v != null && v !== '').map(String),
   )
+  const keepers = keepersFromSession(session, myRosterIds)
 
-  return { ...base, session: sessionState, pickSlots, madePicks, board, grades }
+  const preparation = await getDraftPreparationData(league, session, userId, mySlotEntry?.rosterId ?? myTeam?.externalId ?? undefined).catch(() => unavailablePreparation('Draft preparation could not be loaded. Retry this page.', 'error'))
+  return { ...base, session: sessionState, pickSlots, madePicks, board, grades, queue, keepers, preparation }
 }

@@ -1,7 +1,8 @@
 /**
  * GET/POST /api/cron/import-injuries
  *
- * Vercel Cron schedule: every 15 minutes (see vercel.json).
+ * Schedule (cron-schedule.json): every 30 minutes for every sport, PLUS every 5 minutes as
+ * `?sport=NFL&gameWindow=1`, which only works inside an NFL game window (see gameWindow below).
  * Syncs injury reports for EVERY supported sport into the sportsInjury table.
  * InjuryReportRecord rows are written by the sports-data-importer which reads
  * from this table, so freshness here directly affects AI injury context.
@@ -9,6 +10,10 @@
  * Optional query params:
  *   sport   — one supported sport code; omitted runs all of them
  *   season  — 4-digit year string (defaults to current season)
+ *   gameWindow — `1`: run only while an NFL kickoff is within 150 min ahead / 30 min behind
+ *               (lib/injuries/injuryGameWindow.ts), and skip Rolling Insights, whose injury feed
+ *               updates twice a day (contracts/rolling-insights/GAPS.md) — polling it every five
+ *               minutes buys nothing. ESPN (keyless) carries the game-day updates.
  *
  * ⚠ WHY THIS GREW FROM TWO SPORTS TO SEVEN (2026-08-27). Measured on production the same day,
  * `sports_injuries` last moved for MLB, NBA, NHL and SOCCER on 2026-05-01 and for NCAAB on
@@ -28,6 +33,8 @@ import { riSupports } from "@/lib/sports-data/rollingInsightsSupport"
 import { getApiSportsKey, syncAPISportsInjuriesToDb } from "@/lib/api-sports"
 import { recordInjurySyncDeferred, recordInjurySyncRun } from "@/lib/injuries/injurySyncState"
 import { SUPPORTED_SPORTS } from "@/lib/sport-scope"
+import { inNflInjuryGameWindow } from "@/lib/injuries/injuryGameWindow"
+import { withSyncJobRun } from "@/lib/production-health/syncJobRunTelemetry"
 
 /**
  * PROVIDER MIGRATED 2026-08-10: API-Sports -> Rolling Insights.
@@ -174,9 +181,10 @@ function apiSportsEnabled(url: URL): boolean {
 function sourcesFor(
   sport: Sport,
   apiSportsOn: boolean,
+  skipRollingInsights = false,
 ): { rollingInsights: boolean; espn: boolean; apiSports: boolean } {
   return {
-    rollingInsights: riSupports("injuries", sport),
+    rollingInsights: !skipRollingInsights && riSupports("injuries", sport),
     espn: espnHasInjuryFeed(sport),
     apiSports: apiSportsOn && apiSportsHasInjuryFeed(sport),
   }
@@ -187,7 +195,7 @@ async function runOneSport(url: URL, sport: Sport, apiSportsOn: boolean) {
 
   const startedAt = Date.now()
 
-  const sources = sourcesFor(sport, apiSportsOn)
+  const sources = sourcesFor(sport, apiSportsOn, isGameWindowRun(url))
   const apiSportsVendorSport = apiSportsInjurySport(sport)
 
   try {
@@ -365,9 +373,54 @@ async function runOneSport(url: URL, sport: Sport, apiSportsOn: boolean) {
   }
 }
 
+/** The heartbeat job name for the five-minute game-window mode — PROBES in scripts/cron-freshness-check.mjs keys on it. */
+const GAME_WINDOW_JOB = "cron-import-injuries-gamewindow"
+
+function isGameWindowRun(url: URL): boolean {
+  return ["1", "true", "yes"].includes((url.searchParams.get("gameWindow") ?? "").trim().toLowerCase())
+}
+
 async function handle(req: NextRequest) {
   const url = new URL(req.url)
   const explicit = url.searchParams.get("sport")
+
+  /*
+   * The five-minute game-day run (2026-09-27). Outside a window it returns at once and records
+   * nothing — no provider call, no sync-state row — so the every-five schedule costs one indexed
+   * read for most of the week. `gameWindow` is NFL-only by construction: the window is read off
+   * the NFL schedule, so it refuses to run any other sport rather than polling it on NFL's clock.
+   */
+  if (isGameWindowRun(url)) {
+    if ((explicit ?? "").trim().toUpperCase() !== "NFL") {
+      return NextResponse.json({ ok: false, error: "gameWindow runs NFL only; pass sport=NFL" }, { status: 400 })
+    }
+    /*
+     * ⚠ A HEARTBEAT ON EVERY FIRE, IN OR OUT OF A WINDOW. This mode writes the same SportsInjury
+     * rows as the half-hourly run, so a table probe on it would be satisfied by its sibling and it
+     * could die silently (the shared-probe false green, scripts/cron-freshness-check.mjs); and it
+     * correctly writes NOTHING for most of the week, so an output probe would be red when it works.
+     * The heartbeat records that the tick FIRED, which is the one thing a monitor can check.
+     */
+    const outcome = await withSyncJobRun(
+      { jobName: GAME_WINDOW_JOB, sport: "NFL", trigger: "cron" },
+      async () =>
+        (await inNflInjuryGameWindow())
+          ? { inWindow: true as const, run: await runOneSport(url, "NFL", apiSportsEnabled(url)) }
+          : { inWindow: false as const },
+      (r) =>
+        r.inWindow
+          ? {
+              rowsWritten: Number((r.run.body as { synced?: number }).synced ?? 0),
+              status: r.run.failed ? "failed" : "success",
+              metadata: { inWindow: true },
+            }
+          : { rowsWritten: 0, status: "success", metadata: { inWindow: false } },
+    )
+    if (!outcome.inWindow) {
+      return NextResponse.json({ ok: true, sport: "NFL", skipped: "outside an NFL game window", timestamp: new Date().toISOString() })
+    }
+    return NextResponse.json(outcome.run.body, { status: outcome.run.failed ? 500 : 200 })
+  }
 
   /*
    * Sequential rather than concurrent: both sports read the same ESPN feed and

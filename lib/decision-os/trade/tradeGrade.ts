@@ -15,8 +15,10 @@
  * side at 10%/25%.
  *
  * So there is one number and everything else is read off it:
- *   - the number is `percentDiff` on LEAGUE value (`leagueTradeTotals`), signed from the side that
- *     sends `give` — the same figure the Trade Center has always graded on;
+ *   - the number is `percentDiff` on chart + league-scoring value (`leagueTradeTotals`), signed from the side that
+ *     sends `give` — and, on the viewer's own trades when their roster need was priced, on that value
+ *     adjusted for their roster (`withYourTeamLetter`, 2026-10-10), with the league-value grade kept in
+ *     `market` for the partner and for history;
  *   - the letter is `projectedLetterFor` (`lib/trade-intel/gradeScale.ts`), unchanged;
  *   - the label and the recommendation use the SAME two bands, so a C always reads "Even" and a B
  *     always reads "Slightly favors you". They can no longer disagree, because nothing else is read.
@@ -37,6 +39,16 @@ import {
   type GradeLetter,
 } from '@/lib/trade-intel/gradeScale'
 import type { LeagueTypeBasis } from '@/lib/league/leagueTypeGrading'
+import type { TradeValueSource } from './valueSource'
+import { tradePackageReview } from './tradeEvidence'
+import type { RosterSpotCredit } from '@/lib/trade-value/rosterSpotCharge'
+
+/**
+ * The open-roster-spot credit an uneven deal earned (`lib/trade-value/rosterSpotCharge.ts`), already inside
+ * `giveValue`/`getValue`. `side` is the total it joined, in this view's frame. Not a line: the lines stay one
+ * per traded asset, which completed-trade pricing and every per-asset table rely on.
+ */
+export type TradeRosterSpot = RosterSpotCredit
 
 export type TradeGradeAction = 'accept' | 'review' | 'counter' | 'decline'
 
@@ -45,9 +57,22 @@ export type TradeGradeSideAdvantage = 'even' | 'you' | 'opponent'
 /** One asset in the graded deal, with both prices. Null prices mean the pricer found nothing. */
 export type TradeGradeLine = {
   side: 'give' | 'get'
+  /** Explicit identity for roster-slot checks; absent on older saved evaluations. */
+  assetKind?: 'player' | 'pick' | 'faab'
   name: string
   marketValue: number | null
   leagueValue: number | null
+  /**
+   * The PLAYER RECORD's origin (`sleeper`, `fantasycalc+rolling`, `fantasycalc_pick`, …) — not the
+   * value's. Kept for compatibility; read `valueSource` for where the price came from.
+   */
+  source?: string | null
+  /** WHICH evidence priced this asset (`./valueSource.ts`). Null when unpriced; absent before 2026-09-28. */
+  valueSource?: TradeValueSource | null
+  /** When that evidence was captured (ISO). Only a market chart has one; null for league math or undated sources. */
+  valueAsOf?: string | null
+  /** The period a league-computed value projects over, e.g. "2026 week 3" for a defender. */
+  valueScope?: string | null
 }
 
 /** One asset whose league value differs from its market value, and why. */
@@ -59,12 +84,41 @@ export type TradeGradeMove = {
   reasons: string[]
 }
 
+/**
+ * Personal roster utility: league value adjusted for the VIEWER's roster need (open starting slots,
+ * surplus depth, how thin the waiver wire is at the position). On the viewer's own trades it is what the
+ * headline letter is taken on (`withYourTeamLetter`); everywhere else it is reported beside the letter.
+ */
+export type TradeRosterFit = {
+  giveValue: number
+  getValue: number
+  percentDiff: number
+  moves: TradeGradeMove[]
+}
+
+/** The league-value grade of a deal whose headline is the your-team letter — what the partner and history see. */
+export type TradeMarketGrade = {
+  letter: GradeLetter
+  partnerLetter: GradeLetter
+  percentDiff: number
+  label: string
+  giveValue: number
+  getValue: number
+}
+
 export type TradeGradeView =
   | {
       graded: true
-      /** For the side that sends `give` — "you" on every viewer surface. */
+      /**
+       * For the side that sends `give` — "you" on every viewer surface. On the viewer's own trades, when
+       * their roster need was priced, it is the YOUR-TEAM letter (`letterBasis: 'your_team'`); otherwise
+       * the league-value letter.
+       */
       letter: GradeLetter
-      /** For the other side. Always the mirror of `letter`. */
+      /**
+       * For the other side, on LEAGUE VALUE: the mirror of the market letter (`market.letter` under a
+       * your-team headline, `letter` otherwise). The other manager's roster is not the one being read.
+       */
       partnerLetter: GradeLetter
       /** Signed from the `give` side, on league value: + means that side receives more. */
       percentDiff: number
@@ -72,7 +126,10 @@ export type TradeGradeView =
       sideAdvantage: TradeGradeSideAdvantage
       action: TradeGradeAction
       recommendation: string
-      /** League value each way — the totals the letter is taken on. */
+      /**
+       * League value each way — the totals the lines add up to, and the ones a market letter is taken
+       * on. Under a your-team headline the letter is taken on `rosterFit`'s totals instead.
+       */
       giveValue: number
       getValue: number
       /** Market value each way, before this league's adjustments. */
@@ -87,11 +144,45 @@ export type TradeGradeView =
       /** Every asset, so a card can print the value it was graded on beside each one. */
       lines: TradeGradeLine[]
       moves: TradeGradeMove[]
+      /** The roster-spot credit inside the totals, when the player counts differ. Absent on older grades. */
+      rosterSpot?: TradeRosterSpot | null
+      /** The viewer's roster utility; the your-team letter is taken on it (see `letterBasis`). */
+      rosterFit?: TradeRosterFit | null
+      /**
+       * How `letter`, `percentDiff`, `label`, `action` and `recommendation` were taken. `your_team`
+       * (Guap's ruling, 2026-10-10): on the viewer's own trades the headline is league value adjusted for
+       * THEIR roster need (`rosterFit`), and `market` keeps the league-value grade every other surface
+       * shows. Absent or `market`: the league-value grade.
+       */
+      letterBasis?: 'market' | 'your_team'
+      /** With `letterBasis: 'your_team'`: the same deal's league-value grade. */
+      market?: TradeMarketGrade | null
       /**
        * The league type the grade was priced under and how we know it (see `leagueTypeGrading.ts`).
        * Set by the league grader; absent where no league was read.
        */
       leagueType?: LeagueTypeBasis | null
+      /**
+       * When this letter was FROZEN as a completed trade's original grade (`frozenCompletedGrade.ts`).
+       * Absent: a live grade, taken on today's values.
+       */
+      frozenAt?: string | null
+      /**
+       * With `frozenAt`: how the frozen original was priced (`frozenCompletedGrade.ts`, 2026-10-03) —
+       * `trade_date` on the stored market from the trade's own date, `first_graded` on the values of
+       * the day AllFantasy first graded it because no market record covers the trade date. Every
+       * surface says which (`gradeMoment`). Absent on a live grade.
+       */
+      frozenBasis?: 'trade_date' | 'first_graded' | null
+      /** The day the frozen letter's values are from: the capture day (`trade_date`) or first-graded moment. */
+      pricedAsOf?: string | null
+      /** When the trade happened (ISO), when known — so a first-graded label can say how long after. */
+      tradeAt?: string | null
+      /**
+       * Today's re-evaluation of the same deal, beside a frozen original — never merged into it. Null
+       * when today's grade is the original (just frozen) or could not be taken.
+       */
+      current?: { letter: GradeLetter; partnerLetter: GradeLetter; giveValue: number; getValue: number } | null
     }
   | {
       graded: false
@@ -99,6 +190,11 @@ export type TradeGradeView =
       reason: string
       basis: string | null
       leagueType?: LeagueTypeBasis | null
+      /**
+       * Set when there is no letter because the transaction is not a trade at all: a Pirate steal
+       * (`lib/trade-intel/pirateSteal.ts`). Lets a surface label it and skip it as a "trade".
+       */
+      kind?: 'pirate_steal'
     }
 
 /**
@@ -135,8 +231,28 @@ const ACTION_BY_LETTER: Record<GradeLetter, TradeGradeAction> = {
  * What the grade means for the side that sends `give`. Worded about the DEAL rather than as an
  * order, because the same sentence sits on an offer the manager received and on one they sent.
  */
-export function tradeGradeRecommendation(args: { letter: GradeLetter; giveValue: number; getValue: number }): string {
+export function tradeGradeRecommendation(args: {
+  letter: GradeLetter
+  giveValue: number
+  getValue: number
+  /** What the letter measures. A your-team letter already counts roster fit, so it never says "check it". */
+  basis?: 'market' | 'your_team'
+}): string {
   const gap = Math.round(Math.abs(args.getValue - args.giveValue))
+  if (args.basis === 'your_team') {
+    switch (args.letter) {
+      case 'A':
+        return 'A clear win for your roster. Check injury risk, then take it.'
+      case 'B':
+        return 'Good for your roster. Confirm player risk before acting.'
+      case 'C':
+        return 'Even for your roster — decide on this week’s lineup and team direction.'
+      case 'D':
+        return `Costs your roster more than it adds. A counter needs about ${gap.toLocaleString()} more coming back to reach even.`
+      case 'F':
+        return `An overpay for your roster — about ${gap.toLocaleString()} short. Decline, or ask for substantially more.`
+    }
+  }
   switch (args.letter) {
     case 'A':
       return 'A clear win on league value. Check lineup fit and injury risk, then take it.'
@@ -177,6 +293,8 @@ export function gradeTrade(args: {
   moves: TradeGradeMove[]
   /** Set when the caller already knows the grade cannot be trusted (e.g. a data gap it reported). */
   withheld?: string | null
+  /** The roster-spot credit ALREADY inside `giveValue`/`getValue`, carried so every surface can show it. */
+  rosterSpot?: TradeRosterSpot | null
 }): TradeGradeView {
   const basis = args.basis || null
   if (args.withheld) return { graded: false, reason: args.withheld, basis }
@@ -190,6 +308,10 @@ export function gradeTrade(args: {
       basis,
     }
   }
+  if (![args.giveValue, args.getValue, args.giveMarket, args.getMarket].every(Number.isFinite) ||
+      args.lines.some(line => [line.marketValue, line.leagueValue].some(value => value != null && (!Number.isFinite(value) || value < 0)))) {
+    return { graded: false, reason: 'One or more asset values are invalid. Refresh the values before grading this deal.', basis }
+  }
   if (!(args.giveValue > 0) || !(args.getValue > 0)) {
     return { graded: false, reason: 'The priced assets carry no usable value.', basis }
   }
@@ -200,6 +322,7 @@ export function gradeTrade(args: {
   if (!letter || !partnerLetter) return { graded: false, reason: 'The value gap could not be measured.', basis }
 
   const { label, sideAdvantage } = tradeGradeLabel(percentDiff)
+  const packageReview = tradePackageReview(args.lines, { rosterSpotCharged: Boolean(args.rosterSpot) })
   return {
     graded: true,
     letter,
@@ -207,8 +330,10 @@ export function gradeTrade(args: {
     percentDiff,
     label,
     sideAdvantage,
-    action: ACTION_BY_LETTER[letter],
-    recommendation: tradeGradeRecommendation({ letter, giveValue: args.giveValue, getValue: args.getValue }),
+    action: packageReview && ACTION_BY_LETTER[letter] === 'accept' ? 'review' : ACTION_BY_LETTER[letter],
+    recommendation: packageReview
+      ? `Quoted values: ${label.toLowerCase()}. ${packageReview.note}`
+      : tradeGradeRecommendation({ letter, giveValue: args.giveValue, getValue: args.getValue }),
     giveValue: Math.round(args.giveValue),
     getValue: Math.round(args.getValue),
     giveMarket: Math.round(args.giveMarket),
@@ -219,6 +344,7 @@ export function gradeTrade(args: {
     needGap: args.needGap,
     lines: args.lines,
     moves: args.moves,
+    ...(args.rosterSpot ? { rosterSpot: args.rosterSpot } : {}),
   }
 }
 
@@ -244,11 +370,95 @@ export function mirrorLetter(letter: GradeLetter | null | undefined): GradeLette
   }
 }
 
+/**
+ * THE YOUR-TEAM LETTER (Guap's ruling, 2026-10-10). On the viewer's own trades, when their roster need
+ * was priced (`rosterFit`), the headline — letter, gap, label, action and recommendation — moves to
+ * league value adjusted for THEIR roster: an empty starting slot you cannot fill off
+ * waivers makes the player who fills it worth more to you, and sending surplus depth costs you less. The
+ * same bands, so a your-team B is the same distance from even as a market B.
+ *
+ * The league-value grade is kept whole in `market`, and the partner's letter stays on it: their roster
+ * is not the one being read, and a partner letter derived from the viewer's need would be a guess about
+ * someone else's team. Contention (a contender's or a seller's window) does NOT move this letter yet —
+ * it stays the sentence beside it until a win-now vs future value split has been measured.
+ *
+ * Unchanged when there is no roster fit (need not priced, or a gap): the headline stays on league value.
+ */
+export function withYourTeamLetter(view: TradeGradeView): TradeGradeView {
+  if (!view.graded || !view.rosterFit) return view
+  const fit = view.rosterFit
+  const letter = projectedLetterFor({ percentDiff: fit.percentDiff, hasSignal: true })
+  if (!letter) return view
+  const { label, sideAdvantage } = tradeGradeLabel(fit.percentDiff)
+  const packageReview = tradePackageReview(view.lines, { rosterSpotCharged: Boolean(view.rosterSpot) })
+  return {
+    ...view,
+    letter,
+    percentDiff: fit.percentDiff,
+    label,
+    sideAdvantage,
+    action: packageReview && ACTION_BY_LETTER[letter] === 'accept' ? 'review' : ACTION_BY_LETTER[letter],
+    recommendation: packageReview
+      ? `Quoted values: ${label.toLowerCase()}. ${packageReview.note}`
+      : tradeGradeRecommendation({ letter, giveValue: fit.giveValue, getValue: fit.getValue, basis: 'your_team' }),
+    // `giveValue`/`getValue` stay the league-value totals the lines add up to — every asset table prints
+    // them under the lines. The your-team totals the letter is taken on are `rosterFit`'s.
+    letterBasis: 'your_team',
+    market: {
+      letter: view.letter,
+      partnerLetter: view.partnerLetter,
+      percentDiff: view.percentDiff,
+      label: view.label,
+      giveValue: view.giveValue,
+      getValue: view.getValue,
+    },
+  }
+}
+
+/**
+ * The league-value grade of any view: itself, or — under a your-team headline — the market grade it
+ * carries, with the headline restored. For every reader whose question is about the DEAL rather than
+ * the viewer's roster (the trade agent's "fair for both", the other side's view).
+ */
+export function marketView(view: TradeGradeView): TradeGradeView {
+  if (!view.graded || view.letterBasis !== 'your_team' || !view.market) return view
+  const m = view.market
+  const { label, sideAdvantage } = tradeGradeLabel(m.percentDiff)
+  const packageReview = tradePackageReview(view.lines, { rosterSpotCharged: Boolean(view.rosterSpot) })
+  const { letterBasis: _basis, market: _market, ...rest } = view
+  return {
+    ...rest,
+    letter: m.letter,
+    partnerLetter: m.partnerLetter,
+    percentDiff: m.percentDiff,
+    label,
+    sideAdvantage,
+    action: packageReview && ACTION_BY_LETTER[m.letter] === 'accept' ? 'review' : ACTION_BY_LETTER[m.letter],
+    recommendation: packageReview
+      ? `Quoted values: ${label.toLowerCase()}. ${packageReview.note}`
+      : tradeGradeRecommendation({ letter: m.letter, giveValue: m.giveValue, getValue: m.getValue }),
+    giveValue: m.giveValue,
+    getValue: m.getValue,
+  }
+}
+
+/** The league-value letter of any view — the market letter under a your-team headline. */
+export function marketLetterOf(view: Extract<TradeGradeView, { graded: true }>): GradeLetter {
+  return view.letterBasis === 'your_team' && view.market ? view.market.letter : view.letter
+}
+
 /** The same grade seen from the OTHER side of the deal: sides swapped, letters swapped. */
-export function mirrorTradeGrade(view: TradeGradeView): TradeGradeView {
+export function mirrorTradeGrade(input: TradeGradeView): TradeGradeView {
+  if (!input.graded) return input
+  // The other side reads the deal on league value: a your-team headline is the viewer's roster alone.
+  const view = marketView(input)
   if (!view.graded) return view
   const percentDiff = -view.percentDiff
   const { label, sideAdvantage } = tradeGradeLabel(percentDiff)
+  const packageReview = tradePackageReview(
+    view.lines.map(line => ({ ...line, side: line.side === 'give' ? 'get' : 'give' })),
+    { rosterSpotCharged: Boolean(view.rosterSpot) },
+  )
   return {
     ...view,
     letter: view.partnerLetter,
@@ -256,13 +466,23 @@ export function mirrorTradeGrade(view: TradeGradeView): TradeGradeView {
     percentDiff,
     label,
     sideAdvantage,
-    action: ACTION_BY_LETTER[view.partnerLetter],
-    recommendation: tradeGradeRecommendation({ letter: view.partnerLetter, giveValue: view.getValue, getValue: view.giveValue }),
+    action: packageReview && ACTION_BY_LETTER[view.partnerLetter] === 'accept' ? 'review' : ACTION_BY_LETTER[view.partnerLetter],
+    recommendation: packageReview
+      ? `Quoted values: ${label.toLowerCase()}. ${packageReview.note}`
+      : tradeGradeRecommendation({ letter: view.partnerLetter, giveValue: view.getValue, getValue: view.giveValue }),
     giveValue: view.getValue,
     getValue: view.giveValue,
     giveMarket: view.getMarket,
     getMarket: view.giveMarket,
     lines: view.lines.map((l) => ({ ...l, side: l.side === 'give' ? 'get' : 'give' })),
     moves: view.moves.map((m) => ({ ...m, side: m.side === 'give' ? 'get' : 'give' })),
+    // The credit stays with the same TOTAL, which this view calls the other side.
+    ...(view.rosterSpot ? { rosterSpot: { ...view.rosterSpot, side: view.rosterSpot.side === 'give' ? 'get' : 'give' } as TradeRosterSpot } : {}),
+    // The original viewer's personal utility is not the other manager's roster fit.
+    rosterFit: null,
+    // Today's re-evaluation flips with the original, or the other side reads the wrong "now".
+    current: view.current
+      ? { letter: view.current.partnerLetter, partnerLetter: view.current.letter, giveValue: view.current.getValue, getValue: view.current.giveValue }
+      : view.current,
   }
 }

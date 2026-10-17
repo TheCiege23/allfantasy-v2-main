@@ -3,6 +3,7 @@ import 'server-only'
 import { unstable_cache } from 'next/cache'
 
 import { prisma } from '@/lib/prisma'
+import { isForeignIdSpace } from './rosterIdSpace'
 
 /**
  * Own % and start %, computed from AllFantasy's OWN rosters.
@@ -90,9 +91,12 @@ const readMarketCached = unstable_cache(
           ...(sport ? { sport: sport as never } : {}),
           ...(dynastyOnly == null ? {} : { isDynasty: dynastyOnly }),
         },
-        select: { id: true },
+        select: { id: true, platform: true, sport: true },
       })
       .catch(() => [])
+      // A foreign league's ids collide with real Sleeper ids — counted, they own strangers. Unreadable, so uncounted.
+      // So do a native NHL/NBA/MLB league's Rolling Insights ids: Sleeper ids exist only for NFL.
+      .then((ls) => ls.filter((l) => !isForeignIdSpace(l.platform, l.sport)))
 
     if (leagues.length === 0) return { rows: [] as Array<[string, RosteredMarket]>, leagues: 0 }
 

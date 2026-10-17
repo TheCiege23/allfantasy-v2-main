@@ -59,15 +59,23 @@ vi.mock('@/lib/openweathermap', () => ({
   NFL_VENUE_COORDS: { 'Test Park': { lat: 1, lon: 2, dome: false } },
 }))
 vi.mock('@/app/api/cron/_auth', () => ({ requireCronAuth: () => true }))
+// Every fixture here names its venue, so the home-team fallback is never reached.
+vi.mock('@/lib/weather/venueResolver', () => ({ resolveVenueForTeam: () => ({ kind: 'none' }) }))
 
-/** Games inside 48h, so every one is force-refreshed and hits the expensive path. */
+/**
+ * Every game uncached, so each one hits the expensive path.
+ *
+ * ⚠ ONE UTC DAY APART, NOT ONE SECOND. The route folds rows that map to the same coords/day key —
+ * one game stored by several sources is one forecast — so 120 games a second apart at one venue
+ * are now ONE refresh, and this budget suite would be measuring a single call.
+ */
 function games(n: number) {
   const soon = Date.now() + 60 * 60 * 1000
   return Array.from({ length: n }, (_, i) => ({
     externalId: `g${i}`,
     sport: 'NFL',
     venue: 'Test Park',
-    startTime: new Date(soon + i * 1000),
+    startTime: new Date(soon + i * 24 * 60 * 60 * 1000),
   }))
 }
 

@@ -168,7 +168,7 @@ export function TournamentChrome({ children }: { children: React.ReactNode }) {
             {!collapsed ? (
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[12px] font-bold text-[var(--tournament-text-full)]">{shell.name}</p>
-                <p className="truncate text-[10px] text-[var(--tournament-text-dim)]">{shell.sport}</p>
+                <p className="truncate text-[11px] text-[var(--tournament-text-dim)]">{shell.sport}</p>
               </div>
             ) : null}
             <button
@@ -219,7 +219,7 @@ export function TournamentChrome({ children }: { children: React.ReactNode }) {
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[12px] font-semibold text-white">{participant.displayName}</p>
                   <span
-                    className={`mt-0.5 inline-block rounded-full px-2 py-0.5 text-[9px] font-bold tracking-wide ${
+                    className={`mt-0.5 inline-block rounded-full px-2 py-0.5 text-[11px] font-bold tracking-wide ${
                       statusChip === 'BUBBLE'
                         ? 'bg-amber-500/20 text-amber-200'
                         : statusChip === 'QUALIFIED' || statusChip === 'CHAMPION'
@@ -233,11 +233,11 @@ export function TournamentChrome({ children }: { children: React.ReactNode }) {
                   </span>
                 </div>
               </div>
-              <p className="mt-2 text-[10px] text-[var(--tournament-text-dim)]">
+              <p className="mt-2 text-[11px] text-[var(--tournament-text-dim)]">
                 Round {shell.currentRoundNumber || 1} of {shell.totalRounds}
               </p>
               {conference ? (
-                <p className="truncate text-[10px] text-[var(--tournament-text-mid)]">{conference.name}</p>
+                <p className="truncate text-[11px] text-[var(--tournament-text-mid)]">{conference.name}</p>
               ) : null}
             </div>
           ) : null}
@@ -253,7 +253,7 @@ export function TournamentChrome({ children }: { children: React.ReactNode }) {
             </Link>
             <div className="min-w-0 flex-1">
               <p className="truncate text-[13px] font-bold text-white">{shell.name}</p>
-              <p className="text-[10px] text-[var(--tournament-text-dim)]">
+              <p className="text-[11px] text-[var(--tournament-text-dim)]">
                 <span className="rounded-md bg-white/10 px-1.5 py-0.5 font-mono text-[var(--tournament-active)]">
                   R{shell.currentRoundNumber || 1}
                 </span>
@@ -319,7 +319,7 @@ export function TournamentChrome({ children }: { children: React.ReactNode }) {
             <Link
               key={item.href}
               href={item.href}
-              className={`flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] font-semibold ${
+              className={`flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px] font-semibold ${
                 active ? 'text-[var(--tournament-active)]' : 'text-[var(--tournament-text-dim)]'
               }`}
             >
@@ -331,7 +331,7 @@ export function TournamentChrome({ children }: { children: React.ReactNode }) {
         <button
           type="button"
           onClick={() => setMoreOpen(true)}
-          className="flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] font-semibold text-[var(--tournament-text-dim)]"
+          className="flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px] font-semibold text-[var(--tournament-text-dim)]"
           data-testid="tournament-nav-more"
         >
           <Menu className="h-5 w-5" strokeWidth={1.75} />

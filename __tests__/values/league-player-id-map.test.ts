@@ -34,3 +34,40 @@ describe('league non-market values retain player identity', () => {
     expect(valuePositionsAgree('WR', 'LB')).toBe(false)
   })
 })
+
+/*
+ * 🛑 THE PRICE COVERAGE AUDIT (2026-09-28): 54 of 57 IDP "defender" gaps were a defender found by
+ * his EXACT Sleeper id and then thrown away because the two player tables label him differently —
+ * Brian Burns is LB in `sports_players` (Sleeper) and DE in `SportsPlayer`, which the board uses.
+ */
+describe('an exact Sleeper id is the player; a defensive sub-label is not evidence against it', () => {
+  const burns = { value: 3100, position: 'DE', basis: 'idp-vorp' as const, sleeperId: '5862' }
+  const bySleeperId = new Map([['5862', burns]])
+
+  it('by id, an LB label finds the value the board holds under DE', () => {
+    expect(leagueValueForPlayer({ name: 'Brian Burns', identity: { sleeperId: '5862', position: 'LB' }, bySleeperId })).toBe(burns)
+  })
+
+  it('by id, every defensive sub-label pairing is the same player', () => {
+    for (const [asked, held] of [['DL', 'LB'], ['LB', 'DT'], ['DB', 'LB'], ['LB', 'NT'], ['OLB', 'EDGE']]) {
+      const entry = { value: 1, position: held, basis: 'idp-vorp' as const, sleeperId: 'x' }
+      expect(leagueValueForPlayer({ name: 'x', identity: { sleeperId: 'x', position: asked }, bySleeperId: new Map([['x', entry]]) })).toBe(entry)
+    }
+  })
+
+  it('[kept] by id, a defender still never matches an offensive player or a kicker', () => {
+    for (const asked of ['WR', 'QB', 'K']) {
+      expect(leagueValueForPlayer({ name: 'Brian Burns', identity: { sleeperId: '5862', position: asked }, bySleeperId })).toBeNull()
+    }
+  })
+
+  it('[kept] by NAME, the labels must still agree — a shared name is not an identity', () => {
+    expect(leagueValueForPlayer({ name: 'Brian Burns', identity: { position: 'LB' }, byNameLower: new Map([['brian burns', burns]]) })).toBeNull()
+    expect(leagueValueForPlayer({ name: 'Brian Burns', identity: { position: 'DL' }, byNameLower: new Map([['brian burns', burns]]) })).toBe(burns)
+  })
+
+  it('[kept] an entry carrying a DIFFERENT Sleeper id is never used', () => {
+    expect(leagueValueForPlayer({ name: 'x', identity: { sleeperId: '5862', position: 'LB' },
+      bySleeperId: new Map([['5862', { ...burns, sleeperId: '9999' }]]) })).toBeNull()
+  })
+})

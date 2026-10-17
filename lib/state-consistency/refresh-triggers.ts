@@ -39,7 +39,6 @@ export const FOCUS_REFETCH_THROTTLE_MS = 5000
  *
  * - Chat / AI
  *   - No central client cache; per-thread or per-request fetch. Refetch by re-requesting or opening thread.
- *   - useAIChat clears local thread state when conversation context changes.
  *   - Global event bus can nudge consumers after successful chat/AI actions:
  *     lib/state-consistency/state-events.ts -> dispatchStateRefreshEvent().
  *
@@ -56,7 +55,7 @@ export const REFRESH_TRIGGERS_DOC = {
   leagueList: 'useLeagueList: mount, window focus (throttled); keeps dashboard list fresh after create/join.',
   leagues: 'useLeagueSectionData: mount, focus/visibility (throttled), manual reload, state-event listeners; plus server cache invalidation.',
   drafts: 'Draft sections/APIs: mount, focus/visibility (throttled), manual reload, state-event listeners.',
-  chat: 'Per-thread fetch; useAIChat resets thread state by context and emits refresh events.',
+  chat: 'Per-thread fetch. No surface dispatches chat refresh events since useAIChat was removed (2026-09-29).',
   ai: 'Per-request/session fetch; AI hooks emit refresh events after successful actions.',
   events: 'dispatchStateRefreshEvent/addStateRefreshListener provide cross-domain invalidation signals for auth/leagues/drafts/chat/ai/tokens/subscriptions.',
 } as const

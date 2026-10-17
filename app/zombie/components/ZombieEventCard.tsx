@@ -67,7 +67,7 @@ export function ZombieEventCard({ event, compact, animate }: { event: ZombieFeed
       {!compact && event.subtitle ? (
         <p className="mt-0.5 line-clamp-2 text-[11px] text-[var(--zombie-text-mid)]">{event.subtitle}</p>
       ) : null}
-      <div className="mt-1 flex flex-wrap gap-2 text-[10px] text-[var(--zombie-text-dim)]">
+      <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-[var(--zombie-text-dim)]">
         {event.week != null ? <span>Week {event.week}</span> : null}
         {event.leagueName ? <span>{event.leagueName}</span> : null}
         {event.timestamp ? (

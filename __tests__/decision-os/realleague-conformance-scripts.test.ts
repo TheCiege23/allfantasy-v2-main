@@ -11,8 +11,9 @@ const stripComments = (src: string) =>
   src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1')
 const read = (rel: string) => stripComments(readFileSync(resolve(process.cwd(), rel), 'utf8'))
 
+// `scripts/decision-os-lineup-conformance.ts` was deleted 2026-09-29 with the lineup shadow runner it
+// exercised (the duplicate lineup engine was retired; /core My Team is the one start/sit answer).
 const SCRIPTS = [
-  { path: 'scripts/decision-os-lineup-conformance.ts', sentinel: 'LINEUP_CONFORMANCE_OK' },
   { path: 'scripts/decision-os-waiver-conformance.ts', sentinel: 'WAIVER_CONFORMANCE_OK' },
   { path: 'scripts/decision-os-commissioner-conformance.ts', sentinel: 'COMMISSIONER_CONFORMANCE_OK' },
 ].map((s) => ({ ...s, src: read(s.path) }))

@@ -7,6 +7,9 @@ describe('extractPickMentions', () => {
     ['my 2027 1st', [{ season: 2027, round: 1 }]],
     ['Puka Nacua and a 2026 second', [{ season: 2026, round: 2 }]],
     ['a 2028 first-round pick', [{ season: 2028, round: 1 }]],
+    ['2027 1st Round draft pick', [{ season: 2027, round: 1 }]],
+    ['2027 first-round draft pick', [{ season: 2027, round: 1 }]],
+    ['2027 1st draft pick', [{ season: 2027, round: 1 }]],
     ['my 2027 2nd rounder and Bijan', [{ season: 2027, round: 2 }]],
     ['two 2027 1sts', [{ season: 2027, round: 1 }, { season: 2027, round: 1 }]],
     ['a 2027 1st and a 2028 3rd', [{ season: 2027, round: 1 }, { season: 2028, round: 3 }]],
@@ -40,5 +43,20 @@ describe('extractPickMentions', () => {
   it('labels picks the way the scenario card shows them', () => {
     expect(pickLabel({ season: 2027, round: 1 })).toBe('2027 1st-round pick')
     expect(pickLabel({ season: 2026, round: 3 })).toBe('2026 3rd-round pick')
+  })
+})
+
+describe('Sleeper trade card picks (2026-09-30)', () => {
+  it('reads "2028 2nd Rd (JeffersonTD)" as a 2028 2nd, owner JeffersonTD, with nothing left over', () => {
+    expect(extractPickMentions('2028 2nd Rd (JeffersonTD)')).toEqual({
+      picks: [{ season: 2028, round: 2, text: '2028 2nd Rd (JeffersonTD)', owner: 'JeffersonTD' }],
+      unclear: false,
+    })
+  })
+
+  it('"Rd." and "Rd pick" are round words too; a bracket without a pick is not an owner', () => {
+    expect(extractPickMentions('a 2027 1st Rd. pick').picks).toEqual([expect.objectContaining({ season: 2027, round: 1 })])
+    expect(extractPickMentions('a 2027 1st Rd. pick').unclear).toBe(false)
+    expect(extractPickMentions('Puka Nacua (WR)').picks).toEqual([])
   })
 })

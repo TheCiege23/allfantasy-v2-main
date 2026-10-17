@@ -7,7 +7,7 @@
  *   - buy-sell-hold  → deterministic per-player asset calls (value + age + window)
  *   - waivers        → deterministic add/drop (dynasty value + age weighted)
  *   - lineup         → deterministic value-ranked start/sit (low confidence, honest)
- *   - trade-analyze  → deterministic, age-adjusted trade verdict
+ *   - trade-analyze  → age-adjusted trade facts + THE one trade grade
  *   - trade-find     → deterministic partner fit (needs + contention windows)
  *   - ask            → grounded AI answer over deterministic facts (AF War Room-gated)
  *
@@ -23,7 +23,7 @@ import { evaluateDynastyTeamDirection } from '@/lib/dynasty-war-room/dynastyTeam
 import { evaluateBuySellHold } from '@/lib/dynasty-war-room/dynastyBuySellHoldEngine'
 import { buildDynastyLineupRecommendation } from '@/lib/dynasty-war-room/dynastyLineupEngine'
 import { buildDynastyWaiverRecommendations } from '@/lib/dynasty-war-room/dynastyWaiverEngine'
-import { analyzeDynastyTrade, findDynastyTradeTargets } from '@/lib/dynasty-war-room/dynastyTradeEngine'
+import { dynastyTradeFacts, findDynastyTradeTargets } from '@/lib/dynasty-war-room/dynastyTradeEngine'
 import {
   DYNASTY_WAR_ROOM_SYSTEM_RULES,
   buildDynastyWarRoomPrompt,
@@ -32,6 +32,8 @@ import { requireEntitlement } from '@/lib/subscription/requireEntitlement'
 import { openaiChatText } from '@/lib/openai-client'
 import type { DynastyWarRoomContext } from '@/lib/dynasty-war-room/types'
 import { recordWarRoomTradeShadow } from '@/lib/decision-os/trade/warRoomShadow'
+import { gradeWarRoomTrade, warRoomTradeSide } from '@/lib/decision-os/trade/warRoomTradeGrade'
+import { warRoomTradeAnalysisForClient } from '@/lib/decision-os/trade/warRoomTradeView'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -115,7 +117,7 @@ export async function POST(
       return NextResponse.json({ lineup: buildDynastyLineupRecommendation(context, rosterId) })
 
     case 'trade-analyze': {
-      const analysis = analyzeDynastyTrade(context, {
+      const analysis = dynastyTradeFacts(context, {
         rosterId,
         outgoingPlayerIds: Array.isArray(body.outgoingPlayerIds) ? body.outgoingPlayerIds : [],
         incomingPlayerIds: Array.isArray(body.incomingPlayerIds) ? body.incomingPlayerIds : [],
@@ -133,7 +135,22 @@ export async function POST(
         incomingCount: Array.isArray(body.incomingPlayerIds) ? body.incomingPlayerIds.length : 0,
         analysis,
       })
-      return NextResponse.json({ tradeAnalysis: analysis })
+      /*
+       * 🛑 THE VERDICT IS THE ONE GRADE (2026-09-28, lib/decision-os/trade/warRoomTradeGrade.ts).
+       * The engine returns facts only (2026-09-30); its retired accept/reject/neutral is derived for the
+       * shadow above, inside Decision OS. The panel shows the grade and the facts (age, pick, direction).
+       */
+      const players = context.teams.flatMap((t) => t.players)
+      const picks = context.teams.flatMap((t) => t.picks)
+      const tradeGrade = await gradeWarRoomTrade({
+        leagueId,
+        userId: user.id,
+        viewerSide: rosterId === context.userRosterId,
+        outgoing: warRoomTradeSide({ playerIds: body.outgoingPlayerIds, pickIds: body.outgoingPickIds, players, picks }),
+        incoming: warRoomTradeSide({ playerIds: body.incomingPlayerIds, pickIds: body.incomingPickIds, players, picks }),
+      })
+      // 🛑 The facts only — the engine's value and fit deltas stay on the server (2026-09-29).
+      return NextResponse.json({ tradeAnalysis: warRoomTradeAnalysisForClient(analysis), tradeGrade })
     }
 
     case 'trade-find':

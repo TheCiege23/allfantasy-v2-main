@@ -35,14 +35,47 @@
  * `waiverCheck`, and record `cron-chimmy-lineup-check` / `cron-chimmy-waiver-check` rows only on a
  * run that actually ran for users, so a quiet day writes nothing.
  *
+ * AND THE WAIVER CHECK FOR EVERY OTHER SPORT (2026-09-29, lib/chimmy-alerts/runSportWaiverCheck.ts):
+ * the Waivers board's per-game sections — NBA, NCAAB, NHL, MLB daily in a morning window on game
+ * days, NCAAF on Tuesday — on the per-sport rules in lib/chimmy-alerts/waiverAlertRules.ts, at most
+ * one message per user per Eastern day. Separate from the NFL's Tuesday check, which is unchanged.
+ * It reports under `sportWaiverCheck` and records `cron-chimmy-sport-waiver-check` only on a run
+ * that actually ran for users.
+ *
+ * AND THE BEST BALL DEPTH CHECK (2026-10-08, lib/chimmy-alerts/runBestBallDepthCheck.ts): in the
+ * lineup check's window, a best ball manager whose auto lineup has nobody healthy left at a position
+ * gets one message for the week. The rule is the home card's (dash34 depthAlerts), red only. It
+ * reports under `bestBallDepth` and records `cron-chimmy-best-ball-depth` only on a run that ran.
+ *
+ * AND A LOCK CHECK BEFORE EVERY OTHER SLATE (2026-10-08, lib/chimmy-alerts/runSlateLockCheck.ts): the
+ * weekly lineup check covers only the main slate, so Thursday, Sunday night and Monday locked with no
+ * check at all. 90 to 20 minutes before each of those, a manager with a swap worth taking, a starter
+ * with no projection in that game, or an empty slot (once a week) gets one push for that slate.
+ * Ruled-out starters stay with the injured-starter sweep above. It reports under `slateLock` and
+ * records `cron-chimmy-slate-lock` only on a run that ran.
+ *
+ * A THIRD, SHIPPED OFF: THE GUILLOTINE CHOP-RELEASE ALERT (lib/chimmy-alerts/chopRelease.ts). When a
+ * guillotine league's chopped roster hits waivers, each surviving member gets their own FAAB bid plan
+ * for it. It does nothing — not one read — unless the service carries CHOP_RELEASE_ALERTS_ENABLED=1.
+ * It reports under `chopRelease` and records `cron-chimmy-chop-release` only on a run that found a chop.
+ *
  * Query params:
  *   dryRun=1     evaluate and report without sending (both jobs)
  *   limit=N      cap users processed this run (default 200)
  *   userId=...   evaluate a single user, for verification (both jobs)
  *   lineupCheck=force   run the lineup check outside its window (the weekly claim still holds)
  *   lineupCheck=off     skip the lineup check this run
+ *   bestBallDepth=force run the best ball depth check outside its window (the weekly claim still holds)
+ *   bestBallDepth=off   skip the best ball depth check this run
+ *   slateLock=force     run the slate lock check for the next non-main slate (its claims still hold)
+ *   slateLock=off       skip the slate lock check this run
  *   waiverCheck=force   run the waiver check outside its window (the weekly claim still holds)
  *   waiverCheck=off     skip the waiver check this run
+ *   followFree=off      skip the followed-player free-agent check this run (it runs every sweep)
+ *   sportWaiverCheck=force  run the other-sport waiver check outside its windows (in-season sports
+ *                           only; the daily claim still holds)
+ *   sportWaiverCheck=off    skip the other-sport waiver check this run
+ *   chopRelease=off     skip the chop-release alert this run (it is also off unless the flag is set)
  *
  * FAILS LOUDLY on a systemic error (no push configured, sweep threw). It does NOT fail when
  * zero alerts are found — on a Tuesday in the off-season that is the correct outcome, and a
@@ -61,12 +94,25 @@ import { detectInjuredStarterAlerts } from '@/lib/chimmy-alerts/ChimmyAlertDetec
 import { hydrateInjuredStarters } from '@/lib/chimmy-alerts/hydrateInjuredStarters'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 import { sendPushToUser } from '@/lib/push-notifications'
+import { apnsConfig } from '@/lib/push-notifications/apns'
 import { decidePushForUser } from '@/lib/notifications/pushGate'
+import { teamSweepTelemetry } from '@/lib/core-app/teamSweepPolicy'
 import { recordSyncJobRun, withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 import { runLineupCheck, type LineupCheckRun } from '@/lib/chimmy-alerts/runLineupCheck'
+import { runBestBallDepthCheck, type BestBallDepthRun } from '@/lib/chimmy-alerts/runBestBallDepthCheck'
+import { runSlateLockCheck, type SlateLockRun } from '@/lib/chimmy-alerts/runSlateLockCheck'
 import { runWaiverCheck, type WaiverCheckRun } from '@/lib/chimmy-alerts/runWaiverCheck'
+import { runSportWaiverCheck, type SportWaiverCheckRun } from '@/lib/chimmy-alerts/runSportWaiverCheck'
+import type { ChopReleaseRun } from '@/lib/chimmy-alerts/runChopReleaseCheck'
+import { chopReleaseEnabled } from '@/lib/chimmy-alerts/chopRelease'
+import { runFollowFreeAgentCheck, type FollowFreeAgentRun } from '@/lib/follows/followFreeAgentCheck'
+import { followFreeAgentDeps } from '@/lib/follows/followFreeAgentDeps'
 import { injuredStarterDedupeKey, injuredStarterHref, mergeAudience } from '@/lib/chimmy-alerts/sweepAudience'
-import { liveFirstSeen } from '@/lib/chimmy-alerts/liveStatusFold'
+import { buildFanOutLeagues } from '@/lib/chimmy-alerts/injuryFanOut'
+import { digestCopy, fanOutCopy, groupAlertsByPlayer } from '@/lib/chimmy-alerts/injuryFanOutCopy'
+import { allSportsInjuryAlertsEnabled, onGameDay } from '@/lib/chimmy-alerts/gameDayScope'
+import { liveFirstSeen, planLiveFold, sleeperIdentities } from '@/lib/chimmy-alerts/liveStatusFold'
+import { sleeperIdWhere } from '@/lib/player-identity/externalIdNamespace'
 import type { ChimmyAlertContext } from '@/lib/chimmy-alerts/types'
 import { loadChimmyAlertPreferences } from '@/lib/chimmy-alerts/ChimmyAlertPreferencesService'
 import { preferenceMuteReason } from '@/lib/chimmy-alerts/ChimmyAlertSuppressionEngine'
@@ -91,12 +137,20 @@ const JOB = 'cron-alert-sweep'
 
 /** Recorded only when a weekly check actually ran for users — see the header. */
 const LINEUP_CHECK_JOB = 'cron-chimmy-lineup-check'
+const BEST_BALL_DEPTH_JOB = 'cron-chimmy-best-ball-depth'
+const SLATE_LOCK_JOB = 'cron-chimmy-slate-lock'
+/** "He's free in your league" for followed players (lib/follows/followFreeAgentCheck.ts). */
+const FOLLOW_FREE_AGENT_JOB = 'cron-follow-free-agent'
 const WAIVER_CHECK_JOB = 'cron-chimmy-waiver-check'
+const SPORT_WAIVER_CHECK_JOB = 'cron-chimmy-sport-waiver-check'
+const CHOP_RELEASE_JOB = 'cron-chimmy-chop-release'
 
 /**
  * A weekly check's share of a run. The injured-starter sweep goes first and is the reason this
  * route exists; a check stops starting new users past this and resumes on the next run. Only one
  * check is ever inside its window at a time (Sunday morning, Tuesday), so they do not compete.
+ * ⚠ The other-sport waiver check's morning window can overlap the NFL's Tuesday one; each still
+ * gets at most this much, and both stop starting users at the ceiling below.
  *
  * ⚠ AND NEVER PAST `SWEEP_CEILING_MS` OF THE WHOLE RUN. The fast-tier runner gives this route
  * 330s. Measured over three days (2026-09-21..24): the sweep alone ran p50 24s, p95 40s — and once
@@ -108,7 +162,12 @@ const SWEEP_CEILING_MS = 240_000
 
 type PhaseRefusal = { ran: false; reason: 'disabled' | 'error'; error?: string }
 type LineupCheckReport = LineupCheckRun | PhaseRefusal
+type BestBallDepthReport = BestBallDepthRun | PhaseRefusal
+type SlateLockReport = SlateLockRun | PhaseRefusal
+type FollowFreeAgentReport = FollowFreeAgentRun | PhaseRefusal
 type WaiverCheckReport = WaiverCheckRun | PhaseRefusal
+type SportWaiverCheckReport = SportWaiverCheckRun | PhaseRefusal
+type ChopReleaseReport = ChopReleaseRun | PhaseRefusal
 
 type PhaseArgs = {
   mode: string
@@ -128,6 +187,8 @@ async function weeklyCheckPhase<R extends { ran: boolean }>(
   args: PhaseArgs,
   run: (opts: { dryRun: boolean; force: boolean; userId: string | null; budgetMs: number }) => Promise<R>,
   heartbeat: (result: Extract<R, { ran: true }>) => { jobName: string; outcome: Parameters<typeof recordSyncJobRun>[1] },
+  /** The heartbeat row's sport; null for a check spanning several. */
+  sport: string | null = 'NFL',
 ): Promise<R | PhaseRefusal> {
   if (args.mode === 'off' || args.mode === '0') return { ran: false, reason: 'disabled' }
   const force = args.mode === 'force'
@@ -141,7 +202,7 @@ async function weeklyCheckPhase<R extends { ran: boolean }>(
     })
     if (result.ran && !args.dryRun && !args.singleUser && !force) {
       const hb = heartbeat(result as Extract<R, { ran: true }>)
-      await recordSyncJobRun({ jobName: hb.jobName, sport: 'NFL', trigger: 'cron' }, hb.outcome, Date.now() - started)
+      await recordSyncJobRun({ jobName: hb.jobName, sport, trigger: 'cron' }, hb.outcome, Date.now() - started)
     }
     return result
   } catch (err) {
@@ -165,6 +226,67 @@ function lineupCheckPhase(args: PhaseArgs): Promise<LineupCheckReport> {
   }))
 }
 
+/**
+ * ⚠ SHARES THE LINEUP CHECK'S WINDOW, so the two run in the same fires; each has its own budget and
+ * both still stop starting users at `SWEEP_CEILING_MS`. Only managers holding a best ball league are
+ * walked, so for most of the audience this costs nothing.
+ */
+function bestBallDepthPhase(args: PhaseArgs): Promise<BestBallDepthReport> {
+  return weeklyCheckPhase('best ball depth check', args, runBestBallDepthCheck, (r) => ({
+    jobName: BEST_BALL_DEPTH_JOB,
+    outcome: {
+      rowsRead: r.leaguesChecked,
+      rowsWritten: r.outcomes.sent ?? 0,
+      rowsSkipped: r.notReached,
+      errors: r.errors.map((e) => `${e.userId}: ${e.error}`),
+      status: r.errors.length > 0 ? 'partial' : 'success',
+      metadata: { week: r.week, mainSlate: r.mainSlate, users: r.users, outcomes: r.outcomes },
+    },
+  }))
+}
+
+/**
+ * Runs before every non-main slate (Thursday, Sunday night, Monday). Never inside the lineup check's
+ * window, which is the main slate's, so the two do not share a run's budget.
+ */
+function slateLockPhase(args: PhaseArgs): Promise<SlateLockReport> {
+  return weeklyCheckPhase('slate lock check', args, runSlateLockCheck, (r) => ({
+    jobName: SLATE_LOCK_JOB,
+    outcome: {
+      rowsRead: r.leaguesChecked,
+      rowsWritten: r.outcomes.sent ?? 0,
+      rowsSkipped: r.notReached,
+      errors: r.errors.map((e) => `${e.userId}: ${e.error}`),
+      status: r.errors.length > 0 ? 'partial' : 'success',
+      metadata: { week: r.week, slate: r.slate, users: r.users, outcomes: r.outcomes },
+    },
+  }))
+}
+
+/**
+ * Followed players who just went from a roster to nobody's in one of your leagues (2026-10-08, the
+ * Finder's "Alert me"). Every sweep, not a weekly window: a drop can land any day and is worth most
+ * in the first hour. A transition alert — the first run per follow only writes its baseline.
+ */
+function followFreeAgentPhase(args: PhaseArgs): Promise<FollowFreeAgentReport> {
+  return weeklyCheckPhase(
+    'follow free-agent check',
+    args,
+    (o) => runFollowFreeAgentCheck({ dryRun: o.dryRun, userId: o.userId, budgetMs: o.budgetMs }, followFreeAgentDeps),
+    (r) => ({
+      jobName: FOLLOW_FREE_AGENT_JOB,
+      outcome: {
+        rowsRead: r.followsChecked,
+        rowsWritten: r.alerts,
+        rowsSkipped: r.notReached,
+        errors: r.errors.map((e) => `${e.userId}: ${e.error}`),
+        status: r.errors.length > 0 ? 'partial' : 'success',
+        metadata: { users: r.users, seeded: r.seeded, deduped: r.deduped },
+      },
+    }),
+  )
+}
+
 function waiverCheckPhase(args: PhaseArgs): Promise<WaiverCheckReport> {
   return weeklyCheckPhase('waiver check', args, runWaiverCheck, (r) => ({
     jobName: WAIVER_CHECK_JOB,
@@ -177,6 +299,50 @@ function waiverCheckPhase(args: PhaseArgs): Promise<WaiverCheckReport> {
       metadata: { week: r.week, firstKickoff: r.firstKickoff, users: r.users, picks: r.picks, outcomes: r.outcomes },
     },
   }))
+}
+
+function sportWaiverCheckPhase(args: PhaseArgs): Promise<SportWaiverCheckReport> {
+  return weeklyCheckPhase(
+    'sport waiver check',
+    args,
+    runSportWaiverCheck,
+    (r) => ({
+      jobName: SPORT_WAIVER_CHECK_JOB,
+      outcome: {
+        rowsRead: r.users,
+        rowsWritten: r.outcomes.sent ?? 0,
+        rowsSkipped: r.notReached,
+        errors: r.errors.map((e) => `${e.userId}: ${e.error}`),
+        status: r.errors.length > 0 ? 'partial' : 'success',
+        metadata: { day: r.day, sports: r.sports, openSports: r.openSports, users: r.users, picks: r.picks, outcomes: r.outcomes },
+      },
+    }),
+    null,
+  )
+}
+
+/**
+ * 🛑 THE FLAG IS READ HERE, BEFORE THE RUNNER IS EVEN LOADED — and again inside it. Off, the sweep
+ * never imports the plan code or touches a guillotine league. `chopReleaseEnabled` is pure.
+ */
+async function chopReleasePhase(args: PhaseArgs): Promise<ChopReleaseReport> {
+  if (!chopReleaseEnabled()) return { ran: false, reason: 'disabled' }
+  return weeklyCheckPhase(
+    'chop-release alert',
+    args,
+    async (opts) => (await import('@/lib/chimmy-alerts/runChopReleaseCheck')).runChopReleaseCheck(opts),
+    (r) => ({
+      jobName: CHOP_RELEASE_JOB,
+      outcome: {
+        rowsRead: r.leagues,
+        rowsWritten: r.outcomes.sent ?? 0,
+        rowsSkipped: r.noWeek,
+        errors: r.errors.map((e) => `${e.userId}@${e.leagueId}: ${e.error}`),
+        status: r.errors.length > 0 ? 'partial' : 'success',
+        metadata: { chops: r.chops, outcomes: r.outcomes, budgetStopped: r.budgetStopped, seeded: r.seeded, resets: r.resets },
+      },
+    }),
+  )
 }
 
 /**
@@ -218,29 +384,44 @@ async function foldLiveSleeperStatusesForGameWindow(now: Date): Promise<void> {
   if (gamesInWindow === 0) return
 
   const statuses = await fetchSleeperStatuses('nfl')
-  const urgent: Array<{ externalId: string; status: string }> = []
-  for (const [externalId, status] of statuses) {
-    if (!LIVE_URGENT_STATUSES.has(status.trim().toLowerCase())) continue
-    urgent.push({ externalId, status: status.trim() })
-    if (urgent.length >= LIVE_FOLD_MAX_ROWS) break
-  }
+  const urgentIds = [...statuses]
+    .filter(([, status]) => LIVE_URGENT_STATUSES.has(status.trim().toLowerCase()))
+    .map(([sleeperId]) => sleeperId)
+
+  /*
+   * 🛑 NAME THE SLEEPER ID BY `sleeperId` / `sleeper:<id>`, NEVER BY BARE
+   * `externalId` — that column is each provider's own id, and this lookup used to
+   * hand Sleeper 8394's "Out" (Percy Butler) to Rolling Insights 8394 (Rome
+   * Odunze). See `sleeperIdentities`.
+   */
+  const identityRows =
+    urgentIds.length > 0
+      ? await prisma.sportsPlayer.findMany({
+          where: sleeperIdWhere(urgentIds, 'NFL'),
+          orderBy: { updatedAt: 'desc' },
+          select: { externalId: true, sleeperId: true, source: true, name: true, team: true, position: true },
+        })
+      : []
+  const plan = planLiveFold(
+    statuses,
+    sleeperIdentities(urgentIds, identityRows),
+    LIVE_URGENT_STATUSES,
+    LIVE_FOLD_MAX_ROWS,
+  )
 
   // A player who recovered must not keep an old live row outranking the feed —
-  // clear live rows the current blob no longer marks urgent.
+  // clear every live row this pass does not rewrite: no longer urgent, or no
+  // longer nameable. Run AFTER naming, so a row filed under the wrong player
+  // cannot outlive the pass that stops vouching for it.
   await prisma.sportsInjury.deleteMany({
     where: {
       sport: 'NFL',
       source: LIVE_STATUS_SOURCE,
-      ...(urgent.length > 0 ? { externalId: { notIn: urgent.map((u) => u.externalId) } } : {}),
+      ...(plan.length > 0 ? { externalId: { notIn: plan.map((u) => u.sleeperId) } } : {}),
     },
   })
-  if (urgent.length === 0) return
+  if (plan.length === 0) return
 
-  const meta = await prisma.sportsPlayer.findMany({
-    where: { sport: 'NFL', externalId: { in: urgent.map((u) => u.externalId) } },
-    select: { externalId: true, name: true, team: true, position: true },
-  })
-  const metaById = new Map(meta.map((m) => [m.externalId, m]))
   const expiresAt = new Date(now.getTime() + LIVE_STATUS_TTL_MS)
 
   /*
@@ -254,28 +435,24 @@ async function foldLiveSleeperStatusesForGameWindow(now: Date): Promise<void> {
    * shows Friday when ESPN carries it.
    */
   const existingLive = await prisma.sportsInjury.findMany({
-    where: { sport: 'NFL', source: LIVE_STATUS_SOURCE, externalId: { in: urgent.map((u) => u.externalId) } },
-    select: { externalId: true, status: true, date: true },
+    where: { sport: 'NFL', source: LIVE_STATUS_SOURCE, externalId: { in: plan.map((u) => u.sleeperId) } },
+    select: { externalId: true, status: true, date: true, expiresAt: true },
   })
   const existingById = new Map(existingLive.map((e) => [e.externalId, e]))
 
-  for (const u of urgent) {
-    const m = metaById.get(u.externalId)
-    // No identity, no claim — a row the port would bind by a wrong or empty
-    // name is worse than no row.
-    if (!m?.name?.trim()) continue
-    const date = liveFirstSeen(existingById.get(u.externalId), u.status, now)
+  for (const u of plan) {
+    const date = liveFirstSeen(existingById.get(u.sleeperId), u.status, now)
     await prisma.sportsInjury.upsert({
       where: {
-        sport_externalId_source: { sport: 'NFL', externalId: u.externalId, source: LIVE_STATUS_SOURCE },
+        sport_externalId_source: { sport: 'NFL', externalId: u.sleeperId, source: LIVE_STATUS_SOURCE },
       },
       create: {
         sport: 'NFL',
-        externalId: u.externalId,
-        playerName: m.name,
-        playerId: u.externalId,
-        team: m.team,
-        position: m.position,
+        externalId: u.sleeperId,
+        playerName: u.name,
+        playerId: u.sleeperId,
+        team: u.team,
+        position: u.position,
         status: u.status,
         date,
         source: LIVE_STATUS_SOURCE,
@@ -283,9 +460,9 @@ async function foldLiveSleeperStatusesForGameWindow(now: Date): Promise<void> {
         expiresAt,
       },
       update: {
-        playerName: m.name,
-        team: m.team,
-        position: m.position,
+        playerName: u.name,
+        team: u.team,
+        position: u.position,
         status: u.status,
         date,
         fetchedAt: now,
@@ -309,6 +486,8 @@ interface SweepUserResult {
   pushSkipped?: string
   /** Every detected alert was muted in Chimmy's alert controls (class, type or league). */
   mutedByChimmyPrefs?: boolean
+  /** Players named in this sweep's message — more than one is the game-day digest. */
+  playersSent?: number
   errors: string[]
 }
 
@@ -320,9 +499,12 @@ async function handle(req: NextRequest) {
   const limit = Number.isFinite(limitParam) && limitParam > 0 ? Math.floor(limitParam) : 200
 
   const startedAt = Date.now()
-  const pushConfigured = Boolean(
-    process.env.VAPID_PUBLIC_KEY?.trim() && process.env.VAPID_PRIVATE_KEY?.trim(),
-  )
+  // Either transport is enough: sendPushToUser routes iPhones to APNs and browsers to web-push,
+  // each on its own keys. Gating on VAPID alone skipped every iPhone-only user whenever web
+  // push was unset, and reported the run as "push not configured" while APNs was live.
+  const pushConfigured =
+    Boolean(process.env.VAPID_PUBLIC_KEY?.trim() && process.env.VAPID_PRIVATE_KEY?.trim()) ||
+    apnsConfig() !== null
 
   const runSweep = async () => {
     // Game-window fold FIRST, so this very sweep evaluates against the fresh
@@ -347,7 +529,12 @@ async function handle(req: NextRequest) {
       : await Promise.all([
           prisma.webPushSubscription.findMany({ select: { userId: true }, distinct: ['userId'], take: limit }),
           prisma.leagueTeam.findMany({
-            where: { claimedByUserId: { not: null }, league: { season } },
+            /*
+             * season + 1 since every sport joined the sweep (2026-10-08): ESPN stores an NBA/NHL
+             * 2026-27 league as 2027, so a manager whose only team is one of those was outside the
+             * audience. Which of their leagues count is gameDayScope.isCurrentSeasonLeague's call.
+             */
+            where: { claimedByUserId: { not: null }, league: { season: { in: [season, season + 1] } } },
             select: { claimedByUserId: true },
             distinct: ['claimedByUserId'],
             take: limit,
@@ -369,6 +556,8 @@ async function handle(req: NextRequest) {
       .count({ where: { id: { in: subscribers.map((s) => s.userId) }, email: { not: '' } } })
       .catch(() => null)
 
+    const teamWorkspace = dryRun ? { dryRun: true } : await (await import('@/lib/core-app/teamWorkspaceSweep')).runTeamWorkspaceSweep(subscribers.map(s => s.userId), Math.min(Date.now() + 30_000, startedAt + SWEEP_CEILING_MS)).catch(() => ({ errors: 1 }))
+
     const results: SweepUserResult[] = []
     let totalPushed = 0
     let totalAlerts = 0
@@ -379,7 +568,15 @@ async function handle(req: NextRequest) {
     for (const sub of subscribers) {
       const result: SweepUserResult = { userId: sub.userId, injuredStarters: 0, alerts: 0, pushed: 0, deduped: false, errors: [] }
       try {
-        const signal = await hydrateInjuredStarters({ appUserId: sub.userId })
+        /*
+         * EVERY SPORT, not only the NFL (Guap, 2026-10-08: "do the same for all game days for all
+         * sports"). `sport: null` reads every sport's current leagues; gameDayScope.onGameDay keeps
+         * the NFL exactly as it was and lets a daily sport speak only when his game starts within
+         * GAME_DAY_HOURS. INJURY_ALERTS_NFL_ONLY=1 puts it back to the NFL without a deploy.
+         */
+        const hydrated = await hydrateInjuredStarters({ appUserId: sub.userId, sport: allSportsInjuryAlertsEnabled() ? null : 'NFL' })
+        const sweepNow = new Date()
+        const signal = { ...hydrated, injuredStarters: hydrated.injuredStarters.filter((s) => onGameDay(s, sweepNow)) }
         result.injuredStarters = signal.injuredStarters.length
         if (signal.injuredStarters.length === 0) {
           results.push(result)
@@ -425,74 +622,107 @@ async function handle(req: NextRequest) {
           continue
         }
 
-        // Send only the most urgent alert per sweep. A burst of six notifications for six
-        // leagues is how someone turns notifications off permanently.
-        const top = [...alerts].sort((a, b) => b.urgencySignal - a.urgencySignal)[0]!
-        const dedupePrefix = injuredStarterDedupeKey(top, new Date())
-        const href = injuredStarterHref(top)
-        // Today's message about this player and designation already went out: say nothing again.
-        const already = await prisma.platformNotification
-          .findFirst({ where: { sourceKey: `${dedupePrefix}:${sub.userId}` }, select: { id: true } })
-          .catch(() => null)
-        if (already) {
+        /*
+         * ONE message per player covering EVERY league he starts in (the injury fan-out,
+         * injuryFanOutCopy.ts) — and, since 2026-10-08, ONE phone notification for EVERY player not
+         * yet told about today: the game-day digest. Guap's ask: when the inactives land, one
+         * notification with the list of who is out and the leagues to fix.
+         *
+         * 🛑 BEFORE THE DIGEST THIS SENT THE FIRST UNSENT PLAYER AND STOPPED. Three starters ruled
+         * out at 11:30 on a Sunday took three sweeps — 45 minutes, three buzzes — to say one thing,
+         * and the third could land after a 1pm lock. Every unsent player is now said in this sweep.
+         *
+         * Each player still gets his OWN in-app row under his own dedupe key: the bell lists them
+         * one by one, and that row's sourceKey is what tells the next sweep he was already said.
+         * The email rides the first row only and lists everyone; the phone gets one push.
+         */
+        const now = new Date()
+        const groups = groupAlertsByPlayer(alerts)
+        const unsent: Array<{ group: (typeof alerts)[number][]; key: string }> = []
+        for (const g of groups) {
+          const key = injuredStarterDedupeKey(g[0]!, now)
+          // Today's message about this player and designation already went out: say nothing again.
+          const already = await prisma.platformNotification
+            .findFirst({ where: { sourceKey: `${key}:${sub.userId}` }, select: { id: true } })
+            .catch(() => null)
+          if (!already) unsent.push({ group: g, key })
+        }
+        if (unsent.length === 0) {
           result.deduped = true
           totalDeduped += 1
           results.push(result)
           continue
         }
+        // The backup to start in each league (the finder's league-scored picker) and where to fix it, per player.
+        const fanOuts = await Promise.all(unsent.map((u) => buildFanOutLeagues(sub.userId, u.group, now).catch(() => [])))
+        const copies = unsent.map((u, i) => fanOutCopy(u.group, fanOuts[i]!))
+        const hrefs = await Promise.all(unsent.map(async (u) => injuredStarterHref(u.group[0]!, await alertPlayerRef(u.group[0]!))))
+        const severityOf = (u: (typeof unsent)[number]): 'high' | 'medium' => (u.group[0]!.urgencySignal >= 78 ? 'high' : 'medium')
 
         /*
-         * The email lists EVERY flagged starter, not just `top`. A phone
-         * banner has room for one sentence; an email does not have that
-         * constraint, and a manager with three starters out is badly served by
-         * an email about one of them — the other two are the ones he misses.
+         * The email lists EVERY flagged player, not just the ones this sweep sends about. The
+         * players sent now carry their per-league fix links; the others say what the detector said.
          */
         const injuryEmail = renderInjuryEmail({
-          alerts: alerts.map((a) => ({
-            title: a.title,
-            message: a.message,
-            leagueId: a.leagueId ?? null,
-          })),
+          alerts: groups.map((g) => {
+            const i = unsent.findIndex((u) => u.group === g)
+            if (i >= 0) {
+              return {
+                title: copies[i]!.title,
+                message: copies[i]!.body,
+                leagueId: g[0]!.leagueId ?? null,
+                // Each league's lineup screen, and — where no bench player can come in — its claim screen,
+                // named for the free agent when one was picked (injuryFanOut.ts, 2026-10-09).
+                fixLinks: fanOuts[i]!.flatMap((l) => [
+                  ...(l.fixHref ? [{ leagueName: l.leagueName, href: l.fixHref }] : []),
+                  ...(l.claimHref
+                    ? [{ leagueName: l.leagueName, href: l.claimHref, label: l.freeAgent ? `Add ${l.freeAgent.name} in ${l.leagueName}` : `Free agents in ${l.leagueName}` }]
+                    : []),
+                ]),
+              }
+            }
+            const other = fanOutCopy(g, [])
+            return { title: other.title, message: other.body, leagueId: g[0]!.leagueId ?? null }
+          }),
           baseUrl: getBaseUrl(),
         })
 
         /*
-         * In-app row first, so the bell and the notifications centre carry the
+         * In-app rows first, so the bell and the notifications centre carry the
          * alert even when push is unconfigured or the subscription has gone
-         * stale. The UTC-day bucket in the dedupe prefix keeps a 15-minute
+         * stale. The Eastern-day bucket in the dedupe prefix keeps a 15-minute
          * cadence from writing 96 rows for the same injury.
          *
-         * ⚠ EMAIL IS NO LONGER SKIPPED. It was, on the reasoning that this
-         * sweep never promised one — but the effect was that an injured
-         * starter, the single most time-critical thing this product knows,
-         * had no email at all while digests and trade alerts did. The dedupe
-         * prefix is what makes it safe at a 15-minute cadence: one send per
-         * league per day, not ninety-six.
-         *
-         * It rides `emailOverride` deliberately. The dispatcher's default
+         * Email rides `emailOverride` deliberately. The dispatcher's default
          * sender strips its own HTML — every tag replaced with a space — so
          * anything designed must come through the override, which is the only
          * path to sendTemplatedEmail. SMS and push stay skipped: the targeted
-         * push below is the only push, and SMS is not configured.
+         * push below is the only push, and SMS has no registered sender yet
+         * (Twilio A2P 10DLC).
          */
-        const alertSeverity: 'high' | 'medium' = top.urgencySignal >= 78 ? 'high' : 'medium'
-        await dispatchNotification({
-          userIds: [sub.userId],
-          category: 'injury_alerts',
-          productType: 'app',
-          type: 'chimmy_alert',
-          title: top.title,
-          body: top.message,
-          // The Player Finder card: it leads with the game-day banner and the verified lineup buttons.
-          actionHref: href,
-          actionLabel: 'Open his card',
-          leagueId: top.leagueId ?? null,
-          severity: alertSeverity,
-          meta: { chimmyAlert: true, class: top.class, alertType: top.type, ...(top.metadata ?? {}) },
-          dedupePrefix,
-          skipChannels: { email: injuryEmail == null, sms: true, push: true },
-          ...(injuryEmail ? { emailOverride: injuryEmail } : {}),
-        })
+        for (let i = 0; i < unsent.length; i++) {
+          const u = unsent[i]!
+          const top = u.group[0]!
+          const withEmail = i === 0 && injuryEmail != null
+          await dispatchNotification({
+            userIds: [sub.userId],
+            category: 'injury_alerts',
+            productType: 'app',
+            type: 'chimmy_alert',
+            title: copies[i]!.title,
+            body: copies[i]!.body,
+            // The Player Finder card: it leads with the game-day banner and the verified lineup buttons.
+            actionHref: hrefs[i]!,
+            actionLabel: 'Open his card',
+            leagueId: top.leagueId ?? null,
+            severity: severityOf(u),
+            meta: { chimmyAlert: true, class: top.class, alertType: top.type, ...(top.metadata ?? {}) },
+            dedupePrefix: u.key,
+            skipChannels: { email: !withEmail, sms: true, push: true },
+            ...(withEmail && injuryEmail ? { emailOverride: injuryEmail } : {}),
+          })
+        }
+        result.playersSent = unsent.length
 
         if (!pushConfigured) {
           result.errors.push('push not configured')
@@ -507,26 +737,39 @@ async function handle(req: NextRequest) {
          * this line buzzed the phone regardless. pushGate holds the dispatcher's own rule.
          * A high-severity alert passes quiet hours only when the user allows critical
          * alerts (user decision, 2026-09-14). A settings read that fails sends nothing.
+         *
+         * Asked per player: a league the user muted keeps its player out of the digest
+         * without silencing the others.
          */
-        const pushGate = await decidePushForUser(sub.userId, {
-          category: 'injury_alerts',
-          leagueId: top.leagueId ?? null,
-          severity: alertSeverity,
-        }).catch(() => null)
-        if (!pushGate || !pushGate.allowed) {
-          result.pushSkipped = pushGate ? pushGate.reason : 'settings_unavailable'
+        const gates = await Promise.all(
+          unsent.map((u) =>
+            decidePushForUser(sub.userId, {
+              category: 'injury_alerts',
+              leagueId: u.group[0]!.leagueId ?? null,
+              severity: severityOf(u),
+            }).catch(() => null),
+          ),
+        )
+        const pushable = unsent.map((u, i) => ({ u, i })).filter(({ i }) => gates[i]?.allowed)
+        if (pushable.length === 0) {
+          const first = gates[0]
+          result.pushSkipped = first && !first.allowed ? first.reason : 'settings_unavailable'
           totalPushSkipped += 1
           results.push(result)
           continue
         }
 
+        // One player: his own fan-out copy and card. Several: the digest, landing on the finder's
+        // game-day list ("Game day · your flagged starters"), which shows every one with its lock.
+        const single = pushable.length === 1 ? pushable[0]! : null
+        const pushCopy = single ? copies[single.i]! : digestCopy(pushable.map(({ u }) => u.group))
         const sent = await sendPushToUser(sub.userId, {
-          title: top.title,
-          body: top.message,
-          href,
-          tag: dedupePrefix,
+          title: pushCopy.title,
+          body: pushCopy.body,
+          href: single ? hrefs[single.i]! : '/core/players',
+          tag: pushable[0]!.u.key,
           type: 'lineup',
-          leagueId: top.leagueId ?? null,
+          leagueId: single ? (single.u.group[0]!.leagueId ?? null) : null,
         })
         const okCount = sent.filter((s) => s.ok).length
         result.pushed = okCount
@@ -548,8 +791,38 @@ async function handle(req: NextRequest) {
       singleUser,
       sweepStartedAt: startedAt,
     })
+    const bestBallDepth = await bestBallDepthPhase({
+      mode: (url.searchParams.get('bestBallDepth') ?? '').trim().toLowerCase(),
+      dryRun,
+      singleUser,
+      sweepStartedAt: startedAt,
+    })
+    const slateLock = await slateLockPhase({
+      mode: (url.searchParams.get('slateLock') ?? '').trim().toLowerCase(),
+      dryRun,
+      singleUser,
+      sweepStartedAt: startedAt,
+    })
     const waiverCheck = await waiverCheckPhase({
       mode: (url.searchParams.get('waiverCheck') ?? '').trim().toLowerCase(),
+      dryRun,
+      singleUser,
+      sweepStartedAt: startedAt,
+    })
+    const sportWaiverCheck = await sportWaiverCheckPhase({
+      mode: (url.searchParams.get('sportWaiverCheck') ?? '').trim().toLowerCase(),
+      dryRun,
+      singleUser,
+      sweepStartedAt: startedAt,
+    })
+    const chopRelease = await chopReleasePhase({
+      mode: (url.searchParams.get('chopRelease') ?? '').trim().toLowerCase(),
+      dryRun,
+      singleUser,
+      sweepStartedAt: startedAt,
+    })
+    const followFreeAgent = await followFreeAgentPhase({
+      mode: (url.searchParams.get('followFree') ?? '').trim().toLowerCase(),
       dryRun,
       singleUser,
       sweepStartedAt: startedAt,
@@ -560,6 +833,7 @@ async function handle(req: NextRequest) {
       ok: true as const,
       dryRun,
       pushConfigured,
+      teamWorkspace,
       usersScanned: results.length,
       /** Audience members with a non-empty email on file; null only if the count itself failed. */
       usersWithEmail,
@@ -575,8 +849,18 @@ async function handle(req: NextRequest) {
       errors: withErrors.slice(0, 10).map((r) => ({ userId: r.userId, errors: r.errors })),
       /** Chimmy's lineup check — see the header. Mostly `{ ran: false, reason: 'early' }`. */
       lineupCheck,
+      /** The best ball depth check — the lineup check's window; red positions only. */
+      bestBallDepth,
+      /** The lock check before each non-main slate — mostly `{ ran: false, reason: 'no_slate' }`. */
+      slateLock,
       /** Chimmy's Tuesday waiver check — the same shape, the same rules. */
       waiverCheck,
+      /** The other sports' waiver check — per-sport windows; mostly `{ ran: false, reason: 'closed' }`. */
+      sportWaiverCheck,
+      /** The guillotine chop-release alert — `{ ran: false, reason: 'disabled' }` until the flag is set. */
+      chopRelease,
+      /** Followed players newly free in one of your leagues — `seeded` counts follows seen for the first time. */
+      followFreeAgent,
       durationMs: Date.now() - startedAt,
       timestamp: new Date().toISOString(),
     }
@@ -592,18 +876,22 @@ async function handle(req: NextRequest) {
     const payload =
       dryRun || singleUser
         ? await runSweep()
-        : await withSyncJobRun({ jobName: JOB, sport: 'NFL', trigger: 'cron' }, runSweep, (r) => ({
-            rowsRead: r.usersScanned,
-            rowsWritten: r.pushesSent,
-            rowsSkipped: r.usersWithErrors,
-            /*
-             * ⚠ ZERO PUSHES IS NOT A FAILURE and must never be recorded as one — on a Tuesday in
-             * the off-season it is the correct outcome, and a job that reports failure for being
-             * right is one nobody reads. What IS reported is push being unconfigured, because
-             * that silently converts every alert into nothing at all.
-             */
-            status: !r.pushConfigured || r.usersWithErrors > 0 ? ('partial' as const) : ('success' as const),
-          }))
+        : await withSyncJobRun({ jobName: JOB, sport: 'NFL', trigger: 'cron' }, runSweep, (r) => {
+            const teamWorkspace=teamSweepTelemetry(r.teamWorkspace)
+            return {
+              rowsRead: r.usersScanned,
+              rowsWritten: r.pushesSent,
+              rowsSkipped: r.usersWithErrors,
+              /*
+               * ⚠ ZERO PUSHES IS NOT A FAILURE and must never be recorded as one — on a Tuesday in
+               * the off-season it is the correct outcome, and a job that reports failure for being
+               * right is one nobody reads. What IS reported is push being unconfigured, because
+               * that silently converts every alert into nothing at all.
+               */
+              status: !r.pushConfigured || r.usersWithErrors > 0 || teamWorkspace.errors > 0 ? ('partial' as const) : ('success' as const),
+              metadata:{teamWorkspace},
+            }
+          })
 
     return NextResponse.json(payload)
   } catch (err) {
@@ -628,4 +916,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
   return handle(req)
+}
+
+/**
+ * The Player Finder ref (`NFL:<externalId>`) for the alert's player, from the Sleeper id the
+ * detector carries — so the tap opens HIS card, not a name search. Null when the alert names no
+ * Sleeper id (an ESPN-only player) or the catalog has no row; the href then falls back to `q=`.
+ */
+async function alertPlayerRef(top: { metadata?: Record<string, unknown> | null }): Promise<string | null> {
+  const sleeperId = typeof top.metadata?.sleeperId === 'string' && top.metadata.sleeperId ? top.metadata.sleeperId : null
+  if (!sleeperId) return null
+  const sport = typeof top.metadata?.sport === 'string' && top.metadata.sport ? top.metadata.sport : 'NFL'
+  const { resolvePublicPlayer } = await import('@/lib/core-app/playerFinder')
+  const resolved = await resolvePublicPlayer(sport, sleeperId).catch(() => null)
+  return resolved?.playerReference ?? null
 }

@@ -49,7 +49,6 @@ export class ImportHistoryContextProvider
             careerRecord: null,
             winPercentage: null,
             championships: 0,
-            archetype: null,
             recentLeagues: [],
           },
           fetchedAt,
@@ -61,11 +60,6 @@ export class ImportHistoryContextProvider
         where: { sleeperUsername: username },
         include: {
           leagues: { include: { rosters: true } },
-          aiReports: {
-            where: { reportType: "legacy" },
-            orderBy: { createdAt: "desc" },
-            take: 1,
-          },
         },
       })
 
@@ -79,7 +73,6 @@ export class ImportHistoryContextProvider
             careerRecord: null,
             winPercentage: null,
             championships: 0,
-            archetype: null,
             recentLeagues: [],
           },
           fetchedAt,
@@ -101,10 +94,6 @@ export class ImportHistoryContextProvider
       const championships = allRosters.filter(
         (r: { isChampion?: boolean | null }) => r.isChampion === true
       ).length
-
-      const report = legacy.aiReports[0]
-      const insights =
-        (report?.insights as Record<string, unknown> | null | undefined) ?? null
 
       const totalSeasons = Array.from(
         new Set(legacy.leagues.map((l: (typeof legacy.leagues)[number]) => l.season))
@@ -134,6 +123,9 @@ export class ImportHistoryContextProvider
           }
         })
 
+      // 🛑 NO `archetype`. This slice used to copy the legacy AI report's manager archetype
+      // ("Trader", "Sniper", ...) and the grounding serializer printed it into Chimmy's prompt.
+      // Milestone 32: characterisation labels steer nothing a user sees. Facts only.
       const slice: ImportedHistorySlice = {
         source: "sleeper",
         totalLeagues: legacy.leagues.length,
@@ -141,7 +133,6 @@ export class ImportHistoryContextProvider
         careerRecord: totalWins + totalLosses > 0 ? `${totalWins}-${totalLosses}` : null,
         winPercentage: winPct,
         championships,
-        archetype: typeof insights?.archetype === "string" ? insights.archetype : null,
         recentLeagues,
       }
 

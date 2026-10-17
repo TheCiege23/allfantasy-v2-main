@@ -97,7 +97,7 @@ export function JuryVotingFlow({
     <div className="space-y-5">
       <div className="text-center">
         <Crown className="h-6 w-6 text-amber-400 mx-auto mb-2" />
-        <div className="text-lg font-semibold text-white">Final Tribal Council</div>
+        <div className="text-lg font-semibold text-white">Final Elimination Council</div>
         <div className="text-xs text-white/40 mt-1">
           Vote for the player you believe deserves the title of Sole Survivor
         </div>

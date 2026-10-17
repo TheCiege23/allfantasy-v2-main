@@ -22,7 +22,7 @@ export function CoachingTimeline({
         <div className="absolute left-[11px] top-2 bottom-2 w-px bg-gradient-to-b from-violet-500/50 via-cyan-500/30 to-transparent" aria-hidden />
         {rows.map((row, idx) => (
           <div key={row.year} className="relative flex gap-4 pb-8 last:pb-0">
-            <div className="relative z-[1] flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-violet-400/40 bg-[#0a1020] text-[10px] font-bold text-violet-100">
+            <div className="relative z-[1] flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-violet-400/40 bg-[#0a1020] text-[11px] font-bold text-violet-100">
               {idx + 1}
             </div>
             <div className="min-w-0 flex-1 rounded-xl border border-white/[0.07] bg-black/30 p-4">

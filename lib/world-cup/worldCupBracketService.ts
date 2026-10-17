@@ -472,15 +472,24 @@ export async function generateWorldCupInviteCode() {
   return `WC${crypto.randomUUID().replaceAll("-", "").slice(0, 10).toUpperCase()}`
 }
 
+/**
+ * The name a participant is STORED under (worldCupBracketParticipant.displayName) and shown to every
+ * member of the pool.
+ *
+ * 🛑 NEVER A NAME FROM AN EMAIL. This returned the part before the "@" of the user's email when they
+ * had no session name, and again as the last fallback — and because the result is persisted on join,
+ * an email prefix became the member's permanent pool name (found 2026-09-29). A session "name" that is
+ * itself an email address is refused for the same reason. With no display name or username, the
+ * member is "Bracket Manager" until they set one.
+ */
 async function displayName(user: SessionUser) {
-  if (user.name?.trim()) return user.name.trim()
-  if (user.email) return user.email.split("@")[0]
+  if (user.name?.trim() && !user.name.includes("@")) return user.name.trim()
   if (!user.id) return "Bracket Manager"
   const u = await prisma.appUser.findUnique({
     where: { id: user.id },
-    select: { displayName: true, username: true, email: true },
+    select: { displayName: true, username: true },
   })
-  return u?.displayName || u?.username || u?.email?.split("@")[0] || "Bracket Manager"
+  return u?.displayName || u?.username || "Bracket Manager"
 }
 
 export function userCanManageWorldCupChallenge(i: { userId?: string | null; userEmail?: string | null; ownerUserId?: string | null; isAdmin?: boolean }) {
@@ -936,9 +945,10 @@ export async function getWorldCupChallengeByInvite(inviteCode: string) {
     })
     if (!i || (i.expiresAt && new Date(i.expiresAt) <= new Date()) || (i.maxUses != null && i.useCount >= i.maxUses)) return null
 
+    /* The invite preview is shown to ANYONE holding the link, before they join — never an email. */
     const o = await prisma.appUser.findUnique({
       where: { id: i.challenge.ownerUserId },
-      select: { displayName: true, username: true, email: true },
+      select: { displayName: true, username: true },
     })
 
     const { evaluateWorldCupNewParticipantJoinGate } = await import("./worldCupJoinGate")
@@ -953,7 +963,7 @@ export async function getWorldCupChallengeByInvite(inviteCode: string) {
       inviteCode,
       challengeId: i.challenge.id,
       name: i.challenge.name,
-      ownerName: o?.displayName || o?.username || o?.email?.split("@")[0] || "AllFantasy Manager",
+      ownerName: o?.displayName || o?.username || "AllFantasy Manager",
       seasonYear: i.challenge.seasonYear,
       participantCount: i.challenge.participants.length,
       status: i.challenge.status,

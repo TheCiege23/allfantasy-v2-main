@@ -66,13 +66,13 @@ export function IDPDraftFilters({ pickIndex = 7 }: IDPDraftFiltersProps) {
   return (
     <div className="relative space-y-3 rounded-xl border border-[color:var(--idp-border)] bg-[color:var(--idp-panel)] p-4 pb-24 sm:pb-4">
       <div className="flex flex-wrap gap-1 border-b border-white/[0.06] pb-3">
-        <span className="mr-2 self-center text-[10px] font-bold uppercase tracking-wide text-white/35">Draft salary</span>
+        <span className="mr-2 self-center text-[11px] font-bold uppercase tracking-wide text-white/35">Draft salary</span>
         {(['auction', 'snake', 'hybrid'] as const).map((m) => (
           <button
             key={m}
             type="button"
             onClick={() => setDraftMethod(m)}
-            className={`rounded-lg px-2.5 py-1 text-[10px] font-bold capitalize ${
+            className={`rounded-lg px-2.5 py-1 text-[11px] font-bold capitalize ${
               draftMethod === m ? 'bg-cyan-500/20 text-cyan-100' : 'text-white/45 hover:bg-white/[0.04]'
             }`}
           >
@@ -135,7 +135,7 @@ export function IDPDraftFilters({ pickIndex = 7 }: IDPDraftFiltersProps) {
                 key={d}
                 type="button"
                 onClick={() => setDefSub(d === 'ALL' ? 'ALL' : d)}
-                className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold ${
+                className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
                   defSub === d ? 'border-amber-400/50 bg-amber-500/15 text-amber-50' : 'border-white/10 text-white/45'
                 }`}
               >
@@ -144,7 +144,7 @@ export function IDPDraftFilters({ pickIndex = 7 }: IDPDraftFiltersProps) {
             ))}
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[10px] text-white/40">Sort</span>
+            <span className="text-[11px] text-white/40">Sort</span>
             <select
               value={sort}
               onChange={(e) => setSort(e.target.value as typeof sort)}
@@ -175,16 +175,16 @@ export function IDPDraftFilters({ pickIndex = 7 }: IDPDraftFiltersProps) {
                     <div className="h-9 w-9 rounded-full bg-white/10" />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-xs font-semibold text-white">{r.name}</p>
-                      <p className="text-[10px] text-white/45">
+                      <p className="text-[11px] text-white/45">
                         {r.team} · {r.pos} · {r.role}
                       </p>
                     </div>
                     <div className="text-right">
                       <p className="text-xs font-bold text-[color:var(--idp-defense)]">{r.proj}</p>
-                      <p className="text-[9px] text-white/35">T{r.tier}</p>
+                      <p className="text-[11px] text-white/35">T{r.tier}</p>
                     </div>
                   </div>
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/[0.05] pt-2 pl-8 text-[10px]">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/[0.05] pt-2 pl-8 text-[11px]">
                     <div className="flex flex-wrap gap-2">
                       <span className="rounded border border-white/15 bg-black/30 px-2 py-0.5 font-mono text-white/70">
                         Bid: {demoBidM != null ? `$${demoBidM.toFixed(1)}M` : '$—'}
@@ -203,7 +203,7 @@ export function IDPDraftFilters({ pickIndex = 7 }: IDPDraftFiltersProps) {
                       <span className="rounded-full bg-[color:var(--cap-contract)]/15 px-2 py-0.5 font-mono text-[color:var(--cap-contract)]">
                         ${sal.toFixed(1)}M/yr
                       </span>
-                      <p className="mt-0.5 text-[9px]">
+                      <p className="mt-0.5 text-[11px]">
                         Cap efficiency:{' '}
                         <span className="font-mono text-emerald-200/90">{perM.toFixed(2)} pts/$M</span> · proj {proj.toFixed(1)}/wk
                       </p>
@@ -213,7 +213,7 @@ export function IDPDraftFilters({ pickIndex = 7 }: IDPDraftFiltersProps) {
               )
             })}
           </ul>
-          <p className="text-[10px] text-white/35">
+          <p className="text-[11px] text-white/35">
             Drafted players grey out with team logo — wire when draft pick stream is connected.
           </p>
         </>
@@ -232,7 +232,7 @@ export function IDPDraftFilters({ pickIndex = 7 }: IDPDraftFiltersProps) {
             <span className="font-mono text-sm font-bold text-[color:var(--cap-green)]">${DEMO_CAP_REMAINING_M.toFixed(1)}M</span>
           </div>
           {tab === 'DEFENSE' && (draftMethod === 'auction' || draftMethod === 'hybrid') ? (
-            <div className="flex items-center gap-2 text-[10px] text-white/50">
+            <div className="flex items-center gap-2 text-[11px] text-white/50">
               <span>Demo bid (tap)</span>
               <button
                 type="button"

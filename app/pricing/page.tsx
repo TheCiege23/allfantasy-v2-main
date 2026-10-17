@@ -33,7 +33,7 @@ export const metadata: Metadata = buildSeoMeta({
   openGraphTitle: "AllFantasy Pricing — Unlock fantasy tools for your league",
   openGraphDescription:
     "Subscribe for full access, or buy tokens and pay only for what you use. Clear plans, Stripe checkout.",
-  imagePath: "/af-crest.png",
+  imagePath: "/og-image.jpg",
   keywords: [
     "AllFantasy pricing",
     "fantasy sports subscription",
@@ -45,11 +45,12 @@ export const metadata: Metadata = buildSeoMeta({
 
 export const dynamic = "force-dynamic";
 
-export default function PricingPage({
-  searchParams,
-}: {
-  searchParams?: Record<string, string | string[] | undefined>;
-}) {
+export default async function PricingPage(
+  props: {
+    searchParams?: Promise<Record<string, string | string[] | undefined>>;
+  }
+) {
+  const searchParams = await props.searchParams;
   /*
    * ⚠ A LINK THAT NAMES A PLAN IS SENT TO THAT PLAN'S CHECKOUT. This grid ignores
    * `?plan=` and `?highlight=`, and does not sell AF Legacy at all, yet locks and

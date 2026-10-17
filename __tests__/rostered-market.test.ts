@@ -155,6 +155,40 @@ describe('getRosteredMarket', () => {
     expect(board.byPlayerId.size).toBe(0)
   })
 
+  /*
+   * 🛑 A FOREIGN LEAGUE'S IDS COLLIDE WITH REAL SLEEPER IDS. Fleaflicker's '6038' is not Sleeper's
+   * '6038', so counting it would hand a stranger ownership he does not have. The rosters mock honours
+   * `where.leagueId.in` here, as the database would.
+   */
+  function rostersHonouringWhere(rows: Array<{ leagueId: string; playerData: unknown }>) {
+    rosterFindMany.mockImplementation(async (args: { where: { leagueId: { in: string[] } } }) =>
+      rows.filter((r) => args.where.leagueId.in.includes(r.leagueId)),
+    )
+  }
+
+  it('CONTROL: the same id in a Sleeper league IS counted', async () => {
+    leagueFindMany.mockResolvedValue([
+      { id: 'L0', platform: 'sleeper' },
+      { id: 'L1', platform: 'sleeper' },
+    ])
+    rostersHonouringWhere([{ leagueId: 'L1', playerData: { players: ['6038'], starters: ['6038'] } }])
+    const board = await getRosteredMarket({})
+    expect(board.byPlayerId.get('6038')?.rosteredIn).toBe(1)
+    expect(board.leaguesCounted).toBe(2)
+  })
+
+  it('🛑 a Fleaflicker league neither owns a colliding Sleeper id nor counts in the denominator', async () => {
+    leagueFindMany.mockResolvedValue([
+      { id: 'L0', platform: 'sleeper' },
+      { id: 'L1', platform: 'fleaflicker' },
+    ])
+    rostersHonouringWhere([{ leagueId: 'L1', playerData: { players: ['6038'], starters: ['6038'] } }])
+    const board = await getRosteredMarket({})
+    expect(board.byPlayerId.has('6038')).toBe(false)
+    // Unreadable, so uncounted: a league we cannot see into is not a league that rosters nobody.
+    expect(board.leaguesCounted).toBe(1)
+  })
+
   it('survives a database error without taking the screen down', async () => {
     leagueFindMany.mockRejectedValueOnce(new Error('db down'))
     await expect(getRosteredMarket({})).resolves.toMatchObject({ leaguesCounted: 0 })

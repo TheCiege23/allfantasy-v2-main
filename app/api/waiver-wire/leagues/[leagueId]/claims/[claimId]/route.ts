@@ -22,8 +22,9 @@ function claimMutationError(message: string, status: number) {
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { leagueId: string; claimId: string } }
+  props: { params: Promise<{ leagueId: string; claimId: string }> }
 ) {
+  const params = await props.params
   const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -54,8 +55,9 @@ export async function PATCH(
 
 export async function DELETE(
   _req: NextRequest,
-  { params }: { params: { leagueId: string; claimId: string } }
+  props: { params: Promise<{ leagueId: string; claimId: string }> }
 ) {
+  const params = await props.params
   const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })

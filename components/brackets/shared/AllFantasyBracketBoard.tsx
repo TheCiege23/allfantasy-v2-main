@@ -140,14 +140,14 @@ export default function AllFantasyBracketBoard({
                 className="pointer-events-none absolute left-1/2 top-1/2 z-[3] h-[min(42%,280px)] w-[min(55%,360px)] -translate-x-1/2 -translate-y-1/2 opacity-[0.05]"
                 aria-hidden
               >
-                <img src="/af-crest.png" alt="" className="h-full w-full object-contain" draggable={false} />
+                <img src="/af-crest.svg" alt="" className="h-full w-full object-contain" draggable={false} />
               </div>
             ) : null}
             <div
               className="pointer-events-none absolute inset-x-0 top-0 z-[4] flex items-start px-3 pt-2 sm:px-4 sm:pt-3"
               aria-hidden
             >
-              <span className="text-[9px] font-black uppercase tracking-[0.35em] text-cyan-200/50 sm:text-[10px]">
+              <span className="text-[11px] font-black uppercase tracking-[0.35em] text-cyan-200/50 sm:text-[11px]">
                 AllFantasy
               </span>
             </div>
@@ -167,7 +167,7 @@ export default function AllFantasyBracketBoard({
               className="pointer-events-none absolute inset-x-0 top-0 z-[4] flex items-start px-3 pt-2 sm:px-4 sm:pt-3"
               aria-hidden
             >
-              <span className="text-[9px] font-black uppercase tracking-[0.35em] text-cyan-200/55 sm:text-[10px]">
+              <span className="text-[11px] font-black uppercase tracking-[0.35em] text-cyan-200/55 sm:text-[11px]">
                 AllFantasy
               </span>
             </div>
@@ -189,7 +189,7 @@ export default function AllFantasyBracketBoard({
               className="pointer-events-none absolute left-1/2 top-[46%] z-[5] h-[min(58%,400px)] w-[min(78%,560px)] -translate-x-1/2 -translate-y-1/2 opacity-[0.035]"
               aria-hidden
             >
-              <img src="/af-crest.png" alt="" className="h-full w-full object-contain" draggable={false} />
+              <img src="/af-crest.svg" alt="" className="h-full w-full object-contain" draggable={false} />
             </div>
 
             <div
@@ -198,12 +198,12 @@ export default function AllFantasyBracketBoard({
             >
               <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
                 <img
-                  src="/af-crest.png"
+                  src="/af-crest.svg"
                   alt=""
                   className="h-8 w-8 shrink-0 rounded-xl border border-white/10 bg-black/30 object-contain p-1 shadow-lg shadow-black/40 sm:h-9 sm:w-9"
                   draggable={false}
                 />
-                <div className="min-w-0 text-[10px] font-black uppercase tracking-[0.28em] text-cyan-100/85 sm:text-[11px]">
+                <div className="min-w-0 text-[11px] font-black uppercase tracking-[0.28em] text-cyan-100/85 sm:text-[11px]">
                   Bracket board
                 </div>
               </div>

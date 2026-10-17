@@ -146,3 +146,36 @@ describe('rosterToDraftSlot', () => {
     expect(rosterToDraftSlot({ slot_to_roster_id: { x: 'y' } }, ROSTERS)).toBeNull()
   })
 })
+
+/*
+ * FAAB through the REAL builder (2026-09-29): the ledger read `adds` and `draft_picks` and never
+ * `waiver_budget`, so a player-for-FAAB deal reached every surface as a player for nothing. Shaped on
+ * Pirate League twinty's week-3 trade: Jameis Winston (2306) to roster 10, $35 back to roster 1.
+ */
+describe('the ledger carries FAAB from waiver_budget', () => {
+  it('each side receives and sends the dollars Sleeper recorded', async () => {
+    sleeper({ listHasMap: true, draftEndpoint: 'down' })
+    h.routes.set(`/league/${L}/transactions/1`, [
+      {
+        ...TRADE,
+        transaction_id: 'T-FAAB',
+        adds: { '2306': 10 },
+        drops: { '2306': 1 },
+        draft_picks: [],
+        waiver_budget: [{ amount: 35, sender: 10, receiver: 1 }],
+      },
+    ])
+    const payload = await getTradeGrades(L, { force: true })
+    const t = payload?.trades.find((x) => x.id.endsWith(':T-FAAB'))
+    const by = (r: number) => t?.sides.find((s) => s.rosterId === r)
+    expect({ faabIn: by(1)?.faabIn, faabOut: by(1)?.faabOut, players: by(1)?.playersIn.length }).toEqual({ faabIn: 35, faabOut: 0, players: 0 })
+    expect({ faabIn: by(10)?.faabIn, faabOut: by(10)?.faabOut, players: by(10)?.playersIn.map((p) => p.playerId) }).toEqual({ faabIn: 0, faabOut: 35, players: ['2306'] })
+  })
+
+  it('a trade with no waiver_budget records zero FAAB — present, so a giveaway can be named as one', async () => {
+    sleeper({ listHasMap: true, draftEndpoint: 'down' })
+    const payload = await getTradeGrades(L, { force: true })
+    const t = payload?.trades.find((x) => x.id.endsWith(':T-SWAP'))
+    expect(t?.sides.map((s) => [s.faabIn, s.faabOut])).toEqual([[0, 0], [0, 0]])
+  })
+})

@@ -30,8 +30,18 @@ export function allRosteredIds(world: CanonicalWorld): string[] {
 
 export function indexRosterNames(world: CanonicalWorld, names: PlayerNames): Map<string, LocatedPlayer[]> {
   const byName = new Map<string, LocatedPlayer[]>()
+  const seenRosters = new Set<string>()
   for (const roster of world.rosters) {
-    for (const playerId of roster.playerIds) {
+    // Imported and native roster stores can both contain the same team's roster.
+    // Collapse only identical player sets for a proven team; conflicting snapshots,
+    // unclaimed rows and different teams must still produce ambiguity.
+    const playerIds = [...new Set(roster.playerIds)]
+    if (roster.teamId != null) {
+      const identity = JSON.stringify([roster.teamId, [...playerIds].sort()])
+      if (seenRosters.has(identity)) continue
+      seenRosters.add(identity)
+    }
+    for (const playerId of playerIds) {
       const meta = names.get(playerId)
       if (!meta?.name) continue
       const key = normalizePlayerName(meta.name)
@@ -73,6 +83,23 @@ export function findRosteredByName(
     if (!base || base !== strict) continue
     const hits = [...byName.entries()].filter(([name]) => suffixlessCanonicalName(name) === base).flatMap(([, players]) => players)
     if (new Set(hits.map(p => p.playerId)).size === 1) return { candidate: variant, hits }
+  }
+  /*
+   * Sleeper's trade card abbreviates the first name: "B. Allen" (2026-09-30). A first initial plus the
+   * full surname is bridged only when exactly one player identity in this league fits — "J. Allen" in
+   * a league holding Josh Allen the QB and Josh Allen the edge rusher still matches nothing.
+   */
+  const tokens = normalizePlayerName(raw).split(' ').filter(Boolean)
+  const initial = tokens[0]?.replace(/[^a-z]/g, '') ?? ''
+  if (tokens.length >= 2 && initial.length === 1) {
+    const surname = tokens.slice(1).join(' ')
+    const hits = [...byName.entries()]
+      .filter(([name]) => {
+        const t = name.split(' ')
+        return t.length >= 2 && t[0]!.startsWith(initial) && t.slice(1).join(' ') === surname
+      })
+      .flatMap(([, players]) => players)
+    if (hits.length > 0 && new Set(hits.map(p => p.playerId)).size === 1) return { candidate: raw, hits }
   }
   return { candidate: raw, hits: [] }
 }

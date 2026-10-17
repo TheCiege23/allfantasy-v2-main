@@ -32,7 +32,7 @@ export default function CollegePositionPill({
   return (
     <span className={`relative inline-flex min-w-[56px] items-center justify-center rounded-md px-2.5 py-1 text-[11px] font-semibold tracking-wide ${style} ${className}`}>
       <span>{label}</span>
-      <span className="absolute -right-1 -top-1 rounded-full bg-[#FFB800] px-1 py-[1px] text-[7px] font-bold uppercase tracking-[0.12em] text-[#231600]">
+      <span className="absolute -right-1 -top-1 rounded-full bg-[#FFB800] px-1 py-[1px] text-[11px] font-bold uppercase tracking-[0.12em] text-[#231600]">
         COL
       </span>
     </span>

@@ -38,7 +38,9 @@ vi.mock("@/lib/decision-os/core/parity", async (importOriginal) => ({
 }))
 
 import { runCommissionerHealthShadow } from "@/lib/decision-os/commissioner-health/shadow"
-import { runLineupShadow } from "@/lib/decision-os/lineup/shadow"
+// The lineup emitter (`lib/decision-os/lineup/shadow.ts`) was deleted 2026-09-29 with the duplicate
+// lineup engine, so only commissioner health is left to carry the label. The grouping cases above
+// still use `manager.lineup.set` as DATA — they test the summariser, not an emitter.
 
 function event(flags: Record<string, unknown>, decisionType: string): DecisionTelemetryDebugEvent {
   return {
@@ -121,23 +123,6 @@ describe("the self-comparison emitters carry the label", () => {
     expect(emitted).toHaveBeenCalledTimes(1)
     const [decisionType, flags] = emitted.mock.calls[0]!
     expect(decisionType).toBe("commissioner.league.health")
-    expect((flags as Record<string, unknown>).surface).toBe(WRAP_FIDELITY_SURFACE)
-  })
-
-  it("lineup tags its skip", async () => {
-    await runLineupShadow(
-      { userId: "u1", leagueId: "L1", legacySummary: { leagues: [] } as never },
-      // Both loaders refuse, so the shadow takes the `inputs_unavailable` emit without needing a
-      // world, a ruleset or a database.
-      {
-        loadInputs: async () => null,
-        loadCanonicalInputs: async () => ({ input: null, source: "canonical_world_unavailable", warnings: [] }),
-      } as never,
-    )
-
-    expect(emitted).toHaveBeenCalledTimes(1)
-    const [decisionType, flags] = emitted.mock.calls[0]!
-    expect(decisionType).toBe("manager.lineup.set")
     expect((flags as Record<string, unknown>).surface).toBe(WRAP_FIDELITY_SURFACE)
   })
 })

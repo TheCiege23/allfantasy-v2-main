@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma"
 import { createDraft } from "@/lib/automated-blog"
 import { normalizeToSupportedSport } from "@/lib/sport-scope"
 import { BLOG_CATEGORIES } from "@/lib/automated-blog/types"
+import { requireAdminOrBearer } from "@/lib/adminAuth"
+import { isBlogAdminRequest } from "@/lib/automated-blog/blogAdminGate"
 
 const DEFAULT_LIMIT = 50
 
@@ -16,7 +18,12 @@ export async function GET(req: NextRequest) {
     const limit = Math.min(Number(u.searchParams?.get("limit")) || DEFAULT_LIMIT, 100)
 
     const where: Record<string, unknown> = {}
-    if (status) where.publishStatus = status
+    // Drafts and scheduled articles are admin-only; everyone else sees published.
+    if (await isBlogAdminRequest(req)) {
+      if (status) where.publishStatus = status
+    } else {
+      where.publishStatus = "published"
+    }
     if (sport) where.sport = normalizeToSupportedSport(sport)
     if (category && BLOG_CATEGORIES.includes(category as any)) where.category = category
 
@@ -47,6 +54,8 @@ export async function GET(req: NextRequest) {
 
 /** POST /api/blog — create draft from pre-generated content (body: sport, category, draft). */
 export async function POST(req: NextRequest) {
+  const gate = await requireAdminOrBearer(req)
+  if (!gate.ok) return gate.res
   try {
     const body = await req.json()
     const sport = body?.sport ?? ""

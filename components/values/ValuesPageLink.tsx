@@ -91,7 +91,7 @@ export function ValuesPageLink({
       }
     >
       <div>
-        <div className="font-mono text-[9px] font-bold uppercase tracking-[0.14em] text-[#5d648a]">
+        <div className="font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-[#5d648a]">
           How we value {what}
         </div>
         <div className="mt-1 text-[12px] leading-[1.45] text-[#c3c9e6]">

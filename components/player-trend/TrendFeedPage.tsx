@@ -92,7 +92,7 @@ function buildFallbackSummary(item: TrendFeedItem): TrendSummary {
   return {
     headline: `${displayName} is flagged as a ${trendLabel.toLowerCase()}.`,
     rationale: `Trend score ${item.trendScore.toFixed(1)} with usage ${formatSigned(item.signals?.usageChange ?? 0, 2)} and share ${formatPercent(item.signals?.minutesOrSnapShare ?? 0)}.`,
-    recommendation: 'Open the AI overlay for a provider-backed explanation.',
+    recommendation: "Open Chimmy's insight for a fuller explanation.",
   }
 }
 
@@ -174,7 +174,7 @@ function SnapshotRail({
           </p>
           <div className="mt-2 flex items-end justify-between gap-3">
             <div>
-              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
+              <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
                 Recent
               </p>
               <p className="text-base font-semibold text-slate-900 dark:text-slate-100">
@@ -182,7 +182,7 @@ function SnapshotRail({
               </p>
             </div>
             <div className="text-right">
-              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
+              <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
                 Prior
               </p>
               <p className="text-sm font-medium text-slate-600 dark:text-slate-300">
@@ -312,7 +312,7 @@ function TrendCard({ item }: { item: TrendFeedItem }) {
           disabled={loadingInsight}
           className="rounded-full border border-slate-300/90 bg-white px-4 py-2 text-sm font-medium text-slate-900 transition hover:border-slate-400 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-slate-500 dark:hover:bg-slate-800"
         >
-          {loadingInsight ? 'Loading...' : 'Get AI insight'}
+          {loadingInsight ? 'Loading...' : "Get Chimmy's insight"}
         </button>
         {insight && (
           <div className="mt-4 grid gap-3 xl:grid-cols-3">

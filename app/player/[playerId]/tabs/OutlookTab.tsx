@@ -23,12 +23,12 @@ export function OutlookTab({ player }: { player: PlayerIdentity }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch(`/api/player-outlook?playerName=${encodeURIComponent(player.name)}&sport=${encodeURIComponent(player.sport)}&narrative=true`, { cache: 'no-store' })
+    fetch(`/api/player-outlook?playerName=${encodeURIComponent(player.name)}&sport=${encodeURIComponent(player.sport)}&position=${encodeURIComponent(player.position)}&team=${encodeURIComponent(player.team)}&narrative=true`, { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => setData(d))
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [player.name, player.sport])
+  }, [player.name, player.sport, player.position, player.team])
 
   if (loading) {
     return <div className="space-y-3">{[1, 2, 3].map((i) => <div key={i} className="h-24 animate-pulse rounded-xl bg-white/[0.04]" />)}</div>
@@ -80,14 +80,14 @@ export function OutlookTab({ player }: { player: PlayerIdentity }) {
           </div>
           <div className="flex flex-wrap gap-1">
             {data.riskFlags.map((f) => (
-              <span key={f} className="rounded-md bg-amber-500/10 px-2 py-0.5 text-[10px] text-amber-200">{f}</span>
+              <span key={f} className="rounded-md bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-200">{f}</span>
             ))}
           </div>
         </div>
       )}
 
       {data.confidencePct != null && (
-        <p className="text-[10px] text-white/25">
+        <p className="text-[11px] text-white/25">
           AI confidence: {data.confidencePct}% · Format fit: {data.bestFormatFit ?? 'all'} · Horizon: {data.timeHorizon ?? '—'}
         </p>
       )}
@@ -100,7 +100,7 @@ function TierBox({ label, tier }: { label: string; tier?: number | null }) {
   const color = tier != null && tier <= 2 ? 'text-emerald-400' : tier != null && tier <= 4 ? 'text-cyan-300' : 'text-white/50'
   return (
     <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] px-3 py-2.5 text-center">
-      <p className="text-[9px] uppercase tracking-wide text-white/30">{label}</p>
+      <p className="text-[11px] uppercase tracking-wide text-white/30">{label}</p>
       <p className={`mt-0.5 text-[18px] font-black ${color}`}>{display}</p>
     </div>
   )

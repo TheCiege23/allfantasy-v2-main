@@ -2,6 +2,35 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { reduceCrosswalk } from './crosswalkRules'
+import { rosterIdSpaceOf, type RosterIdSport } from './rosterIdSpace'
+import { teamDefenseSleeperId, type TeamDefenseRosterRow } from './teamDefenseCrosswalk'
+
+export type { TeamDefenseRosterRow } from './teamDefenseCrosswalk'
+
+/**
+ * The id to look a roster id up by on a Sleeper-keyed table — or null, when there is none.
+ *
+ * 🛑 THIS REPLACES `crosswalk.get(id) ?? id`, WHICH WAS WRONG FOR EVERY FOREIGN PLATFORM. The
+ * fallback exists because a Sleeper league's roster id IS its Sleeper id. It once also covered an
+ * unmatched ESPN id, on the claim that it "is long and collides with nothing" — ESPN 12483 (Matthew
+ * Stafford) is Sleeper's 12483 (Jack Bech), and was on 8 production ESPN rosters (2026-09-29). An
+ * ESPN id is a Sleeper id only through the crosswalk; unmapped, it resolves to nothing, as any
+ * foreign id does. A Fleaflicker/MFL/Fantrax/Yahoo id is a short number in
+ * Sleeper's range — 44 of 248 on the one production Fleaflicker league ARE real Sleeper ids — so
+ * the fallback looked it up as a Sleeper id and My Team, the matchup board and its projections
+ * named and priced a stranger. For a foreign league an unmapped id resolves to NOTHING, and the
+ * caller's own honest fallback (provider name, "could not identify", unprojected) takes over.
+ */
+export function sleeperLookupId(
+  platform: string | null | undefined,
+  rosterId: string,
+  crosswalk: ReadonlyMap<string, string>,
+  sport?: RosterIdSport,
+): string | null {
+  // `sport` makes a native non-NFL league foreign (rosterIdSpace.ts): its Rolling Insights 1114
+  // (A.J. Greer) read by `sleeperId` is NFL WR Justin Blackmon.
+  return crosswalk.get(rosterId) ?? (rosterIdSpaceOf(platform, sport) === 'sleeper' ? rosterId : null)
+}
 
 /**
  * Translate a platform's own roster ids into Sleeper ids.
@@ -31,9 +60,17 @@ import { reduceCrosswalk } from './crosswalkRules'
  * no key separates.
  */
 
-/** Which `PlayerIdentityMap` column holds a given platform's own id. */
-const ID_COLUMN_BY_PLATFORM: Record<string, 'espnId'> = {
+/**
+ * Which `PlayerIdentityMap` column holds a given platform's own id.
+ *
+ * Fleaflicker and MFL joined 2026-09-27, once `fantasyCalcIdentityBridge.ts` began filling their
+ * columns (both held zero rows before). This returns a MAP; what a caller does with an id the map
+ * does not hold is that caller's rule and is unchanged here.
+ */
+const ID_COLUMN_BY_PLATFORM: Record<string, 'espnId' | 'fleaflickerId' | 'mflId'> = {
   espn: 'espnId',
+  fleaflicker: 'fleaflickerId',
+  mfl: 'mflId',
 }
 
 /**
@@ -56,9 +93,9 @@ export async function crosswalkToSleeperIds(
   const rows = await prisma.playerIdentityMap
     .findMany({
       where: { sport: sport.trim().toUpperCase(), [column]: { in: rosterIds } },
-      select: { espnId: true, sleeperId: true },
+      select: { espnId: true, fleaflickerId: true, mflId: true, sleeperId: true },
     })
-    .catch(() => [])
+    .catch(() => [] as Array<{ espnId: string | null; fleaflickerId: string | null; mflId: string | null; sleeperId: string | null }>)
 
   /*
    * The one-to-one guard lives in a pure module so it can be tested without
@@ -66,4 +103,27 @@ export async function crosswalkToSleeperIds(
    * dropped rather than resolved to whichever row came back first.
    */
   return reduceCrosswalk(rows.map((r) => ({ from: r[column], to: r.sleeperId })))
+}
+
+/**
+ * `crosswalk` plus this roster's team defences, translated to Sleeper's id for a defence (`KC`).
+ *
+ * ⚠ OPT-IN, AND NFL ONLY. The player crosswalk reads ids alone; a Fleaflicker defence can only be
+ * named from its row (`teamDefenseCrosswalk.ts`), so the callers that hold the rows pass them. A
+ * Sleeper-space league is returned unchanged — its defence id already IS the team code. The two
+ * sources go through `reduceCrosswalk` together, so a roster id they map to different players is
+ * dropped rather than resolved to either.
+ */
+export function withTeamDefenseIds(
+  platform: string | null | undefined,
+  crosswalk: ReadonlyMap<string, string>,
+  rows: readonly TeamDefenseRosterRow[],
+): Map<string, string> {
+  if (rosterIdSpaceOf(platform, 'NFL') === 'sleeper') return new Map(crosswalk)
+  const defences = rows.flatMap((row) => {
+    const to = teamDefenseSleeperId(platform, row)
+    return to ? [{ from: row.playerId, to }] : []
+  })
+  if (defences.length === 0) return new Map(crosswalk)
+  return reduceCrosswalk([...[...crosswalk].map(([from, to]) => ({ from, to })), ...defences])
 }

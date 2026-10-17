@@ -168,7 +168,12 @@ function SideBlock({ side, trade }: { side: TradeSideGrade; trade: GradedTrade }
         {side.picksIn.map((p, i) => (
           <PickLine key={`${p.season}-${p.round}-${i}`} p={p} />
         ))}
-        {side.playersIn.length === 0 && side.picksIn.length === 0 ? (
+        {side.faabIn ? (
+          <div className="bdx-row" style={{ alignItems: 'center' }}>
+            <span className="x" style={{ textAlign: 'left', flex: 1 }}>${side.faabIn} FAAB</span>
+          </div>
+        ) : null}
+        {side.playersIn.length === 0 && side.picksIn.length === 0 && !side.faabIn ? (
           <div className="bdx-rail-empty">nothing received</div>
         ) : null}
       </div>
@@ -180,7 +185,12 @@ function SideBlock({ side, trade }: { side: TradeSideGrade; trade: GradedTrade }
         {side.picksOut.map((p, i) => (
           <PickLine key={`${p.season}-${p.round}-${i}`} p={p} />
         ))}
-        {side.playersOut.length === 0 && side.picksOut.length === 0 ? (
+        {side.faabOut ? (
+          <div className="bdx-row" style={{ alignItems: 'center' }}>
+            <span className="x" style={{ textAlign: 'left', flex: 1 }}>${side.faabOut} FAAB</span>
+          </div>
+        ) : null}
+        {side.playersOut.length === 0 && side.picksOut.length === 0 && !side.faabOut ? (
           <div className="bdx-rail-empty">nothing given up</div>
         ) : null}
       </div>

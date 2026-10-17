@@ -288,7 +288,7 @@ function SimPanel({
             )}
             {status.result?.roundBreakdown && (
               <div className="rounded-xl border border-white/10 bg-slate-950/40 p-3 mb-3">
-                <div className="text-[10px] uppercase tracking-wider text-white/40 mb-2">Avg Points by Round</div>
+                <div className="text-[11px] uppercase tracking-wider text-white/40 mb-2">Avg Points by Round</div>
                 <div className="flex flex-wrap gap-2">
                   {Object.entries(status.result.roundBreakdown).map(([round, pts]) => (
                     <div key={round} className="rounded-lg border border-white/10 bg-slate-950/60 px-3 py-1.5 text-xs">
@@ -300,7 +300,7 @@ function SimPanel({
               </div>
             )}
             {status.result?.scoring && (
-              <div className="text-[10px] text-white/30 mb-2">{status.result.scoring}</div>
+              <div className="text-[11px] text-white/30 mb-2">{status.result.scoring}</div>
             )}
             <details className="mt-2">
               <summary className="text-xs text-white/40 cursor-pointer hover:text-white/60 transition">Raw result data</summary>
@@ -342,7 +342,7 @@ function ComparePanel() {
               <StatRow label="Win Rate" value="--" />
               <StatRow label="Bust Rate" value="--" />
             </div>
-            <div className="mt-3 text-[10px] text-white/30">Run simulations to populate</div>
+            <div className="mt-3 text-[11px] text-white/30">Run simulations to populate</div>
           </div>
         ))}
       </div>
@@ -353,7 +353,7 @@ function ComparePanel() {
 function ResultStat({ label, value, color }: { label: string; value: string; color: string }) {
   return (
     <div className="rounded-xl border border-white/10 bg-slate-950/40 p-3">
-      <div className="text-[10px] uppercase tracking-wider text-white/40">{label}</div>
+      <div className="text-[11px] uppercase tracking-wider text-white/40">{label}</div>
       <div className={`text-xl font-bold mt-1 ${color}`}>{value}</div>
     </div>
   )

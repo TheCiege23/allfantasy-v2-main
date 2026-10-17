@@ -6,6 +6,7 @@ import { isImportProviderAvailable } from '@/lib/league-import/provider-ui-confi
 import { leagueDisplayName, type SectionState } from './leagueHome'
 import { leagueContextFor, type LeagueContext } from './leagueContext'
 import { getPausedSyncKeys } from './syncPreferences'
+import { isLeagueGoneState, LEAGUE_GONE_ERROR_PREFIX } from '@/lib/import-os/collector/leagueGone'
 
 /**
  * League Sync — is THIS league fresh, and what exactly did we read (38a·10).
@@ -68,7 +69,15 @@ export type LeagueSyncData = {
    * Overall state. `attention` covers stale auth and repeated failures — the
    * two cases where the user can actually do something.
    */
-  status: 'ok' | 'attention' | 'never' | 'paused'
+  status: 'ok' | 'attention' | 'never' | 'paused' | 'gone'
+  /**
+   * Set when the provider answered that this league no longer exists (deleted, or the season was
+   * reset under a new id). Not a failure we can retry our way out of: the collector re-asks once
+   * a day, and a manual sync re-asks now. Null for every other state.
+   */
+  providerGone: { checkedAt: Date; detail: string | null } | null
+  /** The viewer imported this row, so `DELETE /api/league/[id]` can remove it for them. */
+  canRemove: boolean
   /** AF's own last successful collection. Never presented as data freshness. */
   lastReadAt: Date | null
   /**
@@ -166,7 +175,10 @@ export async function getLeagueSync(
      */
     runKey
       ? prisma.leagueSyncState
-          .findUnique({ where: { runKey: `${runKey}:active` }, select: { lastSuccessfulSyncAt: true } })
+          .findUnique({
+            where: { runKey: `${runKey}:active` },
+            select: { lastSuccessfulSyncAt: true, syncStatus: true, lastError: true, lastAttemptedSyncAt: true },
+          })
           .catch(() => null)
       : Promise.resolve(null),
     prisma.roster
@@ -233,8 +245,31 @@ export async function getLeagueSync(
   const ageMs = lastReadAt ? now.getTime() - lastReadAt.getTime() : null
   const isStale = ageMs != null && ageMs > STALE_AFTER_MS
 
+  /*
+   * 🛑 A LEAGUE THE PROVIDER DELETED READ AS "Never synced" OR "Needs attention" HERE, WITH NOTHING
+   * TO DO ABOUT IT. The gone run leaves `consecutiveFailures` alone (on purpose — see leagueGone.ts),
+   * so the failure alert below never fired, and the only trace was a generic "Sync failed" on the
+   * hubs. Either lane can be the one that learned it; only the NEWEST attempt across both lanes is
+   * the current answer, so a later successful read on either one clears it.
+   */
+  const newestAttempt = Math.max(
+    syncState?.lastAttemptedSyncAt?.getTime() ?? 0,
+    activeState?.lastAttemptedSyncAt?.getTime() ?? 0,
+  )
+  const goneRow = [syncState, activeState].find(
+    (r) => isLeagueGoneState(r) && (r!.lastAttemptedSyncAt as Date).getTime() === newestAttempt,
+  )
+  const providerGone = goneRow
+    ? {
+        checkedAt: goneRow.lastAttemptedSyncAt as Date,
+        detail: (goneRow.lastError ?? '').slice(LEAGUE_GONE_ERROR_PREFIX.length).trim() || null,
+      }
+    : null
+
   const status: LeagueSyncData['status'] =
-    syncPaused ? 'paused' : lastReadAt == null
+    syncPaused ? 'paused' : providerGone
+      ? 'gone'
+      : lastReadAt == null
       ? 'never'
       : consecutiveFailures > 0 || isStale || orphanedRun != null
         ? 'attention'
@@ -351,6 +386,8 @@ export async function getLeagueSync(
     lastAttemptedAt,
     consecutiveFailures,
     lastError: syncState?.lastError ?? null,
+    providerGone,
+    canRemove: league.userId === userId,
     rows,
     coarse,
     orphanedRun,

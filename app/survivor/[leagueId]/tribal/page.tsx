@@ -2,10 +2,11 @@
 
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import clsx from 'clsx'
 import { useSurvivorUi } from '@/lib/survivor/SurvivorUiContext'
-import { ScrollReveal, type ScrollRevealStep } from '@/app/survivor/components/ScrollReveal'
+import { SurvivorVoteRevealScrolls, type RevealScroll } from '@/components/league/survivor/SurvivorVoteRevealScrolls'
+import { SurvivorRevote } from '@/components/survivor/SurvivorRevote'
 
 export default function SurvivorTribalPage() {
   const params = useParams()
@@ -17,15 +18,6 @@ export default function SurvivorTribalPage() {
   const tribe = ctx.season?.tribes?.find((t) => t.id === council?.attendingTribeId)
 
   const [revealOpen, setRevealOpen] = useState(false)
-  const [reducedMotion, setReducedMotion] = useState(false)
-  useEffect(() => {
-    const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
-    setReducedMotion(mq.matches)
-    const fn = () => setReducedMotion(mq.matches)
-    mq.addEventListener('change', fn)
-    return () => mq.removeEventListener('change', fn)
-  }, [])
-
   const attendingPlayers = useMemo(() => {
     const tid = council?.attendingTribeId
     const all = ctx.season?.players ?? []
@@ -33,20 +25,15 @@ export default function SurvivorTribalPage() {
     return all.filter((p) => p.tribeId === tid && p.playerState !== 'eliminated')
   }, [council?.attendingTribeId, ctx.season?.players])
 
-  const revealSteps: ScrollRevealStep[] = useMemo(() => {
-    const names = attendingPlayers.map((p) => p.displayName).filter(Boolean)
-    const picks = names.slice(0, Math.min(5, Math.max(3, names.length)))
-    const steps: ScrollRevealStep[] = []
-    for (const n of picks) {
-      steps.push({ type: 'vote', targetName: n })
-    }
-    steps.push({ type: 'pause', hostLine: 'The final vote…' })
-    steps.push({ type: 'vote', targetName: picks[picks.length - 1] ?? 'Unknown' })
-    return steps
-  }, [attendingPlayers])
+  const revealSteps: RevealScroll[] = useMemo(() => {
+    if (!council?.isRevealed || !Array.isArray(council.revealSequence)) return []
+    return council.revealSequence.map((step, index) => ({ order: index + 1, targetUserId: null, targetName: step.targetName ?? null, status: (step.status ?? 'counts') as RevealScroll['status'], isExtraVote: step.isExtraVote === true }))
+  }, [council?.isRevealed, council?.revealSequence])
 
   const status = council?.status
-  const quiet = status === 'revealing' || status === 'voting_closed'
+  const quiet = status === 'revealing' || status === 'voting_closed' || status === 'closed'
+
+  if (council?.phase === 'revote') return <SurvivorRevote leagueId={leagueId} />
 
   return (
     <div className="relative min-h-[75vh] px-3 pb-32 pt-4 md:px-6">
@@ -57,7 +44,7 @@ export default function SurvivorTribalPage() {
         }}
       />
       <div className="relative">
-        <p className="text-center text-[11px] font-bold uppercase tracking-[0.35em] text-red-300/80">Tribal Council</p>
+        <p className="text-center text-[11px] font-bold uppercase tracking-[0.35em] text-red-300/80">Elimination Council</p>
         <h1 className="mt-2 text-center text-2xl font-black uppercase tracking-[0.15em] text-white">
           Week {week} · {tribe?.name ?? 'Tribe'} beach
         </h1>
@@ -81,7 +68,7 @@ export default function SurvivorTribalPage() {
                 {p.displayName.slice(0, 1)}
               </div>
               <p className="mt-2 truncate text-[12px] font-semibold text-white">{p.displayName}</p>
-              <p className="mt-1 text-[10px] uppercase tracking-wide text-white/40">
+              <p className="mt-1 text-[11px] uppercase tracking-wide text-white/40">
                 {p.hasImmunityThisWeek ? 'Immune' : status === 'voting_open' ? 'Voting' : '—'}
               </p>
             </div>
@@ -101,35 +88,29 @@ export default function SurvivorTribalPage() {
             </>
           ) : quiet ? (
             <div className="space-y-2">
-              <p className="text-lg font-bold uppercase tracking-[0.2em] text-white/90">The votes are in.</p>
-              <p className="text-[13px] text-white/50">Waiting for the host to read the parchment…</p>
+              <img src="/survivor/exile/scroll-sealed.svg" alt="Council results sealed" width={200} height={140} className="mx-auto" /><p className="text-lg font-bold uppercase tracking-[0.2em] text-white/90">The votes are in.</p>
+              <p className="text-[13px] text-white/50">Results remain sealed until the Torch Ceremony is published.</p>
             </div>
+          ) : council?.isRevealed ? (
+            <p className="text-[13px] text-white/65">The Torch Ceremony has been published. Replay the sealed scrolls below.</p>
           ) : (
-            <p className="text-[13px] text-white/45">No open tribal session. Check back when your commissioner opens council.</p>
+            <p className="text-[13px] text-white/45">No open council. Chimmy will announce the next voting window in league chat.</p>
           )}
         </div>
 
         <div className="mx-auto mt-6 flex max-w-lg flex-col gap-2">
-          <button
+          {council?.isRevealed && revealSteps.length > 0 ? <button
             type="button"
             className="min-h-[48px] rounded-xl border border-white/15 text-[12px] text-white/70"
             onClick={() => setRevealOpen(true)}
           >
-            Preview scroll reveal (UI demo)
-          </button>
-          <p className="text-center text-[10px] text-white/30">
-            Live reveal sequences consume data from the tribal engine when available.
-          </p>
+            Replay Torch Ceremony
+          </button> : null}
         </div>
       </div>
 
       {revealOpen ? (
-        <ScrollReveal
-          steps={revealSteps}
-          reducedMotion={reducedMotion}
-          onComplete={() => setRevealOpen(false)}
-          hostLines={revealSteps.map((_, i) => `Vote ${i + 1} of ${revealSteps.length}`)}
-        />
+        <div className="relative mx-auto mt-6 max-w-2xl"><SurvivorVoteRevealScrolls scrolls={revealSteps} eliminatedName={council?.eliminatedName ?? null} isTie={council?.isTie === true} tiePhase={null} /></div>
       ) : null}
     </div>
   )

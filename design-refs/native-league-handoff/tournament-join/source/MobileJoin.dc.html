@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Tournament invite (phone)</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./specialty/sp.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Cinzel:wght@600;700&amp;family=Caveat:wght@600;700&amp;family=Bebas+Neue&amp;family=Pirata+One&amp;family=Creepster&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080d}
+.dv-cr{position:relative;container-type:inline-size;aspect-ratio:300/340;flex:none}
+.dv-cr>img{position:absolute;display:block}
+.dv-cr>img.f{inset:0;width:100%;height:100%}
+.dv-cr>img.m{left:19.3%;top:18.2%;width:61.3%;filter:drop-shadow(0 4px 6px rgba(0,0,0,.5))}
+.dv-cr>.tab{position:absolute;left:28%;right:28%;top:5.6%;height:7.4%;display:grid;place-items:center;font:900 3.6cqw/1 'Archivo';letter-spacing:.12em;text-transform:uppercase;white-space:nowrap;overflow:hidden}
+.dv-cr>.rib{position:absolute;left:14%;right:14%;top:79%;height:10.4%;display:grid;place-items:center;font:900 6.2cqw/1 'Archivo';letter-spacing:.1em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dv-pair{display:flex;flex-direction:column;gap:8px;padding:14px 12px;border-radius:14px;border:1px solid rgba(255,255,255,.07);background:#0b0d14;cursor:pointer;color:inherit;font:inherit;text-align:center}
+.dv-pair[aria-pressed="true"]{border-color:#e8b84a;background:rgba(232,184,74,.07);box-shadow:0 0 0 3px rgba(232,184,74,.12)}
+.dv-pair>div{display:flex;align-items:center;justify-content:center;gap:6px}
+.dv-pair>div>img{width:64px}
+.dv-pair>div>i{font:900 11px 'Archivo';font-style:normal;color:#5a6078}
+.dv-pair>b{font:800 13px 'Archivo';color:#e8eaf2}
+.dv-in{width:100%;min-height:42px;padding:0 12px;border-radius:9px;border:1px solid rgba(255,255,255,.12);background:#07080d;color:#fff;font:700 15px 'Archivo'}
+.dv-in:focus{outline:2px solid #e8b84a;outline-offset:1px}
+.dv-sw{width:26px;height:26px;border-radius:99px;border:2px solid rgba(255,255,255,.15);cursor:pointer;padding:0}
+.dv-sw[aria-pressed="true"]{outline:2px solid #fff;outline-offset:2px}
+.dv-th{width:44px;height:44px;flex:none;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:#10131c;display:grid;place-items:center;cursor:pointer;padding:0}
+.dv-th>img{width:36px}
+.dv-th[aria-pressed="true"]{border-color:#e8b84a;box-shadow:0 0 0 2px rgba(232,184,74,.4)}
+.dv-lib{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:6px}
+.dv-lib>button{aspect-ratio:1;border-radius:10px;border:1px solid rgba(255,255,255,.08);background:#0b0d14;cursor:pointer;padding:6px}
+.dv-lib>button>img{width:100%;display:block}
+.dv-lib>button[aria-pressed="true"]{border-color:#e8b84a;background:rgba(232,184,74,.1)}
+.dv-md{position:relative;flex:none;aspect-ratio:1}
+.dv-md>img{position:absolute;display:block}
+.dv-md>img.r{inset:0;width:100%}
+.dv-md>img.e{left:19.3%;top:19.3%;width:61.3%}
+.dv-row{display:flex;align-items:center;gap:10px}
+.dv-row>b{width:22px;font:700 12px 'JetBrains Mono';color:#7d84a3;text-align:right}
+.rl-pill{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px 0 4px;border-radius:99px;font:900 11px 'Archivo';letter-spacing:.06em;color:#fff;border:1px solid rgba(0,0,0,.4);vertical-align:middle}
+.rl-pill>i{width:16px;height:16px;border-radius:99px;background:rgba(0,0,0,.28)}
+.rl-pos{display:inline-grid;place-items:center;height:30px;min-width:30px;padding:0 6px;border-radius:8px;font:900 11px 'Archivo';letter-spacing:.02em;box-shadow:inset 0 -2px 0 rgba(0,0,0,.25)}
+.rl-pos.sm{height:22px;min-width:22px;padding:0 4px;border-radius:6px;font-size:9px}
+.jn-badge{position:relative;flex:none;aspect-ratio:1}
+.jn-badge>img{position:absolute;display:block}
+.jn-badge>img.r{inset:0;width:100%}
+.jn-badge>img.e{left:19.3%;top:19.3%;width:61.3%}
+.jn-fact{display:flex;flex-direction:column;gap:3px;padding:12px 14px;border-radius:10px;background:#10131c;border:1px solid rgba(255,255,255,.06)}
+.jn-fact>span{font:600 10.5px 'Archivo';letter-spacing:.08em;text-transform:uppercase;color:#7d84a3}
+.jn-fact>b{font:700 14px 'Archivo';color:#e8eaf2}
+.jn-strip{display:flex;gap:6px;flex-wrap:wrap}
+.jn-strip>div{display:flex;flex-direction:column;align-items:center;gap:3px;width:62px}
+.jn-strip>div>span{font:600 10px 'Archivo';color:#a3a9c2;text-align:center}
+.jn-mate{display:flex;flex-direction:column;align-items:center;gap:5px;transition:opacity .35s,transform .35s}
+.jn-mate.hide{opacity:0;transform:translateY(8px)}
+.jn-mate>span:last-child{font:600 11px 'Archivo';color:#a3a9c2;max-width:86px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.jn-veil{transition:opacity .5s,transform .6s cubic-bezier(.2,.8,.2,1)}
+.jn-veil.hide{opacity:0;transform:scale(.6) rotate(-8deg)}
+@keyframes jnGlow{0%,100%{box-shadow:0 0 0 0 rgba(232,184,74,.0)}50%{box-shadow:0 0 0 14px rgba(232,184,74,.12)}}
+.jn-glow{animation:jnGlow 2.4s ease-in-out infinite}
+</style>
+</helmet>
+<div class="sp" style="--acc: #e8b84a; --acc2: #ffd98a; --accInk: #1a1204; --disp: Archivo; height: 844px; position: relative; overflow: hidden; display: flex; flex-direction: column">
+<div style="position: absolute; inset: 0 0 auto 0; height: 320px; background: radial-gradient(ellipse at 25% 30%, {{gA}}, transparent 60%), radial-gradient(ellipse at 75% 30%, {{gB}}, transparent 60%)"></div>
+<div style="position: relative; display: flex; flex-direction: column; gap: 14px; padding: 22px 18px 24px; flex: 1">
+  <div style="display: flex; align-items: center; justify-content: center; gap: 10px"><div class="jn-badge" style="width: 92px"><img class="r" src="{{rA}}" alt=""><img class="e" src="{{iA}}" alt=""></div><span style="font: 900 18px 'Archivo'; color: #5a6078">VS</span><div class="jn-badge" style="width: 92px"><img class="r" src="{{rB}}" alt=""><img class="e" src="{{iB}}" alt=""></div></div>
+  <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center"><span class="sp-lbl">TheCiege26 invited you</span><span style="font: 900 28px/1.05 'Archivo'">Angelic vs Demonic 2026</span><span class="sp-t2" style="font-size: 13px">NFL · 240 managers · 20 leagues · free</span></div>
+  <div class="sp-card" style="padding: 14px; display: flex; flex-direction: column; gap: 8px">
+    <div style="display: flex; align-items: baseline; gap: 6px"><span class="sp-num" style="font-size: 22px; font-weight: 700">212</span><span class="sp-t3" style="font-size: 12px">of 240 spots · closes Sep 1</span></div>
+    <div class="sp-bar"><span style="width: 88%; background: #e8b84a"></span></div>
+  </div>
+  <div class="sp-card" style="padding: 12px 14px; display: flex; flex-direction: column; gap: 8px"><div style="display: flex; align-items: center; gap: 8px"><span class="rl-pill" style="background: linear-gradient(90deg, #e8b84a, #8a5d12)"><i></i>HALF</span><span style="font-weight: 700; font-size: 13px">Half PPR · Standard roster</span></div><div style="display: flex; flex-wrap: wrap; gap: 3px"><span class="rl-pos sm" style="background: #e0553f; color: #fff">QB</span><span class="rl-pos sm" style="background: #3abf7a; color: #06200f">RB</span><span class="rl-pos sm" style="background: #3abf7a; color: #06200f">RB</span><span class="rl-pos sm" style="background: #3d8fe0; color: #fff">WR</span><span class="rl-pos sm" style="background: #3d8fe0; color: #fff">WR</span><span class="rl-pos sm" style="background: #e89a2c; color: #1a1004">TE</span><span class="rl-pos sm" style="background: #8a8fa8; color: #0b0d14">FLEX</span><span class="rl-pos sm" style="background: #b48cf0; color: #1a0d33">K</span><span class="rl-pos sm" style="background: #8a6a4a; color: #fff">DST</span><span class="rl-pos sm" style="background: #1d2130; color: #a3a9c2">BN ×7</span></div></div>
+  <div style="display: flex; flex-direction: column; gap: 8px"><div class="sp-rule"><b>1</b><span>One draft in a 12-team conference league.</span></div><div class="sp-rule"><b>2</b><span>Records decide the standings. Top 52 per division get in.</span></div><div class="sp-rule"><b>3</b><span>A wildcard bubble on points fills 12 more spots.</span></div><div class="sp-rule"><b>4</b><span>Regional brackets, then Angelic vs Demonic.</span></div></div>
+  <div style="flex: 1"></div>
+  <a class="sp-btn sp-btn-p" href="TournamentReveal.dc.html" style="min-height: 52px; font-size: 15px">Join tournament</a>
+  <span class="sp-t3" style="font-size: 11.5px; text-align: center">You’ll be placed in a league when registration closes.</span>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic { renderVals() {
+  const MAN = {"sides": {"angelic": {"name": "Angelic", "light": "#ffffff", "mid": "#e6e1c6", "dark": "#8e8452", "accent": "#fff1a0", "ink": "#1a1204", "medallion": "medallions/angelic.svg", "ring": "rings/angelic.svg", "frame": "frames/angelic.svg", "icon": "library/angel.svg"}, "demonic": {"name": "Demonic", "light": "#ffd0c8", "mid": "#c81e1e", "dark": "#3a0606", "accent": "#ff7a3a", "ink": "#ffffff", "medallion": "medallions/demonic.svg", "ring": "rings/demonic.svg", "frame": "frames/demonic.svg", "icon": "library/demon.svg"}, "rookie": {"name": "Rookie", "light": "#e9ffd6", "mid": "#7fd44a", "dark": "#2e5a14", "accent": "#c6ff7a", "ink": "#1a1204", "medallion": "medallions/rookie.svg", "ring": "rings/rookie.svg", "frame": "frames/rookie.svg", "icon": "library/sprout.svg"}, "vet": {"name": "Vet", "light": "#fff1d0", "mid": "#c9a24a", "dark": "#5a4210", "accent": "#ffd36b", "ink": "#1a1204", "medallion": "medallions/vet.svg", "ring": "rings/vet.svg", "frame": "frames/vet.svg", "icon": "library/vet.svg"}}};
+const D = "specialty/div/";
+const CN = ['Beast','Goat','Grizz','Kings','Rebels','Smoke','Stealth','Swamp','Thunder','Warrior'];
+const crest = (side, img, conf, divName, w) => { const s = MAN.sides[side]; return { f: D + s.frame, m: D + img, tab: divName, rib: conf, tabC: s.ink, ribC: s.ink, w }; };
+const AVC = ['#22314f','#4a1f2c','#1d3a3a','#2c2a4a','#3a3418','#12352a','#3a1f30','#1f2a4d','#2a3a1a','#3a2a14'];
+const MATES = ['You · TheCiege26','Captainameri','HailMaryHal','Hoovi','PoppaF2021','Yardzilla23','Killercrocodile','TDWilliams','Angs','Randycoke2','ajgaul','pk30015'];
+  return { gA: MAN.sides.angelic.dark + 'cc', gB: MAN.sides.demonic.dark + 'cc', rA: D + MAN.sides.angelic.ring, iA: D + 'library/angel.svg', rB: D + MAN.sides.demonic.ring, iB: D + 'library/demon.svg' }; } }
+</script>
+</body>
+</html>

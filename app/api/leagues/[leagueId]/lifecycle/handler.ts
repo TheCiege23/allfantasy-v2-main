@@ -10,6 +10,7 @@ import {
 import { isElevatedCommissioner, isHeadCommissioner } from '@/server/services/permissionService'
 import type { LeagueLifecycleState } from '@prisma/client'
 import { resolveLeagueAccess } from '@/lib/league-access'
+import { withClientLeagueSettings } from '@/lib/league/clientLeagueSettings'
 
 export const dynamic = 'force-dynamic'
 
@@ -91,5 +92,5 @@ export async function POST(
   }
 
   const snap = getAllowedActions(res.league)
-  return NextResponse.json({ ok: true, league: res.league, lifecycle: lifecycleSnapshotJson(snap) })
+  return NextResponse.json({ ok: true, league: withClientLeagueSettings(res.league), lifecycle: lifecycleSnapshotJson(snap) })
 }

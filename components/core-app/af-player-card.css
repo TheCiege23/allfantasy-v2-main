@@ -1,3 +1,21 @@
+.af-team-highlights-controls { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+.af-team-highlights-controls select { min-height: 44px; margin-left: 8px; padding: 8px; background: var(--panel, #191b29); color: inherit; border: 1px solid var(--line, #303344); border-radius: 8px; }
+.af-team-highlights-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 20px; }
+.af-team-highlights .af-pc-highlight { margin-top: 4px; }
+.af-pc-highlights { margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--line, #303344); min-width: 0; }
+.af-pc-highlights-load { margin: 12px 0; padding: 10px 14px; min-height: 44px; border: 1px solid var(--line, #303344); border-radius: 8px; color: inherit; background: var(--surface, transparent); cursor: pointer; font: inherit; }
+.af-pc-highlights-load:disabled { opacity: .6; cursor: wait; }
+.af-pc-highlight { margin: 16px 0; min-width: 0; }
+.af-pc-highlight-kind { display: block; margin-bottom: 7px; font-size: 11px; letter-spacing: .08em; color: var(--muted, #a3a3b4); }
+.af-pc-highlight-preview { display: block; width: 100%; padding: 0; overflow: hidden; border: 1px solid var(--line, #303344); border-radius: 8px; background: #12121b; color: #fff; cursor: pointer; text-align: left; text-decoration: none; }
+.af-pc-highlight-preview img { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; object-fit: cover; }
+.af-pc-highlight-preview span { display: block; padding: 10px; font-size: 12px; }
+.af-pc-highlight-player { display: block; width: 100%; min-height: 200px; aspect-ratio: 16 / 9; border: 0; border-radius: 8px; }
+.af-pc-highlight-title { display: block; margin: 9px 0 4px; color: inherit; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.af-pc-highlight .af-pc-faint a { color: inherit; text-decoration: underline; }
+.af-pc-highlight-disclosure { margin-top: 12px; color: var(--muted, #a3a3b4); font-size: 11px; line-height: 1.6; }
+.af-pc-highlight-disclosure a { color: inherit; text-decoration: underline; }
+
 /*
  * AF Core — the player card pop-up (STATE 6 / STATE 7 of the 2026-09-07 design
  * handoff, `AF Trade Price Transparency.dc.html`).
@@ -184,7 +202,7 @@
 .af-pc-feed {
   flex-basis: 100%;
   margin: 0;
-  font: 500 10px/1.5 'Archivo', system-ui, sans-serif;
+  font: 500 11px/1.5 'Archivo', system-ui, sans-serif;
   color: var(--faint);
 }
 
@@ -230,7 +248,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font: 800 9px/1 'Archivo', system-ui, sans-serif;
+  font: 800 11px/1 'Archivo', system-ui, sans-serif;
   background: var(--chip);
   color: var(--text2);
 }
@@ -408,7 +426,7 @@
 /* ── labels + absent reasons ─────────────────────────────────────────────── */
 
 .af-pc-label {
-  font: 700 9px/1 'JetBrains Mono', ui-monospace, monospace;
+  font: 700 11px/1 'JetBrains Mono', ui-monospace, monospace;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--faint);
@@ -423,7 +441,7 @@
 
 .af-pc-basis {
   margin: 0;
-  font: 500 10px/1.5 'Archivo', system-ui, sans-serif;
+  font: 500 11px/1.5 'Archivo', system-ui, sans-serif;
   color: var(--faint);
   max-width: 60ch;
 }
@@ -465,7 +483,7 @@
   color: var(--text2);
 }
 .af-pc-chev {
-  font: 700 10px/1 'Archivo', system-ui, sans-serif;
+  font: 700 11px/1 'Archivo', system-ui, sans-serif;
   color: var(--faint);
 }
 .af-pc-insight-d {
@@ -515,7 +533,7 @@
   color: var(--bad);
 }
 .af-pc-tile-sub {
-  font: 700 10px/1.3 'Archivo', system-ui, sans-serif;
+  font: 700 11px/1.3 'Archivo', system-ui, sans-serif;
 }
 .af-pc-up {
   color: var(--good);
@@ -566,6 +584,15 @@
   color: var(--text);
   flex: none;
 }
+.af-pc-proj-src {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--faint);
+}
+.af-pc-proj-src--af {
+  color: var(--accent);
+}
 .af-pc-row--muted .af-pc-row-k,
 .af-pc-row--muted .af-pc-row-v {
   color: var(--faint);
@@ -595,6 +622,38 @@
   color: var(--muted);
   overflow-wrap: anywhere;
 }
+/* THE grade for the trade: the side that got him, then the side that paid. */
+.af-pc-trade-grade {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 3px;
+  font: 500 11px/1.4 'Archivo', system-ui, sans-serif;
+}
+.af-pc-trade-letter {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 3px 1px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+}
+.af-pc-trade-letter b {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  font-weight: 800;
+  color: var(--text);
+}
+.af-pc-trade-letter[data-letter='A'] b { color: #34d399; }
+.af-pc-trade-letter[data-letter='B'] b { color: #5eead4; }
+.af-pc-trade-letter[data-letter='C'] b { color: #fbbf24; }
+.af-pc-trade-letter[data-letter='D'] b { color: #fb923c; }
+.af-pc-trade-letter[data-letter='F'] b { color: #fb5b78; }
 
 /* Platform tints, matching the badge vocabulary used across core. */
 .af-pc-plat--sleeper {

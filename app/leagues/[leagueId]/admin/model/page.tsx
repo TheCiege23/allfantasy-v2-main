@@ -22,7 +22,7 @@ import { redirect } from "next/navigation"
  * the segment.
  */
 export default async function ModelAdminRedirect(props: {
-  params: Promise<{ leagueId: string }> | { leagueId: string }
+  params: Promise<Promise<{ leagueId: string }> | { leagueId: string }>
 }) {
   const params = await props.params
   redirect(`/core/model-admin?league=${encodeURIComponent(params.leagueId)}`)

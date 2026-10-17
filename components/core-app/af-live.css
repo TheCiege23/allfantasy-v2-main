@@ -148,7 +148,7 @@
   color: var(--muted);
   font-family: var(--font-jetbrains-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-weight: 700;
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   white-space: nowrap;
@@ -220,7 +220,7 @@
   padding: 3px 6px;
   border-radius: 10px;
   background: var(--chip-line);
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
@@ -301,7 +301,7 @@
   border-radius: 5px;
   background: var(--bad-soft);
   color: var(--bad);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
 }
 .af-live-clock[data-idle='true'] {
@@ -367,7 +367,7 @@
   white-space: nowrap;
 }
 .af-live-team-record {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--faint);
 }
 .af-live-team-score {
@@ -408,7 +408,7 @@
 }
 .af-live-wp-label {
   flex: none;
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
@@ -562,7 +562,7 @@
   font-size: 11px;
 }
 .af-live-mine-count {
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--accent);
   padding: 3px 7px;
@@ -577,6 +577,11 @@
   color: var(--good);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+/* A projection is not a score: muted, so a pre-game row never reads as points banked. */
+.af-live-mine-pts[data-kind='projection'] {
+  color: var(--muted);
+  font-weight: 700;
 }
 /* Drawn with borders, not a ▾ glyph — the mono fallback font renders that as a dot. */
 .af-live-mine-chev {
@@ -686,12 +691,16 @@
   font-size: 13px;
 }
 .af-live-mover-line {
-  font-size: 10.5px;
+  font-size: 11px;
   line-height: 1.35;
   color: var(--muted);
 }
 .af-live-mover-leagues {
-  font-size: 10px;
+  font-size: 11px;
+  color: var(--faint);
+}
+.af-live-mover-age {
+  font-size: 11px;
   color: var(--faint);
 }
 
@@ -736,7 +745,7 @@
   gap: 6px;
 }
 .af-live-play-type {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.04em;
   color: var(--faint);
@@ -751,7 +760,7 @@
   color: var(--warn);
 }
 .af-live-play-team {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--faint);
 }
@@ -801,7 +810,7 @@
 }
 .af-live-next-time {
   flex: none;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--faint);
 }
@@ -973,7 +982,7 @@
   border-radius: 6px;
   background: var(--chip);
   border: 1px solid var(--chip-line);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.05em;
   color: var(--muted);
@@ -1023,7 +1032,7 @@
   padding: 2px 6px;
   border-radius: 5px;
   background: var(--chip);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.06em;
   color: var(--faint);
@@ -1037,7 +1046,7 @@
 
 .af-live-broadcast {
   margin-left: auto;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.04em;
   color: var(--faint);
@@ -1072,7 +1081,7 @@
   font-weight: 600;
 }
 .af-live-linescore thead th {
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--faint);
 }
@@ -1119,7 +1128,7 @@
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--faint);
 }
@@ -1148,7 +1157,7 @@
   display: grid;
   place-items: center;
   background: color-mix(in srgb, var(--good) 30%, var(--surface2));
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 800;
   color: var(--text2);
 }
@@ -1194,7 +1203,7 @@
   bottom: 3px;
   left: 50%;
   transform: translateX(-50%);
-  font-size: 8.5px;
+  font-size: 11px;
   font-weight: 700;
   color: color-mix(in srgb, var(--text) 55%, transparent);
 }
@@ -1279,7 +1288,7 @@
   white-space: nowrap;
 }
 .af-live-leader-meta {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--faint);
 }
@@ -1520,7 +1529,7 @@
    * still clipped at 390px (measured); 17px cells at 10px type fit with room.
    */
   .af-live-linescore {
-    font-size: 10px;
+    font-size: 11px;
   }
   .af-live-linescore th,
   .af-live-linescore td {
@@ -1550,6 +1559,55 @@
   outline-offset: 2px;
 }
 
+/* ── Game highlights (finals) ───────────────────────────────────────────────
+   A button until tapped, then a 16:9 player. Top-level on purpose: nothing
+   here belongs to a width band. */
+.af-live-highlight {
+  margin-top: 10px;
+}
+.af-live-highlight-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+}
+.af-live-highlight-btn:hover {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.af-live-highlight-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.af-live-highlight-note {
+  font-weight: 500;
+  color: var(--muted);
+}
+.af-live-highlight-frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #000;
+}
+.af-live-highlight-frame iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
 /* ── Clicked-game view ("gamecast") ─────────────────────────────────────────── */
 
 .af-gv {
@@ -1574,7 +1632,7 @@
 }
 .af-gv-muted {
   color: var(--faint);
-  font-size: 10.5px;
+  font-size: 11px;
 }
 
 .af-gv-head {
@@ -1619,7 +1677,7 @@
   font-size: 12px;
 }
 .af-gv-team-record {
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--faint);
 }
 .af-gv-score {
@@ -1750,7 +1808,7 @@
   font-weight: 600;
 }
 .af-gv-leader-line {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--muted);
 }
 
@@ -1828,7 +1886,7 @@
 /* Team colours come from ESPN and are validated as 6-digit hex before use. */
 .af-gv-endzone {
   color: #fff;
-  font-size: 10px;
+  font-size: 11px;
   writing-mode: vertical-rl;
 }
 .af-gv-driveline {
@@ -1911,7 +1969,7 @@
   font-weight: 800;
 }
 .af-gv-pcard-meta {
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--faint);
 }
 .af-gv-pcard-stats {
@@ -1991,7 +2049,7 @@
   align-items: center;
 }
 .af-gv-running small {
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--faint);
 }
@@ -2044,7 +2102,7 @@
   border-left-color: var(--good);
 }
 .af-gv-play-meta {
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--faint);
 }
@@ -2134,7 +2192,7 @@
   font-weight: 600;
 }
 .af-gv-bplay-clock {
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--faint);
 }
@@ -2177,7 +2235,7 @@
   border-top: 1px solid var(--line);
 }
 .af-gv-box-table thead th {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--faint);
   border-top: 0;
@@ -2192,7 +2250,7 @@
 }
 .af-gv-box-group th {
   text-align: left;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -2207,6 +2265,60 @@
 .af-gv-box-total td {
   font-weight: 800;
   color: var(--text2);
+}
+
+/* ── Your starters in the game view, and the football box score ─────────────
+   Top level on purpose: none of this belongs to a width band. */
+.af-gv-mine-note {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+/* A starter's live line sits under his row, aligned past the headshot. */
+.af-gv-mine-line {
+  margin: 4px 0 0 40px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 11.5px;
+  color: var(--text2);
+}
+.af-gv-mine-group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+.af-gv-mine-cell-label {
+  /* 11px is this app's type floor (__tests__/core-app/type-floor.test.ts). */
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--faint);
+}
+.af-gv-box-table tr[data-mine] th,
+.af-gv-box-table tr[data-mine] td {
+  background: var(--accent-soft);
+}
+.af-gv-box-mine {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+}
+.af-gv-box-more {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.af-gv-box-more > summary {
+  cursor: pointer;
+  padding: 4px 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+}
+.af-gv-box-more > summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 @media (max-width: 620px) {
@@ -2278,7 +2390,7 @@
   border-radius: 4px;
   background: var(--warn-soft);
   color: var(--warn);
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 800;
 }
 
@@ -2310,7 +2422,7 @@
 }
 .af-gv-pitch text {
   fill: #0b0f17;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   text-anchor: middle;
   dominant-baseline: central;
@@ -2354,7 +2466,7 @@
   height: 18px;
   border-radius: 50%;
   color: #0b0f17;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
 }
 .af-gv-diamond {
@@ -2542,6 +2654,8 @@
 
 .af-live-lowdata-toggle {
   margin-left: auto;
+  min-height: 44px;
+  min-width: 44px;
   padding: 7px 11px;
   border-radius: 9px;
   background: var(--chip);
@@ -2682,8 +2796,357 @@
  * 620px the rest of this file's phone rules use. The burial starts the moment
  * the grid collapses to one column, which is here — a 900px tablet has it too.
  */
+/*
+ * ✅ REPLACED 2026-10-11 — the whole panel no longer moves; ONE SUMMARY DOES. With the panel pulled
+ * above the games, a phone opened on the impact total, contributions, the latest play, the play feed
+ * and Up next before the first scoreboard — the 2026-10-11 audit measured the first game card ~1.5
+ * screens down. The matchups strip now leads the page, which answers "how am I doing" before any of
+ * that, so on a phone only the "Your live impact" summary stays above the games (a second, phone-only
+ * copy rendered before the grid) and the rest of the panel follows the slate in DOM order. One copy
+ * is shown at a time, both hidden with `display: none`, so a screen reader meets exactly one.
+ */
+.af-live-impact[data-placement='inline'] {
+  display: none;
+}
 @media (max-width: 1080px) {
-  .af-live-side {
-    order: -1;
+  .af-live-impact[data-placement='inline'] {
+    display: flex;
+    margin-bottom: 14px;
   }
+  .af-live-side .af-live-impact[data-placement='side'] {
+    display: none;
+  }
+}
+/* The league-scoped view hides the whole panel (see Grid); its phone summary goes with it. */
+.af-live[data-league-scoped='true'] .af-live-impact[data-placement='inline'] {
+  display: none;
+}
+
+/* ── Your matchup strip ─────────────────────────────────────────── */
+.af-live-matchup {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  /* `--af-border` and `--af-good` are defined nowhere, so their dark-only fallbacks always won —
+     an invisible border and a ~2:1 green on a light page. The core tokens instead. */
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.af-live-matchup-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 12px;
+}
+.af-live-matchup-team {
+  flex: 1 1 120px;
+  min-width: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.af-live-matchup-team:last-child {
+  text-align: right;
+}
+.af-live-matchup-score {
+  font-size: 22px;
+  font-weight: 700;
+}
+/*
+ * The leader's score is green. 🛑 THIS WAS `:nth-of-type(1)` / `(2)`, WHICH COUNTS SPANS, NOT SCORES:
+ * every child of the row is a span (team, score, –, score, team), so the "lead" rule matched nothing
+ * and the "trail" rule matched YOUR score — green exactly when you were losing.
+ */
+.af-live-matchup[data-lead='lead'] .af-live-matchup-score[data-side='you'],
+.af-live-matchup[data-lead='trail'] .af-live-matchup-score[data-side='them'] {
+  color: var(--good);
+}
+.af-live-matchup-meta,
+.af-live-matchup-note {
+  margin: 6px 0 0;
+  font-size: 13px;
+  opacity: 0.8;
+}
+.af-live-matchup-note {
+  margin: 0;
+}
+
+/* Live workspace: readable metadata and compact phone impact. */
+/* 48px tap targets for real buttons — but NOT the "?" help dot: it is a 14px circle with its own enlarged
+   ::after tap area (af-core.css), and min-height turned it into a 14x48 oval (reported 2026-10-13). */
+.af-core .af-live .af-btn,.af-core .af-live button:not(.af-info-tip) { min-height:48px; }
+.af-live-refresh-icon { display:none; }
+@media(max-width:720px) { .af-live-refresh-label { display:none; } .af-live-refresh-icon { display:inline; font-size:24px; } .af-core .af-live-refresh { width:48px; padding:8px; } }
+.af-live-contributions summary { min-height:48px; cursor:pointer; font-weight:700; align-content:center; }
+.af-live-contributions p,.af-live-contributions small { font-size:13px; line-height:1.5; }
+.af-live-league-contribution { padding-block:12px; border-top:1px solid var(--line); }
+.af-live-league-contribution a { color:var(--accent); font-size:15px; }
+.af-live-league-contribution dl { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin:10px 0; }
+.af-live-league-contribution dt { font-size:12px; color:var(--muted); }
+.af-live-league-contribution dd { margin:4px 0 0; font-size:19px; font-variant-numeric:tabular-nums; }
+@media(max-width:720px) {
+ .af-live-lede,.af-live-next-label,.af-live-impact-sub,.af-live-play-line { font-size:15px; }
+ .af-live-sport,.af-live-scope-btn,.af-live-search input { font-size:14px; }
+ .af-live-scope-btn,.af-live-search { min-height:48px; }
+ .af-live-freshness { font-size:12px; letter-spacing:0; text-transform:none; }
+ .af-live-grid { gap:16px; }
+}
+
+/* College Top-25 rank before the team name (2026-10-08). Appended after every @media block on purpose. */
+.af-live-team-rank {
+  margin-right: 4px;
+  font-size: 0.78em;
+  font-weight: 800;
+  color: var(--muted);
+}
+
+/* The college Top 25 filter's note above the slate (2026-10-08). */
+.af-live-top25-note {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.af-live-top25-note a,
+.af-live-empty-body a {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* ── Your matchups across leagues (cross-league view) ────────────── */
+.af-live-glance {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.af-live-glance-head {
+  margin: 0;
+  color: var(--muted);
+}
+/* The header is the open/close control; the counts below it always show. */
+.af-live-glance-h {
+  margin: 0;
+  font: inherit;
+}
+.af-core .af-live .af-live-glance-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 40px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 6px;
+}
+.af-live-glance-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.af-live-glance-chev {
+  width: 7px;
+  height: 7px;
+  margin: 0 3px 3px 2px;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  transform: rotate(45deg);
+  transition: transform 0.15s ease;
+  flex: none;
+}
+.af-live-glance-toggle[aria-expanded='true'] .af-live-glance-chev {
+  margin: 3px 3px 0 2px;
+  transform: rotate(225deg);
+}
+/* An explicit choice wins at any width; with none, a phone starts closed (no flash of the open list). */
+.af-live-glance[data-open='false'] .af-live-glance-body {
+  display: none;
+}
+@media (max-width: 1080px) {
+  .af-live-glance[data-open='auto'] .af-live-glance-body {
+    display: none;
+  }
+}
+.af-live-glance-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin: 8px 0 0;
+  font-size: 14px;
+}
+.af-live-glance-count b {
+  font-size: 18px;
+  font-weight: 800;
+}
+.af-live-glance-count[data-tone='good'] b { color: var(--good); }
+.af-live-glance-count[data-tone='bad'] b { color: var(--bad); }
+.af-live-glance-count[data-tone='warn'] b { color: var(--warn); }
+.af-live-glance-list {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.af-live-glance-row {
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line);
+  background: var(--surface);
+}
+.af-live-glance-row[data-tone='good'] { border-left-color: var(--good); }
+.af-live-glance-row[data-tone='bad'] { border-left-color: var(--bad); }
+.af-live-glance-row[data-tone='warn'] { border-left-color: var(--warn); }
+.af-live-glance-link {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 2px 12px;
+  min-height: 44px;
+  padding: 8px 12px;
+  color: inherit;
+  text-decoration: none;
+}
+.af-live-glance-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 10px;
+}
+.af-live-glance-name {
+  min-width: 0;
+  font-weight: 700;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.af-live-glance-line {
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.af-live-glance-calm {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.af-core .af-live .af-live-glance-more,
+.af-core .af-live .af-live-mine-more {
+  min-height: 40px;
+  margin-top: 8px;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* The standing variant of the matchup strip: an elimination week has no opponent. */
+.af-live-matchup[data-state='standing'][data-lead='lead'] .af-live-matchup-score[data-side='you'] { color: var(--good); }
+.af-live-matchup[data-state='standing'][data-lead='tied'] .af-live-matchup-score[data-side='you'] { color: var(--warn); }
+.af-live-matchup[data-state='standing'][data-lead='trail'] .af-live-matchup-score[data-side='you'] { color: var(--bad); }
+.af-live-matchup-team.af-live-matchup-cut {
+  text-align: right;
+}
+
+/* ── Finals, one line each ───────────────────────────────────────── */
+.af-live-finals {
+  margin-top: 6px;
+}
+.af-live-finals-head {
+  margin: 0 0 8px;
+  color: var(--muted);
+}
+.af-live-finals-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.af-live-final {
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.af-core .af-live .af-live-final-toggle {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-areas: 'teams status chev' 'mine mine mine';
+  align-items: center;
+  gap: 4px 12px;
+  width: 100%;
+  padding: 10px 14px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 12px;
+}
+.af-live-final-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.af-live-final-teams {
+  grid-area: teams;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  min-width: 0;
+}
+.af-live-final-team {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-weight: 600;
+}
+.af-live-final-team[data-won='true'] {
+  color: var(--text);
+  font-weight: 800;
+}
+.af-live-final-logo {
+  border-radius: 4px;
+  object-fit: contain;
+}
+.af-live-final-score {
+  font-size: 16px;
+}
+.af-live-final-at {
+  color: var(--faint);
+  font-size: 12px;
+}
+.af-live-final-status {
+  grid-area: status;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.af-live-final .af-live-mine-chev {
+  grid-area: chev;
+}
+.af-live-final[data-open='true'] .af-live-mine-chev {
+  margin: 3px 3px 0 2px;
+  transform: rotate(225deg);
+}
+.af-live-final-mine {
+  grid-area: mine;
+  font-size: 12.5px;
+  color: var(--accent);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.af-live-final-card {
+  padding: 0 8px 8px;
 }

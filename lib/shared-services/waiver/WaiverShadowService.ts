@@ -7,9 +7,10 @@
  * tendency data (Phase 3), reusing runWaiverAIService's real, already-live
  * deterministic scoring (scoreWaiverCandidates via lib/waiver-engine) as this
  * shadow's own primary recommendation value — no new scoring formula
- * invented — and logs divergence against the one real, independently-
+ * invented. It logged divergence against the one real, independently-
  * computed comparison engine found in the audit
- * (lib/ai/waivers/waiverRecommendationService.ts).
+ * (lib/ai/waivers/waiverRecommendationService.ts) until that engine was
+ * retired on 2026-09-30; `divergence` is empty until another grader exists.
  *
  * SHADOW MODE ONLY: nothing in this module is called by any live route.
  * Every real dependency call is wrapped so a failure here can never surface
@@ -20,9 +21,8 @@
 import { randomUUID } from 'crypto'
 import { runWaiverAIService } from '@/lib/waiver-ai-engine'
 import { buildWaiverDecisionContext, type BuildWaiverDecisionContextInput } from './WaiverContextAssembler'
-import { runLegacyWaiverGrader } from './WaiverRecommendationAdapter'
 import { getManagerBehaviorProfile } from '@/lib/shared-services/knowledge-graph/QueryService'
-import type { ScoredWaiverTarget, ManagerTendencyContext, WaiverEvaluation, WaiverGraderDivergence, WaiverUrgency } from './types'
+import type { ScoredWaiverTarget, ManagerTendencyContext, WaiverEvaluation, WaiverUrgency } from './types'
 import { defaultWaiverShadowResultStore, type WaiverShadowResultStore } from './WaiverShadowResultStore'
 
 async function resolveManagerTendency(managerKey: string | null | undefined): Promise<ManagerTendencyContext> {
@@ -50,37 +50,6 @@ const TIER_TO_URGENCY: Record<ScoredWaiverTarget['recommendation'], WaiverUrgenc
   Add: 'medium',
   Stash: 'low',
   Monitor: 'none',
-}
-
-function buildDivergence(
-  shadowTop: ScoredWaiverTarget | null,
-  legacy: Awaited<ReturnType<typeof runLegacyWaiverGrader>>
-): WaiverGraderDivergence {
-  const notes: string[] = []
-  if (legacy.error) notes.push(legacy.error)
-
-  const shadowTopAddPlayerId = shadowTop?.playerId ?? null
-  const sameTopAdd = legacy.error ? null : shadowTopAddPlayerId === legacy.topAddPlayerId
-  if (sameTopAdd === false) notes.push('Legacy and shadow recommend different top adds.')
-
-  const shadowFaabBid = shadowTop?.faabBid ?? null
-  const faabBidDelta = legacy.error || shadowFaabBid == null || legacy.faabBid == null ? null : legacy.faabBid - shadowFaabBid
-  if (faabBidDelta != null && Math.abs(faabBidDelta) >= 20) notes.push('Large FAAB bid divergence.')
-
-  return {
-    graderId: legacy.graderId,
-    legacyTopAddPlayerId: legacy.topAddPlayerId,
-    legacyTopAddPlayerName: legacy.topAddPlayerName,
-    legacyFaabBid: legacy.faabBid,
-    legacyPriority: legacy.priority,
-    shadowTopAddPlayerId,
-    shadowTopAddPlayerName: shadowTop?.playerName ?? null,
-    shadowFaabBid,
-    shadowPriority: shadowTop?.priorityRank ?? null,
-    sameTopAdd,
-    faabBidDelta,
-    notes,
-  }
 }
 
 function buildRisk(top: ScoredWaiverTarget | null): WaiverEvaluation['risk'] {
@@ -111,7 +80,6 @@ export async function evaluateWaiverShadow(input: EvaluateWaiverShadowInput): Pr
   const primary = await runWaiverAIService(ctx.engineInput)
   const top = primary.deterministic.suggestions[0] ?? null
 
-  const legacy = await runLegacyWaiverGrader({ leagueId: ctx.leagueId, managerKey: ctx.managerKey })
   const managerTendency = await resolveManagerTendency(ctx.managerKey)
 
   const totalValued = ctx.dataCompleteness.rosterPlayerCount + ctx.dataCompleteness.valuedFreeAgentCount
@@ -165,7 +133,14 @@ export async function evaluateWaiverShadow(input: EvaluateWaiverShadowInput): Pr
       contextProvider: ctx.platform,
       managerTendencySource: managerTendency.status === 'ok' ? 'knowledge_graph' : 'unavailable',
     },
-    divergence: [buildDivergence(top, legacy)],
+    /*
+     * EMPTY SINCE 2026-09-30: the one legacy grader (waiverRecommendationService, via
+     * WaiverRecommendationAdapter) was retired. It read rosters raw and matched roster ids across
+     * three id spaces, the decision-engine boundary forbade fixing it in place, and the live route
+     * had already moved to the Decision OS engine. The divergence types, result store and analyzer
+     * are kept so a future independent grader can plug back in; until then they report nothing.
+     */
+    divergence: [],
   }
 
   await resultStore.append(evaluation).catch((err) => {

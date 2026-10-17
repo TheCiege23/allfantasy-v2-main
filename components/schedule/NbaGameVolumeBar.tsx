@@ -62,16 +62,16 @@ export function NbaGameVolumeBar({ days, highlightDate, highlightRole }: NbaGame
                 title={`${d.date}: ${d.gameCount} games (${classLabel(d.classification)})`}
               />
               {/* Game count */}
-              <span className="text-[10px] font-mono text-white/60">
+              <span className="text-[11px] font-mono text-white/60">
                 {d.gameCount > 0 ? d.gameCount : '—'}
               </span>
               {/* Day label */}
-              <span className={`text-[9px] ${isHighlighted ? 'font-bold text-cyan-300' : 'text-white/40'}`}>
+              <span className={`text-[11px] ${isHighlighted ? 'font-bold text-cyan-300' : 'text-white/40'}`}>
                 {DAY_LABELS[d.dayOfWeek] ?? '?'}
               </span>
               {/* Event role badge */}
               {isHighlighted && highlightRole && (
-                <span className="mt-0.5 rounded bg-cyan-500/20 px-1.5 py-0.5 text-[8px] font-bold text-cyan-200">
+                <span className="mt-0.5 rounded bg-cyan-500/20 px-1.5 py-0.5 text-[11px] font-bold text-cyan-200">
                   {highlightRole}
                 </span>
               )}
@@ -80,7 +80,7 @@ export function NbaGameVolumeBar({ days, highlightDate, highlightRole }: NbaGame
         })}
       </div>
       {/* Legend */}
-      <div className="flex flex-wrap gap-3 text-[9px] text-white/40">
+      <div className="flex flex-wrap gap-3 text-[11px] text-white/40">
         <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-orange-500/80" /> Heavy (9+)</span>
         <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-amber-500/60" /> Moderate (5-8)</span>
         <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-emerald-500/50" /> Light (1-4)</span>

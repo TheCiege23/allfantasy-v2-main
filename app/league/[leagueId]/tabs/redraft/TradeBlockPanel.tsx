@@ -15,6 +15,33 @@ import {
 } from '@/lib/redraft/client'
 
 /**
+ * THE grade on a league block card (2026-09-28): the suggested offer from your roster for that player
+ * and its one grade, yours first. A withheld grade says why; an ungraded offer shows only the offer.
+ * See lib/trade-block/tradeBlockOffers.ts.
+ */
+export function BlockOfferLine({ offer }: { offer: TradeBlockItem['suggestedOffer'] }) {
+  if (!offer) return null
+  const g = offer.grade
+  return (
+    <div className="mt-1 text-[11px] leading-snug text-white/65" data-testid="block-offer">
+      <span>
+        Suggested offer: send {offer.gives.join(' + ')} for {offer.receives.join(' + ')}
+      </span>
+      {g?.graded ? (
+        <span className="block font-semibold text-white/85" data-testid="block-offer-grade">
+          Grade: You {g.letter} · Them {g.partnerLetter}
+          {g.label ? <span className="font-normal text-white/55"> — {g.label}</span> : null}
+        </span>
+      ) : g ? (
+        <span className="block text-amber-200/80" data-testid="block-offer-grade-withheld">
+          Not graded: {g.reason}
+        </span>
+      ) : null}
+    </div>
+  )
+}
+
+/**
  * T8 native Trade Block UI: My Trade Block (publish/unpublish owned players), League Trade Block
  * (league-visible cards with Mark interest / Build proposal), My Interests. No auto-submit; "Build
  * proposal" only opens the existing modal preselected.
@@ -114,7 +141,7 @@ export function TradeBlockPanel({
                             : addTradeBlockItem({ leagueId, playerId: p.playerId, playerName: p.playerName, position: p.position, team: p.team }),
                         )
                       }
-                      className={`rounded px-1.5 py-0.5 text-[10px] ${on ? 'border border-rose-400/40 text-rose-200' : 'bg-violet-500/80 text-black'}`}
+                      className={`rounded px-1.5 py-0.5 text-[11px] ${on ? 'border border-rose-400/40 text-rose-200' : 'bg-violet-500/80 text-black'}`}
                     >
                       {on ? 'Remove' : 'Add to block'}
                     </button>
@@ -139,13 +166,14 @@ export function TradeBlockPanel({
                       <div className="flex gap-1">
                         <button type="button" disabled={busy} data-testid={`mark-interest-${i.playerId}`}
                           onClick={() => act(() => addTradeInterest({ leagueId, interestType: 'player_interest', targetRosterId: i.rosterId, playerId: i.playerId, playerName: i.playerName, position: i.position }))}
-                          className="rounded border border-white/20 px-1.5 py-0.5 text-[10px] text-white/80">Mark interest</button>
+                          className="rounded border border-white/20 px-1.5 py-0.5 text-[11px] text-white/80">Mark interest</button>
                         <button type="button" data-testid={`block-build-${i.rosterId}`}
                           onClick={() => onBuildProposal(i.rosterId)}
-                          className="rounded bg-[#ff3d81]/85 px-1.5 py-0.5 text-[10px] font-semibold text-black">Build proposal</button>
+                          className="rounded bg-[#ff3d81]/85 px-1.5 py-0.5 text-[11px] font-semibold text-black">Build proposal</button>
                       </div>
                     </div>
-                    {i.note ? <p className="mt-0.5 text-[10px] text-white/55">“{i.note}”</p> : null}
+                    <BlockOfferLine offer={i.suggestedOffer} />
+                    {i.note ? <p className="mt-0.5 text-[11px] text-white/55">“{i.note}”</p> : null}
                   </div>
                 ))}
               </div>
@@ -159,7 +187,7 @@ export function TradeBlockPanel({
             ) : (
               <ul className="mt-1 space-y-0.5">
                 {myInterests.map((it) => (
-                  <li key={it.id} className="flex items-center justify-between gap-2 text-[10px] text-white/70">
+                  <li key={it.id} className="flex items-center justify-between gap-2 text-[11px] text-white/70">
                     <span>{it.playerName ?? it.position ?? it.interestType} <span className="text-white/40">({it.visibility})</span></span>
                     <button type="button" disabled={busy} onClick={() => act(() => removeTradeInterest(it.id))} className="text-rose-300/80">remove</button>
                   </li>

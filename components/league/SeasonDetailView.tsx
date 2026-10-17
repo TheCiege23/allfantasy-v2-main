@@ -247,20 +247,20 @@ export function SeasonDetailView({ leagueId, season }: SeasonDetailViewProps) {
     <div className="mt-3 space-y-2">
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
         <div className="rounded-xl border border-amber-400/20 bg-amber-500/10 p-3 text-[11px] text-amber-100">
-          <div className="text-[10px] uppercase tracking-wider text-amber-200/60">Champion</div>
+          <div className="text-[11px] uppercase tracking-wider text-amber-200/60">Champion</div>
           <div className="mt-1 font-semibold">{data.meta?.championName ?? 'Not recorded'}</div>
         </div>
         <div className="rounded-xl border border-sky-400/20 bg-sky-500/10 p-3 text-[11px] text-sky-100">
-          <div className="text-[10px] uppercase tracking-wider text-sky-200/60">Runner-Up</div>
+          <div className="text-[11px] uppercase tracking-wider text-sky-200/60">Runner-Up</div>
           <div className="mt-1 font-semibold">{data.meta?.runnerUpName ?? 'Not recorded'}</div>
         </div>
         <div className="rounded-xl border border-emerald-400/20 bg-emerald-500/10 p-3 text-[11px] text-emerald-100">
-          <div className="text-[10px] uppercase tracking-wider text-emerald-200/60">Format</div>
+          <div className="text-[11px] uppercase tracking-wider text-emerald-200/60">Format</div>
           <div className="mt-1 font-semibold">{data.scoringSettings.scoringFormat ?? 'Imported'}</div>
           <div className="mt-1 text-white/55">{data.scoringSettings.teamCount ?? '??'} teams</div>
         </div>
         <div className="rounded-xl border border-fuchsia-400/20 bg-fuchsia-500/10 p-3 text-[11px] text-fuchsia-100">
-          <div className="text-[10px] uppercase tracking-wider text-fuchsia-200/60">Season State</div>
+          <div className="text-[11px] uppercase tracking-wider text-fuchsia-200/60">Season State</div>
           <div className="mt-1 font-semibold">{data.meta?.status ?? 'historical'}</div>
           <div className="mt-1 text-white/55">{data.scoringSettings.isDynasty ? 'Dynasty' : 'Redraft / Standard'}</div>
         </div>
@@ -268,27 +268,27 @@ export function SeasonDetailView({ leagueId, season }: SeasonDetailViewProps) {
 
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
         <div className="rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-2 text-[11px] text-white/72">
-          <div className="text-[10px] uppercase text-white/35">Weeks</div>
+          <div className="text-[11px] uppercase text-white/35">Weeks</div>
           <div className="mt-1 text-base font-semibold text-white">{data.summary.weekCount}</div>
         </div>
         <div className="rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-2 text-[11px] text-white/72">
-          <div className="text-[10px] uppercase text-white/35">Matchups</div>
+          <div className="text-[11px] uppercase text-white/35">Matchups</div>
           <div className="mt-1 text-base font-semibold text-white">{data.summary.matchupCount}</div>
         </div>
         <div className="rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-2 text-[11px] text-white/72">
-          <div className="text-[10px] uppercase text-white/35">Draft Picks</div>
+          <div className="text-[11px] uppercase text-white/35">Draft Picks</div>
           <div className="mt-1 text-base font-semibold text-white">{data.summary.draftPickCount}</div>
         </div>
         <div className="rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-2 text-[11px] text-white/72">
-          <div className="text-[10px] uppercase text-white/35">Transactions</div>
+          <div className="text-[11px] uppercase text-white/35">Transactions</div>
           <div className="mt-1 text-base font-semibold text-white">{data.summary.transactionCount}</div>
         </div>
         <div className="rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-2 text-[11px] text-white/72">
-          <div className="text-[10px] uppercase text-white/35">Lineup Snapshots</div>
+          <div className="text-[11px] uppercase text-white/35">Lineup Snapshots</div>
           <div className="mt-1 text-base font-semibold text-white">{data.summary.rosterSnapshotCount}</div>
         </div>
         <div className="rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-2 text-[11px] text-white/72">
-          <div className="text-[10px] uppercase text-white/35">Playoff Matchups</div>
+          <div className="text-[11px] uppercase text-white/35">Playoff Matchups</div>
           <div className="mt-1 text-base font-semibold text-white">{data.summary.playoffMatchupCount}</div>
         </div>
       </div>
@@ -331,7 +331,7 @@ export function SeasonDetailView({ leagueId, season }: SeasonDetailViewProps) {
         {data.weeklySummary.weeks.length > 0 ? (
           <div className="mb-3 flex flex-wrap gap-2">
             {data.weeklySummary.weeks.map((week) => (
-              <div key={week.week} className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-[10px] text-white/65">
+              <div key={week.week} className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-[11px] text-white/65">
                 W{week.week} · {week.matchupCount} matchups · {week.highestCombinedScore.toFixed(1)} top total
               </div>
             ))}
@@ -343,7 +343,7 @@ export function SeasonDetailView({ leagueId, season }: SeasonDetailViewProps) {
               key={m.matchupId}
               className="rounded-lg border border-white/[0.05] bg-white/[0.02] px-2 py-1.5 text-[11px] text-white/70"
             >
-              <div className="text-[10px] uppercase text-white/35">Week {m.weekOrPeriod}</div>
+              <div className="text-[11px] uppercase text-white/35">Week {m.weekOrPeriod}</div>
               <div className="flex justify-between">
                 <span className={m.winnerTeamId === m.teamA ? 'font-bold text-emerald-300' : ''}>
                   {m.teamA}
@@ -367,19 +367,19 @@ export function SeasonDetailView({ leagueId, season }: SeasonDetailViewProps) {
       <Section title="Draft">
         <div className="mb-3 grid grid-cols-2 gap-2 lg:grid-cols-4">
           <div className="rounded-lg border border-white/[0.05] bg-white/[0.02] px-3 py-2 text-[11px] text-white/72">
-            <div className="text-[10px] uppercase text-white/35">Total Picks</div>
+            <div className="text-[11px] uppercase text-white/35">Total Picks</div>
             <div className="mt-1 font-semibold text-white">{data.draftSummary.totalPicks}</div>
           </div>
           <div className="rounded-lg border border-white/[0.05] bg-white/[0.02] px-3 py-2 text-[11px] text-white/72">
-            <div className="text-[10px] uppercase text-white/35">Rounds</div>
+            <div className="text-[11px] uppercase text-white/35">Rounds</div>
             <div className="mt-1 font-semibold text-white">{data.draftSummary.roundCount}</div>
           </div>
           <div className="rounded-lg border border-white/[0.05] bg-white/[0.02] px-3 py-2 text-[11px] text-white/72">
-            <div className="text-[10px] uppercase text-white/35">Managers</div>
+            <div className="text-[11px] uppercase text-white/35">Managers</div>
             <div className="mt-1 font-semibold text-white">{data.draftSummary.managerCount}</div>
           </div>
           <div className="rounded-lg border border-white/[0.05] bg-white/[0.02] px-3 py-2 text-[11px] text-white/72">
-            <div className="text-[10px] uppercase text-white/35">1.01</div>
+            <div className="text-[11px] uppercase text-white/35">1.01</div>
             <div className="mt-1 font-semibold text-white">{data.draftSummary.firstOverall?.playerId ?? 'Not recorded'}</div>
           </div>
         </div>
@@ -391,30 +391,30 @@ export function SeasonDetailView({ leagueId, season }: SeasonDetailViewProps) {
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
               <div className="rounded-lg border border-white/[0.05] bg-white/[0.02] px-3 py-2 text-[11px] text-white/72">
-                <div className="text-[10px] uppercase text-white/35">Playoff Start</div>
+                <div className="text-[11px] uppercase text-white/35">Playoff Start</div>
                 <div className="mt-1 font-semibold text-white">
                   {data.playoffBracket.playoffWeekStart != null ? `Week ${data.playoffBracket.playoffWeekStart}` : 'Unknown'}
                 </div>
               </div>
               <div className="rounded-lg border border-white/[0.05] bg-white/[0.02] px-3 py-2 text-[11px] text-white/72">
-                <div className="text-[10px] uppercase text-white/35">Regular Season</div>
+                <div className="text-[11px] uppercase text-white/35">Regular Season</div>
                 <div className="mt-1 font-semibold text-white">
                   {data.playoffBracket.regularSeasonLength != null ? `${data.playoffBracket.regularSeasonLength} weeks` : 'Unknown'}
                 </div>
               </div>
               <div className="rounded-lg border border-white/[0.05] bg-white/[0.02] px-3 py-2 text-[11px] text-white/72">
-                <div className="text-[10px] uppercase text-white/35">Playoff Teams</div>
+                <div className="text-[11px] uppercase text-white/35">Playoff Teams</div>
                 <div className="mt-1 font-semibold text-white">{data.playoffBracket.playoffTeams ?? data.playoffBracket.participants.length}</div>
               </div>
               <div className="rounded-lg border border-white/[0.05] bg-white/[0.02] px-3 py-2 text-[11px] text-white/72">
-                <div className="text-[10px] uppercase text-white/35">Bracket Rows</div>
+                <div className="text-[11px] uppercase text-white/35">Bracket Rows</div>
                 <div className="mt-1 font-semibold text-white">{data.summary.playoffMatchupCount}</div>
               </div>
             </div>
 
             <div className="grid gap-2 lg:grid-cols-2">
               <div className="rounded-lg border border-white/[0.05] bg-white/[0.02] p-3">
-                <div className="mb-2 text-[10px] uppercase tracking-wide text-white/35">Playoff finish board</div>
+                <div className="mb-2 text-[11px] uppercase tracking-wide text-white/35">Playoff finish board</div>
                 <ul className="space-y-2 text-[11px] text-white/72">
                   {data.playoffBracket.participants
                     .slice()
@@ -423,11 +423,11 @@ export function SeasonDetailView({ leagueId, season }: SeasonDetailViewProps) {
                       <li key={participant.rosterId} className="flex items-center justify-between gap-3 rounded-lg border border-white/[0.04] bg-black/20 px-3 py-2">
                         <div>
                           <div className="font-semibold text-white">{participant.managerName}</div>
-                          <div className="text-[10px] text-white/45">
+                          <div className="text-[11px] text-white/45">
                             Seed {participant.seed ?? '?'} · {participant.label ?? 'Playoff team'}
                           </div>
                         </div>
-                        <div className="text-right text-[10px] text-white/55">
+                        <div className="text-right text-[11px] text-white/55">
                           <div>{participant.playoffWins}-{participant.playoffLosses}</div>
                           <div>
                             {participant.isChampion ? 'Champion' : participant.isRunnerUp ? 'Runner-up' : participant.label ?? ''}
@@ -441,11 +441,11 @@ export function SeasonDetailView({ leagueId, season }: SeasonDetailViewProps) {
 
               <div className="space-y-3">
                 <div className="rounded-lg border border-white/[0.05] bg-white/[0.02] p-3">
-                  <div className="mb-2 text-[10px] uppercase tracking-wide text-white/35">Winners bracket</div>
+                  <div className="mb-2 text-[11px] uppercase tracking-wide text-white/35">Winners bracket</div>
                   <div className="space-y-2">
                     {data.playoffBracket.winnersBracket.map((entry) => (
                       <div key={`w-${entry.id}`} className="rounded-lg border border-white/[0.04] bg-black/20 px-3 py-2 text-[11px] text-white/72">
-                        <div className="mb-1 text-[10px] uppercase text-white/35">
+                        <div className="mb-1 text-[11px] uppercase text-white/35">
                           {bracketRoundLabel(entry.round)}{entry.matchup != null ? ` · Matchup ${entry.matchup}` : ''}
                         </div>
                         <div className={entry.winnerId === entry.teamOneId ? 'font-semibold text-emerald-300' : ''}>{entry.teamOneLabel ?? 'TBD'}</div>
@@ -457,11 +457,11 @@ export function SeasonDetailView({ leagueId, season }: SeasonDetailViewProps) {
                 </div>
 
                 <div className="rounded-lg border border-white/[0.05] bg-white/[0.02] p-3">
-                  <div className="mb-2 text-[10px] uppercase tracking-wide text-white/35">Losers bracket</div>
+                  <div className="mb-2 text-[11px] uppercase tracking-wide text-white/35">Losers bracket</div>
                   <div className="space-y-2">
                     {data.playoffBracket.losersBracket.map((entry) => (
                       <div key={`l-${entry.id}`} className="rounded-lg border border-white/[0.04] bg-black/20 px-3 py-2 text-[11px] text-white/72">
-                        <div className="mb-1 text-[10px] uppercase text-white/35">
+                        <div className="mb-1 text-[11px] uppercase text-white/35">
                           {bracketRoundLabel(entry.round)}{entry.matchup != null ? ` · Matchup ${entry.matchup}` : ''}
                         </div>
                         <div className={entry.winnerId === entry.teamOneId ? 'font-semibold text-amber-300' : ''}>{entry.teamOneLabel ?? 'TBD'}</div>
@@ -486,16 +486,16 @@ export function SeasonDetailView({ leagueId, season }: SeasonDetailViewProps) {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="font-semibold text-white">{snapshot.managerName ?? snapshot.teamId}</div>
-                  <div className="text-[10px] uppercase text-white/35">Imported roster snapshot</div>
+                  <div className="text-[11px] uppercase text-white/35">Imported roster snapshot</div>
                 </div>
-                <div className="text-right text-[10px] text-white/40">
+                <div className="text-right text-[11px] text-white/40">
                   <div>{snapshot.lineupCount} starters</div>
                   <div>{snapshot.benchCount} bench</div>
                 </div>
               </div>
               <div className="mt-3 space-y-2">
                 <div>
-                  <div className="mb-1 text-[10px] uppercase text-white/35">Starting lineup</div>
+                  <div className="mb-1 text-[11px] uppercase text-white/35">Starting lineup</div>
                   <ul className="space-y-1 text-white/68">
                     {snapshot.lineupPlayers.slice(0, 8).map((player, idx) => (
                       <li key={`${snapshot.teamId}-lineup-${player.id ?? idx}`}>{formatPlayerPreview(player)}</li>
@@ -504,7 +504,7 @@ export function SeasonDetailView({ leagueId, season }: SeasonDetailViewProps) {
                   </ul>
                 </div>
                 <div>
-                  <div className="mb-1 text-[10px] uppercase text-white/35">Bench</div>
+                  <div className="mb-1 text-[11px] uppercase text-white/35">Bench</div>
                   <ul className="space-y-1 text-white/60">
                     {snapshot.benchPlayers.slice(0, 6).map((player, idx) => (
                       <li key={`${snapshot.teamId}-bench-${player.id ?? idx}`}>{formatPlayerPreview(player)}</li>
@@ -523,7 +523,7 @@ export function SeasonDetailView({ leagueId, season }: SeasonDetailViewProps) {
         {data.transactionSummary.length > 0 ? (
           <div className="mb-3 flex flex-wrap gap-2">
             {data.transactionSummary.map((item) => (
-              <div key={item.type} className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-[10px] text-white/65">
+              <div key={item.type} className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-[11px] text-white/65">
                 {item.type} · {item.count}
               </div>
             ))}

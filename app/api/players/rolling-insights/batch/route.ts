@@ -2,10 +2,15 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { resolveCurrentInjuryDesignations } from '@/lib/injuries/currentInjuryDesignations'
 import {
   parseRollingInsightsStatsJson,
   type RollingInsightsTableStats,
 } from '@/lib/players/rolling-insights-stats-display'
+import {
+  crosswalkToRollingInsightsIds,
+  type RiCrosswalkDb,
+} from '@/lib/player-identity/rollingInsightsCrosswalk'
 
 export type RollingInsightsBatchPlayer = {
   season: string | null
@@ -18,8 +23,8 @@ export type RollingInsightsBatchPlayer = {
 }
 
 /**
- * Batch lookup: Sleeper player id → latest Rolling Insights season stats + injury/status
- * (from `PlayerIdentityMap` + `PlayerSeasonStats` source `rolling_insights` + `SportsPlayer`).
+ * Batch lookup: Sleeper player id → latest Rolling Insights season stats (`PlayerIdentityMap` +
+ * `PlayerSeasonStats` source `rolling_insights`) + current injury designation (live injury feed).
  */
 export async function POST(req: NextRequest) {
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
@@ -49,26 +54,17 @@ export async function POST(req: NextRequest) {
       ? String(body.season)
       : null
 
-  const maps = await prisma.playerIdentityMap.findMany({
-    where: {
-      sleeperId: { in: sleeperIds },
-      sport,
-      rollingInsightsId: { not: null },
-    },
-    select: {
-      sleeperId: true,
-      rollingInsightsId: true,
-      status: true,
-    },
+  /*
+   * Sleeper id → RI id through `PlayerIdentityMap` (sport-scoped), refusing any id whose mapping is
+   * not one-to-one. Shared with `/api/redraft/roster` — see `rollingInsightsCrosswalk.ts`.
+   */
+  const crosswalk = await crosswalkToRollingInsightsIds(prisma as unknown as RiCrosswalkDb, {
+    sport,
+    lookups: [{ column: 'sleeperId', ids: sleeperIds }],
   })
+  const maps = [...crosswalk.byId].map(([sleeperId, identity]) => ({ sleeperId, ...identity }))
 
-  const riIds = [
-    ...new Set(
-      maps
-        .map((m) => m.rollingInsightsId)
-        .filter((id): id is string => typeof id === 'string' && id.length > 0),
-    ),
-  ]
+  const riIds = [...new Set(maps.map((m) => m.rollingInsightsId))]
 
   if (riIds.length === 0) {
     const empty: Record<string, RollingInsightsBatchPlayer> = {}
@@ -122,15 +118,18 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const sportsPlayers = await prisma.sportsPlayer.findMany({
-    where: {
-      sport,
-      source: 'rolling_insights',
-      externalId: { in: riIds },
-    },
-    select: { externalId: true, status: true },
-  })
-  const statusByRi = new Map(sportsPlayers.map((p) => [p.externalId, p.status]))
+  /*
+   * 🛑 `injuryStatus` IS A LIVE INJURY DESIGNATION OR NULL — NEVER A ROSTER CODE. This used to return
+   * `PlayerIdentityMap.status || SportsPlayer.status`, which for Rolling Insights is "ACT" / "INACT",
+   * and the league Players tab drew an amber "Injury status: ACT" dot on healthy players. The read
+   * port reads live `SportsInjury` rows only, newest claim wins, namesakes refused.
+   */
+  const designations = await resolveCurrentInjuryDesignations({
+    sport,
+    players: maps
+      .filter((m) => typeof m.canonicalName === 'string' && m.canonicalName.trim())
+      .map((m) => ({ key: m, name: m.canonicalName, team: m.currentTeam, position: m.position })),
+  }).catch(() => new Map<(typeof maps)[number], { status: string }>())
 
   const bySleeperId: Record<string, RollingInsightsBatchPlayer> = {}
 
@@ -143,7 +142,7 @@ export async function POST(req: NextRequest) {
     const rawStats = latest?.stats
     const parsed = parseRollingInsightsStatsJson(rawStats)
 
-    const injuryStatus = (m.status?.trim() || statusByRi.get(ri)?.trim() || null) as string | null
+    const injuryStatus = designations.get(m)?.status ?? null
 
     bySleeperId[sid] = {
       season: latest?.season ?? null,

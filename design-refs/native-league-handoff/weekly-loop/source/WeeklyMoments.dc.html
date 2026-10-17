@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Immunity and torch-out</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./exile/exile.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Cinzel:wght@600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080d}
+.wm-av{position:relative;flex:none;border-radius:999px;display:grid;place-items:center;font:700 13px 'Archivo',sans-serif;color:#fff}
+.wm-out{filter:grayscale(1) brightness(.6)}
+@keyframes wmSway{0%,100%{transform:rotate(-3deg)}50%{transform:rotate(3deg)}}
+.wm-neck{transform-origin:50% 8%;animation:wmSway 4s ease-in-out infinite}
+@keyframes wmSnuff{0%{opacity:1;transform:scale(1)}60%{opacity:1;transform:scale(1,.4) translateY(20px)}100%{opacity:0;transform:scale(.2,.1) translateY(40px)}}
+@keyframes wmSmoke{0%{opacity:0;transform:translateY(16px)}30%{opacity:1}100%{opacity:1;transform:translateY(0)}}
+@keyframes wmDim{to{filter:grayscale(1) brightness(.6)}}
+.wm-stage{position:relative;width:240px;height:300px}
+.wm-stage img{position:absolute;inset:0;width:100%;height:100%}
+.wm-playing .wm-lit{animation:wmSnuff 1.4s ease-in both;transform-origin:50% 45%}
+.wm-playing .wm-sm{animation:wmSmoke 1.2s ease-out 1s both}
+.wm-playing-av{animation:wmDim .8s ease-out 2.2s both}
+</style>
+</helmet>
+<div class="ex" style="min-height: 100vh; display: flex; flex-direction: column">
+  <header style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 18px 28px; border-bottom: 1px solid rgba(255,255,255,.06)">
+    <a class="ex-btn" href="SurvivorTheme.dc.html" aria-label="Back" style="padding: 0 12px">‹</a>
+    <div style="flex: 1 1 320px; display: flex; flex-direction: column; gap: 3px">
+      <h1 class="ex-h1">Immunity and torch-out</h1>
+      <span class="ex-t2">The two moments every Survivor week ends on</span>
+    </div>
+  </header>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 20px; padding: 24px 28px">
+    <section class="ex-card" style="flex: 1 1 620px; padding: 24px; display: flex; flex-wrap: wrap; gap: 28px; align-items: center; background: radial-gradient(ellipse at 22% 55%, rgba(242,201,76,.14), transparent 55%), #0b0d14">
+      <img class="wm-neck" src="weekly/immunity-necklace.svg" alt="Immunity necklace" style="width: 220px; flex: none">
+      <div style="flex: 1 1 260px; display: flex; flex-direction: column; gap: 12px">
+        <span class="ex-lbl ex-gold">Immunity · Week 6 · Tribe Vela</span>
+        <span style="font: 700 28px/1.15 'Cinzel', serif; color: #f1d58a">Open Team 5 wins immunity</span>
+        <span class="ex-t2" style="font-size: 14px">Top score in Tribe Vela with 142.6 points. Safe at Tribal Council and can't receive votes this week.</span>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap">
+          <span class="ex-chip" style="color: #d9b45a; border-color: rgba(217,180,90,.4)">Won by top tribe score</span>
+          <span class="ex-chip">Worn until the next lock</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="ex-card2" style="flex: 1 1 360px; padding: 20px; display: flex; flex-direction: column; gap: 14px">
+      <span class="ex-lbl">Where the necklace shows</span>
+      <div style="display: flex; align-items: center; gap: 12px">
+        <span class="wm-av" style="width: 56px; height: 56px; background: #12352a; font-size: 16px; box-shadow: 0 0 0 2px #10131c, 0 0 0 4px #f2c94c, 0 0 18px rgba(242,201,76,.45)">O5<img src="weekly/immunity-necklace-icon.svg" alt="" style="position: absolute; right: -10px; bottom: -10px; width: 30px; height: 30px"></span>
+        <div style="display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 600">Avatar</span><span class="ex-t2" style="font-size: 12px">Gold ring and necklace badge everywhere the manager appears</span></div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; background: rgba(242,201,76,.07); border: 1px solid rgba(242,201,76,.25)">
+        <span class="ex-num ex-t3" style="width: 14px">1</span>
+        <span class="wm-av" style="width: 30px; height: 30px; font-size: 11px; background: #12352a; box-shadow: 0 0 0 2px #10131c, 0 0 0 3.5px #f2c94c">O5</span>
+        <span style="flex: 1; font-weight: 600">Open Team 5</span>
+        <img src="weekly/immunity-necklace-icon.svg" alt="Immune" style="width: 22px; height: 22px">
+        <span class="ex-num">142.6</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px; font-size: 12.5px"><img src="weekly/immunity-necklace-icon.svg" alt="" style="width: 18px; height: 18px"><span class="ex-t2">Chat and tribe channel: "Open Team 5 won immunity"</span></div>
+    </section>
+  </div>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 20px; padding: 0 28px 32px">
+    <section class="ex-card" style="flex: 1 1 620px; padding: 24px; display: flex; flex-wrap: wrap; gap: 28px; align-items: center; background: radial-gradient(ellipse at 20% 50%, rgba(255,122,42,.12), transparent 55%), #0b0d14">
+      <div class="wm-stage {{stageCls}}" key="{{k}}">
+        <img class="wm-sm" src="weekly/torch-out.svg" alt="" style="opacity: {{smokeOp}}">
+        <img class="wm-lit" src="weekly/torch-lit.svg" alt="Tribal torch" style="opacity: {{litOp}}">
+      </div>
+      <div style="flex: 1 1 260px; display: flex; flex-direction: column; gap: 12px">
+        <span class="ex-lbl" style="color: #ff9a3c">Torch-out · after the verdict</span>
+        <span style="font: 700 28px/1.15 'Cinzel', serif; color: #e8eaf2">{{headline}}</span>
+        <span class="ex-t2" style="font-size: 14px">The flame shrinks and goes out, smoke rises, and the manager's avatar fades to grey across the app. They head to Exile Island.</span>
+        <div style="display: flex; gap: 10px">
+          <button class="ex-btn ex-btn-gold" onClick="{{play}}">Play torch-out</button>
+          <button class="ex-btn" onClick="{{reset}}">Reset</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="ex-card2" style="flex: 1 1 360px; padding: 20px; display: flex; flex-direction: column; gap: 14px">
+      <span class="ex-lbl">After a torch-out</span>
+      <div style="display: flex; align-items: center; gap: 12px">
+        <span class="wm-av {{avCls}}" style="width: 56px; height: 56px; background: #3a2410; font-size: 16px; box-shadow: 0 0 0 2px #10131c, 0 0 0 4px #4a4f5c">O8<img src="weekly/torch-out-icon.svg" alt="" style="position: absolute; right: -10px; bottom: -10px; width: 30px; height: 30px; filter: none"></span>
+        <div style="display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 600">Avatar</span><span class="ex-t2" style="font-size: 12px">Greyscale, dim ring, snuffed-torch badge</span></div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; background: #0b0d14; border: 1px solid rgba(255,255,255,.06); color: #6f7590">
+        <span class="ex-num" style="width: 14px">–</span>
+        <span class="wm-av wm-out" style="width: 30px; height: 30px; font-size: 11px; background: #3a2410">O8</span>
+        <span style="flex: 1; font-weight: 600; text-decoration: line-through">Open Team 8</span>
+        <span class="ex-chip" style="color: #ff9a3c; border-color: rgba(255,154,60,.35)">Out · Wk 6</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 12px">
+        <img src="weekly/torch-lit-icon.svg" alt="" style="width: 32px; height: 32px"><img src="weekly/torch-out-icon.svg" alt="" style="width: 32px; height: 32px">
+        <span class="ex-t2" style="font-size: 12px">Lit torch = still in the game. Snuffed = voted out. Use these as status icons in tribe lists.</span>
+      </div>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { playing: false, k: 0 }; }
+  renderVals() {
+    const st = this.state;
+    return { stageCls: st.playing ? 'wm-playing' : '', k: String(st.k), litOp: '1', smokeOp: st.playing ? '1' : '0',
+      avCls: 'wm-out', headline: 'Open Team 8, your torch is out',
+      play: () => this.setState({ playing: false, k: st.k + 1 }, () => setTimeout(() => this.setState({ playing: true }), 30)),
+      reset: () => this.setState({ playing: false, k: st.k + 1 }) };
+  }
+}
+</script>
+</body>
+</html>

@@ -38,7 +38,7 @@ describe('what an answer was built from', () => {
     render(<ChimmyEvidenceBlock evidence={evidence()} />)
 
     expect(screen.getByText(/medium confidence/i)).toBeTruthy()
-    expect(screen.getByText(/78%/)).toBeTruthy()
+    expect(screen.queryByText(/78%/)).toBeNull()
     expect(screen.getByText(/2 sources/)).toBeTruthy()
     /* 120 minutes reads as hours, not as a raw minute count. */
     expect(screen.getByText(/2h behind/)).toBeTruthy()

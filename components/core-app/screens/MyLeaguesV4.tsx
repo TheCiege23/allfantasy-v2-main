@@ -1,7 +1,10 @@
 'use client'
 
 import Link from 'next/link'
+import { leagueWorkspaceHref } from '@/lib/league/league-workspace-navigation'
 import { useMemo, useState } from 'react'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { groupLeagueHubs } from '@/lib/core-app/leagueHubGroups'
 import type { MyLeaguesData, MyLeaguesLeague, MyLeaguesTier } from '@/lib/core-app/myLeagues'
 import { LeagueHistoryVirtualList } from './LeagueHistoryVirtualList'
@@ -45,6 +48,11 @@ import '@/components/core-app/af-my-leagues.css'
  */
 
 export type MyLeaguesV4Props = MyLeaguesData & {
+  /**
+   * Leagues the account hid from its lists (lib/core-app/leaguePreferences.ts). They leave the tiers
+   * and collect in a collapsed "Hidden leagues" section; a search still finds them in place.
+   */
+  hiddenIds?: string[]
   /** Where the "Import more" actions go. */
   importHref: string
   /** The add-league / re-sync surface this screen replaced at /leagues. */
@@ -113,7 +121,10 @@ export function MyLeaguesV4({
   notice,
   importHref,
   syncHref,
+  hiddenIds = [],
 }: MyLeaguesV4Props) {
+  const { language } = useOptionalLanguage()
+  const copy = (english: string) => coreUiCopy(english, language)
   const [query, setQuery] = useState('')
   const [platform, setPlatform] = useState<string>('all')
   const [showHistory, setShowHistory] = useState(false)
@@ -122,9 +133,14 @@ export function MyLeaguesV4({
   const [expanded, setExpanded] = useState<Partial<Record<MyLeaguesTier, boolean>>>({})
 
   const q = query.trim().toLowerCase()
+  const hiddenKey = hiddenIds.join('.')
+  const hiddenSet = useMemo(() => new Set(hiddenKey ? hiddenKey.split('.') : []), [hiddenKey])
+  // Out of the tiers unless the reader is searching — then a hidden league is found where it lives.
+  const hiddenLeagues = useMemo(() => (q ? [] : leagues.filter((l) => hiddenSet.has(l.id))), [leagues, hiddenSet, q])
 
   const filtered = useMemo(() => {
     return leagues.filter((l) => {
+      if (!q && hiddenSet.has(l.id)) return false
       if (platform !== 'all' && String(l.platform).toLowerCase() !== platform) return false
       if (q && ![l.name, l.hub?.name, ...(l.hub?.members.map((m) => m.name) ?? [])].filter(Boolean).join(' ').toLowerCase().includes(q)) return false
       if (chip === 'needs' && l.tier !== 'needs') return false
@@ -140,7 +156,7 @@ export function MyLeaguesV4({
       }
       return true
     })
-  }, [leagues, platform, q, chip])
+  }, [leagues, platform, q, chip, hiddenSet])
 
   /* History is only searched when the "+ history" toggle is on — the handoff's
      "543 past seasons searchable via + history". */
@@ -175,7 +191,7 @@ export function MyLeaguesV4({
     <div className="af-core af-ml">
       <header className="af-ml-head">
         <div className="af-ml-headline">
-          <h1 className="af-ml-title">My leagues</h1>
+          <h1 className="af-ml-title">{copy('My leagues')}</h1>
           <p className="af-ml-sub">
             <strong>{counts.live}</strong> live
             {counts.history > 0 ? (
@@ -188,6 +204,9 @@ export function MyLeaguesV4({
         </div>
 
         <div className="af-ml-actions">
+          <Link href="/create-league" className="af-ml-btn">
+            Create a league
+          </Link>
           {/*
             ⚠ ONLY WHEN THERE IS SOMEWHERE TO GO. /leagues/sync is retired, so
             this renders nothing rather than pointing at /import beside a button
@@ -195,7 +214,7 @@ export function MyLeaguesV4({
           */}
           {syncHref ? (
             <Link href={syncHref} className="af-ml-btn af-ml-btn--ghost">
-              Sync &amp; connect
+              {copy('Sync & connect')}
             </Link>
           ) : null}
           {/*
@@ -206,10 +225,10 @@ export function MyLeaguesV4({
             synced — which is most of them.
           */}
           <Link href="/core/connect-leagues" className="af-ml-btn af-ml-btn--ghost">
-            Connect two leagues
+            {copy('Connect two leagues')}
           </Link>
           <Link href={importHref} className="af-ml-btn">
-            Import more
+            {copy('Import more')}
           </Link>
         </div>
       </header>
@@ -229,19 +248,19 @@ export function MyLeaguesV4({
                 ? `Search ${counts.all} leagues and past seasons`
                 : `Search ${counts.live} live leagues`
             }
-            aria-label="Search leagues"
+            aria-label={copy('Search leagues')}
             className="af-ml-search-input"
           />
         </label>
 
         <label className="af-ml-select">
-          <span className="af-ml-select-label">Platform</span>
+          <span className="af-ml-select-label">{copy('Platform')}</span>
           <select
             value={platform}
             onChange={(e) => setPlatform(e.target.value)}
             aria-label="Filter by platform"
           >
-            <option value="all">All platforms</option>
+            <option value="all">{copy('All platforms')}</option>
             {platforms.map((p) => (
               <option key={p} value={p}>
                 {platformLabel(p)}
@@ -257,10 +276,10 @@ export function MyLeaguesV4({
           onClick={() => setShowHistory((v) => !v)}
           aria-pressed={showHistory}
         >
-          {showHistory ? 'Live + history' : '+ history'}
+          {copy(showHistory ? 'Live + history' : '+ history')}
         </button>
 
-        <div className="af-ml-view" role="group" aria-label="View mode">
+        <div className="af-ml-view" role="group" aria-label={copy('View mode')}>
           <button
             type="button"
             className="af-ml-view-btn"
@@ -268,7 +287,7 @@ export function MyLeaguesV4({
             onClick={() => setView('grid')}
             aria-pressed={view === 'grid'}
           >
-            Grid
+            {copy('Grid')}
           </button>
           <button
             type="button"
@@ -277,7 +296,7 @@ export function MyLeaguesV4({
             onClick={() => setView('list')}
             aria-pressed={view === 'list'}
           >
-            List
+            {copy('List')}
           </button>
         </div>
       </div>
@@ -293,12 +312,12 @@ export function MyLeaguesV4({
             onClick={() => setChip((cur) => (cur === c.key ? null : c.key))}
             aria-pressed={chip === c.key}
           >
-            {c.label} <span className="af-ml-chip-n af-num">{c.count}</span>
+            {copy(c.label)} <span className="af-ml-chip-n af-num">{c.count}</span>
           </button>
         ))}
         {chip ? (
           <button type="button" className="af-ml-chip af-ml-chip--clear" onClick={() => setChip(null)}>
-            Clear filter
+            {copy('Clear filter')}
           </button>
         ) : null}
       </div>
@@ -324,16 +343,19 @@ export function MyLeaguesV4({
 
       {nothingMatches ? (
         <div className="af-ml-empty">
-          <p className="af-ml-empty-t">Nothing matches those filters</p>
+          <p className="af-ml-empty-t">{copy('Nothing matches those filters')}</p>
           <p className="af-ml-empty-p">
             {counts.live === 0
               ? 'No leagues are connected to this account yet.'
               : 'Try a different platform, clear the chip filter, or turn on “+ history” to search past seasons.'}
           </p>
           <div className="af-ml-empty-actions">
+            <Link href="/create-league" className="af-ml-btn">
+              Create a league
+            </Link>
             {counts.live === 0 ? (
               <Link href={importHref} className="af-ml-btn">
-                Import a league
+                {copy('Import a league')}
               </Link>
             ) : (
               <button
@@ -345,7 +367,7 @@ export function MyLeaguesV4({
                   setChip(null)
                 }}
               >
-                Reset filters
+                {copy('Reset filters')}
               </button>
             )}
           </div>
@@ -366,7 +388,7 @@ export function MyLeaguesV4({
           <section key={tier} className="af-ml-tier" id={meta.anchor} data-tier={tier}>
             <div className="af-ml-tier-head">
               <h2 className="af-ml-tier-title">
-                {meta.title} <span className="af-ml-tier-n af-num">{all.length}</span>
+                {copy(meta.title)} <span className="af-ml-tier-n af-num">{all.length}</span>
               </h2>
               <p className="af-ml-tier-blurb">{meta.blurb}</p>
             </div>
@@ -402,19 +424,39 @@ export function MyLeaguesV4({
                 className="af-ml-collapse"
                 onClick={() => setExpanded((e) => ({ ...e, [tier]: false }))}
               >
-                Show fewer
+                {copy('Show fewer')}
               </button>
             ) : null}
           </section>
         )
       })}
 
+      {/* ── Hidden ─────────────────────────────────────────────────────────── */}
+      {hiddenLeagues.length > 0 ? (
+        <details className="af-ml-tier" id="af-ml-hidden" data-testid="my-leagues-hidden">
+          <summary className="af-ml-tier-head">
+            <h2 className="af-ml-tier-title">
+              {copy('Hidden leagues')} <span className="af-ml-tier-n af-num">{hiddenLeagues.length}</span>
+            </h2>
+            <p className="af-ml-tier-blurb">
+              Hidden from your lists, still counted in your totals.{' '}
+              <Link href="/settings?tab=preferences&returnTo=%2Fleagues">Manage in Settings</Link>
+            </p>
+          </summary>
+          <div className="af-ml-grid" data-tier="quiet" data-view={view}>
+            {hiddenLeagues.map((l) => (
+              <LeagueCard key={l.id} league={l} tier={l.tier} view={view} />
+            ))}
+          </div>
+        </details>
+      ) : null}
+
       {/* ── History ──────────────────────────────────────────────────────── */}
       {showHistory && filteredHistory.length > 0 ? (
         <section className="af-ml-tier" id="af-ml-history">
           <div className="af-ml-tier-head">
             <h2 className="af-ml-tier-title">
-              Past seasons <span className="af-ml-tier-n af-num">{filteredHistory.length}</span>
+              {copy('Past seasons')} <span className="af-ml-tier-n af-num">{filteredHistory.length}</span>
             </h2>
             <p className="af-ml-tier-blurb">
               Finished seasons from your career import. These are records, not leagues you play —
@@ -441,10 +483,10 @@ export function MyLeaguesV4({
         </div>
         <div className="af-ml-foot-actions">
           <Link href="/core/career" className="af-ml-btn af-ml-btn--ghost">
-            Browse history
+            {copy('Browse history')}
           </Link>
           <Link href={importHref} className="af-ml-btn">
-            Import more
+            {copy('Import more')}
           </Link>
         </div>
       </footer>
@@ -459,7 +501,7 @@ export function MyLeaguesV4({
       {coverage.length > 0 ? (
         <section className="af-ml-cover" aria-labelledby="af-ml-cover-h">
           <h2 className="af-ml-cover-h" id="af-ml-cover-h">
-            Not yet watched
+            {copy('Not yet watched')}
           </h2>
           <ul className="af-ml-cover-list">
             {coverage.map((c) => (
@@ -483,8 +525,13 @@ function LeagueCard({
   tier: MyLeaguesTier
   view: ViewMode
 }) {
+  const { language } = useOptionalLanguage()
+  const es = language === 'es'
   const chips = league.chips ?? []
   const tone = league.priority === 'urgent' ? 'bad' : league.reason ? 'warn' : null
+  const dashboardLabel = league.actionLabel && league.actionLabel !== 'Open league'
+    ? league.actionLabel
+    : es ? 'Panel de la liga' : 'League dashboard'
 
   return (
     <article className="af-ml-card" data-tier={tier} data-tone={tone ?? undefined} data-view={view}>
@@ -535,9 +582,14 @@ function LeagueCard({
         </div>
       ) : null}
 
-      <Link href={league.hub?.href ?? league.href} className="af-ml-open">
-        {league.hub ? 'Open shared hub →' : league.actionLabel ?? 'Open league'}
-      </Link>
+      <div className="af-ml-card-actions">
+        <Link href={league.hub?.href ?? league.href} className="af-ml-open">
+          {league.hub ? (es ? 'Abrir centro compartido →' : 'Open shared hub →') : dashboardLabel}
+        </Link>
+        {!league.hub ? (
+          <Link href={leagueWorkspaceHref(league.id)} className="af-ml-open af-ml-open--workspace">{es ? 'Abrir liga ↗' : 'Open League ↗'}</Link>
+        ) : null}
+      </div>
     </article>
   )
 }

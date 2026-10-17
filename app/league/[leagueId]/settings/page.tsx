@@ -9,10 +9,11 @@ import { redirect } from "next/navigation"
  * modal from the same deep link), so send every visitor there. The league
  * shell applies its own role gating.
  */
-export default function LeagueSettingsPage({
-  params,
-}: {
-  params: { leagueId: string }
-}) {
+export default async function LeagueSettingsPage(
+  props: {
+    params: Promise<{ leagueId: string }>
+  }
+) {
+  const params = await props.params;
   redirect(`/league/${params.leagueId}?view=settings`)
 }

@@ -116,8 +116,6 @@ export type ToolAIEntryKey =
   | "draft_helper"
   | "chimmy_chat"
   | "graph_insight"
-  | "psychological"
-  | "psychological_profiles"
   | "legacy_score"
   | "reputation"
   | "rivalries"

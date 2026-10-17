@@ -1,0 +1,51 @@
+name: Tournament pilot database test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tournament-pilot-database-test
+  cancel-in-progress: false
+
+jobs:
+  isolated-pilot:
+    name: Isolated 64-manager NBA setup
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      TOURNAMENT_PILOT_DATABASE_URL: ${{ secrets.TOURNAMENT_PILOT_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Require the isolated pilot connection
+        run: |
+          if [ -z "$TOURNAMENT_PILOT_DATABASE_URL" ]; then
+            echo "Add the TOURNAMENT_PILOT_DATABASE_URL repository secret before running this test." >&2
+            exit 1
+          fi
+      - run: npm ci
+      - name: Run the isolated tournament pilot
+        run: node artifacts/tournament-pilot-staging-cli.cjs test
+      - name: Install Chromium for the authenticated invite rehearsal
+        run: npx playwright install --with-deps chromium
+      - name: Run signed-in invite and frozen-draft rehearsal
+        env:
+          DATABASE_URL: ${{ secrets.TOURNAMENT_PILOT_DATABASE_URL }}
+          COMMISH_TENANT_ID: tournament-pilot
+          TOURNAMENT_PILOT_BROWSER: '1'
+          NODE_OPTIONS: --conditions=react-server
+          PLAYWRIGHT_SERVER_NODE_OPTIONS: ''
+          PLAYWRIGHT_PORT: '3169'
+          E2E_WARM_ROUTES: /api/auth/csrf
+          CI: '1'
+        run: |
+          export NEXTAUTH_SECRET="$(openssl rand -hex 32)"
+          export DIRECT_URL="${DATABASE_URL/-pooler./.}"
+          node artifacts/tournament-pilot-staging-cli.cjs verify
+          npx playwright test e2e/tournament-authenticated-pilot.spec.ts --project=chromium --reporter=line --retries=0

@@ -27,7 +27,7 @@ export default function MobileSectionHeader({ mainTab, username }: MobileSection
       </div>
       {username && (
         <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/5 border border-white/8">
-          <div className="w-6 h-6 rounded-full bg-gradient-to-br from-cyan-400 to-purple-500 flex items-center justify-center text-[10px] font-bold text-white">
+          <div className="w-6 h-6 rounded-full bg-gradient-to-br from-cyan-400 to-purple-500 flex items-center justify-center text-[11px] font-bold text-white">
             {username.charAt(0).toUpperCase()}
           </div>
           <span className="text-xs text-white/60 max-w-[80px] truncate">{username}</span>

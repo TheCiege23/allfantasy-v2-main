@@ -189,6 +189,58 @@ endpoints:
       consumer that needs a string id (e.g. `NormalizedDraftPick.source_player_id`) must
       stringify it without reformatting.
 
+      ⚠ NO LINEUP. Each player's `displayGroup` (RUSHER / RECEIVER / DEFENDER …) is a POSITION
+      group, not a lineup slot. Starters come only from FetchRoster below — which is why every
+      Fleaflicker roster imported with `starter_ids: []` until 2026-09-28.
+
+  FetchRoster:
+    status: INTEGRATED
+    method: GET
+    path: /FetchRoster
+    path_confirmed_via: "Fleaflicker's published Swagger docs, read 2026-09-28 — documentation,
+      not probing. Shape then captured ONCE by scripts/probe.sh (`roster` endpoint, TEAM_ID env)
+      against league 206154, this contract's subject league, approved by the repo owner."
+    params: [sport, league_id, team_id, season, scoring_period, external_id_type]
+    param_types:
+      team_id: "integer — REQUIRED; one team per call. See `cost` below."
+      scoring_period: "integer — optional. Omitted, the endpoint serves the current lineup
+        period, which is what an import wants; the fixture pins week 1 only because a finished
+        season has no current one."
+    envelope: |
+      CAPTURED 2026-09-28 — fixtures/roster.NFL.2021.week1.team1371776.json, TRIMMED by
+      key-union cover (scripts/trim-fixture.mjs, `--keep-all groups`): 189 key paths before and
+      after, zero lost; 329KB -> 69KB.
+      ⚠ REDACTED: each `proPlayer.news[]` item's `contents`, `analysis`, `title` and `url` are
+      third-party (RotoBaller) article text and links, replaced with placeholders — keys kept, so
+      the shape record is whole. This endpoint is the first captured one that embeds news at all.
+      {
+        groups: Array<{
+          group?: 'START' | 'INJURED' | 'TAXI',       # ABSENT on the bench group — see below
+          slots: Array<{
+            position: { label: string, group?, eligibility?, min?, max?, start?, colors? },
+            leaguePlayer?: { proPlayer: ProPlayer, owner: TeamStub, displayGroup, … }
+          }>
+        }>,
+        alwaysAvailablePositions, eligibleLineupPeriods, lineupPeriod, eligibleTeams
+      }
+    vendor_docs_are_wrong_twice: |
+      🛑 Measured on the capture, and both would have silently produced no starters:
+        1. The player key is `leaguePlayer` (camelCase). The docs say `league_player`.
+        2. The docs list a BENCH group. The wire sends the bench group with NO `group` key at
+           all — Fleaflicker omits rather than names it, the same habit this contract records
+           everywhere. "No group" means bench; it must never be read as "unknown, skip the
+           whole response".
+    empty_slots: |
+      An EMPTY slot has `position` and no `leaguePlayer`. The captured team started week 1
+      with its QB slot empty (and two empty BN slots). The key-union trim does not keep such a
+      slot — it adds no key — so this is recorded here rather than shown in the fixture.
+    cost: |
+      ONE REQUEST PER TEAM. An import of a 12-team league makes 12 calls, run 4 at a time
+      (`fetchFleaflickerLineups`), each failing soft to null on its own. rate_limit above
+      records no documented limit.
+    source_of_truth: lib/league-import/fleaflicker/types.ts (FleaflickerRosterResponse);
+      lib/league-import/fleaflicker/fleaflickerLineup.ts (readFleaflickerLineup).
+
   FetchLeagueScoreboard:
     status: INTEGRATED   # <-- promoted 2026-09-12: `lib/import-os/collector/fleaflickerMatchupParity.ts`
       # is a real caller. It was GAME_SHAPE_CONFIRMED_NOT_INTEGRATED, which was accurate for

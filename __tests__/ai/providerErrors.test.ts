@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { normalizeProviderError, isProviderFallbackEligible } from "@/lib/ai/providerErrors"
+import { AiSpendDisabledError } from "@/lib/ai/aiSpendGuard"
 
 function makeError(message: string, status?: number): Error {
   return Object.assign(new Error(message), status != null ? { status } : {})
@@ -138,6 +139,30 @@ describe("normalizeProviderError — content_filter (NOT fallback eligible)", ()
     const err = Object.assign(new Error("Content rejected"), { code: "content_filter", status: 400 })
     expect(normalizeProviderError(err).category).toBe("content_filter")
     expect(normalizeProviderError(err).fallbackEligible).toBe(false)
+  })
+})
+
+describe("normalizeProviderError — spend_disabled (NOT fallback eligible)", () => {
+  // The kill switch is global: every provider is off, so falling through could only reach one whose
+  // own guard was missing. The refusal carries no HTTP status, so without its own rule it lands in
+  // `unknown` — which IS fallback eligible.
+  it("classifies AiSpendDisabledError as spend_disabled and halts", () => {
+    const norm = normalizeProviderError(new AiSpendDisabledError("openai-client"))
+    expect(norm.category).toBe("spend_disabled")
+    expect(norm.fallbackEligible).toBe(false)
+    expect(isProviderFallbackEligible(new AiSpendDisabledError("xai-client"))).toBe(false)
+  })
+
+  it("recognises the refusal by its stable code, not only by class", () => {
+    // A copy across a module boundary (or a serialised error) loses the prototype but keeps the code.
+    const err = Object.assign(new Error("AI provider spend is disabled"), { code: "ai_spend_disabled" })
+    expect(normalizeProviderError(err).category).toBe("spend_disabled")
+  })
+
+  it("a 402 from a PROVIDER is still billing, and still falls back", () => {
+    // Guards against over-reach: the spend refusal also carries 402 (as httpStatus), but a provider's
+    // own payment-required response is a different fact — another provider may have credit.
+    expect(normalizeProviderError(makeError("Payment required", 402)).category).toBe("billing")
   })
 })
 

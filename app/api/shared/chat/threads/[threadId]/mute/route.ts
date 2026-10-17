@@ -7,10 +7,8 @@ import { isLeagueVirtualRoom } from "@/lib/chat-core"
  * POST: set mute state for the current user in this thread.
  * Body: { muted: boolean }
  */
-export async function POST(
-  req: NextRequest,
-  { params }: { params: { threadId: string } }
-) {
+export async function POST(req: NextRequest, props: { params: Promise<{ threadId: string }> }) {
+  const params = await props.params
   const user = await resolvePlatformUser()
   if (!user.appUserId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 

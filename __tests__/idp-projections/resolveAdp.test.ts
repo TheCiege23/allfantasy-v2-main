@@ -126,6 +126,47 @@ describe('loadAdpBySleeperId — translation', () => {
     expect(res.get('111')?.via).toBe('sports_player_id')
   })
 
+  /*
+   * 🛑 ONE ROW PER SOURCE PER SLEEPER ID, AND THE NEWEST IS OFTEN A NAMESAKE. Production 11304:
+   * sleeper "E.J. Jenkins" TE PHI, thesportsdb "Elgton Jenkins" G CLE (the newer row). Newest-wins
+   * looked ADP up under the guard's name, slug and position.
+   */
+  const jenkinsRows = () =>
+    [
+      { id: 'uuid-tsdb', sleeperId: '11304', name: 'Elgton Jenkins', position: 'G', team: 'CLE', source: 'thesportsdb', fetchedAt: new Date('2026-10-11') },
+      { id: 'uuid-ri', sleeperId: '11304', name: 'E.J. Jenkins', position: 'TE', team: 'PHI', source: 'rolling_insights', fetchedAt: new Date('2026-10-10') },
+      { id: 'uuid-s', sleeperId: '11304', name: 'E.J. Jenkins', position: 'TE', team: 'PHI', source: 'sleeper', fetchedAt: new Date('2026-10-01') },
+    ] as never as Parameters<typeof fakePrisma>[0]
+
+  it('speaks for a Sleeper id with the Sleeper row, not the newest vendor namesake', async () => {
+    const res = await loadAdpBySleeperId({
+      prisma: fakePrisma(jenkinsRows(), [
+        row({ playerId: 'NFL:elgton-jenkins:G:CLE', playerName: 'Elgton Jenkins', position: 'G', adp: 210 }),
+        row({ playerId: 'NFL:ej-jenkins:TE:PHI', playerName: 'E.J. Jenkins', position: 'TE', adp: 380 }),
+      ]),
+      sport: 'NFL',
+      sleeperIds: ['11304'],
+    })
+    expect(res.get('11304')?.adp).toBe(380)
+    expect(res.get('11304')?.via).toBe('slug')
+  })
+
+  it("keeps an agreeing vendor row's uuid as an exact key, and drops a contradicting one's", async () => {
+    // adp_data keys 387 NFL players by a Rolling Insights SportsPlayer uuid; that must still hit.
+    const agreeing = await loadAdpBySleeperId({
+      prisma: fakePrisma(jenkinsRows(), [row({ playerId: 'uuid-ri', playerName: 'x', position: 'TE', adp: 380 })]),
+      sport: 'NFL',
+      sleeperIds: ['11304'],
+    })
+    expect(agreeing.get('11304')?.via).toBe('sports_player_id')
+    const namesake = await loadAdpBySleeperId({
+      prisma: fakePrisma(jenkinsRows(), [row({ playerId: 'uuid-tsdb', playerName: 'x', position: 'G', adp: 210 })]),
+      sport: 'NFL',
+      sleeperIds: ['11304'],
+    })
+    expect(namesake.size).toBe(0)
+  })
+
   it('collapses specific defensive positions onto the group the board ranks', async () => {
     // Our side says CB; the ADP board says DB. Without the collapse no corner ever matches.
     const res = await loadAdpBySleeperId({
@@ -243,4 +284,41 @@ describe('loadAdpBySleeperId — what it refuses', () => {
     const res = await loadAdpBySleeperId({ prisma, sport: 'NFL', sleeperIds: [] })
     expect(res.size).toBe(0)
   })
+})
+
+describe('seven-sport ADP isolation and validity', () => {
+  it('does not reuse the first sport placeholder filter for other sports', async () => {
+    const sports = ['NFL', 'NBA', 'NHL', 'MLB', 'NCAAF', 'NCAAB', 'SOCCER']
+    const db = fakePrisma([player()], [row({ playerId: 'uuid-1', adp: 10 })]) as any
+    db.adpDataRecord.groupBy.mockImplementation(async ({ where }: any) => [{ format: 'dynasty', adp: where.sport === 'NFL' ? 10 : 170, _count: { _all: 100 } }])
+    for (const sport of sports) {
+      const result = await loadAdpBySleeperId({ prisma: db, sport, sleeperIds: ['111'] })
+      expect(result.has('111'), sport).toBe(sport !== 'NFL')
+    }
+    expect(db.adpDataRecord.groupBy).toHaveBeenCalledTimes(7)
+  })
+  it.each([0, -1, NaN, Infinity])('refuses invalid draft position %s', async adp => {
+    const db = fakePrisma([player()], [row({ playerId: 'uuid-1', adp })])
+    expect((await loadAdpBySleeperId({ prisma: db, sport: 'NFL', sleeperIds: ['111'] })).size).toBe(0)
+  })
+  it('retries placeholder detection after a transient database failure', async () => {
+    const db = fakePrisma([player()], [row({ playerId: 'uuid-1', adp: 170 })]) as any
+    db.adpDataRecord.groupBy.mockRejectedValueOnce(new Error('temporary')).mockResolvedValue([{ format: 'dynasty', adp: 170, _count: { _all: 100 } }])
+    await loadAdpBySleeperId({ prisma: db, sport: 'NFL', sleeperIds: ['111'] })
+    expect((await loadAdpBySleeperId({ prisma: db, sport: 'NFL', sleeperIds: ['111'] })).size).toBe(0)
+    expect(db.adpDataRecord.groupBy).toHaveBeenCalledTimes(2)
+  })
+})
+
+
+it('refreshes ADP placeholder detection after ingestion can change the board', async () => {
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(1000)
+  try {
+    const db = fakePrisma([player()], [row({ playerId: 'uuid-1', adp: 170 })]) as any
+    db.adpDataRecord.groupBy.mockResolvedValueOnce([]).mockResolvedValue([{ format: 'dynasty', adp: 170, _count: { _all: 100 } }])
+    expect((await loadAdpBySleeperId({ prisma: db, sport: 'NFL', sleeperIds: ['111'] })).size).toBe(1)
+    clock.mockReturnValue(1000 + 6 * 60 * 1000)
+    expect((await loadAdpBySleeperId({ prisma: db, sport: 'NFL', sleeperIds: ['111'] })).size).toBe(0)
+    expect(db.adpDataRecord.groupBy).toHaveBeenCalledTimes(2)
+  } finally { clock.mockRestore() }
 })

@@ -301,7 +301,7 @@ export default function ChimmyChat({
 
   const handlePlayVoice = useCallback(async (text: string, messageId: string) => {
     if (ttsServerReady === false) {
-      toast.error('Voice unavailable — check ElevenLabs API key in settings.');
+      toast.error("Voice unavailable right now.");
       return;
     }
     if (ttsServerReady === null) {
@@ -344,7 +344,7 @@ export default function ChimmyChat({
 
   const toggleVoiceReplies = useCallback(() => {
     if (ttsServerReady === false) {
-      toast.warning('Voice unavailable — check ElevenLabs API key in settings');
+      toast.warning("Voice unavailable right now.");
       return;
     }
     if (ttsServerReady === null) return;
@@ -623,7 +623,7 @@ export default function ChimmyChat({
               className="rounded-full p-3 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
               title={
                 ttsServerReady === false
-                  ? 'ElevenLabs API key required'
+                  ? "Voice unavailable right now"
                   : 'Toggle Chimmy voice replies'
               }
             >
@@ -662,7 +662,7 @@ export default function ChimmyChat({
             onClick={toggleVoiceReplies}
             disabled={voiceToggleDisabled}
             className="rounded-full p-1.5 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
-            title={ttsServerReady === false ? 'ElevenLabs API key required' : 'Toggle voice'}
+            title={ttsServerReady === false ? "Voice unavailable right now" : 'Toggle voice'}
           >
             {voiceConfig.enabled ? <Volume2 className="h-4 w-4 text-cyan-400" /> : <VolumeX className="h-4 w-4 text-slate-400" />}
           </button>

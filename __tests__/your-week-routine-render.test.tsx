@@ -32,6 +32,7 @@ const recap = {
   biggestWin: { leagueName: 'Ice Kings', margin: 23.5 },
   closestLoss: { leagueName: 'Dynasty', margin: 2.2 },
   topScorer: { name: 'Jahmyr Gibbs', points: 28.4, leagueName: 'Ice Kings' },
+  pending: true,
 }
 
 const data = (over: Partial<WeeklyRoutineData> = {}): WeeklyRoutineData => ({
@@ -72,6 +73,13 @@ describe('YourWeekRoutine', () => {
     expect(screen.getByText('Closest loss: Dynasty by 2.2')).toBeTruthy()
     expect(screen.getByText('Top scorer: Jahmyr Gibbs 28.4 (Ice Kings)')).toBeTruthy()
     expect(screen.getByText('Monday night games may still change these.')).toBeTruthy()
+  })
+
+  /* Production 2026-09-28: the caveat sat under week 2's recap on the Monday of week 3. */
+  it('drops the Monday-night caveat once every game in the recap week is final', () => {
+    render(<YourWeekRoutine data={data({ today: 'recap', todayLabel: 'Monday', steps: steps('recap'), recap: { ...recap, pending: false } })} />)
+    expect(screen.getByText('2026 week 1 recap: 1-1')).toBeTruthy()
+    expect(screen.queryByText('Monday night games may still change these.')).toBeNull()
   })
 
   it('the recap block is Monday-only, and absent parts are left out', () => {

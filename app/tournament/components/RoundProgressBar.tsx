@@ -25,7 +25,7 @@ export function RoundProgressBar({
             <div key={r.id} className="flex min-w-0 flex-1 items-center">
               <div className="flex min-w-0 flex-1 flex-col items-center gap-1">
                 <div
-                  className={`relative flex h-10 w-full max-w-[120px] items-center justify-center rounded-lg border text-center text-[9px] font-bold leading-tight ${
+                  className={`relative flex h-10 w-full max-w-[120px] items-center justify-center rounded-lg border text-center text-[11px] font-bold leading-tight ${
                     done
                       ? 'border-cyan-500/40 bg-cyan-500/10 text-cyan-100'
                       : current
@@ -35,7 +35,7 @@ export function RoundProgressBar({
                 >
                   {r.roundLabel}
                   {count != null ? (
-                    <span className="absolute -bottom-4 left-1/2 -translate-x-1/2 whitespace-nowrap text-[9px] text-[var(--tournament-text-dim)]">
+                    <span className="absolute -bottom-4 left-1/2 -translate-x-1/2 whitespace-nowrap text-[11px] text-[var(--tournament-text-dim)]">
                       {count} left
                     </span>
                   ) : null}

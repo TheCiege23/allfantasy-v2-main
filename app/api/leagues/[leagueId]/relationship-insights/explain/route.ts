@@ -86,7 +86,7 @@ export async function POST(
           typeof body?.focusDramaEventId === 'string' ? body.focusDramaEventId.trim() : undefined,
       },
       userMessage:
-        'Explain the top relationship storyline in 3-5 concise sentences using graph intensity, rivalry context, behavior profile cues, and drama timeline evidence only.',
+        'Explain the top relationship storyline in 3-5 concise sentences using graph intensity, rivalry context, and drama timeline evidence only.',
     })
     const orchestration = await runUnifiedOrchestration({
       envelope,

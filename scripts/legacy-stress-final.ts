@@ -113,13 +113,10 @@ async function main() {
     { name: "POST /api/legacy/player-stock", m: "POST", p: "/api/legacy/player-stock", b: { playerName: "Patrick Mahomes" }, n: TOTAL },
     { name: "[AI] POST /api/trade-evaluator", m: "POST", p: "/api/trade-evaluator", b: { give: ["Patrick Mahomes"], get: ["Josh Allen"], leagueId: LEAGUE_IDS[0], leagueSize: 16, isDynasty: true, scoring: "ppr" }, n: 10 },
     { name: "[AI] POST /api/waiver-ai", m: "POST", p: "/api/waiver-ai", b: { playerName: "Tank Dell", leagueId: LEAGUE_IDS[0], week: 5 }, n: 10 },
-    { name: "[AI] POST /api/ai/chat", m: "POST", p: "/api/ai/chat", b: { message: "Trade value of Mahomes?", sleeperUsername: USERNAME }, n: 10 },
     { name: "[AI] POST /api/dynasty-trade-analyzer", m: "POST", p: "/api/dynasty-trade-analyzer", b: { give: ["Breece Hall"], get: ["Bijan Robinson"], leagueId: LEAGUE_IDS[1] }, n: 10 },
     { name: "[AI] POST /api/trade-finder", m: "POST", p: "/api/trade-finder", b: { leagueId: LEAGUE_IDS[0], sleeperUsername: USERNAME }, n: 10 },
     { name: "[AI] POST /api/rankings/mgr-psych", m: "POST", p: "/api/rankings/manager-psychology", b: { leagueId: LEAGUE_IDS[0], sleeperUsername: USERNAME }, n: 10 },
     { name: "[AI] POST /api/roster/analyze", m: "POST", p: "/api/roster/analyze", b: { leagueId: LEAGUE_IDS[0] }, n: 10 },
-    { name: "[AI] POST /api/instant/trade", m: "POST", p: "/api/instant/trade", b: { give: ["CeeDee Lamb"], get: ["Ja'Marr Chase", "2026 2nd"], isDynasty: true, scoring: "ppr", leagueSize: 12 }, n: 10 },
-    { name: "[AI] POST /api/redraft-trade", m: "POST", p: "/api/redraft-trade", b: { give: ["Tyreek Hill"], get: ["Amon-Ra St. Brown"], leagueSize: 12, scoring: "ppr" }, n: 10 },
   ]
 
   const apiResults: TestResult[] = []

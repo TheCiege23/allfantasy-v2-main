@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { DraftPickTradeGradeLine } from './DraftPickTradeGradeLine'
 import {
   ArrowLeftRight,
   ArrowDown,
@@ -101,7 +102,7 @@ function PickSummaryChip({
       : 'border-violet-400/30 bg-violet-500/[0.09] shadow-[0_0_24px_rgba(139,92,246,0.12)]'
   return (
     <div className={`rounded-2xl border px-4 py-3 ${ring}`}>
-      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/45">{label}</p>
+      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/45">{label}</p>
       <p className="mt-1 font-mono text-xl font-bold tracking-tight text-white">{value}</p>
     </div>
   )
@@ -457,7 +458,7 @@ export function DraftPickTradePanelRoot(props: DraftPickTradePanelRootProps) {
                             : 'border-cyan-400/30 bg-cyan-500/10 text-cyan-100'
                         }`}
                       >
-                        <span className="text-[10px] font-bold uppercase tracking-[0.18em] opacity-80">
+                        <span className="text-[11px] font-bold uppercase tracking-[0.18em] opacity-80">
                           On-clock rule
                         </span>
                         <span>
@@ -499,7 +500,7 @@ export function DraftPickTradePanelRoot(props: DraftPickTradePanelRootProps) {
                           </select>
                         </div>
                         <div className="rounded-2xl border border-white/[0.06] bg-black/30 px-4 py-3">
-                          <p className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Preview</p>
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-white/40">Preview</p>
                           <p className="mt-1 font-mono text-2xl font-bold text-emerald-100/95">{giveChip}</p>
                         </div>
                       </div>
@@ -516,7 +517,7 @@ export function DraftPickTradePanelRoot(props: DraftPickTradePanelRootProps) {
                         >
                           <ArrowLeftRight className="h-7 w-7" />
                         </div>
-                        <p className="hidden text-center text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35 xl:block">
+                        <p className="hidden text-center text-[11px] font-semibold uppercase tracking-[0.16em] text-white/35 xl:block">
                           Exchange
                         </p>
                       </div>
@@ -638,7 +639,7 @@ export function DraftPickTradePanelRoot(props: DraftPickTradePanelRootProps) {
                           </select>
                         </div>
                         <div className="rounded-2xl border border-white/[0.06] bg-black/30 px-4 py-3">
-                          <p className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Preview</p>
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-white/40">Preview</p>
                           <p className="mt-1 font-mono text-2xl font-bold text-violet-100/95">{receiveChip}</p>
                         </div>
                       </div>
@@ -707,7 +708,7 @@ export function DraftPickTradePanelRoot(props: DraftPickTradePanelRootProps) {
                         <div className="flex flex-wrap items-center gap-2">
                           <Sparkles className="h-5 w-5 text-violet-300" />
                           <h3 className="text-base font-bold text-white">AI Trade Suggestor</h3>
-                          <span className="rounded-full border border-white/15 bg-black/35 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white/50">
+                          <span className="rounded-full border border-white/15 bg-black/35 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-white/50">
                             Live inventory
                           </span>
                         </div>
@@ -821,7 +822,7 @@ export function DraftPickTradePanelRoot(props: DraftPickTradePanelRootProps) {
                                       {formatPickLabel(s.receiveRound, s.receiveSlot)}
                                     </span>
                                     {s.aiEnhanced ? (
-                                      <span className="rounded-md border border-violet-400/35 bg-violet-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-100/95">
+                                      <span className="rounded-md border border-violet-400/35 bg-violet-500/15 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-violet-100/95">
                                         AI
                                       </span>
                                     ) : null}
@@ -884,23 +885,36 @@ export function DraftPickTradePanelRoot(props: DraftPickTradePanelRootProps) {
                               <span>Verdict detail</span>
                               <ChevronDown className={`h-4 w-4 shrink-0 transition ${analyzerDetailOpen ? 'rotate-180' : ''}`} />
                             </button>
+                            {/*
+                              🛑 THE GRADE LEADS (2026-09-28). When the league's chart graded this swap
+                              (rookie drafts), the accept/reject/counter chip, the fairness chip and the
+                              good/risky-move chip are NOT shown: each is a private scale that could
+                              disagree with the letter. The draft-position delta stays — it is a fact.
+                            */}
+                            <DraftPickTradeGradeLine grade={builderAnalysis.tradeGrade} partnerName={selectedPartner?.displayName ?? null} />
                             <div className="flex flex-wrap items-center gap-2">
-                              <span
-                                className={`rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-wide ${verdictChipClass(builderAnalysis.verdict)}`}
-                              >
-                                {builderAnalysis.verdict}
-                              </span>
+                              {builderAnalysis.tradeGrade?.graded ? null : (
+                                <span
+                                  className={`rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-wide ${verdictChipClass(builderAnalysis.verdict)}`}
+                                >
+                                  {builderAnalysis.verdict}
+                                </span>
+                              )}
                               {builderAnalysis.executionMode ? (
                                 <span className="text-[11px] text-white/45">{builderAnalysis.executionMode}</span>
                               ) : null}
                               {builderAnalysis.structuredAnalysis ? (
                                 <>
-                                  <span className="rounded-full border border-white/14 bg-white/[0.06] px-3 py-1 text-[11px] font-semibold text-white/80">
-                                    {structuredFairnessLabel(builderAnalysis.structuredAnalysis.fairnessLabel)}
-                                  </span>
-                                  <span className="rounded-full border border-cyan-400/25 bg-cyan-500/12 px-3 py-1 text-[11px] font-semibold text-cyan-50/95">
-                                    {structuredGuidanceTone(builderAnalysis.structuredAnalysis.guidanceTone)}
-                                  </span>
+                                  {builderAnalysis.tradeGrade?.graded ? null : (
+                                    <>
+                                      <span className="rounded-full border border-white/14 bg-white/[0.06] px-3 py-1 text-[11px] font-semibold text-white/80">
+                                        {structuredFairnessLabel(builderAnalysis.structuredAnalysis.fairnessLabel)}
+                                      </span>
+                                      <span className="rounded-full border border-cyan-400/25 bg-cyan-500/12 px-3 py-1 text-[11px] font-semibold text-cyan-50/95">
+                                        {structuredGuidanceTone(builderAnalysis.structuredAnalysis.guidanceTone)}
+                                      </span>
+                                    </>
+                                  )}
                                   <span className="text-[11px] text-white/45">
                                     Δ overall{' '}
                                     {builderAnalysis.structuredAnalysis.overallDelta != null
@@ -930,7 +944,7 @@ export function DraftPickTradePanelRoot(props: DraftPickTradePanelRootProps) {
                                 ) : null}
                                 {builderAnalysis.counterReasons.length > 0 ? (
                                   <div className="mt-4 rounded-xl border border-amber-400/25 bg-amber-500/[0.08] px-4 py-3">
-                                    <p className="text-[10px] font-bold uppercase tracking-wide text-amber-200/95">Counter angles</p>
+                                    <p className="text-[11px] font-bold uppercase tracking-wide text-amber-200/95">Counter angles</p>
                                     <ul className="mt-2 space-y-1 text-[13px] text-amber-100/88">
                                       {builderAnalysis.counterReasons.map((r, i) => (
                                         <li key={i}>{r}</li>
@@ -1154,7 +1168,7 @@ function PickFlowChip(props: { label: string; value: string; variant: 'give' | '
       : 'border-violet-400/35 bg-violet-500/[0.1]'
   return (
     <div className={`rounded-2xl border px-4 py-3 ${border}`}>
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">{props.label}</p>
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-white/45">{props.label}</p>
       <p className="mt-1 font-mono text-lg font-bold text-white">{props.value}</p>
     </div>
   )

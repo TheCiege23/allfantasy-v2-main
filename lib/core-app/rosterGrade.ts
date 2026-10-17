@@ -3,6 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { loadLatestPlayerValueSnapshots } from '@/lib/player-values/latestPlayerValueSnapshots'
 import { detectQbFormat } from './slotEligibility'
+import { sleeperReadableRosters } from './rosterIdSpace'
 import { BASELINE_SCORING, buildValueLedger } from '@/lib/trade-intel/valueLedger'
 
 /**
@@ -33,6 +34,8 @@ export type PositionStrength = {
   rank: number
   outOf: number
   playerCount: number
+  /** The league's median total at this position, so the rank has a distance attached. */
+  median?: number
 }
 
 export type RosterGrade = {
@@ -46,6 +49,12 @@ export type RosterGrade = {
   /** Strongest and weakest positions by league rank. Null when unrankable. */
   strongest: PositionStrength | null
   weakest: PositionStrength | null
+  /**
+   * EVERY rankable position, strongest first by percentile. The two above are its ends; the
+   * middle was computed and thrown away, which is exactly the view a manager wants when deciding
+   * where to trade from and where to trade for.
+   */
+  positions?: PositionStrength[]
   /** How many of YOUR players carried a price, of how many held. */
   pricedPlayers: number
   totalPlayers: number
@@ -96,12 +105,18 @@ export async function getRosterGrade(args: {
   const { leagueId, myPlatformUserIds, isDynasty, starters } = args
   if (myPlatformUserIds.length === 0) return null
 
-  const rosters = await prisma.roster
-    .findMany({
-      where: { leagueId },
-      select: { platformUserId: true, playerData: true },
-    })
-    .catch(() => [])
+  // In Sleeper ids: ESPN translated, any other foreign platform emptied — a foreign id priced as a
+  // Sleeper id grades a stranger (ESPN 12483 is Stafford; Sleeper 12483 is Jack Bech).
+  const rosters = await sleeperReadableRosters(
+    await prisma.roster
+      .findMany({
+        where: { leagueId },
+        select: { platformUserId: true, playerData: true, league: { select: { platform: true, sport: true } } },
+      })
+      .catch(() => []),
+    (r) => r.league?.platform,
+    (r) => r.league?.sport,
+  )
 
   // Two teams is not a league to be ranked within.
   if (rosters.length < 3) return null
@@ -242,6 +257,7 @@ export async function getRosterGrade(args: {
       value: Math.round(list[idx].total),
       rank: idx + 1,
       outOf: list.length,
+      median: Math.round(median(list.map((t) => t.total))),
       playerCount: mine.filter((id) => (priced.get(id)?.position ?? '').toUpperCase() === position)
         .length,
     })
@@ -257,6 +273,7 @@ export async function getRosterGrade(args: {
     median: Math.round(median(totals.map((t) => t.total))),
     strongest: strengths[0] ?? null,
     weakest: strengths.length > 1 ? strengths[strengths.length - 1] : null,
+    positions: strengths,
     pricedPlayers: mine.filter((id) => priced.has(id)).length,
     totalPlayers: mine.length,
     basis: { format, qbFormat, capturedAt: newest?.toISOString() ?? null, leagueScored },

@@ -81,7 +81,7 @@ export function RecommendedLeagueCard({
       </div>
 
       {explanation.caveat && (
-        <p className="mt-2 text-[10px] italic" style={{ color: "var(--muted2)" }}>
+        <p className="mt-2 text-[11px] italic" style={{ color: "var(--muted2)" }}>
           {explanation.caveat}
         </p>
       )}

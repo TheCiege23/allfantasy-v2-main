@@ -46,7 +46,7 @@ const NOTIF_CONFIG: Record<SurvivorNotificationType, {
   vote_received: { icon: MessageCircle, color: 'text-violet-400', bgColor: 'bg-violet-500/10', lockScreenTitle: 'Action Confirmed' },
   idol_received: { icon: Shield, color: 'text-emerald-400', bgColor: 'bg-emerald-500/10', lockScreenTitle: 'You Received Something' },
   idol_expiring: { icon: AlertTriangle, color: 'text-orange-400', bgColor: 'bg-orange-500/10', lockScreenTitle: 'Power Expiring Soon' },
-  tribal_tonight: { icon: Flame, color: 'text-red-400', bgColor: 'bg-red-500/10', lockScreenTitle: 'Tribal Council Tonight' },
+  tribal_tonight: { icon: Flame, color: 'text-red-400', bgColor: 'bg-red-500/10', lockScreenTitle: 'Elimination Council Tonight' },
   merge_announced: { icon: Crown, color: 'text-amber-400', bgColor: 'bg-amber-500/10', lockScreenTitle: 'Major Announcement' },
   exile_challenge: { icon: Skull, color: 'text-orange-400', bgColor: 'bg-orange-500/10', lockScreenTitle: 'Exile Challenge Live' },
   token_earned: { icon: Coins, color: 'text-emerald-400', bgColor: 'bg-emerald-500/10', lockScreenTitle: 'Token Update' },

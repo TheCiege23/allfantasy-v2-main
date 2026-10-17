@@ -141,7 +141,7 @@ export function DraftBoardGrid({
                   aria-hidden
                   style={{
                     width: 22, height: 22, borderRadius: '50%', flex: '0 0 22px',
-                    display: 'grid', placeItems: 'center', fontSize: 10, fontWeight: 800,
+                    display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 800,
                     background: 'var(--chip, rgba(255,255,255,.08))', color: 'var(--ink-3, #7e8894)',
                   }}
                 >
@@ -172,7 +172,7 @@ export function DraftBoardGrid({
             {/* Direction is stated, not implied by cell order — a reader should not have to
                 infer that round 3 ran backwards. */}
             <span aria-label={row.reversed ? 'runs right to left' : 'runs left to right'}
-                  style={{ fontSize: 10, color: 'var(--ink-3, #7e8894)' }}>
+                  style={{ fontSize: 11, color: 'var(--ink-3, #7e8894)' }}>
               {row.reversed ? '←' : '→'}
             </span>
           </div>
@@ -200,7 +200,7 @@ export function DraftBoardGrid({
               >
                 <div
                   style={{
-                    fontSize: 10, fontWeight: 700, letterSpacing: '.06em',
+                    fontSize: 11, fontWeight: 700, letterSpacing: '.06em',
                     color: 'var(--ink-3, #7e8894)', fontVariantNumeric: 'tabular-nums',
                   }}
                 >
@@ -211,7 +211,7 @@ export function DraftBoardGrid({
                     <div style={{ fontSize: 12.5, fontWeight: 650, color: 'var(--ink, #edeff2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {pick.playerName}
                     </div>
-                    <div style={{ fontSize: 10, color: 'var(--ink-3, #7e8894)' }}>
+                    <div style={{ fontSize: 11, color: 'var(--ink-3, #7e8894)' }}>
                       {[pick.position, pick.team].filter(Boolean).join(' · ')}
                     </div>
                   </>

@@ -10,6 +10,9 @@ const h = vi.hoisted(() => ({
   channelFindFirst: vi.fn(),
   messageFindUnique: vi.fn(),
   linkCreate: vi.fn(),
+  linkFindFirst: vi.fn(),
+  transaction: vi.fn(),
+  executeRaw: vi.fn(),
   fetch: vi.fn(),
 }))
 
@@ -17,7 +20,8 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     discordLeagueChannel: { findFirst: h.channelFindFirst },
     leagueChatMessage: { findUnique: h.messageFindUnique },
-    discordMessageLink: { create: h.linkCreate },
+    discordMessageLink: { create: h.linkCreate, findFirst:h.linkFindFirst },
+    $transaction:h.transaction,
   },
 }))
 
@@ -53,6 +57,9 @@ beforeEach(() => {
   h.channelFindFirst.mockResolvedValue({ guildId: 'G', channelId: CHANNEL, league: { name: 'Iron Horse' } })
   h.messageFindUnique.mockResolvedValue(publicMessage)
   h.linkCreate.mockResolvedValue({})
+  h.linkFindFirst.mockResolvedValue(null)
+  h.executeRaw.mockResolvedValue(1)
+  h.transaction.mockImplementation(async callback => callback({ $executeRaw:h.executeRaw, discordMessageLink:{create:h.linkCreate,findFirst:h.linkFindFirst} }))
 })
 
 afterEach(() => {
@@ -64,6 +71,7 @@ describe('what may leave AllFantasy', () => {
   it('copies a public main-chat message and records the link', async () => {
     const result = await syncOutboundLeagueChat(input)
     expect(result).toEqual({ synced: true, discordMessageId: 'discord-msg-1' })
+    expect(h.executeRaw).toHaveBeenCalledTimes(1)
     expect(h.fetch).toHaveBeenCalledTimes(1)
     const [url, init] = h.fetch.mock.calls[0]
     expect(String(url)).toContain(`/channels/${CHANNEL}/messages`)
@@ -116,6 +124,25 @@ describe('what may leave AllFantasy', () => {
 })
 
 describe('one bounded retry', () => {
+  it('does not post a message whose delivery is already recorded', async () => {
+    h.linkFindFirst.mockResolvedValue({discordMessageId:'already-delivered'})
+    expect(await syncOutboundLeagueChat(input)).toEqual({synced:true,discordMessageId:'already-delivered'})
+    expect(h.fetch).not.toHaveBeenCalled()
+    expect(h.linkCreate).not.toHaveBeenCalled()
+  })
+
+  it('sends a stable nonce and prevents unintended Discord pings', async () => {
+    h.fetch.mockImplementation(async () => json({id:'discord-msg-1'}))
+    await syncOutboundLeagueChat(input)
+    const first = JSON.parse(h.fetch.mock.calls[0][1].body)
+    await syncOutboundLeagueChat(input)
+    const second = JSON.parse(h.fetch.mock.calls[1][1].body)
+    expect(first.nonce).toBe(second.nonce)
+    expect(first.nonce.length).toBeLessThanOrEqual(25)
+    expect(first.enforce_nonce).toBe(true)
+    expect(first.allowed_mentions).toEqual({parse:[]})
+  })
+
   it('retries once after a short rate limit and then succeeds', async () => {
     h.fetch
       .mockResolvedValueOnce(json({ message: 'You are being rate limited.', retry_after: 0.01 }, 429))

@@ -84,7 +84,7 @@ export default function LeagueActivityFeed({
         </div>
         <button
           type="button"
-          className="rounded-lg border border-white/10 px-2 py-1 text-[10px] text-white/70 hover:bg-white/5"
+          className="rounded-lg border border-white/10 px-2 py-1 text-[11px] text-white/70 hover:bg-white/5"
           onClick={() => void load()}
         >
           Refresh
@@ -101,13 +101,13 @@ export default function LeagueActivityFeed({
       <ul className="mt-2 max-h-48 space-y-2 overflow-y-auto pr-1">
         {rows.map((r) => (
           <li key={r.id} className="rounded-lg border border-white/5 bg-white/[0.03] px-2 py-1.5 text-xs text-white/80">
-            <span className="text-[10px] font-medium uppercase tracking-wide text-white/40">
+            <span className="text-[11px] font-medium uppercase tracking-wide text-white/40">
               {r.source ? `${r.source} · ` : ''}
               {r.type}
             </span>
             {r.title ? <p className="mt-0.5 font-medium text-white/90">{r.title}</p> : null}
             <p className="mt-0.5 text-white/85">{r.message}</p>
-            <p className="mt-0.5 text-[10px] text-white/35">{new Date(r.createdAt).toLocaleString()}</p>
+            <p className="mt-0.5 text-[11px] text-white/35">{new Date(r.createdAt).toLocaleString()}</p>
           </li>
         ))}
       </ul>

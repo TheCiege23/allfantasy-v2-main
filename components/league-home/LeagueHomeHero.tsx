@@ -63,7 +63,7 @@ function StatCard({
 }) {
   return (
     <div className="rounded-2xl border border-white/[0.06] bg-gradient-to-b from-white/[0.04] to-white/[0.015] p-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-      <p className={`text-[10px] font-bold uppercase tracking-[0.16em] ${accent.text}`}>{label}</p>
+      <p className={`text-[11px] font-bold uppercase tracking-[0.16em] ${accent.text}`}>{label}</p>
       <div className="mt-1 text-base font-bold text-white/95 sm:text-lg">{value}</div>
     </div>
   )
@@ -142,7 +142,7 @@ export function LeagueHomeHero({
         {/* Breadcrumb / status chip */}
         <div className="flex items-center gap-2">
           <span
-            className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-black/40 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-white/80 backdrop-blur-md"
+            className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-black/40 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.14em] text-white/80 backdrop-blur-md"
             style={{ boxShadow: `0 0 16px -6px ${accent.hex}` }}
           >
             <span

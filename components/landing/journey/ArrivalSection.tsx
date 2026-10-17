@@ -67,7 +67,7 @@ export function ArrivalSection({
       </div>
 
       <div
-        className="relative z-10 mb-5 inline-flex max-w-[min(94vw,36rem)] items-center justify-center gap-2 rounded-2xl border px-3 py-1.5 text-center text-[10px] font-semibold tracking-[0.06em] sm:px-4 sm:py-2 sm:text-xs"
+        className="relative z-10 mb-5 inline-flex max-w-[min(94vw,36rem)] items-center justify-center gap-2 rounded-2xl border px-3 py-1.5 text-center text-[11px] font-semibold tracking-[0.06em] sm:px-4 sm:py-2 sm:text-xs"
         style={{
           background: 'color-mix(in srgb, var(--accent-amber) 10%, transparent)',
           borderColor: 'color-mix(in srgb, var(--accent-amber) 28%, transparent)',

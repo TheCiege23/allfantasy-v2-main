@@ -51,7 +51,7 @@ function ChimmyVoicePicker({
         style={{ marginBottom: 4 }}
       >
         {selectedVoice.name}
-        <span className={`ml-1 text-[9px] text-white/30 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden>
+        <span className={`ml-1 text-[11px] text-white/30 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden>
           ▾
         </span>
       </button>
@@ -61,7 +61,7 @@ function ChimmyVoicePicker({
           role="listbox"
           aria-label="Chimmy voice"
         >
-          <p className="sticky top-0 z-[1] border-b border-white/[0.06] bg-[#0f1521] px-3 py-2 text-[10px] uppercase tracking-wider text-white/30">
+          <p className="sticky top-0 z-[1] border-b border-white/[0.06] bg-[#0f1521] px-3 py-2 text-[11px] uppercase tracking-wider text-white/30">
             Chimmy Voice
           </p>
           {CHIMMY_VOICES.map((voice) => (
@@ -82,9 +82,9 @@ function ChimmyVoicePicker({
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <span className="text-[12px] font-semibold text-white">{voice.name}</span>
-                  <span className="text-[9px] capitalize text-white/30">{voice.gender}</span>
+                  <span className="text-[11px] capitalize text-white/30">{voice.gender}</span>
                 </div>
-                <p className="mt-0.5 text-[10px] text-white/40">{voice.description}</p>
+                <p className="mt-0.5 text-[11px] text-white/40">{voice.description}</p>
               </div>
               {voice.id === selectedVoiceId ? (
                 <span className="mt-0.5 text-[12px] text-cyan-400" aria-hidden>
@@ -94,7 +94,7 @@ function ChimmyVoicePicker({
             </button>
           ))}
           <div className="border-t border-white/[0.06] px-3 py-2">
-            <p className="text-[9px] text-white/20">Powered by ElevenLabs</p>
+            <p className="text-[11px] text-white/20">Powered by ElevenLabs</p>
           </div>
         </div>
       )}
@@ -129,7 +129,7 @@ function ChimmyLeagueContextBar({
 
   return (
     <div ref={wrapRef} className="relative">
-      <p className="mb-1 text-[8px] text-white/30">Asking about:</p>
+      <p className="mb-1 text-[11px] text-white/30">Asking about:</p>
       <button
         type="button"
         onClick={() => {
@@ -140,7 +140,7 @@ function ChimmyLeagueContextBar({
         {active ? <LeagueAvatar league={active} size={22} /> : null}
         <span className="min-w-0 flex-1 truncate text-left">{active?.name ?? 'All leagues'}</span>
         {!active ? (
-          <span className="rounded-full border border-cyan-400/30 bg-cyan-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-cyan-200">
+          <span className="rounded-full border border-cyan-400/30 bg-cyan-500/15 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-cyan-200">
             Global
           </span>
         ) : null}
@@ -632,7 +632,7 @@ export function LeftChatPanel({
           <span className="relative flex items-center">
             <MessageCircle className="h-3.5 w-3.5 shrink-0" strokeWidth={2.4} aria-hidden />
             {dmUnread > 0 && (
-              <span className="absolute -top-2 -right-2 min-w-[18px] animate-bounce rounded-full bg-gradient-to-r from-pink-500 via-red-500 to-yellow-500 px-1.5 py-0.5 text-[10px] font-bold text-white shadow ring-2 ring-cyan-400">{dmUnread}</span>
+              <span className="absolute -top-2 -right-2 min-w-[18px] animate-bounce rounded-full bg-gradient-to-r from-pink-500 via-red-500 to-yellow-500 px-1.5 py-0.5 text-[11px] font-bold text-white shadow ring-2 ring-cyan-400">{dmUnread}</span>
             )}
           </span>
           DMs
@@ -644,7 +644,7 @@ export function LeftChatPanel({
             <label className="flex min-h-8 items-center gap-2 rounded-full border border-cyan-300/15 bg-black/20 px-2.5 text-[11px] font-bold text-white/70 cursor-pointer">
               <input type="checkbox" checked={dmSilent} onChange={e => setDmSilent(e.target.checked)} /> Silent Mode
             </label>
-            <span className="text-cyan-100/40 text-[10px] font-black uppercase tracking-[0.14em]">Mute</span>
+            <span className="text-cyan-100/40 text-[11px] font-black uppercase tracking-[0.14em]">Mute</span>
             {dmThreads.map(t => (
               <button
                 key={t.id}
@@ -668,11 +668,20 @@ export function LeftChatPanel({
                   <p className="text-[11px] text-white/40">Default — full house, alliances use DMs</p>
                 ) : null}
               </div>
+              {/*
+                🛑 DISABLED, BECAUSE IT DOES NOTHING. This had no `onClick` at all while looking and
+                behaving like a live control: it took hover styling, took focus, and answered a click
+                with silence. Its `aria-label` said "Mute league chat" while only the hover `title`
+                said "coming soon", so a screen-reader user was told it worked and a mouse user was
+                not. The accessible name now carries the same fact the tooltip does.
+              */}
               <button
                 type="button"
-                title="Mute (coming soon)"
-                className="rounded-lg p-1.5 text-white/35 transition hover:bg-white/[0.06] hover:text-white/55"
-                aria-label="Mute league chat"
+                disabled
+                data-hide-in-ios-app=""
+                title="Mute — coming soon"
+                className="rounded-lg p-1.5 text-white/35 transition hover:bg-white/[0.06] hover:text-white/55 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-white/35"
+                aria-label="Mute league chat — coming soon"
               >
                 <VolumeX className="h-4 w-4" />
               </button>
@@ -704,7 +713,7 @@ export function LeftChatPanel({
               <span className="text-base" aria-hidden>🤖</span>
               <div className="min-w-0">
                 <p className="text-[12px] font-bold text-violet-300/90">Chimmy</p>
-                <p className="text-[10px] leading-tight text-white/40">Calm, evidence-based fantasy assistant</p>
+                <p className="text-[11px] leading-tight text-white/40">Calm, evidence-based fantasy assistant</p>
               </div>
             </div>
             <div className="flex shrink-0 items-center justify-between gap-2 pb-1">
@@ -782,7 +791,7 @@ export function LeftChatPanel({
                             </div>
                             {thread.unreadCount > 0 ? (
                               <span
-                                className="absolute -right-0.5 -top-0.5 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white"
+                                className="absolute -right-0.5 -top-0.5 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-red-500 px-1 text-[11px] font-bold text-white"
                                 aria-label={`${thread.unreadCount} unread`}
                               >
                                 {thread.unreadCount}
@@ -1011,7 +1020,7 @@ export function LeftChatPanel({
                             </div>
                             {thread.unreadCount > 0 ? (
                               <span
-                                className="absolute -right-0.5 -top-0.5 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white"
+                                className="absolute -right-0.5 -top-0.5 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-red-500 px-1 text-[11px] font-bold text-white"
                                 aria-label={`${thread.unreadCount} unread`}
                               >
                                 {thread.unreadCount}

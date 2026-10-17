@@ -42,7 +42,7 @@ export default function SweetenerButtons({
             {onApplySweetener && (
               <button
                 onClick={() => onApplySweetener(sw)}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-500/15 border border-purple-400/25 text-[10px] font-medium text-purple-300 hover:bg-purple-500/25 transition-colors touch-manipulation"
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-500/15 border border-purple-400/25 text-[11px] font-medium text-purple-300 hover:bg-purple-500/25 transition-colors touch-manipulation"
               >
                 <Plus className="w-3 h-3" />
                 Add

@@ -15,7 +15,7 @@ export default function LegacyShareIntro({
       <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
         <div className="flex items-center gap-2">
           <h3 className="text-lg sm:text-xl font-bold text-cyan-400">Share Your Legacy</h3>
-          <span className="rounded-full border px-2 py-0.5 text-[10px]" style={{ borderColor: 'var(--border)', color: 'var(--muted)' }}>
+          <span className="rounded-full border px-2 py-0.5 text-[11px]" style={{ borderColor: 'var(--border)', color: 'var(--muted)' }}>
             {secs > 0 ? `Cooldown ${secs}s` : 'Ready'}
           </span>
         </div>

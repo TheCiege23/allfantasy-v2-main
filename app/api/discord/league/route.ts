@@ -188,10 +188,21 @@ export async function PATCH(req: Request) {
     }
   }
 
-  const data: Record<string, boolean> = {}
-  if (typeof body?.syncEnabled === 'boolean') data.syncEnabled = body.syncEnabled
+  const data: { syncEnabled?: boolean; syncOutbound?: boolean; syncInbound?: boolean; lastSyncedMessageId?: string | null } = {}
+  if (typeof body?.syncEnabled === 'boolean') {
+    data.syncEnabled = body.syncEnabled
+    if (!body.syncEnabled) data.lastSyncedMessageId = null
+  }
   if (typeof body?.syncOutbound === 'boolean') data.syncOutbound = body.syncOutbound
-  if (typeof body?.syncInbound === 'boolean') data.syncInbound = body.syncInbound
+  if (typeof body?.syncInbound === 'boolean') {
+    if (body.syncInbound && surface !== DEFAULT_SURFACE) {
+      return NextResponse.json({ error: 'Discord inbound is available for league chat only.' }, { status: 400 })
+    }
+    data.syncInbound = body.syncInbound
+    // A later opt-in begins at Discord's current cursor. Messages from a period
+    // when the switch was off must never be imported retroactively.
+    if (!body.syncInbound) data.lastSyncedMessageId = null
+  }
   const hasToggles = Object.keys(data).length > 0
 
   if (!hasToggles && !hasInvite) {

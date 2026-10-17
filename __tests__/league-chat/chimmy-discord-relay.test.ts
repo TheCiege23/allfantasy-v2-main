@@ -10,6 +10,9 @@ const h = vi.hoisted(() => ({
   channelFindFirst: vi.fn(),
   messageFindUnique: vi.fn(),
   linkCreate: vi.fn(),
+  linkFindFirst: vi.fn(),
+  executeRaw: vi.fn(),
+  transaction: vi.fn(),
   fetch: vi.fn(),
 }))
 
@@ -17,7 +20,8 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     discordLeagueChannel: { findFirst: h.channelFindFirst },
     leagueChatMessage: { findUnique: h.messageFindUnique },
-    discordMessageLink: { create: h.linkCreate },
+    discordMessageLink: { create: h.linkCreate, findFirst: h.linkFindFirst },
+    $transaction: h.transaction,
   },
 }))
 
@@ -56,6 +60,9 @@ beforeEach(() => {
   h.fetch.mockResolvedValue(json({ id: 'discord-msg-1' }))
   h.channelFindFirst.mockResolvedValue({ guildId: 'G', channelId: '1200000000000000002', league: { name: 'Iron Horse' } })
   h.linkCreate.mockResolvedValue({})
+  h.linkFindFirst.mockResolvedValue(null)
+  h.transaction.mockImplementation(async (callback: (tx: unknown) => Promise<unknown>) =>
+    callback({ $executeRaw: h.executeRaw, discordMessageLink: { create: h.linkCreate, findFirst: h.linkFindFirst } }))
 })
 
 afterEach(() => {

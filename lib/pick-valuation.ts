@@ -29,8 +29,6 @@ const TIER_UPGRADE_BONUS: Record<number, number> = {
   3: 50
 }
 
-const MAX_TIME_PENALTY_ON_UPGRADE = 0.08
-
 function clamp(x: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, x))
 }
@@ -360,101 +358,6 @@ export function buildWhyTooltipPayload(context: TooltipContext): WhyTooltipPaylo
       tierOverrideApplied: context.tierOverrideApplied,
       lowStakesTrade: context.isLowStakes,
       futurePickDiscountApplied: context.futureDiscountUsed
-    }
-  }
-}
-
-export interface TradeAnalysisResult {
-  score: number
-  grade: string
-  verdict: string
-  confidence: number
-  confidenceLabel: string
-  whyTooltip: WhyTooltipPayload
-  rawValues: {
-    outgoing: number
-    incoming: number
-  }
-}
-
-interface AnalyzeTradeMeta {
-  missingDataCount?: number
-}
-
-export function analyzeTrade(
-  sideA_out: TradeAsset[], 
-  sideA_in: TradeAsset[], 
-  currentYear: number, 
-  meta: AnalyzeTradeMeta = {}
-): TradeAnalysisResult {
-  let A_out_val = sideTotalValue(sideA_out, currentYear)
-  let A_in_val = sideTotalValue(sideA_in, currentYear)
-
-  const override = applyTierJumpOverride(sideA_out, sideA_in, currentYear)
-  if (override.timePenaltyCapApplied) {
-    A_in_val = recomputeIncomingPicksWithTimeCap(sideA_in, currentYear, MAX_TIME_PENALTY_ON_UPGRADE)
-  }
-  A_in_val += override.bonus
-
-  const rawScore = tradeScore(A_in_val, A_out_val)
-
-  const magnitude = tradeMagnitude(A_out_val, A_in_val)
-  const isLowStakes = lowStakesFlag(magnitude)
-
-  const missingDataCount = meta.missingDataCount ?? 0
-  const nearEven = Math.abs(rawScore - 50) < 8
-
-  const conf = confidenceScore({
-    magnitude,
-    missingDataCount,
-    nearEven
-  })
-
-  const finalScore = compressScore(rawScore, conf)
-
-  const timing = timingLabel(sideA_out, sideA_in, currentYear)
-  const process = processLabel(finalScore, override.bonus > 0, isLowStakes)
-
-  const grade = adjustedLetterGrade(finalScore, conf, isLowStakes)
-
-  const incomingPicks = sideA_in.filter(a => a.type === 'pick' && a.year)
-  const outgoingPicks = sideA_out.filter(a => a.type === 'pick' && a.year)
-  
-  let tierDelta = 0
-  if (outgoingPicks.length > 0 && incomingPicks.length > 0) {
-    const bestOut = Math.min(...outgoingPicks.map(a => pickTier(a.round!)))
-    const bestIn = Math.min(...incomingPicks.map(a => pickTier(a.round!)))
-    tierDelta = bestOut - bestIn
-  }
-
-  const avgYearsOut = incomingPicks.length > 0 
-    ? Math.round(incomingPicks.reduce((sum, a) => sum + (a.year! - currentYear), 0) / incomingPicks.length)
-    : 0
-
-  const why = buildWhyTooltipPayload({
-    headline: override.bonus > 0
-      ? "Tier upgrade outweighs the time delay."
-      : "Value difference driven by aging curve + market values.",
-    outgoingValue: A_out_val,
-    incomingValue: A_in_val,
-    score: finalScore,
-    tierOverrideApplied: override.bonus > 0,
-    isLowStakes,
-    futureDiscountUsed: true,
-    tierDelta: tierDelta > 0 ? tierDelta : undefined,
-    yearsOut: avgYearsOut > 0 ? avgYearsOut : undefined
-  })
-
-  return {
-    score: Math.round(finalScore),
-    grade,
-    verdict: `${process} / ${timing}`,
-    confidence: conf,
-    confidenceLabel: confidenceLabel(conf, isLowStakes),
-    whyTooltip: why,
-    rawValues: {
-      outgoing: A_out_val,
-      incoming: A_in_val
     }
   }
 }

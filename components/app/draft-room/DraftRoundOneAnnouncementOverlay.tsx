@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { Sparkles, X } from 'lucide-react'
 import type { RoundOneAnnouncementQueueItem } from '@/lib/draft-room/resolvePickAnnouncementAssets'
+import { FallbackImg } from '@/components/core-app/FallbackImg'
 
 export type RoundOneAnnouncementItem = RoundOneAnnouncementQueueItem
 
@@ -95,7 +96,7 @@ export function DraftRoundOneAnnouncementOverlay({
     <div
       className={`fixed inset-0 z-[95] flex items-center justify-center bg-black/55 px-3 backdrop-blur-[2px] ${
         entered ? 'opacity-100' : 'opacity-0'
-      } transition-opacity duration-300 ease-out`}
+      } transition-opacity duration-300 ease-out motion-reduce:opacity-100 motion-reduce:transition-none`}
       role="dialog"
       aria-modal="true"
       aria-label="Round one pick announcement"
@@ -121,8 +122,16 @@ export function DraftRoundOneAnnouncementOverlay({
         <div className="relative flex flex-col gap-4 p-4 sm:flex-row sm:items-start">
           <div className="relative h-[96px] w-[96px] shrink-0 overflow-hidden rounded-xl border border-white/15 bg-black/40 shadow-inner sm:h-[110px] sm:w-[110px]">
             {headshotUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element -- arbitrary CDN URLs from live pool
-              <img src={headshotUrl} alt="" className="h-full w-full object-cover object-top" />
+              <FallbackImg
+                src={headshotUrl}
+                alt=""
+                className="h-full w-full object-cover object-top"
+                fallback={
+                  <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-white/10 to-black/40 text-2xl font-black text-white/35">
+                    {pick.playerName.slice(0, 1)}
+                  </div>
+                }
+              />
             ) : (
               <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-white/10 to-black/40 text-2xl font-black text-white/35">
                 {pick.playerName.slice(0, 1)}
@@ -130,11 +139,10 @@ export function DraftRoundOneAnnouncementOverlay({
             )}
             {teamLogoUrl ? (
               <div className="absolute bottom-1 right-1 h-8 w-8 overflow-hidden rounded-md border border-white/20 bg-black/60 p-0.5 shadow-lg">
-                {/* eslint-disable-next-line @next/next/no-img-element -- arbitrary CDN URLs */}
-                <img src={teamLogoUrl} alt="" className="h-full w-full object-contain" />
+                <FallbackImg src={teamLogoUrl} alt="" className="h-full w-full object-contain" fallback={null} />
               </div>
             ) : pick.team ? (
-              <div className="absolute bottom-1 right-1 rounded-md border border-white/15 bg-black/55 px-1.5 py-0.5 font-mono text-[9px] font-bold text-white/80">
+              <div className="absolute bottom-1 right-1 rounded-md border border-white/15 bg-black/55 px-1.5 py-0.5 font-mono text-[11px] font-bold text-white/80">
                 {pick.team}
               </div>
             ) : null}
@@ -144,13 +152,13 @@ export function DraftRoundOneAnnouncementOverlay({
             <div className="flex items-start justify-between gap-2">
               <div className="flex items-center gap-2">
                 <Sparkles className={`h-4 w-4 shrink-0 ${rs ? 'text-cyan-300' : 'text-violet-300'}`} />
-                <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/45">Round 1 selection</span>
+                <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/45">Round 1 selection</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <button
                   type="button"
                   onClick={onDismissFront}
-                  className="rounded-lg border border-cyan-300/30 bg-cyan-500/12 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-cyan-100 transition hover:bg-cyan-500/22"
+                  className="rounded-lg border border-cyan-300/30 bg-cyan-500/12 px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.1em] text-cyan-100 transition hover:bg-cyan-500/22"
                   aria-label="Skip announcement"
                   data-testid="draft-round-one-announcement-skip"
                 >
@@ -175,7 +183,7 @@ export function DraftRoundOneAnnouncementOverlay({
               {chips.slice(0, 4).map((chip) => (
                 <span
                   key={chip}
-                  className="rounded-full border border-white/15 bg-white/8 px-2 py-0.5 text-[10px] font-semibold text-white/80"
+                  className="rounded-full border border-white/15 bg-white/8 px-2 py-0.5 text-[11px] font-semibold text-white/80"
                 >
                   {chip}
                 </span>
@@ -194,7 +202,7 @@ export function DraftRoundOneAnnouncementOverlay({
         </div>
 
         {queue.length > 1 ? (
-          <div className="border-t border-white/[0.06] bg-black/35 px-4 py-2 text-center text-[10px] font-medium text-white/40">
+          <div className="border-t border-white/[0.06] bg-black/35 px-4 py-2 text-center text-[11px] font-medium text-white/40">
             +{queue.length - 1} more Round 1 pick{queue.length > 2 ? 's' : ''} queued
           </div>
         ) : null}

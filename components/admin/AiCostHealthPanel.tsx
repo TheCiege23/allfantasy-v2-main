@@ -83,11 +83,11 @@ function StatCell({
             : "text-white"
   return (
     <div className="flex flex-col gap-0.5">
-      <span className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+      <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
         {label}
       </span>
       <span className={`text-xl font-black ${valueColor}`}>{value}</span>
-      {sub ? <span className="text-[10px] text-zinc-600">{sub}</span> : null}
+      {sub ? <span className="text-[11px] text-zinc-600">{sub}</span> : null}
     </div>
   )
 }
@@ -113,7 +113,7 @@ function FeatureRow({ row }: { row: AiCostFeatureStat }) {
       <td className="py-2 pr-3 text-right text-zinc-500">
         {row.avgTokenCost != null ? Math.round(row.avgTokenCost) : "—"}
       </td>
-      <td className="py-2 pr-3 text-right text-emerald-600 text-[10px]">
+      <td className="py-2 pr-3 text-right text-emerald-600 text-[11px]">
         {row.estimatedTokensSaved > 0 ? `~${fmt(row.estimatedTokensSaved)}` : "—"}
       </td>
       <td className={`py-2 text-right font-bold ${feedbackColor(row.feedbackPositivePct)}`}>
@@ -147,7 +147,7 @@ export function AiCostHealthPanel({ health }: { health: AiCostHealth }) {
         </div>
         <div className="flex items-center gap-1.5">
           {/* Window links are handled by the parent page */}
-          <span className="rounded-full border border-white/10 px-2.5 py-0.5 text-[10px] font-bold text-zinc-400">
+          <span className="rounded-full border border-white/10 px-2.5 py-0.5 text-[11px] font-bold text-zinc-400">
             {windowLabel}
           </span>
         </div>
@@ -276,23 +276,23 @@ export function AiCostHealthPanel({ health }: { health: AiCostHealth }) {
         <SectionHeader title="Billing Enforcement Audit" />
         <div className="grid grid-cols-3 gap-3">
           <div className="flex flex-col gap-0.5">
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Should Charge</span>
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Should Charge</span>
             <span className={`text-xl font-black ${health.shouldChargeCount > 0 ? "text-amber-400" : "text-zinc-400"}`}>
               {fmt(health.shouldChargeCount)}
             </span>
-            <span className="text-[10px] text-zinc-600">policy says charge token</span>
+            <span className="text-[11px] text-zinc-600">policy says charge token</span>
           </div>
           <div className="flex flex-col gap-0.5">
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Actually Charged</span>
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Actually Charged</span>
             <span className="text-xl font-black text-emerald-400">{fmt(health.actualChargedCount)}</span>
-            <span className="text-[10px] text-zinc-600">token deducted in DB</span>
+            <span className="text-[11px] text-zinc-600">token deducted in DB</span>
           </div>
           <div className="flex flex-col gap-0.5">
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Gap</span>
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Gap</span>
             <span className={`text-xl font-black ${health.chargeGap > 0 ? "text-rose-400" : "text-emerald-400"}`}>
               {health.chargeGap > 0 ? `−${fmt(health.chargeGap)}` : "0"}
             </span>
-            <span className="text-[10px] text-zinc-600">
+            <span className="text-[11px] text-zinc-600">
               {health.chargeGap > 0 ? "enforcement gap — charges missed" : "clean"}
             </span>
           </div>
@@ -330,9 +330,9 @@ export function AiCostHealthPanel({ health }: { health: AiCostHealth }) {
             },
           ].map(({ label, count, sub, color }) => (
             <div key={label} className="flex flex-col gap-0.5">
-              <span className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">{label}</span>
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">{label}</span>
               <span className={`text-xl font-black ${color}`}>{fmt(count)}</span>
-              <span className="text-[10px] text-zinc-600">{sub}</span>
+              <span className="text-[11px] text-zinc-600">{sub}</span>
             </div>
           ))}
         </div>
@@ -346,7 +346,7 @@ export function AiCostHealthPanel({ health }: { health: AiCostHealth }) {
         ) : (
           <table className="w-full min-w-[600px]">
             <thead>
-              <tr className="text-[10px] font-bold uppercase tracking-wide text-zinc-600">
+              <tr className="text-[11px] font-bold uppercase tracking-wide text-zinc-600">
                 <th className="pb-2 pr-3 text-left">Feature</th>
                 <th className="pb-2 pr-3 text-right">Total</th>
                 <th className="pb-2 pr-3 text-right">Det%</th>
@@ -367,7 +367,7 @@ export function AiCostHealthPanel({ health }: { health: AiCostHealth }) {
       </Card>
 
       {/* Data staleness note */}
-      <p className="text-[10px] text-zinc-700">
+      <p className="text-[11px] text-zinc-700">
         Data from <code className="text-zinc-500">/ai_interaction_logs</code> ·{" "}
         Token savings are estimated using average cost per LLM call per feature ·{" "}
         Feedback % from <code className="text-zinc-500">/ai_feedback</code>

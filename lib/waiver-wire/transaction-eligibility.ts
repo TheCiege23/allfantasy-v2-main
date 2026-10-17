@@ -18,6 +18,7 @@ import { getEffectiveLeagueWaiverSettings } from './settings-service'
 import { normalizeWaiverTypeForEngine, parseWaiverEngineConfig } from './waiver-engine-config'
 import { assertWeeklyDropLimit } from './waiver-validation'
 import { commissionerOverrideAllowed, getCommissionerOverrides } from './commissioner-claim-override'
+import { isCommissionerRosterLocked } from '@/lib/league/commissioner-roster-lock'
 
 export const WAIVER_TX_RESULT_CODES = [
   'won',
@@ -88,6 +89,9 @@ export async function assertWaiverClaimEligibility(input: WaiverClaimEligibility
   ])
 
   if (!league || !roster) throw new Error('Roster not found or does not belong to this league.')
+  if (await isCommissionerRosterLocked(leagueId, rosterId)) {
+    throw new Error('This roster is locked by the commissioner.')
+  }
 
   if (league.lockAllMoves) {
     throw new Error('All roster moves are locked by the commissioner.')
@@ -212,6 +216,7 @@ export async function assertWaiverClaimEligibility(input: WaiverClaimEligibility
  */
 export function mapWaiverFailureMessageToCode(message: string): WaiverTxResultCode {
   const m = message.toLowerCase()
+  if (m.includes('locked by the commissioner')) return 'blocked_by_roster_lock'
   if (m.includes('insufficient faab')) return 'insufficient_faab'
   if (m.includes('no longer available')) return 'player_no_longer_available'
   if (m.includes('roster full')) return 'invalid_due_to_roster'

@@ -84,9 +84,9 @@ export const confirmEmailReminderDeps: ConfirmEmailReminderDeps = {
     })
     // Same origin rule as the sign-up email: the configured canonical site, never a request header.
     const origin = getDeploymentLinkOrigin() || USER_FACING_SITE_ORIGIN
-    // /onboarding, like the sign-up email: these accounts still hold an auto-generated username,
-    // and /onboarding bounces a finished profile onward.
-    const url = `${origin}/verify/email?token=${encodeURIComponent(rawToken)}&returnTo=${encodeURIComponent('/onboarding')}`
+    // /import, like the sign-up email (2026-09-29): verifying is what unlocks the import, so that
+    // is where the link goes — see app/api/auth/register/route.ts.
+    const url = `${origin}/verify/email?token=${encodeURIComponent(rawToken)}&returnTo=${encodeURIComponent('/import')}`
     return {
       url,
       discard: async () => {

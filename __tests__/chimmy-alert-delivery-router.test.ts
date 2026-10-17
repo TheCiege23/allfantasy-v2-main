@@ -127,3 +127,30 @@ describe('chimmy alert delivery router', () => {
     expect(plan.reason).toBe('dismissed_recently')
   })
 })
+
+/**
+ * Quiet hours are evaluated in the WINDOW'S timezone (2026-10-02). The router read `now.getHours()`
+ * — the server's hour — so a window was shifted by the server's offset.
+ *
+ * The instant is chosen so the old rule is wrong on BOTH a UTC server (CI, Railway) and a
+ * New-York-local machine: 17:00Z is 02:00 in Tokyo (inside 22→7) but 17:00 UTC and 13:00 New York
+ * (outside). Asserting at an hour where the zones agree would pass with the bug in place.
+ */
+describe('chimmy alert quiet hours use the window timezone', () => {
+  const lineupAlert = () => baseAlert({ type: 'lineup_incomplete', class: 'lineup', urgencyScore: 90, severity: 'urgent' })
+  const at = (iso: string) =>
+    baseContext({
+      now: new Date(iso),
+      userPreferences: { quietHours: { startHour: 22, endHour: 7, timezone: 'Asia/Tokyo' } },
+    } as Partial<ChimmyAlertContext>)
+
+  it("holds push inside the window, in the window's zone", () => {
+    const plan = routeAlertDelivery(lineupAlert(), at('2026-10-02T17:00:00Z')) // 02:00 Tokyo
+    expect(plan.transportChannels).not.toContain('push_notification')
+  })
+
+  it("CONTROL: sends push outside the window, in the window's zone", () => {
+    const plan = routeAlertDelivery(lineupAlert(), at('2026-10-02T03:00:00Z')) // 12:00 Tokyo
+    expect(plan.transportChannels).toContain('push_notification')
+  })
+})

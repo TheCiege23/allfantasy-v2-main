@@ -11,7 +11,7 @@ vi.mock('@/components/MiniPlayerImg', () => ({
   default: ({ name }: { name: string }) => <span data-testid="face">{name}</span>,
 }))
 
-import { LiveGameView, lineForPlay, statCells } from '@/components/core-app/screens/LiveGameView'
+import { FINAL_CORRECTION_POLLS, LiveGameView, lineForPlay, statCells } from '@/components/core-app/screens/LiveGameView'
 import type { GameDetailPlayerLine, LiveGameDetail } from '@/lib/live/espnGameSummary'
 
 const team = (over: Partial<LiveGameDetail['home']>): LiveGameDetail['home'] => ({
@@ -109,6 +109,25 @@ function detail(over: Partial<LiveGameDetail> = {}): LiveGameDetail {
   }
 }
 
+describe('bounded final game refresh', () => {
+  it('refreshes corrected finals at the slower cadence then stops', async () => {
+    vi.useFakeTimers()
+    const initial = detail({ status: { state: 'post', detail: 'Final', period: 4, clock: '0:00' } })
+    const fetcher = vi.fn(async () => ({ ok: true, json: async () => ({ detail: { ...initial, home: { ...initial.home, score: 31 } }, stale: false, failed: false }) }))
+    vi.stubGlobal('fetch', fetcher)
+    const rendered = render(<LiveGameView initial={{ detail: initial, stale: false, failed: false }} sport="NFL" gameId={initial.gameId} backHref="/core/live" />)
+    try {
+      await act(async () => { await vi.advanceTimersByTimeAsync(60_000) })
+      expect(fetcher).not.toHaveBeenCalled()
+      await act(async () => { await vi.advanceTimersByTimeAsync(120_000 * FINAL_CORRECTION_POLLS) })
+      expect(fetcher).toHaveBeenCalledTimes(FINAL_CORRECTION_POLLS)
+      expect(rendered.container.textContent).toContain('31')
+      await act(async () => { await vi.advanceTimersByTimeAsync(30 * 60_000) })
+      expect(fetcher).toHaveBeenCalledTimes(FINAL_CORRECTION_POLLS)
+    } finally { rendered.unmount(); vi.useRealTimers(); vi.unstubAllGlobals() }
+  })
+})
+
 const view = (d: LiveGameDetail | null, extra: { stale?: boolean; failed?: boolean } = {}) =>
   render(
     <LiveGameView
@@ -183,9 +202,11 @@ describe('LiveGameView', () => {
   })
 
   it('a stale refresh keeps the game on screen and says so', () => {
-    view(detail(), { stale: true })
+    const { container } = view(detail(), { stale: true })
     expect(screen.getByRole('status')).toHaveTextContent(/last update we have/)
-    expect(screen.getByText('Cincinnati Bengals')).toBeInTheDocument()
+    // The header, specifically: the football box score now names each team too.
+    const names = [...container.querySelectorAll('.af-gv-team-name')].map((n) => n.textContent)
+    expect(names).toContain('Cincinnati Bengals')
   })
 
   it('a failed read with nothing cached says it is our problem, not the game', () => {

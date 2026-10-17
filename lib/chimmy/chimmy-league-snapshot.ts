@@ -29,6 +29,11 @@ export type ChimmyLeagueSnapshot = {
   keeperCount: number | null
   keeperCostSystem: string | null
   keeperRoundPenalty: number | null
+  /**
+   * The only production signal for Best Ball: `leagueType` reads `redraft` or `dynasty` on
+   * every best-ball league. Read by `decisionFormatGate`, which refuses lineup moves here.
+   */
+  bestBallMode: boolean | null
 }
 
 /**
@@ -88,6 +93,8 @@ const SNAPSHOT_SELECT = {
   keeperCount: true,
   keeperCostSystem: true,
   keeperRoundPenalty: true,
+  /* Same reasoning: a format fact, read on the query that already proved membership. */
+  bestBallMode: true,
 } as const
 
 /**

@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 64 64" width="64" height="64">
+<defs>
+<radialGradient id="bye-cover-i-aura" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#e9c46a" stop-opacity=".6"/><stop offset=".55" stop-color="#e9c46a" stop-opacity=".2"/><stop offset="1" stop-color="#e9c46a" stop-opacity="0"/></radialGradient>
+<linearGradient id="bye-cover-i-top" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#e3ddca"/><stop offset=".5" stop-color="#9c9582"/><stop offset="1" stop-color="#4a463a"/></linearGradient>
+<linearGradient id="bye-cover-i-side" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#9a937f"/><stop offset=".5" stop-color="#5e5848"/><stop offset="1" stop-color="#25221b"/></linearGradient>
+<radialGradient id="bye-cover-i-core" cx="45%" cy="40%" r="65%"><stop offset="0" stop-color="#fffbe8"/><stop offset=".45" stop-color="#f6dc8e"/><stop offset="1" stop-color="#b8861c"/></radialGradient>
+</defs>
+<circle cx="32" cy="32" r="31" fill="url(#bye-cover-i-aura)"/>
+<ellipse cx="32" cy="61.5" rx="18" ry="2.4" fill="#000" opacity=".5"/>
+<path d="M17,55 L47,55 L49,61 L15,61 Z" fill="url(#bye-cover-i-side)" stroke="#120c06" stroke-width="2" stroke-linejoin="round"/>
+<path d="M25,42 L39,42 L41,56 L23,56 Z" fill="url(#bye-cover-i-side)" stroke="#120c06" stroke-width="2" stroke-linejoin="round"/>
+<path d="M25.8,47.6 L30.2,47.2 L29.8,50.4 L26.4,50.4 Z M38.2,47.6 L33.8,47.2 L34.2,50.4 L37.6,50.4 Z" fill="#fbe6a6" stroke="#120c06" stroke-width=".8"/>
+<path d="M4,35 L4,39 A28,11 0 0 0 60,39 L60,35 Z" fill="url(#bye-cover-i-side)" stroke="#120c06" stroke-width="2.4" stroke-linejoin="round"/>
+<ellipse cx="32" cy="35" rx="28" ry="11" fill="url(#bye-cover-i-top)" stroke="#120c06" stroke-width="2.4"/>
+<ellipse cx="32" cy="35" rx="22" ry="8" fill="#e9c46a" opacity=".45"/><path d="M40.0,34.0 L54.4,35.0 L40.0,36.0 Z M39.5,36.5 L47.8,41.2 L35.8,37.9 Z M34.6,38.1 L32.0,43.8 L29.4,38.1 Z M28.2,37.9 L16.2,41.2 L24.5,36.5 Z M24.0,36.0 L9.6,35.0 L24.0,34.0 Z M24.5,33.5 L16.2,28.8 L28.2,32.1 Z M29.4,31.9 L32.0,26.2 L34.6,31.9 Z M35.8,32.1 L47.8,28.8 L39.5,33.5 Z" fill="url(#bye-cover-i-core)" stroke="#3a2a06" stroke-width=".8" stroke-linejoin="round"/>
+<ellipse cx="32" cy="35" rx="7" ry="3.2" fill="#fffbe8" stroke="#5a3e08" stroke-width=".8"/>
+<path d="M29.5,36 L29.5,8 Q30,5.5 32,6.5 L47,32 L45,35 Z" fill="url(#bye-cover-i-top)" stroke="#120c06" stroke-width="2.4" stroke-linejoin="round"/>
+<circle cx="34" cy="22" r="3.6" fill="url(#bye-cover-i-core)" stroke="#120c06" stroke-width="1.4"/>
+<path d="M31,9 L31,33" stroke="#f6f1e2" stroke-width="1" opacity=".7"/>
+</svg>

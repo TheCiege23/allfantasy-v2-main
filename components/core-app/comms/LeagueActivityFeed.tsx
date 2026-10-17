@@ -1,6 +1,8 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import type { ActivityTradeGrade } from '@/lib/activity/types'
+import { TRADE_LETTER_COLOR, tradeGradeLabel } from '@/lib/activity/tradeGradeLabel'
 
 /**
  * What has happened across ALL of this user's leagues, each item naming the
@@ -33,6 +35,25 @@ type ActivityItem = {
   leagueId: string | null
   leagueName: string | null
   href?: string | null
+  /** A trade's grade, from the aggregator (`lib/activity/tradeGrades.ts`). */
+  tradeGrade?: ActivityTradeGrade | null
+}
+
+/** Each team's letter and when it was graded; a withheld grade's reason; or nothing. */
+function TradeGrade({ grade }: { grade: ActivityTradeGrade | null | undefined }) {
+  const label = tradeGradeLabel(grade)
+  if (!label) return null
+  if (label.kind === 'withheld') return <span className="af-cm-act-grade">{label.line}</span>
+  return (
+    <span className="af-cm-act-grade" aria-label="Trade grade for each team">
+      {label.chips.map((c) => (
+        <span key={c.name} className="af-cm-act-grade-chip">
+          {c.name} <b style={{ color: TRADE_LETTER_COLOR[c.letter] }}>{c.letter}</b>
+        </span>
+      ))}
+      <span>{label.basis}</span>
+    </span>
+  )
 }
 
 /** Enough to be useful in a drawer without becoming a page. */
@@ -137,6 +158,7 @@ export function LeagueActivityFeed({ onOpenLeague }: { onOpenLeague?: (leagueId:
               <span className="af-cm-act-when">{whenLabel(item.timestamp)}</span>
             </span>
             <span className="af-cm-act-desc">{item.description}</span>
+            {item.type === 'trade' ? <TradeGrade grade={item.tradeGrade} /> : null}
           </>
         )
 

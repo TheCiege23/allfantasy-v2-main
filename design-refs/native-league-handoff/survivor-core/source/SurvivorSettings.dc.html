@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Survivor settings</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./exile/exile.css">
+<link rel="stylesheet" href="./kit/kit.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Cinzel:wght@600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080d}
+.ss-sec{padding:18px 22px 6px;scroll-margin-top:20px}
+.ss-sec h2{margin:0 0 4px;display:flex;align-items:center;gap:10px;font:700 17px 'Archivo';color:#e8eaf2}
+.ss-sec h2 img{width:26px;height:26px}
+.ss-sel{min-height:34px;padding:0 10px;border-radius:8px;border:1px solid rgba(255,255,255,.12);background:#151926;color:#e8eaf2;font:600 13px 'Archivo'}
+.ss-seg{display:inline-flex;gap:2px;padding:3px;border-radius:8px;background:#0b0d14;border:1px solid rgba(255,255,255,.08)}
+.ss-seg button{min-height:30px;padding:0 12px;border:0;border-radius:6px;background:transparent;color:#a3a9c2;font:600 12px 'Archivo';cursor:pointer}
+.ss-seg button[aria-pressed="true"]{background:#151926;color:#f1d58a;box-shadow:inset 0 -2px 0 #d9b45a}
+.ss-wk{display:grid;grid-template-columns:repeat(13,1fr);gap:4px}
+.ss-wk span{height:46px;border-radius:6px;background:#10131c;border:1px solid rgba(255,255,255,.06);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font:700 10px 'JetBrains Mono';color:#6f7590}
+.ss-wk span img{width:16px;height:16px}
+</style>
+</helmet>
+<div class="ex" style="min-height: 100vh; display: flex; flex-direction: column">
+  <header style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 18px 28px; border-bottom: 1px solid rgba(255,255,255,.06)">
+    <a class="ex-btn" href="Commissioner.dc.html" aria-label="Back" style="padding: 0 12px">‹</a>
+    <div style="flex: 1 1 320px; display: flex; flex-direction: column; gap: 3px">
+      <h1 class="ex-h1">Survivor settings</h1>
+      <span class="ex-t2">Blah Survivor · Commissioner · Locks when the draft starts, except where marked</span>
+    </div>
+    <span class="k-pill" style="color: #9be3a8; border-color: rgba(122,214,140,.35)">{{changes}}</span>
+    <button class="ex-btn ex-btn-gold">Save settings</button>
+  </header>
+
+  <div style="display: flex; gap: 22px; padding: 22px 28px 32px; align-items: flex-start">
+    <nav class="k-nav" style="flex: 0 0 210px; position: sticky; top: 16px" aria-label="Settings sections">
+      <sc-for list="{{nav}}" as="n" hint-placeholder-count="8"><button aria-current="{{n.on}}" onClick="{{n.pick}}"><img src="{{n.icon}}" alt="" style="width: 18px; height: 18px">{{n.label}}</button></sc-for>
+    </nav>
+
+    <main style="flex: 1 1 640px; display: flex; flex-direction: column; gap: 14px; min-width: 0">
+      <section class="ex-card ss-sec">
+        <h2><img src="survivor/idols/tribe-immunity-icon.svg" alt="">Tribes</h2>
+        <div class="k-field"><div class="k-field-l"><b>Number of tribes</b><span>{{tribeSub}}</span></div><div class="k-step"><button onClick="{{tribesDn}}" aria-label="Fewer tribes">−</button><span>{{tribes}}</span><button onClick="{{tribesUp}}" aria-label="More tribes">+</button></div></div>
+        <div class="k-field"><div class="k-field-l"><b>How tribes are formed</b><span>Random is drawn on the server and revealed after the draft.</span></div>
+          <div class="ss-seg"><sc-for list="{{formModes}}" as="m" hint-placeholder-count="3"><button aria-pressed="{{m.on}}" onClick="{{m.pick}}">{{m.label}}</button></sc-for></div></div>
+        <div class="k-field"><div class="k-field-l"><b>Tribe names and crests</b><span>Picked from the 50 original tribes. Commissioner can swap before the reveal.</span></div><a class="ex-btn" href="TribeEmblems.dc.html">Choose crests</a></div>
+      </section>
+
+      <section class="ex-card ss-sec">
+        <h2><img src="weekly/urn.svg" alt="">Tribal Council</h2>
+        <div class="k-field"><div class="k-field-l"><b>Votes close</b><span>Shown to managers in their time zone.</span></div><select class="ss-sel" aria-label="Vote deadline"><option>Tuesday · 8:00 PM ET</option><option>Monday · 11:59 PM ET</option></select></div>
+        <div class="k-field"><div class="k-field-l"><b>Allow voting for yourself</b><span>Off by default.</span></div><button class="k-tg" role="switch" aria-checked="{{selfVote}}" onClick="{{tSelf}}" aria-label="Allow self vote"></button></div>
+        <div class="k-field"><div class="k-field-l"><b>Tied vote</b><span>What happens when two or more managers get the most votes.</span></div>
+          <div class="ss-seg"><sc-for list="{{tieModes}}" as="m" hint-placeholder-count="2"><button aria-pressed="{{m.on}}" onClick="{{m.pick}}">{{m.label}}</button></sc-for></div></div>
+        <div class="k-field"><div class="k-field-l"><b>Immunity</b><span>Top score in each tribe going to Tribal Council. After the merge, top score overall.</span></div><span class="k-pill" style="color: #d9b45a; border-color: rgba(217,180,90,.4)">Always on</span></div>
+      </section>
+
+      <section class="ex-card ss-sec">
+        <h2><img src="survivor/idols/immunity-icon.svg" alt="">Hidden idols</h2>
+        <div class="k-field"><div class="k-field-l"><b>Idols in the league</b><span>Immunity and tribe immunity are always included.</span></div><div class="k-step"><button onClick="{{idolsDn}}" aria-label="Fewer idols">−</button><span>{{idols}}</span><button onClick="{{idolsUp}}" aria-label="More idols">+</button></div></div>
+        <div class="k-field"><div class="k-field-l"><b>Which idols</b><span>Random uses the balanced draw. Pick lets you choose from all 20.</span></div><a class="ex-btn" href="IdolSetup.dc.html">Open idol setup</a></div>
+        <div class="k-field"><div class="k-field-l"><b>Hide idol locations from me</b><span>Recommended if you're also playing.</span></div><button class="k-tg" role="switch" aria-checked="{{hideIdols}}" onClick="{{tHide}}" aria-label="Hide idols from commissioner"></button></div>
+      </section>
+
+      <section class="ex-card ss-sec">
+        <h2><img src="exile/token-icon.svg" alt="">Exile Island</h2>
+        <div class="k-field"><div class="k-field-l"><b>Exile Island</b><span>Voted-out managers keep playing for a way back.</span></div><button class="k-tg" role="switch" aria-checked="{{exile}}" onClick="{{tExile}}" aria-label="Exile Island"></button></div>
+        <div class="k-field"><div class="k-field-l"><b>Tokens to return</b><span>Hold up to 5.</span></div><div class="k-step"><button onClick="{{tokDn}}" aria-label="Fewer tokens">−</button><span>{{tokens}}</span><button onClick="{{tokUp}}" aria-label="More tokens">+</button></div></div>
+        <div class="k-field"><div class="k-field-l"><b>Exile boss score</b><span>Finish below it and your tokens are wiped. Editable during the season.</span></div>
+          <div class="ss-seg"><sc-for list="{{bossModes}}" as="m" hint-placeholder-count="3"><button aria-pressed="{{m.on}}" onClick="{{m.pick}}">{{m.label}}</button></sc-for></div></div>
+      </section>
+
+      <section class="ex-card ss-sec">
+        <h2><img src="late/buff-merge.svg" alt="">Swap, merge and jury</h2>
+        <div class="k-field"><div class="k-field-l"><b>Tribe swap</b><span>Optional. Reshuffles tribes once.</span></div><button class="k-tg" role="switch" aria-checked="{{swap}}" onClick="{{tSwap}}" aria-label="Tribe swap"></button><div class="k-step"><button onClick="{{swapDn}}" aria-label="Earlier swap">−</button><span>Wk {{swapWk}}</span><button onClick="{{swapUp}}" aria-label="Later swap">+</button></div></div>
+        <div class="k-field"><div class="k-field-l"><b>Merge</b><span>Tribes become one. Everyone voted out after this joins the jury.</span></div><div class="k-step"><button onClick="{{mergeDn}}" aria-label="Earlier merge">−</button><span>Wk {{mergeWk}}</span><button onClick="{{mergeUp}}" aria-label="Later merge">+</button></div></div>
+        <div class="k-field"><div class="k-field-l"><b>Finalists</b><span>The jury picks the champion from these.</span></div>
+          <div class="ss-seg"><sc-for list="{{finModes}}" as="m" hint-placeholder-count="2"><button aria-pressed="{{m.on}}" onClick="{{m.pick}}">{{m.label}}</button></sc-for></div></div>
+      </section>
+
+      <section class="ex-card ss-sec">
+        <h2><img src="late/champion-icon.svg" alt="">Sharing</h2>
+        <div class="k-field"><div class="k-field-l"><b>Share cards</b><span>Lets managers post big moments outside the app.</span></div><button class="k-tg" role="switch" aria-checked="{{share}}" onClick="{{tShare}}" aria-label="Share cards"></button></div>
+        <div class="k-field"><div class="k-field-l"><b>Public moment pages</b><span>Read-only pages with display names only. Off makes shared links show a sign-in page.</span></div><button class="k-tg" role="switch" aria-checked="{{pub}}" onClick="{{tPub}}" aria-label="Public moment pages"></button></div>
+      </section>
+    </main>
+
+    <aside style="flex: 0 0 380px; position: sticky; top: 16px; display: flex; flex-direction: column; gap: 14px">
+      <div class="ex-card2" style="padding: 18px; display: flex; flex-direction: column; gap: 14px">
+        <span class="ex-lbl">Season preview · 12 managers · 13 weeks</span>
+        <div class="ss-wk"><sc-for list="{{weeks}}" as="w" hint-placeholder-count="13"><span style="border-color: {{w.line}}; background: {{w.bg}}" title="{{w.title}}">{{w.n}}<img src="{{w.icon}}" alt="" style="opacity: {{w.op}}"></span></sc-for></div>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px"><sc-for list="{{legend}}" as="l" hint-placeholder-count="4"><span class="k-pill"><img src="{{l.icon}}" alt="" style="width: 14px">{{l.label}}</span></sc-for></div>
+      </div>
+      <div class="ex-card2" style="padding: 18px; display: flex; flex-direction: column; gap: 10px">
+        <span class="ex-lbl">What managers will see</span>
+        <sc-for list="{{summary}}" as="s" hint-placeholder-count="5"><div style="display: flex; gap: 10px"><span class="ex-gold">·</span><span class="ex-t2" style="font-size: 13px">{{s}}</span></div></sc-for>
+      </div>
+      <div class="ex-card" style="padding: 16px; display: flex; gap: 10px; align-items: flex-start; border-color: {{warnLine}}">
+        <img src="late/exile-boss-icon.svg" alt="" style="width: 28px">
+        <span class="ex-t2" style="font-size: 12.5px">{{warn}}</span>
+      </div>
+    </aside>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1700}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { sec: 'Tribes', tribes: 2, form: 'Random', selfVote: false, tie: 'Revote, then season points', idols: 7, hide: true, exile: true, tokens: 3, boss: 'League median', swap: true, swapWk: 5, mergeWk: 8, fin: 3, share: true, pub: true, dirty: 0 }; }
+  renderVals() {
+    const st = this.state; const set = o => this.setState({ ...o, dirty: st.dirty + 1 });
+    const seg = (key, opts) => opts.map(label => ({ label, on: st[key] === label ? 'true' : 'false', pick: () => set({ [key]: label }) }));
+    const NAV = [['Tribes', 'survivor/idols/tribe-immunity-icon.svg'], ['Tribal Council', 'weekly/torch-lit-icon.svg'], ['Hidden idols', 'survivor/idols/immunity-icon.svg'], ['Exile Island', 'exile/token-icon.svg'], ['Swap, merge, jury', 'late/jury-icon.svg'], ['Sharing', 'late/champion-icon.svg']];
+    const weeks = Array.from({ length: 13 }, (_, i) => { const n = i + 1;
+      let icon = 'weekly/torch-lit-icon.svg', title = 'Tribal Council', bg = '#10131c', line = 'rgba(255,255,255,.06)', op = '.55';
+      if (st.swap && n === st.swapWk) { icon = 'late/buff-vela.svg'; title = 'Tribe swap'; bg = 'rgba(139,123,224,.14)'; line = 'rgba(139,123,224,.5)'; op = '1'; }
+      if (n === st.mergeWk) { icon = 'late/buff-merge.svg'; title = 'Merge'; bg = 'rgba(217,180,90,.14)'; line = 'rgba(217,180,90,.55)'; op = '1'; }
+      if (n > st.mergeWk && n < 13) { icon = 'late/jury-icon.svg'; title = 'Jury grows'; op = '.85'; }
+      if (n === 13) { icon = 'late/champion-icon.svg'; title = 'Final Tribal Council'; bg = 'rgba(242,201,76,.12)'; line = 'rgba(242,201,76,.5)'; op = '1'; }
+      return { n, icon, title, bg, line, op }; });
+    const jurors = Math.max(0, 13 - st.mergeWk - 1);
+    const summary = [st.tribes + ' tribes of ' + Math.floor(12 / st.tribes) + (12 % st.tribes ? '–' + Math.ceil(12 / st.tribes) : '') + ', formed ' + st.form.toLowerCase(),
+      st.idols + ' hidden idols, revealed to holders by DM after the draft',
+      st.exile ? 'Exile Island on: ' + st.tokens + ' tokens to return, boss score is the ' + st.boss.toLowerCase() : 'Exile Island off: voted-out managers are done',
+      (st.swap ? 'Swap in week ' + st.swapWk + ', ' : 'No swap, ') + 'merge in week ' + st.mergeWk,
+      jurors + ' jurors pick from ' + st.fin + ' finalists in week 13'];
+    const bad = st.swap && st.swapWk >= st.mergeWk;
+    const tooFew = 12 - (13 - 1) > st.fin;
+    return {
+      nav: NAV.map(([label, icon]) => ({ label, icon, on: st.sec === label ? 'true' : 'false', pick: () => this.setState({ sec: label }) })),
+      changes: st.dirty ? st.dirty + ' unsaved change' + (st.dirty === 1 ? '' : 's') : 'All saved',
+      tribes: st.tribes, tribeSub: Math.floor(12 / st.tribes) + ' managers per tribe with 12 in the league.',
+      tribesDn: () => set({ tribes: Math.max(2, st.tribes - 1) }), tribesUp: () => set({ tribes: Math.min(4, st.tribes + 1) }),
+      formModes: seg('form', ['Random', 'Commissioner', 'Snake by draft']),
+      selfVote: st.selfVote ? 'true' : 'false', tSelf: () => set({ selfVote: !st.selfVote }),
+      tieModes: seg('tie', ['Revote, then season points', 'Season points']),
+      idols: st.idols, idolsDn: () => set({ idols: Math.max(6, st.idols - 1) }), idolsUp: () => set({ idols: Math.min(8, st.idols + 1) }),
+      hideIdols: st.hide ? 'true' : 'false', tHide: () => set({ hide: !st.hide }),
+      exile: st.exile ? 'true' : 'false', tExile: () => set({ exile: !st.exile }),
+      tokens: st.tokens, tokDn: () => set({ tokens: Math.max(1, st.tokens - 1) }), tokUp: () => set({ tokens: Math.min(5, st.tokens + 1) }),
+      bossModes: seg('boss', ['League median', 'Fixed score', 'Top-3 average']),
+      swap: st.swap ? 'true' : 'false', tSwap: () => set({ swap: !st.swap }), swapWk: st.swapWk,
+      swapDn: () => set({ swapWk: Math.max(2, st.swapWk - 1) }), swapUp: () => set({ swapWk: Math.min(11, st.swapWk + 1) }),
+      mergeWk: st.mergeWk, mergeDn: () => set({ mergeWk: Math.max(3, st.mergeWk - 1) }), mergeUp: () => set({ mergeWk: Math.min(11, st.mergeWk + 1) }),
+      finModes: [2, 3].map(n => ({ label: n + ' finalists', on: st.fin === n ? 'true' : 'false', pick: () => set({ fin: n }) })),
+      share: st.share ? 'true' : 'false', tShare: () => set({ share: !st.share }), pub: st.pub ? 'true' : 'false', tPub: () => set({ pub: !st.pub }),
+      weeks, legend: [['Tribal Council', 'weekly/torch-lit-icon.svg'], ['Swap', 'late/buff-vela.svg'], ['Merge', 'late/buff-merge.svg'], ['Finale', 'late/champion-icon.svg']].map(([label, icon]) => ({ label, icon })),
+      summary, warn: bad ? 'The swap has to come before the merge. Move the swap earlier or the merge later.' : 'One manager goes home each week. With 12 managers and 13 weeks there is room for ' + st.fin + ' finalists' + (st.exile ? ' plus Exile returns.' : '.'),
+      warnLine: bad ? 'rgba(255,74,47,.5)' : 'rgba(255,255,255,.06)'
+    };
+  }
+}
+</script>
+</body>
+</html>

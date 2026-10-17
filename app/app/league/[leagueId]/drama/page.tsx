@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useParams, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, BookOpen } from 'lucide-react'
+import { postWithTokenConfirm, responseErrorMessage } from '@/lib/tokens/clientTokenConfirm'
 import { DRAMA_TYPES } from '@/lib/drama-engine/types'
 import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
 
@@ -118,15 +119,18 @@ export default function LeagueDramaDashboardPage() {
       }
       setStoryLoadingId(eventId)
       try {
-        const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/drama/tell-story`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ eventId }),
-        })
-        const data = await res.json().catch(() => ({}))
+        // Asks before any token is spent; a decline spends nothing and shows nothing.
+        const { response: res, declined } = await postWithTokenConfirm(
+          `/api/leagues/${encodeURIComponent(leagueId)}/drama/tell-story`,
+          { eventId },
+        )
+        if (declined) return
+        const text = res.ok
+          ? ((await res.json().catch(() => ({})))?.narrative ?? 'No story available.')
+          : await responseErrorMessage(res, 'Could not load story.')
         setStoryByEvent((prev) => ({
           ...prev,
-          [eventId]: data?.narrative ?? 'No story available.',
+          [eventId]: text,
         }))
       } catch {
         setStoryByEvent((prev) => ({
@@ -281,25 +285,25 @@ export default function LeagueDramaDashboardPage() {
         {timeline.map((event) => (
           <article key={event.id} className="rounded-xl border border-white/10 bg-black/20 p-3">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] text-amber-200">
+              <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[11px] text-amber-200">
                 {event.dramaType}
               </span>
-              <span className="text-[10px] text-white/45">Score {Math.round(event.dramaScore)}</span>
-              <span className="text-[10px] text-white/45">
+              <span className="text-[11px] text-white/45">Score {Math.round(event.dramaScore)}</span>
+              <span className="text-[11px] text-white/45">
                 Teams {event.relatedTeamIds.length} · Managers {event.relatedManagerIds.length}
               </span>
               <div className="ml-auto flex flex-wrap items-center gap-1.5">
                 <button
                   type="button"
                   onClick={() => void tellStory(event.id)}
-                  className="inline-flex items-center gap-1 rounded border border-cyan-500/25 px-2 py-0.5 text-[10px] text-cyan-200 hover:bg-cyan-500/15"
+                  className="inline-flex items-center gap-1 rounded border border-cyan-500/25 px-2 py-0.5 text-[11px] text-cyan-200 hover:bg-cyan-500/15"
                 >
                   <BookOpen className="h-3 w-3" />
                   {storyLoadingId === event.id ? 'Loading…' : storyByEvent[event.id] ? 'Hide story' : 'Tell me the story'}
                 </button>
                 <Link
                   href={`/app/league/${encodeURIComponent(leagueId)}/drama/${encodeURIComponent(event.id)}`}
-                  className="rounded border border-white/20 px-2 py-0.5 text-[10px] text-white/75 hover:bg-white/10"
+                  className="rounded border border-white/20 px-2 py-0.5 text-[11px] text-white/75 hover:bg-white/10"
                 >
                   Story detail
                 </Link>

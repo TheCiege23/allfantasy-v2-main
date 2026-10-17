@@ -32,6 +32,7 @@ import { finalizeRedraftWeek, readWeekSlate, WEEK_KEYED_SPORTS } from '@/lib/red
 import { scoreRosterForWeek } from '@/lib/redraft/scoringEngine'
 import { seasonSportToLeagueSport } from '@/lib/season-week/standardSeasonScope'
 import { acquireAutomationLock, releaseAutomationLock } from '@/lib/automation/locks'
+import { finishGuillotineSeason, rosterIdForOwner } from '@/lib/guillotine/finishGuillotineSeason'
 
 export type NativeGuillotineOutcome =
   | 'not_guillotine'
@@ -60,15 +61,6 @@ export type NativeGuillotineDeps = {
 
 const LOCK_TTL_MS = 5 * 60 * 1000
 
-/** A season roster's owner -> the league roster: `roster:<id>` names it, a user id is its manager. */
-function rosterIdForOwner(ownerId: string, rosters: Array<{ id: string; platformUserId: string | null }>): string | null {
-  if (ownerId.startsWith('roster:')) {
-    const id = ownerId.slice('roster:'.length)
-    return rosters.some((r) => r.id === id) ? id : null
-  }
-  return rosters.find((r) => r.platformUserId === ownerId)?.id ?? null
-}
-
 export async function runNativeGuillotineWeek(
   input: { seasonId: string; currentFantasyWeek: number },
   deps: NativeGuillotineDeps = {},
@@ -90,6 +82,8 @@ export async function runNativeGuillotineWeek(
   }
 
   const gSeason = await ensureGuillotineSeason({ leagueId: season.leagueId, redraftSeasonId: season.id })
+  // score-sync re-offers a finished season until it is archived; nothing is left to chop.
+  if (season.status === 'complete') return completeSeason(season.id, gSeason, base)
 
   const active = await prisma.redraftRoster.findMany({
     where: { seasonId: season.id, isEliminated: false },
@@ -188,8 +182,9 @@ export async function runNativeGuillotineWeek(
       return { ...base, outcome: 'refused', week, reason: 'roster_mapping_incomplete' }
     }
 
+    // This season only: `GuillotinePeriodScore` is keyed by league, so last year's weeks are here too.
     const previous = await prisma.guillotinePeriodScore.findMany({
-      where: { leagueId: season.leagueId, weekOrPeriod: { lt: week } },
+      where: { leagueId: season.leagueId, season: season.season, weekOrPeriod: { lt: week } },
       select: { rosterId: true, periodPoints: true },
     })
     const cumulBefore = new Map<string, number>()
@@ -214,7 +209,9 @@ export async function runNativeGuillotineWeek(
       systemUserId: owner?.userId ?? undefined,
     })
     const choppedRedraft = result?.eliminationFlagged?.marked ?? []
-    if (result?.reason === 'final stage complete') return { ...base, outcome: 'season_complete', week }
+    // The engine marked the season complete itself; it still has to be crowned and archived here,
+    // because score-sync only re-offers it while the league is unarchived.
+    if (result?.reason === 'final stage complete') return { ...(await completeSeason(season.id, gSeason, base)), week }
     if (result?.reason === 'final stage scored') return { ...base, outcome: 'final_stage_scored', week }
     if (!result || result.choppedRosterIds.length === 0) {
       return { ...base, outcome: 'refused', week, reason: result?.reason ?? 'engine_returned_nothing' }
@@ -243,11 +240,8 @@ async function completeSeason(
   gSeason: Awaited<ReturnType<typeof ensureGuillotineSeason>>,
   base: { seasonId: string },
 ): Promise<NativeGuillotineResult> {
-  await prisma.redraftSeason.updateMany({ where: { id: seasonId, status: { not: 'complete' } }, data: { status: 'complete' } })
-  if (gSeason.ok) {
-    await prisma.guillotineSeason.updateMany({ where: { id: gSeason.seasonId, status: { not: 'complete' } }, data: { status: 'complete' } })
-  }
-  return { ...base, outcome: 'season_complete' }
+  const finished = await finishGuillotineSeason({ seasonId, guillotineSeasonId: gSeason.ok ? gSeason.seasonId : null })
+  return { ...base, outcome: 'season_complete', ...(finished.archived ? {} : { reason: finished.reason }) }
 }
 
 /** The week's last kickoff, for a week the finalizer reported as already closed (no slate in hand). */

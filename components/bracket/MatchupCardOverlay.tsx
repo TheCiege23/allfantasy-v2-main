@@ -196,7 +196,7 @@ export function MatchupCardOverlay({
             {isUpsetPick && isPicked && (
               <div className="flex items-center gap-1 mt-0.5">
                 <Zap className="w-3 h-3" style={{ color: "#c084fc" }} />
-                <span className="text-[10px] font-bold" style={{ color: "#c084fc" }}>
+                <span className="text-[11px] font-bold" style={{ color: "#c084fc" }}>
                   Upset Pick
                 </span>
               </div>
@@ -212,7 +212,7 @@ export function MatchupCardOverlay({
                   >
                     {Math.round(winProb)}%
                   </div>
-                  <div className="text-[9px]" style={{ color: "rgba(255,255,255,0.25)" }}>
+                  <div className="text-[11px]" style={{ color: "rgba(255,255,255,0.25)" }}>
                     win prob
                   </div>
                 </>
@@ -225,7 +225,7 @@ export function MatchupCardOverlay({
                   >
                     {Math.round(popularityPct)}%
                   </div>
-                  <div className="text-[9px]" style={{ color: "rgba(148,163,184,0.7)" }}>
+                  <div className="text-[11px]" style={{ color: "rgba(148,163,184,0.7)" }}>
                     picked
                   </div>
                 </div>
@@ -291,7 +291,7 @@ export function MatchupCardOverlay({
               <div className="text-2xl font-black" style={{ color: "rgba(255,255,255,0.9)" }}>
                 {game.homeScore ?? 0}
               </div>
-              <div className="text-[10px]" style={{ color: "rgba(255,255,255,0.3)" }}>
+              <div className="text-[11px]" style={{ color: "rgba(255,255,255,0.3)" }}>
                 {homeName?.slice(0, 12)}
               </div>
             </div>
@@ -302,7 +302,7 @@ export function MatchupCardOverlay({
               <div className="text-2xl font-black" style={{ color: "rgba(255,255,255,0.9)" }}>
                 {game.awayScore ?? 0}
               </div>
-              <div className="text-[10px]" style={{ color: "rgba(255,255,255,0.3)" }}>
+              <div className="text-[11px]" style={{ color: "rgba(255,255,255,0.3)" }}>
                 {awayName?.slice(0, 12)}
               </div>
             </div>
@@ -323,7 +323,7 @@ export function MatchupCardOverlay({
             side="home"
             popularityPct={popularity?.homePct ?? null}
           />
-          <div className="text-center text-[10px] font-bold" style={{ color: "rgba(255,255,255,0.12)" }}>VS</div>
+          <div className="text-center text-[11px] font-bold" style={{ color: "rgba(255,255,255,0.12)" }}>VS</div>
           <TeamCard
             name={awayName}
             seed={awaySeed}
@@ -351,7 +351,7 @@ export function MatchupCardOverlay({
                 <TrendingUp className="w-3.5 h-3.5" style={{ color: "#fb923c" }} />
                 <span className="text-xs font-bold" style={{ color: "#fb923c" }}>AI Matchup Analysis</span>
                 {aiData.confidence && (
-                  <span className="text-[9px] px-1.5 py-0.5 rounded" style={{ background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.3)" }}>
+                  <span className="text-[11px] px-1.5 py-0.5 rounded" style={{ background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.3)" }}>
                     {aiData.confidence}% conf
                   </span>
                 )}
@@ -361,7 +361,7 @@ export function MatchupCardOverlay({
               </p>
               {aiData.sources?.length > 0 && (
                 <details className="group">
-                  <summary className="text-[10px] font-semibold cursor-pointer" style={{ color: "rgba(255,255,255,0.25)" }}>
+                  <summary className="text-[11px] font-semibold cursor-pointer" style={{ color: "rgba(255,255,255,0.25)" }}>
                     Sources ({aiData.sources.length})
                   </summary>
                   <div className="mt-2 space-y-1">
@@ -371,7 +371,7 @@ export function MatchupCardOverlay({
                         href={s.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="block text-[10px] underline"
+                        className="block text-[11px] underline"
                         style={{ color: "rgba(251,146,60,0.6)" }}
                       >
                         {s.title || s.url}
@@ -381,7 +381,7 @@ export function MatchupCardOverlay({
                 </details>
               )}
               {aiData.lastUpdated && (
-                <div className="text-[9px]" style={{ color: "rgba(255,255,255,0.15)" }}>
+                <div className="text-[11px]" style={{ color: "rgba(255,255,255,0.15)" }}>
                   Updated: {formatInTimezone(aiData.lastUpdated)}
                 </div>
               )}

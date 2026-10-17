@@ -48,8 +48,6 @@ export interface NormalizedLeagueSettings {
   rosterSize: number | null
   scoring: string | null
   isDynasty: boolean
-  /** Provider-reported automatic lineup mode; absent leaves existing settings intact. */
-  best_ball?: boolean
   /** Phase OS-C5: the provider's own real league status (e.g. Sleeper's `pre_draft`/`drafting`/
    * `in_season`/`complete`), when the provider's API supplies one. `null`/absent when the provider
    * genuinely doesn't report a status — never a fabricated default. See
@@ -97,6 +95,33 @@ export interface NormalizedLeagueSettings {
    * only thing that can, and it is otherwise discarded at import.
    */
   is_keeper?: boolean
+  /**
+   * Sleeper's own waiver-schedule settings, exactly as Sleeper sent them — present only for a
+   * Sleeper import that carried at least one. `daily_waivers_hour` is the Pacific run hour
+   * (measured, contracts/sleeper/GAPS.md S-06); ⚠ `waiver_day_of_week`'s weekday is UNRESOLVED
+   * (S-05) except the measured `2` = Wednesday — never convert it by arithmetic. Read `lib/waivers/sleeperWaiverSchedule.ts` for a schedule a screen
+   * can show.
+   */
+  sleeper_waiver_schedule?: {
+    waiver_day_of_week?: number
+    daily_waivers?: number
+    daily_waivers_hour?: number
+    waiver_clear_days?: number
+  }
+  /**
+   * The provider's own best-ball flag (Sleeper `settings.best_ball`). The Sleeper mapper writes
+   * 1 or 0 (#1371); read it with `lineupMode.isBestBallSettings`, never by truthiness of a name.
+   *
+   * ⚠ DROPPED AT IMPORT UNTIL 2026-09-27: 0 of 344 Sleeper 2026 NFL leagues carried it while
+   * 43 NFL leagues were named best ball, so every lineup surface treated them as set-your-own
+   * lineups. Persisted into `League.settings.best_ball` by the settings spread and onto
+   * `League.bestBallMode` by `buildTier0LeagueColumnPatch`.
+   *
+   * Absent leaves existing settings intact (#1372). ⚠ ONE declaration: #1372 and #1373 each added
+   * this field (`boolean` and `0 | 1 | boolean`) and a clean merge kept both — a duplicate
+   * identifier. The wider type stands; `boolean` is a subset of it.
+   */
+  best_ball?: 0 | 1 | boolean
   reserve_allow_cov?: boolean
   reserve_allow_sus?: boolean
   reserve_allow_out?: boolean

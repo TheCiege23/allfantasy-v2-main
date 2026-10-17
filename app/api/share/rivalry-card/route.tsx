@@ -9,6 +9,9 @@ import { awardView, isAwardKind } from '@/lib/share/weeklyAwardCard'
 import { getGuillotineEscapesForUser } from '@/lib/share/guillotineEscape'
 import { resolveRosterDisplayNames } from '@/lib/guillotine/rosterDisplayNames'
 import { getUpsetForCard } from '@/lib/share/weeklyUpset'
+import { resolveLeagueMembership } from '@/lib/league-access'
+import { getLeagueStandings } from '@/lib/core-app/leagueStandings'
+import { standingsCardRows } from '@/lib/share/standingsCard'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -26,6 +29,10 @@ export const runtime = 'nodejs'
  *
  * `?kind=upset&leagueId=…&season=…&week=…` renders YOUR upset win that week — only by the odds saved
  * before kickoff (lib/share/weeklyUpset.ts), never recomputed. Your claimed team is the access check.
+ *
+ * `?kind=standings&leagueId=…` renders the league table as it stands — the top of it, the playoff line,
+ * and your row even when it is below the fold (lib/share/standingsCard.ts). League membership
+ * (`resolveLeagueMembership`) is the access check: `getLeagueStandings` itself checks nothing.
  */
 
 function initials(name: string): string {
@@ -304,6 +311,104 @@ async function upsetCard(req: NextRequest, userId: string) {
   )
 }
 
+async function standingsCard(req: NextRequest, userId: string) {
+  const leagueId = req.nextUrl.searchParams?.get('leagueId')?.trim()
+  if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
+  const membership = await resolveLeagueMembership(leagueId, userId)
+  if (!membership.ok) return NextResponse.json({ error: 'Not a member of this league' }, { status: membership.status })
+  const data = await getLeagueStandings(leagueId, userId).catch(() => null)
+  if (!data || !data.available) return NextResponse.json({ error: 'No standings to share yet' }, { status: 404 })
+  const card = standingsCardRows(data.board)
+  if (!card) return NextResponse.json({ error: 'No standings to share yet' }, { status: 404 })
+  const zoneColor: Record<string, string> = {
+    bye: '#60a5fa',
+    playoff: '#34d399',
+    bubble: '#f59e0b',
+    out: '#5d64a3',
+    eliminated: '#f87171',
+  }
+
+  return new ImageResponse(
+    (
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          width: '100%',
+          height: '100%',
+          background: '#0b0e2a',
+          fontFamily: 'sans-serif',
+        }}
+      >
+        <div style={{ display: 'flex', height: 8, width: '100%', background: 'linear-gradient(90deg,#34d399,#1e6cff)' }} />
+        <div style={{ display: 'flex', flexDirection: 'column', padding: '28px 48px', flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', fontSize: 40, fontWeight: 900, fontStyle: 'italic', color: '#f0f2ff', letterSpacing: 1 }}>
+              STANDINGS
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+              <div style={{ display: 'flex', fontSize: 22, fontWeight: 700, color: '#c6cbf5' }}>{data.league.name}</div>
+              <div style={{ display: 'flex', fontSize: 17, color: '#8b93cf' }}>{card.subtitle}</div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', marginTop: 18, flex: 1 }}>
+            <div style={{ display: 'flex', fontSize: 15, fontWeight: 800, color: '#5d64a3', letterSpacing: 2, paddingBottom: 6 }}>
+              <div style={{ display: 'flex', width: 56 }}>#</div>
+              <div style={{ display: 'flex', flex: 1 }}>TEAM</div>
+              <div style={{ display: 'flex', width: 120, justifyContent: 'flex-end' }}>{card.hasRecords ? 'W-L' : ''}</div>
+              <div style={{ display: 'flex', width: 150, justifyContent: 'flex-end' }}>PF</div>
+            </div>
+            {card.rows.map((r) =>
+              r.kind === 'line' ? (
+                <div
+                  key="line"
+                  style={{ display: 'flex', borderTop: '2px solid #34d399', marginTop: 2, marginBottom: 2, paddingTop: 2, fontSize: 13, fontWeight: 800, color: '#34d399', letterSpacing: 2 }}
+                >
+                  {r.label}
+                </div>
+              ) : r.kind === 'gap' ? (
+                <div key={`gap-${r.after}`} style={{ display: 'flex', fontSize: 20, color: '#5d64a3', paddingLeft: 17, letterSpacing: 4 }}>
+                  {/* Plain dots: no font ships with these cards, and "⋯" renders as a missing-glyph box. */}
+                  ...
+                </div>
+              ) : (
+                <div
+                  key={r.rosterId}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    height: card.rowHeight,
+                    fontSize: card.fontSize,
+                    color: r.isYou ? '#ffffff' : '#c6cbf5',
+                    fontWeight: r.isYou ? 900 : 600,
+                    background: r.isYou ? 'rgba(30,108,255,0.28)' : 'transparent',
+                    borderLeft: `5px solid ${zoneColor[r.zone] ?? '#5d64a3'}`,
+                    paddingLeft: 12,
+                  }}
+                >
+                  <div style={{ display: 'flex', width: 44 }}>{r.seed}</div>
+                  <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>{r.isYou ? `${r.name}  · YOU` : r.name}</div>
+                  <div style={{ display: 'flex', width: 120, justifyContent: 'flex-end' }}>{r.record}</div>
+                  <div style={{ display: 'flex', width: 150, justifyContent: 'flex-end' }}>{r.pointsFor}</div>
+                </div>
+              ),
+            )}
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', fontSize: 15, color: '#5d64a3' }}>{card.footnote}</div>
+            <div style={{ display: 'flex', fontSize: 18, fontWeight: 800, color: '#c6cbf5' }}>
+              AllFantasy.ai · a Brown Pig LLC product
+            </div>
+          </div>
+        </div>
+      </div>
+    ),
+    { width: 1200, height: 630 },
+  )
+}
+
 export async function GET(req: NextRequest) {
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
@@ -312,6 +417,7 @@ export async function GET(req: NextRequest) {
   if (req.nextUrl.searchParams?.get('kind')?.trim() === 'award') return awardCard(req, userId)
   if (req.nextUrl.searchParams?.get('kind')?.trim() === 'escape') return escapeCard(req, userId)
   if (req.nextUrl.searchParams?.get('kind')?.trim() === 'upset') return upsetCard(req, userId)
+  if (req.nextUrl.searchParams?.get('kind')?.trim() === 'standings') return standingsCard(req, userId)
 
   const leagueId = req.nextUrl.searchParams?.get('leagueId')?.trim()
   const aId = req.nextUrl.searchParams?.get('a')?.trim()

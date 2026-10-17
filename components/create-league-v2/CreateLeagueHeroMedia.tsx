@@ -38,7 +38,7 @@ export function CreateLeagueHeroMedia({
             onError={() => {
               const el = videoRef.current
               if (!el) return
-              if (media.fallback && el.src !== media.fallback) {
+              if (media.fallback && el.src !== new URL(media.fallback, window.location.origin).href) {
                 el.src = media.fallback
                 el.load()
               }
@@ -53,7 +53,7 @@ export function CreateLeagueHeroMedia({
             aria-hidden
           />
           {media.badge ? (
-            <div className="absolute left-4 top-4 rounded-full border border-white/15 bg-black/45 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-white/85 backdrop-blur-md">
+            <div className="absolute left-4 top-4 rounded-full border border-white/15 bg-black/45 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-white/85 backdrop-blur-md">
               {media.badge}
             </div>
           ) : null}

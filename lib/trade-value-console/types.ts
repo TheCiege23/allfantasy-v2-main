@@ -20,6 +20,12 @@ export type TeamContextMode = 'my_team' | 'team_a' | 'team_b' | 'neutral'
 
 export type TradeAssetInput =
   | { kind: 'player'; playerId?: string; name?: string; sportHint?: string;
+      /**
+       * The player's id on THIS league's rosters, in the league's own id space. Read only where a grade
+       * is priced from the league's rosters (a college redraft league); the chart path never reads it,
+       * so carrying it cannot change an NFL price the way a bare `playerId` would.
+       */
+      rosterPlayerId?: string;
       /** Provider-qualified reference; a Yahoo number must never be read as a Sleeper ID. */
       providerIdentity?: { provider: 'sleeper' | 'yahoo'; id: string; position?: string; team?: string } }
   | {
@@ -28,6 +34,11 @@ export type TradeAssetInput =
       round: number
       tier?: 'early' | 'mid' | 'late'
       label?: string
+      /**
+       * The provider roster id of the team the pick ORIGINALLY belonged to (`LeagueTeam.externalId`), when
+       * known — its landing spot follows that team's finish (`loadPickSlotProjection`).
+       */
+      originalRosterId?: string
     }
   | { kind: 'faab'; amount: number }
 
@@ -49,6 +60,11 @@ export type TradeConsoleAnalyzeInput = {
   allowMultisportFairness?: boolean
   /** League team `externalId` — opponent roster for lineup / rebalance context. */
   opponentTeamExternalId?: string | null
+  /**
+   * With no league: how a daily-sport deal is scored — fantasy points, or a standard category preset
+   * (`lib/decision-os/trade/sportPointsContext.ts`). Ignored in a league, which uses its own settings.
+   */
+  scoringFormat?: 'points' | 'nba_9cat' | 'nba_8cat_standard' | 'mlb_5x5' | 'mlb_6x6' | null
 }
 
 export type TradeConsoleLeagueSnapshot = {
@@ -217,6 +233,8 @@ export type TradeIntelligence = {
 }
 
 export type TradeConsoleAnalyzeResult = {
+  visualImpact?: import('@/lib/decision-os/trade/loadVisualImpact').VisualImpactResult | null
+  evaluationReceipt?: ({ status: 'saved' } & import('@/lib/decision-os/trade/evaluationReceipt').SavedTradeEvaluation) | { status: 'unavailable' } | null
   ok: true
   /** `league` = roster + scoring from a league row; `global` = sport/asset analysis without league. */
   analysisMode: 'league' | 'global'

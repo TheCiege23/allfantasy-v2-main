@@ -81,16 +81,21 @@ export function normalizeNflTeamDefenseWeeklyStats(raw: unknown): Record<string,
 
   const out: Record<string, number> = {}
 
-  setIfNumber(out, 'def_sack', firstNumber(source, ['def_sack', 'sack', 'sacks', 'def_sacks']))
-  setIfNumber(out, 'def_int', firstNumber(source, ['def_int', 'interceptions', 'int', 'def_interceptions']))
+  setIfNumber(out, 'def_sack', firstNumber(source, ['def_sack', 'dst_sack', 'sack', 'sacks', 'def_sacks']))
+  setIfNumber(out, 'def_int', firstNumber(source, ['def_int', 'dst_interception', 'interceptions', 'int', 'def_interceptions']))
   setIfNumber(out, 'def_fr', firstNumber(source, ['def_fr', 'fum_rec', 'fumble_recovery', 'fumbles_recovered']))
   setIfNumber(out, 'def_safety', firstNumber(source, ['def_safety', 'def_safe', 'safe', 'safety', 'safeties']))
   setIfNumber(out, 'def_blk_kick', firstNumber(source, ['def_blk_kick', 'blk_kick', 'blocked_kick', 'blocked_kicks']))
-  setIfNumber(out, 'def_td', firstNumber(source, ['def_td', 'defensive_td', 'def_tds']))
+  // Stored team rows share this unambiguous touchdown key with IDP rows. A bare `td`
+  // on a team row describes opponent offensive touchdowns, so it must never be used here.
+  setIfNumber(out, 'def_td', firstNumber(source, ['def_td', 'idp_defensive_touchdown', 'defensive_td', 'def_tds']))
   setIfNumber(
     out,
     'def_st_td',
-    sumNumbers(source, ['def_st_td', 'st_td', 'special_teams_td', 'ret_td', 'kr_td', 'pr_td']),
+    // A supplied total already includes its kick/punt-return components. Prefer the
+    // total (including an explicit zero); add components only when no total exists.
+    firstNumber(source, ['def_st_td', 'st_td', 'special_teams_td', 'ret_td']) ??
+      sumNumbers(source, ['kr_td', 'pr_td']),
   )
   setIfNumber(
     out,
@@ -117,6 +122,31 @@ export function isTeamDefenseRow(playerId: string | null | undefined, position: 
 export function teamAbbrevFromDefPlayerId(playerId: string | null | undefined): string | null {
   const match = String(playerId ?? '').match(/^nfl:def:(.+)$/i)
   return match ? match[1].trim().toUpperCase() : null
+}
+
+/**
+ * The ONE key a team defence's box score is stored under — `nfl:def:<ABBR>` — for either id form a
+ * roster can hold, or null when the row is not a team defence.
+ *
+ * 🛑 TWO ID FORMS, ONE DEFENCE. Sleeper's id for a defence is the bare club code (`KC` — every
+ * Sleeper-league DEF slot on production); AllFantasy's synthetic one is `nfl:def:KC`. Every box-score
+ * writer keys on the synthetic form — the team-defence ingest (`buildTeamDefensePlayerId`), the live
+ * provider's defence lines, and all 8 `player_game_log_cache` defence rows on production (0 under a
+ * bare code, 2026-10-13) — so a reader asking for `KC` found nothing and scored points-allowed alone.
+ * The synthetic form is canonical because it is what the stored data and its writers already use;
+ * a bare code is accepted only on a row whose position says team defence, since a two-letter id is
+ * not otherwise self-describing.
+ */
+export function canonicalTeamDefenseId(
+  playerId: string | null | undefined,
+  position: string | null | undefined,
+): string | null {
+  const fromId = teamAbbrevFromDefPlayerId(playerId)
+  if (fromId) return `nfl:def:${fromId}`
+  const pos = String(position ?? '').trim().toUpperCase()
+  if (pos !== 'DEF' && pos !== 'DST' && pos !== 'D/ST') return null
+  const code = String(playerId ?? '').trim().toUpperCase()
+  return /^[A-Z]{2,3}$/.test(code) ? `nfl:def:${code}` : null
 }
 
 export function pointsAllowedFromGame(

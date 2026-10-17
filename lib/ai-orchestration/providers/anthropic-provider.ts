@@ -20,6 +20,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import type { IProviderClient, ProviderChatOptions } from '../provider-interface'
 import type { ProviderChatRequest, ProviderChatResult } from '../types'
 import { isAiSpendEnabled } from '@/lib/ai/aiSpendGuard'
+import { anthropicTokenUsage, recordLlmCall } from '@/lib/telemetry/llm-usage'
 import {
   CHIMMY_CLAUDE_EFFORT,
   CHIMMY_CLAUDE_FALLBACK_BETA,
@@ -68,7 +69,24 @@ export function createAnthropicProvider(): IProviderClient {
       if (!user.trim()) return buildProviderInvalidResponse({ provider: ROLE, model, error: 'Empty user message' })
 
       const client = new Anthropic({ apiKey, maxRetries: 0 })
-      const create = (withFallbacks: boolean) =>
+      /*
+       * Metered per request (`recordLlmCall`). This is Chimmy's push/PECR answer and the Opus "explain"
+       * buttons, which recorded nothing until 2026-09-28. The retry without the fallback header is a
+       * second billed request, so it is counted too.
+       */
+      const create = async (withFallbacks: boolean): Promise<Anthropic.Message> => {
+        const startedAt = Date.now()
+        const maxTokens = Math.max(CHIMMY_CLAUDE_MAX_TOKENS, request.maxTokens ?? 0)
+        try {
+          const response = await sendCreate(withFallbacks)
+          recordLlmCall({ feature: 'chimmy_orchestration', provider: ROLE, model: response.model || model, usage: anthropicTokenUsage(response.usage), maxTokens, ok: true, durationMs: Date.now() - startedAt })
+          return response
+        } catch (err) {
+          recordLlmCall({ feature: 'chimmy_orchestration', provider: ROLE, model, maxTokens, ok: false, durationMs: Date.now() - startedAt })
+          throw err
+        }
+      }
+      const sendCreate = (withFallbacks: boolean) =>
         client.messages.create(
           {
             model,

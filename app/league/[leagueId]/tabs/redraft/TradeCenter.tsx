@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { TradeCenterModal } from './TradeCenterModal'
 import { CommissionerReviewPanel } from './CommissionerReviewPanel'
+import { reviewIdFor } from '@/lib/trade-review/reviewIdStore'
 import { TradeDiscoveryPanel } from './TradeDiscoveryPanel'
 import { TradeBlockPanel } from './TradeBlockPanel'
 import { MarketSnapshotPanel } from './MarketSnapshotPanel'
@@ -132,7 +133,9 @@ export function TradeCenter({
     setBusyProposalId(proposalId)
     setError(null)
     try {
-      await submitTradeVote({ proposalId, action })
+      // A commissioner's decision carries the review it was made with (design step 6: decision logged).
+      const commissionerAction = action === 'commissioner_approve' || action === 'commissioner_veto'
+      await submitTradeVote({ proposalId, action, ...(commissionerAction ? { reviewId: reviewIdFor(proposalId) } : {}) })
       await refresh()
     } catch (e) {
       setError(e instanceof Error ? e.message : `Failed to ${action}`)
@@ -145,7 +148,7 @@ export function TradeCenter({
     setBusyProposalId(proposalId)
     setError(null)
     try {
-      await vetoRedraftTradeProposal({ proposalId })
+      await vetoRedraftTradeProposal({ proposalId, reviewId: reviewIdFor(proposalId) })
       await refresh()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to veto proposal')
@@ -187,7 +190,7 @@ export function TradeCenter({
       </div>
 
       {settings ? (
-        <div className="flex flex-wrap gap-2 text-[10px] text-white/55" data-testid="trade-settings-summary">
+        <div className="flex flex-wrap gap-2 text-[11px] text-white/55" data-testid="trade-settings-summary">
           <span className="rounded border border-white/10 bg-white/[0.03] px-2 py-0.5">
             Review: {settings.commissionerTradeReviewType}
           </span>
@@ -209,19 +212,19 @@ export function TradeCenter({
           data-testid="redraft-trade-runtime-summary"
         >
           <div>
-            <p className="text-[10px] uppercase tracking-[0.16em] text-[#ffd7e5]/60">Runtime</p>
+            <p className="text-[11px] uppercase tracking-[0.16em] text-[#ffd7e5]/60">Runtime</p>
             <p className="mt-1 font-semibold text-white">{runtime.coverage.pendingTrades} pending</p>
           </div>
           <div>
-            <p className="text-[10px] uppercase tracking-[0.16em] text-[#ffd7e5]/60">History</p>
+            <p className="text-[11px] uppercase tracking-[0.16em] text-[#ffd7e5]/60">History</p>
             <p className="mt-1 font-semibold text-white">{runtime.coverage.transactionCount} records</p>
           </div>
           <div>
-            <p className="text-[10px] uppercase tracking-[0.16em] text-[#ffd7e5]/60">Vote State</p>
+            <p className="text-[11px] uppercase tracking-[0.16em] text-[#ffd7e5]/60">Vote State</p>
             <p className="mt-1 font-semibold text-white">{runtime.coverage.voteCount} votes</p>
           </div>
           <div>
-            <p className="text-[10px] uppercase tracking-[0.16em] text-[#ffd7e5]/60">Pick Trading</p>
+            <p className="text-[11px] uppercase tracking-[0.16em] text-[#ffd7e5]/60">Pick Trading</p>
             <p className="mt-1 font-semibold text-white">
               {runtime.settings.pickExecutionStatus === 'unavailable'
                 ? 'Not in proposals'
@@ -253,29 +256,31 @@ export function TradeCenter({
                     {rosterNameById.get(p.receiverRosterId) ?? 'Team B'}
                   </p>
                   <div className="flex items-center gap-1.5">
-                    {p.valueSnapshot ? (
+                    {/* The one grade, from the proposer's side — not the proposal-time snapshot's own scale. */}
+                    {p.tradeGrade?.grade ? (
                       <span
-                        className="rounded border border-[#ff9ec0]/40 bg-[#ff3d81]/10 px-1.5 py-0.5 text-[10px] font-bold text-[#ffd7e5]"
-                        title={`Original grade at proposal time · fairness ${p.valueSnapshot.fairnessScore}/100`}
+                        className="rounded border border-[#ff9ec0]/40 bg-[#ff3d81]/10 px-1.5 py-0.5 text-[11px] font-bold text-[#ffd7e5]"
+                        title={`Grade for ${rosterNameById.get(p.proposerRosterId) ?? 'the proposer'} on this league's values`}
                         data-testid="trade-proposal-grade"
                       >
-                        {p.valueSnapshot.grade}
+                        {p.tradeGrade.grade}
                       </span>
                     ) : null}
-                    <span className={`rounded border px-2 py-0.5 text-[10px] uppercase ${tone}`}>{p.status}</span>
+                    <span className={`rounded border px-2 py-0.5 text-[11px] uppercase ${tone}`}>{p.status}</span>
                   </div>
                 </div>
                 <div className="mt-2 grid gap-2 sm:grid-cols-2">
                   <div className="rounded border border-white/10 bg-white/[0.03] p-2">
-                    <p className="font-semibold text-white/70">{rosterNameById.get(p.proposerRosterId) ?? 'Team A'} sends</p>
+                    {/* Each team over what it GETS — the proposer's grade above is for this column. */}
+                    <p className="font-semibold text-white/70">{rosterNameById.get(p.proposerRosterId) ?? 'Team A'} gets</p>
                     <p className="mt-1 text-white/55">
-                      {proposerAssets.length ? proposerAssets.map(formatProposalAsset).join(', ') : '—'}
+                      {receiverAssets.length ? receiverAssets.map(formatProposalAsset).join(', ') : '—'}
                     </p>
                   </div>
                   <div className="rounded border border-white/10 bg-white/[0.03] p-2">
-                    <p className="font-semibold text-white/70">{rosterNameById.get(p.receiverRosterId) ?? 'Team B'} sends</p>
+                    <p className="font-semibold text-white/70">{rosterNameById.get(p.receiverRosterId) ?? 'Team B'} gets</p>
                     <p className="mt-1 text-white/55">
-                      {receiverAssets.length ? receiverAssets.map(formatProposalAsset).join(', ') : '—'}
+                      {proposerAssets.length ? proposerAssets.map(formatProposalAsset).join(', ') : '—'}
                     </p>
                   </div>
                 </div>
@@ -331,7 +336,7 @@ export function TradeCenter({
                     onReversed={() => void refresh()}
                   />
                 ) : null}
-                {isCommissioner || settingsCommissioner ? <CommissionerReviewPanel proposalId={p.id} /> : null}
+                {isCommissioner || settingsCommissioner ? <CommissionerReviewPanel leagueId={leagueId} proposalId={p.id} /> : null}
               </div>
             )
           })

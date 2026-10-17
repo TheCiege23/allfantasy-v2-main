@@ -46,6 +46,8 @@ export type IdentityRow = {
 export type DobRow = {
   sleeperId: string | null
   dob: string | null
+  /** The row's `SportsPlayer.source`. Sleeper's own row outranks a provider row stamped with its id. */
+  source?: string | null
 }
 
 /**
@@ -77,10 +79,16 @@ export function buildSleeperDobMap(
   for (const pid of ambiguous) sleeperIdByPlayer.delete(pid)
 
   const dobBySleeperId = new Map<string, string>()
-  for (const r of dobRows) {
+  /*
+   * 🛑 SLEEPER'S OWN ROW FIRST, THEN FIRST WINS. Rolling Insights and TheSportsDB rows carry the same
+   * Sleeper id and disagree with each other — Kyler Murray is 1997-08-07 in one and 1997-08-27 in the
+   * other — and the query has no ordering, so "first" was a coin toss between them. Sleeper's row is
+   * the player this id names; it decides whenever it holds a birthday. The remaining tie-break is
+   * still first-wins, so a duplicate cannot flip the value between runs.
+   */
+  const ordered = [...dobRows].sort((a, b) => Number(b.source === 'sleeper') - Number(a.source === 'sleeper'))
+  for (const r of ordered) {
     const dob = r.dob?.trim()
-    /* First wins: the caller reads these in one query with no ordering
-       guarantee, so a duplicate must not silently flip the value between runs. */
     if (!r.sleeperId || !dob || dobBySleeperId.has(r.sleeperId)) continue
     /* A filler birthday is worse than none — see the header. */
     if (isPlaceholderBirthday(dob)) continue

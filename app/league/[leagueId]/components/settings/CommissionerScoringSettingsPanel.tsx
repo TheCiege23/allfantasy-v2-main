@@ -292,7 +292,7 @@ export function CommissionerScoringSettingsPanel({
                   type="button"
                   onClick={() => setMoreTab(tab.id)}
                   className={clsx(
-                    'min-h-[28px] rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide',
+                    'min-h-[28px] rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide',
                     moreTab === tab.id ? ACCENT : PILL_INACTIVE,
                   )}
                 >
@@ -317,11 +317,11 @@ export function CommissionerScoringSettingsPanel({
               >
                 <div className="min-w-0 flex-1">
                   <p className="text-[12px] font-medium text-white/90">{row.label}</p>
-                  {helper ? <p className="mt-0.5 text-[10px] text-white/40">{helper}</p> : null}
-                  {yardLive ? <p className="mt-1 text-[10px] text-white/35">{yardLive}</p> : null}
+                  {helper ? <p className="mt-0.5 text-[11px] text-white/40">{helper}</p> : null}
+                  {yardLive ? <p className="mt-1 text-[11px] text-white/35">{yardLive}</p> : null}
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
-                  <label className="flex cursor-pointer items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-white/45">
+                  <label className="flex cursor-pointer items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-white/45">
                     <input
                       type="checkbox"
                       checked={st.enabled}
@@ -357,7 +357,7 @@ export function CommissionerScoringSettingsPanel({
         >
           {saving ? 'Saving…' : 'Save changes'}
         </button>
-        {dirty ? <p className="mt-2 text-center text-[10px] text-amber-200/65">Unsaved scoring changes</p> : null}
+        {dirty ? <p className="mt-2 text-center text-[11px] text-amber-200/65">Unsaved scoring changes</p> : null}
       </div>
     </div>
   )

@@ -1,8 +1,11 @@
+import { isImportedPlatform } from '@/lib/league/isNativeLeague'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { resolveLeagueAccess } from '@/lib/league-access'
+import { CURRENT_TEAMS } from '@/lib/leagues/leagueTeamLifecycle'
+import { readImportedPointsAgainst } from '@/lib/league-import/importedPointsAgainst'
 import { buildRosterLabelMap } from '@/lib/scoring-engine/resolveTeamLabels'
 import {
   computeAllPlay,
@@ -11,10 +14,8 @@ import {
   formatStreak,
 } from '@/lib/standings/seasonForm'
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { leagueId: string } },
-) {
+export async function GET(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
+  const params = await props.params
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
@@ -25,6 +26,11 @@ export async function GET(
       id: true,
       season: true,
       settings: true,
+      platform: true,
+      bestBallMode: true,
+      bbMatchupFormat: true,
+      leagueType: true,
+      leagueVariant: true,
     },
   })
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
@@ -44,7 +50,23 @@ export async function GET(
   }
 
   const sp = req.nextUrl.searchParams
-  const season = Math.max(2000, Math.min(2100, Number(sp.get('season')) || league.season))
+  const season = Math.max(2000, Math.min(2100, Math.trunc(Number(sp.get('season'))) || league.season))
+
+  // Imported records remain platform-owned; never substitute a native round-robin result.
+  if (isImportedPlatform(league.platform)) {
+    const teams = await prisma.leagueTeam.findMany({ where: { leagueId, ...CURRENT_TEAMS }, orderBy: [{ currentRank: 'asc' }, { teamName: 'asc' }] })
+    const pointsAgainst = (team: typeof teams[number]) => readImportedPointsAgainst({
+      settings: league.settings, platform: league.platform, season, externalId: team.externalId, persisted: team.pointsAgainst,
+    })
+    const played = teams.some(t => t.wins + t.losses + t.ties > 0 || t.pointsFor !== 0 || (pointsAgainst(t) ?? 0) !== 0)
+    const standings = season === league.season && played ? teams.map(t => ({ rosterId: t.id, teamName: t.teamName?.trim() || t.ownerName?.trim() || 'Unnamed team',
+      wins: t.wins, losses: t.losses, ties: t.ties, pointsFor: t.pointsFor, pointsAgainst: pointsAgainst(t), rank: t.currentRank,
+      categoryWinsFor: null, categoryLossesFor: null, categoryTiesFor: null, streak: null, allPlay: null })) : []
+    const owned = teams.filter(t => t.claimedByUserId === session.user!.id || t.platformUserId === session.user!.id)
+    return NextResponse.json({ season, standings, scoringMode, viewerRosterId: owned.length === 1 ? owned[0].id : null,
+      playoffCut: null, source: 'imported', sourcePlatform: league.platform, scoredWeeks: null, cumulative: league.bestBallMode && league.bbMatchupFormat === 'cumulative' },
+      { headers: { 'Cache-Control': 'private, no-store' } })
+  }
 
   /*
    * Streak and all-play (standings 9a) are DERIVED from the same weekly results the standings
@@ -59,7 +81,7 @@ export async function GET(
     }),
     buildRosterLabelMap(leagueId),
     prisma.teamWeekResult.findMany({
-      where: { leagueId, season },
+      where: { leagueId, season, status: 'final' },
       select: { week: true, rosterId: true, totalPoints: true, winLoss: true },
     }),
   ])
@@ -67,7 +89,8 @@ export async function GET(
   const streaks = computeStreaks(weekResults)
   const allPlay = computeAllPlay(weekResults)
 
-  const standings = rows.map((r) => ({
+  const scoredRosterIds = new Set(weekResults.map(r => r.rosterId))
+  const standings = rows.filter(r => scoredRosterIds.has(r.rosterId)).map((r) => ({
     rosterId: r.rosterId,
     teamName: labels.get(r.rosterId) ?? r.rosterId,
     wins: r.wins,
@@ -110,5 +133,5 @@ export async function GET(
       : NaN
   const playoffCut = Number.isFinite(playoffTeams) && playoffTeams > 0 ? playoffTeams : null
 
-  return NextResponse.json({ season, standings, scoringMode, viewerRosterId, playoffCut })
+  return NextResponse.json({ season, standings, scoringMode, viewerRosterId, playoffCut, source: 'native', sourcePlatform: 'AllFantasy', scoredWeeks: new Set(weekResults.map(r => r.week)).size, cumulative: league.bestBallMode && league.bbMatchupFormat === 'cumulative' }, { headers: { 'Cache-Control': 'private, no-store' } })
 }

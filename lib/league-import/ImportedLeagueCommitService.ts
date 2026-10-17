@@ -1,3 +1,4 @@
+import { IMPORTED_POINTS_AGAINST_KEY, importedPointsAgainstSnapshot } from './importedPointsAgainst'
 import { randomUUID } from 'crypto'
 import { Prisma } from '@prisma/client'
 import { waitUntil } from '@vercel/functions'
@@ -175,6 +176,23 @@ export function buildTier0LeagueColumnPatch(
   setIfBool('irAllowDNR', l.reserve_allow_dnr)
   setIfBool('irAllowDoubtful', l.reserve_allow_doubtful)
 
+  /*
+   * Best ball — the provider's own flag (Sleeper `settings.best_ball`), so every surface that
+   * already reads `League.bestBallMode` (portfolio facet, the Chimmy lineup check, autocoach,
+   * start/sit, the league shell's Best Ball tab) agrees with the game-day list. Guap's decision,
+   * 2026-09-27. Absent flag → no key → the column keeps its value.
+   *
+   * ⚠ THE SLEEPER MAPPER WRITES 1 / 0, NOT A BOOLEAN (#1371), so `setIfBool` alone would never fire.
+   *
+   * ⚠ ONE CONSUMER READ IT AS "TRADES OFF": `resolveLeagueTradeSettings` blocked every trade in a
+   * best-ball league, which is AllFantasy's native best-ball default — not Sleeper's, where best-ball
+   * leagues trade. That rule is now scoped to native leagues (tradeSettingsResolver.ts), or this
+   * line would have made Chimmy refuse trade cards in every imported best-ball league.
+   */
+  const bestBall = l.best_ball
+  if (bestBall === 1 || bestBall === true) out.bestBallMode = true
+  else if (bestBall === 0 || bestBall === false) out.bestBallMode = false
+
   return out
 }
 
@@ -319,6 +337,7 @@ export function buildImportedLeagueSettings(normalized: NormalizedImportResult):
     scoring_settings: (normalized.league as Record<string, unknown>).scoring_settings,
     sport_type: sportType,
     league_variant: leagueVariant,
+    [IMPORTED_POINTS_AGAINST_KEY]: importedPointsAgainstSnapshot(normalized),
     source_tracking: {
       ...normalized.source,
     },
@@ -914,6 +933,13 @@ export async function persistImportedLeagueFromNormalization(
 
   /* Collected across every post-create step and returned; see `runBootstrapStep`. */
   const incompleteSteps: ImportWarningRecord[] = []
+  if (provider === 'espn' && normalized.league.sport === 'MLB') {
+    await runBootstrapStep('BOOTSTRAP_PLAYER_IDENTITIES_FAILED', 'Baseball player identities need review before native conversion', 'error', incompleteSteps, async () => {
+      const { ingestMlbEspnImportIdentities } = await import('@/lib/player-identity/ingestMlbEspnImportIdentities')
+      await ingestMlbEspnImportIdentities(normalized.player_map ?? {})
+    })
+  }
+
 
   /*
    * ⚠ THE ONE THAT MATTERS MOST. This writes every LeagueTeam and Roster row. When it threw,

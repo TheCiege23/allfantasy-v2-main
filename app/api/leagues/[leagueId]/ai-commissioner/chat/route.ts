@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { assertLeagueMember } from '@/lib/league-access'
+import { getLeagueRole } from '@/lib/league/permissions'
+import { prisma } from '@/lib/prisma'
 import { answerAICommissionerQuestion } from '@/lib/ai-commissioner'
 import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
 import { TokenSpendService } from '@/lib/tokens/TokenSpendService'
@@ -21,9 +22,8 @@ export async function POST(
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  try {
-    await assertLeagueMember(leagueId, userId)
-  } catch {
+  const role = await getLeagueRole(leagueId, userId)
+  if (role !== 'commissioner' && role !== 'co_commissioner') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
@@ -68,11 +68,19 @@ export async function POST(
   const spendService = new TokenSpendService()
   const spendLedgerId = gate.tokenSpend?.id ?? null
   try {
+    const network = await Promise.resolve().then(() => prisma.commissionerNetworkMember.findFirst({
+      where: { leagueId, network: { ownerUserId: userId } },
+      select: { network: { select: { name: true, members: { select: { league: { select: { id: true, name: true, userId: true } } } } } } },
+    })).catch(() => null)
     const result = await answerAICommissionerQuestion({
       leagueId,
       question,
       sport: body.sport ?? null,
       season,
+      networkContext: network ? {
+        name: network.network.name,
+        leagues: network.network.members.filter((member) => member.league.userId === userId).map((member) => ({ id: member.league.id, name: member.league.name ?? 'Untitled league' })),
+      } : null,
     })
 
     return NextResponse.json({

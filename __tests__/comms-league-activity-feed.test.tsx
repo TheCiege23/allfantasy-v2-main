@@ -38,6 +38,31 @@ describe('LeagueActivityFeed', () => {
     expect(url).not.toContain('leagueId')
   })
 
+  /*
+   * 🛑 THE GRADE ON A FEED TRADE (2026-09-27). A trade read "A gets X · B gets Y" and nothing else,
+   * while every other trade surface showed each team's letter.
+   */
+  it('draws each team’s letter on a graded trade, and says when it was graded', async () => {
+    const graded = item({ tradeGrade: { graded: true, basis: 'today', sides: [{ name: 'Hoovi', letter: 'D' }, { name: 'Nicolodeon', letter: 'B' }] } })
+    vi.stubGlobal('fetch', mockFetch({ status: 'ok', items: [graded] }))
+    const { container } = render(<LeagueActivityFeed />)
+    await screen.findByText('Kings League')
+    const chips = [...container.querySelectorAll('.af-cm-act-grade-chip')].map((c) => c.textContent)
+    expect(chips).toEqual(['Hoovi D', 'Nicolodeon B'])
+    expect(screen.getByText('on this league’s values today')).toBeTruthy()
+  })
+
+  it('a withheld grade says why with no letter, and an ungraded trade draws nothing', async () => {
+    vi.stubGlobal('fetch', mockFetch({ status: 'ok', items: [
+      item({ id: 'w', tradeGrade: { graded: false, reason: 'FAAB in this trade is not priced on the league chart' } }),
+      item({ id: 'n' }),
+    ] }))
+    const { container } = render(<LeagueActivityFeed />)
+    expect(await screen.findByText('Not graded: FAAB in this trade is not priced on the league chart')).toBeTruthy()
+    expect(container.querySelectorAll('.af-cm-act-grade-chip')).toHaveLength(0)
+    expect(container.querySelectorAll('.af-cm-act-grade')).toHaveLength(1)
+  })
+
   it('names the league each item came from', async () => {
     vi.stubGlobal('fetch', mockFetch({ status: 'ok', items: [item()] }))
 

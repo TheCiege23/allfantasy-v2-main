@@ -13,8 +13,10 @@ import {
   SectionHead,
   StatPair,
   platformKey,
+  NoLeaguesYet,
 } from '@/components/core-app/boards/BoardKit'
 import { DraftClock } from '@/components/core-app/boards/DraftClock'
+import { TopicTip } from '@/components/core-app/TopicTip'
 import '@/components/core-app/af-core-boards.css'
 
 /**
@@ -88,6 +90,7 @@ function urgency(r: DraftHqAllRow): number {
 }
 
 function statusOf(r: DraftHqAllRow): { label: string; sev: 'bad' | 'warn' | 'good' | 'info' } {
+  if (r.rawStatus === 'paused') return { label: 'PAUSED', sev: 'info' }
   if (r.yoursOnClock) return { label: 'YOU ARE ON THE CLOCK', sev: 'bad' }
   if (r.phase === 'live') {
     return {
@@ -120,7 +123,9 @@ function statusOf(r: DraftHqAllRow): { label: string; sev: 'bad' | 'warn' | 'goo
 function reasoningOf(r: DraftHqAllRow): string {
   const bits: string[] = []
 
-  if (r.yoursOnClock) {
+  if (r.rawStatus === 'paused') {
+    bits.push('This draft is paused; the pick countdown is stopped.')
+  } else if (r.yoursOnClock) {
     bits.push('It is your pick right now.')
   } else if (r.phase === 'live' && r.onClockName) {
     bits.push(`${r.onClockName} is on the clock.`)
@@ -131,8 +136,8 @@ function reasoningOf(r: DraftHqAllRow): string {
   if (r.yourSlot != null && r.teamCount != null) {
     const early = r.yourSlot <= Math.max(1, Math.round(r.teamCount / 4))
     const late = r.yourSlot >= r.teamCount - Math.max(0, Math.round(r.teamCount / 4) - 1)
-    if (early) bits.push(`You pick ${r.yourSlot} of ${r.teamCount} — an early slot, so the board comes to you first each round.`)
-    else if (late) bits.push(`You pick ${r.yourSlot} of ${r.teamCount} — back of the order, so your picks come in pairs.`)
+    if (early) bits.push(`Your original draft slot is ${r.yourSlot} of ${r.teamCount} — near the front of the opening round.`)
+    else if (late) bits.push(`Your original draft slot is ${r.yourSlot} of ${r.teamCount} — near the end of the opening round.`)
     else bits.push(`You pick ${r.yourSlot} of ${r.teamCount}.`)
   }
 
@@ -175,13 +180,13 @@ function LiveDetail({ row, picks }: { row: DraftHqAllRow; picks: LiveDraftPicks 
               <PlayerFace
                 imageUrl={p.imageUrl}
                 name={p.playerName ?? 'Unnamed pick'}
-                teamLogoUrl={teamLogoUrl('NFL', p.team)}
+                teamLogoUrl={teamLogoUrl(p.sport ?? 'NFL', p.team)}
                 size="sm"
               />
               <span className="af-bd-asset-name">
                 {p.playerName ? (
                   <PlayerName
-                    sport="NFL"
+                    sport={p.sport ?? 'NFL'}
                     sleeperId={p.sleeperId}
                     name={p.playerName}
                     position={p.position}
@@ -312,7 +317,7 @@ function Card({ row, picks }: { row: DraftHqAllRow; picks?: LiveDraftPicks }) {
             className="af-bd-btn"
             href={`/core/draft-hq?league=${encodeURIComponent(row.leagueId)}`}
           >
-            {row.phase === 'live' ? 'Open the board →' : 'Open board →'}
+            {row.phase === 'live' ? 'Open the board →' : row.phase === 'upcoming' ? 'Prepare for draft →' : 'Open board →'}
           </Link>
         </header>
 
@@ -337,6 +342,7 @@ function Card({ row, picks }: { row: DraftHqAllRow; picks?: LiveDraftPicks }) {
             sev={row.queuedCount > 0 ? 'accent' : undefined}
           />
         </div>
+        <p className="af-bd-note"><TopicTip topic="draftCardStats" /></p>
 
         {/*
           The live tail, only for a draft that is actually running and only when
@@ -358,6 +364,16 @@ export function DraftHqBoard({ data, allHref, totalLeagues, picks }: DraftHqBoar
 
   const withDraft = data.rows.length
 
+  /* No leagues on this account yet: say so and offer a way forward (BoardKit NoLeaguesYet). */
+  if (totalLeagues === 0) {
+    return (
+      <div className="af-bd">
+        <BoardHead eyebrow="Core · Draft HQ" title="Draft HQ" blurb="Every draft you are in, ranked by the clock — the one on you first, then the ones running, then the ones still to come." />
+        <NoLeaguesYet what="Once one is, every draft you are in shows here, ranked by the clock. A mock draft works right now, with no league at all." />
+      </div>
+    )
+  }
+
   return (
     <div className="af-bd">
       <BoardHead
@@ -365,6 +381,7 @@ export function DraftHqBoard({ data, allHref, totalLeagues, picks }: DraftHqBoar
         title="Draft HQ"
         blurb="Every draft you are in, ranked by the clock — the one on you first, then the ones running, then the ones still to come."
       />
+      <p className="af-bd-note">Latest draft per league <TopicTip topic="draftHqScope" /></p>
 
       {rows.length > 0 ? (
         <section className="af-bd-sec" aria-labelledby="af-dh-board">

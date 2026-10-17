@@ -3,13 +3,11 @@
 /**
  * Commissioner OS League-Specific Intelligence Wiring phase — Parts 16-17.
  *
- * Commissioner-only — never rendered for a normal manager. Gated on the
- * real, server-verified `context.isCommissioner` from `ActiveLeagueContext`
- * (never a client-side guess); the API call itself is ALSO independently
- * authorization-checked server-side, so even if this component somehow
- * rendered for a non-commissioner, the fetch would still 404. Reuses the
- * same dark/opacity Tailwind convention as `UserOsActionsSummary.tsx` — no
- * dashboard redesign.
+ * Mounted by the server-gated commissioner hub with an explicit league id.
+ * The API independently checks authorization. Styled with `af-ch-os-*` classes
+ * in af-commish-hub.css on the Core theme tokens — never Tailwind white/colour
+ * utilities, which af-core.css forbids in this scope because light mode clamps
+ * them unreadable.
  *
  * Part 17 (copy-ready content workflow): preview/edit/copy/dismiss for any
  * recommendation that carries real `copyReadyContent` (storylines,
@@ -22,7 +20,8 @@
  * is ever auto-sent anywhere.
  */
 import { useCallback, useEffect, useState } from 'react'
-import { useActiveLeagueContext } from './ActiveLeagueContextProvider'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { commissionerOsText } from '@/lib/core-app/commissionerOsText'
 
 interface CopyReadyContent {
   channel: string
@@ -51,13 +50,6 @@ interface CommissionerRecommendationsApiResponse {
 }
 
 const PRIORITY_RANK: Record<string, number> = { critical: 3, high: 2, medium: 1, low: 0 }
-const PRIORITY_DOT: Record<string, string> = {
-  critical: 'bg-red-400',
-  high: 'bg-amber-400',
-  medium: 'bg-sky-400',
-  low: 'bg-white/30',
-}
-
 const DOMAIN_LABEL: Record<string, string> = {
   health: 'League Health',
   engagement: 'Engagement',
@@ -68,6 +60,46 @@ const DOMAIN_LABEL: Record<string, string> = {
   trades: 'Trades',
   integrity: 'Integrity',
 }
+const DOMAIN_LABEL_ES: Record<string, string> = {
+  health: 'Salud de la liga',
+  engagement: 'Participación',
+  rankings: 'Rankings',
+  storylines: 'Historias',
+  rivalries: 'Rivalidades',
+  draft: 'Draft',
+  trades: 'Intercambios',
+  integrity: 'Integridad',
+}
+
+function domainLabel(domain: string, language: string): string | undefined {
+  return (language === 'es' ? DOMAIN_LABEL_ES : DOMAIN_LABEL)[domain]
+}
+
+/**
+ * The area a recommendation belongs to, from its `type`.
+ *
+ * 🛑 NOT FROM `domain`. On a commissioner recommendation `domain` names the OS it belongs to —
+ * every generator sets `'commissioner'` — so `DOMAIN_LABEL[top.domain]` never matched and the
+ * card printed the raw word, upper-cased by `.af-label`: "COMMISSIONER" on every card. Seen
+ * 2026-10-01 in a signed-in check. Each generator's `type` starts with its area instead.
+ */
+const TYPE_AREA: ReadonlyArray<[prefix: string, area: string]> = [
+  ['league_health', 'health'],
+  ['engagement_', 'engagement'],
+  ['mission_control_action', 'health'],
+  ['power_rankings', 'rankings'],
+  ['storyline_', 'storylines'],
+  ['rivalry_', 'rivalries'],
+  ['draft_', 'draft'],
+  ['trade_', 'trades'],
+  ['integrity_', 'integrity'],
+]
+
+export function recommendationAreaLabel(rec: { type: string }, language = 'en'): string {
+  const area = TYPE_AREA.find(([prefix]) => rec.type.startsWith(prefix))?.[1]
+  // An unknown type gets a neutral label, never a raw internal value.
+  return (area && domainLabel(area, language)) || (language === 'es' ? 'Acción del comisionado' : 'Commissioner action')
+}
 
 const CHANNEL_LABEL: Record<string, string> = {
   league_chat: 'League chat',
@@ -76,6 +108,27 @@ const CHANNEL_LABEL: Record<string, string> = {
   newsletter: 'Newsletter',
   social_caption: 'Social caption',
   in_app_only: 'In-app only',
+}
+const CHANNEL_LABEL_ES: Record<string, string> = {
+  league_chat: 'Chat de la liga',
+  discord: 'Discord',
+  email: 'Correo',
+  newsletter: 'Boletín',
+  social_caption: 'Texto para redes',
+  in_app_only: 'Solo en la app',
+}
+
+function channelLabel(channel: string, language: string): string {
+  return (language === 'es' ? CHANNEL_LABEL_ES : CHANNEL_LABEL)[channel] ?? channel
+}
+
+/** The status behind a domain chip's tooltip, which printed the raw enum in either language. */
+const DOMAIN_STATUS_ES: Record<string, string> = {
+  ok: 'disponible',
+  unavailable: 'no disponible',
+  unsupported: 'no compatible',
+  stale_blocked: 'datos desactualizados',
+  engine_error: 'error del motor',
 }
 
 /**
@@ -90,18 +143,23 @@ function resolveCommissionerTabId(sport: string | undefined | null): string {
   return FOOTBALL_SPORTS.has(sport.trim().toUpperCase()) ? 'commissioner' : 'league'
 }
 
-export function CommissionerOsActionsSummary() {
-  const { context } = useActiveLeagueContext()
+const UNVERIFIED = 'unverified'
+const FAILED = 'failed'
+
+export function CommissionerOsActionsSummary({ leagueId, sport }: { leagueId: string; sport?: string | null }) {
+  const { language } = useOptionalLanguage()
+  const es = language === 'es'
   const [data, setData] = useState<CommissionerRecommendationsApiResponse | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set())
 
-  const isCommissioner = context?.isCommissioner === true
-  const canonicalLeagueId = context?.canonicalLeagueId
+  // The parent hub is server-gated for commissioners and co-commissioners. The API
+  // independently checks the session's league role before returning recommendations.
+  const canonicalLeagueId = leagueId
 
   const load = useCallback(() => {
-    if (!canonicalLeagueId || !isCommissioner) {
+    if (!canonicalLeagueId) {
       setData(null)
       return () => {}
     }
@@ -111,16 +169,22 @@ export function CommissionerOsActionsSummary() {
     fetch(`/api/league-hub/context/${encodeURIComponent(canonicalLeagueId)}/commissioner-recommendations`, {
       cache: 'no-store',
     })
-      .then((response) =>
-        response.ok ? response.json() : Promise.reject(new Error('Failed to load commissioner recommendations'))
-      )
+      .then((response) => {
+        // The hub admits whoever `getLeagueRole` calls commissioner, which includes the
+        // importer of any league. This route trusts ownership only on native leagues, so an
+        // importer who never verified as commissioner reaches the hub and gets a 404 here.
+        // That is a missing verification, not a failure — say so instead of showing red.
+        if (response.status === 404) return Promise.reject(new Error(UNVERIFIED))
+        return response.ok ? response.json() : Promise.reject(new Error('Failed to load commissioner recommendations'))
+      })
       .then((payload: CommissionerRecommendationsApiResponse) => {
         if (!active) return
         setData(payload)
       })
-      .catch(() => {
+      .catch((e: unknown) => {
         if (!active) return
-        setError('Could not load Commissioner OS for this league')
+        // A code, not a sentence: the sentence is chosen at render, in the reader's language.
+        setError(e instanceof Error && e.message === UNVERIFIED ? UNVERIFIED : FAILED)
       })
       .finally(() => {
         if (!active) return
@@ -129,46 +193,56 @@ export function CommissionerOsActionsSummary() {
     return () => {
       active = false
     }
-  }, [canonicalLeagueId, isCommissioner])
+  }, [canonicalLeagueId])
 
   useEffect(() => {
     const cleanup = load()
     return cleanup
   }, [load])
 
-  // Never rendered for a normal manager — no widget, no placeholder, nothing.
-  if (!isCommissioner) return null
-
   return (
     <section
-      className="mt-6 rounded-xl border border-amber-500/20 bg-amber-500/[0.03] p-4"
+      className="af-ch-os"
       data-testid="commissioner-os-actions-summary"
     >
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-medium text-amber-200/80">Commissioner OS</h2>
-        <div className="flex items-center gap-3">
+      <div className="af-ch-os-head">
+        <h2 className="af-ch-os-title">Commissioner OS</h2>
+        <div className="af-ch-os-head-actions">
           <button
             type="button"
             onClick={load}
-            className="text-xs text-white/40 underline decoration-dotted hover:text-white/60"
+            className="af-ch-os-textbtn"
           >
-            Refresh
+            {es ? 'Actualizar' : 'Refresh'}
           </button>
           <a
-            href={`/league/${canonicalLeagueId}?tab=${resolveCommissionerTabId(context?.sport)}`}
-            className="text-xs text-cyan-400 underline"
+            href={`/league/${canonicalLeagueId}?tab=${resolveCommissionerTabId(sport)}`}
+            className="af-ch-os-link"
           >
-            View all
+            {es ? 'Ver todo' : 'View all'}
           </a>
         </div>
       </div>
 
       {isLoading ? (
-        <div className="mt-3 h-16 animate-pulse rounded-lg border border-white/10 bg-white/5" aria-busy="true" />
+        <div className="af-ch-os-skeleton" aria-busy="true" />
+      ) : error === UNVERIFIED ? (
+        <p className="af-ch-os-note" data-testid="commissioner-os-unverified">
+          {es
+            ? 'Las recomendaciones aparecen cuando se verifica en su plataforma que eres el comisionado de esta liga.'
+            : "Recommendations appear once you are verified as this league's commissioner on its provider."}
+        </p>
       ) : error ? (
-        <p className="mt-3 text-sm text-red-300">{error}</p>
+        <p className="af-ch-os-note" data-tone="bad" role="alert">
+          {es ? 'No se pudo cargar el Commissioner OS de esta liga' : 'Could not load Commissioner OS for this league'}
+        </p>
       ) : (
-        <CommissionerOsBody data={data} dismissedIds={dismissedIds} onDismiss={(id) => setDismissedIds((prev) => new Set(prev).add(id))} />
+        <CommissionerOsBody
+          data={data}
+          language={language}
+          dismissedIds={dismissedIds}
+          onDismiss={(id) => setDismissedIds((prev) => new Set(prev).add(id))}
+        />
       )}
     </section>
   )
@@ -176,13 +250,16 @@ export function CommissionerOsActionsSummary() {
 
 function CommissionerOsBody({
   data,
+  language,
   dismissedIds,
   onDismiss,
 }: {
   data: CommissionerRecommendationsApiResponse | null
+  language: string
   dismissedIds: Set<string>
   onDismiss: (id: string) => void
 }) {
+  const es = language === 'es'
   if (!data) return null
 
   const recs = [...data.bundle.commissioner]
@@ -195,88 +272,101 @@ function CommissionerOsBody({
   const copyReady = recs.filter((r) => r.copyReadyContent && r.copyReadyContent.some((c) => c.available))
 
   return (
-    <div className="mt-3">
+    <div className="af-ch-os-body">
       {top ? (
-        <div className="rounded-lg border border-white/10 bg-black/20 p-3">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <span className={`h-1.5 w-1.5 rounded-full ${PRIORITY_DOT[top.priority]}`} aria-hidden />
-              <span className="text-[11px] font-medium uppercase tracking-wide text-white/40">
-                {DOMAIN_LABEL[top.domain] ?? top.domain}
-              </span>
+        <div className="af-ch-os-card">
+          <div className="af-ch-os-card-head">
+            <div className="af-ch-os-card-domain">
+              <span className="af-ch-os-dot" data-priority={top.priority} aria-hidden />
+              <span className="af-label">{recommendationAreaLabel(top, language)}</span>
             </div>
             <button
               type="button"
               onClick={() => onDismiss(top.id)}
-              className="text-[11px] text-white/30 hover:text-white/60"
+              className="af-ch-os-textbtn"
             >
-              Dismiss
+              {es ? 'Descartar' : 'Dismiss'}
             </button>
           </div>
-          <p className="mt-1 text-sm font-semibold text-white">{top.title}</p>
-          <p className="mt-0.5 text-xs text-white/60">{top.summary}</p>
+          {/* The server writes these in English; translated here, where the language is known. */}
+          <p className="af-ch-os-card-title">{commissionerOsText(top.title, language)}</p>
+          {/* A summary that only repeats the title says nothing; it read "Recommended review" twice. */}
+          {top.summary && top.summary.trim() !== top.title.trim() ? (
+            <p className="af-ch-os-card-summary">{commissionerOsText(top.summary, language)}</p>
+          ) : null}
         </div>
       ) : (
-        <p className="text-sm text-white/50">No commissioner action needed right now.</p>
+        <p className="af-ch-os-note">{es ? 'Por ahora no hace falta ninguna acción del comisionado.' : 'No commissioner action needed right now.'}</p>
       )}
 
-      <div className="mt-3 flex flex-wrap items-center gap-1.5">
+      <div className="af-ch-os-chips">
         {urgentCount > 0 ? (
-          <span className="rounded-full bg-red-500/15 px-2 py-0.5 text-[11px] font-medium text-red-300">
-            {urgentCount} urgent
+          <span className="af-ch-os-chip" data-tone="bad">
+            {es ? `${urgentCount} ${urgentCount === 1 ? 'urgente' : 'urgentes'}` : `${urgentCount} urgent`}
           </span>
         ) : null}
         {reviewCount > 0 ? (
-          <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-medium text-amber-300">
-            {reviewCount} review recommended
+          <span className="af-ch-os-chip" data-tone="warn">
+            {es ? `${reviewCount} con revisión recomendada` : `${reviewCount} review recommended`}
           </span>
         ) : null}
         {domainEntries.map(([domain, status]) => (
           <span
             key={domain}
-            className={`rounded-full border px-2 py-0.5 text-[10px] ${
-              status === 'ok' ? 'border-white/10 bg-white/5 text-white/60' : 'border-white/10 bg-white/[0.03] text-white/30'
-            }`}
-            title={status}
+            className="af-ch-os-chip"
+            data-tone={status === 'ok' ? 'neutral' : 'off'}
+            title={es ? DOMAIN_STATUS_ES[status] ?? status : status}
           >
-            {DOMAIN_LABEL[domain] ?? domain}
+            {domainLabel(domain, language) ?? domain}
           </span>
         ))}
       </div>
 
-      {copyReady.length > 0 ? <CopyReadyPanel recommendations={copyReady} onDismiss={onDismiss} /> : null}
+      {copyReady.length > 0 ? <CopyReadyPanel recommendations={copyReady} language={language} onDismiss={onDismiss} /> : null}
 
-      <p className="mt-2 text-[11px] text-white/35">Updated {new Date(data.generatedAt).toLocaleTimeString()}</p>
+      <p className="af-ch-os-stamp">
+        {es ? 'Actualizado' : 'Updated'} {new Date(data.generatedAt).toLocaleTimeString(es ? 'es' : undefined)}
+      </p>
     </div>
   )
 }
 
 function CopyReadyPanel({
   recommendations,
+  language,
   onDismiss,
 }: {
   recommendations: RecommendationSummary[]
+  language: string
   onDismiss: (id: string) => void
 }) {
   return (
-    <div className="mt-3 border-t border-white/10 pt-3">
-      <h3 className="text-[11px] font-medium uppercase tracking-wide text-white/40">Copy-ready content</h3>
-      <div className="mt-2 flex flex-col gap-2">
+    <div className="af-ch-os-copy">
+      <h3 className="af-label">{language === 'es' ? 'Contenido listo para copiar' : 'Copy-ready content'}</h3>
+      <div className="af-ch-os-copy-list">
         {recommendations.map((rec) => (
-          <CopyReadyCard key={rec.id} recommendation={rec} onDismiss={onDismiss} />
+          <CopyReadyCard key={rec.id} recommendation={rec} language={language} onDismiss={onDismiss} />
         ))}
       </div>
     </div>
   )
 }
 
+/**
+ * 🛑 The draft in the textarea is NOT translated. It is the text the commissioner posts to their
+ * league, whose readers have their own languages — the reader of this card is not its audience.
+ * The card's own words around it follow the reader's language.
+ */
 function CopyReadyCard({
   recommendation,
+  language,
   onDismiss,
 }: {
   recommendation: RecommendationSummary
+  language: string
   onDismiss: (id: string) => void
 }) {
+  const es = language === 'es'
   const available = (recommendation.copyReadyContent ?? []).filter((c) => c.available)
   const [channelIndex, setChannelIndex] = useState(0)
   const active = available[channelIndex] ?? available[0]
@@ -293,38 +383,36 @@ function CopyReadyCard({
   const overLimit = active.characterLimit !== null && draft.length > active.characterLimit
 
   return (
-    <div className="rounded-lg border border-white/10 bg-black/20 p-3">
-      <div className="flex items-center justify-between">
-        <p className="text-xs font-medium text-white/70">{recommendation.title}</p>
+    <div className="af-ch-os-card">
+      <div className="af-ch-os-card-head">
+        <p className="af-ch-os-copy-title">{commissionerOsText(recommendation.title, language)}</p>
         <button
           type="button"
           onClick={() => onDismiss(recommendation.id)}
-          className="text-[11px] text-white/30 hover:text-white/60"
+          className="af-ch-os-textbtn"
         >
-          Dismiss
+          {es ? 'Descartar' : 'Dismiss'}
         </button>
       </div>
 
       {available.length > 1 ? (
-        <div className="mt-2 flex flex-wrap gap-1">
+        <div className="af-ch-os-chips">
           {available.map((c, i) => (
             <button
               key={c.channel}
               type="button"
               onClick={() => setChannelIndex(i)}
-              className={`rounded-full border px-2 py-0.5 text-[10px] ${
-                i === channelIndex
-                  ? 'border-cyan-400/40 bg-cyan-400/10 text-cyan-300'
-                  : 'border-white/10 bg-white/5 text-white/50'
-              }`}
+              className="af-ch-os-chip"
+              data-tone={i === channelIndex ? 'active' : 'neutral'}
+              aria-pressed={i === channelIndex}
             >
-              {CHANNEL_LABEL[c.channel] ?? c.channel}
+              {channelLabel(c.channel, language)}
             </button>
           ))}
         </div>
       ) : (
-        <p className="mt-2 text-[10px] uppercase tracking-wide text-white/30">
-          {CHANNEL_LABEL[active.channel] ?? active.channel}
+        <p className="af-label af-ch-os-channel">
+          {channelLabel(active.channel, language)}
         </p>
       )}
 
@@ -335,25 +423,25 @@ function CopyReadyCard({
           setCopied(false)
         }}
         rows={3}
-        className="mt-2 w-full resize-none rounded-md border border-white/10 bg-black/30 p-2 text-xs text-white/80 focus:border-cyan-400/40 focus:outline-none"
+        className="af-ch-os-draft"
       />
 
-      <div className="mt-1.5 flex items-center justify-between">
-        <span className={`text-[10px] ${overLimit ? 'text-red-300' : 'text-white/30'}`}>
+      <div className="af-ch-os-card-head">
+        <span className="af-ch-os-count" data-tone={overLimit ? 'bad' : undefined}>
           {draft.length}
           {active.characterLimit !== null ? ` / ${active.characterLimit}` : ''}
         </span>
-        <div className="flex items-center gap-2">
-          {copied ? <span className="text-[11px] text-emerald-300">Copied</span> : null}
+        <div className="af-ch-os-head-actions">
+          {copied ? <span className="af-ch-os-copied">{es ? 'Copiado' : 'Copied'}</span> : null}
           <button
             type="button"
             onClick={() => {
               navigator.clipboard.writeText(draft).then(() => setCopied(true))
             }}
             disabled={overLimit}
-            className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-white/80 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+            className="af-btn af-ch-os-copy-btn"
           >
-            Copy
+            {es ? 'Copiar' : 'Copy'}
           </button>
         </div>
       </div>

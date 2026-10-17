@@ -1,9 +1,8 @@
-import Link from 'next/link'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-dash-trade.css'
 import type { RecentTrade } from '@/lib/core-app/recentTrades'
-import { PlayerImage } from '@/app/components/PlayerImage'
-import { TeamLogo } from '@/app/components/TeamLogo'
+import { DashTradeBandView, type TradeBandCard } from '@/components/core-app/screens/DashTradeBandView'
+import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 
 /**
  * Latest trade activity in your leagues.
@@ -19,38 +18,63 @@ import { TeamLogo } from '@/app/components/TeamLogo'
  * Each side therefore labels its basis and explains which contextual inputs
  * were available. A zero-signal result never appears as an earned C.
  *
- * The verdict that IS shown is THE grade (lib/decision-os/trade/tradeGrade.ts):
- * this league's values TODAY for what each side received — the same letter the
- * Trade Center gives the deal. ⚠ It used to say "valued the day it was made",
- * which was never true: the prices were always the newest on file. It renders
- * only when every asset on both sides priced; absent means exactly that.
+ * The verdict that IS shown is THE grade (lib/decision-os/trade/tradeGrade.ts)
+ * for what each side received: the trade's FROZEN ORIGINAL, taken the first time
+ * AllFantasy graded it on this league's values (`frozenCompletedGrade.ts`) — the
+ * same frozen row the /core Trades history reads. The band says when with
+ * `gradeMoment(t.gradedAt)`. ⚠ It once said "valued the day it was made", and that
+ * is still not true: an imported trade is first graded when we first read it,
+ * which can be long after the deal. It renders only when every asset on both
+ * sides priced; absent means exactly that.
  *
  * ⚠ A PICK IS NAMED AS A PICK. "2027 4th", never the player it later became —
  * the two managers traded the pick, and resolving it would rewrite the deal
  * they actually made.
  *
- * Renders nothing when no trade landed in the last two weeks. A trade from
- * March is not news, and an empty "recent trades" band is furniture.
+ * ⚠ THE HOME SHOWS THE LAST 24 HOURS ONLY (founder, 2026-10-08). The loader reads two weeks so the
+ * quiet row below has something to point at, but on the home a trade from last Tuesday is not news.
+ * Older trades are one tap away on the league's Trades page; when nothing landed in the window, one
+ * quiet row says so and links to where the last one did. Nothing renders at all when the loader's two
+ * weeks held no trade either — an empty band is furniture.
+ *
+ * ⚠ THE "WHY" IS AF PRO'S, AND A LOCKED VIEWER NEVER RECEIVES IT. The letters stay free; the grade
+ * reason is the Trade Center's paid breakdown (`trade_depth`). Stripped here, on the server, so it is
+ * not sitting in the RSC payload behind a CSS lock.
  */
 
 const VISIBLE_ASSETS = 4
+export const TRADE_BAND_WINDOW_MS = 24 * 60 * 60 * 1000
+
+/** The league's Trades tab on /core — where every older trade lives. */
+export function leagueTradesHref(leagueId: string): string {
+  return `/core/trades?league=${encodeURIComponent(leagueId)}`
+}
+
+function inWindow(iso: string, now: Date): boolean {
+  const t = new Date(iso).getTime()
+  if (!Number.isFinite(t)) return false
+  const age = now.getTime() - t
+  // A few minutes of clock skew into the future still counts as "just now".
+  return age <= TRADE_BAND_WINDOW_MS && age >= -5 * 60_000
+}
 
 /**
  * The verdict, in names rather than the engine's A/B.
  *
  * A reader cannot act on "Slightly favors A" — they do not know which side the
  * engine called A, and nothing on the card tells them. The verdict already
- * carries the roster it favours, so the sentence can name the manager.
+ * carries the roster it favours, so the sentence can name the manager. The
+ * view says it (DashTradeBandView `verdictText`).
  */
-function verdictSentence(t: RecentTrade): string {
+function verdictOf(t: RecentTrade): TradeBandCard['verdict'] {
   const v = t.verdict
-  if (!v) return ''
-  if (v.favoursRosterId == null) return 'An even deal on paper'
-  const side = t.sides.find((s) => s.rosterId === v.favoursRosterId)
+  if (!v) return null
+  if (v.favoursRosterId == null) return { kind: 'even' }
+  // String-compared: a durable-feed side carries its roster id as a string, the verdict as a number.
+  const side = t.sides.find((s) => String(s.rosterId) === String(v.favoursRosterId))
   const who = side ? side.teamName || side.managerName : null
-  const strength = v.verdict.toLowerCase().includes('strongly') ? 'Clearly favours' : 'Slightly favours'
   /* No name resolved: say the shape of the verdict, never a placeholder. */
-  return who ? `${strength} ${who}` : 'One side comes out ahead'
+  return who ? { kind: 'favours', strongly: v.verdict.toLowerCase().includes('strongly'), who } : { kind: 'unnamed' }
 }
 
 function agoLabel(iso: string, now: Date): string | null {
@@ -82,101 +106,60 @@ function statusLabel(status?: string): string | null {
   } as Record<string, string>)[status] ?? status.replaceAll('_', ' ')
 }
 
-export function DashTradeBand({ trades, now }: { trades: RecentTrade[]; now: Date }) {
+export function DashTradeBand({
+  trades,
+  now,
+  depth = null,
+}: {
+  trades: RecentTrade[]
+  now: Date
+  /** AF Pro's trade depth. Null (unread) locks the "why" line — fail closed, like the Trade Center. */
+  depth?: CoreDepthAccess | null
+}) {
   if (!trades || trades.length === 0) return null
+  const unlocked = depth?.unlocked === true
+  const recent = trades.filter((t) => inWindow(t.acceptedAt, now))
+  const latest = [...trades].sort((a, b) => new Date(b.acceptedAt).getTime() - new Date(a.acceptedAt).getTime())[0]!
 
+  /*
+   * ⚠ THE WORDS ARE SAID IN THE CLIENT (2026-10-04). This band keeps the decisions — each trade's age
+   * against the server's `now`, which side the verdict names, which assets show — and
+   * DashTradeBandView says them in the reader's language.
+   */
   return (
-    <section className="af-core af-trade" aria-label="Latest league trades">
-      <div className="af-trade-head">
-        <span className="af-label af-trade-kicker">Latest league trades</span>
-        <span className="af-trade-count af-num">
-          {`${trades.length} latest · past 2 weeks`}
-        </span>
-      </div>
-
-      <div className="af-trade-list">
-        {trades.map((t) => {
-          const ago = agoLabel(t.acceptedAt, now)
-          return (
-            <article key={`${t.platformLeagueId}:${t.id}`} className="af-trade-card">
-              <div className="af-trade-meta">
-                {t.leagueAvatarUrl ? <img className="af-trade-league-avatar" src={t.leagueAvatarUrl} alt="" /> : null}
-                <Link className="af-trade-league" href={`/league/${t.leagueId}?view=trades`}>
-                  {t.leagueName}
-                </Link>
-                {ago ? <span className="af-trade-ago af-num">{ago}</span> : null}
-                {statusLabel(t.status) ? <span className="af-trade-ago af-num">{statusLabel(t.status)}</span> : null}
-              </div>
-
-              <div className="af-trade-sides">
-                {t.sides.map((s) => (
-                  <div key={s.rosterId} className="af-trade-side">
-                    <span className="af-trade-manager">
-                      {s.avatarUrl ? <img className="af-trade-avatar" src={s.avatarUrl} alt="" /> : null}
-                      <span className="af-trade-mgr">{s.teamName || s.managerName}</span>
-                    </span>
-                    <span className="af-trade-got af-num">{t.status === 'processed' ? 'RECEIVED' : 'IN THIS TRADE'}</span>
-                    <ul className="af-trade-assets">
-                      {s.received.slice(0, VISIBLE_ASSETS).map((a, i) => (
-                        <li key={`${a.kind}:${a.name}:${i}`} data-kind={a.kind}>
-                          {a.kind === 'player' && a.playerId ? (
-                            <PlayerImage sleeperId={a.playerId} sport={t.sport ?? 'NFL'} name={a.name} position={a.position ?? undefined} headshotUrl={a.headshotUrl} size={26} />
-                          ) : null}
-                          <span>{a.name}{a.position ? <span className="af-trade-pos af-num"> {a.position}</span> : null}</span>
-                          {a.kind === 'player' && a.team ? <TeamLogo teamAbbr={a.team} sport={t.sport ?? 'NFL'} logoUrl={a.teamLogoUrl} size={18} /> : null}
-                        </li>
-                      ))}
-                      {s.received.length > VISIBLE_ASSETS ? (
-                        <li className="af-trade-more">
-                          +{s.received.length - VISIBLE_ASSETS} more
-                        </li>
-                      ) : null}
-                      {s.received.length === 0 ? (
-                        /* Never an empty column with an arrow pointing into it. */
-                        <li className="af-trade-more">nothing we can name</li>
-                      ) : null}
-                    </ul>
-                    {s.gradeBasis || s.gradeReason ? (
-                      <div className="af-trade-side-grade" data-ungraded={!s.grade}>
-                        <span className="af-trade-side-letter">{s.grade ?? '—'}</span>
-                        <span><strong>{s.gradeBasis ?? 'Contextual grade withheld'}</strong> · {s.gradeReason}</span>
-                      </div>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
-
-              {t.verdict ? (
-                <p className="af-trade-verdict">
-                  {/*
-                    ⚠ THE ENGINE SAYS "favors A" AND A READER HAS NO IDEA WHO A
-                    IS. Its vocabulary is positional — team A versus team B —
-                    and that leaked straight onto the card. The manager's own
-                    name is the only version of this sentence anyone can act on,
-                    and the roster id needed to say it was already on the
-                    verdict.
-                  */}
-                  <span
-                    className="af-trade-verdict-word"
-                    data-fair={t.verdict.favoursRosterId == null ? 'true' : 'false'}
-                  >
-                    {verdictSentence(t)}
-                  </span>
-                  <span className="af-trade-conf af-num">
-                    {' '}
-                    · on this league’s values today
-                    {t.verdict.confidence > 0 ? ` · ${t.verdict.confidence}% confidence` : ''}
-                  </span>
-                </p>
-              ) : null}
-
-              <Link className="af-trade-open" href={`/league/${t.leagueId}?view=trades`}>
-                Open this league&rsquo;s trades
-              </Link>
-            </article>
-          )
-        })}
-      </div>
-    </section>
+    <DashTradeBandView
+      visibleAssets={VISIBLE_ASSETS}
+      why={{ unlocked, upgradePath: depth?.upgradePath ?? '/upgrade?plan=pro', planName: depth?.planName ?? 'AF Pro' }}
+      quiet={
+        recent.length === 0
+          ? { leagueName: latest.leagueName, href: leagueTradesHref(latest.leagueId), ago: agoLabel(latest.acceptedAt, now) }
+          : null
+      }
+      trades={recent.map((t) => ({
+        key: `${t.platformLeagueId}:${t.id}`,
+        leagueId: t.leagueId,
+        href: leagueTradesHref(t.leagueId),
+        leagueName: t.leagueName,
+        leagueAvatarUrl: t.leagueAvatarUrl,
+        sport: t.sport ?? 'NFL',
+        ago: agoLabel(t.acceptedAt, now),
+        status: t.status ?? null,
+        statusLabel: statusLabel(t.status),
+        sides: t.sides.map((s) => ({
+          rosterId: s.rosterId,
+          name: s.teamName || s.managerName,
+          avatarUrl: s.avatarUrl,
+          received: s.received.slice(0, VISIBLE_ASSETS),
+          receivedCount: s.received.length,
+          grade: s.grade,
+          gradeBasis: s.gradeBasis,
+          gradeReason: unlocked ? s.gradeReason : '',
+          gradeParts: unlocked ? s.gradeParts ?? null : null,
+        })),
+        verdict: verdictOf(t),
+        confidence: t.verdict?.confidence ?? 0,
+        moment: t.gradedMoment ?? { frozenAt: t.gradedAt },
+      }))}
+    />
   )
 }

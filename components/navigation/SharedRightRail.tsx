@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useRightRailData } from '@/hooks/useRightRailData'
 import { useAIAccessStatus } from '@/hooks/useAIAccessStatus'
 import { getPrimaryChimmyEntry, getChimmyChatHrefWithPrompt, AI_HUB_HREF } from '@/lib/ai-product-layer'
+import { inIosAppAccessLine } from '@/lib/chimmy/outOfAnswers'
 
 export default function SharedRightRail() {
   const { data, loading, error } = useRightRailData()
@@ -35,7 +36,7 @@ export default function SharedRightRail() {
       </section>
 
       <section className="mode-panel-soft rounded-2xl p-4" style={{ borderColor: 'color-mix(in srgb, var(--accent-cyan) 40%, var(--border))' }}>
-        <h3 className="text-sm font-semibold" style={{ color: 'var(--accent-cyan-strong)' }}>AI Quick Ask</h3>
+        <h3 className="text-sm font-semibold" style={{ color: 'var(--accent-cyan-strong)' }}>Chimmy Quick Ask</h3>
         {data.aiQuickActions.length > 0 ? (
           <ul className="mt-2 space-y-2">
             {data.aiQuickActions.slice(0, 3).map((q) => (
@@ -65,7 +66,7 @@ export default function SharedRightRail() {
             className="inline-flex rounded-lg border px-3 py-1.5 text-xs transition"
             style={{ borderColor: 'var(--border)', color: 'var(--text)' }}
           >
-            AI Hub
+            Chimmy Hub
           </Link>
         </div>
       </section>
@@ -89,9 +90,9 @@ export default function SharedRightRail() {
         className="mode-panel-soft rounded-2xl p-4"
         style={{ borderColor: 'color-mix(in srgb, var(--accent-cyan) 40%, var(--border))' }}
       >
-        <h3 className="text-sm font-semibold" style={{ color: 'var(--accent-cyan-strong)' }}>AI Status</h3>
+        <h3 className="text-sm font-semibold" style={{ color: 'var(--accent-cyan-strong)' }}>Chimmy Status</h3>
         {aiAccess.loading ? (
-          <p className="mt-2 text-xs mode-muted">Checking AI access…</p>
+          <p className="mt-2 text-xs mode-muted">Checking your Chimmy access…</p>
         ) : aiAccess.data ? (
           <div className="mt-2 space-y-1 text-xs mode-muted">
             <div>
@@ -110,10 +111,13 @@ export default function SharedRightRail() {
                 Plan: <span className="mode-text">Premium</span>
               </div>
             )}
-            <div>{aiAccess.data.message}</div>
+            {/* The resolver's line can end in "Upgrade or buy tokens" — never in an iOS build that
+                sells nothing (3.1.1); an IAP build sells both through Apple and shows it. */}
+            <div data-ios-purchase>{aiAccess.data.message}</div>
+            <div data-ios-purchase-alt>{inIosAppAccessLine(aiAccess.data)}</div>
           </div>
         ) : (
-          <p className="mt-2 text-xs mode-muted">Sign in to see your AI access.</p>
+          <p className="mt-2 text-xs mode-muted">Sign in to see your Chimmy access.</p>
         )}
         <div className="mt-3 flex flex-wrap gap-2">
           <Link

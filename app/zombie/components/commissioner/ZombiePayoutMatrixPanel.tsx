@@ -83,7 +83,7 @@ export function ZombiePayoutMatrixPanel({
 
   return (
     <SettingsSection id="zm-payout-matrix" title="Weekly & season payout split">
-      <p className="mb-3 text-[10px] leading-relaxed text-white/45">{describePayoutTierContext(sport)}</p>
+      <p className="mb-3 text-[11px] leading-relaxed text-white/45">{describePayoutTierContext(sport)}</p>
       <div className="mb-3 flex flex-wrap gap-2">
         <button
           type="button"

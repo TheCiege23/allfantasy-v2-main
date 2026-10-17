@@ -25,6 +25,34 @@ export const MLB_CONFIG: SportConfigFull = {
     { key: 'qs', label: 'Quality Start', defaultPoints: 4, isToggleable: true, group: 'pitching', sport: 'MLB' },
     { key: 'l', label: 'Loss', defaultPoints: -5, isToggleable: true, group: 'pitching', sport: 'MLB' },
     { key: 'er', label: 'Earned Runs', defaultPoints: -1, isToggleable: true, group: 'pitching', sport: 'MLB' },
+    /*
+     * Per-game stats the scoring panel offers and the Rolling Insights box score carries. Batting and
+     * pitching share raw field names (`H`, `HR`, `BB`, `R`, `1B`…), so pitching keys are prefixed
+     * `p_` and batter strikeouts are `bat_so` — `so` stays PITCHER strikeouts. A two-way player's
+     * two box lines then sum into one week without a collision.
+     *
+     * Defaults: singles/doubles/triples are 0 because `tb` already scores them (no double count);
+     * a league that scores hits by type does it through its panel, which sets `tb` to 0. Holds and
+     * batter strikeouts carry the panel's AllFantasy defaults (3, -1). Everything else is 0 until a
+     * league's panel says otherwise (see uiScoringStoreBridge.ts).
+     */
+    { key: 'single', label: 'Singles', defaultPoints: 0, isToggleable: true, group: 'hitting', sport: 'MLB' },
+    { key: 'double', label: 'Doubles', defaultPoints: 0, isToggleable: true, group: 'hitting', sport: 'MLB' },
+    { key: 'triple', label: 'Triples', defaultPoints: 0, isToggleable: true, group: 'hitting', sport: 'MLB' },
+    { key: 'bat_so', label: 'Strikeouts (Batter)', defaultPoints: -1, isToggleable: true, group: 'hitting', sport: 'MLB' },
+    { key: 'hbp', label: 'Hit By Pitch', defaultPoints: 0, isToggleable: true, group: 'hitting', sport: 'MLB' },
+    { key: 'ibb', label: 'Intentional Walks', defaultPoints: 0, isToggleable: true, group: 'hitting', sport: 'MLB' },
+    { key: 'cs', label: 'Caught Stealing', defaultPoints: 0, isToggleable: true, group: 'hitting', sport: 'MLB' },
+    { key: 'hld', label: 'Hold', defaultPoints: 3, isToggleable: true, group: 'pitching', sport: 'MLB' },
+    { key: 'bs', label: 'Blown Save', defaultPoints: 0, isToggleable: true, group: 'pitching', sport: 'MLB' },
+    { key: 'outs', label: 'Outs Recorded', defaultPoints: 0, isToggleable: true, group: 'pitching', sport: 'MLB' },
+    { key: 'p_h', label: 'Hits Allowed', defaultPoints: 0, isToggleable: true, group: 'pitching', sport: 'MLB' },
+    { key: 'p_r', label: 'Runs Allowed', defaultPoints: 0, isToggleable: true, group: 'pitching', sport: 'MLB' },
+    { key: 'p_bb', label: 'Walks Allowed', defaultPoints: 0, isToggleable: true, group: 'pitching', sport: 'MLB' },
+    { key: 'p_hbp', label: 'Hit Batters', defaultPoints: 0, isToggleable: true, group: 'pitching', sport: 'MLB' },
+    { key: 'p_hr', label: 'Home Runs Allowed', defaultPoints: 0, isToggleable: true, group: 'pitching', sport: 'MLB' },
+    { key: 'wp', label: 'Wild Pitches', defaultPoints: 0, isToggleable: true, group: 'pitching', sport: 'MLB' },
+    { key: 'bk', label: 'Balks', defaultPoints: 0, isToggleable: true, group: 'pitching', sport: 'MLB' },
   ],
 
   scoringPresets: [{ name: 'Standard', categories: [] }],

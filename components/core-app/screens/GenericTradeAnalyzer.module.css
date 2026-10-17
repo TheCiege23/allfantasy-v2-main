@@ -1,0 +1,10 @@
+.review { margin: 16px 0; padding: 14px; border: 1px solid var(--accent-line, #2d8793); border-radius: 12px; background: var(--accent-soft, rgba(38, 191, 208, .08)); }
+.review p { margin: 7px 0 !important; }
+.review ul { margin: 8px 0 12px; padding-left: 20px; color: var(--text, #fff); }
+.review button { min-height: 44px; }
+.breakdown { margin-top: 14px; border-top: 1px solid var(--line, #475569); padding-top: 12px; }
+.breakdown summary { cursor: pointer; font-weight: 700; min-height: 44px; display: flex; align-items: center; }
+.breakdown ul { list-style: none; padding: 0; margin: 6px 0 0; display: grid; gap: 8px; }
+.breakdown li { display: flex; flex-wrap: wrap; gap: 4px 12px; padding: 10px; border-radius: 8px; background: rgba(127, 148, 180, .09); }
+.breakdown li strong { flex: 1 1 180px; }
+.breakdown li small { flex-basis: 100%; color: var(--muted, #acb7ca); }

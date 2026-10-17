@@ -1,6 +1,8 @@
 import type { PrismaClient } from '@prisma/client'
 
 import { findMyRoster, rosterPlayerIds } from '@/lib/core-app/myRoster'
+import { isForeignIdSpace, sleeperReadableRosters, sleeperReadablePlayerDataOf, rosterIdSpaceOf } from '@/lib/core-app/rosterIdSpace'
+import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
 import { resolveRostersForTeams } from '@/lib/leagues/rosterTeamIdentity'
 import { hasIdpScoring, isIdpPosition } from '@/lib/core-app/scoringNotes'
 
@@ -29,6 +31,8 @@ export type IdpMatchupState =
   | 'no_team_claimed'
   | 'no_matchup'
   | 'no_scoring_settings'
+  /** The rosters are the provider's own ids (see `isForeignIdSpace`) — not "no matchup on file". */
+  | 'ids_unreadable'
 
 export interface IdpMatchupPlayer {
   sleeperId: string
@@ -92,13 +96,13 @@ export interface LoadIdpMatchupArgs {
 export async function loadIdpMatchup(args: LoadIdpMatchupArgs): Promise<IdpMatchupPayload> {
   const league =
     (await args.prisma.league
-      .findUnique({ where: { id: args.leagueId }, select: { id: true, settings: true } })
+      .findUnique({ where: { id: args.leagueId }, select: { id: true, settings: true, platform: true } })
       .catch(() => null)) ??
     (await args.prisma.league
       .findFirst({
         where: { platformLeagueId: args.leagueId },
         orderBy: { updatedAt: 'desc' },
-        select: { id: true, settings: true },
+        select: { id: true, settings: true, platform: true },
       })
       .catch(() => null))
   if (!league) return EMPTY('no_scoring_settings')
@@ -184,9 +188,15 @@ export async function loadIdpMatchup(args: LoadIdpMatchupArgs): Promise<IdpMatch
     .catch(() => [])
   const teamByExternal = new Map(teams.map((t) => [t.externalId ?? '', t]))
 
-  const rosters = await args.prisma.roster
-    .findMany({ where: { leagueId: league.id }, select: { id: true, platformUserId: true, playerData: true } })
-    .catch(() => [] as Array<{ id: string; platformUserId: string | null; playerData: unknown }>)
+  // A Fleaflicker/MFL/Fantrax/Yahoo roster id collides with real Sleeper ids: read as one, the
+  // scoreboard would name and score a stranger, so such rosters contribute no ids. An ESPN roster is
+  // translated (raw, ESPN 12483 Stafford is Sleeper's 12483 Jack Bech).
+  const rosters = await sleeperReadableRosters(
+    await args.prisma.roster
+      .findMany({ where: { leagueId: league.id }, select: { id: true, platformUserId: true, playerData: true } })
+      .catch(() => [] as Array<{ id: string; platformUserId: string | null; playerData: unknown }>),
+    league.platform,
+  )
 
   /*
    * Roster lookup for the OPPONENT cannot use the claimed-user candidate — that id belongs to
@@ -216,10 +226,17 @@ export async function loadIdpMatchup(args: LoadIdpMatchupArgs): Promise<IdpMatch
    * the opponent resolved 44 players while my side resolved 0.
    */
   const mine = await findMyRoster(args.prisma, league.id, args.userId)
-  const myIds = mine.found ? rosterPlayerIds(mine.playerData) : idsFor(myTeam.externalId)
+  const myIds = mine.found
+    ? rosterPlayerIds(await sleeperReadablePlayerDataOf(league.platform, mine.playerData))
+    : idsFor(myTeam.externalId)
   const oppIds = idsFor(oppRosterId)
   const allIds = [...new Set([...myIds, ...oppIds])]
-  if (allIds.length === 0) return EMPTY('no_matchup', ['No rosters imported for this matchup.'])
+  if (allIds.length === 0) {
+    // Not only foreign platforms: an ESPN roster with no translatable id reads empty for the same reason.
+    return rosterIdSpaceOf(league.platform) !== 'sleeper'
+      ? EMPTY('ids_unreadable', [`${FOREIGN_IDS_UNREADABLE}, so the matchup cannot be scored here.`])
+      : EMPTY('no_matchup', ['No rosters imported for this matchup.'])
+  }
 
   const [playerRows, actual] = await Promise.all([
     args.prisma.sportsPlayer

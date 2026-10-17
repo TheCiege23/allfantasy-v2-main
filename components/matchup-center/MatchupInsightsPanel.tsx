@@ -19,7 +19,7 @@ export function MatchupInsightsPanel({
       <div className="flex items-center justify-between gap-2">
         <h3 className="text-[11px] font-bold uppercase tracking-[0.16em] text-white/50">AI & insights</h3>
         {partialData ? (
-          <span className="text-[10px] text-amber-200/80">Partial data — refreshing sources…</span>
+          <span className="text-[11px] text-amber-200/80">Partial data — refreshing sources…</span>
         ) : null}
       </div>
       <div className="space-y-2 text-[12px] leading-snug text-white/75">

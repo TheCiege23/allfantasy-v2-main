@@ -1,6 +1,53 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
-import { bestLineup, type Scored } from '@/lib/waivers/waiverBoard'
+import { bestLineup, loadWaiverBoard, lockedBestLineup, type Scored } from '@/lib/waivers/waiverBoard'
+import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
+
+/*
+ * Doubles for the loader tests at the bottom of this file. `bestLineup` above is pure and touches
+ * none of them. The projection feed is keyed by Sleeper id: '6038' IS Sleeper's "Wrong Player".
+ */
+vi.mock('@/lib/core-app/myRoster', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/core-app/myRoster')>()),
+  findMyRoster: vi.fn(async () => ({ found: true, playerData: { players: ['6038'] } })),
+}))
+vi.mock('@/lib/core-app/playerProjections', async (importOriginal) => ({
+  // The AF engine column: the carry-over arithmetic stays real, and the read finds no AF rows.
+  afEngineForLeague: (await importOriginal<typeof import('@/lib/core-app/playerProjections')>()).afEngineForLeague,
+  lookupAfEngineProjections: vi.fn(async () => new Map()),
+  latestProjectionWeek: vi.fn(async () => ({ season: '2026', week: 4 })),
+  lookupProjections: vi.fn(async (ids: readonly string[]) => {
+    const feed: Record<string, { name: string; line: number; position?: string; team?: string }> = {
+      '6038': { name: 'Wrong Player', line: 5 },
+      fa1: { name: 'Free Agent', line: 12 },
+      ...extraFeed,
+    }
+    return new Map(
+      ids
+        .filter((id) => feed[id])
+        .map((id) => [
+          id,
+          {
+            projectedPoints: feed[id].line,
+            name: feed[id].name,
+            position: feed[id].position ?? 'TE',
+            team: feed[id].team ?? 'KC',
+            componentStats: { rec: feed[id].line },
+          },
+        ]),
+    )
+  }),
+}))
+vi.mock('@/lib/projections/leagueScoring', () => ({
+  computeLeagueProjectedPoints: (line: Record<string, number>) => ({ points: Number(line.rec) }),
+}))
+vi.mock('@/lib/waivers/recentFormProjection', () => ({ projectFromRecentForm: vi.fn(async () => new Map()) }))
+// Nobody ruled out unless a test says so.
+vi.mock('@/lib/core-app/unavailableStarters', () => ({ loadUnavailableBySport: vi.fn(async () => new Map()) }))
+// The week the fixtures say is being played: the kickoff tests set it; every other test has none.
+vi.mock('@/lib/core-app/sportsWeek', () => ({ resolveSportsWeek: vi.fn(async () => null), isPreseason: () => false }))
+/** Extra projection-feed players for one test, keyed by id. Each test that sets it resets it. */
+let extraFeed: Record<string, { name: string; line: number; position?: string; team?: string }> = {}
 
 /**
  * The waiver board this replaces read nothing at all: `waiverRecommendationService` selects
@@ -96,5 +143,356 @@ describe('marginal gain — the reason this is not a "best available" list', () 
     const after = bestLineup([...roster, p('fa', 'TE', 13)], STANDARD)
     const dropped = roster.filter((x) => before.used.has(x.sleeperId) && !after.used.has(x.sleeperId))
     expect(dropped.map((d) => d.sleeperId)).toEqual(['te'])
+  })
+})
+
+/*
+ * A Fleaflicker/MFL/Fantrax/Yahoo roster id is a short number in Sleeper's range. Read as a Sleeper
+ * id, '6038' on a Fleaflicker roster was priced as Sleeper's player and named as the starter a free
+ * agent "displaces".
+ */
+describe('loadWaiverBoard — foreign roster ids', () => {
+  const prismaOn = (platform: string) =>
+    ({
+      league: {
+        findUnique: async () => ({
+          id: 'L1',
+          settings: { scoring_settings: { rec: 1 }, roster_positions: ['TE'] },
+          platform,
+        }),
+        findFirst: async () => null,
+      },
+      roster: { findMany: async () => [{ playerData: { players: ['6038'] } }] },
+      playerGameStat: {
+        aggregate: async (args: any) =>
+          args?.where?.season ? { _max: { weekOrRound: 3 } } : { _max: { season: 2026 } },
+        findMany: async () => [{ playerId: 'fa1' }],
+      },
+      sportsPlayer: {
+        findMany: async () => [{ sleeperId: 'fa1', name: 'Free Agent', team: 'KC', position: 'TE', updatedAt: new Date() }],
+      },
+    }) as never
+
+  it('does not price or name the Sleeper player who shares a Fleaflicker roster id', async () => {
+    const board = await loadWaiverBoard({ prisma: prismaOn('fleaflicker'), leagueId: 'L1', userId: 'u-1' })
+    expect(JSON.stringify(board)).not.toContain('Wrong Player')
+    expect(board.candidates).toEqual([])
+    // Imported but unread — not "no roster rows imported for your team yet".
+    expect(board.state).toBe('ids_unreadable')
+    expect(board.notes.join(' ')).toContain(FOREIGN_IDS_UNREADABLE)
+  })
+
+  it('CONTROL: the same id in a Sleeper league IS priced and named as displaced', async () => {
+    const board = await loadWaiverBoard({ prisma: prismaOn('sleeper'), leagueId: 'L1', userId: 'u-1' })
+    expect(board.state).toBe('ok')
+    expect(board.candidates[0]?.displaces?.name).toBe('Wrong Player')
+  })
+
+  it('puts the AllFantasy engine beside the free agent and the starter he displaces, without moving the gain', async () => {
+    const { lookupAfEngineProjections } = await import('@/lib/core-app/playerProjections')
+    vi.mocked(lookupAfEngineProjections).mockResolvedValueOnce(new Map([
+      ['fa1', { playerId: 'fa1', projectedPoints: 24, basis: null, confidence: null }],
+      ['6038', { playerId: '6038', projectedPoints: 10, basis: null, confidence: null }],
+    ]))
+    const before = await loadWaiverBoard({ prisma: prismaOn('sleeper'), leagueId: 'L1', userId: 'u-1' })
+    const board = await loadWaiverBoard({ prisma: prismaOn('sleeper'), leagueId: 'L1', userId: 'u-1' })
+    // Provider line scores the same under this league as generic (rec x1), so AF carries over 1:1.
+    expect(before.candidates[0]?.afProjectedPoints).toBe(24)
+    expect(before.candidates[0]?.displaces?.afProjectedPoints).toBe(10)
+    // Without AF rows the figures are absent, and the gain is identical either way.
+    expect(board.candidates[0] && 'afProjectedPoints' in board.candidates[0]).toBe(false)
+    expect(before.candidates[0]?.gain).toBe(board.candidates[0]?.gain)
+  })
+
+  /*
+   * My Team's Lineup check sends the starters it knows will not play. Without that, a ruled-out
+   * starter whose projection predates the designation stays in the best lineup at full value, and
+   * the free agent who fills his slot is priced against a player who is not playing.
+   */
+  it('prices an add against the hole an unavailable starter leaves, and still names him', async () => {
+    const normal = await loadWaiverBoard({ prisma: prismaOn('sleeper'), leagueId: 'L1', userId: 'u-1' })
+    expect(normal.candidates[0]?.gain).toBe(7) // 12 against a 5-point starter
+
+    const out = await loadWaiverBoard({ prisma: prismaOn('sleeper'), leagueId: 'L1', userId: 'u-1', unavailable: ['6038'] })
+    expect(out.candidates[0]?.gain).toBe(12) // 12 against a zero
+    expect(out.candidates[0]?.displaces?.name).toBe('Wrong Player')
+  })
+
+  /*
+   * The Waivers screen passes no `unavailable` — only My Team's Lineup check did. So an IR back's stale
+   * projection sat in "your lineup" (97.68 against a lineup projected 81.5, Elimination Station 2,
+   * 2026-10-03) and sank every free agent's gain. The board now reads who is out itself.
+   */
+  it('zeroes a ruled-out roster player on its own, with no caller list — the Waivers screen passes none', async () => {
+    const { loadUnavailableBySport } = await import('@/lib/core-app/unavailableStarters')
+    vi.mocked(loadUnavailableBySport).mockResolvedValueOnce(new Map([['NFL', new Set(['6038'])]]))
+    const board = await loadWaiverBoard({ prisma: prismaOn('sleeper'), leagueId: 'L1', userId: 'u-1' })
+    expect(board.currentLineupPoints).toBe(0)
+    expect(board.candidates[0]?.gain).toBe(12)
+    expect(vi.mocked(loadUnavailableBySport)).toHaveBeenLastCalledWith(
+      // Your roster AND the free agents: one read decides who can play for both.
+      expect.objectContaining({ sleeperIds: ['6038', 'fa1'], sports: ['NFL'], season: 2026, week: 4 }),
+    )
+  })
+
+  it('a failed availability read changes nothing — the board as before', async () => {
+    const { loadUnavailableBySport } = await import('@/lib/core-app/unavailableStarters')
+    vi.mocked(loadUnavailableBySport).mockRejectedValueOnce(new Error('db down'))
+    const board = await loadWaiverBoard({ prisma: prismaOn('sleeper'), leagueId: 'L1', userId: 'u-1' })
+    expect(board.state).toBe('ok')
+    expect(board.currentLineupPoints).toBe(5)
+    expect(board.candidates[0]?.gain).toBe(7)
+  })
+})
+
+/*
+ * Kickoff locks (2026-10-03). Rico Dowdle scored 9.8 from Elimination Station 2's bench on Thursday;
+ * on Saturday the board still seated him over a starter who had not played, so "your best lineup"
+ * was a lineup nobody could field and every free agent was measured against it.
+ */
+describe('lockedBestLineup', () => {
+  const SLOTS = ['RB', 'RB']
+  const s1 = p('s1', 'RB', 4)
+  const s2 = p('s2', 'RB', 15)
+  const b1 = p('b1', 'RB', 10)
+
+  it('without locks it is bestLineup, unchanged', () => {
+    const locks = { pinned: new Map<number, string>(), frozenOut: new Set<string>() }
+    expect(lockedBestLineup([s1, s2, b1], SLOTS, locks)).toEqual(bestLineup([s1, s2, b1], SLOTS))
+  })
+  it('a bench player whose game kicked off cannot come in', () => {
+    const r = lockedBestLineup([s1, s2, b1], SLOTS, { pinned: new Map(), frozenOut: new Set(['b1']) })
+    expect(r.total).toBe(19)
+    expect(r.used.has('b1')).toBe(false)
+  })
+  it('a starter whose game kicked off keeps his slot, even against a better player', () => {
+    const fa = p('fa', 'RB', 30)
+    const r = lockedBestLineup([s1, s2, fa], SLOTS, { pinned: new Map([[0, 's1']]), frozenOut: new Set() })
+    expect(r.used.has('s1')).toBe(true)
+    expect(r.total).toBe(34) // s1's locked 4 + the 30 in the one open slot
+  })
+})
+
+describe('loadWaiverBoard — kickoff locks', () => {
+  const SAT = new Date('2026-10-03T16:00:00Z')
+  const THU = new Date('2026-10-02T00:15:00Z') // PIT @ CLE, already played
+  const SUN = new Date('2026-10-04T17:00:00Z')
+  const games = [
+    { homeTeam: 'CLE', awayTeam: 'PIT', startTime: THU, seasonType: 'regular', venue: null },
+    { homeTeam: 'LV', awayTeam: 'KC', startTime: SUN, seasonType: 'regular', venue: null },
+    { homeTeam: 'BUF', awayTeam: 'NE', startTime: SUN, seasonType: 'regular', venue: null },
+    { homeTeam: 'CHI', awayTeam: 'NYJ', startTime: SUN, seasonType: 'regular', venue: null },
+  ]
+  const prisma = (starters: string[]) =>
+    ({
+      league: {
+        findUnique: async () => ({ id: 'L1', settings: { scoring_settings: { rec: 1 }, roster_positions: ['RB', 'RB', 'BN'] }, platform: 'sleeper' }),
+        findFirst: async () => null,
+      },
+      roster: { findMany: async () => [{ playerData: { players: ['s1', 's2', 'b1'], starters } }] },
+      playerGameStat: {
+        aggregate: async (args: any) => (args?.where?.season ? { _max: { weekOrRound: 3 } } : { _max: { season: 2026 } }),
+        findMany: async () => [{ playerId: 'faSun' }, { playerId: 'faThu' }],
+      },
+      sportsPlayer: {
+        findMany: async () => [
+          { sleeperId: 'faSun', name: 'Sunday FA', team: 'NYJ', position: 'RB', updatedAt: new Date() },
+          { sleeperId: 'faThu', name: 'Thursday FA', team: 'CLE', position: 'RB', updatedAt: new Date() },
+        ],
+      },
+      sportsGame: { findMany: async () => games },
+    }) as never
+
+  const DOWDLE_WEEK = {
+    s1: { name: 'Emmett Johnson', line: 4, position: 'RB', team: 'KC' },
+    s2: { name: 'Jeremiyah Love', line: 15, position: 'RB', team: 'BUF' },
+    b1: { name: 'Rico Dowdle', line: 10, position: 'RB', team: 'PIT' },
+    faSun: { name: 'Sunday FA', line: 8, position: 'RB', team: 'NYJ' },
+    faThu: { name: 'Thursday FA', line: 20, position: 'RB', team: 'CLE' },
+  }
+
+  const run = async (feed: typeof extraFeed, starters: string[], now: Date = SAT, fixturesWeek = 4) => {
+    extraFeed = feed
+    try {
+      const { findMyRoster } = await import('@/lib/core-app/myRoster')
+      vi.mocked(findMyRoster).mockResolvedValueOnce({ found: true, playerData: { players: ['s1', 's2', 'b1'], starters } } as never)
+      const { resolveSportsWeek } = await import('@/lib/core-app/sportsWeek')
+      vi.mocked(resolveSportsWeek).mockResolvedValueOnce({ season: 2026, week: fixturesWeek, seasonType: 'regular' } as never)
+      return await loadWaiverBoard({ prisma: prisma(starters), leagueId: 'L1', userId: 'u-1', now })
+    } finally {
+      extraFeed = {}
+    }
+  }
+
+  it('keeps a bench player who already played OUT of the best lineup, and measures adds against the real one', async () => {
+    const board = await run(DOWDLE_WEEK, ['s1', 's2'])
+    expect(board.currentLineupPoints).toBe(19) // Love 15 + Johnson 4 — not Love + Dowdle 25
+    expect(board.candidates.map((c) => c.name)).toEqual(['Sunday FA'])
+    expect(board.candidates[0]?.gain).toBe(4)
+    expect(board.candidates[0]?.displaces?.name).toBe('Emmett Johnson')
+    // The Thursday free agent would "gain" 16, but his game is over — he cannot play for you.
+    // Only what happened: no starter is pinned here, so the note does not say "0 of your starters".
+    expect(board.notes).toContain(
+      'Games already kicked off are locked in: 1 bench player can no longer come in and 1 free agent whose game has started is not shown.',
+    )
+    expect(board.notes.join(' ')).not.toMatch(/\b0 /)
+  })
+
+  it('a starter who already played keeps his slot and is never "displaced"', async () => {
+    const board = await run(
+      { ...DOWDLE_WEEK, s1: { name: 'Thursday Starter', line: 4, position: 'RB', team: 'PIT' }, b1: { name: 'Bench Back', line: 3, position: 'RB', team: 'KC' } },
+      ['s1', 's2'],
+    )
+    expect(board.currentLineupPoints).toBe(19)
+    // The Sunday FA (8) would replace the 4-point starter — but that starter is locked in.
+    expect(board.candidates).toEqual([])
+    expect(board.notes).toContain(
+      'Games already kicked off are locked in: 1 of your starters keeps his slot and 1 free agent whose game has started is not shown.',
+    )
+  })
+
+  it('CONTROL: the same roster on Wednesday, before any kickoff, seats the 10-point back as before', async () => {
+    const board = await run(DOWDLE_WEEK, ['s1', 's2'], new Date('2026-09-30T12:00:00Z'))
+    expect(board.currentLineupPoints).toBe(25)
+    expect(board.candidates.map((c) => c.name)).toEqual(['Thursday FA'])
+  })
+
+  it('applies no locks when the fixtures are for a different week than the projections', async () => {
+    // The clock says week 5 while the projections are week 4: last week's kickoffs say nothing here.
+    const board = await run(DOWDLE_WEEK, ['s1', 's2'], SAT, 5)
+    expect(board.currentLineupPoints).toBe(25)
+  })
+
+  it('does not pin a starter whose slot it cannot know — starters shorter than the slots', async () => {
+    const board = await run(
+      { ...DOWDLE_WEEK, s1: { name: 'Thursday Starter', line: 4, position: 'RB', team: 'PIT' }, b1: { name: 'Bench Back', line: 3, position: 'RB', team: 'KC' } },
+      ['s1'], // one starter stored against two slots
+    )
+    // Unpinned, so the old rule applies: the Sunday FA may take the 4-point back's seat.
+    expect(board.candidates.map((c) => c.name)).toEqual(['Sunday FA'])
+  })
+})
+
+/*
+ * The free-agent pool on a Saturday (2026-10-03). The newest stat week held only Thursday's game —
+ * 144 players against ~2,320 in a full week — so the pool was two NFL teams and every free agent who
+ * had not played since Thursday was invisible.
+ */
+describe('loadWaiverBoard — the free-agent pool', () => {
+  type StatRow = { playerId: string; weekOrRound: number }
+  const prisma = (stats: StatRow[], meta: Array<{ sleeperId: string; team: string }>) =>
+    ({
+      league: {
+        findUnique: async () => ({ id: 'L1', settings: { scoring_settings: { rec: 1 }, roster_positions: ['TE'] }, platform: 'sleeper' }),
+        findFirst: async () => null,
+      },
+      roster: { findMany: async () => [{ playerData: { players: ['6038'] } }] },
+      playerGameStat: {
+        aggregate: async (args: any) =>
+          args?.where?.season ? { _max: { weekOrRound: Math.max(...stats.map((s) => s.weekOrRound)) } } : { _max: { season: 2026 } },
+        // Honours the week filter, so a query for the newest week alone really does miss week 3.
+        findMany: async (args: any) => {
+          const w = args?.where?.weekOrRound
+          const inWeek = (n: number) => (typeof w === 'number' ? n === w : (w?.gte == null || n >= w.gte) && (w?.lte == null || n <= w.lte))
+          return [...new Set(stats.filter((s) => inWeek(s.weekOrRound)).map((s) => s.playerId))].map((playerId) => ({ playerId }))
+        },
+      },
+      sportsPlayer: {
+        findMany: async () => meta.map((m) => ({ sleeperId: m.sleeperId, name: m.sleeperId, team: m.team, position: 'TE', updatedAt: new Date() })),
+      },
+    }) as never
+
+  it('on a Saturday, finds the free agent who last played on Sunday — not only Thursday’s players', async () => {
+    extraFeed = {
+      w3a: { name: 'Sunday Tight End', line: 9, position: 'TE', team: 'NYJ' },
+      th1: { name: 'Thursday Tight End', line: 7, position: 'TE', team: 'CLE' },
+    }
+    try {
+      const board = await loadWaiverBoard({
+        prisma: prisma(
+          [{ playerId: 'w3a', weekOrRound: 3 }, { playerId: 'th1', weekOrRound: 4 }],
+          [{ sleeperId: 'w3a', team: 'NYJ' }, { sleeperId: 'th1', team: 'CLE' }],
+        ),
+        leagueId: 'L1',
+        userId: 'u-1',
+      })
+      expect(board.candidates.map((c) => c.name)).toEqual(['Sunday Tight End', 'Thursday Tight End'])
+    } finally {
+      extraFeed = {}
+    }
+  })
+
+  /*
+   * "229 of 422 startable free agents could not be projected" read as a coverage failure. Measured on
+   * Elimination Station 2: ~206 of them had no line and no game this season that fantasy scoring
+   * counts. The note now says those apart from the real gap — one counting game, too few for form.
+   */
+  it('says apart "nothing to rank them on" from "only one counting game"', async () => {
+    const { projectFromRecentForm } = await import('@/lib/waivers/recentFormProjection')
+    vi.mocked(projectFromRecentForm).mockImplementation(async (a: any) =>
+      // The form fallback (2+ games) prices nobody; asked again at one game, only 'one' comes back.
+      a.minGames === 1 ? new Map([['one', { points: 2, games: 1 }]]) : new Map(),
+    )
+    try {
+      const board = await loadWaiverBoard({
+        prisma: prisma(
+          [{ playerId: 'never1', weekOrRound: 3 }, { playerId: 'never2', weekOrRound: 3 }, { playerId: 'one', weekOrRound: 3 }],
+          [{ sleeperId: 'never1', team: 'NYJ' }, { sleeperId: 'never2', team: 'NYJ' }, { sleeperId: 'one', team: 'NYJ' }],
+        ),
+        leagueId: 'L1',
+        userId: 'u-1',
+      })
+      expect(board.notes).toContain(
+        '2 of 3 startable free agents have no projection and no game this season that this league’s scoring counts, so there is nothing to rank them on.',
+      )
+      expect(board.notes).toContain('1 more has no projection and only one counting game this season — too few to rank, so he is not shown.')
+      expect(board.notes.join(' ')).not.toMatch(/could not be projected/)
+    } finally {
+      vi.mocked(projectFromRecentForm).mockImplementation(async () => new Map())
+    }
+  })
+
+  it('a failed one-game read falls back to the old sentence, never to silence', async () => {
+    const { projectFromRecentForm } = await import('@/lib/waivers/recentFormProjection')
+    vi.mocked(projectFromRecentForm).mockImplementation(async (a: any) => {
+      if (a.minGames === 1) throw new Error('db down')
+      return new Map()
+    })
+    try {
+      const board = await loadWaiverBoard({
+        prisma: prisma([{ playerId: 'never1', weekOrRound: 3 }], [{ sleeperId: 'never1', team: 'NYJ' }]),
+        leagueId: 'L1',
+        userId: 'u-1',
+      })
+      expect(board.notes).toContain('1 of 1 startable free agents could not be projected under this league’s scoring and are not shown.')
+    } finally {
+      vi.mocked(projectFromRecentForm).mockImplementation(async () => new Map())
+    }
+  })
+
+  it('does not offer a free agent who is out or on IR this week, and does not call him unprojected', async () => {
+    const { loadUnavailableBySport } = await import('@/lib/core-app/unavailableStarters')
+    vi.mocked(loadUnavailableBySport).mockResolvedValueOnce(new Map([['NFL', new Set(['irPriced', 'irBare'])]]))
+    extraFeed = {
+      ok: { name: 'Healthy Tight End', line: 8, position: 'TE', team: 'NYJ' },
+      irPriced: { name: 'Injured Star', line: 30, position: 'TE', team: 'BUF' }, // stale line, on IR
+      // irBare: on IR with no line at all — Jordan Mason's shape
+    }
+    try {
+      const board = await loadWaiverBoard({
+        prisma: prisma(
+          [{ playerId: 'ok', weekOrRound: 3 }, { playerId: 'irPriced', weekOrRound: 3 }, { playerId: 'irBare', weekOrRound: 3 }],
+          [{ sleeperId: 'ok', team: 'NYJ' }, { sleeperId: 'irPriced', team: 'BUF' }, { sleeperId: 'irBare', team: 'MIN' }],
+        ),
+        leagueId: 'L1',
+        userId: 'u-1',
+      })
+      expect(board.candidates.map((c) => c.name)).toEqual(['Healthy Tight End'])
+      expect(board.notes).toContain('2 free agents are ruled out, on injured reserve or on a bye this week and not shown.')
+      // Every free agent who CAN play was priced, so there is no projection gap to report.
+      expect(board.notes.join(' ')).not.toMatch(/could not be projected/)
+    } finally {
+      extraFeed = {}
+    }
   })
 })

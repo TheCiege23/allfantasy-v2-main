@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { resolveRostersForTeams } from '@/lib/leagues/rosterTeamIdentity'
 import { hasScoringRules } from '@/lib/projections/leagueScoring'
 import { leagueProjectionGap, leagueScoredLineupTotal, lookupProjections } from './playerProjections'
+import { forecastMatchup, UNATTRIBUTED_REASON, type Forecast, type ForecastStarter } from './matchupForecast'
 
 /**
  * Who you play next, and what both sides are projected to score.
@@ -33,6 +34,8 @@ export type MatchupSide = {
   projected: number | null
   /** How many of their starters that total was built from. */
   projectedFrom: number
+  /** AllFantasy's own engine total for the same lineup. Only a pricer supplies it; null otherwise. */
+  afProjected?: number | null
   starterCount: number
 }
 
@@ -48,6 +51,12 @@ export type NextMatchup = {
    * of the one-line read, so a pair of dashes is never left to explain itself.
    */
   unpricedReason: string | null
+  /**
+   * Win probability from the ONE shared rule set (`matchupForecast.ts`) the Matchup screen and the
+   * all-leagues board use, over the same per-player numbers this card sums. Absent when no pricer
+   * supplied per-starter inputs; `available: false` carries the reason in words.
+   */
+  forecast?: Forecast | null
 }
 
 function asIds(v: unknown): string[] {
@@ -65,7 +74,16 @@ const EMPTY_SLOT = '0'
  */
 export type MatchupLineupPricer = (
   lineups: ReadonlyMap<string, readonly string[]>,
-) => Promise<ReadonlyMap<string, { projected: number | null; projectedFrom: number }>>
+) => Promise<ReadonlyMap<string, {
+  projected: number | null
+  projectedFrom: number
+  afProjected?: number | null
+  /**
+   * Each starter as the shared forecast needs him. `actual` is null when no score row is held — the
+   * card refuses rather than read a started starter's missing score as zero points banked.
+   */
+  forecast?: Array<Omit<ForecastStarter, 'actual'> & { actual: number | null }>
+}>>
 
 export async function getNextMatchup(args: {
   /** Internal `League.id` — used for LeagueTeam and Roster lookups. */
@@ -111,6 +129,8 @@ export async function getNextMatchup(args: {
    * 0 its roster row shows, not his full projection — see `sumLeagueScoredStarters`.
    */
   priceLineups?: MatchupLineupPricer | null
+  /** The provider sets the scoring lineup, so a one-lineup forecast would overstate certainty. */
+  bestBall?: boolean
 }): Promise<NextMatchup | null> {
   const { leagueId, platformLeagueId, myExternalId, seasonYear, week } = args
   if (!platformLeagueId || !myExternalId) return null
@@ -235,8 +255,9 @@ export async function getNextMatchup(args: {
      * beside the total and the withheld edge sentence already say when one is short, and a
      * standard-PPR number summed in is wrong without saying so. See `leagueScoredLineupTotal`.
      */
+    const pricedSide = args.priceLineups ? priced?.get(rosterId) : undefined
     const { projected, projectedFrom } = args.priceLineups
-      ? priced?.get(rosterId) ?? { projected: null, projectedFrom: 0 }
+      ? pricedSide ?? { projected: null, projectedFrom: 0 }
       : leagueScoredLineupTotal(starters, projections, args.scoringSettings)
 
     return {
@@ -246,6 +267,7 @@ export async function getNextMatchup(args: {
       avatarUrl: team?.avatarUrl ?? null,
       projected,
       projectedFrom,
+      afProjected: pricedSide?.afProjected ?? null,
       starterCount: starters.length,
     }
   }
@@ -253,6 +275,36 @@ export async function getNextMatchup(args: {
   const you = side(myRosterId)
   const opponent = opponentRow ? side(opponentRow.rosterId) : null
   const sides = opponent ? [you, opponent] : [you]
+
+  /*
+   * ⚠ ONE WIN PROBABILITY, NOT A THIRD. The Matchup screen and the all-leagues board already share
+   * `forecastMatchup`; this card feeds it the per-player numbers it just summed, so all three agree.
+   *
+   * One guard the shared rules cannot apply here: they detect "points banked but no per-player rows"
+   * from the scoreboard total, and this card reads no scoreboard. A starter past kickoff with no
+   * score row (every non-Sleeper league today) would otherwise be modelled as zero points banked —
+   * so that case refuses with the shared rule's own reason.
+   */
+  const forecastOf = (rosterId: string) => (args.priceLineups ? priced?.get(rosterId)?.forecast : undefined)
+  const youRows = forecastOf(myRosterId)
+  const oppRows = opponentRow ? forecastOf(opponentRow.rosterId) : undefined
+  let forecast: Forecast | null = null
+  if (youRows && oppRows) {
+    const scoreMissing = [youRows, oppRows].some((rows) =>
+      rows.some((s) => !s.unavailable && s.state !== 'upcoming' && s.actual == null),
+    )
+    const toSide = (rows: typeof youRows) => {
+      const starters = rows.map((s) => ({ ...s, actual: s.actual ?? 0 }))
+      return {
+        starters,
+        teamPoints: starters.reduce((n, s) => n + s.actual, 0),
+        hasPlayerPoints: rows.some((s) => s.actual != null),
+      }
+    }
+    forecast = scoreMissing
+      ? { available: false, refusal: 'unattributed', reason: UNATTRIBUTED_REASON }
+      : forecastMatchup(toSide(youRows), toSide(oppRows), { bestBall: args.bestBall === true })
+  }
 
   return {
     seasonYear,
@@ -265,5 +317,6 @@ export async function getNextMatchup(args: {
       starters: sides.reduce((n, s) => n + s.starterCount, 0),
       pricedStarters: sides.reduce((n, s) => n + s.projectedFrom, 0),
     }),
+    forecast,
   }
 }

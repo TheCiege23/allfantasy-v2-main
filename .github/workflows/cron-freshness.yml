@@ -92,7 +92,13 @@ jobs:
             echo "skipped=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          node scripts/cron-freshness-check.mjs --json > freshness.json
+          # GitHub runs this script with bash -e. A stale probe intentionally makes
+          # the checker exit 1, but the report still needs to reach heal and alert.
+          if node scripts/cron-freshness-check.mjs --json > freshness.json; then
+            echo "freshness checker exited healthy"
+          else
+            echo "::warning::freshness checker reported failing probes; processing its JSON report"
+          fi
           echo "skipped=false" >> "$GITHUB_OUTPUT"
           # A parse failure must not read as "nothing failing" — that is the false clean this whole
           # monitor exists to remove. An unreadable report counts as a failure of its own.
@@ -103,7 +109,7 @@ jobs:
             catch (e) { console.log("PARSE_ERROR"); process.exit(0) }
             const bad = (d.results ?? []).filter((r) => !["OK", "IDLE"].includes(r.state))
             console.log(JSON.stringify({ failing: bad.length, unmonitored: (d.unmonitored ?? []).length,
-              bad: bad.map((r) => ({ path: r.path, state: r.state, detail: r.detail ?? null })) }))
+              bad: bad.map((r) => ({ path: r.path, kind: r.kind, state: r.state, detail: r.detail ?? null })) }))
           ' > summary.json
           if grep -q PARSE_ERROR summary.json; then
             echo "::error::freshness report was unreadable — treating as FAILING"
@@ -144,7 +150,7 @@ jobs:
           esac
           # CONFIG means the probe names a job_name nothing writes — a registry error, not a dropped
           # trigger. Re-firing it cannot help and would hammer a route hourly forever.
-          PATHS=$(node -p "JSON.parse(require('fs').readFileSync('summary.json','utf8')).bad.filter(b=>b.state!=='CONFIG'&&b.path).map(b=>b.path).join('\n')")
+          PATHS=$(node -p "JSON.parse(require('fs').readFileSync('summary.json','utf8')).bad.filter(b=>b.state!=='CONFIG'&&b.kind!=='coverage'&&b.path).map(b=>b.path).join('\n')")
           if [ -z "$PATHS" ]; then echo "nothing re-firable (all CONFIG)"; exit 0; fi
           echo "$PATHS" | while IFS= read -r p; do
             [ -n "$p" ] || continue

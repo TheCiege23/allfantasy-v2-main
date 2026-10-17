@@ -27,14 +27,25 @@ export function reportedLabel(iso: string | null | undefined, nowIso?: string | 
   }
   const get = (parts: Intl.DateTimeFormatPart[], t: Intl.DateTimeFormatPart['type']) => parts.find((p) => p.type === t)?.value ?? ''
 
+  /*
+   * ⚠ A WEEKDAY ALONE IS AMBIGUOUS ONCE IT IS A WEEK OLD. On Sunday morning
+   * 2026-09-27 the list read "reported Sun 6:47p ET" for a report from the
+   * PREVIOUS Sunday — a time that had not happened yet that day. From six days
+   * back the month/day is added: "reported Sun 9/20 6:47p ET".
+   */
+  const ageMs = nowIso ? new Date(nowIso).getTime() - d.getTime() : NaN
+  const withDate = Number.isFinite(ageMs) && ageMs >= 6 * 24 * 60 * 60 * 1000
+
   if (dateOnly) {
-    const parts = fmt({ weekday: 'short' }, 'UTC')
-    return `reported ${get(parts, 'weekday')}`
+    const parts = fmt({ weekday: 'short', month: 'numeric', day: 'numeric' }, 'UTC')
+    const day = withDate ? ` ${get(parts, 'month')}/${get(parts, 'day')}` : ''
+    return `reported ${get(parts, 'weekday')}${day}`
   }
 
-  const parts = fmt({ weekday: 'short', hour: 'numeric', minute: '2-digit', hour12: true }, LOCK_ZONE)
+  const parts = fmt({ weekday: 'short', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }, LOCK_ZONE)
   const ampm = get(parts, 'dayPeriod').toLowerCase().startsWith('p') ? 'p' : 'a'
-  const when = `${get(parts, 'weekday')} ${get(parts, 'hour')}:${get(parts, 'minute')}${ampm} ET`
+  const day = withDate ? ` ${get(parts, 'month')}/${get(parts, 'day')}` : ''
+  const when = `${get(parts, 'weekday')}${day} ${get(parts, 'hour')}:${get(parts, 'minute')}${ampm} ET`
 
   // Inside the last hour on a game day, minutes matter more than the clock.
   if (nowIso) {

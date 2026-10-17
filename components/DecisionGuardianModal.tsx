@@ -227,20 +227,20 @@ export default function DecisionGuardianModal({
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-1 flex-wrap">
                 <span
-                  className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${config.badgeBg} ${config.badgeText}`}
+                  className={`px-2 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider ${config.badgeBg} ${config.badgeText}`}
                 >
                   {config.label}
                 </span>
 
                 {modeConfig ? (
                   <span
-                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${modeConfig.bg} ${modeConfig.text} border ${modeConfig.border}`}
+                    className={`px-2 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider ${modeConfig.bg} ${modeConfig.text} border ${modeConfig.border}`}
                   >
                     {modeConfig.label}
                   </span>
                 ) : null}
 
-                <span className="text-[10px] text-white/40 uppercase tracking-wider">
+                <span className="text-[11px] text-white/40 uppercase tracking-wider">
                   {ACTION_LABELS[actionType]} Guardian
                 </span>
               </div>
@@ -299,7 +299,7 @@ export default function DecisionGuardianModal({
           <div className="space-y-3 mb-5">
             <div className="flex items-center gap-3 p-3 rounded-xl bg-black/20 border border-white/5">
               <div className="flex items-center gap-2 flex-1">
-                <div className="text-[10px] uppercase tracking-wider text-white/40 w-16">You</div>
+                <div className="text-[11px] uppercase tracking-wider text-white/40 w-16">You</div>
                 <ArrowRight className="h-3 w-3 text-white/20" />
                 <div className="text-sm text-white/80">{evaluation.userAction}</div>
               </div>
@@ -307,7 +307,7 @@ export default function DecisionGuardianModal({
 
             <div className="flex items-center gap-3 p-3 rounded-xl bg-black/20 border border-white/5">
               <div className="flex items-center gap-2 flex-1">
-                <div className="text-[10px] uppercase tracking-wider text-white/40 w-16">AI</div>
+                <div className="text-[11px] uppercase tracking-wider text-white/40 w-16">AI</div>
                 <ArrowRight className="h-3 w-3 text-white/20" />
                 <div className="text-sm text-white/80">{evaluation.aiRecommendation}</div>
               </div>
@@ -316,13 +316,13 @@ export default function DecisionGuardianModal({
 
           <div className={`grid ${hasAcceptanceData ? "grid-cols-2" : "grid-cols-3"} gap-3 mb-5`}>
             <div className="p-3 rounded-xl bg-black/20 border border-white/5 text-center">
-              <div className="text-[10px] uppercase tracking-wider text-white/40 mb-1">Deviation</div>
+              <div className="text-[11px] uppercase tracking-wider text-white/40 mb-1">Deviation</div>
               <div className={`text-xl font-bold ${config.badgeText}`}>{evaluation.deviationScore}</div>
-              <div className="text-[10px] text-white/30">/100</div>
+              <div className="text-[11px] text-white/30">/100</div>
             </div>
 
             <div className="p-3 rounded-xl bg-black/20 border border-white/5 text-center">
-              <div className="text-[10px] uppercase tracking-wider text-white/40 mb-1">EV Loss</div>
+              <div className="text-[11px] uppercase tracking-wider text-white/40 mb-1">EV Loss</div>
               <div className="flex items-center justify-center gap-1">
                 {evaluation.expectedValueLoss > 0 && <TrendingDown className="h-3.5 w-3.5 text-red-400" />}
                 <div
@@ -337,7 +337,7 @@ export default function DecisionGuardianModal({
 
             {!hasAcceptanceData && (
               <div className="p-3 rounded-xl bg-black/20 border border-white/5 text-center">
-                <div className="text-[10px] uppercase tracking-wider text-white/40 mb-1">Confidence</div>
+                <div className="text-[11px] uppercase tracking-wider text-white/40 mb-1">Confidence</div>
                 <div className="text-xl font-bold text-white/80">{evaluation.confidenceInWarning}%</div>
               </div>
             )}
@@ -424,7 +424,7 @@ export default function DecisionGuardianModal({
             </button>
           </div>
 
-          <div className="mt-3 text-center text-[10px] text-white/25">
+          <div className="mt-3 text-center text-[11px] text-white/25">
             AI Decision Guardian — Override decisions are logged for learning
           </div>
         </div>

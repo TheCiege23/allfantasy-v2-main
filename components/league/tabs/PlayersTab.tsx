@@ -13,6 +13,7 @@ import {
 import { LeagueTradePanel } from '@/components/league-trade'
 import PlayerHeadshot from '@/components/league/PlayerHeadshot'
 import { ActiveTradeCard, TradeBlockCarousel } from '@/components/league/TradeCard'
+import { DEVY_NO_TREND_LABEL } from '@/lib/devy/devyTrend'
 import type {
   LeaguePlayersData,
   LeaguePlayersSubtab,
@@ -85,7 +86,7 @@ function PlayerListCard({
               {player.badges.map((badge) => (
                 <span
                   key={`${player.id}-${badge}`}
-                  className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-semibold text-white/70"
+                  className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] font-semibold text-white/70"
                 >
                   {badge}
                 </span>
@@ -95,7 +96,7 @@ function PlayerListCard({
         </div>
         {player.adp != null ? (
           <div className="rounded-xl bg-[#1C2539] px-3 py-2 text-right">
-            <div className="text-[10px] uppercase tracking-[0.16em] text-[#8B9DB8]">ADP</div>
+            <div className="text-[11px] uppercase tracking-[0.16em] text-[#8B9DB8]">ADP</div>
             <div className="text-[15px] font-semibold text-white">{Math.round(player.adp)}</div>
           </div>
         ) : null}
@@ -117,7 +118,7 @@ function PlayerListCard({
         <div className="mt-3 grid grid-cols-5 gap-x-3 gap-y-2 border-t border-white/5 pt-3">
           {player.stats.map((stat) => (
             <div key={`${player.id}-${stat.label}`}>
-              <div className="text-[10px] uppercase tracking-[0.16em] text-[#8B9DB8]">{stat.label}</div>
+              <div className="text-[11px] uppercase tracking-[0.16em] text-[#8B9DB8]">{stat.label}</div>
               <div className="text-[14px] font-semibold text-white">{stat.value}</div>
             </div>
           ))}
@@ -160,9 +161,14 @@ export default function PlayersTab({
     [playerUniverse]
   )
 
+  /*
+   * Pro players only. No college trend is measured (`lib/devy/devyTrend.ts`); the college list that
+   * used to be merged here ranked `DevyPlayer.stockTrendDelta`, a LEVEL, and drew it as "+N.N" —
+   * so every prospect read as rising. The Trend tab says so instead (`college-trend-unmeasured`).
+   */
   const filteredTrend = useMemo(
-    () => sortPlayers(filterByPosition(mergeUniverse(players.trend, players.college?.trend ?? []), position), sortBy),
-    [mergeUniverse, players.trend, players.college?.trend, position, sortBy]
+    () => sortPlayers(filterByPosition(mergeUniverse(players.trend, []), position), sortBy),
+    [mergeUniverse, players.trend, position, sortBy]
   )
   const filteredAvailable = useMemo(
     () => sortPlayers(filterByPosition(mergeUniverse(players.available, players.college?.available ?? []), position), sortBy),
@@ -288,6 +294,14 @@ export default function PlayersTab({
 
           {subtab === 'trend' ? (
             <div className="space-y-3">
+              {players.college && playerUniverse !== 'PRO_PLAYERS' ? (
+                <div
+                  data-testid="college-trend-unmeasured"
+                  className="rounded-2xl border border-[#1E2A42] bg-[#131929] p-4 text-[14px] text-[#8B9DB8]"
+                >
+                  College prospects — {DEVY_NO_TREND_LABEL}. See Available and Leaders for them.
+                </div>
+              ) : null}
               {filteredTrend.map((player) => (
                 <PlayerListCard key={player.id} player={player} showTrend />
               ))}
@@ -304,7 +318,7 @@ export default function PlayersTab({
                 href={`/waiver-ai?leagueId=${leagueId}`}
                 className="flex min-h-[48px] items-center justify-between rounded-2xl border border-[#00D4AA]/30 bg-[#0F3D35] px-4 py-3 text-[15px] font-semibold text-[#00D4AA]"
               >
-                <span>✦ Get AI waiver picks</span>
+                <span>✦ Get Chimmy&apos;s waiver picks</span>
                 <ArrowRightLeft className="h-4 w-4" />
               </Link>
               <div className="space-y-3">
@@ -359,7 +373,7 @@ export default function PlayersTab({
                     href={`/trade-evaluator?leagueId=${leagueId}`}
                     className="inline-flex text-[13px] font-semibold text-[#00D4AA]"
                   >
-                    ✦ Analyze with AI
+                    ✦ Analyze with Chimmy
                   </Link>
                 </div>
               ))

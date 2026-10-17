@@ -22,7 +22,7 @@ import { isRegularSeason } from './sportsWeek'
  */
 
 /** An NFL week is 13-16 fixtures; byes reduce it, never below about 13. */
-const MIN_PLAUSIBLE_SLATE = 12
+export const MIN_PLAUSIBLE_SLATE = 12
 
 export type ByeInfo = {
   /** Week -> the roster's players (by sleeperId) who are off that week. */

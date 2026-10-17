@@ -8,6 +8,16 @@ import { buildLeagueStandingsContext } from '@/lib/chimmy/leagueStandingsGroundi
 import { prepareChimmyDecisionAnswer } from '@/lib/chimmy/decisionAnswerService'
 import type { ChimmyDecisionAnswer } from '@/lib/chimmy/decisionAnswerContract'
 import { recordChatStartSitAdvice } from '@/lib/chimmy-advice/chatStartSitAdvice'
+import { consumeRateLimit } from '@/lib/rate-limit'
+import {
+  readChimmyPlanAllowance,
+  releaseChimmyPlanAllowance,
+  takeChimmyPlanAllowance,
+} from '@/lib/chimmy/planAllowance'
+import { runChimmyToolLoop } from '@/lib/chimmy/tools/chimmyToolLoop'
+import { CHIMMY_TOOL_LOOP_SYSTEM_PROMPT } from '@/lib/chimmy/tools/toolLoopSystemPrompt'
+import type { ChatStartCall } from '@/lib/chimmy/tools/chimmyTools'
+import { enforceTradeLetters, type ChimmyTradeGrade } from '@/lib/chimmy/tradeGradeCheck'
 
 /** Two newlines, kept as a constant so an editing pass cannot flatten it. */
 const NEWLINES = String.fromCharCode(10, 10)
@@ -33,8 +43,13 @@ async function buildPrivateGrounding(context: {
    * member of would leak another league's standings into a private reply. The
    * facts come from the same exported builders the Chimmy panel uses, so there
    * is one implementation of each rather than a second copy living here.
+   *
+   * ⚠ The signature is `(userId, leagueId)`. This call had them swapped from
+   * 2026-08-26, so every member was refused and every @chimmy reply here was told
+   * the league "could not be loaded". The failure is closed, so it leaked nothing
+   * and looked like an ordinary sync gap.
    */
-  const access = await loadLeagueGroundingForUser(leagueId, userId).catch(() => null)
+  const access = await loadLeagueGroundingForUser(userId, leagueId).catch(() => null)
   if (!access || !access.ok) {
     const reason = access && !access.ok ? access.reason : 'error'
     return `CONTEXT: this league's data could not be loaded (${reason}). Do not describe the roster, standings or history; say plainly that you could not read them.`
@@ -99,6 +114,36 @@ export async function generateChimmyPrivateReply(
     return decision.answer
   }
 
+  /*
+   * 🛑 EVERYTHING THAT WAS NOT A DECISION QUESTION REACHED A WEAKER, UNMETERED ASSISTANT. The panel
+   * answers through the tool loop (rosters, matchups, injuries, the engines, the "facts + confidence"
+   * rules); this path made one bare OpenAI call with standings and head-to-head only, and no plan or
+   * rate check — so the most public place Chimmy speaks gave the worst answer, at an open cost.
+   *
+   * Now: a member of the league (membership proven here, never assumed from the client's id) whose
+   * plan includes Chimmy with allowance left gets the SAME tool loop and prompt as the panel, paid
+   * from the SAME daily allowance (given back when no answer arrives). Everyone else keeps the short
+   * grounded answer they had — rate-limited, so it is no longer an uncapped model call.
+   */
+  const provenLeagueId = context.leagueId && context.userId ? await provenMembership(context.userId, context.leagueId) : null
+  const full = context.userId
+    ? await answerWithToolLoop({ question: userContent, userId: context.userId, leagueId: provenLeagueId }).catch(() => null)
+    : null
+  if (full) return full
+
+  if (context.userId) {
+    const limited = consumeRateLimit({
+      scope: 'chimmy',
+      action: 'chat_private_reply',
+      sleeperUsername: context.userId,
+      maxRequests: FALLBACK_REPLIES_PER_HOUR,
+      windowMs: 60 * 60 * 1000,
+    })
+    if (!limited.success) {
+      return "You've asked @chimmy a lot this hour. Open the Chimmy panel for more, or try again a little later."
+    }
+  }
+
   const grounding = await buildPrivateGrounding(context)
 
   const result = await openaiChatText({
@@ -120,4 +165,89 @@ ${grounding}`,
   }
 
   return "I'm having trouble reaching the AI right now. Try again in a moment, or open the full Chimmy panel from the dashboard."
+}
+
+/** The short fallback answers per user per hour. Generous for a person; a ceiling for a script. */
+export const FALLBACK_REPLIES_PER_HOUR = 20
+
+/** The tool loop's own budget in a chat thread, and the cap after which the quick answer is used. */
+export const CHAT_LOOP_BUDGET_MS = 20_000
+export const CHAT_LOOP_HARD_CAP_MS = 28_000
+
+/**
+ * Chat-only instructions, sent after the shared (cached) prompt. A reply in a chat thread is read in
+ * a bubble and only the asker sees it; it cannot carry a confirm card (the propose tools already say
+ * so when no card collector is passed), and it must not quote anyone's private messages.
+ */
+export const CHAT_REPLY_STYLE =
+  'WHERE THIS ANSWER APPEARS: a private reply inside a chat thread, seen only by the person who asked. ' +
+  'Keep it short: the call and its evidence in about 120 words. ' +
+  'Nothing you do here can change a lineup or send a trade; if they want a move made, give your recommendation and tell them to make it in the league, or in the Chimmy panel where a confirm card can be shown.'
+
+async function provenMembership(userId: string, leagueId: string): Promise<string | null> {
+  const access = await loadLeagueGroundingForUser(userId, leagueId).catch(() => null)
+  return access && access.ok ? leagueId : null
+}
+
+/**
+ * The panel's tool loop for a plan holder with allowance left, or null (caller falls back). Never
+ * throws past the caller's `.catch`; an included answer that never arrives is given back.
+ */
+async function answerWithToolLoop(args: {
+  question: string
+  userId: string
+  leagueId: string | null
+}): Promise<string | null> {
+  const plan = await readChimmyPlanAllowance({ userId: args.userId }).catch(() => null)
+  if (!plan || plan.remaining <= 0) return null
+  const taken = await takeChimmyPlanAllowance({ userId: args.userId, state: plan }).catch(() => null)
+  if (!taken) return null
+
+  const context = {
+    leagueId: args.leagueId,
+    userId: args.userId,
+    startCalls: [] as ChatStartCall[],
+    tradeGrades: [] as ChimmyTradeGrade[],
+  }
+  const loopArgs = {
+    question: args.question,
+    systemPrompt: CHIMMY_TOOL_LOOP_SYSTEM_PROMPT,
+    clockLine: `CURRENT DATE AND TIME (UTC): ${new Date().toISOString()}`,
+    styleLine: CHAT_REPLY_STYLE,
+    conversation: [],
+    context,
+    enabled: true,
+    budgetMs: CHAT_LOOP_BUDGET_MS,
+  }
+  /*
+   * The sender's own message is held until this reply exists (the chat routes return both together),
+   * so the full assistant gets a chat-sized budget and a hard cap. Past the cap the quick answer is
+   * given instead and the included answer goes back — a person waiting on a spinner is the worse cost.
+   */
+  let capTimer: ReturnType<typeof setTimeout> | undefined
+  const loop = await Promise.race([
+    runChimmyToolLoop(loopArgs).catch(() => null),
+    new Promise<null>((resolve) => {
+      capTimer = setTimeout(() => resolve(null), CHAT_LOOP_HARD_CAP_MS)
+    }),
+  ]).finally(() => clearTimeout(capTimer))
+  let text = loop?.text?.trim() || ''
+  if (text) {
+    // The same rule as the panel: a trade letter in the answer must be one the engine gave.
+    const held = await enforceTradeLetters({
+      answer: text,
+      grades: context.tradeGrades,
+      retry: async (correction) =>
+        (await runChimmyToolLoop({ ...loopArgs, question: `${args.question}\n\n${correction}` }).catch(() => null))?.text ?? null,
+    }).catch(() => null)
+    if (held) text = held.text.trim()
+  }
+  if (!text) {
+    await releaseChimmyPlanAllowance({ userId: args.userId, state: taken }).catch(() => false)
+    return null
+  }
+  if (context.startCalls.length > 0) {
+    await recordChatStartSitAdvice({ userId: args.userId, calls: context.startCalls, answer: text }).catch(() => null)
+  }
+  return text
 }

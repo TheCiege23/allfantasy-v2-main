@@ -104,7 +104,7 @@ export function LeaguePreviousSeasonsPanel({ leagueId, sportLabel, leagueFormatL
                   <div className="flex items-center gap-2">
                     <span className="text-[14px] font-semibold text-white">{s.season}</span>
                     {isLive ? (
-                      <span className="rounded-md bg-cyan-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase text-cyan-200">
+                      <span className="rounded-md bg-cyan-500/15 px-1.5 py-0.5 text-[11px] font-bold uppercase text-cyan-200">
                         Current
                       </span>
                     ) : null}

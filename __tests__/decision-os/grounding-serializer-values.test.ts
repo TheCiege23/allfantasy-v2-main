@@ -344,3 +344,22 @@ describe('a missing slice degrades, it does not throw', () => {
     expect(text).toContain('6420')
   })
 })
+
+/*
+ * League intelligence is the only slice that names the league's teams (standings is not itemised),
+ * so a 22-team division list must survive the prose cap. Every other prose slice keeps 1200.
+ */
+describe('the league-intelligence prose cap', () => {
+  const long = (tail: string) => `${'x'.repeat(1900)}\n${tail}`
+
+  it('keeps a 22-team group list that runs past 1200 characters, end included', () => {
+    const text = serializeDecisionOsGroundingForPrompt(packet({ leagueIntelligence: present(long('New Era (11): LAST-TEAM-SENTINEL.')) }), NOW)
+    expect(text).toContain('LAST-TEAM-SENTINEL')
+  })
+
+  it('still trims every other prose slice at 1200', () => {
+    const text = serializeDecisionOsGroundingForPrompt(packet({ savedAnalysis: present(long('SAVED-TAIL-SENTINEL')) }), NOW)
+    expect(text).not.toContain('SAVED-TAIL-SENTINEL')
+    expect(text).toContain('…')
+  })
+})

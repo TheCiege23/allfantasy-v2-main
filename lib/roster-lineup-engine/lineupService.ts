@@ -1,3 +1,4 @@
+import { seasonSetupBlocked } from '@/lib/tournament/seasonNativeContract'
 /**
  * Persist lineup changes with validation, normalized sync, history, and optional lock cache.
  */
@@ -7,9 +8,31 @@ import { getRosterTemplateForLeague } from '@/lib/multi-sport/MultiSportRosterSe
 import { getFormatTypeForVariant } from '@/lib/sport-defaults/LeagueVariantRegistry'
 import { validateCanonicalRosterPayload } from './rosterValidationService'
 import { syncAfRosterLineupAssignments } from './lineupAssignmentSync'
+import { syncRedraftSlotTypesForLineup } from './redraftSlotSync'
+import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { recordAfRosterMoveHistory } from './rosterMoveHistory'
 import { upsertAfLineupLockState, resolveFullLineupLockContext } from './lineupLockService'
 import type { LineupValidationContext } from './types'
+import { isCommissionerRosterLocked } from '@/lib/league/commissioner-roster-lock'
+import { getNormalizedLineupSections, type RosterSectionKey } from '@/lib/roster/LineupTemplateValidation'
+
+/** Locked starters keep their exact slot; a locked bench/IR player stays in that section. */
+export function movedLockedLineupPlayer(before: unknown, after: unknown, lockedPlayerIds: readonly string[]): string | null {
+  if (lockedPlayerIds.length === 0) return null
+  const locations = (data: unknown) => {
+    const sections = getNormalizedLineupSections(data)
+    const result = new Map<string, string>()
+    for (const section of Object.keys(sections) as RosterSectionKey[]) {
+      sections[section].forEach((row, index) => {
+        result.set(String(row.id), section === 'starters' ? `${section}:${index}` : section)
+      })
+    }
+    return result
+  }
+  const original = locations(before)
+  const proposed = locations(after)
+  return lockedPlayerIds.find((id) => original.get(id) !== proposed.get(id)) ?? null
+}
 
 function weekFromLeagueSettings(settings: unknown): number {
   if (!settings || typeof settings !== 'object' || Array.isArray(settings)) return 1
@@ -32,6 +55,10 @@ export type PersistRosterLineupInput = {
   week: number
   source: 'user_save' | 'commissioner_override' | 'import' | 'system'
   skipLockCheck?: boolean
+  transactionCheck?: (tx: Prisma.TransactionClient) => Promise<void>
+  automationAudit?: { id: string; action: string; message: string; metadata: Record<string,unknown> }
+  expectedOwnerUserId?: string
+  expectedStarters?: string[]
 }
 
 function canonicalLineupEventTypeForSource(source: PersistRosterLineupInput['source']): string {
@@ -48,11 +75,20 @@ export async function persistRosterLineupWithEngine(
     where: { id: input.leagueId },
   })
   if (!league) return { ok: false, error: 'League not found', status: 404 }
+  if (seasonSetupBlocked(league.settings)) return { ok: false, error: 'Tournament lineups remain locked until season activation.', status: 409 }
 
   const roster = await prisma.roster.findFirst({
     where: { id: input.rosterId, leagueId: input.leagueId },
   })
   if (!roster) return { ok: false, error: 'Roster not found', status: 404 }
+  if (input.expectedStarters) {
+    const current=(roster.playerData as Record<string,unknown> | null)?.starters
+    if (!Array.isArray(current) || JSON.stringify(current.map(String))!==JSON.stringify(input.expectedStarters)) return {ok:false,error:'Your lineup changed. Refresh and compare again.',status:409}
+  }
+
+  if ((input.source === 'user_save' || input.source === 'system') && await isCommissionerRosterLocked(input.leagueId, input.rosterId)) {
+    return { ok: false, error: 'This roster is locked by the commissioner.', status: 403 }
+  }
 
   const sport = String(league.sport ?? 'NFL')
   const formatType = getFormatTypeForVariant(sport, (league.leagueVariant as string | null) ?? undefined)
@@ -110,7 +146,8 @@ export async function persistRosterLineupWithEngine(
       leagueWeek,
       editingWeek: input.week,
       season: input.season,
-      playerData: input.nextPlayerData,
+      // A client can edit nextPlayerData, including gameTime. Lock from the saved roster only.
+      playerData: roster.playerData,
       lockAllMoves: league.lockAllMoves,
       lifecycleState: league.lifecycleState,
     })
@@ -121,15 +158,34 @@ export async function persistRosterLineupWithEngine(
         status: 403,
       }
     }
+    const movedLockedPlayer = movedLockedLineupPlayer(roster.playerData, input.nextPlayerData, lockCtx.lockedPlayerIds)
+    if (movedLockedPlayer) {
+      return { ok: false, error: 'That player\'s game has started. Their lineup position is locked for today.', status: 403 }
+    }
   }
 
   const before = roster.playerData as Prisma.InputJsonValue
 
-  await prisma.$transaction(async (tx) => {
-    await tx.roster.update({
+  /*
+   * 🛑 NATIVE SCORING READS `RedraftRosterPlayer.slotType`, NOT THIS LINEUP. Without the sync below
+   * a native manager could bench a ruled-out starter, see "Lineup saved", and still be scored on
+   * him — live and at the week's seal. NATIVE only: an imported league is a SHADOW twin
+   * (lib/league/write-authority.ts) and must never reach redraft tables. A roster with no linked
+   * `RedraftRoster` has no scoring projection to keep.
+   */
+  const redraftRosterId =
+    resolveWriteAuthority(league.platform) === 'NATIVE' ? (roster.redraftRosterId ?? null) : null
+
+  try { await prisma.$transaction(async (tx) => {
+    await input.transactionCheck?.(tx)
+    if (input.expectedStarters) {
+      const result=await tx.roster.updateMany({ where:{id:input.rosterId,...(input.expectedOwnerUserId?{platformUserId:input.expectedOwnerUserId}:{}),playerData:{equals:before}},data:{playerData:input.nextPlayerData as Prisma.InputJsonValue} })
+      if(result.count!==1) throw new Error('STALE_TEAM_LINEUP')
+    } else await tx.roster.update({
       where: { id: input.rosterId },
       data: { playerData: input.nextPlayerData as Prisma.InputJsonValue },
     })
+    if(input.automationAudit) await tx.automationAuditLog.create({data:{...input.automationAudit, leagueId:input.leagueId,userId:input.actorUserId,entityType:"roster",entityId:input.rosterId,metadata:input.automationAudit.metadata as Prisma.InputJsonValue}})
     await syncAfRosterLineupAssignments(
       {
         leagueId: input.leagueId,
@@ -140,7 +196,13 @@ export async function persistRosterLineupWithEngine(
       },
       tx,
     )
-  })
+    if (redraftRosterId) {
+      await syncRedraftSlotTypesForLineup(tx, { redraftRosterId, playerData: input.nextPlayerData })
+    }
+  }) } catch(e) {
+    if(e instanceof Error && e.message==='STALE_TEAM_LINEUP') return {ok:false,error:'Your roster changed while saving. Refresh and compare again.',status:409}
+    throw e
+  }
 
   await recordAfRosterMoveHistory({
     leagueId: input.leagueId,

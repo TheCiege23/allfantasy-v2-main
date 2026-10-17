@@ -108,11 +108,11 @@ export async function GET(
     jury = await getJuryMembers(leagueId)
 
     if (cycle && myRosterId) {
-      const canVote = eligibility?.canVote.includes(myRosterId) ?? false
+      const canVote = (eligibility?.canVote.includes(myRosterId) ?? false) && cycle.phase === 'VOTING_OPEN' && !cycle.closedAt && (!cycle.voteOpenedAt || new Date(cycle.voteOpenedAt) <= new Date()) && (!cycle.voteDeadlineAt || new Date(cycle.voteDeadlineAt) > new Date())
       ballot = {
         canVote,
         voteDeadlineAt: cycle.voteDeadlineAt,
-        closed: !!cycle.closedAt,
+        closed: !!cycle.closedAt || cycle.phase === 'VOTING_LOCKED' || !!cycle.voteDeadlineAt && new Date(cycle.voteDeadlineAt) <= new Date(),
       }
     }
 

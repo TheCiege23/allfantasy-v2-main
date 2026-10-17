@@ -35,7 +35,7 @@ export function ThemeModeSelector({ className }: { className?: string }) {
   return (
     <div className={className}>
       <p
-        className="mb-1.5 text-[10px] font-medium uppercase tracking-widest"
+        className="mb-1.5 text-[11px] font-medium uppercase tracking-widest"
         style={{ color: "var(--muted2)" }}
       >
         {t("theme.selectorTitle")}
@@ -49,7 +49,7 @@ export function ThemeModeSelector({ className }: { className?: string }) {
               key={id}
               type="button"
               onClick={() => handleSelect(id)}
-              className="flex-1 rounded-lg border px-1 py-1.5 text-[10px] font-semibold transition-colors"
+              className="flex-1 rounded-lg border px-1 py-1.5 text-[11px] font-semibold transition-colors"
               style={
                 isActive
                   ? {

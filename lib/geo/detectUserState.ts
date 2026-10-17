@@ -4,12 +4,16 @@ import type { GeoDetectionResult } from "./geoTypes"
 import { isTorExit, resolveEdgeGeo } from "./geoHeaders"
 import { fetchIpApi, fetchProxycheck } from "./geoIpFetch"
 import {
-  combineAnonymizerSignals,
+  combineAnonymizerDetail,
+  logAnonymizerBlock,
   parseIpApiPayload,
   parseProxycheckPayload,
   UNREADABLE_IP_GEO,
 } from "./geoIpParse"
 import type { ParsedIpGeo, ProxycheckVerdict } from "./geoIpParse"
+import { decideRelay, lookupRelayState } from "./privateRelayRanges"
+import { getRelayRangeSetNode } from "./privateRelayStore"
+import { isAppleCorporateNetwork } from "./appleNetwork"
 
 export { __resetIpApiShapeWarning } from "./geoIpParse"
 
@@ -117,15 +121,47 @@ export async function detectUserState(request: Request | Headers): Promise<GeoDe
 
   // Tor is read from the edge header and costs nothing; everything else is the
   // same combined rule the middleware gate applies (./geoIpParse).
+  // Apple's own network (./appleNetwork — App Store review) is not asked about,
+  // the same as the middleware gate, unless Apple's Relay feed lists the address.
   let isVpnOrProxy = isTorExit(headers)
-  if (!isVpnOrProxy && rawIp) {
+  const appleNetwork = !isVpnOrProxy && rawIp !== null && isAppleCorporateNetwork(rawIp)
+  const skipAnonymizerCheck =
+    appleNetwork && !(await getRelayRangeSetNode().then((s) => Boolean(s && lookupRelayState(s, rawIp as string)), () => false))
+  // Kept for the block log below — which vendor said yes, and in what words.
+  let blockSignals: { proxycheck: ProxycheckVerdict | null; ipapi: ParsedIpGeo | null } = { proxycheck: null, ipapi: null }
+  let blockDetail = combineAnonymizerDetail({ tor: isVpnOrProxy, proxycheck: null, ipapi: null })
+  if (!isVpnOrProxy && rawIp && !skipAnonymizerCheck) {
     const proxycheck = await proxycheckVerdict(rawIp)
     // Reuse the response already in hand rather than calling twice; only ask
     // again when the geo branch above never ran, and not at all once proxycheck
     // has already said yes.
     const ipapi = proxycheck?.anonymized ? null : (lookup ?? (await ipapiLookup(rawIp)))
-    isVpnOrProxy = combineAnonymizerSignals({ tor: false, proxycheck, ipapi }) === true
+    blockSignals = { proxycheck, ipapi }
+    blockDetail = combineAnonymizerDetail({ tor: false, proxycheck, ipapi })
+    isVpnOrProxy = blockDetail.anonymized === true
   }
+
+  // An anonymized address Apple's Private Relay feed lists can be PLACED rather
+  // than refused — the middleware gate's rule (lib/geo/privateRelayRanges), so
+  // signup, checkout and /api/geo/check agree with it about the same address.
+  if (isVpnOrProxy && rawIp && !isTorExit(headers)) {
+    const set = await getRelayRangeSetNode()
+    const decision = decideRelay(set ? lookupRelayState(set, rawIp) : null)
+    if (decision.kind === "placed") {
+      return {
+        stateCode: decision.state,
+        country: "US",
+        isVpnOrProxy: false,
+        detectionSource: placed.detectionSource,
+        rawIp,
+        privateRelay: { state: decision.state, paidBlocked: decision.paidBlocked },
+      }
+    }
+  }
+
+  // Logged only here, after the Private Relay placement above, so a relay user who is PLACED rather
+  // than refused is not reported as a block. Never the address.
+  if (isVpnOrProxy) logAnonymizerBlock("detectUserState", blockDetail, blockSignals)
 
   return {
     stateCode,

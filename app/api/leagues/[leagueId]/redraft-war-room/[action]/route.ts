@@ -5,7 +5,7 @@
  * all POST actions (keeps the Vercel route count low):
  *   - waivers        → deterministic add/drop recommendations
  *   - lineup         → deterministic start/sit
- *   - trade-analyze  → deterministic trade verdict (body: outgoingPlayerIds, incomingPlayerIds)
+ *   - trade-analyze  → trade facts + THE grade (body: outgoingPlayerIds, incomingPlayerIds)
  *   - trade-find     → deterministic partner fit
  *   - ask            -> grounded AI answer over deterministic facts (AF War Room-gated)
  *
@@ -19,7 +19,7 @@ import { buildRedraftWarRoomContext } from '@/lib/redraft-war-room/redraftWarRoo
 import { evaluateTeamNeeds } from '@/lib/redraft-war-room/redraftTeamNeedsEngine'
 import { buildLineupRecommendation } from '@/lib/redraft-war-room/redraftLineupEngine'
 import { buildWaiverRecommendations } from '@/lib/redraft-war-room/redraftWaiverEngine'
-import { analyzeTrade, findTradeTargets } from '@/lib/redraft-war-room/redraftTradeEngine'
+import { redraftTradeFacts, findTradeTargets } from '@/lib/redraft-war-room/redraftTradeEngine'
 import {
   REDRAFT_WAR_ROOM_SYSTEM_RULES,
   buildRedraftWarRoomPrompt,
@@ -29,6 +29,8 @@ import { openaiChatText } from '@/lib/openai-client'
 import { classifyRedraftQuestionForModel, selectOpenAIModelForIntent } from '@/lib/ai/modelRouting'
 import type { RedraftWarRoomContext } from '@/lib/redraft-war-room/types'
 import { recordWarRoomTradeShadow } from '@/lib/decision-os/trade/warRoomShadow'
+import { gradeWarRoomTrade, warRoomTradeSide } from '@/lib/decision-os/trade/warRoomTradeGrade'
+import { warRoomTradeAnalysisForClient } from '@/lib/decision-os/trade/warRoomTradeView'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -96,7 +98,7 @@ export async function POST(
       return NextResponse.json({ lineup: buildLineupRecommendation(context, rosterId) })
 
     case 'trade-analyze': {
-      const analysis = analyzeTrade(context, {
+      const analysis = redraftTradeFacts(context, {
         rosterId,
         outgoingPlayerIds: Array.isArray(body.outgoingPlayerIds) ? body.outgoingPlayerIds : [],
         incomingPlayerIds: Array.isArray(body.incomingPlayerIds) ? body.incomingPlayerIds : [],
@@ -112,7 +114,21 @@ export async function POST(
         incomingCount: Array.isArray(body.incomingPlayerIds) ? body.incomingPlayerIds.length : 0,
         analysis,
       })
-      return NextResponse.json({ tradeAnalysis: analysis })
+      /*
+       * 🛑 THE VERDICT IS THE ONE GRADE (2026-09-28, lib/decision-os/trade/warRoomTradeGrade.ts).
+       * The engine returns facts only (2026-09-30); its retired accept/reject/neutral is derived for the
+       * shadow above, inside Decision OS. The panel shows the grade and the facts (lineup, bench, playoff).
+       */
+      const players = context.teams.flatMap((t) => t.players)
+      const tradeGrade = await gradeWarRoomTrade({
+        leagueId,
+        userId: user.id,
+        viewerSide: rosterId === context.userRosterId,
+        outgoing: warRoomTradeSide({ playerIds: body.outgoingPlayerIds, players }),
+        incoming: warRoomTradeSide({ playerIds: body.incomingPlayerIds, players }),
+      })
+      // 🛑 The facts only — the engine's value and fit deltas stay on the server (2026-09-29).
+      return NextResponse.json({ tradeAnalysis: warRoomTradeAnalysisForClient(analysis), tradeGrade })
     }
 
     case 'trade-find':

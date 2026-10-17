@@ -102,7 +102,7 @@ export function LotteryFairnessDashboard({
       <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-5">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-white/40">Lottery Fairness Dashboard</p>
+            <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-white/40">Lottery Fairness Dashboard</p>
             <p className="mt-1 text-lg font-bold text-white">{data.leagueName}</p>
           </div>
           <span className={clsx('rounded-lg px-3 py-1 text-[11px] font-bold', STATUS_COLORS[data.lotteryStatus])}>
@@ -174,7 +174,7 @@ export function LotteryFairnessDashboard({
 function SummaryCard({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
     <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3 text-center">
-      <p className="text-[10px] text-white/40">{label}</p>
+      <p className="text-[11px] text-white/40">{label}</p>
       <p className={clsx('mt-1 text-lg font-bold', color ?? 'text-white')}>{value}</p>
     </div>
   )
@@ -201,7 +201,7 @@ function OverviewTab({ data }: { data: LotteryFairnessData }) {
       {data.runAt && (
         <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 text-xs text-white/50">
           <p>Lottery run at: <span className="text-white/80">{new Date(data.runAt).toLocaleString()}</span></p>
-          {data.seed && <p>Seed: <code className="text-[10px] text-white/40">{data.seed.slice(0, 16)}...</code></p>}
+          {data.seed && <p>Seed: <code className="text-[11px] text-white/40">{data.seed.slice(0, 16)}...</code></p>}
         </div>
       )}
     </div>
@@ -236,7 +236,7 @@ function OddsTab({ entries }: { entries: LotteryEntry[] }) {
       {/* Odds table */}
       <div className="overflow-x-auto rounded-xl border border-white/10">
         <table className="w-full text-left text-xs">
-          <thead className="border-b border-white/10 text-[10px] uppercase text-white/40">
+          <thead className="border-b border-white/10 text-[11px] uppercase text-white/40">
             <tr>
               <th className="p-2.5">Team</th>
               <th className="p-2.5">Record</th>
@@ -274,7 +274,7 @@ function ResultsTab({ entries, data }: { entries: LotteryEntry[]; data: LotteryF
   return (
     <div className="overflow-x-auto rounded-xl border border-white/10">
       <table className="w-full text-left text-xs">
-        <thead className="border-b border-white/10 text-[10px] uppercase text-white/40">
+        <thead className="border-b border-white/10 text-[11px] uppercase text-white/40">
           <tr>
             <th className="p-2.5">Pick</th>
             <th className="p-2.5">Team</th>
@@ -320,7 +320,7 @@ function AuditTab({ events }: { events: AuditEvent[] }) {
             <span className="text-white/30">{new Date(e.timestamp).toLocaleString()}</span>
           </div>
           <p className="mt-0.5 text-white/50">{e.details}</p>
-          <p className="text-[10px] text-white/30">by {e.actor}</p>
+          <p className="text-[11px] text-white/30">by {e.actor}</p>
         </div>
       ))}
     </div>
@@ -361,7 +361,7 @@ function SimulateTab({
       {simResults && (
         <div className="overflow-x-auto rounded-xl border border-white/10">
           <table className="w-full text-left text-xs">
-            <thead className="border-b border-white/10 text-[10px] uppercase text-white/40">
+            <thead className="border-b border-white/10 text-[11px] uppercase text-white/40">
               <tr>
                 <th className="p-2.5">Team</th>
                 <th className="p-2.5 text-right">Avg Pick</th>

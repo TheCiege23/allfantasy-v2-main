@@ -293,22 +293,23 @@ function buildDmCopy(
   if (fillsNeed) {
     return {
       opener: `Hey, I noticed you could use help at ${partner.needs.join('/')} — I think ${mainGiveNames || 'this package'} could be a great fit for you.`,
-      rationale: `This fills your ${partner.needs[0] || mainReceivePos} gap and I'm getting ${mainReceiveNames || 'what I need'} in return. Fair deal for both of us.`,
+      // No claim that the deal is FAIR: the one trade grade says that, and the user sees it beside this copy.
+      rationale: `This fills your ${partner.needs[0] || mainReceivePos} gap and I'm getting ${mainReceiveNames || 'what I need'} in return.`,
       fallback: `No worries if the pieces don't line up perfectly — happy to tweak it. What would make this work for you?`,
     }
   }
 
   if (fairnessScore >= 0.85) {
     return {
-      opener: `I think this is a pretty even deal that helps us both — want to take a look?`,
-      rationale: `The values line up well here and we're both getting pieces that fit our teams better.`,
+      opener: `I think this could help us both — want to take a look?`,
+      rationale: `We're both getting pieces that fit our teams better.`,
       fallback: `If the fit isn't quite right, I'm open to adjusting. What would you need to make this work?`,
     }
   }
 
   return {
     opener: `Hey, I've been looking at rosters and think we could work something out — interested?`,
-    rationale: `${mainGiveNames || 'My offer'} for ${mainReceiveNames || 'your pieces'} keeps things fair and helps both our lineups.`,
+    rationale: `${mainGiveNames || 'My offer'} for ${mainReceiveNames || 'your pieces'} helps both our lineups.`,
     fallback: `Totally understand if you're not sold yet — let me know what you'd need to make it happen.`,
   }
 }

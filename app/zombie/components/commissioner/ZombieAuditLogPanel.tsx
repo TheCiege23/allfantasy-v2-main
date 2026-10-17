@@ -202,19 +202,19 @@ function AuditRow({ entry: e }: { entry: AuditEntry }) {
               {e.action.replace(/_/g, ' ')}
             </span>
             {!e.isPublic && (
-              <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-bold text-amber-300">
+              <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[11px] font-bold text-amber-300">
                 ADMIN
               </span>
             )}
             {e.actorRole === 'commissioner' && (
-              <span className="rounded bg-sky-500/15 px-1.5 py-0.5 text-[9px] font-bold text-sky-300">
+              <span className="rounded bg-sky-500/15 px-1.5 py-0.5 text-[11px] font-bold text-sky-300">
                 COMMISH
               </span>
             )}
           </div>
           <p className="text-[11px] text-[var(--zombie-text-mid)] line-clamp-1">{e.description}</p>
         </div>
-        <span className="shrink-0 text-[10px] text-[var(--zombie-text-dim)]">
+        <span className="shrink-0 text-[11px] text-[var(--zombie-text-dim)]">
           {new Date(e.createdAt).toLocaleDateString()}
         </span>
       </button>
@@ -259,12 +259,12 @@ function AuditRow({ entry: e }: { entry: AuditEntry }) {
             <div className="mt-2">
               {e.previousState != null && (
                 <p className="text-[var(--zombie-text-dim)]">
-                  Previous: <code className="text-[10px] text-white/60">{JSON.stringify(e.previousState)}</code>
+                  Previous: <code className="text-[11px] text-white/60">{JSON.stringify(e.previousState)}</code>
                 </p>
               )}
               {e.newState != null && (
                 <p className="text-[var(--zombie-text-dim)]">
-                  New: <code className="text-[10px] text-white/60">{JSON.stringify(e.newState)}</code>
+                  New: <code className="text-[11px] text-white/60">{JSON.stringify(e.newState)}</code>
                 </p>
               )}
             </div>

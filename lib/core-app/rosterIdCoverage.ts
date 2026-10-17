@@ -58,8 +58,16 @@ export function rosterIdCoverage(sampled: readonly string[], known: ReadonlySet<
 }
 
 /** The sentence the screen shows for a league whose rosters we cannot read this way. */
+const PLATFORM_LABEL: Record<string, string> = {
+  espn: 'ESPN',
+  yahoo: 'Yahoo',
+  fleaflicker: 'Fleaflicker',
+  mfl: 'MFL',
+  fantrax: 'Fantrax',
+}
+
 export function coverageReason(platform: string | null | undefined): string {
   const p = (platform ?? '').trim().toLowerCase()
-  const label = p === 'espn' ? 'ESPN' : p === 'yahoo' ? 'Yahoo' : p ? p : 'this platform'
+  const label = PLATFORM_LABEL[p] ?? (p || 'this platform')
   return `this league's rosters use ${label} player ids we have not matched to our player table yet, so we cannot tell who has him`
 }

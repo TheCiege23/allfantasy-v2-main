@@ -27,7 +27,14 @@ describe('mock IDP standings do not render', () => {
     expect(src).not.toContain('Team A')
     expect(src).not.toContain('1240.2')
     expect(src).not.toMatch(/const MOCK/)
-    expect(src).toContain('idp-standings-unavailable')
+    // IDP now uses verified standings instead of an unavailable placeholder.
+    expect(src).toContain('<LeagueStandings')
+    const view = read('components/standings/LeagueStandings.tsx')
+    expect(view).not.toContain('Team A')
+    expect(view).not.toContain('1240.2')
+    expect(view).not.toMatch(/const MOCK/)
+    expect(view).toContain('/scoring/standings')
+    expect(view).toContain('No completed scoring results are available for this season yet.')
   })
 })
 

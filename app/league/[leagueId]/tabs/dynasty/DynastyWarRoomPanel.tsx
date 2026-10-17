@@ -26,6 +26,9 @@ import type { BuySellHoldResult } from '@/lib/dynasty-war-room/dynastyBuySellHol
 import type { DynastyLineupResult } from '@/lib/dynasty-war-room/dynastyLineupEngine'
 import type { DynastyWaiverResult } from '@/lib/dynasty-war-room/dynastyWaiverEngine'
 import type { DynastyTradeAnalysis, DynastyTradeFinderResult } from '@/lib/dynasty-war-room/dynastyTradeEngine'
+import type { SuggestionGrade } from '@/lib/trade-intel/partnerRanking'
+import type { WarRoomTradeAnalysisView } from '@/lib/decision-os/trade/warRoomTradeView'
+import { WarRoomTradeGradeLine } from '../WarRoomTradeGradeLine'
 
 type Tool = 'buy-sell-hold' | 'waivers' | 'lineup' | 'trade-analyze' | 'trade-find' | null
 
@@ -62,7 +65,8 @@ export function DynastyWarRoomPanel({ leagueId }: { leagueId: string }) {
   const [buySellHold, setBuySellHold] = useState<BuySellHoldResult | null>(null)
   const [waivers, setWaivers] = useState<DynastyWaiverResult | null>(null)
   const [lineup, setLineup] = useState<DynastyLineupResult | null>(null)
-  const [tradeAnalysis, setTradeAnalysis] = useState<DynastyTradeAnalysis | null>(null)
+  const [tradeAnalysis, setTradeAnalysis] = useState<WarRoomTradeAnalysisView<DynastyTradeAnalysis> | null>(null)
+  const [tradeGrade, setTradeGrade] = useState<SuggestionGrade | null>(null)
   const [tradeFinder, setTradeFinder] = useState<DynastyTradeFinderResult | null>(null)
   const [tradeOutgoingId, setTradeOutgoingId] = useState('')
   const [tradeIncomingIds, setTradeIncomingIds] = useState('')
@@ -103,14 +107,12 @@ export function DynastyWarRoomPanel({ leagueId }: { leagueId: string }) {
           const fallbackOutgoing = ownPlayers.find((p) => !p.isStarterSlot)?.playerId ?? ownPlayers[0]?.playerId ?? ''
           const outgoing = (tradeOutgoingId || fallbackOutgoing).trim()
           const incoming = tradeIncomingIds.split(',').map((id) => id.trim()).filter(Boolean)
-          setTradeAnalysis(
-            (
-              await analyzeDynastyWarRoomTrade(leagueId, {
-                outgoingPlayerIds: outgoing ? [outgoing] : [],
-                incomingPlayerIds: incoming,
-              })
-            ).tradeAnalysis,
-          )
+          const analyzed = await analyzeDynastyWarRoomTrade(leagueId, {
+            outgoingPlayerIds: outgoing ? [outgoing] : [],
+            incomingPlayerIds: incoming,
+          })
+          setTradeAnalysis(analyzed.tradeAnalysis)
+          setTradeGrade(analyzed.tradeGrade ?? null)
           if (!tradeOutgoingId && fallbackOutgoing) setTradeOutgoingId(fallbackOutgoing)
         } else if (which === 'trade-find') setTradeFinder((await findDynastyWarRoomTrades(leagueId)).tradeFinder)
       } catch (e) {
@@ -178,7 +180,7 @@ export function DynastyWarRoomPanel({ leagueId }: { leagueId: string }) {
       <div className="flex items-center gap-2">
         <Sparkles className="h-4 w-4 text-violet-300" />
         <h2 className="text-sm font-bold text-white">AF Legacy — Dynasty</h2>
-        <span className="rounded-full bg-violet-500/15 px-2 py-0.5 text-[10px] font-semibold text-violet-200">
+        <span className="rounded-full bg-violet-500/15 px-2 py-0.5 text-[11px] font-semibold text-violet-200">
           {context.sport} · {context.scoring.scoringPreset}
           {context.scoring.superflex ? ' · SF' : ''}
         </span>
@@ -190,7 +192,7 @@ export function DynastyWarRoomPanel({ leagueId }: { leagueId: string }) {
         data-testid="dynasty-war-room-direction-card"
       >
         <div>
-          <p className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-white/40">
+          <p className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-white/40">
             <Compass className="h-3 w-3" /> Direction
           </p>
           <p className="text-[12px] font-semibold text-violet-100">
@@ -201,14 +203,14 @@ export function DynastyWarRoomPanel({ leagueId }: { leagueId: string }) {
           </p>
         </div>
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Age / value</p>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-white/40">Age / value</p>
           <p className="text-[11px] text-white/70">
             {direction?.avgStarterAge != null ? `avg starter age ${direction.avgStarterAge}` : 'age n/a'}
             {direction?.youngValueShare != null ? ` · young ${(direction.youngValueShare * 100).toFixed(0)}%` : ''}
           </p>
         </div>
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Data</p>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-white/40">Data</p>
           <p className="text-[11px] text-white/60">
             {context.freeAgents?.length ?? 0} FAs · val{' '}
             {context.availability?.playerValues === 'available' ? '✓' : '—'} · age{' '}
@@ -230,7 +232,7 @@ export function DynastyWarRoomPanel({ leagueId }: { leagueId: string }) {
           </p>
           <div className="mt-2 grid gap-2 sm:grid-cols-3">
             <div>
-              <p className="text-[10px] font-semibold text-rose-300/80">NEEDS</p>
+              <p className="text-[11px] font-semibold text-rose-300/80">NEEDS</p>
               {needs.needs.length ? (
                 needs.needs.map((n) => (
                   <p key={n.position} className="text-[11px] text-white/70">
@@ -242,7 +244,7 @@ export function DynastyWarRoomPanel({ leagueId }: { leagueId: string }) {
               )}
             </div>
             <div>
-              <p className="text-[10px] font-semibold text-emerald-300/80">STRENGTHS</p>
+              <p className="text-[11px] font-semibold text-emerald-300/80">STRENGTHS</p>
               {needs.strengths.length ? (
                 needs.strengths.slice(0, 4).map((s) => (
                   <p key={s} className="text-[11px] text-white/60">
@@ -254,7 +256,7 @@ export function DynastyWarRoomPanel({ leagueId }: { leagueId: string }) {
               )}
             </div>
             <div>
-              <p className="text-[10px] font-semibold text-amber-300/80">TARGET POSITIONS</p>
+              <p className="text-[11px] font-semibold text-amber-300/80">TARGET POSITIONS</p>
               <p className="text-[11px] text-white/60">{needs.tradeTargetPositions.join(', ') || '—'}</p>
             </div>
           </div>
@@ -286,7 +288,7 @@ export function DynastyWarRoomPanel({ leagueId }: { leagueId: string }) {
         <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-white/40">
           <Layers className="h-3.5 w-3.5" /> Pick capital
           {picksState === 'available' && myPicks.length > 0 ? (
-            <span className="ml-1 rounded-full bg-violet-500/15 px-2 py-0.5 text-[10px] font-semibold text-violet-200">
+            <span className="ml-1 rounded-full bg-violet-500/15 px-2 py-0.5 text-[11px] font-semibold text-violet-200">
               {myPicks.length} picks · tier {Math.round(pickTierTotal * 10) / 10}
             </span>
           ) : null}
@@ -330,7 +332,7 @@ export function DynastyWarRoomPanel({ leagueId }: { leagueId: string }) {
             — this league&apos;s rookie-draft size isn&apos;t known, so your own picks aren&apos;t shown.
           </p>
         ) : null}
-        <p className="mt-1.5 text-[10px] text-white/30">
+        <p className="mt-1.5 text-[11px] text-white/30">
           Tiers are structural (round + years out), not market values.
         </p>
       </div>
@@ -483,12 +485,12 @@ export function DynastyWarRoomPanel({ leagueId }: { leagueId: string }) {
           </div>
           {tradeAnalysis ? (
             <div className="mt-2 space-y-1" data-testid="dynasty-war-room-trade-analyze-result">
-              <p className="font-semibold text-white/80">
-                Verdict: {tradeAnalysis.verdict.replace(/_/g, ' ')}
-                {tradeAnalysis.valueDelta != null ? (
-                  <span className="text-white/40"> · value {tradeAnalysis.valueDelta}</span>
-                ) : null}
-              </p>
+              {/*
+                🛑 THE GRADE IS THE VERDICT (2026-09-28). Since 2026-09-29 there is no fallback: the
+                engine's own accept/reject/neutral and value delta are not sent, and no grade reads
+                "Not graded" with the reason.
+              */}
+              <WarRoomTradeGradeLine grade={tradeGrade} testId="dynasty-war-room-trade-grade" />
               {tradeAnalysis.explanationFacts.map((f) => (
                 <p key={f}>{f}</p>
               ))}

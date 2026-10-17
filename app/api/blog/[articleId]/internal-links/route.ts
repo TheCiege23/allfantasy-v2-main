@@ -1,12 +1,15 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { suggestInternalLinks } from "@/lib/automated-blog"
+import { requireAdminOrBearer } from "@/lib/adminAuth"
 
 /** GET /api/blog/[articleId]/internal-links — suggest internal links for this article. */
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ articleId: string }> }
 ) {
+  const gate = await requireAdminOrBearer(req)
+  if (!gate.ok) return gate.res
   try {
     const { articleId } = await params
     const article = await prisma.blogArticle.findUnique({

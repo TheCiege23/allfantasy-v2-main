@@ -48,6 +48,14 @@
 | `N-14` | NCAABB `/player-stats` season totals stop ~mid-December | ASK THE VENDOR — do not probe | any college-basketball season answer | Measured on our stored copy (`fantasy_stat_lines`, season 2025 = 2025-26, re-fetched 2026-09-24): median per-team max `games_played` **11** (p90 13) against a median **32** team games in ESPN's standings. Duke went 32-2; Cameron Boozer shows 12 GP. The players in the April final (`fixtures/live.NCAABB.json`) show 11-13 GP. `minutes` is non-zero on only 2,496 of 4,732 rows. `/live` DOES return late-season games, so per-game lines can rebuild the season. **Never present these totals as a season.** |
 | `N-15` | NCAABB `/live` player box can omit players | OPEN (vendor) | college game logs | In the fixture UConn scored 63 but its 6 box lines sum to 50; Michigan's 8 lines sum to its 69. Compare `sum(points)` with `full_box.<side>.score` per game when ingesting, and report the gap rather than trusting the box to be whole. |
 | `N-16` | `schedule-season/2026/NCAABB` returns 304 | OPEN — do not probe; the daily sync reports it | NCAAB week finalizing for 2026-27 | 304 twice on `RSC_TOKEN2` (the entitled account) on 2026-09-24, while 2025 returned 6,027 games — most likely the 2026-27 schedule is not published yet (N-02: a 304 can mean not-yet-started). `lib/sports-data/riSeasonSchedule.ts` writes NOTHING on a 304 and records it in the multi-sport run's `metadata.schedule`; read that rather than re-probing. Until it returns 200, NCAAB weeks cannot seal (the finalizer refuses an unsynced schedule). |
+| `N-17` | 🛑 **What player `status: ACT` means DIFFERS BY SPORT** — measured on our stored rows 2026-10-01, no probe | MEASURED | anything that reads `ACT` as "current roster" | **NCAAFB: it IS the current roster.** Median 106 `ACT` per school (p90 119; Navy/Army ~190 are genuinely large squads). Of RI rows whose name + school match a player now in the NFL, 3,611 are `INACT` vs 211 `ACT`, and many of those 211 are namesakes/sons (Antonio Cromartie Jr., FSU). Summer 2026 transfers are `ACT` at the NEW school and `INACT` at the old (Raiola→Oregon, Lagway→Baylor, Leavitt→LSU, Mateer→Oklahoma); 2026 draftees are `INACT` (Klubnik, Tate, Allar, Nussmeier). It is MORE current than our CFBD `SportsPlayer` pool (fetched 2026-06-26, still has Raiola at Nebraska). Stale `ACT` rows survive at some FCS schools (Dartmouth, Wagner, William & Mary). **NCAABB: it is NOT** — Duke has 38 `ACT` rows, 33 absent from ESPN's 2026-27 roster, including players gone for years, and 2026-27 newcomers are missing entirely (`contracts/espn/GAPS.md` M-01/M-02) — consistent with N-16, the 2026-27 NCAABB season not being published yet. Re-measure NCAABB once N-16 returns 200. |
+| `N-18` | 🛑 **NFL `/play-by-play` `players[]` stopped carrying `id` (and `teamAbbr`) — measured on our cached feed 2026-10-11, no probe** | OPEN — ask vendor | play-by-play identity joins (headshots, position, club, player card, "your starter" matching) | A read-only look at `sports_data_cache` `pbp:feed:NFL`: of the 20 newest plays, **19 carry the parser's `name:` fallback** (every play detected from ~22:25Z on 2026-10-11; the last with an id was 22:21Z), and every play's team is null. Our parser (`rollingInsightsPlayByPlay.ts`) had not changed since before 10-09, so the payload changed — but we cannot tell from stored data whether `id` is now null, absent, or a non-integer (the parser read only JSON numbers; it now also accepts a numeric string). Names also arrive as short forms ("A.St", "S.La"). Mitigation in our code: plays with no id are matched by FULL name to exactly one NFL `PlayerIdentityMap` row (11 of 12 distinct names on that feed; 0 ambiguous). **Ask the vendor** whether `players[].id`/`teamAbbr` are guaranteed on NFL plays; re-measure on the next NFL slate. |
+
+---
+
+## N-19 — NBA discipline play attribution (measured 2026-10-13)
+
+`fixtures/play-by-play.NBA.json` captures one final 2026-03-15 NBA game (437 plays) via the documented one-time probe. Its only `technical_foul_committed` play is a delay-of-game technical with `players: []`; it has no flagrant foul example. Other fouls include both identified and unidentified participants. Player IDs on identified foul plays are numeric strings and must pass the verified provider registry. This proves the action exists in the feed, but **does not** prove complete player technical/flagrant attribution, zero-event coverage or how later stat corrections appear. Tournament default NBA scoring remains blocked until those contracts are verified and a full-current-game reconciliation is implemented. A local full-snapshot comparison now detects changes to plays when both snapshots are present; it does not prove the provider delivered every correction or resolve unattributed/team events. Do not infer a player from description text or set missing counts to zero.
 
 ---
 
@@ -57,10 +65,10 @@
 |---|---|---|---|---|
 | `G-01` | Field names in `/live` for **NHL** | **RESOLVED** | — | `fixtures/live.NHL.json` — probed 2026-03-15 on `RSC_TOKEN2`, 6 games, full player box. Fields in `ENDPOINTS.yaml → fields.NHL`. ⚠ NHL nests `player_box.<side>.{goalies\|skaters}.<player_id>`, one level deeper than NBA/MLB. |
 | `G-01b` | Are **NBA / NHL** actually entitled on `RSC_TOKEN2`? | **RESOLVED — yes** | NBA + NHL scoring | Probed 2026-03-15 with `RSC_TOKEN2`: NBA HTTP 200 / 7 games, NHL HTTP 200 / 6 games, both with full player box. Recorded because this question has been answered WRONGLY twice by probing with the first token only — see `N-02` and the CLAUDE.md credential table. A single-credential probe cannot answer "do we have this sport". |
-| `G-02` | Field names in `/live` for **NCAAFB** | UNVERIFIED | CFB scoring | Probe on a Saturday → commit fixture |
+| `G-02` | Field names in `/live` for **NCAAFB** | SHAPE VERIFIED 2026-10-05 | Advanced scoring still incomplete | `fixtures/live.NCAAFB.json`: 54 games / 3,588 player lines, 2026-10-03. See follow-up below. |
 | `G-03` | Field names in `/live` for **NCAABB** | **RESOLVED 2026-09-24** | — | `fixtures/live.NCAABB.json` — `probe.sh live NCAAB "" 2026-04-06` on `RSC_TOKEN2`, 1 game (the national final). NBA's shape: `player_box.<side>.<player_id>`, no group level. Fields in `ENDPOINTS.yaml → fields.NCAABB`. ⚠ One game only — see N-15 before trusting a box to be complete. |
-| `G-04` | Field names in `/live` for **SOCCER** (all 3 leagues) | UNVERIFIED | Soccer scoring | Probe with `?league=EPL` during a match |
-| `G-05` | `game_id` format for NHL / NCAAFB / NCAABB / SOCCER | UNVERIFIED | Per-game polling | Read `game_ID` off any `/schedule` response |
+| `G-04` | Field names in `/live` for **SOCCER** (all 3 leagues) | PARTIAL 2026-09-28 — no fixture | Soccer scoring | Still no `/live` fixture. What the ingest STORES was read off production `player_game_stats` instead (4,159 rows, EPL + La Liga + Serie A): groups `fielders` / `goalkeepers`, and the fields listed in `lib/scoring-runtime/soccerStatNormalization.ts`. That is the ingest's output, not the vendor payload — capture `probe.sh live SOCCER EPL <matchday>` to close this. |
+| `G-05` | `game_id` format for NHL / NCAAFB / NCAABB / SOCCER | SOCCER resolved 2026-09-28 | Per-game polling | SOCCER: `YYYYMMDD-<home>-<away>`, the date being the kickoff's US Eastern day (all 1,140 live rows of `fixtures/schedule-season.SOCCER.*.json`). |
 | `G-06` | **`/injuries` field list** for NFL beyond the 5 known keys | PARTIAL | Injury detail | Known: `player`, `player_id`, `injury`, `date_injured`, `returns`. Probe for more. |
 | `G-07` | `/depth-charts` field list — **all sports** | UNVERIFIED | Depth-chart features | Probe NFL first |
 
@@ -433,3 +441,25 @@ whether the format is stable across sports (NFL and SOCCER both show it; the oth
 ages at all), and whether the vendor also exposes a real `birth_date` on an endpoint we do not
 call. Per the repo rule this was NOT probed — resolving it needs `scripts/probe.sh` on a new
 endpoint/sport pair with the fixture committed in the same change, or an answer from the vendor.
+
+
+### NCAAFB live capture — October 5, 2026
+
+Captured through the contract probe on the entitled second account for October 3.
+The existing box parser extracts all 3,588 player lines from 54 games. All 107 kicker
+lines have a field_goal_distances array whose length equals field_goals_made,
+including zero-make lines. This supports further distance reconciliation; it does
+not authorize summing distances as makes or enabling a second scoring source.
+
+Team boxes include safeties, defensive interceptions/recoveries, sacks, defense
+TDs, defense points allowed and team two-point counts. Player boxes do not contain
+verified two-point, forced-fumble or assisted-tackle fields. Total team two-point
+counts cannot be assigned to individual athletes. RI player IDs and its week
+number are separate source namespaces; scoring must reconcile athlete and game
+identity before combining these lines with CFBD. No runtime scoring is changed.
+
+The probe no longer requires jq, refuses to overwrite a committed capture, and
+withholds curl errors and non-200 bodies so a failed request cannot print the
+credential-bearing query URL. Credentials must still be supplied only via env.
+
+Production has no ri.contract_probe_log table (to_regclass returned null). The committed fixture and this contract record the capture; no schema was created merely to log a probe.

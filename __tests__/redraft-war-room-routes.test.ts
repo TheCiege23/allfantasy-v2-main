@@ -192,11 +192,14 @@ describe('POST /redraft-war-room/[action]', () => {
     expect(Array.isArray(body.tradeFinder.targets)).toBe(true)
   })
 
-  it('trade-analyze returns a verdict', async () => {
+  it('trade-analyze returns the analysis facts — and never the engine’s own verdict or value delta (2026-09-29)', async () => {
     const body = await (
       await postAction('trade-analyze', { outgoingPlayerIds: ['r1-wr2'], incomingPlayerIds: ['r2-rb1'] })
     ).json()
-    expect(['accept', 'reject', 'neutral', 'needs_more_data']).toContain(body.tradeAnalysis.verdict)
+    expect(Array.isArray(body.tradeAnalysis.explanationFacts)).toBe(true)
+    expect(Array.isArray(body.tradeAnalysis.lineupImpact)).toBe(true)
+    for (const key of ['verdict', 'valueDelta', 'rosterFitDelta']) expect(body.tradeAnalysis).not.toHaveProperty(key)
+    expect(body.tradeGrade).toBeTruthy()
   })
 
   it('member cannot target another roster (403)', async () => {

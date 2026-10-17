@@ -13,6 +13,7 @@ import {
 } from '@/lib/trade-engine/dual-brain-trade-analyzer';
 import { runQualityGate } from '@/lib/trade-engine/quality-gate';
 import { formatTradeResponse, computeDeterministicVerdict } from '@/lib/trade-engine/trade-response-formatter';
+import { dynastyAnalyzerSectionsForClient } from '@/lib/trade-engine/dynastyAnalyzerClientView';
 import type { TradeDecisionContextV1 } from '@/lib/trade-engine/trade-decision-context';
 import { buildTradeAnalyzerIntelPrompt } from '@/lib/trade-engine/trade-analyzer-intel';
 import { buildStableFallbackResponse, buildReliabilityMetadata } from '@/lib/ai-reliability';
@@ -23,6 +24,29 @@ import {
 } from '@/lib/ai-context-envelope';
 import { normalizeToSupportedSport } from '@/lib/sport-scope';
 import { recordTradeSurfaceShadow } from '@/lib/decision-os/trade/surfaceShadow';
+import { evaluateTrade, type EvaluateTradeDeps } from '@/lib/decision-os/trade/evaluateTrade';
+import {
+  NOT_YOUR_LEAGUE_REASON,
+  resolveEvaluationLeagueId,
+  resolveVerifiedPlatformLeagueId,
+} from '@/lib/decision-os/trade/evaluationLeague';
+import { receiptGradeFields } from '@/lib/decision-os/trade/receiptViews';
+import { gradeInputsFromAssetLabels, splitSideAssets } from '@/lib/decision-os/trade/tradeGradeInputs';
+
+type LabelAsset = { name: string; type?: 'player' | 'pick' | null }
+
+function labelAssets(raw: unknown, fallbackSide: string): LabelAsset[] {
+  if (Array.isArray(raw)) {
+    return raw
+      .filter((a): a is { name: unknown; type?: unknown } => Boolean(a) && typeof a === 'object')
+      .map((a): LabelAsset => ({
+        name: String(a.name ?? ''),
+        type: a.type === 'player' ? 'player' : a.type === 'pick' ? 'pick' : null,
+      }))
+      .filter((a) => a.name.trim().length > 0)
+  }
+  return splitSideAssets(fallbackSide).map((name) => ({ name, type: null }))
+}
 
 function parseLeagueContext(raw: string | undefined): LeagueContextInput {
   if (!raw) return {}
@@ -76,7 +100,7 @@ export async function POST(req: Request) {
   if (gated) return gated;
 
   const includeTrace = wantsDebugTrace(req);
-  const { sideA, sideB, leagueContext, leagueId, sport } = await req.json();
+  const { sideA, sideB, leagueContext, leagueId, sport, gradeLeagueId, gradeSideA, gradeSideB } = await req.json();
 
   if (!sideA || !sideB) {
     return NextResponse.json(
@@ -87,12 +111,67 @@ export async function POST(req: Request) {
 
   try {
     const normalizedSport = normalizeToSupportedSport(sport);
+    const userId = session.user.id
     const parsedLeague = parseLeagueContext(leagueContext)
-    if (leagueId) parsedLeague.leagueId = leagueId
+    /*
+     * 🛑 A CLIENT'S `leagueId` IS NOT A LEAGUE THE CALLER MAY READ. It used to be set here as given, and
+     * the assembler below reads manager tendencies, competitor snapshots, trade history and league values
+     * `where: { platformLeagueId }` — all written into the AI prompt, so naming another league's id got
+     * its derived manager data narrated back. Now only a league the caller owns or has a team in is used,
+     * as its `platformLeagueId` (the key the assembler matches on); anything else is analyzed league-blind.
+     */
+    const verifiedPlatformLeagueId = leagueId
+      ? await resolveVerifiedPlatformLeagueId({ suppliedLeagueId: String(leagueId), userId })
+      : null
+    if (verifiedPlatformLeagueId) parsedLeague.leagueId = verifiedPlatformLeagueId
     parsedLeague.platform = parsedLeague.platform || normalizedSport
 
-    const sideAAssets = sideA.split(/,|and/i).map((s: string) => s.trim()).filter((s: string) => s.length > 1)
-    const sideBAssets = sideB.split(/,|and/i).map((s: string) => s.trim()).filter((s: string) => s.length > 1)
+    const sideAAssets = splitSideAssets(String(sideA))
+    const sideBAssets = splitSideAssets(String(sideB))
+
+    /*
+     * 🛑 THE LETTER IS THE ONE TRADE ENGINE'S (2026-09-27). This page printed two letters of its own —
+     * the deterministic verdict's `fairnessGrade` and the AI section's — on scales no other surface
+     * uses. `evaluateTrade()` grades the deal from TEAM A's side in the league the viewer chose.
+     *
+     * Orientation: each team's list is what that team GETS — the engine calls the side whose list is
+     * worth more "favored" and the page labels it the winner — so Team A gives B's list, gets A's.
+     *
+     * ⚠ `gradeLeagueId`, NOT `leagueId`: the grade's league goes through `resolveEvaluationLeagueId`,
+     * which admits only a league the viewer owns or has a team in. (`leagueId` is gated the same way
+     * above, for the context assembler.) `viewerSide: false` — the viewer is not proven to be Team A,
+     * so roster need is not priced.
+     *
+     * Started here and awaited at the response, so it overlaps the AI stage rather than adding to it.
+     */
+    const evaluationReceiptPromise = (async () => {
+      const evaluationLeagueId = await resolveEvaluationLeagueId({ suppliedLeagueId: gradeLeagueId ?? null, userId })
+      const notYourLeague: Partial<EvaluateTradeDeps> =
+        gradeLeagueId && !evaluationLeagueId
+          ? { grade: async () => ({ graded: false, reason: NOT_YOUR_LEAGUE_REASON, basis: null }) }
+          : {}
+      return evaluateTrade(
+        {
+          surface: 'dynasty-trade-analyzer',
+          leagueId: evaluationLeagueId,
+          userId,
+          give: gradeInputsFromAssetLabels(labelAssets(gradeSideB, String(sideB))),
+          get: gradeInputsFromAssetLabels(labelAssets(gradeSideA, String(sideA))),
+          viewerSide: false,
+        },
+        notYourLeague,
+      )
+    })()
+    // An error path that returns before the response is built must not leave this rejection unhandled.
+    evaluationReceiptPromise.catch(() => undefined)
+    // Never fails the analysis: a grade that cannot be taken is a withheld grade with the reason.
+    const tradeGradePayload = async () => {
+      try {
+        return receiptGradeFields(await evaluationReceiptPromise)
+      } catch {
+        return receiptGradeFields({ receiptId: null, assets: [], grade: { graded: false, reason: 'This trade could not be graded just now.', basis: null } })
+      }
+    }
 
     const partyA: TradeParty = { name: 'Team A', assets: sideAAssets }
     const partyB: TradeParty = { name: 'Team B', assets: sideBAssets }
@@ -104,7 +183,7 @@ export async function POST(req: Request) {
     console.log(`[dynasty-trade-analyzer] Stage A assembled in ${stageALatency}ms — ctx=${tradeContext.contextId}, ${tradeContext.dataQuality.assetsCovered}/${tradeContext.dataQuality.assetsTotal} assets (${tradeContext.dataQuality.coveragePercent}%), ${tradeContext.dataQuality.warnings.length} warnings`)
 
     const envelope = tradeContextToEnvelope(tradeContext, {
-      leagueId: leagueId ?? parsedLeague.leagueId ?? null,
+      leagueId: verifiedPlatformLeagueId,
       userId: session.user?.id ?? null,
     });
     const mandatorySuffix = getMandatorySystemPromptSuffix(envelope);
@@ -129,7 +208,7 @@ export async function POST(req: Request) {
       recordTradeSurfaceShadow({
         surface: 'dynasty',
         userId: session.user?.id ?? null,
-        leagueId: leagueId ?? parsedLeague.leagueId ?? null,
+        leagueId: verifiedPlatformLeagueId,
         assetsGive: sideAAssets.length,
         assetsGet: sideBAssets.length,
         surfaceVerdict: verdict,
@@ -146,31 +225,32 @@ export async function POST(req: Request) {
         deterministicFallback.confidence ?? null,
         tradeContext.valueDelta?.percentageDiff ?? null,
       )
+      /*
+       * 🛑 AI DOWN IS NOT A LICENCE FOR THE PRIVATE VERDICT (2026-09-29). This path sent the
+       * deterministic engine's winner, verdict, confidence and reasons — whose first line IS its
+       * verdict on the private scale ("Side A has a 12% value edge: 5,000 (A) vs 4,400 (B)"). The page
+       * shows the one grade (`tradeGrade`) and the data warnings; the engine's verdict stays on the
+       * server (the shadow above).
+       */
       const normalizedOutput = normalizeToContract(
         {
-          primaryAnswer: fallbackExplanation ?? detVerdictOnly,
-          verdict: deterministicFallback.verdict ?? detVerdictOnly,
-          confidencePct: deterministicFallback.confidence,
-          confidenceLabel: deterministicFallback.confidence >= 70 ? 'high' : deterministicFallback.confidence >= 45 ? 'medium' : 'low',
-          suggestedNextAction: 'Review the evidence above; re-run when AI is available for narrative.',
+          primaryAnswer: fallbackExplanation,
+          suggestedNextAction: 'Review the league grade above; re-run when AI is available for narrative.',
         },
         envelope,
         { includeTrace: includeTrace, traceProvider: 'deterministic_fallback' }
       );
       return NextResponse.json({
+        tradeGrade: await tradeGradePayload(),
         sections: null,
-        deterministicVerdict: detVerdictOnly,
         analysis: {
-          winner: deterministicFallback.winner ?? 'Even',
-          valueDelta: `Data-only result (AI unavailable). Confidence: ${deterministicFallback.confidence}%.`,
-          factors: deterministicFallback.reasons,
-          confidence: deterministicFallback.confidence,
-          dynastyVerdict: deterministicFallback.verdict,
-          vetoRisk: null,
+          factors: [],
+          reasons: [],
+          counters: [],
+          warnings: deterministicFallback.warnings,
           agingConcerns: deterministicFallback.warnings,
           recommendations: [],
         },
-        deterministicFallback,
         fallbackExplanation,
         reliability,
         normalizedOutput,
@@ -196,11 +276,18 @@ export async function POST(req: Request) {
       detVerdict.netValueDeltaPct ?? tradeContext.valueDelta?.percentageDiff ?? null,
     )
 
-    const primaryAnswer = [detVerdict.winnerLabel, gate.filteredReasons?.slice(0, 2).join('; ')].filter(Boolean).join(' — ') || consensus.verdict;
+    /*
+     * 🛑 THE RESPONSE NAMES NO WINNER BUT THE ONE GRADE'S (2026-09-29). It carried the dual-brain
+     * engine's `winner`, `dynastyVerdict`, `deterministicVerdict` (winner label, fairness letter,
+     * confidence, acceptance %, veto risk, side totals, deltas), the AI's own verdict and confidence,
+     * and the private side totals in `stageA` — the page printed much of it beside the letter. The
+     * engine's verdict stays on the server (the shadow above); `sections` is the allowlisted client
+     * view (lib/trade-engine/dynastyAnalyzerClientView.ts). Its only consumer is DynastyTradeForm.
+     */
+    const primaryAnswer = gate.filteredReasons?.slice(0, 2).join('; ') || 'See the league grade and analysis.';
     const normalizedOutput = normalizeToContract(
       {
         primaryAnswer,
-        verdict: consensus.verdict ?? detVerdict.winnerLabel,
         keyEvidence: gate.filteredReasons,
         confidencePct: gate.adjustedConfidence,
         confidenceLabel: gate.adjustedConfidence >= 70 ? 'high' : gate.adjustedConfidence >= 45 ? 'medium' : 'low',
@@ -212,50 +299,17 @@ export async function POST(req: Request) {
     );
 
     return NextResponse.json({
-      sections,
-      deterministicVerdict: detVerdict,
+      tradeGrade: await tradeGradePayload(),
+      sections: dynastyAnalyzerSectionsForClient(sections, gate.filteredCounters),
       normalizedOutput,
       ...(includeTrace && { trace: normalizedOutput.trace }),
       analysis: {
-        winner: detVerdict.winner === 'Even' ? 'Even' : `Side ${detVerdict.winner}`,
-        verdict: detVerdict.winnerLabel,
-        confidence: detVerdict.confidence,
         factors: gate.filteredReasons,
         reasons: gate.filteredReasons,
         counters: gate.filteredCounters,
         warnings: gate.filteredWarnings,
-        valueDelta: `Side A total=${tradeContext.sideA.totalValue}, Side B total=${tradeContext.sideB.totalValue}, delta=${tradeContext.valueDelta.absoluteDiff} (${tradeContext.valueDelta.percentageDiff}%)`,
-        dynastyVerdict: detVerdict.winnerLabel,
-        vetoRisk: detVerdict.vetoRisk,
-        fairnessGrade: detVerdict.fairnessGrade,
-        fairnessScore: detVerdict.fairnessScore,
-        netValueDelta: detVerdict.netValueDelta,
-        netValueDeltaPct: detVerdict.netValueDeltaPct,
-        acceptanceProbability: detVerdict.acceptanceProbability,
-        acceptanceLikelihood: detVerdict.acceptanceLikelihood,
-        keyDrivers: detVerdict.keyDrivers,
         agingConcerns: gate.filteredWarnings.filter(w => w.toLowerCase().includes('age') || w.toLowerCase().includes('cliff') || w.toLowerCase().includes('declining')),
         recommendations: gate.filteredCounters.slice(0, 3),
-      },
-      aiCommentary: {
-        aiVerdict: consensus.verdict,
-        aiConfidence: gate.adjustedConfidence,
-        reasons: gate.filteredReasons,
-        counters: gate.filteredCounters,
-        warnings: gate.filteredWarnings,
-        consensusMethod: consensus.meta.consensusMethod,
-        source: 'ai-peer-review',
-      },
-      peerReview: {
-        verdict: consensus.verdict,
-        confidence: gate.adjustedConfidence,
-        deterministicConfidence: gate.deterministicConfidence,
-        originalLLMConfidence: gate.originalLLMConfidence,
-        reasons: gate.filteredReasons,
-        counters: gate.filteredCounters,
-        warnings: gate.filteredWarnings,
-        consensusMethod: consensus.meta.consensusMethod,
-        confidenceAdjustment: consensus.meta.confidenceAdjustment,
       },
       qualityGate: {
         passed: gate.passed,
@@ -274,9 +328,6 @@ export async function POST(req: Request) {
         contextId: tradeContext.contextId,
         version: tradeContext.version,
         assembledAt: tradeContext.assembledAt,
-        valueDelta: tradeContext.valueDelta,
-        sideATotalValue: tradeContext.sideA.totalValue,
-        sideBTotalValue: tradeContext.sideB.totalValue,
         dataQuality: tradeContext.dataQuality,
         missingData: tradeContext.missingData,
         tradeHistoryStats: tradeContext.tradeHistoryStats,

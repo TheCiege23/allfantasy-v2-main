@@ -9,7 +9,7 @@
  *   - roster-needs           → roster needs after keepers
  *   - waivers                → in-season add/drop (when active)
  *   - lineup                 → in-season start/sit (when active)
- *   - trade-analyze          → keeper-cost-aware trade verdict
+ *   - trade-analyze          → keeper-cost-aware trade facts + THE one trade grade
  *   - trade-find             → keeper-surplus partner fit
  *   - ask                    → grounded AI answer (AF War Room-gated)
  *
@@ -26,13 +26,15 @@ import { evaluateKeeperRosterNeeds } from '@/lib/keeper-war-room/keeperRosterNee
 import { buildKeeperDraftPlan } from '@/lib/keeper-war-room/keeperDraftPlanEngine'
 import { buildKeeperWaiverRecommendations } from '@/lib/keeper-war-room/keeperWaiverEngine'
 import { buildKeeperLineupRecommendation } from '@/lib/keeper-war-room/keeperLineupEngine'
-import { analyzeKeeperTrade } from '@/lib/keeper-war-room/keeperTradeEngine'
+import { keeperTradeFacts } from '@/lib/keeper-war-room/keeperTradeEngine'
 import { findKeeperTradeTargets } from '@/lib/keeper-war-room/keeperTradeFinderEngine'
 import { KEEPER_WAR_ROOM_SYSTEM_RULES, buildKeeperWarRoomPrompt } from '@/lib/keeper-war-room/keeperWarRoomPrompt'
 import { requireEntitlement } from '@/lib/subscription/requireEntitlement'
 import { openaiChatText } from '@/lib/openai-client'
 import type { KeeperWarRoomContext } from '@/lib/keeper-war-room/types'
 import { recordWarRoomTradeShadow } from '@/lib/decision-os/trade/warRoomShadow'
+import { gradeWarRoomTrade, warRoomTradeSide } from '@/lib/decision-os/trade/warRoomTradeGrade'
+import { warRoomTradeAnalysisForClient } from '@/lib/decision-os/trade/warRoomTradeView'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -121,7 +123,7 @@ export async function POST(
       return NextResponse.json({ lineup: buildKeeperLineupRecommendation(context, rosterId) })
 
     case 'trade-analyze': {
-      const analysis = analyzeKeeperTrade(context, {
+      const analysis = keeperTradeFacts(context, {
         rosterId,
         outgoingPlayerIds: Array.isArray(body.outgoingPlayerIds) ? body.outgoingPlayerIds : [],
         incomingPlayerIds: Array.isArray(body.incomingPlayerIds) ? body.incomingPlayerIds : [],
@@ -137,7 +139,21 @@ export async function POST(
         incomingCount: Array.isArray(body.incomingPlayerIds) ? body.incomingPlayerIds.length : 0,
         analysis,
       })
-      return NextResponse.json({ tradeAnalysis: analysis })
+      /*
+       * 🛑 THE VERDICT IS THE ONE GRADE (2026-09-29, lib/decision-os/trade/warRoomTradeGrade.ts).
+       * The engine returns facts only (2026-09-30); its retired accept/reject/neutral is derived for the
+       * shadow above, inside Decision OS. The panel shows the grade and the facts (keeper surplus, fit).
+       */
+      const players = context.teams.flatMap((t) => t.players)
+      const tradeGrade = await gradeWarRoomTrade({
+        leagueId,
+        userId: user.id,
+        viewerSide: rosterId === context.userRosterId,
+        outgoing: warRoomTradeSide({ playerIds: body.outgoingPlayerIds, players }),
+        incoming: warRoomTradeSide({ playerIds: body.incomingPlayerIds, players }),
+      })
+      // 🛑 The facts only — the engine's value, fit and surplus deltas stay on the server (2026-09-29).
+      return NextResponse.json({ tradeAnalysis: warRoomTradeAnalysisForClient(analysis), tradeGrade })
     }
 
     case 'trade-find':

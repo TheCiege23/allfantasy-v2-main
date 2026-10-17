@@ -62,14 +62,14 @@ export default function CounterButtons({
             {isOpen && (
               <div className="px-3 pb-3 space-y-3">
                 <div className="p-2 bg-amber-500/10 rounded-lg border border-amber-500/15">
-                  <p className="text-[10px] font-bold uppercase text-amber-400/70 mb-1">If they say:</p>
+                  <p className="text-[11px] font-bold uppercase text-amber-400/70 mb-1">If they say:</p>
                   <p className="text-xs text-amber-200/80 italic">"{counter.ifTheyObject}"</p>
                 </div>
 
                 {hasChanges && (
                   <div className="grid grid-cols-2 gap-2">
                     <div className="space-y-1">
-                      <p className="text-[10px] font-bold uppercase text-cyan-400/70">Your side</p>
+                      <p className="text-[11px] font-bold uppercase text-cyan-400/70">Your side</p>
                       {counter.counterTrade.youAdd?.map((asset, i) => (
                         <div key={`ya-${i}`} className="flex items-center gap-1 text-xs">
                           <span className="text-emerald-400">+</span>
@@ -90,7 +90,7 @@ export default function CounterButtons({
                       )}
                     </div>
                     <div className="space-y-1">
-                      <p className="text-[10px] font-bold uppercase text-amber-400/70">Their side</p>
+                      <p className="text-[11px] font-bold uppercase text-amber-400/70">Their side</p>
                       {counter.counterTrade.theyAdd?.map((asset, i) => (
                         <div key={`ta-${i}`} className="flex items-center gap-1 text-xs">
                           <span className="text-emerald-400">+</span>

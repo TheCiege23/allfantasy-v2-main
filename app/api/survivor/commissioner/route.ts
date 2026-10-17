@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { Prisma } from '@prisma/client'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { survivorHostGuard } from '@/lib/survivor/survivorHostGuard'
 import { requireCommissionerRole } from '@/lib/league/permissions'
 import { advancePhase } from '@/lib/survivor/gameStateMachine'
 import { processReturnFromExile } from '@/lib/survivor/exileEngine'
@@ -10,6 +11,7 @@ import { rebalanceTribes } from '@/lib/survivor/tribeEngine'
 import { getSurvivorConfig } from '@/lib/survivor/SurvivorLeagueConfig'
 import { enqueueNotification } from '@/lib/survivor/notificationEngine'
 import { voidPendingRedraftTradesForRoster } from '@/lib/redraft/voidPendingTradesForElimination'
+import { SURVIVOR_IDOL_CATALOG, type SurvivorIdolPowerType } from '@/lib/survivor/survivorIdolSeedingEngine'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,10 +22,11 @@ const PAUSE_ERROR_PREFIX = 'PAUSED:'
  * NextResponse-friendly async guard. Returns null on success or a
  * NextResponse to return directly on failure.
  */
-async function commissionerGuard(leagueId: string, userId: string): Promise<NextResponse | null> {
+async function commissionerGuard(leagueId: string, userId: string, allowBlindOperations = false): Promise<NextResponse | null> {
   try {
     await requireCommissionerRole(leagueId, userId)
-    return null
+    if (allowBlindOperations) return null
+    return survivorHostGuard(leagueId, userId)
   } catch (err) {
     if (err instanceof Response) {
       const body = await err.text().catch(() => '')
@@ -142,7 +145,7 @@ export async function POST(req: NextRequest) {
   if (!leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
   if (!action) return NextResponse.json({ error: 'action required' }, { status: 400 })
 
-  const guard2 = await commissionerGuard(leagueId, userId)
+  const guard2 = await commissionerGuard(leagueId, userId, action === 'pause_season' || action === 'resume_season')
   if (guard2) return guard2
 
   const log = async (
@@ -261,31 +264,63 @@ export async function POST(req: NextRequest) {
   if (action === 'grant_idol') {
     const targetUserId = typeof body.userId === 'string' ? body.userId : ''
     const powerType = typeof body.powerType === 'string' ? body.powerType : ''
+    const playerId = typeof body.playerId === 'string' ? body.playerId.trim() : ''
     const notes = typeof body.notes === 'string' ? body.notes : ''
-    if (!targetUserId || !powerType) {
-      return NextResponse.json({ error: 'userId and powerType required' }, { status: 400 })
+    const power = SURVIVOR_IDOL_CATALOG[powerType as SurvivorIdolPowerType]
+    if (!targetUserId || !playerId || !power) {
+      return NextResponse.json({ error: 'A manager, drafted player, and supported idol power are required.' }, { status: 400 })
     }
     const config = await getSurvivorConfig(leagueId)
     if (!config) return NextResponse.json({ error: 'Survivor config missing' }, { status: 400 })
     const roster = await prisma.roster.findFirst({
       where: { leagueId, platformUserId: targetUserId },
-      select: { id: true },
+      select: { id: true, redraftRosterId: true },
     })
-    if (!roster) return NextResponse.json({ error: 'Roster not found for user' }, { status: 400 })
-    await prisma.survivorIdol.create({
-      data: {
-        leagueId,
-        configId: config.configId,
-        rosterId: roster.id,
-        playerId: `bound_${roster.id}`,
-        powerType,
-        powerLabel: powerType.replace(/_/g, ' '),
-        currentOwnerUserId: targetUserId,
-        originalOwnerUserId: targetUserId,
-        status: 'hidden',
-      },
+    if (!roster?.redraftRosterId) return NextResponse.json({ error: 'Finish the draft before assigning an idol.' }, { status: 422 })
+    const [draftedPlayer, existingIdol, league, owner] = await Promise.all([
+      prisma.redraftRosterPlayer.findFirst({ where: { rosterId: roster.redraftRosterId, playerId, droppedAt: null }, select: { playerName: true } }),
+      prisma.survivorIdol.findFirst({ where: { leagueId, playerId, status: { in: ['hidden', 'revealed'] }, isUsed: false }, select: { id: true } }),
+      prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true } }),
+      prisma.survivorPlayer.findUnique({ where: { leagueId_userId: { leagueId, userId: targetUserId } }, select: { idolIds: true, playerState: true } }),
+    ])
+    if (!draftedPlayer || owner?.playerState !== 'active') return NextResponse.json({ error: 'Choose an active manager’s currently rostered player.' }, { status: 422 })
+    if (existingIdol) return NextResponse.json({ error: 'That player already carries an active idol.' }, { status: 409 })
+    if (!league) return NextResponse.json({ error: 'League not found' }, { status: 404 })
+    const player = await prisma.sportsPlayer.findFirst({
+      where: { sport: 'NBA', OR: [{ id: playerId }, { externalId: playerId }, { sleeperId: playerId }] },
+      select: { imageUrl: true },
     })
-    await log('grant_idol', notes || `Granted ${powerType}`, { targetUserId, newState: { powerType } })
+    await prisma.$transaction(async tx => {
+      const idol = await tx.survivorIdol.create({
+        data: {
+          leagueId, configId: config.configId, rosterId: roster.id, playerId,
+          powerType: power.powerType, powerLabel: power.label, powerDesc: power.description,
+          powerCategory: power.category, status: 'hidden', isSecret: true,
+          isPubliclyKnown: false, isUsed: false, isTradable: true,
+          currentOwnerUserId: targetUserId, originalOwnerUserId: targetUserId,
+          expiresAtMerge: false, validUntilPhase: 'final_5',
+          playWindowRule: 'before_reveal',
+          auditLog: { assignedSource: 'commissioner_grant', playerId },
+        },
+      })
+      await tx.survivorIdolLedgerEntry.create({
+        data: { leagueId, idolId: idol.id, eventType: 'assigned', toRosterId: roster.id, metadata: { source: 'commissioner_grant', playerId, powerType } },
+      })
+      await tx.survivorPlayer.update({
+        where: { leagueId_userId: { leagueId, userId: targetUserId } },
+        data: { idolIds: Array.from(new Set([...(owner.idolIds ?? []), idol.id])) },
+      })
+      await tx.leagueChatMessage.create({
+        data: {
+          id: `survivor-idol:${idol.id}:notice`, leagueId, userId: league.userId,
+          message: `@Chimmy: ${draftedPlayer.playerName} holds your secret ${power.label}. ${power.description} The idol follows that player through trades and waivers.`,
+          type: 'system', imageUrl: player?.imageUrl ?? null, isPrivate: true,
+          visibleToUserId: targetUserId, messageSubtype: 'chimmy_private',
+          metadata: { chimmyPrivateReply: true, survivorIdolReveal: true, idolId: idol.id, playerId, playerName: draftedPlayer.playerName, playerImageUrl: player?.imageUrl ?? null },
+        },
+      })
+    })
+    await log('grant_idol', notes || `Granted ${powerType}`, { targetUserId, newState: { powerType, playerId } })
     return NextResponse.json({ ok: true })
   }
 

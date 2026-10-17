@@ -99,6 +99,17 @@ vi.mock('@/lib/decision-os/world', () => ({
 vi.mock('@/lib/decision-os/trade/canonicalEvaluator', () => ({
   evaluateCanonicalTrade: (...args: unknown[]) => evaluateCanonicalTrade(...args),
 }))
+/* Trade OS: each row records the letter it shows as a receipt. The real link builder, a stubbed save. */
+const receiptIdForGrade = vi.fn(async (_input: Record<string, unknown>) => 'rcpt_row')
+vi.mock('@/lib/decision-os/trade/recordTradeGrade', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/decision-os/trade/recordTradeGrade')>()),
+  receiptIdForGrade: (input: Record<string, unknown>) => receiptIdForGrade(input),
+}))
+/* Stored crests (`SportsTeam.logo`). Default: a lookup that knows no team, as with an empty table. */
+const getStoredTeamLogoResolver = vi.fn()
+vi.mock('@/lib/sport-teams/storedTeamLogos', () => ({
+  getStoredTeamLogoResolver: (...args: unknown[]) => getStoredTeamLogoResolver(...args),
+}))
 
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -121,6 +132,9 @@ function censusPrismaUsage(src: string): Map<string, Set<string>> {
   }
   return out
 }
+
+/** A "Now" grade as the one grader returns it, for the history row's receipt. */
+const NOW_VIEW = { graded: true, letter: 'A', partnerLetter: 'F', percentDiff: 37, giveValue: 3000, getValue: 4800 }
 
 function makeRequest(leagueId: string): NextRequest {
   return new NextRequest(`http://localhost/api/league/trades-panel?leagueId=${leagueId}`)
@@ -146,6 +160,7 @@ describe('GET /api/league/trades-panel — native league real trade data', () =>
     priceTradesAtCurrentMarket.mockResolvedValue(new Map())
     resolveCanonicalWorld.mockResolvedValue(null)
     evaluateCanonicalTrade.mockResolvedValue(null)
+    getStoredTeamLogoResolver.mockResolvedValue(() => null)
   })
 
   describe('lineup effect (item #6)', () => {
@@ -279,6 +294,16 @@ describe('GET /api/league/trades-panel — native league real trade data', () =>
     })
     expect((trade.received as Array<{ teamLogoUrl: string | null }>)[0].teamLogoUrl).toBeTruthy()
     expect((trade.sent as Array<{ label: string }>)[0].label).toBe('Player Two')
+
+    // Trade OS: the row points at the receipt for exactly the letter it shows, linked to its trade.
+    expect(trade.receiptId).toBe('rcpt_row')
+    const recorded = receiptIdForGrade.mock.calls.map((c) => c[0])
+    expect(recorded).toContainEqual(expect.objectContaining({
+      surface: 'trades-panel',
+      leagueId: 'league-1',
+      grade: trade.leagueGrade,
+      stored: expect.objectContaining({ ref: { kind: 'af', tradeId: 'trade-1' }, rosterCheck: 'unverified' }),
+    }))
   })
 
   it('regression guard: still returns an empty, well-formed response when there are no active trades', async () => {
@@ -323,6 +348,7 @@ describe('GET /api/league/trades-panel — native league real trade data', () =>
         pricedAt: '2026-09-13T13:00:00.000Z',
         fullyPriced: true,
         unresolvedAssets: [],
+        graded: { view: NOW_VIEW, give: { assets: [], unpriceable: [] }, get: { assets: [], unpriceable: [] } },
       }],
     ]))
 
@@ -346,8 +372,16 @@ describe('GET /api/league/trades-panel — native league real trade data', () =>
         currentValueGiven: 3000,
         currentValueReceived: 4800,
         currentPricingComplete: true,
+        receiptId: 'rcpt_row',
       }),
     ])
+    // The "Now" letter's receipt: the proposer's side, no roster need, the grade that was priced.
+    expect(receiptIdForGrade).toHaveBeenCalledWith(expect.objectContaining({
+      surface: 'trades-panel',
+      viewerSide: false,
+      grade: NOW_VIEW,
+      stored: expect.objectContaining({ ref: { kind: 'af', tradeId: 'trade-done' } }),
+    }))
   })
 
   /*
@@ -356,6 +390,55 @@ describe('GET /api/league/trades-panel — native league real trade data', () =>
    * reads is the draft it returns. Without these two, the mock is a workaround and the
    * next change to the draft contract goes unnoticed.
    */
+  describe('team crests outside the NFL come from the stored team rows', () => {
+    const crest = 'https://stored.test/memphis.png'
+    function oneTrade(status: string) {
+      return [{
+        id: `trade-${status}`,
+        status,
+        proposerRosterId: 'roster-proposer',
+        receiverRosterId: 'roster-receiver',
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        items: [
+          { id: 'item-1', itemType: 'player', fromRosterId: 'roster-proposer', toRosterId: 'roster-receiver', itemReference: 'p1', metadata: { playerName: 'Player One', position: 'G', team: 'Memphis Grizzlies' } },
+        ],
+      }]
+    }
+    beforeEach(() => {
+      findManyRoster.mockResolvedValue([
+        { id: 'roster-proposer', platformUserId: 'user-proposer' },
+        { id: 'roster-receiver', platformUserId: 'user-receiver' },
+      ])
+      findManyAppUser.mockResolvedValue([])
+      getStoredTeamLogoResolver.mockResolvedValue((team: string | null | undefined) =>
+        String(team ?? '').toLowerCase() === 'memphis grizzlies' ? crest : null)
+    })
+
+    it('an NBA trade shows the stored crest for a full team name', async () => {
+      findFirstLeague.mockResolvedValue({ id: 'league-1', platform: 'native', platformLeagueId: null, name: 'Hoops', sport: 'NBA' })
+      listAfLeagueTrades.mockResolvedValue(oneTrade('pending'))
+      const body = (await (await GET(makeRequest('league-1'))).json()) as { activeTrades: Array<{ received: Array<{ teamLogoUrl: string | null }> }> }
+      expect(body.activeTrades[0].received[0].teamLogoUrl).toBe(crest)
+      expect(getStoredTeamLogoResolver).toHaveBeenCalledWith('NBA')
+    })
+
+    it('the commissioner’s executed list uses the league’s sport, not NFL', async () => {
+      findFirstLeague.mockResolvedValue({ id: 'league-1', platform: 'native', platformLeagueId: null, name: 'Hoops', sport: 'NBA' })
+      isElevatedCommissioner.mockResolvedValue(true)
+      listAfLeagueTrades.mockImplementation(async (_id: string, opts?: { status?: string }) =>
+        opts?.status === 'processed' ? oneTrade('processed') : [])
+      const body = (await (await GET(makeRequest('league-1'))).json()) as { executedTrades: Array<{ sent: Array<{ teamLogoUrl: string | null }> }> }
+      // Executed rows are what each side SENT: the proposer's item is under `sent`.
+      expect(body.executedTrades[0].sent[0].teamLogoUrl).toBe(crest)
+    })
+
+    it('an NFL league never reads the stored rows — the registry already knows every club', async () => {
+      listAfLeagueTrades.mockResolvedValue(oneTrade('pending'))
+      await GET(makeRequest('league-1'))
+      expect(getStoredTeamLogoResolver).not.toHaveBeenCalled()
+    })
+  })
+
   it('passes the saved draft through to the response', async () => {
     listAfLeagueTrades.mockResolvedValue([])
     const updatedAt = new Date('2026-02-02T00:00:00.000Z')

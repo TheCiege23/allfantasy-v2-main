@@ -42,7 +42,7 @@ export default function ChimmySnoozeAction({ onSnooze, disabled }: ChimmySnoozeA
         type="button"
         onClick={() => setOpen((prev) => !prev)}
         disabled={disabled}
-        className="inline-flex items-center gap-1 rounded-md border border-white/15 bg-white/5 px-2 py-1 text-[10px] text-white/60 transition hover:bg-white/10 disabled:opacity-40"
+        className="inline-flex items-center gap-1 rounded-md border border-white/15 bg-white/5 px-2 py-1 text-[11px] text-white/60 transition hover:bg-white/10 disabled:opacity-40"
       >
         <Clock className="h-3 w-3" />
         Snooze

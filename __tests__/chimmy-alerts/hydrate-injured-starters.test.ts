@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { buildInjuredStarterSignals, withoutUnverifiedSleeperAppearances } from '@/lib/chimmy-alerts/hydrateInjuredStarters'
+import { buildInjuredStarterSignals, withoutBestBallAppearances, withoutUnverifiedSleeperAppearances } from '@/lib/chimmy-alerts/hydrateInjuredStarters'
 
 function item(over: Partial<Record<string, unknown>> = {}) {
   return {
@@ -168,5 +168,46 @@ describe('live Sleeper lineup verification', () => {
     const portfolio = { items: [item()], connectedLeagueCount: 1 } as never
     const verified = withoutUnverifiedSleeperAppearances(portfolio, new Map())
     expect(buildInjuredStarterSignals(verified).injuredStarters).toEqual([])
+  })
+})
+
+describe('alert tap and best ball (2026-09-27)', () => {
+  it("carries his Sleeper id and sport so the tap can open HIS card — never an ESPN id", () => {
+    const r = buildInjuredStarterSignals({
+      items: [
+        item({
+          sport: 'NFL',
+          leagueAppearances: [
+            { canonicalLeagueId: 'lg-e', leagueName: 'E', provider: 'espn', playerId: '4046', rosterStatus: 'starter' },
+            { canonicalLeagueId: 'lg-s', leagueName: 'S', provider: 'sleeper', playerId: '6794', rosterStatus: 'starter' },
+          ],
+        }),
+      ],
+    } as never)
+    expect(r.injuredStarters.map((s) => [s.leagueId, s.sleeperId, s.sport])).toEqual([
+      ['lg-e', '6794', 'NFL'],
+      ['lg-s', '6794', 'NFL'],
+    ])
+    const espnOnly = buildInjuredStarterSignals({
+      items: [item({ leagueAppearances: [{ canonicalLeagueId: 'lg-e', leagueName: 'E', provider: 'espn', playerId: '4046', rosterStatus: 'starter' }] })],
+    } as never)
+    expect(espnOnly.injuredStarters[0]!.sleeperId).toBeNull()
+  })
+
+  it('drops every appearance in a best-ball league — nobody sets that lineup', () => {
+    const portfolio = {
+      items: [
+        item({
+          leagueAppearances: [
+            { canonicalLeagueId: 'bb', leagueName: 'Best Ball', provider: 'sleeper', playerId: 'p1', rosterStatus: 'starter' },
+            { canonicalLeagueId: 'lg-1', leagueName: 'KBFL', provider: 'sleeper', playerId: 'p1', rosterStatus: 'starter' },
+          ],
+        }),
+      ],
+    } as never
+    const out = buildInjuredStarterSignals(withoutBestBallAppearances(portfolio, new Set(['bb'])))
+    expect(out.injuredStarters.map((s) => s.leagueId)).toEqual(['lg-1'])
+    // An empty set is the identity.
+    expect(withoutBestBallAppearances(portfolio, new Set())).toBe(portfolio)
   })
 })

@@ -43,6 +43,7 @@ export type UnpricedReasonCode =
   | 'idp_replacement_unavailable'
   | 'idp_scoring_unavailable'
   | 'ambiguous_identity'
+  | 'no_pick_market'
 
 export type UnpricedReason = { code: UnpricedReasonCode; label: string }
 
@@ -61,6 +62,16 @@ export function idpReplacementUnpricedReason(): UnpricedReason {
   return reason('idp_replacement_unavailable', 'League starting slots or projected defender coverage cannot establish replacement value')
 }
 
+/**
+ * A pick the league's value chart carries no market price for. The chart for guillotine, survivor
+ * and zombie leagues is the redraft one, which has no pick rows; a dynasty chart can lack a far
+ * season. Before 2026-09-28 those fell to a formula curve that priced a 2027 1st at 7,360 against
+ * FantasyCalc's ~2,900, and letters were issued on it (trade price coverage audit).
+ */
+export function noPickMarketUnpricedReason(year: number, round: number): UnpricedReason {
+  return reason('no_pick_market', `No market value for a ${year} round ${round} pick in this league's format`)
+}
+
 const TEAM_DEFENSE_POSITIONS = new Set(['DEF', 'DST', 'D/ST'])
 
 /** The only sport the value feed covers. */
@@ -71,6 +82,7 @@ const SPORT_NAMES: Record<string, string> = {
   NCAAFB: 'college football',
   NCAAB: 'college basketball',
   NCAABB: 'college basketball',
+  SOCCER: 'soccer',
 }
 
 function reason(code: UnpricedReasonCode, label: string): UnpricedReason {
@@ -93,6 +105,22 @@ function sportReason(sport: string | null | undefined): UnpricedReason | null {
   // An unknown sport is not evidence of a feed gap; the caller's other facts decide.
   if (!s || s === FEED_SPORT) return null
   return reason('no_feed_for_sport', `No values on file for ${SPORT_NAMES[s] ?? s} players`)
+}
+
+/**
+ * A draft pick in a sport nothing prices picks for. Every pick price on file is the NFL's (the
+ * FantasyCalc chart), so outside the NFL a pick is unpriced rather than read off a football chart —
+ * the same rule `pickPolicyRefusal` applies inside a league, extended to the open analyzer and the
+ * roster picker's previews, which had no sport check (trade grade audit, 2026-10-09).
+ */
+export function noSportPickMarketUnpricedReason(sport: string | null | undefined): UnpricedReason {
+  const s = String(sport ?? '').trim().toUpperCase()
+  return reason('no_pick_market', `Draft picks have no ${SPORT_NAMES[s] ?? (s || 'league')} price yet`)
+}
+
+/** Whether a pick in this sport has any price source at all. Only the NFL's chart carries picks. */
+export function sportHasPickMarket(sport: string | null | undefined): boolean {
+  return String(sport ?? '').trim().toUpperCase() === FEED_SPORT
 }
 
 /**
@@ -125,8 +153,8 @@ export function playerUnpricedReason(args: {
 
 /**
  * Why the trade ANALYSIS priced a player at nothing. Its engine tries the feed, this league's own
- * defender board, a historical value and a draft value before giving up, so "not on the feed" is
- * not the whole story there — but a position the feed never covers still is.
+ * defender board (and, for a question about the past, a historical value) before giving up, so "not
+ * on the feed" is not the whole story there — but a position the feed never covers still is.
  */
 export function analysisUnpricedReason(args: {
   position: string | null | undefined
@@ -137,6 +165,24 @@ export function analysisUnpricedReason(args: {
     (isIdpPosition(args.position) ? reason('defender', 'No league-derived defensive value available for this player') : null) ??
     positionReason(args.position) ??
     reason('no_value_on_file', 'No feed, historical or draft value on file')
+  )
+}
+
+/**
+ * A player today's market board does not carry, whose only number is an old historical snapshot.
+ *
+ * That snapshot is NOT the market (measured 2026-09-28, SF 12-team): rank for rank it sits 1.4–2.4×
+ * above the live board at the fringe — rank 150 is 2,210 against 1,431, rank 300 is 773 against 316 —
+ * and the board lists ~420 players down to a value of 5, so a player missing from it is valued below
+ * that floor today. Carrying the snapshot priced exactly those players at a multiple of their market.
+ */
+export function staleHistoricalUnpricedReason(snapshotDate: string | null | undefined): UnpricedReason {
+  const when = String(snapshotDate ?? '').slice(0, 10)
+  return reason(
+    'not_on_feed',
+    when
+      ? `Not on today's market board — the only value on file is from a ${when} snapshot, which is not today's market`
+      : "Not on today's market board — the only value on file is an old snapshot, which is not today's market",
   )
 }
 

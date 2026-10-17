@@ -2,6 +2,8 @@ import { redirect } from "next/navigation"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { MyLeaguesV4 } from "@/components/core-app/screens/MyLeaguesV4"
+import { getLeaguePreferences } from "@/lib/core-app/leaguePreferencesStore"
+import { applyLeagueOrder } from "@/lib/core-app/leaguePreferences"
 import { getMyLeaguesData } from "@/lib/core-app/myLeagues"
 import { buildMetadata, getSEOPageConfig } from "@/lib/seo"
 
@@ -50,14 +52,19 @@ export default async function LeaguesPage() {
    * state — which links to import and to sync — rather than an error boundary
    * that offers the reader nothing to press.
    */
-  const data = await getMyLeaguesData(userId).catch((err) => {
-    console.error("[/leagues] getMyLeaguesData failed", err)
-    return null
-  })
+  // The account's order and hidden leagues (lib/core-app/leaguePreferences.ts); never throws.
+  const [data, leaguePrefs] = await Promise.all([
+    getMyLeaguesData(userId).catch((err) => {
+      console.error("[/leagues] getMyLeaguesData failed", err)
+      return null
+    }),
+    getLeaguePreferences(userId),
+  ])
 
   return (
     <MyLeaguesV4
-      leagues={data?.leagues ?? []}
+      leagues={applyLeagueOrder(data?.leagues ?? [], leaguePrefs.order)}
+      hiddenIds={leaguePrefs.hidden}
       history={data?.history ?? []}
       counts={
         data?.counts ?? {

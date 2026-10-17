@@ -64,7 +64,7 @@ function VolatilityTag({ tag }: { tag: 'low' | 'medium' | 'high' }) {
         : ['Low volatility', 'bg-emerald-500/20 text-emerald-400']
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${color}`}
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${color}`}
       title="Score variance from simulation"
     >
       {label}
@@ -287,7 +287,7 @@ export function MatchupSimulationCard({
           <Link
             href={explainUrl}
             data-testid="matchup-card-ai-explain"
-            className="rounded border border-cyan-500/40 px-2 py-0.5 text-[10px] text-cyan-300 hover:bg-cyan-500/10"
+            className="rounded border border-cyan-500/40 px-2 py-0.5 text-[11px] text-cyan-300 hover:bg-cyan-500/10"
             title="Ask Chimmy to explain this matchup"
           >
             Explain matchup
@@ -297,7 +297,7 @@ export function MatchupSimulationCard({
             onClick={runSimulation}
             disabled={loading}
             data-testid="matchup-card-rerun"
-            className="rounded border border-white/20 px-2 py-0.5 text-[10px] text-white/70 hover:bg-white/10 disabled:opacity-50"
+            className="rounded border border-white/20 px-2 py-0.5 text-[11px] text-white/70 hover:bg-white/10 disabled:opacity-50"
             title="Rerun simulation"
           >
             {loading ? 'Running…' : result ? 'Rerun Simulation' : 'Sim My Matchup'}
@@ -311,28 +311,28 @@ export function MatchupSimulationCard({
           <p className="text-[11px] font-medium text-white/80 truncate" title={teamAName}>
             {teamAName}
           </p>
-          <p className="text-[10px] text-white/50 mt-0.5">
+          <p className="text-[11px] text-white/50 mt-0.5">
             Proj: {display.projectedScoreA.toFixed(1)} (range {formatScoreRangeLabel(display.scoreRangeA)})
           </p>
           {scoreA != null && (
-            <p className="text-[10px] text-emerald-400/90 mt-0.5">Current: {scoreA.toFixed(1)}</p>
+            <p className="text-[11px] text-emerald-400/90 mt-0.5">Current: {scoreA.toFixed(1)}</p>
           )}
         </div>
         <div className="text-right">
           <p className="text-[11px] font-medium text-white/80 truncate" title={teamBName}>
             {teamBName}
           </p>
-          <p className="text-[10px] text-white/50 mt-0.5">
+          <p className="text-[11px] text-white/50 mt-0.5">
             Proj: {display.projectedScoreB.toFixed(1)} (range {formatScoreRangeLabel(display.scoreRangeB)})
           </p>
           {scoreB != null && (
-            <p className="text-[10px] text-emerald-400/90 mt-0.5">Current: {scoreB.toFixed(1)}</p>
+            <p className="text-[11px] text-emerald-400/90 mt-0.5">Current: {scoreB.toFixed(1)}</p>
           )}
         </div>
       </div>
 
       <div className="space-y-1.5">
-        <div className="flex justify-between text-[10px] text-white/50">
+        <div className="flex justify-between text-[11px] text-white/50">
           <span>Win probability</span>
           <span>
             {display.winProbA >= 99 ? '99+' : display.winProbA.toFixed(1)}% – {display.winProbB >= 99 ? '99+' : display.winProbB.toFixed(1)}%
@@ -348,7 +348,7 @@ export function MatchupSimulationCard({
             style={{ width: `${display.winProbB}%` }}
           />
         </div>
-        <div className="flex justify-between text-[10px]">
+        <div className="flex justify-between text-[11px]">
           <span className="text-cyan-400/90">{display.winProbA.toFixed(0)}%</span>
           <span className="text-amber-400/90">{display.winProbB.toFixed(0)}%</span>
         </div>
@@ -356,14 +356,14 @@ export function MatchupSimulationCard({
 
       {display.upsetChance > 5 && (
         <div className="flex items-center justify-between rounded-lg bg-amber-500/10 border border-amber-500/20 px-2.5 py-1.5">
-          <span className="text-[10px] text-amber-300/90">Upset chance (underdog)</span>
+          <span className="text-[11px] text-amber-300/90">Upset chance (underdog)</span>
           <span className="text-[11px] font-semibold text-amber-400">{display.upsetChance}%</span>
         </div>
       )}
 
       {result?.prediction && (
         <div className="rounded-lg border border-cyan-500/25 bg-cyan-500/10 px-2.5 py-2">
-          <p className="text-[10px] uppercase tracking-wider text-cyan-200/90">
+          <p className="text-[11px] uppercase tracking-wider text-cyan-200/90">
             Deterministic prediction engine
           </p>
           <p className="mt-1 text-[11px] text-cyan-50/90">
@@ -377,20 +377,20 @@ export function MatchupSimulationCard({
 
       {comparisonSummary && (
         <div className="rounded-lg border border-white/10 bg-black/30 p-2.5 space-y-2">
-          <p className="text-[10px] text-emerald-300">{comparisonSummary.strengthSummary}</p>
-          <p className="text-[10px] text-amber-300">{comparisonSummary.weaknessSummary}</p>
+          <p className="text-[11px] text-emerald-300">{comparisonSummary.strengthSummary}</p>
+          <p className="text-[11px] text-amber-300">{comparisonSummary.weaknessSummary}</p>
         </div>
       )}
 
       <div className="rounded-lg border border-white/10 bg-black/30 p-2.5 space-y-2">
         <div className="flex items-center justify-between gap-2">
-          <p className="text-[10px] uppercase tracking-wider text-white/60">Position comparison</p>
+          <p className="text-[11px] uppercase tracking-wider text-white/60">Position comparison</p>
           <div className="flex items-center gap-1">
             <button
               type="button"
               data-testid="matchup-card-position-tab-all"
               onClick={() => setPositionTab('all')}
-              className={`rounded px-2 py-0.5 text-[10px] ${
+              className={`rounded px-2 py-0.5 text-[11px] ${
                 positionTab === 'all'
                   ? 'bg-cyan-500/20 text-cyan-200'
                   : 'border border-white/20 text-white/65 hover:bg-white/10'
@@ -402,7 +402,7 @@ export function MatchupSimulationCard({
               type="button"
               data-testid="matchup-card-position-tab-edges"
               onClick={() => setPositionTab('edges')}
-              className={`rounded px-2 py-0.5 text-[10px] ${
+              className={`rounded px-2 py-0.5 text-[11px] ${
                 positionTab === 'edges'
                   ? 'bg-cyan-500/20 text-cyan-200'
                   : 'border border-white/20 text-white/65 hover:bg-white/10'
@@ -415,7 +415,7 @@ export function MatchupSimulationCard({
         {visibleRows.length > 0 ? (
           <div className="space-y-1.5">
             {visibleRows.map((row) => (
-              <div key={row.slotId} className="flex items-center justify-between text-[10px]">
+              <div key={row.slotId} className="flex items-center justify-between text-[11px]">
                 <span className="text-white/60">{row.slotLabel}</span>
                 <span className="text-white/80">
                   {row.teamAScore.toFixed(1)} - {row.teamBScore.toFixed(1)}
@@ -435,12 +435,12 @@ export function MatchupSimulationCard({
             ))}
           </div>
         ) : (
-          <p className="text-[10px] text-white/50">No clear edge in current position profile.</p>
+          <p className="text-[11px] text-white/50">No clear edge in current position profile.</p>
         )}
       </div>
 
       {display.iterations != null && (
-        <p className="text-[9px] text-white/30">{display.iterations.toLocaleString()} sims</p>
+        <p className="text-[11px] text-white/30">{display.iterations.toLocaleString()} sims</p>
       )}
     </div>
   )

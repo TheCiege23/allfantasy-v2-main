@@ -36,7 +36,7 @@ export default function BracketHistoryTab({ pools }: { pools: HistoryPool[] }) {
               <li key={p.id} className="flex items-center justify-between rounded-lg border border-white/10 bg-black/20 px-2 py-1.5">
                 <span className="truncate pr-2">
                   <span className="block truncate">{p.name}</span>
-                  <span className="mt-0.5 inline-flex items-center gap-1 text-[10px] text-white/50">
+                  <span className="mt-0.5 inline-flex items-center gap-1 text-[11px] text-white/50">
                     <span className="inline-flex items-center gap-1 rounded-full border border-cyan-400/20 bg-cyan-500/10 px-1.5 py-0.5 text-cyan-200/85">
                       <span className="font-semibold">{sportUI.badge}</span>
                       <span>{sportUI.shortLabel}</span>

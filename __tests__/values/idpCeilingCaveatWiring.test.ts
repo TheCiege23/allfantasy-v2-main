@@ -56,8 +56,15 @@ describe('the page consumes and renders it', () => {
     expect(PAGE).toMatch(/idpCeilingCaveat\?: IdpCeilingCaveat \| null/)
   })
 
-  it('maps it onto the result the view reads', () => {
-    expect(PAGE).toContain('idpCeilingCaveat: payload.tradeInsights?.idpCeilingCaveat ?? null')
+  /*
+   * ⚠ BLANKED ON THE PAGE SINCE TRADE OS (2026-09-27). The caveat is a range of the route's COMPOSITE
+   * fairness, a scale the one grade does not use; live mode has blanked it since Phase 1, and
+   * historical mode — the last place it was mapped — now shows the same one grade. The route still
+   * emits it (above); the page must not put it beside a letter it could contradict.
+   */
+  it('is blanked on the result the view reads', () => {
+    expect(PAGE).not.toContain('idpCeilingCaveat: payload.tradeInsights?.idpCeilingCaveat ?? null')
+    expect(PAGE).toMatch(/idpCeilingCaveat:\s*null,/)
   })
 
   /** 🛑 THE ASSERTION THAT CATCHES THE DEAD-COMPONENT CLASS OF BUG. */

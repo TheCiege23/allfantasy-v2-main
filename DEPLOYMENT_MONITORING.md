@@ -41,6 +41,8 @@ Use for release evidence when AI route behavior changes materially.
 ---
 
 # Same-Day Rollout: trade/league-analyze AI Migration
+
+> **Historical (2026-09-30):** both `/api/ai/trade/league-analyze` and `/api/legacy/trade/league-analyze` were removed (commit `1b2e29ca4`) — nothing rendered their result, so the page no longer calls them and `NEXT_PUBLIC_USE_AI_TRADE_ANALYZE` has no reader. The queries and rollback steps below describe the April rollout only; do not run them expecting live traffic.
 **Deployment Time:** 2026-04-21
 **Feature:** `NEXT_PUBLIC_USE_AI_TRADE_ANALYZE=true`
 **Route:** `/api/ai/trade/league-analyze` (new) ← `/api/legacy/trade/league-analyze` (fallback)

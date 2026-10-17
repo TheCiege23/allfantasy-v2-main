@@ -17,6 +17,7 @@ import {
   Zap,
 } from 'lucide-react'
 import type { DraftUISettings, TimerMode } from '@/lib/draft-defaults/DraftUISettingsResolver'
+import { CUSTOM_TIMER_MAX_SECONDS } from '@/lib/draft/draftSettingsPolicy'
 import { DEFAULT_TRADE_RULES } from '@/lib/commissioner-ai-draft-manager/types'
 import { DraftImportFlow } from './DraftImportFlow'
 import { SwapManagerModal } from './SwapManagerModal'
@@ -248,7 +249,7 @@ export function CommissionerControlCenterModal({
   }
 
   const handleSetTimer = () => {
-    const sec = Math.max(0, Math.min(86400, parseInt(timerInput, 10) || 90))
+    const sec = Math.max(0, Math.min(CUSTOM_TIMER_MAX_SECONDS, parseInt(timerInput, 10) || 90))
     setTimerInput(String(sec))
     run('set_timer', () => onAction('set_timer_seconds', { seconds: sec, resetCurrentTimer: true }))
   }
@@ -840,7 +841,7 @@ export function CommissionerControlCenterModal({
                     </label>
                   ))}
                 </div>
-                <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-white/60">
+                <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-white/60">
                   <label className="flex items-center gap-1">
                     Cooldown (s)
                     <input
@@ -890,7 +891,7 @@ export function CommissionerControlCenterModal({
                     const row = aiRowState[rid] ?? { aiStyle: 'BALANCED', tradeAggression: 'medium', active: true }
                     return (
                       <div key={rid} className="flex flex-wrap items-center gap-2 rounded border border-white/10 bg-black/30 px-2 py-1.5">
-                        <label className="flex items-center gap-1 text-[10px] text-white/70">
+                        <label className="flex items-center gap-1 text-[11px] text-white/70">
                           <input
                             type="checkbox"
                             checked={row.active}
@@ -904,7 +905,7 @@ export function CommissionerControlCenterModal({
                           <span className="font-mono">{rid.slice(0, 8)}…</span>
                         </label>
                         <select
-                          className="rounded border border-white/15 bg-black/40 px-1 py-0.5 text-[10px] text-white"
+                          className="rounded border border-white/15 bg-black/40 px-1 py-0.5 text-[11px] text-white"
                           value={row.aiStyle}
                           data-testid={`draft-commissioner-ai-style-${rid}`}
                           onChange={(e) =>
@@ -918,7 +919,7 @@ export function CommissionerControlCenterModal({
                           ))}
                         </select>
                         <select
-                          className="rounded border border-white/15 bg-black/40 px-1 py-0.5 text-[10px] text-white"
+                          className="rounded border border-white/15 bg-black/40 px-1 py-0.5 text-[11px] text-white"
                           value={row.tradeAggression}
                           data-testid={`draft-commissioner-ai-agg-${rid}`}
                           onChange={(e) =>

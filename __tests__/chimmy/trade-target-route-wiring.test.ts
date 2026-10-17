@@ -38,8 +38,22 @@ describe('the trade-target verdict in the chat route', () => {
     expect(call).not.toMatch(/leagueId:\s*leagueId\b/)
   })
 
-  it('only parses the question when a proven league is in scope', () => {
-    expect(ROUTE).toMatch(/const tradeTargetQuestion = leagueSnapshot \? parseTradeTargetQuestion\(message\) : null/)
+  it('only parses the question for a proven league that allows trades, on a single-decision message', () => {
+    expect(ROUTE).toMatch(/const tradeTargetQuestion = leagueSnapshot && !leagueForbidsTrades\(leagueSnapshot\) && !compoundDecision\(message\)\s*\?\s*parseTradeTargetQuestion\(message\)\s*:\s*null/)
+  })
+
+  /* It reads the whole message; a compound one is split by the shared service, never read whole. */
+  it('takes its compound test from the shared clause splitter, not a copy of it', () => {
+    expect(ROUTE).toMatch(/import \{ compoundDecision \} from '@\/lib\/chimmy\/decisionClauses'/)
+  })
+
+  /*
+   * This read runs BEFORE the shared decision service and is charged when it decides, so without
+   * the skip a manager in a no-trade format (Survivor-Guillotine, Tournament) bought a trade
+   * verdict the service's format gate refuses free.
+   */
+  it('takes its "no trades" test from the shared format gate, not a copy of it', () => {
+    expect(ROUTE).toMatch(/import \{ leagueForbidsTrades \} from '@\/lib\/chimmy\/decisionFormatGate'/)
   })
 
   it('is computed AFTER the confirmation check — the drawer sends every paid question twice', () => {
@@ -74,5 +88,23 @@ describe('the trade-target verdict in the chat route', () => {
   it('tells the drawer which league the answer was about, on both returns', () => {
     expect(ROUTE.slice(UNRESOLVED_RETURN_AT, MAIN_SPEND_AT)).toMatch(/leagueGrounding: tradeTargetGrounding/)
     expect(ROUTE.slice(DECIDED_RETURN_AT, LOOP_AT)).toMatch(/leagueGrounding: tradeTargetGrounding/)
+  })
+
+  /*
+   * 2026-09-29: the decided verdict wrote NO history — a paid "should I trade for X" answer vanished
+   * from the thread on reload. It now writes both halves before returning, after the spend, with the
+   * YES/NO chip lifted from the same meta.decision the response sends, and a failed write cannot
+   * break the answer.
+   */
+  it('writes the decided verdict to chat history, with its chip, after the spend and before the return', () => {
+    const decidedReturn = ROUTE.indexOf('return NextResponse.json({', DECIDED_RETURN_AT)
+    const block = ROUTE.slice(DECIDED_RETURN_AT, decidedReturn)
+    expect(block).toMatch(/await Promise\.allSettled\(\[/)
+    expect(block).toMatch(/appendChatHistory\(\{ conversationId, role: 'user'/)
+    expect(block).toMatch(/appendChatHistory\(\{ conversationId, role: 'assistant', content: text/)
+    expect(block).toMatch(/\.\.\.decisionDisplayPolish\(targetDecision\)/)
+    // The response and the stored row carry ONE decision object.
+    expect(ROUTE.slice(decidedReturn, LOOP_AT)).toMatch(/decision: targetDecision,/)
+    expect(DECIDED_RETURN_AT).toBeGreaterThan(MAIN_SPEND_AT)
   })
 })

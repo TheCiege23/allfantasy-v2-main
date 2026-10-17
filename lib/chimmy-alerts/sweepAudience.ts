@@ -28,6 +28,11 @@ export type SweepTopAlert = {
   metadata?: Record<string, unknown>
 }
 
+/** yyyy-mm-dd in America/New_York. */
+export function easternDay(now: Date): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now)
+}
+
 function slug(s: string): string {
   return s
     .trim()
@@ -44,11 +49,17 @@ export function alertPlayerName(top: SweepTopAlert): string | null {
   return fromTitle && fromTitle !== top.title ? fromTitle : null
 }
 
-/** `injured-starter:<player>:<designation>:<yyyy-mm-dd>` — the sourceKey prefix; the dispatcher appends `:<userId>`. */
+/**
+ * `injured-starter:<player>:<designation>:<yyyy-mm-dd>` — the sourceKey prefix; the dispatcher appends `:<userId>`.
+ *
+ * ⚠ THE DAY IS THE US EASTERN DATE, NOT THE UTC ONE (2026-10-08). With every sport on the sweep, a
+ * 7:30pm ET tip-off is told at 6pm ET — and at 8pm ET the UTC date rolls over, so a UTC-day key
+ * said the same Out about the same game twice in one evening. Game days are Eastern days.
+ */
 export function injuredStarterDedupeKey(top: SweepTopAlert, now: Date): string {
   const name = alertPlayerName(top)
   const designation = typeof top.metadata?.designation === 'string' ? (top.metadata.designation as string) : 'flagged'
-  const day = now.toISOString().slice(0, 10)
+  const day = easternDay(now)
   return `injured-starter:${name ? slug(name) : (top.leagueId ?? 'all')}:${slug(designation)}:${day}`
 }
 
@@ -56,9 +67,15 @@ export function injuredStarterDedupeKey(top: SweepTopAlert, now: Date): string {
  * Where a tap lands: the Player Finder card for that player, which leads with
  * the game-day banner and the verified Open-lineup buttons for every league he
  * starts in — one tap from the notification to the platform's lineup screen.
+ *
+ * ⚠ `q=` ALONE DID NOT OPEN THE CARD. The finder opens a card only for `player=<sport:externalId>`;
+ * with just a name it showed search results over the home list, one tap short of what this promised.
+ * The sweep resolves the ref from the alert's Sleeper id and passes it; the name search stays as
+ * the fallback when no ref resolves.
  */
-export function injuredStarterHref(top: SweepTopAlert): string {
+export function injuredStarterHref(top: SweepTopAlert, playerRef?: string | null): string {
   const name = alertPlayerName(top)
+  if (name && playerRef) return `/core/players?q=${encodeURIComponent(name)}&player=${encodeURIComponent(playerRef)}`
   if (name) return `/core/players?q=${encodeURIComponent(name)}`
   return top.leagueId ? `/league/${top.leagueId}` : '/my-players'
 }

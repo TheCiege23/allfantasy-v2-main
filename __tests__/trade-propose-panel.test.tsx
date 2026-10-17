@@ -225,7 +225,8 @@ describe('⚠ never write a row the counterparty cannot open', () => {
   })
 
   it('names the managers it can see but cannot reach instead of hiding them', () => {
-    expect(PANEL).toContain('not on\n              AllFantasy yet')
+    expect(PANEL).toContain('partners.length - reachable.length')
+    expect(PANEL).toContain('other managers are not on AllFantasy yet')
   })
 
   it('says plainly that this cannot go to Sleeper', () => {
@@ -259,10 +260,11 @@ describe('⚠ no new API route, and the panel earns its request', () => {
     expect(DISPATCH).toContain("'trades': () => import('../trades/handler')")
   })
 
-  it('does not fetch until the manager starts building', () => {
-    // Enriching every roster in the league is an expensive read, and a manager
-    // who only reads the verdict never needs it.
-    expect(HOOK).toContain('if (!leagueId || !enabled || data != null')
+  it('only fetches rosters for a selected league', () => {
+    // League pick previews need the roster quote book before analysis; a global
+    // trade screen still has no league roster to load.
+    expect(HOOK).toContain('if (!leagueId || !enabled)')
+    expect(CENTER).toContain('Boolean(props.league?.id)')
   })
 
   it('⚠ reads the rosters ONCE for the whole screen', () => {

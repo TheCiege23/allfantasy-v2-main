@@ -24,7 +24,7 @@ export default function LeagueSettings({
             <div className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#8B9DB8]">
               <span>{item.label}</span>
               {item.badge ? (
-                <span className="rounded-md bg-white/10 px-1.5 py-0.5 text-[9px] tracking-[0.14em] text-white/70">
+                <span className="rounded-md bg-white/10 px-1.5 py-0.5 text-[11px] tracking-[0.14em] text-white/70">
                   {item.badge}
                 </span>
               ) : null}

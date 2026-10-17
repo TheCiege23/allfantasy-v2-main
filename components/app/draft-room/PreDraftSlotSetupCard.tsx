@@ -103,7 +103,7 @@ export function PreDraftSlotSetupCard(props: PreDraftSlotSetupCardProps) {
           Pre-Draft Setup
         </h3>
         <span
-          className="rounded border border-white/15 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-white/70"
+          className="rounded border border-white/15 px-2 py-0.5 text-[11px] uppercase tracking-[0.12em] text-white/70"
           data-testid="predraft-slot-counts"
         >
           {realSlotCount}/{totalSlots} real · {placeholderCount} placeholder

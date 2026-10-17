@@ -16,7 +16,7 @@ import { TRADE_INTELLIGENCE_SYSTEM_RULES } from './answerPolicy'
 export async function buildTradeContextForChimmy(
   leagueId: string,
   userId: string,
-  opts: { proposalId?: string | null; playerId?: string | null; partnerRosterId?: string | null } = {},
+  opts: { playerId?: string | null; partnerRosterId?: string | null } = {},
 ): Promise<string | null> {
   if (!leagueId || !userId) return null
 
@@ -29,28 +29,13 @@ export async function buildTradeContextForChimmy(
   if (ctx.role === 'non_member') return null
 
   const hasBlock = (ctx.tradeBlock?.data?.leagueVisibleItems.length ?? 0) > 0 || (ctx.tradeBlock?.data?.myInterests.length ?? 0) > 0
-  const hasProposal = Boolean(ctx.proposal?.ok)
   const hasPlayer = Boolean(ctx.playerValue?.ok)
   // Nothing to ground on → stay silent so other formats' answers are unaffected.
-  if (!hasBlock && !hasProposal && !hasPlayer) return null
+  if (!hasBlock && !hasPlayer) return null
 
   const lines: string[] = []
   lines.push('TRADE CONTEXT (AllFantasy deterministic trade layers T2–T9 — use ONLY these numbers):')
   lines.push(`- Role: ${ctx.role}. Sport: ${ctx.sport ?? 'unknown'}.`)
-
-  if (ctx.proposal?.data) {
-    const p = ctx.proposal.data
-    lines.push(`- Proposal ${p.proposalId} (${p.status}): snapshot grade ${p.snapshotGrade ?? 'n/a'}, fairness ${p.fairnessScore ?? 'n/a'}/100, confidence ${p.confidenceScore ?? 'n/a'}/100 (HISTORICAL snapshot, may differ from current).`)
-    if (p.reasons.length) lines.push(`  reasons: ${p.reasons.join('; ')}`)
-    if (p.warnings.length) lines.push(`  warnings: ${p.warnings.join('; ')}`)
-  } else if (ctx.proposal && !ctx.proposal.ok) {
-    lines.push(`- Proposal: ${ctx.proposal.limitations.map((l) => l.detail).join(' ') || 'not available'}`)
-  }
-
-  if (ctx.commissionerReview?.data) {
-    lines.push('- Commissioner review (COMMISSIONER-ONLY; neutral flags, NOT a veto command, never collusion):')
-    lines.push(`  ${JSON.stringify((ctx.commissionerReview.data as { review?: unknown }).review ?? {}).slice(0, 900)}`)
-  }
 
   if (ctx.playerValue?.data) {
     const v = ctx.playerValue.data

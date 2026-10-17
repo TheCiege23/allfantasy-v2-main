@@ -304,7 +304,7 @@ describe("POST /api/chat/chimmy contract", () => {
 
     expect(res.status).toBe(401)
     await expect(res.json()).resolves.toEqual({ error: "Unauthorized" })
-  })
+  }, 180_000)
 
   it("returns rate limit response from AI protection", async () => {
     runAiProtectionMock.mockResolvedValueOnce(
@@ -434,6 +434,49 @@ describe("POST /api/chat/chimmy contract", () => {
     expect(body.meta.decision).toMatchObject({ status: "ready", authority: "explanation_only", leagueId: "league-1" })
     expect(spendTokensForRuleMock).toHaveBeenCalled()
     expect(runUnifiedOrchestrationMock).not.toHaveBeenCalled()
+  })
+
+  /*
+   * 2026-09-29: a READY decision answer's history row stored grounding, cost and mode but not its
+   * chip, so a reload showed START / COUNTER on the live answer and nothing on the restored one. The
+   * row now stores exactly the verdict and keys the response's meta.decision carried.
+   */
+  it("stores a ready decision answer's chip and supersede keys in its history row, as the response sent them", async () => {
+    const { appendChatHistory } = await import("@/lib/ai-memory/chat-history-store")
+    const append = appendChatHistory as unknown as ReturnType<typeof vi.fn>
+    append.mockClear()
+    const verdict = { key: "start", source: "lineup_engine", detail: "Kyren Williams" }
+    prepareDecisionMock.mockResolvedValueOnce({ version: 1, kind: "lineup", decisionType: "manager.lineup.set", authority: "explanation_only",
+      status: "ready", leagueId: "league-1", answer: "Start Kyren Williams.", sources: ["lineup_engine"],
+      verdict, answerKeys: ["optimize_my_lineup:league-1"] })
+    const form = new FormData()
+    form.append("message", "Should I start Kyren Williams or Tank Bigsby?")
+    form.append("leagueId", "league-1")
+    form.append("confirmTokenSpend", "true")
+    const { POST } = await import("@/app/api/chat/chimmy/route")
+    const body = await (await POST(buildMultipartRequest(form) as any)).json()
+    expect(body.meta.decision.verdict).toEqual(verdict)
+    const row = append.mock.calls.map(([r]) => r).find((r) => r.role === "assistant")
+    expect(row.meta.display.verdict).toEqual(body.meta.decision.verdict)
+    expect(row.meta.display.answerKeys).toEqual(["optimize_my_lineup:league-1"])
+  })
+
+  it("a free partial (needs_data) stores no chip, whatever its text opens with", async () => {
+    const { appendChatHistory } = await import("@/lib/ai-memory/chat-history-store")
+    const append = appendChatHistory as unknown as ReturnType<typeof vi.fn>
+    append.mockClear()
+    prepareDecisionMock.mockResolvedValueOnce({ version: 1, kind: "trade", decisionType: "manager.trade.evaluate", authority: "explanation_only",
+      status: "needs_data", leagueId: "league-1", answer: "HOLD: name both sides of the trade.", sources: [],
+      verdict: { key: "hold", source: "trade_engine", detail: null } })
+    const form = new FormData()
+    form.append("message", "Should I trade this player?")
+    form.append("leagueId", "league-1")
+    form.append("confirmTokenSpend", "true")
+    const { POST } = await import("@/app/api/chat/chimmy/route")
+    await POST(buildMultipartRequest(form) as any)
+    const row = append.mock.calls.map(([r]) => r).find((r) => r.role === "assistant")
+    expect(row).toBeTruthy()
+    expect(row.meta.display.verdict).toBeUndefined()
   })
 
   it("returns a missing-evidence gap before spending tokens", async () => {
@@ -655,7 +698,10 @@ describe("POST /api/chat/chimmy contract", () => {
     const res = await POST(buildMultipartRequest(formData) as any)
 
     expect(res.status).toBe(200)
-    expect(buildMyRosterInjuriesMock).toHaveBeenCalledWith({ userId: "user-1" })
+    /* The push path races this report at 4s, so its scan budget must sit inside that race. */
+    expect(buildMyRosterInjuriesMock).toHaveBeenCalledWith({ userId: "user-1", scan: { budgetMs: 1_500, perItemTimeoutMs: 1_200 } })
+    const pushScan = buildMyRosterInjuriesMock.mock.calls.at(-1)?.[0]?.scan
+    expect(pushScan.budgetMs + pushScan.perItemTimeoutMs).toBeLessThan(4_000)
     const request = requestContractToUnifiedMock.mock.calls.at(-1)?.[0]
     expect(request?.userMessage).toContain("MY ROSTER INJURIES (ALL LEAGUES)")
     expect(request?.userMessage).toContain("Christian McCaffrey")
@@ -663,7 +709,7 @@ describe("POST /api/chat/chimmy contract", () => {
     expect(body.meta?.dataSources).toContain("cross_league_roster_injuries")
   })
 
-  it("does not run the 40-league injury scan for a question that is not about injuries", async () => {
+  it("does not run the cross-league injury scan for a question that is not about injuries", async () => {
     previewSpendMock.mockResolvedValueOnce({
       ruleCode: "ai_chimmy_chat_message",
       tokenCost: 0,
@@ -688,7 +734,7 @@ describe("POST /api/chat/chimmy contract", () => {
     const { POST } = await import("@/app/api/chat/chimmy/route")
     const response = await POST(buildMultipartRequest(formData) as any)
     expect(response.status).toBe(200)
-    expect(buildMyRosterInjuriesMock).toHaveBeenCalledWith({ userId: "user-1", leagueId: "league-1" })
+    expect(buildMyRosterInjuriesMock).toHaveBeenCalledWith({ userId: "user-1", leagueId: "league-1", scan: { budgetMs: 1_500, perItemTimeoutMs: 1_200 } })
     const request = requestContractToUnifiedMock.mock.calls.at(-1)?.[0]
     expect(request?.userMessage).toContain("MY ROSTER INJURIES (SELECTED LEAGUE)")
     expect(request?.userMessage).toContain("Omar Cooper: IR")

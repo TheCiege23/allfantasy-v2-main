@@ -26,7 +26,7 @@ export function AFProjectionPopover({ data, onClose }: Props) {
   return (
     <div className="w-52 space-y-3">
       <div className="flex items-center justify-between">
-        <span className="text-[10px] font-bold uppercase tracking-widest text-cyan-400/80">AF Projection</span>
+        <span className="text-[11px] font-bold uppercase tracking-widest text-cyan-400/80">AF Projection</span>
         <button
           type="button"
           onClick={onClose}
@@ -38,12 +38,12 @@ export function AFProjectionPopover({ data, onClose }: Props) {
       </div>
 
       {data.error ? (
-        <p className="text-[10px] text-amber-200/90">{data.error}</p>
+        <p className="text-[11px] text-amber-200/90">{data.error}</p>
       ) : null}
 
       <div className="grid grid-cols-3 gap-1.5 text-center">
         <div className="rounded-lg border border-white/8 bg-white/[0.03] px-2 py-1.5">
-          <div className="text-[9px] uppercase tracking-widest text-white/35 mb-0.5">Standard</div>
+          <div className="text-[11px] uppercase tracking-widest text-white/35 mb-0.5">Standard</div>
           <div className="text-sm font-bold text-white">{data.standard.toFixed(1)}</div>
         </div>
         <div
@@ -55,11 +55,11 @@ export function AFProjectionPopover({ data, onClose }: Props) {
                 : 'border-white/8 bg-white/[0.03]'
           }`}
         >
-          <div className="text-[9px] uppercase tracking-widest text-white/35 mb-0.5">AF</div>
+          <div className="text-[11px] uppercase tracking-widest text-white/35 mb-0.5">AF</div>
           <div className={`text-sm font-bold ${deltaColor}`}>{data.af.toFixed(1)}</div>
         </div>
         <div className="rounded-lg border border-white/8 bg-white/[0.03] px-2 py-1.5">
-          <div className="text-[9px] uppercase tracking-widest text-white/35 mb-0.5">Delta</div>
+          <div className="text-[11px] uppercase tracking-widest text-white/35 mb-0.5">Delta</div>
           <div className={`text-sm font-bold ${deltaColor}`}>
             {data.delta > 0.05 || data.delta < -0.05 ? (
               <>
@@ -74,7 +74,7 @@ export function AFProjectionPopover({ data, onClose }: Props) {
       </div>
 
       {data.weatherLabel && (
-        <div className="rounded-lg border border-white/8 bg-white/[0.02] px-2.5 py-1.5 text-[10px] text-white/55">
+        <div className="rounded-lg border border-white/8 bg-white/[0.02] px-2.5 py-1.5 text-[11px] text-white/55">
           {data.weatherLabel}
         </div>
       )}
@@ -84,7 +84,7 @@ export function AFProjectionPopover({ data, onClose }: Props) {
       {data.factors.length > 0 && (
         <div className="space-y-1">
           {data.factors.slice(0, 3).map((f, i) => (
-            <div key={i} className="flex items-center justify-between gap-2 text-[10px] text-white/50">
+            <div key={i} className="flex items-center justify-between gap-2 text-[11px] text-white/50">
               <span className="truncate flex-1">{f.label}</span>
               <span
                 className={
@@ -105,13 +105,13 @@ export function AFProjectionPopover({ data, onClose }: Props) {
 
       {data.hasData && (
         <div className="flex items-center justify-between pt-1 border-t border-white/6">
-          <span className="text-[9px] text-white/25 uppercase tracking-widest">Confidence</span>
-          <span className="text-[9px] text-white/40 capitalize">{data.confidence}</span>
+          <span className="text-[11px] text-white/25 uppercase tracking-widest">Confidence</span>
+          <span className="text-[11px] text-white/40 capitalize">{data.confidence}</span>
         </div>
       )}
 
       {!data.hasData && !data.isLoading && (
-        <div className="text-[10px] text-white/35 text-center py-1">
+        <div className="text-[11px] text-white/35 text-center py-1">
           {data.isOutdoor === false ? 'Indoor venue · no weather adjustment' : 'Weather data unavailable'}
         </div>
       )}

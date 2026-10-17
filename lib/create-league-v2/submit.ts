@@ -46,6 +46,7 @@ export interface CreateLeagueV2Result {
   error?: string
   redirectTo?: string
   fieldErrors?: CreateLeagueFieldErrors
+  warning?: string
 }
 
 // ── Endpoint routing ────────────────────────────────────────────────
@@ -72,9 +73,23 @@ function buildCanonicalPayload(state: CreateLeagueV2State): Record<string, unkno
     // A guillotine week has no opponent, so there is no head-to-head game for a median game to
     // double. The wizard hides the box for guillotine; this drops a choice made before switching.
     medianGame: state.medianGame === true && lt !== 'guillotine',
-    draftDate: state.draftDate,
-    draftTime: state.draftTime,
+    // TE premium: NFL only, and only once the commissioner has chosen the per-catch amount.
+    ...(state.sport === 'NFL' && state.tePremium === true && typeof state.tePremiumPoints === 'number'
+      ? { tePremiumPoints: state.tePremiumPoints }
+      : {}),
     draftTimezone: state.timezone,
+  }
+  /*
+   * 🛑 OMIT, NEVER SEND EMPTY STRINGS. The NBA/NHL Survivor branch of
+   * createCanonicalLeagueInTransaction builds its season calendar from the draft time whenever
+   * both fields are *strings* — `''` included — and `toUtc('', '', zone)` is an Invalid Date.
+   * Absent fields are the server's "no date yet" (draftDateUtc stays null).
+   */
+  const draftDate = state.draftDate.trim()
+  const draftTime = state.draftTime.trim()
+  if (state.draftScheduleLater !== true && draftDate && draftTime) {
+    conceptSetup.draftDate = draftDate
+    conceptSetup.draftTime = draftTime
   }
 
   const enabledPremiumAdvancedSettings = getEnabledPremiumAdvancedSettings(state.advancedSetup)
@@ -85,6 +100,7 @@ function buildCanonicalPayload(state: CreateLeagueV2State): Record<string, unkno
   }
   if (lt === 'survivor') {
     conceptSetup.survivorTribeCount = state.survivorTribeCount
+    conceptSetup.commissionerParticipationMode = state.survivorCommissionerParticipationMode ?? 'non_participating_host'
   }
   if (isFootballLike(state.sport) && state.thirdRoundReversal && isThirdRoundReversalAvailable(state.draftType)) {
     conceptSetup.thirdRoundReversal = true
@@ -342,7 +358,7 @@ function summarizeSubmittedPayload(payload: unknown): Record<string, unknown> {
 
 // ── Main submit ─────────────────────────────────────────────────────
 
-export async function submitCreateLeagueV2(state: CreateLeagueV2State): Promise<CreateLeagueV2Result> {
+export async function submitCreateLeagueV2(state: CreateLeagueV2State, sourceLeagueId?: string, acceptWeeklyLineups = false): Promise<CreateLeagueV2Result> {
   if (!getEffectiveLeagueType(state)) {
     return { ok: false, error: 'Choose a league concept to continue.' }
   }
@@ -351,12 +367,16 @@ export async function submitCreateLeagueV2(state: CreateLeagueV2State): Promise<
   }
 
   const endpoint = getEndpoint(state)
+  if (sourceLeagueId && endpoint !== '/api/leagues') {
+    return { ok: false, error: 'This league concept cannot carry over imported rosters yet.' }
+  }
 
   let payload: unknown
   if (endpoint === '/api/tournament/create') {
     payload = buildTournamentPayload(state)
   } else {
-    payload = buildCanonicalPayload(state)
+    const canonical = buildCanonicalPayload(state)
+    payload = { ...canonical, ...(sourceLeagueId ? { sourceLeagueId, conceptSetup: { ...(canonical.conceptSetup as Record<string, unknown>), acceptWeeklyLineups } } : {}) }
   }
 
   if (process.env.NODE_ENV === 'development') {
@@ -419,7 +439,9 @@ export async function submitCreateLeagueV2(state: CreateLeagueV2State): Promise<
 
   const leagueId = parseLeagueId(json)
   const redirectTo = parseRedirectUrl(state, json)
+  const warnings = Array.isArray(json.warnings) ? json.warnings as Array<{ code?: string; message?: string }> : []
+  const warning = warnings.find((item) => item.code === 'IMPORT_MATERIALIZATION_PENDING')?.message
   trackMetaEventsFromResponse(json)
 
-  return { ok: true, leagueId, redirectTo }
+  return { ok: true, leagueId, redirectTo, warning }
 }

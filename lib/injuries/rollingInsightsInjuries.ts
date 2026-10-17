@@ -171,6 +171,8 @@ export interface NormalizedRiInjury {
   statusReason: ParsedDesignation['reason']
   /** Full original prose, preserved verbatim. */
   description: string | null
+  /** When the injury HAPPENED (`date_injured`) — NOT when it was reported. The stored row's `date`
+   *  is the report time; see riReportSeenAt. */
   date: Date | null
   week: number | null
   raw: RiInjuryRow & { team?: string; team_id?: string | number }
@@ -229,6 +231,44 @@ export function normalizeRiInjuries(payload: unknown, sport = 'NFL'): Normalized
     }
   }
   return out
+}
+
+/** Where the first-seen report time is kept in `raw`, beside the vendor's own fields. */
+export const REPORT_SEEN_AT_KEY = 'af_report_seen_at'
+
+export interface PreviousRiRow {
+  description: string | null
+  date: Date | null
+  raw: unknown
+}
+
+/**
+ * When Rolling Insights' CURRENT word on this player was first seen: kept while `returns` is
+ * unchanged, reset to `now` when it changes.
+ *
+ * 🛑 `date` USED TO BE `date_injured` (2026-10-11), AND EVERY READER TREATS `date` AS THE REPORT TIME.
+ * RI publishes no report time — `date_injured` is when the injury HAPPENED, often weeks before
+ * today's designation — so a fresh "Out" looked weeks old. It lost the newest-claim comparison to any
+ * lagging ESPN row, was flagged `stale` (459 of 500 live rows that day), and a stale "Out" is read as
+ * last week's news, so Chimmy counted those starters as playing. RI re-publishes twice a day and we
+ * poll every 30 minutes, so the first time we see a `returns` text is the report time to within one
+ * poll, and never later than it.
+ *
+ * ⚠ A row written before this change carries no first-seen time. If its text is unchanged its
+ * stored `date` is kept: we cannot know when that text appeared, and inventing "now" would make
+ * Friday's "Questionable" outrank ESPN's Sunday "Active". It is replaced the first time the text
+ * changes, which for an NFL designation is at least weekly.
+ */
+export function riReportSeenAt(
+  row: Pick<NormalizedRiInjury, 'description'>,
+  previous: PreviousRiRow | undefined,
+  now: Date,
+): Date {
+  if (!previous || (previous.description ?? null) !== (row.description ?? null)) return now
+  const raw = previous.raw && typeof previous.raw === 'object' ? (previous.raw as Record<string, unknown>) : null
+  const seen = typeof raw?.[REPORT_SEEN_AT_KEY] === 'string' ? new Date(raw[REPORT_SEEN_AT_KEY] as string) : null
+  if (seen && !Number.isNaN(seen.getTime())) return seen
+  return previous.date ?? now
 }
 
 const RI_SOURCE = 'rolling_insights'
@@ -310,9 +350,22 @@ export async function syncRollingInsightsInjuriesToDb(opts?: {
   const expiresAt = new Date(now.getTime() + INJURY_TTL_MS)
   const season = now.getUTCMonth() + 1 >= 8 ? now.getUTCFullYear() : now.getUTCFullYear() - 1
 
+  // What each player's row said last run, so an unchanged report keeps the time it was first seen.
+  const previous = new Map<string, PreviousRiRow>()
+  try {
+    const existing = await prisma.sportsInjury.findMany({
+      where: { sport, source: RI_SOURCE, externalId: { in: rows.map((r) => r.externalId) } },
+      select: { externalId: true, description: true, date: true, raw: true },
+    })
+    for (const e of existing) previous.set(e.externalId, e)
+  } catch {
+    // Without the previous rows every report reads as first seen now: fresher than true, never older.
+  }
+
   for (const row of rows) {
     if (row.status == null) result.unparseableStatus += 1
     try {
+      const reportedAt = riReportSeenAt(row, previous.get(row.externalId), now)
       const data = {
         playerName: row.playerName,
         // Provider id, not canonical. The read port resolves to canonical AF
@@ -323,12 +376,13 @@ export async function syncRollingInsightsInjuriesToDb(opts?: {
         type: row.type,
         status: row.status,
         description: row.description,
-        date: row.date,
+        // The REPORT time, not `date_injured` (kept in `raw`). See riReportSeenAt.
+        date: reportedAt,
         season,
         week: row.week,
         fetchedAt: now,
         expiresAt,
-        raw: row.raw as never,
+        raw: { ...row.raw, [REPORT_SEEN_AT_KEY]: reportedAt.toISOString() } as never,
       }
       await prisma.sportsInjury.upsert({
         where: { sport_externalId_source: { sport, externalId: row.externalId, source: RI_SOURCE } },

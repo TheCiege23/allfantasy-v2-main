@@ -89,8 +89,8 @@ describe('getDiscordBridge', () => {
     expect((await getDiscordBridge('commish', 'league_1'))?.templateUrl).toBeNull()
   })
 
-  it('does not offer two-way while nothing schedules it', async () => {
-    expect((await getDiscordBridge('commish', 'league_1'))?.inboundAvailable).toBe(false)
+  it('offers the opt-in once the worker is scheduled', async () => {
+    expect((await getDiscordBridge('commish', 'league_1'))?.inboundAvailable).toBe(true)
   })
 
   it('shows league chat copying OFF when there is no channel yet', async () => {

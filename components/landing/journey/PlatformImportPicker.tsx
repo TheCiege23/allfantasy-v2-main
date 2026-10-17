@@ -145,7 +145,7 @@ export function PlatformImportPicker() {
               Import from {active.label}
             </span>
             <span
-              className="rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+              className="rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide"
               style={{ borderColor: 'color-mix(in srgb, var(--accent-amber) 40%, transparent)', color: 'var(--accent-amber-strong)' }}
             >
               {active.badge}
@@ -155,7 +155,7 @@ export function PlatformImportPicker() {
             {active.steps.map((step, i) => (
               <li key={step.title} className="flex gap-2.5 text-xs">
                 <span
-                  className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold"
+                  className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold"
                   style={{ background: 'color-mix(in srgb, var(--panel2) 80%, transparent)', color: 'var(--muted)' }}
                 >
                   {i + 1}

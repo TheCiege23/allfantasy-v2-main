@@ -84,7 +84,7 @@ export default function StandingsTable({
   viewerRosterId = null,
   playoffCut = null,
 }: Props) {
-  const showCategories = scoringMode === 'h2h_category' || scoringMode === 'roto'
+  const showCategories = scoringMode === 'h2h_category'
   const gridCols = showCategories
     ? 'grid-cols-[40px_minmax(0,1fr)_repeat(6,minmax(0,84px))]'
     : 'grid-cols-[40px_minmax(0,1fr)_repeat(5,minmax(0,84px))]'
@@ -96,7 +96,7 @@ export default function StandingsTable({
       data-scoring-mode={scoringMode}
     >
       <div
-        className={`grid ${gridCols} gap-2 border-b border-white/10 px-4 py-3 font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-white/40`}
+        className={`grid ${gridCols} gap-2 border-b border-white/10 px-4 py-3 font-mono text-[11px] font-bold uppercase tracking-[0.12em] text-white/40`}
       >
         <div>#</div>
         <div>Team</div>
@@ -110,7 +110,7 @@ export default function StandingsTable({
             CAT
           </div>
         ) : null}
-        <div className="text-right">PF</div>
+        <div className="text-right">{scoringMode === 'roto' ? 'Rank pts' : 'PF'}</div>
         <div className="text-right">PA</div>
         <div className="text-right">Strk</div>
         <div className="text-right" title="Record against every other team, every week">
@@ -156,7 +156,7 @@ export default function StandingsTable({
                   </span>
                 </span>
                 <span className="text-right font-mono tabular-nums text-white/85">
-                  {formatRecord(r.wins, r.losses, r.ties)}
+                  {scoringMode === 'roto' ? '—' : formatRecord(r.wins, r.losses, r.ties)}
                 </span>
                 {showCategories ? (
                   <span
@@ -199,7 +199,7 @@ export default function StandingsTable({
                   data-testid="standings-playoff-cut"
                 >
                   <span className="h-px flex-1 bg-amber-400/40" />
-                  <span className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-amber-400">
+                  <span className="font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-amber-400">
                     Playoff cut · top {playoffCut}
                   </span>
                   <span className="h-px flex-1 bg-amber-400/40" />

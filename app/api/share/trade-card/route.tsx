@@ -5,7 +5,8 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getTradeGrades, type TradeSideGrade } from '@/lib/trade-intel/sleeperTradeGradeService'
 import { hasNoSignal } from '@/lib/trade-intel/tradeGradeEmail'
-import { realizedGradeDisplay } from '@/lib/trade-intel/gradeScale'
+import { resultMark } from '@/lib/trade-intel/tradeResultMark'
+import { resolveLanguage, LANG_COOKIE_KEY, getIntlLocale, type LanguageCode } from '@/lib/i18n/constants'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -17,21 +18,23 @@ export const runtime = 'nodejs'
  * to be shared as an IMAGE (Web Share / download), so no league data is ever
  * exposed on an unauthenticated URL. Every number on the card comes from the
  * same graded ledger the Legacy tab shows.
+ *
+ * 🛑 A RESULT, NOT A GRADE (Trade OS, 2026-09-27). This card measures what a trade PRODUCED — fantasy
+ * points while each asset was held. It used to print that as a 110px letter ("initial B · now A"),
+ * the same shape as the one trade grade, which is a judgement of VALUE at the time. Two letters for one
+ * trade, on two scales, is what the one engine removes; the design keeps the observed result separate
+ * and never lets it rewrite a grade. So the mark is the outcome — WON / LOST / EVEN — and the points.
  */
-
-const GRADE_COLOR: Record<string, string> = {
-  A: '#3ddc97',
-  B: '#3ddc97',
-  C: '#7fb3ff',
-  D: '#ffc53d',
-  F: '#ff6b8b',
-}
 
 function initials(name: string): string {
   return name.trim().slice(0, 2).toUpperCase() || '??'
 }
 
-function SideCol({ side, provisional }: { side: TradeSideGrade; provisional: boolean }) {
+function SideCol({ side, provisional, tie, language }: { side: TradeSideGrade; provisional: boolean; tie: boolean; language:LanguageCode }) {
+  const es=language==='es'
+  const marks:Record<string,string>={WON:'GANÓ',LOST:'PERDIÓ',EVEN:'EMPATE'}
+  const trends:Record<string,string>={improving:'mejorando',worsening:'empeorando',steady:'estable'}
+  const number=(value:number)=>value.toLocaleString(getIntlLocale(language),{minimumFractionDigits:1,maximumFractionDigits:1})
   const topIn = [
     ...side.playersIn.map((a) => ({
       name: a.name,
@@ -50,12 +53,7 @@ function SideCol({ side, provisional }: { side: TradeSideGrade; provisional: boo
     .map((s) => `'${s.season.slice(2)} ${s.net > 0 ? '+' : ''}${s.net.toFixed(0)}`)
     .join(' > ')
   const avatarUrl = side.avatar ? `https://sleepercdn.com/avatars/${side.avatar}` : null
-  const display = realizedGradeDisplay({
-    scored: !provisional,
-    currentGrade: side.currentGrade,
-    initialGrade: side.initialGrade,
-    trend: side.trend === 'improving' || side.trend === 'worsening' ? side.trend : 'steady',
-  })
+  const display = resultMark(side, { provisional, tie })
 
   return (
     <div
@@ -106,17 +104,17 @@ function SideCol({ side, provisional }: { side: TradeSideGrade; provisional: boo
       <div
         style={{
           display: 'flex',
-          fontSize: 110,
+          fontSize: es?64:96,
           fontWeight: 900,
           fontStyle: 'italic',
-          color: provisional ? '#5d64a3' : GRADE_COLOR[side.currentGrade] ?? '#7fb3ff',
+          color: display.color,
           marginTop: 4,
           lineHeight: 1,
         }}
       >
-        {display.mark}
+        {es?(marks[display.mark]??display.mark):display.mark}
       </div>
-      <div style={{ display: 'flex', fontSize: 17, color: '#8b93cf', marginTop: 6 }}>{display.caption}</div>
+      <div style={{ display: 'flex', fontSize: 17, color: '#8b93cf', marginTop: 6 }}>{es?(provisional?'sin puntos registrados todavía':`resultado hasta ahora · ${trends[side.trend]??'estable'}`):display.caption}</div>
       {provisional ? null : (
         <div
           style={{
@@ -127,8 +125,8 @@ function SideCol({ side, provisional }: { side: TradeSideGrade; provisional: boo
             marginTop: 4,
           }}
         >
-          net {side.cumulativeNet > 0 ? '+' : ''}
-          {side.cumulativeNet.toFixed(1)} pts
+          {es?'saldo':'net'} {side.cumulativeNet > 0 ? '+' : ''}
+          {number(side.cumulativeNet)} pts
         </div>
       )}
       {trail && !provisional ? (
@@ -137,7 +135,7 @@ function SideCol({ side, provisional }: { side: TradeSideGrade; provisional: boo
       <div style={{ display: 'flex', flexDirection: 'column', marginTop: 14, alignItems: 'center' }}>
         {topIn.map((a) => (
           <div key={a.name} style={{ display: 'flex', fontSize: 16, color: '#c6cbf5' }}>
-            {a.name} · {a.pts.toFixed(1)}
+            {a.name} · {number(a.pts)}
           </div>
         ))}
       </div>
@@ -146,6 +144,8 @@ function SideCol({ side, provisional }: { side: TradeSideGrade; provisional: boo
 }
 
 export async function GET(req: NextRequest) {
+  const language=resolveLanguage(req.nextUrl.searchParams?.get('lang')??req.cookies?.get(LANG_COOKIE_KEY)?.value)
+  const es=language==='es'
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -220,22 +220,22 @@ export async function GET(req: NextRequest) {
                 letterSpacing: 1,
               }}
             >
-              WHO WON THIS TRADE?
+              {es?'¿QUIÉN GANÓ EL INTERCAMBIO?':'WHO WON THIS TRADE?'}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
               <div style={{ display: 'flex', fontSize: 22, fontWeight: 700, color: '#c6cbf5' }}>
                 {league.name}
               </div>
               <div style={{ display: 'flex', fontSize: 17, color: '#8b93cf' }}>
-                {trade.season} · week {trade.week}
+                {trade.season} · {es?'semana':'week'} {trade.week}
                 {/* "Dead even" is a result. With nothing credited there is no result yet. */}
-                {provisional ? ' · not scored yet' : trade.tie ? ' · DEAD EVEN (so far)' : ''}
+                {provisional ? (es?' · sin puntos todavía':' · not scored yet') : trade.tie ? (es?' · EMPATE (hasta ahora)':' · DEAD EVEN (so far)') : ''}
               </div>
             </div>
           </div>
           <div style={{ display: 'flex', gap: 22, marginTop: 24, flex: 1 }}>
             {trade.sides.slice(0, 3).map((side) => (
-              <SideCol key={side.rosterId} side={side} provisional={provisional} />
+              <SideCol key={side.rosterId} side={side} provisional={provisional} tie={Boolean(trade.tie)} language={language} />
             ))}
           </div>
           <div
@@ -247,7 +247,7 @@ export async function GET(req: NextRequest) {
             }}
           >
             <div style={{ display: 'flex', fontSize: 15, color: '#5d64a3' }}>
-              Graded on real points while each asset was held · picks tracked to who they became
+              {es?'Puntos reales mientras se conservó cada activo · selecciones vinculadas al jugador elegido':'Scored on real points while each asset was held · picks tracked to who they became'}
             </div>
             <div style={{ display: 'flex', fontSize: 18, fontWeight: 800, color: '#c6cbf5' }}>
               AllFantasy.ai · a Brown Pig LLC product

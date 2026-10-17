@@ -9,7 +9,7 @@ import { getBigBrotherConfig } from './BigBrotherLeagueConfig'
 import { getEligibility } from './BigBrotherEligibilityEngine'
 import { setNominations } from './BigBrotherNominationEngine'
 import { setReplacementNominee } from './BigBrotherNominationEngine'
-import { getSeasonPointsFromRosterPerformance } from '@/lib/survivor/SurvivorVoteEngine'
+import { getBigBrotherSeasonPoints as getSeasonPointsFromRosterPerformance } from './BigBrotherScores'
 import { appendBigBrotherAudit } from './BigBrotherAuditLog'
 import { announceNominationCeremony } from './BigBrotherChatAnnouncements'
 import type { AutoNominationFallback } from './types'
@@ -106,6 +106,7 @@ export async function runAutoReplacementNominee(cycleId: string, options?: { sys
       week: true,
       hohRosterId: true,
       vetoSavedRosterId: true,
+      vetoWinnerRosterId: true,
       nominee1RosterId: true,
       nominee2RosterId: true,
       vetoUsed: true,
@@ -116,7 +117,7 @@ export async function runAutoReplacementNominee(cycleId: string, options?: { sys
   const config = await getBigBrotherConfig(cycle.leagueId)
   if (!config) return { ok: false, error: 'Not a Big Brother league' }
 
-  const excluded = [cycle.hohRosterId, cycle.vetoSavedRosterId].filter(Boolean) as string[]
+  const excluded = [cycle.hohRosterId, cycle.vetoWinnerRosterId, cycle.vetoSavedRosterId, cycle.nominee1RosterId, cycle.nominee2RosterId].filter(Boolean) as string[]
   const evicted = await prisma.bigBrotherCycle.findMany({
     where: { leagueId: cycle.leagueId, evictedRosterId: { not: null } },
     select: { evictedRosterId: true },

@@ -16,7 +16,7 @@ export function MatchupWeekSelector({
   const cap = maxWeek ?? 40
   return (
     <div className="flex flex-wrap items-center justify-center gap-2 rounded-xl border border-white/[0.1] bg-[#0a1228]/90 px-3 py-2">
-      <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/45">Week</span>
+      <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/45">Week</span>
       <button
         type="button"
         disabled={disabled || week <= 1}

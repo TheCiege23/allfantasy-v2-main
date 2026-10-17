@@ -14,7 +14,7 @@ const TABS = [
   { href: '/brackets', label: 'My Entries' },
   { href: '/brackets', label: 'Standings' },
   { href: '/messages', label: 'Pool Chat' },
-  { href: CHIMMY_HREF, label: 'AI Coach' },
+  { href: CHIMMY_HREF, label: 'Chimmy' },
   { href: '/brackets', label: 'History' },
 ] as const
 

@@ -38,7 +38,7 @@ export function WorldCupAiPromptChips({
           key={action.key}
           type="button"
           onClick={() => onSelect(action.prompt)}
-          className="inline-flex min-h-8 shrink-0 items-center rounded-full border border-cyan-300/15 bg-white/[0.045] px-3 py-1 text-[10px] font-black text-slate-100/78 transition hover:border-cyan-300/35 hover:bg-cyan-300/[0.08] hover:text-white touch-manipulation focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/55 sm:text-[11px]"
+          className="inline-flex min-h-8 shrink-0 items-center rounded-full border border-cyan-300/15 bg-white/[0.045] px-3 py-1 text-[11px] font-black text-slate-100/78 transition hover:border-cyan-300/35 hover:bg-cyan-300/[0.08] hover:text-white touch-manipulation focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/55 sm:text-[11px]"
           data-testid={`wc-prompt-chip-${action.key}`}
         >
           {action.label}

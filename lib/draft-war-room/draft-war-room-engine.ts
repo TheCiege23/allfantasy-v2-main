@@ -159,7 +159,7 @@ export function runDraftWarRoom(input: WarRoomInput): WarRoomResult {
   if (rosterNotes.length === 0) rosterNotes.push('Starting requirements met — draft for value or depth')
 
   // Value on board
-  const valueNotes = board.valuePlayers.slice(0, 3).map(v => `${v.name} (${v.position}): ADP ${v.adp} — available ${v.adp - input.currentPickNumber} picks after expected`)
+  const valueNotes = board.valuePlayers.slice(0, 3).map(v => `${v.name} (${v.position}): ADP ${v.adp} — available ${input.currentPickNumber - v.adp} picks after expected`)
 
   // Pivot plans
   const pivotPlans: string[] = []

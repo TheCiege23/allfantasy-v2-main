@@ -23,13 +23,23 @@ export async function POST(req: Request) {
 
   const leagueId = typeof body.leagueId === 'string' ? body.leagueId.trim() : ''
   let draftEligibleFromLeague: Set<string> | undefined
+  let authoritativeSport: string | undefined
+  let authoritativeSeason: number | undefined
+  let authoritativeScoring: string | null | undefined
+  let starterSlots: import('@/lib/sports-reporting/draftAdvisorRosterNeeds').DraftAdvisorStarterSlot[] | undefined
   if (leagueId) {
     const league = await assertLeagueAccess(leagueId, session.user.id)
     if (!league) {
       return NextResponse.json({ ok: false, error: 'League not found or forbidden' }, { status: 403 })
     }
     const payload = await getLeagueDraftTemplatePayload(leagueId).catch(() => null)
-    if (payload) draftEligibleFromLeague = getDraftEligiblePositionsFromPayload(payload)
+    authoritativeSport = league.sport
+    authoritativeSeason = league.season
+    authoritativeScoring = league.scoring
+    if (payload) {
+      draftEligibleFromLeague = getDraftEligiblePositionsFromPayload(payload)
+      starterSlots = payload.template.slots.map(slot => ({slotName:slot.slotName,starterCount:slot.starterCount,allowedPositions:slot.allowedPositions}))
+    }
   }
 
   const available = Array.isArray(body.availablePlayers) ? body.availablePlayers : body.available
@@ -64,7 +74,7 @@ export async function POST(req: Request) {
     round: Math.max(1, Number(body.round) || 1),
     pickInRound: Math.max(1, Number(body.pick ?? body.pickInRound) || 1),
     totalTeams: Math.max(2, Math.min(32, Number(body.totalTeams) || 12)),
-    sport: String(body.sport ?? 'NFL'),
+    sport: authoritativeSport ?? String(body.sport ?? 'NFL'),
     isDynasty: Boolean(body.isDynasty),
     isSuperflex: Boolean(body.isSuperflex ?? body.isSF),
     rosterSlots: rosterSlots.map(String),
@@ -77,15 +87,16 @@ export async function POST(req: Request) {
   // Enriches the top 40 available candidates; degrades gracefully if DB unavailable.
   // We only enrich the top 40 by incoming order (caller already sorts by ADP) to
   // keep response latency acceptable while covering the real decision window.
-  const scoringFormat =
+  const scoringFormat = authoritativeScoring || (
     typeof input.scoringSettings?.scoringFormat === 'string'
       ? input.scoringSettings.scoringFormat
       : typeof input.scoringSettings?.type === 'string'
         ? input.scoringSettings.type
-        : 'ppr'
+        : ['NFL','NCAAF'].includes(input.sport.toUpperCase()) ? 'ppr' : 'points')
 
   const groundedContext = await getDraftAdvisorContext({
     sport: input.sport,
+    season: authoritativeSeason,
     candidates: input.availablePlayers.slice(0, 40).map((p) => ({
       playerName: p.name,
       position: p.position,
@@ -93,6 +104,7 @@ export async function POST(req: Request) {
       adp: p.adp ?? null,
     })),
     currentRoster: input.userRoster,
+    starterSlots,
     leagueFormat: input.isDynasty ? 'dynasty' : 'redraft',
     scoringFormat,
     draftPosition: input.currentPick?.slot ?? null,

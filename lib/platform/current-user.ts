@@ -14,7 +14,7 @@ export async function resolvePlatformUser(): Promise<ResolvedPlatformUser> {
   } | null
 
   const appUserId = session?.user?.id ? String(session.user.id) : null
-  const legacyCookie = getUserSessionFromCookie()
+  const legacyCookie = (await getUserSessionFromCookie())
   const legacyUsername = legacyCookie?.sleeperUsername || null
 
   if (appUserId) {

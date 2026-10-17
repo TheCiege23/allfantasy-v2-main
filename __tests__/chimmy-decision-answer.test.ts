@@ -60,6 +60,18 @@ describe('shared consequential-answer contract', () => {
     expect(out?.gap?.remedy).not.toContain('Sync')
     expect(h.lineup).not.toHaveBeenCalled()
   })
+  it('a league whose player ids cannot be matched is not sent round a re-sync loop', async () => {
+    h.waiver.mockResolvedValue({ kind: 'waiver', status: 'unresolved', reason: 'roster_ids_unreadable', detail: "This league's player ids can't be matched to ours yet." })
+    const out = await prepareChimmyDecisionAnswer({ question: 'Should I add Reed and drop Brown?', leagueId: 'l1', userId: 'u1' })
+    expect(out).toMatchObject({ status: 'needs_data', gap: { code: 'roster_ids_unreadable' } })
+    expect(out?.gap?.remedy).toContain("can't be matched to ours yet")
+    expect(out?.gap?.remedy).not.toMatch(/^Sync /)
+  })
+  it('CONTROL: any other unresolved scenario still gets the sync remedy', async () => {
+    h.waiver.mockResolvedValue({ kind: 'waiver', status: 'unresolved', reason: 'drop_not_on_roster', detail: 'Brown is not on your roster.' })
+    const out = await prepareChimmyDecisionAnswer({ question: 'Should I add Reed and drop Brown?', leagueId: 'l1', userId: 'u1' })
+    expect(out?.gap?.remedy).toMatch(/^Sync league settings and rosters/)
+  })
   it('keeps engine picks and projections in the answer, without a model verdict', async () => {
     h.start.mockResolvedValue({ kind: 'start_sit', status: 'ready', week: { week: 4, season: '2026' }, contested: true,
       startPlayerId: 'a', options: [{ playerId: 'a', name: 'Chase', points: 20, lineupIfStarted: 120, inBestLineup: true },
@@ -83,9 +95,25 @@ describe('shared consequential-answer contract', () => {
     expect(out).toMatchObject({ status: 'needs_data', gap: { code: 'engine_unavailable' } })
     expect(out?.answer).not.toContain('private database')
   })
-  it('does not guess an add or FAAB bid when no move was resolved', async () => {
+  /*
+   * It never guessed a bid, and still does not. But it used to REFUSE ("name the player to add and
+   * drop"), a free dead end for a strategy question. It now steps aside (null), so the full answer
+   * path takes the question with the roster, waiver-pool and FAAB tools (2026-09-28).
+   */
+  it('hands a FAAB question that names no move to the full answer, instead of refusing it', async () => {
     const out = await prepareChimmyDecisionAnswer({ question: 'How much FAAB should I bid?', leagueId: 'l1', userId: 'u1' })
+    expect(out).toBeNull()
+    expect(h.waiver).toHaveBeenCalled()
+  })
+  it('still answers a NAMED waiver move the engine could not resolve, precisely and free', async () => {
+    h.waiver.mockResolvedValue({ kind: 'waiver', status: 'unresolved', reason: 'add_rostered', detail: 'Jaylen Warren is already on a roster.' })
+    const out = await prepareChimmyDecisionAnswer({ question: 'Should I pick up Jaylen Warren?', leagueId: 'l1', userId: 'u1' })
+    expect(out).toMatchObject({ status: 'needs_data', gap: { code: 'add_rostered' } })
+  })
+  it('still asks a trade question to name its sides', async () => {
+    const out = await prepareChimmyDecisionAnswer({ question: 'Should I make a trade?', leagueId: 'l1', userId: 'u1' })
     expect(out).toMatchObject({ status: 'needs_data', gap: { code: 'decision_inputs_required' } })
+    expect(out?.answer).toContain('Name what you give and receive')
   })
   it('keeps trade discovery available with engine-generated offers and explicit limits', async () => {
     h.finder.mockResolvedValue({ status: 'ready', you: { teamName: 'My team' }, ideas: [{ partnerTeam: 'Partner', give: [{ name: 'Chase' }], get: [{ name: 'Jefferson' }], giveTotal: 100, getTotal: 101, fairness: 'balanced', why: ['Fits a WR need.'], sendable: true }] })

@@ -182,7 +182,8 @@ export function applyIsotonicMap(rawProbability: number, points: IsotonicBinPoin
  * Computes and stores the isotonic calibration map from paired prediction/outcome data.
  * IMPORTANT: TradeOfferEvent.acceptProb stores the raw logistic model output (with b0
  * calibration but WITHOUT isotonic calibration). Isotonic calibration is applied post-hoc
- * in buildAcceptModel (core-engine.ts) and calibrateAcceptProbability (accept-calibration.ts).
+ * in calibrateAcceptProbability (accept-calibration.ts). (core-engine.ts, which also applied it,
+ * was deleted 2026-09-26: it had no importers.)
  * This ensures the isotonic map is always fitted on pre-isotonic predictions, avoiding
  * circular calibration.
  */

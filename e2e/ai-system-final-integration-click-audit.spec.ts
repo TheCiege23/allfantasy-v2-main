@@ -317,7 +317,7 @@ test.describe('@ai ai system final integration click audit', () => {
     await mockWaiverApis(page, leagueId)
 
     await page.goto('/e2e/waiver-wire-live')
-    await expect(page.getByTestId('waiver-ai-help-link')).toContainText('Get AI waiver help')
+    await expect(page.getByTestId('waiver-ai-help-link')).toContainText("Get Chimmy's waiver help")
     await expect(page.getByTestId('waiver-ai-help-link')).toHaveAttribute('href', /\/messages\?tab=ai/)
     await expect(page.getByTestId('waiver-ai-engine-explanation-toggle')).toBeEnabled()
 
@@ -354,7 +354,7 @@ test.describe('@ai ai system final integration click audit', () => {
 
     await page.goto('/trade-evaluator')
     await fillAndEvaluateTrade(page)
-    await expect(page.getByTestId('trade-ai-explanation-link')).toContainText('Discuss in AI Chat')
+    await expect(page.getByTestId('trade-ai-explanation-link')).toContainText('Discuss with Chimmy')
     await expect(page.getByTestId('trade-ai-explanation-link')).toHaveAttribute('href', /\/messages\?tab=ai/)
     await expect(page.getByTestId('trade-ai-explanation-link')).toHaveAttribute('href', /insightType=trade/)
 

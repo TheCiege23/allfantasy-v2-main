@@ -24,11 +24,14 @@ import { getSeasonBoard, getSeasonStatsBoard } from '@/lib/sports-data/sleeperMa
 import { getMarketValues, playerValue } from '@/lib/trade-intel/marketValueService'
 
 const SLEEPER = 'https://api.sleeper.app/v1'
-const CACHE_PREFIX = 'waiver-intel:v1:'
+/* v2: targets carry `unavailable` — a v1 payload would keep an IR player unflagged for its hour. */
+const CACHE_PREFIX = 'waiver-intel:v2:'
 const CACHE_TTL_MS = 60 * 60 * 1000 // 1h — waivers move faster than trades
 const MAX_CHAIN = 12
 const MAX_WEEKS = 18
 const BID_CAP_PCT = 0.6
+/** Available players quoted a bid in `bidQuotes` — deep enough to cover a lineup board's adds. */
+const BID_QUOTE_POOL = 80
 
 async function j<T>(path: string): Promise<T | null> {
   try {
@@ -87,6 +90,13 @@ export type WaiverTarget = {
   fillsSlots: string[]
   suggestedBid: number | null
   reasoning: string[]
+  /**
+   * Set when he cannot play THIS week — ruled out (IR, out, suspended) or his club is on bye. The bid
+   * stays: a stash is a real move in a dynasty or keeper league. But he is ranked after everyone who
+   * can play, and the row says why, so a manager trying to survive one week is never handed a $600
+   * suggestion on a player who cannot help him (Jordan Mason, IR after thumb surgery, 2026-10-03).
+   */
+  unavailable?: { kind: 'ruled_out'; status: string } | { kind: 'bye' }
 }
 export type WaiverIntelPayload = {
   version: 1
@@ -102,8 +112,33 @@ export type WaiverIntelPayload = {
     recent: WinningBid[]
   }
   targets: WaiverTarget[]
+  /**
+   * The same suggested bid as `targets[].suggestedBid`, by the same rule and cap, for a deeper pool
+   * of available players (Sleeper id → dollars). Lets the Waivers screen's lineup list show ONE bid
+   * source beside every add it ranks, instead of a second model or nothing. Absent on payloads
+   * cached before it existed, and when there is no budget or value chart.
+   */
+  bidQuotes?: Record<string, number>
   formulaNotes: string[]
   missing: string[]
+}
+
+/**
+ * Who among these players cannot play in the week being played, and why — through the shared reader,
+ * so this list and the waiver board agree. Fails open: an unreadable week or a failed read flags no
+ * one, which is the list as it was.
+ */
+async function readAbsences(sleeperIds: readonly string[]): Promise<Map<string, NonNullable<WaiverTarget['unavailable']>>> {
+  try {
+    const { latestProjectionWeek } = await import('@/lib/core-app/playerProjections')
+    const at = await latestProjectionWeek()
+    if (!at || sleeperIds.length === 0) return new Map()
+    const { loadAbsencesBySport } = await import('@/lib/core-app/unavailableStarters')
+    const bySport = await loadAbsencesBySport({ sleeperIds, sports: ['NFL'], season: Number(at.season), week: at.week })
+    return bySport.get('NFL') ?? new Map()
+  } catch {
+    return new Map()
+  }
 }
 
 function quantile(sorted: number[], q: number): number | null {
@@ -208,19 +243,29 @@ async function buildWaiverIntel(
   // Targets: best available by market value, needs-tagged, bid-suggested.
   const anchor = values?.faab.anchorValue ?? null
   const targets: WaiverTarget[] = []
+  const bidQuotes: Record<string, number> = {}
+  const bidFor = (v: number): number | null =>
+    budget != null && anchor != null && anchor > 0
+      ? Math.max(1, Math.min(Math.round(budget * BID_CAP_PCT), Math.round((v / anchor) * budget)))
+      : null
   if (board && values) {
-    const candidates = Object.values(board.players)
+    const valued = Object.values(board.players)
       .filter((p) => !rostered.has(p.playerId) && p.position && p.position !== 'DEF')
       .map((p) => ({ p, v: playerValue(values, p.playerId) }))
       .filter((x): x is { p: (typeof x)['p']; v: number } => x.v != null && x.v > 0)
       .sort((a, b) => b.v - a.v)
-      .slice(0, 10)
+    for (const { p, v } of valued.slice(0, BID_QUOTE_POOL)) {
+      const q = bidFor(v)
+      if (q != null) bidQuotes[p.playerId] = q
+    }
+    const candidates = valued.slice(0, 10)
+    const absences = await readAbsences(candidates.map(({ p }) => p.playerId))
     for (const { p, v } of candidates) {
+      const absence = absences.get(p.playerId)
       const fills = openSlots.filter((slot) => (SLOT_ACCEPTS[slot] ?? []).includes(p.position ?? ''))
-      let suggestedBid: number | null = null
+      const suggestedBid: number | null = bidFor(v)
       const reasoning: string[] = [`market value ${v.toLocaleString()} (${values.mode} chart)`]
-      if (budget != null && anchor != null && anchor > 0) {
-        suggestedBid = Math.max(1, Math.min(Math.round(budget * BID_CAP_PCT), Math.round((v / anchor) * budget)))
+      if (suggestedBid != null) {
         reasoning.push(`suggested = min(${Math.round(BID_CAP_PCT * 100)}% of $${budget}, $${budget} × value/anchor)`)
       }
       if (sortedBids.length > 0) {
@@ -229,6 +274,13 @@ async function buildWaiverIntel(
         )
       }
       if (fills.length > 0) reasoning.push(`fills your open ${fills.join(' / ')} slot`)
+      if (absence) {
+        reasoning.unshift(
+          absence.kind === 'bye'
+            ? 'on bye this week — he cannot score for you until next week'
+            : `${absence.status} — he cannot play this week, so any bid is a stash`,
+        )
+      }
       targets.push({
         playerId: p.playerId,
         name: p.name,
@@ -238,10 +290,16 @@ async function buildWaiverIntel(
         fillsSlots: fills,
         suggestedBid,
         reasoning,
+        ...(absence ? { unavailable: absence } : {}),
       })
     }
-    // Needs first, then raw value.
-    targets.sort((a, b) => (b.fillsSlots.length > 0 ? 1 : 0) - (a.fillsSlots.length > 0 ? 1 : 0) || (b.marketValue ?? 0) - (a.marketValue ?? 0))
+    // Who can play this week first, then needs, then raw value.
+    targets.sort(
+      (a, b) =>
+        (a.unavailable ? 1 : 0) - (b.unavailable ? 1 : 0) ||
+        (b.fillsSlots.length > 0 ? 1 : 0) - (a.fillsSlots.length > 0 ? 1 : 0) ||
+        (b.marketValue ?? 0) - (a.marketValue ?? 0),
+    )
   }
 
   return {
@@ -258,6 +316,7 @@ async function buildWaiverIntel(
       recent: bids.slice(0, 6),
     },
     targets,
+    ...(Object.keys(bidQuotes).length > 0 ? { bidQuotes } : {}),
     /*
      * Shown to the manager word for word (components/decide/WaiverIntel.tsx), so it is written for
      * them. `values.faab.formula` states the same rule for the model — Chimmy's grounding and the

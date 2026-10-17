@@ -33,7 +33,7 @@ function StatChip({ label, value, tone }: { label: string; value: number; tone?:
     "border-white/10 bg-white/[0.04] text-white/70"
   return (
     <div className={`rounded-xl border px-3 py-2 ${toneClass}`}>
-      <p className="text-[10px] font-black uppercase tracking-[0.14em] opacity-70">{label}</p>
+      <p className="text-[11px] font-black uppercase tracking-[0.14em] opacity-70">{label}</p>
       <p className="mt-1 text-lg font-black">{value}</p>
     </div>
   )
@@ -143,7 +143,7 @@ export function PlatformOsOperatorPanel() {
 
           {/* ── Trend coverage detail ───────────────────────────────────────────────────── */}
           <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3 text-xs text-white/60">
-            <p className="mb-1 text-[10px] font-black uppercase tracking-[0.14em] text-white/40">Trend coverage</p>
+            <p className="mb-1 text-[11px] font-black uppercase tracking-[0.14em] text-white/40">Trend coverage</p>
             <p data-testid="platform-os-trend-coverage">
               {snapshot.trendCoverage.available} available · {snapshot.trendCoverage.insufficientHistory} insufficient history ·{" "}
               {snapshot.trendCoverage.noSnapshots} no snapshots · {snapshot.trendCoverage.unavailable} unavailable
@@ -152,7 +152,7 @@ export function PlatformOsOperatorPanel() {
 
           {/* ── Attention queue ─────────────────────────────────────────────────────────── */}
           <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
-            <p className="mb-2 text-[10px] font-black uppercase tracking-[0.14em] text-white/40">
+            <p className="mb-2 text-[11px] font-black uppercase tracking-[0.14em] text-white/40">
               Attention queue ({snapshot.attentionQueue.length})
             </p>
             {snapshot.attentionQueue.length === 0 ? (

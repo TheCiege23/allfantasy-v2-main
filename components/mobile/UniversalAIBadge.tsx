@@ -77,7 +77,7 @@ export default function UniversalAIBadge({
     return (
       <div className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-lg ${config.bg} border ${config.border}`}>
         <Icon className={`w-3 h-3 ${config.text}`} />
-        <span className={`text-[10px] font-semibold uppercase tracking-wide ${config.text}`}>
+        <span className={`text-[11px] font-semibold uppercase tracking-wide ${config.text}`}>
           {config.label}
         </span>
       </div>
@@ -99,7 +99,7 @@ export default function UniversalAIBadge({
           return (
             <span
               key={`${chip.type}-${i}`}
-              className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium border ${colors.bg} ${colors.text} ${colors.border}`}
+              className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium border ${colors.bg} ${colors.text} ${colors.border}`}
             >
               {chip.label}
             </span>

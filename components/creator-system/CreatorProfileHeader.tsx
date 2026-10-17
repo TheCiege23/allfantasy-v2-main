@@ -134,7 +134,10 @@ export function CreatorProfileHeader({
         )}
 
         <div className="flex flex-wrap items-center gap-3">
-          {creator.websiteUrl && (
+          {/* Only http(s): the URL is creator-supplied, and React 18 still renders a
+              `javascript:` href. Rows written before the write path validated are
+              skipped here rather than trusted. */}
+          {creator.websiteUrl && /^https?:\/\//i.test(creator.websiteUrl) && (
             <a
               href={creator.websiteUrl}
               target="_blank"

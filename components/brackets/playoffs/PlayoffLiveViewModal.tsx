@@ -10,6 +10,7 @@ import {
 } from "@/lib/playoffs/playoffBracketGraph"
 import { teamColors } from "@/lib/playoffs/playoffTeamColors"
 import { isOfficialTeamName } from "@/lib/playoffs/playoffBracketProjection"
+import { formatLabel } from "@/lib/playoffs/singleGame"
 
 /**
  * Series detail.
@@ -175,7 +176,7 @@ export default function PlayoffLiveViewModal({ series, sport, onClose }: Playoff
 
           <dl style={{ marginTop: 16, display: "grid", gap: 8, margin: 0 }}>
             {[
-              ["Format", `Best of ${series.bestOf}`],
+              ["Format", formatLabel(series.bestOf)],
               ["Venue", series.venue ?? "—"],
               ["Broadcast", series.broadcastNetwork ?? "—"],
               ["Next game", series.nextGameDateLabel ?? "—"],

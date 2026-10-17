@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
       needsExileScore: gs.needsExileScore,
       needsPhaseAdvance: gs.needsPhaseAdvance,
     },
-    raw: gs,
+
   })
 }
 

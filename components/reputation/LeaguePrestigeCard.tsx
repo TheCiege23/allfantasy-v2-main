@@ -40,7 +40,7 @@ export function LeaguePrestigeCard({
         </div>
         {reputation.verifiedLeague && (
           <span
-            className="shrink-0 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider"
+            className="shrink-0 inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider"
             style={{
               background: "rgba(34,197,94,0.12)",
               color:      "rgb(134,239,172)",
@@ -84,7 +84,7 @@ export function LeaguePrestigeCard({
         )}
       </div>
 
-      <p className="text-[10px] italic" style={{ color: "var(--muted2)" }}>
+      <p className="text-[11px] italic" style={{ color: "var(--muted2)" }}>
         Prestige computed from verified activity · No member history shown
       </p>
     </div>

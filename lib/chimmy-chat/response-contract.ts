@@ -57,7 +57,11 @@ type ChimmyContractBase = {
 export type ChimmyTradeAnswerContract = ChimmyContractBase & {
   answerType: 'trade'
   score: number
-  grade: string
+  /*
+   * No `grade` (design step 7, 2026-09-27). It was a letter derived from Chimmy's own confidence score —
+   * a private A..D scale on every trade answer, beside the one grade the answer text quotes. A trade's
+   * letter comes from the one trade engine, in the answer and its receipt, and nowhere else.
+   */
   recommendation: 'accept' | 'reject' | 'counter' | 'hold'
   reasons: string[]
   risks: string[]
@@ -140,7 +144,6 @@ const FollowUpSchema = z.object({
 const TradeSchema = z.object({
   answerType: z.literal('trade'),
   score: z.number().min(0).max(100),
-  grade: z.string().min(1),
   recommendation: z.enum(['accept', 'reject', 'counter', 'hold']),
   reasons: z.array(z.string().min(1)).min(1),
   risks: z.array(z.string().min(1)).min(1),
@@ -233,18 +236,6 @@ function toSentenceList(...values: Array<string | null | undefined>): string[] {
     .slice(0, 4)
 
   return out.length > 0 ? out : ['Context signals support this recommendation.']
-}
-
-function scoreToGrade(score: number): string {
-  if (score >= 93) return 'A'
-  if (score >= 90) return 'A-'
-  if (score >= 87) return 'B+'
-  if (score >= 83) return 'B'
-  if (score >= 80) return 'B-'
-  if (score >= 77) return 'C+'
-  if (score >= 73) return 'C'
-  if (score >= 70) return 'C-'
-  return 'D'
 }
 
 function inferRecommendation(text: string): 'accept' | 'reject' | 'counter' | 'hold' {
@@ -386,7 +377,6 @@ export function buildChimmyAnswerContract(args: {
     contract = {
       answerType,
       score,
-      grade: scoreToGrade(score),
       recommendation: inferRecommendation(`${structure?.shortAnswer ?? ''} ${structure?.recommendedAction ?? ''}`),
       reasons,
       risks,

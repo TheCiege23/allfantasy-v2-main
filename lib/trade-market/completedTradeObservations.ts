@@ -1,6 +1,7 @@
 import type { PrismaClient } from '@prisma/client'
 
 import { FIRST_ROUND_IN_MARKET_UNITS, pickRoundShare } from '@/lib/pick-curve'
+import { authoritativeRowsBySleeperId } from '@/lib/player-match/authoritativePlayerRow'
 import { isCentred } from './sinceSeasonArg'
 
 /**
@@ -135,16 +136,22 @@ export async function gatherCompletedTradeObservations(args: {
   const chart = new Map<string, number>()
   for (const r of snapshots) if (!chart.has(r.sleeperId)) chart.set(r.sleeperId, r.value)
 
+  /*
+   * 🛑 THE NEWEST ROW IS NOT THE PLAYER (2026-10-12). Every source stamps the same `sleeperId`,
+   * and TheSportsDB's rows got theirs by NAME, so "most recently updated wins" labelled TE E.J.
+   * Jenkins (11304) "Elgton Jenkins G" in the trade market. The Sleeper row names the id; another
+   * row may only fill a gap it agrees with (`lib/player-match/authoritativePlayerRow.ts`).
+   */
   const players = await args.prisma.sportsPlayer.findMany({
     where: { sleeperId: { in: [...ids] } },
-    select: { sleeperId: true, name: true, position: true, updatedAt: true },
-    orderBy: { updatedAt: 'desc' },
+    select: { sleeperId: true, name: true, position: true, source: true, fetchedAt: true },
+    orderBy: { fetchedAt: 'desc' },
   })
+  const authoritative = authoritativeRowsBySleeperId(players)
   const meta = new Map<string, { name: string; position: string | null }>()
-  for (const r of players) {
-    if (!r.sleeperId) continue
-    const cur = meta.get(r.sleeperId)
-    if (!cur || (!cur.position && r.position)) meta.set(r.sleeperId, { name: r.name, position: r.position })
+  for (const id of ids) {
+    const r = authoritative.get(id.trim().toLowerCase())
+    if (r) meta.set(id, { name: r.name, position: r.position ?? null })
   }
 
   const byPlayer: CompletedTradeGather['byPlayer'] = new Map()

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, type JSX } from "react"
 import { useRouter } from "next/navigation"
 import { signIn } from "next-auth/react"
 import {
@@ -114,7 +114,7 @@ export default function NocturneOAuthGrid({
   }
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }} data-hide-in-ios-app>
       {PROVIDERS.map(({ provider, label, glyph: Glyph }) => {
         const enabled = isSocialProviderEnabled(provider)
         const isApple = provider === "apple"

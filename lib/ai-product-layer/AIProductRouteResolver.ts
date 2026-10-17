@@ -33,7 +33,7 @@ const FEATURE_ROUTES: Record<string, string> = {
   trade_analyzer: '/trade-evaluator',
   trade_evaluator: '/trade-evaluator',
   waiver_ai: '/waiver-ai',
-  rankings: '/rankings',
+  rankings: '/core/rankings?scope=league',
   draft_helper: '/mock-draft',
   graph_insight: '/app/simulation-lab',
   psychological: `${AF_LEGACY}?tab=overview`,

@@ -137,7 +137,7 @@ export function TradeBuilder({ leagueId }: TradeBuilderProps) {
           </div>
           <div className="leading-tight">
             <p className="text-sm font-semibold">Trade Center</p>
-            <p className="text-[10px] text-white/65">
+            <p className="text-[11px] text-white/65">
               Build and submit trade offers from live {leagueSport} league rosters.
             </p>
           </div>
@@ -248,7 +248,7 @@ export function TradeBuilder({ leagueId }: TradeBuilderProps) {
                 style={{ width: `${Math.max(4, Math.min(96, fairnessScore))}%` }}
               />
             </div>
-            <p className="mt-1 text-[10px] text-white/60">
+            <p className="mt-1 text-[11px] text-white/60">
               This balance tracks selected asset counts only. Final review should use Trade Analyzer.
             </p>
             <button
@@ -260,7 +260,7 @@ export function TradeBuilder({ leagueId }: TradeBuilderProps) {
               {saving ? "Submitting..." : "Submit trade offer"}
             </button>
             {error && (
-              <p className="mt-1 text-[10px] text-red-300">
+              <p className="mt-1 text-[11px] text-red-300">
                 {error}
               </p>
             )}
@@ -310,15 +310,15 @@ function RosterSide({
               }`}
             >
               <div className="flex items-center gap-2">
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white/10 text-[10px] font-semibold">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white/10 text-[11px] font-semibold">
                   {p.pos}
                 </span>
                 <div className="min-w-0">
                   <p className="truncate font-medium">{p.name}</p>
-                  <p className="text-[10px] text-white/60">{p.team || "FA"}</p>
+                  <p className="text-[11px] text-white/60">{p.team || "FA"}</p>
                 </div>
               </div>
-              <span className="text-[10px] text-emerald-200">{p.id.slice(0, 8)}</span>
+              <span className="text-[11px] text-emerald-200">{p.id.slice(0, 8)}</span>
             </button>
           )
         })}
@@ -339,7 +339,7 @@ function RosterSide({
               }`}
             >
               <span>{pick.label}</span>
-              <span className="text-[10px] text-indigo-200">Pick</span>
+              <span className="text-[11px] text-indigo-200">Pick</span>
             </button>
           )
         })}
@@ -360,11 +360,11 @@ function SummaryList({ players, picks, selectedPlayers, selectedPicks }: Summary
   const anyPicks = selectedPicks.length > 0
 
   if (!anyPlayers && !anyPicks) {
-    return <p className="text-[10px] text-white/55">Nothing selected.</p>
+    return <p className="text-[11px] text-white/55">Nothing selected.</p>
   }
 
   return (
-    <ul className="space-y-0.5 text-[10px] text-white/80">
+    <ul className="space-y-0.5 text-[11px] text-white/80">
       {players
         .filter((p) => selectedPlayers.includes(p.id))
         .map((p) => (

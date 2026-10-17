@@ -49,7 +49,7 @@ export function TeamSummaryBar({
           <span>
             Pipeline: <span className="font-semibold text-white/80">{pipeline}</span> prospects in system
           </span>
-          <span className="rounded-full border border-white/[0.08] px-2 py-0.5 text-[10px] uppercase tracking-wide text-white/60">
+          <span className="rounded-full border border-white/[0.08] px-2 py-0.5 text-[11px] uppercase tracking-wide text-white/60">
             {label}
           </span>
         </div>
@@ -113,9 +113,9 @@ export function TeamSummaryBar({
             >
               {pipeBusy ? 'Analyzing pipeline…' : 'AI pipeline health'}
             </button>
-            {pipeErr ? <p className="text-[10px] text-amber-200/90">{pipeErr}</p> : null}
+            {pipeErr ? <p className="text-[11px] text-amber-200/90">{pipeErr}</p> : null}
             {pipeText ? (
-              <p className="text-[10px] leading-snug text-white/55">{pipeText}</p>
+              <p className="text-[11px] leading-snug text-white/55">{pipeText}</p>
             ) : null}
           </div>
         ) : null}
@@ -142,7 +142,7 @@ function Chip({
     >
       <span className="text-[16px]">{emoji}</span>
       <div className="min-w-0">
-        <p className="truncate text-[10px] uppercase tracking-wide text-white/45">{label}</p>
+        <p className="truncate text-[11px] uppercase tracking-wide text-white/45">{label}</p>
         <p className="text-[15px] font-bold tabular-nums" style={{ color }}>
           {value}
         </p>

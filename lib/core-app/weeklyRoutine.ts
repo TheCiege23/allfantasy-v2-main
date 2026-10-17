@@ -41,7 +41,24 @@ export type RoutineStep = {
   today: boolean
   state: 'done' | 'open' | 'unknown'
   summary: string | null
+  /**
+   * What `summary` was built from, so the card can say it in the reader's language (2026-10-04).
+   * `summary` stays the English as written; lib/core-app/dashboard3aCopy.ts rebuilds the Spanish from
+   * this at render. Absent exactly when `summary` is null — or on a payload built before it existed,
+   * which then renders whole English.
+   */
+  summaryParts?: RoutineSummaryParts
 }
+
+export type RoutineSummaryParts =
+  | { kind: 'results'; season: number; week: number; wins: number; losses: number }
+  | { kind: 'no-results' }
+  | { kind: 'adds'; count: number }
+  | { kind: 'no-adds' }
+  | { kind: 'in-doubt'; count: number }
+  | { kind: 'none-in-doubt' }
+  | { kind: 'games'; games: number; coinFlips: number }
+  | { kind: 'recap'; week: number; wins: number; losses: number; topScorer: { name: string; points: number } | null }
 
 export type WeeklyRecap = {
   season: number
@@ -52,6 +69,12 @@ export type WeeklyRecap = {
   closestLoss: { leagueName: string; margin: number } | null
   /** Your highest-scoring STARTER that week, from the platform's own weekly scores. */
   topScorer: { name: string; points: number; leagueName: string } | null
+  /**
+   * True when some of that week's matchups are not final yet — the only case in which "Monday night
+   * games may still change these" is true. It was printed under every recap, including week 2's
+   * on the Monday of week 3, when week 2 had been final for a week (production audit 2026-09-28).
+   */
+  pending: boolean
 }
 
 /** A weekly award you won in the last played week — a shareable moment (item 9, 2026-09-14). */
@@ -117,6 +140,7 @@ export function recapFrom(week: WeekAllData | null, topScorer: WeeklyRecap['topS
     biggestWin: biggest ? { leagueName: biggest.leagueName, margin: margin(biggest) } : null,
     closestLoss: closest ? { leagueName: closest.leagueName, margin: margin(closest) } : null,
     topScorer,
+    pending: week.rows.some((r) => r.completed === false),
   }
 }
 
@@ -137,25 +161,34 @@ export function buildWeeklyRoutine(input: {
   const today = routineDayFor(input.now, input.timeZone)
   const recap = recapFrom(input.lastWeek, input.topScorer)
 
-  const detail: Record<RoutineStepKey, Pick<RoutineStep, 'state' | 'summary'>> = {
+  const detail: Record<RoutineStepKey, Pick<RoutineStep, 'state' | 'summary' | 'summaryParts'>> = {
     results: recap
       ? {
           state: 'done',
           summary: `${recap.season} week ${recap.week}: ${recap.wins}-${recap.losses} across ${plural(recap.wins + recap.losses, 'league')}`,
+          summaryParts: { kind: 'results', season: recap.season, week: recap.week, wins: recap.wins, losses: recap.losses },
         }
-      : { state: 'unknown', summary: 'No scored results of yours on file yet.' },
+      : { state: 'unknown', summary: 'No scored results of yours on file yet.', summaryParts: { kind: 'no-results' } },
     waivers:
       input.addsThisWeek == null
         ? { state: 'unknown', summary: null }
         : input.addsThisWeek > 0
-          ? { state: 'done', summary: `You made ${plural(input.addsThisWeek, 'add')} this week.` }
-          : { state: 'open', summary: 'No adds of yours on file this week.' },
+          ? {
+              state: 'done',
+              summary: `You made ${plural(input.addsThisWeek, 'add')} this week.`,
+              summaryParts: { kind: 'adds', count: input.addsThisWeek },
+            }
+          : { state: 'open', summary: 'No adds of yours on file this week.', summaryParts: { kind: 'no-adds' } },
     lineups:
       input.startersInDoubt == null
         ? { state: 'unknown', summary: null }
         : input.startersInDoubt > 0
-          ? { state: 'open', summary: `${plural(input.startersInDoubt, 'starter')} may not play.` }
-          : { state: 'done', summary: 'No starters of yours in doubt.' },
+          ? {
+              state: 'open',
+              summary: `${plural(input.startersInDoubt, 'starter')} may not play.`,
+              summaryParts: { kind: 'in-doubt', count: input.startersInDoubt },
+            }
+          : { state: 'done', summary: 'No starters of yours in doubt.', summaryParts: { kind: 'none-in-doubt' } },
     gameday: (() => {
       const s = input.schedule
       const games = s ? s.coinFlips.length + s.leaning.length + s.unprojected.length : 0
@@ -163,6 +196,7 @@ export function buildWeeklyRoutine(input: {
       return {
         state: 'open' as const,
         summary: `${plural(games, 'matchup')} this week${s.coinFlips.length > 0 ? ` · ${plural(s.coinFlips.length, 'coin flip')}` : ''}.`,
+        summaryParts: { kind: 'games' as const, games, coinFlips: s.coinFlips.length },
       }
     })(),
     recap: recap
@@ -174,6 +208,13 @@ export function buildWeeklyRoutine(input: {
           ]
             .filter(Boolean)
             .join(' · '),
+          summaryParts: {
+            kind: 'recap',
+            week: recap.week,
+            wins: recap.wins,
+            losses: recap.losses,
+            topScorer: recap.topScorer ? { name: recap.topScorer.name, points: recap.topScorer.points } : null,
+          },
         }
       : { state: 'unknown', summary: null },
   }
@@ -273,7 +314,7 @@ async function topStarterFor(
   const who = composePlayerIdentities(
     await prisma.sportsPlayer.findMany({
       where: { sleeperId: top.playerId },
-      select: { sleeperId: true, name: true, position: true, team: true, sport: true, imageUrl: true },
+      select: { sleeperId: true, name: true, position: true, team: true, sport: true, imageUrl: true, source: true, fetchedAt: true },
     }),
   ).get(top.playerId)
   // An unnamed top scorer is left out rather than replaced by the next NAMED one, which would not be the top.

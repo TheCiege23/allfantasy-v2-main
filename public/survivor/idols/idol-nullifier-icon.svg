@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <radialGradient id="idol-nullifier-i-aura" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#84cc16" stop-opacity="0.6"/>
+      <stop offset="0.55" stop-color="#65a30d" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#365314" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="idol-nullifier-i-obs" gradientUnits="userSpaceOnUse" x1="8" y1="4" x2="56" y2="60">
+      <stop offset="0" stop-color="#6b7383"/>
+      <stop offset="0.35" stop-color="#2b3039"/>
+      <stop offset="1" stop-color="#08090c"/>
+    </linearGradient>
+    <linearGradient id="idol-nullifier-i-bone" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fffbef"/>
+      <stop offset="0.5" stop-color="#e2d3b0"/>
+      <stop offset="1" stop-color="#8a7550"/>
+    </linearGradient>
+    <g id="idol-nullifier-i-sil">
+      <path d="M19,12 L23,5 L27,9 L32,4 L37,9 L41,5 L45,12 L46,30 Q45,35 40,36 L24,36 Q19,35 18,30 Z"/>
+      <path d="M14,40 Q32,35 50,40 Q56,42 57,48 L57,59 L7,59 L7,48 Q8,42 14,40 Z"/>
+    </g>
+    <g id="idol-nullifier-i-bust">
+      <use xlink:href="#idol-nullifier-i-sil" fill="url(#idol-nullifier-i-obs)" stroke="#0a0b0d" stroke-width="2.6" stroke-linejoin="round"/>
+      <path d="M20,13 L21,29" stroke="#c6cfdd" stroke-width="1.3" opacity="0.7" stroke-linecap="round"/>
+      <path d="M9.5,48 Q11,43 16,42" stroke="#c6cfdd" stroke-width="1.3" opacity="0.6" stroke-linecap="round" fill="none"/>
+      <path d="M44.5,13 L45.5,30" stroke="#bef264" stroke-width="1.3" opacity="0.85" stroke-linecap="round"/>
+      <path d="M50,41 Q55.5,43 55.5,48 L55.5,58" stroke="#bef264" stroke-width="1.3" opacity="0.85" fill="none" stroke-linecap="round"/>
+      <path d="M21,19 L30,19 L29,23 L22,23 Z M43,19 L34,19 L35,23 L42,23 Z" fill="#050607"/>
+      <path d="M22.5,20 L28.5,20 L28,22 L23.2,22 Z M41.5,20 L35.5,20 L36,22 L40.8,22 Z" fill="#d9f99d"/>
+      <path d="M24,29 L40,29 L39,32.5 L25,32.5 Z" fill="#050607"/>
+    </g>
+    <clipPath id="idol-nullifier-i-l"><path d="M0,0 L32,0 L30,12 L34,22 L30,32 L34,42 L30,52 L32,64 L0,64 Z"/></clipPath>
+    <clipPath id="idol-nullifier-i-r"><path d="M64,0 L32,0 L30,12 L34,22 L30,32 L34,42 L30,52 L32,64 L64,64 Z"/></clipPath>
+    <path id="idol-nullifier-i-shard" d="M0,-4 Q-4,-6 -5,-2.5 Q-6.5,0 -5,2.5 Q-4,6 0,4 L6,2.5 L34,2.2 L37,4 L40,1 L50,0 L39,-2 L36,-3.5 L33,-2.2 L6,-2.5 Z"/>
+  </defs>
+  <circle cx="32" cy="32" r="31" fill="url(#idol-nullifier-i-aura)"/>
+  <ellipse cx="32" cy="61" rx="22" ry="2.4" fill="#000" opacity="0.5"/>
+  <path d="M32,6 L30,12 L34,22 L30,32 L34,42 L30,52 L32,58" stroke="#a3e635" stroke-width="5" fill="none" stroke-linejoin="round" opacity="0.8"/>
+  <g transform="translate(-2,0.5) rotate(-3 32 59)"><g clip-path="url(#idol-nullifier-i-l)"><use xlink:href="#idol-nullifier-i-bust"/></g></g>
+  <g transform="translate(2,0) rotate(3 32 59)"><g clip-path="url(#idol-nullifier-i-r)"><use xlink:href="#idol-nullifier-i-bust"/></g></g>
+  <path d="M32,7 L30,12 L34,22 L30,32 L34,42 L30,52 L32,57" stroke="#f7ffe0" stroke-width="1.3" fill="none" stroke-linejoin="round"/>
+  <g transform="translate(13,57) rotate(-45) scale(1,1.2)">
+    <use xlink:href="#idol-nullifier-i-shard" fill="url(#idol-nullifier-i-bone)" stroke="#120c06" stroke-width="2.2" stroke-linejoin="round"/>
+  </g>
+  <g transform="translate(51,57) rotate(-135) scale(1,-1.2)">
+    <use xlink:href="#idol-nullifier-i-shard" fill="url(#idol-nullifier-i-bone)" stroke="#120c06" stroke-width="2.2" stroke-linejoin="round"/>
+  </g>
+  <circle cx="32" cy="38" r="3.4" fill="#bef264" stroke="#120c06" stroke-width="1.6"/>
+</svg>

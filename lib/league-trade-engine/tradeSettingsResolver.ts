@@ -61,12 +61,26 @@ export function resolveLeagueTradeSettings(league: League): ResolvedLeagueTradeS
     num(comm.tradeProcessingDelayHours ?? ext.tradeProcessingDelayHours, 0),
   )
 
-  let tradesAllowed = !league.lockAllMoves && !league.bestBallMode
+  /*
+   * ⚠ "BEST BALL = NO TRADES" IS ALLFANTASY'S NATIVE DEFAULT, NOT A FACT ABOUT BEST BALL. Sleeper
+   * best-ball leagues trade. Since 2026-09-27 imports carry the provider's best-ball flag onto
+   * `bestBallMode` (ImportedLeagueCommitService.buildTier0LeagueColumnPatch), so this rule applies
+   * only to a league AllFantasy runs itself; an imported league's trades are the platform's call.
+   */
+  const platform = String((league as { platform?: string | null }).platform ?? '').trim().toLowerCase()
+  const nativeBestBall = Boolean(league.bestBallMode) && (platform === '' || platform === 'manual' || platform === 'allfantasy')
+  let tradesAllowed = !league.lockAllMoves && !nativeBestBall
   if (league.guillotineMode) {
     const g = (snap as Record<string, unknown>).guillotineSettings as { tradesAllowed?: boolean } | undefined
     tradesAllowed = tradesAllowed && Boolean(g?.tradesAllowed ?? false)
   }
-  if (league.bestBallMode && league.bbTradesEnabled === false) {
+  if (league.leagueVariant === 'survivor_guillotine') {
+    const raw = league.settings && typeof league.settings === 'object' && !Array.isArray(league.settings)
+      ? league.settings as Record<string, unknown> : {}
+    const survivorGuillotine = raw.survivorGuillotine as { tradesEnabled?: boolean } | undefined
+    tradesAllowed = tradesAllowed && survivorGuillotine?.tradesEnabled === true
+  }
+  if (nativeBestBall && league.bbTradesEnabled === false) {
     tradesAllowed = false
   }
 

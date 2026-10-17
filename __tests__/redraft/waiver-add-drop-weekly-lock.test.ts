@@ -12,6 +12,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 
 const findFirstLeague = vi.fn()
+const findUniqueLeague = vi.fn()
 const findFirstRoster = vi.fn()
 const findManyRoster = vi.fn()
 const leagueWaiverSettingsFindUnique = vi.fn()
@@ -19,7 +20,10 @@ const evaluateLegalityForProjectedRoster = vi.fn()
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
-    league: { findFirst: (...args: unknown[]) => findFirstLeague(...args) },
+    league: {
+      findFirst: (...args: unknown[]) => findFirstLeague(...args),
+      findUnique: (...args: unknown[]) => findUniqueLeague(...args),
+    },
     roster: {
       findFirst: (...args: unknown[]) => findFirstRoster(...args),
       findMany: (...args: unknown[]) => findManyRoster(...args),
@@ -67,6 +71,7 @@ describe('assertWaiverClaimEligibility — weekly lineup lock must not block ben
       lockAllMoves: false,
       lifecycleState: 'in_season',
     })
+    findUniqueLeague.mockResolvedValue({ settings: {} })
     findFirstRoster.mockResolvedValue({ id: 'roster-1', playerData: rosterPlayerData, faabRemaining: 100 })
     findManyRoster.mockResolvedValue([{ id: 'roster-1', playerData: rosterPlayerData }])
     leagueWaiverSettingsFindUnique.mockResolvedValue(null)

@@ -182,24 +182,39 @@ export async function decideTradeEvaluate(dco: TradeDCO, deps: TradeDecisionDeps
   const uncertainty = [...dco.uncertainty]
   const how_confident = howConfident(confidence, data_completeness, uncertainty)
 
-  const fairness = evaluation.fairnessScore ?? 0
-  const fairnessLabel = fairness >= 85 ? 'fair' : fairness >= 65 ? 'slightly uneven' : 'lopsided'
+  /*
+   * 🛑 NO LETTER IN THIS SENTENCE, AND NO SCORE WHEN THERE IS NONE (trade grade audit, 2026-10-09).
+   * It read "Trade graded ${grade}", printing the snapshot's own A+…F fairness letter — a scale on which
+   * an even deal is an A+ while the one grade every other surface shows calls it a C — and, when the
+   * snapshot withheld on partial coverage, "Trade graded null — lopsided (fairness 0/100)": the missing
+   * score defaulted to 0 and read as the most lopsided deal possible. The redraft modal showing this
+   * card already promises no letter grade.
+   */
+  const fairness = evaluation.fairnessScore
+  const scored = typeof fairness === 'number' && Number.isFinite(fairness)
+  const fairnessLabel = !scored ? null : fairness >= 85 ? 'fair' : fairness >= 65 ? 'slightly uneven' : 'lopsided'
   const leanLabel = evaluation.leanedTo === 'even' ? 'even' : evaluation.leanedTo === snapshot.sides[0]?.rosterId ? 'proposer' : 'receiver'
-  const what_happened = `Trade graded ${evaluation.grade} — ${fairnessLabel} (fairness ${fairness}/100).`
+  const what_happened = scored
+    ? `Value check: ${fairnessLabel} (fairness ${fairness}/100, where 100 is even).`
+    : 'Not graded — the values on file do not cover every asset in this trade.'
   const why_it_matters = illegal.length
     ? illegal[0].message
-    : evaluation.leanedTo === 'even'
-      ? 'Both sides receive near-equal deterministic value.'
-      : `Value leans toward the ${leanLabel} by ${Math.abs(evaluation.valueDifference ?? 0)}.`
+    : !scored
+      ? 'A missing value is not treated as worthless, so no verdict is given on part of the deal.'
+      : evaluation.leanedTo === 'even'
+        ? 'Both sides receive near-equal deterministic value.'
+        : `Value leans toward the ${leanLabel} by ${Math.abs(evaluation.valueDifference ?? 0)}.`
   const what_to_do = illegal.length
     ? illegal[0].message
     : blocked.length
       ? blocked[0].message
       : evaluation.reviewRecommended
         ? 'Commissioner review is recommended before this trade is accepted.'
-        : fairness >= 85
-          ? 'This trade is balanced — reasonable to accept.'
-          : `Consider a counter — the ${leanLabel} currently gains more value.`
+        : !scored
+          ? 'Review the assets yourself before accepting.'
+          : fairness >= 85
+            ? 'This trade is balanced — reasonable to accept.'
+            : `Consider a counter — the ${leanLabel} currently gains more value.`
 
   const decision: Decision<TradeEvaluation> = {
     decision_id: newId(),

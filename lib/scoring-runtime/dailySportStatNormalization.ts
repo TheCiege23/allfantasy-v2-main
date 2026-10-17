@@ -37,6 +37,8 @@
  * Resolve G-01 by committing a fixture (the contract's own `scripts/probe.sh`,
  * during a game), then reconcile these tables against it.
  */
+import { normalizeMlbGameStats } from './mlbStatNormalization'
+import { normalizeSoccerGameStats } from './soccerStatNormalization'
 
 type JsonRecord = Record<string, unknown>
 
@@ -79,7 +81,9 @@ const NBA_STAT_ALIASES: Readonly<Record<string, readonly string[]>> = {
   // one letter out, which scores every made three as nothing.
   threes: ['three_points_made', 'threes', 'tpm', 'fg3m', '3pm'],
   fgm: ['field_goals_made', 'fgm', 'FGM'], //                    measured: field_goals_made
-  ftm: ['free_throws_made', 'ftm', 'FTM'], //                    measured: free_throws_made
+  ftm: ['free_throws_made', 'ftm', 'FTM'],
+  fga: ['field_goals_attempted', 'fga', 'FGA'],
+  fta: ['free_throws_attempted', 'fta', 'FTA'],
 }
 
 /**
@@ -318,6 +322,13 @@ const DAILY_SPORT_NORMALIZERS: Readonly<Record<string, (raw: unknown) => Normali
   NBA: normalizeNbaGameStats,
   NHL: normalizeNhlGameStats,
   NCAAB: normalizeNcaabGameStats,
+  // Group-aware (batting vs pitching share field names) and measured against fixtures/live.MLB.json —
+  // see mlbStatNormalization.ts. Registering it lets the weekly sync score MLB once the season's
+  // opener is recorded (dailySportSeasonStarts.ts); without one, the sync declines and says so.
+  MLB: normalizeMlbGameStats,
+  // Measured against the stored production rows, not the contract (G-04 has no soccer fields) — see
+  // soccerStatNormalization.ts. Like MLB, a week scores only once its season opener is recorded.
+  SOCCER: normalizeSoccerGameStats,
 }
 
 export function isDailyStatSport(sport: string | null | undefined): boolean {

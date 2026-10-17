@@ -13,10 +13,12 @@ import { resolveSportForDynasty } from '@/lib/dynasty-engine/SportDynastyResolve
 import type { DynastyProjectionOutput } from '@/lib/dynasty-engine/types'
 import type { FuturePickAsset, PlayerDynastyAsset, TeamDynastyInputs } from '@/lib/dynasty-projection/types'
 import { requireLeagueApiAccess } from '@/lib/api/require-league-access'
+import { findSportsPlayersForLeague } from '@/lib/player-identity/findSportsPlayerByLeagueId'
 
 type LeagueLite = {
   id: string
   platformLeagueId: string | null
+  platform: string | null
   sport: string
   season: number | null
   isDynasty: boolean | null
@@ -308,6 +310,7 @@ async function resolveLeagueByAnyId(leagueId: string): Promise<LeagueLite | null
     select: {
       id: true,
       platformLeagueId: true,
+      platform: true,
       sport: true,
       season: true,
       isDynasty: true,
@@ -397,22 +400,12 @@ async function buildTeamInputsFromLeague(params: {
           },
         })
       : Promise.resolve([]),
-    playerIds.length
-      ? prisma.sportsPlayer.findMany({
-          where: {
-            sport: { in: [sportLower, sport] },
-            OR: [{ externalId: { in: playerIds } }, { sleeperId: { in: playerIds } }],
-          },
-          select: {
-            externalId: true,
-            sleeperId: true,
-            name: true,
-            position: true,
-            age: true,
-            status: true,
-          },
-        })
-      : Promise.resolve([]),
+    /*
+     * Roster ids are in the league PLATFORM's space. The old `externalId IN ids OR sleeperId IN ids`
+     * read a Sleeper id as a Rolling Insights id too, and RI's player of that number is a stranger
+     * whose age, position and injury status then priced this roster's dynasty value.
+     */
+    findSportsPlayersForLeague(sport, league.platform, playerIds),
     playerIds.length
       ? prisma.playerMetaTrend.findMany({
           where: {
@@ -426,11 +419,8 @@ async function buildTeamInputsFromLeague(params: {
 
   const nowYear = new Date().getFullYear()
   const playerById = new Map(players.map((p) => [p.id, p]))
-  const cachedById = new Map<string, (typeof cachedPlayers)[number]>()
-  for (const p of cachedPlayers) {
-    cachedById.set(p.externalId, p)
-    if (p.sleeperId) cachedById.set(p.sleeperId, p)
-  }
+  // Keyed by the roster id that asked — never re-keyed by a row's own `externalId`.
+  const cachedById = cachedPlayers
   const trendByPlayerId = new Map(trends.map((t) => [t.playerId, t.trendScore]))
   const futurePicksByTeam = buildFuturePicksByTeam({
     teams,

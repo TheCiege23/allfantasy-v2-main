@@ -12,10 +12,8 @@ const paramsSchema = worldCupChallengeParamsSchema.extend({
   teamId: z.string().min(1),
 })
 
-export async function GET(
-  request: Request,
-  { params: rawParams }: { params: unknown }
-) {
+export async function GET(request: Request, props: { params: Promise<unknown> }) {
+  const rawParams = await props.params
   const auth = await requireWorldCupApiUser(request)
   if (!auth.ok) return auth.response
 

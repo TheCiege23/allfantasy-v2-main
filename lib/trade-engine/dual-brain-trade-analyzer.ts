@@ -9,76 +9,18 @@ import {
   mergePeerReviews,
   type PeerReviewProviderResult,
   type PeerReviewConsensus,
-  TradeAnalysisSchema,
-  validateAndParseAnalysis,
-  scoreProviderResult,
-  mergeAnalyses,
-  type TradeAnalysis,
-  type ProviderResult,
-  type ConsensusAnalysis,
 } from "./trade-analysis-schema";
 
 export type TradeAiMode = "openai" | "grok" | "both" | "off";
-export type TradeAiPrimary = "openai" | "grok";
 
-/**
- * Strict JSON contract injected into every dual-brain trade analysis call.
- * Both OpenAI and Grok MUST return this exact shape.
+/*
+ * ⚠ `runDualBrainTradeAnalysis`, its JSON contract and its Grok news addendum were DELETED 2026-09-27
+ * (trade engine Phase 4). They had no caller anywhere, and they asked two models for their own trade
+ * winner and confidence — the pattern the one engine replaces. The peer review below is the live path
+ * (`/api/dynasty-trade-analyzer`); converting it to explain the engine receipt is a listed follow-up.
  */
-export const DUAL_BRAIN_JSON_CONTRACT = `
-You MUST return ONLY valid JSON matching this exact schema — no markdown, no commentary:
-
-{
-  "winner": "Team A" | "Team B" | "Even" | "Slight edge to Team A" | "Slight edge to Team B",
-  "confidence": <number 0-100>,
-  "reasoning": "<2-4 sentence explanation grounding your verdict in the provided data>",
-  "key_factors": ["<factor 1>", "<factor 2>", ...],
-  "risk_flags": ["<risk 1>", ...],
-  "counter_suggestions": ["<counter trade idea 1>", ...],
-  "news_impact": ["<news item affecting this trade>", ...],
-  "confidence_breakdown": {
-    "data_quality": <0-100>,
-    "market_alignment": <0-100>,
-    "risk_weighting": <0-100>
-  }
-}
-
-ANTI-HALLUCINATION RULES (CRITICAL):
-1. You MUST NOT invent stats, player values, ADP numbers, or trade volumes.
-2. You may ONLY use data explicitly provided in the structured trade payload.
-3. If information is missing, say so in risk_flags and REDUCE confidence accordingly.
-4. news_impact MUST be empty ([]) unless you have verified real-time data with confidence >70%.
-5. Every key_factor MUST reference specific data from the payload (values, ages, positions, roster needs).
-6. counter_suggestions MUST only reference players/picks that exist in the provided roster/league data.
-7. DO NOT override or contradict the deterministic fairness score — only interpret and explain it.
-`;
-
-/**
- * Grok-specific addendum granting web/X search for news_impact.
- */
-export const GROK_NEWS_ADDENDUM = `
-NEWS ENRICHMENT (Grok only):
-- You have access to web_search and x_search tools.
-- The NEWS INTELLIGENCE block in the context contains pre-scored, time-decayed news with value adjustments.
-- Use web/X search to VERIFY those items and find any BREAKING news missed by the cache (last 2 hours).
-- Populate news_impact with verified items. Include source and date for each.
-- Only include news items if your confidence in the overall analysis is >70%.
-- If confidence is ≤70%, set news_impact to an empty array.
-- If you find breaking news that contradicts a cached item, note the conflict in risk_flags.
-- NEWS VALUE ADJUSTMENTS in the intelligence block are AUTHORITATIVE — do not override them, only interpret.
-`;
 
 type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
-
-export interface DualBrainRequest {
-  systemPrompt: string;
-  userPrompt: string;
-  temperature?: number;
-  maxTokens?: number;
-  mode?: TradeAiMode;
-  primary?: TradeAiPrimary;
-  timeoutMs?: number;
-}
 
 export interface PeerReviewRequest {
   factLayerPrompt: string;
@@ -102,12 +44,6 @@ function resolveMode(explicit?: TradeAiMode): TradeAiMode {
   const m = envStr("TRADE_AI_MODE", "both").toLowerCase();
   if (m === "off" || m === "openai" || m === "grok" || m === "both") return m as TradeAiMode;
   return "both";
-}
-
-function resolvePrimary(explicit?: TradeAiPrimary): TradeAiPrimary {
-  if (explicit) return explicit;
-  const p = envStr("TRADE_AI_PRIMARY", "openai").toLowerCase();
-  return p === "grok" ? "grok" : "openai";
 }
 
 function resolveTimeout(explicit?: number): number {
@@ -249,191 +185,4 @@ export async function runPeerReviewAnalysis(
   }
 
   return consensus;
-}
-
-async function callOpenAI(
-  messages: ChatMessage[],
-  temperature: number,
-  maxTokens: number,
-  timeoutMs: number
-): Promise<ProviderResult> {
-  const start = Date.now();
-  try {
-    const result = await withTimeout(
-      openaiChatJson({ messages, temperature, maxTokens }),
-      timeoutMs,
-      "OpenAI"
-    );
-
-    const latencyMs = Date.now() - start;
-
-    if (!result.ok) {
-      return {
-        provider: "openai",
-        analysis: null,
-        raw: null,
-        latencyMs,
-        error: result.details,
-        schemaValid: false,
-        confidenceScore: 0,
-      };
-    }
-
-    const parsed = parseJsonContentFromChatCompletion(result.json);
-    const { valid, analysis } = validateAndParseAnalysis(parsed);
-
-    const providerResult: ProviderResult = {
-      provider: "openai",
-      analysis,
-      raw: parsed,
-      latencyMs,
-      schemaValid: valid,
-      confidenceScore: 0,
-    };
-    providerResult.confidenceScore = scoreProviderResult(providerResult);
-    return providerResult;
-  } catch (e: any) {
-    return {
-      provider: "openai",
-      analysis: null,
-      raw: null,
-      latencyMs: Date.now() - start,
-      error: String(e?.message || e),
-      schemaValid: false,
-      confidenceScore: 0,
-    };
-  }
-}
-
-async function callGrok(
-  messages: ChatMessage[],
-  temperature: number,
-  maxTokens: number,
-  timeoutMs: number
-): Promise<ProviderResult> {
-  const start = Date.now();
-  try {
-    const result = await withTimeout(
-      xaiChatJson({ messages, temperature, maxTokens }),
-      timeoutMs,
-      "Grok"
-    );
-
-    const latencyMs = Date.now() - start;
-
-    if (!result.ok) {
-      return {
-        provider: "grok",
-        analysis: null,
-        raw: null,
-        latencyMs,
-        error: result.details,
-        schemaValid: false,
-        confidenceScore: 0,
-      };
-    }
-
-    const text = parseTextFromXaiChatCompletion(result.json);
-    const parsed = parseJsonFromText(text);
-    const { valid, analysis } = validateAndParseAnalysis(parsed);
-
-    const providerResult: ProviderResult = {
-      provider: "grok",
-      analysis,
-      raw: parsed,
-      latencyMs,
-      schemaValid: valid,
-      confidenceScore: 0,
-    };
-    providerResult.confidenceScore = scoreProviderResult(providerResult);
-    return providerResult;
-  } catch (e: any) {
-    return {
-      provider: "grok",
-      analysis: null,
-      raw: null,
-      latencyMs: Date.now() - start,
-      error: String(e?.message || e),
-      schemaValid: false,
-      confidenceScore: 0,
-    };
-  }
-}
-
-export async function runDualBrainTradeAnalysis(
-  req: DualBrainRequest
-): Promise<ConsensusAnalysis | null> {
-  const mode = resolveMode(req.mode);
-  const primary = resolvePrimary(req.primary);
-  const timeoutMs = resolveTimeout(req.timeoutMs);
-  const temperature = req.temperature ?? 0.45;
-  const maxTokens = req.maxTokens ?? 2000;
-
-  if (mode === "off") {
-    return null;
-  }
-
-  // Build provider-specific message arrays with the JSON contract injected
-  const openaiMessages: ChatMessage[] = [
-    { role: "system", content: `${req.systemPrompt}\n\n${DUAL_BRAIN_JSON_CONTRACT}` },
-    { role: "user", content: req.userPrompt },
-  ];
-
-  const grokMessages: ChatMessage[] = [
-    { role: "system", content: `${req.systemPrompt}\n\n${DUAL_BRAIN_JSON_CONTRACT}\n\n${GROK_NEWS_ADDENDUM}` },
-    { role: "user", content: req.userPrompt },
-  ];
-
-  const results: ProviderResult[] = [];
-
-  if (mode === "both") {
-    const [openaiResult, grokResult] = await Promise.allSettled([
-      callOpenAI(openaiMessages, temperature, maxTokens, timeoutMs),
-      callGrok(grokMessages, temperature, maxTokens, timeoutMs),
-    ]);
-
-    if (openaiResult.status === "fulfilled") results.push(openaiResult.value);
-    else
-      results.push({
-        provider: "openai",
-        analysis: null,
-        raw: null,
-        latencyMs: 0,
-        error: String(openaiResult.reason),
-        schemaValid: false,
-        confidenceScore: 0,
-      });
-
-    if (grokResult.status === "fulfilled") results.push(grokResult.value);
-    else
-      results.push({
-        provider: "grok",
-        analysis: null,
-        raw: null,
-        latencyMs: 0,
-        error: String(grokResult.reason),
-        schemaValid: false,
-        confidenceScore: 0,
-      });
-  } else if (mode === "openai") {
-    const result = await callOpenAI(openaiMessages, temperature, maxTokens, timeoutMs);
-    results.push(result);
-
-    if (!result.analysis) {
-      console.warn("[dual-brain] OpenAI failed, attempting Grok fallback");
-      const fallback = await callGrok(grokMessages, temperature, maxTokens, timeoutMs);
-      results.push(fallback);
-    }
-  } else if (mode === "grok") {
-    const result = await callGrok(grokMessages, temperature, maxTokens, timeoutMs);
-    results.push(result);
-
-    if (!result.analysis) {
-      console.warn("[dual-brain] Grok failed, attempting OpenAI fallback");
-      const fallback = await callOpenAI(openaiMessages, temperature, maxTokens, timeoutMs);
-      results.push(fallback);
-    }
-  }
-
-  return mergeAnalyses(results, primary);
 }

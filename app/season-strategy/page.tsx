@@ -266,7 +266,7 @@ function LeagueGate({
     <div className="min-h-screen bg-[#07071a] text-white">
       <div className="border-b border-white/6 bg-[#07071a]/90 backdrop-blur-xl">
         <div className="mx-auto max-w-5xl px-4 py-5 sm:px-6">
-          <span className="inline-flex rounded-full border border-violet-500/20 bg-violet-500/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.24em] text-violet-300">
+          <span className="inline-flex rounded-full border border-violet-500/20 bg-violet-500/10 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-[0.24em] text-violet-300">
             Season Strategy
           </span>
           <h1 className="mt-3 text-3xl font-black">Select a Sleeper League</h1>
@@ -324,10 +324,10 @@ function LeagueGate({
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] text-white/50">
+                      <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[11px] text-white/50">
                         {SPORT_LABELS[league.sport]}
                       </span>
-                      <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] text-white/50">
+                      <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[11px] text-white/50">
                         {league.format}
                       </span>
                     </div>
@@ -657,7 +657,7 @@ export default function SeasonStrategyPage() {
               <div className="flex flex-wrap items-center gap-3">
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="rounded-full border border-violet-500/20 bg-violet-500/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.24em] text-violet-300">
+                    <span className="rounded-full border border-violet-500/20 bg-violet-500/10 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-[0.24em] text-violet-300">
                       Season Strategy
                     </span>
                   </div>
@@ -721,7 +721,7 @@ export default function SeasonStrategyPage() {
 
             <div className="max-w-2xl mx-auto px-0 py-0 space-y-5">
               <div className="rounded-2xl border border-white/8 bg-[#0c0c1e] p-5">
-                <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-white/40">Sleeper Username</p>
+                <p className="mb-3 text-[11px] font-bold uppercase tracking-widest text-white/40">Sleeper Username</p>
                 <input
                   value={username}
                   onChange={(event) => setUsername(event.target.value)}
@@ -734,7 +734,7 @@ export default function SeasonStrategyPage() {
               </div>
 
               <div className="rounded-2xl border border-white/8 bg-[#0c0c1e] p-5">
-                <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-white/40">Current Week (optional)</p>
+                <p className="mb-3 text-[11px] font-bold uppercase tracking-widest text-white/40">Current Week (optional)</p>
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
@@ -785,11 +785,11 @@ export default function SeasonStrategyPage() {
                           {plan.winWindow.classification.replace(/_/g, ' ')}
                         </div>
                         <div className="mt-1 text-2xl font-black">{plan.rosterGrade.overall}</div>
-                        <div className="mt-0.5 text-[10px] opacity-60">Overall Grade</div>
+                        <div className="mt-0.5 text-[11px] opacity-60">Overall Grade</div>
                       </div>
 
                       <div className="flex-1">
-                        <div className="mb-1 text-[10px] font-bold uppercase tracking-widest text-violet-400">🧠 Key Insight</div>
+                        <div className="mb-1 text-[11px] font-bold uppercase tracking-widest text-violet-400">🧠 Key Insight</div>
                         <p className="mb-2 text-lg font-bold leading-snug text-white">{plan.topInsight}</p>
                         <div className="flex flex-wrap items-center gap-3 text-xs text-white/40">
                           <span>🎯 {plan.seasonGoal.primary}</span>
@@ -866,10 +866,10 @@ export default function SeasonStrategyPage() {
                             <div className="flex items-center justify-between gap-2">
                               <div className="text-sm font-black text-white">{position}</div>
                               <div className="flex items-center gap-2">
-                                <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] text-white/45">
+                                <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[11px] text-white/45">
                                   {details.depth}
                                 </span>
-                                <span className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-bold text-cyan-300">
+                                <span className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2 py-0.5 text-[11px] font-bold text-cyan-300">
                                   {details.grade}
                                 </span>
                               </div>
@@ -923,7 +923,7 @@ export default function SeasonStrategyPage() {
                                   {target.position} · {target.currentOwner}
                                 </div>
                               </div>
-                              <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase ${urgencyClass(target.urgency)}`}>
+                              <span className={`rounded-full border px-2 py-0.5 text-[11px] font-bold uppercase ${urgencyClass(target.urgency)}`}>
                                 {target.urgency}
                               </span>
                             </div>
@@ -946,7 +946,7 @@ export default function SeasonStrategyPage() {
                           <div key={candidate.playerName} className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
                             <div className="flex items-center justify-between gap-3">
                               <div className="text-sm font-black text-white">{candidate.playerName}</div>
-                              <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-200">
+                              <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[11px] font-bold uppercase text-amber-200">
                                 {candidate.valueWindow}
                               </span>
                             </div>
@@ -954,7 +954,7 @@ export default function SeasonStrategyPage() {
                             {candidate.targetManagers.length > 0 ? (
                               <div className="mt-3 flex flex-wrap gap-2">
                                 {candidate.targetManagers.map((manager) => (
-                                  <span key={manager} className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] text-white/55">
+                                  <span key={manager} className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[11px] text-white/55">
                                     {manager}
                                   </span>
                                 ))}
@@ -1020,7 +1020,7 @@ export default function SeasonStrategyPage() {
                         plan.waiverStrategy.stashTargets.map((target) => (
                           <div key={`${target.type}-${target.playerDescription}`} className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
                             <div className="flex items-center gap-2">
-                              <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-bold uppercase text-white/55">
+                              <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[11px] font-bold uppercase text-white/55">
                                 {target.type.replace(/_/g, ' ')}
                               </span>
                               <span className="text-sm font-bold text-white">{target.playerDescription}</span>
@@ -1037,7 +1037,7 @@ export default function SeasonStrategyPage() {
 
                     <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4">
                       <div className="flex items-center gap-2">
-                        <span className="rounded-full border border-emerald-500/20 bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-200">
+                        <span className="rounded-full border border-emerald-500/20 bg-emerald-500/15 px-2 py-0.5 text-[11px] font-bold uppercase text-emerald-200">
                           {plan.waiverStrategy.faabPhilosophy}
                         </span>
                         <span className="text-sm font-bold text-white">FAAB Philosophy</span>
@@ -1100,7 +1100,7 @@ export default function SeasonStrategyPage() {
                           <div className="mt-4 space-y-2">
                             {action.actions.map((item) => (
                               <div key={item} className="flex gap-2 text-sm text-white/70">
-                                <span className="mt-1 inline-flex h-4 w-4 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10 text-[10px] text-emerald-300">
+                                <span className="mt-1 inline-flex h-4 w-4 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10 text-[11px] text-emerald-300">
                                   ✓
                                 </span>
                                 <span>{item}</span>
@@ -1134,7 +1134,7 @@ export default function SeasonStrategyPage() {
                         <div key={manager.managerName} className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
                           <div className="flex items-center justify-between gap-3">
                             <div className="text-sm font-black text-white">{manager.managerName}</div>
-                            <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase ${threatClass(manager.threat)}`}>
+                            <span className={`rounded-full border px-2 py-0.5 text-[11px] font-bold uppercase ${threatClass(manager.threat)}`}>
                               {manager.threat}
                             </span>
                           </div>

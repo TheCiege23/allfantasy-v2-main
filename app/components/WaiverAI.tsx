@@ -532,7 +532,7 @@ export default function WaiverAI() {
                   />
                 </div>
                 {platform !== 'sleeper' && (
-                  <p className="text-xs text-amber-400">
+                  <p className="text-xs text-amber-400" data-hide-in-ios-app="">
                     Only Sleeper is fully supported right now. Other platforms are coming soon.
                   </p>
                 )}

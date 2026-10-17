@@ -90,7 +90,7 @@ export default function ChimmyTrustPanel({
             'span',
             {
               'data-testid': 'chimmy-trust-panel-badge',
-              className: `inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${levelClasses}`,
+              className: `inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider ${levelClasses}`,
             },
             levelLabel,
           )
@@ -101,7 +101,7 @@ export default function ChimmyTrustPanel({
             'span',
             {
               'data-testid': 'chimmy-trust-panel-pct',
-              className: 'text-[10px] text-white/50',
+              className: 'text-[11px] text-white/50',
             },
             `${pct}%`,
           )
@@ -112,7 +112,7 @@ export default function ChimmyTrustPanel({
             'span',
             {
               'data-testid': 'chimmy-trust-panel-sources-summary',
-              className: 'text-[10px] text-white/40',
+              className: 'text-[11px] text-white/40',
             },
             `Sources: ${(dataSources ?? []).slice(0, 2).join(', ')}`,
           )
@@ -123,7 +123,7 @@ export default function ChimmyTrustPanel({
             'span',
             {
               'data-testid': 'chimmy-trust-panel-freshness',
-              className: `text-[10px] ${freshnessClass}`,
+              className: `text-[11px] ${freshnessClass}`,
             },
             freshness.charAt(0).toUpperCase() + freshness.slice(1),
           )
@@ -137,7 +137,7 @@ export default function ChimmyTrustPanel({
               'data-testid': 'chimmy-trust-panel-expand',
               onClick: () => setExpanded((v) => !v),
               className:
-                'ml-auto text-[10px] text-white/40 hover:text-white/70 transition underline-offset-2 hover:underline',
+                'ml-auto text-[11px] text-white/40 hover:text-white/70 transition underline-offset-2 hover:underline',
               'aria-expanded': expanded,
               'aria-controls': 'chimmy-trust-panel-details',
             },
@@ -172,14 +172,14 @@ export default function ChimmyTrustPanel({
                 { className: 'flex items-center gap-1.5' },
                 React.createElement(
                   'span',
-                  { className: 'text-[10px] text-white/35 uppercase tracking-wider' },
+                  { className: 'text-[11px] text-white/35 uppercase tracking-wider' },
                   'League context:',
                 ),
                 React.createElement(
                   'span',
                   {
                     'data-testid': 'chimmy-trust-panel-league-context',
-                    className: `text-[10px] font-medium ${
+                    className: `text-[11px] font-medium ${
                       leagueContext === 'available'
                         ? 'text-emerald-300'
                         : leagueContext === 'partial'
@@ -198,7 +198,7 @@ export default function ChimmyTrustPanel({
                 { 'data-testid': 'chimmy-trust-panel-based-on' },
                 React.createElement(
                   'p',
-                  { className: 'mb-1 text-[10px] text-white/35 uppercase tracking-wider' },
+                  { className: 'mb-1 text-[11px] text-white/35 uppercase tracking-wider' },
                   'Contributing signals',
                 ),
                 React.createElement(
@@ -210,7 +210,7 @@ export default function ChimmyTrustPanel({
                       {
                         key: i,
                         className:
-                          'rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-300/80',
+                          'rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-300/80',
                       },
                       sig,
                     ),
@@ -225,7 +225,7 @@ export default function ChimmyTrustPanel({
                 { 'data-testid': 'chimmy-trust-panel-missing' },
                 React.createElement(
                   'p',
-                  { className: 'mb-1 text-[10px] text-white/35 uppercase tracking-wider' },
+                  { className: 'mb-1 text-[11px] text-white/35 uppercase tracking-wider' },
                   'Would improve with',
                 ),
                 React.createElement(
@@ -237,7 +237,7 @@ export default function ChimmyTrustPanel({
                       {
                         key: i,
                         className:
-                          'rounded-full border border-white/15 bg-white/5 px-2 py-0.5 text-[10px] text-white/50',
+                          'rounded-full border border-white/15 bg-white/5 px-2 py-0.5 text-[11px] text-white/50',
                       },
                       sig,
                     ),
@@ -255,7 +255,7 @@ export default function ChimmyTrustPanel({
                       'span',
                       {
                         'data-testid': 'chimmy-trust-panel-freshness',
-                        className: `text-[10px] ${freshnessClass}`,
+                        className: `text-[11px] ${freshnessClass}`,
                       },
                       `Data: ${freshness.charAt(0).toUpperCase() + freshness.slice(1)}`,
                     )
@@ -263,14 +263,14 @@ export default function ChimmyTrustPanel({
                 syncedLabel
                   ? React.createElement(
                       'span',
-                      { className: 'text-[10px] text-white/35' },
+                      { className: 'text-[11px] text-white/35' },
                       `Last sync: ${syncedLabel}${syncFreshness?.referenceTimezone ? ` (${syncFreshness.referenceTimezone})` : ''}`,
                     )
                   : null,
                 topSources.length > 0
                   ? React.createElement(
                       'span',
-                      { className: 'text-[10px] text-white/30' },
+                      { className: 'text-[11px] text-white/30' },
                       topSources
                         .map(([k, v]) => `${k.replace(/_/g, ' ')}: ${formatIsoTime(v) ?? 'unknown'}`)
                         .join(' • '),
@@ -288,7 +288,7 @@ export default function ChimmyTrustPanel({
                 },
                 React.createElement(
                   'span',
-                  { className: 'w-full text-[10px] text-white/35 uppercase tracking-wider' },
+                  { className: 'w-full text-[11px] text-white/35 uppercase tracking-wider' },
                   'Sources',
                 ),
                 ...(sourceLinks ?? []).map((link, i) =>
@@ -300,7 +300,7 @@ export default function ChimmyTrustPanel({
                       target: '_blank',
                       rel: 'noopener noreferrer',
                       className:
-                        'rounded-full border border-cyan-500/25 bg-cyan-500/10 px-2 py-0.5 text-[10px] text-cyan-300/80 hover:text-cyan-200 transition',
+                        'rounded-full border border-cyan-500/25 bg-cyan-500/10 px-2 py-0.5 text-[11px] text-cyan-300/80 hover:text-cyan-200 transition',
                     },
                     link.label,
                   ),

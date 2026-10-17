@@ -33,7 +33,7 @@ export default function PermissionsWrapper({
         {children}
       </span>
       {showDeniedReason ? (
-        <p className="max-w-[280px] text-[10px] leading-snug text-white/45">{hint}</p>
+        <p className="max-w-[280px] text-[11px] leading-snug text-white/45">{hint}</p>
       ) : null}
     </div>
   )

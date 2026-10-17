@@ -26,6 +26,8 @@ export type TriageStarter = {
   sleeperId: string
   sport: string
   externalId: string
+  /** The feed that minted `externalId`; the finder ref carries it (playerRef.ts). */
+  source?: string | null
   name: string
   position: string | null
   team: string | null
@@ -33,18 +35,33 @@ export type TriageStarter = {
   leagueId: string
   leagueName: string
   platform: string
+  /** What a deep link to this league's lineup screen needs (platformLinks.lineupLink). Optional: older callers omit them and the link falls back to the league page. */
+  platformLeagueId?: string | null
+  season?: number | null
+  /** Your team's platform id in this league — the ESPN teamId / Yahoo team number. */
+  teamId?: string | null
+}
+
+/** A league he starts in, carrying what the row's "Open lineup" button needs. */
+export type TriageLeague = {
+  leagueId: string
+  leagueName: string
+  platform: string
+  platformLeagueId?: string | null
+  season?: number | null
+  teamId?: string | null
 }
 
 export type TriageInjury = { status: string | null; description: string | null; reportedAt: string | null }
 
 export type TriageRow = {
-  player: { sport: string; externalId: string; sleeperId: string; name: string; position: string | null; team: string | null; imageUrl: string | null }
+  player: { sport: string; externalId: string; source?: string | null; sleeperId: string; name: string; position: string | null; team: string | null; imageUrl: string | null }
   /** The readiness chip; null only for a no-game row with no report. */
   status: { label: string; tone: MoveTone } | null
   description: string | null
   reportedAt: string | null
   /** Leagues where he is in your starting lineup. */
-  leagues: Array<{ leagueId: string; leagueName: string; platform: string }>
+  leagues: TriageLeague[]
   /** His kickoff this week, ISO; null when his club is not on the schedule. */
   kickoff: string | null
   /** The schedule is on file and his club has no game in it. */
@@ -61,9 +78,55 @@ export type GameDayTriage = {
   /** How many leagues' starting lineups were read. */
   leaguesRead: number
   startersRead: number
+  /**
+   * Leagues whose lineups were NOT read because the loader's bound was reached.
+   * Zero in any realistic account (the bound is far above the largest one on
+   * production); non-zero is said on screen, never swallowed.
+   */
+  leaguesNotRead?: number
+  /** Leagues left out because they are best ball — the platform sets those lineups itself. */
+  bestBallLeagues?: number
+  /**
+   * Leagues on a platform whose player ids we cannot translate yet (Yahoo, MFL, Fantrax,
+   * Fleaflicker). Left out rather than read raw: an untranslated id matches a DIFFERENT
+   * player's Sleeper id.
+   */
+  unsupportedLeagues?: number
+  /** When the OLDEST lineup read was last synced (Roster.updatedAt), ISO — the list is only as current as that. */
+  rostersAsOf?: string | null
+  /**
+   * Leagues whose starting lineup has an unfilled slot ('0' in `starters`), with how many.
+   * Optional so older callers and fixtures need not carry it; absent reads as none found.
+   */
+  emptySlots?: Array<TriageLeague & { count: number }>
+  /**
+   * When each league's lineup READ was last synced, one entry per league read. Lets a screen name the
+   * leagues behind an old `rostersAsOf` instead of letting one stale league date the whole list.
+   */
+  rosterAges?: Array<{ leagueId: string; leagueName: string; asOf: string }>
 }
 
 const SEVERITY: Record<MoveTone, number> = { bad: 0, warn: 1, good: 2 }
+
+/**
+ * The short text after the status on a chip — "Questionable · Hamstring" — or null.
+ *
+ * ⚠ A FEED DESCRIPTION OFTEN JUST RESTATES THE DESIGNATION. The chip read
+ * "IR · IR. INJURED RESERVE" for Jaxson Dart on 2026-09-27. A description whose
+ * letters begin with the label's letters adds nothing and is dropped; so is one
+ * too long for a chip (the card shows the whole sentence).
+ */
+export function chipDetail(label: string | null | undefined, description: string | null | undefined, max = 20): string | null {
+  const d = (description ?? '').trim()
+  if (!d || d.length > max) return null
+  const letters = (s: string) => s.toLowerCase().replace(/[^a-z]/g, '')
+  const l = letters(label ?? '')
+  const dl = letters(d)
+  if (l && dl.startsWith(l)) return null
+  // "IR · Injured Reserve" says the same thing twice in a different spelling.
+  if (l === 'ir' && dl.startsWith('injuredreserve')) return null
+  return d
+}
 
 export function triageRows(args: {
   starters: TriageStarter[]
@@ -83,7 +146,24 @@ export function triageRows(args: {
   const byPlayer = new Map<string, TriageRow>()
 
   for (const s of starters) {
-    const inj = injuries.get(s.name.trim().toLowerCase()) ?? null
+    const reported = injuries.get(s.name.trim().toLowerCase()) ?? null
+    // A designation explicitly for another week is not a current lineup warning.
+    // Match the designation phrase, not "Expected Return Week 7": a player on
+    // IR with that return date is still unavailable this week. Old Week 1
+    // Questionable reports must not survive into a Week 3 game-day triage.
+    const reportWeek = reported?.description?.match(/\b(?:Out|Questionable|Doubtful|Probable|Inactive|Active)\s+for\s+Week\s+(\d{1,2})\b/i)
+    /*
+     * ⚠ AND A GAME-DAY WORD ABOUT TRAINING CAMP IS A JULY REPORT. Production 2026-09-28, week 3:
+     * Jeremy Chinn "Back - Questionable for start of Training Camp" was flagged in War Room and
+     * Player Finder, "reported Mon" — the feed re-stamps the row's date, so the 45-day age gate
+     * cannot see it. Only the game-day designations are dropped: IR / PUP / NFI carry over from
+     * camp into the season and stay true.
+     */
+    const campReport =
+      week != null &&
+      /^(?:questionable|doubtful|probable)$/i.test(String(reported?.status ?? '').trim()) &&
+      /\btraining\s+camp\b/i.test(reported?.description ?? '')
+    const inj = campReport || (week != null && reportWeek && Number(reportWeek[1]) !== week) ? null : reported
     const readyBase = readiness(inj?.status ?? null, Boolean(inj))
     const club = normalizeTeamAbbrev(s.team)
     const kickoff = club ? (kickoffs[club] ?? null) : null
@@ -95,17 +175,25 @@ export function triageRows(args: {
     const bye = noGame && byeStatus(club, kickoffs, week, unresolved) === 'bye'
     if (!flagged && !noGame) continue
 
+    const league: TriageLeague = {
+      leagueId: s.leagueId,
+      leagueName: s.leagueName,
+      platform: s.platform,
+      platformLeagueId: s.platformLeagueId ?? null,
+      season: s.season ?? null,
+      teamId: s.teamId ?? null,
+    }
     const existing = byPlayer.get(s.sleeperId)
     if (existing) {
-      if (!existing.leagues.some((l) => l.leagueId === s.leagueId)) existing.leagues.push({ leagueId: s.leagueId, leagueName: s.leagueName, platform: s.platform })
+      if (!existing.leagues.some((l) => l.leagueId === s.leagueId)) existing.leagues.push(league)
       continue
     }
     byPlayer.set(s.sleeperId, {
-      player: { sport: s.sport, externalId: s.externalId, sleeperId: s.sleeperId, name: s.name, position: s.position, team: s.team, imageUrl: s.imageUrl },
+      player: { sport: s.sport, externalId: s.externalId, source: s.source ?? null, sleeperId: s.sleeperId, name: s.name, position: s.position, team: s.team, imageUrl: s.imageUrl },
       status: ready,
       description: inj?.description ?? null,
       reportedAt: inj?.reportedAt ?? null,
-      leagues: [{ leagueId: s.leagueId, leagueName: s.leagueName, platform: s.platform }],
+      leagues: [league],
       kickoff,
       noGame,
       bye,
@@ -113,18 +201,25 @@ export function triageRows(args: {
     })
   }
 
-  /*
-   * Soonest lock first: a game still ahead sorts by minutes to kickoff; a
-   * player with no game this week can be fixed any time before his leagues
-   * lock, so he follows; a player whose game has already started cannot be
-   * changed and goes last. Severity breaks ties, then the name.
-   */
+  return [...byPlayer.values()].sort(compareTriageRows(nowIso))
+}
+
+/**
+ * Soonest lock first: a game still ahead sorts by minutes to kickoff; a
+ * player with no game this week can be fixed any time before his leagues
+ * lock, so he follows; a player whose game has already started cannot be
+ * changed and goes last. Severity breaks ties, then the name.
+ *
+ * Exported so the loader can merge one sport's rows with another's under the
+ * same order, rather than concatenating two lists each sorted on its own.
+ */
+export function compareTriageRows(nowIso: string): (a: TriageRow, b: TriageRow) => number {
   const bucket = (r: TriageRow): number => {
     if (!r.kickoff) return 1
     return lockState(r.kickoff, nowIso).state === 'locked' ? 2 : 0
   }
   const minutes = (r: TriageRow): number => (r.kickoff ? lockState(r.kickoff, nowIso).minutes : Number.MAX_SAFE_INTEGER)
-  return [...byPlayer.values()].sort((a, b) => {
+  return (a, b) => {
     const ba = bucket(a)
     const bb = bucket(b)
     if (ba !== bb) return ba - bb
@@ -133,5 +228,5 @@ export function triageRows(args: {
     const sb = b.status ? SEVERITY[b.status.tone] : 3
     if (sa !== sb) return sa - sb
     return a.player.name.localeCompare(b.player.name)
-  })
+  }
 }

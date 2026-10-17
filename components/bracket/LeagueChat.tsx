@@ -24,7 +24,7 @@ export function LeagueChat({ leagueId, currentUserId }: { leagueId: string; curr
   const [sending, setSending] = useState(false)
   const [loading, setLoading] = useState(true)
   const bottomRef = useRef<HTMLDivElement>(null)
-  const pollRef = useRef<ReturnType<typeof setInterval>>()
+  const pollRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined)
 
   const fetchMessages = useCallback(async () => {
     try {
@@ -139,7 +139,7 @@ export function LeagueChat({ leagueId, currentUserId }: { leagueId: string; curr
                 >
                   {msg.message}
                 </div>
-                <div className={`text-[10px] mt-0.5 ${isOwn ? "text-right" : ""} text-white/25`}>
+                <div className={`text-[11px] mt-0.5 ${isOwn ? "text-right" : ""} text-white/25`}>
                   {formatTime(msg.createdAt)}
                 </div>
               </div>

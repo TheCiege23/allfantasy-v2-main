@@ -35,6 +35,9 @@ import { projectRosterSlots } from './derive'
 import { loadLatestPlayerValueSnapshots } from '@/lib/player-values/latestPlayerValueSnapshots'
 import { mapRedraftRosterRowToRawRoster, unionRosterRows, type RawRedraftRosterRow } from './redraftRoster'
 import { resolveLeagueConcept } from '@/lib/league/leagueConceptOptions'
+import { sleeperReadableRosters } from '@/lib/core-app/rosterIdSpace'
+import { applyBridgeKeepingSlots, bridgeColumnFor, loadBridgedLeagues } from '@/lib/core-app/bridgedRosterIds'
+import { nonSleeperExternalIdWhere } from '@/lib/player-identity/externalIdNamespace'
 
 export interface CanonicalWorldPort {
   loadLeague(leagueId: string): Promise<RawLeagueRow | null>
@@ -162,7 +165,16 @@ export const defaultCanonicalWorldPort: CanonicalWorldPort = {
 
   async loadRosters(leagueId) {
     // Source 1 — canonical `Roster.playerData` (imported leagues + some native AF leagues).
-    const rows = await prisma.roster.findMany({
+    /*
+     * ⚠ THE ONE PLACE THIS SUBSTRATE KNOWS THE PROVIDER, ON PURPOSE. A Fleaflicker/MFL/Fantrax/Yahoo
+     * roster holds that provider's own ids, short numbers that collide with real Sleeper ids, and every
+     * enrichment read below (`loadPlayerMetadataRows`, injuries, values, projections) asks the Sleeper
+     * space first — so a collision named, injured and priced a stranger. Such a roster contributes no
+     * ids; the facts downstream stay origin-blind because they never see one. An ESPN roster is
+     * translated into Sleeper ids (ids with no identity dropped): ESPN 12483 is Matthew Stafford, and
+     * read raw it was Sleeper's Jack Bech.
+     */
+    const rawRows = await prisma.roster.findMany({
       where: { leagueId },
       select: {
         id: true,
@@ -171,8 +183,32 @@ export const defaultCanonicalWorldPort: CanonicalWorldPort = {
         faabRemaining: true,
         waiverPriority: true,
         settings: true,
+        league: { select: { platform: true } },
       },
     })
+    /*
+     * A Fleaflicker / MFL league is read THROUGH the identity bridge (bridgedRosterIds.ts) when most of
+     * it translates — the same `BRIDGE_MIN_COVERAGE` rule the Player Finder applies, so a miss here
+     * can still be trusted as "not on this roster". Bridged ids become Sleeper ids; an empty slot
+     * stays '0' and an unbridged id stays in its slot as `unbridged:<id>` (never a bare number), so
+     * lineup readers keep slot order and can count what they cannot see. Below the coverage rule, or
+     * on any failure, the roster is stripped exactly as before.
+     */
+    const platformOfLeague = rawRows[0]?.league?.platform ?? null
+    let bridgedMap: ReadonlyMap<string, string> | null = null
+    if (bridgeColumnFor(platformOfLeague)) {
+      const bridged = await loadBridgedLeagues([{ id: leagueId, platform: platformOfLeague }]).catch(() => null)
+      const verdict = bridged?.get(leagueId)
+      if (verdict?.readable) bridgedMap = verdict.map
+    }
+    const prepared: Array<Omit<(typeof rawRows)[number], 'playerData'> & { playerData: unknown }> = bridgedMap
+      ? rawRows.map((r) => ({ ...r, playerData: applyBridgeKeepingSlots(r.playerData, bridgedMap!) }))
+      : rawRows
+    const rows = await sleeperReadableRosters(
+      prepared,
+      // Bridged rows are already in Sleeper's space; anything else goes through the one translator.
+      (row: { league: { platform: string | null } | null }) => (bridgedMap ? 'sleeper' : row.league?.platform),
+    )
     const canonical: RawRosterRow[] = rows.map((row: {
       id: string
       platformUserId: string | null
@@ -180,6 +216,7 @@ export const defaultCanonicalWorldPort: CanonicalWorldPort = {
       faabRemaining: number | null
       waiverPriority: number | null
       settings: unknown
+      league: { platform: string | null } | null
     }) => ({
       id: row.id,
       platformUserId: row.platformUserId ?? '',
@@ -274,9 +311,13 @@ export async function loadPlayerMetadataRows(
    * row could claim a Sleeper id's key and lock the real row out of it.
    *
    * These ids are mixed by design — provider ids for imported leagues, native ids for AF leagues
-   * — so the answer is order rather than exclusion. The Sleeper space is asked first and can never
-   * be a coincidence; the provider read then runs only for ids nothing in the Sleeper space
-   * claimed. Both keep `fetchedAt desc`, and the authoritative rows lead the returned array so the
+   * — so the answer is order rather than exclusion. The Sleeper space is asked first; a hit there
+   * is no coincidence ONLY because `loadRosters` strips the foreign-id leagues (Fleaflicker, MFL,
+   * Fantrax, Yahoo) whose short numeric ids ARE real Sleeper ids, and translates ESPN's. (This said
+   * "an ESPN id is long and collides with nothing"; ESPN 12483 is Matthew Stafford and Sleeper 12483
+   * is Jack Bech — 17 such ids, measured 2026-09-29.) The provider read then runs only for ids
+   * nothing in the Sleeper space claimed, and never for one that `mayBeSleeperId`: an NFL Sleeper id
+   * with no Sleeper row would otherwise match Rolling Insights' player of that number. Both keep `fetchedAt desc`, and the authoritative rows lead the returned array so the
    * projector's first-write-wins resolves to them.
    */
   const bySleeper = await prisma.sportsPlayer.findMany({
@@ -304,7 +345,7 @@ export async function loadPlayerMetadataRows(
   const byProvider =
     unclaimed.length > 0
       ? await prisma.sportsPlayer.findMany({
-          where: { sport, externalId: { in: unclaimed } },
+          where: nonSleeperExternalIdWhere(unclaimed, sport),
           orderBy: { fetchedAt: 'desc' },
           select: {
             externalId: true,
@@ -565,7 +606,9 @@ export async function loadScheduleGameRows(
  * READ-ONLY injury-context read for the F2.3 injury/availability enrichment seam.
  *
  * Reads the SAME SportsPlayer cache as F2.1 player metadata but selects freshness fields
- * (fetchedAt / expiresAt / updatedAt) that the F2.1 read does not include. One `findMany` only —
+ * (fetchedAt / expiresAt / updatedAt) that the F2.1 read does not include, plus the IDENTITY
+ * (name / team / position) the injury feed is matched on — `status` here is a ROSTER status, never
+ * the designation (see `resolveInjuryContext`). One `findMany` only —
  * no writes, no cache warming, no live API calls. Freshest row per id wins (orderBy fetchedAt desc).
  */
 export async function loadInjuryContextRows(
@@ -589,6 +632,9 @@ export async function loadInjuryContextRows(
       fetchedAt: true,
       expiresAt: true,
       updatedAt: true,
+      name: true,
+      team: true,
+      position: true,
     },
   })
   const claimed = new Set<string>()
@@ -600,7 +646,7 @@ export async function loadInjuryContextRows(
   const byProvider =
     unclaimed.length > 0
       ? await prisma.sportsPlayer.findMany({
-          where: { sport, externalId: { in: unclaimed } },
+          where: nonSleeperExternalIdWhere(unclaimed, sport),
           orderBy: { fetchedAt: 'desc' },
           select: {
             externalId: true,
@@ -610,6 +656,9 @@ export async function loadInjuryContextRows(
             fetchedAt: true,
             expiresAt: true,
             updatedAt: true,
+            name: true,
+            team: true,
+            position: true,
           },
         })
       : []
@@ -623,6 +672,9 @@ export async function loadInjuryContextRows(
       fetchedAt: Date
       expiresAt: Date
       updatedAt: Date
+      name?: string | null
+      team?: string | null
+      position?: string | null
     }) => ({
       externalId: row.externalId,
       sleeperId: row.sleeperId ?? null,
@@ -631,6 +683,9 @@ export async function loadInjuryContextRows(
       fetchedAt: row.fetchedAt ?? null,
       expiresAt: row.expiresAt ?? null,
       updatedAt: row.updatedAt ?? null,
+      name: row.name ?? null,
+      team: row.team ?? null,
+      position: row.position ?? null,
     }),
   )
 }
@@ -871,6 +926,7 @@ export async function loadIdpValueRows(args: {
       args.numTeams,
       (args.starterSlots ?? []).join(','),
       JSON.stringify(resolved.scoring),
+      JSON.stringify(resolved.projectionWindow ?? null),
       offRoster.join(','),
     ].join('|')
     const scoring = resolved.scoring
@@ -882,6 +938,7 @@ export async function loadIdpValueRows(args: {
         rosterSlots: args.starterSlots,
         numTeams: args.numTeams,
         isDynasty: args.isDynasty,
+        projectionWindow: resolved.projectionWindow,
       }),
     )
     const out: RawIdpValueRow[] = []

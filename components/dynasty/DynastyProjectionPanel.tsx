@@ -159,12 +159,12 @@ export function DynastyProjectionPanel({
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
-        setAiError(data?.error || 'Failed to generate AI dynasty advice')
+        setAiError(data?.error || "Chimmy couldn't generate dynasty advice")
         return
       }
       setAiAdvice((data?.analysis ?? null) as DynastyAdvice | null)
     } catch {
-      setAiError('Failed to generate AI dynasty advice')
+      setAiError("Chimmy couldn't generate dynasty advice")
     } finally {
       setAiLoading(false)
     }
@@ -255,12 +255,12 @@ export function DynastyProjectionPanel({
           </button>
           <button
             type="button"
-            aria-label="Get AI dynasty advice"
+            aria-label="Get Chimmy's dynasty advice"
             onClick={() => void runAiAdvice()}
             disabled={!selected || aiLoading}
             className="rounded border border-cyan-400/30 bg-cyan-500/10 px-2.5 py-1.5 text-xs text-cyan-200 hover:bg-cyan-500/20 disabled:opacity-50"
           >
-            {aiLoading ? 'Analyzing…' : 'AI dynasty advice'}
+            {aiLoading ? 'Analyzing…' : "Chimmy's dynasty advice"}
           </button>
           <Link
             href={`/trade-finder?leagueId=${encodeURIComponent(leagueId)}&context=dynasty&dynastyTeamId=${encodeURIComponent(selected?.teamId ?? '')}`}
@@ -299,7 +299,7 @@ export function DynastyProjectionPanel({
             <span className="text-white/45">{weatherLegendOpen ? '−' : '+'}</span>
           </button>
           {weatherLegendOpen ? (
-            <p className="border-t border-white/[0.06] px-3 pb-2 pt-1 text-[10px] text-white/50">
+            <p className="border-t border-white/[0.06] px-3 pb-2 pt-1 text-[11px] text-white/50">
               Dynasty scores here are long-term strength — for game-week weather adjustments, use the AF crest next to
               projected points on Team and Players tabs.
             </p>
@@ -351,7 +351,7 @@ export function DynastyProjectionPanel({
                     Future outlook: {teamNames[selected.teamId] ?? selected.teamId}
                   </h4>
                   <span
-                    className={`rounded-full px-2 py-0.5 text-[10px] ${
+                    className={`rounded-full px-2 py-0.5 text-[11px] ${
                       directionLabel(selected) === 'Contending'
                         ? 'bg-emerald-500/20 text-emerald-300'
                         : directionLabel(selected) === 'Rebuilding'
@@ -481,7 +481,7 @@ export function DynastyProjectionPanel({
       {aiError ? <p className="mt-3 text-xs text-rose-400">{aiError}</p> : null}
       {aiAdvice ? (
         <div className="mt-3 rounded-lg border border-cyan-400/20 bg-cyan-500/5 p-3">
-          <p className="text-xs font-semibold uppercase tracking-wider text-cyan-300">AI dynasty advice</p>
+          <p className="text-xs font-semibold uppercase tracking-wider text-cyan-300">Chimmy&apos;s dynasty advice</p>
           {aiAdvice.overallOutlook ? <p className="mt-1 text-sm text-white/90">{aiAdvice.overallOutlook}</p> : null}
           <div className="mt-2 flex flex-wrap gap-3 text-xs text-white/70">
             {aiAdvice.contenderOrRebuilder ? <span>Status: {aiAdvice.contenderOrRebuilder}</span> : null}

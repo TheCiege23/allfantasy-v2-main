@@ -42,9 +42,28 @@ describe('domain-os-refresh → rankings daily snapshot wiring', () => {
       '@/lib/core-app/rankingsEngine',
       '@/lib/core-app/rankingsSnapshots',
       '@/lib/prisma',
+      '@/lib/rank/calculateRank',
       '@/lib/rank/careerLedger',
       '@/lib/rank/careerXp',
       '@/lib/rank/levels',
     ])
+  })
+
+  it('🛑 the level refresh it added (calculateRank) keeps the graph lean one hop further', () => {
+    // calculateRank is the 2026-10-01 addition: the daily snapshot rewrites stale stored levels.
+    // Its career-profile hook must stay a DYNAMIC import — a static one would pull the profile
+    // module's graph into this cron at load time.
+    const staticImports = (file: string) =>
+      [...readFileSync(path.join(process.cwd(), file), 'utf8').matchAll(/^import (?:type )?[^'";]*? from '([^']+)'/gm)]
+        .map((m) => m[1])
+        .sort()
+    expect(staticImports('lib/rank/calculateRank.ts')).toEqual([
+      '@/lib/core-app/careerProfileRefresh',
+      '@/lib/prisma',
+      '@/lib/rank/careerLedger',
+      '@/lib/rank/careerXp',
+      '@/lib/rank/levels',
+    ])
+    expect(staticImports('lib/core-app/careerProfileRefresh.ts')).toEqual([])
   })
 })

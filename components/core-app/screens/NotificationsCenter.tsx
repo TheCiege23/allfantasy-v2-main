@@ -1,7 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useClientSyncAccount } from '@/components/providers/ClientSyncAccountProvider'
 import { groupNotificationRows } from '@/lib/core-app/notificationGroups'
 import type {
   NotificationFilter,
@@ -9,9 +10,12 @@ import type {
   NotificationsCenterData,
 } from '@/lib/core-app/notificationsCenter'
 import { EnableWebPushCard } from '@/components/notifications/EnableWebPushCard'
+import { IosAppPushCard } from '@/components/notifications/IosAppPushCard'
 import { InstallButton } from '@/components/pwa/PWAActions'
 import { NotificationRowMute } from '@/components/core-app/screens/NotificationRowMute'
 import '@/components/core-app/af-notifications.css'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 
 /**
  * 22c — the in-app notifications centre.
@@ -66,14 +70,14 @@ function visibleFilters(mentionsAvailable: boolean): Array<{ id: NotificationFil
   return mentionsAvailable ? FILTERS : FILTERS.filter((f) => f.id !== 'mentions')
 }
 
-function timeAgo(iso: string): string {
+function timeAgo(iso: string, language = 'en'): string {
   const ms = Date.now() - new Date(iso).getTime()
   const mins = Math.round(ms / 60_000)
-  if (mins < 1) return 'just now'
-  if (mins < 60) return `${mins}m ago`
+  if (mins < 1) return language === 'es' ? 'ahora mismo' : 'just now'
+  if (mins < 60) return language === 'es' ? `hace ${mins} min` : `${mins}m ago`
   const hours = Math.round(mins / 60)
-  if (hours < 24) return `${hours}h ago`
-  return `${Math.round(hours / 24)}d ago`
+  if (hours < 24) return language === 'es' ? `hace ${hours} h` : `${hours}h ago`
+  return language === 'es' ? `hace ${Math.round(hours / 24)} d` : `${Math.round(hours / 24)}d ago`
 }
 
 function Row({
@@ -85,12 +89,14 @@ function Row({
   urgent?: boolean
   onRead?: (id: string) => void
 }) {
+  const { language } = useOptionalLanguage()
+  const copy = (english: string) => coreUiCopy(english, language)
   return (
     <li className="af-nt-row" data-severity={row.severity} data-read={row.read} data-urgent={!!urgent}>
       <span className="af-nt-dot" aria-hidden />
       <span className="af-nt-body">
         <span className="af-nt-toprow">
-          <b className="af-nt-title">{row.title}</b>
+          <b className="af-nt-title">{copy(row.title)}</b>
           {row.leagueName ? (
             <span className="af-nt-league af-platform" data-platform={row.platform ?? undefined}>
               {row.leagueName}
@@ -98,8 +104,8 @@ function Row({
           ) : null}
         </span>
         {/* The specific reason. Never "you have an update". */}
-        <span className="af-nt-detail">{row.detail}</span>
-        {!urgent ? <span className="af-nt-time af-num">{timeAgo(row.createdAt)}{row.relatedIds && row.relatedIds.length > 1 ? ` · ${row.relatedIds.length} matching notices` : ''}</span> : null}
+        <span className="af-nt-detail">{copy(row.detail)}</span>
+        {!urgent ? <span className="af-nt-time af-num">{timeAgo(row.createdAt, language)}{row.relatedIds && row.relatedIds.length > 1 ? language === 'es' ? ` · ${row.relatedIds.length} avisos coincidentes` : ` · ${row.relatedIds.length} matching notices` : ''}</span> : null}
       </span>
 
       {row.action ? (
@@ -111,11 +117,11 @@ function Row({
             rel="noopener noreferrer"
             onClick={() => onRead?.(row.id)}
           >
-            {row.action.label}
+            {copy(row.action.label)}
           </a>
         ) : (
           <Link className="af-nt-act" href={row.action.href} onClick={() => onRead?.(row.id)}>
-            {row.action.label}
+            {copy(row.action.label)}
           </Link>
         )
       ) : null}
@@ -132,10 +138,10 @@ function Row({
           href={row.handoff.href}
           target="_blank"
           rel="noopener noreferrer"
-          title={`${row.handoff.label} · ${row.handoff.screen}`}
+          title={`${copy(row.handoff.label)} · ${copy(row.handoff.screen)}`}
           onClick={() => onRead?.(row.id)}
         >
-          {row.handoff.label} <span aria-hidden>↗</span>
+          {copy(row.handoff.label)} <span aria-hidden>↗</span>
         </a>
       ) : null}
 
@@ -152,11 +158,31 @@ function Row({
 }
 
 export function NotificationsCenter({ data }: NotificationsCenterProps) {
+  const accountId = useClientSyncAccount()
+  const { language } = useOptionalLanguage()
+  if (data.viewerId && data.viewerId !== accountId) return <p role="status">{language === 'es' ? 'Cargando notificaciones…' : 'Loading notifications…'}</p>
+  return <ScopedNotificationsCenter key={`${accountId ?? ''}:${data.leagueId ?? ''}`} data={data} />
+}
+
+function ScopedNotificationsCenter({ data }: NotificationsCenterProps) {
+  const { language } = useOptionalLanguage()
+  const copy = (english: string) => coreUiCopy(english, language)
   const [filter, setFilter] = useState<NotificationFilter>('all')
   const [readIds, setReadIds] = useState<Set<string>>(new Set())
   const [marking, setMarking] = useState(false)
   const [markedAll, setMarkedAll] = useState(false)
   const [readError, setReadError] = useState<string | null>(null)
+  const seq = useRef(0)
+  const busy = useRef(false)
+  useEffect(() => {
+    seq.current += 1
+    busy.current = false
+    setReadIds(new Set())
+    setMarkedAll(false)
+    setMarking(false)
+    setReadError(null)
+    return () => { seq.current += 1 }
+  }, [data.rest, data.unread])
 
   const match = useCallback(
     (r: NotificationRow) => filter === 'all' || r.kind === filter,
@@ -182,19 +208,26 @@ export function NotificationsCenter({ data }: NotificationsCenterProps) {
    * they are filtered out of the request rather than sent and silently ignored.
    */
   const markRead = useCallback(async (ids: string[] | 'all') => {
+    if (busy.current) return
     const payload =
       ids === 'all' ? 'all' : [...new Set(ids.flatMap((id) =>
         groupNotificationRows(data.rest).find((r) => r.id === id)?.relatedIds ?? [id],
       ))].filter((id) => !id.startsWith('issue:'))
     if (payload !== 'all' && payload.length === 0) return
+    busy.current = true
+    const mine = ++seq.current
     setMarking(true)
     setReadError(null)
     const response = await fetch('/api/user/notifications', {
       method: 'PATCH',
+      signal: AbortSignal.timeout(15_000),
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ids: payload, ...(data.leagueId ? { leagueId: data.leagueId } : {}) }),
     }).catch(() => null)
-    if (!response?.ok) {
+    const result = await response?.json?.().catch(() => null)
+    if (mine !== seq.current) return
+    busy.current = false
+    if (!response?.ok || result?.success !== true) {
       setReadError('Could not mark notifications read. Please try again.')
       setMarking(false)
       return
@@ -231,13 +264,13 @@ export function NotificationsCenter({ data }: NotificationsCenterProps) {
     <div className="af-nt">
       <header className="af-nt-head">
         <div>
-          <h1 className="af-display af-nt-title">Notifications</h1>
+          <h1 className="af-display af-nt-title">{copy('Notifications')}</h1>
           <p className="af-nt-sub">
             {unread > 0
-              ? `${unread} waiting${data.leagueId ? ' in this league' : ''}. The ones with a clock on them are at the top.`
+              ? language === 'es' ? `${unread} pendientes${data.leagueId ? ' en esta liga' : ''}. Los avisos con plazo aparecen primero.` : `${unread} waiting${data.leagueId ? ' in this league' : ''}. The ones with a clock on them are at the top.`
               : data.leagueId
-                ? 'Nothing is waiting on you in this league.'
-                : 'Nothing is waiting on you.'}
+                ? copy('Nothing is waiting on you in this league.')
+                : copy('Nothing is waiting on you.')}
           </p>
         </div>
         {/*
@@ -253,10 +286,10 @@ export function NotificationsCenter({ data }: NotificationsCenterProps) {
           onClick={() => markRead('all')}
           disabled={marking || unread === 0}
         >
-          {marking ? 'Marking…' : 'Mark all read'}
+          {copy(marking ? 'Marking…' : 'Mark all read')}
         </button>
       </header>
-      {readError ? <p role="alert">{readError}</p> : null}
+      {readError ? <p role="alert">{copy(readError)}</p> : null}
 
       {/*
         🛑 THE ASK LIVES HERE BECAUSE MOBILE NEVER REACHED THE OTHER ONE.
@@ -272,7 +305,8 @@ export function NotificationsCenter({ data }: NotificationsCenterProps) {
         The card renders its own states (unsupported, not configured, denied, already on),
         so the only correct gate here is "none".
       */}
-      <div className="af-nt-push">
+      {/* Web push and web install only — hidden inside the iOS app, wrapper included, so no empty box. */}
+      <div className="af-nt-push" data-hide-in-ios-app>
         <EnableWebPushCard />
         {/*
           ⚠ INSTALLING IS A PREREQUISITE FOR ALERTS ON IPHONE, NOT A SEPARATE FEATURE.
@@ -284,9 +318,11 @@ export function NotificationsCenter({ data }: NotificationsCenterProps) {
           <InstallButton hideWhenInstalled />
         </div>
       </div>
+      {/* The app's own alerts card; renders nothing outside the iOS app. */}
+      <IosAppPushCard className="af-nt-push" />
 
       {/* Live counts, straight off the loader. */}
-      <div className="af-nt-filters" role="tablist" aria-label="Filter notifications">
+      <div className="af-nt-filters" role="tablist" aria-label={copy('Filter notifications')}>
         {visibleFilters(data.mentionsAvailable).map((f) => (
           <button
             key={f.id}
@@ -297,7 +333,7 @@ export function NotificationsCenter({ data }: NotificationsCenterProps) {
             data-on={filter === f.id}
             onClick={() => setFilter(f.id)}
           >
-            {f.label}
+            {copy(f.label)}
             <span className="af-nt-filtercount af-num">{data.counts[f.id]}</span>
           </button>
         ))}
@@ -305,9 +341,9 @@ export function NotificationsCenter({ data }: NotificationsCenterProps) {
 
       {actToday.length > 0 ? (
         <section className="af-nt-section" data-tier="urgent">
-          <h2 className="af-nt-sectiontitle">Act today</h2>
+          <h2 className="af-nt-sectiontitle">{copy('Act today')}</h2>
           <p className="af-nt-sectionnote">
-            Every one of these has a deadline before tomorrow. Nothing without a clock is in here.
+            {copy('Every one of these has a deadline before tomorrow. Nothing without a clock is in here.')}
           </p>
           <ul className="af-nt-list">
             {actToday.map((r) => (
@@ -318,7 +354,7 @@ export function NotificationsCenter({ data }: NotificationsCenterProps) {
       ) : null}
 
       <section className="af-nt-section">
-        <h2 className="af-nt-sectiontitle">Everything else</h2>
+        <h2 className="af-nt-sectiontitle">{copy('Everything else')}</h2>
         {/*
           * Says the window out loud. The chip counts are computed from the rows
           * on this page, so with more stored than the loader fetches they are a
@@ -327,9 +363,9 @@ export function NotificationsCenter({ data }: NotificationsCenterProps) {
           */}
         {data.olderNotListed > 0 ? (
           <p className="af-nt-sectionnote">
-            The {data.listed} most recent are listed here. {data.olderNotListed} older{' '}
-            {data.olderNotListed === 1 ? 'notification is' : 'notifications are'} not shown, so the
-            counts above describe this page rather than everything you have.
+            {language === 'es'
+              ? `Aquí se muestran los ${data.listed} avisos más recientes. ${data.olderNotListed} anteriores no aparecen; los conteos de arriba describen esta página, no todos tus avisos.`
+              : `The ${data.listed} most recent are listed here. ${data.olderNotListed} older ${data.olderNotListed === 1 ? 'notification is' : 'notifications are'} not shown, so the counts above describe this page rather than everything you have.`}
           </p>
         ) : null}
         {rest.length > 0 ? (
@@ -342,9 +378,9 @@ export function NotificationsCenter({ data }: NotificationsCenterProps) {
           <p className="af-nt-empty">
             {filter === 'all'
               ? data.leagueId
-                ? 'No notifications on file for this league. This is a log of things that happened — an empty one means nothing has here, not that we stopped watching.'
-                : 'No notifications on file. This is a log of things that happened — an empty one means nothing has, not that we stopped watching.'
-              : `Nothing under ${FILTERS.find((f) => f.id === filter)!.label}.`}
+                ? copy('No notifications on file for this league. This is a log of things that happened — an empty one means nothing has here, not that we stopped watching.')
+                : copy('No notifications on file. This is a log of things that happened — an empty one means nothing has, not that we stopped watching.')
+              : language === 'es' ? `Nada en ${copy(FILTERS.find((f) => f.id === filter)!.label)}.` : `Nothing under ${FILTERS.find((f) => f.id === filter)!.label}.`}
           </p>
         )}
       </section>
@@ -355,14 +391,13 @@ export function NotificationsCenter({ data }: NotificationsCenterProps) {
       */}
       {data.push.suppressedReason ? (
         <footer className="af-nt-foot">
-          <p className="af-nt-foot-t">Why your phone stayed quiet</p>
-          <p className="af-nt-foot-b">{data.push.suppressedReason}</p>
+          <p className="af-nt-foot-t">{copy('Why your phone stayed quiet')}</p>
+          <p className="af-nt-foot-b">{copy(data.push.suppressedReason)}</p>
           <p className="af-nt-foot-b">
-            At this many leagues the job is holding things back, not sending them. Anything without
-            a deadline waits here instead of ringing.
+            {copy('At this many leagues the job is holding things back, not sending them. Anything without a deadline waits here instead of ringing.')}
           </p>
           <Link href="/settings?tab=notifications" className="af-nt-foot-link">
-            Change what gets through
+            {copy('Change what gets through')}
           </Link>
         </footer>
       ) : null}

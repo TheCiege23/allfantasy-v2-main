@@ -7,7 +7,19 @@ const h = vi.hoisted(() => ({
   buildHeadToHeadGrounding: vi.fn(),
   prepareChimmyDecisionAnswer: vi.fn(),
   recordChatStartSitAdvice: vi.fn(),
+  readPlan: vi.fn(),
+  takePlan: vi.fn(),
+  releasePlan: vi.fn(),
+  runLoop: vi.fn(),
 }))
+
+/* Default: no plan includes Chimmy, so every existing case below takes the quick, grounded path. */
+vi.mock('@/lib/chimmy/planAllowance', () => ({
+  readChimmyPlanAllowance: h.readPlan,
+  takeChimmyPlanAllowance: h.takePlan,
+  releaseChimmyPlanAllowance: h.releasePlan,
+}))
+vi.mock('@/lib/chimmy/tools/chimmyToolLoop', () => ({ runChimmyToolLoop: h.runLoop }))
 
 vi.mock('@/lib/openai-client', () => ({ openaiChatText: h.openaiChatText }))
 vi.mock('@/lib/chimmy/decisionAnswerService', () => ({ prepareChimmyDecisionAnswer: h.prepareChimmyDecisionAnswer }))
@@ -40,6 +52,66 @@ beforeEach(() => {
   h.loadLeagueGroundingForUser.mockResolvedValue({ ok: true, snapshot: { id: 'l1' } })
   h.buildLeagueStandingsContext.mockResolvedValue('STANDINGS: Casey 5-1')
   h.buildHeadToHeadGrounding.mockResolvedValue({ text: 'H2H: Casey 3-1 vs Jordan', managers: 2, source: 'sleeper' })
+  h.readPlan.mockResolvedValue(null)
+  h.takePlan.mockImplementation(async ({ state }: { state: unknown }) => state)
+  h.releasePlan.mockResolvedValue(true)
+  h.runLoop.mockResolvedValue({ text: 'From the tool loop.', toolsUsed: ['get_my_roster'], turns: 2 })
+})
+
+const PLAN = { planName: 'AF Pro', limit: 100, used: 3, remaining: 97, resetsAt: '2026-10-12T00:00:00.000Z' }
+
+describe('🛑 @chimmy in a chat runs the SAME assistant as the panel for a plan holder', () => {
+  it('a member with allowance left gets the tool loop, the shared prompt, and the proven league', async () => {
+    h.readPlan.mockResolvedValue(PLAN)
+    const { CHIMMY_TOOL_LOOP_SYSTEM_PROMPT } = await import('@/lib/chimmy/tools/toolLoopSystemPrompt')
+    const out = await generateChimmyPrivateReply('@chimmy how is my team looking?', { leagueId: 'l1', userId: 'u1' })
+    expect(out).toBe('From the tool loop.')
+    const args = h.runLoop.mock.calls[0][0]
+    expect(args.systemPrompt).toBe(CHIMMY_TOOL_LOOP_SYSTEM_PROMPT)
+    expect(args.context.leagueId).toBe('l1')
+    expect(args.context.userId).toBe('u1')
+    // A chat bubble cannot show a confirm card: no collector, so the propose tools refuse in words.
+    expect(args.context.actionCards).toBeUndefined()
+    expect(args.styleLine).toMatch(/seen only by the person who asked/)
+    expect(args.budgetMs).toBeLessThan(75_000)
+    expect(h.takePlan).toHaveBeenCalledTimes(1)
+    expect(h.openaiChatText).not.toHaveBeenCalled()
+  })
+
+  it('🛑 a league the asker is NOT a member of is never handed to the tools', async () => {
+    h.readPlan.mockResolvedValue(PLAN)
+    h.loadLeagueGroundingForUser.mockResolvedValue({ ok: false, reason: 'not_member' })
+    await generateChimmyPrivateReply('@chimmy who leads this league?', { leagueId: 'someone-elses', userId: 'u1' })
+    expect(h.runLoop.mock.calls[0][0].context.leagueId).toBeNull()
+  })
+
+  it('no answer from the loop: the included answer goes BACK, and the quick answer is given', async () => {
+    h.readPlan.mockResolvedValue(PLAN)
+    h.runLoop.mockResolvedValue(null)
+    const out = await generateChimmyPrivateReply('@chimmy hi', { leagueId: 'l1', userId: 'u1' })
+    expect(h.releasePlan).toHaveBeenCalledTimes(1)
+    expect(out).toBe('Start Kelce.')
+  })
+
+  it('allowance used up (or no plan): no tool loop, the quick grounded answer as before', async () => {
+    h.readPlan.mockResolvedValue({ ...PLAN, used: 100, remaining: 0 })
+    await generateChimmyPrivateReply('@chimmy hi', { leagueId: 'l1', userId: 'u1' })
+    expect(h.runLoop).not.toHaveBeenCalled()
+    expect(h.takePlan).not.toHaveBeenCalled()
+    expect(h.openaiChatText).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('🛑 the quick answer is no longer an uncapped model call', () => {
+  it('allows FALLBACK_REPLIES_PER_HOUR an hour per person, then says so instead of calling the model', async () => {
+    const { FALLBACK_REPLIES_PER_HOUR } = await import('@/lib/chat-core/chimmyPrivateReply')
+    const user = `rate-${Math.random().toString(36).slice(2)}`
+    for (let i = 0; i < FALLBACK_REPLIES_PER_HOUR; i++) await generateChimmyPrivateReply('@chimmy hi', { userId: user })
+    const calls = h.openaiChatText.mock.calls.length
+    const out = await generateChimmyPrivateReply('@chimmy hi', { userId: user })
+    expect(out).toMatch(/asked @chimmy a lot this hour/)
+    expect(h.openaiChatText.mock.calls.length).toBe(calls)
+  })
 })
 
 describe('generateChimmyPrivateReply grounding', () => {
@@ -95,6 +167,21 @@ describe('generateChimmyPrivateReply grounding', () => {
     expect(systemPrompt()).toContain('not_member')
     expect(systemPrompt()).toMatch(/could not read them/i)
     expect(h.buildLeagueStandingsContext).not.toHaveBeenCalled()
+  })
+
+  /*
+   * The loader is `(userId, leagueId)`. This file's default mock admits ANY arguments, so a swapped
+   * call passed every test here while the real membership check refused every member (2026-08-26 to
+   * 2026-09-28). This mock admits only the real member, the way `resolveLeagueMembership` does.
+   */
+  it('checks membership as (userId, leagueId), the loader\'s real argument order', async () => {
+    h.loadLeagueGroundingForUser.mockImplementation(async (userId: string, leagueId: string) =>
+      userId === 'u1' && leagueId === 'l1' ? { ok: true, snapshot: { id: 'l1' } } : { ok: false, reason: 'not_member' })
+
+    await generateChimmyPrivateReply('@chimmy standings?', { leagueId: 'l1', userId: 'u1' })
+
+    expect(h.loadLeagueGroundingForUser).toHaveBeenCalledWith('u1', 'l1')
+    expect(systemPrompt()).toContain('STANDINGS: Casey 5-1')
   })
 
   it('treats a thrown access check as no access', async () => {

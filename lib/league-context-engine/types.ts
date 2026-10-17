@@ -118,6 +118,13 @@ export type MatchupPeriodContext = {
   currentPeriod: number
   periodLabel: string
   source: 'sleeper_state_nfl' | 'league_season_default' | 'unknown'
+  /**
+   * True only when Sleeper's NFL state is this league's season, regular season, and an integer
+   * week 1–18. `source: 'sleeper_state_nfl'` alone does not mean that: it is also returned in the
+   * preseason, the postseason and a prior season. Anything treating the week as a COMPLETED-week
+   * boundary (value-v2 strategy evidence) must require this.
+   */
+  verifiedRegularSeason?: boolean
 }
 
 /**

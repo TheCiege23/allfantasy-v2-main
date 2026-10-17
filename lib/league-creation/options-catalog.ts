@@ -2,6 +2,7 @@ import {
   LEAGUE_CREATE_OPTIONS_CATALOG_V1,
   type LeagueCreateOptionsCatalog,
 } from '@/lib/league-creation/options-catalog-seed-data'
+import { normalizeDraftTypeForEngineValidation, resolveEffectiveDraftTypeForConcept } from '@/lib/draft-types/draftTypeRegistry'
 
 export function getFallbackLeagueCreateOptionsCatalog(): LeagueCreateOptionsCatalog {
   return LEAGUE_CREATE_OPTIONS_CATALOG_V1
@@ -23,6 +24,16 @@ export function getAllowedSportsFromCatalog(catalog: LeagueCreateOptionsCatalog,
 
 export function getAllowedDraftTypesFromCatalog(catalog: LeagueCreateOptionsCatalog, concept: string): string[] {
   return catalog.allowedDraftTypesByConcept[concept] ?? []
+}
+
+/** Specialty wire IDs are valid when they resolve from an allowed base draft choice. */
+export function isAllowedDraftTypeFromCatalog(catalog: LeagueCreateOptionsCatalog, concept: string, draftType: string): boolean {
+  const allowed = getAllowedDraftTypesFromCatalog(catalog, concept)
+  if (!allowed.length) return true
+  const normalized = normalizeDraftTypeForEngineValidation(draftType)
+  return allowed.includes(draftType) || allowed.includes(normalized) || allowed.some((base) =>
+    resolveEffectiveDraftTypeForConcept(concept, base) === draftType,
+  )
 }
 
 export function getAllowedScoringPresetsFromCatalog(

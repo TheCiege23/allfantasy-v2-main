@@ -21,7 +21,8 @@ export const ACTIVE_SYNC_SCOPES = ['league_state', 'transactions', 'teams_roster
  * with one JS thread is how one slow league stalls the ones behind it.
  */
 export const ACTIVE_SYNC_LEAGUE_TIMEOUT_MS = 60_000
-const ACTIVE_LANE_SUFFIX = 'active'
+/** State-key suffix for the five-minute lane — shared by `lineupRefresh.ts` so a manual refresh and the lane hold one lock. */
+export const ACTIVE_LANE_SUFFIX = 'active'
 const RECENT_VIEW_WINDOW_MS = 30 * 60_000
 
 /**
@@ -101,14 +102,19 @@ export async function selectActiveSyncConnections(input?: {
   const eligible = perProvider
     .flat()
     .filter((connection) => connection.season === season)
-    .filter((connection) =>
-      isInSeason(resolveSeasonState({
+    .filter((connection) => {
+      const { state } = resolveSeasonState({
         sport: connection.sport,
         provider: connection.provider,
         season: connection.season,
         now,
-      }).state),
-    )
+      })
+      // An absent calendar does not establish an offseason. Current-season
+      // Fantrax college-football leagues otherwise wait four hours between
+      // refreshes even while games are being played. Keep their mutable data
+      // in the bounded active lane without inventing season boundaries.
+      return isInSeason(state) || state === 'unknown'
+    })
     .map((connection) => ({ ...connection, runKey: `${connection.runKey}:${ACTIVE_LANE_SUFFIX}` }))
 
   if (eligible.length === 0) return { connections: [], eligible: 0, recentlyViewedSelected: 0 }

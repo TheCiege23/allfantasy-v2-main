@@ -9,8 +9,8 @@
  * Every field is derived from persisted deterministic data only: the current
  * `RedraftMatchup` row (week, status, home/away projected points, opponent) and
  * the reused Team Health lineup signals (RedraftRosterPlayer). NO AI, NO
- * generative/recommendation endpoint (`/api/ai-tools/matchup-prep/*`,
- * `/api/ai/matchup-preview` are explicitly NOT consumed). When projections or
+ * generative/recommendation endpoint (`/api/ai/matchup-preview` is explicitly
+ * NOT consumed). When projections or
  * opponent data aren't safely available, the contract says so honestly with
  * `null` / `'unknown'` / `'unavailable'` rather than fabricating a value.
  */

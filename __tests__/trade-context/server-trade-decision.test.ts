@@ -110,3 +110,22 @@ describe('server trade decision capture', () => {
     expect(result.reason).toContain('3-team')
   })
 })
+
+describe('the proposal receipt is handed back, not saved as a second row', () => {
+  it('returns the engine receipt unsaved — tradeService writes it into the trade row', async () => {
+    evaluateCanonicalTrade.mockResolvedValue({
+      action: 'accept', recommendation: 'x', fairnessScore: 80, confidenceScore: 90,
+      coverageStatus: 'complete', coveragePct: 100, grade: 'A', memo: { snapshot: { version: 'v' } }, rosterImpact: null,
+    })
+    const saveReceipt = vi.fn(async () => ({ id: 'should-not-happen' }))
+    const result = await evaluateServerTradeDecision({
+      leagueId: 'l1', proposerRosterId: 'r1', receiverRosterId: 'r2', participantRosterIds: ['r1', 'r2'], season: 2026,
+      assets: [{ itemType: 'player', itemReference: 'p1', fromRosterId: 'r1', toRosterId: 'r2', metadata: { playerName: 'One' } }],
+      capturedAt: '2026-09-19T17:00:00.000Z',
+      gradeProposal: vi.fn(async () => PROPOSER_GRADE),
+      engineDeps: { saveReceipt },
+    })
+    expect(saveReceipt).not.toHaveBeenCalled()
+    expect(result.evaluationReceipt).toMatchObject({ surface: 'proposal', persisted: false, grade: { letter: 'B' } })
+  })
+})

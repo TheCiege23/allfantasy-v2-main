@@ -91,3 +91,12 @@ describe("FantasyValueSnapshot contract", () => {
     expect(snapshot.missingData).toContain("recent news")
   })
 })
+
+
+describe('Observed stat units', () => {
+  it.each(['NFL','NBA','NHL','MLB','NCAAF','NCAAB','SOCCER'])('does not treat raw points as fantasy points for %s', sport => {
+    const snapshot = buildFantasyValueSnapshot({sport,playerName:'Unscored Stats',stats:{points:200,games:10},projections:{points:300}})
+    expect(snapshot.shortTermValue).toBeNull()
+    expect(snapshot.missingData).toContain('short-term projection/stat value')
+  })
+})

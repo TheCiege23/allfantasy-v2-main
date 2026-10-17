@@ -68,9 +68,10 @@ export function DivisionSettingsCommissionerPanel({ leagueId }: Props) {
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const [savedConfig, setSavedConfig] = useState<DivisionConfig | null>(null)
 
-  // Label: "Divisions" or "Tribes"
-  const groupLabel = isSurvivor ? 'Tribe' : 'Division'
-  const groupLabelPlural = isSurvivor ? 'Tribes' : 'Divisions'
+  // Label: "Divisions" or "Tribes", in the reader's language. (The default NAMES written by
+  // handleCountChange stay English — they are saved into the league, and every member reads them.)
+  const groupLabel = isSurvivor ? t('division.tribeWord') : t('division.divisionWord')
+  const groupLabelPlural = isSurvivor ? t('division.tribesWord') : t('division.divisionsWord')
 
   // Load
   useEffect(() => {
@@ -89,7 +90,7 @@ export function DivisionSettingsCommissionerPanel({ leagueId }: Props) {
         setTeams(data.teams ?? [])
         setSavedConfig(cfg)
       })
-      .catch(() => { if (active) setError('Failed to load division settings') })
+      .catch(() => { if (active) setError(t('division.loadFailed')) })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
   }, [leagueId])
@@ -151,11 +152,11 @@ export function DivisionSettingsCommissionerPanel({ leagueId }: Props) {
         body: JSON.stringify({ count, names, teamAssignments, aiNamingEnabled }),
       })
       const data = await res.json()
-      if (!res.ok) { setError(data.error ?? 'Save failed'); return }
+      if (!res.ok) { setError(data.error ?? t('leagueSettings.saveFailed')); return }
       setSavedConfig(data.config)
       setSuccess(true)
       setTimeout(() => setSuccess(false), 3000)
-    } catch { setError('Request failed') }
+    } catch { setError(t('leagueSettings.requestFailed')) }
     finally { setSaving(false) }
   }, [leagueId, count, names, teamAssignments, aiNamingEnabled])
 
@@ -192,9 +193,10 @@ export function DivisionSettingsCommissionerPanel({ leagueId }: Props) {
     return { groups, unassigned }
   }, [teams, teamAssignments, count])
 
-  if (loading) return <div className="py-8 text-center text-sm text-white/50">Loading division settings...</div>
+  if (loading) return <div className="py-8 text-center text-sm text-white/50">{t('division.loading')}</div>
 
-  const countLabel = count === 0 ? 'No' : String(count)
+  const noneLabel = isSurvivor ? t('division.noTribes') : t('division.noDivisions')
+  const countLabel = count === 0 ? noneLabel : String(count)
 
   return (
     <div className="space-y-6">
@@ -210,10 +212,10 @@ export function DivisionSettingsCommissionerPanel({ leagueId }: Props) {
       <div className="space-y-2">
         <div>
           <p className="text-[11px] font-bold uppercase tracking-wider text-white/50">
-            Num of {groupLabelPlural}
+            {isSurvivor ? t('division.numTribes') : t('division.numDivisions')}
           </p>
-          <p className="text-[10px] text-white/30">
-            Set number of {isSurvivor ? 'tribes' : 'divisions'} for league
+          <p className="text-[11px] text-white/30">
+            {isSurvivor ? t('division.setNumberTribes') : t('division.setNumber')}
           </p>
         </div>
 
@@ -240,8 +242,14 @@ export function DivisionSettingsCommissionerPanel({ leagueId }: Props) {
                     count === opt.value ? 'text-cyan-300 font-medium' : 'text-white/80'
                   }`}
                 >
-                  <span>{opt.label === 'No' ? 'No' : opt.label}</span>
-                  <span className="ml-1 text-white/40">{groupLabelPlural}</span>
+                  {opt.value === 0 ? (
+                    <span>{noneLabel}</span>
+                  ) : (
+                    <>
+                      <span>{opt.label}</span>
+                      <span className="ml-1 text-white/40">{groupLabelPlural}</span>
+                    </>
+                  )}
                 </button>
               ))}
             </div>
@@ -254,7 +262,7 @@ export function DivisionSettingsCommissionerPanel({ leagueId }: Props) {
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <p className="text-[11px] font-bold uppercase tracking-wider text-white/50">
-              {groupLabel} Names
+              {isSurvivor ? t('division.tribeNames') : t('division.names')}
             </p>
             {isCommissioner && (
               <button
@@ -306,8 +314,8 @@ export function DivisionSettingsCommissionerPanel({ leagueId }: Props) {
             <p className="text-[11px] font-bold uppercase tracking-wider text-white/50">
               {t('division.aiAutoNaming')}
             </p>
-            <p className="text-[10px] text-white/30">
-              Automatically generate creative {isSurvivor ? 'tribe' : 'division'} names
+            <p className="text-[11px] text-white/30">
+              {isSurvivor ? t('division.aiAutoNamingDescTribes') : t('division.aiAutoNamingDesc')}
             </p>
           </div>
           <button
@@ -330,7 +338,7 @@ export function DivisionSettingsCommissionerPanel({ leagueId }: Props) {
       {count > 0 && teams.length > 0 && (
         <div className="space-y-3">
           <p className="text-[11px] font-bold uppercase tracking-wider text-white/50">
-            Team Assignments
+            {t('division.teamAssignments')}
           </p>
 
           {/* Division groups */}
@@ -341,7 +349,7 @@ export function DivisionSettingsCommissionerPanel({ leagueId }: Props) {
                   backgroundColor: ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316'][divIdx % 8]
                 }} />
                 <span className="text-[12px] font-semibold text-white/70">{names[divIdx] ?? `${groupLabel} ${divIdx + 1}`}</span>
-                <span className="ml-auto text-[10px] text-white/30">
+                <span className="ml-auto text-[11px] text-white/30">
                   {teamsByDivision.groups[divIdx]?.length ?? 0} {t('division.teams')}
                 </span>
               </div>
@@ -353,16 +361,16 @@ export function DivisionSettingsCommissionerPanel({ leagueId }: Props) {
                       {team.avatarUrl ? (
                         <img src={team.avatarUrl} alt="" className="h-6 w-6 rounded-full border border-white/10 object-cover" />
                       ) : (
-                        <div className="flex h-6 w-6 items-center justify-center rounded-full border border-white/10 bg-white/5 text-[9px] font-bold text-white/40">
+                        <div className="flex h-6 w-6 items-center justify-center rounded-full border border-white/10 bg-white/5 text-[11px] font-bold text-white/40">
                           {(team.teamName ?? '?')[0]}
                         </div>
                       )}
-                      <span className="flex-1 text-[12px] text-white/80">{team.teamName ?? 'Unknown'}</span>
+                      <span className="flex-1 text-[12px] text-white/80">{team.teamName ?? t('division.unknownTeam')}</span>
                       {isCommissioner && (
                         <select
                           value={divIdx}
                           onChange={(e) => handleTeamAssign(team.id, parseInt(e.target.value, 10))}
-                          className="rounded border border-white/15 bg-[#0d1526] px-1.5 py-0.5 text-[10px] text-white/60"
+                          className="rounded border border-white/15 bg-[#0d1526] px-1.5 py-0.5 text-[11px] text-white/60"
                         >
                           {names.map((n, idx) => (
                             <option key={idx} value={idx}>{n || `${groupLabel} ${idx + 1}`}</option>
@@ -388,18 +396,18 @@ export function DivisionSettingsCommissionerPanel({ leagueId }: Props) {
                     {team.avatarUrl ? (
                       <img src={team.avatarUrl} alt="" className="h-6 w-6 rounded-full border border-white/10 object-cover" />
                     ) : (
-                      <div className="flex h-6 w-6 items-center justify-center rounded-full border border-white/10 bg-white/5 text-[9px] font-bold text-white/40">
+                      <div className="flex h-6 w-6 items-center justify-center rounded-full border border-white/10 bg-white/5 text-[11px] font-bold text-white/40">
                         {(team.teamName ?? '?')[0]}
                       </div>
                     )}
-                    <span className="flex-1 text-[12px] text-white/80">{team.teamName ?? 'Unknown'}</span>
+                    <span className="flex-1 text-[12px] text-white/80">{team.teamName ?? t('division.unknownTeam')}</span>
                     {isCommissioner && count > 0 && (
                       <select
                         value=""
                         onChange={(e) => { if (e.target.value !== '') handleTeamAssign(team.id, parseInt(e.target.value, 10)) }}
-                        className="rounded border border-white/15 bg-[#0d1526] px-1.5 py-0.5 text-[10px] text-white/60"
+                        className="rounded border border-white/15 bg-[#0d1526] px-1.5 py-0.5 text-[11px] text-white/60"
                       >
-                        <option value="">Assign...</option>
+                        <option value="">{t('division.assign')}</option>
                         {names.map((n, idx) => (
                           <option key={idx} value={idx}>{n || `${groupLabel} ${idx + 1}`}</option>
                         ))}
@@ -457,13 +465,13 @@ export function DivisionSettingsCommissionerPanel({ leagueId }: Props) {
               onClick={save}
               className="flex-1 rounded-lg bg-cyan-600/80 px-4 py-2.5 text-sm font-medium text-white hover:bg-cyan-600 disabled:opacity-50 transition"
             >
-              {saving ? 'Saving...' : isSurvivor ? t('division.saveTribe') : t('division.saveDivision')}
+              {saving ? t('scoring.saving') : isSurvivor ? t('division.saveTribe') : t('division.saveDivision')}
             </button>
             {hasChanges && (
               <button type="button" onClick={resetToSaved}
                 className="flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-xs text-white/60 hover:bg-white/10 transition">
                 <RotateCcw className="h-3.5 w-3.5" />
-                Reset
+                {t('division.reset')}
               </button>
             )}
           </div>

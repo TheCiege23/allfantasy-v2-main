@@ -2,6 +2,8 @@ import { beforeEach, expect, it, vi } from 'vitest'
 const h = vi.hoisted(() => ({ trades: vi.fn(), players: vi.fn(), teams: vi.fn() }))
 vi.mock('@/lib/prisma', () => ({ prisma: { leagueTrade: { findMany: h.trades }, sportsPlayer: { findMany: h.players }, leagueTeam: { findMany: h.teams } } }))
 vi.mock('@/lib/player-media', () => ({ attachPlayerMediaBatch: vi.fn(async () => new Map()) }))
+const provider = vi.hoisted(() => ({ resolve: vi.fn(async () => new Map()) }))
+vi.mock('@/lib/player-identity/resolveProviderRosterPlayers', () => ({ resolveProviderRosterPlayers: provider.resolve }))
 import { persistedRecentTrades } from '@/lib/core-app/persistedRecentTrades'
 beforeEach(() => {
   h.players.mockResolvedValue([{ sleeperId: 'p', name: 'Player One', position: 'QB' }])
@@ -31,4 +33,24 @@ it('keeps identical provider league and transaction IDs in separate feeds', asyn
   const trades = await persistedRecentTrades([{ id: 'espn-league', name: 'ESPN', platform: 'espn', platformLeagueId: '123' }, { id: 'yahoo-league', name: 'Yahoo', platform: 'yahoo', platformLeagueId: '123' }], new Date('2026-09-26'))
   expect(trades.map(t => t.leagueId)).toEqual(['espn-league', 'yahoo-league'])
   expect(new Set(trades.map(t => t.id)).size).toBe(2)
+})
+
+/* Production 2026-09-28: an ESPN trade rendered "Player 4432620" on /core. */
+it('names an ESPN trade player through the identity map, and never shows a raw provider id', async () => {
+  provider.resolve.mockImplementation(async (platform: string, ids: readonly string[], sport: string) =>
+    platform === 'espn' && sport === 'NFL'
+      ? new Map(ids.filter((id) => id === '4432620').map((id) => [id, { name: 'Brock Bowers', position: 'TE', team: 'LV', imageUrl: null, sport: 'NFL' }]))
+      : new Map(),
+  )
+  const row = { platform: 'espn', sport: 'nfl', transactionId: 't', tradeDate: new Date('2026-09-25T12:00:00Z'), picksReceived: [] }
+  h.trades.mockResolvedValue([
+    { ...row, playersReceived: ['4432620'], history: { sleeperLeagueId: 'e1', sleeperUsername: 'other1' } },
+    { ...row, playersReceived: ['999'], history: { sleeperLeagueId: 'e1', sleeperUsername: 'other2' } },
+  ])
+  const trades = await persistedRecentTrades([{ id: 'af', name: 'ESPN League', platformLeagueId: 'e1', platform: 'espn' }], new Date('2026-09-20'))
+  const [named, unnamed] = trades[0].sides.map((s) => s.received[0])
+  expect(named).toMatchObject({ name: 'Brock Bowers', position: 'TE', gradeAs: { kind: 'player', name: 'Brock Bowers' } })
+  expect(unnamed.name).toBe('Unrecognised ESPN player')
+  expect(unnamed.name).not.toContain('999')
+  expect(unnamed.gradeAs).toBeNull()
 })

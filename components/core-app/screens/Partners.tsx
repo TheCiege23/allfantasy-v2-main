@@ -35,9 +35,9 @@ const CAPABILITIES = [
     body: 'Point us at your league data and get back the call and its reasoning — lineups, trades, waivers, playoff paths — resolved against each league’s own settings, not a global ranking.',
   },
   {
-    key: 'MANAGER PSYCHOLOGY',
-    title: 'How your users actually play',
-    body: 'Trade, draft and lineup patterns read from your leagues’ real history and scored against each league’s own peers: who overpays, who never streams, who disengages in November.',
+    key: 'MANAGER RECORDS',
+    title: 'What your users actually did',
+    body: 'Every trade, draft pick, waiver bid and lineup, read from your leagues’ real history and counted against each league’s own settings — facts about what happened, never a label on who someone is.',
   },
   {
     key: 'CHIMMY INTELLIGENCE',
@@ -53,7 +53,7 @@ const CAPABILITIES = [
 
 const AUDIENCES = [
   { who: 'Fantasy platforms', why: 'Decision intelligence on your own leagues, without building a model team.' },
-  { who: 'Media & creators', why: 'Manager psychology and storylines drawn from the leagues you cover.' },
+  { who: 'Media & creators', why: 'Rivalries, records and storylines drawn from the leagues you cover.' },
   { who: 'League operators', why: 'Health, engagement and attention signals across every league you run.' },
   { who: 'Brands & agencies', why: 'Season-long activations grounded in real league behaviour.' },
 ]

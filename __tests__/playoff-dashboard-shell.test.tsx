@@ -566,12 +566,14 @@ describe("PlayoffBracketShell dashboard", () => {
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith("/api/brackets/playoffs/challenge-1/admin/sync-series?mode=teams_schedule_only", expect.objectContaining({ method: "POST" }))
       expect(toastSuccessMock).toHaveBeenCalledWith("Teams and schedule updated. User picks were not changed.")
+      expect(screen.getByTestId("playoff-sync-results-only-button")).toBeEnabled()
     })
 
     fireEvent.click(screen.getByTestId("playoff-sync-results-only-button"))
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith("/api/brackets/playoffs/challenge-1/admin/sync-series?mode=results_only", expect.objectContaining({ method: "POST" }))
       expect(toastSuccessMock).toHaveBeenCalledWith("Results synced. Reopen the entry or use Show Pick Results to verify Correct/Wrong picks.")
+      expect(screen.getByTestId("playoff-sync-series-button")).toBeEnabled()
     })
     expect(screen.getByTestId("playoff-sync-status-message")).toHaveTextContent("Results synced. Reopen the entry or use Show Pick Results to verify Correct/Wrong picks.")
 

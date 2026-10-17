@@ -1,6 +1,12 @@
 /**
  * Server-side expired-pick processor: advances snake/linear drafts when timerEndAt has passed
  * and no browser is open. Uses the same queue-first → BPA flow as slow-draft automation.
+ *
+ * Auction drafts are advanced too, by the SAME automation an open draft room runs
+ * (`runAuctionAutomationTick`): resolve an expired bid, and auto-bid / auto-nominate only where the
+ * league's settings already allow it. Before, auctions were skipped here (`auction_not_supported`),
+ * so an expired bid only closed while someone had the room open — with everyone gone, an auction
+ * sat on one nominated player indefinitely.
  */
 
 import 'server-only'
@@ -28,6 +34,7 @@ import {
 } from '@/lib/draft-notifications'
 import { publishDraftIntelForUpcomingManagers, sendDraftIntelDm } from '@/lib/draft-intelligence'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { runAuctionAutomationTick } from '@/lib/live-draft-engine/auction'
 
 type SlotOrderEntry = { slot: number; rosterId: string; displayName: string }
 type TradedPickRecord = {
@@ -42,6 +49,7 @@ export type ExpiredPickProcessDetail =
   | { leagueId: string; outcome: 'processed_queue'; rosterId: string; playerName: string }
   | { leagueId: string; outcome: 'processed_bpa'; rosterId: string; playerName: string }
   | { leagueId: string; outcome: 'processed_skip' }
+  | { leagueId: string; outcome: 'processed_auction'; actions: string[] }
   | { leagueId: string; outcome: 'skipped'; reason: string }
   | { leagueId: string; outcome: 'error'; message: string }
 
@@ -350,6 +358,33 @@ export async function processExpiredDraftPickForLeague(
   }
 }
 
+/**
+ * One auction league whose timer has expired: run the room's own automation tick, server-side.
+ *
+ * ⚠ NOT GATED ON `autoPickEnabled` OR THE SOFT TIMER, AND THAT IS PARITY, NOT AN OVERSIGHT. Closing
+ * an expired bid is the auction's clock doing its job, not a pick made on a manager's behalf — the
+ * open-room path (`runAutomationTicksThrottled`) runs this tick with no such gate. The parts that DO
+ * act for a manager (auto-bid, auto-nominate) are gated inside the tick on the league's own settings.
+ *
+ * Concurrency with a browser in the room: every resolve / bid / nomination takes the per-league
+ * auction lock and re-reads the session under it, and the pick row is unique on (session, overall),
+ * so this tick and a room poll racing each other cannot sell one nomination twice.
+ */
+export async function processExpiredAuctionForLeague(leagueId: string): Promise<ExpiredPickProcessDetail> {
+  try {
+    if (!(await isLeagueRosterDraftReady(leagueId))) {
+      return { leagueId, outcome: 'skipped', reason: 'roster_configuration_incomplete' }
+    }
+    const tick = await runAuctionAutomationTick(leagueId)
+    if (!tick.changed) return { leagueId, outcome: 'skipped', reason: 'auction_no_action' }
+    void invalidateLeagueDraftCaches(leagueId)
+    return { leagueId, outcome: 'processed_auction', actions: tick.actions.map((a) => a.type) }
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e)
+    return { leagueId, outcome: 'error', message }
+  }
+}
+
 export type ProcessExpiredDraftPicksOptions = {
   now?: Date
   /** Max leagues to scan from DB (safety cap). */
@@ -357,7 +392,7 @@ export type ProcessExpiredDraftPicksOptions = {
 }
 
 /**
- * Find in-progress snake/linear drafts with expired pick timers and process each.
+ * Find in-progress snake/linear/auction drafts with expired timers and process each.
  */
 export async function processExpiredDraftPicks(
   options: ProcessExpiredDraftPicksOptions = {},
@@ -368,7 +403,7 @@ export async function processExpiredDraftPicks(
   const candidates = await prisma.draftSession.findMany({
     where: {
       status: 'in_progress',
-      draftType: { in: ['snake', 'linear'] },
+      draftType: { in: ['snake', 'linear', 'auction'] },
       timerEndAt: { lte: now },
       // Sleeper-mirrored drafts are never ours to advance. sleeperSync does not write
       // timerEndAt, but a session our engine started BEFORE it was linked to Sleeper can
@@ -376,7 +411,7 @@ export async function processExpiredDraftPicks(
       // autopick into a board the mirror rewrites every tick, in a league we do not run.
       sleeperDraftId: null,
     },
-    select: { leagueId: true },
+    select: { leagueId: true, draftType: true },
     orderBy: { timerEndAt: 'asc' },
     take: maxLeagues,
   })
@@ -387,7 +422,10 @@ export async function processExpiredDraftPicks(
   let skipped = 0
 
   for (const row of candidates) {
-    const detail = await processExpiredDraftPickForLeague(row.leagueId, now)
+    const detail =
+      row.draftType === 'auction'
+        ? await processExpiredAuctionForLeague(row.leagueId)
+        : await processExpiredDraftPickForLeague(row.leagueId, now)
     details.push(detail)
     if (detail.outcome === 'error') {
       errors.push({ leagueId: detail.leagueId, message: detail.message })
@@ -396,7 +434,8 @@ export async function processExpiredDraftPicks(
     if (
       detail.outcome === 'processed_queue' ||
       detail.outcome === 'processed_bpa' ||
-      detail.outcome === 'processed_skip'
+      detail.outcome === 'processed_skip' ||
+      detail.outcome === 'processed_auction'
     ) {
       processed += 1
     } else {

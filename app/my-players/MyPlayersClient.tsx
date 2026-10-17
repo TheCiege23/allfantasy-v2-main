@@ -4,8 +4,7 @@
  * Cross-League Player Intelligence phase — Parts 12-13.
  *
  * A real, authenticated "My Players" workspace — not a broad dashboard
- * redesign, reuses the same dark/opacity Tailwind convention already
- * established in `LeagueHubClient.tsx`/`CommissionerOsActionsSummary.tsx`.
+ * redesign, reuses the app's existing dark/opacity Tailwind convention.
  * Fetches from `/api/player-portfolio` (server-derives the user, never
  * trusts a client-supplied id) and renders a filterable/sortable grid plus
  * an inline detail drawer per player, distinguishing loading/empty/
@@ -365,7 +364,7 @@ function PlayerCard({ item, onSelect }: { item: CrossLeaguePlayerPortfolioItem; 
         )}
         <div className="flex flex-1 items-center justify-between">
           <span className="text-sm font-semibold text-white">{item.displayName}</span>
-          {urgent ? <span className="rounded-full bg-red-500/15 px-2 py-0.5 text-[10px] font-medium text-red-300">Action</span> : null}
+          {urgent ? <span className="rounded-full bg-red-500/15 px-2 py-0.5 text-[11px] font-medium text-red-300">Action</span> : null}
         </div>
       </div>
       <p className="mt-0.5 text-xs text-white/50">
@@ -379,7 +378,7 @@ function PlayerCard({ item, onSelect }: { item: CrossLeaguePlayerPortfolioItem; 
         {item.exposure.leagueCount} league{item.exposure.leagueCount === 1 ? '' : 's'} · {item.exposure.starterCount} starting
       </p>
       {item.identityConfidence === 'ambiguous' || item.identityConfidence === 'unresolved' ? (
-        <p className="mt-1 text-[10px] text-amber-400/70">Identity {item.identityConfidence}</p>
+        <p className="mt-1 text-[11px] text-amber-400/70">Identity {item.identityConfidence}</p>
       ) : null}
     </button>
   )
@@ -422,7 +421,7 @@ function PlayerDetailDrawer({ item, onClose }: { item: CrossLeaguePlayerPortfoli
             <div key={a.canonicalLeagueId} className="rounded-lg border border-white/10 bg-white/[0.03] p-3">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium text-white">{a.leagueName}</span>
-                <span className="text-[10px] uppercase text-white/30">{a.provider}</span>
+                <span className="text-[11px] uppercase text-white/30">{a.provider}</span>
               </div>
               <p className="mt-0.5 text-xs text-white/50">
                 {a.teamName ?? 'Your team'} · {ROSTER_STATUS_LABEL[a.rosterStatus] ?? a.rosterStatus}
@@ -436,7 +435,7 @@ function PlayerDetailDrawer({ item, onClose }: { item: CrossLeaguePlayerPortfoli
               ) : (
                 <p className="mt-1 text-[11px] text-white/30">No action needed in this league.</p>
               )}
-              <p className="mt-1 text-[10px] text-white/30">
+              <p className="mt-1 text-[11px] text-white/30">
                 {a.executionCapability === 'native_execute'
                   ? 'Executable in AllFantasy'
                   : a.executionCapability === 'copy_action'

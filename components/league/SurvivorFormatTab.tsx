@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
+import { SurvivorTribesPanel } from '@/app/league/[leagueId]/components/settings/survivor/SurvivorTribesPanel'
 import { SurvivorTribalCouncilPanel, type TribalCouncilView } from './survivor/SurvivorTribalCouncilPanel'
 
 type FoundationState = {
@@ -16,6 +17,8 @@ type FoundationState = {
     idolsEnabled: boolean
     powerupsEnabled: boolean
     exileIslandEnabled: boolean
+    exileReturnWeek: number
+    exileReturnTokens: number
   }
   access?: {
     isCommissioner?: boolean
@@ -25,6 +28,7 @@ type FoundationState = {
     privacyWarnings: string[]
     decisions?: {
       canPerformAdminAction?: boolean
+      canPerformSensitiveHostAction?: boolean
       canSeeHiddenIdolAssignments?: boolean
       canSeeVoteTallyBeforeReveal?: boolean
       canOverrideVoteDeadline?: boolean
@@ -77,33 +81,28 @@ export function SurvivorFormatTab({ leagueId }: SurvivorFormatTabProps) {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
-  const [castSize, setCastSize] = useState('20')
-  const [tribeCount, setTribeCount] = useState('4')
+  const [exileEnabled, setExileEnabled] = useState(true)
+  const [returnWeek, setReturnWeek] = useState('10')
+  const [returnTokens, setReturnTokens] = useState('4')
   const [hostMode, setHostMode] = useState<'non_participating_host' | 'participating_player'>('non_participating_host')
 
   useEffect(() => {
     if (!leagueId) return
     setLoading(true)
-    fetch(`/api/leagues/${leagueId}/survivor`, { credentials: 'include' })
+    fetch(`/api/leagues/${leagueId}/survivor/state`, { credentials: 'include' })
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error('Could not load Survivor foundation'))))
       .then((json: FoundationState) => {
         setState(json)
         if (json.settings) {
-          setCastSize(String(json.settings.defaultTeamCount))
-          setTribeCount(String(json.settings.tribeCount))
+          setExileEnabled(json.settings.exileIslandEnabled)
+          setReturnWeek(String(json.settings.exileReturnWeek))
+          setReturnTokens(String(json.settings.exileReturnTokens))
           setHostMode(json.settings.commissionerParticipationMode)
         }
       })
       .catch((err) => setStatus(err instanceof Error ? err.message : String(err)))
       .finally(() => setLoading(false))
   }, [leagueId])
-
-  const tribeSize = useMemo(() => {
-    const teams = Number(castSize)
-    const tribes = Number(tribeCount)
-    if (!Number.isFinite(teams) || !Number.isFinite(tribes) || tribes <= 0) return 0
-    return Math.ceil(teams / tribes)
-  }, [castSize, tribeCount])
 
   async function saveFoundation() {
     setSaving(true)
@@ -115,16 +114,17 @@ export function SurvivorFormatTab({ leagueId }: SurvivorFormatTabProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           settings: {
-            defaultTeamCount: Number(castSize),
-            tribeCount: Number(tribeCount),
             commissionerParticipationMode: hostMode,
+            exileIslandEnabled: exileEnabled,
+            exileReturnWeek: Number(returnWeek),
+            exileReturnTokens: Number(returnTokens),
           },
         }),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json.error ?? 'Save failed')
       setStatus('Saved.')
-      const fresh = await fetch(`/api/leagues/${leagueId}/survivor`, { credentials: 'include' })
+      const fresh = await fetch(`/api/leagues/${leagueId}/survivor/state`, { credentials: 'include' })
       if (fresh.ok) setState((await fresh.json()) as FoundationState)
     } catch (err) {
       setStatus(err instanceof Error ? err.message : String(err))
@@ -142,7 +142,7 @@ export function SurvivorFormatTab({ leagueId }: SurvivorFormatTabProps) {
   const init = state?.initialization
 
   async function refresh() {
-    const fresh = await fetch(`/api/leagues/${leagueId}/survivor`, { credentials: 'include' })
+    const fresh = await fetch(`/api/leagues/${leagueId}/survivor/state`, { credentials: 'include' })
     if (fresh.ok) setState((await fresh.json()) as FoundationState)
   }
 
@@ -159,7 +159,7 @@ export function SurvivorFormatTab({ leagueId }: SurvivorFormatTabProps) {
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json.error ?? json.code ?? `${action} failed`)
       setStatus(`${action}: ok`)
-      const fresh = await fetch(`/api/leagues/${leagueId}/survivor`, { credentials: 'include' })
+      const fresh = await fetch(`/api/leagues/${leagueId}/survivor/state`, { credentials: 'include' })
       if (fresh.ok) setState((await fresh.json()) as FoundationState)
     } catch (err) {
       setStatus(err instanceof Error ? err.message : String(err))
@@ -193,46 +193,18 @@ export function SurvivorFormatTab({ leagueId }: SurvivorFormatTabProps) {
         <div>
           <h3 className="text-sm font-semibold text-white">Survivor Foundation</h3>
           <p className="mt-1 text-xs text-neutral-400">
-            Phase 1 stores setup and privacy state only. Gameplay engines stay off until their DB flows are ready.
+            Set league rules and commissioner privacy. Tribe choices lock when drafting starts.
           </p>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div>
-            <FieldLabel>Cast size</FieldLabel>
-            <input
-              type="number"
-              min={16}
-              max={20}
-              value={castSize}
-              onChange={(e) => setCastSize(e.target.value)}
-              className="mt-1 w-full rounded border border-neutral-700 bg-neutral-900 px-2 py-2 text-sm"
-            />
-          </div>
-          <div>
-            <FieldLabel>Tribes</FieldLabel>
-            <input
-              type="number"
-              min={2}
-              max={5}
-              value={tribeCount}
-              onChange={(e) => setTribeCount(e.target.value)}
-              className="mt-1 w-full rounded border border-neutral-700 bg-neutral-900 px-2 py-2 text-sm"
-            />
-          </div>
-          <div>
-            <FieldLabel>Tribe size</FieldLabel>
-            <div className="mt-1 rounded border border-neutral-800 bg-neutral-950 px-2 py-2 text-sm text-neutral-300">
-              {tribeSize || '-'}
-            </div>
-          </div>
-        </div>
+        <SurvivorTribesPanel leagueId={leagueId} canEdit={canAdmin} hasAfCommissionerSub={false} />
 
         <div>
           <FieldLabel>Commissioner privacy</FieldLabel>
           <div className="mt-2 grid gap-2 sm:grid-cols-2">
             <button
               type="button"
+              disabled={state?.access?.isParticipant}
               onClick={() => setHostMode('non_participating_host')}
               className={`rounded border px-3 py-2 text-left text-sm ${
                 hostMode === 'non_participating_host'
@@ -255,6 +227,17 @@ export function SurvivorFormatTab({ leagueId }: SurvivorFormatTabProps) {
             </button>
           </div>
         </div>
+
+        <fieldset className="space-y-3 rounded-xl border border-violet-500/25 p-4">
+          <legend className="px-2 text-sm text-violet-200">Exile Island</legend>
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={exileEnabled} onChange={e => setExileEnabled(e.target.checked)} />Enable Exile for voted-out managers</label>
+          <p className="text-xs text-neutral-400">Managers earn tokens on Exile. After the return week is finalized, the system selects one qualifying manager to return. Ties use lifetime tokens, longest stay, then manager ID.</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="text-xs text-neutral-300">Return week<input type="number" min={2} max={51} value={returnWeek} onChange={e => setReturnWeek(e.target.value)} className="mt-1 block w-full rounded border border-neutral-700 bg-neutral-900 px-2 py-2 text-sm" /></label>
+            <label className="text-xs text-neutral-300">Minimum tokens<input type="number" min={1} max={1000} value={returnTokens} onChange={e => setReturnTokens(e.target.value)} className="mt-1 block w-full rounded border border-neutral-700 bg-neutral-900 px-2 py-2 text-sm" /></label>
+          </div>
+          <p className="text-xs text-neutral-500">Configure Exile before the draft. The returning manager rebuilds their released roster through waivers.</p>
+        </fieldset>
 
         <button
           type="button"
@@ -315,14 +298,14 @@ export function SurvivorFormatTab({ leagueId }: SurvivorFormatTabProps) {
             >
               {init?.phase2Complete ? 'Re-run initialization' : 'Initialize Survivor'}
             </button>
-            <button
+            {state?.access?.decisions?.canPerformSensitiveHostAction ? <button
               type="button"
               disabled={saving || loading}
               onClick={() => runPhase2Action('assign-tribes')}
               className="rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-200 disabled:opacity-60"
             >
               Assign tribes
-            </button>
+            </button> : null}
             <button
               type="button"
               disabled={saving || loading}
@@ -331,14 +314,14 @@ export function SurvivorFormatTab({ leagueId }: SurvivorFormatTabProps) {
             >
               Create chats
             </button>
-            <button
+            {state?.access?.decisions?.canPerformSensitiveHostAction ? <button
               type="button"
               disabled={saving || loading}
               onClick={() => runPhase2Action('seed-idols')}
               className="rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-200 disabled:opacity-60"
             >
               Seed idols
-            </button>
+            </button> : null}
             <button
               type="button"
               disabled={saving || loading}

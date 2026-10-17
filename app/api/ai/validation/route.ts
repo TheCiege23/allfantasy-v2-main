@@ -30,7 +30,6 @@ const AREAS = [
       "POST /api/chimmy",
       "POST /api/chat/chimmy",
       "POST /api/ai/chimmy",
-      "POST /api/ai/chat",
     ],
   },
   {
@@ -40,7 +39,6 @@ const AREAS = [
       "POST /api/trade-evaluator",
       "POST /api/dynasty-trade-analyzer",
       "POST /api/legacy/trade/analyze",
-      "POST /api/ai/trade-eval",
       "POST /api/leagues/[leagueId]/trade/ai-decision",
     ],
   },
@@ -68,13 +66,7 @@ const AREAS = [
       "POST /api/war-room/queue",
       "POST /api/war-room/opponent-tendencies",
       "POST /api/war-room/post-draft-report",
-      "POST /api/ai-tools/war-room/dashboard",
     ],
-  },
-  {
-    id: "matchup_prep",
-    description: "Matchup Prep: head-to-head projections, edge, and game plan from synced league data",
-    endpoints: ["POST /api/ai-tools/matchup-prep/dashboard"],
   },
 ] as const
 
