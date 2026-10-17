@@ -432,7 +432,10 @@ export async function POST(req: NextRequest) {
   const sleeperUser = await lookupSleeperUser(accountIdentifier)
   if (sleeperUser.status === 'not_found') {
     return NextResponse.json(
-      { error: 'Provider account not found.' },
+      {
+        error:
+          'We could not find a Sleeper account with that username. Check the spelling, or leave the field blank to use your linked Sleeper account.',
+      },
       { status: 404 },
     )
   }
