@@ -17,6 +17,7 @@ vi.mock('@/lib/draft-defaults/DraftUISettingsResolver', () => ({
 }))
 vi.mock('@/lib/prisma', () => ({ prisma: { draftSession: { findFirst: async () => ({ status: 'in_progress' }) } } }))
 vi.mock('@/lib/draft-room/draftRoomChatWireLoad', () => ({ loadDraftChatWireMessages: vi.fn() }))
+vi.mock('@/lib/chat-core/chimmyPrivateReply', () => ({ generateChimmyPrivateReply: async () => 'Take the center.' }))
 vi.mock('@/lib/league-chat/LeagueChatMessageService', () => ({
   createLeagueChatMessage: async (_leagueId: string, _userId: string, body: string, opts: Record<string, unknown>) => {
     h.created.push({ body, opts })
@@ -157,6 +158,18 @@ describe('POST /api/leagues/[id]/draft/chat', () => {
     await post({ text: '[GIF] https://media.giphy.com/old.gif' })
     expect(h.created[0]!.opts.type).toBe('gif')
     expect((h.created[0]!.opts.metadata as Record<string, unknown>).mediaUrl).toBe('https://media.giphy.com/old.gif')
+  })
+
+  it('keeps a typed @chimmy question private even when a GIF rides with it', async () => {
+    const { status } = await post({
+      text: '@chimmy who should I take',
+      metadata: { gif: { url: 'https://media.giphy.com/w.gif', previewUrl: 'https://media.giphy.com/w.gif', title: 'hmm' } },
+    })
+    expect(status).toBe(200)
+    expect(h.created[0]!.body).toBe('@chimmy who should I take')
+    expect(h.created[0]!.opts).toMatchObject({ isPrivate: true, visibleToUserId: 'u1', messageSubtype: 'chimmy_private' })
+    expect(h.created[1]!.opts).toMatchObject({ isPrivate: true, messageSubtype: 'chimmy_private_response' })
+    expect(h.created.every((c) => c.opts.isPrivate === true)).toBe(true)
   })
 
   it('refuses an empty message with nothing rich attached', async () => {
