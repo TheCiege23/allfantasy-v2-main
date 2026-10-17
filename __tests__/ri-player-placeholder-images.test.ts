@@ -25,6 +25,8 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     sportsTeam: { upsert: vi.fn().mockResolvedValue({}) },
     sportsPlayer: { upsert: upsertMock, updateMany: updateManyMock },
+    // Players are written in batches through one INSERT ... ON CONFLICT, not per-row upserts.
+    $executeRaw: upsertMock,
   },
 }))
 
