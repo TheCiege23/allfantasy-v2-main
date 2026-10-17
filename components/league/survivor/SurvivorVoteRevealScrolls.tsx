@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import styles from './SurvivorVoteRevealScrolls.module.css'
 export type RevealScroll = {
   order: number; targetUserId: string | null; targetName: string | null;
-  status: 'counts' | 'late_does_not_count' | 'blocked_by_idol' | 'target_safe' | 'taken_by_vote_steal'; isExtraVote: boolean
+  status: 'counts' | 'late_does_not_count' | 'forfeited_by_shot' | 'blocked_by_idol' | 'blocked_by_shot' | 'target_safe' | 'taken_by_vote_steal'; isExtraVote: boolean
 }
 /** Callers pass only the published sequence. */
 export function SurvivorVoteRevealScrolls({ scrolls, eliminatedName, isTie, tiePhase, autoPlay = true, isPublished = true, exileEnabled = false }: {
@@ -39,7 +39,7 @@ export function SurvivorVoteRevealScrolls({ scrolls, eliminatedName, isTie, tieP
         {scrolls.slice(0, shown).map((vote, i) => <div key={`${vote.order}-${i}`} className={`${styles.slip} ${vote.status !== 'counts' ? styles.invalid : ''}`}>
           <span className={styles.ordinal}>Vote {i + 1}{vote.isExtraVote ? ' · Extra vote' : ''}</span>
           <span className={styles.name}>{vote.targetName ?? 'Unnamed target'}</span>
-          {vote.status !== 'counts' && <span className={styles.stamp}>{vote.status === 'taken_by_vote_steal' ? 'Taken · Does not count' : vote.status === 'blocked_by_idol' ? 'Idol · Does not count' : vote.status === 'late_does_not_count' ? 'Late · Does not count' : 'Safe · Does not count'}</span>}
+          {vote.status !== 'counts' && <span className={styles.stamp}>{vote.status === 'taken_by_vote_steal' ? 'Taken · Does not count' : vote.status === 'blocked_by_idol' ? 'Idol · Does not count' : vote.status === 'blocked_by_shot' ? 'Shot succeeded · Does not count' : vote.status === 'forfeited_by_shot' ? 'Shot used · Ballot forfeited' : vote.status === 'late_does_not_count' ? 'Late · Does not count' : 'Safe · Does not count'}</span>}
         </div>)}
       </div>
       {counts.size > 0 && <div className={styles.tally}><p className={styles.ordinal}>Tally</p>{[...counts].sort((a,b) => b[1]-a[1]).map(([name,n]) => <p key={name} className="mt-2 flex justify-between gap-3 text-sm"><span>{name}</span><strong>{n}</strong></p>)}</div>}
