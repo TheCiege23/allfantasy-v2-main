@@ -56,6 +56,7 @@ import {
 } from '@/lib/core-app/railCareerChannel'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-core-shell.css'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * The chrome every AF Core screen sits inside: league rail, primary nav, top bar.
@@ -2352,7 +2353,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                 <span className="af-plan-name af-label">{plan.name}</span>
                 {plan.tokensLeft != null ? (
                   <>
-                    <span className="af-plan-tokens af-num">{plan.tokensLeft.toLocaleString()}</span>
+                    <span className="af-plan-tokens af-num">{plan.tokensLeft.toLocaleString(getAppIntlLocale())}</span>
                     <span className="af-label">{language === 'es' ? 'tokens restantes' : 'tokens left'}</span>
                   </>
                 ) : null}

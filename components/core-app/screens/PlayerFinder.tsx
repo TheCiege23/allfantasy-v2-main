@@ -92,6 +92,7 @@ import { leagueCall } from '@/lib/core-app/leagueCall'
 import { PlayerSeasonCard } from '@/components/core-app/player-finder/PlayerSeasonCard'
 import { PlayerNextGames } from '@/components/core-app/player-finder/PlayerNextGames'
 import { PlayerNews } from '@/components/core-app/player-finder/PlayerNews'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * Screen 3 — Player Finder.
@@ -1130,7 +1131,7 @@ export function PlayerFinder({
               {detail.idpValue ? (
                 <StatTile
                   label={t.idpValue}
-                  value={detail.idpValue.value.toLocaleString()}
+                  value={detail.idpValue.value.toLocaleString(getAppIntlLocale())}
                   tone="good"
                   tip={{ title: t.idpValue, body: t.idpBody(detail.idpValue.reference.numTeams, detail.idpValue.reference.idpStarters) }}
                   help={
@@ -1280,7 +1281,7 @@ export function PlayerFinder({
                                 {r.held ? <span className="af-pf-impact-held af-label">{t.thisLeagueBadge}</span> : null}
                                 {/* The phone table has no room for a Value column; the number rides in the league cell there. */}
                                 {leagueValues?.[l.leagueId] ? (
-                                  <span className="af-pf-value-inline af-num">{t.valueInline(leagueValues[l.leagueId]!.value.toLocaleString('en-US'))}</span>
+                                  <span className="af-pf-value-inline af-num">{t.valueInline(leagueValues[l.leagueId]!.value.toLocaleString(getAppIntlLocale()))}</span>
                                 ) : null}
                               </span>
                             </td>
@@ -1342,7 +1343,7 @@ export function PlayerFinder({
                                         : t.valueBasis(leagueValues[l.leagueId]!.mode, leagueValues[l.leagueId]!.numQbs === 2)
                                     }
                                   >
-                                    {leagueValues[l.leagueId]!.value.toLocaleString('en-US')}
+                                    {leagueValues[l.leagueId]!.value.toLocaleString(getAppIntlLocale())}
                                     {leagueValues[l.leagueId]!.value !== leagueValues[l.leagueId]!.base ? <span className="af-pf-value-fit" aria-label={t.valueAdjusted}>*</span> : null}
                                   </span>
                                 ) : (

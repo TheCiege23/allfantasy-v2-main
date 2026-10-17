@@ -29,6 +29,7 @@ import { StandingsPointsChart } from './StandingsPointsChart'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { standingsBoardCopy } from '@/lib/core-app/standingsUiCopy'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * The league table, two ways — items 1–8 and 10 of the 2026-09-17 standings brief.
@@ -94,7 +95,7 @@ const LAYOUT_STORAGE_KEY = 'af-standings-layout'
 const PHONE_QUERY = '(max-width: 640px)'
 
 function pts(v: number | null): string {
-  return v == null ? '—' : v.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+  return v == null ? '—' : v.toLocaleString(getAppIntlLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 })
 }
 
 function pct(v: number | null): string {

@@ -19,6 +19,7 @@ import {
   NoLeaguesYet,
 } from '@/components/core-app/boards/BoardKit'
 import '@/components/core-app/af-core-boards.css'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * `/core/trades` with no league held.
@@ -95,7 +96,7 @@ function PickAsset({ a }: { a: TradeAsset }) {
         the seasons and rounds it covers. A redraft league, or a round past the book’s
         depth, has no price here and must never be shown a zero.
       */}
-      <span className="af-bd-asset-val">{a.value != null ? a.value.toLocaleString() : '—'}</span>
+      <span className="af-bd-asset-val">{a.value != null ? a.value.toLocaleString(getAppIntlLocale()) : '—'}</span>
     </span>
   )
 }
@@ -133,7 +134,7 @@ function Asset({ a, leagueId }: { a: TradeAsset; leagueId: string }) {
         player name is a claim that he is worthless; a dash says we hold no
         price. The grade above already refuses the letter for the same reason.
       */}
-      <span className="af-bd-asset-val">{a.value != null ? a.value.toLocaleString() : '—'}</span>
+      <span className="af-bd-asset-val">{a.value != null ? a.value.toLocaleString(getAppIntlLocale()) : '—'}</span>
     </span>
   )
 }

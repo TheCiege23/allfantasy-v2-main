@@ -76,6 +76,7 @@ import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { FallbackImg } from '@/components/core-app/FallbackImg'
 import { isBlockingFormatNote } from '@/lib/trade-intel/formatNoteBlocking'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * Screen 36a — Trade Center.
@@ -296,7 +297,7 @@ type AnalyzeResult = {
  * cannot price is not worthless, and rendering 0 would say he is.
  */
 function money(v: number | null | undefined): string {
-  return typeof v === 'number' && Number.isFinite(v) ? v.toLocaleString() : '—'
+  return typeof v === 'number' && Number.isFinite(v) ? v.toLocaleString(getAppIntlLocale()) : '—'
 }
 
 /**
@@ -313,7 +314,7 @@ function totalOf(lines: Line[]): string {
     .map(valueOf)
     .filter((v): v is number => typeof v === 'number' && Number.isFinite(v))
   if (priced.length === 0) return '—'
-  return priced.reduce((a, b) => a + b, 0).toLocaleString()
+  return priced.reduce((a, b) => a + b, 0).toLocaleString(getAppIntlLocale())
 }
 
 /**
@@ -1824,7 +1825,7 @@ export function TradeCenter(props: {
             {balance?.diff != null && balance.diff !== 0 ? (
               <span className="af-tc-stepbar-delta" data-tone={balance.diff > 0 ? 'good' : 'bad'}>
                 {balance.diff > 0 ? '+' : '−'}
-                {Math.abs(balance.diff).toLocaleString()}
+                {Math.abs(balance.diff).toLocaleString(getAppIntlLocale())}
               </span>
             ) : null}
           </span>
@@ -2247,7 +2248,7 @@ export function TradeCenter(props: {
                 ? copy('Nothing priced on one side')
                 : balance.diff === 0
                   ? copy('Even on priced value')
-                  : `${balance.diff > 0 ? '+' : '−'}${Math.abs(balance.diff).toLocaleString()} ${copy('to you')} · ${balance.pct}% ${copy('apart')}`}
+                  : `${balance.diff > 0 ? '+' : '−'}${Math.abs(balance.diff).toLocaleString(getAppIntlLocale())} ${copy('to you')} · ${balance.pct}% ${copy('apart')}`}
             </span>
           </div>
           {balance.givePct != null ? (

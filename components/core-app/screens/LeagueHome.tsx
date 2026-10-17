@@ -26,6 +26,7 @@ import { rivalLastText } from '@/lib/core-app/dashboard3aCopy'
 import { rosterIdsMatch } from '@/lib/core-app/rosterIdMatch'
 import { PROJECTION_PROVIDER_LABEL } from '@/lib/core-app/projectionProvider'
 import type { StandingsLineups } from '@/lib/core-app/standingsLineups'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * Jump to another week.
@@ -886,7 +887,7 @@ export function LeagueHome({
                     key: team.teamId,
                     label: team.teamName,
                     value: team.pointsFor,
-                    displayValue: Math.round(team.pointsFor).toLocaleString(),
+                    displayValue: Math.round(team.pointsFor).toLocaleString(getAppIntlLocale()),
                     tone: team.isYou ? 'good' : 'accent',
                   }))}
                 />

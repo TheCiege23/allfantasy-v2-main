@@ -9,6 +9,7 @@ import { useAppleIapPrices } from '@/lib/monetization/apple-iap-client'
 import { CheckoutOutcomePanel } from '@/components/monetization/CheckoutOutcomePanel'
 import { getTokenPurchasableRule, type TokenBuyer } from '@/lib/tokens/tokenPurchasable'
 import '@/components/core-app/af-tokens.css'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * Screen 20a — the token centre.
@@ -156,7 +157,7 @@ export function TokenCentreV4({ packs }: TokenCentreV4Props) {
           <span className="af-tk-balance-none">{t('tokens.v4.balanceUnavailable')}</span>
         ) : (
           <span className="af-tk-balance-num" data-testid="tokens-balance-display">
-            {balance.toLocaleString()}
+            {balance.toLocaleString(getAppIntlLocale())}
           </span>
         )}
       </section>
@@ -214,13 +215,13 @@ export function TokenCentreV4({ packs }: TokenCentreV4Props) {
           {packs.map((p) => (
             <div key={p.sku} className="af-tk-pack">
               <span className="af-tk-pack-num af-num">
-                {p.tokenAmount != null ? p.tokenAmount.toLocaleString() : '—'}
+                {p.tokenAmount != null ? p.tokenAmount.toLocaleString(getAppIntlLocale()) : '—'}
               </span>
               <span className="af-tk-pack-label">{t('tokens.v4.packTokens')}</span>
               <span className="af-tk-pack-price af-num">{appleApp ? (applePrices[p.sku] ?? 'Loading Apple price…') : `$${p.amountUsd.toFixed(2)}`}</span>
               {p.tokenAmount != null && chimmyCost ? (
                 <span className="af-tk-pack-about" data-testid={`tokens-pack-about-${p.sku}`}>
-                  {t('tokens.v4.packAbout').replace('{{n}}', Math.floor(p.tokenAmount / chimmyCost).toLocaleString())}
+                  {t('tokens.v4.packAbout').replace('{{n}}', Math.floor(p.tokenAmount / chimmyCost).toLocaleString(getAppIntlLocale()))}
                 </span>
               ) : null}
               {/*

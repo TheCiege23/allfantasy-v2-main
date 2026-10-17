@@ -50,6 +50,7 @@ import '@/components/core-app/af-career-live.css'
 // Last on purpose: the phone/tablet layer overrides the three sheets above.
 import '@/components/core-app/af-career-devices.css'
 import '@/components/core-app/af-career-wall.css'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * Career — handoff 13a, desktop frame.
@@ -104,7 +105,7 @@ const LEGACY_COLORS: Record<string, string> = {
 }
 
 function nf(n: number): string {
-  return n.toLocaleString('en-US')
+  return n.toLocaleString(getAppIntlLocale())
 }
 
 /** Radial prestige gauge. Geometry is the handoff's: r=52 on a 128 viewBox. */

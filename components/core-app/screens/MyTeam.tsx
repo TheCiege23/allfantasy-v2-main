@@ -28,6 +28,7 @@ import { PROJECTION_PROVIDER_LABEL } from '@/lib/core-app/projectionProvider'
 import { InfoTip } from '@/components/core-app/InfoTip'
 import { kickoffText } from '@/lib/core-app/kickoffText'
 import { myTeamCardReasonText, myTeamReasonText, scoringNoteText } from '@/lib/core-app/myTeamReasonText'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 export type MyTeamProps = {
   data: MyTeamData
@@ -379,7 +380,7 @@ function gradeSubtitle(g: RosterGrade, es = false): string {
       ? es ? 'justo en la mediana de la liga' : 'right on the league median'
       : es
         ? `${Math.abs(vsMedian).toLocaleString('es')} ${vsMedian > 0 ? 'por encima' : 'por debajo'} de la mediana`
-        : `${Math.abs(vsMedian).toLocaleString()} ${vsMedian > 0 ? 'above' : 'below'} the median`,
+        : `${Math.abs(vsMedian).toLocaleString(getAppIntlLocale())} ${vsMedian > 0 ? 'above' : 'below'} the median`,
   )
   if (g.strongest) {
     parts.push(es
@@ -501,7 +502,7 @@ function PositionStrengthCard({ grade }: { grade: RosterGrade }) {
               </span>
               {p.median != null ? (
                 <span className="af-mt-posstr-meta">
-                  {p.value.toLocaleString()} {es ? 'vs mediana' : 'vs median'} {p.median.toLocaleString()}
+                  {p.value.toLocaleString(getAppIntlLocale())} {es ? 'vs mediana' : 'vs median'} {p.median.toLocaleString(getAppIntlLocale())}
                 </span>
               ) : null}
             </li>
