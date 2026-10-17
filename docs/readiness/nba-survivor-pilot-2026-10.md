@@ -4,11 +4,11 @@ The commissioner can configure a league and start a native draft, but the curren
 
 ## Rules agreed for the NBA pilot
 
-- Fantasy weeks run Tuesday through Monday in US Eastern time. The existing generic daily-sport week window still uses a UTC opener anchor; that must be corrected for this format before real scoring starts.
+- Fantasy weeks run Tuesday through Monday in US Eastern time. The daily-sport resolver stores UTC-midnight calendar keys; scoring and Exile convert those keys to Eastern boundaries. Confirm daylight-saving behavior in a full-week rehearsal.
 - Commissioners choose all-games scoring or one pregame game per player each week. If no selection is made, the player's first game of that week is selected automatically. The pregame selection, lock, and score pipeline remain to be built.
 - Playing commissioners can change settings and approve or postpone a system-random tribe redraw at the 40% threshold, but cannot see private ballots, hidden idols, or other tribes' huddles.
 - Shot in the Dark is one hidden use per manager with a 1-in-6 success probability. Its persisted use and official reveal are not yet implemented.
-- Exile is on by default. A voted-out manager's main roster is released; one qualifying manager with the highest token balance returns at the configured deadline. The weekly host/Chimmy score-to-beat rule awaits the commissioner's examples.
+- Exile is on by default. A voted-out manager's main roster is released; one qualifying manager with the highest token balance returns at the configured deadline. Chimmy locks a comparable NBA roster before the week's first tipoff. The highest Exile score above Chimmy earns one token; a Chimmy win or tie resets unprotected Exile balances.
 - Idols follow real drafted players through trades, elimination, waivers, and claims. Only the current holder can see a hidden idol. Direct idol transfers are blocked in the native NBA pilot.
 
 ## Implemented in this branch
@@ -25,6 +25,6 @@ The commissioner can configure a league and start a native draft, but the curren
 1. Build and verify Tuesday-to-Monday Eastern NBA scoring for both commissioner-selected modes, including daylight-saving changes, pre-tipoff locks, missed picks, stat corrections, and finalization.
 2. Finish the draft rehearsal with actual users in browsers: scheduling, multi-device reconnect, live chat rendering, commissioner pick correction, private idol notice display, and commissioner blind mode. The isolated service-level 20-manager draft and its saved artifacts passed on 2026-10-15, but those browser and role checks remain.
 3. Persist Shot in the Dark, implement the 40% tribe-switch prompt and unbiased redraw, and test member/huddle access before and after elimination and merge.
-4. Define the Exile weekly score-to-beat contest from the commissioner examples; then verify token reset, challenge rewards, weekly roster exclusivity, and the single deadline return.
+4. Verify the locked Chimmy NBA roster, final stat coverage, token reset, challenge rewards, weekly roster exclusivity, and the single deadline return against a real multi-manager scoring week. The server now waits for finalized Chimmy and Exile scores before it settles the contest.
 5. Verify the full weekly challenge slate, official ballots and Torch reveal, commissioner recovery controls, and season-finale flow under scheduled automation. The planned-season runner currently requires an enablement flag; confirm its production schedule and idempotent retries.
 6. Complete a multi-account, full-week dry run with a playing commissioner and a non-playing commissioner before invitations extend beyond testers.
