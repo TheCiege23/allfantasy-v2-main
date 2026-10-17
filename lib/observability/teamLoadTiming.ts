@@ -1,5 +1,5 @@
 import {recordCompletedSpan} from './rootTiming'
-export type TeamReadPhase='league'|'roster'|'players'|'enrichment'|'matchup'|'identities'|'injuries'|'schedule'|'opponents'|'format'|'elimination'|'provider'|'bye'|'values'
+export type TeamReadPhase='league'|'roster'|'players'|'enrichment'|'matchup'|'identities'|'injuries'|'schedule'|'opponents'|'format'|'elimination'|'provider'|'bye'|'values'|'projections'
 /** Fixed names and numeric durations only. No request URLs, identities, SQL, roster or error content. */
 export function teamLoadTiming(mode:'full'|'saved'|'alerts'|'portfolio'|'core-summary'){
  const started=performance.now(),phases:Partial<Record<TeamReadPhase,number>>={}

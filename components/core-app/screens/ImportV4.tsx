@@ -906,7 +906,15 @@ export function ImportV4({
    */
   const [handleLinkedElsewhere, setHandleLinkedElsewhere] = useState(false)
 
+  /*
+   * ⚠ ONLY THE LATEST LOOKUP MAY WRITE TO THE SCREEN. Lookups resolve in any order, so without this a
+   * slow "not found" for the username typed first could land after the leagues for the corrected one
+   * and replace them. `runDiscover` and `reset` advance it; a result whose number is old is dropped.
+   */
+  const discoverSeq = useRef(0)
+
   const reset = useCallback(() => {
+    discoverSeq.current += 1
     setLeagues([])
     setHandleLinkedElsewhere(false)
     setAccountLabel(null)
@@ -937,7 +945,9 @@ export function ImportV4({
       setLeagues([])
       setHandleLinkedElsewhere(false)
       setPhase({ k: 'discovering' })
+      const seq = ++discoverSeq.current
       const res = await discoverProviderLeagues(provider, identifier, { sport: 'nfl' })
+      if (seq !== discoverSeq.current) return
       if (!res.ok && res.verificationRequired) {
         setVerifyGate({ k: 'discover', identifier })
         setPhase({ k: 'idle' })
@@ -1025,8 +1035,10 @@ export function ImportV4({
     if (!isImportProviderAvailable(provider)) return
     if (!supportsImportProviderDiscovery(provider)) return
     let cancelled = false
+    const seq = discoverSeq.current
     void discoverProviderLeagues(provider, '', { sport: 'nfl' }).then((res) => {
-      if (cancelled) return
+      // An explicit lookup started since then owns the screen now.
+      if (cancelled || seq !== discoverSeq.current) return
       /*
        * ⚠ THE ONE FAILURE THAT IS NOT SILENT HERE. "Usually not connected yet" (below) is not this:
        * a linked Sleeper account that has not confirmed its email is refused BEFORE discovery, so
@@ -1880,6 +1892,9 @@ export function ImportV4({
         }
       : null
 
+  // The Enter handlers check this too: with only the button disabled, Enter started overlapping lookups.
+  const lookupBusy = phase.k === 'discovering' || phase.k === 'previewing'
+
   /*
    * The connect action, hoisted so it can sit ON the field's row for every
    * provider that has a field, and stand alone for Yahoo, which does not. Same
@@ -1891,7 +1906,7 @@ export function ImportV4({
       type="button"
       className="af-btn af-im-submit"
       data-testid="import-discovery-find"
-      disabled={phase.k === 'discovering' || phase.k === 'previewing'}
+      disabled={lookupBusy}
       onClick={() => {
         const typed = account.trim()
         /*
@@ -2327,6 +2342,7 @@ export function ImportV4({
                     onKeyDown={(e) => {
                       if (e.key !== 'Enter') return
                       e.preventDefault()
+                      if (lookupBusy) return
                       if (canDiscover) void runDiscover(account.trim())
                       else if (account.trim()) void runPreview(account.trim())
                     }}
@@ -2381,6 +2397,7 @@ export function ImportV4({
                   onKeyDown={(e) => {
                     if (e.key !== 'Enter') return
                     e.preventDefault()
+                    if (lookupBusy) return
                     const typed = account.trim()
                     if (typed) void runPreview(toYahooLeagueKey(typed))
                     else void runDiscover('')

@@ -1,6 +1,6 @@
 'use client'
 
-import type { ReactNode } from 'react'
+import { Fragment, type ReactNode } from 'react'
 import Link from 'next/link'
 import type {
   ChimmyAddReceipt,
@@ -14,6 +14,7 @@ import type {
 import { describeTrackRecord, readTrackRecordLine } from '@/lib/chimmy-outcomes/trackRecord'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { trackRecordText } from '@/lib/core-app/dashboard3aCopy'
+import { AfSavedShare } from '@/components/core-app/screens/AfSavedShare'
 
 /**
  * The home "Receipts" card — how your past moves turned out (retention item 6, user
@@ -44,7 +45,8 @@ const OUTCOME_TEXT_ES: Record<TradeReceipt['outcome'], string> = {
   even: 'más o menos parejo',
 }
 
-type Adviser = 'AutoCoach' | 'Chimmy'
+/** 'AF' is the home triage card's rule-based "swap in X" tip — AllFantasy's, never Chimmy's. */
+type Adviser = 'AutoCoach' | 'Chimmy' | 'AF'
 
 function callText(who: Adviser, call: StartCallReceipt['call'], es: boolean): string {
   if (es) return call === 'same' ? 'más o menos igual' : call === 'right' ? `${who} acertó` : `${who} falló`
@@ -165,7 +167,7 @@ function StartCallRow({
 }) {
   const outcome = c.call === 'right' ? 'ahead' : c.call === 'wrong' ? 'behind' : undefined
   return (
-    <li className="af3a-receipt" data-kind={who === 'AutoCoach' ? 'autocoach' : 'chimmy'} data-outcome={outcome}>
+    <li className="af3a-receipt" data-kind={who === 'AutoCoach' ? 'autocoach' : who === 'AF' ? 'af-tip' : 'chimmy'} data-outcome={outcome}>
       <Link className="af3a-receipt-title" href={c.href}>
         {es
           ? `${who} dijo que alinearas a ${c.recommended.name} en lugar de ${c.instead.name}`
@@ -325,7 +327,9 @@ export function ReceiptsCard({ data, help }: { data: DecisionReceiptsData | null
   const hasChimmyAdds = chimmyAdds.length > 0 || chimmyAddsTooEarly > 0 || chimmyAddsUnscored > 0 || chimmyAddsUnknown > 0
   const hasChimmy =
     chimmyRecord != null || chimmy.length > 0 || chimmyPending > 0 || chimmyUnscored > 0 || chimmyUnreadable > 0 || hasChimmyAdds
-  const kinds = [hasTrades, hasWaivers, hasLineups, hasAutoCoach, hasChimmy].filter(Boolean).length
+  const afTips: ChimmyReceipt[] = data.afTips ?? []
+  const hasAfTips = afTips.length > 0
+  const kinds = [hasTrades, hasWaivers, hasLineups, hasAutoCoach, hasChimmy, hasAfTips].filter(Boolean).length
   if (kinds === 0) return null
   const headed = kinds > 1
 
@@ -525,6 +529,28 @@ export function ReceiptsCard({ data, help }: { data: DecisionReceiptsData | null
               </p>
             )
           ) : null}
+        </>
+      ) : null}
+
+      {hasAfTips ? (
+        <>
+          {headed ? <h3 className="af3a-receipt-group">{es ? 'Consejos de cambio de AF' : 'AF swap tips'}</h3> : null}
+          <ul className="af3a-receipt-list">
+            {afTips.map((t) => (
+              <Fragment key={t.id}>
+                <StartCallRow c={t} who="AF" es={es} />
+                {/* A brag only when it is one: you followed the tip and it outscored the alternative. */}
+                {t.call === 'right' && t.followed === 'yes' ? (
+                  <li className="af3a-receipt-share-row">
+                    <AfSavedShare
+                      tip={{ recommended: t.recommended, instead: t.instead, leagueName: t.leagueName, week: t.week }}
+                      es={es}
+                    />
+                  </li>
+                ) : null}
+              </Fragment>
+            ))}
+          </ul>
         </>
       ) : null}
 

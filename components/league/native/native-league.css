@@ -216,3 +216,22 @@
 .nl-health-list .nl-button{flex:none}
 .nl-health-clear{display:flex;align-items:center;gap:8px;color:var(--good)!important;font-weight:600}
 @media(max-width:767px){.nl-health-list li{flex-direction:column;align-items:stretch}.nl-health-list .nl-button{width:100%}}
+/* League activity feed (2026-10-14): trades, waivers, chops, evictions, with reactions on chat items. */
+.nl-activity-list{list-style:none;margin:0 0 12px;padding:0;display:flex;flex-direction:column}
+.nl-activity-list>li{display:flex;flex-direction:column;gap:4px;padding:12px 0;border-bottom:1px solid var(--line)}
+.nl-activity-list>li:last-child{border-bottom:0}
+.nl-activity-head{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11px;color:var(--faint)}
+.nl-activity-kind{text-transform:uppercase;letter-spacing:.08em;font-weight:600;color:var(--accent)}
+.nl-activity-list>li[data-kind=chop] .nl-activity-kind,.nl-activity-list>li[data-kind=eviction] .nl-activity-kind{color:var(--bad)}
+.nl-activity-list strong{font-size:13px;color:var(--text)}
+.nl-activity-lines{list-style:none;margin:0;padding:0;font-size:12px;color:var(--text2)}
+.nl-activity-lines li[data-verb=add] span{color:var(--good);font-weight:700}
+.nl-activity-lines li[data-verb=drop] span{color:var(--bad);font-weight:700}
+.nl-activity-lines small{color:var(--faint)}
+.nl-activity-detail{margin:0!important;font-size:12px!important;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.nl-activity-reactions{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:4px}
+.nl-activity-reactions button{display:inline-flex;align-items:center;gap:4px;min-height:32px;min-width:32px;padding:0 10px;border:1px solid var(--line2);border-radius:999px;background:transparent;color:var(--text2);font-size:13px}
+.nl-activity-reactions button[data-mine=true]{border-color:var(--accent);color:var(--text)}
+.nl-activity-picker{display:inline-flex;gap:4px;padding:2px;border:1px solid var(--line2);border-radius:999px;background:var(--raised)}
+.nl-activity-picker button{border:0!important;padding:0 6px!important}
+.nl-activity-error{color:var(--bad)!important;font-size:12px}

@@ -4122,6 +4122,10 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           tradeDepth: traceCard('trade-depth', () =>
             resolveCorePaywall(userId, { email: viewerEmail, now }).then((p) => p.trade_depth),
           ).catch(() => null),
+          // AF Pro on the triage card: the best-free-agent button and Questionable game-time calls.
+          playerDepth: traceCard('player-depth', () =>
+            resolveCorePaywall(userId, { email: viewerEmail, now }).then((p) => p.player_depth),
+          ).catch(() => null),
           brief,
           drafts,
         }
