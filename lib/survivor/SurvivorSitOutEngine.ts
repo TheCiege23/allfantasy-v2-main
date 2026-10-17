@@ -140,11 +140,15 @@ export async function settleNbaTribeSitOutDeadline(leagueId: string, week: numbe
 export async function runNbaTribeSitOutDeadlineBatch(now = new Date()) {
   const states = await prisma.survivorGameState.findMany({
     where: { weekScoringFinalAt: null, phase: { in: ['pre_merge', 'post_swap', 'tribe'] }, league: { survivorMode: true, sport: 'NBA' } },
-    select: { leagueId: true, currentWeek: true, league: { select: { settings: true } } }, orderBy: { updatedAt: 'asc' }, take: 20,
+    select: { leagueId: true, currentWeek: true, pausedSnapshot: true, league: { select: { settings: true } } }, orderBy: { updatedAt: 'asc' }, take: 20,
   })
   const outcomes: Record<string, number> = {}
   let failed = 0
   for (const state of states) {
+    if (state.pausedSnapshot != null) {
+      outcomes.paused = (outcomes.paused ?? 0) + 1
+      continue
+    }
     try {
       const week = state.currentWeek > 0 ? state.currentWeek : readSurvivorFullSeasonPlan(state.league.settings)?.startWeek
       if (!week) continue

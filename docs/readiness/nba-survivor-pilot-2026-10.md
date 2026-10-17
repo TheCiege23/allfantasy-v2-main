@@ -28,3 +28,12 @@ The commissioner can configure a league and start a native draft, but the curren
 4. Define the Exile weekly score-to-beat contest from the commissioner examples; then verify token reset, challenge rewards, weekly roster exclusivity, and the single deadline return.
 5. Verify the full weekly challenge slate, official ballots and Torch reveal, commissioner recovery controls, and season-finale flow under scheduled automation. The planned-season runner currently requires an enablement flag; confirm its production schedule and idempotent retries.
 6. Complete a multi-account, full-week dry run with a playing commissioner and a non-playing commissioner before invitations extend beyond testers.
+
+## Beta-invite safeguards, 2026-10-17
+
+- Commissioner pause now freezes the league. The planned-season runner, the five-minute score bridge and the tribe sit-out batch all skip a league with a `pausedSnapshot`; before this, pause set only that column while the runner checked `phase`, so a paused league kept opening councils and eliminating managers.
+- `adjust_score` is stored as point boost or penalty, which the five-minute score sync preserves. It previously wrote `finalScore` directly and the next sync recomputed it away.
+- Queued Survivor notifications are delivered by the score-sync cron. The only sender used to be `/api/survivor/automation`, which no scheduler calls. Each row is claimed before delivery, and rows more than a day past due are retired rather than sent.
+- A scheduled draft start notifies every manager, as a manual start already did. If seats are still unclaimed at draft time, the commissioner gets one notice explaining why the draft is waiting.
+- The legacy `idols/play` route now checks that the caller owns the idol and claims it atomically.
+- Still to set in production, outside the repo: `DRAFT_TICK_CRON_ENABLED=true` on the worker service for unattended expired-pick autopick, and confirm NBA ADP rows exist for this season before the draft.

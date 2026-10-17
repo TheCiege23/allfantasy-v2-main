@@ -2,10 +2,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const m = vi.hoisted(() => ({
   due: vi.fn(), session: vi.fn(), pool: vi.fn(), prewarm: vi.fn(), start: vi.fn(), lock: vi.fn(),
+  notifyStart: vi.fn(), enqueue: vi.fn(), priorNotice: vi.fn(), league: vi.fn(),
 }))
 vi.mock('@/lib/prisma', () => ({
-  prisma: { leagueSettings: { findMany: m.due }, draftSession: { findFirst: m.session } },
+  prisma: {
+    leagueSettings: { findMany: m.due }, draftSession: { findFirst: m.session },
+    survivorNotification: { findFirst: m.priorNotice }, league: { findUnique: m.league },
+  },
 }))
+vi.mock('@/lib/draft-notifications', () => ({ notifyDraftStartingSoon: m.notifyStart }))
+vi.mock('@/lib/survivor/notificationEngine', () => ({ enqueueNotification: m.enqueue }))
 vi.mock('@/lib/draft-room/ensureDraftPoolReady', () => ({
   getDraftPoolReadiness: m.pool, triggerDraftPoolPrewarmBackground: m.prewarm,
 }))
@@ -23,6 +29,9 @@ describe('scheduled Survivor draft start', () => {
     m.start.mockResolvedValue({ ok: true })
     m.lock.mockImplementation(async (_leagueId: string, action: () => Promise<unknown>) =>
       ({ acquired: true, value: await action() }))
+    m.notifyStart.mockResolvedValue(undefined)
+    m.priorNotice.mockResolvedValue(null)
+    m.league.mockResolvedValue({ userId: 'commish' })
   })
   it('starts a due native live draft exactly once through the control lock', async () => {
     const now = new Date('2026-10-20T19:00:00Z')
@@ -32,6 +41,7 @@ describe('scheduled Survivor draft start', () => {
     }))
     expect(m.lock).toHaveBeenCalledWith('league-1', expect.any(Function))
     expect(m.start).toHaveBeenCalledOnce()
+    expect(m.notifyStart).toHaveBeenCalledWith('league-1')
   })
   it('does not start a provider draft, a completed draft, or a cold player pool', async () => {
     m.due.mockResolvedValueOnce([{ leagueId: 'external', league: { platform: 'sleeper' } }])
@@ -47,5 +57,16 @@ describe('scheduled Survivor draft start', () => {
     m.start.mockResolvedValueOnce({ ok: false, reason: 'SURVIVOR_CAST_INCOMPLETE', error: 'Claim every seat.' })
     expect(await startScheduledSurvivorDrafts()).toMatchObject({ started: 0, skipped: 1, errors: [] })
     expect(await startScheduledSurvivorDrafts()).toMatchObject({ started: 1, errors: [] })
+  })
+  it('tells the commissioner once why the scheduled draft is waiting', async () => {
+    m.start.mockResolvedValue({ ok: false, reason: 'SURVIVOR_CAST_INCOMPLETE', error: 'Claim all 2 open Survivor cast seats before starting the draft.' })
+    await startScheduledSurvivorDrafts()
+    expect(m.enqueue).toHaveBeenCalledWith('league-1', 'draft_cast_incomplete', expect.objectContaining({
+      recipientUserId: 'commish', body: expect.stringContaining('Claim all 2 open'),
+    }))
+    m.priorNotice.mockResolvedValue({ id: 'sent-already' })
+    await startScheduledSurvivorDrafts()
+    expect(m.enqueue).toHaveBeenCalledOnce()
+    expect(m.notifyStart).not.toHaveBeenCalled()
   })
 })

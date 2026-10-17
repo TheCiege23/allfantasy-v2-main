@@ -256,6 +256,10 @@ export async function advanceWeek(leagueId: string): Promise<void> {
 }
 
 export async function syncWeeklyScores(leagueId: string, week: number): Promise<void> {
+  // A paused season is frozen: no rescoring, no immunity changes, and the
+  // pause marker in lastError stays put until the commissioner resumes.
+  const game = await prisma.survivorGameState.findUnique({ where: { leagueId }, select: { pausedSnapshot: true } })
+  if (game?.pausedSnapshot != null) return
   const season = await prisma.redraftSeason.findFirst({
     where: { leagueId },
     orderBy: { createdAt: 'desc' },
