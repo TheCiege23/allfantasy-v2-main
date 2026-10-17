@@ -2383,7 +2383,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           {active === 'home' ? <SmsOptInCard eligible={Boolean(props.smsOptInEligible)} /> : null}
           {active === 'home' ? <TeamFollowPrompt eligible={Boolean(props.teamFollowPromptEligible)} initialSport={props.teamFollowPromptSport} /> : null}
           {/* The iOS push registrar is mounted once, in the root layout, so a tap is handled on every page. */}
-          <CoreWelcomeTour leagueCount={leagues.length} />
+          {active === 'home' ? <CoreWelcomeTour leagueCount={leagues.length} /> : null}
           {/*
             The VISIBLE button, on the /core home screen: a real action row
             above the dashboard rather than a chip in the chrome. This is the
