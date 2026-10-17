@@ -14,13 +14,17 @@ export interface ScheduledSurvivorDraftSummary {
   errors: Array<{ leagueId: string; error: string }>
 }
 
-/** Called by the minute draft tick; only native Survivor leagues that opted into autostart qualify. */
+/**
+ * Called by the minute draft tick; native Survivor and Guillotine leagues that opted into autostart
+ * qualify. Guillotine saved the "Autostart Draft" toggle but nothing read it, so the commissioner had
+ * to press Start by hand at draft time.
+ */
 export async function startScheduledSurvivorDrafts(now: Date = new Date()): Promise<ScheduledSurvivorDraftSummary> {
   const due = await prisma.leagueSettings.findMany({
     where: {
       autostart: true,
       draftDateUtc: { lte: now, gte: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000) },
-      league: { is: { survivorMode: true } },
+      league: { is: { OR: [{ survivorMode: true }, { guillotineMode: true }, { leagueVariant: 'guillotine' }] } },
     },
     select: { leagueId: true, league: { select: { platform: true } } },
     orderBy: { draftDateUtc: 'asc' },
